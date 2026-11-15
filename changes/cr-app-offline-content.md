@@ -24,7 +24,7 @@ bis man es wieder rückgängig macht").
 On Android, iOS, macOS, Windows and Linux — never the web — the core keeps two tiers in one store per account on this
 device:
 
-- **(a) the automatic cache:** what the person viewed (tiles, previews, the frames of an original that were read, the
+- **(a) the automatic cache:** what the person viewed (tiles, previews, the frames of a video that were played, the
   listings needed to reach them), under a storage limit, the least recently viewed evicted first;
 - **(b) "Available offline":** a Memory, a Chapter, a folder or a file the person pinned — fetched whole, kept until
   undone, never evicted, counted in what the page shows.
@@ -222,10 +222,17 @@ offline) and are not trivial: inbox #897.
 - **The unit** is an entry: a blob file (with whatever frames it holds) or a kept listing. Last view is set when a tile
   is drawn, a preview or file shown, a reader read, a listing opened.
 - **The limit** is per account on this device, set on the account's Settings page (D10); `0` turns the automatic tier
-  off (pins still work). The default is Owner question 2.
+  off (pins still work). The default is **2 GB on phones, 10 GB on desktops** (owner 2026-11-15); the person sets any
+  size, not a list of steps.
+- **Lowering the limit** below what the automatic tier holds evicts at once, down to the new limit — not at the next
+  write (owner 2026-11-15). Pins are never evicted by it; when they alone exceed the new limit, the automatic tier keeps
+  nothing.
 - **Eviction** runs after a write that takes the automatic tier over the limit: least recently viewed first, pinned
-  entries never, down to 90 % of the limit. A single original larger than a quarter of the limit is not kept by the
+  entries never, down to 90 % of the limit. A single video larger than a quarter of the limit is not kept by the
   automatic tier (it would evict everything else for one video); its frames still stream.
+- **Originals** (owner 2026-11-15): the store keeps an original only where the app reads one to show the item — today a
+  video's frames and a Depot file, which has no other tier. A photo's original is never kept by either tier; its preview
+  stands in, as it does online. When a later tier replaces a video's original for playback, that tier is kept instead.
 - **Pinned entries count** in "used" and are shown separately; pins may exceed the limit (then the automatic tier keeps
   nothing). **A free-space floor:** neither tier writes while the volume has less than 5 % free; a pin then pauses and
   says so.
@@ -236,7 +243,8 @@ offline) and are not trivial: inbox #897.
 - **What can be pinned:** a Memory, a Chapter, a folder (everything below it the built applications can open — Memories
   and Depot), a file. The header's "Available offline" toggle, offered where the node's kind declares it through the
   registry (`AppKinds`), never by core calling an application.
-- **A pin fetches whole:** the listings below the node, every tile, preview and original (Owner question 3), with
+- **A pin fetches whole:** the listings below the node, every tile and preview, and the originals D8 keeps (a video's,
+  a Depot file's — never a photo's; owner 2026-11-15), with
   progress, resumable (a blob file appends; a restart continues), before the first byte the size is shown and confirmed.
 - **Sync:** at each online open of the account and on each live poll that sees a pinned node's revision move
   (`listNodes`' `ETag`, `listNodeMedia`'s `mediaRevision`), the pin re-reads its listings and fetches what is new; what
@@ -250,7 +258,7 @@ offline) and are not trivial: inbox #897.
 ### D10 — Where the person sees and sets it
 
 - **Settings, per account:** a "Storage on this device" section on the account's Settings page: the
-  limit (a list of sizes and Off), used by the automatic tier, used by pins, the volume's free space, the pinned items
+  limit (a free size field and Off), used by the automatic tier, used by pins, the volume's free space, the pinned items
   (each removable), "Clear cache", "Remove all offline content".
 - **On a node:** the header's "Available offline" toggle with its state (fetching n of m, kept, paused: no space).
 - **Offline:** the shell's banner "Offline — content as of …", each write disabled.
@@ -337,6 +345,11 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   check` in `site/` green and every guard but guard_gaps green.
 
 ## Owner questions
+
+Answered 2026-11-15: **2** — default 2 GB / 10 GB, any size, lowering evicts at once (D8). **3** — as recommended, but
+no photo original in either tier; only originals the app reads to show an item (D8, D9). **4** — the copy as proposed.
+**5** — accepted. **1** — open: the owner's answer was that the data could lie encrypted offline; it does (D1, D2), and
+the residual is only a thief who also passes the device's own unlock at the record's level — a clarification is asked.
 
 1. **Offline opening after an escalation (D4).** A thief who keeps a stolen device offline and passes its unlock reads
    what the store held, even after you "Sign out and remove saved key" from another device; online, the escalation
