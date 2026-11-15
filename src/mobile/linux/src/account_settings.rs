@@ -72,7 +72,7 @@ pub fn open(window: &adw::ApplicationWindow, connection: String) {
     page.connection.replace(Some(connection.clone()));
     let weak = Rc::downgrade(&page);
     glib::spawn_future_local(async move {
-        let settings = match bridge::call(&Call::SettingsOpen { connection }).await.map(|(a, _)| a) {
+        let settings = match bridge::call(&Call::SettingsOpen { connection, separator: said::decimal_separator() }).await.map(|(a, _)| a) {
             Ok(Answer::SettingsOpened { settings }) => settings,
             other => {
                 eprintln!("veyq: Settings.Open answered {other:?}");

@@ -61,7 +61,10 @@ data class OfflineItem(
 @Serializable
 enum class LimitUnit(val bytes: Long, val word: Msg) { MB(1_000_000L, Msg.STORAGE_UNIT_MB), GB(1_000_000_000L, Msg.STORAGE_UNIT_GB) }
 
-/** The limit as the free size field shows it: an [amount] as typed ("2", "2.5", "500") in a [unit]; [off] the tier is off. */
+/**
+ * The limit as the free size field shows it: an [amount] as typed ("2", "2.5" — "2,5" where the reader's decimal sign is
+ * a comma —, "500") in a [unit]; [off] the tier is off.
+ */
 @Serializable
 @SerialName("LimitField")
 data class LimitField(val amount: String, val unit: LimitUnit, val off: Boolean)
@@ -114,13 +117,14 @@ object OfflineShown {
     fun title(name: String?): Notice = name?.let { Notice(Msg.OFFLINE_ITEM_NAMED, it) } ?: Notice(Msg.OFFLINE_ITEM_UNNAMED)
 
     /**
-     * The free size field's value of a limit of [bytes]: in GB from 1 GB up (a whole number, else one or two decimals),
-     * in MB below; 0 is "Off" (the field shows the default unit, empty).
+     * The free size field's value of a limit of [bytes]: in GB from 1 GB up (a whole number, else one or two decimals,
+     * written with [separator], the reader's decimal sign — a German UI reads "1,5"), in MB below; 0 is "Off" (the field
+     * shows the default unit, empty). [parse] reads either sign back.
      */
-    fun field(bytes: Long): LimitField {
+    fun field(bytes: Long, separator: Char = '.'): LimitField {
         if (bytes <= 0) return LimitField("", LimitUnit.GB, off = true)
         val unit = if (bytes >= LimitUnit.GB.bytes) LimitUnit.GB else LimitUnit.MB
-        return LimitField(decimal(bytes, unit.bytes), unit, off = false)
+        return LimitField(decimal(bytes, unit.bytes, separator), unit, off = false)
     }
 
     /**
@@ -136,14 +140,14 @@ object OfflineShown {
         return bytes.takeIf { it > 0 && it <= 1_000_000L * LimitUnit.GB.bytes }
     }
 
-    private fun decimal(bytes: Long, unit: Long): String {
+    private fun decimal(bytes: Long, unit: Long, separator: Char): String {
         val hundredths = (bytes * 100 + unit / 2) / unit
         val whole = hundredths / 100
         val frac = hundredths % 100
         return when {
             frac == 0L -> "$whole"
-            frac % 10 == 0L -> "$whole.${frac / 10}"
-            else -> "$whole.${frac.toString().padStart(2, '0')}"
+            frac % 10 == 0L -> "$whole$separator${frac / 10}"
+            else -> "$whole$separator${frac.toString().padStart(2, '0')}"
         }
     }
 }

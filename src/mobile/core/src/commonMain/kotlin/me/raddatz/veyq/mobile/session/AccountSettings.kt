@@ -49,6 +49,8 @@ class AccountSettings<A : Connection, T : Any>(
     private val here: Here<A, T>,
     /** The account's own address, shown until the server's copy read. */
     email: String,
+    /** The reader's decimal sign (the platform's locale data), as the limit's free size field writes its amount. */
+    private val separator: Char = '.',
     private val now: () -> Long,
 ) {
     /**
@@ -331,7 +333,10 @@ class AccountSettings<A : Connection, T : Any>(
     fun startFollowStorage(): Watch = Watch(CoroutineScope(Dispatchers.Default).launch { followStorage() })
 
     private suspend fun loadStorage() {
-        attempt { door.storage() }.onSuccess { _state.value = current.copy(storage = it, storageUnavailable = if (it == null) door.storageUnavailable() else null) }
+        attempt { door.storage() }.onSuccess {
+            val storage = it?.copy(field = me.raddatz.veyq.mobile.offline.OfflineShown.field(it.limit, separator))
+            _state.value = current.copy(storage = storage, storageUnavailable = if (it == null) door.storageUnavailable() else null)
+        }
     }
 
     /** Staying signed in at [level], as "Manage servers" changes it ([SessionModel.stay]). */
@@ -433,10 +438,13 @@ class AccountSettings<A : Connection, T : Any>(
         @OptIn(kotlin.time.ExperimentalTime::class)
         private fun epochMs(iso: String): Long? = runCatching { kotlin.time.Instant.parse(iso).toEpochMilliseconds() }.getOrNull()
 
-        /** [account]'s Settings, its trust and sign-out those of [session] ("Manage servers"' model). */
+        /**
+         * [account]'s Settings, its trust and sign-out those of [session] ("Manage servers"' model); [separator] the
+         * reader's decimal sign (the platform's locale data, as the entry editor takes it).
+         */
         @OptIn(kotlin.time.ExperimentalTime::class)
-        fun of(session: SessionModel<VeyqAccount, TenantSession>, account: VeyqAccount): AccountSettings<VeyqAccount, TenantSession> =
-            AccountSettings(Over(account), Held(session, account), account.email) { kotlin.time.Clock.System.now().toEpochMilliseconds() }
+        fun of(session: SessionModel<VeyqAccount, TenantSession>, account: VeyqAccount, separator: Char): AccountSettings<VeyqAccount, TenantSession> =
+            AccountSettings(Over(account), Held(session, account), account.email, separator) { kotlin.time.Clock.System.now().toEpochMilliseconds() }
     }
 
     /** [Here] over the [SessionModel] that holds [account]. */

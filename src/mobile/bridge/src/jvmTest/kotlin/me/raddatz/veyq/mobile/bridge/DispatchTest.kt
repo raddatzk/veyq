@@ -534,7 +534,7 @@ class DispatchTest {
             val hidden = Hidden({}, emptySet())
             Composition(
                 SessionModel(TrustingDoor(kept), hidden, RecentUses({}, emptyList())), hidden,
-                settings = { session, account -> me.raddatz.veyq.mobile.session.AccountSettings(played, HeldBy(session, account), "p@a.example") { 0L } },
+                settings = { session, account, separator -> me.raddatz.veyq.mobile.session.AccountSettings(played, HeldBy(session, account), "p@a.example", separator) { 0L } },
             ) { _ -> Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}) }
         }
         assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.SettingsOpen("a.example#u1")), "a page before any tenant opened")
@@ -642,7 +642,7 @@ class DispatchTest {
             val hidden = Hidden({}, emptySet())
             Composition(
                 SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden,
-                settings = { session, account -> me.raddatz.veyq.mobile.session.AccountSettings(played, HeldBy(session, account), "p@a.example") { 0L } },
+                settings = { session, account, separator -> me.raddatz.veyq.mobile.session.AccountSettings(played, HeldBy(session, account), "p@a.example", separator) { 0L } },
             ) { _ -> Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}) }
         }
         b.signedIn()
@@ -699,7 +699,7 @@ class DispatchTest {
             val hidden = Hidden({}, emptySet())
             Composition(
                 SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden,
-                settings = { session, account -> me.raddatz.veyq.mobile.session.AccountSettings(played, HeldBy(session, account), "p@a.example") { 0L } },
+                settings = { session, account, separator -> me.raddatz.veyq.mobile.session.AccountSettings(played, HeldBy(session, account), "p@a.example", separator) { 0L } },
             ) { _ -> Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}) }
         }
         b.signedIn()

@@ -95,7 +95,7 @@ internal class Composition<A : Connection, T : Any>(
      * An account's Settings page (core's `AccountSettings`) over the session that holds it: `AccountSettings.of` in the
      * library; a test plays one over a door of its own, or has none (`Settings.Open` is then refused for the connection).
      */
-    val settings: (session: SessionModel<A, T>, account: A) -> AccountSettings<A, T>? = { _, _ -> null },
+    val settings: (session: SessionModel<A, T>, account: A, separator: Char) -> AccountSettings<A, T>? = { _, _, _ -> null },
     /**
      * How a Memories upload's tiers are made (`MediaUpload.Deriver`): asked of the host in the library ([HostTiers]); a test
      * plays the host, or has none (every original goes up alone).
@@ -471,7 +471,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.SettingsOpen -> {
                 if (tenant.value == null) return noTenant
                 val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
-                val model = parts.settings(session, account) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+                val model = parts.settings(session, account, call.separator.firstOrNull() ?: '.') ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
                 val id = ids.incrementAndFetch()
                 accountPages.put(id, HeldAccount(model, account.key))
                 scope.launch { model.refresh() }
@@ -1640,7 +1640,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             )
             Composition(
                 SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files, pictures = pictures,
-                settings = { session, account -> AccountSettings.of(session, account) }, tiers = tiers,
+                settings = { session, account, separator -> AccountSettings.of(session, account, separator) }, tiers = tiers,
                 trustedLink = { account, role, decode ->
                     when (role) {
                         DeviceLink.Role.SHOW_FOR_NEW_DEVICE -> DeviceLink.showForNewDevice(account)
