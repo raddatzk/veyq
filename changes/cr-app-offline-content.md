@@ -42,9 +42,8 @@ account wipe the store.
   app did not choose and § Secrets on screen; `docs/crosscutting/security-model.md` § What a trusted device rests on,
   per platform; `docs/crosscutting/native-apps.md`; `uc.account.trust-device` (E1, the anti-withholding rule).
 - **Sibling CRs:** the apps' account Settings page (`uc.account.sessions`, built on every app) is the page this CR's
-  "Storage on this device" section joins — phase 5 here builds on it as it is. `cr-memories-on-every-app` (in progress) moves the gallery, the lightbox and the uploads into core screen
-  models — phase 3 here waits for its core phases, and its `GalleryModel.Door` is where Memories' reads go through the
-  store. The desktop packages (ADR 0139, built) decide the Flatpak's and the MSIX's data locations — D3 below names the
+  "Storage on this device" section joins — phase 5 here builds on it as it is. Memories on every app (done 2026-11-15) moved the gallery, the lightbox and the uploads into core screen
+  models (ADR 0136's Consequences) — `GalleryModel.Door` is where Memories' reads go through the store. The desktop packages (ADR 0139, built) decide the Flatpak's and the MSIX's data locations — D3 below names the
   paths it must keep writable.
 - **Where what runs:** core tests on the JVM and macosArm64 (`./gradlew :core:jvmTest :core:macosArm64Test` from
   `src/mobile/`); the Linux container (`/usr/bin/python3 src/mobile/linux/run.py test`), the Windows VM
@@ -289,7 +288,7 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   at the next start (bite: remove the id first → red); (e) a torn shard write (kill between write and rename) leaves the
   previous shard readable.
 
-- [ ] **3 the read path, offline opening and eviction (core)** — after `cr-memories-on-every-app`'s core phases: D4's
+- [ ] **3 the read path, offline opening and eviction (core)** — over Memories' core screen models (built): D4's
   kept wrap and offline unlock in `VeyqAccount`/`SessionModel` (a new `Gate` state is not needed: the unlock opens an
   account marked offline); D5's allowlist, `If-None-Match`, replace and sweep in `TenantSession.trees`, `MemoryMedia`,
   `DepotFiles`, `ApplicationBlobs`; reachability and the probe; each screen model's `offline` state and D7's refusals;

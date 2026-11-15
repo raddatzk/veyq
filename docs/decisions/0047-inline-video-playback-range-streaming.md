@@ -235,6 +235,20 @@ Still open: whether a banner's original is dropped once its copy exists.
   file "deleted after", which a crash leaves. Measured: `run-as … ls cache` empty during and after every view and playback
   on an Android emulator; `find / -xdev -newer <marker>` in the Linux container and `%TEMP%` on the Windows VM showed
   nothing of a played medium (ADR 0123's Consequences).
+  **Memories holds the same rule** (2026-11-13/15, Memories on every app; ADR 0136's Consequences for its models): a
+  tile, a preview and a chapter's cover are decoded in memory (the decoded-picture cache is the platform's, bounded), a
+  video plays through the lightbox's `RangeReader`, closed with its page, and an original is written only where the
+  person saves it (a save dialog's path through `FileSink`, a Mac's save panel too; iOS's `fileMover` from the swept
+  `tmp/downloads/`). **Apple's Photos picker copies are not a decrypted copy but the person's own original** — the
+  transfer's file is gone once the picker returns, so the app copies each pick to `tmp/picked/<uuid>/` and removes it
+  when core's `MediaUploads` hands the file back (done, cancelled, abandoned; a failed one kept for its retry; all of
+  them when the tenant closes) and by name at every start (`sweepTemporary` names `picked`, no longer an accident of
+  sweeping every UUID directory). Rejected: `PHAsset` resources streamed (needs the photo library's permission, where
+  the picker needs none) and `loadTransferable(Data)` (a video whole in memory). Android reads the picker's URIs at
+  offsets and copies nothing. Measured: `run-as … ls -laR cache files` on Android before and after a pass (only
+  `profileInstalled`); an iOS simulator's `tmp/picked/` and `tmp/downloads/` empty after a pick uploaded and an original
+  saved; a planted `$TMPDIR/picked/<dir>` gone at the macOS build's start; `find / -xdev -newer <marker>` in the Linux
+  container and `%TEMP%` on the Windows VM after a pass with a 600 MiB WebM: nothing decrypted.
   **A picked Emergency Kit is read in memory and never copied** (2026-11-13, the kit at sign-in): Android reads the
   document's URI into one capped array and draws it from a `memfd`; Apple reads the `.fileImporter` URL in place (never
   `asCopy`, which copies into the app's `tmp/Inbox`) under an `NSFileCoordinator` read into one buffer; the desktops hand

@@ -79,5 +79,8 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   one reader the share extension uses too, re-encoding a HEIC through ImageIO so macOS reads the same way;
   `AppModel.receiveDrop`). The reader is measured through the extension; a drop itself is not, since the Simulator's one
   scripted finger cannot hold a thumbnail and switch apps. Android's drag and drop is not built.
+- **Decision 2's Memory is not built** (2026-11-15): Memories is in every app now (ADR 0136's and ADR 0123's
+  Consequences), but no app offers a Memory as a share target or takes a drop onto a phone's gallery; a Memory's larger
+  files sealed in frames from disk out of iOS's share extension (decision 6) wait with it (inbox #893).
 - App groups and keychain groups need the developer team's signing: a Simulator build is signed ad hoc with them; a device
   build needs the team's provisioning profile with the group.

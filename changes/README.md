@@ -907,7 +907,9 @@ cr-release-identity's injections). Two forms that do work with an uncommitted ba
 protocol said `grep -c "deletedAt is null" … # expect 2`; the honest answer is **3**, because the comment above
 the predicate quotes it in order to explain it. A tally over source text counts prose as code, so it reports a
 successful restore as a failed one — and the repair it invites is deleting the comment that documents the rule.
-Compare trees, not occurrences. For an **automated, repeated** guard that re-injects on
+Compare trees, not occurrences. **A snapshot under `/tmp` does not outlive a crash of the machine** (macOS clears it at
+boot): a scripted bite keeps its snapshots beside the build, and the tree is compared with them before anything is
+committed — a Mac that crashed mid-run left a mutant in the mobile bridge's dispatch twice (2026-11-14). For an **automated, repeated** guard that re-injects on
 every run, work on a throwaway *copy* of the tree, not the live one: `scripts/validate_guard_gaps.py`
 copies → forges → runs → discards, so even an abort leaves an orphaned tempdir, never a dirty tree
 (every guard's `__file__`-relative `ROOT` makes a copied `scripts/<guard>.py` resolve to the copy).
