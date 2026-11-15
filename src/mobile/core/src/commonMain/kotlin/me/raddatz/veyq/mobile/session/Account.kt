@@ -1003,6 +1003,9 @@ class VeyqAccount private constructor(
                     mine.serialize(), mine.sign, tenants, device, material, null, openedOffline = true, authSeed = authSeed,
                 ).also {
                     it.offline = o
+                    // the pins read now: offline no sync reads them, and a pinned node's toggle and Settings' items
+                    // showed none until the next online open (phase 6's Linux pass)
+                    runCatching { o.loaded() }
                     it._reach.value = Reach.Offline(tenantsAnswer.asOf)
                     it.startProbe()
                 }
