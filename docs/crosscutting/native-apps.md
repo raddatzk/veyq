@@ -422,8 +422,9 @@ each app's lists read after a write). A guest's deleted folder is restorable onl
 
 **Memories**: curating a Memory — its date, place and map, participants, a medium's capture time, the banner (inbox
 #890); item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
-re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); its music
-(#906) and GPX tracks (#907); a guest's view of a received link (#435, a source for the same model).
+re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); its music —
+planned ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md), #906): the core's player and Music view, each platform's two decks, background play on
+the phones and the system's media controls, a pinned Memory's tracks kept like a video's original — and GPX tracks (#907); a guest's view of a received link (#435, a source for the same model).
 
 **Uploads**: an upload that goes on while the app is in the background (Android a foreground service, iOS a
 background task); placeholder tiles in the gallery for what is under way; the list behind Apple's button seen open.
