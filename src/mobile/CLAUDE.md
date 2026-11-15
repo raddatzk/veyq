@@ -342,7 +342,8 @@ A Gradle build of its own, run through its own wrapper.
     session, no prompt. Brief the person on every prompt the run may raise first, the uncertain ones marked.
   - `drive <step>...` prints the app's log, then runs `Veyq.Drive`'s steps (`tree`, `invoke <id>`, `select <id>`,
     `set <id> <text>`, `key`, `type <id> <text>` and `press <id> [keys]` (a system dialog's entry and button), `scroll <id>
-    [percent]` (a ScrollViewer through UIA's ScrollPattern), `explorer <x> <y> <w> <h> <path>` and `drag <id|@x,y>
+    [percent]` (a ScrollViewer through UIA's ScrollPattern), `range <id> <percent>` (a slider's RangeValue, one move) and
+    `slide <id> <from> <to>` (a mouse drag across an element, percents of its width: the device link's slide), `explorer <x> <y> <w> <h> <path>` and `drag <id|@x,y>
     <name>|<name>…` (an Explorer window placed beside the app, its items dragged with SendInput's mouse onto an element),
     `hovershot <file>` (the screen while the next drag is held), `click <x> <y>`, `screen <file>`, `droptargets`, `size`,
     `maximize`, `wait`, `sleep`, `shot <name>.png`) and prints what each saw. Read the log and the tree first; a `shot`
@@ -810,6 +811,10 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   toast and stderr.
 - `include!` takes no inner attribute, so the generated `bridge.rs` carries none. The app's `wire` module holds the
   lints' allowances.
+- Under Broadway a pointer released past the widget it pressed is delivered over whatever lies under it, not to the
+  pressed widget: a `GtkScale` dragged past its end never heard the release (measured 2026-11-15, the device link's
+  slide, whose dialog content now takes the release too). A gesture whose end matters listens for the release above the
+  widget, not on it.
 - Broadway in the browser pane takes a click only after the pointer has moved there: hover first, then click.
   `computer type` reaches no GTK entry, but `computer key` with space-separated letters does; a password is never
   typed, `run --devlogin` signs in. A hidden pane lags Broadway's frames, so a screenshot can show the state before the

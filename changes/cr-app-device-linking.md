@@ -449,6 +449,74 @@ text goes straight into `DeviceLink` inside the core.
   **And the code stays out of capture** (§ Secrets on screen): Windows' showing screen and its scanner through
   `ScreenSecrets.Guard`, bitten as the sweep was — `Veyq.Drive`'s `shot` (BitBlt) shows the desktop behind the window,
   and the code with `VEYQ_DEV_CAPTURABLE=1`; Linux has no capture to keep it from (the section says why).
+
+  **Status: Linux met, Windows built (2026-11-15); the Windows VM pass waits for the VM (another agent's pass held it).**
+
+  **Built:**
+  - **Linux** (`device_link.rs`): one `AdwDialog` for all four roles over the bridge's `Link.*` calls and `Watched.Link`,
+    drawing `LinkShown` as Android's `DeviceLinkScreen` does (the same words, the same steps); the code a `GtkPicture` of
+    `Link.Code`'s PNG asked at the window's scale; the link's camera `ScanView::open_link` (`Scan.Open` of kind `LINK`, the
+    `qr_camera.rs` view the kit's scan uses); the six digits an `AdwEntryRow` that keeps digits only, six at most, sent once
+    by its button or Enter; a new device's link at `DONE` closes the dialog (the bridge opens the account under it), a
+    `Watched.Link` of `null` (the tenant closed) too; "Start over" opens a new link of the same role in the same dialog.
+    Settings gains "Add a device" (only while `addDevice`): "Show a code" and, where the Camera portal names a camera,
+    "Scan a code"; the sign-in gains "Scan a code from another device" (camera only) and "Sign in with a QR code", over
+    the server the form holds. Steps go to stderr (`veyq-link:` step, refusal, hint — never a code, a number or a name).
+  - **The slide on GTK** (D5): a `GtkScale` 0…1. A capture-phase `EventControllerLegacy` on the scale notes the press
+    and takes the first value the gesture moves it to as where it began; a release (on the scale, or anywhere over the
+    dialog's content — one past the scale's end never reaches the scale under Broadway) confirms only when it began at
+    ≤ 15 % and ends at ≥ 98 %, and springs back otherwise (an `AdwTimedAnimation`, stopped by the next press or key). A
+    click on the track warps there in one move, so its first value is where it ended and it does not confirm. Keys: the
+    arrows in ten steps, Return/Enter at the end confirms; Home, End and the Page keys are taken and move nothing; the
+    wheel is taken. Insensitive while the name is blank; the sentence is the scale's accessible label.
+  - **Windows** (`DeviceLinkDialog.cs`): the same in a `ContentDialog` (through `Dialogs.Show`) whose content is
+    `ScreenSecrets.Guard`'ed; `QrCamera.OpenLink`; the slide a `Slider` with the same rules (`PointerPressed`,
+    `PointerReleased` and `PointerCaptureLost` with `handledEventsToo`, `PreviewKeyDown` for the keys, a
+    `DispatcherTimer` spring-back); Settings' section and the sign-in's two entries as on Linux (`QrCamera.PresentAsync`
+    decides the scans: the VM has no camera, so `NoCamera` offers only the showing halves). `Veyq.Drive` gains
+    `slide <id> <from> <to>` (a SendInput mouse drag across an element).
+  - **Found and fixed on both desktops by the Linux pass:** the offer after a sign-in that offers no level (Linux without
+    the Secret Service — every linked Linux run here; a Windows device without Hello) drew nothing, not even "Not now":
+    `Offer::show` / `OfferView.Show` took the first draw of an empty list for a redraw, so the person stood on a page
+    with no button. Both now draw from "nothing drawn yet", and "Not now" after a link says `offer_not_now_linked_hint`
+    (`Offer.linked`), as Android's does.
+
+  **Met (Linux):**
+  - `linux/run.py build` green (clippy `-D warnings`, cargo tests 47 + the sandbox's 5, build), after merging
+    `claude/windows-cr-f6c73c` at 58d1247a6; `scripts/validate_mobile_words.py` green.
+  - **Linux ↔ web, all four runs** (the app under Broadway in the Fedora 44 container, `run.py run --port 8096
+    --devlogin [--fill] --no-secret-service`, its test camera `VEYQ_DEV_CAMERA` an image rewritten in place before each
+    scan; driven by Playwright's mouse and keyboard over Broadway; the web in headless system Chrome,
+    `channel: 'chrome'`, one persistent profile, its camera a `.y4m` of the app's code cropped from a Broadway
+    screenshot; no password typed anywhere — the web was signed in only by being linked):
+    A2 the web shows its sign-in code → Linux (Settings → Scan a code) scans it and shows six digits, typed into the web
+    → `CONFIRMING` → slid → `DONE`, the web signed in. A1 Linux shows → the web scans: numbers equal on both screens
+    (32950, 95180, 52080 across runs), slid, the web signed in. A3 Linux, at its sign-in, scans the web's add-a-device
+    code: numbers equal (55995), the web slid, `SCAN_FROM_TRUSTED: FINISHING → DONE`, `session Signed, offer: []`. A4
+    Linux shows its sign-in code → the web scans it, its six digits typed into Linux → the web slid →
+    `SHOW_FOR_SIGN_IN: DONE`, the offer's "Not now" with "This device got no password: …" (shot). That linked Linux
+    device was then itself the trusted one: it showed a code, the web joined (52080 on both) and the pointer slide sealed.
+  - **The slide by a pointer** (Playwright's mouse over Broadway): with a blank name a full drag does nothing; a click on
+    the track's end does not confirm; a drag to the middle springs back to 0 (shots); a drag from the knob carried past
+    the end confirms (`the slide's end: moved on`, `SEALING → DONE`). **By keyboard:** from the end Left, Home, Enter
+    left it at 0.9 and confirmed nothing (shot); Right, Enter confirmed (A1, A2).
+  - Bites (`/bin/cp -f` restore, compared equal): "Not now" after a link said in the plain words → `cargo test`'s
+    `the_offer_lists_what_the_core_offers_then_not_now` red. The release past the scale was red in the pass itself
+    (three carried drags did not confirm, the knob left at the end) and green after the fix, the same gesture.
+  - Cleanup: every devlogin session of the Linux app signed out by Settings' "Sign out" before its window closed; the
+    A3 linked device (left on the empty offer page by the bug above) signed out from the A4 device's Settings row; the A4
+    device by "Sign out"; every web session by the web's own sign-out. Left: the device-register entries of the runs'
+    containers and of the web profile (no screen removes one, inbox #894's area).
+
+  **Deviations:**
+  - Neither GTK nor WinUI offers an accessible named action of the app's own (Android's `CustomAccessibilityAction`,
+    Apple's named action): the sentence is the slider's accessible name and a screen-reader user confirms by the keys.
+  - The Linux pass ran without the Secret Service (`--no-secret-service`): the shared `veyq-linux-home` volume may be
+    another agent's at the same time. So every linked Linux run was D4's run-only case (no level offered) — which is what
+    found the empty-offer bug; a linked Linux device staying signed in through the Secret Service is not run here.
+  - The phones' gap phase 5 named (a close in `FINISHING` leaving the new device's shell unopened) holds on both phones,
+    measured by reading `AppModel` (Android and Apple open the shell only on the link's `DONE` and stop their watch in
+    `closeLink`; the core ends the link `ENDED` while its tail signs in): not a core fix — inbox #918.
 - [ ] **7 docs and harvest** — ADR 0059 §2 and ADR 0004 § Transport: D1's sentence; `uc.account.onboard-device`
   notes the apps (no coverage change); `native-apps.md` § Account: the adoption blocker removed, what is built added;
   `site/src/content/docs/account/adding-another-device.mdx` and `getting-started/sign-in.mdx` (with their `de/` twins)
