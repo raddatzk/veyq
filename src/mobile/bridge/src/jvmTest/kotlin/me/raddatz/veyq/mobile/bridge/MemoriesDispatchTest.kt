@@ -52,7 +52,7 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Memories through the bridge (the CR "Memories on every app", phase 3; ADR 0137): a Memory's page and its lightbox, the
+ * Memories through the bridge (ADR 0123's Consequences, the bridge; ADR 0137): a Memory's page and its lightbox, the
  * media added by path with the tiers a host the test plays makes through real [Host] requests and replies (the JPEGs as the
  * reply's payload, [HostTiers]), a video read through its reader, an original saved, a medium trashed and undone, a chapter
  * made — every call and watch as JSON, over a Memory the test plays as the server ([PlayedMemory]) and core's own
@@ -323,7 +323,7 @@ class MemoriesDispatchTest {
         assertEquals(1, played.rowCoverOpens, "a held frame's blob is not opened again")
         assertEquals(Answer.Refused(Answer.Why.NO_COVER), b.ask(Call.ShellRowCover("f", null)), "a node with no cover")
 
-        // the justified grid is the core's (D14): every row 4:3, so 1 000 wide (target 200) holds all four in one justified row,
+        // the justified grid is the core's (ADR 0136's Consequences): every row 4:3, so 1 000 wide (target 200) holds all four in one justified row,
         // 500 wide (target 150) three justified and a widow at the target height; the host only places the frames
         val wide = b.ask(Call.GalleryLayout(g, 1000.0, 0.0, 600.0)) as Answer.GridLayout
         assertEquals(listOf(listOf("a", "clip", "raw", "bad")), wide.rows.map { r -> r.tiles.map { it.mediaId } }, "the grid's rows in its order")

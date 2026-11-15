@@ -1,12 +1,12 @@
-// A Memory's or a chapter's page (the CR "Memories on every app" phase 5, D11; ADR 0136 decision 2; Linux's
+// A Memory's or a chapter's page (ADR 0136 decision 2; ADR 0123's Consequences, the Windows app; Linux's
 // memory_page.rs, rule for rule), Fluent's way: the node's head (its cover, NodeHeader.Hero), the count, a Memory's chapters
-// as a list of rows with their covers, and the media as the web's justified grid (D14) — every tile's frame the core's
+// as a list of rows with their covers, and the media as the web's justified grid (ADR 0136's Consequences) — every tile's frame the core's
 // (Gallery.Layout: GalleryModel.layout), only the rows near the view placed on the grid's Canvas (the core's
 // Layout.window, ADR 0105), laid out anew when the width or the scroll changes; each tile the grid tier's thumbnail decoded
 // by WIC (Gallery.Tile, held small and dropped least recently shown first, Recent), a video's with a play badge. A tile
 // opens the lightbox (LightboxView) in the page's place. The page's "Add photos" (the header's own upload) opens the open
 // picker for photos and videos, and a drop of files onto the page adds them (Memory.Upload) — a dropped folder is said and
-// not taken (the CR's owner question 3). A medium trashed (from the lightbox) is out at once with Undo in the shell's
+// not taken (the owner, 2026-11-13). A medium trashed (from the lightbox) is out at once with Undo in the shell's
 // InfoBar for as long as the core offers it. The page is read anew live while it stands (Watched.GalleryLive, the web's
 // poll).
 //

@@ -443,14 +443,14 @@ text goes straight into `DeviceLink` inside the core.
     watch on close — whether a close within the tail leaves their shell unopened is not measured (inbox-worthy for phase 6).
   - **Shared test fakes belong where both builds compile them.** The played relay sat in core's `commonTest`, which
     `:bridge` does not see; moved to `testDevice` rather than copied.
-- [ ] **6 Linux and Windows** — the same screens as phase 4 on the desktops. · Done when: both `run.py build`/`test`
+- [x] **6 Linux and Windows** — the same screens as phase 4 on the desktops. · Done when: both `run.py build`/`test`
   green; each desktop's pass links with the web in both directions (the desktop showing; and scanning through its test
   camera); `NoCamera` offers only the showing halves on the Windows VM.
   **And the code stays out of capture** (§ Secrets on screen): Windows' showing screen and its scanner through
   `ScreenSecrets.Guard`, bitten as the sweep was — `Veyq.Drive`'s `shot` (BitBlt) shows the desktop behind the window,
   and the code with `VEYQ_DEV_CAPTURABLE=1`; Linux has no capture to keep it from (the section says why).
 
-  **Status: Linux met, Windows built (2026-11-15); the Windows VM pass waits for the VM (another agent's pass held it).**
+  **Status: done (2026-11-15).**
 
   **Built:**
   - **Linux** (`device_link.rs`): one `AdwDialog` for all four roles over the bridge's `Link.*` calls and `Watched.Link`,
@@ -511,6 +511,35 @@ text goes straight into `DeviceLink` inside the core.
     device by "Sign out"; every web session by the web's own sign-out. Left: the device-register entries of the runs'
     containers and of the web profile (no screen removes one, inbox #894's area).
 
+  **Met (Windows, on the VM, 2026-11-15)** — `run.py run --devlogin --unlock` (the debug build, its own
+  `%LOCALAPPDATA%\veyq`), driven by `Veyq.Drive`, the web as on Linux, the app's code taken from a `shot` of a debug
+  build started with `VEYQ_DEV_CAPTURABLE=1`:
+  - **`NoCamera` offers only the showing halves:** the log says `Settings' link scan not offered: no camera` and `the
+    sign-in's kit and link scans not offered: no camera`; the UIA tree holds `settings-link-show` and `signin-link-show`,
+    no scan entry.
+  - **W1, Windows shows → the web scans:** numbers equal (09082), slid by `slide`, `SHOW_FOR_NEW_DEVICE: DONE`, the web
+    signed in. **W2, Windows at its sign-in shows its code → the web scans it:** its six digits typed into Windows
+    (`type link-code-field`), sent once, the web slid, `SHOW_FOR_SIGN_IN: FINISHING → DONE`, `session Signed, offer:
+    Presence Login`, the offer's "Not now" in the link's words (shot). **W3, that linked Windows device shows → the web
+    joins:** numbers equal (59440), confirmed by keyboard.
+  - **The slide:** with a blank name a `slide` across it did nothing; `range link-slide 100` (UIA's RangeValue, one move)
+    left the knob at the end and confirmed nothing; a drag from the start to the middle sprang back (shots); a drag from
+    the start past the end confirmed. Keys (`press link-slide …`): End then Enter nothing; nine Rights then Enter nothing
+    (the knob at 0.9, shot); the tenth Right then Enter confirmed.
+  - **Out of capture, bitten:** the first non-capturable build's `shot` of the shown code **held the code** — the log said
+    `out of capture`, then `capturable again` 13 ms later while the dialog stayed (WinUI raised the content's move
+    Unloaded after its Loaded). `ScreenSecrets.Guard` now drops an element only once it is not `IsLoaded`; the same
+    `shot` then showed the wallpaper, the window capturable again after the dialog closed (`shot`, Settings visible), and
+    the `VEYQ_DEV_CAPTURABLE=1` build's `shot` showed the code. The guarded unlock's `shot` showed the wallpaper before
+    and after the fix (the control).
+  - `windows/run.py build` green after the fix (gates, `Veyq.Bridge.Tests` here and there, `Veyq.Tests`, the app,
+    `Veyq.Drive`).
+  - Cleanup: every Windows session signed out by Settings' "Sign out" (the devlogin ones and the linked W2 device), every
+    web session by its own sign-out; the debug app stopped and the installed MSIX (1.815) started again by its AUMID
+    (`app.veyq.Veyq_b17envnammnz6!App`, through the `veyq-app` task), left running.
+  - Not checked: the Memories agent's lightbox arrows after the Save dialog (the coordinator's optional ask) — the
+    Memories entry's UIA id was not at hand, so it was left rather than searched for.
+
   **Deviations:**
   - Neither GTK nor WinUI offers an accessible named action of the app's own (Android's `CustomAccessibilityAction`,
     Apple's named action): the sentence is the slider's accessible name and a screen-reader user confirms by the keys.
@@ -520,6 +549,21 @@ text goes straight into `DeviceLink` inside the core.
   - The phones' gap phase 5 named (a close in `FINISHING` leaving the new device's shell unopened) holds on both phones,
     measured by reading `AppModel` (Android and Apple open the shell only on the link's `DONE` and stop their watch in
     `closeLink`; the core ends the link `ENDED` while its tail signs in): not a core fix — inbox #918.
+  - The Windows VM has no camera, so Windows scanning (its `QrCamera.OpenLink`) is proven only by the build and Linux's
+    twin; the Windows runs are the two showing directions, as the Done-when allows (`NoCamera`).
+
+  **Retrospective:**
+  - **A pass's first failures were the harness's, not the app's:** the web's "Confirm" was a checkbox's button, the web
+    closed its page after four minutes while the app waited for a person's pace, Playwright knows no `Return` key and
+    `Veyq.Drive` split a step into three parts. Each cost a ceremony (ten minutes of a code's life); a harness step is
+    tried once against a throwaway state before a ceremony depends on it.
+  - **Where a release lands is the toolkit's business:** GTK under Broadway delivered a release past the scale to the
+    widget under the pointer, and WinUI moved a dialog's content with its Unloaded after the Loaded. Both were found by a
+    shot or a log line, not by a unit test; a gesture's end and a guard's lifetime are watched where the toolkit, not
+    the widget, owns them.
+  - **An empty list is a first draw too:** the offer's "draw only on change" treated the first, empty draw as no change on
+    both desktops; a device with no level to offer stood on a page with no button. Seen only because the pass ran the
+    run-only case on purpose.
 - [ ] **7 docs and harvest** — ADR 0059 §2 and ADR 0004 § Transport: D1's sentence; `uc.account.onboard-device`
   notes the apps (no coverage change); `native-apps.md` § Account: the adoption blocker removed, what is built added;
   `site/src/content/docs/account/adding-another-device.mdx` and `getting-started/sign-in.mdx` (with their `de/` twins)

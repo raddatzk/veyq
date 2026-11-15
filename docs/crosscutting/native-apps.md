@@ -19,7 +19,8 @@ and New pot (`EntryEditor`, `PotSettings`, `PotCreateSheet`), shared files
 (`navigation/NodeHeader`), an open node's header with pin, trash, rename and cover (`navigation/NodeHeaderModel`) and the
 sheets behind it (`MoveSheet`, `ShareSheet`, `ReportSheet`; ADR 0136's Consequences), a file's page and its Save a copy
 (`depot/FileModel`, `FileSave`), Depot's uploads (`depot/DepotUploads`, the walk's rule `FolderUpload.keeps`) and a drop
-box's page (`depot/DropBoxPage`); which words an outcome raises (`words/Notices`) and what a row or a page says, piece by piece
+box's page (`depot/DropBoxPage`), a Memory's page and its lightbox (`memories/GalleryModel`, `Lightbox`, the grid's layout
+`MediaGridLayout`, the rights `MemoryRights`, `MemoryCreate`) and Memories' uploads' settle (`memories/MediaUploads`); which words an outcome raises (`words/Notices`) and what a row or a page says, piece by piece
 (`words/Piece`). A platform keeps only its UI, built to its own guidelines, and what only it can do: the system pickers
 and share sheets, the secure store, decoding and framing pictures, writing a date, a size or an amount its own way, the
 device's calendar, and the order of a view's own steps.
@@ -36,7 +37,8 @@ currency is a number alone (no locale's or `"EUR"` fallback); a stale save reads
 editor and saves on top, as the web; the editor's delete is asked and says `entry_delete`; a PDF receipt shows at most
 20 pages and says so; today and a restore's window are the core's clock; a file downloads as itself, any other node as
 its ZIP; a replace expects the content shown when Replace was chosen; a member replaces nothing in a guest's identity
-folder; nothing decrypted is written to show or play a file ([ADR 0047](../decisions/0047-inline-video-playback-range-streaming.md)'s
+folder; a gallery is the web's justified grid on every app, its uploaders read once per gallery, its slideshow the
+web's and a medium's Undo the node trash's 6 s; nothing decrypted is written to show or play a file ([ADR 0047](../decisions/0047-inline-video-playback-range-streaming.md)'s
 Consequences).
 
 ## Platforms
@@ -49,8 +51,9 @@ Consequences).
 | iPad | yes (the iOS target, no device family set) | SwiftUI | `NavigationSplitView` with its sidebar open in a regular size class; the detail is one page whose bar's places are a segmented control in its toolbar, not a tab bar, Search always the toolbar's field at its trailing end; Settings pinned at the sidebar's foot; an object chosen in the sidebar has no back (ADR 0122 decision 7); sign-in and unlock read at a form's width | the Simulator, 2026-11-10 |
 | macOS | yes (macOS 26) | SwiftUI | always the split view, as the iPad's; the sidebar 240–360 pt wide | an ad-hoc signed build, 2026-11-10 (Home, a Pot's entries and overview); without a team's signing the device trust is never enrolled; no share extension there |
 | Windows | the core and the bridge for x64 (`veyq.dll`), cross-compiled on the developer's Mac; the app on a Windows host (`src/mobile/windows/run.py build`), unpackaged and self-contained | WinUI 3 in C#, Fluent, over the core as `veyq.dll` through the bridge | `NavigationView` with its own thresholds: Left from 1008 epx, LeftCompact (icons) from 641, LeftMinimal below; the switcher its pane header, Search its `AutoSuggestBox` (Ctrl+E, Ctrl+F), Settings at its foot, New the first command of the content's `CommandBar` | an ARM64 Windows 11 VM under x64 emulation, driven through UI Automation, 2026-11-11 (the first slice: sign-in, the shell, Home, a Pot read only, Search; maximized, 800 and 500 wide); the members' pictures and a Pot's download through the system's save picker, its ZIP imported by the web, 2026-11-11; the device trust, the owner answering Windows Hello, 2026-11-11; a node's header with every action on it, 2026-11-12; Expenses whole (the entry editor, receipts with a PDF through `Windows.Data.Pdf`, settle-up, history and restore, settings and people, New pot, the live poll), 2026-11-12; Depot whole (a file's page with
-media played, Save a copy with its cancel, uploads up to 2 GiB + 1, drop boxes and the top level's share; the drop not seen,
-§ Open), 2026-11-12; no x64 PC |
+media played, Save a copy with its cancel, uploads up to 2 GiB + 1, drop boxes and the top level's share), 2026-11-12; Explorer's drop with UAC on, 2026-11-13; Memories (New Memory and
+chapters, the justified grid with the live poll, the lightbox with zoom, the slideshow, a video played, Save and trash
+with Undo, uploads with this host's tiers and a drop from Explorer, a Memory's links, the row covers), 2026-11-15; no x64 PC |
 | Linux | the core and the bridge for arm64 and x86-64, cross-compiled on the developer's Mac; the app for arm64, proved and built in the GNOME 51 SDK it ships on (`src/mobile/linux/run.py build`) and drawn in a Fedora 44 container for a pass (`run.py run`), and as an aarch64 Flatpak bundle on `org.gnome.Platform//51` (`run.py flatpak`, [ADR 0139](../decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)) | GTK 4 and libadwaita in Rust, over the core as `libveyq.so` through the bridge | `AdwNavigationSplitView` with libadwaita's `AdwSidebar` (240–360 sp), collapsing below 600 sp to a navigation stack, the sidebar in its page mode; the switcher the sidebar's title menu, Search a search bar under it (Ctrl+F), Settings at its foot | Broadway in Fedora 44 arm64, drawn into a browser, 2026-11-10 (the first slice: sign-in, the shell, Home, a Pot read only, Search; 1100 × 750 and 500 × 750); the members' pictures and a Pot's download through GTK's save dialog, its ZIP imported by the web, 2026-11-11; the device trust over gnome-keyring in the container, 2026-11-11; a node's header with every action on it, 2026-11-12; Expenses whole (the entry editor, receipts with a PDF through poppler-glib, settle-up, history and restore, settings and people, New pot, the live poll), 2026-11-12; Depot whole (a file's page with
 media played, Save a copy with its cancel, uploads up to 2 GiB + 1, drop boxes and the top level's share), 2026-11-12; a
 real GNOME session in the Fedora 45 VM for the drop, the portal's dialogs and the sound, 2026-11-12; the Flatpak installed
@@ -59,7 +62,8 @@ the secure store's calls, an update and an uninstall, 2026-11-13 (ADR 0123's Con
 the installed Flatpak's sandbox — by an Emergency Kit picked through the portal, the members' pictures, the exchange
 rates, a receipt's PDF uploaded, drawn and saved at document-portal paths, a Depot upload and a drop from Files, H.264
 and VP9 played and heard, the account's Settings from the sidebar (rename, another session signed out, sign-out) in
-English/light and German/dark — 2026-11-13 |
+English/light and German/dark — 2026-11-13; Memories (as Windows', a drop from Files and the sound in the VM's session),
+2026-11-13/14 |
 
 Windows and Linux are wanted (owner 2026-11-09), each with its own native UI over the same core
 ([ADR 0136](../decisions/0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): Linux GTK 4 and
@@ -77,9 +81,9 @@ means the code is there and compiles, nothing recorded beyond. Both apps hold ev
 otherwise; the Linux and Windows apps hold only their first slice, the members' pictures, a Pot's download, the
 device trust with "Manage servers" (their rows above), the kit at sign-in and the account's Settings, a folder's and a Pot's header with every action on it: pin,
 trash with undo and the space's trash, rename, New folder, move and copy with the storage check, a folder's download,
-share links, a report and a cover with its crop, Expenses whole as its paragraph's but the share sheet's files, and
-Depot whole as its paragraph's but Send a copy (measured 2026-11-12, ADR 0123's Consequences, the Linux app and the
-Windows app).
+share links, a report and a cover with its crop, Expenses whole as its paragraph's but the share sheet's files,
+Depot whole as its paragraph's but Send a copy (measured 2026-11-12), and Memories as its paragraph's (measured
+2026-11-13/15; ADR 0123's Consequences, the Linux app and the Windows app).
 
 **Account and session.** Sign-in with password and Secret Key behind the `/api/setup` major gate, each grant judged as
 the web judges it (measured, `LiveSignInTest`, `GrantTrustTest`); several servers and tenants with their switcher,
@@ -125,8 +129,9 @@ application ending in Search (names only), Home's tree with its filters; favorit
 restore, purge), move, copy (Pot, folder, file, drop box, with the storage check), rename (its links' names re-sealed),
 a node's cover with its crop, core's header for every kind, a report to the moderators — each measured 2026-11-08/09.
 
-**Sharing.** Links on a Pot, a folder or a file (READ, READ_WRITE, "Add files only" drop boxes, at a space's top
-level too): create, edit, renew, switch off and on, delete; closing a link re-keys the subtree, an interrupted re-key
+**Sharing.** Links on a Pot, a folder, a file, a Memory or a chapter (READ, READ_WRITE, "Add files only" drop boxes,
+at a space's top level too; a Memory's or chapter's upload-only link sealing to the node's own drop key, neither edited
+nor renewed): create, edit, renew, switch off and on, delete; closing a link re-keys the subtree, an interrupted re-key
 is resumed — measured 2026-11-09. Taking shared images and PDFs into a Pot from the system's share sheet (Android, iOS;
 ADR 0138), measured 2026-11-08.
 
@@ -152,12 +157,23 @@ the desktops' way out).
 
 **Memories.** The gallery with chapters, the lightbox with details, video and saving the original; adding photos and
 videos, their metadata read on the device as the web reads it (EXIF, the container's time, position), Android asking
-once for full media access so a photo keeps its place and name — measured 2026-11-09.
+once for full media access so a photo keeps its place and name — measured 2026-11-09. Since 2026-11-13 the page, the
+lightbox and the uploads' settle are the core's (ADR 0136's Consequences), and every app draws New Memory and Add
+chapter, the chapters with their covers, the web's justified grid, the live poll, zoom, the slideshow, a medium trashed
+with Undo (a guest's own purged after asking, held by the core's tests: the apps open a gallery as a member only), a
+Memory's links, and the hero once a cover exists; GPX tracks and music are left out of the gallery, as the web's photo
+views leave them. Measured on Android (2026-11-15), on Linux (the container and the Fedora VM, 2026-11-13/14) and on
+Windows (the VM, 2026-11-15), each with a WRITE_ONLY guest's upload seen through the poll; on Apple the moved rules were
+passed on iOS and macOS (2026-11-13), the new functions only built (§ Open). The desktops make a medium's tiers through
+the host (`HostRequest.MediaTiers`: gdk-pixbuf and GStreamer, WIC and `Windows.Media.Editing`), take a drop of files onto
+the gallery and say a dropped folder not taken. On a Mac the lightbox opens in the window, a window of its own only when
+asked (ADR 0123's Consequences).
 
 **Uploads.** One queue in the core, the web's rules (`UploadQueueTest`); Android's row and sheet under the top bar,
 Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's button not seen open); Linux's header bar
 button with its popover and Windows' `AppBarButton` with its flyout, each with Cancel, Retry and Cancel all, measured
-2026-11-12. What the tray shows and when it clears is the core's (`DepotUploads`).
+2026-11-12. What the tray shows and when it clears is the core's (`DepotUploads`, Memories' batches among them); what a
+medium's upload settles and when a picked file is let go, `MediaUploads`'.
 
 **Out and in.** The ZIP of a Pot, a folder, a file or a drop box, as the web writes it — measured 2026-11-09.
 
@@ -179,7 +195,8 @@ dialog. Callers: the kit's scan at sign-in, device linking.
     Windows 11 provisions them), so where a person removed one the members' pictures fall back to initials (measured
     2026-11-11, the decode test's bite) and a format Media Foundation does not decode is said and offered for saving (the
     VM decoded VP9/Opus and H.264/AAC and refused ProRes, `C00D5212`, said `file_unsupported`; the app ships no codec:
-    patents, the owner's answer of the Depot slice, 2026-11-12). **Built 2026-11-13** (`windows/run.py package`, ADR
+    patents, the owner's answer of the Depot slice, 2026-11-12). A HEIC photo's tiers need the HEIF and HEVC extensions likewise
+    (not measured; where WIC does not decode it, it goes up alone with its icon, as on a phone that cannot). **Built 2026-11-13** (`windows/run.py package`, ADR
     0123's Consequences, the MSIX): installs, starts to its German sign-in with UAC off (elevated, like every process
     there), updates in place keeping its data and uninstalls leaving nothing on the VM; a signed copy's block map is the
     unsigned one's. With **UAC on** (2026-11-13): installs, starts to its German sign-in at medium integrity (`0x2000`, not
@@ -205,8 +222,10 @@ dialog. Callers: the kit's scan at sign-in, device linking.
     an x64 PC, and whether de's +243 MiB over a 2 GiB upload (en's +86) is the GC's slack, is unmeasured.
   - **The level's New shows on a file's and a drop box's page** (as on every non-Pot page); one switch-off of a link took
     30 s once (de/dark; 4 s in en/light), not seen again.
-  - **The other screens.** Memories' screens and uploads are not built. New offers a folder, a Pot, Upload files and
-    Upload folder.
+  - **Memories' unseen steps on Windows** (2026-11-15, each machine-doable, inbox #926): a video's sound (the Depot pass's was the
+    owner's ear), a chapter's cover drawn (none was set in the pass), a HEIC picked (the HEIF and HEVC extensions; an
+    undecodable file goes up alone, `MediaTiersTest`), and two fixes built and unit-checked but not driven again: the
+    lightbox's ←/→ after the save picker (the keys on the window's content now) and a grid tile in its `Border`.
   - **Windows' share sheet left a ghost** once: after it was used, screenshots taken while a later `ContentDialog`
     opened showed its window again (stale, the first link), while UI Automation drove the dialog beneath; gone after a
     restart. Whether a person sees it on a real display is checked in the next Windows pass.
@@ -252,8 +271,11 @@ dialog. Callers: the kit's scan at sign-in, device linking.
     (`run.py run --no-secret-service`, `run.py test`'s `no-bus` and `absent` probes).
   - **A fingerprint reader** (fprintd, polkit) has no standard way to a key, so the presence level is not planned on
     Linux.
-  - **The other screens.** Memories' screens and uploads are not built. New offers a folder, a Pot, Upload files and
-    Upload folder.
+  - **HEIC on Linux**: the Fedora container's glycin-heif has no HEVC decoder (libde265), so a HEIC goes up alone with
+    its icon; in the GNOME 51 runtime not measured (the build sandbox's glycin starts no loader). Whether the installed
+    Flatpak decodes one is its next pass's question.
+  - **A Memory's WebM sought far** took about a minute to land under Broadway (16 Mb/s read a range at a time through
+    the reader; Windows' took 2 s): a larger read-ahead for a seek is untried.
   - **What the uploads say waits for a save** (2026-11-12): an `AdwToastOverlay` shows one toast at a time and a save's
     progress toast never times out, so an upload's offer or outcome shows only after the save ends. Unexplained, seen
     once each: the first 2 GiB upload failed at 30 % and its automatic retry failed at once (no code was logged; three
@@ -269,10 +291,10 @@ dialog. Callers: the kit's scan at sign-in, device linking.
   x86-64 Linux PC without AVX, and a Windows-on-ARM PC whose x64 emulation hides AVX (it shows it by default). A
   software AES-GCM, or a second source such as CNG, would be a second implementation of a primitive on one platform;
   it is revisited if someone asks.
-- **A cover on the desktops is shown on a Pot's page** (its head, cut by `Cover.Cut`) and in its dialog, but no folder's
-  page draws a hero and no row a thumbnail, where Android and Apple draw both. The core has what they need
-  (`NodeCover.THUMBNAIL_EDGE`, `NodeCover.changes`, `HeaderShown.cover`, `Header.CoverPicture`, `Cover.Cut`); the other
-  kinds bring it in their slices. A cover set from another device shows on the page's next open, as on every platform.
+- **A cover on the desktops is shown on a Pot's and a Memory's page** (its head, cut by `Cover.Cut`), in its dialog and
+  on a Memory's row in Memories' list (`Shell.RowCover`), but no folder's page draws a hero and no other row a thumbnail,
+  where Android and Apple draw both. The core has what they need (`NodeCover.row`, `HeaderShown.cover`,
+  `Header.CoverPicture`, `Cover.Cut`); the other kinds bring it in their slices. A cover set from another device shows on the page's next open, as on every platform.
 - **An image past `FileView.IMAGE_EDGE` (4096) on the desktops** was not on a device (the passes' JPEG is 3000 × 2000):
   the scale-down (`file_page::within_edge`, Windows' `DecodePixelWidth`) is built, not seen.
 - **Apple's Depot passes left gaps** (2026-11-12): the macOS build was compiled, not run, so its download through the
@@ -280,8 +302,19 @@ dialog. Callers: the kit's scan at sign-in, device linking.
   the simulator tool does not drive), no drop box made from the top level (it types no name) and no cancel or retry (it
   takes no network away). Android's passes and the core's tests hold them.
 - **Apple's Undo was never tapped on a device**: the simulator tool's screenshots lag 2–3 s behind a 6 s window, so
-  the tap lands after the toast is gone. The trash's and the move's undo are held by the core's tests and measured on
-  Android and both desktops.
+  the tap lands after the toast is gone. The trash's, the move's and a medium's undo are held by the core's tests and
+  measured on Android and both desktops.
+- **Apple's Memories functions of 2026-11-15 were never tapped** (the owner's, inbox #925): New Memory, Add chapter, the
+  chapter covers, the live poll, zoom with its pan, the slideshow, a medium trashed with Undo and a Memory's WRITE_ONLY
+  link — built for macOS and the iOS simulator and launched signed in, but the simulator tool's access was not granted,
+  so no tap ran; the core's tests hold their rules. Nor were the Mac's Escape in the inline lightbox, its File menu's
+  "Open in New Window", a tile's context menu and a ⌘-click driven (the background tools send none), nor a seek near a
+  medium's end on iOS and macOS (the simulator's screenshots lag the player's controls; AVKit's on the Mac expose
+  nothing to accessibility).
+- **Memories' phone passes left two steps** (machine-doable, inbox #926): a member's upload from the web seen through
+  the poll (the passes' web upload was a WRITE_ONLY guest's, since Vite's `?devlogin` reads a `.run/.env` the serving
+  worktree lacked), and a GPX track left out of a phone's gallery (the dev account holds none; music was, 52 of 54
+  media shown).
 - **Apple's Expenses screens were never typed into** since their move into the core (2026-11-12): the simulator tool
   types no text, so a new entry saved, an item split, a person or category added or renamed, New pot created and a
   share from Photos were driven on Android and the desktops and held by `commonTest`, not on an iPhone; on Apple they
@@ -308,8 +341,6 @@ dialog. Callers: the kit's scan at sign-in, device linking.
 - **A picture replaced under the same user id sends no signal.** The id set stays the same, so no update tells Linux
   or Windows to ask again. Nothing reads the people anew yet; the first caller of `AvatarsModel.peopleRead` owes the
   hosts that signal (a revision per id, say).
-- **A Memory's medium through a reader** and tiles as UI (covers outside a Pot's page above) are Memories' slice: the
-  reader, the players and the upload queue in the bridge are built (Depot's, ADR 0137's Consequences).
 
 **Account**
 - Linking a device on a phone ([ADR 0059](../decisions/0059-device-linking.md)): the contract gives a client without
@@ -344,9 +375,10 @@ share is offered** in their shells (`folder == null && rules.on && rules.dropBox
 refresh**: nothing polls a drop box; `ShellModel.refresh` reads the tree anew (the desktops' F5, the uploads' settle,
 each app's lists read after a write). A guest's deleted folder is restorable only by Undo (inbox #904).
 
-**Memories**: creating a Memory and a chapter; the live poll; zoom and the slideshow; editing the date, the place,
-the participants and a medium's capture time; trashing and restoring media; item marks, buckets and guests' uploader
-names; the map; sharing and its guest views; the re-key of a Memory or chapter; export, import and copy; the banner.
+**Memories**: curating a Memory — its date, place and map, participants, a medium's capture time, the banner (inbox
+#890); item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
+re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); its music
+(#906) and GPX tracks (#907); a guest's view of a received link (#435, a source for the same model).
 
 **Uploads**: an upload that goes on while the app is in the background (Android a foreground service, iOS a
 background task); placeholder tiles in the gallery for what is under way; the list behind Apple's button seen open.

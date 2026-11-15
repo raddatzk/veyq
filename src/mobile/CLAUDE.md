@@ -20,7 +20,13 @@ A Gradle build of its own, run through its own wrapper.
   offer said once, the tray's acknowledge on the model's clock), a walk's rule `FolderUpload.keeps`, a drop box's page
   `DropBoxPage` (read anew on each revision of the shell's lists, a folder's delete only after asking) and the top level's
   "Add files only" `ShareSheet.topLevel`; `memories/`: a Memory's gallery, each medium under the key its origin
-  fixes), which
+  fixes; a Memory's or a chapter's page as a screen model, `GalleryModel`: its rows, chapters and rights, when it reads
+  anew — the lists' revision, an own upload into this node, the live poll's moved revision —, the trash with its Undo
+  (which waits for its trash) and a guest's purge, and the justified grid's frames, `MediaGridLayout`; its `Lightbox`: the
+  page by medium id, a video's `RangeReader` closed by the model when the page goes, the details, the save, the
+  slideshow on the model's clock; the web's rights ported fail-closed, `MemoryRights`; New Memory and Add chapter,
+  `MemoryCreate`; the uploads' settle and each picked file handed back once the queue is done with it, `MediaUploads`;
+  the tier spec, `MediaUpload`'s; ADR 0136's Consequences), which
   uses core's session and is never used by it; an application's spec is generated into `api.<application>`.
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
   decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's
@@ -79,6 +85,16 @@ A Gradle build of its own, run through its own wrapper.
   deleted only after `DropBox.AskDelete` (`DropBox.Delete`: trashed through a header with a guest folder's facts, `DropBox.Undo`);
   a space's top level's "Add files only" is `Share.OpenTopLevel(scopeId)` onto the `Share.*` calls, offered where
   `ShellShown.topLevelShare` says.
+  A Memory's or a chapter's page is `Gallery.Open` (`Watched.Gallery`: `GalleryShown`, rows naming blob ids, never bytes;
+  `Watched.GalleryLive` is the poll, a watch with no update of its own), its grid `Gallery.Layout` (the core lays out, the
+  host places the window's frames), a tile `Gallery.Tile` and a chapter's cover `Gallery.ChapterCover` (`Answer.Bytes`),
+  `Gallery.Trash/Undo/Purge/CancelAsk/Seen/Reload/CreateChapter/Close`; its lightbox `Lightbox.Open` (`Watched.Lightbox`)
+  with `Lightbox.Go/Picture/Slideshow/Details/Trash/Stop/Close`, `Medium.Reader` (refused once the lightbox no longer
+  holds it) and `Medium.Save` onto Depot's save calls; `Memory.Upload(gallery, paths)` reads each path at offsets and asks
+  the host for the tiers (`HostRequest.MediaTiers`, the spec in the request, `preview ‖ thumbnail` as the reply's
+  payload; `MediaDuration` for a poster's time), never on the deriving or the UI thread; `Shell.CreateMemory` and
+  `Gallery.CreateChapter` answer `Created(node, notice)`; a list row's cover is `Shell.RowCover` (ADR 0137's
+  Consequences).
   A device link (ADR 0059) is opened by its role's call — the trusted device's `Link.ShowForNewDevice`/`ScanSignInCode`
   over a connection (a tenant open; they close with it), the new device's `Link.ScanFromTrusted`/`ShowForSignIn` over the
   sign-in form's server — answered `LinkOpened(link)` for `Watched.Link` (`LinkShown`: the core's `DeviceLink.Shown`).
@@ -545,7 +561,10 @@ mechanism per platform, never a per-screen copy:
   peek shows its secret in clear. `ScreenSecrets.Guard(element)` excludes the window from capture
   (`SetWindowDisplayAffinity`, `WDA_EXCLUDEFROMCAPTURE`, Electron's `setContentProtection` and Signal's screen
   security) while the element is loaded: the sign-in (its scanner is a `ContentDialog` in the same window), the unlock,
-  and Manage's and Settings' password asks. A capture through the compositor sees the desktop behind the window
+  Manage's and Settings' password asks, and the device link's dialog (`DeviceLinkDialog`: the code it shows, its
+  scanner). An element WinUI moves keeps the guard: a `ContentDialog`'s content was loaded, then unloaded 13 ms later
+  while it stayed on screen, so `Guard` drops an element only once it is no longer `IsLoaded` (bitten 2026-11-15 on the
+  VM: without that the `shot` of the shown pairing code held the code, with it the wallpaper). A capture through the compositor sees the desktop behind the window
   (bitten 2026-11-13 on the VM: `Veyq.Drive`'s BitBlt `shot` of the filled sign-in and of its scanner showed the
   wallpaper; the same build with `VEYQ_DEV_CAPTURABLE=1` showed the scanner holding the Secret Key the test camera
   read); that Recall honours it is remembered (Microsoft's and Signal's word), not measured — no Copilot+ PC here. A
@@ -605,6 +624,9 @@ menu on iOS. On Linux the GNOME HIG's way, as libadwaita draws it: the creating 
 overlaid on a view (GNOME has no floating action button); the same guard holds it. On Windows Fluent's way, as
 Windows' own Settings and Explorer draw it: the creating action is New, the first command of the content's
 `CommandBar`, built only in `windows/Veyq/CreateAction.cs`, never a button laid over a view; the same guard holds it.
+A tile WinUI places on a `Canvas` at the core's frame sits in a `Border` placed there, never a `Button` placed by
+`Canvas.SetLeft`/`SetTop`: the guard reads the latter as a floating button (Memories' grid, 2026-11-15). The guard knows
+no grid cell placed by its frame; an exception for one would be the cleaner answer (inbox #927).
 WinUI's own chrome (the pane's button, back, the scroll bar, a `ToggleSwitch`'s On/Off) speaks the system's language
 whatever the app's words are, as on every Windows app, so a switch carries no words of its own: its header says what it
 turns on; a built-in item that shows a word of its own (`NavigationView`'s Settings) is replaced
@@ -716,6 +738,15 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   `MoveSheet` does): the copy's preview in Android's `LaunchedEffect` stopped the slow emulator answering (2026-11-11).
 - Kotlin initialises properties in declaration order: a flow a collector in `init` writes is declared above that
   `init`, or the first value meets a null field (Android's `_offer`, the first start crashed, measured 2026-11-11).
+- Compose's `HorizontalPager` reads its key and page for the page count it last laid out: a trash in the lightbox shrank
+  the rows under it and crashed the app (`IndexOutOfBoundsException` in the pager's key map, measured 2026-11-15). A
+  pager over a list the core may shorten keys a gone index (`rows.getOrNull(it)?.mediaId ?: "gone:$it"`) and draws
+  nothing for it. Run a core model's poll from its own scope (`GalleryModel.startLive()`), never `live()` from a
+  composable, which reads and opens the gallery on the main thread.
+- A core state that changes in two updates is waited for in both: a medium leaves the rows a moment before its Undo is
+  offered, so a test waiting for "gone and no Undo" takes the instant between them for the window's end — wait for the
+  offer first. And a test of an Undo needs a door that holds the trash's call open: a door that answers at once never
+  shows an Undo racing its own trash (Android did, under load, 2026-11-15).
 - A `SurfaceView` inside a Compose `Dialog` got no surface (measured 2026-11-09, the lightbox's video: the player stayed
   unprepared, black): draw a player there into a `TextureView`.
 - Android's photo picker hands a photo over with its GPS zeroed and under a name of its own (`34.jpg`, measured

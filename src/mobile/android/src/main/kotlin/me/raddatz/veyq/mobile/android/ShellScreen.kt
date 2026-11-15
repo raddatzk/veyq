@@ -691,7 +691,7 @@ private fun ExpensesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) 
     if (creating) PotCreateSheet(s, model) { creating = false }
 }
 
-/** Memories' own list (its Memories), with "New Memory" (D4: made at the top of the space shown, then opened). */
+/** Memories' own list (its Memories), with "New Memory" (made at the top of the space shown, then opened; core's `MemoryCreate`). */
 @Composable
 private fun MemoriesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) -> Unit = model::open) {
     var creating by remember { mutableStateOf(false) }

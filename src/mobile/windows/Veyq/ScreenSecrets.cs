@@ -28,7 +28,10 @@ internal static partial class ScreenSecrets
     public static T Guard<T>(T element) where T : FrameworkElement
     {
         element.Loaded += (_, _) => { if (Shown.Add(element)) Apply(); };
-        element.Unloaded += (_, _) => { if (Shown.Remove(element)) Apply(); };
+        // WinUI may raise a move's Unloaded after its new Loaded (measured 2026-11-15: a ContentDialog's content loaded,
+        // then unloaded 13 ms later while it stayed on screen, and the window became capturable with the pairing code
+        // in it): an element that is loaded again keeps the window out of capture
+        element.Unloaded += (_, _) => { if (!element.IsLoaded && Shown.Remove(element)) Apply(); };
         return element;
     }
 

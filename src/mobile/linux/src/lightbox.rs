@@ -1,4 +1,4 @@
-//! A Memory's lightbox (the CR "Memories on every app" phase 4, D11; core's `Lightbox`), GNOME's way, as Loupe shows a
+//! A Memory's lightbox (core's `Lightbox`; ADR 0123's Consequences, the Linux app), GNOME's way, as Loupe shows a
 //! picture: an `AdwNavigationPage` pushed over the gallery, the medium over black, its header bar with the position as its
 //! title and the medium's name under it, Previous and Next at its start, Slideshow, Details, Save and Move to trash at its
 //! end — each only where the core offers it. A picture zooms in its own scroll (Ctrl+wheel, a pinch, `+`, `-`, `0`); ←
