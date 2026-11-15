@@ -1,6 +1,8 @@
 package me.raddatz.veyq.mobile.navigation
 
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -19,6 +21,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** The move and copy sheet both apps drew (ADR 0136 decision 2, the header CR's D1 and D4) — over a door the test plays. */
+@OptIn(ExperimentalCoroutinesApi::class)
 class MoveSheetTest {
     private fun n(id: String, parent: String?, kind: String = "FOLDER", identity: Boolean = false) = NodeRef("s", id, parent, kind, id, identity)
 
@@ -51,7 +54,7 @@ class MoveSheetTest {
     }
 
     private suspend fun TestScope.sheet(node: NodeAt, copying: Boolean = false, door: Door = Door(tree)) =
-        MoveSheet(node, copying, door, backgroundScope).also { it.load(); runCurrent() }
+        MoveSheet(node, copying, door, backgroundScope, UnconfinedTestDispatcher(testScheduler)).also { it.load(); runCurrent() }
 
     @Test
     fun the_browser_opens_at_the_place_and_blocks_where_the_node_is_and_below_it() = runTest {
