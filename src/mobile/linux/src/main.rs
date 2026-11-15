@@ -74,7 +74,7 @@ impl Screens {
             }
             // the offer to stay signed in stands over the shell until it is answered (ADR 0123 decision 8)
             Gate::Signed { offer: Some(offer), .. } => {
-                self.offer.show(&offer.levels);
+                self.offer.show(&offer.levels, offer.linked);
                 self.face(&self.offer.page);
             }
             Gate::Signed { switching, .. } => {

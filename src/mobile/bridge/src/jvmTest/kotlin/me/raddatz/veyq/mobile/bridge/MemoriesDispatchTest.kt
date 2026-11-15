@@ -116,6 +116,7 @@ class MemoriesDispatchTest {
         private val frames = original.toList().chunked(V1.FRAME_PLAINTEXT).map { it.toByteArray() }
         val items = CopyOnWriteArrayList<MemoryMedia.Item>()
         val trashed: MutableSet<String> = ConcurrentHashMap.newKeySet()
+        @Volatile var rowCoverOpens = 0
         val sent = CopyOnWriteArrayList<String>()
         val listings = AtomicInteger()
         val moved = AtomicInteger()
@@ -254,6 +255,12 @@ class MemoriesDispatchTest {
                     val reads = AtomicInteger()
                     GalleryModel(node, played.door(node, uploads), now = { if (reads.getAndIncrement() == 0) 0L else 1_000_000L })
                 },
+                // a Memory "m" whose cover frames the picture's middle half; every other node names none
+                rowCover = { nodeId, held ->
+                    val cover = if (nodeId != "m") null else me.raddatz.veyq.mobile.session.NodeCover.read(kotlinx.serialization.json.JsonObject(mapOf("cover" to
+                        me.raddatz.veyq.mobile.session.NodeCover.uploaded(me.raddatz.veyq.mobile.blob.ApplicationBlobs.Plan("b-m", 1, 5, "d3JhcA==", "m"), me.raddatz.veyq.mobile.session.NodeCover.Crop(0.25, 0.0, 0.5, 1.0)))))
+                    me.raddatz.veyq.mobile.session.NodeCover.row(cover, held) { played.rowCoverOpens++; "row-m".encodeToByteArray() }
+                },
                 createMemory = { scopeId, parentId, name ->
                     MemoryCreate.check(MemoryCreate.MEMORY, parentId?.let { "FOLDER" }, name, emptyList())?.let { MemoryCreate.Made(null, it) }
                         ?: MemoryCreate.Made(NodeAt(scopeId, "m-new", MemoryCreate.MEMORY, name.trim()), null)
@@ -303,6 +310,18 @@ class MemoriesDispatchTest {
         assertEquals(Answer.Refused(Answer.Why.NO_BYTES), b.ask(Call.GalleryTile(g, "raw")))
         assertContentEquals("cover-c1".encodeToByteArray(), b.askWithPayload(Call.GalleryChapterCover(g, "c1")).second)
         assertEquals(Answer.Refused(Answer.Why.NO_COVER), b.ask(Call.GalleryChapterCover(g, "f")), "a node that is no chapter of this Memory")
+
+        // a list row's cover (Memories' list): the stored picture with its frame and crop once, then the frame alone while
+        // the host holds it — a row redrawn on every state opens no blob again
+        val (rowAnswer, rowBytes) = b.askWithPayload(Call.ShellRowCover("m", null))
+        val rowCover = rowAnswer as Answer.RowCover
+        assertEquals(Answer.RowCover(rowCover.frame, me.raddatz.veyq.mobile.session.NodeCover.Crop(0.25, 0.0, 0.5, 1.0), true, null), rowCover)
+        assertContentEquals("row-m".encodeToByteArray(), rowBytes, "a row's cover is the stored picture")
+        val (heldAnswer, heldBytes) = b.askWithPayload(Call.ShellRowCover("m", rowCover.frame))
+        assertEquals(Answer.RowCover(rowCover.frame, rowCover.crop, false, null), heldAnswer, "a held frame is not sent again")
+        assertEquals(null, heldBytes)
+        assertEquals(1, played.rowCoverOpens, "a held frame's blob is not opened again")
+        assertEquals(Answer.Refused(Answer.Why.NO_COVER), b.ask(Call.ShellRowCover("f", null)), "a node with no cover")
 
         // the justified grid is the core's (D14): every row 4:3, so 1 000 wide (target 200) holds all four in one justified row,
         // 500 wide (target 150) three justified and a widow at the target height; the host only places the frames

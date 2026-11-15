@@ -52,6 +52,28 @@ class NodeCoverTest {
     }
 
     @Test
+    fun a_rows_cover_is_opened_only_when_the_host_does_not_hold_its_frame() = kotlinx.coroutines.test.runTest {
+        val cover = NodeCover.read(JsonObject(mapOf("cover" to NodeCover.uploaded(ApplicationBlobs.Plan("b-1", 1, 3, "d3JhcA==", "n"), NodeCover.Crop(0.25, 0.0, 0.5, 1.0)))))!!
+        var opened = 0
+        val open: suspend () -> ByteArray? = { opened++; "jpg".encodeToByteArray() }
+        // nothing held: the picture, its frame (the key a list keeps it by) and its crop
+        val first = NodeCover.row(cover, null, open)!!
+        assertEquals("b-1@0.25,0.0,0.5,1.0", first.frame)
+        assertEquals(NodeCover.frameOf(cover), first.frame)
+        assertEquals(NodeCover.Crop(0.25, 0.0, 0.5, 1.0), first.crop)
+        assertEquals("jpg", first.bytes!!.decodeToString())
+        // that frame held: no blob opened, no bytes
+        val again = NodeCover.row(cover, first.frame, open)!!
+        assertNull(again.bytes, "a held frame is not sent again")
+        assertEquals(1, opened, "a held frame's blob is not opened again")
+        // another crop of the same picture: opened anew
+        assertEquals("jpg", NodeCover.row(cover, "b-1@0.0,0.0,1.0,1.0", open)!!.bytes!!.decodeToString())
+        // no cover, or a picture that does not open: none
+        assertNull(NodeCover.row(null, null, open))
+        assertNull(NodeCover.row(cover, null) { null })
+    }
+
+    @Test
     fun a_covers_jpeg_is_the_webs_spec_and_its_size_keeps_the_aspect_without_enlarging() {
         // the web's COVER_SPEC: long edge 2048, quality 0.85; a list's picture at least 384 on its short edge
         kotlin.test.assertEquals(2048, NodeCover.LONG_EDGE)

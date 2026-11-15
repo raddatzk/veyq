@@ -37,6 +37,26 @@ public sealed class DropSortTest
         Assert.AreEqual(0, DropSort.Calls(Trip, sorted).Count, "a drop of nothing local sends nothing");
     }
 
+    /// <summary>A drop onto a gallery (Linux's memory_page test, rule for rule): its files in one Memory.Upload, a folder
+    /// said and not taken (owner question 3), what is not on this computer said as Depot's drop says it.</summary>
+    [TestMethod]
+    public void ADropOntoAGallerySendsItsFilesAndSaysEachFolderNotTaken()
+    {
+        var sorted = DropSort.Sort([
+            new DroppedItem("a.jpg", @"C:\Bilder\a.jpg", false),
+            new DroppedItem("Reise ü", @"C:\Bilder\Reise ü", true),
+            new DroppedItem("clip.webm", @"C:\Bilder\clip.webm", false),
+            new DroppedItem("away.jpg", "", false),
+        ]);
+        var call = (Call.MemoryUpload)DropSort.GalleryCall(7, sorted)!;
+        Assert.AreEqual(7, call.gallery);
+        CollectionAssert.AreEqual(new[] { @"C:\Bilder\a.jpg", @"C:\Bilder\clip.webm" }, call.paths.ToArray(), "the files, one batch, no folder");
+        CollectionAssert.AreEqual(new[] { Words.MemoryDropFolder("Reise ü"), Words.DepotDropNotLocal("away.jpg") }, DropSort.GallerySaid(sorted).ToArray());
+        var onlyFolder = DropSort.Sort([new DroppedItem("y", @"C:\x\y\", true)]);
+        Assert.IsNull(DropSort.GalleryCall(7, onlyFolder), "a folder alone sends nothing");
+        CollectionAssert.AreEqual(new[] { Words.MemoryDropFolder("y") }, DropSort.GallerySaid(onlyFolder).ToArray());
+    }
+
     [TestMethod]
     public void ADroppedPathsFactsNameItsRootAndWhatTheFileSystemSaysNeverItsName()
     {

@@ -38,6 +38,10 @@ public sealed class TrustWordsTest
         Assert.AreEqual((Words.OfferNotNow(), Words.OfferNotNowHint()), (both[2].Title, both[2].Hint));
         var login = TrustWords.Offer([StaySignedIn.Login]);
         CollectionAssert.AreEqual(new StaySignedIn?[] { StaySignedIn.Login, null }, login.Select(c => c.Level).ToArray());
+        // after a device link with no level the device can keep: "Not now" alone, in the link's words (ADR 0059 §10)
+        var linked = TrustWords.Offer([], linked: true);
+        Assert.AreEqual(1, linked.Count);
+        Assert.AreEqual((Words.OfferNotNow(), Words.OfferNotNowLinkedHint()), (linked[0].Title, linked[0].Hint));
     }
 
     [TestMethod]

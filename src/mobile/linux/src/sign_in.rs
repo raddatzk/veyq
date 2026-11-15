@@ -9,6 +9,10 @@
 //! Kit" beside it, only where the Camera portal names a camera, scans its code ([crate::qr_camera], kind `KIT`). Either
 //! way the gate's `kit` fills the email and the server and the Secret Key row says "From your Emergency Kit" — the key
 //! itself the core holds, never this side.
+//!
+//! Below them the two ways in from another device (ADR 0059 §1; `cr-app-device-linking`): "Scan a code from another
+//! device", only where a camera is, and "Sign in with a QR code" — each a ceremony of [crate::device_link] over the
+//! server the form names (nothing a scan reads changes it).
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -85,6 +89,9 @@ pub struct SignIn {
     kit_row: adw::ActionRow,
     open_kit: adw::ButtonRow,
     scan_kit: adw::ButtonRow,
+    /// The two device-linking entries; the scan only where a camera is.
+    link_scan: adw::ButtonRow,
+    link_show: adw::ButtonRow,
     /// The kit's server replaced a different one the form held: said, never refused.
     other_server: gtk::Label,
     /// The kit the form last showed, so a new one fills the email and the server once.
@@ -119,6 +126,11 @@ impl SignIn {
         for row in [server.upcast_ref::<gtk::Widget>(), email.upcast_ref(), password.upcast_ref(), secret_key.upcast_ref(), kit_row.upcast_ref(), open_kit.upcast_ref(), scan_kit.upcast_ref()] {
             fields.add(row);
         }
+        let link_scan = adw::ButtonRow::builder().title(words::signin_link_scan()).start_icon_name("camera-photo-symbolic").visible(false).build();
+        let link_show = adw::ButtonRow::builder().title(words::signin_link_show()).build();
+        let links = adw::PreferencesGroup::new();
+        links.add(&link_scan);
+        links.add(&link_show);
         let other_server = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
         other_server.add_css_class("dim-label");
         // Staying signed in is no longer chosen here: the core offers it after the sign-in (ADR 0123 decision 8), drawn by `Offer`
@@ -130,7 +142,7 @@ impl SignIn {
         cancel.add_css_class("flat");
         let spinner = adw::Spinner::builder().visible(false).build();
         let heading = gtk::Label::new(Some(&words::signin_title()));
-        let page = page(&heading, &[fields.upcast_ref(), other_server.upcast_ref(), error.upcast_ref(), submit.upcast_ref(), cancel.upcast_ref(), spinner.upcast_ref()]);
+        let page = page(&heading, &[fields.upcast_ref(), other_server.upcast_ref(), error.upcast_ref(), submit.upcast_ref(), cancel.upcast_ref(), spinner.upcast_ref(), links.upcast_ref()]);
 
         let s = Rc::new(Self {
             page,
@@ -142,6 +154,8 @@ impl SignIn {
             kit_row,
             open_kit,
             scan_kit,
+            link_scan,
+            link_show,
             other_server,
             shown_kit: RefCell::new(None),
             submit,
@@ -164,13 +178,22 @@ impl SignIn {
         s.scan_kit.connect_activated(move |_| if let Some(s) = w.upgrade() {
             s.scan();
         });
-        // the scan's entry only where the Camera portal names a camera (D7: no camera, no entry)
+        let w = Rc::downgrade(&s);
+        s.link_scan.connect_activated(move |_| if let Some(s) = w.upgrade() {
+            s.link(|server| Call::LinkScanFromTrusted { server });
+        });
+        let w = Rc::downgrade(&s);
+        s.link_show.connect_activated(move |_| if let Some(s) = w.upgrade() {
+            s.link(|server| Call::LinkShowForSignIn { server });
+        });
+        // the scans' entries only where the Camera portal names a camera (D7: no camera, no entry)
         let w = Rc::downgrade(&s);
         glib::spawn_future_local(async move {
             let present = crate::qr_camera::camera_present().await;
-            eprintln!("veyq: the sign-in's kit scan {}", if present { "offered" } else { "not offered: no camera" });
+            eprintln!("veyq: the sign-in's kit and link scans {}", if present { "offered" } else { "not offered: no camera" });
             if let Some(s) = w.upgrade() {
                 s.scan_kit.set_visible(present);
+                s.link_scan.set_visible(present);
             }
         });
         s
@@ -189,6 +212,11 @@ impl SignIn {
                 secret_key: typed,
             });
         }
+    }
+
+    /// A device link from the sign-in over the server the form names (`Link.ScanFromTrusted`, `Link.ShowForSignIn`).
+    fn link(&self, make: impl FnOnce(String) -> Call) {
+        crate::device_link::open(&self.page, make(self.server.text().trim().to_string()));
     }
 
     /// "Open Emergency Kit": GTK's open dialog for a PDF or a picture; the core reads the file at the path picked.
@@ -281,6 +309,8 @@ impl SignIn {
         self.cancel.set_sensitive(!working);
         self.submit.set_sensitive(!working);
         self.open_kit.set_sensitive(!working);
+        self.link_scan.set_sensitive(!working);
+        self.link_show.set_sensitive(!working);
         self.spinner.set_visible(*working);
         show_error(&self.error, error);
     }
@@ -413,9 +443,11 @@ pub fn level_words(level: StaySignedIn) -> Option<(String, String)> {
 
 /// The offer's answers, in order: each level the core offers (`Gate.Signed.offer`, in the core's order) that has words
 /// here, then "Not now" — each with its title and its line.
-pub fn offer_choices(levels: &[StaySignedIn]) -> Vec<(Choice, String, String)> {
+pub fn offer_choices(levels: &[StaySignedIn], linked: bool) -> Vec<(Choice, String, String)> {
     let mut choices: Vec<_> = levels.iter().filter_map(|&l| level_words(l).map(|(title, hint)| (Choice::Stay(l), title, hint))).collect();
-    choices.push((Choice::NotNow, words::offer_not_now(), words::offer_not_now_hint()));
+    // after a device link the device got no password: "Not now" says what the next start then needs (ADR 0059 §10)
+    let hint = if linked { words::offer_not_now_linked_hint() } else { words::offer_not_now_hint() };
+    choices.push((Choice::NotNow, words::offer_not_now(), hint));
     choices
 }
 
@@ -428,7 +460,9 @@ pub struct Offer {
     pub page: adw::ToolbarView,
     group: adw::PreferencesGroup,
     rows: RefCell<Vec<adw::ActionRow>>,
-    shown: RefCell<Vec<StaySignedIn>>,
+    /// The levels drawn last and whether the offer followed a device link; None before the first draw (an offer with no
+    /// level at all still draws its "Not now").
+    shown: RefCell<Option<(Vec<StaySignedIn>, bool)>>,
     spinner: adw::Spinner,
     /// Says a level this device could not keep, where the person then is (the shell: the offer has ended).
     said: Rc<dyn Fn(String)>,
@@ -443,19 +477,21 @@ impl Offer {
         let spinner = adw::Spinner::builder().visible(false).build();
         let heading = gtk::Label::new(Some(&words::offer_title()));
         let page = page(&heading, &[group.upcast_ref(), footer.upcast_ref(), spinner.upcast_ref()]);
-        Self { page, group, rows: RefCell::new(Vec::new()), shown: RefCell::new(Vec::new()), spinner, said }
+        Self { page, group, rows: RefCell::new(Vec::new()), shown: RefCell::new(None), spinner, said }
     }
 
-    /// Draws [levels], the offer's; the rows are built anew only when the levels change.
-    pub fn show(&self, levels: &[StaySignedIn]) {
-        if *self.shown.borrow() == levels {
+    /// Draws [levels], the offer's, and its "Not now" in a device link's words where [linked]; the rows are built anew only
+    /// when they change.
+    pub fn show(&self, levels: &[StaySignedIn], linked: bool) {
+        let drawn = Some((levels.to_vec(), linked));
+        if *self.shown.borrow() == drawn {
             return;
         }
-        *self.shown.borrow_mut() = levels.to_vec();
+        *self.shown.borrow_mut() = drawn;
         for row in self.rows.borrow_mut().drain(..) {
             self.group.remove(&row);
         }
-        let choices = offer_choices(levels);
+        let choices = offer_choices(levels, linked);
         let rows: Vec<adw::ActionRow> = choices
             .iter()
             .map(|(_, title, hint)| {
@@ -514,13 +550,16 @@ mod tests {
 
     #[test]
     fn the_offer_lists_what_the_core_offers_then_not_now() {
-        let choices: Vec<Choice> = offer_choices(&[StaySignedIn::Login]).into_iter().map(|c| c.0).collect();
+        let choices: Vec<Choice> = offer_choices(&[StaySignedIn::Login], false).into_iter().map(|c| c.0).collect();
         assert_eq!(choices, vec![Choice::Stay(StaySignedIn::Login), Choice::NotNow]);
-        assert_eq!(offer_choices(&[StaySignedIn::Login])[0].1, words::signin_remember());
-        assert_eq!(offer_choices(&[StaySignedIn::Login])[0].2, words::offer_login_hint());
+        assert_eq!(offer_choices(&[StaySignedIn::Login], false)[0].1, words::signin_remember());
+        assert_eq!(offer_choices(&[StaySignedIn::Login], false)[0].2, words::offer_login_hint());
         // PRESENCE has no words here (no Linux store offers it): never drawn as LOGIN's
-        let presence: Vec<Choice> = offer_choices(&[StaySignedIn::Presence, StaySignedIn::Login]).into_iter().map(|c| c.0).collect();
+        let presence: Vec<Choice> = offer_choices(&[StaySignedIn::Presence, StaySignedIn::Login], false).into_iter().map(|c| c.0).collect();
         assert_eq!(presence, vec![Choice::Stay(StaySignedIn::Login), Choice::NotNow]);
-        assert_eq!(offer_choices(&[]).into_iter().map(|c| c.0).collect::<Vec<_>>(), vec![Choice::NotNow]);
+        assert_eq!(offer_choices(&[], false).into_iter().map(|c| c.0).collect::<Vec<_>>(), vec![Choice::NotNow]);
+        // after a device link: "Not now" says the device got no password
+        assert_eq!(offer_choices(&[], true)[0].2, words::offer_not_now_linked_hint());
+        assert_eq!(offer_choices(&[], false)[0].2, words::offer_not_now_hint());
     }
 }
