@@ -1,4 +1,4 @@
-// A picked photo's or video's tiers, made for the core (the CR "Memories on every app" D5; ADR 0136 decision 1: decoding and
+// A picked photo's or video's tiers, made for the core (ADR 0137's Consequences, the tiers; ADR 0136 decision 1: decoding and
 // encoding are the platform's, the spec — edges, qualities, the poster's moment — the core's, in the request; Linux's
 // media_tiers.rs, rule for rule). The core asks on its upload queue's own thread (Media.Duration, then Media.Tiers), which
 // Core.Draw hands to the thread pool, never the UI thread; this answers there:

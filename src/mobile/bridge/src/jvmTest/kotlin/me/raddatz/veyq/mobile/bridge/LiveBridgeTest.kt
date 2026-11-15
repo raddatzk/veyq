@@ -2331,7 +2331,7 @@ class LiveBridgeTest {
     }
 
     /**
-     * Memories through the bridge's calls (the CR "Memories on every app", phase 3), on a running instance: an `App memory
+     * Memories through the bridge's calls (ADR 0123's Consequences, the bridge; ADR 0137's), on a running instance: an `App memory
      * <n>` made by `Shell.CreateMemory` at the personal space's top, three JPEGs drawn here and the WebM at
      * `VEYQ_LIVE_MEMORY_WEBM` (600 MiB, made by `ffmpeg`) added by path through `Memory.Upload`, their tiers made by a host
      * this test plays (`Media.Duration`, `Media.Tiers`: ImageIO's JPEGs to the core's spec, a drawn poster for the video), read

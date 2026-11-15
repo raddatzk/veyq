@@ -24,7 +24,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * A Memory's page and its lightbox both phones drew (ADR 0136 decision 2; the CR's phase 1 moved them into the core) — over
+ * A Memory's page and its lightbox both phones drew (ADR 0136 decision 2; moved into the core, its Consequences) — over
  * a gallery the test plays: the rows and the tiers they read, when the gallery reads anew, a Memory's chapters, the lightbox's
  * index across a re-read, a video's reader and when it closes, a blocked medium, the uploaders read once, the original saved.
  */

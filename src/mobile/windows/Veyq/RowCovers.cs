@@ -1,4 +1,4 @@
-// A Memory's cover on its list row (the CR "Memories on every app" D10; Linux's home::cover_prefix, rule for rule): the
+// A Memory's cover on its list row (ADR 0137's Consequences, a list row's cover; Linux's home::cover_prefix, rule for rule): the
 // kind's glyph until the core names a cover (Shell.RowCover), then the framed part of the stored picture, cut where the
 // core says (Cover.Cut) and decoded small by WIC. A list is drawn anew on every state: each row's cover is held by node id
 // with the frame it was cut for, and the core sends the picture again only once the cover or its crop changed. Decoded in

@@ -763,7 +763,7 @@ internal sealed class Call {
     @Serializable @SerialName("Gallery.ChapterCover") data class GalleryChapterCover(val gallery: Long, val nodeId: String) : Call()
 
     /**
-     * Gallery [gallery]'s rows laid out as the justified grid [width] wide (core's `GalleryModel.layout`, the CR's D14: the
+     * Gallery [gallery]'s rows laid out as the justified grid [width] wide (core's `GalleryModel.layout`, ADR 0136's Consequences: the
      * web's `MediaGrid.vue`; in the host's own unit, a GTK or WinUI view's logical pixels), seen from [top] down [viewHeight]:
      * [Answer.GridLayout] — the rows a view mounts there (`MediaGridLayout.Layout.window`: the view's and one view each way,
      * ADR 0105), each with its place and its tiles' frames by medium id, and the grid's whole height. Asked anew when the

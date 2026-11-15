@@ -26,7 +26,7 @@ import kotlin.test.AfterTest
 import me.raddatz.veyq.mobile.session.LiveRun
 
 /**
- * The CR's phase 2 on a running dev instance (`VEYQ_LIVE`), through the core's models: with
+ * A Memory's create, trash, Undo and links (ADR 0136's Consequences) on a running dev instance (`VEYQ_LIVE`), through the core's models: with
  * `VEYQ_LIVE_MEMORY_GUESTS=<file>` an "App memory <n>" is made at the default space's top by `ShellModel.createMemory`, a
  * chapter in it by `GalleryModel.createChapter`; two photos (the web's EXIF fixture) are uploaded, one trashed and undone
  * (`GalleryModel.trash`/`undo`: back in the rows), the other trashed and purged for good; a WRITE_ONLY link minted (the
