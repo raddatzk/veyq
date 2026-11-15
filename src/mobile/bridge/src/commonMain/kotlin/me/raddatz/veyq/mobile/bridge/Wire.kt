@@ -1264,7 +1264,7 @@ internal sealed class Update {
  * A Memory's or a chapter's page as the host draws it (core's `GalleryModel`, ADR 0136 decision 2; one view for a member and
  * a link's guest, whose rights only remove functions), each field the model's own answer:
  * - its [node], its [rows] in the grid's order (null while the first read runs), [failed] (the last read did not: the rows
- *   before stay), how many it holds ([count], `memory_items`), and a Memory's [chapters] (each cover through
+ *   before stay) with what it says ([failure], `GalleryModel.State.failure`), how many it holds ([count], `memory_items`), and a Memory's [chapters] (each cover through
  *   [Call.GalleryChapterCover]);
  * - what it offers whoever looks: [canUpload] ([Call.MemoryUpload]; the header's own "upload" too), [canSave] (a medium's
  *   original saved and played), each row's delete ([GalleryRow.canDelete]) and its New ([creates]: a chapter on a Memory);
@@ -1279,6 +1279,8 @@ internal class GalleryShown(
     val node: NodeAt,
     val rows: List<GalleryRow>?,
     val failed: Boolean,
+    /** What the page says in the grid's place where [failed]: offline, that the store does not hold it; else the load failed. */
+    val failure: Msg?,
     val count: Notice,
     val chapters: List<NodeAt>,
     val canUpload: Boolean,

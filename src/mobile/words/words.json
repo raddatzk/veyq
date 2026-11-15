@@ -3397,6 +3397,11 @@
     "en": "An item is no longer available offline",
     "de": "Ein Eintrag ist nicht mehr offline verfügbar"
   },
+  "offline_not_kept": {
+    "note": "in a screen's place offline where this device does not keep its content (not made available offline, or not viewed within the limit): not a failed load (ADR 0140 decision 5)",
+    "en": "Not available offline",
+    "de": "Nicht offline verfügbar"
+  },
   "offline_item_named": {
     "note": "a row of Settings' items available offline: {1} the item's name",
     "en": "{1}",

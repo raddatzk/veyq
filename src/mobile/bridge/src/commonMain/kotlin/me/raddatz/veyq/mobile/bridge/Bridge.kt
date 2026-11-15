@@ -1439,6 +1439,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         node = g.node,
         rows = s.rows?.map { galleryRow(g, it) },
         failed = s.failed,
+        failure = s.failure,
         count = Notice(Msg.MEMORY_ITEMS, s.count),
         chapters = s.chapters.map { NodeAt(it.scopeId, it.nodeId, it.kind, it.name) },
         canUpload = s.rights.upload,

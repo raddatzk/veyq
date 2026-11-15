@@ -61,6 +61,8 @@ class GalleryModelTest {
         )
         val original = ByteArray(3 * V1.FRAME_PLAINTEXT + 17) { (it % 251).toByte() }
         var uploads = 0
+        val reach = MutableStateFlow(true)
+        override val online get() = reach
 
         override suspend fun gallery(): MemoryMedia.Gallery? {
             listings++
@@ -185,10 +187,39 @@ class GalleryModelTest {
         runCurrent()
         assertEquals(listOf("b", "a"), g.current.rows?.map { it.mediaId })
         assertTrue(g.current.failed)
+        assertEquals(Msg.MEMORY_GALLERY_FAILED, g.current.failure)
         g.close()
         door.lists.value = Any()
         runCurrent()
         assertEquals(4, door.listings, "a closed page reads nothing")
+    }
+
+    /**
+     * A gallery the offline store does not hold (a Memory not kept offline, its listing cleared) says so offline — not
+     * that the load failed, which is what it says online (phase 6's Android pass read "The gallery could not be loaded."
+     * offline). Bite: [GalleryModel.State.failure] without its offline case → red.
+     */
+    @Test
+    fun offlineAGalleryTheStoreDoesNotHoldSaysSoNotThatItFailed() = runTest {
+        val door = Door(null)
+        door.reach.value = false
+        val g = open(door)
+        assertTrue(g.current.failed)
+        assertNull(g.current.rows)
+        assertEquals(Msg.OFFLINE_NOT_KEPT, g.current.failure, "offline, a gallery not kept reads as a failed load")
+        // the read failing before the reach says offline: the same once it does
+        val late = Door(null)
+        val h = open(late)
+        assertEquals(Msg.MEMORY_GALLERY_FAILED, h.current.failure, "online, a read that fails says the load failed")
+        late.reach.value = false
+        runCurrent()
+        assertEquals(Msg.OFFLINE_NOT_KEPT, h.current.failure)
+        // back online and read: nothing to say
+        late.items = listOf(item("a", at = 1))
+        late.reach.value = true
+        runCurrent()
+        assertNull(h.current.failure)
+        assertEquals(listOf("a"), h.current.rows?.map { it.mediaId })
     }
 
     @Test

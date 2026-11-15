@@ -613,8 +613,9 @@ internal sealed class MemoryPage : IDisposable
         _count.Text = s is null ? "" : Said.Notice(s.count);
         _status.Content = s switch
         {
-            null or { rows: null, failed: false } => new ProgressRing { IsActive = true, Margin = new Thickness(24), HorizontalAlignment = HorizontalAlignment.Center },
-            { rows: null, failed: true } => Status(Words.MemoryGalleryFailed(), ""),
+            null or { rows: null, failure: null } => new ProgressRing { IsActive = true, Margin = new Thickness(24), HorizontalAlignment = HorizontalAlignment.Center },
+            // offline, what the store does not hold says so, else the load failed (the core's words)
+            { rows: null, failure: { } failure } => Status(Said.Key(failure), ""),
             { rows.Count: 0 } => Status(Words.MemoryGalleryEmpty(), HomeView.KindGlyph(Node.kind)),
             _ => null,
         };

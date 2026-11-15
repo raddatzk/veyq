@@ -186,9 +186,11 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
                 )
             }
         }
+        val failure = state.failure
         when {
-            state.failed -> item(key = "failed") {
-                Text(stringResource(R.string.memory_gallery_failed), color = role(palette.danger), modifier = Modifier.padding(16.dp))
+            // offline, what the store does not hold says so (muted: no failure), else the load failed (core's words)
+            failure != null -> item(key = "failed") {
+                Text(say(failure), color = role(if (state.offline != null) palette.muted else palette.danger), modifier = Modifier.padding(16.dp))
             }
             rows == null || layout == null -> item(key = "loading") {
                 Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }

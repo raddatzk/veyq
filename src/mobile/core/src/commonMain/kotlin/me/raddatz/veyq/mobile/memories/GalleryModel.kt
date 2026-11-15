@@ -163,7 +163,7 @@ class GalleryModel(
         val rows: List<Row>? = null,
         /** A Memory's chapters (none for a chapter). */
         val chapters: List<NodeRef> = emptyList(),
-        /** The gallery did not read (the last read stays shown). */
+        /** The gallery did not read (the last read stays shown); [failure] says why. */
         val failed: Boolean = false,
         /** What the page offers whoever looks ([MemoryRights.of]); an action shows only where it says yes. */
         val rights: MemoryRights.Rights = MemoryRights.NONE,
@@ -177,6 +177,16 @@ class GalleryModel(
         val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null,
     ) {
         val count: Int get() = rows?.size ?: 0
+
+        /**
+         * What the page says where the gallery did not read ([failed]): offline, that the store does not hold it (a node
+         * not kept offline, or its listing cleared) — not a failed load; online, that the load failed. Null where it read.
+         */
+        val failure: Msg? get() = when {
+            !failed -> null
+            offline != null -> Msg.OFFLINE_NOT_KEPT
+            else -> Msg.MEMORY_GALLERY_FAILED
+        }
     }
 
     /** What whoever looks may do here online; offline the page offers none of its writes ([State.rights]). */
