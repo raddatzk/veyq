@@ -13,6 +13,7 @@ function fakePlayer(now: NowPlaying | null = null) {
     nowPlaying: shallowRef(now),
     notice: shallowRef<'unplayable' | null>(null),
     play: vi.fn(), stop: vi.fn(), pause: vi.fn(), resume: vi.fn(), next: vi.fn(), previous: vi.fn(), seek: vi.fn(),
+    interrupt: vi.fn(() => () => undefined),
   } satisfies AudioPlayer
 }
 const NOW: NowPlaying = { key: 'k', trackId: 'a', title: 'Summer Song', album: 'Lisbon', playing: true, positionMs: 0, durationMs: 1000 }
