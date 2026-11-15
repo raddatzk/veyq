@@ -319,6 +319,12 @@ is under a quarter of the phones' 2 GB default). ADR 0140 decision 8's list of k
 
 ## Owner questions
 
+Answered 2026-11-15: **1** — the copy as recommended (EN and DE). **2** — *everywhere* (the apps **and the web**) the
+music pauses while a video in the lightbox plays and starts again by itself when the video stops or the lightbox moves
+on. The web half is a change of this CR: a small web phase beside the core's (`src/web/src/core/audio/player.ts` and the
+lightbox's video), so the Definition of done's empty `src/web/` diff no longer holds — only `contracts/` and
+`src/backend/` stay untouched.
+
 1. **Copy for the apps' new words** (EN / DE). The web's `audio.*` and `memories.music.*` are reused as they are, except
    three that say "browser", and four the apps add. *Recommendation:*
    - `music_unplayable`: "{name} can't be played on this device." / "{name} kann auf diesem Gerät nicht abgespielt
