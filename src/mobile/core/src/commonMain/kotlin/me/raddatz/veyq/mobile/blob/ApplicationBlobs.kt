@@ -25,6 +25,11 @@ import me.raddatz.veyq.mobile.session.NodeCreate
 import me.raddatz.veyq.mobile.session.NodeEpochWrite
 import me.raddatz.veyq.mobile.session.OpenNode
 import me.raddatz.veyq.mobile.session.TenantSession
+import me.raddatz.veyq.mobile.session.Reach
+import me.raddatz.veyq.mobile.session.Unreachable
+import me.raddatz.veyq.mobile.offline.KeptRead
+import me.raddatz.veyq.mobile.api.models.ApplicationBlobPage
+import io.ktor.client.statement.readRawBytes
 
 /**
  * A node's application blobs (ADR 0112), core's for every application — a port of `src/web/src/core/blob/
@@ -63,8 +68,21 @@ class ApplicationBlobs(private val tenant: TenantSession) {
     private fun keyContext(scopeId: String, ownerId: String, blobId: String, role: String) =
         Context("blob-key", "scopeId" to scopeId, "ownerId" to ownerId, "blobId" to blobId, "role" to role)
 
-    /** Every application blob of [nodeId], paged by cursor; only the first page is conditional on [ifNoneMatch]. */
+    /**
+     * Every application blob of [nodeId], paged by cursor; only the first page is conditional on [ifNoneMatch]. Without
+     * one it is a kept read (ADR 0140 decision 5): the store's `ETag` sent, a newer answer replacing the kept one, the
+     * kept answer while the server is unreachable.
+     */
     suspend fun list(scopeId: String, nodeId: String, ifNoneMatch: String? = null): Listing? {
+        if (ifNoneMatch == null && account.offline != null) {
+            val read = try {
+                account.kept(KeptRead.APPLICATION_BLOBS, tenant.tenant.tenantId, scopeId, nodeId, conditional = true) { tag -> fetchPages(scopeId, nodeId, tag) }
+            } catch (e: me.raddatz.veyq.mobile.session.VeyqAccount.Refused) {
+                throw UploadRefused("list ${e.status}")
+            }
+            val pages = read.pages.map { me.raddatz.veyq.mobile.session.VeyqAccount.KEPT_JSON.decodeFromString(ApplicationBlobPage.serializer(), it.decodeToString()) }
+            return Listing(pages.flatMap { p -> p.blobs.map(::listed) }, null)
+        }
         val out = ArrayList<Listed>()
         var after: String? = null
         var etag: String? = null
@@ -83,6 +101,28 @@ class ApplicationBlobs(private val tenant: TenantSession) {
             first = false
         }
         return Listing(out, etag)
+    }
+
+    /** Every page of [nodeId]'s listing as the server sent it, the first conditional on [tag]: what the store keeps. */
+    private suspend fun fetchPages(scopeId: String, nodeId: String, tag: String?): me.raddatz.veyq.mobile.session.VeyqAccount.Fetched {
+        val pages = ArrayList<ByteArray>()
+        var after: String? = null
+        var etag: String? = null
+        while (true) {
+            val first = after == null
+            val r = account.respond { appApi.listApplicationBlobs(scopeId, nodeId, after, PAGE, if (first) tag else null) }
+            if (first && r.status == 304) return me.raddatz.veyq.mobile.session.VeyqAccount.Fetched.NotModified
+            if (!r.success) return me.raddatz.veyq.mobile.session.VeyqAccount.Fetched.Refused(r.status, account.errorCode(r))
+            if (first) etag = r.response.headers[io.ktor.http.HttpHeaders.ETag]
+            val raw = r.response.readRawBytes()
+            pages += raw
+            val page = me.raddatz.veyq.mobile.session.VeyqAccount.KEPT_JSON.decodeFromString(ApplicationBlobPage.serializer(), raw.decodeToString())
+            if (!page.more) break
+            val next = page.cursor ?: throw UploadRefused("a page with more and no cursor")
+            if (next == after) throw UploadRefused("a cursor that did not advance")
+            after = next
+        }
+        return me.raddatz.veyq.mobile.session.VeyqAccount.Fetched.Pages(pages, etag)
     }
 
     private fun listed(b: ApplicationBlob) = Listed(
@@ -269,10 +309,13 @@ class ApplicationBlobs(private val tenant: TenantSession) {
         suite.open(keyContext(scopeId, node.id, blobId, role), node.key, unb64(wrappedBlobKey))
     }.getOrNull()
 
-    /** A blob's plaintext under [key], its [chunkCount] frames read through presigned GETs and opened in place. */
-    internal suspend fun frames(scopeId: String, blobId: String, chunkCount: Int, key: ByteArray): ByteArray {
+    /**
+     * A blob's plaintext under [key], its [chunkCount] frames read through presigned GETs and opened in place — from the
+     * offline store where it keeps them; [keep]: the frames fetched are kept there (ADR 0140 decision 8 names what is).
+     */
+    internal suspend fun frames(scopeId: String, blobId: String, chunkCount: Int, key: ByteArray, keep: Boolean = false): ByteArray {
         val out = ArrayList<ByteArray>(chunkCount)
-        framesTo(scopeId, blobId, chunkCount, key) { out += it }
+        framesTo(scopeId, blobId, chunkCount, key, keep = keep) { out += it }
         val all = ByteArray(out.sumOf { it.size })
         var o = 0
         for (part in out) {
@@ -288,27 +331,70 @@ class ApplicationBlobs(private val tenant: TenantSession) {
      */
     internal suspend fun framesTo(
         scopeId: String, blobId: String, chunkCount: Int, key: ByteArray, first: Int = 0, until: Int = chunkCount,
-        sink: suspend (ByteArray) -> Unit,
-    ) = FrameSource(scopeId, blobId, chunkCount, key).read(first, until, sink)
+        keep: Boolean = false, sink: suspend (ByteArray) -> Unit,
+    ) = FrameSource(scopeId, blobId, chunkCount, key, keep).read(first, until, sink)
 
     /**
      * A blob's frames read by index under [key], as often as asked (a player seeking through a video): its presigned GETs are
      * signed once and kept, and signed again when the store refuses one (they lapse). A network failure, a 5xx, 408 or 429
      * is tried again (at most 4 times, backing off); a URL refused as lapsed signs them again (twice in a row at most, so a
      * read longer than their lifetime signs again at each lapse).
+     *
+     * **The offline store** (ADR 0140 decisions 5 and 8): a frame it keeps is read from it, the server not asked; one it
+     * does not keep is fetched while the server is reached and refused ([Unreachable]) while it is not — a medium plays the
+     * frames kept and stops where they end. Where [keep], the frames fetched are kept as the store served them, appended in
+     * batches of [KEEP_BATCH] (one frame index and one manifest shard written per batch, never per frame).
      */
-    internal inner class FrameSource(private val scopeId: String, private val blobId: String, val chunkCount: Int, private val key: ByteArray) {
+    internal inner class FrameSource(
+        private val scopeId: String, private val blobId: String, val chunkCount: Int, private val key: ByteArray, private val keep: Boolean = false,
+    ) {
         private var urls: List<String>? = null
+        private val offline = account.offline
+        private val entry = offline?.blobKey(tenant.tenant.tenantId, scopeId, blobId)
 
         suspend fun read(first: Int, until: Int, sink: suspend (ByteArray) -> Unit) {
+            val fetched = LinkedHashMap<Int, ByteArray>()
+            var touched = false
+            try {
+                readFrames(first, until, sink, fetched) {
+                    if (!touched) { touched = true; offline?.touch(entry!!) }
+                }
+            } finally {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { keepFetched(fetched) }
+            }
+        }
+
+        private suspend fun keepFetched(fetched: MutableMap<Int, ByteArray>) {
+            val o = offline ?: return
+            val e = entry ?: return
+            if (fetched.isEmpty()) return
+            runCatching { o.keepFrames(e, HashMap(fetched), chunkCount.toLong() * V1.FRAME_PLAINTEXT) }
+                .onFailure { println("veyq: frames were not kept: $it") }
+            fetched.clear()
+        }
+
+        private suspend fun readFrames(first: Int, until: Int, sink: suspend (ByteArray) -> Unit, fetched: MutableMap<Int, ByteArray>, kept: suspend () -> Unit) {
             var resigned = 0
             for (i in first until minOf(until, chunkCount)) {
+                val o = offline
+                val e = entry
+                val stored = if (o != null && e != null) o.frame(e, i) else null
+                if (stored != null) {
+                    kept()
+                    sink(suite.openFrame(key, i, chunkCount, stored))
+                    continue
+                }
+                if (account.reach.value != Reach.Online) throw Unreachable("frame $i of a blob not kept")
                 var tries = 0
                 var backoff = 250L
                 while (true) {
                     val signed = urls ?: presignGets(scopeId, blobId).also { urls = it }
                     val (status, frame) = account.getFromStore(signed[i])
                     if (frame != null) {
+                        if (keep && entry != null) {
+                            fetched[i] = frame
+                            if (fetched.size >= KEEP_BATCH) keepFetched(fetched)
+                        }
                         sink(suite.openFrame(key, i, chunkCount, frame))
                         resigned = 0 // a read longer than the URLs' lifetime signs again at each lapse
                         break
@@ -323,6 +409,10 @@ class ApplicationBlobs(private val tenant: TenantSession) {
                         delay(backoff)
                         backoff = minOf(backoff * 2, 4_000)
                         continue
+                    }
+                    if (status == 0) {
+                        account.storeUnreachable()
+                        throw Unreachable("the store did not answer")
                     }
                     throw UploadRefused("chunk_get_failed:$status")
                 }
@@ -340,6 +430,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
 
     companion object {
         private const val PAGE = 1000
+
+        /** How many fetched frames the store appends at once. */
+        internal const val KEEP_BATCH = 16
 
         /** What a store answers a presigned URL past its lifetime with: S3's 403, others' 400 or 401. Signed anew. */
         private val LAPSED = setOf(400, 401, 403)

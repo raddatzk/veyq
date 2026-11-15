@@ -76,21 +76,35 @@ object DepotFiles {
             if (files.isEmpty()) continue
             val byId = files.associateBy { it.id }
             for (parentId in files.map { it.parentId }.distinct()) {
-                val page = runCatching { tenant.account.call { FilesApi(tenant.base, tenant.account.http).listFiles(scopeId, parentId) } }.getOrNull() ?: continue
+                val page = runCatching { listing(tenant, scopeId, parentId, settle = false) }.getOrNull() ?: continue
                 for (item in page.items) {
                     val node = byId[item.nodeId] ?: continue
                     out[node.id] = file(tenant, node, item)
                 }
             }
         }
+        tenant.account.settle()
         return out
+    }
+
+    /**
+     * Folder [parentId]'s files (null: the space's top) as a kept read (ADR 0140 decision 5): the server's answer while it
+     * is reached, replacing the kept one; the kept answer while it is not.
+     */
+    private suspend fun listing(tenant: TenantSession, scopeId: String, parentId: String?, settle: Boolean = true): me.raddatz.veyq.mobile.api.depot.models.FileListPage {
+        val read = tenant.account.kept(me.raddatz.veyq.mobile.offline.KeptRead.FILES, tenant.tenant.tenantId, scopeId, parentId ?: "", settle = settle) {
+            tenant.account.fetched(tenant.account.respond { FilesApi(tenant.base, tenant.account.http).listFiles(scopeId, parentId) }, null)
+        }
+        return me.raddatz.veyq.mobile.session.VeyqAccount.KEPT_JSON.decodeFromString(
+            me.raddatz.veyq.mobile.api.depot.models.FileListPage.serializer(), read.pages.single().decodeToString(),
+        )
     }
 
     /** File [nodeId] of [scopeId] as it is listed now (its content read anew, a replaced blob included); null where it is not. */
     @Throws(Exception::class)
     suspend fun one(tenant: TenantSession, scopeId: String, nodeId: String): File? {
         val node = tenant.node(scopeId, nodeId)?.takeIf { it.kind == FILE } ?: return null
-        val page = tenant.account.call { FilesApi(tenant.base, tenant.account.http).listFiles(scopeId, node.parentId) }
+        val page = listing(tenant, scopeId, node.parentId)
         val item = page.items.firstOrNull { it.nodeId == nodeId } ?: return null
         return file(tenant, node, item)
     }
@@ -121,7 +135,8 @@ object DepotFiles {
         val node = tenant.node(file.scopeId, file.nodeId) ?: throw IllegalStateException("not in the tree")
         val blobs = ApplicationBlobs(tenant)
         val key = blobs.openKey(file.scopeId, node, blobId, ROLE, file.wrappedBlobKey!!) ?: throw IllegalStateException("key_unreadable")
-        blobs.framesTo(file.scopeId, blobId, file.chunkCount, key, first, minOf(until, file.chunkCount), sink)
+        // a Depot file has no other tier: what is read of it is kept (ADR 0140 decision 8)
+        blobs.framesTo(file.scopeId, blobId, file.chunkCount, key, first, minOf(until, file.chunkCount), keep = true, sink = sink)
     }
 
     /** The name [file] (node [nodeName]) is downloaded as (core's `downloadName`: the node's name, else its uploaded one). */

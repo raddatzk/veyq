@@ -7,6 +7,7 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.Url
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -52,6 +53,7 @@ import me.raddatz.veyq.mobile.api.models.LoginVerifyRequest
 import me.raddatz.veyq.mobile.api.models.MasterKeyWrap
 import me.raddatz.veyq.mobile.api.models.RefreshRequest
 import me.raddatz.veyq.mobile.api.models.ScopeSummary
+import me.raddatz.veyq.mobile.api.models.NodeSummary
 import me.raddatz.veyq.mobile.crypto.JoinRecords
 import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.IdentityPrivate
@@ -72,6 +74,14 @@ import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
+import me.raddatz.veyq.mobile.offline.AccountOffline
+import me.raddatz.veyq.mobile.offline.EntryKey
+import me.raddatz.veyq.mobile.offline.KeptRead
+import me.raddatz.veyq.mobile.api.models.MyTenant
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.builtins.ListSerializer
 
 /** Why a sign-in did not complete, in words a member can act on (the platform localizes by [reason]). */
 class SignInFailure(val reason: Reason, detail: String? = null) : Exception(detail ?: reason.name) {
@@ -119,6 +129,17 @@ class VeyqAccount private constructor(
     internal val mySignPublic: ByteArray,
     override val tenants: List<TenantRef>,
     private val device: ThisDevice,
+    /** The `key-material` answer this account opened with (wraps and the sealed identity: what the store keeps of it). */
+    private val material: AccountKeyMaterial,
+    /** The `listMyTenants` answer as the server sent it, kept for an offline unlock; null where it came from the store. */
+    private val tenantsBody: ByteArray?,
+    /**
+     * Opened from the offline store with the server unreachable (ADR 0140 decision 4): it holds no access token and sends
+     * nothing until the probe reached the server and the resume steps ran ([reconnect]).
+     */
+    openedOffline: Boolean = false,
+    /** A password-trusted account opened offline: its login key, derived at the unlock, to sign in at [reconnect]; zeroed then. */
+    private var authSeed: ByteArray? = null,
 ) : Connection {
     internal class Tokens(var access: String, var refresh: String?) {
         val lock = Mutex()
@@ -126,6 +147,158 @@ class VeyqAccount private constructor(
 
     private val trust = Trust(suite)
     private val marks = TrustMarks(device.store, primitives, masterKey)
+
+    // ---- reachability and the offline store (ADR 0140 decisions 4 and 5)
+
+    private val _reach = MutableStateFlow<Reach>(Reach.Online)
+
+    /** Whether the server is reached: the core's, from what the requests came to ([Reach]). */
+    val reach: StateFlow<Reach> = _reach.asStateFlow()
+
+    /** Sends nothing until [reconnect] ran: the account was opened offline and holds no session yet. */
+    private var sendsNothing = openedOffline
+
+    /** When the server last answered (epoch ms): what a screen offline says its content is as of. */
+    private var lastAnswer: Long? = null
+
+    /** This account's offline store on this device, open while the account is (none where the device keeps no trust in it,
+     *  or the host named no directory). */
+    internal var offline: AccountOffline? = null
+        private set
+
+    private val background = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+    private var probing: kotlinx.coroutines.Job? = null
+    private val reconnecting = Mutex()
+
+    /** The store opened (where this device trusts the account and the host named a directory) and the opening answers kept. */
+    internal suspend fun ensureOffline() {
+        if (offline != null || trusted == null) return
+        val stores = device.offline ?: return
+        val o = runCatching { stores.openFor(key, masterKey, server, device.offlineLimit) }
+            .onFailure { println("veyq: the offline store did not open: $it") }.getOrNull() ?: return
+        offline = o
+        keepOpening(o)
+        runCatching { o.store.sweep() }
+    }
+
+    /** The answers an offline unlock opens with: the key material (its wraps and sealed identity only) and the tenants. */
+    private suspend fun keepOpening(o: AccountOffline) {
+        val kept = AccountKeyMaterial(material.userId, material.suiteId, material.wraps, material.wrappedIdentityPrivateKey)
+        o.keep(o.key(KeptRead.KEY_MATERIAL), listOf(KEPT_JSON.encodeToString(AccountKeyMaterial.serializer(), kept).encodeToByteArray()), null)
+        tenantsBody?.let { o.keep(o.key(KeptRead.MY_TENANTS), listOf(it), null) }
+        o.sweep()
+    }
+
+    /** The object store did not answer a presigned read: the account is offline, as for a request to the server. */
+    internal fun storeUnreachable() = wentOffline()
+
+    /** The server answered: it is reached. */
+    private fun answered() {
+        lastAnswer = now()
+    }
+
+    /** A request did not reach the server: the account is offline, and the probe starts. */
+    private fun wentOffline() {
+        if (_reach.value != Reach.Online) return
+        _reach.value = Reach.Offline(lastAnswer)
+        startProbe()
+    }
+
+    /**
+     * The probe while offline: `GET /api/setup` after 5 s, then doubling up to 60 s ([LivePoll.next] at [PROBE]), until
+     * [reconnect] ran — or the trust ended.
+     */
+    private fun startProbe() {
+        if (probing?.isActive == true) return
+        probing = background.launch {
+            val poll = LivePoll(PROBE, ::now)
+            var wait = poll.next(LivePoll.Tick.SKIP)
+            while (_reach.value is Reach.Offline) {
+                kotlinx.coroutines.delay(wait)
+                poll.started()
+                if (reconnect()) break
+                wait = poll.next(LivePoll.Tick.FAILED)
+            }
+        }
+    }
+
+    /**
+     * Back online: the server's answer to `/api/setup`, then the resume's own steps (ADR 0140 decision 4) — the session
+     * (a remembered account's refresh, a password-trusted one's login with the key its offline unlock derived) and the
+     * `key-material` read for this device's wrap. A refused refresh or login, or a wrap the server no longer serves, ends
+     * the account here ([Reach.Ended]): the store is wiped (a refused refresh forgets the record too, as the resume does),
+     * the person signs in again. True once online; false while the server does not answer.
+     */
+    internal suspend fun reconnect(): Boolean = reconnecting.withLock {
+        when (_reach.value) {
+            Reach.Online -> return@withLock true
+            is Reach.Ended -> return@withLock false
+            is Reach.Offline -> Unit
+        }
+        try {
+            if (!SetupApi(server, http).getSetupStatus().success) return@withLock false
+            val refresh = tokens.refresh
+            val seed = authSeed
+            if (refresh != null) {
+                val r = TokenApi(server, http).refreshSession(RefreshRequest(refresh))
+                if (r.status in 400..499) return@withLock false.also { end(SignInFailure.Reason.SESSION_ENDED, forgetRecord = trusted?.method == TrustedDevice.Method.DEVICE_KEY) }
+                if (!r.success) return@withLock false
+                val pair = r.body()
+                tokens.access = pair.accessToken
+                tokens.refresh = pair.refreshToken
+                val kept = trusted
+                if (kept?.method == TrustedDevice.Method.DEVICE_KEY && pair.refreshToken != null) device.keepRefresh(kept.refreshAlias, pair.refreshToken)
+            } else if (seed != null) {
+                val login = LoginApi(server, http)
+                val challenge = login.requestLoginChallenge(LoginChallengeRequest(email)).takeIf { it.success }?.body() ?: return@withLock false
+                val signature = primitives.ed25519Sign(seed, unb64(challenge.nonce))
+                val session = login.verifyLogin(LoginVerifyRequest(email = email, nonce = challenge.nonce, signature = b64(signature)))
+                if (session.status == 401) return@withLock false.also { end(SignInFailure.Reason.CREDENTIALS, forgetRecord = false) }
+                if (!session.success) return@withLock false
+                session.body().let { tokens.access = it.accessToken; tokens.refresh = it.refreshToken }
+            } else {
+                return@withLock false.also { end(SignInFailure.Reason.SESSION_ENDED, forgetRecord = false) }
+            }
+            val r = AccountApi(server, http).getAccountKeyMaterial()
+            if (!r.success) return@withLock false
+            val now = r.body()
+            val record = trusted
+            if (record != null) {
+                val method = if (record.method == TrustedDevice.Method.DEVICE_KEY) MasterKeyWrap.Method.DEVICE_KEY else MasterKeyWrap.Method.DEVICE
+                val wrap = now.wraps.firstOrNull { it.method == method && it.id == record.wrapId }
+                    ?: return@withLock false.also { end(SignInFailure.Reason.DEVICE_NOT_TRUSTED, forgetRecord = false) }
+                device.keepWrap(key, ThisDevice.KeptWrap(record.wrapId, wrap.wrappedKey, wrap.kdfParams))
+            }
+            sendsNothing = false
+            authSeed?.fill(0)
+            authSeed = null
+            answered()
+            _reach.value = Reach.Online
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * This device's trust in the account gone, found at a reconnect: the store closed and wiped, the local wrap copy
+     * removed, the record forgotten where [forgetRecord] (a refused refresh, as the resume forgets it) — then
+     * [Reach.Ended], on which the way in signs the account out.
+     */
+    private suspend fun end(reason: SignInFailure.Reason, forgetRecord: Boolean) {
+        val record = trusted
+        if (forgetRecord && record != null) {
+            device.keys.deleteSecret(record.refreshAlias)
+            device.forget(record.key)
+            trusted = null
+        } else {
+            device.dropWrap(key)
+        }
+        wipeOffline()
+        _reach.value = Reach.Ended(reason)
+    }
 
     /** This device's own store: what an application keeps per device and not per account (the day's exchange rates). */
     internal val deviceStore: DeviceStore get() = device.store
@@ -219,7 +392,12 @@ class VeyqAccount private constructor(
      */
     suspend fun open(tenant: TenantRef): TenantSession {
         val base = originOf(tenant)
-        val summaries = call { ScopesApi(base, http).listMyScopes() }.filter { it.deletedAt == null }
+        val scopesRead = kept(KeptRead.MY_SCOPES, tenant.tenantId, "", "") { fetched(respond { ScopesApi(base, http).listMyScopes() }, null) }
+        val summaries = KEPT_JSON.decodeFromString(ListSerializer(ScopeSummary.serializer()), scopesRead.pages.single().decodeToString())
+            .filter { it.deletedAt == null }
+        // offline (ADR 0140 decision 4): only the scope keys this device held when it last verified them open — no
+        // granter's chain can be read, so nothing new is judged —, and no members, capabilities or services
+        if (scopesRead.offline != null) return openOffline(tenant, base, summaries)
         val capabilities = runCatching { call { TenantsApi(base, http).getTenantCapabilities(tenant.tenantId) }.capabilities }.getOrNull()
         val on = capabilities?.map { it.id }?.toSet()
         // The external services' addresses the tenant's set names (ADR 0088 decision 7): none when the set did not read.
@@ -249,6 +427,17 @@ class VeyqAccount private constructor(
         return TenantSession(this, tenant, base, open, off, closed, people, services, ShareLinks.Rules.of(capabilities))
     }
 
+    private suspend fun openOffline(tenant: TenantRef, base: String, summaries: List<ScopeSummary>): TenantSession {
+        val grants = grants(base)
+        val open = mutableListOf<TenantSession.OpenScope>()
+        val closed = mutableMapOf<String, GrantOutcome.Reason>()
+        for (s in summaries) when (val o = grants.openHeld(s)) {
+            is GrantOutcome.Opened -> open += TenantSession.OpenScope(s, o.key, scopeName(s, tenant))
+            is GrantOutcome.Refused -> closed[s.id] = o.reason
+        }
+        return TenantSession(this, tenant, base, open, emptySet(), closed)
+    }
+
     /** A grant of a scope key to this account itself, as a scope's birth posts it (ADR 0028 decision 6), all base64. */
     class SelfGrant(val wrappedGrant: String, val grantSignature: String, val recipientIdentityDigest: String)
 
@@ -270,8 +459,27 @@ class VeyqAccount private constructor(
     suspend fun signOut() {
         trusted?.takeIf { it.method == TrustedDevice.Method.DEVICE_KEY }?.let { forget(it) }
         wipeOffline()
-        runCatching { call { SessionApi(server, http).logout() } }
+        close()
+    }
+
+    /**
+     * Ends this connection only, as the duplicate of a connection of the same account held already (`SessionModel`'s add),
+     * or one whose trust a reconnect found gone (its store wiped already): its server session logged out and its keys
+     * zeroed — nothing on the device changes: the record, the wrap copy and the offline store stay with the account, which
+     * stays on this device (ADR 0140 decision 11: the store goes only when the account leaves this device).
+     */
+    suspend fun retire() {
+        offline?.close()
+        offline = null
+        close()
+    }
+
+    private suspend fun close() {
+        probing?.cancel()
+        background.coroutineContext[kotlinx.coroutines.Job]?.cancel()
+        if (!sendsNothing) runCatching { call { SessionApi(server, http).logout() } }
         masterKey.fill(0)
+        authSeed?.fill(0)
         http.close()
         outside.close()
     }
@@ -297,6 +505,7 @@ class VeyqAccount private constructor(
             val id = try { addWrap(AddWrapRequest.Method.DEVICE_KEY, sealed, iv) } catch (e: Exception) { releaseUnlockKeys(); throw e }
                 ?: return TrustOutcome.NOT_OFFERED.also { releaseUnlockKeys() }
             TrustedDevice(server, email, userId, TrustedDevice.Method.DEVICE_KEY, id, alias, level).also {
+                device.keepWrap(it.key, ThisDevice.KeptWrap(id, b64(sealed), b64(iv)))
                 try {
                     device.keys.putSecret(it.refreshAlias, refresh)
                 } catch (e: Exception) {
@@ -315,17 +524,21 @@ class VeyqAccount private constructor(
             val kek = suite.kekDevicePassword(factor, password, salt)
             factor.fill(0)
             val wrapped = try { suite.seal(Context("master-key"), kek, masterKey) } finally { kek.fill(0) }
-            val id = addWrap(AddWrapRequest.Method.DEVICE, wrapped, suite.encodeKdfParams(V1.ARGON, salt))
+            val kdf = suite.encodeKdfParams(V1.ARGON, salt)
+            val id = addWrap(AddWrapRequest.Method.DEVICE, wrapped, kdf)
             if (id == null) {
                 device.keys.deleteBindKey(alias)
                 return TrustOutcome.NOT_OFFERED
             }
-            TrustedDevice(server, email, userId, TrustedDevice.Method.DEVICE, id, alias)
+            TrustedDevice(server, email, userId, TrustedDevice.Method.DEVICE, id, alias).also {
+                device.keepWrap(it.key, ThisDevice.KeptWrap(id, b64(wrapped), b64(kdf)))
+            }
         }
         device.remember(record)
         trusted = record
         previous?.let { drop(it) }
         releaseUnlockKeys()
+        ensureOffline()
         runCatching { register().remember(device.id, device.label, null, record.wrapId, now()) }
         return if (level != null) TrustOutcome.REMEMBERED else TrustOutcome.TRUSTED
     }
@@ -401,7 +614,9 @@ class VeyqAccount private constructor(
      * This account's offline store on this device removed (ADR 0140 decision 11): at its sign-out (both trusts), "Stop
      * trusting this device" and removing the device. Best effort: a wipe a crash interrupted finishes at the next start.
      */
-    private fun wipeOffline() {
+    private suspend fun wipeOffline() {
+        offline?.let { runCatching { it.close() } }
+        offline = null
         device.offline?.let { o -> runCatching { o.wipe(key) }.onFailure { println("veyq: the offline store was not wiped: $it") } }
     }
 
@@ -453,12 +668,112 @@ class VeyqAccount private constructor(
         return r.body()
     }
 
-    /** [call]'s refresh, the response handed back whatever its status, for a caller that tells statuses apart. */
+    /**
+     * [call]'s refresh, the response handed back whatever its status, for a caller that tells statuses apart. A request
+     * that does not reach the server throws [Unreachable] and turns the account offline ([reach]); an account opened
+     * offline sends nothing until it reconnected.
+     */
     internal suspend fun <T : Any> respond(f: suspend () -> HttpResponse<T>): HttpResponse<T> {
-        val first = f()
+        val first = sent(f)
         if (first.status != 401 || tokens.refresh == null) return first
         refresh(tokens.access)
-        return f()
+        return sent(f)
+    }
+
+    /** One request: [Unreachable] where it did not reach the server, which turns the account offline. */
+    private suspend fun <T : Any> sent(f: suspend () -> HttpResponse<T>): HttpResponse<T> {
+        if (sendsNothing) throw Unreachable("opened offline")
+        return try {
+            f().also { answered() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: SignInFailure) {
+            throw e
+        } catch (e: Unreachable) {
+            throw e
+        } catch (e: Exception) {
+            wentOffline()
+            throw Unreachable(e.message, e)
+        }
+    }
+
+    /** What a kept read's fetch came to: its pages as the server sent them and its revision, a `304`, or a refusal. */
+    internal sealed class Fetched {
+        class Pages(val pages: List<ByteArray>, val revision: String?) : Fetched()
+        object NotModified : Fetched()
+        class Refused(val status: Int, val code: String?) : Fetched()
+    }
+
+    /** A kept read's answer: its pages, and — where they came from the store with the server unreachable — as of when. */
+    internal class Read(val pages: List<ByteArray>, val offline: OfflineAsOf?)
+
+    /** A read the server refused ([status], its error [code]); what was kept of it is gone. */
+    class Refused(val status: Int, val code: String?) : Exception("HTTP $status${code?.let { " $it" } ?: ""}")
+
+    /**
+     * A [KeptRead] for [tenant], [scope] and [id] (ADR 0140 decision 5): the server first while it is reached — sent the
+     * kept revision where the read is [conditional], a `304` marking the kept answer current, a newer answer **replacing**
+     * it, never merged, a `403`/`404` dropping it ([Refused]) — and the store's answer while it is not. After a replace or a
+     * drop the store is swept of what no current answer reaches ([settle]: a caller that reads many settles once). Without
+     * a store it is the server's answer alone.
+     */
+    internal suspend fun kept(
+        read: KeptRead, tenant: String, scope: String, id: String, conditional: Boolean = false, settle: Boolean = true,
+        fetch: suspend (ifNoneMatch: String?) -> Fetched,
+    ): Read {
+        val o = offline
+        val key = o?.key(read, tenant, scope, id)
+        if (o != null && _reach.value != Reach.Online) {
+            val kept = o.answer(key!!) ?: throw Unreachable("not kept")
+            return Read(kept.pages, OfflineAsOf(kept.asOf))
+        }
+        val kept = if (o != null && conditional) o.answer(key!!) else null
+        val fetched = try {
+            fetch(kept?.revision)
+        } catch (e: Unreachable) {
+            val stored = kept ?: o?.answer(key!!) ?: throw e
+            return Read(stored.pages, OfflineAsOf(stored.asOf))
+        }
+        return when (fetched) {
+            is Fetched.NotModified -> {
+                val k = kept ?: throw IllegalStateException("a 304 with no kept answer")
+                o!!.confirm(key!!)
+                Read(k.pages, null)
+            }
+            is Fetched.Pages -> {
+                if (o != null) {
+                    o.keep(key!!, fetched.pages, fetched.revision)
+                    sweepDue = true
+                    if (settle) settle()
+                }
+                Read(fetched.pages, null)
+            }
+            is Fetched.Refused -> {
+                if (o != null && (fetched.status == 403 || fetched.status == 404)) {
+                    if (fetched.code == "tenant_suspended" && tenant.isNotEmpty()) o.suspend(tenant) else o.drop(key!!)
+                    sweepDue = true
+                    if (settle) settle()
+                }
+                throw Refused(fetched.status, fetched.code)
+            }
+        }
+    }
+
+    private var sweepDue = false
+
+    /** The store swept, where a read replaced or dropped an answer since the last sweep. */
+    internal suspend fun settle() {
+        val o = offline ?: return
+        if (!sweepDue) return
+        sweepDue = false
+        runCatching { o.sweep() }.onFailure { println("veyq: the offline store was not swept: $it") }
+    }
+
+    /** [r]'s body as the server sent it, its pages' one page; or its refusal with the error's code. */
+    internal suspend fun <T : Any> fetched(r: HttpResponse<T>, revision: String? = r.response.headers[HttpHeaders.ETag]): Fetched = when {
+        r.status == 304 -> Fetched.NotModified
+        r.success -> Fetched.Pages(listOf(r.response.readRawBytes()), revision)
+        else -> Fetched.Refused(r.status, errorCode(r))
     }
 
     /**
@@ -468,7 +783,8 @@ class VeyqAccount private constructor(
     internal suspend fun refresh(seen: String = tokens.access) {
         tokens.lock.withLock {
             if (tokens.access == seen) {
-                val r = TokenApi(server, http).refreshSession(RefreshRequest(tokens.refresh ?: throw SignInFailure(SignInFailure.Reason.CREDENTIALS, "no refresh token")))
+                val token = tokens.refresh ?: throw SignInFailure(SignInFailure.Reason.CREDENTIALS, "no refresh token")
+                val r = sent { TokenApi(server, http).refreshSession(RefreshRequest(token)) }
                 if (!r.success) throw SignInFailure(SignInFailure.Reason.CREDENTIALS, "refresh ${r.status}")
                 val pair = r.body()
                 tokens.access = pair.accessToken
@@ -482,7 +798,7 @@ class VeyqAccount private constructor(
     }
 
     /** The `code` of an error response's body (`ErrorResponse`), or null. */
-    private suspend fun errorCode(r: HttpResponse<*>): String? = runCatching {
+    internal suspend fun errorCode(r: HttpResponse<*>): String? = runCatching {
         (Json.parseToJsonElement(r.response.bodyAsText()) as? JsonObject)?.get("code")?.jsonPrimitive?.content
     }.getOrNull()
 
@@ -510,10 +826,43 @@ class VeyqAccount private constructor(
         /** The DEVICE_KEY wrap's associated data, the web's (`deviceKeyWrap.ts`); only this device ever opens it. */
         private val DEVICE_KEY_AAD = utf8("veyq/v1/device-key-wrap")
 
+        /** The probe's cadence while offline (ADR 0140 decision 5): 5 s, doubling to 60 s. */
+        internal val PROBE = LivePoll.Cadence(intervalMs = 5_000, maxBackoffMs = 60_000, jitter = 0.2, minGapMs = 0)
+
+        /** How a kept answer is read back: as the generated client reads the server's. */
+        internal val KEPT_JSON = Json { ignoreUnknownKeys = true; isLenient = true }
+
         /** An HTTP client with the bearer of [tokens], and the server checked for its major and suite. */
         private class Connected(val suite: V1, val base: String, val tokens: Tokens, val http: HttpClient, val outside: HttpClient)
 
         private suspend fun connect(
+            primitives: Primitives,
+            server: String,
+            client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+            device: ThisDevice? = null,
+        ): Connected {
+            val c = clients(primitives, server, client)
+            try {
+                val setup = try {
+                    SetupApi(c.base, c.http).getSetupStatus()
+                } catch (e: Exception) {
+                    throw SignInFailure(SignInFailure.Reason.UNREACHABLE, e.message)
+                }
+                if (!setup.success) throw SignInFailure(SignInFailure.Reason.UNREACHABLE, "setup ${setup.status}")
+                val status = setup.body()
+                if (!ClientWindow.speaks(status.version.major)) throw SignInFailure(SignInFailure.Reason.INCOMPATIBLE, "server major ${status.version.major}, app $MAJOR")
+                if ("v1" !in status.suites) throw SignInFailure(SignInFailure.Reason.INCOMPATIBLE, "no v1 suite")
+                device?.keepInstanceSalt(Url(c.base).host, status.instanceSalt)
+                return c
+            } catch (e: Throwable) {
+                c.http.close()
+                c.outside.close()
+                throw e
+            }
+        }
+
+        /** The account's two HTTP clients, nothing sent yet: [connect]'s, and an offline unlock's (which cannot ask the server). */
+        private fun clients(
             primitives: Primitives,
             server: String,
             client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
@@ -535,23 +884,7 @@ class VeyqAccount private constructor(
                     socketTimeoutMillis = SERVER_WORK_MS
                 }
             }
-            val c = Connected(V1(primitives), server.trimEnd('/'), tokens, http, client { expectSuccess = false })
-            try {
-                val setup = try {
-                    SetupApi(c.base, http).getSetupStatus()
-                } catch (e: Exception) {
-                    throw SignInFailure(SignInFailure.Reason.UNREACHABLE, e.message)
-                }
-                if (!setup.success) throw SignInFailure(SignInFailure.Reason.UNREACHABLE, "setup ${setup.status}")
-                val status = setup.body()
-                if (!ClientWindow.speaks(status.version.major)) throw SignInFailure(SignInFailure.Reason.INCOMPATIBLE, "server major ${status.version.major}, app $MAJOR")
-                if ("v1" !in status.suites) throw SignInFailure(SignInFailure.Reason.INCOMPATIBLE, "no v1 suite")
-                return c
-            } catch (e: Throwable) {
-                http.close()
-                c.outside.close()
-                throw e
-            }
+            return Connected(V1(primitives), server.trimEnd('/'), tokens, http, client { expectSuccess = false })
         }
 
         /** Login (ADR 0003): the Ed25519 key of Argon2id(password, authSalt) answers the server's nonce. The refresh token
@@ -593,18 +926,76 @@ class VeyqAccount private constructor(
             val kem = suite.xwingKey(identity.kemSeed)
             val mine = suite.identityPublic(identity)
             // Every tenant the account belongs to on this server (answered whatever Host it is asked at).
-            val tenants = ScopesApi(c.base, c.http).listMyTenants().let {
+            // Every tenant the account belongs to on this server (answered whatever Host it is asked at), as sent: an offline
+            // unlock reads it back from the store.
+            val tenantsBody = ScopesApi(c.base, c.http).listMyTenants().let {
                 if (!it.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "my-tenants ${it.status}")
-                it.body()
-            }.map { TenantRef(it.tenantId, it.name, it.domain) }
+                it.response.readRawBytes()
+            }
+            val tenants = tenantsOf(tenantsBody)
             if (tenants.isEmpty()) throw SignInFailure(SignInFailure.Reason.NO_TENANT)
             val account = VeyqAccount(
                 suite, primitives, c.http, c.outside, c.base, c.tokens, material.userId, email.trim(), masterKey, identity, kem,
-                mine.serialize(), mine.sign, tenants, device,
+                mine.serialize(), mine.sign, tenants, device, material, tenantsBody,
             )
+            account.answered()
             account.trusted?.let { device.touch(it.key) }
+            account.ensureOffline()
             account.recordThisDevice(familyId, label)
             return account
+        }
+
+        private fun tenantsOf(body: ByteArray): List<TenantRef> =
+            KEPT_JSON.decodeFromString(ListSerializer(MyTenant.serializer()), body.decodeToString()).map { TenantRef(it.tenantId, it.name, it.domain) }
+
+        /**
+         * An account opened from its offline store with the server unreachable (ADR 0140 decision 4): [masterKey] from this
+         * device's kept wrap, the identity from the kept `key-material`, the tenants from the kept `listMyTenants`; no
+         * session — it sends nothing until its probe reached the server and [reconnect] ran ([refresh]: the remembered
+         * account's kept token; [authSeed]: a password-trusted one's login key). Null where this device keeps no store of
+         * the account or the store holds no opening answers: then the unlock fails as unreachable.
+         */
+        private suspend fun openedOffline(
+            primitives: Primitives,
+            record: TrustedDevice,
+            device: ThisDevice,
+            client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+            masterKey: ByteArray,
+            refresh: String?,
+            authSeed: ByteArray?,
+        ): VeyqAccount? {
+            val stores = device.offline
+            if (stores == null || !stores.has(record.key)) return null
+            val o = runCatching { stores.openFor(record.key, masterKey, record.server, device.offlineLimit) }.getOrNull() ?: return null
+            val material = o.answer(o.key(KeptRead.KEY_MATERIAL))?.pages?.singleOrNull()
+                ?.let { runCatching { KEPT_JSON.decodeFromString(AccountKeyMaterial.serializer(), it.decodeToString()) }.getOrNull() }
+            val tenantsAnswer = o.answer(o.key(KeptRead.MY_TENANTS))
+            val tenants = tenantsAnswer?.pages?.singleOrNull()?.let { runCatching { tenantsOf(it) }.getOrNull() }
+            if (material == null || material.userId != record.userId || tenants.isNullOrEmpty()) {
+                o.close()
+                return null
+            }
+            val c = clients(primitives, record.server, client)
+            c.tokens.refresh = refresh
+            return try {
+                val suite = c.suite
+                val identity = suite.deserializeIdentityPrivate(suite.open(Context("identity-priv"), masterKey, unb64(material.wrappedIdentityPrivateKey)))
+                val kem = suite.xwingKey(identity.kemSeed)
+                val mine = suite.identityPublic(identity)
+                VeyqAccount(
+                    suite, primitives, c.http, c.outside, c.base, c.tokens, material.userId, record.email, masterKey, identity, kem,
+                    mine.serialize(), mine.sign, tenants, device, material, null, openedOffline = true, authSeed = authSeed,
+                ).also {
+                    it.offline = o
+                    it._reach.value = Reach.Offline(tenantsAnswer.asOf)
+                    it.startProbe()
+                }
+            } catch (e: Exception) {
+                o.close()
+                c.http.close()
+                c.outside.close()
+                null
+            }
         }
 
         /** Every failure of a sign-in as a [SignInFailure], the HTTP client closed. */
@@ -695,14 +1086,28 @@ class VeyqAccount private constructor(
             password: String,
             device: ThisDevice,
             client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+        ): VeyqAccount = try {
+            unlockOnDeviceOnline(primitives, record, password, device, client)
+        } catch (e: SignInFailure) {
+            if (e.reason != SignInFailure.Reason.UNREACHABLE) throw e
+            unlockOnDeviceOffline(primitives, record, password, device, client) ?: throw e
+        }
+
+        private suspend fun unlockOnDeviceOnline(
+            primitives: Primitives,
+            record: TrustedDevice,
+            password: String,
+            device: ThisDevice,
+            client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
         ): VeyqAccount {
             require(record.method == TrustedDevice.Method.DEVICE) { "not a password-trusted record" }
-            val c = connect(primitives, record.server, client)
+            val c = connect(primitives, record.server, client, device)
             return guarded(c) {
                 val session = login(primitives, c, record.email, password)
                 val material = keyMaterial(c)
                 val wrap = material.wraps.firstOrNull { it.method == MasterKeyWrap.Method.DEVICE && it.id == record.wrapId }
-                    ?: throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "wrap not served")
+                    ?: throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "wrap not served").also { notServed(device, record) }
+                device.keepWrap(record.key, ThisDevice.KeptWrap(record.wrapId, wrap.wrappedKey, wrap.kdfParams))
                 val factor = device.keys.bindHmac(record.alias, DEVICE_BIND) ?: run {
                     device.forget(record.key)
                     throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "bind key gone")
@@ -722,6 +1127,50 @@ class VeyqAccount private constructor(
                 }
                 finish(c, primitives, record.email, material, masterKey, device, session.family.id)
             }
+        }
+
+        /**
+         * A password-trusted account opened with the server unreachable: the kept DEVICE wrap opened as the online unlock
+         * opens the served one, and the login key for [reconnect] derived from [password] and the server's kept instance
+         * salt. Null where nothing is kept to open; a wrong password is DEVICE_NOT_TRUSTED, as online.
+         */
+        private suspend fun unlockOnDeviceOffline(
+            primitives: Primitives,
+            record: TrustedDevice,
+            password: String,
+            device: ThisDevice,
+            client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+        ): VeyqAccount? {
+            val kept = device.keptWrap(record.key)?.takeIf { it.wrapId == record.wrapId } ?: return null
+            val salt = device.instanceSalt(Url(record.server).host) ?: return null
+            if (device.offline?.has(record.key) != true) return null
+            val suite = V1(primitives)
+            val factor = device.keys.bindHmac(record.alias, DEVICE_BIND) ?: return null
+            val masterKey = try {
+                val (params, kdfSalt) = suite.decodeKdfParams(unb64(kept.kdfParams ?: throw OpenRefused("no kdfParams")))
+                val kek = suite.kekDevicePassword(factor, password, kdfSalt, params)
+                try { suite.open(Context("master-key"), kek, unb64(kept.wrappedKey)) } finally { kek.fill(0) }
+            } catch (e: Exception) {
+                throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "wrap does not open")
+            } finally {
+                factor.fill(0)
+            }
+            val seed = suite.authSeed(password, suite.authSalt(unb64(salt), record.email))
+            return openedOffline(primitives, record, device, client, masterKey, null, seed) ?: run {
+                masterKey.fill(0)
+                seed.fill(0)
+                null
+            }
+        }
+
+        /**
+         * The server no longer serves this device's wrap (another device's "Sign out and remove saved key", ADR 0058
+         * decision 2): the local copy goes and the store is wiped (ADR 0140 decision 4). The record stays — one answer of a
+         * server never makes a device forget its trust.
+         */
+        private fun notServed(device: ThisDevice, record: TrustedDevice) {
+            device.dropWrap(record.key)
+            device.offline?.let { o -> runCatching { o.wipe(record.key) } }
         }
 
         /**
@@ -808,9 +1257,21 @@ class VeyqAccount private constructor(
             record: TrustedDevice,
             device: ThisDevice,
             client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+        ): VeyqAccount = try {
+            resumeOnline(primitives, record, device, client)
+        } catch (e: SignInFailure) {
+            if (e.reason != SignInFailure.Reason.UNREACHABLE) throw e
+            resumeOffline(primitives, record, device, client) ?: throw e
+        }
+
+        private suspend fun resumeOnline(
+            primitives: Primitives,
+            record: TrustedDevice,
+            device: ThisDevice,
+            client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
         ): VeyqAccount {
             require(record.method == TrustedDevice.Method.DEVICE_KEY) { "not a remembered record" }
-            val c = connect(primitives, record.server, client)
+            val c = connect(primitives, record.server, client, device)
             return guarded(c) {
                 val token = device.keys.secret(record.refreshAlias) ?: run {
                     device.forget(record.key)
@@ -824,6 +1285,7 @@ class VeyqAccount private constructor(
                 if (r.status in 400..499) {
                     device.keys.deleteSecret(record.refreshAlias)
                     device.forget(record.key)
+                    device.offline?.let { o -> runCatching { o.wipe(record.key) } }
                     throw SignInFailure(SignInFailure.Reason.SESSION_ENDED, "refresh ${r.status}")
                 }
                 if (!r.success) throw SignInFailure(SignInFailure.Reason.UNREACHABLE, "refresh ${r.status}")
@@ -833,7 +1295,8 @@ class VeyqAccount private constructor(
                 pair.refreshToken?.let { device.keepRefresh(record.refreshAlias, it) }
                 val material = keyMaterial(c)
                 val wrap = material.wraps.firstOrNull { it.method == MasterKeyWrap.Method.DEVICE_KEY && it.id == record.wrapId }
-                    ?: throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "wrap not served")
+                    ?: throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "wrap not served").also { notServed(device, record) }
+                device.keepWrap(record.key, ThisDevice.KeptWrap(record.wrapId, wrap.wrappedKey, wrap.kdfParams))
                 val masterKey = try {
                     device.keys.openUnlockable(unb64(wrap.kdfParams ?: throw OpenRefused("no iv")), unb64(wrap.wrappedKey), DEVICE_KEY_AAD, record.unlockLevel!!)
                 } catch (e: DeviceAuthFailed) {
@@ -842,6 +1305,33 @@ class VeyqAccount private constructor(
                     throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "wrap does not open")
                 }
                 finish(c, primitives, record.email, material, masterKey, device, null)
+            }
+        }
+
+        /**
+         * A remembered account opened with the server unreachable (ADR 0140 decision 4): the kept DEVICE_KEY wrap opened
+         * under the unlock key at the record's level — PRESENCE still asks the person, LOGIN still rests on the device's
+         * sign-in —, then the store. Null where nothing is kept to open.
+         */
+        private suspend fun resumeOffline(
+            primitives: Primitives,
+            record: TrustedDevice,
+            device: ThisDevice,
+            client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+        ): VeyqAccount? {
+            val kept = device.keptWrap(record.key)?.takeIf { it.wrapId == record.wrapId } ?: return null
+            if (device.offline?.has(record.key) != true) return null
+            val refresh = device.keys.secret(record.refreshAlias) ?: return null
+            val masterKey = try {
+                device.keys.openUnlockable(unb64(kept.kdfParams ?: throw OpenRefused("no iv")), unb64(kept.wrappedKey), DEVICE_KEY_AAD, record.unlockLevel!!)
+            } catch (e: DeviceAuthFailed) {
+                throw SignInFailure(if (e.cancelled) SignInFailure.Reason.DEVICE_AUTH_CANCELLED else SignInFailure.Reason.DEVICE_NOT_TRUSTED, e.message)
+            } catch (e: OpenRefused) {
+                throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "wrap does not open")
+            }
+            return openedOffline(primitives, record, device, client, masterKey, refresh, null) ?: run {
+                masterKey.fill(0)
+                null
             }
         }
     }
@@ -967,10 +1457,48 @@ class TenantSession internal constructor(
     internal fun scopeKey(scopeId: String): Pair<ByteArray, Int>? =
         scopes.firstOrNull { it.summary.id == scopeId }?.let { it.key to it.summary.grantedEpoch }
 
-    internal suspend fun trees(): Map<String, List<OpenNode>> = tree ?: scopes.associate { s ->
-        val rows = account.call { api(::ContentApi).listNodes(s.summary.id) }
-        s.summary.id to Tree.open(account.suite, s.summary.id, s.key, rows)
+    /**
+     * Each open scope's tree: `listNodes` as a kept read (ADR 0140 decision 5) — its kept `ETag` sent as `If-None-Match`,
+     * a newer answer replacing the kept one, the store's answer offline ([offline] then says as of when). A scope the
+     * server no longer serves the account (`403`/`404`: a removed membership) lists nothing, and what was kept of it is
+     * swept (decision 6). The store is swept once, after every scope was read.
+     */
+    internal suspend fun trees(): Map<String, List<OpenNode>> = tree ?: run {
+        var asOf: OfflineAsOf? = null
+        var unkept: Unreachable? = null
+        val read = try {
+            scopes.associate { s ->
+                val rows = try {
+                    val r = account.kept(KeptRead.NODES, tenant.tenantId, s.summary.id, s.summary.id, conditional = true, settle = false) { tag ->
+                        account.fetched(account.respond { api(::ContentApi).listNodes(s.summary.id, tag) })
+                    }
+                    if (r.offline != null) asOf = OfflineAsOf(minOfNotNull(asOf?.asOf, r.offline.asOf))
+                    VeyqAccount.KEPT_JSON.decodeFromString(ListSerializer(NodeSummary.serializer()), r.pages.single().decodeToString())
+                } catch (e: VeyqAccount.Refused) {
+                    if (e.status != 403 && e.status != 404) throw e
+                    emptyList()
+                } catch (e: Unreachable) {
+                    // offline, a scope nothing of which was kept lists nothing; the others show what was
+                    unkept = e
+                    emptyList()
+                }
+                s.summary.id to Tree.open(account.suite, s.summary.id, s.key, rows)
+            }
+        } finally {
+            account.settle()
+        }
+        // offline with nothing kept at all: the read failed, as it would have without a store
+        if (unkept != null && asOf == null) throw unkept!!
+        if (unkept != null && account.reach.value == Reach.Online) throw unkept!!
+        offline = asOf
+        read
     }.also { tree = it }
+
+    /** Where the last read of the tree came from the store with the server unreachable: as of when; null when it was the server's. */
+    var offline: OfflineAsOf? = null
+        private set
+
+    private fun minOfNotNull(a: Long?, b: Long?): Long? = if (a == null) b else if (b == null) a else minOf(a, b)
 
     override suspend fun nodes(): List<NodeRef> = trees().flatMap { (_, nodes) -> nodes.map { it.asNode() } }
 

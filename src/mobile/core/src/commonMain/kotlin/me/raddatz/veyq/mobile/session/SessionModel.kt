@@ -9,6 +9,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.launch
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -94,6 +96,16 @@ class SessionModel<A : Connection, T : Any>(
         fun opened(session: T) {}
         suspend fun spaces(session: T): List<SpaceRef>
         suspend fun signOut(account: A)
+
+        /**
+         * [account] ends as the duplicate of a connection of the same account this model holds already ([Connections.add]
+         * keeps that one): its server session and keys only — the record, the wrap copy and the offline store stay with the
+         * account, which stays on this device (ADR 0140 decision 11).
+         */
+        suspend fun retire(account: A) = signOut(account)
+
+        /** Why [account] ended on its own (a reconnect found this device's trust gone, [Reach.Ended]); null: it never does. */
+        fun ends(account: A): kotlinx.coroutines.flow.Flow<SignInFailure.Reason>? = null
         suspend fun forgetDevice(account: A)
 
         /** The levels staying signed in can take on this device now ([DeviceKeys.staySignedIn]). */
@@ -558,6 +570,7 @@ class SessionModel<A : Connection, T : Any>(
      */
     suspend fun signOut(account: A): SignedOut<A, T> {
         val wasCurrent = connections.current?.first == account
+        watchedEnds.remove(account.key)?.cancel()
         connections.remove(account)
         if (offer?.connection == account.key) offer = null
         if (wasCurrent) opened = null
@@ -649,7 +662,32 @@ class SessionModel<A : Connection, T : Any>(
 
     private suspend fun add(account: A) {
         val tenant = door.defaultTenant(account) ?: throw SignInFailure(SignInFailure.Reason.NO_TENANT)
-        connections.add(account, tenant).duplicate?.let { runCatching { door.signOut(it) } }
+        // the duplicate leaves its connection only: the account stays on this device, under the connection held
+        connections.add(account, tenant).duplicate?.let { d -> watchedEnds.remove(d.key)?.cancel(); runCatching { door.retire(d) } }
+        val ends = door.ends(account) ?: return
+        watchedEnds[account.key] = scope.launch { ends.first().let { ended(account, it) } }
+    }
+
+    /** The watch of each held account's own end ([Door.ends]), by connection key. */
+    private val watchedEnds = HashMap<String, kotlinx.coroutines.Job>()
+
+    /**
+     * [account] ended on its own (a reconnect found this device's trust gone: its store is wiped already): it leaves the
+     * switcher, and — where it was current — the next account opens, else the unlock or the sign-in says [reason].
+     */
+    private suspend fun ended(account: A, reason: SignInFailure.Reason) {
+        if (connections.all.none { it === account }) return
+        watchedEnds.remove(account.key)
+        val wasCurrent = connections.current?.first == account
+        connections.remove(account)
+        if (offer?.connection == account.key) offer = null
+        if (wasCurrent) opened = null
+        runCatching { door.retire(account) }
+        val next = connections.current
+        when {
+            next == null -> locked(error = words(reason))
+            wasCurrent -> openOrLock(next.first, next.second)
+        }
     }
 
     private suspend fun openTenant(account: A, tenant: TenantRef): Opened<A, T> {
@@ -781,6 +819,8 @@ class AccountDoor(
     }
     override suspend fun spaces(session: TenantSession): List<SpaceRef> = session.spaces()
     override suspend fun signOut(account: VeyqAccount) = account.signOut()
+    override suspend fun retire(account: VeyqAccount) = account.retire()
+    override fun ends(account: VeyqAccount) = account.reach.mapNotNull { (it as? Reach.Ended)?.reason }
     override suspend fun forgetDevice(account: VeyqAccount) = account.forgetThisDevice()
     override fun staySignedIn(): Set<StaySignedIn> = device.keys.staySignedIn
     override fun declined(account: VeyqAccount): Boolean = device.declined(account.key)

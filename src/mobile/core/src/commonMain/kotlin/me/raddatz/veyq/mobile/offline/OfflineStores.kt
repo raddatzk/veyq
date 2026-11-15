@@ -67,6 +67,10 @@ class OfflineStores internal constructor(
         }
     }
 
+    /** [open] as an account's reads use it ([AccountOffline]), its limit [defaultLimit] until the person sets one. */
+    fun openFor(account: String, masterKey: ByteArray, server: String, defaultLimit: Long): AccountOffline =
+        AccountOffline(open(account, masterKey), files, store, account, server, defaultLimit, clock)
+
     /** The steps of a [wipe], for a test to stop it where a crash would. */
     internal enum class WipeStep { MARKED, FILES, DIRECTORY }
 

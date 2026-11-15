@@ -158,6 +158,11 @@ internal class Reader(private val b: ByteArray) {
 
     fun long(): Long = (int().toLong() shl 32) or (int().toLong() and 0xffffffffL)
 
+    fun raw(k: Int): ByteArray {
+        need(k)
+        return b.copyOfRange(at, at + k).also { at += k }
+    }
+
     fun text(): String {
         val k = int()
         need(k)

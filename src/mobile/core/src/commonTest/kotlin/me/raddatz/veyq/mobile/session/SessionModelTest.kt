@@ -111,6 +111,8 @@ class SessionModelTest {
         override fun opened(session: String) { shown += session }
         override suspend fun spaces(session: String) = listOf(SpaceRef(session, "SHARED", session))
         override suspend fun signOut(account: Acc) { signedOut += account.key }
+        val retired = mutableListOf<String>()
+        override suspend fun retire(account: Acc) { retired += account.key }
         override suspend fun forgetDevice(account: Acc) {}
         override fun staySignedIn() = offered
         override fun declined(account: Acc) = account.key in declined
@@ -295,7 +297,10 @@ class SessionModelTest {
         m.addServer()
         m.signIn("a.example", "e", "pw", "sk")
         assertEquals(1, m.accounts.size)
-        assertEquals(listOf(a.key), d.signedOut)
+        // the duplicate leaves its connection only, never the device: a sign-out would wipe the account's offline store
+        // (ADR 0140 decision 11), which the connection held keeps using
+        assertEquals(listOf(a.key), d.retired)
+        assertEquals(emptyList(), d.signedOut, "the duplicate was signed out: the account's store would be wiped")
     }
 
     @Test
