@@ -993,6 +993,92 @@ zoom and the slideshow, trash with Undo, a Memory's links in the share sheet.
   a web upload appearing within one poll, a medium trashed and undone (Undo on Apple within the tool's lag or recorded as
   the Depot CR recorded it), a WRITE_ONLY link made and a guest's upload seen.
 
+**Status: built on both phones, unit-proven, every new check bitten; Android passed live (2026-11-15). Apple built for
+macOS and the iOS simulator and launched signed in, but not driven: the simulator tool's access to the throwaway
+simulator went unanswered (the owner away), so no Apple tap of this phase was made — below.**
+
+**Built:**
+- **Android** — Home's New and the drawer's New list core's `AppKinds.createsWhere` (New Memory among them; the drawer's
+  asks Home, as its folder and Pot do); Memories' own list has "New Memory" (made at the top of the space shown), each
+  made Memory opened. A Memory's page: the add button a menu of "Add photos" and "Add chapter" where core offers both
+  (`GalleryModel.creates`, the rights' `upload`), a chapter made and opened; a chapter row draws its cover
+  (`GalleryModel.chapterCover`, decoded small, cropped); the live poll (`GalleryModel.startLive`, in the gallery's own scope —
+  `live()` from a composable would read and open the gallery on the main thread) while the page is started; core's Undo as a
+  snackbar for as long as `State.undo` holds, `State.said` once, a guest's purge asked in a dialog. The lightbox: Slideshow
+  (core's `Lightbox.slideshow`; the pager follows the model's step without paging it back, the person's paging pauses it),
+  Move to trash where `GalleryModel.deletes` says so (run in the app model's scope: a trash or an Undo outlives the snackbar
+  that asked), zoom by pinch and double tap (Compose's `transformable`, the pager waits while zoomed, a page left goes back to
+  its fit, a touch pauses the slideshow, the pages clipped so a zoomed picture never covers the caption). `NameDialog`
+  (was `FolderNameDialog`) serves a folder, a Memory and a chapter.
+- **Apple** — the same on SwiftUI: `createsWhere` in Home's and the drawer's New (`NewKind.memory`), `MemoriesList` with
+  New Memory, the add menu's "Add chapter", `ChapterCover` (`AppleMemories.chapterCover`, new), `AppModel.liveGallery`
+  (`startLive` while the scene is active), `GalleryNotice` (Undo / what was said) at the page's and the lightbox's foot, the
+  purge as a confirmation dialog, the lightbox's Slideshow and Move to trash (iOS toolbar, the Mac's own bar), zoom by
+  `MagnifyGesture` and a double tap with a drag panning while zoomed (`highPriorityGesture` only then, so paging keeps the
+  swipe otherwise). The lightbox now carries its gallery (`GalleryBox` mirrors its state for the notices, a Mac window's too).
+- **core** — `GalleryModel.page`/`rowPage`: a Memory's or a chapter's page as an `ObjectRef` (a chapter is no object of a
+  list, `applicationOf` names no application for it, so both phones' chapter rows opened nothing — a bug since phase 1,
+  found in this pass). **`GalleryModel.undo()` waits for its trash**: pressed while the trash was still on its way, the
+  restore went first, found nothing, and the trash landing after it took the medium for good (measured on Android under a
+  load of 25: `d-clip.mp4` lost so). The Undo now awaits what the trash came to and restores only one that went.
+- **Words:** none new (`memory_new`, `memory_add_chapter`, `memory_create_*_title`, `memory_slideshow_*`, `memory_trash`,
+  `trash_undo`, `memory_delete_own_*` from phases 2 and 4).
+
+**Met:** `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew --continue :core:jvmTest :core:macosArm64Test :bridge:jvmTest
+:android:assembleDebug :android:compileReleaseKotlin` green from `src/mobile` after the merge of `claude/windows-cr-f6c73c`
+at `cd1413285` (core jvm 667, 10 skipped — the live cases; macosArm64 477; bridge 88, 4 skipped); `:core:compileKotlinLinuxX64
+:core:compileKotlinMingwX64` green (no bridge shape changed, so the desktops' `run.py build` were not rerun); the Apple app
+built for macOS and for an iPhone 18 Pro simulator (phase 1's commands, `-destination 'platform=iOS Simulator,id=<throwaway>'`);
+the guards (`/usr/bin/python3 scripts/validate_*.py` but guard_gaps) green. New: `GalleryPageTest` (2),
+`GalleryActionsTest` +2 (an Undo pressed while the trash is on its way restores only after it landed; one of a trash that
+did not go restores nothing). **Bitten**, by a script (mutation → `./gradlew :core:jvmTest --tests <class>` red → restored
+with `/bin/cp -f`), 4 of 4 red: a chapter not opened as a page, any kind opened; the Undo not waiting for its trash, a
+failed trash restored anyway. The Done-when's grep finds, over both apps, only `NodeHeader`'s existing reads of core's
+`TRASH_UNDO_MS` (a comment on Android; Apple's header notice sleeping core's constant) — no copied number, no rule of
+Memories'.
+**Android, live** (throwaway AVD `veyq_mem6_tmp`, Pixel 8, API 36, `-gpu host`; deleted after; signed in by
+`android/devlogin.py`; read as text by `uiautomator dump`, three screenshots for what text cannot show): a Memory made from
+Home's New ("Android" — the emulator's `input text` lost the rest of "Android memory" to the dialog's tap; recorded, not
+renamed) opened at once; "Add chapter" → "Day one" made; a second, "Daytwo", made and opened at once (after the core fix);
+"Day one" again refused "There is already a chapter named “Day one” here."; the drawer's New offers New Memory, Memories'
+list its "New Memory" button. Four media through the photo picker (`a-exif.jpg` the web's EXIF fixture, two ffmpeg photos,
+a 10 s H.264 MP4) → "4 items". A WRITE_ONLY link made in the share sheet ("Add photos only", its address shown); a web
+guest (headless system Chrome, Vite's origin, name "Live guest") added `e-web.jpg` through it, then `f-web2.jpg` with the
+gallery on screen: set on the guest page at 00:32:25Z, "6 items" read at 00:32:40Z — within one poll (`LivePoll.ITEMS`
+20 s). The lightbox: a double tap zoomed the picture to fill the screen (screenshot), a swipe then panned it ("1 of 6"
+kept), a double tap and a swipe paged ("2 of 6"); the slideshow from "1 of 6" stepped every ~5 s to "6 of 6" and ended
+(its button back to Start), started at "3 of 6" it paused on a swipe ("5 of 6" held 11 s). Trash: "Moved to trash" with
+Undo; Undo pressed 0.3 s after the trash (the race above) brought `c-bars.jpg` back at its place ("5 of 5" on `a-exif.jpg`
+after it, "5 items"); `b-test.jpg` trashed and left: the Undo gone after its window, "4 items". A cover set on "Day one"
+drawn on its row (screenshot). **GPX/music:** the dev account's "Musik-Test" holds 54 media, 2 of them `audio/mpeg`
+(read by a scratch live case over `MemoryMedia.list`, not committed); Android drew "52 items", no track. `run-as
+me.raddatz.veyq ls -laR cache files` after: only `profileInstalled`. **Fixed on the way (Android):** a trash in the
+lightbox crashed the app (`IndexOutOfBoundsException` in the pager's key map: the rows shrank under its last page count) —
+the pager's key and page now guard a gone index; seen red in the pass, green after. The emulator's own unlock ANR'd twice
+under a load of 25 (the renderer in `nSetStopped`, not the app's code).
+**Apple, not driven:** the throwaway iPhone 18 Pro simulator booted, the app installed and launched signed in by
+`apple/devlogin.py` (its "Anmeldung auf diesem Gerät" offer on screen, read by `simctl io screenshot`), but the simulator
+tool's access request went unanswered and the tool then refused without asking again; nothing was tapped. Apple's
+functions of this phase are held by the core's tests (the rules are all core's) and the two builds; New Memory, Add
+chapter, the chapter covers, the poll, zoom, the slideshow and trash with Undo are **unproven on an Apple device** — the
+next Apple pass (or the owner in front of a Mac) drives them; the Undo stays as native-apps records it for Apple.
+**Cleaned up:** the Memory "Android" with its chapters and links trashed and purged (`DevMemoryTest`,
+`VEYQ_DEV_MEMORY_PURGE=Android`); the emulator's seven session families signed out in its Settings ("Stop trusting", then
+"Sign out here"); the simulator's one revoked by a scratch live case over `SessionApi` (its family alone created at
+01:00:52Z), the case deleted; the AVD and the simulator deleted.
+
+**Deviation:** none in the design. The live case on the web side was a link's guest, not a signed-in member: Vite's
+`?devlogin` reads the checkout's `.run/.env`, which the coordinator's worktree (Vite's root) does not hold, and that
+worktree is not this phase's to write into — a guest's upload through the WRITE_ONLY link is the web upload both steps of
+the Done-when name. The Memory is "Android", not "Android memory" (above).
+
+**Retrospective:** the device pass found three faults no test had: a chapter could never be opened from a phone (the
+lists' kind mapping was the wrong owner for "which page opens"), an Undo raced its own trash (only a slow server shows it,
+and the tests' door answered at once — a door that holds a call open is what a test of an Undo needs), and the pager
+crashed when its rows shrank (phase 1's pager never lost a row while open). Running a core `live()` from a composable
+would have read on the main thread; the model's own `startLive` is the phones' way. The simulator tool's permission is an
+owner's click: an Apple pass belongs in a window where the owner can grant it, or it runs only to the launch.
+
 ### Phase 7 — The docs
 
 - ADR 0136's Consequences: Memories' screen models (`GalleryModel`, `Lightbox`, `MemoryRights`, the create, the trash), one

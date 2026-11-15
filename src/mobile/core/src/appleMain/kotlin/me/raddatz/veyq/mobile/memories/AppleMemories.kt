@@ -31,6 +31,12 @@ object AppleMemories {
         gallery.tile(mediaId)?.toNSData()
     }
 
+    /** Chapter [nodeId]'s cover picture as stored, for its row in [gallery] (`GalleryModel.chapterCover`); null where it has none. */
+    @Throws(Exception::class)
+    suspend fun chapterCover(gallery: GalleryModel, nodeId: String): NSData? = withContext(Dispatchers.Default) {
+        gallery.chapterCover(nodeId)?.toNSData()
+    }
+
     /** Medium [mediaId]'s picture in [lightbox], whole; null where it shows none. */
     @Throws(Exception::class)
     suspend fun picture(lightbox: Lightbox, mediaId: String): NSData? = withContext(Dispatchers.Default) {

@@ -119,8 +119,8 @@ struct DrawerList: View {
                 TenantSwitcher(model: model)
                 // the web's sidebar "New": what a level creates, opened on Home
                 Menu {
-                    ForEach(AppKinds.shared.drawerCreates, id: \.self) { c in
-                        Button(say(c.word), systemImage: Names.createSymbol(c)) { model.requestNew(c == .pot ? .pot : .folder) }
+                    ForEach(AppKinds.shared.createsWhere(isHome: false), id: \.self) { c in
+                        Button(say(c.word), systemImage: Names.createSymbol(c)) { model.requestNew(c == .pot ? .pot : c == .memory ? .memory : .folder) }
                     }
                 } label: {
                     // drawn here: a Mac draws a bordered menu as its own grey pop-up, whatever its button style
@@ -494,6 +494,8 @@ struct Bar: View {
             ObjectPlaceholder(ref: ref, tab: key)
         } else if let app = model.shell.application, app == .expenses {
             ExpensesList(model: model)
+        } else if let app = model.shell.application, app == .memories {
+            MemoriesList(model: model)
         } else if let app = model.shell.application {
             ArrangedListView(list: model.applicationList(app), onOpen: model.open, key: "app:\(app)")
                 .navigationTitle(Names.application(app))
@@ -514,6 +516,7 @@ struct HomeView: View {
     @State private var creatingPot = false
     @State private var pickingFiles = false
     @State private var pickingFolder = false
+    @State private var namingMemory = false
 
     /// A group's rows: a folder enters, an object opens.
     @ViewBuilder private func rows(_ nodes: [NodeRef]) -> some View {
@@ -592,12 +595,14 @@ struct HomeView: View {
         }
         // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
         .createMenu(say(.drawerNew), shown: model.canCreateHere) {
-            ForEach(AppKinds.shared.homeCreates, id: \.self) { c in
+            // core's `createsWhere`: a folder, a Pot, files and a folder uploaded here, and a Memory here
+            ForEach(AppKinds.shared.createsWhere(isHome: true), id: \.self) { c in
                 Button(say(c.word), systemImage: Names.createSymbol(c)) {
                     switch c {
                     case .pot: creatingPot = true
                     case .uploadFiles: pickingFiles = true
                     case .uploadFolder: pickingFolder = true
+                    case .memory: newName = ""; nameProblem = nil; namingMemory = true
                     default: newName = ""; nameProblem = nil; naming = true
                     }
                 }
@@ -626,11 +631,27 @@ struct HomeView: View {
         } message: {
             if let nameProblem { Text(nameProblem) }
         }
+        // New Memory: made at this level and opened (the web's `MemoryNodeDialog`)
+        .alert(say(.memoryCreateMemoryTitle), isPresented: $namingMemory) {
+            TextField(say(.nodeName), text: $newName)
+            Button(say(.folderCreate)) {
+                let name = newName
+                guard let space = model.shell.space else { return }
+                let parent = model.shell.folder?.nodeId
+                Task {
+                    if let problem = await model.createMemory(scopeId: space, parentId: parent, name: name) { nameProblem = problem; namingMemory = true }
+                }
+            }
+            Button(say(.signinCancel), role: .cancel) {}
+        } message: {
+            if let nameProblem { Text(nameProblem) }
+        }
         .sheet(isPresented: $creatingPot) { NewPotSheet(model: model) }
         // what the drawer's "New" asked for
         .onChange(of: model.newRequest, initial: true) { _, asked in
             switch asked {
             case .folder: newName = ""; nameProblem = nil; naming = true
+            case .memory: newName = ""; nameProblem = nil; namingMemory = true
             case .pot: creatingPot = true
             case nil: return
             }
@@ -934,6 +955,35 @@ struct ExpensesList: View {
     }
 }
 
+/// Memories' own list (its Memories), with "New Memory" (made at the top of the space shown, then opened).
+struct MemoriesList: View {
+    @Bindable var model: AppModel
+    @State private var naming = false
+    @State private var newName = ""
+    @State private var problem: String?
+
+    private var space: String? { model.shell.space ?? model.spaces.first?.scopeId }
+
+    var body: some View {
+        ArrangedListView(list: model.applicationList(.memories), onOpen: model.open, key: "app:\(ApplicationId.memories)")
+            .navigationTitle(Names.application(.memories))
+            .createAction(say(.memoryNew), shown: space != nil) { newName = ""; problem = nil; naming = true }
+            .alert(say(.memoryCreateMemoryTitle), isPresented: $naming) {
+                TextField(say(.nodeName), text: $newName)
+                Button(say(.folderCreate)) {
+                    let name = newName
+                    guard let space else { return }
+                    Task {
+                        if let p = await model.createMemory(scopeId: space, parentId: nil, name: name) { problem = p; naming = true }
+                    }
+                }
+                Button(say(.signinCancel), role: .cancel) {}
+            } message: {
+                if let problem { Text(problem) }
+            }
+    }
+}
+
 /// The web's motifs (src/web/src/shared/ui/icons.ts) in SF Symbols: images, file, inbox, wallet, folder, link.
 enum Names {
     static func application(_ app: ApplicationId) -> String { say(AppKinds.shared.applicationWord(app: app)) }
@@ -965,6 +1015,7 @@ enum Names {
         switch c {
         case .pot: "wallet.bifold"
         case .uploadFiles: "square.and.arrow.up.on.square"
+        case .memory, .chapter: "photo.badge.plus"
         default: "folder.badge.plus"
         }
     }

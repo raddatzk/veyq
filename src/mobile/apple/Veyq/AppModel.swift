@@ -837,6 +837,14 @@ final class AppModel {
         return made
     }
 
+    /// `node`'s page's live poll (core's `GalleryModel.live`, run by core) for as long as the calling task runs — the page
+    /// while the app is active, so nothing is asked in the background; its cancellation stops the poll.
+    func liveGallery(_ node: NodeAt) async {
+        guard let live = galleryModel(node)?.startLive() else { return }
+        while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
+        live.stop()
+    }
+
     /// The gallery goes (another opened, the tenant closed): its lightbox and a video's reader close with it. The tenant's
     /// close passes `windows`: every lightbox window's gallery goes too.
     private func closeGallery(windows: Bool = false) {
@@ -1338,8 +1346,36 @@ final class AppModel {
         return refused.map { say(notice: $0) }
     }
 
+    /// A Memory `name` made in space `scopeId` under `parentId` (nil: the space's top) — New Memory, core's
+    /// `ShellModel.createMemory` (the web's `MemoryNodeDialog`: checked against the loaded tree, then sent) —, opened once
+    /// made (the web's). Why not, in the dialog's words, or nil.
+    func createMemory(scopeId: String, parentId: String?, name: String) async -> String? {
+        guard let m = shellModel else { return say(notice: MemoryCreate.shared.refused(reason: nil)) }
+        let made = try? await m.createMemory(scopeId: scopeId, parentId: parentId, name: name)
+        applyShell(start: false)
+        await readDetails(m.tenant)
+        return opened(made)
+    }
+
+    /// A chapter `name` made in `gallery`'s Memory (core's `GalleryModel.createChapter`, which reads the lists anew), opened
+    /// once made; why not, or nil.
+    func createChapter(_ gallery: GalleryModel, name: String) async -> String? {
+        let made = try? await gallery.createChapter(name: name)
+        applyShell(start: false)
+        if let m = shellModel { await readDetails(m.tenant) }
+        return opened(made)
+    }
+
+    /// What a Memory's or a chapter's create came to: the node made opened (both are Memories'), or why not in words.
+    private func opened(_ made: MemoryCreate.Made?) -> String? {
+        if let notice = made?.notice { return say(notice: notice) }
+        guard let n = made?.node else { return say(notice: MemoryCreate.shared.refused(reason: nil)) }
+        if let page = GalleryModel.companion.page(node: n) { open(page) }
+        return nil
+    }
+
     /// What the drawer's "New" asked Home to create, until Home opens its dialog.
-    enum NewKind { case folder, pot }
+    enum NewKind { case folder, pot, memory }
     var newRequest: NewKind?
 
     /// The drawer's "New": Home, where its dialog for `kind` opens.
