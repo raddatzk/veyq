@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.android
 
+import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -17,6 +18,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
@@ -55,6 +60,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -77,12 +83,15 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
@@ -340,7 +349,10 @@ private fun MediaTile(row: GalleryModel.Row, gallery: GalleryModel, model: AppMo
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel, onClose: () -> Unit) {
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    // the whole screen, edge to edge like the activity: a dialog's window otherwise keeps out of the system bars and the
+    // display cutout, so in landscape the lightbox sat shifted right by the cutout with the page showing beside it (#931)
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        EdgeToEdgeDialogWindow()
         val state by box.state.collectAsStateWithLifecycle()
         val rows = state.rows
         if (rows.isEmpty()) {
@@ -379,8 +391,11 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
             containerColor = Color.Black,
             contentColor = Color.White,
             snackbarHost = { SnackbarHost(snackbar) },
+            // black behind the bars and the cutout, nothing drawn under them
+            contentWindowInsets = WindowInsets.safeDrawing,
             topBar = {
                 TopAppBar(
+                    windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
                     title = { Text(stringResource(R.string.memory_item_position, pager.currentPage + 1, rows.size)) },
                     navigationIcon = {
                         IconButton(onClick = onClose) { Icon(Icons.Filled.Close, stringResource(R.string.memory_close)) }
@@ -430,6 +445,24 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
         }
         if (details) {
             ModalBottomSheet(onDismissRequest = { details = false }) { MediaDetailsSheet(row, box) }
+        }
+    }
+}
+
+/**
+ * The window of the dialog this is composed in drawn into the display cutout too (an edge-to-edge dialog's window still
+ * keeps out of it on its short edges), with the system bars' icons light over the lightbox's black.
+ */
+@Composable
+private fun EdgeToEdgeDialogWindow() {
+    val window = (LocalView.current.parent as? DialogWindowProvider)?.window ?: return
+    SideEffect {
+        window.attributes = window.attributes.also {
+            it.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        }
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = false
+            isAppearanceLightNavigationBars = false
         }
     }
 }

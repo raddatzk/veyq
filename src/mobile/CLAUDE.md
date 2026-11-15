@@ -792,6 +792,14 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   shows an Undo racing its own trash (Android did, under load, 2026-11-15).
 - A `SurfaceView` inside a Compose `Dialog` got no surface (measured 2026-11-09, the lightbox's video: the player stayed
   unprepared, black): draw a player there into a `TextureView`.
+- A Compose `Dialog`'s window keeps out of the status bar, the navigation bar and the display cutout, even with
+  `usePlatformDefaultWidth = false` and the activity edge to edge: in landscape the lightbox sat 132 px right of the
+  screen's edge, the page showing beside it (measured 2026-11-15, `dumpsys window`: the dialog's `frame=[132,74][2400,1017]`).
+  A full-screen dialog takes `decorFitsSystemWindows = false` plus the cutout mode `ALWAYS` on its own window
+  (`EdgeToEdgeDialogWindow`) and keeps its content in `WindowInsets.safeDrawing`.
+- ffmpeg's `testsrc` at a 16:9 size draws its pattern off centre and cut at the right (the circle, the counter): a
+  frame of it looks shifted wherever it is drawn. Before calling a drawn video shifted, compare the screen against
+  ffmpeg's own frame of that time (#931 was that, 2026-11-15: the player had drawn it exactly).
 - Android's photo picker hands a photo over with its GPS zeroed and under a name of its own (`34.jpg`, measured
   2026-11-09: the bytes the same size, the position 0/0, which the reader drops). The app therefore asks once for full
   media access (`READ_MEDIA_*` and `ACCESS_MEDIA_LOCATION`, one system dialog) and, where it was given, reads the media
