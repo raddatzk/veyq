@@ -324,6 +324,12 @@ class AccountSettings<A : Connection, T : Any>(
         door.storageChanges.collect { loadStorage() }
     }
 
+    /**
+     * [followStorage] as a job the host stops ([Watch.stop]) when the page closes: Swift cannot cancel a suspend call it
+     * awaits, so the Apple app holds this instead.
+     */
+    fun startFollowStorage(): Watch = Watch(CoroutineScope(Dispatchers.Default).launch { followStorage() })
+
     private suspend fun loadStorage() {
         attempt { door.storage() }.onSuccess { _state.value = current.copy(storage = it, storageUnavailable = if (it == null) door.storageUnavailable() else null) }
     }

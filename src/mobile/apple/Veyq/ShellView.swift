@@ -35,6 +35,12 @@ struct ShellView: View {
         .sheet(isPresented: Binding(get: { model.managing != nil }, set: { if !$0 { model.managing = nil } })) {
             ManageView(model: model)
         }
+        // items made available offline that left this device (core's, named where the shell held their name): said once
+        .alert(model.goneNotices.first.map { say(notice: $0) } ?? "", isPresented: Binding(get: { !model.goneNotices.isEmpty }, set: { _ in })) {
+            Button(say(.ok), role: .cancel) { model.goneSeen() }
+        } message: {
+            if model.goneNotices.count > 1 { Text(model.goneNotices.dropFirst().map { say(notice: $0) }.joined(separator: "\n")) }
+        }
         #if os(iOS)
         // the account's Settings: a sheet with its own stack and Done, as Manage servers (the shell's stacks are core's)
         .sheet(isPresented: Binding(get: { model.settings != nil }, set: { if !$0 { model.closeSettings() } })) {
@@ -137,6 +143,9 @@ struct DrawerList: View {
                 .menuStyle(.button)
                 .buttonStyle(.plain)
                 .menuIndicator(.hidden)
+                // offline every write is gone (ADR 0140 decision 7)
+                .disabled(!model.online)
+                .opacity(model.online ? 1 : 0.38)
                 row(say(.drawerHome), symbol: "house", selected: model.shell.isHome) { model.choose(nil) }
             }
             .listRowBackground(Color.clear)
@@ -728,15 +737,34 @@ struct TrashOf: Identifiable {
     var id: String { scopeId }
 }
 
-/// Picking a place for what another app shared (ADR 0138): its banner below a page's navigation bar, which an inset on
-/// the shell would slide under.
+/// The shell's banners below a page's navigation bar, which an inset on the shell would slide under: offline, "Offline —
+/// content as of …" (ADR 0140 decision 10); picking a place for what another app shared (ADR 0138).
 struct Picking: ViewModifier {
     let model: AppModel
 
     func body(content: Content) -> some View {
         content.safeAreaInset(edge: .top, spacing: 0) {
-            if let incoming = model.incoming { ShareBanner(incoming: incoming, onCancel: model.cancelShare) }
+            VStack(spacing: 0) {
+                if let banner = model.offlineBanner { OfflineBanner(banner: banner) }
+                if let incoming = model.incoming { ShareBanner(incoming: incoming, onCancel: model.cancelShare) }
+            }
         }
+    }
+}
+
+/// The shell's banner while the server is out of reach: a quiet strip under the navigation bar, as the system's apps
+/// say a lasting state of the whole screen; every write is gone meanwhile.
+struct OfflineBanner: View {
+    let banner: Notice
+
+    var body: some View {
+        Label(say(notice: banner), systemImage: "icloud.slash")
+            .font(.subheadline)
+            .foregroundStyle(Role.muted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.bar, ignoresSafeAreaEdges: [])
     }
 }
 
@@ -950,7 +978,7 @@ struct ExpensesList: View {
     var body: some View {
         ArrangedListView(list: model.applicationList(.expenses), onOpen: model.open, key: "app:\(ApplicationId.expenses)")
             .navigationTitle(Names.application(.expenses))
-            .createAction(say(.createPot), shown: !model.spaces.isEmpty) { creating = true }
+            .createAction(say(.createPot), shown: !model.spaces.isEmpty && model.online) { creating = true }
             .sheet(isPresented: $creating) { NewPotSheet(model: model) }
     }
 }
@@ -967,7 +995,7 @@ struct MemoriesList: View {
     var body: some View {
         ArrangedListView(list: model.applicationList(.memories), onOpen: model.open, key: "app:\(ApplicationId.memories)")
             .navigationTitle(Names.application(.memories))
-            .createAction(say(.memoryNew), shown: space != nil) { newName = ""; problem = nil; naming = true }
+            .createAction(say(.memoryNew), shown: space != nil && model.online) { newName = ""; problem = nil; naming = true }
             .alert(say(.memoryCreateMemoryTitle), isPresented: $naming) {
                 TextField(say(.nodeName), text: $newName)
                 Button(say(.folderCreate)) {

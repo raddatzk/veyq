@@ -78,6 +78,12 @@ final class AppModel {
     private(set) var favorites: [ObjectRef] = []
     private(set) var drawer: ArrangedList = ArrangedList(favorites: [], recent: [], all: [])
     private(set) var switching = false
+    /// The shell's banner while the server is out of reach (core's `ShellModel.State.banner`); nil online.
+    private(set) var offlineBanner: VeyqCore.Notice?
+    /// Items made available offline that left this device (core's `State.gone`), said until `goneSeen()`.
+    private(set) var goneNotices: [VeyqCore.Notice] = []
+    /// Whether the account reaches its server: offline every write is taken away (ADR 0140 decision 7).
+    var online: Bool { offlineBanner == nil }
     /// "Manage servers", shown as a sheet while non-nil.
     var managing: [ManagedServer]?
     var drawerOpen = false
@@ -102,7 +108,41 @@ final class AppModel {
                 Shared.defaults.set(true, forKey: "veyq.installed")
             }
         }
-        return AppleSessions.shared.device(keychain: keychain, label: label, prompt: say(.deviceUnlockPrompt), defaults: Shared.defaults)
+        #if os(iOS)
+        let limit = AccountOffline.companion.PHONE_LIMIT
+        #else
+        let limit = AccountOffline.companion.DESKTOP_LIMIT
+        #endif
+        // the share extension never opens the offline store (ADR 0140 decision 3): it names no directory
+        return AppleSessions.shared.device(
+            keychain: keychain, label: label, prompt: say(.deviceUnlockPrompt), defaults: Shared.defaults,
+            offlineRoot: inExtension ? nil : offlineRoot(), offlineLimit: limit)
+    }
+
+    /// The accounts' offline stores' directory (ADR 0140 decision 3): `offline/` in the app's Application Support — on iOS
+    /// the app's own container (never the app group), on a Mac `~/Library/Application Support/<bundle id>/`. Made here so
+    /// the system's own protection is set on it first: left out of backups (iCloud, Time Machine), and on iOS readable once
+    /// the device was first unlocked after a restart. Nil where it cannot be made: then the app keeps nothing.
+    private static func offlineRoot() -> String? {
+        let fm = FileManager.default
+        guard var dir = try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return nil }
+        #if os(macOS)
+        dir.appendPathComponent(Bundle.main.bundleIdentifier ?? "me.raddatz.veyq", isDirectory: true)
+        #endif
+        dir.appendPathComponent("offline", isDirectory: true)
+        do {
+            #if os(iOS)
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+            #else
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            #endif
+            var values = URLResourceValues()
+            values.isExcludedFromBackup = true
+            try dir.setResourceValues(values)
+        } catch {
+            return nil
+        }
+        return dir.path
     }
     private let recent: RecentUses
     private let hidden: Hidden
@@ -173,9 +213,27 @@ final class AppModel {
             switching = g.switching
             offer = g.offer
             if shellModel != nil, shellModel?.tenant === session.signedTo?.session { applyShell(start: false); screen = .signed }
+            followEnded(g)
         default:
             screen = .starting
         }
+    }
+
+    /// The shown account ended on its own (`Reach.Ended`: a reconnect found this device's trust gone): core took it out of
+    /// the switcher and opened the next one, which no call of this model asked for — the shell follows it here. A switch
+    /// or a sign-out this model made shows its own opened account.
+    private func followEnded(_ g: SessionModelGate.Signed) {
+        guard !g.switching, let opened = session.signedTo, let shown = shellModel?.tenant, shown !== opened.session,
+              !session.accounts.contains(where: { $0 === shown.account }) else { return }
+        trustLog("the shown account ended: the shell follows the next one")
+        Task { if shellModel?.tenant !== opened.session { try? await show(opened) } }
+    }
+
+    /// The shell's notices of items no longer available offline were shown: core does not say them again.
+    func goneSeen() {
+        guard let m = shellModel else { return }
+        goneNotices = []
+        Task { try? await m.goneSeen() }
     }
 
     /// The debug build's unlock (`devlogin.py --unlock`): the password for the unlock screen, now or once it shows.
@@ -465,6 +523,8 @@ final class AppModel {
     var settings: AccountSettingsState?
     @ObservationIgnored private var settingsModel: AccountSettings<VeyqAccount, TenantSession>?
     @ObservationIgnored private var settingsWatch: AccountSettingsWatch?
+    /// "Storage on this device" read anew at each change of the pins while the page is open (core's).
+    @ObservationIgnored private var storageWatch: AccountSettingsWatch?
 
     /// The drawer's Settings (and a Mac's Settings window): the current account's page, read anew as it opens.
     func openSettings() {
@@ -476,12 +536,15 @@ final class AppModel {
         settingsWatch = m.watch { @Sendable _ in
             Task { @MainActor [weak self] in self?.syncSettings() }
         }
+        storageWatch = m.startFollowStorage()
         Task { try? await m.refresh() }
     }
 
     func closeSettings() {
         settingsWatch?.stop()
         settingsWatch = nil
+        storageWatch?.stop()
+        storageWatch = nil
         settingsModel = nil
         settings = nil
     }
@@ -587,6 +650,8 @@ final class AppModel {
             ServerEntry(account: c, tenants: hidden.visibleTenants(connectionKey: c.key, tenants: c.tenants, current: c == account ? tenant : nil))
         }
         shell = state.shell
+        offlineBanner = state.banner
+        goneNotices = state.gone
         if start { drawerOpen = shell.drawerOpensAtStart }
     }
 
@@ -1676,6 +1741,13 @@ extension AppModel: SettingsActions {
         }
     }
     func signOutHere() { onSettings { try await $0.signOutHere() } }
+    func setOfflineLimit(_ amount: String, _ unit: LimitUnit) { onSettings { try await $0.setOfflineLimit(amount: amount, unit: unit); return nil } }
+    func turnOfflineLimitOff() { onSettings { try await $0.turnOfflineLimitOff(); return nil } }
+    func clearOfflineCache() { onSettings { try await $0.clearOfflineCache(); return nil } }
+    func unpinOffline(_ node: String) { onSettings { try await $0.unpinOffline(node: node); return nil } }
+    func askRemoveAllOffline() { settingsModel?.askRemoveAllOffline(); syncSettings() }
+    func cancelRemoveAllOffline() { settingsModel?.cancelRemoveAllOffline(); syncSettings() }
+    func removeAllOffline() { onSettings { try await $0.removeAllOffline(); return nil } }
 
     func settingsStay(_ level: StaySignedIn) async -> TrustChange {
         guard let m = settingsModel else { return .failed }

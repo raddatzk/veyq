@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,6 +38,10 @@ import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.OfflinePin
+import androidx.compose.material.icons.outlined.SdStorage
+import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -52,6 +57,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -103,6 +111,17 @@ interface SettingsActions {
 
     /** "Add a device"'s "Scan a code": the new device shows its sign-in code, this device scans. */
     fun linkScan() {}
+
+    /** "Storage on this device" (ADR 0140 decision 10): the limit typed as [amount] in [unit]; core refuses what is no size. */
+    fun setOfflineLimit(amount: String, unit: me.raddatz.veyq.mobile.offline.LimitUnit) {}
+    fun turnOfflineLimitOff() {}
+    fun clearOfflineCache() {}
+    fun unpinOffline(node: String) {}
+
+    /** "Remove all offline content", asked first (core's `askingRemoveAll`), then [removeAllOffline] or the cancel. */
+    fun askRemoveAllOffline() {}
+    fun cancelRemoveAllOffline() {}
+    fun removeAllOffline() {}
 }
 
 /** A step the page asks to be confirmed first, as the web's `SessionsPanel` does: what it says and what it does. */
@@ -143,6 +162,19 @@ fun SettingsScreen(state: AccountSettings.State, actions: SettingsActions) {
     }
     if (renaming) RenameDialog(state.device.label, onRename = { renaming = false; actions.rename(it) }, onClose = { renaming = false })
     if (askPassword) PasswordDialog(state.working, actions) { askPassword = false }
+    var limiting by remember { mutableStateOf(false) }
+    state.storage?.let { storage -> if (limiting) LimitDialog(storage.field, actions) { limiting = false } }
+    if (state.askingRemoveAll) AlertDialog(
+        onDismissRequest = actions::cancelRemoveAllOffline,
+        title = { Text(stringResource(R.string.account_settings_storage_remove_all)) },
+        text = { Text(stringResource(R.string.account_settings_storage_remove_all_question)) },
+        confirmButton = {
+            TextButton(onClick = actions::removeAllOffline, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
+                Text(stringResource(R.string.account_settings_storage_remove_all_confirm))
+            }
+        },
+        dismissButton = { TextButton(onClick = actions::cancelRemoveAllOffline) { Text(stringResource(R.string.signin_cancel)) } },
+    )
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -181,6 +213,7 @@ fun SettingsScreen(state: AccountSettings.State, actions: SettingsActions) {
                 val camera = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)
                 addDevice(camera, !state.working, actions)
             }
+            storage(state, context, onLimit = { limiting = true }, actions)
             appearance(context)
             item(key = "sign-out") {
                 Column(Modifier.padding(16.dp)) {
@@ -468,6 +501,152 @@ private fun LazyListScope.addDevice(camera: Boolean, enabled: Boolean, actions: 
             )
         }
     }
+}
+
+/**
+ * "Storage on this device" (ADR 0140 decision 10), as Android's own Settings shows an app's storage: the limit (a free
+ * size, or Off) in a dialog behind its row, what the recently viewed content and the items available offline use and the
+ * volume's free space as rows with their sizes, each item available offline with its state and its removal, then
+ * "Clear cache" and "Remove all offline content" (asked first). Nothing where the device keeps no store of the account but
+ * the reason core gives.
+ */
+private fun LazyListScope.storage(state: AccountSettings.State, context: Context, onLimit: () -> Unit, actions: SettingsActions) {
+    val storage = state.storage
+    val unavailable = state.storageUnavailable
+    if (storage == null && unavailable == null) return
+    item(key = "storage-divider") { HorizontalDivider(Modifier.padding(top = 16.dp)) }
+    header("storage", { stringResource(R.string.account_settings_storage) })
+    if (storage == null) {
+        item(key = "storage-unavailable") {
+            Text(
+                say(unavailable!!), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp).testTag("settings-storage-unavailable"),
+            )
+        }
+        return
+    }
+    fun size(bytes: Long) = android.text.format.Formatter.formatShortFileSize(context, bytes)
+    item(key = "storage-limit") {
+        val field = storage.field
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.account_settings_storage_limit)) },
+            supportingContent = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        if (field.off) stringResource(R.string.account_settings_storage_limit_off) else "${field.amount} ${say(field.unit.word)}",
+                        modifier = Modifier.testTag("settings-storage-limit-value"),
+                    )
+                    if (state.refusal == me.raddatz.veyq.mobile.words.Msg.ACCOUNT_SETTINGS_STORAGE_LIMIT_INVALID) {
+                        Text(say(state.refusal!!), color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            leadingContent = { Icon(Icons.Outlined.Storage, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = onLimit).testTag("settings-storage-limit"),
+        )
+    }
+    item(key = "storage-hint") {
+        Text(
+            stringResource(R.string.account_settings_storage_limit_hint), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+        )
+    }
+    item(key = "storage-automatic") { SizeRow(stringResource(R.string.account_settings_storage_automatic), size(storage.automatic), Icons.Outlined.History, "settings-storage-automatic") }
+    item(key = "storage-pinned") { SizeRow(stringResource(R.string.account_settings_storage_pinned), size(storage.pinned), Icons.Outlined.OfflinePin, "settings-storage-pinned") }
+    storage.free?.let { free -> item(key = "storage-free") { SizeRow(stringResource(R.string.account_settings_storage_free), size(free), Icons.Outlined.SdStorage, "settings-storage-free") } }
+    if (storage.items.isEmpty()) item(key = "storage-items-empty") {
+        Text(
+            stringResource(R.string.account_settings_storage_items_empty), color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
+    items(storage.items, key = { "pinned-${it.tenant}-${it.node}" }) { item ->
+        ListItem(
+            headlineContent = { Text(say(item.title)) },
+            supportingContent = { Text(listOfNotNull(item.said?.let { say(it) }, size(item.bytes)).joinToString(" · ")) },
+            leadingContent = { Icon(kindIcon(item.kind), null) },
+            trailingContent = {
+                IconButton(onClick = { actions.unpinOffline(item.node) }, enabled = !state.working, modifier = Modifier.testTag("settings-storage-remove-${item.node}")) {
+                    Icon(Icons.Outlined.Delete, stringResource(R.string.account_settings_storage_remove_item))
+                }
+            },
+            colors = listColors(),
+        )
+    }
+    item(key = "storage-actions") {
+        Column(Modifier.padding(horizontal = 8.dp)) {
+            TextButton(onClick = actions::clearOfflineCache, enabled = !state.working, modifier = Modifier.testTag("settings-storage-clear-cache")) {
+                Text(stringResource(R.string.account_settings_storage_clear_cache))
+            }
+            TextButton(
+                onClick = actions::askRemoveAllOffline,
+                enabled = !state.working,
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.testTag("settings-storage-remove-all"),
+            ) { Text(stringResource(R.string.account_settings_storage_remove_all)) }
+        }
+    }
+}
+
+/** One size of the storage section: what it is, its size at the end. */
+@Composable
+private fun SizeRow(label: String, size: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tag: String) {
+    ListItem(
+        headlineContent = { Text(label) },
+        leadingContent = { Icon(icon, null) },
+        trailingContent = { Text(size, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag(tag)) },
+        colors = listColors(),
+    )
+}
+
+/**
+ * The storage limit as a free size (ADR 0140 decision 8: any size, not a list of steps): its number and its unit as
+ * Material's segmented buttons; "Off" turns the automatic tier off. Core reads the number (a point or a comma).
+ */
+@Composable
+private fun LimitDialog(field: me.raddatz.veyq.mobile.offline.LimitField, actions: SettingsActions, onClose: () -> Unit) {
+    var amount by remember { mutableStateOf(field.amount) }
+    var unit by remember { mutableStateOf(field.unit) }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(stringResource(R.string.account_settings_storage_limit)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(stringResource(R.string.account_settings_storage_limit_hint), style = MaterialTheme.typography.bodyMedium)
+                OutlinedTextField(
+                    amount, { amount = it }, singleLine = true,
+                    label = { Text(stringResource(R.string.account_settings_storage_limit)) },
+                    suffix = { Text(say(unit.word)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth().testTag("settings-storage-limit-field"),
+                )
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    val units = me.raddatz.veyq.mobile.offline.LimitUnit.entries
+                    units.forEachIndexed { i, u ->
+                        SegmentedButton(
+                            selected = unit == u, onClick = { unit = u },
+                            shape = SegmentedButtonDefaults.itemShape(i, units.size),
+                            modifier = Modifier.testTag("settings-storage-unit-${u.name}"),
+                        ) { Text(say(u.word)) }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onClose(); actions.setOfflineLimit(amount, unit) }, enabled = amount.isNotBlank(), modifier = Modifier.testTag("settings-storage-limit-set")) {
+                Text(stringResource(R.string.account_settings_storage_limit_set))
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = { onClose(); actions.turnOfflineLimitOff() }, modifier = Modifier.testTag("settings-storage-limit-off")) {
+                    Text(stringResource(R.string.account_settings_storage_limit_off))
+                }
+                TextButton(onClick = onClose) { Text(stringResource(R.string.signin_cancel)) }
+            }
+        },
+    )
 }
 
 /** "Appearance and language" (D3): the app follows the system's theme; its language is the system's per-app setting. */
