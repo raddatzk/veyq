@@ -4,6 +4,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.suspend-tenant.md
   - docs/features/admin/use-cases/uc.admin.tenant-reachability.md
   - docs/features/admin/use-cases/uc.admin.delete-tenant.md
+  - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
 ---
 
 ## "This space is temporarily offline"
@@ -21,6 +22,18 @@ do your other spaces.
 
 veyq cannot talk to its server: your internet connection is down, or the server is. Check your connection and try
 again later. Nothing on your device is lost; your keys stay where they were.
+
+## "Offline — content as of …" in the app
+
+The veyq app shows what it kept on this device: what you viewed recently and what you made available offline, as of
+the time it names. You can look at it and play its videos, but change nothing until the server is back; anything not
+kept says **Not available offline**. The app notices by itself when the server can be reached again:
+[Use content offline](/getting-started/use-content-offline/).
+
+A space taken offline can look the same in the app. If whoever runs your server takes it offline in a way that makes
+the server unreachable for you, the app cannot tell that from being offline, and shows what it kept of the space until
+it reaches the server again. Then it hides the space and deletes the copies of what you viewed there; what you made
+available offline in it waits, without its content, until the space is back.
 
 ## "This server isn't set up yet"
 

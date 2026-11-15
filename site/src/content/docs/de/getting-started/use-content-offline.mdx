@@ -1,0 +1,89 @@
+---
+title: "Inhalte offline nutzen"
+description: In der veyq-App bleibt, was du angesehen hast, bis zu einem Limit auf deinem Gerät, und was du offline verfügbar machst, bleibt, bis du es zurücknimmst. Beides öffnet sich ohne Verbindung.
+sources:
+  - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
+  - docs/crosscutting/native-apps.md
+---
+
+Die veyq-[App](/de/getting-started/install-the-app/) kann Inhalte auf deinem Gerät behalten, damit du sie ohne
+Verbindung öffnen kannst. Sie behält zweierlei:
+
+- **Was du zuletzt angesehen hast:** Bilder, Vorschauen, den Teil eines Videos, den du abgespielt hast, und die Dateien,
+  die du geöffnet hast, bis zu einem Speicherlimit, das du festlegst. Ist es erreicht, geht zuerst, was du am längsten
+  nicht angesehen hast.
+- **Was du offline verfügbar machst:** eine Erinnerung, ein Kapitel, einen Ordner oder eine Datei, ganz heruntergeladen und
+  behalten, bis du es ausschaltest.
+
+Alles bleibt verschlossen. Die App behält es genau so, wie dein Server es speichert, und verschließt es für dieses Gerät
+ein zweites Mal. Wer die Dateien kopiert, erfährt daraus nichts. Der Browser behält nichts.
+
+:::note[Nur auf einem Gerät, das angemeldet bleibt]
+Die App behält Inhalte nur für ein Konto, das auf diesem Gerät angemeldet bleibt. Wo du jedes Mal deinen Secret Key
+brauchst, steht unter **Speicher auf diesem Gerät** in den Einstellungen: *Inhalte werden nur auf einem Gerät offline
+gespeichert, das bei diesem Konto angemeldet bleibt.* Wie ein Gerät angemeldet bleibt:
+[Geräte und Sitzungen](/de/account/devices-and-sessions/).
+:::
+
+## Etwas offline verfügbar machen
+
+1. Öffne die Erinnerung, das Kapitel, den Ordner oder die Datei.
+2. Öffne das Menü in der Kopfzeile (**Mehr**) und wähle **Offline verfügbar**.
+3. Die App sagt, wie viel sie speichert: **Offline verfügbar machen?** Wähle **Verfügbar machen**.
+
+Während des Herunterladens zeigt die Kopfzeile, wie weit es ist (**… von … geladen**), danach **Auf diesem Gerät**.
+Unter Android fragt die App beim ersten Mal, ob sie Mitteilungen zeigen darf: Dort steht, wie weit das Herunterladen
+ist. Wird der Platz auf deinem Gerät knapp, steht dort **Pausiert: nicht genug Platz auf diesem Gerät**.
+
+Ein Foto wird als seine Vorschau behalten, so wie die App es zeigt, nicht als Original. Ein Video und eine Datei werden
+ganz behalten, ebenso die Cover darin. Was andere hinzufügen oder ändern, während du online bist, wird ebenfalls
+geladen.
+
+Zum Zurücknehmen wählst du noch einmal **Offline verfügbar**. Es ist sofort aus, ohne Nachfrage.
+
+## Festlegen, wie viel behalten wird
+
+Öffne das Menü (auf einem Computer die Seitenleiste), wähle unten **Einstellungen** und geh zu **Speicher auf diesem
+Gerät**.
+
+- **Speicherlimit:** Gib eine Größe ein, wähle **MB** oder **GB** und dann **Limit festlegen**. Unter Android wählst du
+  zuerst **Speicherlimit**; unter Linux bestätigst du mit dem Haken am Ende des Felds. Es beginnt bei 2 GB auf einem
+  Telefon und 10 GB auf einem Computer. Ein kleineres Limit gilt sofort.
+- **Aus** behält nichts, was du nur angesehen hast (unter Linux und Windows ist es der letzte Eintrag in der Liste der
+  Einheiten). Was du offline verfügbar gemacht hast, bleibt trotzdem.
+- **Zuletzt angesehen**, **Offline verfügbar** und **Frei auf diesem Gerät** zeigen die Größen.
+- Darunter jeder offline verfügbare Eintrag, mit dem, was er belegt, und **Von diesem Gerät entfernen**.
+- **Cache leeren** entfernt, was du nur angesehen hast. **Alle Offline-Inhalte entfernen** entfernt alles, auch was du
+  offline verfügbar gemacht hast, und fragt vorher.
+
+Was du offline verfügbar machst, bleibt immer, auch über das Limit hinaus. Dann wird nichts anderes behalten. Ein
+Video, das größer ist als ein Viertel des Limits, wird nicht nur deshalb behalten, weil du es angesehen hast. Hat dein
+Gerät weniger als 5 % Platz frei, behält die App nichts Neues.
+
+## Wenn du offline bist
+
+Die App zeigt **Offline — Stand** und die Zeit, zu der dein Server zuletzt bestätigt hat, was sie zeigt. Du kannst dir
+alles ansehen, was behalten ist, und seine Videos abspielen; alles andere sagt **Nicht offline verfügbar**. Offline
+lässt sich nichts ändern: *Du bist offline. Ändern geht wieder, sobald du online bist.*
+
+Du kannst die App auch ohne Verbindung starten: Entsperre sie wie immer. Ist der Server wieder erreichbar, merkt die
+App das von selbst, meist innerhalb einer Minute.
+
+## Wann Behaltenes verschwindet
+
+Die App entfernt, was sie für ein Konto behalten hat:
+
+- wenn du dich auf diesem Gerät **abmeldest**, **Diesem Gerät nicht mehr vertrauen** wählst oder das Gerät entfernst;
+- wenn du dieses Gerät von einem anderen aus mit **Abmelden und gespeicherten Schlüssel entfernen** abmeldest, sobald
+  dieses Gerät den Server das nächste Mal erreicht;
+- wenn du **Alle Offline-Inhalte entfernen** wählst oder die App entfernst.
+
+Deine Inhalte bleiben auf deinem Server: Melde dich wieder an, und sie sind da.
+
+Wird etwas gelöscht oder verlierst du den Zugriff darauf, verwirft die App ihre Kopie, sobald sie wieder online ist. War
+es offline verfügbar, sagt sie es: *„…“ ist nicht mehr offline verfügbar.* Auch einen Bereich, den dein Server offline
+genommen hat, zeigt sie nicht mehr, sobald sie das vom Server erfahren hat:
+[Offline oder nicht erreichbar](/de/help/offline/).
+
+Was ein gestohlenes Gerät trotzdem noch öffnen kann, und warum:
+[Bekannte Grenzen](/de/security/known-limitations/#the-apps-offline-store).

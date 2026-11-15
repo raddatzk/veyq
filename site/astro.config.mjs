@@ -41,6 +41,7 @@ export default defineConfig({
                 'getting-started/emergency-kit',
                 'getting-started/sign-in',
                 'getting-started/install-the-app',
+                'getting-started/use-content-offline',
                 'getting-started/keyboard-shortcuts',
               ],
             },
