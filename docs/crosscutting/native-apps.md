@@ -375,7 +375,7 @@ dialog. Callers: the kit's scan at sign-in, device linking.
     measured red against check-then-act 20/20 and green at rest, never yet under load (#928).
   - Windows' Settings logged "the settings did not draw: COMException 0x800F1000" twice on a sign-out from Settings;
     caught, the sign-out completed, the cause not looked into (inbox #929).
-  - Every pass leaves a device-register entry per device it linked (no screen removes one; inbox #894).
+  - Every pass leaves a device-register entry per device it linked (no screen removes one): an orphan once a reconcile drops its rows, and orphans are what eviction takes first ([en.account.device-register](../features/account/enablers/en.account.device-register.md) § Growth).
 - The device register's own screen (the devices an account trusts, ADR 0058): every app writes it at each unlock and
   enrolment, only the web shows it.
 - Invites and members; the rest of the web's settings — password, email, replacing the keys, recovery, erasure, terms,

@@ -55,8 +55,8 @@ devices, unlike their contacts, stay few (its `maxLength` is 65,532). The plaint
   level, mints a brand-new server wrap id ([ADR 0005 §9](../../../decisions/0005-unlock-methods-and-device-trust.md)),
   so a `wrapId` is a handle to a wrap and never an identity for a device.
 - **`label`** — the display name. Seeded best-effort, renamed by the user (below).
-- **`lastSeenAt`** — when this device last reconciled the register. It exists for one job only: bounding the
-  register's growth (below). It is **not** shown to the user — the sessions view shows the *server's*
+- **`lastSeenAt`** — when this device last reconciled the register. It exists for one job only: ordering the
+  orphans the register's growth bound evicts (below). It is **not** shown to the user — the sessions view shows the *server's*
   timestamps, which are the authoritative ones.
 - **`families`** — the join that lets a session row find its device. This is what makes a name render at all.
 - **`wraps`** — the join that lets one device retire another's convenience wrap. A wrap id is known **only to
@@ -189,13 +189,27 @@ not *intended vs. derived*, but **whether the intent was made true somewhere the
 
 ### Growth is bounded by eviction, not by immediate deletion
 
-Family and wrap rows are pruned as soon as a client sees the authoritative list they belong to, and evicting a
-device takes its dependent family **and wrap** rows with it. **Device entries are kept**, because a
-device whose sessions have all expired is still a device the user named — dropping it there would silently
-revert a rename every time a laptop sat unused. Growth is instead bounded by keeping only the **N
-most-recently-seen** devices and evicting the rest, with N set comfortably above the per-method wrap ceiling
-so a real device is never evicted by a limit meant for a different thing. A wrong N costs a **label**, never a
-row and never a revoke — which is why an approximate bound is the right instrument here.
+Family and wrap rows are pruned as soon as a client sees the authoritative list they belong to. **Device entries
+are kept**, because a device whose sessions have all expired is still a device the user named — dropping it there
+would silently revert a rename every time a laptop sat unused. Growth is instead bounded by evicting **orphans** —
+devices no family row and no wrap row names any more — least recently seen first, and only as many as it takes to
+get back to **N** devices, with N set comfortably above the per-method wrap ceiling. An orphan has no row to take
+along, and an evicted orphan costs only a **label**, never a row and never a revoke — which is why an approximate
+bound is the right instrument here.
+
+**A device a family or wrap row still names is never evicted**, however long ago it was seen and however full the
+register is (decided 2026-11-15). As far as the register can know such a device is in use: its rows
+are pruned only against the server's own lists (§ Sync & merge), so a row standing means the server listed that
+family or that wrap the last time anyone looked. The rule it replaced — keep the N most recently seen, whatever they
+held — let N sign-ins of new devices (measured: a run of live tests on the dev instance) push out a device in daily
+use, saved key and all: its sessions then showed unnamed and "Sign out and remove saved key" lost its join. So when
+only devices in use are left, the register **stands over N** — a register slightly over its bound beats losing a
+real device's name. Its hard bound is the contract's: the sealed blob is at most 65,532 base64 characters
+(`DeviceRegisterUpdate.blob`). A write whose seal would pass it is refused on the client
+(`device_register_full`) instead of evicting a device in use; the next reconcile, which prunes the rows of gone
+families and wraps and so turns their devices into orphans, is what makes room again. Rejected: **refusing every
+write past N** — it would stop the newest device, the one signing in, from being named at all, to protect a count
+nothing else depends on.
 
 ## Write moments — three, all idempotent, all best-effort
 

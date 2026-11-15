@@ -83,14 +83,19 @@ const decoder = new TextDecoder()
 const MAX_WRITE_ATTEMPTS = 5
 
 /**
- * How many devices the register keeps, least-recently-seen evicted beyond it.
+ * How many devices the register aims to keep: beyond it, **orphans** — devices no family row and no wrap row names —
+ * are evicted, least recently seen first. A device a family or wrap row still names is never evicted — 32 sign-ins
+ * of new devices used to push out a device in daily use, saved key and all (en.account.device-register § Growth) —
+ * so the register may stand over this bound; the hard bound is [MAX_BLOB_CHARS].
  *
- * Set above the backend's per-method wrap ceiling (20) so a device that legitimately holds a convenience wrap is
- * never evicted by a bound meant for a different thing. A wrong value here costs a **label** — never a session
- * row and never a revoke, both of which come from the server — which is why an approximate bound is the right
- * instrument rather than a policy that has to be exactly right.
+ * Set above the backend's per-method wrap ceiling (20). A wrong value here costs a **label** of a device nothing
+ * names any more — never a session row and never a revoke, both of which come from the server.
  */
 export const MAX_DEVICES = 32
+
+/** The contract's `maxLength` on the sealed blob (`DeviceRegisterUpdate.blob`, account.openapi.yaml). A register
+ *  whose seal is longer is refused here with `device_register_full`, not sent for the server's `400`. */
+export const MAX_BLOB_CHARS = 65532
 
 const empty = (): RegisterPlain => ({ devices: {}, families: {}, wraps: {} })
 
@@ -145,25 +150,20 @@ function isStaleRevision(e: unknown): Promise<boolean> {
 }
 
 /**
- * Drop the least-recently-seen devices beyond [MAX_DEVICES], and any family **or wrap** row pointing at a device
- * that just went — an unresolvable join is worse than no join. **Always recomputed on the map it is about to
- * seal** — see [mutateAndSave]. This is also what bounds the wrap map: it has no ceiling of its own.
+ * Bring the register back to [MAX_DEVICES] by evicting **orphans** only — devices no family row and no wrap row
+ * names — least recently seen first, and only as many as the bound needs. A device a row still names is in use as
+ * far as the register can know (the rows are pruned only against the server's lists, by [reconcileWithSessions]),
+ * so it is never evicted: when only such devices are left, the register stays over the bound. An orphan has no row
+ * to take along. **Always recomputed on the map it is about to seal** — see [mutateAndSave].
  */
 function evict(reg: RegisterPlain): void {
   const ids = Object.keys(reg.devices)
   if (ids.length <= MAX_DEVICES) return
-  const doomed = new Set(
-    ids
-      .sort((a, b) => (reg.devices[b].lastSeenAt ?? 0) - (reg.devices[a].lastSeenAt ?? 0))
-      .slice(MAX_DEVICES),
-  )
-  for (const id of doomed) delete reg.devices[id]
-  for (const [familyId, deviceId] of Object.entries(reg.families)) {
-    if (doomed.has(deviceId)) delete reg.families[familyId]
-  }
-  for (const [wrapId, deviceId] of Object.entries(reg.wraps)) {
-    if (doomed.has(deviceId)) delete reg.wraps[wrapId]
-  }
+  const named = new Set([...Object.values(reg.families), ...Object.values(reg.wraps)])
+  const orphans = ids
+    .filter((id) => !named.has(id))
+    .sort((a, b) => (reg.devices[a].lastSeenAt ?? 0) - (reg.devices[b].lastSeenAt ?? 0))
+  for (const id of orphans.slice(0, ids.length - MAX_DEVICES)) delete reg.devices[id]
 }
 
 /**
@@ -209,6 +209,8 @@ async function mutateAndSave(base: OpenedRegister, apply: (reg: RegisterPlain) =
     if (!mk) throw new Error('device register requires an unlocked vault')
     try {
       const blob = sealRegister(mk, next, current.revision + 1)
+      // Over the contract's bound only devices in use are left (evict took every orphan it could): no write.
+      if (blob.length > MAX_BLOB_CHARS) throw new Error('device_register_full')
       await withRefresh(() =>
         accountDeviceRegisterApi().putDeviceRegister({ deviceRegisterUpdate: { blob, revision: current.revision } }),
       )

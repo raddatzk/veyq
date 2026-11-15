@@ -309,7 +309,9 @@ describe('write moment 3 — reconciling against the server lists', () => {
 })
 
 describe('eviction', () => {
-  it('bounds the register at MAX_DEVICES, dropping the least-recently-seen', async () => {
+  // en.account.device-register § Growth: a device still holding a family row or a wrap row is a device in use — the rows are pruned only
+  // against the server's lists (reconcile), so while one stands, eviction must not take its name.
+  it('never evicts a device with a family row: the 33rd sign-in leaves the register over MAX_DEVICES', async () => {
     const devices: RegisterPlain['devices'] = {}
     const families: RegisterPlain['families'] = {}
     for (let i = 0; i < MAX_DEVICES; i++) {
@@ -321,16 +323,13 @@ describe('eviction', () => {
     await rememberThisDevice('newest', 'Newest', 'fNew', 'wNew', 99_999)
 
     const stored = open(server.state.blob!, server.state.revision)
-    expect(Object.keys(stored.devices)).toHaveLength(MAX_DEVICES)
+    expect(Object.keys(stored.devices)).toHaveLength(MAX_DEVICES + 1)
+    expect(stored.devices.d0).toEqual(dev('device 0', 1_000)) // least recently seen, and still named
+    expect(stored.families.f0).toBe('d0')
     expect(stored.devices.newest).toBeDefined()
-    expect(stored.devices.d0).toBeUndefined() // the oldest lastSeenAt went
-    expect(stored.devices.d1).toBeDefined() // …and only the oldest
-    // A family pointing at an evicted device goes with it — an unresolvable join is worse than no join.
-    expect(stored.families.f0).toBeUndefined()
-    expect(stored.families.f1).toBe('d1')
   })
 
-  it('takes the evicted device\'s WRAP rows with it too — the third map has no bound of its own', async () => {
+  it('never evicts a device with a wrap row either — its saved key keeps its name', async () => {
     const devices: RegisterPlain['devices'] = {}
     const wraps: RegisterPlain['wraps'] = {}
     for (let i = 0; i < MAX_DEVICES; i++) {
@@ -342,10 +341,46 @@ describe('eviction', () => {
     await rememberThisDevice('newest', 'Newest', null, 'wNew', 99_999)
 
     const stored = open(server.state.blob!, server.state.revision)
-    expect(stored.devices.d0).toBeUndefined()
-    expect(stored.wraps.w0).toBeUndefined() // went with its device
-    expect(stored.wraps.w1).toBe('d1') // …and only that one
+    expect(Object.keys(stored.devices)).toHaveLength(MAX_DEVICES + 1)
+    expect(stored.devices.d0).toBeDefined()
+    expect(stored.wraps.w0).toBe('d0')
     expect(stored.wraps.wNew).toBe('newest')
+  })
+
+  it('prunes orphans first, least recently seen first, and only as many as the bound needs', async () => {
+    const devices: RegisterPlain['devices'] = {}
+    const families: RegisterPlain['families'] = {}
+    const wraps: RegisterPlain['wraps'] = {}
+    for (let i = 0; i < MAX_DEVICES; i++) devices[`d${i}`] = dev(`device ${i}`, 1_000 + i)
+    // The two least recently seen devices are in use; d2..d4 are orphans (no family, no wrap row).
+    families.f0 = 'd0'
+    wraps.w1 = 'd1'
+    for (let i = 5; i < MAX_DEVICES; i++) families[`f${i}`] = `d${i}`
+    const server = fakeServer({ blob: seal(reg(devices, families, wraps), 1), revision: 1 })
+
+    await rememberThisDevice('newest', 'Newest', 'fNew', null, 99_999)
+
+    const stored = open(server.state.blob!, server.state.revision)
+    expect(Object.keys(stored.devices)).toHaveLength(MAX_DEVICES)
+    expect(stored.devices.d0).toBeDefined() // in use, though the least recently seen
+    expect(stored.devices.d1).toBeDefined()
+    expect(stored.devices.d2).toBeUndefined() // the least recently seen orphan went
+    expect(stored.devices.d3).toBeDefined() // …and only it
+    expect(stored.devices.d4).toBeDefined()
+  })
+
+  it('refuses a write whose sealed blob would pass the contract\'s 65532-character bound, evicting no device in use', async () => {
+    const devices: RegisterPlain['devices'] = {}
+    const families: RegisterPlain['families'] = {}
+    const label = 'x'.repeat(200)
+    for (let i = 0; i < 200; i++) {
+      devices[`device-${i}`] = dev(`${label} ${i}`, 1_000 + i)
+      families[`family-${i}`] = `device-${i}`
+    }
+    const server = fakeServer({ blob: seal(reg(devices, families), 1), revision: 1 })
+
+    await expect(rememberThisDevice('newest', 'Newest', 'fNew', null, 99_999)).rejects.toThrow('device_register_full')
+    expect(server.putDeviceRegister).not.toHaveBeenCalled()
   })
 
   // The mirror image of the frozen-id-delta case: eviction's truth is the register's own contents, so it must be

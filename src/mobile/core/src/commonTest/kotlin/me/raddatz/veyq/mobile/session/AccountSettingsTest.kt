@@ -336,4 +336,54 @@ class AccountSettingsTest {
         assertEquals(mapOf("f-laptop" to "dev-laptop", "f-new" to "dev-new"), plain.families)
         assertEquals(mapOf("w-laptop" to "dev-laptop", "w-new" to "dev-new"), plain.wraps)
     }
+
+    // en.account.device-register § Growth: a device a family or wrap row still names is in use; eviction never takes its name.
+    @Test
+    fun theRegisterNeverEvictsADeviceInUseAndMayStandOverItsBound() = runTest {
+        val s = Server()
+        val store = s.register()
+        val max = DeviceRegisterStore.MAX_DEVICES
+        for (i in 0 until max) store.remember("dev-$i", "Device $i", if (i % 2 == 0) "f-$i" else null, if (i % 2 == 1) "w-$i" else null, 1_000L + i)
+        store.remember("dev-new", "New", "f-new", null, 99_999)
+        val plain = store.read()
+        assertEquals(max + 1, plain.devices.size, "a device in use was evicted")
+        assertEquals("Device 0", plain.devices["dev-0"]?.label)
+        assertEquals("dev-0", plain.families["f-0"])
+        assertEquals("dev-1", plain.wraps["w-1"])
+    }
+
+    @Test
+    fun theRegisterPrunesOrphansFirstLeastRecentlySeenFirstAndOnlyAsManyAsItNeeds() = runTest {
+        val s = Server()
+        val store = s.register()
+        val max = DeviceRegisterStore.MAX_DEVICES
+        // dev-0 and dev-1 are in use though the least recently seen; dev-2..dev-4 are orphans
+        for (i in 0 until max) {
+            val family = if (i == 0 || i >= 5) "f-$i" else null
+            store.remember("dev-$i", "Device $i", family, if (i == 1) "w-1" else null, 1_000L + i)
+        }
+        store.remember("dev-new", "New", "f-new", null, 99_999)
+        val devices = store.read().devices.keys
+        assertEquals(max, devices.size)
+        assertTrue("dev-0" in devices && "dev-1" in devices, "a device in use was evicted")
+        assertFalse("dev-2" in devices, "the least recently seen orphan stayed")
+        assertTrue("dev-3" in devices && "dev-4" in devices, "more orphans went than the bound needs")
+    }
+
+    @Test
+    fun aRegisterOverTheContractsBlobBoundIsRefusedNotWrittenAndNoDeviceInUseGoes() = runTest {
+        val s = Server()
+        val store = s.register()
+        val label = "x".repeat(200)
+        var refused: Throwable? = null
+        var added = 0
+        while (refused == null && added < 1_000) {
+            val revision = s.register.revision
+            refused = runCatching { store.remember("dev-$added", "$label $added", "f-$added", null, 1_000L + added) }.exceptionOrNull()
+            if (refused == null) added++ else assertEquals(revision, s.register.revision, "the refused register was written")
+        }
+        assertEquals("device_register_full", refused?.message)
+        assertEquals(added, store.read().devices.size, "a device in use was evicted to make room")
+        assertTrue(s.register.blob!!.length <= DeviceRegisterStore.MAX_BLOB_CHARS)
+    }
 }
