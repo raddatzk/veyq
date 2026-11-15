@@ -789,7 +789,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   a ceremony each to the harness. On Android an `input swipe` that starts inside the gesture inset (x below about 100 px)
   is the system's back and closes the link's dialog: start a slide's drag further in. A link that ends `FAILED` is first
   checked against `/api/setup`: a dead dev backend reads exactly so. Each linked family is signed
-  out after the run; the device-register entries stay (inbox #894).
+  out after the run; the device-register entries stay, orphans that eviction takes first (en.account.device-register § Growth).
 - Under a host load around 20 the swiftshader emulator raises "isn't responding" on a long editor sheet: the main thread is
   idle (`kill -3` after `adb root`, `/data/anr/trace_*`), so tap Wait, never Close; a pass reads its state after it.
 - On iOS one SwiftUI `Text` of a megabyte drew nothing (measured 2026-11-12, a file's cut text): a long text is a line a

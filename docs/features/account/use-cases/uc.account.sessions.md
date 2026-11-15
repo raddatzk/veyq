@@ -59,8 +59,8 @@ every device out — complete without names, and E3 says why it shows no list.
    **family rows** whose families the server no longer lists are dropped straight away, as an explicit list of
    ids — never as "keep only what I just saw", which would delete a family another device created between this
    client's read and its write. **Device entries are kept**, because a device whose sessions have all expired is
-   still a device the user named; the register's growth is bounded by evicting the least-recently-seen devices
-   instead. Without that bound, every login in a private window — where the local device id does not survive
+   still a device the user named; the register's growth is bounded by evicting the least-recently-seen
+   **orphans** — devices no family or wrap row names any more — instead, never a device a row still names. Without that bound, every login in a private window — where the local device id does not survive
    the window's close — would add an entry nobody ever removes.
 
 ## Main flow — sign out
