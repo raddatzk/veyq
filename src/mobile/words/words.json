@@ -3306,5 +3306,10 @@
     "note": "under the account's Sign out: what it ends",
     "en": "Signs this account out on this device. Your other devices stay signed in.",
     "de": "Meldet dieses Konto auf diesem Gerät ab. Deine anderen Geräte bleiben angemeldet."
+  },
+  "offline_read_only": {
+    "note": "a change refused while the app cannot reach the server: offline, everything is read-only (ADR 0140 decision 7)",
+    "en": "You’re offline. Changes are possible again once you’re back online.",
+    "de": "Du bist offline. Ändern geht wieder, sobald du online bist."
   }
 }

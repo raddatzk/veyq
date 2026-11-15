@@ -83,6 +83,9 @@ class FileModel(
         suspend fun uploader(file: DepotFiles.File): Uploaders.Uploader?
         /** The upload-queue job that replaces [file]'s content with [source] over [expectedBlobId]. */
         fun replaceJob(file: DepotFiles.File, source: UploadSource, expectedBlobId: String?): DepotFiles.ReplaceJob
+
+        /** Whether the account reaches its server: offline the page is read-only (ADR 0140 decision 7). Absent: always. */
+        fun online(): Boolean = true
     }
 
     /** What the page shows of the file. */
@@ -175,6 +178,7 @@ class FileModel(
      * read or the replace is not offered.
      */
     fun chooseReplace(): Boolean {
+        if (!door.online()) return false
         val f = file ?: return false
         if (current.header?.own?.any { it.id == REPLACE } != true) return false
         chosen = f
@@ -189,6 +193,7 @@ class FileModel(
     fun replace(source: UploadSource): DepotFiles.ReplaceJob? {
         val f = chosen ?: return null
         chosen = null
+        if (!door.online()) return null
         return door.replaceJob(f, source, f.blobId)
     }
 

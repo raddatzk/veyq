@@ -74,6 +74,9 @@ class AccountSettings<A : Connection, T : Any>(
 
         /** The instance's active capabilities (`GET /api/setup`'s manifest). */
         abstract suspend fun capabilities(): Set<String>
+
+        /** What this account's offline store on this device holds (ADR 0140 decision 10); null where it keeps none. */
+        open suspend fun storage(): Storage? = null
         internal open fun register(): DeviceRegisterStore = throw UnsupportedOperationException("this door keeps no device register")
     }
 
@@ -109,6 +112,14 @@ class AccountSettings<A : Connection, T : Any>(
         val removesKey: Boolean,
     )
 
+    /**
+     * "Storage on this device" (ADR 0140 decision 10), sizes only, in bytes: the [limit] the person set (0: the automatic
+     * tier off), what the [automatic] tier and the [pinned] items use, and the volume's [free] space (null where the system
+     * does not say).
+     */
+    @Serializable
+    data class Storage(val limit: Long, val automatic: Long, val pinned: Long, val free: Long?)
+
     /** A device the register knows that holds a served saved key and no session: removable ([removeSavedKey]). */
     @Serializable
     data class SavedKeyDevice(val deviceId: String, val label: String)
@@ -131,6 +142,8 @@ class AccountSettings<A : Connection, T : Any>(
         @Serializable(with = MsgKey::class) val refusal: Msg? = null,
         /** Why the device names are missing: the register refused (ADR 0028 decision 7); every row still acts. */
         @Serializable(with = MsgKey::class) val registerRefusal: Msg? = null,
+        /** This account's offline store on this device; null where it keeps none (a device without trust, no directory). */
+        val storage: Storage? = null,
     ) {
         /** Whether "Sign out every other" has anything to end. */
         val hasOthers: Boolean get() = families.orEmpty().any { !it.current }
@@ -253,6 +266,7 @@ class AccountSettings<A : Connection, T : Any>(
     /** The web's loader: the list first; the register's half after it, never able to take the list down (E4). */
     private suspend fun load(keepRefusal: Boolean = false) {
         if (!keepRefusal) _state.value = current.copy(refusal = null)
+        attempt { door.storage() }.onSuccess { _state.value = current.copy(storage = it) }
         attempt { door.email() }.onSuccess { (address, confirmed) -> _state.value = current.copy(email = address, emailConfirmed = confirmed) }
         attempt { door.capabilities() }.onSuccess { _state.value = current.copy(addDevice = DEVICE_LINKING in it) }
         val families = attempt { door.families() }.getOrElse {
@@ -353,6 +367,7 @@ class AccountSettings<A : Connection, T : Any>(
         override suspend fun removeSavedKey(wrap: String) = done { AccountWrapsApi(account.server, account.http).deleteAccountWrap(wrap) }
         override suspend fun capabilities() = account.call { SetupApi(account.server, account.http).getSetupStatus() }.capabilities.map { it.id }.toSet()
         override fun register() = account.register()
+        override suspend fun storage() = account.offline?.usage()?.let { Storage(it.limit, it.automatic, it.pinned, it.free) }
 
         /** A call answered with no body: anything but a success throws. */
         private suspend fun done(f: suspend () -> HttpResponse<Unit>) {

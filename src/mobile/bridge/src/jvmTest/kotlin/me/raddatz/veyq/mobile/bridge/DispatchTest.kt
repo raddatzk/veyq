@@ -1513,6 +1513,7 @@ class DispatchTest {
         @Volatile var failing = true
         @Volatile var changes = 0
         private val next = java.util.concurrent.atomic.AtomicInteger()
+        override fun online() = true
 
         fun put(name: String, blob: String): String = "n-$name".also { names[name] = it; blobs[it] = blob }
 

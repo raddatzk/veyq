@@ -112,6 +112,27 @@ class SecretFreeSchemaTest {
         assertEquals(listOf("Paired.handle", "Paired.payload", "Paired.grantEnvelope", "Paired.channel", "Paired.transport"), pairingNamed(listOf(Paired.serializer())))
     }
 
+    /**
+     * What the offline store adds to the wire crosses as sizes and times alone (ADR 0140 decision 10, the CR's phase 3): a
+     * screen offline says as of when (`OfflineAsOf`: the shell's state, a gallery's), the Settings section how much is
+     * kept against the limit (`AccountSettings.Storage`) — never a key, a seal, an entry's name or what it holds. A field
+     * added to either is red here until it is named below, with why; and each is reached from the wire's roots.
+     */
+    @Test
+    fun theOfflineStoreCrossesAsSizesAndTimesAlone() {
+        val schema = Schema(Roots.all)
+        val fields = schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }.groupBy({ it.owner }, { it.name })
+        assertEquals(listOf("asOf"), fields["OfflineAsOf"], "a screen offline says more than as of when")
+        assertEquals(
+            listOf("limit", "automatic", "pinned", "free"),
+            fields.entries.single { (owner, _) -> owner.endsWith("AccountSettings.Storage") }.value,
+            "the Settings section's storage says more than sizes",
+        )
+        // where they ride: the shell's state, a gallery's, the Settings page's
+        val holders = fields.filterValues { names -> "offline" in names || "storage" in names }.keys.map { it.substringAfterLast('.') }.toSet()
+        assertTrue(holders.containsAll(setOf("State", "GalleryShown", "SettingsShown")), "the offline states ride elsewhere: $holders")
+    }
+
     @Serializable @kotlinx.serialization.SerialName("Paired")
     class Paired(val number: String, val handle: String, val payload: String, val grantEnvelope: String, val channel: String, val transport: String)
 

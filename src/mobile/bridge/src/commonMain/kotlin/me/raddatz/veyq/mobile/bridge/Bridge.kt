@@ -1370,6 +1370,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         working = s.working,
         refusal = s.refusal,
         registerRefusal = s.registerRefusal,
+        storage = s.storage,
     )
 
     /** A Pot's settings as the host draws them ([PotSettingsShown]), each field one core function's answer. */
@@ -1429,6 +1430,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         purging = s.purging,
         purgeQuestion = g.purgeQuestion.takeIf { s.purging != null },
         said = s.said,
+        offline = s.offline,
     )
 
     /** One medium as a gallery's row and a lightbox's page show it ([GalleryRow]). */
