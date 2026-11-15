@@ -383,8 +383,8 @@ dialog. Callers: the kit's scan at sign-in, device linking.
   no per-app language of their own).
 - **On macOS a session's menu in Settings was never driven** ("Weitere" → "Dieses Gerät abmelden" on another session:
   the background tools open no menu) — the owner's click (inbox #916); **and its rename alert shows the current name
-  only the first time** — later openings are empty (the binding set before presenting; AppKit's alert keeps its field),
-  not fixed (inbox #917).
+  only the first time** — later openings were empty (the binding set before presenting; AppKit's alert keeps its field);
+  the name is now set once the alert shows, built but not yet checked on the Mac (inbox #917).
 - Several instances gated on their major (inbox #436): the apps speak only their own major today.
 
 **Navigation and sharing**
