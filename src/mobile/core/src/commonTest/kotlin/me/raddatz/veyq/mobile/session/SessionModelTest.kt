@@ -711,7 +711,7 @@ class SessionModelTest {
         assertIs<Gate.Signed>(m.current)
     }
 
-    // ---- a link from the sign-in (cr-app-device-linking D4): the app's sign-in tail, a DEVICE_KEY offer only ----
+    // ---- a link from the sign-in (uc.account.onboard-device § In the apps): the app's sign-in tail, a DEVICE_KEY offer only ----
 
     /** Runs *sign in with a QR code* between [m]'s sign-in and a trusted device over the door's relay, to the end. */
     private fun kotlinx.coroutines.test.TestScope.linkIn(d: Door, m: SessionModel<Acc, String>, server: String, label: String = "Tablet"): DeviceLink {
@@ -746,7 +746,7 @@ class SessionModelTest {
         assertEquals(Gate.Signed(a.key, "ta"), m.current)
     }
 
-    /** Inbox #918: the screen closed while the grant is spent (Back, the sheet's close) — the account still opens. */
+    /** ADR 0136's Consequences: the screen closed while the grant is spent (Back, the sheet's close) — the account still opens. */
     @Test
     fun a_link_closed_while_it_finishes_still_says_the_account_it_signed_in() = runTest {
         val d = door().apply { linkHeld = kotlinx.coroutines.CompletableDeferred() }

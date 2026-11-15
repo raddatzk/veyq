@@ -450,7 +450,7 @@ describe('the sign-in answer (ADR 0059 §6, §11)', () => {
   })
 })
 
-// The two shapes both implementations must agree on byte for byte (cr-app-device-linking D2): the scanned text's
+// The two shapes both implementations must agree on byte for byte (ADR 0059): the scanned text's
 // grammar and the envelope's plaintext. Read from the contract, not restated here, so the app core's Conformance and
 // this file answer to one list — a case moved between accepted and refused turns one of them red.
 type PayloadCase = { name: string; text: string; veyqpair: string | null; veyqsignin: string | null }

@@ -110,7 +110,7 @@ internal sealed class AccountSettingsPage : IDisposable
         }
     }
 
-    /// <summary>Opens the device link <paramref name="make"/> builds for this page's account (cr-app-device-linking).</summary>
+    /// <summary>Opens the device link <paramref name="make"/> builds for this page's account (ADR 0059).</summary>
     private async void Link(Func<string, Call> make)
     {
         try

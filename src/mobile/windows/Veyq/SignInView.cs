@@ -12,7 +12,7 @@
 // camera, scans its code (QrCamera, kind KIT). Either way the gate's kit fills the email and the server and the Secret Key
 // field says "From your Emergency Kit" — the key itself the core holds, never this side.
 //
-// Below them the two ways in from another device (ADR 0059 §1; cr-app-device-linking): "Scan a code from another device",
+// Below them the two ways in from another device (ADR 0059 §1): "Scan a code from another device",
 // only where there is a camera, and "Sign in with a QR code" — each a ceremony of DeviceLinkDialog over the server the
 // form names (nothing a scan reads changes it).
 using System;

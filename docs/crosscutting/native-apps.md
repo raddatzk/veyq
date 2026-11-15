@@ -79,7 +79,7 @@ The desktop apps' packages, a preview, are described to a person on the docs sit
 "Measured" means ADR 0123 records it run against a dev instance (and, where it says so, read back by the web); "built"
 means the code is there and compiles, nothing recorded beyond. Both apps hold everything listed unless a row says
 otherwise; the Linux and Windows apps hold only their first slice, the members' pictures, a Pot's download, the
-device trust with "Manage servers" (their rows above), the kit at sign-in and the account's Settings, a folder's and a Pot's header with every action on it: pin,
+device trust with "Manage servers" (their rows above), the kit at sign-in, the account's Settings and device linking, a folder's and a Pot's header with every action on it: pin,
 trash with undo and the space's trash, rename, New folder, move and copy with the storage check, a folder's download,
 share links, a report and a cover with its crop, Expenses whole as its paragraph's but the share sheet's files,
 Depot whole as its paragraph's but Send a copy (measured 2026-11-12), and Memories as its paragraph's (measured
@@ -105,6 +105,19 @@ language; the desktops have no row); "Add a device" where the instance has `core
 2026-11-13 against the dev backend on Android, iOS, macOS, Linux (the Fedora VM, inside the Flatpak's sandbox) and
 Windows (the VM), the desktops in English/light and German/dark: this device renamed, a second session of the account signed out from
 the list, "Sign out" taken — on macOS a session's own menu not driven (§ Open).
+**Device linking, on all four apps** ([ADR 0059](../decisions/0059-device-linking.md); the core's model, ADR 0136's
+Consequences; `uc.account.onboard-device` § In the apps): both directions in both roles — Settings' "Add a device" shows
+a code and, where the device has a camera, scans one; the sign-in's "Scan a code from another device" (camera only) and
+"Sign in with a QR code" use the form's server, and say "This server does not link devices." where it has
+`core.device-linking` off (Settings' entry is offered only where it is on). The new device spends the grant's token at
+refresh (ADR 0059 §2) and is offered only its `DEVICE_KEY` levels, "Not now" saying the password and Secret Key or the
+kit will be needed next time. The shown code and the scanner are a secret on screen (`src/mobile/CLAUDE.md` § Secrets
+on screen). Measured 2026-11-13/15 against the web in headless Chrome (its camera a `.y4m` of the app's code), no
+password typed: Android all four runs (a throwaway AVD's virtual scene as its camera), Linux all four (the container,
+its test camera), macOS three of four (its test camera), Windows the two showing ones (the VM has no camera, so
+`NoCamera` offers only those) and a linked Windows device showing again; the slide by pointer and keys on Android, Linux
+and Windows; Android's task snapshot and Windows' capture bitten with the code shown.
+The Use page that says this to a person: [Add another device](../../site/src/content/docs/account/adding-another-device.mdx).
 
 **Device trust, on all four apps** (ADR 0123 decision 8 as changed 2026-11-11; measured 2026-11-11, `DeviceTrustLiveTest`,
 `LiveBridgeTest` and a pass per app, ADR 0123's Consequences, the device trust; the two live tests again 2026-11-14,
@@ -343,8 +356,26 @@ dialog. Callers: the kit's scan at sign-in, device linking.
   hosts that signal (a revision per id, say).
 
 **Account**
-- Linking a device on a phone ([ADR 0059](../decisions/0059-device-linking.md)): the contract gives a client without
-  cookies no adoption (`POST /api/token/adopt` answers only with a cookie).
+- **Device linking's passes left gaps** ([ADR 0059](../decisions/0059-device-linking.md); § Built, by area):
+  - The iOS Simulator's four runs against the web, Apple's snapshot bite (`.secretOnScreen()` removed → the
+    SplashBoard snapshot shows the code) and the Mac's fourth run (the Mac new device showing, the web scanning) were
+    not run — CoreSimulator wedged under load, and the Mac's fourth try met the web's camera reopening and then the dev
+    backend restarting (machine-doable, inbox #928). Apple's runs were driven by debug hooks (`VEYQ_DEV_LINK`,
+    `VEYQ_DEV_LINK_DIR`), so the Apple slide itself — drag, arrows and Return, VoiceOver's named action — waits for a
+    person (the owner's, #928).
+  - No app has linked with another app yet (phone ↔ phone, phone ↔ desktop): every run had the web on the other side
+    (machine-doable through the test cameras, #928).
+  - Windows has never scanned a link's code: the VM has no camera, so `QrCamera.OpenLink` is proven by its build and
+    Linux's twin only; a real camera's link scan on every app is the owner's (inbox #912).
+  - A linked Linux device staying signed in through the Secret Service was not run: the pass ran without it
+    (`--no-secret-service`, the shared home volume), so every linked Linux run was the run-only case (#928).
+  - On GTK and WinUI a screen reader confirms the slide by the keys, with no named action of its own (ADR 0136's
+    Consequences); no screen reader has driven the slide on any platform.
+  - `DeviceLinkTest`'s confirmation race in its final form (its racers on their own threads behind one gate) was
+    measured red against check-then-act 20/20 and green at rest, never yet under load (#928).
+  - Windows' Settings logged "the settings did not draw: COMException 0x800F1000" twice on a sign-out from Settings;
+    caught, the sign-out completed, the cause not looked into (inbox #929).
+  - Every pass leaves a device-register entry per device it linked (no screen removes one; inbox #894).
 - The device register's own screen (the devices an account trusts, ADR 0058): every app writes it at each unlock and
   enrolment, only the web shows it.
 - Invites and members; the rest of the web's settings — password, email, replacing the keys, recovery, erasure, terms,

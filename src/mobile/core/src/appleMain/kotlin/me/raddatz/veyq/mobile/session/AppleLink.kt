@@ -9,7 +9,7 @@ import platform.Foundation.NSData
 import platform.Foundation.dataWithBytes
 
 /**
- * Device linking as the Apple app reaches it (`apple/Veyq/DeviceLinkView.swift`; `cr-app-device-linking` phase 4): Swift
+ * Device linking as the Apple app reaches it (`apple/Veyq/DeviceLinkView.swift`): Swift
  * sees neither Kotlin's default arguments nor a suspending decoder, its camera takes a `QrScan<AnyObject>`, and a
  * Kotlin byte array crosses the boundary a byte at a time — so the four roles are opened here, each decode's time goes
  * to [timing] (never the text), and the code's picture comes back as one `NSData`.

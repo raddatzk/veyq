@@ -60,6 +60,17 @@ session; and the *"stay signed in"* question is answered **on the new device, be
 because the lifetime is fixed at adoption and no later refresh can move it. A grant whose token were simply
 kept in script would satisfy every visible step of this ceremony and lose the session on the next page load.
 
+**An app spends the token at refresh instead.** Adoption exists to move a token out of script into a cookie, which
+a native app — keeping its refresh token in memory or the platform's key store, as after its own login — has no use
+for. It spends the handed-over token once at [ADR 0004](0004-session-tokens.md)'s refresh with the token in the
+body — the rotation adoption itself runs, body in, body out —, keeps the successor where it keeps a login's, and
+reads its family id from the session list's `current` entry. A native variant of adoption (a body answer, an optional
+scope) was rejected: it would add a contract and a backend change, and a way for a web caller that omits a field to
+get a body token — the exfiltration ADR 0004 keeps the browser out of. The first ordering holds for an app as it is
+(the token is spent before the tail that needs the session); the second binds the browser's cookie, not an app's key
+store, so an app asks "stay signed in" after the grant, as it does after its login, and offers only the levels a
+linked device can take (§10).
+
 **3. One envelope, sealed to the new device's ephemeral transport key.** The new device mints a single-use
 keypair; the trusted device `asymWrap`s **both** the Master Key and the refresh token to its public key and
 posts the result. **Pickup is unauthenticated on purpose**: the envelope is worthless without the ephemeral
@@ -73,7 +84,14 @@ the row unfindable.
 only to the instance it is already pointed at. A code that could name an endpoint would let an attacker's QR
 redirect a trusted device's *seal* to a server they control — no password, no session, nothing else needed —
 and because veyq is self-hostable, "scan this and your new device is configured" is the convenience someone
-will reach for. This is the one rule of this ADR that a reviewer should look for by name.
+will reach for. This is the one rule of this ADR that a reviewer should look for by name. Its executable form is the
+payload grammar in `contracts/crypto/vectors/v1.json` § `pairing_channel.payloads`, which the web and the apps' core
+both read: the exact, case-sensitive marker, then the canonical standard base64 of exactly 32 bytes, padded or not,
+never starting with `/` (so nothing scanned is URL-shaped), with only space, tab, CR and LF trimmed around it — one
+text per secret, and the other direction's marker refused. The grant's plaintext JSON is pinned beside it (`grant`).
+A parser's vectors are written with every implementation's library in view — its whitespace set, base64 padding and
+pad bits, JSON number forms —, not only this rule: the web's first parser accepted a leading `/`, a non-canonical
+encoding and every Unicode space, and only writing the second implementation showed it.
 
 **5. Each direction's binding step, and the rule underneath.** Neither is decoration; each is what proves the
 device being granted is one the user is holding.

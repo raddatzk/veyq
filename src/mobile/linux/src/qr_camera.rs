@@ -114,7 +114,7 @@ impl ScanView {
         Self::open_with(Call::ScanOpen { kind, server, link: None }, other, changed)
     }
 
-    /// Opens device link [link]'s own scan (kind `LINK`, `cr-app-device-linking` D6) and its camera: what it reads goes
+    /// Opens device link [link]'s own scan (kind `LINK`, ADR 0141) and its camera: what it reads goes
     /// straight into the link in the core, never back here; the link's state says what came of it.
     pub fn open_link(
         link: i64,

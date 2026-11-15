@@ -6,7 +6,7 @@ import UIKit
 import AppKit
 #endif
 
-/// One device-linking ceremony on screen (ADR 0059; `cr-app-device-linking` phase 4), in any of its four roles: core's
+/// One device-linking ceremony on screen (ADR 0059), in any of its four roles: core's
 /// `DeviceLink` decides every step, this draws its state and hands the person's acts back — the camera into its scan,
 /// the six digits typed (`enterCode`), the slide's end (`confirm`), and `onClose` (which closes the link). A sheet with
 /// its own navigation bar, as iOS asks a task of its own to be.
@@ -268,7 +268,7 @@ private struct LinkConfirming: View {
     }
 }
 
-/// The slide that confirms (ADR 0059 §7, D5): the system's `Slider`, which confirms only at its end and springs back
+/// The slide that confirms (ADR 0059 §7, ADR 0136's Consequences): the system's `Slider`, which confirms only at its end and springs back
 /// otherwise — a deliberate gesture, not a tap. Keyboard: the arrow keys move it, Return at the end confirms (a key
 /// never confirms by itself). VoiceOver reads `sentence` and confirms through the action of that name. `onConfirm`
 /// answers whether the link moved on; one that did not springs back.

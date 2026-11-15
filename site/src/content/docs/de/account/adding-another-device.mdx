@@ -2,6 +2,7 @@
 title: "Ein weiteres Gerät hinzufügen"
 sources:
   - docs/features/account/use-cases/uc.account.onboard-device.md
+  - docs/crosscutting/native-apps.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -47,6 +48,24 @@ es zeigt einen frischen Code.
 
 **Tippe nie eine Zahl ein, die dir jemand am Telefon oder in einer Nachricht nennt.** Niemand, der es ehrlich meint,
 fragt je danach. Fragt jemand, ist genau das der Angriff, und das Eintippen der Zahl ist der Moment, in dem er gelingt.
+
+## In der App
+
+Auch die [veyq-App](/de/getting-started/install-the-app/) fügt auf beiden Wegen hinzu und wird so hinzugefügt, mit
+dem Browser oder mit einer anderen App. Die Schritte sind dieselben, mit diesen Unterschieden:
+
+- **Einstellungen** findest du in der Seitenleiste der App. **Gerät hinzufügen** bietet dort **Code anzeigen** und, nur wenn der
+  Computer eine Kamera hat, **Code scannen**.
+- Bei der Anmeldung der App erscheint **Code eines anderen Geräts scannen** nur, wenn eine Kamera da ist; **Über
+  QR-Code anmelden** immer. Beide nutzen den Server im Formular darüber, gib also zuerst die Adresse deines Bereichs
+  ein: Beide Geräte müssen denselben Server nutzen.
+- Der Regler lässt sich auch mit der Tastatur schieben: die Pfeiltasten bis zum Ende, dann die Eingabetaste.
+- Öffnet sich das neue Gerät, fragt die App, wie es sich ab jetzt anmeldet. Wählst du **Nicht jetzt** oder hat der
+  Computer nichts, worin er einen gespeicherten Schlüssel aufbewahren kann, braucht es beim nächsten Mal dein Passwort
+  und deinen Secret Key oder dein Notfall-Kit.
+
+Ein Gerät ohne Kamera kann nur einen Code anzeigen; das andere Gerät scannt ihn. Zwei Geräte ohne Kamera können sich
+nicht gegenseitig hinzufügen: Melde dich mit Passwort und Secret Key oder mit deinem Notfall-Kit an.
 
 ## Bevor du schiebst
 

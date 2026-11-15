@@ -39,7 +39,7 @@ import kotlin.concurrent.atomics.incrementAndFetch
 
 /**
  * `DeviceLink`'s four roles over a played relay ([PlayedServer]), both sides real: the pairing crypto, the QR drawn by one
- * link and read through the real decoder by the other (`cr-app-device-linking` phase 3).
+ * link and read through the real decoder by the other.
  */
 class DeviceLinkTest {
     private val p = testPrimitives
@@ -211,7 +211,9 @@ class DeviceLinkTest {
         runCurrent()
         settle()
         assertEquals(Step.CONFIRMING, trusted.current.step)
-        // the relay seals to the key it read off the answer, under a MAC it cannot make
+        // the relay seals to the key it read off the answer, under a MAC it cannot make — planted only once the trusted
+        // side is CONFIRMING, the order the real server forces (nothing sealed before a delegation): planted earlier, the
+        // trusted side's own poll collected it and the case read GONE, proving nothing about the MAC
         val channel = server.channels.values.single()
         val realKey = pairing.channelKey(assertNotNull(PairingPayload.parse(text, PairingMarker.ADD_DEVICE)))
         val pub = pairing.readTransportAnswer(realKey, assertNotNull(channel.answer))

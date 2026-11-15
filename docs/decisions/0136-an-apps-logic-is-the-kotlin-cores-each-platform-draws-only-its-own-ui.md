@@ -144,6 +144,24 @@ four times.
 - **When the members' pictures are read is the core's** (`session/AvatarsModel`, decision 1): Android and Apple had
   each synced them when a tenant opened, a rule in two apps before a third and fourth copy. They now watch the core's
   model, and Linux and Windows read its id set through the bridge (ADR 0137 decision 1).
+- **A device link is one core model, and an app opens the account on its sign-in, never on its last step**
+  (2026-11-13/15, device linking on all five apps, [ADR 0059](0059-device-linking.md)). `session/DeviceLink` holds the
+  ceremony in each of its four roles (shows or scans, for a new device or from one) as decision 2's state: the web's
+  steps, the refusals by name, the code reaching a UI only as `matrix()`/`png(px)`, the scanning roles' own `QrScan`, the
+  polls, the client's own channel deadline (the server's 10 min, so a relay that stops answering does not leave a link
+  waiting for ever). Its crypto, the payload grammar and the grant's JSON are `crypto/Pairing`, held to
+  `contracts/crypto/vectors/v1.json` § `pairing_channel` as `@veyq/crypto` is. A platform draws the state and hands back
+  the camera's frames, the six digits and the slide's end; the bridge carries the state alone (`Link.*`,
+  `Watched.Link`), never the code's text, a key, the grant or a token. **The new device's tail runs whatever the screen
+  does**: once the handed-over token is spent its successor must be kept, so a close in `FINISHING` ends the state as
+  `ENDED` while the tail still signs the account in. An app keyed to the state's `DONE` therefore never opened that
+  account — the bridge first held its close off in `FINISHING`, a rule in one host the phones lacked. Every app opens
+  the shell on `DeviceLink.signedIn()` / `SessionModel.signedInBy(link)` instead (true once the tail signed in, false on
+  every other end), never on `DONE`. The slide (ADR 0059 §7) is each platform's slider confirming only a gesture that
+  began at its start and ends at its end, or the arrow keys to the end then Return; a jump (a tap on the track, a
+  Home/End/Page key, one accessibility adjustment) never confirms. A screen reader confirms through a named action of the
+  sentence on Android and Apple; GTK and WinUI offer no named action of an app's own, so there the sentence is the
+  slider's accessible name and a screen-reader user confirms by the keys (`device_link.rs`, `DeviceLinkDialog.cs`).
 - **A node's header and its sheets are core screen models** (2026-11-11/12, before Linux and Windows drew them; decision
   2's shape, each rule a `commonTest` case killed by a mutation; what the desktops built and measured is ADR 0123's
   Consequences, the Linux app and the Windows app). Android and Apple held each of these in their app models and draw

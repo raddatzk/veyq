@@ -84,7 +84,7 @@ internal sealed class QrCamera : IDisposable
         return camera;
     }
 
-    /// <summary>Opens device link <paramref name="link"/>'s own scan (kind LINK, cr-app-device-linking D6) and its camera:
+    /// <summary>Opens device link <paramref name="link"/>'s own scan (kind LINK, ADR 0141) and its camera:
     /// what it reads goes straight into the link in the core, never back here; the link's state says what came of it.</summary>
     public static QrCamera OpenLink(long link, Func<ScanShown, UIElement?> draw, Action<ScanShown> changed)
     {
