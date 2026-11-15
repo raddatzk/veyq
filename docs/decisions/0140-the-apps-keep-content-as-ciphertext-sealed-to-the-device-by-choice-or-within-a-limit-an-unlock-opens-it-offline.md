@@ -218,6 +218,41 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
   seal or token (`SecretFreeSchemaTest`, [ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)
   decisions 1 and 2).
 - **A device whose trust is the Secret Key at every start gets no offline content** — the cost of decision 4.
+- **The passes, per platform (phase 6).** **Android** — 2026-11-15, a throwaway AVD (API 36 `google_apis` arm64,
+  `sdk_gphone64_arm64`, deleted after), the debug build against the dev backend (`veyq.localhost:8080`), the app's
+  language German (`adb shell cmd locale set-app-locales me.raddatz.veyq --locales de-DE`):
+  - *Decision 2's load on ART, cold:* the core's JVM classes and the test classes dexed (`d8 --min-api 36`) and run by
+    `dalvikvm64` (ART 2.1.0, JIT on — as in the app's process, whose maps hold `jit-cache`). `OfflineManifestLoadTest`
+    itself, five fresh processes: first open **199–225 ms**, then 182–192 ms. Since that test writes the 100,000 entries
+    in the same process before it opens them, the store was also written in one process and opened in fresh ones with
+    the page cache dropped first (`echo 3 > /proc/sys/vm/drop_caches`, root): first open **255–277 ms**, then 182–214 ms
+    (page cache warm: 218–224 ms first). Within decision 2's 1 s and below phase 2's first runs (JVM 1,049–1,174 ms,
+    macOS 1,507 ms). With the JIT off (`-Xusejit:false`, no app runs so) the open takes 4.1–5.1 s.
+  - *The pass:* `android/devlogin.py` signed in (password trust, no offer accepted); a Memory and a Chapter in it made in
+    the app, a video (`ffmpeg` test pattern, 436,169 bytes, two frames) and a JPEG uploaded into the Chapter through the
+    photo picker, each carrying the marker `VEYQPLAINMARKER6a1f0c93e2b54d17` in its metadata (the picker hands media ids,
+    so the media were named `18.mp4` and `19.jpg`; the known names grepped are those and the nodes' "Offline Pass 6a",
+    "Kapitel 6a"); the Chapter made available offline ("458 kB" asked, "Auf diesem Gerät · 586 kB" after: covers and
+    listings beside the frames); Settings' limit set to "1,5" (the field read "1,5 GB") and "Cache leeren" left
+    "Zuletzt angesehen 0 B". Then `adb shell cmd connectivity airplane-mode enable` (`nc 10.0.2.2 8080`: "Network is
+    unreachable"), `am force-stop` (no process left), the app started and unlocked by `devlogin.py --unlock`: the shell
+    showed "Offline — Stand 15.11.2026 17:55", the pinned Chapter its two items, and the video played from the store (its
+    frame 5 s in on screen, the decoder's rendering-start in logcat). The Memory itself, not pinned and its listing
+    cleared, said "Die Galerie konnte nicht geladen werden." — what is not kept reads as a failed load offline, not as
+    "not available offline". Back online the banner went within about 35 s (the probe's backoff).
+  - *The store:* `run-as`/root `find /data/data/me.raddatz.veyq -type f` listed `no_backup/offline/<32-hex account
+    dir>/header` and 60 files named by 32 hex digits (1,076 KiB; the largest 436,281 bytes, the video's sealed frames), and
+    nothing else of the store. The directory pulled (`adb pull`) and `grep -rlaF` for the marker, the four names,
+    `offlinemarker`, `ftypisom` and `Lavf`: no hit (the same grep over the uploaded originals finds the marker in both).
+  - *Sign-out:* Settings' "Abmelden" left `no_backup/offline/` empty (the account's directory gone, the trust record
+    kept: the app showed its unlock). The rest of the container then: `no_backup/androidx.work.workdb` with `-wal`/`-shm`,
+    Room's lock file under `cache/`, `files/profileInstalled`, `shared_prefs/veyq.trust.xml` (the trust record, the
+    limit by account key, the instance salt), `veyq-recent.xml` (node ids), `veyq.memories.xml` — `src/mobile/CLAUDE.md`
+    § Nothing on disk the app did not choose names each. The pass's families were signed out from Settings and the device
+    stopped trusting before the last sign-out (a password-trusted unlock is a login: each start left a family).
+  - *Not run here:* a real phone (Play-signed release build, a physical Keystore, the system killing the app rather than
+    `force-stop`), the cold boot's credential-encrypted storage before the first unlock, and the presence level's
+    offline unlock (it needs the emulator's screen-lock PIN typed, which a pass does not do).
 - **Left out, each an inbox row:** writes made offline and sent later (#897, a conflict model per application); a
   scheduled sync of pins while the app is not running (#896); Expenses offline (#898).
 
