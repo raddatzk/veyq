@@ -320,7 +320,7 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   the account's store under the newer connection — decide there; `putFrames` rewrites the frame index and shard once per
   call, so a read path batches frames; Android's first load (ART) is unmeasured.
 
-- [ ] **3 the read path, offline opening and eviction (core)** — over Memories' core screen models (built): D4's
+- [x] **3 the read path, offline opening and eviction (core)** — over Memories' core screen models (built): D4's
   kept wrap and offline unlock in `VeyqAccount`/`SessionModel` (a new `Gate` state is not needed: the unlock opens an
   account marked offline); D5's allowlist, `If-None-Match`, replace and sweep in `TenantSession.trees`, `MemoryMedia`,
   `DepotFiles`, `ApplicationBlobs`; reachability and the probe; each screen model's `offline` state and D7's refusals;
@@ -337,6 +337,42 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   (f) a node answered `blockedByOperator` and a tenant answered suspended are not shown from the store while a sibling
   is (the control), and the automatic tier's entries below them are gone (bite: hide without dropping → the byte count
   stays → red).
+  Done 2026-11-15. Checks: `./gradlew :core:jvmTest :bridge:jvmTest :core:macosArm64Test` green (699, 89, 506 tests),
+  `linux/run.py test` green (511), `windows/run.py test` on the VM green (512), `LiveOfflineTest` green against the dev
+  backend (`VEYQ_LIVE=http://veyq.localhost:8080`, `VEYQ_ENV_FILE` the main checkout's), every guard but guard_gaps
+  green. **Bites**, each one edit restored from a snapshot, each red at its own assertion: (a) merge the newer listing into
+  the kept one (`VeyqAccount.kept`) — `OfflineReadPathTest` and, scoped to `listNodeMedia`, `LiveOfflineTest` (the
+  trashed photo shown from the store); (b) no sweep after a `403` — the left scope's frames stay; (c) the store kept when
+  the wrap is not served, when the refresh is refused, and at a reconnect that finds the wrap gone — three bites, three
+  reds; (d) evict by size — the most recently viewed goes; (e) `presignBlobDownloads` added to `KeptRead` —
+  `KeptReadsTest` names `presignedGets` and `url`; (f) a blocked node treated as reached, and a suspended tenant hidden
+  without dropping — the frames and entries stay. And the coordinator's: the duplicate sign-in signed out instead of
+  retired (`SessionModelTest`), no close before the wipe (a late write lands in the wiped directory), frames kept one at
+  a time (`OfflineLimitTest`: 40 renames for 20 frames, 4 batched).
+  Built as: `offline/KeptRead` (the allowlist — `listMyTenants` added, which an offline unlock needs for the tenants'
+  domains and which carries no token or address; `NodeSummary.slugToken` let through by name, a blinded name token),
+  `offline/AccountOffline` (answers kept and replaced, frames kept, the limit and its eviction, the 5 % floor through a
+  new `DeviceFiles.totalBytes`, the mark-and-sweep from `listMyTenants` down; the opening answers never evicted),
+  `session/Reach` (`Online`, `Offline(asOf)`, `Ended(reason)`; `Unreachable`), `VeyqAccount.kept` (online first, a `304`
+  confirming, a `403`/`404` dropping, `tenant_suspended` dropping the tenant, the store offline), the wrap copy in the
+  device store (`ThisDevice.keepWrap`, at each online unlock and enrolment, gone with the record), `resume`/`unlockOnDevice`
+  falling back to the store when the server is unreachable (a scope opens offline only at the very key this device holds,
+  `GrantOpener.openHeld`; no members, capabilities or services offline), the probe (`LivePoll`'s backoff at 5 s to 60 s)
+  and `reconnect` (refresh, or a login with the key a password-trusted offline unlock derived from the kept instance salt —
+  held in memory until then —, then `key-material` for the wrap). Decided here (coordinator 2026-11-15): **a duplicate
+  connection retires** (`VeyqAccount.retire`, `Door.retire`): its session and keys only, never the record, the wrap copy
+  or the store — the store goes only when the account leaves this device (D11); this also stopped the duplicate's
+  sign-out forgetting the record the held connection had just re-enrolled. **A store is closed before its wipe**
+  (`OfflineStore.close` waits for a call under way, then answers nothing and writes nothing). **Frames are kept in
+  batches** of 16 (`ApplicationBlobs.KEEP_BATCH`). **Hosts pass no directory yet** — phase 5. Screens: `ShellModel.State`,
+  `GalleryModel.State` (`offline: OfflineAsOf`), D7's refusals with `offline_read_only` in the shell's writes, the
+  gallery's (its rights read-only offline), Depot's replace and uploads; `AccountSettings.State.storage` (sizes only);
+  the bridge's `GalleryShown.offline`, `SettingsShown.storage` (`SecretFreeSchemaTest`: sizes and a time, nothing else).
+  `SessionModel` signs an account whose reconnect ended it out of the switcher and shows the unlock or the sign-in with
+  why. For phase 4: a pin is still only the manifest's `pins` field (`OfflineStore.setPins`, internal); a blocked node's
+  or a suspended tenant's entries are dropped pinned or not — phase 4's pin list keeps the pin itself, without content.
+  A duplicate connection opens a second `OfflineStore` over the same directory until it retires (a cache; the next open's
+  orphan sweep settles it) — one shared instance per account is phase 4's if the sync makes it matter.
 
 - [ ] **4 pins and their sync (core, Android's and Apple's background)** — D9: the pin per node through `AppKinds`, the
   fetch with progress and resume, the size confirmed first, the sync on open and on a moved revision, the re-key path
@@ -349,12 +385,19 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   (c) a re-key that refetched frames is caught by the count (bite: clear frames on a moved revision → red).
 
 - [ ] **5 the Settings section and the screens on every app** — D10 on Android, iOS, macOS, Windows and Linux, on the account's
-  Settings page; the header toggle, the shell's banner, disabled writes; every word in
+  Settings page; the header toggle, the shell's banner, disabled writes; each host passes D3's directory as
+  `ThisDevice(offlineRoot)` and its kind's default as `offlineLimit` (`AccountOffline.PHONE_LIMIT` on Android and iOS,
+  `DESKTOP_LIMIT` on macOS, Windows and Linux) — until then no app keeps anything (coordinator 2026-11-15: the hosts naming
+  the directory belong here, not to phase 3); the shell's reaction to `Reach.Ended` drawn (the core already signs the
+  account out of the switcher and shows the unlock or the sign-in with why); every word in
   `words/words.json` (English and German). · Done when: `./gradlew :android:assembleDebug`, the Apple project's build,
   `run.py build`/`test` on Linux and Windows green; `scripts/validate_mobile_words.py` green; each app clicked once
   through: set the limit, pin a Memory, see used and pinned sizes, clear the cache.
 
-- [ ] **6 the passes** — per platform against the dev instance: sign in, view a Memory, pin a Chapter, cut the network
+- [ ] **6 the passes** — first, Android's cold load of the manifest (ART), unmeasured so far: D2's 100,000-entry load
+  (`OfflineManifestLoadTest`) on the emulator's first run, beside phase 2's JVM 1,049–1,174 ms and macOS 1,507 ms first
+  runs; phase 3 left it alone, as nothing on its read path showed it (coordinator 2026-11-15). Then per platform against
+  the dev instance: sign in, view a Memory, pin a Chapter, cut the network
   (airplane mode on the phones, the VM's network off, the container's network removed), close the app, start it, unlock,
   open the pinned Chapter and play a pinned video; then the device's store listed and grepped for a plaintext marker (a
   medium uploaded with a known byte pattern and a known name), then sign out and the directory listed empty; the app's
