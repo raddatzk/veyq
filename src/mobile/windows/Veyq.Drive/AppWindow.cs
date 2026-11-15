@@ -131,9 +131,21 @@ internal sealed partial class AppWindow(string process)
                 // a scrolled view (a ScrollViewer: a list, a file's PDF) moved to <percent> of its height, as a wheel would
                 var e = Find(parts[1]);
                 var to = double.Parse(parts.Length > 2 ? parts[2] : "100", CultureInfo.InvariantCulture);
-                ((ScrollPattern)e.GetCurrentPattern(ScrollPattern.Pattern)).SetScrollPercent(ScrollPattern.NoScroll, to);
-                Thread.Sleep(300);
-                return "";
+                var pattern = (ScrollPattern)e.GetCurrentPattern(ScrollPattern.Pattern);
+                pattern.SetScrollPercent(ScrollPattern.NoScroll, to);
+                return Settled(e, pattern);
+            }
+            case "wheel":
+            {
+                // a scrolled view turned by the mouse wheel over its middle, <notches> down (negative: up), as a person
+                // scrolls: SendInput's wheel, not UIA's ScrollPattern — a jump seen after one is the app's, not the drive's
+                var e = Find(parts[1]);
+                // over the middle of what shows of it: a view's UIA rectangle can reach past the window (Settings' page
+                // read 3830 high in a 717 high window, 2026-11-15)
+                var r = System.Windows.Rect.Intersect(e.Current.BoundingRectangle, Window().Current.BoundingRectangle);
+                var notches = int.Parse(parts.Length > 2 ? parts[2] : "5", CultureInfo.InvariantCulture);
+                Mouse.Wheel((int)(r.Left + r.Width / 2), (int)(r.Top + r.Height / 2), notches);
+                return Settled(e, (ScrollPattern)e.GetCurrentPattern(ScrollPattern.Pattern));
             }
             case "range":
             {
@@ -191,6 +203,33 @@ internal sealed partial class AppWindow(string process)
             default:
                 throw new ArgumentException($"no step named {parts[0]}");
         }
+    }
+
+    /// <summary>Where a scrolled view stands right after a scroll and two seconds later (a jump back shows as the two
+    /// differing) — its ScrollPattern's percent, which WinUI updates late, and the screen top of its own focused element
+    /// (or else its first named element), which is the layout itself —, and which element holds the focus then.</summary>
+    private static string Settled(AutomationElement view, ScrollPattern pattern)
+    {
+        var mark = AutomationElement.FocusedElement is { } f && IsWithin(f, view) ? f
+            : view.FindFirst(TreeScope.Descendants, new NotCondition(new PropertyCondition(AutomationElement.AutomationIdProperty, "")));
+        string At() => FormattableString.Invariant($"{pattern.Current.VerticalScrollPercent:0.#} %, '{mark?.Current.AutomationId}' at y {mark?.Current.BoundingRectangle.Top:0}");
+        Thread.Sleep(300);
+        var first = At();
+        Thread.Sleep(2000);
+        var later = At();
+        var focused = AutomationElement.FocusedElement;
+        var focus = focused is null ? "none" : $"{focused.Current.ControlType.ProgrammaticName} '{focused.Current.AutomationId}'";
+        return $"scrolled to {first}; 2 s later {later}; focus on {focus}\n";
+    }
+
+    /// <summary>Whether <paramref name="e"/> lies inside <paramref name="ancestor"/>.</summary>
+    private static bool IsWithin(AutomationElement e, AutomationElement ancestor)
+    {
+        for (var p = TreeWalker.ControlViewWalker.GetParent(e); p is not null; p = TreeWalker.ControlViewWalker.GetParent(p))
+        {
+            if (Automation.Compare(p, ancestor)) return true;
+        }
+        return false;
     }
 
     /// <summary>`explorer <x> <y> <w> <h> <path>`: an Explorer window opened at <path> in the logged-on session, placed at

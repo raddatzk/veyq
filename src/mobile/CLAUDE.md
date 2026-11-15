@@ -384,7 +384,8 @@ A Gradle build of its own, run through its own wrapper.
     session, no prompt. Brief the person on every prompt the run may raise first, the uncertain ones marked.
   - `drive <step>...` prints the app's log, then runs `Veyq.Drive`'s steps (`tree`, `invoke <id>`, `select <id>`,
     `set <id> <text>`, `key`, `type <id> <text>` and `press <id> [keys]` (a system dialog's entry and button), `scroll <id>
-    [percent]` (a ScrollViewer through UIA's ScrollPattern), `range <id> <percent>` (a slider's RangeValue, one move) and
+    [percent]` (a ScrollViewer through UIA's ScrollPattern), `wheel <id> [notches]` (the mouse wheel over it, SendInput: a
+    person's scroll; both print where the view stands then and 2 s later, and what holds the focus), `range <id> <percent>` (a slider's RangeValue, one move) and
     `slide <id> <from> <to>` (a mouse drag across an element, percents of its width: the device link's slide), `explorer <x> <y> <w> <h> <path>` and `drag <id|@x,y>
     <name>|<name>…` (an Explorer window placed beside the app, its items dragged with SendInput's mouse onto an element),
     `hovershot <file>` (the screen while the next drag is held), `click <x> <y>`, `screen <file>`, `droptargets`, `size`,
@@ -644,9 +645,13 @@ Per engine:
   end (a second online unlock, then Stop trusting), `shared_prefs/veyq.device-secrets.xml` (`KeystoreDeviceKeys`).
 - **Curl (Linux, `Engine.linux.kt`):** libcurl has no response cache, and its cookie engine starts only with
   `CURLOPT_COOKIEFILE`/`COOKIEJAR`, which Ktor's engine never sets (remembered from libcurl's docs; the engine's klib
-  references no cookie option). Not measured here.
+  references no cookie option). Measured 2026-11-15 (ADR 0140's Linux pass, after a sign-in, a pin, a video played
+  offline and a sign-out): the home held `veyq/device-store.json`, the empty `veyq/offline/`, gnome-keyring's files and
+  GStreamer's plugin registry under `~/.cache/gstreamer-1.0/` — nothing an HTTP stack keeps.
 - **WinHTTP (Windows, `Engine.mingw.kt`):** WinHTTP has no response cache (unlike WinINet), and the cookies it handles
-  live in the session handle's memory, never on disk (remembered from Microsoft's docs). Not measured here.
+  live in the session handle's memory, never on disk (remembered from Microsoft's docs). Measured 2026-11-15 (ADR 0140's
+  Windows pass, the unpackaged debug build): the data folder held `device-store.json`, the empty `offline\` and
+  `log.txt`, and the files the pass wrote under `%TEMP%` and `INetCache` held none of its content's names or bytes.
 A new engine, or a new client built outside these factories, states its cache and cookie store here and is measured
 as the Darwin one was: the app's container listed after a pass.
 
@@ -1082,6 +1087,12 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   `.` or `,` — a decimal goes in by `set`, a UIA `set` while a form rebuilds may land on the box it replaces (wait for the
   rebuild), a UIA `select` leaves a `ComboBox`'s drop-down open, and an `AutoSuggestBox`'s inner box is `#TextBox`
   (Search's too): reach it by `press ed-date tab tab`.
+- Windows Settings "jumped back to the rename box after a UIA scroll" (phase 5's pass) is the drive's, not the app's
+  (measured 2026-11-15, offline CR phase 6): right after the page opens its first box holds the focus, and UIA's
+  `SetScrollPercent(100)` then lands at 5.5 %, where that box stays in view; the mouse wheel (`wheel`) scrolled the same
+  page to 31 % and it stayed, with the focus still in the box, and a `scroll` after the box was focused by UIA stayed at
+  100 %. Scroll a WinUI page with `wheel` and read where it stands. A view's UIA rectangle can reach past the window
+  (Settings' page read 3830 high in a 717 high window), so `wheel` aims at the part of it that shows.
 - A desktop pass that needs a full storage (a receipt's skipped notice) copies its Pot first — a copy needs room — and
   then holds the one-byte quota with `DepotLiveTest.aCopyOrAFolder*` (`VEYQ_LIVE_STORAGE_FIT="Reisen/AppUpUi"`,
   `VEYQ_LIVE_STORAGE_FIT_HOLD_S`), started once the app's `run.py run` finished its own Gradle step: the quota is set about

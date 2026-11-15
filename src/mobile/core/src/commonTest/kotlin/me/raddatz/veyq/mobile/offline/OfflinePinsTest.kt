@@ -26,7 +26,8 @@ import kotlin.test.assertTrue
  * `Pin.covers`) → the chapter's cover is not kept and does not draw offline; (a) unpin by dropping every entry the node's pin reached
  * (`AccountOffline.removePin`) → the chapter's frames, which the chapter's own pin still reaches, go; (b) keep pins outside
  * the sweep (no `settlePins`, a pinned entry never swept) → the trashed Memory's pin and frames stay; (c) clear a blob's
- * frames when its listing's revision moved (`AccountOffline.keep`) → the re-key's sync fetches every frame again.
+ * frames when its listing's revision moved (`AccountOffline.keep`) → the re-key's sync fetches every frame again; (e) an
+ * offline open without reading the pins (`openedOffline` without `loaded`) → offline the pins read as none.
  */
 class OfflinePinsTest {
     private val played = mutableListOf<PlayedTenant>()
@@ -84,6 +85,8 @@ class OfflinePinsTest {
         t.reachable = false
         val off = t.resume()
         assertIs<Reach.Offline>(off.reach.value)
+        // the pins as kept, without a sync: the node's toggle and Settings' items read them (bite (e))
+        assertEquals(listOf(m.id to Pin.State.KEPT), assertNotNull(off.offlinePins).pins.value.map { it.node to it.state }, "offline the pins read as none")
         val g = assertNotNull(MemoryMedia.list(tenantOf(off), s.id, m.id))
         val video = g.items.first { t.nameOf(it.mediaId) == "video" }
         val played = ArrayList<String>()

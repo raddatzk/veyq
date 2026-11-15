@@ -1003,6 +1003,9 @@ class VeyqAccount private constructor(
                     mine.serialize(), mine.sign, tenants, device, material, null, openedOffline = true, authSeed = authSeed,
                 ).also {
                     it.offline = o
+                    // the pins read now: offline no sync reads them, and a pinned node's toggle and Settings' items
+                    // showed none until the next online open (phase 6's Linux pass)
+                    runCatching { o.loaded() }
                     it._reach.value = Reach.Offline(tenantsAnswer.asOf)
                     it.startProbe()
                 }
@@ -1068,7 +1071,8 @@ class VeyqAccount private constructor(
             client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
             secretKey: () -> ByteArray,
         ): VeyqAccount {
-            val c = connect(primitives, server, client)
+            // the device kept: its instance salt, which a password-trusted unlock offline derives the login key from
+            val c = connect(primitives, server, client, device)
             return guarded(c) {
                 val session = login(primitives, c, email, password)
                 val material = keyMaterial(c)

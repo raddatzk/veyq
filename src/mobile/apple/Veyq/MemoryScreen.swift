@@ -60,8 +60,9 @@ struct MemoryScreen: View {
                         .padding(.horizontal)
                     }
                 }
-                if state?.failed == true {
-                    Text(say(.memoryGalleryFailed)).foregroundStyle(Role.danger).padding()
+                if let failure = state?.failure {
+                    // offline, what the store does not hold says so (muted: no failure), else the load failed (core's words)
+                    Text(say(failure)).foregroundStyle(state?.offline != nil ? Role.muted : Role.danger).padding()
                 } else if state?.rows == nil {
                     ProgressView().frame(maxWidth: .infinity).padding()
                 } else if rows.isEmpty {

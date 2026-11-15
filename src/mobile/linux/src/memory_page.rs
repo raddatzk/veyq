@@ -627,14 +627,18 @@ impl Inner {
         while let Some(child) = self.status.first_child() {
             self.status.remove(&child);
         }
-        match shown.as_ref().map(|s| (s.rows.as_ref(), s.failed)) {
-            None | Some((None, false)) => {
+        match shown.as_ref().map(|s| (s.rows.as_ref(), s.failure.as_deref())) {
+            None | Some((None, None)) => {
                 let page = adw::StatusPage::builder().vexpand(true).build();
                 page.set_child(Some(&adw::Spinner::builder().width_request(32).height_request(32).halign(gtk::Align::Center).build()));
                 page.add_css_class("compact");
                 self.status.append(&page);
             }
-            Some((None, true)) => self.status.append(&status(&words::memory_gallery_failed(), "dialog-warning-symbolic")),
+            // offline, what the store does not hold says so, else the load failed (the core's words)
+            Some((None, Some(failure))) => {
+                let icon = if shown.as_ref().is_some_and(|s| s.offline.is_some()) { "network-offline-symbolic" } else { "dialog-warning-symbolic" };
+                self.status.append(&status(&said::key(failure), icon))
+            }
             Some((Some(rows), _)) if rows.is_empty() => {
                 self.drop_rows();
                 self.status.append(&status(&words::memory_gallery_empty(), kind_icon(&self.node.kind)));

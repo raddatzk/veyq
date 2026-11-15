@@ -21,7 +21,10 @@
 //   press <id> [keys]         the element focused and keys typed into the window it lies in (`enter` by default):
 //                             a system dialog's button (the save picker's Save), which UIA's Invoke cannot press
 //   scroll <id> [percent]     a scrolled view (its ScrollPattern: a ScrollViewer, a list) moved to percent of its height
-//                             (100 by default)
+//                             (100 by default); prints where it stands then and 2 s later, and what holds the focus
+//   wheel <id> [notches]      the mouse wheel turned over the middle of what shows of a scrolled view (SendInput),
+//                             notches as WHEEL_DELTA sent (5 by default; on the test VM a negative count scrolls down):
+//                             a person's scroll, not UIA's; prints as scroll does
 //   range <id> <percent>      a slider (a player's seek bar) set to percent of its range (its RangeValue)
 //   slide <id> <from> <to>    a mouse drag across the element (SendInput) from <from> to <to>, each a percent of its
 //                             width at its middle: the device link's slide, which a RangeValue set does not confirm

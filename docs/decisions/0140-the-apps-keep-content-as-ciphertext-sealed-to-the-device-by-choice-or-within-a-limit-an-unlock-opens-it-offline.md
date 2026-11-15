@@ -238,8 +238,9 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
     unreachable"), `am force-stop` (no process left), the app started and unlocked by `devlogin.py --unlock`: the shell
     showed "Offline — Stand 15.11.2026 17:55", the pinned Chapter its two items, and the video played from the store (its
     frame 5 s in on screen, the decoder's rendering-start in logcat). The Memory itself, not pinned and its listing
-    cleared, said "Die Galerie konnte nicht geladen werden." — what is not kept reads as a failed load offline, not as
-    "not available offline". Back online the banner went within about 35 s (the probe's backoff).
+    cleared, said "Die Galerie konnte nicht geladen werden." — what is not kept read as a failed load offline; since then
+    the core says "Nicht offline verfügbar" there (`GalleryModel.State.failure`, `offline_not_kept`; `GalleryModelTest`),
+    seen on Linux and Windows below. Back online the banner went within about 35 s (the probe's backoff).
   - *The store:* `run-as`/root `find /data/data/me.raddatz.veyq -type f` listed `no_backup/offline/<32-hex account
     dir>/header` and 60 files named by 32 hex digits (1,076 KiB; the largest 436,281 bytes, the video's sealed frames), and
     nothing else of the store. The directory pulled (`adb pull`) and `grep -rlaF` for the marker, the four names,
@@ -253,6 +254,68 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
   - *Not run here:* a real phone (Play-signed release build, a physical Keystore, the system killing the app rather than
     `force-stop`), the cold boot's credential-encrypted storage before the first unlock, and the presence level's
     offline unlock (it needs the emulator's screen-lock PIN typed, which a pass does not do).
+  **Linux** — 2026-11-15, the debug build in `linux/run.py run` (Fedora 44 container, GTK under `gtk4-broadwayd`, driven
+  from headless system Chrome through the workspace's Playwright), its home on a volume of its own (`--home
+  veyq-6b-home`, removed after), German (`LANGUAGE=de VEYQ_LOCALE=de_DE.UTF-8`), against the dev backend
+  (`VEYQ_LIVE=http://veyq.localhost:8080`, `VEYQ_LIVE_STORE=http://veyq.localhost:8081`):
+  - *The pass:* `run --devlogin` signed in (password trust: "Nicht jetzt" on the offer); a Memory "Offline Pass 6b" and
+    its Chapter "Kapitel 6b" made in the app, `veyq6b-clip.mp4` (`ffmpeg` testsrc, 4 s, 28,675 bytes) and
+    `veyq6b-photo.jpg` (30,320 bytes) uploaded into the Chapter through the app's file chooser, each carrying the marker
+    `VEYQPLAINMARKER6b…` (in the video's `comment`/`title` metadata and the JPEG's `COM` segment; `grep -c` finds it
+    in both originals). The Memory viewed, the Chapter made available offline ("104,1 KB" asked, "Auf diesem Gerät ·
+    258,1 KB" after), "Cache leeren" left "Zuletzt angesehen 0 Bytes". *The network cut:* the app reaches the server
+    only through the container's `socat` forwards to the host (the backend picks the tenant from the Host, so the
+    origin's name stays on the container's loopback); those were killed (`docker exec … kill`, then
+    `/dev/tcp/127.0.0.1/8080` and `/8081`: "Connection refused"), since removing the container's network would also
+    remove Broadway's published port, the pass's only way to the screen. The Memory then said "Offline — Stand …" and
+    "Nicht offline verfügbar". The window closed (the container ended), the app started again with
+    `VEYQ_LIVE=http://veyq.localhost:18089` (a port nothing serves: the container's forward leads nowhere, and the
+    app's own server `veyq.localhost:8080` is refused) and `--devlogin --unlock`: the password opened the account
+    offline ("session Signed"), the Memory showed its Chapter, the Chapter its two items, and the video played from the
+    store ("lightbox medium: reader 17, 28675 B", "medium prepared: 4 s", a later frame on screen — its colours shifted
+    under Broadway; Windows drew the same frame true).
+  - *Two faults the first try found, fixed and bitten in the core:* a password-trusted device that signed in and was
+    closed without an online unlock could not open offline ("Der Server ist nicht erreichbar.": only an unlock kept the
+    server's instance salt — now the sign-in keeps it, `StayLevelTest.aSignInKeepsTheInstanceSaltAnOfflineUnlockNeeds`),
+    and an account opened offline read no pins (a pinned Chapter's toggle "Off", Settings' list "Noch nichts ist
+    offline verfügbar" beside 258,1 KB pinned — now the offline open reads them, `OfflinePinsTest` bite (e); seen right
+    on Windows). The pass above is the second, from a fresh home.
+  - *The store:* `find ~/.local/share/veyq -type f` listed `device-store.json` and `offline/<32-hex account dir>/` with
+    `header` and 30 files named by 32 hex digits (mode 700 on both directories; 380 KiB; the largest 106,991 bytes).
+    The directory copied out (`docker cp`) and `grep -rlaF` for the marker, the two file names, "Offline Pass 6b",
+    "Kapitel 6b", `ftypisom` and `Lavf`: no hit; nor in `device-store.json`.
+  - *Sign-out* (offline, Settings' "Abmelden") left `offline/` empty; the home then held `veyq/device-store.json` (its keys:
+    the device id, the trust record, the kept DEVICE wrap, the instance salt, `veyq.recent` and the hidden set — ids,
+    no names), gnome-keyring's `keyrings/` and `veyq-run/keyring` (`run.py`'s own), and outside the volume
+    GStreamer's plugin registry `~/.cache/gstreamer-1.0/registry.aarch64.bin` — no content.
+  - *Not run here:* the Flatpak (installed from its bundle, its sandbox's `~/.var/app/<id>/data`), a desktop session's
+    own keyring and network manager (the container's are the pass's), the network removed rather than the route, a real
+    x86_64 machine.
+
+  **Windows** — 2026-11-15, the debug build unpackaged in `windows/run.py run` on the test VM (Windows 11 on arm64,
+  x64 under Prism), driven by `Veyq.Drive` (`run.py drive`), German (`VEYQ_LANGUAGE=de-DE`), the data folder
+  `%LOCALAPPDATA%\veyq` (the pass's `device-store.json` set aside and put back after):
+  - *The route:* the coordinator's own tunnel held 8080 and 8081 on the VM, so the app signed in to
+    `http://veyq.localhost:18480` instead — the pass's own `run.py run` tunnel (`-R 18480`) to a forwarder on the Mac
+    (`127.0.0.1:18480` → the backend's 8080); the tenant is the Host's name without its port. Blobs went to the
+    store's public endpoint (`veyq.localhost:8081`) over the coordinator's tunnel, which never served the app's API.
+  - *The pass:* `run --devlogin` signed in (password trust, `offer-not-now`); the Memory viewed, "Kapitel 6b" made
+    available offline (`header:offline`, `PrimaryButton`: "Kept"), Settings showed "252 KB" pinned and "Cache leeren"
+    left "0 Bytes". *The network cut:* the tunnel's `ssh` killed (by PID): `Invoke-WebRequest
+    http://veyq.localhost:18480/api/setup` on the VM: "Die Verbindung mit dem Remoteserver kann nicht hergestellt
+    werden.". The Memory said "Offline — Stand 15.11.2026 19:17" and "Nicht offline verfügbar" (`memory-status`). The
+    window closed (`invoke Close`, no process left), the app started again with `--devlogin --unlock` and its tunnel on
+    18481 (nothing behind it): unlocked offline with the password, the Chapter's toggle read "Kept" and Settings listed
+    "Kapitel 6b" (the pins read offline), and `lightbox-play` played the video from the store ("medium opened: 4 s,
+    640×360", its frame 2 s in on screen).
+  - *The store:* 30 files under `offline\<32-hex>\` (`header` and 29 named by 32 hex digits, 280,183 bytes, the largest
+    106,991), copied out (`Compress-Archive`, `scp`) and grepped as on Linux: no hit. The files the last 30 minutes
+    wrote under `%TEMP%`, `INetCache` and the data folder (`Select-String -SimpleMatch`): no hit either.
+  - *Sign-out* (offline, `settings-sign-out`) left `offline\` empty; the data folder then held `device-store.json` (the
+    same keys as Linux's, and the Credential Manager's bind key's alias) and `log.txt`; no `%APPDATA%\veyq`.
+  - *Not run here:* the MSIX (its package's `LocalState`), Windows Hello's presence level offline (the person types the
+    PIN), a Copilot+ PC, the VM's own network off (it carries the pass's ssh; its settings are the owner's).
+  The passes' families were revoked from Settings, the devices stopped trusting, and the test Memory went to the trash.
 - **Left out, each an inbox row:** writes made offline and sent later (#897, a conflict model per application); a
   scheduled sync of pins while the app is not running (#896); Expenses offline (#898).
 
