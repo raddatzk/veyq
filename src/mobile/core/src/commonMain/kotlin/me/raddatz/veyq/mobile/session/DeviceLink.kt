@@ -6,6 +6,7 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.statement.bodyAsText
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -197,6 +198,17 @@ class DeviceLink private constructor(
 
     private val job = SupervisorJob(parent.coroutineContext[Job])
     private val scope = CoroutineScope(parent.coroutineContext + job)
+
+    /** Whether the new device's tail signed in: true once it did, false once the link ended without (every other end). */
+    private val signedInBy = CompletableDeferred<Boolean>().also { d -> job.invokeOnCompletion { d.complete(false) } }
+
+    /**
+     * The new device's sign-in by this link: true once its tail signed the account in, false once the link ended without
+     * one (a refusal, a close before [Step.FINISHING], the trusted device's roles always). It outlives the screen: a close
+     * in [Step.FINISHING] ends [state] as [Step.ENDED] while the tail still signs in (the spent token's successor must be
+     * kept), so a UI that opens the account on [Step.DONE] would never open it (inbox #918). What opens the shell is this.
+     */
+    suspend fun signedIn(): Boolean = signedInBy.await()
 
     class Watch internal constructor(private val job: Job) {
         fun stop() = job.cancel()
@@ -453,7 +465,16 @@ class DeviceLink private constructor(
         try {
             // the token is spent here: the tail runs to its end even when the screen closes meanwhile, so a spent token's
             // successor is always kept (a close in FINISHING ends the screen, not the sign-in)
-            withContext(NonCancellable) { receive!!(grant) }
+            // its end is said inside the block: once a close cancelled the link, what follows it need not run (#918)
+            withContext(NonCancellable) {
+                try {
+                    receive!!(grant)
+                } catch (e: Throwable) {
+                    signedInBy.complete(false)
+                    throw e
+                }
+                signedInBy.complete(true)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

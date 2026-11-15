@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.session
 
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -29,6 +30,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -119,7 +121,10 @@ class SessionModelTest {
         val relays = mutableListOf<String>()
         val linked = mutableListOf<Pair<String, String>>()
         override fun relay(server: String): DeviceLink.Relay = pairing.Side(server).also { relays += server }
+        /** Holds a link's tail at the account's making until completed (the token's spend taking its time). */
+        var linkHeld: kotlinx.coroutines.CompletableDeferred<Unit>? = null
         override suspend fun linked(server: String, grant: me.raddatz.veyq.mobile.crypto.PairingGrant): Acc {
+            linkHeld?.await()
             linked += server to grant.label
             return by(server)
         }
@@ -739,6 +744,40 @@ class SessionModelTest {
         assertEquals(TrustChange.DONE, m.stay(StaySignedIn.LOGIN))
         assertEquals(listOf(a.key to StaySignedIn.LOGIN), d.stays)
         assertEquals(Gate.Signed(a.key, "ta"), m.current)
+    }
+
+    /** Inbox #918: the screen closed while the grant is spent (Back, the sheet's close) — the account still opens. */
+    @Test
+    fun a_link_closed_while_it_finishes_still_says_the_account_it_signed_in() = runTest {
+        val d = door().apply { linkHeld = kotlinx.coroutines.CompletableDeferred() }
+        val m = model(d)
+        m.start()
+        val link = linkIn(d, m, "a.example")
+        assertEquals(DeviceLink.Step.FINISHING, link.current.step)
+        val opened = async { m.signedInBy(link) }
+        link.close()
+        runCurrent()
+        assertEquals(DeviceLink.Step.ENDED, link.current.step, "the screen's close did not end the link's state")
+        assertFalse(opened.isCompleted, "the sign-in was said before its tail ended")
+        d.linkHeld!!.complete(Unit)
+        runCurrent()
+        assertIs<Gate.Signed>(m.current)
+        val o = assertNotNull(opened.await(), "a link closed in FINISHING said no sign-in although its tail signed in")
+        assertEquals(a.key, o.account.key)
+        assertEquals("ta", o.tenant.tenantId)
+    }
+
+    @Test
+    fun a_link_closed_before_it_finishes_says_no_sign_in() = runTest {
+        val d = door()
+        val m = model(d)
+        m.start()
+        val link = m.showForSignIn("a.example", backgroundScope)!!
+        runCurrent()
+        link.close()
+        runCurrent()
+        assertNull(m.signedInBy(link))
+        assertIs<Gate.SignIn>(m.current)
     }
 
     @Test
