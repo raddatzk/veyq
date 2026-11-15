@@ -42,7 +42,7 @@ internal sealed class AccountSettingsPage : IDisposable
     private readonly Button _rename = new() { Content = Words.NodeRename() };
     /// <summary>The panel the name's box and button were last put in: they are taken out of it by name, never through their
     /// Parent, which reads null while that card still loads — two draws in a row (a sign-out's) then added them to the next
-    /// card while still the old one's children, and WinUI threw 0x800F1000 (inbox #929, measured 2026-11-15).</summary>
+    /// card while still the old one's children, and WinUI threw 0x800F1000 (measured 2026-11-15).</summary>
     private Panel? _nameHolder;
     private string? _label;
     private string? _refusal;

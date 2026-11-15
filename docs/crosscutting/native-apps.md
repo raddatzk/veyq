@@ -53,7 +53,10 @@ Consequences).
 | Windows | the core and the bridge for x64 (`veyq.dll`), cross-compiled on the developer's Mac; the app on a Windows host (`src/mobile/windows/run.py build`), unpackaged and self-contained | WinUI 3 in C#, Fluent, over the core as `veyq.dll` through the bridge | `NavigationView` with its own thresholds: Left from 1008 epx, LeftCompact (icons) from 641, LeftMinimal below; the switcher its pane header, Search its `AutoSuggestBox` (Ctrl+E, Ctrl+F), Settings at its foot, New the first command of the content's `CommandBar` | an ARM64 Windows 11 VM under x64 emulation, driven through UI Automation, 2026-11-11 (the first slice: sign-in, the shell, Home, a Pot read only, Search; maximized, 800 and 500 wide); the members' pictures and a Pot's download through the system's save picker, its ZIP imported by the web, 2026-11-11; the device trust, the owner answering Windows Hello, 2026-11-11; a node's header with every action on it, 2026-11-12; Expenses whole (the entry editor, receipts with a PDF through `Windows.Data.Pdf`, settle-up, history and restore, settings and people, New pot, the live poll), 2026-11-12; Depot whole (a file's page with
 media played, Save a copy with its cancel, uploads up to 2 GiB + 1, drop boxes and the top level's share), 2026-11-12; Explorer's drop with UAC on, 2026-11-13; Memories (New Memory and
 chapters, the justified grid with the live poll, the lightbox with zoom, the slideshow, a video played, Save and trash
-with Undo, uploads with this host's tiers and a drop from Explorer, a Memory's links, the row covers), 2026-11-15; no x64 PC |
+with Undo, uploads with this host's tiers and a drop from Explorer, a Memory's links, the row covers), 2026-11-15; and
+the steps that pass left: a video's sound (the default output's peak meter up to 0.15 while an AAC tone played, 0 at
+rest), a chapter's cover set and drawn on its row, a HEIC's tiers and an undecodable one's glyph, the lightbox's ←/→
+after the save picker, the grid's tiles in their `Border`s, 2026-11-15; no x64 PC |
 | Linux | the core and the bridge for arm64 and x86-64, cross-compiled on the developer's Mac; the app for arm64, proved and built in the GNOME 51 SDK it ships on (`src/mobile/linux/run.py build`) and drawn in a Fedora 44 container for a pass (`run.py run`), and as an aarch64 Flatpak bundle on `org.gnome.Platform//51` (`run.py flatpak`, [ADR 0139](../decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)) | GTK 4 and libadwaita in Rust, over the core as `libveyq.so` through the bridge | `AdwNavigationSplitView` with libadwaita's `AdwSidebar` (240–360 sp), collapsing below 600 sp to a navigation stack, the sidebar in its page mode; the switcher the sidebar's title menu, Search a search bar under it (Ctrl+F), Settings at its foot | Broadway in Fedora 44 arm64, drawn into a browser, 2026-11-10 (the first slice: sign-in, the shell, Home, a Pot read only, Search; 1100 × 750 and 500 × 750); the members' pictures and a Pot's download through GTK's save dialog, its ZIP imported by the web, 2026-11-11; the device trust over gnome-keyring in the container, 2026-11-11; a node's header with every action on it, 2026-11-12; Expenses whole (the entry editor, receipts with a PDF through poppler-glib, settle-up, history and restore, settings and people, New pot, the live poll), 2026-11-12; Depot whole (a file's page with
 media played, Save a copy with its cancel, uploads up to 2 GiB + 1, drop boxes and the top level's share), 2026-11-12; a
 real GNOME session in the Fedora 45 VM for the drop, the portal's dialogs and the sound, 2026-11-12; the Flatpak installed
@@ -208,8 +211,9 @@ dialog. Callers: the kit's scan at sign-in, device linking.
     Windows 11 provisions them), so where a person removed one the members' pictures fall back to initials (measured
     2026-11-11, the decode test's bite) and a format Media Foundation does not decode is said and offered for saving (the
     VM decoded VP9/Opus and H.264/AAC and refused ProRes, `C00D5212`, said `file_unsupported`; the app ships no codec:
-    patents, the owner's answer of the Depot slice, 2026-11-12). A HEIC photo's tiers need the HEIF and HEVC extensions likewise
-    (not measured; where WIC does not decode it, it goes up alone with its icon, as on a phone that cannot). **Built 2026-11-13** (`windows/run.py package`, ADR
+    patents, the owner's answer of the Depot slice, 2026-11-12). A HEIC photo's tiers need the HEIF and HEVC extensions likewise:
+    with both on the VM a HEIC decoded to its tiers, and one WIC does not decode went up alone and shows its kind's glyph
+    in the grid (measured 2026-11-15); without them it is the same path, not measured (the VM has them). **Built 2026-11-13** (`windows/run.py package`, ADR
     0123's Consequences, the MSIX): installs, starts to its German sign-in with UAC off (elevated, like every process
     there), updates in place keeping its data and uninstalls leaving nothing on the VM; a signed copy's block map is the
     unsigned one's. With **UAC on** (2026-11-13): installs, starts to its German sign-in at medium integrity (`0x2000`, not
@@ -235,10 +239,6 @@ dialog. Callers: the kit's scan at sign-in, device linking.
     an x64 PC, and whether de's +243 MiB over a 2 GiB upload (en's +86) is the GC's slack, is unmeasured.
   - **The level's New shows on a file's and a drop box's page** (as on every non-Pot page); one switch-off of a link took
     30 s once (de/dark; 4 s in en/light), not seen again.
-  - **Memories' unseen steps on Windows** (2026-11-15, each machine-doable, inbox #926): a video's sound (the Depot pass's was the
-    owner's ear), a chapter's cover drawn (none was set in the pass), a HEIC picked (the HEIF and HEVC extensions; an
-    undecodable file goes up alone, `MediaTiersTest`), and two fixes built and unit-checked but not driven again: the
-    lightbox's ←/→ after the save picker (the keys on the window's content now) and a grid tile in its `Border`.
   - **Windows' share sheet left a ghost** once: after it was used, screenshots taken while a later `ContentDialog`
     opened showed its window again (stale, the first link), while UI Automation drove the dialog beneath; gone after a
     restart. Whether a person sees it on a real display is checked in the next Windows pass.
@@ -373,8 +373,6 @@ dialog. Callers: the kit's scan at sign-in, device linking.
     Consequences); no screen reader has driven the slide on any platform.
   - `DeviceLinkTest`'s confirmation race in its final form (its racers on their own threads behind one gate) was
     measured red against check-then-act 20/20 and green at rest, never yet under load (#928).
-  - Windows' Settings logged "the settings did not draw: COMException 0x800F1000" twice on a sign-out from Settings;
-    caught, the sign-out completed, the cause not looked into (inbox #929).
   - Every pass leaves a device-register entry per device it linked (no screen removes one; inbox #894).
 - The device register's own screen (the devices an account trusts, ADR 0058): every app writes it at each unlock and
   enrolment, only the web shows it.
