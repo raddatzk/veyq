@@ -46,10 +46,13 @@ internal val wire = Json {
  * What the host starts the core with ([veyq_init]): [device] the name this device gives itself in the account's device
  * register; [window] Windows' HWND of the host's top-level window, which owns Windows Hello's prompt (`0` elsewhere, and
  * for a prompt without an owner); [prompt] the words that prompt shows (the host's `device_unlock_prompt`, empty where
- * none shows). None of them secret: the device keys themselves are the core's (`platformDeviceKeys`).
+ * none shows); [offlineRoot] the directory the host names for the accounts' offline stores (ADR 0140 decision 3:
+ * `$XDG_DATA_HOME/veyq/offline` on Linux, the app's data folder's `offline` on Windows), null where it keeps none — the
+ * core makes and fills it, each bridge host a desktop, so a store starts with `AccountOffline.DESKTOP_LIMIT`. None of
+ * them secret: the device keys themselves are the core's (`platformDeviceKeys`).
  */
 @Serializable
-internal class Config(val device: String, val window: Long = 0, val prompt: String = "")
+internal class Config(val device: String, val window: Long = 0, val prompt: String = "", val offlineRoot: String? = null)
 
 /**
  * One action of the host ([veyq_call]): each a model's own function, dispatched by [Bridge] one line per case. The

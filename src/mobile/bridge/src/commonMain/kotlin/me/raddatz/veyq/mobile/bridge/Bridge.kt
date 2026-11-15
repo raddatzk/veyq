@@ -1633,7 +1633,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 persist = { ids -> store.write(HIDDEN, ids.joinToString("\n")) },
                 initial = store.read(HIDDEN)?.lines()?.filter { it.isNotEmpty() }?.toSet().orEmpty(),
             )
-            val device = ThisDevice(store, keys(store), config.device, primitives)
+            // every host of the bridge is a desktop (Linux, Windows): a store starts with the desktop's limit (ADR 0140 decision 8)
+            val device = ThisDevice(
+                store, keys(store), config.device, primitives,
+                offlineRoot = config.offlineRoot, offlineLimit = me.raddatz.veyq.mobile.offline.AccountOffline.DESKTOP_LIMIT,
+            )
             Composition(
                 SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files, pictures = pictures,
                 settings = { session, account -> AccountSettings.of(session, account) }, tiers = tiers,
