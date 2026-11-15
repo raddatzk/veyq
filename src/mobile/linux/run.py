@@ -29,12 +29,13 @@ Verbs:
                              the registry and target in the volumes `veyq-flatpak-cargo`/`veyq-flatpak-target-<arch>`.
                              SANDBOX_SKIPS then run in the Fedora 44 container (`cargo test -- --exact`), where glycin
                              runs without a portal. Its exit code is cargo's.
-  run [--port N] [--devlogin [--fill|--unlock]] [--no-secret-service]
+  run [--port N] [--devlogin [--fill|--unlock]] [--no-secret-service | --home VOLUME]
                              `build`'s generation and `cargo build`, then the app under `gtk4-broadwayd`, drawn into a
                              browser at http://127.0.0.1:N (default 8095; published on 127.0.0.1 only). It runs under a
                              session bus of its own with gnome-keyring-daemon, and the home's data directory (the device
                              store, the keyring and the password it opens with) is the volume `veyq-linux-home`, so a
-                             second start finds what the first kept; `--no-secret-service` runs with neither, where
+                             second start finds what the first kept (`--home` names another, so a pass keeps a home of
+                             its own and removes it after); `--no-secret-service` runs with neither, where
                              nothing is offered after the sign-in and every start signs in. LANGUAGE and
                              ADW_DEBUG_COLOR_SCHEME, when set, reach the app, VEYQ_LOCALE as its LANG (default
                              en_US.UTF-8; `VEYQ_LOCALE=de_DE.UTF-8 LANGUAGE=de` for German words and German
@@ -351,7 +352,8 @@ APP_UNDER_SECRET_SERVICE = (
 )
 
 
-def run_app(port: int, devlogin: bool, unlock: bool = False, fill: bool = False, secret_service: bool = True) -> int:
+def run_app(port: int, devlogin: bool, unlock: bool = False, fill: bool = False, secret_service: bool = True,
+            home: str = HOME_VOLUME) -> int:
     secrets = dev_principal(unlock, fill) if devlogin else None
     docker_platform, target = arch()
     lib_dir = generate(target)
@@ -384,7 +386,7 @@ def run_app(port: int, devlogin: bool, unlock: bool = False, fill: bool = False,
                  + (APP_UNDER_SECRET_SERVICE if secret_service else "exec /veyq/target/debug/veyq"),
                  # gnome-keyring-daemon drops its capabilities at start, which a container refuses unless it may lock memory
                  docker_args=docker_args + (["--cap-add=IPC_LOCK"] if secret_service else []),
-                 env=env, secrets=secrets, volumes={HOME_VOLUME: "/root/.local/share"} if secret_service else None)
+                 env=env, secrets=secrets, volumes={home: "/root/.local/share"} if secret_service else None)
 
 
 def lock() -> int:
@@ -627,6 +629,8 @@ def main() -> None:
     r.add_argument("--unlock", action="store_true", help="with --devlogin: the password alone, for a password-trusted unlock")
     r.add_argument("--no-secret-service", action="store_true",
                    help="no session bus and no kept home: nothing is kept, every start signs in")
+    r.add_argument("--home", default=HOME_VOLUME, metavar="VOLUME",
+                   help=f"the named volume that keeps the home's data between runs (default {HOME_VOLUME})")
     verbs.add_parser("lock", help="cargo update: write Cargo.lock anew")
     f = verbs.add_parser("flatpak", help="build the Flatpak bundle in the pinned GNOME SDK (ADR 0139)")
     f.add_argument("--arch", choices=sorted(FLATPAK_ARCHES), help="default: this host's architecture")
@@ -642,7 +646,9 @@ def main() -> None:
     if args.verb == "run":
         if (args.fill or args.unlock) and not args.devlogin:
             sys.exit("--fill and --unlock go with --devlogin")
-        sys.exit(run_app(args.port, args.devlogin, args.unlock, args.fill, not args.no_secret_service))
+        if args.no_secret_service and args.home != HOME_VOLUME:
+            sys.exit("--home keeps what the Secret Service stores: it does not go with --no-secret-service")
+        sys.exit(run_app(args.port, args.devlogin, args.unlock, args.fill, not args.no_secret_service, args.home))
     if args.verb == "lock":
         sys.exit(lock())
     if args.verb == "flatpak":

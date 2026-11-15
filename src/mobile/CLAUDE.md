@@ -310,11 +310,12 @@ A Gradle build of its own, run through its own wrapper.
     build`), so the app links against the runtime's GTK and libadwaita and the manifest's poppler. One test is skipped
     there (`SANDBOX_SKIPS` in `run.py`: glycin needs a portal a build's sandbox lacks); `run` still builds and draws in
     the Fedora 44 container, a pass's environment.
-  - `run [--port N] [--devlogin [--fill|--unlock]] [--no-secret-service]` serves the app under `gtk4-broadwayd` at
+  - `run [--port N] [--devlogin [--fill|--unlock]] [--no-secret-service | --home VOLUME]` serves the app under `gtk4-broadwayd` at
     `http://127.0.0.1:8095`, for the browser pane. `LANGUAGE=de VEYQ_LOCALE=de_DE.UTF-8` gives German, and
     `ADW_DEBUG_COLOR_SCHEME=prefer-dark` gives dark. It runs under a session bus with gnome-keyring-daemon, its home's
     data (the device store, the keyring and the password it opens with) on the volume `veyq-linux-home`, so a second
-    start resumes what the first trusted; `docker volume rm veyq-linux-home` starts from nothing. `--no-secret-service`
+    start resumes what the first trusted; `docker volume rm veyq-linux-home` starts from nothing. `--home` names another
+    volume, so a pass that keeps a trust keeps it in a home of its own and removes that after. `--no-secret-service`
     runs without both (nothing offered after the sign-in, every start signs in). `--fill` only fills the sign-in, for
     a pass to press it; `--unlock` hands the password alone to a password-trusted account's unlock and fills Manage's
     way back to the password once (the pass presses its button). The app's stderr says `session <gate>, offer: […]`,
