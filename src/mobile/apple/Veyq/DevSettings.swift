@@ -49,7 +49,7 @@ final class PlayedSettings: SettingsActions {
             return AccountSettingsState(
                 email: "ada@example.org", emailConfirmed: nil, device: AccountSettingsDevice(label: label, familyId: nil, trust: trust),
                 families: nil, savedKeyDevices: [], otherSavedKeys: false, addDevice: false, working: false,
-                refusal: .accountSettingsLoadFailed, registerRefusal: .accountSettingsRegisterUnreadable)
+                refusal: .accountSettingsLoadFailed, registerRefusal: .accountSettingsRegisterUnreadable, storage: nil)
         }
         return AccountSettingsState(
             email: "ada@example.org", emailConfirmed: KotlinBoolean(value: false),
@@ -60,7 +60,7 @@ final class PlayedSettings: SettingsActions {
                     current: $0.current, label: $0.label, removesKey: $0.removesKey)
             },
             savedKeyDevices: saved.map { AccountSettingsSavedKeyDevice(deviceId: $0.0, label: $0.1) },
-            otherSavedKeys: otherKeys, addDevice: true, working: false, refusal: nil, registerRefusal: nil)
+            otherSavedKeys: otherKeys, addDevice: true, working: false, refusal: nil, registerRefusal: nil, storage: nil)
     }
 
     func closeSettings() { log("close") }

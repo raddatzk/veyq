@@ -89,7 +89,8 @@ targets:
     platform: iOS
     sources:
       - path: Veyq
-        excludes: [Info.plist, "*.entitlements", VeyqApp.swift, DevLogin.swift]
+        # OfflineBackground.swift asks UIApplication for background time, which an extension has not (ADR 0140 decision 9)
+        excludes: [Info.plist, "*.entitlements", VeyqApp.swift, DevLogin.swift, OfflineBackground.swift]
       - path: VeyqShare
         excludes: [Info.plist, "*.entitlements"]
       - path: build/generated/share/Words.xcstrings

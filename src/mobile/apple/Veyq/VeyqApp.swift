@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct VeyqApp: App {
     @State private var model = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -18,6 +19,8 @@ struct VeyqApp: App {
             root
             #endif
         }
+        // a pin's fetch under way when the app is left asks the system for the time to go on (ADR 0140 decision 9)
+        .onChange(of: scenePhase) { _, phase in OfflineBackground.shared.phase(phase) }
         #if os(macOS)
         .commands { LightboxCommands() }
         #endif
@@ -40,6 +43,7 @@ struct VeyqApp: App {
         RootView(model: model)
             .task {
                 DevLogin.run(model)
+                OfflineBackground.shared.start()
                 model.start()
             }
     }
