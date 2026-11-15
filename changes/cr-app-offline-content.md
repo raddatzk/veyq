@@ -158,7 +158,7 @@ and `listMyScopes` answers (D5). The session has **no token**; it is offline and
   holds the device, passes its authentication at the record's level and **keeps it offline** opens the content the
   store held when it went offline, after the owner escalated from another device. The same thief online, before the
   escalation, reads everything the account reads — the store adds nothing there; what it adds is the window after the
-  escalation, bounded to what was kept. Owner question 1 confirms this; without the copy there is no offline opening
+  escalation, bounded to what was kept. The owner accepted this (2026-11-15); without the copy there is no offline opening
   after the app was closed at all (Rejected: offline only while the account stays open in memory — a phone kills a
   background app within minutes, so the feature would not exist on phones).
 - Rejected: an offline grace period read from the device clock — the thief sets the clock.
@@ -348,8 +348,8 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
 
 Answered 2026-11-15: **2** — default 2 GB / 10 GB, any size, lowering evicts at once (D8). **3** — as recommended, but
 no photo original in either tier; only originals the app reads to show an item (D8, D9). **4** — the copy as proposed.
-**5** — accepted. **1** — open: the owner's answer was that the data could lie encrypted offline; it does (D1, D2), and
-the residual is only a thief who also passes the device's own unlock at the record's level — a clarification is asked.
+**5** — accepted. **1** — accepted after the clarification that the store is ciphertext sealed to this device (D1, D2)
+and the residual needs a thief who also passes the device's own unlock at the record's level and keeps it offline.
 
 1. **Offline opening after an escalation (D4).** A thief who keeps a stolen device offline and passes its unlock reads
    what the store held, even after you "Sign out and remove saved key" from another device; online, the escalation
