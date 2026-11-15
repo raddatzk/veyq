@@ -115,7 +115,10 @@ kit will be needed next time. The shown code and the scanner are a secret on scr
 on screen). Measured 2026-11-13/15 against the web in headless Chrome (its camera a `.y4m` of the app's code), no
 password typed: Android all four runs (a throwaway AVD's virtual scene as its camera), Linux all four (the container,
 its test camera), macOS three of four (its test camera), Windows the two showing ones (the VM has no camera, so
-`NoCamera` offers only those) and a linked Windows device showing again; the slide by pointer and keys on Android, Linux
+`NoCamera` offers only those) and a linked Windows device showing again; a linked Linux device staying signed in through
+the Secret Service (2026-11-15: `run.py run --home` a volume of its own, the web's code scanned, "Stay signed in" at the
+Login level, the app quit and started twice straight to its shell; a copy of that home without its keyring started to the
+sign-in; Settings' "Sign out" left no session and no saved key of it on the web's list); the slide by pointer and keys on Android, Linux
 and Windows; Android's task snapshot and Windows' capture bitten with the code shown.
 The Use page that says this to a person: [Add another device](../../site/src/content/docs/account/adding-another-device.mdx).
 
@@ -367,8 +370,6 @@ dialog. Callers: the kit's scan at sign-in, device linking.
     (machine-doable through the test cameras, #928).
   - Windows has never scanned a link's code: the VM has no camera, so `QrCamera.OpenLink` is proven by its build and
     Linux's twin only; a real camera's link scan on every app is the owner's (inbox #912).
-  - A linked Linux device staying signed in through the Secret Service was not run: the pass ran without it
-    (`--no-secret-service`, the shared home volume), so every linked Linux run was the run-only case (#928).
   - On GTK and WinUI a screen reader confirms the slide by the keys, with no named action of its own (ADR 0136's
     Consequences); no screen reader has driven the slide on any platform.
   - `DeviceLinkTest`'s confirmation race in its final form (its racers on their own threads behind one gate) was
