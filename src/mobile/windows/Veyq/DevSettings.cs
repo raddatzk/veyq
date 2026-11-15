@@ -49,6 +49,10 @@ internal static class DevSettings
             working = false,
             refusal = null,
             registerRefusal = null,
+            storage = null,
+            storageUnavailable = null,
+            askingRemoveAll = false,
+            limitUnits = [],
         };
     }
 }
