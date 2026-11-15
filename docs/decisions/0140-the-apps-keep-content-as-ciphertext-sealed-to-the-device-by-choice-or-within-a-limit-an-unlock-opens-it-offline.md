@@ -316,6 +316,12 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
   - *Not run here:* the MSIX (its package's `LocalState`), Windows Hello's presence level offline (the person types the
     PIN), a Copilot+ PC, the VM's own network off (it carries the pass's ssh; its settings are the owner's).
   The passes' families were revoked from Settings, the devices stopped trusting, and the test Memory went to the trash.
+  **iOS and macOS — not run.** Both build (`xcodebuild`, `CODE_SIGNING_ALLOWED=NO`, macOS and the iOS Simulator SDK,
+  2026-11-15), but no pass ran: the iOS Simulators do not boot on the build Mac (CoreSimulator out of date), the
+  Simulator cannot answer the background question anyway (`BGTaskScheduler.h`: no background processing there), an
+  ad-hoc macOS build stores no device trust and so keeps no store, and the Mac's screen was locked for the click-through.
+  The passes above, on a real iPhone and on a signed macOS build — including whether `BGContinuedProcessingTask`'s submit
+  is accepted with the wildcard identifier and how long `beginBackgroundTask` lasts — are the owner's.
 - **Left out, each an inbox row:** writes made offline and sent later (#897, a conflict model per application); a
   scheduled sync of pins while the app is not running (#896); Expenses offline (#898).
 

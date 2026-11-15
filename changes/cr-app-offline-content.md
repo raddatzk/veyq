@@ -463,7 +463,7 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   word in `words.json` EN+DE (`offline_*`, `account_settings_storage_*`, `storage_unit_*`), the owner's copy where
   given. (5) No D3 path helper in core: the hosts name the directory.
 
-- [ ] **6 the passes** — carried from phase 5's click-throughs (coordinator 2026-11-15): "Clear cache" left about 19 kB
+- [x] **6 the passes** — carried from phase 5's click-throughs (coordinator 2026-11-15): "Clear cache" left about 19 kB
   "Recently viewed" on Android, Linux and Windows — check whether that is the open screen's listings kept again at once
   (fine) or a clear that misses entries (a bug); the limit field shows the core's "1.5" in a German UI — the core
   formats the field per the locale's decimal sign; Windows Settings jumped back to the focused rename box after a UIA
