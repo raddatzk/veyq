@@ -191,9 +191,13 @@ fun appleHttpClient(block: io.ktor.client.HttpClientConfig<*>.() -> Unit): HttpC
 object AppleSessions {
     private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> appleHttpClient(block) }
 
-    /** This installation: [defaults] for its records and marks (the app group's on iOS), the Keychain for its keys. */
-    fun device(keychain: KeychainBridge, label: String, prompt: String, defaults: NSUserDefaults): ThisDevice =
-        ThisDevice(UserDefaultsStore(defaults), AppleDeviceKeys(keychain, prompt), label, LibsodiumPrimitives)
+    /**
+     * This installation: [defaults] for its records and marks (the app group's on iOS), the Keychain for its keys, and
+     * [offlineRoot] the directory the app names for the accounts' offline stores (ADR 0140 decision 3; null: none, as the
+     * share extension), each starting at [offlineLimit] (`AccountOffline.PHONE_LIMIT` on iOS, `DESKTOP_LIMIT` on macOS).
+     */
+    fun device(keychain: KeychainBridge, label: String, prompt: String, defaults: NSUserDefaults, offlineRoot: String?, offlineLimit: Long): ThisDevice =
+        ThisDevice(UserDefaultsStore(defaults), AppleDeviceKeys(keychain, prompt), label, LibsodiumPrimitives, offlineRoot, offlineLimit)
 
     @Throws(SignInFailure::class, kotlin.coroutines.cancellation.CancellationException::class)
     suspend fun signIn(server: String, email: String, password: String, secretKey: String, device: ThisDevice): VeyqAccount =
