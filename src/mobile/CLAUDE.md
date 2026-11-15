@@ -561,7 +561,10 @@ mechanism per platform, never a per-screen copy:
   peek shows its secret in clear. `ScreenSecrets.Guard(element)` excludes the window from capture
   (`SetWindowDisplayAffinity`, `WDA_EXCLUDEFROMCAPTURE`, Electron's `setContentProtection` and Signal's screen
   security) while the element is loaded: the sign-in (its scanner is a `ContentDialog` in the same window), the unlock,
-  and Manage's and Settings' password asks. A capture through the compositor sees the desktop behind the window
+  Manage's and Settings' password asks, and the device link's dialog (`DeviceLinkDialog`: the code it shows, its
+  scanner). An element WinUI moves keeps the guard: a `ContentDialog`'s content was loaded, then unloaded 13 ms later
+  while it stayed on screen, so `Guard` drops an element only once it is no longer `IsLoaded` (bitten 2026-11-15 on the
+  VM: without that the `shot` of the shown pairing code held the code, with it the wallpaper). A capture through the compositor sees the desktop behind the window
   (bitten 2026-11-13 on the VM: `Veyq.Drive`'s BitBlt `shot` of the filled sign-in and of its scanner showed the
   wallpaper; the same build with `VEYQ_DEV_CAPTURABLE=1` showed the scanner holding the Secret Key the test camera
   read); that Recall honours it is remembered (Microsoft's and Signal's word), not measured — no Copilot+ PC here. A
