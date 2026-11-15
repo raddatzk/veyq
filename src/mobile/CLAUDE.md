@@ -536,7 +536,7 @@ A Gradle build of its own, run through its own wrapper.
 ## Secrets on screen
 
 A screen that shows a secret of the person's own account **in clear** — the Secret Key, the password, the kit
-scanner's camera (the kit's code is the Secret Key), the pairing code a trusted device shows (`cr-app-device-linking`)
+scanner's camera (the kit's code is the Secret Key), the pairing code a trusted device shows (ADR 0059)
 — stays out of what the system captures of the app **on its own and keeps on disk** (inbox #886, found 2026-11-13 by
 the kit scanner's no-copy pass). A masked field shows dots and needs nothing — unless the platform reveals it on a
 control (Windows' `PasswordBox` peek). Not covered, on purpose: a share link and its password, made to be handed on
@@ -780,6 +780,16 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - Driving the web from a mobile pass (headless system Chrome, `?devlogin`): a level row's `locator.click()` waits forever
   for a stable element; click the row's bounding box with `page.mouse`, or open by hash (`#app-depot-2/alpha-txt`). A file
   page's Replace is its hidden `input.files-picker` (`setInputFiles`), then "Ersetzen".
+- A device-linking pass against the web (2026-11-13/15): the web's camera is headless Chrome's fake one
+  (`--use-fake-device-for-media-stream --use-file-for-fake-video-capture=<the app's code as .y4m>`), opened only after
+  the file is written — rewritten under an open camera it says "Camera unavailable". `?devlogin` reads the `.run/.env`
+  of the tree Vite serves; where it has none, sign the web in by linking it from the app first, which needs no password.
+  A code lives ten minutes and the web's page closes after four, so every harness step (a key name, a button's role, a
+  `Veyq.Drive` command) is tried once against a throwaway state before a ceremony depends on it — the first passes lost
+  a ceremony each to the harness. On Android an `input swipe` that starts inside the gesture inset (x below about 100 px)
+  is the system's back and closes the link's dialog: start a slide's drag further in. A link that ends `FAILED` is first
+  checked against `/api/setup`: a dead dev backend reads exactly so. Each linked family is signed
+  out after the run; the device-register entries stay (inbox #894).
 - Under a host load around 20 the swiftshader emulator raises "isn't responding" on a long editor sheet: the main thread is
   idle (`kill -3` after `adb root`, `/data/anr/trace_*`), so tap Wait, never Close; a pass reads its state after it.
 - On iOS one SwiftUI `Text` of a megabyte drew nothing (measured 2026-11-12, a file's cut text): a long text is a line a

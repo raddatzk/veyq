@@ -99,6 +99,21 @@ flowchart TB
    information comes early, the commitment comes last.
 7. From here it is steps 5–7 of the other direction, unchanged.
 
+## In the apps
+
+Every app — Android, iOS, macOS, Linux, Windows — runs both directions in both roles, with the web and, by the same
+protocol and vectors, with each other ([native-apps](../../../crosscutting/native-apps.md) § Built, by area, and what
+no pass has run yet, § Open). The trusted side lives in the app's
+Settings ("Add a device": show a code, scan one), the new side on its sign-in form, whose two entries use the server
+typed above them and nothing a scan says (§4). A device without a camera offers only its showing halves; two such
+devices cannot link and use the password and Secret Key, or the Emergency Kit. What differs from the browser is only
+the new device's tail (main flow step 6): it **spends** the handed-over token once at refresh with the token in the
+body instead of adopting it into a cookie ([ADR 0059](../../../decisions/0059-device-linking.md) §2), and the
+*"stay signed in"* question is the app's own offer after the grant, as after its login, restricted to the levels
+that enrol a `DEVICE_KEY` wrap (§10). Where the device has none (Linux without the Secret Service), or the account
+holder answers "Not now", it holds the Master Key for the run only (E5), and the offer says it will need the password
+and Secret Key or the Emergency Kit next time.
+
 ## Alternate / exception flows
 
 - **E1 — the pairing expires.** A channel is short-lived and single-use, and only one is outstanding per

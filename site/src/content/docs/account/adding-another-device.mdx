@@ -2,6 +2,7 @@
 title: "Add another device"
 sources:
   - docs/features/account/use-cases/uc.account.onboard-device.md
+  - docs/crosscutting/native-apps.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -44,6 +45,23 @@ The new device is not told; it waits until the code runs out. Start again on the
 
 **Never type in a number someone gives you on the phone or in a message.** Nobody legitimate will ever ask you for
 one. If someone is asking, that is the attack, and typing the number is the moment it succeeds.
+
+## In the app
+
+The [veyq app](/getting-started/install-the-app/) adds and is added both ways too, with the browser or with another
+app. The steps are the same, with these differences:
+
+- **Settings** is in the app's sidebar. **Add a device** there offers **Show a code**, and **Scan a code** only where the
+  computer has a camera.
+- On the app's sign-in, **Scan a code from another device** appears only where there is a camera; **Sign in with a QR
+  code** always does. Both use the server in the form above them, so enter your space's address first: both devices
+  must use the same server.
+- The slide also works by keyboard: the arrow keys to the end, then Return.
+- When the new device opens, the app asks how it signs in from now on. If you choose **Not now**, or the computer has
+  nothing to keep a saved key with, it needs your password and Secret Key, or your Emergency Kit, next time.
+
+A device without a camera can only show a code, so the other device scans it. Two devices without a camera cannot add
+each other: sign in with your password and Secret Key, or your Emergency Kit.
 
 ## Before you slide
 

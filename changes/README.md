@@ -959,6 +959,15 @@ the test file had been edited, because Gradle's file-system watching missed an e
 write at once. The green it reported was the previous run's. Run a bite with `--no-watch-fs`, and read the task
 lines before the verdict: an injected file whose compile task says `UP-TO-DATE` was not run.
 
+**And check what turned it red.** A mutant that does not compile fails the build, and an exit code cannot tell that
+from a failing test: the first scripted bites of the apps' pairing crypto counted `BUILD FAILED` and were re-run (2026-11-13).
+A scripted bite greps the run's output for the failing test's own name. The converse holds too: **a bite that stays
+green can mean a second, accidental guard, not a missing test.** The pairing's "a second code sent" stayed green because
+its `sent` flag sat behind a step check that already refused the call (both became one atomic move, and the bite went
+red); an unchecked move to `FINISHING` stayed hidden because the keys a close zeroes made the forged grant unopenable
+until the test planted one a relay could make under the zeroed keys. Before writing "redundant" next to a green bite,
+find what else refused it.
+
 **And check the lever reaches the oracle, in the form the oracle searches for.** Surviving the tool is not
 enough — the injected value has to *arrive*, and arrive *recognisably*. cr-wire-assertion-db-sweep picked a lever
 nothing repairs (*"replace the blinded `slugTokenFor` with the plain `slugify(name)`, and the Memory title's

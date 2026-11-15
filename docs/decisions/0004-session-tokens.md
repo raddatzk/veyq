@@ -84,7 +84,10 @@ into **named session families**. No JWTs.
   names the one that does), and a device-linking grant (§ Session family, and
   [ADR 0059](0059-device-linking.md) decision 2), which hands a refresh token to a device that holds no cookie
   yet, so a body is the only way it can arrive. That device converts it once, at the **adoption** verb, which
-  rotates the presented token and returns its successor in a cookie. The handed-over token is therefore a **one-shot
+  rotates the presented token and returns its successor in a cookie. A native app keeps no cookie and has no use for
+  that conversion: it spends a grant's token once at refresh with the token in the body — the same rotation, body in,
+  body out — and reads its family id from the session list's `current` entry (ADR 0059 decision 2), so adoption stays
+  the browser's verb. The handed-over token is therefore a **one-shot
   bearer** — readable by script for the span of a single request, and superseded by the time the response
   lands. Adoption changes **transport, never authority**: its caller must already present a valid CURRENT
   refresh token, which is exactly what refresh demands, and what comes back is strictly less exfiltrable than
