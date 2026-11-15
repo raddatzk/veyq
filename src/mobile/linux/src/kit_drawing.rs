@@ -185,7 +185,7 @@ mod tests {
     /// The core started over a store that keeps nothing, the sign-in shown, the printed kit at [printed] read through
     /// `Session.SignInKit`, and the kit the sign-in's gate carries; the core shut down again.
     fn read_kit_over_the_bridge(printed: String) -> Result<wire::KitShown, String> {
-        let config = wire::Config { device: "kit-drawing test".into(), window: 0, prompt: String::new() };
+        let config = wire::Config { device: "kit-drawing test".into(), window: 0, prompt: String::new(), offline_root: None };
         if bridge::start(&config, DeviceStore::in_memory()) != Start::Started {
             return Err("the core did not start".into());
         }

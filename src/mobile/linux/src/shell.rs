@@ -10,6 +10,10 @@
 //! to a navigation stack. A list keeps where it was scrolled to when the shell draws it anew — after an object opened from
 //! it closed, after an update — by its place ([ListScrolls]).
 //!
+//! Offline (ADR 0140 decision 10) an `AdwBanner` under the content's header bar says so, as of when (`ShellShown.offlineBanner`):
+//! GNOME's banner for a state that lasts; New is not offered then and the header's writes are gone (the core's). An item
+//! no longer available offline (`ShellModelState.gone`) is said once as a toast, then told seen (`Shell.OfflineGoneSeen`).
+//!
 //! Every state is the core's (`ShellModel.State` and `ShellShown`); every action one call. What the sidebar selects,
 //! which back the header shows and what the title says follow the state, as Android's and Apple's shells draw it.
 use std::cell::{Cell, RefCell};
@@ -84,6 +88,10 @@ pub struct Shell {
     memory: RefCell<Option<MemoryPage>>,
     /// The content's navigation, where a Memory's lightbox is pushed over the page ([crate::lightbox]).
     nav: adw::NavigationView,
+    /// "Offline — content as of …", revealed while the core shows the lists from the offline store.
+    banner: adw::Banner,
+    /// The `gone` notices said last, so an update that repeats them before the core drops them says nothing again.
+    gone_said: RefCell<Vec<bridge::wire::Notice>>,
     /// The upload queue's button in the content's header bar, shown while it lists anything.
     _uploads: Rc<Uploads>,
     /// Where each list was scrolled to, by its place.
@@ -167,6 +175,8 @@ impl Shell {
         window.add_action(&refresh_action);
         let content_view = adw::ToolbarView::new();
         content_view.add_top_bar(&content_header);
+        let banner = adw::Banner::new("");
+        content_view.add_top_bar(&banner);
         let toasts = adw::ToastOverlay::new();
         // the upload queue, GNOME Files' way: a header bar button while anything is listed, its popover the list
         let uploads = Uploads::new(&toasts);
@@ -222,6 +232,8 @@ impl Shell {
             drop_box: RefCell::new(None),
             memory: RefCell::new(None),
             nav,
+            banner,
+            gone_said: RefCell::new(Vec::new()),
             _uploads: uploads,
             scrolls: ListScrolls::default(),
             now: RefCell::new(None),
@@ -339,6 +351,17 @@ impl Shell {
             }
         });
 
+        // "Available offline", a check item whose state the header sets from the core's (`header`): activated, the core
+        // toggles it (on asks first), the state follows the core's answer, never the click
+        let offline = gio::SimpleAction::new_stateful("header-offline", None, &false.to_variant());
+        let weak = Rc::downgrade(self);
+        offline.connect_activate(move |_, _| {
+            let Some(s) = weak.upgrade() else { return };
+            if let Some(h) = s.header.borrow().as_ref() {
+                h.offline();
+            }
+        });
+        window.add_action(&offline);
         // the header's actions, on the node on screen (`header`)
         for id in ["favorite", "share", "rename", "delete", "move", "copy", "download", "report", "cover"] {
             let action = gio::SimpleAction::new(&format!("header-{id}"), None);
@@ -537,6 +560,7 @@ impl Shell {
         self._uploads.start();
         avatars::listed(&format!("{}\n{}", shown.connection, shown.tenant.tenant_id), &shown.pictures);
         *self.connection.borrow_mut() = Some(shown.connection.clone());
+        self.draw_offline(&state, &shown);
         *self.now.borrow_mut() = Some((state, shown));
         self.draw_switcher();
         self.draw_new();
@@ -552,6 +576,29 @@ impl Shell {
             let opens_drawer = self.now.borrow().as_ref().is_some_and(|(_, s)| s.drawer_opens_at_start);
             self.split.set_show_content(!opens_drawer);
         }
+    }
+
+    /// The offline banner, and each item no longer available offline said once, then told seen.
+    fn draw_offline(&self, state: &ShellModelState, shown: &ShellShown) {
+        match &shown.offline_banner {
+            Some(b) => {
+                self.banner.set_title(&home::glib_escape(&said::notice(b)));
+                self.banner.set_revealed(true);
+            }
+            None => self.banner.set_revealed(false),
+        }
+        if *self.gone_said.borrow() == state.gone {
+            return;
+        }
+        *self.gone_said.borrow_mut() = state.gone.clone();
+        if state.gone.is_empty() {
+            return;
+        }
+        for n in &state.gone {
+            eprintln!("veyq: offline gone: {}", n.msg);
+            self.toasts.add_toast(adw::Toast::new(&home::glib_escape(&said::notice(n))));
+        }
+        bridge::send(Call::ShellOfflineGoneSeen);
     }
 
     fn draw_switcher(&self) {
