@@ -134,6 +134,12 @@ struct NodeHeaderActions: View {
         return header?.current.pinned?.boolValue
     }
 
+    /// "Available offline" of the node (core's toggle: on, its state's line, the size a pin waits to be confirmed with).
+    private var offline: OfflineToggle? {
+        _ = model.headerRevision
+        return header?.current.offline
+    }
+
     var body: some View {
         HStack {
             if let plan {
@@ -143,7 +149,9 @@ struct NodeHeaderActions: View {
                 }
                 if plan.hasMenu {
                     Menu {
-                        ForEach(plan.menu, id: \.self) { id in Button { run(id) } label: { label(id) } }
+                        ForEach(plan.menu, id: \.self) { id in
+                            if id == NodeHeader.shared.OFFLINE { offlineToggle } else { Button { run(id) } label: { label(id) } }
+                        }
                         if !plan.menu.isEmpty, !plan.last.isEmpty { Divider() }
                         ForEach(plan.last, id: \.self) { id in
                             Button(role: id == NodeHeader.shared.DELETE ? .destructive : nil) { run(id) } label: { label(id) }
@@ -198,6 +206,16 @@ struct NodeHeaderActions: View {
         } message: {
             if let renameProblem { Text(renameProblem) }
         }
+        // a pin asks the size it keeps before its first byte (core's question); nothing is kept until it is confirmed
+        .alert(say(.offlinePinAskTitle), isPresented: Binding(get: { offline?.question != nil }, set: { _ in })) {
+            Button(say(.offlinePinConfirm)) {
+                guard let header else { return }
+                Task { if let notice = try? await header.confirmOffline() { failed = say(notice: notice) } }
+            }
+            Button(say(.signinCancel), role: .cancel) { header?.cancelOffline() }
+        } message: {
+            if let question = offline?.question { Text(say(notice: question)) }
+        }
         .alert(failed ?? "", isPresented: Binding(get: { failed != nil }, set: { if !$0 { failed = nil } })) {
             Button(say(.ok), role: .cancel) {}
         }
@@ -222,8 +240,25 @@ struct NodeHeaderActions: View {
             asking = true
         case NodeHeader.shared.DOWNLOAD:
             Task { await download() }
+        case NodeHeader.shared.OFFLINE:
+            // on: off at once; off: core reads the size it keeps and asks first (the alert above)
+            guard let header else { return }
+            Task { if let notice = try? await header.toggleOffline() { failed = say(notice: notice) } }
         default:
             if let own = contribution.actions.first(where: { $0.id == id }) { own.run() } else { dialog = id }
+        }
+    }
+
+    /// "Available offline" in the "More" menu (ADR 0140 decision 10): a toggle, as the system's menus show a state, with its
+    /// state's line under it (core's: "Downloading 3 MB of 12 MB", "On this device", "Paused: …").
+    private var offlineToggle: some View {
+        Toggle(isOn: Binding(get: { offline?.on ?? false }, set: { _ in run(NodeHeader.shared.OFFLINE) })) {
+            Label {
+                Text(word(NodeHeader.shared.OFFLINE))
+                if let said = offline?.said { Text(say(notice: said)) }
+            } icon: {
+                Image(systemName: "arrow.down.circle.dotted")
+            }
         }
     }
 

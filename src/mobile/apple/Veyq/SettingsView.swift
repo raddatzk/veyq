@@ -22,11 +22,27 @@ protocol SettingsActions: AnyObject {
     func linkShow()
     /// "Add a Device"'s "Scan a Code": the new device shows its sign-in code, this device scans.
     func linkScan()
+    /// "Storage on This Device" (ADR 0140 decision 10): the limit typed as `amount` in `unit`; core refuses what is no size.
+    func setOfflineLimit(_ amount: String, _ unit: LimitUnit)
+    func turnOfflineLimitOff()
+    func clearOfflineCache()
+    func unpinOffline(_ node: String)
+    /// "Remove All Offline Content", asked first (core's `askingRemoveAll`), then `removeAllOffline` or the cancel.
+    func askRemoveAllOffline()
+    func cancelRemoveAllOffline()
+    func removeAllOffline()
 }
 
 extension SettingsActions {
     func linkShow() {}
     func linkScan() {}
+    func setOfflineLimit(_ amount: String, _ unit: LimitUnit) {}
+    func turnOfflineLimitOff() {}
+    func clearOfflineCache() {}
+    func unpinOffline(_ node: String) {}
+    func askRemoveAllOffline() {}
+    func cancelRemoveAllOffline() {}
+    func removeAllOffline() {}
 }
 
 /// A step the page asks to be confirmed first, as the web's `SessionsPanel` does: what it says and what it does.
@@ -56,6 +72,9 @@ struct SettingsView: View {
     @State private var askPassword = false
     @State private var password = ""
     @State private var trustSaid: String?
+    /// The limit's free size field as typed, and its unit; set from core's field whenever that changes.
+    @State private var limitAmount = ""
+    @State private var limitUnit: LimitUnit = .gb
 
     var body: some View {
         Form {
@@ -82,6 +101,7 @@ struct SettingsView: View {
                     Text(say(.accountSettingsAddDeviceSub) + " " + say(.linkIntro))
                 }
             }
+            storage
             #if os(iOS)
             // D3: the app follows the system's appearance; its language is the system's per-app setting
             Section {
@@ -142,7 +162,126 @@ struct SettingsView: View {
         } message: {
             Text(say(.managePasswordTrustHint))
         }
+        .alert(say(.accountSettingsStorageRemoveAll), isPresented: Binding(get: { state.askingRemoveAll }, set: { if !$0, state.askingRemoveAll { actions.cancelRemoveAllOffline() } })) {
+            Button(say(.accountSettingsStorageRemoveAllConfirm), role: .destructive) { actions.removeAllOffline() }
+            Button(say(.signinCancel), role: .cancel) { actions.cancelRemoveAllOffline() }
+        } message: {
+            Text(say(.accountSettingsStorageRemoveAllQuestion))
+        }
+        .task(id: limitKey) {
+            guard let field = state.storage?.field else { return }
+            limitAmount = field.amount
+            limitUnit = field.unit
+        }
         .overlay(alignment: .top) { if state.working { ProgressView().padding(8) } }
+    }
+
+    /// Core's free size field as one value: the field is set anew from it whenever core's changes.
+    private var limitKey: String {
+        guard let f = state.storage?.field else { return "" }
+        return "\(f.amount)|\(f.unit.name)|\(f.off)"
+    }
+
+    private static func size(_ bytes: Int64) -> String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
+
+    /// "Storage on This Device" (ADR 0140 decision 10), as the system's own storage pages show it: the limit (a free size
+    /// with its unit, or Off), what the recently viewed content and the items available offline use and the volume's
+    /// free space as values, each item available offline with its state and its removal, then "Clear Cache" and "Remove All
+    /// Offline Content" (asked first). Where the device keeps no store of the account, only the reason core gives.
+    @ViewBuilder
+    private var storage: some View {
+        if let storage = state.storage {
+            Section {
+                LabeledContent(say(.accountSettingsStorageLimit)) {
+                    Text(storage.field.off ? say(.accountSettingsStorageLimitOff) : "\(storage.field.amount) \(say(storage.field.unit.word))")
+                }
+                HStack {
+                    TextField(say(.accountSettingsStorageLimit), text: $limitAmount)
+                        #if os(iOS)
+                        .keyboardType(.decimalPad)
+                        #endif
+                        .labelsHidden()
+                    Picker(say(.accountSettingsStorageLimit), selection: $limitUnit) {
+                        ForEach([LimitUnit.mb, LimitUnit.gb], id: \.self) { u in Text(say(u.word)).tag(u) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                }
+                Button(say(.accountSettingsStorageLimitSet)) { actions.setOfflineLimit(limitAmount, limitUnit) }
+                    .disabled(state.working || limitAmount.trimmingCharacters(in: .whitespaces).isEmpty)
+                if !storage.field.off {
+                    Button(say(.accountSettingsStorageLimitOff)) { actions.turnOfflineLimitOff() }
+                        .disabled(state.working)
+                }
+            } header: {
+                Text(say(.accountSettingsStorage))
+            } footer: {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(say(.accountSettingsStorageLimitHint))
+                    if state.refusal == .accountSettingsStorageLimitInvalid {
+                        Text(say(.accountSettingsStorageLimitInvalid)).foregroundStyle(Role.danger)
+                    }
+                }
+            }
+            Section {
+                LabeledContent(say(.accountSettingsStorageAutomatic), value: Self.size(storage.automatic))
+                LabeledContent(say(.accountSettingsStoragePinned), value: Self.size(storage.pinned))
+                if let free = storage.free { LabeledContent(say(.accountSettingsStorageFree), value: Self.size(free.int64Value)) }
+            }
+            Section {
+                if storage.items.isEmpty {
+                    Text(say(.accountSettingsStorageItemsEmpty)).foregroundStyle(Role.muted)
+                }
+                ForEach(storage.items, id: \.node) { item in offlineRow(item) }
+            } header: {
+                Text(say(.accountSettingsStoragePinned))
+            }
+            Section {
+                Button(say(.accountSettingsStorageClearCache)) { actions.clearOfflineCache() }
+                    .disabled(state.working)
+                Button(say(.accountSettingsStorageRemoveAll), role: .destructive) { actions.askRemoveAllOffline() }
+                    .disabled(state.working)
+            }
+        } else if let why = state.storageUnavailable {
+            Section(say(.accountSettingsStorage)) {
+                Text(say(why)).foregroundStyle(Role.muted)
+            }
+        }
+    }
+
+    /// One item available offline: its name (core's, from the tree the app holds), its state and size, its removal — a
+    /// swipe action and a context menu on iOS, a button at its end on a Mac (as a saved key's row).
+    private func offlineRow(_ item: OfflineItem) -> some View {
+        let node = item.node
+        return HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                Label(say(notice: item.title), systemImage: Names.kindSymbol(item.kind))
+                Text([item.said.map { say(notice: $0) }, Self.size(item.bytes)].compactMap { $0 }.joined(separator: " · "))
+                    .font(.footnote).foregroundStyle(Role.muted)
+            }
+            #if os(macOS)
+            Spacer()
+            Button(role: .destructive) { actions.unpinOffline(node) } label: { Image(systemName: "trash") }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(say(.accountSettingsStorageRemoveItem))
+                .help(say(.accountSettingsStorageRemoveItem))
+                .disabled(state.working)
+            #endif
+        }
+        #if os(iOS)
+        .swipeActions(edge: .trailing) {
+            Button(role: .destructive) { actions.unpinOffline(node) } label: {
+                Label(say(.accountSettingsStorageRemoveItem), systemImage: "trash")
+            }
+            .disabled(state.working)
+        }
+        .contextMenu {
+            Button(role: .destructive) { actions.unpinOffline(node) } label: {
+                Label(say(.accountSettingsStorageRemoveItem), systemImage: "trash")
+            }
+        }
+        #endif
     }
 
     private var account: some View {
