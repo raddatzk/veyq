@@ -95,6 +95,7 @@ impl Ceremony {
         content.add_top_bar(&adw::HeaderBar::new());
         content.set_content(Some(&scroll));
         let dialog = adw::Dialog::builder().title(title(&opening)).content_width(560).content_height(720).child(&content).build();
+        let releases = content.clone();
         let code = adw::EntryRow::builder().title(words::link_sign_in_code()).input_purpose(gtk::InputPurpose::Digits).build();
         let label = adw::EntryRow::builder().title(words::link_label()).build();
         let c = Rc::new(Self {
@@ -142,7 +143,27 @@ impl Ceremony {
                 c.name_slide();
             }
         });
+        c.watch_releases(&releases);
         c
+    }
+
+    /// A pointer's release anywhere in the dialog's [content] ends the slide's gesture: one past the scale's end never
+    /// reaches the scale (measured under Broadway: a drag carried past the track's end was released over the dialog).
+    fn watch_releases(self: &Rc<Self>, content: &adw::ToolbarView) {
+        let release = gtk::EventControllerLegacy::new();
+        release.set_propagation_phase(gtk::PropagationPhase::Capture);
+        let weak = Rc::downgrade(self);
+        release.connect_event(move |_, event| {
+            let ended = event.event_type();
+            if matches!(ended, gdk::EventType::ButtonRelease | gdk::EventType::TouchEnd | gdk::EventType::TouchCancel)
+                && let Some(c) = weak.upgrade()
+                && let Some(slide) = c.slide.borrow().clone()
+            {
+                slide.released(ended == gdk::EventType::TouchCancel);
+            }
+            glib::Propagation::Proceed
+        });
+        content.add_controller(release);
     }
 
     /// The six digits typed, sent once (`Link.EnterCode`; the core takes one).
@@ -327,7 +348,7 @@ impl Ceremony {
     /// This side's code as the core drew it, dark on light whatever the theme (a scanner reads that), [alt] for a
     /// screen reader. The picture is asked at the window's scale, so a module is whole device pixels.
     fn code_picture(&self, link: i64, alt: String) -> gtk::Widget {
-        let picture = gtk::Picture::builder().content_fit(gtk::ContentFit::Contain).can_shrink(false).halign(gtk::Align::Center).build();
+        let picture = gtk::Picture::builder().content_fit(gtk::ContentFit::Contain).can_shrink(true).halign(gtk::Align::Center).build();
         picture.set_size_request(CODE_SIDE, CODE_SIDE);
         picture.set_alternative_text(Some(&alt));
         picture.set_widget_name("link-qr");
@@ -513,6 +534,9 @@ impl Ceremony {
     }
 }
 
+/// What a confirmation calls back: whether the link moved on.
+type Answered = Box<dyn FnOnce(bool)>;
+
 /// The slide (D5): a scale from 0 to 1 that confirms only by a gesture carried from its start to its end, or by the
 /// arrow keys to the end and Return. The sentence it confirms is its label, for the eye and for a screen reader.
 struct Slide {
@@ -527,11 +551,13 @@ struct Slide {
     from: Cell<Option<f64>>,
     /// A confirmation is under way: nothing moves the slide until its answer.
     confirming: Cell<bool>,
+    /// Asks the link to confirm and calls back whether it moved on.
+    ask: Box<dyn Fn(Answered)>,
 }
 
 impl Slide {
     /// [confirm] is asked at the slide's end and calls back whether the link moved on; one that did not springs back.
-    fn new(confirm: impl Fn(Box<dyn FnOnce(bool)>) + 'static) -> Rc<Self> {
+    fn new(confirm: impl Fn(Answered) + 'static) -> Rc<Self> {
         let adjustment = gtk::Adjustment::new(0.0, 0.0, 1.0, 1.0 / STEPS, 1.0 / STEPS, 0.0);
         let scale = gtk::Scale::builder().orientation(gtk::Orientation::Horizontal).adjustment(&adjustment).draw_value(false).hexpand(true).build();
         scale.set_widget_name("link-slide");
@@ -553,8 +579,8 @@ impl Slide {
             pressed: Cell::new(false),
             from: Cell::new(None),
             confirming: Cell::new(false),
+            ask: Box::new(confirm),
         });
-        let confirm = Rc::new(confirm);
 
         let s = Rc::downgrade(&slide);
         adjustment.connect_value_changed(move |a| {
@@ -564,13 +590,16 @@ impl Slide {
             }
         });
 
-        // the pointer: seen before the scale's own gestures (capture), never taken from them
+        // the pointer: seen before the scale's own gestures (capture), never taken from them. A release past the scale
+        // never reaches it (measured under Broadway, a drag carried past the track's end): the dialog's content sees that
+        // one ([Ceremony::watch_releases]); [Slide::released] takes the first of the two
         let pointer = gtk::EventControllerLegacy::new();
         pointer.set_propagation_phase(gtk::PropagationPhase::Capture);
-        let (s, c) = (Rc::downgrade(&slide), confirm.clone());
+        let s = Rc::downgrade(&slide);
         pointer.connect_event(move |_, event| {
             let Some(s) = s.upgrade() else { return glib::Propagation::Proceed };
-            match event.event_type() {
+            let kind = event.event_type();
+            match kind {
                 gdk::EventType::ButtonPress | gdk::EventType::TouchBegin => {
                     if s.confirming.get() {
                         return glib::Propagation::Stop;
@@ -579,15 +608,8 @@ impl Slide {
                     s.pressed.set(true);
                     s.from.set(None);
                 }
-                gdk::EventType::ButtonRelease | gdk::EventType::TouchEnd | gdk::EventType::TouchCancel if s.pressed.get() => {
-                    s.pressed.set(false);
-                    let carried = s.from.take().is_some_and(|from| from <= START);
-                    let at_end = s.adjustment.value() >= END;
-                    if carried && at_end && event.event_type() != gdk::EventType::TouchCancel {
-                        s.confirm(&c);
-                    } else {
-                        s.spring_back();
-                    }
+                gdk::EventType::ButtonRelease | gdk::EventType::TouchEnd | gdk::EventType::TouchCancel => {
+                    s.released(kind == gdk::EventType::TouchCancel);
                 }
                 _ => {}
             }
@@ -597,7 +619,7 @@ impl Slide {
 
         let keys = gtk::EventControllerKey::new();
         keys.set_propagation_phase(gtk::PropagationPhase::Capture);
-        let (s, c) = (Rc::downgrade(&slide), confirm);
+        let s = Rc::downgrade(&slide);
         keys.connect_key_pressed(move |_, key, _, _| {
             let Some(s) = s.upgrade() else { return glib::Propagation::Proceed };
             use gdk::Key;
@@ -616,7 +638,7 @@ impl Slide {
             match key {
                 Key::Right | Key::Up | Key::KP_Right | Key::KP_Up => moved(1.0),
                 Key::Left | Key::Down | Key::KP_Left | Key::KP_Down => moved(-1.0),
-                Key::Return | Key::KP_Enter | Key::ISO_Enter if s.adjustment.value() >= END => s.confirm(&c),
+                Key::Return | Key::KP_Enter | Key::ISO_Enter if s.adjustment.value() >= END => s.confirm(),
                 // a key that jumps to the end would be the click the slide refuses: taken, nothing moves
                 k if taken.contains(&k) => {}
                 _ => return glib::Propagation::Proceed,
@@ -644,12 +666,26 @@ impl Slide {
         }
     }
 
-    fn confirm<F: Fn(Box<dyn FnOnce(bool)>) + 'static>(self: &Rc<Self>, confirm: &Rc<F>) {
+    /// A pointer was released (or its touch cancelled, [cancelled]) anywhere in the dialog: a gesture pressed on the
+    /// scale that began at its start and ended at its end confirms; any other springs back.
+    fn released(self: &Rc<Self>, cancelled: bool) {
+        if !self.pressed.replace(false) {
+            return;
+        }
+        let carried = self.from.take().is_some_and(|from| from <= START);
+        if carried && !cancelled && self.adjustment.value() >= END {
+            self.confirm();
+        } else {
+            self.spring_back();
+        }
+    }
+
+    fn confirm(self: &Rc<Self>) {
         if self.confirming.replace(true) {
             return;
         }
         let s = Rc::downgrade(self);
-        confirm(Box::new(move |moved| {
+        (self.ask)(Box::new(move |moved| {
             let Some(s) = s.upgrade() else { return };
             s.confirming.set(false);
             if !moved {
@@ -731,6 +767,7 @@ fn consequence() -> gtk::Label {
 fn digits(digits: &str) -> gtk::Label {
     let attrs = gtk::pango::AttrList::new();
     attrs.insert(gtk::pango::AttrInt::new_letter_spacing(6 * gtk::pango::SCALE));
+    attrs.insert(gtk::pango::AttrFloat::new_scale(2.0));
     let label = gtk::Label::builder().label(digits).attributes(&attrs).selectable(true).build();
     label.add_css_class("title-1");
     label.add_css_class("monospace");

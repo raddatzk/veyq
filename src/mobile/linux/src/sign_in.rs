@@ -443,9 +443,11 @@ pub fn level_words(level: StaySignedIn) -> Option<(String, String)> {
 
 /// The offer's answers, in order: each level the core offers (`Gate.Signed.offer`, in the core's order) that has words
 /// here, then "Not now" — each with its title and its line.
-pub fn offer_choices(levels: &[StaySignedIn]) -> Vec<(Choice, String, String)> {
+pub fn offer_choices(levels: &[StaySignedIn], linked: bool) -> Vec<(Choice, String, String)> {
     let mut choices: Vec<_> = levels.iter().filter_map(|&l| level_words(l).map(|(title, hint)| (Choice::Stay(l), title, hint))).collect();
-    choices.push((Choice::NotNow, words::offer_not_now(), words::offer_not_now_hint()));
+    // after a device link the device got no password: "Not now" says what the next start then needs (ADR 0059 §10)
+    let hint = if linked { words::offer_not_now_linked_hint() } else { words::offer_not_now_hint() };
+    choices.push((Choice::NotNow, words::offer_not_now(), hint));
     choices
 }
 
@@ -458,7 +460,9 @@ pub struct Offer {
     pub page: adw::ToolbarView,
     group: adw::PreferencesGroup,
     rows: RefCell<Vec<adw::ActionRow>>,
-    shown: RefCell<Vec<StaySignedIn>>,
+    /// The levels drawn last and whether the offer followed a device link; None before the first draw (an offer with no
+    /// level at all still draws its "Not now").
+    shown: RefCell<Option<(Vec<StaySignedIn>, bool)>>,
     spinner: adw::Spinner,
     /// Says a level this device could not keep, where the person then is (the shell: the offer has ended).
     said: Rc<dyn Fn(String)>,
@@ -473,19 +477,21 @@ impl Offer {
         let spinner = adw::Spinner::builder().visible(false).build();
         let heading = gtk::Label::new(Some(&words::offer_title()));
         let page = page(&heading, &[group.upcast_ref(), footer.upcast_ref(), spinner.upcast_ref()]);
-        Self { page, group, rows: RefCell::new(Vec::new()), shown: RefCell::new(Vec::new()), spinner, said }
+        Self { page, group, rows: RefCell::new(Vec::new()), shown: RefCell::new(None), spinner, said }
     }
 
-    /// Draws [levels], the offer's; the rows are built anew only when the levels change.
-    pub fn show(&self, levels: &[StaySignedIn]) {
-        if *self.shown.borrow() == levels {
+    /// Draws [levels], the offer's, and its "Not now" in a device link's words where [linked]; the rows are built anew only
+    /// when they change.
+    pub fn show(&self, levels: &[StaySignedIn], linked: bool) {
+        let drawn = Some((levels.to_vec(), linked));
+        if *self.shown.borrow() == drawn {
             return;
         }
-        *self.shown.borrow_mut() = levels.to_vec();
+        *self.shown.borrow_mut() = drawn;
         for row in self.rows.borrow_mut().drain(..) {
             self.group.remove(&row);
         }
-        let choices = offer_choices(levels);
+        let choices = offer_choices(levels, linked);
         let rows: Vec<adw::ActionRow> = choices
             .iter()
             .map(|(_, title, hint)| {
@@ -544,13 +550,16 @@ mod tests {
 
     #[test]
     fn the_offer_lists_what_the_core_offers_then_not_now() {
-        let choices: Vec<Choice> = offer_choices(&[StaySignedIn::Login]).into_iter().map(|c| c.0).collect();
+        let choices: Vec<Choice> = offer_choices(&[StaySignedIn::Login], false).into_iter().map(|c| c.0).collect();
         assert_eq!(choices, vec![Choice::Stay(StaySignedIn::Login), Choice::NotNow]);
-        assert_eq!(offer_choices(&[StaySignedIn::Login])[0].1, words::signin_remember());
-        assert_eq!(offer_choices(&[StaySignedIn::Login])[0].2, words::offer_login_hint());
+        assert_eq!(offer_choices(&[StaySignedIn::Login], false)[0].1, words::signin_remember());
+        assert_eq!(offer_choices(&[StaySignedIn::Login], false)[0].2, words::offer_login_hint());
         // PRESENCE has no words here (no Linux store offers it): never drawn as LOGIN's
-        let presence: Vec<Choice> = offer_choices(&[StaySignedIn::Presence, StaySignedIn::Login]).into_iter().map(|c| c.0).collect();
+        let presence: Vec<Choice> = offer_choices(&[StaySignedIn::Presence, StaySignedIn::Login], false).into_iter().map(|c| c.0).collect();
         assert_eq!(presence, vec![Choice::Stay(StaySignedIn::Login), Choice::NotNow]);
-        assert_eq!(offer_choices(&[]).into_iter().map(|c| c.0).collect::<Vec<_>>(), vec![Choice::NotNow]);
+        assert_eq!(offer_choices(&[], false).into_iter().map(|c| c.0).collect::<Vec<_>>(), vec![Choice::NotNow]);
+        // after a device link: "Not now" says the device got no password
+        assert_eq!(offer_choices(&[], true)[0].2, words::offer_not_now_linked_hint());
+        assert_eq!(offer_choices(&[], false)[0].2, words::offer_not_now_hint());
     }
 }
