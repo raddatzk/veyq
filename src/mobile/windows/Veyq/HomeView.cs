@@ -51,13 +51,13 @@ internal static class HomeView
     public static FontIcon Glyph(string glyph) => new() { Glyph = glyph, FontSize = 16 };
 
     /// <summary>A list row: the kind's glyph, the name, a chevron where it enters.</summary>
-    private static ListViewItem Row(string glyph, string name, string automationId, bool enters, Action open)
+    private static ListViewItem Row(string glyph, string name, string automationId, bool enters, Action open, Func<FontIcon, UIElement>? prefix = null)
     {
         var line = new Grid { ColumnSpacing = 12 };
         line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        line.Children.Add(Glyph(glyph));
+        line.Children.Add(prefix is null ? Glyph(glyph) : prefix(Glyph(glyph)));
         var title = new TextBlock { Text = name, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
         Grid.SetColumn(title, 1);
         line.Children.Add(title);
@@ -74,9 +74,11 @@ internal static class HomeView
         return row;
     }
 
-    /// <summary>A row that opens <paramref name="r"/> in its application.</summary>
+    /// <summary>A row that opens <paramref name="r"/> in its application; a Memory's shows its cover where it has one
+    /// (RowCovers).</summary>
     public static ListViewItem ObjectRow(ObjectRef r) =>
-        Row(KindGlyph(r.kind), r.name, $"object:{r.name}", false, () => Act.Send(new Call.ShellOpen { Ref = r }));
+        Row(KindGlyph(r.kind), r.name, $"object:{r.name}", false, () => Act.Send(new Call.ShellOpen { Ref = r }),
+            r.kind == "MEMORY" ? glyph => RowCovers.Prefix(glyph, r.nodeId) : null);
 
     private static ListViewItem FolderRow(NodeRef n) =>
         Row(KindGlyph(n.kind), n.name, $"folder:{n.name}", true,

@@ -50,10 +50,11 @@ public static unsafe class Core
     private static readonly List<GCHandle> Kept = [];
 
     /// <summary>
-    /// What draws an Emergency Kit file the core asks for (<c>Pdf.Pages</c>, <c>Pdf.Page</c>, <c>Picture.Luma</c>; ADR 0136
-    /// decision 1: the platform draws, the core decides): the app's, set before the core starts; null for a request it
-    /// does not draw. Its task's payload (a drawing's luminance) goes beside the reply and is zeroed once the core copied
-    /// it. Without one, every such request is answered failed.
+    /// What draws an Emergency Kit file the core asks for (<c>Pdf.Pages</c>, <c>Pdf.Page</c>, <c>Picture.Luma</c>) and a
+    /// picked medium's tiers (<c>Media.Duration</c>, <c>Media.Tiers</c>; ADR 0136 decision 1: the platform draws, the core
+    /// decides): the app's, set before the core starts; null for a request it does not draw. Its task's payload (a
+    /// drawing's luminance, a medium's two JPEGs) goes beside the reply and is zeroed once the core copied it. Without one,
+    /// every such request is answered failed.
     /// </summary>
     public static Func<HostRequest, Task<(HostReply Reply, byte[]? Payload)>?>? Drawer { get; set; }
 
@@ -202,7 +203,7 @@ public static unsafe class Core
         {
             var store = (DeviceStore)GCHandle.FromIntPtr((nint)ctx).Target!;
             var request = JsonSerializer.Deserialize(Copy(json), WireContext.Default.HostRequest) ?? throw new JsonException("null");
-            if (request is HostRequest.PdfPages or HostRequest.PdfPage or HostRequest.PictureLuma)
+            if (request is HostRequest.PdfPages or HostRequest.PdfPage or HostRequest.PictureLuma or HostRequest.MediaDuration or HostRequest.MediaTiers)
             {
                 Draw(token, request);
                 return;

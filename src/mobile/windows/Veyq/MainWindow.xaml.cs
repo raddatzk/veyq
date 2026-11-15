@@ -48,8 +48,9 @@ public sealed partial class MainWindow : Window
             store = DeviceStore.InMemory();
         }
         Start started;
-        // an Emergency Kit's pages and pictures are drawn by Windows' own renderer when the core asks (KitDrawing)
-        Core.Drawer = KitDrawing.Answer;
+        // an Emergency Kit's pages and pictures are drawn by Windows' own renderer when the core asks (KitDrawing), a picked
+        // medium's tiers by WIC and Windows.Media.Editing (MediaTiers)
+        Core.Drawer = request => KitDrawing.Answer(request) ?? MediaTiers.Answer(request);
         try
         {
             // the window owns Windows Hello's prompt, in the app's words (ADR 0136's Consequences)

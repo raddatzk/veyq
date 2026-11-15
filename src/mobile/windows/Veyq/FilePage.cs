@@ -48,8 +48,8 @@ internal sealed class FilePage : IDisposable
     private (FileViewKind, int)? _drawn;
     private bool _closed;
     private PdfView? _pdf;
-    /// <summary>The medium playing: its player, its source and the stream over the core's reader.</summary>
-    private (MediaPlayerElement Player, Windows.Media.Core.MediaSource Source, ReaderStream Stream)? _media;
+    /// <summary>The medium playing over the core's reader.</summary>
+    private MediumPlayer? _media;
 
     public NodeAt Node { get; }
 
@@ -222,37 +222,14 @@ internal sealed class FilePage : IDisposable
                 return;
             }
             Log.Write($"file medium: reader {reader}, {size} B, {type ?? "no type"}");
-            var stream = new ReaderStream(size, (at, length) => Range(reader, at, length), () => _ = Core.CallAsync(new Call.ReaderClose { reader = reader }));
-            var source = Windows.Media.Core.MediaSource.CreateFromStream(stream.AsRandomAccessStream(), type ?? "");
-            // the page owns the player: handed to the element and taken back from it before it is let go (a player the
-            // element made itself and that was disposed under it threw E_ABORT when the element left the tree)
-            var mp = new Windows.Media.Playback.MediaPlayer { AutoPlay = false, Source = source };
-            var player = new MediaPlayerElement { AreTransportControlsEnabled = true, Stretch = Stretch.Uniform };
-            player.SetMediaPlayer(mp);
-            AutomationProperties.SetAutomationId(player, "file-medium");
-            AutomationProperties.SetName(player, Words.TabDepotFile());
-            var queue = _root.DispatcherQueue;
-            mp.MediaOpened += (p, _) => Log.Write($"medium opened: {p.PlaybackSession.NaturalDuration.TotalSeconds:0} s, {p.PlaybackSession.NaturalVideoWidth}×{p.PlaybackSession.NaturalVideoHeight}, seekable {p.PlaybackSession.CanSeek}");
-            mp.MediaFailed += (_, e) =>
+            var player = new MediumPlayer(reader, size, type, "file-medium", Words.TabDepotFile(), false, _root.DispatcherQueue, () =>
             {
-                Log.Write($"the medium does not play here: {e.Error} {e.ExtendedErrorCode?.HResult:X8} {e.ErrorMessage}");
-                queue.TryEnqueue(() =>
-                {
-                    if (_closed || _drawn != asked) return;
-                    StopMedia();
-                    Quietly("the words", () => _content.Content = Message(unplayable is { } w ? Said.Key(w) : Words.FileUnsupported()));
-                });
-            };
-            // the position in the log each fifth second, for a pass to read the play and a seek from
-            var logged = -1L;
-            mp.PlaybackSession.PositionChanged += (session, _) =>
-            {
-                var at = (long)session.Position.TotalSeconds / 5;
-                if (Interlocked.Exchange(ref logged, at) != at)
-                    Log.Write($"medium at {(long)session.Position.TotalSeconds} s of {(long)session.NaturalDuration.TotalSeconds} s");
-            };
-            _media = (player, source, stream);
-            _content.Content = player;
+                if (_closed || _drawn != asked) return;
+                StopMedia();
+                MediumPlayer.Quietly("the words", () => _content.Content = Message(unplayable is { } w ? Said.Key(w) : Words.FileUnsupported()));
+            });
+            _media = player;
+            _content.Content = player.Element;
         }
         catch (Exception e)
         {
@@ -262,41 +239,12 @@ internal sealed class FilePage : IDisposable
         }
     }
 
-    /// <summary>Range <paramref name="at"/>+<paramref name="length"/> of reader <paramref name="reader"/> (Reader.Read),
-    /// awaited off the UI thread.</summary>
-    private static async Task<byte[]> Range(long reader, long at, int length)
-    {
-        var (answer, bytes) = await Core.CallAsync(new Call.ReaderRead { reader = reader, position = at, length = length }).ConfigureAwait(false);
-        return answer is Answer.Bytes && bytes is not null ? bytes : throw new IOException($"Reader.Read answered {answer.GetType().Name}");
-    }
-
-    /// <summary>Stops the medium playing, if one is: the player let go first, then its source and the stream, which lets
-    /// the core's reader go.</summary>
+    /// <summary>Stops the medium playing, if one is (MediumPlayer: the player let go first, then the core's reader).</summary>
     private void StopMedia()
     {
-        if (_media is not { } m) return;
+        var m = _media;
         _media = null;
-        var mp = m.Player.MediaPlayer;
-        Quietly("pause", () => mp?.Pause());
-        Quietly("element", () => m.Player.SetMediaPlayer(null));
-        Quietly("source", () => { if (mp is not null) mp.Source = null; });
-        Quietly("player", () => mp?.Dispose());
-        Quietly("media source", () => m.Source.Dispose());
-        Quietly("stream", () => m.Stream.Dispose());
-    }
-
-    /// <summary>A step of letting the player go, which may throw while Media Foundation still works (an exception out of a
-    /// dispatcher's callback ends the app in combase): said in the log, the next step taken.</summary>
-    private static void Quietly(string what, Action step)
-    {
-        try
-        {
-            step();
-        }
-        catch (Exception e)
-        {
-            Log.Write($"letting the medium go: {what} threw {e.GetType().Name} {e.HResult:X8}");
-        }
+        m?.Dispose();
     }
 
     private static UIElement Loading(string words)
