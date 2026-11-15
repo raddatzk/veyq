@@ -11,6 +11,11 @@
 //! share sheet ([crate::share_sheet]); the report opens core's report sheet ([crate::report]), the cover its dialog
 //! ([crate::cover]), whose words follow the core's state (Set cover, or Change cover where the node has one).
 //!
+//! "Available offline" (ADR 0140 decision 10) is a check item of the "More" menu (`win.header-offline`, a stateful action
+//! whose state is the core's `offline.on`), the pin's status line under it as an insensitive item ("Downloading 3 MB of
+//! 12 MB", "On this device"); turning it on asks first, the size it keeps in an `AdwAlertDialog` (the core's `asking` and
+//! `question`), as GNOME asks before a step that takes space; turning it off does not.
+//!
 //! The header also draws the node's head for its page ([Header::hero]): the cover across the page's width, 16:9, cut as
 //! stored (`Header.CoverPicture`, the part its crop shows by `Cover.Cut`: the core's math), as Android's and Apple's
 //! pages place it first in their scroll; a click opens the cover dialog where the plan offers it. A node without a cover
@@ -21,14 +26,14 @@ use std::rc::{Rc, Weak};
 use adw::prelude::*;
 use gtk::{cairo, gdk, gio, glib};
 
-use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::Crop, wire::Facts, wire::HeaderShown, wire::NodeAt, wire::Update, wire::Watched};
+use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::Crop, wire::Facts, wire::HeaderShown, wire::NodeAt, wire::OfflineToggle, wire::Update, wire::Watched};
 use crate::{said, words};
 
 /// The most buttons the content's header bar holds beside its title (GNOME: a few, the rest in the menu).
 pub const MAX_BUTTONS: i32 = 2;
 
 /// The header's ids drawn so far; every other id of the plan is left out until its phase.
-pub const DRAWN: &[&str] = &["favorite", "share", "rename", "delete", "download", "move", "copy", "report", "cover", "replace", "upload"];
+pub const DRAWN: &[&str] = &["favorite", "share", "rename", "delete", "download", "move", "copy", "report", "cover", "replace", "upload", "offline"];
 
 /// Whether [id] is drawn for a node of [kind].
 pub fn drawn(id: &str, _kind: &str) -> bool {
@@ -77,6 +82,8 @@ struct Inner {
     /// The crop the head shows (`HeaderShown.cover`), and the number of the latest read of its picture.
     hero_crop: RefCell<Option<Crop>>,
     hero_asked: Cell<u64>,
+    /// The pin's question while it shows (the core's `offline.asking`): presented once, closed when the state drops it.
+    offline_ask: RefCell<Option<adw::AlertDialog>>,
 }
 
 impl Header {
@@ -96,6 +103,7 @@ impl Header {
             picture: Rc::new(RefCell::new(None)),
             hero_crop: RefCell::new(None),
             hero_asked: Cell::new(0),
+            offline_ask: RefCell::new(None),
         });
         inner.hero.set_overflow(gtk::Overflow::Hidden);
         inner.hero.add_css_class("card");
@@ -184,6 +192,15 @@ impl Header {
         let toasts = self.inner.toasts.clone();
         glib::spawn_future_local(async move {
             say(&toasts, bridge::call(&Call::HeaderPin { header }).await.map(|(a, _)| a), "Header.Pin");
+        });
+    }
+
+    /// "Available offline" toggled: off at once, on asked first (the state's `asking`, drawn by [Inner::draw_offline]).
+    pub fn offline(&self) {
+        let Some(header) = self.inner.id.get() else { return };
+        let toasts = self.inner.toasts.clone();
+        glib::spawn_future_local(async move {
+            say(&toasts, bridge::call(&Call::HeaderOffline { header }).await.map(|(a, _)| a), "Header.Offline");
         });
     }
 
@@ -377,10 +394,57 @@ impl Inner {
         });
     }
 
+    /// The pin's question, while the state asks it: the size it keeps, Cancel or "Make available"; gone with the asking.
+    fn draw_offline(self: &Rc<Self>, toggle: Option<&OfflineToggle>) {
+        let question = toggle.and_then(|t| t.asking.and(t.question.as_ref()));
+        let Some(question) = question else {
+            if let Some(ask) = self.offline_ask.borrow_mut().take() {
+                ask.force_close();
+            }
+            return;
+        };
+        let (Some(header), true) = (self.id.get(), self.offline_ask.borrow().is_none()) else { return };
+        let Some(parent) = self.toasts.root() else { return };
+        let ask = adw::AlertDialog::builder().heading(words::offline_pin_ask_title()).body(said::notice(question)).build();
+        ask.add_responses(&[("cancel", &words::entry_cancel()), ("confirm", &words::offline_pin_confirm())]);
+        ask.set_response_appearance("confirm", adw::ResponseAppearance::Suggested);
+        ask.set_default_response(Some("confirm"));
+        ask.set_close_response("cancel");
+        let toasts = self.toasts.clone();
+        ask.connect_response(None, move |_, response| {
+            let confirmed = response == "confirm";
+            let toasts = toasts.clone();
+            glib::spawn_future_local(async move {
+                if confirmed {
+                    say(&toasts, bridge::call(&Call::HeaderOfflineConfirm { header }).await.map(|(a, _)| a), "Header.OfflineConfirm");
+                } else {
+                    say(&toasts, bridge::call(&Call::HeaderOfflineCancel { header }).await.map(|(a, _)| a), "Header.OfflineCancel");
+                }
+            });
+        });
+        eprintln!("veyq: header offline: asked {}", question.msg);
+        ask.present(Some(&parent));
+        *self.offline_ask.borrow_mut() = Some(ask);
+    }
+
     fn draw(self: &Rc<Self>) {
         let cover = self.shown.borrow().as_ref().map(|s| s.cover.clone());
         if let Some(cover) = cover {
             self.draw_hero(cover);
+        }
+        let offline = self.shown.borrow().as_ref().and_then(|s| s.offline.clone());
+        if self.on_bar.get() {
+            self.draw_offline(offline.as_ref());
+            // the check item's state is the core's: the window's stateful `win.header-offline`
+            if let Some(action) = self
+                .bar
+                .root()
+                .and_downcast::<gtk::ApplicationWindow>()
+                .and_then(|w| w.lookup_action("header-offline"))
+                .and_downcast::<gio::SimpleAction>()
+            {
+                action.set_state(&offline.as_ref().is_some_and(|o| o.on).to_variant());
+            }
         }
         let shown = self.shown.borrow();
         // the offer ended (its window, or the undo): the toast goes with it — once a state showed the offer, so an
@@ -419,6 +483,13 @@ impl Inner {
         for (group, ids) in [(&first, &plan.menu), (&last, &plan.last)] {
             for a in ids.iter().filter(|a| drawn(&a.id, kind)) {
                 group.append(a.word.as_deref().map(said::key).as_deref(), Some(&action_of(&a.id, kind)));
+                // the pin's status under its check item, drawn insensitive
+                if a.id == "offline"
+                    && let Some(line) = s.offline.as_ref().and_then(|o| o.said.as_ref())
+                {
+                    // an action no one registers draws the item insensitive: a status, not a command
+                    group.append(Some(&said::notice(line)), Some("win.header-offline-status"));
+                }
             }
         }
         menu.append_section(None, &first);
@@ -448,7 +519,7 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
         match update {
             Ok(Update::Header { shown, .. }) => {
                 if let Some(s) = &shown {
-                    eprintln!("veyq: header {}: pinned {:?}, undo {}, gone {}, plan {}", s.node.kind, s.pinned, s.undo.is_some(), s.gone,
+                    eprintln!("veyq: header {}: pinned {:?}, offline {:?}, undo {}, gone {}, plan {}", s.node.kind, s.pinned, s.offline.as_ref().map(|o| (o.status, o.asking.is_some())), s.undo.is_some(), s.gone,
                         s.plan.as_ref().map(|p| [&p.buttons, &p.menu, &p.last].iter().map(|g| g.iter().map(|a| a.id.as_str()).collect::<Vec<_>>().join(",")).collect::<Vec<_>>().join(" | ")).unwrap_or_default());
                 }
                 *inner.shown.borrow_mut() = shown;
@@ -498,6 +569,7 @@ pub fn icon_of(id: &str) -> &'static str {
         "cover" => "image-x-generic-symbolic",
         "replace" => "document-revert-symbolic",
         "upload" => "insert-image-symbolic",
+        "offline" => "folder-download-symbolic",
         _ => "view-more-symbolic",
     }
 }
@@ -565,7 +637,7 @@ mod tests {
 
     #[test]
     fn the_cores_actions_are_drawn_and_a_download_where_it_is_the_nodes_archive() {
-        for id in ["favorite", "share", "rename", "delete", "move", "copy", "download", "report", "cover"] {
+        for id in ["favorite", "share", "rename", "delete", "move", "copy", "download", "report", "cover", "offline"] {
             assert!(drawn(id, "FOLDER") && drawn(id, "EXPENSES_POT") && drawn(id, "FILE"), "{id}");
         }
         assert_eq!(action_of("download", "FILE"), "win.file-save", "a file's download is its page's Save a copy");
@@ -580,5 +652,6 @@ mod tests {
         assert_eq!(action_of("download", "FOLDER"), "win.header-download");
         assert_eq!(action_of("move", "EXPENSES_POT"), "win.header-move");
         assert_eq!(action_of("rename", "FOLDER"), "win.header-rename");
+        assert_eq!(action_of("offline", "MEMORY"), "win.header-offline", "Available offline is the window's stateful check item");
     }
 }

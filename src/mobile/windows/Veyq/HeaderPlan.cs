@@ -11,7 +11,7 @@ namespace Veyq;
 internal static class HeaderPlan
 {
     /// <summary>The ids drawn so far.</summary>
-    public static readonly string[] Drawn = ["favorite", "share", "rename", "delete", "download", "move", "copy", "report", "cover", "replace", "upload"];
+    public static readonly string[] Drawn = ["favorite", "share", "rename", "delete", "download", "move", "copy", "report", "cover", "replace", "upload", "offline"];
 
     /// <summary>Whether <paramref name="id"/> is drawn for a node of <paramref name="kind"/> (a file's download is its
     /// page's Save a copy, a Pot's its page's download: <see cref="ByPage"/>).</summary>

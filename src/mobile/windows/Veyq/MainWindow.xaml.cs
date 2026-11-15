@@ -55,7 +55,18 @@ public sealed partial class MainWindow : Window
         {
             // the window owns Windows Hello's prompt, in the app's words (ADR 0136's Consequences)
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this).ToInt64();
-            started = Core.Start(new Config { device = Environment.MachineName, window = hwnd, prompt = Words.DeviceUnlockPrompt() }, store);
+            // the accounts' offline stores in the data folder this process has (ADR 0140 decision 3: the package's under
+            // the MSIX, %LOCALAPPDATA%\veyq unpackaged); none where it cannot be made — then nothing is kept offline
+            string? offline = null;
+            try
+            {
+                offline = DataFolder.Offline(AppData.Folder);
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+            {
+                Log.Write($"the data folder did not open ({e.GetType().Name}); nothing is kept offline");
+            }
+            started = Core.Start(new Config { device = Environment.MachineName, window = hwnd, prompt = Words.DeviceUnlockPrompt(), offlineRoot = offline }, store);
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {

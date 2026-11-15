@@ -9,6 +9,10 @@
 // with its progress and Cancel — through its page (File.Save, FilePage). What is offered, in which
 // order and with which words is the core's (HeaderPlan: what is drawn so far, and the bar's groups).
 //
+// "Available offline" (ADR 0140 decision 10) is an AppBarToggleButton among the secondary commands, checked as the core's
+// offline.on says, the pin's status line under it ("Downloading 3 MB of 12 MB", "On this device"); turning it on asks first,
+// the size it keeps in a ContentDialog (the core's asking and question), turning it off does not.
+//
 // The header also draws the node's head for its page (Hero): the cover across the page's width, 16:9, cut as stored
 // (Header.CoverPicture, decoded by WIC, the part its crop shows by Cover.Cut: the core's math), as Android's and Apple's
 // pages place it first in their scroll; invoked, it opens the cover dialog where the plan offers it. A node without a
@@ -40,6 +44,7 @@ internal sealed class NodeHeader : IDisposable
     private bool _laterSet;
     private bool _closed;
     private bool _seenUndo;
+    private bool _offlineAsked;
 
     public NodeAt Node { get; }
 
@@ -124,7 +129,8 @@ internal sealed class NodeHeader : IDisposable
         {
             if (_closed || update is not Update.Header h) return;
             Shown = h.shown;
-            if (h.shown is { } s) Log.Write($"header {s.node.kind}: pinned {s.pinned}, undo {s.undo is not null}, gone {s.gone}, plan {Ids(s.plan)}");
+            if (h.shown is { } s) Log.Write($"header {s.node.kind}: pinned {s.pinned}, offline {s.offline?.status}{(s.offline?.asking is not null ? " asking" : "")}, undo {s.undo is not null}, gone {s.gone}, plan {Ids(s.plan)}");
+            AskOffline(h.shown?.offline);
             // the offer ended (its window, or the undo): the Undo goes with it — once a state showed the offer, so an
             // update from before the trash that arrives after its answer ends nothing
             DrawHero(h.shown?.cover);
@@ -223,8 +229,76 @@ internal sealed class NodeHeader : IDisposable
         if (Shown is not { gone: false, plan: { } plan } s) return (primary, secondary);
         var kind = s.node.kind;
         foreach (var a in HeaderPlan.Primary(plan, kind)) primary.Add(Command(a, s, pageDownload, pageReplace, pageUpload));
-        foreach (var a in HeaderPlan.Secondary(plan, kind)) secondary.Add(a is null ? new AppBarSeparator() : Command(a, s, pageDownload, pageReplace, pageUpload));
+        foreach (var a in HeaderPlan.Secondary(plan, kind))
+        {
+            if (a is { id: "offline" })
+            {
+                secondary.AddRange(Offline(a, s));
+                continue;
+            }
+            secondary.Add(a is null ? new AppBarSeparator() : Command(a, s, pageDownload, pageReplace, pageUpload));
+        }
         return (primary, secondary);
+    }
+
+    /// <summary>"Available offline": a toggle checked as the core holds it — a click asks the core, whose state redraws it
+    /// — and the pin's status line under it where it has one.</summary>
+    private IEnumerable<ICommandBarElement> Offline(PlanAction a, HeaderShown s)
+    {
+        var on = s.offline?.on == true;
+        var toggle = new AppBarToggleButton { Icon = new SymbolIcon(Symbol.Download), Label = a.word is { } w ? Veyq.Said.Key(w) : a.id, IsChecked = on };
+        AutomationProperties.SetAutomationId(toggle, "header:offline");
+        // Checked/Unchecked, not Click: UI Automation's Toggle (a screen reader's) raises no Click. The core's state, not
+        // the toggle, checks it: put back at once, the next state redraws it
+        var putBack = false;
+        void Toggled(object sender, RoutedEventArgs e)
+        {
+            if (putBack) return;
+            putBack = true;
+            toggle.IsChecked = on;
+            putBack = false;
+            ToggleOffline();
+        }
+        toggle.Checked += Toggled;
+        toggle.Unchecked += Toggled;
+        yield return toggle;
+        if (s.offline?.said is { } line)
+        {
+            var text = new TextBlock
+            {
+                Text = Veyq.Said.Notice(line),
+                Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+                Margin = new Thickness(44, 0, 12, 6),
+                TextWrapping = TextWrapping.Wrap,
+            };
+            AutomationProperties.SetAutomationId(text, "header:offline-status");
+            yield return new AppBarElementContainer { Content = text, IsTabStop = false };
+        }
+    }
+
+    private async void ToggleOffline()
+    {
+        if (_id is not { } header) return;
+        Tell(await Ask(new Call.HeaderOffline { header = header }), "Header.Offline");
+    }
+
+    /// <summary>The pin's question while the state asks it (the size it keeps): "Make available" confirms, Cancel leaves it;
+    /// asked once per asking.</summary>
+    private async void AskOffline(OfflineToggle? toggle)
+    {
+        if (toggle is not { asking: not null, question: { } question })
+        {
+            _offlineAsked = false;
+            return;
+        }
+        if (_offlineAsked || _id is not { } header) return;
+        _offlineAsked = true;
+        Log.Write($"header offline: asked {question.msg}");
+        var confirmed = await Dialogs.Ask(_window, "offline-ask", Words.OfflinePinAskTitle(), Veyq.Said.Notice(question), Words.OfflinePinConfirm());
+        if (_closed) return;
+        Tell(await Ask(confirmed ? new Call.HeaderOfflineConfirm { header = header } : new Call.HeaderOfflineCancel { header = header }),
+            confirmed ? "Header.OfflineConfirm" : "Header.OfflineCancel");
     }
 
     private AppBarButton Command(PlanAction a, HeaderShown s, Action pageDownload, Action? pageReplace, Action? pageUpload)

@@ -128,8 +128,16 @@ fn activate(app: &adw::Application) {
         eprintln!("veyq: the device store did not open ({e}); this start keeps nothing");
         DeviceStore::in_memory()
     });
+    // the accounts' offline stores (ADR 0140 decision 3): `$XDG_DATA_HOME/veyq/offline` — in the Flatpak its own
+    // `~/.var/app/<id>/data` —, never the cache directory, which a cleaner may empty under a pin. The core makes the store's
+    // own directory (0700) and fills it; its parent is the data directory the device store lives in.
+    let data = glib::user_data_dir().join("veyq");
+    if let Err(e) = std::fs::create_dir_all(&data) {
+        eprintln!("veyq: the data directory did not open ({e}); nothing is kept offline");
+    }
+    let offline_root = data.is_dir().then(|| data.join("offline")).and_then(|p| p.to_str().map(str::to_owned));
     // no window owns a prompt here: the Secret Service asks nothing of its own (ADR 0136's Consequences)
-    let config = Config { device: glib::host_name().to_string(), window: 0, prompt: String::new() };
+    let config = Config { device: glib::host_name().to_string(), window: 0, prompt: String::new(), offline_root };
     match bridge::start(&config, store) {
         Start::Started | Start::AlreadyStarted => {}
         Start::NoAes => {

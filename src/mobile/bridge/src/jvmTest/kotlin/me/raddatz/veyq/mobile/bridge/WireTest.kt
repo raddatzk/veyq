@@ -89,7 +89,7 @@ class WireTest {
 
     /** Each root's values: every variant of a sealed root once. */
     private val samples: Map<KSerializer<*>, List<Any>> = mapOf(
-        Config.serializer() to listOf(Config("Fedora 44", 0, ""), Config("WIN-VM", 0x2051C, "veyq wants to open your account")),
+        Config.serializer() to listOf(Config("Fedora 44", 0, ""), Config("WIN-VM", 0x2051C, "veyq wants to open your account", "C:\\Users\\p\\AppData\\Local\\veyq\\offline"), Config("Fedora 44", 0, "", "/home/p/.local/share/veyq/offline")),
         Call.serializer() to listOf(
             Call.SessionStart, Call.SessionSignIn("veyq.localhost:8080", "p@example.org", "typed", "A3-TYPED"),
             Call.SessionStaySignedIn(StaySignedIn.PRESENCE), Call.SessionStaySignedIn(StaySignedIn.LOGIN), Call.SessionNotNow,

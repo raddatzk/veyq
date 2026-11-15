@@ -11,6 +11,12 @@
 // - Add a device (only while the core offers it, addDevice: core.device-linking): "Show a code" and, where there is a
 //   camera, "Scan a code" — each a ceremony of DeviceLinkDialog over the window;
 // - Devices with a saved key: each removable, and "Remove every saved key except this device's";
+// - Storage on this device (ADR 0140 decision 10), as Windows' own Settings > Storage draws sizes: the limit of what is
+//   kept of content viewed — a free size in a TextBox, its unit or Off in a ComboBox, "Set limit" —, the sizes the
+//   automatic tier and the items available offline take and the volume's free space, "Clear cache", "Remove all offline
+//   content" (asked first, the core's askingRemoveAll), and a card per item available offline with its status, its size
+//   and its Remove; followed live while the page shows (Watched.SettingsStorageLive). Where this device keeps no store of
+//   the account, the section says why (storageUnavailable);
 // - Sign out of this account here.
 //
 // Theme and language follow the system (D3): no card for them. Every state is the core's (Settings.Open,
@@ -54,6 +60,18 @@ internal sealed class AccountSettingsPage : IDisposable
     /// is there for "Scan a code" (ADR 0141 decision 4: no camera, no entry).</summary>
     private string? _connection;
     private bool _camera;
+    /// <summary>The storage limit's free size field and its unit (or Off, the last entry), kept across redraws as the
+    /// name's box is; the panel they were last put in; the field as drawn last; set while a redraw selects the unit.</summary>
+    private readonly TextBox _limit = new() { MinWidth = 96, InputScope = new Microsoft.UI.Xaml.Input.InputScope { Names = { new Microsoft.UI.Xaml.Input.InputScopeName(Microsoft.UI.Xaml.Input.InputScopeNameValue.Number) } } };
+    private readonly ComboBox _unit = new() { MinWidth = 88 };
+    private readonly Button _setLimit = new() { Content = Words.AccountSettingsStorageLimitSet() };
+    private Panel? _limitHolder;
+    private LimitField? _limitDrawn;
+    private IReadOnlyList<LimitUnit> _units = [];
+    private bool _drawing;
+    /// <summary>The storage section followed live while the page shows; "Remove all offline content"'s question asked.</summary>
+    private Watch? _storageWatch;
+    private bool _removeAllAsked;
 
     public UIElement Page { get; }
 
@@ -66,6 +84,24 @@ internal sealed class AccountSettingsPage : IDisposable
         AutomationProperties.SetAutomationId(_name, "settings-name");
         AutomationProperties.SetAutomationId(_rename, "settings-rename");
         _rename.Click += (_, _) => Rename();
+        AutomationProperties.SetName(_limit, Words.AccountSettingsStorageLimit());
+        AutomationProperties.SetAutomationId(_limit, "settings-storage-limit");
+        AutomationProperties.SetName(_unit, Words.AccountSettingsStorageLimit());
+        AutomationProperties.SetAutomationId(_unit, "settings-storage-unit");
+        AutomationProperties.SetAutomationId(_setLimit, "settings-storage-limit-set");
+        _setLimit.Click += (_, _) => SetLimit();
+        _limit.KeyDown += (_, e) =>
+        {
+            if (e.Key != Windows.System.VirtualKey.Enter) return;
+            e.Handled = true;
+            SetLimit();
+        };
+        // Off chosen turns the automatic tier off at once; a unit waits for "Set limit"
+        _unit.SelectionChanged += (_, _) =>
+        {
+            if (_drawing || _unit.SelectedIndex != _units.Count) return;
+            Do("storage limit off", id => new Call.SettingsOfflineLimitOff { settings = id });
+        };
         _name.KeyDown += (_, e) =>
         {
             if (e.Key != Windows.System.VirtualKey.Enter) return;
@@ -149,6 +185,8 @@ internal sealed class AccountSettingsPage : IDisposable
             }
             _id = id;
             Log.Write("settings open");
+            // the storage section follows the pins and their fetches while the page shows; its updates come on the page's
+            _storageWatch = Core.Watch(new Watched.SettingsStorageLive { settings = id }, _ => { }, e => Log.Write($"the storage section's follow: {e.Message}"));
             _watch = Core.Watch(new Watched.Settings { settings = id }, update =>
             {
                 if (_disposed || update is not Update.Settings { shown: var s }) return;
@@ -177,6 +215,8 @@ internal sealed class AccountSettingsPage : IDisposable
     public void Dispose()
     {
         _disposed = true;
+        _storageWatch?.Dispose();
+        _storageWatch = null;
         _watch?.Dispose();
         _watch = null;
         if (_id is { } id) Act.Send(new Call.SettingsClose { settings = id });
@@ -218,6 +258,14 @@ internal sealed class AccountSettingsPage : IDisposable
         {
             Log.Write($"settings {what} failed: {e.GetType().Name}");
         }
+    }
+
+    /// <summary>The limit typed, set in the unit chosen (the core parses it and says why where it is no size).</summary>
+    private void SetLimit()
+    {
+        var amount = _limit.Text;
+        var unit = _unit.SelectedIndex >= 0 && _unit.SelectedIndex < _units.Count ? _units[_unit.SelectedIndex] : _limitDrawn?.unit ?? LimitUnit.Gb;
+        Do("storage limit", id => new Call.SettingsOfflineLimit { settings = id, amount = amount, unit = unit });
     }
 
     private void Rename()
@@ -319,6 +367,10 @@ internal sealed class AccountSettingsPage : IDisposable
         _nameHolder?.Children.Remove(_name);
         _nameHolder?.Children.Remove(_rename);
         _nameHolder = null;
+        _limitHolder?.Children.Remove(_limit);
+        _limitHolder?.Children.Remove(_unit);
+        _limitHolder?.Children.Remove(_setLimit);
+        _limitHolder = null;
         _sections.Children.Clear();
         if (_refusal != s.refusal)
         {
@@ -417,11 +469,116 @@ internal sealed class AccountSettingsPage : IDisposable
             }
         }
 
+        DrawStorage(s);
+
         // Sign out
         _sections.Children.Add(Heading(Words.DrawerSignOut()));
         var signOut = TextButton(Words.DrawerSignOut(), "settings-sign-out");
         signOut.Click += (_, _) => Do("sign out here", id => new Call.SettingsSignOutHere { settings = id });
         _sections.Children.Add(signOut);
+    }
+
+    /// <summary>"Storage on this device": the limit, the sizes, "Clear cache" and "Remove all offline content", then the
+    /// items available offline; where this device keeps no store of the account, why — or nothing where there is nothing
+    /// to say.</summary>
+    private void DrawStorage(SettingsShown s)
+    {
+        if (s.storage is not { } st)
+        {
+            if (s.storageUnavailable is not { } why) return;
+            _sections.Children.Add(Heading(Words.AccountSettingsStorage()));
+            _sections.Children.Add(Caption(Said.Key(why)));
+            return;
+        }
+        _sections.Children.Add(Heading(Words.AccountSettingsStorage()));
+        DrawLimit(s, st);
+        _sections.Children.Add(Card("\uE713", Words.AccountSettingsStorageLimit(), [Words.AccountSettingsStorageLimitHint()], "settings-storage-limit-card", out _limitHolder, _limit, _unit, _setLimit));
+        foreach (var (glyph, title, bytes, id) in new[]
+        {
+            ("\uE81C", Words.AccountSettingsStorageAutomatic(), (long?)st.automatic, "settings-storage-automatic"),
+            ("\uE896", Words.AccountSettingsStoragePinned(), st.pinned, "settings-storage-pinned"),
+            ("\uEDA2", Words.AccountSettingsStorageFree(), st.free, "settings-storage-free"),
+        })
+        {
+            if (bytes is not { } b) continue;
+            var size = new TextBlock { Text = Said.Size(b), VerticalAlignment = VerticalAlignment.Center, Foreground = Brush("TextFillColorSecondaryBrush") };
+            AutomationProperties.SetAutomationId(size, $"{id}-size");
+            _sections.Children.Add(Card(glyph, title, [], id, size));
+        }
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(0, 8, 0, 0) };
+        var clear = TextButton(Words.AccountSettingsStorageClearCache(), "settings-storage-clear");
+        clear.Click += (_, _) => Do("clear cache", id => new Call.SettingsClearCache { settings = id });
+        buttons.Children.Add(clear);
+        // the core asks first (askingRemoveAll), asked below
+        var removeAll = TextButton(Words.AccountSettingsStorageRemoveAll(), "settings-storage-remove-all");
+        removeAll.Click += (_, _) => Do("ask remove all", id => new Call.SettingsAskRemoveAll { settings = id });
+        buttons.Children.Add(removeAll);
+        _sections.Children.Add(buttons);
+        AskRemoveAll(s.askingRemoveAll);
+
+        _sections.Children.Add(Heading(Words.AccountSettingsStoragePinned()));
+        if (st.items.Count == 0) _sections.Children.Add(Caption(Words.AccountSettingsStorageItemsEmpty()));
+        foreach (var item in st.items)
+        {
+            var remove = TextButton(Words.AccountSettingsStorageRemoveItem(), $"settings-storage-remove:{item.node}");
+            var node = item.node;
+            remove.Click += (_, _) => Do("remove an item", id => new Call.SettingsOfflineRemove { settings = id, node = node });
+            _sections.Children.Add(Card("\uE896", Said.Notice(item.title), [ItemLine(item)], $"settings-storage-item:{item.node}", remove));
+        }
+    }
+
+    /// <summary>An item's line under its name: its status as the core says it, and the size it keeps on this device.</summary>
+    public static string ItemLine(OfflineItem item) =>
+        item.said is { } n ? $"{Said.Notice(n)} · {Said.Size(item.bytes)}" : Said.Size(item.bytes);
+
+    /// <summary>The limit's field and its unit from the core's, set only where the core's changed and not while typed.</summary>
+    private void DrawLimit(SettingsShown s, Storage st)
+    {
+        var units = s.limitUnits.Select(u => u.unit).ToList();
+        _drawing = true;
+        try
+        {
+            if (!units.SequenceEqual(_units))
+            {
+                _unit.Items.Clear();
+                foreach (var u in s.limitUnits) _unit.Items.Add(Said.Key(u.word));
+                _unit.Items.Add(Words.AccountSettingsStorageLimitOff());
+                _units = units;
+                _limitDrawn = null;
+            }
+            if (Equals(_limitDrawn, st.field)) return;
+            if (_limitDrawn is null || _limit.FocusState == FocusState.Unfocused) _limit.Text = st.field.amount;
+            _unit.SelectedIndex = st.field.off ? _units.Count : Math.Max(0, _units.ToList().IndexOf(st.field.unit));
+            _limitDrawn = st.field;
+        }
+        finally
+        {
+            _drawing = false;
+        }
+    }
+
+    /// <summary>"Remove all offline content"'s question while the core asks it: Remove all, or Cancel; asked once per asking.</summary>
+    private async void AskRemoveAll(bool asking)
+    {
+        if (!asking)
+        {
+            _removeAllAsked = false;
+            return;
+        }
+        if (_removeAllAsked) return;
+        _removeAllAsked = true;
+        try
+        {
+            var confirmed = await Dialogs.Confirm(_window, "settings-storage-remove-all-ask", Words.AccountSettingsStorageRemoveAll(),
+                Words.AccountSettingsStorageRemoveAllQuestion(), Words.AccountSettingsStorageRemoveAllConfirm());
+            if (_disposed) return;
+            if (confirmed) await Send("remove all", id => new Call.SettingsRemoveAll { settings = id });
+            else await Send("cancel remove all", id => new Call.SettingsCancelRemoveAll { settings = id });
+        }
+        catch (Exception e)
+        {
+            Log.Write($"settings remove all failed: {e.GetType().Name}");
+        }
     }
 
     /// <summary>How this device stays signed in, as Manage says it, with its changes and "Stop trusting this device".</summary>
