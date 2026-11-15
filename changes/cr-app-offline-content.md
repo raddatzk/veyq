@@ -337,7 +337,7 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   container listed as § Nothing on disk the app did not choose asks. · Done when: each pass's commands and outputs are
   in ADR 0140's Consequences, per platform, with what could not be run named (a real device, a Copilot+ PC).
 
-- [ ] **7 harvest** — `help/offline.mdx` (EN and DE) gains what the apps show offline and the suspended-space case
+- [ ] **7 harvest** — `help/offline.mdx` (EN and DE) and security-model's residuals gain what the apps show offline and the suspended-space case (owner question 5)
   (D6), and a Use page "Use content offline" (`getting-started/`, EN and DE) tells the pin, the limit and the wipe, both
   walked in the apps per `changes/README.md` § A page that tells users what to click), Security's
   `what-the-server-sees.md`/`threat-model.md` lines for the device adversary, `native-apps.md` from planned to built, the
