@@ -413,3 +413,10 @@ re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto
 
 **Uploads**: an upload that goes on while the app is in the background (Android a foreground service, iOS a
 background task); placeholder tiles in the gallery for what is under way; the list behind Apple's button seen open.
+
+**Offline content** — planned ([ADR 0140](../decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md);
+inbox #895): what a person viewed, kept within a limit they set (2 GB on phones, 10 GB on desktops by default), and
+what they made "Available offline", kept until undone, both as ciphertext sealed to the device and opened offline after
+an unlock at the device's trust level; offline every screen is read-only and says since when its content is. Not part
+of it: writes made offline and sent later (#897), a sync of pins while the app is not running (#896), Expenses offline
+(#898).

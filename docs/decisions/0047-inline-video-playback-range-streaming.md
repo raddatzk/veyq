@@ -256,8 +256,12 @@ Still open: whether a banner's original is dropped once its copy exists.
   written either, and the system's own snapshot of a scanner showing a kit's code is suppressed (`src/mobile/CLAUDE.md`
   § Secrets on screen). Measured on each app after picking the web's three fixture kits and a scan: the app's container,
   temp and cache folders listed for anything newer than a marker — nothing of a kit (each listing bitten by a planted copy).
+  **What the apps do keep is ciphertext, by choice or within a limit** ([ADR 0140](0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)):
+  the content a person viewed or made available offline, as the server sent it, sealed again under a key of the account
+  on that device — never a decrypted byte, a token or a presigned URL. The plaintext rule above is unchanged by it.
 - **Nor does the apps' HTTP stack keep anything** (2026-11-13): the core's clients run with no response cache, no
-  cookie store and no credential store on every engine — ciphertext and metadata are not the stack's to keep either.
+  cookie store and no credential store on every engine — ciphertext and metadata are not the stack's to keep either
+  (the app's own store of ADR 0140 is the one thing the app chooses to keep).
   Measured on an iOS simulator: URLSession's default cache had written 67 answers to `Library/Caches` — blob frames,
   `members`, `exif`, and `/api/login/verify` with its tokens in clear; after the session was configured to keep
   nothing, the same pass left none; on an ephemeral session not even CFNetwork's `Library/HTTPStorages` (its

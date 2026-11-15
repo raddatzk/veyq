@@ -583,7 +583,16 @@ snapshot pulled and looked at, without the protection the secret in it, with it 
 The core's HTTP clients keep **nothing on disk** on any platform: no response cache, no cookie store, no credential
 store. ADR 0047's rule (no plaintext at rest but where the person saves it) extends to what an HTTP stack keeps on its
 own — ciphertext and metadata included, since the app never chose to keep them. The session token is the app's to keep
-(in a header, ADR 0004; the device's wraps in the Keychain or its platform equivalent), never a stack's. Per engine:
+(in a header, ADR 0004; the device's wraps in the Keychain or its platform equivalent), never a stack's.
+
+**The one thing the app chooses to keep is its offline store** ([ADR 0140](../../docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md),
+planned, the core's package `offline/`): content a person viewed (bounded by a limit they set) or made available
+offline, as ciphertext exactly as the server sent it — blob frames and an allowlist of listing answers — each entry
+sealed again under a key of this account on this device, in one directory per account whose file names are opaque. It
+never holds a decrypted byte, a token or a presigned URL, and sign-out, "Stop trusting this device" and removing the
+device wipe it. Anything else the app writes still has to be named here or in ADR 0047's Consequences.
+
+Per engine:
 - **Darwin (Apple, `appleHttpClient` in `Apple.kt`):** Ktor starts from `defaultSessionConfiguration`, whose shared
   `URLCache` wrote every answer to `Library/Caches/me.raddatz.veyq/Cache.db` + `fsCachedData` — measured 2026-11-13 on
   an iOS 27 simulator after a sign-in, a Memory's gallery and a medium's details: 67 responses, among them

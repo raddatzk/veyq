@@ -69,6 +69,14 @@ wraps the register cannot name, the action is defined by **exclusion of what the
   ([uc.account.trust-device](../features/account/use-cases/uc.account.trust-device.md) E1): the anti-withholding
   rule is unchanged by this ADR, and nothing here adds a path where a missing server wrap destroys local key
   material.
+- **The escalation reaches a device's offline store at its next contact.** An app keeps a copy of its own wrap and its
+  content as ciphertext to open offline ([ADR 0140](0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md) decision 4); a
+  wrap the server no longer serves removes that copy and wipes the store at the device's next resume, not the moment the
+  escalation is pressed. A thief who keeps the device offline and passes its unlock reads what the store held until then
+  — the residual the owner accepted (2026-11-15), named in [security-model](../crosscutting/security-model.md) § What a
+  trusted device rests on, per platform. The device's key material is still untouched by the missing wrap (E1): its
+  unlock and bind keys stay, so an operator who withholds the wrap costs the device only a copy of what the server
+  holds anyway.
 - **Rejected — coupling the two by default** (every revoke also deletes the wrap). It reads as safer and is
   worse: the common revoke is housekeeping ("I signed in somewhere I don't use any more"), and silently charging
   it an Emergency Kit on another device teaches people not to revoke. It also collapses a distinction the product
