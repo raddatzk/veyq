@@ -206,7 +206,16 @@ A Gradle build of its own, run through its own wrapper.
   entry moved under another name or into another account's store refused, a header under another Master Key starting
   the store empty, a torn shard write leaving the previous shard; `OfflineWipeWiredTest`: sign-out, Stop trusting and
   removing the device wipe it, an interrupted wipe finishes at the next start; `OfflineManifestLoadTest` prints the
-  manifest's load at 100,000 entries as `veyq-measure:`, the bound D2 names, never asserted).
+  manifest's load at 100,000 entries as `veyq-measure:`, the bound D2 names, never asserted), and of the read path through
+  it (ADR 0140 decisions 4–8): `OfflineReadPathTest` over a server the test plays with real seals (`PlayedTenant`, a switch
+  that cuts the network) — a gallery opened from the store after an unlock with the server unreachable, a newer listing
+  replacing the kept one (a trashed medium gone), the sweep after a `403` (a left scope's frames), a blocked node and a
+  suspended tenant dropped, a wrap not served and a refused refresh wiping the store at resume and at reconnect, the shell
+  read-only offline, a store closed before its wipe —, `OfflineLimitTest` (the least recently viewed evicted, a pin never,
+  the limit lowered or `0`, a medium kept in batches) and the JVM's `KeptReadsTest` (no kept body names or describes a
+  token or an address: derived from the generated models of `KeptRead` and the contracts' text); live, `LiveOfflineTest`
+  (`VEYQ_LIVE`: a gallery viewed online, a medium trashed from another session, the account unlocked again with the network
+  cut).
   The QR reader (`qr/`, a port of ZXing's QR path; its `NOTICE` beside it) changes only with ZXing's corpus still at
   upstream's thresholds: `QrCorpusTest` (JVM; `:core:fetchQrCorpus` fetches the images into `build/qr-corpus`, each held to
   its SHA-256 in `core/qr/zxing-corpus.sha256`, so the first run needs the network) and `QrDecoderTest` (every target, over
@@ -592,7 +601,8 @@ own — ciphertext and metadata included, since the app never chose to keep them
 (in a header, ADR 0004; the device's wraps in the Keychain or its platform equivalent), never a stack's.
 
 **The one thing the app chooses to keep is its offline store** ([ADR 0140](../../docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md),
-the core's package `offline/`: the store and its wipe built; no host names its directory yet, so no app keeps anything): content a person viewed (bounded by a limit they set) or made available
+the core's package `offline/`: the store, its wipe and the read path through it built; no host names its directory yet,
+so no app keeps anything): content a person viewed (bounded by a limit they set) or made available
 offline, as ciphertext exactly as the server sent it — blob frames and an allowlist of listing answers — each entry
 sealed again under a key of this account on this device, in one directory per account whose file names are opaque. It
 never holds a decrypted byte, a token or a presigned URL, and sign-out, "Stop trusting this device" and removing the

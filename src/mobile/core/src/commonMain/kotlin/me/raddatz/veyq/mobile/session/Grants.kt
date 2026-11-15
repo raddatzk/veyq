@@ -84,6 +84,29 @@ internal class GrantOpener(
         return GrantOutcome.Opened(key)
     }
 
+    /**
+     * A grant opened with the server unreachable (ADR 0140 decision 4): only the very key this device holds for the scope —
+     * at its held epoch, with its held succession commitment — which it verified when it took it. No granter's chain is
+     * read and nothing new is judged; anything else stays closed until the server is reached.
+     */
+    suspend fun openHeld(s: ScopeSummary): GrantOutcome {
+        val epoch = s.grantedEpoch.toLong()
+        val held = marks.held(s.id)
+        if (held == null || held.epoch != epoch) return refused(GrantOutcome.Reason.AWAITING_CURRENT_KEY)
+        val key = try {
+            suite.openAs(Context("scope-grant", "scopeId" to s.id, "epoch" to epoch), kem, unb64(s.wrappedGrant))
+        } catch (e: Exception) {
+            return refused(GrantOutcome.Reason.DOES_NOT_OPEN)
+        }
+        val (commitment, seed) = trust.successionKeyPair(key).let { (pk, sk) -> b64(pk) to sk }
+        seed.fill(0)
+        if (commitment != held.commitment) {
+            key.fill(0)
+            return refused(GrantOutcome.Reason.EPOCH_UNLINKED)
+        }
+        return GrantOutcome.Opened(key)
+    }
+
     private fun refused(r: GrantOutcome.Reason) = GrantOutcome.Refused(r)
 
     /** Null when the grant may be opened, else why not. */

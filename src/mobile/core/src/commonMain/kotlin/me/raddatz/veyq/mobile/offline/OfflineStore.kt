@@ -27,7 +27,8 @@ import me.raddatz.veyq.mobile.crypto.u32be
  *   A change writes its shard at once; a last view ([touch]) marks it, written at most once per shard per 30 s and on
  *   [flush] (the app going to the background).
  *
- * Every call takes the store's lock: one writer at a time.
+ * Every call takes the store's lock: one writer at a time. Once [close]d, the store answers nothing and writes nothing —
+ * so a read still running when its account signs out cannot put a file back into a directory a wipe removed.
  */
 class OfflineStore internal constructor(
     private val files: DeviceFiles,
@@ -43,14 +44,15 @@ class OfflineStore internal constructor(
     private val dirty = BooleanArray(SHARDS)
     private val written = LongArray(SHARDS) { Long.MIN_VALUE }
     private val indexes = HashMap<EntryKey, HashMap<Int, Pair<Long, Int>>>()
+    private var closed = false
 
     // ---- what the store holds
 
     /** Every entry the manifest names, a copy. */
-    suspend fun entries(): List<KeptEntry> = lock.withLock { shards.flatMap { s -> s.values.map { it.shown() } } }
+    suspend fun entries(): List<KeptEntry> = lock.withLock { if (closed) emptyList() else shards.flatMap { s -> s.values.map { it.shown() } } }
 
     /** The entry [key] names, null when none is kept. */
-    suspend fun entry(key: EntryKey): KeptEntry? = lock.withLock { find(key)?.shown() }
+    suspend fun entry(key: EntryKey): KeptEntry? = lock.withLock { if (closed) null else find(key)?.shown() }
 
     /** The bytes the store's files take on disk, the manifest's own shards left out. */
     suspend fun used(): Long = lock.withLock { shards.sumOf { s -> s.values.sumOf { it.size } } }
@@ -62,6 +64,7 @@ class OfflineStore internal constructor(
      * (ADR 0140 decision 5) — with the server's [revision] and [asOf], the time the server last confirmed it.
      */
     suspend fun put(key: EntryKey, content: ByteArray, revision: String? = null, asOf: Long? = null) = lock.withLock {
+        if (closed) return@withLock
         val name = name(TAG_ENTRY, key)
         val sealed = seal(content, aad(TAG_ENTRY, key))
         replace(path(name), sealed)
@@ -72,8 +75,17 @@ class OfflineStore internal constructor(
         writeShard(shard(name))
     }
 
+    /** The server confirmed [key]'s kept answer unchanged (a `304`) at [asOf]: its line moves, its file stays. */
+    suspend fun confirm(key: EntryKey, asOf: Long) = lock.withLock {
+        if (closed) return@withLock
+        val kept = find(key)?.takeIf { !it.blob } ?: return@withLock
+        kept.asOf = asOf
+        writeShard(kept.shard)
+    }
+
     /** The answer kept as [key], opened; null when none is, or when it does not open (then it is dropped as missing). */
     suspend fun get(key: EntryKey): ByteArray? = lock.withLock {
+        if (closed) return@withLock null
         val kept = find(key)?.takeIf { !it.blob } ?: return@withLock null
         val bytes = files.read(path(kept.name))
         val opened = bytes?.let { open(it, aad(TAG_ENTRY, key)) }
@@ -85,6 +97,7 @@ class OfflineStore internal constructor(
 
     /** Appends each of [frames] (a frame index to the frame as the store served it) to [key]'s blob, the ones it holds left as they are. */
     suspend fun putFrames(key: EntryKey, frames: Map<Int, ByteArray>) = lock.withLock {
+        if (closed) return@withLock
         val name = name(TAG_ENTRY, key)
         val old = find(key)
         if (old != null && !old.blob) drop(old)
@@ -106,6 +119,7 @@ class OfflineStore internal constructor(
 
     /** Frame [index] of [key]'s blob as the store served it; null when it is not kept or does not open (then the blob is dropped). */
     suspend fun frame(key: EntryKey, index: Int): ByteArray? = lock.withLock {
+        if (closed) return@withLock null
         val kept = find(key)?.takeIf { it.blob } ?: return@withLock null
         val at = indexOf(key)?.get(index) ?: return@withLock null
         val opened = files.read(path(kept.name), at.first, at.second)?.let { open(it, frameAad(key, index)) }
@@ -115,13 +129,14 @@ class OfflineStore internal constructor(
 
     /** The frame indexes kept of [key]'s blob. */
     suspend fun frames(key: EntryKey): Set<Int> = lock.withLock {
-        if (find(key)?.blob != true) emptySet() else indexOf(key)?.keys?.toSet().orEmpty()
+        if (closed || find(key)?.blob != true) emptySet() else indexOf(key)?.keys?.toSet().orEmpty()
     }
 
     // ---- views, removal, durability
 
     /** [key] was viewed now: its last view moves, written with its shard within 30 s or at [flush]. */
     suspend fun touch(key: EntryKey) = lock.withLock {
+        if (closed) return@withLock
         val kept = find(key) ?: return@withLock
         kept.lastView = clock()
         dirty[kept.shard] = true
@@ -130,10 +145,32 @@ class OfflineStore internal constructor(
     }
 
     /** Writes every shard a last view changed (the app going to the background). */
-    suspend fun flush() = lock.withLock { for (s in 0 until SHARDS) if (dirty[s]) writeShard(s) }
+    suspend fun flush() = lock.withLock { if (!closed) for (s in 0 until SHARDS) if (dirty[s]) writeShard(s) }
 
     /** Drops [key]: its files and its line in the manifest. */
-    suspend fun remove(key: EntryKey) = lock.withLock { find(key)?.let { drop(it) }; Unit }
+    suspend fun remove(key: EntryKey) = lock.withLock { if (!closed) find(key)?.let { drop(it) }; Unit }
+
+    /** Drops every one of [keys], each shard they touch written once (a sweep's, an eviction's). */
+    suspend fun removeAll(keys: Collection<EntryKey>) = lock.withLock {
+        if (closed) return@withLock
+        val touched = HashSet<Int>()
+        for (k in keys) {
+            val kept = find(k) ?: continue
+            files.remove(path(kept.name))
+            dropBlobState(kept.key, kept)
+            shards[kept.shard].remove(kept.key)
+            touched += kept.shard
+        }
+        for (s in touched) writeShard(s)
+    }
+
+    /** [key]'s pins set to [pins] (phase 4's pins; a test's): an entry with a pin is never evicted. */
+    internal suspend fun setPins(key: EntryKey, pins: Set<String>) = lock.withLock {
+        if (closed) return@withLock
+        val kept = find(key) ?: return@withLock
+        kept.pins = pins
+        writeShard(kept.shard)
+    }
 
     /**
      * Removes every file of the directory the manifest does not name — a write beside that a crash left, an entry of a
@@ -141,6 +178,7 @@ class OfflineStore internal constructor(
      * once the account is open.
      */
     suspend fun sweep() = lock.withLock {
+        if (closed) return@withLock
         val named = HashSet<String>()
         named += HEADER
         for (s in 0 until SHARDS) named += shardName(s)
@@ -148,8 +186,12 @@ class OfflineStore internal constructor(
         for (n in files.list(directory).orEmpty()) if (n !in named) files.remove(path(n))
     }
 
-    /** Forgets the store's key; the store answers nothing after. */
-    fun close() {
+    /**
+     * Forgets the store's key; the store answers nothing and writes nothing after. Waits for a call under way, so nothing
+     * it writes lands after the close (ADR 0140 decision 11: a store a session holds is closed before its wipe).
+     */
+    suspend fun close() = lock.withLock {
+        closed = true
         key.fill(0)
     }
 

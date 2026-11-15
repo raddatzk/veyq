@@ -1237,6 +1237,8 @@ internal class GalleryShown(
     val purging: String?,
     val purgeQuestion: Notice?,
     val said: Notice?,
+    /** Shown from the offline store, read-only, as of when (ADR 0140 decision 5): a time, nothing else; null online. */
+    val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null,
 )
 
 /**
@@ -1341,6 +1343,8 @@ internal class SettingsShown(
     val working: Boolean,
     @Serializable(with = MsgKey::class) val refusal: Msg?,
     @Serializable(with = MsgKey::class) val registerRefusal: Msg?,
+    /** "Storage on this device" (ADR 0140 decision 10): sizes only; null where this device keeps no store of the account. */
+    val storage: me.raddatz.veyq.mobile.session.AccountSettings.Storage? = null,
 )
 
 /**

@@ -58,6 +58,9 @@ class DepotUploads(
 
         /** Something was made or changed: the lists are read anew. */
         fun changed()
+
+        /** Whether the account reaches its server: offline nothing is queued (ADR 0140 decision 7). Absent: always. */
+        fun online(): Boolean = true
     }
 
     /** What the uploads say once: a folder upload's outcome (one line each), or a replace offered with its [action]. */
@@ -127,6 +130,7 @@ class DepotUploads(
      * [label] (where they go): a name a file already holds offers its replace once it settles. The number queued.
      */
     fun upload(scopeId: String, parentId: String?, label: String, sources: List<UploadSource>): Int {
+        if (!door.online()) return 0
         val jobs = sources.mapNotNull { door.uploadJob(scopeId, parentId, it, it.name) }
         enqueue(jobs, label, parentId ?: scopeId)
         return jobs.size
@@ -139,7 +143,7 @@ class DepotUploads(
      * words. Runs off the caller's thread; returns once its files are queued, with how many were (0 where none went).
      */
     suspend fun uploadFolder(scopeId: String, parentId: String?, shownName: String?, path: String, found: List<FolderUpload.Found>): Int =
-        withContext(work) {
+        if (!door.online()) 0 else withContext(work) {
             val rootName = FolderUpload.rootName(shownName, path)
             val walked = FolderUpload.walked(found)
             _state.update { it.copy(preparing = rootName) }

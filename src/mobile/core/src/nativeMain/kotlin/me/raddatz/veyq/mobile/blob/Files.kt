@@ -59,3 +59,6 @@ internal expect fun syncDirectory(path: String)
 
 /** The bytes free for this user on the volume that holds [path]; null where the system does not say. */
 internal expect fun freeBytes(path: String): Long?
+
+/** The size of the volume that holds [path]; null where the system does not say. */
+internal expect fun totalBytes(path: String): Long?

@@ -7,6 +7,9 @@ import kotlinx.serialization.json.doubleOrNull
 import me.raddatz.veyq.mobile.api.memories.apis.MediaApi
 import me.raddatz.veyq.mobile.api.memories.models.MediaDerivativeKind
 import me.raddatz.veyq.mobile.api.memories.models.MediaSummary
+import me.raddatz.veyq.mobile.api.memories.models.MediaListPage
+import me.raddatz.veyq.mobile.offline.KeptRead
+import io.ktor.client.statement.readRawBytes
 import me.raddatz.veyq.mobile.blob.ApplicationBlobs
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.crypto.BlobMeta
@@ -74,25 +77,36 @@ object MemoryMedia {
         val lightboxBlob: Blob get() = preview ?: original
     }
 
-    class Gallery(val items: List<Item>, val mediaRevision: Int, val deleteRevision: Int)
+    /** A listing: its media, the revisions the live poll continues from, and — read from the offline store with the
+     *  server unreachable — as of when ([offline]; null when it is the server's). */
+    class Gallery(val items: List<Item>, val mediaRevision: Int, val deleteRevision: Int, val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null)
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** Every live medium of [nodeId] of [scopeId], ordered as the grid shows them; null where the node is not opened here. */
+    /**
+     * Every live medium of [nodeId] of [scopeId], ordered as the grid shows them; null where the node is not opened here.
+     * A kept read (ADR 0140 decision 5): the kept `mediaRevision` sent as `If-None-Match`, a newer listing replacing the
+     * kept one — never merged, so a medium trashed on the server is gone from it —, the kept listing while the server is
+     * unreachable.
+     */
     @Throws(Exception::class)
     suspend fun list(tenant: TenantSession, scopeId: String, nodeId: String): Gallery? {
         val node = tenant.node(scopeId, nodeId) ?: return null
         val suite = tenant.account.suite
         val api = MediaApi(tenant.base, tenant.account.http)
+        val read = try {
+            tenant.account.kept(KeptRead.NODE_MEDIA, tenant.tenant.tenantId, scopeId, nodeId, conditional = true) { tag -> pages(tenant, api, scopeId, nodeId, tag) }
+        } catch (e: me.raddatz.veyq.mobile.session.VeyqAccount.Refused) {
+            throw IllegalStateException("media list ${e.status}")
+        }
         val rows = ArrayList<MediaSummary>()
-        var since: String? = null
         var mediaRevision = 0
         var deleteRevision = 0
         var first = true
         var sealedDrop: String? = null
         val wrappedIdentities = HashMap<String, String>()
-        while (true) {
-            val page = tenant.account.call { api.listNodeMedia(scopeId, nodeId, since = since) }
+        for (raw in read.pages) {
+            val page = me.raddatz.veyq.mobile.session.VeyqAccount.KEPT_JSON.decodeFromString(MediaListPage.serializer(), raw.decodeToString())
             rows += page.media
             // the live poll continues from the FIRST page's revisions (read before its rows: a change committed while the
             // pages came in moves the server past them, and the next poll reads it)
@@ -103,10 +117,6 @@ object MemoryMedia {
             }
             page.sealedDropPrivateKey?.let { sealedDrop = it }
             page.uploaderKeys.orEmpty().forEach { wrappedIdentities[it.identityId] = it.wrappedIdentityKey }
-            if (!page.more) break
-            val next = page.cursor ?: break
-            if (next == since) break
-            since = next
         }
         // K_up per guest identity, opened once: an X-Wing decapsulation each
         val upKeys = HashMap<String, ByteArray?>()
@@ -137,8 +147,37 @@ object MemoryMedia {
                 row.ownerKey, row.blockedByOperator, key,
             )
         }
-        return Gallery(order(items), mediaRevision, deleteRevision)
+        return Gallery(order(items), mediaRevision, deleteRevision, read.offline)
     }
+
+    /** Every page of [nodeId]'s media as the server sent them, the first conditional on [tag] (the kept `mediaRevision`). */
+    private suspend fun pages(tenant: TenantSession, api: MediaApi, scopeId: String, nodeId: String, tag: String?): me.raddatz.veyq.mobile.session.VeyqAccount.Fetched {
+        val out = ArrayList<ByteArray>()
+        var since: String? = null
+        var revision: String? = null
+        while (true) {
+            val first = out.isEmpty()
+            val r = tenant.account.respond { api.listNodeMedia(scopeId, nodeId, ifNoneMatch = if (first) tag else null, since = since) }
+            if (first && r.status == 304) return me.raddatz.veyq.mobile.session.VeyqAccount.Fetched.NotModified
+            if (!r.success) return me.raddatz.veyq.mobile.session.VeyqAccount.Fetched.Refused(r.status, tenant.account.errorCode(r))
+            val raw = r.response.readRawBytes()
+            out += raw
+            val page = me.raddatz.veyq.mobile.session.VeyqAccount.KEPT_JSON.decodeFromString(MediaListPage.serializer(), raw.decodeToString())
+            // the live poll and the store continue from the FIRST page's revision
+            if (first) revision = page.mediaRevision.toString()
+            if (!page.more) break
+            val next = page.cursor ?: break
+            if (next == since) break
+            since = next
+        }
+        return me.raddatz.veyq.mobile.session.VeyqAccount.Fetched.Pages(out, revision)
+    }
+
+    /**
+     * Whether the offline store keeps what is read of [blob] (ADR 0140 decision 8): a tile and a preview, and a video's
+     * original (its frames as played) — never a photo's original, for which the preview stands in.
+     */
+    private fun keeps(item: Item, blob: Blob): Boolean = roleOf(item, blob) != ORIGINAL || item.isVideo
 
     /** The grid's order (`useMediaGalleryLive`'s date sort, newest first): a row without a capture time last, ties by id. */
     fun order(items: List<Item>): List<Item> = items.sortedWith(
@@ -189,7 +228,7 @@ object MemoryMedia {
         if (item.blocked) return null
         val suite = tenant.account.suite
         val key = openBlobKey(suite, item.scopeId, item.mediaId, item.key, blob, roleOf(item, blob)) ?: return null
-        return ApplicationBlobs(tenant).frames(item.scopeId, blob.blobId, blob.chunkCount, key)
+        return ApplicationBlobs(tenant).frames(item.scopeId, blob.blobId, blob.chunkCount, key, keep = keeps(item, blob))
     }
 
     /**
@@ -199,7 +238,7 @@ object MemoryMedia {
     fun reader(tenant: TenantSession, item: Item, blob: Blob): RangeReader? {
         if (item.blocked) return null
         val key = openBlobKey(tenant.account.suite, item.scopeId, item.mediaId, item.key, blob, roleOf(item, blob)) ?: return null
-        val source = ApplicationBlobs(tenant).FrameSource(item.scopeId, blob.blobId, blob.chunkCount, key)
+        val source = ApplicationBlobs(tenant).FrameSource(item.scopeId, blob.blobId, blob.chunkCount, key, keeps(item, blob))
         return RangeReader(blob.size, blob.chunkCount) { first, until, sink -> source.read(first, until, sink) }
     }
 
@@ -209,7 +248,7 @@ object MemoryMedia {
         if (item.blocked) return false
         val suite = tenant.account.suite
         val key = openBlobKey(suite, item.scopeId, item.mediaId, item.key, blob, roleOf(item, blob)) ?: return false
-        ApplicationBlobs(tenant).framesTo(item.scopeId, blob.blobId, blob.chunkCount, key, first, minOf(until, blob.chunkCount), sink)
+        ApplicationBlobs(tenant).framesTo(item.scopeId, blob.blobId, blob.chunkCount, key, first, minOf(until, blob.chunkCount), keeps(item, blob), sink)
         return true
     }
 

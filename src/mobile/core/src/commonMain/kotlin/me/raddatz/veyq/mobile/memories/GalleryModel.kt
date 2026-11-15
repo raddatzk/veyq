@@ -45,6 +45,10 @@ import me.raddatz.veyq.mobile.words.Notice
  * [ShellModel.TRASH_UNDO_MS] ([trash], [undo]: restore is reached only from that Undo, as the web's); a guest's own one is a
  * purge, asked first and without Undo ([askPurge], [purge]).
  *
+ * **Offline** (ADR 0140 decisions 5 and 7) the page shows the listing the offline store kept, [State.offline] saying as
+ * of when; a tile it did not keep reads as none. It is read-only then: [State.rights] offers no write, and every write
+ * is refused with one notice ([Msg.OFFLINE_READ_ONLY]). Back online it reads anew.
+ *
  * Each app draws [state] (or [watch]); [close] when the page goes (a lightbox on it closes with it).
  */
 class GalleryModel(
@@ -113,6 +117,9 @@ class GalleryModel(
 
         /** Node [nodeId]'s cover picture as stored (core's `NodeCover`), or null where it has none. Absent: none. */
         suspend fun cover(nodeId: String): ByteArray? = null
+
+        /** Whether the account reaches its server: false while it is offline. Absent: always. */
+        val online: Flow<Boolean> get() = kotlinx.coroutines.flow.flowOf(true)
     }
 
     /** What a trash or a restore of a medium came to (`deleteMedia`, `restoreMedia`). */
@@ -166,11 +173,16 @@ class GalleryModel(
         val purging: String? = null,
         /** What the last delete or Undo left to say (a restore refused, a purge failed); null once seen ([seen]). */
         val said: Notice? = null,
+        /** Shown from the offline store, read-only, its content as of when (ADR 0140 decision 5); null online. */
+        val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null,
     ) {
         val count: Int get() = rows?.size ?: 0
     }
 
-    private val _state = MutableStateFlow(State(rights = MemoryRights.of(access, node.kind)))
+    /** What whoever looks may do here online; offline the page offers none of its writes ([State.rights]). */
+    private val granted = MemoryRights.of(access, node.kind)
+
+    private val _state = MutableStateFlow(State(rights = granted))
     val state: StateFlow<State> = _state.asStateFlow()
     val current: State get() = _state.value
 
@@ -220,7 +232,28 @@ class GalleryModel(
     init {
         scope.launch { door.revisions.collect { read() } }
         scope.launch { door.uploaded.collect { if (it == node.nodeId) read() } }
+        scope.launch {
+            door.online.collect { on ->
+                if (!on) _state.update { it.offline(it.offline ?: me.raddatz.veyq.mobile.session.OfflineAsOf(listedAt)) }
+                else if (current.offline != null) read()
+            }
+        }
     }
+
+    /** When the last listing the server answered was read (epoch ms, [now]'s own clock is no wall clock). */
+    private var listedAt: Long? = null
+
+    /** [this] offline as of [at] (read-only), or online again (null). */
+    private fun State.offline(at: me.raddatz.veyq.mobile.session.OfflineAsOf?): State =
+        copy(offline = at, rights = if (at == null) granted else readOnly(granted))
+
+    /** The online rights less every write: what the page offers offline (ADR 0140 decision 7). */
+    private fun readOnly(r: MemoryRights.Rights) = r.copy(
+        upload = false, deleteMedia = MemoryRights.DeleteMedia.NONE, createMemory = false, createChapter = false, editMeta = false,
+    )
+
+    /** The notice every write offline is refused with. */
+    private val readOnlyNotice get() = Notice(Msg.OFFLINE_READ_ONLY)
 
     /** The gallery read anew (a pull to refresh). */
     fun reload() {
@@ -242,10 +275,12 @@ class GalleryModel(
         }
         if (read != null) {
             listed = read
+            if (read.offline == null) listedAt = wallClock()
             // a trashed one the listing no longer names is settled
             pending.retainAll(read.items.map { it.mediaId }.toSet())
         }
-        _state.update { s ->
+        _state.update { prior ->
+            val s = if (read != null) prior.offline(read.offline) else prior
             val withChapters = if (chapters != null) s.copy(chapters = chapters) else s
             if (read == null) withChapters.copy(failed = true)
             // a photo view's media only: a track and a music track are another view's (GalleryMedium, ADR 0135 decision 2)
@@ -301,7 +336,7 @@ class GalleryModel(
      * The picked [sources] added to this Memory or chapter (the app's one upload queue), where the rights let whoever looks
      * upload; how many were queued.
      */
-    fun upload(sources: List<UploadSource>): Int = if (rights.upload) door.upload(sources) else 0
+    fun upload(sources: List<UploadSource>): Int = if (rights.upload && current.offline == null) door.upload(sources) else 0
 
     // ---- a chapter made ----
 
@@ -310,6 +345,7 @@ class GalleryModel(
      * not. The gallery's chapters are read again with the lists.
      */
     suspend fun createChapter(name: String): MemoryCreate.Made {
+        if (current.offline != null) return MemoryCreate.Made(null, readOnlyNotice)
         if (MemoryCreate.CHAPTER !in creates) return MemoryCreate.Made(null, Notice(Msg.NODE_ILLEGAL_STRUCTURE))
         if (name.isBlank()) return MemoryCreate.Made(null, Notice(Msg.FOLDER_NAME_EMPTY))
         return runCatching { door.createChapter(name.trim()) }.getOrElse { MemoryCreate.Made(null, MemoryCreate.refused(null)) }
@@ -339,6 +375,7 @@ class GalleryModel(
      */
     suspend fun trash(mediaId: String): Notice? {
         if (row(mediaId) == null) return null
+        if (current.offline != null) return readOnlyNotice
         return when (rights.deleteMedia) {
             MemoryRights.DeleteMedia.ANY -> trashAny(mediaId)
             MemoryRights.DeleteMedia.OWN -> {
@@ -389,6 +426,7 @@ class GalleryModel(
      */
     suspend fun undo(): Notice? {
         val u = undoing ?: return null
+        if (current.offline != null) return readOnlyNotice
         undoWindow?.cancel()
         endUndo()
         // a trash that did not go has read the gallery anew already: nothing to restore
@@ -410,7 +448,7 @@ class GalleryModel(
 
     /** "Delete" on a guest's own medium [mediaId]: asked first (it is purged for good, no Undo). Not for another's. */
     fun askPurge(mediaId: String) {
-        if (rights.deleteMedia != MemoryRights.DeleteMedia.OWN || row(mediaId) == null || !door.isOwn(mediaId)) return
+        if (current.offline != null || rights.deleteMedia != MemoryRights.DeleteMedia.OWN || row(mediaId) == null || !door.isOwn(mediaId)) return
         _state.update { it.copy(purging = mediaId) }
     }
 
@@ -427,6 +465,7 @@ class GalleryModel(
     suspend fun purge(): Notice? {
         val mediaId = current.purging ?: return null
         _state.update { it.copy(purging = null) }
+        if (current.offline != null) return readOnlyNotice
         if (rights.deleteMedia != MemoryRights.DeleteMedia.OWN || !door.isOwn(mediaId)) return null
         val gone = runCatching { door.purge(mediaId) }.getOrDefault(false)
         if (!gone) {
@@ -549,6 +588,10 @@ class GalleryModel(
          */
         fun layout(rows: List<Row>, width: Double): MediaGridLayout.Layout =
             MediaGridLayout.justify(rows.map { MediaGridLayout.Source(it.mediaId, it.aspect) }, width, MediaGridLayout.targetHeight(width))
+
+        /** The wall clock (epoch ms): what an offline page says its content is as of. */
+        @OptIn(kotlin.time.ExperimentalTime::class)
+        private fun wallClock(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
 
         private fun monotonicMs(): () -> Long {
             val start = kotlin.time.TimeSource.Monotonic.markNow()

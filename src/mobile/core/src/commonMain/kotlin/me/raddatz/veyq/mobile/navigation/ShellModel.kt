@@ -25,6 +25,7 @@ import me.raddatz.veyq.mobile.session.NodeRename
 import me.raddatz.veyq.mobile.session.NodeReport
 import me.raddatz.veyq.mobile.session.NodeTrash
 import me.raddatz.veyq.mobile.session.OpenNode
+import me.raddatz.veyq.mobile.session.Reach
 import me.raddatz.veyq.mobile.session.ShareLinkChanges
 import me.raddatz.veyq.mobile.session.ShareLinks
 import me.raddatz.veyq.mobile.session.StorageFit
@@ -78,9 +79,12 @@ class ShellModel(
         fun space(shell: Shell): SpaceRef? = spaces.firstOrNull { it.scopeId == shell.space }
     }
 
-    /** Serializable, since the native bridge sends it as it is (ADR 0123's Consequences, the bridge). */
+    /**
+     * Serializable, since the native bridge sends it as it is (ADR 0123's Consequences, the bridge). [offline]: the lists
+     * are the offline store's, read-only, as of when (ADR 0140 decision 5, the shell's banner); null online.
+     */
     @Serializable
-    class State(val shell: Shell, val lists: Lists)
+    class State(val shell: Shell, val lists: Lists, val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null)
 
     /** The tenant as read, before what this device hides is taken out. */
     private class Raw(val spaces: List<SpaceRef>, val nodes: List<NodeRef>, val favorites: List<ObjectRef>, val off: Set<String>)
@@ -116,6 +120,25 @@ class ShellModel(
         rebuild(start = true, openLastUsed = openLastUsed)
         // a re-key the tenant ran (its background resume, a link closed) changed keys the lists were read under
         if (rekeys == null) rekeys = CoroutineScope(Dispatchers.Default).launch { tenant.rekeyed.drop(1).collect { refresh() } }
+        // offline the lists are the store's and say so; back online they are read anew (ADR 0140 decision 5)
+        if (reaches == null) reaches = CoroutineScope(Dispatchers.Default).launch {
+            tenant.account.reach.drop(1).collect { if (it == Reach.Online) refresh() else rebuild() }
+        }
+    }
+
+    private var reaches: kotlinx.coroutines.Job? = null
+
+    /** Whether the account reaches its server: offline every write here is refused ([readOnly], ADR 0140 decision 7). */
+    val online: Boolean get() = tenant.account.reach.value == Reach.Online
+
+    /** The notice a write offline is refused with. */
+    private val readOnly get() = Notice(Msg.OFFLINE_READ_ONLY)
+
+    /** What the shell shows offline: as of when its lists were last confirmed by the server; null online. */
+    private fun offlineNow(): me.raddatz.veyq.mobile.session.OfflineAsOf? = when (val r = tenant.account.reach.value) {
+        Reach.Online -> null
+        is Reach.Offline -> me.raddatz.veyq.mobile.session.OfflineAsOf(tenant.offline?.asOf ?: r.asOf)
+        is Reach.Ended -> me.raddatz.veyq.mobile.session.OfflineAsOf(tenant.offline?.asOf)
     }
 
     private var rekeys: kotlinx.coroutines.Job? = null
@@ -152,7 +175,7 @@ class ShellModel(
             uses = recent.resolve(objects),
         )
         _state.update { prior ->
-            State(next(prior?.shell.takeUnless { start }, spaces, if (openLastUsed) recent.lastUsed(objects) else null), lists)
+            State(next(prior?.shell.takeUnless { start }, spaces, if (openLastUsed) recent.lastUsed(objects) else null), lists, offlineNow())
         }
     }
 
@@ -227,6 +250,7 @@ class ShellModel(
 
     /** Pins or unpins [ref], then the lists are read anew; false when it was not stored (the heart goes back). */
     suspend fun toggleFavorite(ref: NodeAt): Boolean {
+        if (!online) return false
         val now = tenant.isFavorite(ref.scopeId, ref.nodeId) ?: return false
         val stored = runCatching { tenant.setFavorite(ref.scopeId, ref.nodeId, !now) }.getOrDefault(false)
         refresh()
@@ -243,6 +267,7 @@ class ShellModel(
 
     /** Moves [ref] with everything under it to its space's trash; a page of it leaves for its parent. */
     suspend fun trash(ref: NodeAt): Trashed {
+        if (!online) return Trashed(NodeTrash.Deleted.FAILED, readOnly, null)
         val before = runCatching { tenant.node(ref.scopeId, ref.nodeId) }.getOrNull()
         val outcome = runCatching { NodeTrash.delete(tenant, ref.scopeId, ref.nodeId) }.getOrDefault(NodeTrash.Deleted.FAILED)
         val r = Trashed(outcome, Notices.trashed(outcome, ref.name), before)
@@ -254,6 +279,7 @@ class ShellModel(
 
     /** The undo of a trash: [node] back under its name, as it was; the notice of its failure, or null. */
     suspend fun undoTrash(node: OpenNode): Notice? {
+        if (!online) return readOnly
         val token = AppKinds.tokenInput(node.kind, node.name) ?: return Notices.trashUndoFailed(node.name)
         val restored = runCatching { NodeTrash.restore(tenant, node, token) }.getOrNull()
         refresh()
@@ -268,6 +294,7 @@ class ShellModel(
 
     /** Brings [row] back from the trash, under [newName] after its own was taken; the lists are read anew. */
     suspend fun restoreFromTrash(row: NodeTrash.Trashed, newName: String?): NodeTrash.Restored {
+        if (!online) return NodeTrash.Restored.REFUSED
         val token = AppKinds.tokenInput(row.kind, newName?.trim() ?: row.name) ?: return NodeTrash.Restored.REFUSED
         val r = runCatching { NodeTrash.restoreFromTrash(tenant, row, token, newName) }.getOrDefault(NodeTrash.Restored.REFUSED)
         refresh()
@@ -276,7 +303,7 @@ class ShellModel(
 
     /** Erases [row] and everything under it now: irreversible. */
     suspend fun purge(row: NodeTrash.Trashed): NodeTrash.Purged =
-        runCatching { NodeTrash.purge(tenant, row.scopeId, row.id) }.getOrDefault(NodeTrash.Purged.FAILED)
+        if (!online) NodeTrash.Purged.FAILED else runCatching { NodeTrash.purge(tenant, row.scopeId, row.id) }.getOrDefault(NodeTrash.Purged.FAILED)
 
     /**
      * The header of [node] over this shell ([NodeHeaderModel]), its kind's page knowing [facts] (null: not yet); [closeOpen]
@@ -332,6 +359,7 @@ class ShellModel(
 
     /** Renames [ref] to [name] (its placement, then its open links' names); an open page follows it under its new name. */
     suspend fun rename(ref: NodeAt, name: String): Renamed {
+        if (!online) return Renamed(NodeRename.Result(NodeRename.Outcome.FAILED), readOnly)
         val r = runCatching { NodeRename.rename(tenant, ref.scopeId, ref.nodeId, name, AppKinds::tokenInput, now()) }
             .getOrDefault(NodeRename.Result(NodeRename.Outcome.FAILED))
         if (r.outcome == NodeRename.Outcome.RENAMED) {
@@ -351,6 +379,7 @@ class ShellModel(
 
     /** Moves [ref] under [to] (null: the space's root), its name kept; the lists are read anew. */
     suspend fun move(ref: NodeAt, to: String?): Moved {
+        if (!online) return Moved(NodeMove.Result(NodeMove.Outcome.FAILED), readOnly, null)
         val from = runCatching { tenant.node(ref.scopeId, ref.nodeId)?.parentId }.getOrNull()
         val r = runCatching { NodeMove.move(tenant, ref.scopeId, ref.nodeId, to, AppKinds::tokenInput, AppKinds.placement) }
             .getOrDefault(NodeMove.Result(NodeMove.Outcome.FAILED))
@@ -361,6 +390,7 @@ class ShellModel(
 
     /** A new folder [name] in [scopeId] under [parentId] (null: the space's root); why not, or null once made. */
     suspend fun createFolder(scopeId: String, parentId: String?, name: String): Notice? {
+        if (!online) return readOnly
         val n = name.trim()
         if (n.isEmpty()) return Notice(Msg.FOLDER_NAME_EMPTY)
         val r = runCatching { FolderCreate.create(tenant, scopeId, parentId, n) }.getOrNull()
@@ -384,6 +414,7 @@ class ShellModel(
      * Pot names an erased person; the lists are read anew. Why not, or null once copied.
      */
     suspend fun duplicate(ref: NodeAt, to: String?, deletedName: String, uuid: () -> String): Notice? {
+        if (!online) return readOnly
         val r = runCatching { SubtreeCopy.duplicate(tenant, ref.scopeId, ref.nodeId, to, AppKinds.copies(deletedName, uuid)) }.getOrNull()
         refresh()
         return Notices.subtreeCopyRefused(r?.outcome)
@@ -495,6 +526,7 @@ class ShellModel(
             override suspend fun uploader(file: me.raddatz.veyq.mobile.depot.DepotFiles.File) = me.raddatz.veyq.mobile.depot.Uploaders.of(tenant, file)
             override fun replaceJob(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, source: me.raddatz.veyq.mobile.blob.UploadSource, expectedBlobId: String?) =
                 me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob(tenant, file, source, expectedBlobId, source.name)
+            override fun online() = this@ShellModel.online
         }, shares)
 
     /**
@@ -511,6 +543,7 @@ class ShellModel(
             override fun replaceJob(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, source: me.raddatz.veyq.mobile.blob.UploadSource, expectedBlobId: String?) =
                 me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob(tenant, file, source, expectedBlobId, source.name)
             override fun changed() = changed()
+            override fun online() = this@ShellModel.online
         })
 
     /**
@@ -534,6 +567,7 @@ class ShellModel(
      * [parentId] (null: the space's top): the node made, to open, or why not; the lists are read anew.
      */
     suspend fun createMemoryNode(scopeId: String, parentId: String?, kind: String, name: String): me.raddatz.veyq.mobile.memories.MemoryCreate.Made {
+        if (!online) return me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, readOnly)
         val made = me.raddatz.veyq.mobile.memories.MemoryCreate.create(tenant, scopeId, parentId, kind, name)
         refresh()
         return made
@@ -582,6 +616,7 @@ class ShellModel(
             override suspend fun createChapter(name: String) =
                 createMemoryNode(ref.scopeId, ref.nodeId, me.raddatz.veyq.mobile.memories.MemoryCreate.CHAPTER, name)
             override suspend fun cover(nodeId: String) = NodeCover.openNode(tenant, nodeId)
+            override val online = tenant.account.reach.map { it == Reach.Online }.distinctUntilChanged()
         }, access = me.raddatz.veyq.mobile.memories.MemoryRights.Access.Member(
             memoriesOn = "memories" !in tenant.applicationsOff(), inIdentityFolder = inIdentityFolder(ref),
         ), now = now)

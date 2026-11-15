@@ -128,7 +128,9 @@ data class TrustedDevice(
 /**
  * This installation as the accounts see it: its device store (preferences), its keys, the label it names itself with
  * in the account's device register (the model's name), its id there, and the accounts it trusts — and [offlineRoot],
- * the directory the host names for the accounts' offline stores (ADR 0140 decision 3), null where it names none.
+ * the directory the host names for the accounts' offline stores (ADR 0140 decision 3), null where it names none, with
+ * [offlineLimit], the limit an account's store starts with on this kind of device (decision 8: 2 GB on a phone, 10 GB on
+ * a desktop).
  */
 class ThisDevice(
     val store: DeviceStore,
@@ -136,9 +138,38 @@ class ThisDevice(
     val label: String,
     private val primitives: Primitives,
     val offlineRoot: String? = null,
+    val offlineLimit: Long = me.raddatz.veyq.mobile.offline.AccountOffline.DESKTOP_LIMIT,
 ) {
     /** The accounts' offline stores on this device, where the host named their directory. */
-    val offline: OfflineStores? by lazy { offlineRoot?.let { OfflineStores(it, store, primitives) } }
+    val offline: OfflineStores? by lazy { offlineRoot?.let { OfflineStores(it, store, primitives, offlineFiles, offlineClock) } }
+
+    /** The offline stores' files and clock: a test's seam (a counted write, a clock it sets), set before [offline] is first read. */
+    internal var offlineFiles: me.raddatz.veyq.mobile.blob.DeviceFiles = me.raddatz.veyq.mobile.blob.deviceFiles
+
+    @OptIn(kotlin.time.ExperimentalTime::class)
+    internal var offlineClock: () -> Long = { kotlin.time.Clock.System.now().toEpochMilliseconds() }
+
+    /**
+     * A copy of this device's own wrap of account [key]'s Master Key (ADR 0140 decision 4): ciphertext the server holds
+     * too, kept beside the record so an unlock opens the account with the server unreachable. Kept at each online unlock
+     * and enrolment, removed with the record and when the server no longer serves the wrap.
+     */
+    @Serializable
+    internal data class KeptWrap(val wrapId: String, val wrappedKey: String, val kdfParams: String?)
+
+    internal fun keepWrap(key: String, wrap: KeptWrap) = store.write(WRAP + key, JSON.encodeToString(wrap))
+
+    internal fun keptWrap(key: String): KeptWrap? = runCatching { store.read(WRAP + key)?.let { JSON.decodeFromString<KeptWrap>(it) } }.getOrNull()
+
+    internal fun dropWrap(key: String) = store.remove(WRAP + key)
+
+    /**
+     * Server [host]'s instance salt (public: `/api/setup` answers it to anyone), kept at each online sign-in: what a
+     * password-trusted account opened offline derives its login key with, to sign in again at reconnect.
+     */
+    internal fun keepInstanceSalt(host: String, salt: String) = store.write(SALT + host, salt)
+
+    internal fun instanceSalt(host: String): String? = store.read(SALT + host)
 
     /** A random id, kept outside the key stores (the web's `veyq:device-id`): it names this device in the register. */
     val id: String
@@ -154,7 +185,10 @@ class ThisDevice(
     internal fun remember(record: TrustedDevice) =
         store.write(TRUSTED, JSON.encodeToString(listOf(record) + trusted().filter { it.key != record.key }))
 
-    internal fun forget(key: String) = store.write(TRUSTED, JSON.encodeToString(trusted().filter { it.key != key }))
+    internal fun forget(key: String) {
+        store.write(TRUSTED, JSON.encodeToString(trusted().filter { it.key != key }))
+        dropWrap(key)
+    }
 
     /**
      * Whether the person answered the offer to stay signed in for account [key] with "Not now" on this device (ADR 0123 decision 8): it
@@ -191,6 +225,8 @@ class ThisDevice(
         const val ID = "veyq.device-id"
         const val TRUSTED = "veyq.trusted-devices"
         const val DECLINED = "veyq.stay-signed-in-declined"
+        const val WRAP = "veyq.offline-wrap."
+        const val SALT = "veyq.instance-salt."
         val JSON = Json { ignoreUnknownKeys = true }
     }
 }

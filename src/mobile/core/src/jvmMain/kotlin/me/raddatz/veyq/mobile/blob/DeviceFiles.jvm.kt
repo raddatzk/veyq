@@ -66,4 +66,6 @@ internal actual val deviceFiles: DeviceFiles = object : DeviceFiles {
     override fun removeDirectory(path: String): Boolean = File(path).let { it.delete() || !it.exists() }
 
     override fun freeBytes(path: String): Long? = File(path).usableSpace.takeIf { it > 0 }
+
+    override fun totalBytes(path: String): Long? = File(path).totalSpace.takeIf { it > 0 }
 }

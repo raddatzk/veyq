@@ -15,3 +15,9 @@ internal actual fun freeBytes(path: String): Long? = memScoped {
     if (statvfs(path, s.ptr) != 0) return@memScoped null
     s.f_bavail.toLong() * s.f_frsize.toLong()
 }
+
+internal actual fun totalBytes(path: String): Long? = memScoped {
+    val s = alloc<statvfs>()
+    if (statvfs(path, s.ptr) != 0) return@memScoped null
+    s.f_blocks.toLong() * s.f_frsize.toLong()
+}
