@@ -70,4 +70,6 @@ internal actual val deviceFiles: DeviceFiles = object : DeviceFiles {
     override fun removeDirectory(path: String): Boolean = me.raddatz.veyq.mobile.blob.removeDirectory(path) || pathFacts(path) == null
 
     override fun freeBytes(path: String): Long? = me.raddatz.veyq.mobile.blob.freeBytes(path)
+
+    override fun totalBytes(path: String): Long? = me.raddatz.veyq.mobile.blob.totalBytes(path)
 }

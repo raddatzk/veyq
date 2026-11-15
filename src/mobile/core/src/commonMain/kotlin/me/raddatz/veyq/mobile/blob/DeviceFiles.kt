@@ -45,6 +45,9 @@ internal interface DeviceFiles {
 
     /** The bytes free for this user on the volume holding [path]; null where the system does not say. */
     fun freeBytes(path: String): Long?
+
+    /** The size of the volume holding [path]; null where the system does not say (the free-space floor's whole, ADR 0140 decision 8). */
+    fun totalBytes(path: String): Long?
 }
 
 /** This platform's [DeviceFiles]. */

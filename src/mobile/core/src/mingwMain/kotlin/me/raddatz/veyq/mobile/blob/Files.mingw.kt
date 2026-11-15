@@ -57,3 +57,9 @@ internal actual fun freeBytes(path: String): Long? = memScoped {
     if (GetDiskFreeSpaceExW(path, free.ptr, null, null) == 0) return@memScoped null
     free.QuadPart.toLong()
 }
+
+internal actual fun totalBytes(path: String): Long? = memScoped {
+    val total = alloc<ULARGE_INTEGER>()
+    if (GetDiskFreeSpaceExW(path, null, total.ptr, null) == 0) return@memScoped null
+    total.QuadPart.toLong()
+}
