@@ -175,7 +175,8 @@ lightbox and the uploads' settle are the core's (ADR 0136's Consequences), and e
 chapter, the chapters with their covers, the web's justified grid, the live poll, zoom, the slideshow, a medium trashed
 with Undo (a guest's own purged after asking, held by the core's tests: the apps open a gallery as a member only), a
 Memory's links, and the hero once a cover exists; GPX tracks and music are left out of the gallery, as the web's photo
-views leave them. Measured on Android (2026-11-15), on Linux (the container and the Fedora VM, 2026-11-13/14) and on
+views leave them. Measured on Android (2026-11-15; a member's upload through the web seen through the poll and a GPX
+track left out of the gallery the same day, a throwaway emulator), on Linux (the container and the Fedora VM, 2026-11-13/14) and on
 Windows (the VM, 2026-11-15), each with a WRITE_ONLY guest's upload seen through the poll; on Apple the moved rules were
 passed on iOS and macOS (2026-11-13), the new functions only built (§ Open). The desktops make a medium's tiers through
 the host (`HostRequest.MediaTiers`: gdk-pixbuf and GStreamer, WIC and `Windows.Media.Editing`), take a drop of files onto
@@ -324,10 +325,9 @@ dialog. Callers: the kit's scan at sign-in, device linking.
   "Open in New Window", a tile's context menu and a ⌘-click driven (the background tools send none), nor a seek near a
   medium's end on iOS and macOS (the simulator's screenshots lag the player's controls; AVKit's on the Mac expose
   nothing to accessibility).
-- **Memories' phone passes left two steps** (machine-doable, inbox #926): a member's upload from the web seen through
-  the poll (the passes' web upload was a WRITE_ONLY guest's, since Vite's `?devlogin` reads a `.run/.env` the serving
-  worktree lacked), and a GPX track left out of a phone's gallery (the dev account holds none; music was, 52 of 54
-  media shown).
+- **Memories' iPhone pass left two steps** (machine-doable once a simulator boots, inbox #926): a member's upload from the
+  web seen through the poll, and a GPX track left out of the gallery (the dev account's Memory "Leftovers 926" holds one
+  track and one photo). Android passed both (2026-11-15); the simulators were unavailable on the developer's Mac.
 - **Apple's Expenses screens were never typed into** since their move into the core (2026-11-12): the simulator tool
   types no text, so a new entry saved, an item split, a person or category added or renamed, New pot created and a
   share from Photos were driven on Android and the desktops and held by `commonTest`, not on an iPhone; on Apple they
