@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.navigation
 
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -42,6 +43,12 @@ class MoveSheet(
     val copying: Boolean,
     private val door: Door,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    /**
+     * Where the reads and writes run: off the caller's thread. A test passes its own scheduler's dispatcher — on a real
+     * thread, the undo window launched from inside [send] lets a test scheduler skip its delay before [send] has returned
+     * (inbox #930): the window had closed by the time the test looked.
+     */
+    private val work: CoroutineDispatcher = Dispatchers.Default,
 ) {
     /** What the sheet reads and writes ([ShellModel.moveSheet] over a tenant, a test over its own). */
     interface Door {
@@ -139,7 +146,7 @@ class MoveSheet(
      * Reads the space's tree and opens at the node's place; a copy reads what it would leave behind and out, and whether the
      * tenant has room for it, meanwhile. The reads and writes run off the caller's thread (a UI's main one: they decrypt).
      */
-    suspend fun load() = withContext(Dispatchers.Default) {
+    suspend fun load() = withContext(work) {
         if (copying) {
             launch {
                 val p = runCatching { door.preview(node) }.getOrNull() ?: return@launch
@@ -212,7 +219,7 @@ class MoveSheet(
     /** The guest folder's confirm declined: nothing is sent. */
     fun cancelConfirm() = _state.update { it.copy(confirming = false) }
 
-    private suspend fun send(): State = withContext(Dispatchers.Default) { sending() }
+    private suspend fun send(): State = withContext(work) { sending() }
 
     private suspend fun sending(): State {
         val m = moved ?: return current
@@ -260,7 +267,7 @@ class MoveSheet(
         val b = back ?: return null
         undoWindow?.cancel()
         endUndo()
-        val outcome = withContext(Dispatchers.Default) { runCatching { door.move(node, b.from) }.getOrDefault(NodeMove.Outcome.FAILED) }
+        val outcome = withContext(work) { runCatching { door.move(node, b.from) }.getOrDefault(NodeMove.Outcome.FAILED) }
         door.changed()
         return if (outcome == NodeMove.Outcome.MOVED) null else Notice(Msg.MOVE_UNDO_FAILED, node.name)
     }
