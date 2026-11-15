@@ -147,9 +147,10 @@ internal sealed class Call {
      * [connection], answered with its id ([Answer.SettingsOpened]) for [Watched.Settings]; the core reads it at once
      * (`refresh`). Refused `NO_SUCH_CONNECTION`, or `NO_TENANT_OPEN` (it is reached from an open tenant's drawer). It stays
      * until [SettingsClose], its account's sign-out here, or the tenant closes. Each action is one call answered once it
-     * ended — [Answer.Done], and why it did not come through is the state's `refusal`.
+     * ended — [Answer.Done], and why it did not come through is the state's `refusal`. [separator] is the reader's decimal
+     * separator (the platform's locale data, one character), as the limit's free size field writes its amount.
      */
-    @Serializable @SerialName("Settings.Open") data class SettingsOpen(val connection: String) : Call()
+    @Serializable @SerialName("Settings.Open") data class SettingsOpen(val connection: String, val separator: String = ".") : Call()
     @Serializable @SerialName("Settings.Close") data class SettingsClose(val settings: Long) : Call()
 
     /** Everything read anew (`refresh`): the address, the sessions, the device names, "Add a device". */

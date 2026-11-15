@@ -172,7 +172,7 @@ internal sealed class AccountSettingsPage : IDisposable
     {
         try
         {
-            var (answer, _) = await Core.CallAsync(new Call.SettingsOpen { connection = connection });
+            var (answer, _) = await Core.CallAsync(new Call.SettingsOpen { connection = connection, separator = System.Globalization.CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator is { Length: 1 } sep ? sep : "." });
             if (answer is not Answer.SettingsOpened { settings: var id })
             {
                 Log.Write($"Settings.Open answered {(answer is Answer.Refused r ? $"Refused {r.why}" : answer.GetType().Name)}");

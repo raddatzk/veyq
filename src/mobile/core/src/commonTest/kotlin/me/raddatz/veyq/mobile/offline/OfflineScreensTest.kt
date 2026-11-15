@@ -60,14 +60,18 @@ class OfflineScreensTest {
         assertEquals(LimitField("2.5", LimitUnit.GB, false), OfflineShown.field(2_500_000_000))
         assertEquals(LimitField("500", LimitUnit.MB, false), OfflineShown.field(500_000_000))
         assertEquals(LimitField("", LimitUnit.GB, true), OfflineShown.field(0))
+        // the reader's decimal sign: a German UI writes "2,5", and what it writes reads back
+        assertEquals(LimitField("2,5", LimitUnit.GB, false), OfflineShown.field(2_500_000_000, ','))
+        assertEquals(LimitField("1,25", LimitUnit.GB, false), OfflineShown.field(1_250_000_000, ','))
+        assertEquals(LimitField("2", LimitUnit.GB, false), OfflineShown.field(AccountOffline.PHONE_LIMIT, ','))
         assertEquals(2_500_000_000, OfflineShown.parse("2,5", LimitUnit.GB))
         assertEquals(2_500_000_000, OfflineShown.parse(" 2.5 ", LimitUnit.GB))
         assertEquals(750_000_000, OfflineShown.parse("750", LimitUnit.MB))
         assertEquals(1_250_000, OfflineShown.parse("1.25", LimitUnit.MB))
         for (bad in listOf("", "0", "-1", "abc", "1.234", "1e9", "99999999")) assertNull(OfflineShown.parse(bad, LimitUnit.GB), bad)
         // what the field shows reads back to the same limit
-        for (b in listOf(AccountOffline.PHONE_LIMIT, 2_500_000_000, 500_000_000, 1_250_000_000)) {
-            val f = OfflineShown.field(b)
+        for (b in listOf(AccountOffline.PHONE_LIMIT, 2_500_000_000, 500_000_000, 1_250_000_000)) for (sign in listOf('.', ',')) {
+            val f = OfflineShown.field(b, sign)
             assertEquals(b, OfflineShown.parse(f.amount, f.unit))
         }
     }
@@ -277,6 +281,13 @@ class OfflineScreensTest {
         // the limit: a free size, refused when it is none, Off
         page.setOfflineLimit("0,5", LimitUnit.GB)
         assertEquals(500_000_000, page.current.storage?.limit)
+        // the field in the reader's decimal sign (the page opened with the platform's): a German UI reads "1,5"
+        page.setOfflineLimit("1.5", LimitUnit.GB)
+        val german = AccountSettings(AccountSettings.Over(a), Here(), a.email, ',') { 0L }
+        german.refresh()
+        assertEquals(LimitField("1,5", LimitUnit.GB, false), german.current.storage?.field)
+        assertEquals(LimitField("1.5", LimitUnit.GB, false), page.current.storage?.field)
+        page.setOfflineLimit("0,5", LimitUnit.GB)
         page.setOfflineLimit("lots", LimitUnit.GB)
         assertEquals(Msg.ACCOUNT_SETTINGS_STORAGE_LIMIT_INVALID, page.current.refusal)
         assertEquals(500_000_000, page.current.storage?.limit)

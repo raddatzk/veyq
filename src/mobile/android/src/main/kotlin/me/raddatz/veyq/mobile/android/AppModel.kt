@@ -485,7 +485,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** The drawer's Settings: the current account's page, read anew as it opens. */
     fun openSettings() {
         val account = session.signedTo?.account ?: return
-        val m = me.raddatz.veyq.mobile.session.AccountSettings.of(session, account)
+        val m = me.raddatz.veyq.mobile.session.AccountSettings.of(session, account, separator())
         settingsWatch?.cancel()
         settingsModel = m
         settingsWatch = viewModelScope.launch {

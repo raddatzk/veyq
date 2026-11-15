@@ -530,7 +530,7 @@ final class AppModel {
     func openSettings() {
         drawerOpen = false
         guard settingsModel == nil, let account = session.signedTo?.account else { return }
-        let m = AccountSettingsCompanion.shared.of(session: session, account: account)
+        let m = AccountSettingsCompanion.shared.of(session: session, account: account, separator: decimalSeparator)
         settingsModel = m
         settings = m.current
         settingsWatch = m.watch { @Sendable _ in
