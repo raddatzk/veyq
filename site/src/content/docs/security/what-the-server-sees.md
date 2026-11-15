@@ -18,6 +18,7 @@ sources:
   - docs/decisions/0014-group-scopes-and-governance.md
   - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
   - docs/decisions/0092-logs-are-operational-and-name-no-person.md
+  - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
   - docs/decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md
 ---
 
@@ -177,6 +178,11 @@ time the server observes live is not kept for them. What it does hold, each with
   a blob was accessed. Playback is concession 1. A Memory's background music is playback too: a playing track shows up
   as reads of one of the Memory's blobs, one after another while the music runs, as watching its videos does - never
   which file it is, its title or the order.
+- What the apps keep for offline use ([ADR 0140](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)) is on the device only and sealed to it; the server learns
+  nothing about it beyond the reads it serves anyway. Making something available offline fetches what lies below it,
+  so the operator sees a burst of whole-blob reads of that subtree, and later reads of its listings with the revision
+  the device kept (`If-None-Match`), from which it can tell that a device keeps a subtree in step; a later sync fetches
+  only the frames the device does not hold yet.
 
 ### Sharing
 

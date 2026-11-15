@@ -14,6 +14,7 @@ sources:
   - docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md
   - docs/crosscutting/cc.security.csp.md
   - docs/decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md
+  - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
 ---
 
 This page collects what veyq does **not** protect against today, in one place. Each entry says why it remains, where
@@ -48,6 +49,7 @@ operator is you, and the active-operator entries do not apply.
 | [Per-instance rate limiting](#rate-limiting-is-per-instance) | online attacker | cc.security.rate-limit | deferred hardening |
 | [One seal implementation, no external audit](#assurance-one-implementation-no-external-audit) | — | ADR 0017 | a second independent implementation |
 | [Losing every way back is final](#losing-every-way-back-is-final) | — | security-model § Recovery | by design (no escrow) |
+| [The apps' offline store](#the-apps-offline-store) | a thief who passes the device's unlock and keeps it offline; whoever can write the device's disk | ADR 0140 | accepted; nothing recorded against a replay |
 | [The desktop app: Flathub's runtime, Windows' trust, no auto-update](#the-desktop-app-flathubs-runtime-windows-trust-no-auto-update) | whoever controls what Flathub serves you; whoever holds the MSIX's signing key | ADR 0139 | nothing recorded; a store listing would bring updates |
 
 ## The operator-served web client is passive-operator only
@@ -547,6 +549,35 @@ account keys after a compromise.
   § Consequences.
 
 **Closed by:** by design; escrow would break operator-blindness.
+
+## The apps' offline store
+
+The apps, never the browser, keep content on the device for offline use: what a person viewed, within a limit they set,
+and what they made available offline ([ADR 0140](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)). It is kept as the ciphertext the server sent, each entry
+sealed again under a random key of the account on this device, itself wrapped under a key derived from the Master
+Key, and the files are named by a MAC of what they hold. To open it offline, the device keeps a copy of its own wrap of
+the Master Key, so an offline unlock asks exactly what an online one asks at that device's trust level, and a device
+that keeps no trust keeps no store. What remains:
+
+- **Without the device's unlock** the store gives away the number of its entries, their sizes and its total, never
+  content, names or ids.
+- **After "Sign out and remove saved key"** from another device, a thief who also passes this device's own unlock
+  (its sign-in, or the biometric or PIN where it asks for presence) and **keeps it offline** opens what the store held
+  when it went offline. The removal wipes the store and the wrap's copy at the device's next contact with the server,
+  not before. Online, before the removal, the same thief reads everything the account reads; the store adds that
+  window, bounded to what was kept (decision 4, accepted).
+- **A replay:** each entry is authenticated, but whoever can write the device's disk can put older store files back,
+  and the app then shows an older state offline — content the account could read at that time, never another account's
+  and never a forged one (decision 5).
+- **A suspended space seen as offline:** a space the operator suspends or holds is hidden, and its viewed copies
+  dropped, as soon as the app reaches the server's refusal; a suspension that makes the server unreachable looks like
+  being offline, so the app shows what it kept of that space until it next reaches the server (decision 6, our reading,
+  not a reviewed answer).
+
+**Decided in:** [ADR 0140](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md) decisions 4 to 6;
+  [security-model § What a trusted device rests on](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#what-a-trusted-device-rests-on-per-platform).
+
+**Closed by:** accepted; a counter against a replay would live on the same disk it guards against.
 
 ## The desktop app: Flathub's runtime, Windows' trust, no auto-update
 

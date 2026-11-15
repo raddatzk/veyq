@@ -5,6 +5,8 @@ package me.raddatz.veyq.mobile.blob
  * a dialog. The core does all reading and writing (ADR 0137
  * decision 3's line): `nativeMain` over `Files.kt`'s calls (POSIX on Apple and Linux, Win32's wide calls on Windows),
  * `jvmMain` over `java.nio` (Android).
+ * Common code reaches files only through this seam: `Files.kt`'s calls are `nativeMain`'s, so a `commonMain` caller of
+ * them compiles for no JVM target.
  *
  * A seam, so a test can stop a write where a crash would ([write] then [rename] is how a file is replaced whole).
  */

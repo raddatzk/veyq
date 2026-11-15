@@ -1,0 +1,82 @@
+---
+title: "Use content offline"
+description: In the veyq app, what you viewed stays on your device within a limit you set, and what you make available offline stays until you undo it. Both open without a connection.
+sources:
+  - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
+  - docs/crosscutting/native-apps.md
+---
+
+The veyq [app](/getting-started/install-the-app/) can keep content on your device, so you can open it without a
+connection. It keeps two kinds:
+
+- **What you viewed recently:** pictures, previews, the part of a video you played and the files you opened, up to a
+  storage limit you set. When the limit is reached, what you have not looked at for the longest goes first.
+- **What you make available offline:** a Memory, a Chapter, a folder or a file, downloaded whole and kept until you
+  turn it off.
+
+Everything stays locked. The app keeps it exactly as your server stores it and locks it once more for this device, so
+whoever copies the files learns nothing from them. The browser keeps nothing.
+
+:::note[Only on a device that stays signed in]
+The app keeps content only for an account that stays signed in on this device. Where you need your Secret Key every
+time, **Storage on this device** in Settings says: *Content is kept for offline use only on a device that stays signed
+in to this account.* How a device stays signed in: [Devices and sessions](/account/devices-and-sessions/).
+:::
+
+## Make something available offline
+
+1. Open the Memory, Chapter, folder or file.
+2. Open the menu in its header (**More**) and choose **Available offline**.
+3. The app says how much it keeps: **Make available offline?** Choose **Make available**.
+
+While it downloads, the header says how far it is (**Downloading … of …**), then **On this device**. On Android the
+app asks the first time whether it may show notifications: the download's progress shows there. If your device runs out of space, it says **Paused: not enough space on this device**.
+
+A photo is kept as its preview, the way the app shows it; its original is not. A video and a file are kept whole, and
+so are the covers inside. What others add or change while you are online is downloaded too.
+
+To undo it, choose **Available offline** again. It is turned off at once, without a question.
+
+## Set how much is kept
+
+Open the menu (on a computer, the sidebar), choose **Settings** at its foot, and go to **Storage on this device**.
+
+- **Storage limit:** type a size, choose **MB** or **GB** and then **Set limit**. On Android, choose **Storage limit**
+  first; on Linux, set it with the check mark at the field's end. It starts at 2 GB on a phone and 10 GB on a computer.
+  A lower limit takes effect at once.
+- **Off** keeps nothing you only viewed (on Linux and Windows, it is the last entry in the unit's list). What you made
+  available offline still stays.
+- **Recently viewed**, **Available offline** and **Free on this device** show the sizes.
+- Below them, each item available offline, with what it holds and **Remove from this device**.
+- **Clear cache** removes what you only viewed. **Remove all offline content** removes everything, including what you
+  made available offline, and asks first.
+
+What you make available offline always stays, even beyond the limit. Then nothing else is kept. A video larger than a
+quarter of the limit is not kept just for having been watched. When your device has less than 5 % space left, the app
+keeps nothing new.
+
+## When you are offline
+
+The app shows **Offline — content as of** and the time your server last confirmed what it shows. You can look at
+everything that is kept and play its videos; anything else says **Not available offline**. Nothing can be changed
+offline: *You're offline. Changes are possible again once you're back online.*
+
+You can also start the app without a connection: unlock it as you always do. Once the server can be reached again,
+the app notices it by itself within about a minute.
+
+## When kept content goes
+
+The app removes what it kept for an account:
+
+- when you **sign out** of it on this device, choose **Stop trusting this device**, or remove the device;
+- when you sign this device out from another one with **Sign out and remove saved key**, the next time this device
+  reaches the server;
+- when you choose **Remove all offline content**, or remove the app.
+
+Your content stays on your server: sign in again and it is there.
+
+When something is deleted, or you lose access to it, the app drops its copy the next time it is online. If it was
+available offline, it says so: *"…" is no longer available offline.* A space your server has taken offline is not
+shown either, once the app has heard so from the server: [Offline or unreachable](/help/offline/).
+
+What a stolen device can still open, and why: [Known limitations](/security/known-limitations/#the-apps-offline-store).

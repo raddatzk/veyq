@@ -203,7 +203,9 @@ safety net, go to a subagent.** When in doubt, delegate.
 
 **Parallel implementers share one working tree.** Two subagents that edit the same files (a CR, a README both
 touch) run one after the other, not side by side. Every implementer stages by explicit path, as § The pipeline
-step 3 says.
+step 3 says. An implementer given a git worktree of its own gets one **outside** every other
+session's `.claude/worktrees/` (its scratchpad, say): a hook refuses edits under another session's worktree directory,
+so a worktree nested there cannot be written (seen 2026-11-15).
 
 **The closing process retro is mandatory and spoken, not just filed.** When the implementer's report arrives, I
 proactively tell the user, in the conversation and not only in the CR's `## Retrospective`, **what could improve

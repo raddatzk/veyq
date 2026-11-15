@@ -868,6 +868,8 @@ class VeyqAccount private constructor(
                 val status = setup.body()
                 if (!ClientWindow.speaks(status.version.major)) throw SignInFailure(SignInFailure.Reason.INCOMPATIBLE, "server major ${status.version.major}, app $MAJOR")
                 if ("v1" !in status.suites) throw SignInFailure(SignInFailure.Reason.INCOMPATIBLE, "no v1 suite")
+                // kept here, at every sign-in, not only at an online unlock: a password-trusted device signed in and closed
+                // before its first unlock otherwise had no salt and opened nothing offline (ADR 0140's Linux pass)
                 device?.keepInstanceSalt(Url(c.base).host, status.instanceSalt)
                 return c
             } catch (e: Throwable) {

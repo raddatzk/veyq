@@ -810,8 +810,8 @@ What the rows rest on:
   simulator with Face ID enrolled, Linux in that container with gnome-keyring, Windows on that VM with the owner
   answering Hello. ADR 0123's Consequences, the device trust, records each.
 
-**The offline store** ([ADR 0140](../decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md), planned; the apps only, never the
-web): content a person viewed (within a limit they set) or made available offline, kept as ciphertext exactly as the
+**The offline store** ([ADR 0140](../decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md), built on
+Android, Linux and Windows and passed there 2026-11-15, built on Apple and not yet passed; the apps only, never the web): content a person viewed (within a limit they set) or made available offline, kept as ciphertext exactly as the
 server sent it, each entry sealed again under a random key of the account on this device, itself wrapped under an HKDF
 of the Master Key; file names are an HMAC of what the entry is. To open it offline the device keeps a copy of its own
 wrap (the Master Key under its unlock key, ciphertext the server holds too), so **an offline unlock is the record's
@@ -829,6 +829,12 @@ gets no store. Each platform's directory is in ADR 0140 decision 3, under the pr
 - **The offline store, replayed:** each entry is authenticated, but someone who can write the device's disk can put back
   older store files, and the app then shows an older state offline — content the account could read at that time, never
   another account's and never a forged one. A counter against it would live on the same rollbackable disk.
+- **The offline store, a suspended space seen as offline** (our reading, accepted by the owner 2026-11-15, not a
+  reviewed answer): a space the operator suspends or holds is hidden and its automatic entries dropped the moment the app
+  reaches the server's refusal (ADR 0140 decision 6), but a suspension that withdraws the space's routing makes the
+  server unreachable, which the app cannot tell from being offline, so it shows that space's kept content until it next
+  reaches the server. The reading: a hold or a suspension stops the server making content available; a member's own
+  device copy was already delivered to them, as a saved file would be.
 - **Windows, a local account without a password:** the Windows sign-in authenticates nobody, so LOGIN opens the Master
   Key for anyone at the PC. The app does not ask whether the account has a password, so LOGIN is offered there too
   (not measured on such an account: the VM's has one).

@@ -205,6 +205,21 @@ throwaway AVD's virtual scene, the iOS Simulator, the macOS build, Linux in the 
 the ARM VM); `NoCamera` on each machine without one, `Denied` on Android, and on Linux by a virtual camera and GNOME's
 dialog. Callers: the kit's scan at sign-in, device linking.
 
+**Offline content, on all four apps** ([ADR 0140](../decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)). One store per account on this device in the core's
+`offline/`, ciphertext only, every entry sealed again under a key of this account on this device: what a person viewed,
+within a limit they set on the account's Settings page ("Storage on this device"; 2 GB on the phones, 10 GB on the
+desktops by default, any size, Off), and what they made "Available offline" from a Memory's, a chapter's, a folder's or a
+file's header menu, kept until undone and synced at each online open and on a moved revision. An account on a trusted
+device unlocks offline at its trust level; offline the shell says "Offline — content as of …", every write is refused,
+and what is not kept says "Not available offline". Sign-out, Stop trusting, removing the device, a refused refresh and a
+wrap the server no longer serves wipe the store; Android fetches a pin in a WorkManager worker promoted to a `dataSync`
+foreground service, iOS in the time `beginBackgroundTask` and `BGContinuedProcessingTask` grant. Measured 2026-11-15 on
+Android (a throwaway AVD), Linux (the container) and Windows (the VM) against the dev backend: a Chapter pinned, the
+network cut, the app closed, started and unlocked offline, the pinned video played from the store, the store grepped for
+a plaintext marker and the media's names (no hit), and the store empty after sign-out (ADR 0140's Consequences, each
+pass); the manifest's load at 100,000 entries 173–869 ms on the Windows VM, 199–277 ms cold on ART. The Use page that
+says this to a person: [Use content offline](../../site/src/content/docs/getting-started/use-content-offline.mdx).
+
 ## Open
 
 **Platforms and form factors**
@@ -413,9 +428,10 @@ re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto
 **Uploads**: an upload that goes on while the app is in the background (Android a foreground service, iOS a
 background task); placeholder tiles in the gallery for what is under way; the list behind Apple's button seen open.
 
-**Offline content** — planned ([ADR 0140](../decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md);
-inbox #895): what a person viewed, kept within a limit they set (2 GB on phones, 10 GB on desktops by default), and
-what they made "Available offline", kept until undone, both as ciphertext sealed to the device and opened offline after
-an unlock at the device's trust level; offline every screen is read-only and says since when its content is. Not part
-of it: writes made offline and sent later (#897), a sync of pins while the app is not running (#896), Expenses offline
-(#898).
+**Offline content** ([ADR 0140](../decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)): **Apple's passes are the owner's** — on a real iPhone and a signed macOS
+build, the pass the other three ran, and whether `BGContinuedProcessingTask`'s submit is accepted with the wildcard
+identifier and how long `beginBackgroundTask` lasts (the Simulator has no background processing, and an ad-hoc macOS
+build keeps no trust and so no store). Not run on any app: a real phone's release build and the system killing the app,
+the presence level's offline unlock (a PIN or Windows Hello typed), the Flatpak's and the MSIX's own data folders, a
+pinned Depot file or folder (built, run by no test). Not part of it: a sync of pins while the app is not running (#896),
+writes made offline and sent later (#897), Expenses offline (#898).

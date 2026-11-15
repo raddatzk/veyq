@@ -4,6 +4,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.suspend-tenant.md
   - docs/features/admin/use-cases/uc.admin.tenant-reachability.md
   - docs/features/admin/use-cases/uc.admin.delete-tenant.md
+  - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
 ---
 
 ## „Dieser Bereich ist vorübergehend offline“
@@ -22,6 +23,19 @@ vorher stoppt. Dein Konto bleibt, und deine anderen Bereiche auch.
 
 veyq kann nicht mit seinem Server sprechen: Deine Internetverbindung ist weg, oder der Server ist es. Prüfe deine
 Verbindung und versuch es später erneut. Auf deinem Gerät geht nichts verloren; deine Schlüssel bleiben, wo sie waren.
+
+## „Offline — Stand …“ in der App
+
+Die veyq-App zeigt, was sie auf diesem Gerät behalten hat: was du zuletzt angesehen und was du offline verfügbar gemacht
+hast, mit dem Stand, den sie nennt. Du kannst es dir ansehen und seine Videos abspielen, aber nichts ändern, bis der
+Server wieder da ist; was nicht behalten ist, sagt **Nicht offline verfügbar**. Die App merkt von selbst, wenn der
+Server wieder erreichbar ist: [Inhalte offline nutzen](/de/getting-started/use-content-offline/).
+
+Ein offline genommener Bereich kann in der App genauso aussehen. Nimmt die Person, die deinen Server betreibt, ihn so
+offline, dass der Server für dich nicht erreichbar ist, kann die App das nicht davon unterscheiden, offline zu sein, und
+zeigt, was sie von dem Bereich behalten hat, bis sie den Server wieder erreicht. Dann blendet sie den Bereich aus und
+löscht die Kopien dessen, was du dort angesehen hast; was du darin offline verfügbar gemacht hast, wartet ohne seinen
+Inhalt, bis der Bereich zurück ist.
 
 ## „Dieser Server ist noch nicht eingerichtet“
 
