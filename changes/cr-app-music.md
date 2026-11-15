@@ -298,7 +298,7 @@ lightbox plays and starts again by itself when the video stops or the lightbox m
   unconditionally → the listener's-pause case red; (b) the lightbox does not end the interruption on an item change →
   the next-item case red; (c) the end not dropped at `stop` → the stop case red.
 
-- [ ] **3 the player (core `audio/`)** — `Order`, `Fades`, `MusicPlayer` with `interrupt()` (D13), `NowPlaying`, the
+- [x] **3 the player (core `audio/`)** — `Order`, `Fades`, `MusicPlayer` with `interrupt()` (D13), `NowPlaying`, the
   deck port (D2) and the system controls' port (D3's core half), with a played deck for tests. · Done when: `./gradlew
   :core:jvmTest :core:macosArm64Test` green, and R13's `order`, `fades` and `player` cases and phase 2's interrupt cases
   each have a Kotlin twin (the list mapped test by test in the phase's report); **bites**, each one edit restored from a snapshot, each red at its own assertion:
@@ -306,6 +306,16 @@ lightbox plays and starts again by itself when the video stops or the lightbox m
   2 s case red; (c) the press fade 5 s instead of 1 s → the replace case red; (d) a failed load not dropped from the order
   → the nothing-plays case loops instead of ending; (e) `stop` not clearing the system controls → its case red; (f) a
   late `open()` not released → the leaked-reader count red.
+  *Done 2026-11-15:* `audio/` holds `Order.kt`, `Fades.kt`, `Deck.kt` (the `Deck` port, `SystemControls`,
+  `PlayerCommands`), `NowPlaying.kt` (`PlayerTrack`, `TrackSource`, `PlayerQueue` with a `route: ObjectRef`, `NowPlaying`,
+  `PlayerNotice`) and `MusicPlayer.kt` (`State {nowPlaying, notice, skipped}` — D9's skipped ids sit beside `nowPlaying`, not in
+  it, so the Music view keeps its marks after a queue that played nothing ended). Tests `OrderTest` (11), `FadesTest` (4),
+  `MusicPlayerTest` (21) over `PlayedAudio` on virtual time. Twins: every `order` and `fades` case; of `player`'s 13 the
+  AudioContext-wake case has none (no deck needs a press's stack) and "no fade without a gain" became "a file that ends
+  before its span moves on at once without a fade" (every deck ramps, D2); phase 2's interrupt cases each a twin, plus a
+  queue paused before the video staying paused. Bites (a)–(f) each red at its own case and green again, and two more:
+  the end resuming unconditionally → the listener's-pause/-play cases red; a new queue not counted → its case red.
+  A track still loading when `interrupt()` comes starts during the video (D13 pauses only a playing queue).
 
 - [ ] **4 Memories' music (core `memories/music/`)** — `MusicQueue`, `AudioFacts`, `Frames`, `Wav`, `MusicUpload` (D7),
   `TrackLabel` (D10), the ITEM report (D11), `MusicModel` (D8), the header toggle (D6), the lightbox's compact-control
