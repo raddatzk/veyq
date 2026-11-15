@@ -503,6 +503,9 @@ text goes straight into `DeviceLink` inside the core.
   - Bites (`/bin/cp -f` restore, compared equal): "Not now" after a link said in the plain words → `cargo test`'s
     `the_offer_lists_what_the_core_offers_then_not_now` red. The release past the scale was red in the pass itself
     (three carried drags did not confirm, the knob left at the end) and green after the fix, the same gesture.
+  - **Windows, built:** `windows/run.py build` green on the VM in a directory of its own (`VEYQ_WINDOWS_DIR=F:\veyq-link6`,
+    beside the Memories agent's): NuGet gates, `Veyq.Bridge.Tests` here and there, `Veyq.Tests`, the app and `Veyq.Drive`.
+    Bite: "Not now" after a link in the plain words → `TrustWordsTest.TheOfferListsWhatTheCoreOffersThenNotNow` red.
   - Cleanup: every devlogin session of the Linux app signed out by Settings' "Sign out" before its window closed; the
     A3 linked device (left on the empty offer page by the bug above) signed out from the A4 device's Settings row; the A4
     device by "Sign out"; every web session by the web's own sign-out. Left: the device-register entries of the runs'
