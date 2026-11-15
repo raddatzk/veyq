@@ -440,6 +440,28 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   `words/words.json` (English and German). · Done when: `./gradlew :android:assembleDebug`, the Apple project's build,
   `run.py build`/`test` on Linux and Windows green; `scripts/validate_mobile_words.py` green; each app clicked once
   through: set the limit, pin a Memory, see used and pinned sizes, clear the cache.
+  **Decided (coordinator 2026-11-15), and built first as the core's and the bridge's groundwork (5a), so the platforms
+  only draw:** (1) **a pin keeps covers** — every node's cover below the pinned node (a Memory's, its chapters', a
+  folder's) is fetched with the pin; a cover is named by the node's sealed meta, which the store cannot read, so the
+  pin's fetch records each node's cover blob in the pin's sealed record (`Pin.covers`, ids only) and the pin's reach and
+  the sweep's mark read them (`OfflinePinsTest.a_pin_keeps_the_covers…`; bite: covers dropped from `reach` → red). (2)
+  **A dropped pin's notice** is named from the names the shell read in this run (`ShellModel.State.gone`, `heldNames`),
+  else nameless (`offline_gone_named` / `offline_gone`); the core picks the key. (3) **Every phase-5 call through the
+  core and the bridge** (Linux and Windows reach it only so): `NodeHeaderModel.State.offline` (`OfflineToggle`: on,
+  status, its line, the bytes fetched of the total, the size asked) with `toggleOffline` → `confirmOffline` /
+  `cancelOffline` (on: asked with its size first; off: at once) and the header's `offline` menu action
+  (`NodeHeader.OFFLINE`); offline the header's rights read only (`NodeHeader.readOnly`) and the shell's New is not
+  offered; `ShellModel.State.banner` and `gone` (`goneSeen`); `AccountSettings.State.storage` (`Storage`: sizes, the
+  limit's free size field `LimitField`, the pinned `items` named from the held tree), `storageUnavailable` (no trust
+  here), `askingRemoveAll`, with `setOfflineLimit(amount, unit)`, `turnOfflineLimitOff`, `clearOfflineCache`,
+  `unpinOffline`, `askRemoveAllOffline` → `removeAllOffline` / `cancelRemoveAllOffline` and `followStorage` (the
+  section live while shown). The bridge: `Header.Offline|OfflineConfirm|OfflineCancel`, `Settings.OfflineLimit|
+  OfflineLimitOff|ClearCache|OfflineRemove|AskRemoveAll|RemoveAll|CancelRemoveAll`, `Shell.OfflineGoneSeen`,
+  `Watched.SettingsStorageLive`; `HeaderShown.offline`, `ShellShown.offlineBanner`, `SettingsShown.storage|
+  storageUnavailable|askingRemoveAll|limitUnits` (`SecretFreeSchemaTest`: sizes, times, states, words and the held
+  tree's names only; no `Pin` on the wire). `Reach.Ended` needs no new call: the gate already carries why. (4) Every
+  word in `words.json` EN+DE (`offline_*`, `account_settings_storage_*`, `storage_unit_*`), the owner's copy where
+  given. (5) No D3 path helper in core: the hosts name the directory.
 
 - [ ] **6 the passes** — first, Android's cold load of the manifest (ART), unmeasured so far: D2's 100,000-entry load
   (`OfflineManifestLoadTest`) on the emulator's first run, beside phase 2's JVM 1,049–1,174 ms and macOS 1,507 ms first
