@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.UnfoldMore
+import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
@@ -162,6 +163,14 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
         )
     }
 
+    // items made available offline that left this device (core's, named where the shell held their name): one snackbar
+    // each, then core does not say them again
+    androidx.compose.runtime.LaunchedEffect(s.gone) {
+        if (s.gone.isEmpty()) return@LaunchedEffect
+        for (n in s.gone) snackbar.showSnackbar(context.text(n), withDismissAction = true, duration = androidx.compose.material3.SnackbarDuration.Long)
+        model.goneSeen()
+    }
+
     BackHandler(enabled = shell.searching || shell.canGoBack) {
         if (shell.searching) model.search(false) else model.goBack()
     }
@@ -238,6 +247,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         },
                     )
                 }
+                s.banner?.let { OfflineBanner(it) }
                 incoming?.let { ShareBanner(it, onCancel = model::cancelShare) }
                 }
             },
@@ -580,6 +590,8 @@ private fun Drawer(
                 Box {
                     Button(
                         onClick = { newMenu = true },
+                        // offline every write is gone (ADR 0140 decision 7)
+                        enabled = s.online,
                         colors = ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
                         shape = MaterialTheme.shapes.small,
                         modifier = Modifier.fillMaxWidth(),
@@ -685,7 +697,7 @@ private fun ObjectItems(refs: List<ObjectRef>, open: ObjectRef?, onOpen: (Object
 @Composable
 private fun ExpensesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) -> Unit = model::open) {
     var creating by remember { mutableStateOf(false) }
-    CreateAction(stringResource(R.string.create_pot), shown = s.spaces.isNotEmpty(), onClick = { creating = true }, state = LocalListStates.current.of("app:EXPENSES")) { list, bottom ->
+    CreateAction(stringResource(R.string.create_pot), shown = s.spaces.isNotEmpty() && s.online, onClick = { creating = true }, state = LocalListStates.current.of("app:EXPENSES")) { list, bottom ->
         ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), onOpen = onOpen, state = list, bottom = bottom)
     }
     if (creating) PotCreateSheet(s, model) { creating = false }
@@ -696,7 +708,7 @@ private fun ExpensesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) 
 private fun MemoriesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) -> Unit = model::open) {
     var creating by remember { mutableStateOf(false) }
     val space = s.shell.space ?: s.spaces.firstOrNull()?.scopeId
-    CreateAction(stringResource(R.string.memory_new), shown = space != null, onClick = { creating = true }, state = LocalListStates.current.of("app:MEMORIES")) { list, bottom ->
+    CreateAction(stringResource(R.string.memory_new), shown = space != null && s.online, onClick = { creating = true }, state = LocalListStates.current.of("app:MEMORIES")) { list, bottom ->
         ArrangedListScreen(s.applicationList(ApplicationId.MEMORIES), onOpen = onOpen, state = list, bottom = bottom)
     }
     if (creating && space != null) NameDialog(stringResource(R.string.memory_create_memory_title), onClose = { creating = false }) { name ->
@@ -853,6 +865,22 @@ internal val LocalShellNotices = androidx.compose.runtime.staticCompositionLocal
 
 /** Whether the shell is picking a place for what another app shared (ADR 0138). */
 internal val LocalPicking = androidx.compose.runtime.compositionLocalOf { false }
+
+/**
+ * The shell's banner while the server is out of reach (ADR 0140 decision 10, core's words: "Offline — content as of …"):
+ * a strip under the top app bar, as Material shows a lasting state of the whole screen; every write is gone meanwhile.
+ */
+@Composable
+private fun OfflineBanner(banner: me.raddatz.veyq.mobile.words.Notice) {
+    Row(
+        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Outlined.CloudOff, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(8.dp))
+        Text(say(banner), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
 
 /** The pick mode's banner: what waits and where it can go, with its cancel. */
 @Composable

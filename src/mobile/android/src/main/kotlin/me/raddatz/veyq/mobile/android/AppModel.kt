@@ -84,7 +84,14 @@ sealed interface Screen {
         val switching: Boolean = false,
         /** "Manage servers" is open over the shell. */
         val managing: List<ManagedServer>? = null,
+        /** The shell's banner while the server is out of reach (core's `ShellModel.State.banner`); null online. */
+        val banner: me.raddatz.veyq.mobile.words.Notice? = null,
+        /** Items made available offline that left this device (core's `State.gone`), said until [AppModel.goneSeen]. */
+        val gone: List<me.raddatz.veyq.mobile.words.Notice> = emptyList(),
     ) : Screen {
+        /** Whether the account reaches its server: offline every write is taken away (ADR 0140 decision 7). */
+        val online: Boolean get() = banner == null
+
         /** The chosen application's own list, by the one rule (ADR 0122 decision 5). */
         fun applicationList(app: ApplicationId): ArrangedList = lists.applicationList(app)
 
@@ -118,6 +125,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         KeystoreDeviceKeys(app) { host?.get() },
         android.os.Build.MODEL,
         BouncyCastlePrimitives,
+        // ADR 0140 decision 3: app-private, credential-encrypted, left out of Auto Backup by the directory itself
+        offlineRoot = java.io.File(app.noBackupFilesDir, "offline").path,
+        offlineLimit = me.raddatz.veyq.mobile.offline.AccountOffline.PHONE_LIMIT,
     )
 
     /** The way in (core's `SessionModel`): the start, the sign-in, the unlock, the switcher, the sign-out. */
@@ -153,9 +163,26 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         when (g) {
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.SignIn -> _screen.value = Screen.SignIn(g.working, g.error, g.adding, g.server, g.email, g.kit)
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Unlock -> _screen.value = Screen.Unlock(g.record, g.working, g.error)
-            is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> shellModel?.state?.value?.let(::publish)
+            is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> {
+                shellModel?.state?.value?.let(::publish)
+                followEnded(g)
+            }
             else -> _screen.value = Screen.Starting
         }
+    }
+
+    /**
+     * The shown account ended on its own ([me.raddatz.veyq.mobile.session.Reach.Ended]: a reconnect found this device's
+     * trust gone): core took it out of the switcher and opened the next one, which no call of this model asked for — the
+     * shell follows it here. A switch or a sign-out this model made shows its own opened account.
+     */
+    private fun followEnded(g: me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) {
+        if (g.switching) return
+        val opened = session.signedTo ?: return
+        val shown = shellModel?.tenant ?: return
+        if (shown === opened.session || session.accounts.any { it === shown.account }) return
+        trustLog("the shown account ended: the shell follows the next one")
+        viewModelScope.launch { if (shellModel?.tenant !== opened.session) show(opened) }
     }
 
     /** The activity a prompt for the unlock key is shown over, while one is resumed. */
@@ -461,7 +488,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val m = me.raddatz.veyq.mobile.session.AccountSettings.of(session, account)
         settingsWatch?.cancel()
         settingsModel = m
-        settingsWatch = viewModelScope.launch { m.state.collect { _settings.value = it } }
+        settingsWatch = viewModelScope.launch {
+            // "Storage on this device" read anew at each change of the pins while the page is open (core's)
+            launch { m.followStorage() }
+            m.state.collect { _settings.value = it }
+        }
         viewModelScope.launch { m.refresh() }
     }
 
@@ -511,6 +542,13 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             null
         }
         override fun signOutHere() = onSettings { it.signOutHere() }
+        override fun setOfflineLimit(amount: String, unit: me.raddatz.veyq.mobile.offline.LimitUnit) = onSettings { it.setOfflineLimit(amount, unit); null }
+        override fun turnOfflineLimitOff() = onSettings { it.turnOfflineLimitOff(); null }
+        override fun clearOfflineCache() = onSettings { it.clearOfflineCache(); null }
+        override fun unpinOffline(node: String) = onSettings { it.unpinOffline(node); null }
+        override fun askRemoveAllOffline() { settingsModel?.askRemoveAllOffline() }
+        override fun cancelRemoveAllOffline() { settingsModel?.cancelRemoveAllOffline() }
+        override fun removeAllOffline() = onSettings { it.removeAllOffline(); null }
         override fun linkShow() = showForNewDevice()
         override fun linkScan() = scanSignInCode()
     }
@@ -1350,6 +1388,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             uses = l.uses,
             switching = gate.switching,
             managing = if (start) null else prior?.managing,
+            banner = state.banner,
+            gone = state.gone,
         )
     }
 
@@ -1377,6 +1417,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** Whether "New" is offered where the shell is (core's `ShellModel.canCreateHere`). */
     val canCreateHere: Boolean get() = shellModel?.canCreateHere == true
+
+    /** The shell's notices of items no longer available offline were shown: core does not say them again. */
+    fun goneSeen() {
+        val m = shellModel ?: return
+        viewModelScope.launch { m.goneSeen() }
+    }
     fun search(on: Boolean) = updateShell { it.search(on) }
 
     private fun updateShell(f: (Shell) -> Shell) {

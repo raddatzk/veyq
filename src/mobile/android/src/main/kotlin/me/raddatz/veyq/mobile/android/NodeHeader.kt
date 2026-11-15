@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -48,6 +49,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -133,6 +135,8 @@ internal fun NodeHeaderActions(
             // the heart turns at once and back when the write did not land (core's)
             Plan.FAVORITE -> scope.launch { header.toggleFavorite()?.let { snackbar.showSnackbar(context.text(it)) } }
             Plan.DOWNLOAD -> saveTo.launch(contribution.downloadName ?: me.raddatz.veyq.mobile.export.NodeExport.fileName(node.name))
+            // on: off at once; off: core reads the size it keeps and asks first (`State.offline.asking`, the dialog below)
+            Plan.OFFLINE -> scope.launch { header.toggleOffline()?.let { snackbar.showSnackbar(context.text(it)) } }
             in own -> own.getValue(id).onClick()
             else -> dialog = id
         }
@@ -151,7 +155,9 @@ internal fun NodeHeaderActions(
     if (plan.hasMenu) {
         IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
         DropdownMenu(menu, { menu = false }) {
-            for (id in plan.menu) DropdownMenuItem(
+            for (id in plan.menu) if (id == Plan.OFFLINE) {
+                OfflineMenuItem(labelOf(id, header, contribution, hasCover), state.offline) { menu = false; run(id) }
+            } else DropdownMenuItem(
                 text = { Text(labelOf(id, header, contribution, hasCover)) },
                 onClick = { menu = false; run(id) },
             )
@@ -164,6 +170,30 @@ internal fun NodeHeaderActions(
                 onClick = { menu = false; run(id) },
             )
         }
+    }
+
+    // a pin asks the size it keeps before its first byte (core's question); where the pin starts, Android 13+ is asked for
+    // its notifications — the fetch runs without them, its progress notification is then not shown
+    val notifications = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
+    ) {}
+    state.offline?.let { offline ->
+        val question = offline.question ?: return@let
+        AlertDialog(
+            onDismissRequest = header::cancelOffline,
+            title = { Text(stringResource(R.string.offline_pin_ask_title)) },
+            text = { Text(say(question)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                        androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) !=
+                        android.content.pm.PackageManager.PERMISSION_GRANTED
+                    ) notifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                    scope.launch { header.confirmOffline()?.let { snackbar.showSnackbar(context.text(it)) } }
+                }) { Text(stringResource(R.string.offline_pin_confirm)) }
+            },
+            dismissButton = { TextButton(onClick = header::cancelOffline) { Text(stringResource(R.string.entry_cancel)) } },
+        )
     }
 
     val close = { dialog = null }
@@ -233,6 +263,34 @@ private suspend fun offerUndo(
         runCatching { shown.await() }.getOrNull().also { window.cancel() }
     }
     if (answer == SnackbarResult.ActionPerformed) undo()?.let { snackbar.showSnackbar(context.text(it)) }
+}
+
+/**
+ * "Available offline" in the header's menu (ADR 0140 decision 10): a checkable item, as Material's menus mark a chosen
+ * one, its state's line under it (core's: "Downloading 3 MB of 12 MB", "On this device", "Paused: …") and, while it
+ * fetches, how far.
+ */
+@Composable
+private fun OfflineMenuItem(label: String, offline: me.raddatz.veyq.mobile.offline.OfflineToggle?, onClick: () -> Unit) {
+    val on = offline?.on == true
+    DropdownMenuItem(
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(label)
+                offline?.said?.let { Text(say(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                val done = offline?.done
+                val total = offline?.total
+                if (offline?.status == me.raddatz.veyq.mobile.offline.OfflineStatus.FETCHING && done != null && total != null && total > 0) {
+                    LinearProgressIndicator(progress = { (done.toFloat() / total).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+                }
+            }
+        },
+        // the check at the end, as Material marks a chosen item; no leading icon, as the menu's other items have none
+        trailingIcon = if (on) ({ Icon(Icons.Filled.Check, null) }) else null,
+        onClick = onClick,
+        // read out as a checkable item, as a switch would be
+        modifier = Modifier.semantics { toggleableState = androidx.compose.ui.state.ToggleableState(on) },
+    )
 }
 
 private fun iconOf(id: String, own: Map<String, OwnAction>): ImageVector = when (id) {
