@@ -298,8 +298,15 @@ class OfflineScreensTest {
         page.setOfflineLimit("10", LimitUnit.GB)
 
         // clear cache keeps the pin; remove all only once asked
+        me.raddatz.veyq.mobile.memories.MemoryMedia.read(tenant, g.items.single(), g.items.single().thumbnail!!)
+        page.refresh()
+        assertTrue(assertNotNull(page.current.storage).automatic > 0, "the medium viewed again is not kept")
         page.clearOfflineCache()
         assertEquals(1, page.current.storage?.items?.size)
+        // "Recently viewed" shows nothing after it: what an account opens with is kept (an offline unlock needs it), but is
+        // no content viewed, so it is not counted there (phase 6: Clear cache left about 19 kB showing)
+        assertEquals(0L, page.current.storage?.automatic, "Recently viewed after Clear cache")
+        assertTrue(assertNotNull(a.offline).store.entries().any { it.key.kind in KeptRead.OPENING }, "the opening answers went with the cache")
         page.removeAllOffline()
         assertEquals(1, page.current.storage?.items?.size, "removed all without asking")
         page.askRemoveAllOffline()

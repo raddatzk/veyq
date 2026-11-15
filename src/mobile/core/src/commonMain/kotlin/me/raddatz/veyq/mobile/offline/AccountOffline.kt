@@ -57,7 +57,12 @@ class AccountOffline internal constructor(
     /** A kept answer: its pages as the server sent them, the server's revision and when the server last confirmed it. */
     class Answer(val pages: List<ByteArray>, val revision: String?, val asOf: Long?)
 
-    /** What the store holds against the limit (the Settings section's sizes, ADR 0140 decision 10). */
+    /**
+     * What the store holds against the limit (the Settings section's sizes, ADR 0140 decision 10): [automatic] is content
+     * viewed ("Recently viewed", what "Clear cache" drops), [pinned] what the pins reach. The answers an account opens
+     * with and the pins' record ([KeptRead.PROTECTED], a few kB) count against the limit but in neither: they are no
+     * content, and no button but a wipe drops them — counted as "Recently viewed" they showed after "Clear cache".
+     */
     data class Usage(val limit: Long, val automatic: Long, val pinned: Long, val free: Long?)
 
     internal fun key(read: KeptRead, tenant: String = "", scope: String = "", id: String = "") = EntryKey(server, tenant, scope, read.kind, id)
@@ -78,7 +83,7 @@ class AccountOffline internal constructor(
         val entries = store.entries()
         return Usage(
             limit,
-            entries.filter { it.pins.isEmpty() }.sumOf { it.size },
+            entries.filter { it.pins.isEmpty() && it.key.kind !in KeptRead.PROTECTED }.sumOf { it.size },
             entries.filter { it.pins.isNotEmpty() }.sumOf { it.size },
             files.freeBytes(store.directory),
         )
