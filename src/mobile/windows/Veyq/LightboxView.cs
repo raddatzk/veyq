@@ -61,6 +61,8 @@ internal sealed class LightboxView : IDisposable
     /// <summary>Where the lightbox's keys are held while it stands (the window's content), and the keys.</summary>
     private readonly UIElement _keyHost;
     private readonly System.Collections.Generic.List<KeyboardAccelerator> _keys = [];
+    /// <summary>← and → on the window's content, tunnelling: before a focused control's own arrow keys.</summary>
+    private readonly KeyEventHandler _arrows;
     private MediumPlayer? _player;
     private bool _closed;
 
@@ -88,7 +90,7 @@ internal sealed class LightboxView : IDisposable
         _next = Button(Symbol.Next, Words.MemoryNext(), "lightbox-next", () => Step(1));
         _slideshow = Button(Symbol.Play, Words.MemorySlideshowStart(), "lightbox-slideshow", Slideshow);
         _details = Button(Symbol.Help, Words.MemoryDetails(), "lightbox-details", ShowDetails);
-        _details.Icon = new FontIcon { Glyph = "" };
+        _details.Icon = new FontIcon { Glyph = "\uE946" };
         _save = Button(Symbol.Download, Words.MemoryDownload(), "lightbox-save", Save);
         _trash = Button(Symbol.Delete, Words.MemoryTrash(), "lightbox-trash", Trash);
         foreach (var b in new[] { back, _previous, _next }) _bar.PrimaryCommands.Add(b);
@@ -109,6 +111,14 @@ internal sealed class LightboxView : IDisposable
         AutomationProperties.SetAutomationId(_view, "lightbox");
         _keyHost = (UIElement)window.Content;
         _keyHost.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
+        _arrows = (_, e) =>
+        {
+            if (e.Key is not (VirtualKey.Left or VirtualKey.Right) || e.OriginalSource is TextBox or Slider || Held(VirtualKey.Menu)
+                || Held(VirtualKey.Control) || Held(VirtualKey.Shift)) return;
+            e.Handled = true;
+            Step(e.Key == VirtualKey.Left ? -1 : 1);
+        };
+        _keyHost.AddHandler(UIElement.PreviewKeyDownEvent, _arrows, true);
         Keys();
         Open(index);
     }
@@ -161,9 +171,10 @@ internal sealed class LightboxView : IDisposable
         Draw();
     }
 
-    /// <summary>← → page, + - 0 zoom, Escape back — as accelerators of the window's content while the lightbox stands, so
-    /// they reach it wherever the focus went (after the save picker it was no longer in the view, measured 2026-11-15: ←
-    /// paged nothing); a text box still takes its own arrows first.</summary>
+    /// <summary>+ - 0 zoom and Escape back as accelerators of the window's content while the lightbox stands, so they reach
+    /// it wherever the focus went; ← → page on that content's PreviewKeyDown. As accelerators they were taken first by the
+    /// focused control's own arrows: after the save picker the focus is back on the bar's Save, whose CommandBar moves it
+    /// with ← → (measured 2026-11-15: + zoomed there, → paged nothing). A text box and the player's seek bar keep theirs.</summary>
     private void Keys()
     {
         void Add(VirtualKey key, Action act, VirtualKeyModifiers modifiers = VirtualKeyModifiers.None)
@@ -177,8 +188,6 @@ internal sealed class LightboxView : IDisposable
             _keys.Add(a);
             _keyHost.KeyboardAccelerators.Add(a);
         }
-        Add(VirtualKey.Left, () => Step(-1));
-        Add(VirtualKey.Right, () => Step(1));
         Add((VirtualKey)187, () => ZoomBy(ZoomStep));               // = and + (VK_OEM_PLUS)
         Add(VirtualKey.Add, () => ZoomBy(ZoomStep));
         Add((VirtualKey)189, () => ZoomBy(1 / ZoomStep));           // - (VK_OEM_MINUS)
@@ -187,6 +196,9 @@ internal sealed class LightboxView : IDisposable
         Add(VirtualKey.NumberPad0, () => SetZoom(1));
         Add(VirtualKey.Escape, () => _close());
     }
+
+    private static bool Held(VirtualKey key) =>
+        Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
 
     /// <summary>Pages by <paramref name="by"/> (−1 back, 1 on) where there is a medium there.</summary>
     private void Step(int by)
@@ -249,7 +261,7 @@ internal sealed class LightboxView : IDisposable
         _zoom = null;
         if (row.blocked)
         {
-            _stage.Content = Message(row.said is { } w ? Said.Key(w) : Words.MemoryBlocked(), "");
+            _stage.Content = Message(row.said is { } w ? Said.Key(w) : Words.MemoryBlocked(), "\uE733");
             return;
         }
         var column = new Grid();
@@ -300,7 +312,7 @@ internal sealed class LightboxView : IDisposable
         }
         else
         {
-            var glyph = HomeView.Glyph(row.video ? "" : "");
+            var glyph = HomeView.Glyph(row.video ? "\uE714" : "\uE91B");
             glyph.FontSize = 96;
             glyph.HorizontalAlignment = HorizontalAlignment.Center;
             glyph.VerticalAlignment = VerticalAlignment.Center;
@@ -382,7 +394,7 @@ internal sealed class LightboxView : IDisposable
             {
                 if (_closed) return;
                 StopPlayer(tellCore: true);
-                _stage.Content = Message(Words.MemoryVideoFailed(), "");
+                _stage.Content = Message(Words.MemoryVideoFailed(), "\uE714");
             });
             _player = player;
             _zoom = null;
@@ -392,7 +404,7 @@ internal sealed class LightboxView : IDisposable
         catch (Exception e)
         {
             Log.Write($"the lightbox's medium did not open ({e.GetType().Name}: {e.Message})");
-            if (!_closed) _stage.Content = Message(Words.MemoryVideoFailed(), "");
+            if (!_closed) _stage.Content = Message(Words.MemoryVideoFailed(), "\uE714");
         }
     }
 
@@ -508,6 +520,7 @@ internal sealed class LightboxView : IDisposable
         }
         _stage.Content = null;
         foreach (var k in _keys) _keyHost.KeyboardAccelerators.Remove(k);
+        _keyHost.RemoveHandler(UIElement.PreviewKeyDownEvent, _arrows);
         _keys.Clear();
         _watch?.Dispose();
         if (_id is { } lightbox)
