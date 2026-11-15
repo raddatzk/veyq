@@ -1,6 +1,5 @@
 package me.raddatz.veyq.mobile.android
 
-import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -60,7 +59,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -83,15 +81,12 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.window.DialogWindowProvider
-import androidx.core.view.WindowCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
@@ -135,7 +130,8 @@ internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
 internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     val palette = LocalPalette.current
     val state by gallery.state.collectAsStateWithLifecycle()
-    var open by remember { mutableStateOf<MemoryLightbox?>(null) }
+    // the lightbox is the gallery's (core's, held by the app model): an activity a rotation recreated shows it again (#934)
+    var open by remember(gallery) { mutableStateOf(gallery.openLightbox) }
     val hero = LocalNodeHero.current
     val rows = state.rows
     // the system's photo picker: photos and videos, several at once
@@ -352,7 +348,7 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
     // the whole screen, edge to edge like the activity: a dialog's window otherwise keeps out of the system bars and the
     // display cutout, so in landscape the lightbox sat shifted right by the cutout with the page showing beside it (#931)
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        EdgeToEdgeDialogWindow()
+        EdgeToEdgeDialogWindow(darkIcons = false)
         val state by box.state.collectAsStateWithLifecycle()
         val rows = state.rows
         if (rows.isEmpty()) {
@@ -445,24 +441,6 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
         }
         if (details) {
             ModalBottomSheet(onDismissRequest = { details = false }) { MediaDetailsSheet(row, box) }
-        }
-    }
-}
-
-/**
- * The window of the dialog this is composed in drawn into the display cutout too (an edge-to-edge dialog's window still
- * keeps out of it on its short edges), with the system bars' icons light over the lightbox's black.
- */
-@Composable
-private fun EdgeToEdgeDialogWindow() {
-    val window = (LocalView.current.parent as? DialogWindowProvider)?.window ?: return
-    SideEffect {
-        window.attributes = window.attributes.also {
-            it.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
-        }
-        WindowCompat.getInsetsController(window, window.decorView).apply {
-            isAppearanceLightStatusBars = false
-            isAppearanceLightNavigationBars = false
         }
     }
 }
