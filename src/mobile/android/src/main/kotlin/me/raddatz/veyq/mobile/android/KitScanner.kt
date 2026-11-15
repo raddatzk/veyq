@@ -3,9 +3,13 @@ package me.raddatz.veyq.mobile.android
 import android.util.Log
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,10 +64,14 @@ fun KitScanner(scan: QrScan<*>, onClose: () -> Unit, onNoCamera: () -> Unit) {
         }
     }
     // secure: the camera shows the kit's code — the Secret Key —, so no screenshot and no recents thumbnail holds a frame of it
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, securePolicy = SecureFlagPolicy.SecureOn)) {
+    // the whole screen, edge to edge: a dialog's window otherwise sits beside the cutout in landscape (#936)
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false, securePolicy = SecureFlagPolicy.SecureOn)) {
+        EdgeToEdgeDialogWindow()
         Scaffold(
+            contentWindowInsets = WindowInsets.safeDrawing,
             topBar = {
                 TopAppBar(
+                    windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
                     title = { Text(stringResource(R.string.signin_kit_scan)) },
                     navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.Filled.Close, stringResource(R.string.signin_cancel)) } },
                 )

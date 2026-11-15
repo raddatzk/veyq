@@ -798,7 +798,15 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   `usePlatformDefaultWidth = false` and the activity edge to edge: in landscape the lightbox sat 132 px right of the
   screen's edge, the page showing beside it (measured 2026-11-15, `dumpsys window`: the dialog's `frame=[132,74][2400,1017]`).
   A full-screen dialog takes `decorFitsSystemWindows = false` plus the cutout mode `ALWAYS` on its own window
-  (`EdgeToEdgeDialogWindow`) and keeps its content in `WindowInsets.safeDrawing`.
+  (`EdgeToEdgeDialogWindow`, which the lightbox, `KitScanner` and `DeviceLinkScreen` call) and keeps its content in
+  `WindowInsets.safeDrawing` (a field under it consumes the scaffold's padding before its `imePadding()`). Measured
+  2026-11-15 (#936): the scanner's and the device link's window `frame=[0,0][2400,1080]` in landscape and seascape, the
+  lightbox's in landscape, each bar 132 px in from the cutout's side.
+- A rotation recreates the activity, and whatever a composable holds in `remember` goes with it: the lightbox closed on
+  a rotation while the Memory under it stayed (#934, measured 2026-11-15 — the shell's place is the core's, held by
+  `AppModel`, a `ViewModel`). What a rotation must keep is a model's: the page draws anew from it (`GalleryModel.openLightbox`).
+  A playing video goes back to its poster, the player being the view's. The kit scanner's `scan` is still held in
+  `remember` (`SignInScreen`): a rotation closes it, the sign-in form staying (measured the same day).
 - ffmpeg's `testsrc` at a 16:9 size draws its pattern off centre and cut at the right (the circle, the counter): a
   frame of it looks shifted wherever it is drawn. Before calling a drawn video shifted, compare the screen against
   ffmpeg's own frame of that time (#931 was that, 2026-11-15: the player had drawn it exactly).

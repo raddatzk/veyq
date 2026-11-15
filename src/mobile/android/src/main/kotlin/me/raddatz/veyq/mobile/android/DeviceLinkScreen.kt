@@ -7,11 +7,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -96,16 +101,20 @@ fun DeviceLinkScreen(link: DeviceLink, onAgain: () -> Unit, onClose: () -> Unit)
         Role.SCAN_FROM_TRUSTED -> R.string.link_join_title
         Role.SHOW_FOR_SIGN_IN -> R.string.signin_link_show
     }
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false, securePolicy = SecureFlagPolicy.SecureOn)) {
+    // the whole screen, edge to edge: a dialog's window otherwise sits beside the cutout in landscape (#936)
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, dismissOnClickOutside = false, decorFitsSystemWindows = false, securePolicy = SecureFlagPolicy.SecureOn)) {
+        EdgeToEdgeDialogWindow()
         Scaffold(
+            contentWindowInsets = WindowInsets.safeDrawing,
             topBar = {
                 TopAppBar(
+                    windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
                     title = { Text(stringResource(title)) },
                     navigationIcon = { IconButton(onClick = onClose) { Icon(Icons.Filled.Close, stringResource(R.string.signin_cancel)) } },
                 )
             },
         ) { padding ->
-            Box(Modifier.padding(padding).fillMaxSize().imePadding(), contentAlignment = Alignment.TopCenter) {
+            Box(Modifier.padding(padding).consumeWindowInsets(padding).fillMaxSize().imePadding(), contentAlignment = Alignment.TopCenter) {
                 Column(
                     Modifier.widthIn(max = 520.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp).testTag("link"),
                     verticalArrangement = Arrangement.spacedBy(16.dp),

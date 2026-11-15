@@ -266,6 +266,25 @@ class GalleryModelTest {
     }
 
     @Test
+    fun theOpenLightboxIsTheGallerysUntilItCloses() = runTest {
+        val door = Door(listOf(item("c", at = 3), item("b", at = 2), item("a", at = 1)))
+        val g = open(door)
+        assertNull(g.openLightbox, "none opened")
+        val box = g.lightbox(1)
+        box.go(2)
+        // a view drawn anew (a recreated activity) finds the same lightbox on the same medium
+        assertSame(box, g.openLightbox)
+        assertEquals("a", g.openLightbox?.current?.row?.mediaId)
+        val other = g.lightbox(0)
+        assertSame(other, g.openLightbox, "one at a time: the newer one")
+        other.close()
+        assertNull(g.openLightbox, "closed: no lightbox shows again")
+        g.lightbox(0)
+        g.close()
+        assertNull(g.openLightbox, "the gallery closed: none")
+    }
+
+    @Test
     fun aVideosReaderOpensOnlyForAVideoAndClosesWhenPagedAwayOrTheLightboxCloses() = runTest {
         val door = Door(listOf(item("v1", at = 3, type = "video/mp4"), item("p", at = 2), item("v2", at = 1, type = "video/mp4")))
         val g = open(door)
