@@ -63,7 +63,7 @@ class OfflineStore internal constructor(
      * Keeps [content] (a listing's answer as the server sent it) as [key], replacing what was kept — never merged
      * (ADR 0140 decision 5) — with the server's [revision] and [asOf], the time the server last confirmed it.
      */
-    suspend fun put(key: EntryKey, content: ByteArray, revision: String? = null, asOf: Long? = null) = lock.withLock {
+    suspend fun put(key: EntryKey, content: ByteArray, revision: String? = null, asOf: Long? = null, pins: Set<String>? = null) = lock.withLock {
         if (closed) return@withLock
         val name = name(TAG_ENTRY, key)
         val sealed = seal(content, aad(TAG_ENTRY, key))
@@ -71,7 +71,7 @@ class OfflineStore internal constructor(
         val now = clock()
         val old = find(key)
         dropBlobState(key, old)
-        shards[shard(name)][key] = Kept(key, name, blob = false, sealed.size.toLong(), now, old?.pins.orEmpty(), revision, asOf)
+        shards[shard(name)][key] = Kept(key, name, blob = false, sealed.size.toLong(), now, pins ?: old?.pins.orEmpty(), revision, asOf)
         writeShard(shard(name))
     }
 
@@ -95,8 +95,11 @@ class OfflineStore internal constructor(
 
     // ---- a blob's frames
 
-    /** Appends each of [frames] (a frame index to the frame as the store served it) to [key]'s blob, the ones it holds left as they are. */
-    suspend fun putFrames(key: EntryKey, frames: Map<Int, ByteArray>) = lock.withLock {
+    /**
+     * Appends each of [frames] (a frame index to the frame as the store served it) to [key]'s blob, the ones it holds left
+     * as they are; [pins] the pins that reach it now (null: those it had).
+     */
+    suspend fun putFrames(key: EntryKey, frames: Map<Int, ByteArray>, pins: Set<String>? = null) = lock.withLock {
         if (closed) return@withLock
         val name = name(TAG_ENTRY, key)
         val old = find(key)
@@ -113,7 +116,7 @@ class OfflineStore internal constructor(
         replace(path(name(TAG_INDEX, key)), seal(FrameIndexCodec.encode(index), aad(TAG_INDEX, key)))
         indexes[key] = index
         val size = (files.size(path(name)) ?: 0L)
-        shards[shard(name)][key] = Kept(key, name, blob = true, size, clock(), old?.pins.orEmpty(), null, null)
+        shards[shard(name)][key] = Kept(key, name, blob = true, size, clock(), pins ?: old?.pins.orEmpty(), null, null)
         writeShard(shard(name))
     }
 
@@ -164,12 +167,25 @@ class OfflineStore internal constructor(
         for (s in touched) writeShard(s)
     }
 
-    /** [key]'s pins set to [pins] (phase 4's pins; a test's): an entry with a pin is never evicted. */
+    /** [key]'s pins set to [pins] (a test's): an entry with a pin is never evicted. */
     internal suspend fun setPins(key: EntryKey, pins: Set<String>) = lock.withLock {
         if (closed) return@withLock
         val kept = find(key) ?: return@withLock
         kept.pins = pins
         writeShard(kept.shard)
+    }
+
+    /** Each entry of [pins] given those pins (the pins that reach it now, [AccountOffline.applyPins]), each shard written once. */
+    internal suspend fun setPinsAll(pins: Map<EntryKey, Set<String>>) = lock.withLock {
+        if (closed) return@withLock
+        val touched = HashSet<Int>()
+        for ((k, p) in pins) {
+            val kept = find(k) ?: continue
+            if (kept.pins == p) continue
+            kept.pins = p
+            touched += kept.shard
+        }
+        for (s in touched) writeShard(s)
     }
 
     /**

@@ -179,6 +179,22 @@ object MemoryMedia {
      */
     private fun keeps(item: Item, blob: Blob): Boolean = roleOf(item, blob) != ORIGINAL || item.isVideo
 
+    /**
+     * What a pin of Memory or chapter [node] keeps (ADR 0140 decisions 8 and 9): each medium's tiles and preview and a
+     * video's original — what [keeps] keeps when it is viewed —, a medium the operator blocked none; each blob with its key.
+     */
+    internal suspend fun pinned(tenant: TenantSession, node: me.raddatz.veyq.mobile.session.OpenNode): List<me.raddatz.veyq.mobile.offline.PinBlob> {
+        val g = list(tenant, node.scopeId, node.id) ?: return emptyList()
+        val suite = tenant.account.suite
+        return g.items.filter { !it.blocked }.flatMap { item ->
+            listOfNotNull(item.thumbnail, item.preview, item.original.takeIf { item.isVideo }).filter { keeps(item, it) }.mapNotNull { b ->
+                openBlobKey(suite, item.scopeId, item.mediaId, item.key, b, roleOf(item, b))?.let {
+                    me.raddatz.veyq.mobile.offline.PinBlob(item.scopeId, b.blobId, b.chunkCount, b.byteSize, it)
+                }
+            }
+        }
+    }
+
     /** The grid's order (`useMediaGalleryLive`'s date sort, newest first): a row without a capture time last, ties by id. */
     fun order(items: List<Item>): List<Item> = items.sortedWith(
         compareBy<Item> { it.meta?.effectiveCapturedAt == null }

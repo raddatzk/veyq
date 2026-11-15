@@ -374,7 +374,7 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   A duplicate connection opens a second `OfflineStore` over the same directory until it retires (a cache; the next open's
   orphan sweep settles it) — one shared instance per account is phase 4's if the sync makes it matter.
 
-- [ ] **4 pins and their sync (core, Android's and Apple's background)** — D9: the pin per node through `AppKinds`, the
+- [x] **4 pins and their sync (core, Android's and Apple's background)** — D9: the pin per node through `AppKinds`, the
   fetch with progress and resume, the size confirmed first, the sync on open and on a moved revision, the re-key path
   (R5: listings re-read, no frame refetched), the Android worker and the iOS background time (first: whether
   `BGContinuedProcessingTask` exists on the simulator's iOS — measured, not remembered). · Done when: core and bridge
@@ -383,6 +383,53 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   offline after it; **bites**: (a) unpinning a node another pin still reaches keeps the shared blobs (bite: drop by node
   → red); (b) a pin of a node trashed on the server is dropped with its notice (bite: keep pins outside the sweep → red);
   (c) a re-key that refetched frames is caught by the count (bite: clear frames on a moved revision → red).
+  Done 2026-11-15. **Apple's first measurement** (Xcode 27.2, iOS SDK 27.2; no simulator booted, CoreSimulator not
+  usable here): measured — `BackgroundTasks.framework/Headers/BGTask.h` and `BGTaskRequest.h` declare
+  `BGContinuedProcessingTask`/`…Request` `API_AVAILABLE(ios(26.0))`, unavailable on macOS (the app's deployment target is
+  iOS 26, so no availability check); the request's identifier is `<bundle id>.<context>.*`-wildcarded; the throwing
+  `submit` is deprecated from iOS 27 (an async one replaces it); and `BGTaskScheduler.h` says itself that the simulator
+  supports no background processing (`BGTaskSchedulerErrorCodeUnavailable`) — so the simulator cannot decide it; the
+  call compiles (`xcodebuild … -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build`, and the
+  macOS build). **Unmeasured, for phase 6 on a real iPhone:** that a submit is accepted, that registering the wildcard
+  identifier (`me.raddatz.veyq.offline.*`, `Info.plist`'s `BGTaskSchedulerPermittedIdentifiers`) is what the system
+  wants, whether a background mode is needed beside it, the system's progress UI and its expiry, and
+  `beginBackgroundTask`'s time. Built as: `offline/OfflinePins` (`VeyqAccount.offlinePins`: `plan` — the bytes not yet
+  kept, before the first —, `pin`, `unpin`, `sync`; the sync started by `AccountDoor.opened` with `AppKinds.pins`, a pass
+  at each online open, at reconnect, on a pinned listing whose kept revision moved (`VeyqAccount.kept` wakes it) and on
+  its own `LivePoll` minute; `ApplicationBlobs.FrameSource.fill` fetches only frames not kept, checks each under
+  `K_blob`, keeps what it fetched before a failure, stops at the free-space floor as `NO_SPACE`); `PinKinds` with
+  `AppKinds.pins` (a Memory and a chapter: tiles, previews, a video's original; a Depot file its content; a folder
+  through the walk); pins in the store's own sealed record (`KeptRead.PINS`, no name: the store keeps no plaintext), and
+  `AccountOffline.reach`/`applyPins` give every entry exactly the pins that reach it (by the kept answers alone), so a
+  pinned write ignores the limit and the automatic tier's quarter rule; the sweep first settles the pins (`settlePins`:
+  a node no longer listed — trashed, scope or tenant left, a `403` on its tree — drops the pin into `gone`; a blocked node
+  or a suspended tenant keeps it `UNAVAILABLE` without content; back to `WAITING` once served); **one shared store per
+  account in the process** (`OfflineStores.openShared`, released per holder, closed for a wipe whoever holds it), since
+  the sync made a second writer matter; `OfflineFetching` (every fetch's progress, for the hosts' background). Android:
+  `OfflineWork.kt` — a WorkManager 2.12.0 worker started whenever a fetch begins, promoted to a `dataSync` foreground
+  service with its notification (`offline_fetch_*` words), ended when none is left. Apple: `OfflineBackground.swift` —
+  a continued-processing task submitted when a fetch begins in front, `beginBackgroundTask` on leaving the app.
+  Tests: `OfflinePinsTest` (seven cases); **bites**, each one edit restored from a snapshot, red at its own assertion:
+  (a) `removePin` dropping every entry the node's pin reached → the chapter's frames gone; (b) the sweep without
+  `settlePins`, pinned entries never swept → the trashed Memory's pin stayed (and the blocked node's pin stayed `KEPT`);
+  (c) `keep` clearing a listing's blobs when its revision moved → "a re-key refetched frames, expected 5 but was 10".
+  `LivePinsTest` green against the dev backend: a Memory in a fresh folder pinned through the door (two blobs: a photo's
+  thumbnail and preview), a photo added from another session kept after the next online open (four blobs), the folder's
+  subtree re-keyed by a link's close (`CLOSED_REKEY_PENDING`: the Memory is left due for a web device, as the app does
+  not re-key Memories' media rows) — the tree's revision moved, no frame fetched again, every frame in place —, then
+  opened offline with both photos. Checks: `./gradlew :core:jvmTest :bridge:jvmTest` (706, 89), `:core:macosArm64Test`
+  (513), `:android:assembleDebug` (verification metadata written from an empty Gradle home: WorkManager, Room 2.7.0 and
+  SQLite 2.5.0 under it), the Apple app for the iOS simulator SDK and macOS, `linux/run.py test` (518), `windows/run.py
+  test` on the VM (519). **For phase 5:** the hosts call `offlinePins` (`pinnable` answers only after the door opened a
+  tenant); a pin dropped has no name to show (the store keeps none) — say it without one, or name it from the tree the
+  screen still holds; Android asks for `POST_NOTIFICATIONS` where a pin is made (declared, not asked: without it the
+  service runs and its notification is not shown); the bridge carries no pin call yet. Not kept by a pin: a node's covers
+  (application blobs) — a pinned Memory's chapter covers show without their picture offline. A pinned Depot file and
+  folder are built (`DepotFiles.pinned`, the file's folder listing in its reach) but run by no test (`PlayedTenant` serves
+  no `listFiles`; the live test pins a Memory). **For phase 6:** the Android worker on a device (the foreground service's
+  start from the foreground, its notification, the process kept after leaving the app) and WorkManager's own files in the
+  container listing (`databases/androidx.work.workdb`, `shared_prefs/androidx.work.util.preferences.xml`, named in
+  `src/mobile/CLAUDE.md`); Apple's unmeasured list above.
 
 - [ ] **5 the Settings section and the screens on every app** — D10 on Android, iOS, macOS, Windows and Linux, on the account's
   Settings page; the header toggle, the shell's banner, disabled writes; each host passes D3's directory as

@@ -166,6 +166,16 @@ class VeyqAccount private constructor(
     internal var offline: AccountOffline? = null
         private set
 
+    private var pinsHeld: me.raddatz.veyq.mobile.offline.OfflinePins? = null
+
+    /** This account's pins on this device and their sync (ADR 0140 decision 9); null where it keeps no offline store. */
+    val offlinePins: me.raddatz.veyq.mobile.offline.OfflinePins?
+        get() {
+            val o = offline ?: return null
+            pinsHeld?.takeIf { it.offline === o }?.let { return it }
+            return me.raddatz.veyq.mobile.offline.OfflinePins(this, o, background, ::now).also { pinsHeld = it }
+        }
+
     private val background = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
     private var probing: kotlinx.coroutines.Job? = null
     private val reconnecting = Mutex()
@@ -174,7 +184,7 @@ class VeyqAccount private constructor(
     internal suspend fun ensureOffline() {
         if (offline != null || trusted == null) return
         val stores = device.offline ?: return
-        val o = runCatching { stores.openFor(key, masterKey, server, device.offlineLimit) }
+        val o = runCatching { stores.openShared(key, masterKey, server, device.offlineLimit) }
             .onFailure { println("veyq: the offline store did not open: $it") }.getOrNull() ?: return
         offline = o
         keepOpening(o)
@@ -469,6 +479,8 @@ class VeyqAccount private constructor(
      * stays on this device (ADR 0140 decision 11: the store goes only when the account leaves this device).
      */
     suspend fun retire() {
+        pinsHeld?.stop()
+        pinsHeld = null
         offline?.close()
         offline = null
         close()
@@ -615,7 +627,9 @@ class VeyqAccount private constructor(
      * trusting this device" and removing the device. Best effort: a wipe a crash interrupted finishes at the next start.
      */
     private suspend fun wipeOffline() {
-        offline?.let { runCatching { it.close() } }
+        pinsHeld?.stop()
+        pinsHeld = null
+        offline?.let { runCatching { it.closeForWipe() } }
         offline = null
         device.offline?.let { o -> runCatching { o.wipe(key) }.onFailure { println("veyq: the offline store was not wiped: $it") } }
     }
@@ -745,6 +759,8 @@ class VeyqAccount private constructor(
                     o.keep(key!!, fetched.pages, fetched.revision)
                     sweepDue = true
                     if (settle) settle()
+                    // a pinned listing's revision moved (decision 9): the pins' sync fetches what is new
+                    if (conditional && kept != null && kept.revision != fetched.revision && o.store.entry(key)?.pins?.isNotEmpty() == true) pinsHeld?.wake()
                 }
                 Read(fetched.pages, null)
             }
@@ -966,7 +982,7 @@ class VeyqAccount private constructor(
         ): VeyqAccount? {
             val stores = device.offline
             if (stores == null || !stores.has(record.key)) return null
-            val o = runCatching { stores.openFor(record.key, masterKey, record.server, device.offlineLimit) }.getOrNull() ?: return null
+            val o = runCatching { stores.openShared(record.key, masterKey, record.server, device.offlineLimit) }.getOrNull() ?: return null
             val material = o.answer(o.key(KeptRead.KEY_MATERIAL))?.pages?.singleOrNull()
                 ?.let { runCatching { KEPT_JSON.decodeFromString(AccountKeyMaterial.serializer(), it.decodeToString()) }.getOrNull() }
             val tenantsAnswer = o.answer(o.key(KeptRead.MY_TENANTS))

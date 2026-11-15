@@ -40,8 +40,20 @@ enum class KeptRead(val kind: String, internal val model: KSerializer<*>) {
         /** A blob's frames, as the object store served them. */
         const val FRAMES = "frames"
 
+        /**
+         * The account's pins on this device (ADR 0140 decision 9: each pin's node, its state, a pin dropped with its
+         * notice), sealed as every entry is — no server's answer, the store's own record.
+         */
+        const val PINS = "pins"
+
         /** The reads an account opens with: never evicted (an offline unlock needs them), dropped only by a wipe. */
         internal val OPENING = setOf(KEY_MATERIAL.kind, MY_TENANTS.kind, MY_SCOPES.kind)
+
+        /** What neither the limit, "Clear cache" nor the sweep drops: the opening answers and the pins' record. */
+        internal val PROTECTED = OPENING + PINS
+
+        /** The listings below a scope: what a pin reaches through. */
+        internal val LISTINGS = setOf(NODES.kind, NODE_MEDIA.kind, FILES.kind, APPLICATION_BLOBS.kind)
     }
 }
 

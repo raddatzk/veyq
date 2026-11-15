@@ -10,6 +10,12 @@
 		<key>UIImageName</key>
 		<string>VeyqMark</string>
 	</dict>
+	<!-- A pin's fetch as a continued-processing task (ADR 0140 decision 9, iOS 26's BGContinuedProcessingTask): the bundle id,
+	     a context and a unique suffix per request, permitted by the wildcard. -->
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>me.raddatz.veyq.offline.*</string>
+	</array>
 	<!-- App Transport Security stays on everywhere but the developer's own dev instance, a *.localhost tenant. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>

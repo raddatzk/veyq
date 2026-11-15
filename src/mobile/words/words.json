@@ -3311,5 +3311,20 @@
     "note": "a change refused while the app cannot reach the server: offline, everything is read-only (ADR 0140 decision 7)",
     "en": "You’re offline. Changes are possible again once you’re back online.",
     "de": "Du bist offline. Ändern geht wieder, sobald du online bist."
+  },
+  "offline_fetch_title": {
+    "note": "the system's notice while the app fetches what was made available offline, outside the app (Android's notification, iOS's background task; ADR 0140 decision 9)",
+    "en": "Making content available offline",
+    "de": "Inhalte werden offline verfügbar gemacht"
+  },
+  "offline_fetch_channel": {
+    "note": "the name of Android's notification channel for that fetch, shown in the system's settings",
+    "en": "Available offline",
+    "de": "Offline verfügbar"
+  },
+  "offline_fetch_percent": {
+    "note": "how far that fetch is, under its title: {1} a whole percent",
+    "en": "{1} %% done",
+    "de": "{1} %% erledigt"
   }
 }

@@ -139,6 +139,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { session.gate.collect(::gateChanged) }
+        // a pin's fetch keeps the process once the app is left: WorkManager's worker, a dataSync foreground service
+        OfflineWork.watch(app, viewModelScope)
     }
 
     private fun gateChanged(g: me.raddatz.veyq.mobile.session.SessionModel.Gate) {

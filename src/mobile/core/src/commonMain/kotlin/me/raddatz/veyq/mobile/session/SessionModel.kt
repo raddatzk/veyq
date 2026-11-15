@@ -813,9 +813,13 @@ class AccountDoor(
     override suspend fun open(account: VeyqAccount, tenant: TenantRef): TenantSession =
         account.open(tenant).also { it.rekeyRules = me.raddatz.veyq.mobile.AppKinds.rules }
 
-    /** The tenant shown: the scopes served as re-keying are finished in the background ([TenantSession.resumeRekeys]). */
+    /**
+     * The tenant shown: the scopes served as re-keying are finished in the background ([TenantSession.resumeRekeys]), and
+     * the account's pins synced by the build's kinds ([AppKinds.pins], ADR 0140 decision 9) — at each open, online.
+     */
     override fun opened(session: TenantSession) {
         session.resumeRekeys()
+        session.account.offlinePins?.start(session, me.raddatz.veyq.mobile.AppKinds.pins)
     }
     override suspend fun spaces(session: TenantSession): List<SpaceRef> = session.spaces()
     override suspend fun signOut(account: VeyqAccount) = account.signOut()

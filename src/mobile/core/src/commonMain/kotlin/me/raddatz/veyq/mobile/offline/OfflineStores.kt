@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.offline
 
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import me.raddatz.veyq.mobile.blob.DeviceFiles
@@ -69,7 +71,35 @@ class OfflineStores internal constructor(
 
     /** [open] as an account's reads use it ([AccountOffline]), its limit [defaultLimit] until the person sets one. */
     fun openFor(account: String, masterKey: ByteArray, server: String, defaultLimit: Long): AccountOffline =
-        AccountOffline(open(account, masterKey), files, store, account, server, defaultLimit, clock)
+        AccountOffline(open(account, masterKey), files, null, store, account, server, defaultLimit, clock)
+
+    private class Shared(val offline: AccountOffline, var holders: Int)
+
+    private val sharing = Mutex()
+    private val shared = HashMap<String, Shared>()
+
+    /**
+     * [openFor] once per account in this process: a second connection of the same account (a sign-in while one is held,
+     * until it retires) and the sync behind it use the store the first one opened — one manifest in memory, one writer —,
+     * never a second instance over the same directory. Each holder's [AccountOffline.close] ends its use; the last one
+     * closes the store. A wipe closes it whoever holds it ([AccountOffline.closeForWipe]).
+     */
+    suspend fun openShared(account: String, masterKey: ByteArray, server: String, defaultLimit: Long): AccountOffline = sharing.withLock {
+        shared[account]?.let { it.holders++; return@withLock it.offline }
+        lateinit var made: AccountOffline
+        made = AccountOffline(open(account, masterKey), files, { holder, all -> released(account, holder, all) }, store, account, server, defaultLimit, clock)
+        shared[account] = Shared(made, 1)
+        made
+    }
+
+    /** One holder of [account]'s shared store is done with it ([all]: every holder, a wipe's): true where the store closes. */
+    private suspend fun released(account: String, holder: AccountOffline, all: Boolean): Boolean = sharing.withLock {
+        val s = shared[account]?.takeIf { it.offline === holder } ?: return@withLock true
+        s.holders--
+        if (s.holders > 0 && !all) return@withLock false
+        shared.remove(account)
+        true
+    }
 
     /** The steps of a [wipe], for a test to stop it where a crash would. */
     internal enum class WipeStep { MARKED, FILES, DIRECTORY }

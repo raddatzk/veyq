@@ -374,7 +374,6 @@ class ApplicationBlobs(private val tenant: TenantSession) {
         }
 
         private suspend fun readFrames(first: Int, until: Int, sink: suspend (ByteArray) -> Unit, fetched: MutableMap<Int, ByteArray>, kept: suspend () -> Unit) {
-            var resigned = 0
             for (i in first until minOf(until, chunkCount)) {
                 val o = offline
                 val e = entry
@@ -385,37 +384,80 @@ class ApplicationBlobs(private val tenant: TenantSession) {
                     continue
                 }
                 if (account.reach.value != Reach.Online) throw Unreachable("frame $i of a blob not kept")
-                var tries = 0
-                var backoff = 250L
-                while (true) {
-                    val signed = urls ?: presignGets(scopeId, blobId).also { urls = it }
-                    val (status, frame) = account.getFromStore(signed[i])
-                    if (frame != null) {
-                        if (keep && entry != null) {
-                            fetched[i] = frame
-                            if (fetched.size >= KEEP_BATCH) keepFetched(fetched)
-                        }
-                        sink(suite.openFrame(key, i, chunkCount, frame))
-                        resigned = 0 // a read longer than the URLs' lifetime signs again at each lapse
-                        break
-                    }
-                    if (status in LAPSED && resigned < 2) {
-                        resigned++
-                        urls = null
-                        continue
-                    }
-                    if ((status == 0 || status >= 500 || status == 408 || status == 429) && tries < 4) {
-                        tries++
-                        delay(backoff)
-                        backoff = minOf(backoff * 2, 4_000)
-                        continue
-                    }
-                    if (status == 0) {
-                        account.storeUnreachable()
-                        throw Unreachable("the store did not answer")
-                    }
-                    throw UploadRefused("chunk_get_failed:$status")
+                val frame = fetch(i)
+                if (keep && entry != null) {
+                    fetched[i] = frame
+                    if (fetched.size >= KEEP_BATCH) keepFetched(fetched)
                 }
+                sink(suite.openFrame(key, i, chunkCount, frame))
+            }
+        }
+
+        /**
+         * Every frame of the blob the offline store does not keep yet, fetched and kept (a pin's fetch, ADR 0140 decision
+         * 9): none is handed on — each is opened under the blob's key only to check it before it is kept, and its plaintext
+         * zeroed —, the ones kept are never fetched again (a re-key keeps `K_blob` and the blob's id, R5), and [fetched] is
+         * told each frame's size. False where the store took no more (the free-space floor): the fetch pauses there.
+         */
+        suspend fun fill(fetched: (Long) -> Unit = {}): Boolean {
+            val o = offline ?: return true
+            val e = entry ?: return true
+            val have = o.frames(e)
+            val batch = LinkedHashMap<Int, ByteArray>()
+            val size = chunkCount.toLong() * V1.FRAME_PLAINTEXT
+            try {
+                for (i in 0 until chunkCount) {
+                    if (i in have) continue
+                    if (account.reach.value != Reach.Online) throw Unreachable("offline")
+                    val frame = fetch(i)
+                    suite.openFrame(key, i, chunkCount, frame).fill(0)
+                    batch[i] = frame
+                    fetchedFrames++
+                    fetched(frame.size.toLong())
+                    if (batch.size >= KEEP_BATCH) {
+                        val took = o.keepFrames(e, HashMap(batch), size)
+                        batch.clear()
+                        if (!took) return false
+                    }
+                }
+                val took = batch.isEmpty() || o.keepFrames(e, HashMap(batch), size)
+                batch.clear()
+                return took
+            } finally {
+                // what was fetched before a failure is kept: the next fetch continues after it
+                if (batch.isNotEmpty()) kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { runCatching { o.keepFrames(e, HashMap(batch), size) } }
+            }
+        }
+
+        private var resigned = 0
+
+        /** Frame [i] as the object store serves it: signed once, signed again when lapsed, tried again on a failure. */
+        private suspend fun fetch(i: Int): ByteArray {
+            var tries = 0
+            var backoff = 250L
+            while (true) {
+                val signed = urls ?: presignGets(scopeId, blobId).also { urls = it }
+                val (status, frame) = account.getFromStore(signed[i])
+                if (frame != null) {
+                    resigned = 0 // a read longer than the URLs' lifetime signs again at each lapse
+                    return frame
+                }
+                if (status in LAPSED && resigned < 2) {
+                    resigned++
+                    urls = null
+                    continue
+                }
+                if ((status == 0 || status >= 500 || status == 408 || status == 429) && tries < 4) {
+                    tries++
+                    delay(backoff)
+                    backoff = minOf(backoff * 2, 4_000)
+                    continue
+                }
+                if (status == 0) {
+                    account.storeUnreachable()
+                    throw Unreachable("the store did not answer")
+                }
+                throw UploadRefused("chunk_get_failed:$status")
             }
         }
     }
@@ -433,6 +475,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
 
         /** How many fetched frames the store appends at once. */
         internal const val KEEP_BATCH = 16
+
+        /** Every frame a pin's fetch took from the object store in this process ([FrameSource.fill]): what a test counts. */
+        internal var fetchedFrames = 0L
 
         /** What a store answers a presigned URL past its lifetime with: S3's 403, others' 400 or 401. Signed anew. */
         private val LAPSED = setOf(400, 401, 403)
