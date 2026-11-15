@@ -4,7 +4,8 @@
 - **Status:** **built** ([ADR 0135](../../../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md),
   the player [en.platform.audio-player](../../platform/enablers/en.platform.audio-player.md)): Memories'
   `features/memories/music/` and `MemoryMusic.vue`. It replaces the Spotify and Apple Music playlists, which ADR 0135
-  removed.
+  removed. The apps' music and a lightbox video's pause of it are decided, not built
+  ([§ Decided, not built](#decided-not-built)).
 - **Primary actor:** Anyone who may upload into the Memory or Chapter on screen (`memoryRights.upload`): a member who
   may write its scope, or a guest of a link that may upload. **Secondary:** anyone who opens it — a member, or a guest
   of any link onto it — listens.
@@ -80,10 +81,25 @@
 A Memory sounds the way it was: its own songs play in the background for everyone who opens it, guests included, with
 no account at any service and nothing leaving the instance.
 
+## Decided, not built
+
+[ADR 0142](../../../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md):
+
+- **A video pauses the music** (decision 13), on the web and in the apps: while a video in the lightbox plays, the
+  music pauses; when the video pauses or ends, the lightbox moves on, or it closes, the music starts again by itself,
+  unless the listener pressed play or pause meanwhile. Until then main flow step 4's lightbox lets both sound.
+- **The apps** (Android, iOS, macOS, Windows, Linux) play a node's music as the web does, from the header's toggle and a
+  Music view beside the gallery (Photos | Music), with a bar and the lightbox's compact controls; add a track from that
+  view with its facts sealed as the web seals them, rename, download, remove and report one. **On the phones it plays on
+  in the background and with the screen off**, with the lock screen's and the headset's controls; the desktops offer
+  their system media controls. A track added from an app is trimmed only where it is a WAV (inbox #932); a track the
+  device cannot play is skipped and marked "doesn't play on this device". A pinned Memory's music plays offline.
+
 ## Related
 
 - Feature: [Memory](../_index.md)
 - Decision: [ADR 0135](../../../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md),
+  the apps and a video's pause of the music: [ADR 0142](../../../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md),
   the medium pattern of [ADR 0130](../../../decisions/0130-a-gpx-track-is-a-medium-of-its-memory-drawn-on-its-map.md)
 - Enablers: [en.platform.audio-player](../../platform/enablers/en.platform.audio-player.md),
   [en.memory.media](../enablers/en.memory.media.md)

@@ -1,16 +1,16 @@
 ---
 id: cr-app-music
 title: A Memory's music in the apps — the core's player (order, crossfade, queue), each platform's decks and system controls, background play on the phones, the Music view, adding, renaming and reporting a track
-status: planned
+status: in-progress
 satisfies: []
-adrs: ["0135", "0136", "0137", "0140", "0122", "0123", "0130", "0093", "0077", "0139"]
+adrs: ["0142", "0135", "0136", "0137", "0140", "0122", "0123", "0130", "0093", "0077", "0139"]
 invariants:
   - "operator-blind E2EE: a track is a plain medium (ADR 0135 decision 2); the server learns nothing it does not learn of a video — no type, title, duration, trim or order leaves a client unsealed"
   - "every rule of ADR 0135 decisions 2-9 is the core's (ADR 0136 decisions 1 and 2): order, fades, the queue, the facts, refusals; a platform plays bytes it is handed through a core reader (ADR 0137) and draws — it decides nothing"
   - "a listed tier the apps write is the web's, field for field (`durationMs`, `trimStartMs`, `trimEndMs`, `trackName`); a rename rewrites the RAW tier with every other field verbatim (the web's `setTrackLabel`)"
   - "the bridge carries titles, times, states and words only — never a key, a seal or a token (SecretFreeSchemaTest)"
   - "no word in an app but from src/mobile/words/words.json; each app follows its platform's guideline (ADR 0123 decision 9)"
-  - "the contracts, the backend and the web are unchanged"
+  - "the contracts and the backend are unchanged; the web changes only by D13, a lightbox video interrupting the music (phase 2)"
 ---
 
 ## Goal
@@ -46,8 +46,8 @@ the web seals them; keep a pinned Memory's tracks offline like a video's origina
   uploaded from an app (#932, D7); a Chapter playing its Memory's music (#847, the web has it neither); a guest's view of a
   received link in the apps (#435 — the apps open a gallery as a member only, so a guest's listening is the web's until
   then); reporting a photo or video from the apps' lightbox (the ITEM report D11 builds serves it; drawing it there is
-  #891's curating slice); GPX tracks (#907). Nothing in the contracts, the backend or the web changes: every read and write
-  this CR calls exists (R9, R10, R11).
+  #891's curating slice); GPX tracks (#907). Nothing in the contracts or the backend changes: every read and write this
+  CR calls exists (R9, R10, R11). The web changes only by D13 (phase 2).
 
 ## Measured at refine (2026-11-15)
 
@@ -74,7 +74,7 @@ unless they name `src/web/` or the repo root; `C=core/src/commonMain/kotlin/me/r
 
 ## Decisions
 
-The ADR phase (1) writes D1–D12 as ADR 0142 ("The apps play a node's music through the core's player; each platform
+The ADR phase (1) writes D1–D13 as ADR 0142 ("The apps play a node's music through the core's player; each platform
 plays bytes and lends its system controls"); these are its decisions, each "rejected" its Alternatives.
 
 ### D1 — The player is the core's, a port of the web's: `audio/` in core, Memories' part in `memories/music/`
@@ -83,7 +83,7 @@ plays bytes and lends its system controls"); these are its decisions, each "reje
   suite's `randomBytes`, injectable for tests), `Fades` (R2), `MusicPlayer` (R1's state machine: queue, snapshot, the
   250 ms tick, opening 15 s ahead, skip, `unplayable`, replace with a crossfade, at most two open sources) and its
   state `NowPlaying` (R1's fields; `album` the node's name, and a **route** instead of an `href`, D5). Its API is the
-  web's: `play(queue)`, `stop`, `pause`, `resume`, `next`, `previous`, `seek(ms)`.
+  web's: `play(queue)`, `stop`, `pause`, `resume`, `next`, `previous`, `seek(ms)`, and `interrupt()` (D13).
 - **`core/…/memories/music/`** (Memories' application side): `MusicQueue` (R4: a node's unblocked tracks, the
   snapshot, the titles, the spans, the key), `AudioFacts` (parse and validate R5's fields exactly as `audioFactsFrom`;
   the silence scan; `untrimmed`), `Frames` (MP3/ADTS parsing, `adtsDurationMs`), `Wav` (header and PCM at both ends),
@@ -139,7 +139,7 @@ The core owns *what* the system shows and *which* commands exist (`NowPlaying`, 
   (R8), so this CR adds no unlock rule. ADR 0135's residual ("a phone may suspend a hidden tab") does not hold for the
   apps — ADR 0142 says so.
 - **Notification permission:** a media-session notification is exempt from `POST_NOTIFICATIONS` on Android 13+
-  (remembered; measured in phase 7a — if it is not shown without the grant, the play press asks for it, as a pin does).
+  (remembered; measured in phase 8a — if it is not shown without the grant, the play press asks for it, as a pin does).
 - Rejected: **iOS without a background mode** (play only in front) and **Android without a service** — the owner's
   decision (2026-11-15) is that music plays on with the screen off. Rejected: **MPRIS through `zbus` directly** — it is
   in the tree only through `ashpd`; gio's D-Bus is what the app already links.
@@ -164,8 +164,7 @@ same title — the web's two numberings (R4) are not ported, and the web's defec
   route.
 - **The lightbox's compact controls** (R3: title, previous, play/pause, next) sit in the lightbox's top bar while a
   queue is loaded, a row of their own on a phone; closing the lightbox stops nothing; the slideshow's own pause ignores
-  them. **A video in the lightbox and the music:** the web lets both sound (R3); the recommendation is that the apps pause
-  the music while a video plays and resume it when the video stops or the lightbox leaves it — owner question 2.
+  them. **A video in the lightbox interrupts the music** (D13, owner question 2).
 
 ### D6 — Where a node's music shows: the header toggle and the Music view
 
@@ -193,7 +192,7 @@ filtered to audio (Android `OpenMultipleDocuments` with `audio/*` — no `READ_M
   its order (R9), which a later CR may align.
 - **The duration** from the platform's reader of the picked file (Android `MediaMetadataRetriever`, Apple `AVURLAsset`,
   Windows and Linux the existing `Media.Duration` host request, extended to audio if its `MediaClip` path refuses audio —
-  phase 6's first measurement), **except a raw ADTS file, whose frames the core counts** (`adtsDurationMs`, the web's
+  phase 7's first measurement), **except a raw ADTS file, whose frames the core counts** (`adtsDurationMs`, the web's
   rule: an ADTS length is an estimate everywhere).
 - **The trim is found where it is cheap without a platform decoder: WAV only** — the core reads the PCM at both ends
   (`Wav`) and runs the scan (−60 dBFS, 20 ms windows, 30 s per end, a trim leaving < 1 s keeps the whole). **Every
@@ -216,13 +215,13 @@ live poll. The bridge carries it as `Watched.Music` → `MusicShown` (titles, le
 ### D9 — A format a device cannot play: skipped, marked, and said
 
 - **At upload:** a file the device cannot read is refused `unplayable` (D7) — on a Windows without the Web Media
-  extension that is an Ogg file, on Apple likely every Ogg (R14 — measured in phases 5 and 6, not assumed).
+  extension that is an Ogg file, on Apple likely every Ogg (R14 — measured in phases 6 and 7, not assumed).
 - **At playback** (ADR 0135 decision 3): a track whose deck fails to load is dropped from the round and skipped; the
   Music view marks it "doesn't play on this device" for the rest of the session (the player's skipped ids in
   `NowPlaying`); when none plays, the bar says so for 5 s and the queue ends (R1's `unplayable`). Download still offers
   the file.
 - **Windows ships no codec** (owner 2026-11-12, kept): what plays is what Media Foundation and the extensions Windows 11
-  provisions decode. Phase 6's first measurement is the format matrix on the VM — MP3, M4A (AAC and ALAC), raw ADTS,
+  provisions decode. Phase 7's first measurement is the format matrix on the VM — MP3, M4A (AAC and ALAC), raw ADTS,
   WAV (16/24-bit, float), FLAC, Ogg Vorbis, Ogg Opus — with the Web Media extension present and removed; ADR 0142 and
   the site name what does not play and that the app shows it as above. The same matrix runs on Linux (container and
   Flatpak) and Apple (the macOS build), so the Use page names each platform's gaps from measurements.
@@ -250,28 +249,67 @@ music plays offline; the automatic tier keeps the frames played, its quarter-of-
 is under a quarter of the phones' 2 GB default). ADR 0140 decision 8's list of kept originals gains "a music track's"
 (phase 1). Offline the Music view is read-only (ADR 0140 D7): no add, rename, remove or report; playing works.
 
+### D13 — A lightbox video interrupts the music, on every surface (the web included)
+
+Owner question 2, answered 2026-11-15: everywhere — the apps **and the web** — the music pauses while a video in the
+lightbox plays and starts again by itself when the video stops or the lightbox moves on.
+
+- **The player's seam:** `interrupt()` pauses a playing queue and returns an end. The end resumes the queue only when it
+  was playing when interrupted and nothing came between: a listener's play or pause, a new queue, a `stop`. A play pressed
+  during the video sounds both (the listener's choice) and the end then does nothing; a pause pressed keeps it paused
+  after the video. While interrupted, `NowPlaying.playing` is false, so the bar, the compact controls and the system
+  controls show it paused. Resuming is the bar's play.
+- **The lightbox raises it** from its video's own events: playing → `interrupt()`; pause, ended, an item change (by hand or
+  the slideshow) and the lightbox's close → the end. A muted video counts as playing (the lightbox reads no volume). The
+  web: `MediaLightbox.vue`'s `<video>` over `core/audio/player.ts` (phase 2); the apps: `GalleryModel.Lightbox` over
+  `MusicPlayer` (phase 4), each platform's video player reporting playing and paused through the lightbox model it
+  already drives.
+- **Android trap:** the lightbox's video plays without requesting audio focus of its own, or D3's focus listener takes it
+  as a loss and pauses with no end to resume it.
+- Rejected: **both sound** (the web's behaviour until now, R3) — two sounds at once are what the platforms' audio rules
+  (audio focus, `AVAudioSession`) avoid, and the video's sound is what the viewer just chose. Rejected: **ducking** the
+  music under the video — still two sounds, at a level that suits neither; Android's may-duck focus is for short sounds.
+  Rejected: **stopping the queue, or pausing it without resuming** — the listener would restart the music by hand after
+  every video.
+
 ## Phases
 
-- [ ] **1 the ADR and the docs it changes** — ADR 0142 (the next free number, `ls docs/decisions | tail -3`) holding
-  D1–D12 and their rejected alternatives, its Consequences: the background residual of ADR 0135 lifted on the apps, the
-  untrimmed decoded formats (#932), the per-platform format gaps as phase 6 will measure them; ADR 0135's Consequences
-  and ADR 0140 decision 8 point at it (a track's original kept); en.platform.audio-player and uc.memory.background-music
-  name the native realisation as planned; `native-apps.md` § Memories names music as planned (#906 → this CR);
-  `src/mobile/CLAUDE.md` names the packages `audio/` and `memories/music/`. · Done when: every `/usr/bin/python3
-  scripts/validate_*.py` but `validate_guard_gaps.py` exits 0.
+- [x] **1 the ADR and the docs it changes** — ADR 0142 (the next free number, `ls docs/decisions | tail -3`) holding
+  D1–D13 and their rejected alternatives, its Consequences: the background residual of ADR 0135 lifted on the apps, the
+  untrimmed decoded formats (#932), the per-platform format gaps as phases 6 and 7 will measure them; ADR 0135 and ADR
+  0140 point at it by a `Replaced in part` line each (`docs/README.md`: never a mark in an earlier ADR's body) — 0135's
+  decision 8 (a video interrupts the music) and its hidden-tab residual for the apps, 0140's decisions 8 and 9 (a track's
+  original kept); en.platform.audio-player and uc.memory.background-music carry the native realisation and D13 in a
+  "Decided, not built" section; `native-apps.md` § Open's Memories names music as planned (ADR 0142, #906);
+  `src/mobile/CLAUDE.md` names the packages `audio/` and `memories/music/`; the topic table lists 0142 under Native app
+  and Memories. · Done when: every `/usr/bin/python3 scripts/validate_*.py` but `validate_guard_gaps.py` exits 0.
 
-- [ ] **2 the player (core `audio/`)** — `Order`, `Fades`, `MusicPlayer`, `NowPlaying`, the deck port (D2) and the system
-  controls' port (D3's core half), with a played deck for tests. · Done when: `./gradlew :core:jvmTest
-  :core:macosArm64Test` green, and R13's `order`, `fades` and `player` cases each have a Kotlin twin (the list mapped
-  test by test in the phase's report); **bites**, each one edit restored from a snapshot, each red at its own assertion:
+- [ ] **2 the web: a lightbox video interrupts the music (D13)** — `src/web/src/core/audio/player.ts` gains
+  `interrupt()` (D13's rules: pause a playing queue, the end resumes only what it paused and only when no listener's
+  play or pause, new queue or `stop` came between); `MediaLightbox.vue`'s `<video>` interrupts on `playing` and ends it
+  on `pause`, `ended`, an item change (the slideshow's included) and its unmount. en.platform.audio-player and
+  uc.memory.background-music fold D13 from their "Decided, not built" into the built text (the uc's main flow step 4
+  no longer lets both sound); `memories/add-background-music.mdx` (EN+DE) says it where it speaks of the lightbox, if it
+  does. · Done when: `pnpm run check` in `src/web/` green, with new `player.test.ts` cases (interrupt pauses and the lock
+  screen shows paused; its end resumes; a listener's pause during it keeps the music paused after; a listener's play
+  during it makes the end do nothing; a `stop` or a new queue during it makes the end do nothing) and
+  `MediaLightbox.test.ts` cases (a video's `playing` pauses the player; its `pause`, `ended`, the next item and closing
+  each resume it); **bites**, each one edit restored from a snapshot, each red at its own assertion: (a) the end resumes
+  unconditionally → the listener's-pause case red; (b) the lightbox does not end the interruption on an item change →
+  the next-item case red; (c) the end not dropped at `stop` → the stop case red.
+
+- [ ] **3 the player (core `audio/`)** — `Order`, `Fades`, `MusicPlayer` with `interrupt()` (D13), `NowPlaying`, the
+  deck port (D2) and the system controls' port (D3's core half), with a played deck for tests. · Done when: `./gradlew
+  :core:jvmTest :core:macosArm64Test` green, and R13's `order`, `fades` and `player` cases and phase 2's interrupt cases
+  each have a Kotlin twin (the list mapped test by test in the phase's report); **bites**, each one edit restored from a snapshot, each red at its own assertion:
   (a) a round's first may be the last played → the 1,000-round test red; (b) `previous` restarts at any position → the
   2 s case red; (c) the press fade 5 s instead of 1 s → the replace case red; (d) a failed load not dropped from the order
   → the nothing-plays case loops instead of ending; (e) `stop` not clearing the system controls → its case red; (f) a
   late `open()` not released → the leaked-reader count red.
 
-- [ ] **3 Memories' music (core `memories/music/`)** — `MusicQueue`, `AudioFacts`, `Frames`, `Wav`, `MusicUpload` (D7),
+- [ ] **4 Memories' music (core `memories/music/`)** — `MusicQueue`, `AudioFacts`, `Frames`, `Wav`, `MusicUpload` (D7),
   `TrackLabel` (D10), the ITEM report (D11), `MusicModel` (D8), the header toggle (D6), the lightbox's compact-control
-  state (D5), D12's `keeps`/`pinned`. Tests: R13's Memories cases ported; a **cross-surface fixture** — a listed tier as
+  state (D5) and its video's interruption (D13), D12's `keeps`/`pinned`. Tests: R13's Memories cases ported; a **cross-surface fixture** — a listed tier as
   the web's `media.ts` seals it (`durationMs`, `trimStartMs`, `trimEndMs`, `trackName`, plus a field core does not know)
   opened by `AudioFacts`, and after a rename every field but `trackName` byte-equal; live tests (`VEYQ_LIVE`): upload a
   WAV with 2 s of silence at each end and an MP3, read both back (the WAV trimmed within 20 ms, the MP3 untrimmed with its
@@ -283,27 +321,27 @@ is under a quarter of the phones' 2 GB default). ADR 0140 decision 8's list of k
   start ≥ end accepted → `AudioFacts` validation case red; (e) the queue numbering its unsorted list → D4's one-numbering
   case red; (f) a 200 MiB + 1 byte file accepted → red.
 
-- [ ] **4 the bridge** — `Watched.Player` → `PlayerShown`, `Watched.Music` → `MusicShown`, the calls (`Player.Play|
+- [ ] **5 the bridge** — `Watched.Player` → `PlayerShown`, `Watched.Music` → `MusicShown`, the calls (`Player.Play|
   Pause|Resume|Next|Previous|Seek|Stop|OpenNode`, `Music.Play|Rename|Remove|Download|Report|Add(paths)`), the deck host
   requests and events (D2), the system-controls commands as calls; `PlayerShown` and `MusicShown` under
   `SecretFreeSchemaTest`; a player's readers dropped with its tenant (`DispatchTest`'s pattern). · Done when:
   `:bridge:jvmTest` green; **bites**: (a) a `K_blob` field added to `MusicShown` → `SecretFreeSchemaTest` red; (b) the
   player left out of `closeTenant()` → a reader outliving the sign-out, red.
 
-- [ ] **5 Android and Apple (iOS, macOS)** — D2's decks, D3's background and system controls, D5's bar and compact
+- [ ] **6 Android and Apple (iOS, macOS)** — D2's decks, D3's background and system controls, D5's bar and compact
   controls, D6's view switch and Music view, D7's picker, every word from `words.json` (EN+DE). First, measured on the
   emulator and the macOS build: which of D9's formats each platform's player loads from a reader (the matrix in the
   phase's report). · Done when: `./gradlew :android:assembleDebug`, the Apple project's builds (iOS simulator SDK,
   macOS) and `scripts/validate_mobile_words.py` green; each app clicked once: add a track, play, next, seek, rename,
-  leave the Memory and keep hearing it, close the bar.
+  leave the Memory and keep hearing it, play a video in the lightbox (the music pauses and resumes, D13), close the bar.
 
-- [ ] **6 Windows and Linux** — the same over the bridge, D3's SMTC and MPRIS, the Flatpak's `--own-name`. First,
+- [ ] **7 Windows and Linux** — the same over the bridge, D3's SMTC and MPRIS, the Flatpak's `--own-name`. First,
   measured: D9's format matrix on the VM (Web Media extension present and removed) and in the container and the Flatpak;
   whether `Media.Duration`'s `MediaClip` path reads audio (else the host answers it another way). · Done when: `run.py
-  build`/`test` green on both; each app clicked once as phase 5's.
+  build`/`test` green on both; each app clicked once as phase 6's.
 
-- [ ] **7 the passes** — per platform against the dev instance: play a Memory's music, walk to another Memory and a
-  Chapter, open the lightbox (the compact controls, owner question 2's behaviour with a video), (a) **Android**: screen
+- [ ] **8 the passes** — per platform against the dev instance: play a Memory's music, walk to another Memory and a
+  Chapter, open the lightbox (the compact controls; a video pauses the music and its end, the next item and closing resume it, D13), (a) **Android**: screen
   off for 5 minutes with the music going on through a track change, the lock screen's and a headset's next, the
   notification without `POST_NOTIFICATIONS` granted (D3), headphones out pauses; (b) **iOS** on a device (the owner's):
   the same with the lock screen and Control Center, a call's interruption; (c) **macOS**: Now Playing and the media keys;
@@ -311,8 +349,8 @@ is under a quarter of the phones' 2 GB default). ADR 0140 decision 8's list of k
   and its next/pause act, in the Flatpak; then on one phone: pin the Memory, airplane mode, close, unlock, play.
   · Done when: each pass's commands and outputs are in ADR 0142's Consequences, with what could not be run named.
 
-- [ ] **8 harvest** — `memories/add-background-music.mdx` (EN+DE) tells the apps (background play, the system controls,
-  each platform's formats that do not play from phase 5/6's matrices, the untrimmed decoded formats), `install-the-app.mdx`
+- [ ] **9 harvest** — `memories/add-background-music.mdx` (EN+DE) tells the apps (background play, the system controls,
+  each platform's formats that do not play from phase 6/7's matrices, the untrimmed decoded formats), `install-the-app.mdx`
   (EN+DE) no longer sends music to the browser; Security's `what-the-server-sees.md` unchanged unless a pass found
   otherwise; en/uc and `native-apps.md` from planned to built; the lessons to `changes/README.md` or the lines they bite;
   inbox #906 deleted, this CR deleted. · Done when: `pnpm run check` in `site/` green and every guard but guard_gaps green.
@@ -346,10 +384,11 @@ two numberings of an untitled track), #847, #435, #891, #907 (out of scope above
 
 ## Definition of done
 
-Phases 1–8 checked with their Done-when met; the core, bridge, Linux and Windows checks green; the bites above each seen
-red and green again; the format matrices and the passes recorded per platform in ADR 0142; the Use pages in EN and DE
-updated with `pnpm run check` in `site/` green; every `scripts/validate_*.py` but guard_gaps green. No contract, backend
-or web change: `git diff --stat` over `contracts/ src/backend/ src/web/` is empty at the end.
+Phases 1–9 checked with their Done-when met; `pnpm run check` in `src/web/` and the core, bridge, Linux and Windows
+checks green; the bites above each seen red and green again; the format matrices and the passes recorded per platform in
+ADR 0142; the Use pages in EN and DE updated with `pnpm run check` in `site/` green; every `scripts/validate_*.py` but
+guard_gaps green. No contract or backend change: `git diff --stat` over `contracts/ src/backend/` is empty at the end;
+`src/web/`'s diff is phase 2's alone (`core/audio/player.ts`, `MediaLightbox.vue`, their tests).
 
 ## Retrospective
 

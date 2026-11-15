@@ -5,6 +5,7 @@
 - Date: 2026-11-14
 - Model: [uc.memory.background-music](../features/memory/use-cases/uc.memory.background-music.md) (the player:
   [en.platform.audio-player](../features/platform/enablers/en.platform.audio-player.md))
+- Replaced in part: decision 8 (a lightbox video interrupts the music instead of both sounding) and the Consequences' hidden-tab residual, for the apps, by ADR 0142 (not built)
 
 ## Context
 
