@@ -163,7 +163,7 @@ interface OfflineNodes {
     /** Whether a node of [kind] offers the toggle. */
     fun pinnable(kind: String): Boolean
 
-    /** The bytes pinning [ref] would fetch (shown and confirmed first); null where it cannot be pinned. */
+    /** The bytes pinning [ref] would keep (shown and confirmed first); null where it cannot be pinned. */
     suspend fun plan(ref: NodeAt): Long?
 
     /** [ref] pinned and its fetch started; false where it cannot be pinned. */

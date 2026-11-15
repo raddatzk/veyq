@@ -58,6 +58,8 @@ internal class PlayedTenant(files: DeviceFiles = deviceFiles, val clock: () -> L
     val suspended = HashSet<String>()
     /** How often the store served a frame. */
     var storeGets = 0
+    /** The bytes the store served, frame by frame. */
+    var storeBytes = 0L
     /** The network goes once the store served this many frames (a fetch cut in the middle); null: never. */
     var cutAfterStoreGets: Int? = null
     /** Every request's path, in order. */
@@ -109,7 +111,7 @@ internal class PlayedTenant(files: DeviceFiles = deviceFiles, val clock: () -> L
         val meta: ByteArray? = type?.let { BlobMeta.seal(suite, key, it, "$id.bin", null) }
         val byteSize: Long get() = frames.sumOf { it.size.toLong() }
     }
-    inner class Medium(val node: Node, val label: String, val original: Blob, val thumbnail: Blob?) {
+    inner class Medium(val node: Node, val label: String, val original: Blob, val thumbnail: Blob?, val preview: Blob? = null) {
         val id = id(label)
         var trashed = false
         var blocked = false
@@ -119,19 +121,27 @@ internal class PlayedTenant(files: DeviceFiles = deviceFiles, val clock: () -> L
     val scopes = mutableListOf<Scope>()
     private val blobs = HashMap<String, Blob>()
 
+    /** The stored size of blob [id] (its sealed frames'). */
+    fun byteSizeOf(id: String): Long = blobs.getValue(id).byteSize
+
     fun scope(name: String, tenant: Tenant = tenants.first()): Scope = Scope(name, tenant).also { scopes += it }
 
     fun node(scope: Scope, label: String, kind: String = "MEMORY", parent: Node? = null, name: String = "Node $label"): Node =
         Node(scope, label, parent, kind, name).also { scope.nodes += it; scope.revision++ }
 
-    /** A medium of [node] whose original is [frames] frames and whose thumbnail (where [thumbnail]) one, each with a marker. */
-    fun medium(node: Node, name: String, frames: Int = 1, video: Boolean = false, thumbnail: Boolean = true): Medium {
+    /**
+     * A medium of [node] whose original is [frames] frames, whose thumbnail (where [thumbnail]) one and whose preview (where
+     * [preview]) [preview] frames, each with a marker.
+     */
+    fun medium(node: Node, name: String, frames: Int = 1, video: Boolean = false, thumbnail: Boolean = true, preview: Int = 0): Medium {
         val mediaId = id(name)
         val original = Blob("$name-o", (0 until frames).map { "original $name frame $it".encodeToByteArray() }, "ORIGINAL", mediaId, { node.key }, node.scope.id, if (video) "video/mp4" else "image/jpeg")
         val thumb = if (thumbnail) Blob("$name-t", listOf("thumbnail $name".encodeToByteArray()), "THUMBNAIL", mediaId, { node.key }, node.scope.id, null) else null
         blobs[original.id] = original
+        val prev = if (preview > 0) Blob("$name-p", (0 until preview).map { "preview $name frame $it".encodeToByteArray() }, "PREVIEW", mediaId, { node.key }, node.scope.id, null) else null
         thumb?.let { blobs[it.id] = it }
-        return Medium(node, name, original, thumb).also { node.media += it; node.mediaRevision++ }
+        prev?.let { blobs[it.id] = it }
+        return Medium(node, name, original, thumb, prev).also { node.media += it; node.mediaRevision++ }
     }
 
     /** Node [n]'s cover set to a one-frame picture with a marker: its meta names it, the tree's revision moves. */
@@ -211,7 +221,7 @@ internal class PlayedTenant(files: DeviceFiles = deviceFiles, val clock: () -> L
 
     private fun blobRef(b: Blob) = """"blobId":"${b.id}","chunkCount":${b.frames.size},"byteSize":${b.byteSize},"wrappedBlobKey":"${b64(b.wrapped)}"${b.meta?.let { ",\"wrappedBlobMeta\":\"${b64(it)}\"" } ?: ""}"""
 
-    private fun mediumJson(m: Medium) = """{"blockedByOperator":${m.blocked},"mediaId":"${m.id}",${blobRef(m.original)},"updatedAt":"2026-01-01T00:00:00.000Z","derivatives":[${m.thumbnail?.let { """{"kind":"THUMBNAIL",${blobRef(it)}}""" } ?: ""}]}"""
+    private fun mediumJson(m: Medium) = """{"blockedByOperator":${m.blocked},"mediaId":"${m.id}",${blobRef(m.original)},"updatedAt":"2026-01-01T00:00:00.000Z","derivatives":[${listOfNotNull(m.thumbnail?.let { """{"kind":"THUMBNAIL",${blobRef(it)}}""" }, m.preview?.let { """{"kind":"PREVIEW",${blobRef(it)}}""" }).joinToString(",")}]}"""
 
     private suspend fun MockRequestHandleScope.answer(r: HttpRequestData): HttpResponseData {
         val path = r.url.encodedPath
@@ -224,7 +234,9 @@ internal class PlayedTenant(files: DeviceFiles = deviceFiles, val clock: () -> L
             }
             val (blobId, index) = path.trim('/').split('/')
             storeGets++
-            return respond(blobs.getValue(blobId).frames[index.toInt()], HttpStatusCode.OK)
+            val frame = blobs.getValue(blobId).frames[index.toInt()]
+            storeBytes += frame.size
+            return respond(frame, HttpStatusCode.OK)
         }
         val tenant = tenantOf(r)
         if (tenant != null && tenant.id in suspended && path != "/api/setup") return json("""{"code":"tenant_suspended"}""", HttpStatusCode.Forbidden)

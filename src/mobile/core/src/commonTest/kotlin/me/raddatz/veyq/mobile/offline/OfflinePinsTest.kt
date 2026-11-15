@@ -27,7 +27,9 @@ import kotlin.test.assertTrue
  * (`AccountOffline.removePin`) → the chapter's frames, which the chapter's own pin still reaches, go; (b) keep pins outside
  * the sweep (no `settlePins`, a pinned entry never swept) → the trashed Memory's pin and frames stay; (c) clear a blob's
  * frames when its listing's revision moved (`AccountOffline.keep`) → the re-key's sync fetches every frame again; (e) an
- * offline open without reading the pins (`openedOffline` without `loaded`) → offline the pins read as none.
+ * offline open without reading the pins (`openedOffline` without `loaded`) → offline the pins read as none; (f) a pin's
+ * size as the bytes the store does not hold yet (`OfflinePins.plan` summing `AccountOffline.missing`, #935) → a Memory
+ * whose videos were played asks less than its pin keeps (1731 B asked 345), a kept pin's asks 0.
  */
 class OfflinePinsTest {
     private val played = mutableListOf<PlayedTenant>()
@@ -73,7 +75,7 @@ class OfflinePinsTest {
         assertEquals(gets + 5, t.storeGets, "not exactly the pin's five frames were fetched")
         assertEquals(Pin.State.KEPT, pins.pins.value.single().state)
         assertTrue(o.store.entries().filter { it.key.kind == KeptRead.FRAMES }.all { it.pins == setOf(m.id) }, "a pinned blob does not carry its pin")
-        assertEquals(0L, assertNotNull(pins.plan(tenant, s.id, m.id)).bytes, "a kept pin still has bytes to fetch")
+        assertEquals(plan.bytes, assertNotNull(pins.plan(tenant, s.id, m.id)).bytes, "a kept pin's size is not what it keeps")
 
         // another device adds a medium; the next sync (the next online open) keeps it
         t.medium(m, "later")
@@ -94,6 +96,73 @@ class OfflinePinsTest {
         assertEquals((0 until 3).map { "original video frame $it" }, played)
         assertEquals(setOf("photo", "video", "later"), g.items.map { t.nameOf(it.mediaId) }.toSet())
         off.retire()
+    }
+
+    /** The stored bytes of every blob whose frames the store holds whole: what the pins keep, as the server sized it. */
+    private suspend fun AccountOffline.keptBytes(t: PlayedTenant): Long =
+        store.entries().filter { it.key.kind == KeptRead.FRAMES }.sumOf { t.byteSizeOf(it.key.id) }
+
+    /** A Memory of photos (tile and preview), videos (a tile, several frames) and a cover, with a chapter of one video. */
+    private fun memoryOfEveryTier(t: PlayedTenant, s: PlayedTenant.Scope, parent: PlayedTenant.Node? = null): PlayedTenant.Node {
+        val m = t.node(s, "memory", parent = parent)
+        t.medium(m, "photo1", frames = 3, preview = 2)
+        t.medium(m, "photo2", frames = 2, preview = 1)
+        for (i in 1..4) t.medium(m, "video$i", frames = 3 + i, video = true)
+        t.cover(m, "memory-cover")
+        val chapter = t.node(s, "chapter", kind = "CHAPTER", parent = m)
+        t.medium(chapter, "video5", frames = 2, video = true, thumbnail = false)
+        t.cover(chapter, "chapter-cover")
+        return m
+    }
+
+    @Test
+    fun a_pins_size_is_what_it_then_fetches_for_a_memory_a_chapter_and_a_folder() = runTest {
+        for (what in listOf("memory", "chapter", "folder")) {
+            val t = play()
+            val s = t.scope("s1")
+            val folder = t.node(s, "folder", kind = "FOLDER")
+            val m = memoryOfEveryTier(t, s, parent = folder)
+            t.remember()
+            val a = t.resume()
+            val o = assertNotNull(a.offline)
+            o.setLimit(0)
+            val tenant = tenantOf(a)
+            val pins = pinsOf(a)
+            val node = when (what) { "memory" -> m.id; "chapter" -> t.id("chapter"); else -> folder.id }
+            val plan = assertNotNull(pins.plan(tenant, s.id, node), what)
+            val served = t.storeBytes
+            assertTrue(pins.pin(tenant, s.id, node))
+            pins.sync()
+            assertEquals(Pin.State.KEPT, pins.pins.value.single().state, what)
+            assertTrue(o.frames(t).keys.none { it.startsWith("photo") && it.endsWith("-o") }, "$what: a photo's original was kept")
+            assertEquals(t.storeBytes - served, plan.bytes, "$what: the pin's size is not what its fetch took")
+            assertEquals(o.keptBytes(t), plan.bytes, "$what: the pin's size is not what it keeps")
+            a.retire()
+        }
+    }
+
+    @Test
+    fun a_pins_size_counts_what_viewing_kept_already() = runTest {
+        // #935: the Memory's videos were played (the automatic tier kept their frames), then it was pinned: the question
+        // said "This keeps 0 B on this device" of the ~6 MB the pin then held
+        val t = play()
+        val s = t.scope("s1")
+        val m = memoryOfEveryTier(t, s)
+        t.remember()
+        val a = t.resume()
+        val o = assertNotNull(a.offline)
+        val tenant = tenantOf(a)
+        val g = assertNotNull(MemoryMedia.list(tenant, s.id, m.id))
+        for (item in g.items) {
+            item.thumbnail?.let { MemoryMedia.read(tenant, item, it) }
+            if (item.isVideo) MemoryMedia.stream(tenant, item, item.original) {}
+        }
+        val pins = pinsOf(a)
+        val plan = assertNotNull(pins.plan(tenant, s.id, m.id))
+        assertTrue(pins.pin(tenant, s.id, m.id))
+        pins.sync()
+        assertEquals(o.keptBytes(t), plan.bytes, "the pin's size leaves out what the store held already")
+        a.retire()
     }
 
     @Test
