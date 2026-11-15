@@ -18,6 +18,9 @@
 // **Paging is instant where it can be** (`../previewCache.ts`): the decrypted previews stay in memory while the lightbox is
 // open, bounded by size, so a step back shows the item at once; once an item's preview is shown its two neighbours are read
 // ahead, which also keeps the slideshow one step ahead. A block or a removal drops the item's bytes, closing drops them all.
+// **A playing video interrupts the music** (ADR 0142 decision 13): its `playing` pauses core's player through
+// `interrupt()`; its `pause`, its `ended`, an item change (by hand or the slideshow) and the lightbox's close end the
+// interruption, which resumes the music unless the listener played or paused it meanwhile. A muted video counts as playing.
 //
 // **One lightbox for a member and a share guest** (inbox #401). It touches no API itself: every byte and seal comes
 // through the loaders the Memory's data source hands in (`../source.ts`, the member's or the guest's — required, so no
@@ -126,6 +129,15 @@ const { url: videoUrl, set: setVideo, clear: clearVideo } = useObjectUrl()
 const videoSwUrl = ref<string | null>(null)
 const videoHandle = ref<string | null>(null)
 const videoLoading = ref(false)
+// The end of the music's interruption by the playing video (ADR 0142 decision 13), while one is held. A `playing` that
+// fires again (after a seek or a stall) keeps the end it holds.
+let endMusicInterruption: (() => void) | null = null
+const interruptMusic = () => { endMusicInterruption ??= audioPlayer().interrupt() }
+function resumeMusic() {
+  const end = endMusicInterruption
+  endMusicInterruption = null
+  end?.()
+}
 const loading = ref(false)
 const error = ref(false)
 const downloading = ref(false)
@@ -248,6 +260,7 @@ async function loadPreview() {
   dropZoom() // navigation resets the zoom and revokes the previous item's original
   clearVideo() // drop the previous item's playing video (revoke its blob URL)
   stopSwPlayback() // and tear down any SW playback of the previous item (revoke handle + port)
+  resumeMusic() // the previous item's video is gone: the music it interrupted plays on
   videoLoading.value = false
   error.value = false
   if (!item.value || !previewable.value) return
@@ -710,6 +723,7 @@ onBeforeUnmount(() => {
   slideshow.stop()
   previews.clear()
   stopSwPlayback() // revoke any live SW playback (its port + in-SW plaintext cache) when the lightbox unmounts
+  resumeMusic() // closing ends the video's interruption of the music
 })
 </script>
 
@@ -822,7 +836,7 @@ onBeforeUnmount(() => {
           <!-- Video playback (#104, ADR 0047): once the user clicks play, the video plays either from the SW range
                path (`videoSwUrl` = /__media/<handle>, ADR 0047) or, as a fallback, a decrypted typed blob URL
                (`videoUrl`, Slice 1). Before that, a video shows its poster (the PREVIEW tier) + a play affordance. -->
-          <video v-else-if="videoSwUrl || videoUrl" :src="videoSwUrl ?? videoUrl ?? undefined" controls autoplay playsinline />
+          <video v-else-if="videoSwUrl || videoUrl" :src="videoSwUrl ?? videoUrl ?? undefined" controls autoplay playsinline @playing="interruptMusic" @pause="resumeMusic" @ended="resumeMusic" />
           <div v-else-if="videoType && previewUrl" class="media-lightbox-video-poster">
             <img :src="previewUrl" :alt="memoryName" />
             <button
