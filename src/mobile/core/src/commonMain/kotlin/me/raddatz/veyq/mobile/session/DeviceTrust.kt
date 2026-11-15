@@ -298,6 +298,8 @@ internal class DeviceRegisterStore(
             val next = evict(change(current.plain))
             val stored = current.revision + 1
             val blob = b64(suite.seal(context(stored), masterKey, utf8(JSON.encodeToString(Plain.serializer(), next))))
+            // over the contract's bound only devices in use are left (evict took every orphan it could): no write
+            check(blob.length <= MAX_BLOB_CHARS) { "device_register_full" }
             if (api.put(DeviceRegisterUpdate(blob, current.revision))) {
                 marks.raiseRegister(stored)
                 return
@@ -307,11 +309,18 @@ internal class DeviceRegisterStore(
         throw IllegalStateException("device_register_unsettled")
     }
 
-    /** The least recently seen devices beyond [MAX_DEVICES] go, with every family and wrap row naming them. */
+    /**
+     * Back to [MAX_DEVICES] by evicting **orphans** only — devices no family row and no wrap row names — least recently
+     * seen first, and only as many as the bound needs. A device a row still names is in use as far as the register can
+     * know (rows are pruned only against the server's lists, by [reconcile]), so it is never evicted, and the register
+     * may stand over the bound (en.account.device-register § Growth). An orphan has no row to take along. The web's `evict`.
+     */
     private fun evict(p: Plain): Plain {
         if (p.devices.size <= MAX_DEVICES) return p
-        val keep = p.devices.entries.sortedByDescending { it.value.lastSeenAt }.take(MAX_DEVICES).map { it.key }.toSet()
-        return Plain(p.devices.filterKeys { it in keep }, p.families.filterValues { it in keep }, p.wraps.filterValues { it in keep })
+        val named = p.families.values.toSet() + p.wraps.values
+        val doomed = p.devices.entries.filter { it.key !in named }.sortedBy { it.value.lastSeenAt }
+            .take(p.devices.size - MAX_DEVICES).map { it.key }.toSet()
+        return p.copy(devices = p.devices - doomed)
     }
 
     /** What the sessions list reads from the register (the web's `RegisterView`). */
@@ -354,7 +363,11 @@ internal class DeviceRegisterStore(
         }
 
         const val MAX_ATTEMPTS = 5
+        /** The web's `MAX_DEVICES`: beyond it orphans go; a device in use never does, so the register may stand over it. */
         const val MAX_DEVICES = 32
+
+        /** The contract's `maxLength` on `DeviceRegisterUpdate.blob`: a longer seal is refused, `device_register_full`. */
+        const val MAX_BLOB_CHARS = 65532
         val JSON = Json { ignoreUnknownKeys = true }
         fun context(revision: Long) = Context("device-register", "revision" to revision)
     }

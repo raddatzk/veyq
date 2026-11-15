@@ -24,9 +24,9 @@ import kotlin.test.assertTrue
  * (its `finally` still takes the device off). A live case of another run against the same account in the same seconds
  * moves the counts too: run it alone. The register is compared by its entries: the case's own is there during the case
  * and gone after, and nothing else was added. Where it is full ([DeviceRegisterStore.MAX_DEVICES]), the meter's and the
- * case's entries each evict the least recently seen other one (#894) — what every sign-in at the cap does — so there
- * the entries after are a subset of those before, and exactly them where the register had room (measured 2026-11-14:
- * the dev principal's register held 31 entries, the meter's left out).
+ * case's entries may each evict the least recently seen **orphan** (a device no family or wrap row names) — what every
+ * sign-in at the cap does — so there the entries after are a subset of those before, and exactly them where the
+ * register had room (measured 2026-11-14: the dev principal's register held 31 entries, the meter's left out).
  */
 class LiveRunTest {
     private val p = BouncyCastlePrimitives
@@ -43,7 +43,7 @@ class LiveRunTest {
         assumeTrue("VEYQ_LIVE is not set: a live case", origin != null)
         val before = counts()
         println("[live run] before: $before")
-        // the meter and the case each add an entry: past the register's cap a write evicts another device's (#894)
+        // the meter and the case each add an entry: past the register's cap a write may evict an orphan's
         val roomy = before.devices.size + 2 <= DeviceRegisterStore.MAX_DEVICES
 
         try {
