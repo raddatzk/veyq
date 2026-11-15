@@ -84,6 +84,13 @@ class AccountOffline internal constructor(
         )
     }
 
+    /** The bytes the store keeps that each pin reaches, by its node (an entry two pins reach counts in each). */
+    suspend fun pinnedBytes(): Map<String, Long> {
+        val out = HashMap<String, Long>()
+        for (e in store.entries()) for (p in e.pins) out[p] = (out[p] ?: 0L) + e.size
+        return out
+    }
+
     // ---- a listing's answer
 
     /** The pins that reach [key] now, null where the account pins nothing (an entry then keeps the pins it had). */

@@ -77,6 +77,24 @@ class AccountSettings<A : Connection, T : Any>(
 
         /** What this account's offline store on this device holds (ADR 0140 decision 10); null where it keeps none. */
         open suspend fun storage(): Storage? = null
+
+        /** Why this device keeps no offline store of the account where it could (no trust in it); null otherwise. */
+        open fun storageUnavailable(): Msg? = null
+
+        /** The limit set to [bytes] (0: the automatic tier off); lowering it evicts at once. */
+        open suspend fun setLimit(bytes: Long) {}
+
+        /** "Clear cache": the automatic tier dropped, the pins kept. */
+        open suspend fun clearCache() {}
+
+        /** "Remove all offline content": every pin and everything kept. */
+        open suspend fun removeAllOffline() {}
+
+        /** The pin of [node] taken off. */
+        open suspend fun unpin(node: String) {}
+
+        /** Each change of the pins or their fetches: what the section reads anew while it is shown ([followStorage]). */
+        open val storageChanges: kotlinx.coroutines.flow.Flow<Unit> get() = kotlinx.coroutines.flow.emptyFlow()
         internal open fun register(): DeviceRegisterStore = throw UnsupportedOperationException("this door keeps no device register")
     }
 
@@ -113,12 +131,20 @@ class AccountSettings<A : Connection, T : Any>(
     )
 
     /**
-     * "Storage on this device" (ADR 0140 decision 10), sizes only, in bytes: the [limit] the person set (0: the automatic
-     * tier off), what the [automatic] tier and the [pinned] items use, and the volume's [free] space (null where the system
-     * does not say).
+     * "Storage on this device" (ADR 0140 decision 10), in bytes: the [limit] the person set (0: the automatic tier off) and
+     * as its free size field shows it ([field]), what the [automatic] tier and the pinned items use ([pinned]), the
+     * volume's [free] space (null where the system does not say), and the pinned [items], each removable — named from the
+     * tree the app holds, never from the store.
      */
     @Serializable
-    data class Storage(val limit: Long, val automatic: Long, val pinned: Long, val free: Long?)
+    data class Storage(
+        val limit: Long,
+        val automatic: Long,
+        val pinned: Long,
+        val free: Long?,
+        val field: me.raddatz.veyq.mobile.offline.LimitField = me.raddatz.veyq.mobile.offline.OfflineShown.field(limit),
+        val items: List<me.raddatz.veyq.mobile.offline.OfflineItem> = emptyList(),
+    )
 
     /** A device the register knows that holds a served saved key and no session: removable ([removeSavedKey]). */
     @Serializable
@@ -144,6 +170,10 @@ class AccountSettings<A : Connection, T : Any>(
         @Serializable(with = MsgKey::class) val registerRefusal: Msg? = null,
         /** This account's offline store on this device; null where it keeps none (a device without trust, no directory). */
         val storage: Storage? = null,
+        /** Why the section keeps nothing here ([Msg.ACCOUNT_SETTINGS_STORAGE_NO_TRUST]); null where it does or is not shown. */
+        @Serializable(with = MsgKey::class) val storageUnavailable: Msg? = null,
+        /** "Remove all offline content" asked ([askRemoveAllOffline]): its question shows until confirmed or cancelled. */
+        val askingRemoveAll: Boolean = false,
     ) {
         /** Whether "Sign out every other" has anything to end. */
         val hasOthers: Boolean get() = families.orEmpty().any { !it.current }
@@ -235,6 +265,69 @@ class AccountSettings<A : Connection, T : Any>(
         load(keepRefusal = true)
     }
 
+    // ---- "Storage on this device" (ADR 0140 decision 10)
+
+    /**
+     * The limit typed in the free size field: [amount] in [unit] (`OfflineShown.parse`: a positive number, a point or a
+     * comma as its decimal sign); anything else is refused with its word and nothing changes. Lowering it evicts at once.
+     */
+    suspend fun setOfflineLimit(amount: String, unit: me.raddatz.veyq.mobile.offline.LimitUnit) = act {
+        val bytes = me.raddatz.veyq.mobile.offline.OfflineShown.parse(amount, unit)
+        if (bytes == null) {
+            refuse(Msg.ACCOUNT_SETTINGS_STORAGE_LIMIT_INVALID)
+            return@act
+        }
+        attempt { door.setLimit(bytes) }.onFailure { refuse(Msg.ACCOUNT_SETTINGS_LOAD_FAILED) }
+        loadStorage()
+    }
+
+    /** The limit "Off": the automatic tier keeps nothing (what it held goes at once); pins still work. */
+    suspend fun turnOfflineLimitOff() = act {
+        attempt { door.setLimit(0) }.onFailure { refuse(Msg.ACCOUNT_SETTINGS_LOAD_FAILED) }
+        loadStorage()
+    }
+
+    /** "Clear cache": what was kept of content viewed goes; the items available offline stay. */
+    suspend fun clearOfflineCache() = act {
+        attempt { door.clearCache() }.onFailure { refuse(Msg.ACCOUNT_SETTINGS_LOAD_FAILED) }
+        loadStorage()
+    }
+
+    /** Item [node] no longer available offline (its row's Remove). */
+    suspend fun unpinOffline(node: String) = act {
+        attempt { door.unpin(node) }.onFailure { refuse(Msg.ACCOUNT_SETTINGS_LOAD_FAILED) }
+        loadStorage()
+    }
+
+    /** "Remove all offline content" asked: nothing goes until [removeAllOffline]. */
+    fun askRemoveAllOffline() {
+        if (current.storage != null) _state.value = current.copy(askingRemoveAll = true)
+    }
+
+    fun cancelRemoveAllOffline() {
+        _state.value = current.copy(askingRemoveAll = false)
+    }
+
+    /** What [askRemoveAllOffline] asked: every pin and everything kept goes. Nothing without the question asked first. */
+    suspend fun removeAllOffline() = act {
+        if (!current.askingRemoveAll) return@act
+        _state.value = current.copy(askingRemoveAll = false)
+        attempt { door.removeAllOffline() }.onFailure { refuse(Msg.ACCOUNT_SETTINGS_LOAD_FAILED) }
+        loadStorage()
+    }
+
+    /**
+     * The section read anew at each change of the pins or their fetches, while the page is shown (a host runs it as the
+     * page's own job, as a gallery's live poll; it ends when that is cancelled).
+     */
+    suspend fun followStorage() {
+        door.storageChanges.collect { loadStorage() }
+    }
+
+    private suspend fun loadStorage() {
+        attempt { door.storage() }.onSuccess { _state.value = current.copy(storage = it, storageUnavailable = if (it == null) door.storageUnavailable() else null) }
+    }
+
     /** Staying signed in at [level], as "Manage servers" changes it ([SessionModel.stay]). */
     suspend fun stay(level: StaySignedIn): TrustChange = act { here.stay(level).also { load() } }
 
@@ -266,7 +359,7 @@ class AccountSettings<A : Connection, T : Any>(
     /** The web's loader: the list first; the register's half after it, never able to take the list down (E4). */
     private suspend fun load(keepRefusal: Boolean = false) {
         if (!keepRefusal) _state.value = current.copy(refusal = null)
-        attempt { door.storage() }.onSuccess { _state.value = current.copy(storage = it) }
+        loadStorage()
         attempt { door.email() }.onSuccess { (address, confirmed) -> _state.value = current.copy(email = address, emailConfirmed = confirmed) }
         attempt { door.capabilities() }.onSuccess { _state.value = current.copy(addDevice = DEVICE_LINKING in it) }
         val families = attempt { door.families() }.getOrElse {
@@ -367,7 +460,30 @@ class AccountSettings<A : Connection, T : Any>(
         override suspend fun removeSavedKey(wrap: String) = done { AccountWrapsApi(account.server, account.http).deleteAccountWrap(wrap) }
         override suspend fun capabilities() = account.call { SetupApi(account.server, account.http).getSetupStatus() }.capabilities.map { it.id }.toSet()
         override fun register() = account.register()
-        override suspend fun storage() = account.offline?.usage()?.let { Storage(it.limit, it.automatic, it.pinned, it.free) }
+        override suspend fun storage(): Storage? {
+            val o = account.offline ?: return null
+            val u = o.usage()
+            val pins = account.offlinePins
+            val bytes = o.pinnedBytes()
+            val progress = pins?.progress?.value.orEmpty()
+            val items = pins?.pins?.value.orEmpty().map { p ->
+                val status = me.raddatz.veyq.mobile.offline.OfflineShown.status(p.node, listOf(p), progress)
+                me.raddatz.veyq.mobile.offline.OfflineItem(
+                    p.tenant, p.scope, p.node, p.kind, me.raddatz.veyq.mobile.offline.OfflineShown.title(pins?.nameOf(p)),
+                    status, me.raddatz.veyq.mobile.offline.OfflineShown.said(status, progress[p.node]), bytes[p.node] ?: 0L,
+                )
+            }
+            return Storage(u.limit, u.automatic, u.pinned, u.free, items = items)
+        }
+
+        // the host named a directory, and this device keeps no trust in the account: nothing is kept (ADR 0140 decision 4)
+        override fun storageUnavailable() =
+            Msg.ACCOUNT_SETTINGS_STORAGE_NO_TRUST.takeIf { account.thisDevice.offlineRoot != null && account.trusted == null }
+        override suspend fun setLimit(bytes: Long) { account.offline?.setLimit(bytes) }
+        override suspend fun clearCache() { account.offline?.clearCache() }
+        override suspend fun removeAllOffline() { account.offline?.removeAll() }
+        override suspend fun unpin(node: String) { account.offlinePins?.unpin(node) }
+        override val storageChanges get() = account.offlinePins?.changes ?: kotlinx.coroutines.flow.emptyFlow()
 
         /** A call answered with no body: anything but a success throws. */
         private suspend fun done(f: suspend () -> HttpResponse<Unit>) {

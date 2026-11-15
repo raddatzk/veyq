@@ -112,6 +112,23 @@ class OfflinePins internal constructor(
     private val syncing = Mutex()
     private var loop: Job? = null
 
+    /**
+     * The name of [pin]'s node in the tree this account's session of its tenant reads (`TenantSession.trees`, a kept read
+     * offline) — never the store's: it keeps no name; null where no session of the tenant is held or the node is not in it.
+     */
+    suspend fun nameOf(pin: Pin): String? = sessions[pin.tenant]?.let { t ->
+        try {
+            t.node(pin.scope, pin.node)?.name
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Each change of the pins or of their fetches. */
+    val changes: kotlinx.coroutines.flow.Flow<Unit> get() = kotlinx.coroutines.flow.combine(pins, progress) { _, _ -> }
+
     /** Whether node [nodeId] is pinned. */
     fun pinned(nodeId: String): Boolean = pins.value.any { it.node == nodeId }
 

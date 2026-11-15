@@ -31,7 +31,11 @@ import me.raddatz.veyq.mobile.words.Notices
  * - **the cover** of a kind that takes one: where its frame sits ([State.cover], read when the header opens and after each
  *   cover write), its picture, a picked picture set (the platform's JPEG to [NodeCover]'s spec) or the stored one framed
  *   anew, and its removal — what the bridge's hosts draw; Android and Apple still write their covers through `NodeCover`
- *   directly.
+ *   directly;
+ * - **"Available offline"** (ADR 0140 decisions 9 and 10), where the account keeps an offline store on this device and
+ *   the kind is pinned: its toggle's state ([State.offline]: on, where its fetch is, its line), turned on only after the
+ *   size it keeps is asked ([toggleOffline], then [confirmOffline] or [cancelOffline]) and off at once;
+ * - **offline** ([Door.online] false) every write leaves the header (ADR 0140 decision 7): its rights read only.
  *
  * Each app draws [state] (or [watch]) and the dialogs; what it says is a [Notice] the actions return. The move, the copy,
  * the share and the report are sheets of their own ([MoveSheet], [ShareSheet], [ReportSheet]).
@@ -70,6 +74,10 @@ class NodeHeaderModel(
         suspend fun setCover(ref: NodeAt, jpeg: ByteArray, crop: NodeCover.Crop): NodeCover.Outcome = NodeCover.Outcome.FAILED
         suspend fun recropCover(ref: NodeAt, crop: NodeCover.Crop): NodeCover.Outcome = NodeCover.Outcome.FAILED
         suspend fun removeCover(ref: NodeAt): NodeCover.Outcome = NodeCover.Outcome.FAILED
+        /** "Available offline" on this tenant's nodes; null where the account keeps no offline store on this device. */
+        fun offline(): me.raddatz.veyq.mobile.offline.OfflineNodes? = null
+        /** Whether the account reaches its server, now and at each change: offline the header takes no write. */
+        val online: kotlinx.coroutines.flow.Flow<Boolean> get() = kotlinx.coroutines.flow.flowOf(true)
     }
 
     data class State(
@@ -88,6 +96,8 @@ class NodeHeaderModel(
          * ZIP's; null until read.
          */
         val downloadName: String? = null,
+        /** "Available offline" of the node; null where it is not offered (no offline store here, a kind not pinned). */
+        val offline: me.raddatz.veyq.mobile.offline.OfflineToggle? = null,
     )
 
     private var facts: AppKinds.Facts? = facts
@@ -95,6 +105,10 @@ class NodeHeaderModel(
     /** What an undo brings back, while it is offered. */
     private var undoing: OpenNode? = null
     private var undoWindow: Job? = null
+    private var online = true
+    private val offlineNodes = door.offline()?.takeIf { it.pinnable(node.kind) }
+    /** The size a pin waits to be confirmed with ([toggleOffline]); null while none is asked. */
+    private val asking = MutableStateFlow<Long?>(null)
 
     private val _state = MutableStateFlow(State(pinned = door.isFavorite(node)).let { it.copy(rights = rights(it.pinned)) })
     val state: StateFlow<State> = _state.asStateFlow()
@@ -114,6 +128,19 @@ class NodeHeaderModel(
         }
         if (AppKinds.header(node.kind)?.takesCover == true) scope.launch { readCover() }
         scope.launch { readDownloadName() }
+        scope.launch {
+            door.online.collect {
+                online = it
+                recompose()
+            }
+        }
+        offlineNodes?.let { o ->
+            scope.launch {
+                kotlinx.coroutines.flow.combine(o.pins, o.progress, asking) { pins, progress, ask ->
+                    me.raddatz.veyq.mobile.offline.OfflineShown.toggle(node.nodeId, pins, progress, ask)
+                }.collect { t -> _state.update { it.copy(offline = t).let { s -> s.copy(rights = rights(s.pinned)) } } }
+            }
+        }
     }
 
     private suspend fun readDownloadName() {
@@ -140,6 +167,7 @@ class NodeHeaderModel(
             node.kind, favoriteKnown = pinned != null, shareable = kind?.shareable == true, linksOn = door.linksOn(),
             rename = kind?.renames != false, takesCover = kind?.takesCover == true, coverOffered = doors.coverOffered,
             copy = doors.copies, download = doors.downloads, report = reportOffered, inGuestFolder = door.inIdentityFolder(node),
+            offline = offlineNodes != null, online = online,
         )
     }
 
@@ -222,6 +250,37 @@ class NodeHeaderModel(
         door.changed()
         // renamed; a link that kept the old name is said (the rename stands)
         return Renamed(r.notice, if (r.linksFailed) Notice(Msg.SHARE_NAME_RESEAL_FAILED) else null)
+    }
+
+    /**
+     * The toggle of "Available offline": on, it is turned off at once (what no other pin reaches is the automatic tier's
+     * again); off, the size it would keep is read and asked ([State.offline]'s `asking` and `question`) — nothing is kept
+     * until [confirmOffline]. Why not, or null.
+     */
+    suspend fun toggleOffline(): Notice? {
+        val o = offlineNodes ?: return null
+        if (current.offline?.on == true) {
+            asking.value = null
+            o.unpin(node)
+            return null
+        }
+        val bytes = runCatching { o.plan(node) }.getOrNull() ?: return Notice(Msg.OFFLINE_PIN_FAILED)
+        asking.value = bytes
+        return null
+    }
+
+    /** The pin asked by [toggleOffline] confirmed: the node is pinned and its fetch starts. Why not, or null. */
+    suspend fun confirmOffline(): Notice? {
+        val o = offlineNodes ?: return null
+        if (asking.value == null) return null
+        val pinned = runCatching { o.pin(node) }.getOrDefault(false)
+        asking.value = null
+        return if (pinned) null else Notice(Msg.OFFLINE_PIN_FAILED)
+    }
+
+    /** The pin asked by [toggleOffline] not made. */
+    fun cancelOffline() {
+        asking.value = null
     }
 
     private suspend fun readCover() {

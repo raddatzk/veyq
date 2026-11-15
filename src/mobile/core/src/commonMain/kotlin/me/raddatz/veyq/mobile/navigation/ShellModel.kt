@@ -81,10 +81,23 @@ class ShellModel(
 
     /**
      * Serializable, since the native bridge sends it as it is (ADR 0123's Consequences, the bridge). [offline]: the lists
-     * are the offline store's, read-only, as of when (ADR 0140 decision 5, the shell's banner); null online.
+     * are the offline store's, read-only, as of when (ADR 0140 decision 5, the shell's banner: [banner]); null online.
+     * [gone]: each item made available offline that was removed from this device since it is no longer available (ADR
+     * 0140 decision 6), named where the shell held its name ([me.raddatz.veyq.mobile.offline.OfflineShown.gone]) — shown
+     * until [goneSeen].
      */
     @Serializable
-    class State(val shell: Shell, val lists: Lists, val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null)
+    class State(
+        val shell: Shell,
+        val lists: Lists,
+        val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null,
+        val gone: List<Notice> = emptyList(),
+    ) {
+        /** The banner offline: "Offline — content as of {time}"; null online. */
+        val banner: Notice? get() = me.raddatz.veyq.mobile.offline.OfflineShown.banner(offline)
+
+        internal fun moved(shell: Shell, lists: Lists = this.lists) = State(shell, lists, offline, gone)
+    }
 
     /** The tenant as read, before what this device hides is taken out. */
     private class Raw(val spaces: List<SpaceRef>, val nodes: List<NodeRef>, val favorites: List<ObjectRef>, val off: Set<String>)
@@ -124,9 +137,35 @@ class ShellModel(
         if (reaches == null) reaches = CoroutineScope(Dispatchers.Default).launch {
             tenant.account.reach.drop(1).collect { if (it == Reach.Online) refresh() else rebuild() }
         }
+        watchGone()
     }
 
     private var reaches: kotlinx.coroutines.Job? = null
+    private var goneWatch: kotlinx.coroutines.Job? = null
+
+    /**
+     * Every node name this shell read in this run, by node id: what names an item made available offline once its node
+     * is gone from the lists (ADR 0140 decision 6) — the store keeps no name, so a node this shell never held goes nameless.
+     */
+    private val heldNames = HashMap<String, String>()
+
+    /** The pins dropped since their node is no longer available, as the shell says them ([State.gone]). */
+    private fun watchGone() {
+        val pins = tenant.account.offlinePins ?: return
+        if (goneWatch != null) return
+        goneWatch = CoroutineScope(Dispatchers.Default).launch {
+            pins.gone.collect { gone ->
+                val said = gone.filter { it.tenant == tenant.tenant.tenantId }.map { me.raddatz.veyq.mobile.offline.OfflineShown.gone(heldNames[it.node]) }
+                _state.update { s -> s?.let { State(it.shell, it.lists, it.offline, said) } }
+            }
+        }
+    }
+
+    /** The [State.gone] notices said: they are not said again (on any screen of the account). */
+    suspend fun goneSeen() {
+        tenant.account.offlinePins?.offline?.seenGone()
+        _state.update { s -> s?.let { State(it.shell, it.lists, it.offline) } }
+    }
 
     /** Whether the account reaches its server: offline every write here is refused ([readOnly], ADR 0140 decision 7). */
     val online: Boolean get() = tenant.account.reach.value == Reach.Online
@@ -157,6 +196,7 @@ class ShellModel(
     }
 
     private suspend fun read() = Raw(tenant.spaces(), tenant.nodes(), tenant.favorites(), tenant.applicationsOff())
+        .also { r -> r.nodes.forEach { heldNames[it.nodeId] = it.name } }
 
     /** The lists anew from what was read (this device's hidden spaces changed). */
     fun rebuild() = rebuild(start = false, openLastUsed = false)
@@ -175,7 +215,7 @@ class ShellModel(
             uses = recent.resolve(objects),
         )
         _state.update { prior ->
-            State(next(prior?.shell.takeUnless { start }, spaces, if (openLastUsed) recent.lastUsed(objects) else null), lists, offlineNow())
+            State(next(prior?.shell.takeUnless { start }, spaces, if (openLastUsed) recent.lastUsed(objects) else null), lists, offlineNow(), prior?.gone.orEmpty())
         }
     }
 
@@ -186,7 +226,7 @@ class ShellModel(
 
     /** Any move of the shell (its own transitions are `Shell`'s). */
     fun update(change: (Shell) -> Shell) {
-        _state.update { s -> s?.let { State(change(it.shell), it.lists) } }
+        _state.update { s -> s?.moved(change(s.shell)) }
     }
 
     fun choose(app: ApplicationId?) = update { it.choose(app) }
@@ -208,7 +248,7 @@ class ShellModel(
 
     private fun opened(ref: ObjectRef, move: (Shell) -> Shell) {
         recent.record(ref, now())
-        _state.update { s -> s?.let { State(move(it.shell), Lists(it.lists.spaces, it.lists.nodes, it.lists.objects, it.lists.favorites, it.lists.applications, it.lists.filters, drawer(it.lists.objects, it.lists.favorites), recent.resolve(it.lists.objects))) } }
+        _state.update { s -> s?.let { it.moved(move(it.shell), Lists(it.lists.spaces, it.lists.nodes, it.lists.objects, it.lists.favorites, it.lists.applications, it.lists.filters, drawer(it.lists.objects, it.lists.favorites), recent.resolve(it.lists.objects))) } }
     }
 
     /** Every node of [scopeId] this device opens: what the move browser walks. */
@@ -245,6 +285,7 @@ class ShellModel(
         get() {
             val s = shell ?: return false
             val space = s.space ?: return false
+            if (!online) return false
             return s.folderAt(space)?.let { !inIdentityFolder(it) } ?: true
         }
 
@@ -330,6 +371,8 @@ class ShellModel(
             override suspend fun setCover(ref: NodeAt, jpeg: ByteArray, crop: NodeCover.Crop) = NodeCover.set(tenant, ref.scopeId, ref.nodeId, jpeg, crop)
             override suspend fun recropCover(ref: NodeAt, crop: NodeCover.Crop) = NodeCover.recrop(tenant, ref.scopeId, ref.nodeId, crop)
             override suspend fun removeCover(ref: NodeAt) = NodeCover.remove(tenant, ref.scopeId, ref.nodeId)
+            override fun offline() = tenant.account.offlinePins?.let { me.raddatz.veyq.mobile.offline.OfflineNodes.of(it, tenant) }
+            override val online = tenant.account.reach.map { it == Reach.Online }.distinctUntilChanged()
         })
 
     private var reportKnown: Boolean? = null

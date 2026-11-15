@@ -3326,5 +3326,175 @@
     "note": "how far that fetch is, under its title: {1} a whole percent",
     "en": "{1} %% done",
     "de": "{1} %% erledigt"
+  },
+  "offline_available": {
+    "note": "a node's toggle in its header's menu: kept whole on this device until turned off (ADR 0140 decision 10; owner's copy 2026-11-15)",
+    "en": "Available offline",
+    "de": "Offline verfügbar"
+  },
+  "offline_status_waiting": {
+    "note": "under an item made available offline whose content is not kept yet: it is fetched at the next connection",
+    "en": "Not on this device yet",
+    "de": "Noch nicht auf diesem Gerät"
+  },
+  "offline_status_fetching": {
+    "note": "under an item made available offline while its content is fetched: {1} the size fetched, {2} the size it takes",
+    "en": "Downloading {1} of {2}",
+    "de": "{1} von {2} geladen"
+  },
+  "offline_status_kept": {
+    "note": "under an item made available offline once all of it is kept here",
+    "en": "On this device",
+    "de": "Auf diesem Gerät"
+  },
+  "offline_status_no_space": {
+    "note": "under an item made available offline whose fetch stopped since the device is nearly full",
+    "en": "Paused: not enough space on this device",
+    "de": "Pausiert: nicht genug Platz auf diesem Gerät"
+  },
+  "offline_status_unavailable": {
+    "note": "under an item made available offline that the server does not serve right now (blocked by the operator, or its space suspended): nothing of it is kept until it is served again",
+    "en": "Not available right now",
+    "de": "Gerade nicht verfügbar"
+  },
+  "offline_pin_ask_title": {
+    "note": "the question before an item is made available offline",
+    "en": "Make available offline?",
+    "de": "Offline verfügbar machen?"
+  },
+  "offline_pin_ask": {
+    "note": "under that question: {1} the size it takes",
+    "en": "This keeps {1} on this device. It stays until you turn it off.",
+    "de": "Dafür werden {1} auf diesem Gerät gespeichert. Sie bleiben, bis du es ausschaltest."
+  },
+  "offline_pin_confirm": {
+    "note": "that question's button",
+    "en": "Make available",
+    "de": "Verfügbar machen"
+  },
+  "offline_pin_failed": {
+    "note": "an item that could not be made available offline (its size could not be read)",
+    "en": "This can’t be made available offline right now.",
+    "de": "Das kann gerade nicht offline verfügbar gemacht werden."
+  },
+  "offline_banner": {
+    "note": "the shell's banner while the server is unreachable: {1} when the content shown was last confirmed (a date and time; owner's copy 2026-11-15)",
+    "en": "Offline — content as of {1}",
+    "de": "Offline — Stand {1}"
+  },
+  "offline_banner_unknown": {
+    "note": "the same banner where it is not known as of when the content is",
+    "en": "Offline",
+    "de": "Offline"
+  },
+  "offline_gone_named": {
+    "note": "an item made available offline was removed from this device since it is no longer available to you (in the trash, or a space you left): {1} its name",
+    "en": "“{1}” is no longer available offline",
+    "de": "„{1}“ ist nicht mehr offline verfügbar"
+  },
+  "offline_gone": {
+    "note": "the same where the app no longer holds the item's name",
+    "en": "An item is no longer available offline",
+    "de": "Ein Eintrag ist nicht mehr offline verfügbar"
+  },
+  "offline_item_named": {
+    "note": "a row of Settings' items available offline: {1} the item's name",
+    "en": "{1}",
+    "de": "{1}"
+  },
+  "offline_item_unnamed": {
+    "note": "the same row where the app does not hold the item's name right now",
+    "en": "An item",
+    "de": "Ein Eintrag"
+  },
+  "account_settings_storage": {
+    "note": "the account Settings section of what the app keeps on this device (ADR 0140 decision 10; owner's copy 2026-11-15)",
+    "en": "Storage on this device",
+    "de": "Speicher auf diesem Gerät"
+  },
+  "account_settings_storage_limit": {
+    "note": "the size up to which content you viewed is kept",
+    "en": "Storage limit",
+    "de": "Speicherlimit"
+  },
+  "account_settings_storage_limit_hint": {
+    "note": "under the storage limit",
+    "en": "Content you viewed is kept up to this size, the longest unviewed going first. Items available offline always stay.",
+    "de": "Angesehene Inhalte werden bis zu dieser Größe gespeichert; was am längsten nicht angesehen wurde, geht zuerst. Offline verfügbare Einträge bleiben immer."
+  },
+  "account_settings_storage_limit_off": {
+    "note": "the storage limit switched off: nothing viewed is kept, items available offline still are",
+    "en": "Off",
+    "de": "Aus"
+  },
+  "account_settings_storage_limit_set": {
+    "note": "the button that sets the limit typed",
+    "en": "Set limit",
+    "de": "Limit festlegen"
+  },
+  "account_settings_storage_limit_invalid": {
+    "note": "a limit that is no size",
+    "en": "Enter a size, such as 2 GB.",
+    "de": "Gib eine Größe ein, etwa 2 GB."
+  },
+  "account_settings_storage_automatic": {
+    "note": "what content you viewed takes on this device (a size beside it)",
+    "en": "Recently viewed",
+    "de": "Zuletzt angesehen"
+  },
+  "account_settings_storage_pinned": {
+    "note": "what items made available offline take on this device (a size beside it)",
+    "en": "Available offline",
+    "de": "Offline verfügbar"
+  },
+  "account_settings_storage_free": {
+    "note": "the device's free space (a size beside it)",
+    "en": "Free on this device",
+    "de": "Frei auf diesem Gerät"
+  },
+  "account_settings_storage_items_empty": {
+    "note": "where no item is made available offline",
+    "en": "Nothing is available offline yet.",
+    "de": "Noch nichts ist offline verfügbar."
+  },
+  "account_settings_storage_remove_item": {
+    "note": "an item's action: it is no longer available offline",
+    "en": "Remove from this device",
+    "de": "Von diesem Gerät entfernen"
+  },
+  "account_settings_storage_clear_cache": {
+    "note": "removes what was kept of content you viewed; items available offline stay",
+    "en": "Clear cache",
+    "de": "Cache leeren"
+  },
+  "account_settings_storage_remove_all": {
+    "note": "removes everything this account keeps on this device, items available offline too (asked first)",
+    "en": "Remove all offline content",
+    "de": "Alle Offline-Inhalte entfernen"
+  },
+  "account_settings_storage_remove_all_question": {
+    "note": "the question before that removal",
+    "en": "Remove everything this account keeps on this device? Items available offline are no longer available offline.",
+    "de": "Alles entfernen, was dieses Konto auf diesem Gerät speichert? Offline verfügbare Einträge sind dann nicht mehr offline verfügbar."
+  },
+  "account_settings_storage_remove_all_confirm": {
+    "note": "that question's button",
+    "en": "Remove all",
+    "de": "Alle entfernen"
+  },
+  "account_settings_storage_no_trust": {
+    "note": "the section on a device that keeps no trust in the account: nothing is kept offline there",
+    "en": "Content is kept for offline use only on a device that stays signed in to this account.",
+    "de": "Inhalte werden nur auf einem Gerät offline gespeichert, das bei diesem Konto angemeldet bleibt."
+  },
+  "storage_unit_mb": {
+    "note": "a size unit of the storage limit field",
+    "en": "MB",
+    "untranslated": true
+  },
+  "storage_unit_gb": {
+    "note": "a size unit of the storage limit field",
+    "en": "GB",
+    "untranslated": true
   }
 }
