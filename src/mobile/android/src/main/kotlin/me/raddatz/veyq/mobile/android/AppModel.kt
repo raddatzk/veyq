@@ -861,6 +861,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         openGallery = null
     }
 
+    /**
+     * [gallery]'s delete, Undo or purge (core's `GalleryModel.trash`/`undo`/`purge`, what each says lands in its state) run
+     * in the model's scope: a request the person started finishes though the lightbox or the snackbar that asked went.
+     */
+    fun galleryAct(act: suspend () -> Unit) {
+        viewModelScope.launch { act() }
+    }
+
     /** Decoded tiers by blob id, the most recent kept (a gallery asks for every tile as it scrolls past). */
     private val mediaPictures = object : android.util.LruCache<String, androidx.compose.ui.graphics.ImageBitmap>(48 * 1024 * 1024) {
         override fun sizeOf(key: String, value: androidx.compose.ui.graphics.ImageBitmap) = value.width * value.height * 4
@@ -1148,6 +1156,33 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val app = getApplication<Application>()
         val m = shellModel ?: return app.text(me.raddatz.veyq.mobile.words.Notices.folderRefused(null))
         return m.createFolderHere(name)?.let { app.text(it) }.also { readRowDetails(m.tenant) }
+    }
+
+    /**
+     * A Memory [name] made in space [scopeId] under [parentId] (null: the space's top) — New Memory, core's
+     * `ShellModel.createMemory` (the web's `MemoryNodeDialog`: checked against the loaded tree, then sent) —, opened once
+     * made (the web's). Why not, in the dialog's words, or null.
+     */
+    suspend fun createMemory(scopeId: String, parentId: String?, name: String): String? {
+        val app = getApplication<Application>()
+        val m = shellModel ?: return app.text(me.raddatz.veyq.mobile.memories.MemoryCreate.refused(null))
+        return opened(m.createMemory(scopeId, parentId, name)).also { readRowDetails(m.tenant) }
+    }
+
+    /** A chapter [name] made in [gallery]'s Memory (core's `GalleryModel.createChapter`), opened once made; why not, or null. */
+    suspend fun createChapter(gallery: me.raddatz.veyq.mobile.memories.GalleryModel, name: String): String? {
+        // core reads the lists anew once it is made (`ShellModel.createMemoryNode`)
+        val made = gallery.createChapter(name)
+        shellModel?.let { readRowDetails(it.tenant) }
+        return opened(made)
+    }
+
+    /** What a Memory's or a chapter's create came to: the node made opened, or why not in words. */
+    private fun opened(made: me.raddatz.veyq.mobile.memories.MemoryCreate.Made): String? {
+        made.notice?.let { return getApplication<Application>().text(it) }
+        val n = made.node ?: return getApplication<Application>().text(me.raddatz.veyq.mobile.memories.MemoryCreate.refused(null))
+        me.raddatz.veyq.mobile.memories.GalleryModel.page(n)?.let(::open)
+        return null
     }
 
     /** What the drawer's "New" asked Home to create ("folder" or "pot"), until Home opens its dialog. */
