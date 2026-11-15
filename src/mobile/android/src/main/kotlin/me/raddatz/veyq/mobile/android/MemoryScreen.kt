@@ -241,7 +241,7 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
 }
 
 /**
- * A chapter's row picture (D10): its cover, the stored picture core reads for one of this Memory's chapters
+ * A chapter's row picture (ADR 0136's Consequences, Memories): its cover, the stored picture core reads for one of this Memory's chapters
  * (`GalleryModel.chapterCover`), decoded small and cropped to the tile; the kind's icon where it has none.
  */
 @Composable
@@ -354,7 +354,7 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
                 if (state.slideshow == me.raddatz.veyq.mobile.memories.Lightbox.Slideshow.PLAYING) pager.animateScrollToPage(state.index) else pager.scrollToPage(state.index)
             }
         }
-        // a picture zoomed in takes the swipe for its own pan (the platform's zoom, D2): paging waits until it is back
+        // a picture zoomed in takes the swipe for its own pan (the platform's zoom, ADR 0136's Consequences): paging waits until it is back
         var zoomed by remember { mutableStateOf(false) }
         LaunchedEffect(state.index) { zoomed = false }
         val row = state.row ?: rows.first()
@@ -472,7 +472,7 @@ private const val ZOOM_MAX = 5f
 private const val ZOOM_TAP = 2.5f
 
 /**
- * A lightbox's picture fitted, zoomed by the platform (D2: a pinch, a double tap; the model knows nothing of it): zoomed in,
+ * A lightbox's picture fitted, zoomed by the platform (ADR 0136's Consequences: a pinch, a double tap; the model knows nothing of it): zoomed in,
  * one finger pans it and the pager waits ([onZoom]); a page left is back at its fit. A touch pauses the slideshow (the web
  * pauses on any pointer).
  */

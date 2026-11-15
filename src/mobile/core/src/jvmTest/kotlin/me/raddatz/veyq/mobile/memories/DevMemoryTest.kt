@@ -18,7 +18,7 @@ import kotlin.test.assertNotNull
 
 /**
  * Dev tooling, not a test of the product: makes and removes a Memory of the seeded principal for a device pass of the
- * apps' Memories (`cr-memories-on-every-app` phase 1), where the phones then read what is in it. Runs only with
+ * apps' Memories (ADR 0123's Consequences, Memories on every app), where the phones then read what is in it. Runs only with
  * `VEYQ_LIVE` and one of:
  * - `VEYQ_DEV_MEMORY_FILL=<directory>`: an "App memory <n>" made at the default space's top by `ShellModel.createMemory`
  *   and every file of the directory uploaded into it by `MediaUpload.upload`, in name order, as a platform uploads it —

@@ -14,7 +14,7 @@ using Windows.Storage.Streams;
 namespace Veyq.Tests;
 
 /// <summary>
-/// A picked medium's tiers made by Windows for the core (MediaTiers; the CR "Memories on every app" D5 and D8; Linux's
+/// A picked medium's tiers made by Windows for the core (MediaTiers; ADR 0123's Consequences, the Windows app; Linux's
 /// media_tiers tests, case for case): a photo turned by its EXIF and fitted to the core's edges, never enlarged; a video's
 /// poster at the core's moment and its length; a file that does not decode answered with no tiers. Every file is made here
 /// in the temporary folder and removed after.

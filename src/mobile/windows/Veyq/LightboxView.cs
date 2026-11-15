@@ -1,4 +1,4 @@
-// A Memory's lightbox (the CR "Memories on every app" phase 5, D11; core's Lightbox; Linux's lightbox.rs, rule for rule),
+// A Memory's lightbox (core's Lightbox; ADR 0123's Consequences, the Windows app; Linux's lightbox.rs, rule for rule),
 // Fluent's way, as Windows' Photos shows a picture: in the gallery's place over black, a CommandBar on top with Close,
 // Previous and Next, the position and the medium's name, then Slideshow, Details, Save and Move to trash — each only where
 // the core offers it. A picture zooms in its ScrollViewer (Ctrl+wheel, a pinch, +, -, 0); ← and → page; Escape closes. A

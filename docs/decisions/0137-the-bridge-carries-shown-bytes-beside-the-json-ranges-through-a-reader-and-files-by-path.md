@@ -31,7 +31,8 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
      shares it.
    - **NULL means no payload; a non-NULL pointer with length 0 is an empty one.** `Exports.kt` hands an empty payload
      as a pointer to a byte never read, so a range past a blob's end (no bytes) is told from an answer that carries
-     none without reading its JSON. Every `Answer.Bytes` has a payload; no other answer has one.
+     none without reading its JSON. Every `Answer.Bytes` has a payload, and so has an `Answer.RowCover` that sent its
+     picture (a list row's cover, below); no other answer has one.
    - **An update never carries a payload.** State is JSON; a picture is asked for. The state names what there is to
      ask for: `ShellShown.pictures` (and `Update.Pot.pictures`) list the user ids whose picture the core holds,
      `ShellShown.me` the signed-in member's; `Avatar.Picture(userId)` answers the bytes. A changed set is a new update,
@@ -49,8 +50,8 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
    `Answer.Reader(reader, size, mediaType)`; `Reader.Read(reader, position, length)` answers `Answer.Bytes` with that
    range — fewer bytes only at the end, an empty payload past it — through the core's `RangeReader`, whose frame cache
    stays the core's; `Reader.Close(reader)` frees it, and every reader of a tenant closes when the tenant does, as its
-   Pots do. `Bridge.openReader` is the door every opening call uses: Depot's `File.Reader` the first (a Memory's medium
-   next), and a reader a page opened closes with that page too.
+   Pots do. `Bridge.openReader` is the door every opening call uses: Depot's `File.Reader` the first, Memories' `Medium.Reader`
+   the second, and a reader a page opened closes with that page too.
 3. **A file on the device is a path the host names, and the core opens it.** The host's dialog gives a path — GTK's
    `FileDialog` (the xdg portal where one runs; under Flatpak the document portal's path), WinUI's `FileSavePicker` /
    `FileOpenPicker` — and the core opens it with the platform's own call. Nothing of a file's content crosses the
@@ -173,6 +174,36 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
     SHA-256, the reader refused after `File.Close`) and `filesAndAFolder…` (`VEYQ_LIVE_UPLOAD=1`: a folder with a hidden
     file and a non-ASCII subfolder, its link said; a 400 MiB upload cancelled with nothing left; 2 GiB + 1 byte uploaded in
     158 s and saved back in 132 s at its SHA-256); `SecretFreeSchemaTest` unchanged.
+- **A Memory's media: the second reader, tiers the host draws, uploads by path** (2026-11-13/15, Memories on the
+  desktops; the models ADR 0136's Consequences, the screens ADR 0123's, the Linux app and the Windows app):
+  - **The second reader:** `Medium.Reader(lightbox)` → `Answer.Reader` through `Bridge.openReader`, refused `NO_MEDIUM`
+    for a picture. A reader a lightbox opened is refused and dropped once the lightbox's model no longer holds it (paged
+    away, stopped, closed, its gallery or its tenant closed): the model holds the rule, the bridge follows it.
+  - **Drawn pixels ride inward for an upload too:** `HostRequest.MediaTiers(path, mediaType, previewEdge, previewQuality,
+    thumbnailEdge, thumbnailQuality, posterAtMs)` → `HostReply.Tiers(width, height, previewSize)` with `preview ‖
+    thumbnail` as the reply's payload, as `HostReply.Pixels`; `HostRequest.MediaDuration(path)` tells a video's length,
+    so the poster's time stays the core's (`MediaUpload.posterAtMs`). The bridge's `HostTiers` is the core's
+    `MediaUpload.Deriver` over the host, asking on a scope of its own — never the queue's deriving thread, never the UI's;
+    a reply that is no set of both tiers, a silent host or a source without a path sends the original alone (the phones'
+    rule for what they cannot decode). The spec rides in the request, so no host copies a number. Rejected: the host
+    deriving every tier before it calls (every preview of a batch held at once).
+  - `Memory.Upload(gallery, paths)` → `Queued(count, notice)`: each path a `FileSource` read at offsets (`PathSource`
+    keeps the path for the host's tiers); a path no medium by `isMedia` is left out and said (`memory_not_media`).
+  - **A gallery's grid crosses laid out:** `Gallery.Layout(gallery, width, top, viewHeight)` → `Answer.GridLayout(rows,
+    height, count)`, only the rows of the view's window, each tile's frame; a host places frames and lays out nothing. A
+    tile is `Gallery.Tile`, a chapter's cover `Gallery.ChapterCover`, each `Answer.Bytes`; a row names blob ids to key
+    a decoded cache by, never bytes.
+  - **A list row's cover:** `Shell.RowCover(nodeId, held)` → `Answer.RowCover(frame, crop, sent, mediaType)` (core's
+    `NodeCover.row`), the stored picture beside the JSON only where the host does not hold that frame, so a list drawn
+    anew on every state opens a cover's blob only once it changed — the second answer with a payload (decision 1).
+  - Measured: `MemoriesDispatchTest` (every Memories call and watch over a played Memory and a played host through a
+    real `Host`; 17 mutations of the dispatch and 5 of the row cover, each red), `WireTest`'s samples,
+    `SecretFreeSchemaTest` unchanged; with `VEYQ_LIVE` and `VEYQ_LIVE_MEMORY_WEBM=<file>`,
+    `LiveBridgeTest.aMemoryIsMadeFilledByPathPlayedSavedAndEmptiedThroughCalls` (a 599 MB VP9 WebM and three photos up
+    by path with the played host's tiers, each tile at its thumbnail's SHA-256, a range across a frame's edge and the
+    saved original at the file's, a second save cancelled with nothing left, a trash undone, a chapter made; purged).
+    A played upload job must hold the core job's own once-only lock: the queue prepares ahead while the run awaits the
+    same work, so a job without it asked the host twice.
 - Decoding a picture is the platform's (ADR 0136 decision 1), and WebP is not every platform's own: GTK 4.22 decodes it
   through glycin's loaders, Windows through the Store's Webp Image Extensions. Packaging must carry both (native-apps
   § Open).

@@ -424,8 +424,8 @@ implementation exists but what holds it to the first.
   its listed tier (`media-meta`: geometry, capture time and its source, GPS, place) projected as `normalizeMediaMeta` does
   and its original's sealed meta (type, name), ordered newest first by the effective capture time (a correction over the
   derived one), an undated row last; each tier (`ORIGINAL`, `THUMBNAIL`, `PREVIEW`) is a blob of core's blob service whose
-  key is bound to the medium (`blob-key` with `ownerId` the medium's id, ADR 0113). Both apps draw the gallery as square
-  tiles of the thumbnail (a video marked, its poster), the chapters a Memory holds above it, and a lightbox paging through
+  key is bound to the medium (`blob-key` with `ownerId` the medium's id, ADR 0113). Both apps draw the gallery as tiles
+  of the thumbnail (a video marked, its poster; square at first, the web's justified grid since 2026-11-13), the chapters a Memory holds above it, and a lightbox paging through
   the previews with each medium's name and capture time (measured 2026-11-09: `MemoryMediaTest` — a correction ignored turns
   it red —; `MemoryLiveTest` reading a Memory the web filled with three JPEGs with EXIF time and GPS, a PNG and an MP4 — each
   tile and preview the JPEG the web derived, each time with its source; the same gallery and lightbox on Android and iOS).
@@ -466,8 +466,38 @@ implementation exists but what holds it to the first.
   with `AVAssetImageGenerator` (its track's transform applied), and core reads the picked file at any offset as it seals
   it (measured 2026-11-09: the same photo and clip went up from the iOS Simulator under their own names, the photo with
   its position and altitude, the photos picker offering "with location" by default).
-  Not built yet: the live poll, zoom, the slideshow, edits (date, place, participants, capture-time correction, trash),
-  item marks, buckets, the map, sharing, the re-key, export and copy.
+  - **Memories on every app** (2026-11-13/15; the gallery's, the lightbox's and the uploads' rules moved into core
+    screen models first, ADR 0136's Consequences, and both phones thinned onto them). Both apps draw New Memory (Home's
+    and the drawer's New from `AppKinds.createsWhere`, Memories' own list) and Add chapter (the add menu beside Add
+    photos), the chapters with their covers, the justified grid in a lazy list (Compose's `LazyColumn`, SwiftUI's
+    `LazyVStack`: only the rows near the view built), the live poll while the page is started or the scene active
+    (`GalleryModel.startLive`, never a `live()` run from a composable, which would read on the main thread), core's Undo
+    as a snackbar or a notice at the page's foot, a guest's purge asked; the lightbox's Slideshow and Move to trash, zoom
+    by pinch and double tap (Compose's `transformable`, SwiftUI's `MagnifyGesture`; the pager waits while zoomed); a
+    Memory's links in the share sheet. Android saves an original through `CreateDocument`, reading the picker's URIs in
+    place; Apple saves on macOS through `NSSavePanel` into `FileSink` and copies a Photos pick to `tmp/picked/` (ADR
+    0047's Consequences). **On a Mac the lightbox opens in the window's content** (a navigation destination: back and
+    Escape return), and in a window of its own only when asked — "Open in New Window" in the lightbox's bar and the File
+    menu, a tile's context menu, a ⌘-click (the owner, 2026-11-13: a sheet read as a detached second window). That window
+    is a value-based `WindowGroup` carrying opaque ids only, not restored at the next start, with its own `GalleryModel`
+    (`ShellModel.galleryAt`) and `Lightbox` (`lightboxOn`), closed with the window and with the tenant. iOS stays full
+    screen.
+    Measured 2026-11-13 (phase passes, each Memory made and purged by `DevMemoryTest`, `VEYQ_DEV_MEMORY_FILL=<dir>` /
+    `VEYQ_DEV_MEMORY_PURGE=<name>`): on Android (a throwaway AVD), iOS (a throwaway iPhone 18 Pro) and macOS (the ad hoc
+    build) the moved rules — the grid in order, the lightbox paged, a 241 MB MP4 played through the reader and sought on
+    Android, the details with camera, place and uploader, originals saved at the uploads' SHA-256, a pick uploaded, nothing
+    decrypted left; Android's justified rows at 411 dp (8 dp gaps), the Mac's inline lightbox and its second window over a
+    Memory of nine photos of four shapes. Measured 2026-11-15 on Android (a throwaway AVD, `devlogin.py`, read by
+    `uiautomator dump`): a Memory made from New and opened, two chapters made (one opened at once, a same name refused),
+    four media through the photo picker, a WRITE_ONLY link made and a web guest's photo seen within one 20 s poll, zoom
+    and pan, the slideshow to its end and paused by a swipe, a trash undone 0.3 s after it (the race ADR 0136's
+    Consequences name) and one left past its window, a chapter's cover drawn, a gallery with two audio tracks shown
+    without them; `run-as … ls` showing nothing. **Apple's new functions of 2026-11-15 were built for macOS and iOS and
+    launched signed in, never tapped** (native-apps § Open). Found by the passes, not by a test: a chapter that never
+    opened from a phone, the Undo's race, and Android's pager crashing when a trash shrank its rows (its key and page now
+    guard a gone index).
+  Not built yet: edits (date, place, participants, capture-time correction), item marks, buckets, the map and GPX tracks,
+  music, the banner, the re-key, export and copy (inbox #890–#893, #906, #907).
 - **One upload queue, core's** (owner 2026-11-09: "the same split as the web"). Every upload of every application runs
   through core's `blob/UploadQueue.kt`, the web's `core/blob/queue.ts` rule for rule: one job at a time in enqueue order,
   progress as a fraction, "preparing" until a job's first progress, one automatic retry of a transient failure, none of a
@@ -673,6 +703,18 @@ implementation exists but what holds it to the first.
     minted on a guest's file), each in an `App depot <n>` / `App drop <n>` purged after. `VEYQ_LIVE_DEPOT_PASS=<name>`
     fills a desktop pass's folder (`VEYQ_LIVE_DEPOT_PASS_MEDIA` adds media), `VEYQ_LIVE_DEPOT_PASS_PURGE=1` purges it in any
     space.
+  - **Memories** (2026-11-13/15, ADR 0136's Consequences for the models, ADR 0137's for the reader, the tiers and the
+    paths): `Shell.CreateMemory`; a gallery `Gallery.Open` → `GalleryOpened` and `Watched.Gallery` (`GalleryShown`, rows
+    naming blob ids, never bytes), `Watched.GalleryLive` (the poll inside the watch's job, as `PotLive`), `Gallery.Layout`
+    (`GridLayout`: the window's rows with their frames), `Gallery.Tile/ChapterCover/Reload/Trash/Undo/Purge/CancelAsk/
+    Seen/CreateChapter/Close`; `Memory.Upload(gallery, paths)`; a lightbox `Lightbox.Open` → `LightboxOpened` and
+    `Watched.Lightbox` (`LightboxShown` with `SlideshowState`), `Lightbox.Go/Picture/Slideshow/Details/Trash/Stop/Close`,
+    `Medium.Reader`, `Medium.Save` onto Depot's `Saving`/`Watched.Save`/`Save.Cancel`; a Memory's list row's cover
+    `Shell.RowCover`; the host's `Media.Tiers`/`Media.Duration` requests. A create answers `Created(node, notice)`, since
+    the host opens the node made; the page's own "Add photos" joins the header through `Header.Facts`' `gallery`.
+    Measured: `MemoriesDispatchTest`, `WireTest`, and `LiveBridgeTest.aMemoryIsMade…` (ADR 0137's Consequences).
+    `VEYQ_DEV_MEMORY_FILL=<dir>` / `VEYQ_DEV_MEMORY_PURGE=<name>` (`DevMemoryTest`, core's `jvmTest`) make and fill a
+    pass's Memory and trash and purge it after.
 
   Measured 2026-11-10 (the channels 2026-11-11, ADR 0137's Consequences):
   - `./gradlew :bridge:jvmTest` runs four checks:
@@ -863,6 +905,45 @@ implementation exists but what holds it to the first.
   files, Upload folder… and Save a copy (saved at the originals' SHA-256); **audio heard on the default sink's monitor**
   (`parec`): a 440 Hz WebM (Opus) and a 550 Hz MP4 (AAC) at RMS −21.1 dBFS while playing, silence paused. Not produced: a
   drop without a local path in the session (Files offers no copy out of its trash; `cargo test` holds the refusal).
+  - **Memories** (built 2026-11-13/14; the models ADR 0136's Consequences, the calls the bridge's above).
+    - `memory_page.rs`: a Memory's or a chapter's page — the head's cover (the hero only once a cover exists, as on the
+      phones: owner 2026-11-13), the chapters as a boxed list with their covers, the justified grid as a `gtk::Fixed` of
+      row widgets at the core's frames (only the window's rows `Gallery.Layout` names mounted, laid out anew on a width
+      change and on the scroll; a `gtk::ListView` would have had to recycle the page's head as an item), tiles decoded by
+      GTK at 400 px and at most 400 held, least recently shown out; "Add photos" (the header's `upload`) through GTK's file
+      dialog filtered to images and videos; **a drop of files onto the page is one `Memory.Upload`, a dropped folder said
+      (`memory_drop_folder`) and not taken** (owner 2026-11-13: a folder walked into one Memory would flatten it, which the
+      web does not offer either); the trash's Undo an `AdwToast` held while the state offers it; the poll's watch while
+      the page stands. `lightbox.rs`: an `AdwNavigationPage` pushed over black, Previous/Next, ←/→ (in the capture
+      phase: the picture's scroll took them first) and a swipe, zoom by Ctrl+wheel, a pinch and `+`/`-`/`0`, the core's
+      slideshow, Details in an `AdwDialog`, Save through GTK's save dialog with the file page's progress toast, Move to
+      trash; a video played through `player.rs` (the file page's `gtk::Video` over the reader, shared). New Memory in the
+      shell's New, Add chapter the page's own creating action. Memories' list draws each Memory's cover in its row
+      (`Shell.RowCover`, cut by `Cover.Cut`).
+    - `media_tiers.rs` answers `Media.Tiers`/`Media.Duration`: **a photo decoded through gdk-pixbuf, not GTK's own
+      loader**, which keeps a JPEG as stored (measured 2026-11-13: an 80×40 JPEG with EXIF orientation 6 stayed 80×40
+      through `gdk::Texture` and came out 40×80 through gdk-pixbuf's `apply_embedded_orientation` — the cover dialog had
+      the same blind spot unnoticed); both JPEGs encoded by gdk-pixbuf's `savev` in memory; a video's poster a GStreamer
+      `playbin` frame at the core's time. In the GNOME 51 SDK's build sandbox gdk-pixbuf neither decodes nor encodes
+      (glycin has no portal there, "Loader process exited early"), so those tests are `run.py`'s `SANDBOX_SKIPS`, run in
+      the Fedora container after the SDK's pass. **HEIC does not decode in the Fedora container** (glycin-heif without
+      libde265); such a photo goes up alone with its icon. The SDK carries `playbin`, `appsink`, `vp9dec`, `qtdemux`
+      and `avdec_h264`, the container `openh264dec`.
+
+  Measured 2026-11-13/14 (`run.py build`: clippy `-D warnings`, `cargo test` 46 with the tiers' host — an image turned by
+  its EXIF, a poster sought, an undecodable file answering no tiers — and the drop's sort among 17 mutations of the app, the bridge and the core, each red):
+  **under Broadway** (`run.py run --port 8097 --devlogin --no-secret-service`, driven from headless Chrome, en/light and
+  de/dark) a Memory made from New and a chapter in it; the web's GPS/EXIF fixture, a 1600×900 JPEG stored with
+  orientation 6 (tiers 900×1600, drawn upright), a 20 s H.264/AAC MP4 and a 602 MB VP9/Opus WebM added through the
+  dialog, each tile from this host's tiers; the grid justified (a widow row at 200) and laid out anew at 744 px; the
+  lightbox paged, zoomed (`+`, Ctrl+wheel, `0`), the slideshow run to "Ended", the details, the WebM played and sought
+  to 269 s of 300 (a minute to land: 16 Mb/s read a range at a time through the reader), the GPS photo saved at its
+  SHA-256, a medium trashed and undone; a READ and a WRITE_ONLY link made, a web guest's photo seen by the poll within
+  6 s; `VmHWM` 397 MiB after the WebM's upload, play and seek; `find / -xdev -newer <marker>`: the saved original, GTK's
+  settings and recent list, GStreamer's registry and the device store, nothing decrypted. **In the Fedora VM's GNOME
+  session**: three photos dragged from Files onto the gallery went up as one batch, and the MP4's sound read from the
+  sink's monitor (−21.1 dBFS, ~436 Hz for the clip's 440 Hz). Not driven: a guest's own purge (the apps open a gallery
+  as a member only).
   - **The Flatpak** (built 2026-11-13, [ADR 0139](0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md);
     `src/mobile/linux/flatpak/`, `run.py flatpak`). The app id is `src/mobile/desktop-identity.json`'s (`app.veyq.Veyq`
     until the owner decides it), and with it the GApplication id, the resource path and the icon's and desktop entry's
@@ -1069,6 +1150,44 @@ implementation exists but what holds it to the first.
   measured on this VM, not as the SDK's documented rule. `droptargets` is no evidence either way: it listed no window
   holding `OleDropTargetInterface` while the drops landed (WinUI's drop target is not that window property).
   `DropSortTest` holds the rule.
+  - **Memories** (built 2026-11-15; Linux's set, the models ADR 0136's Consequences).
+    - `MemoryPage.cs`: the head's cover, the count, the chapters as a `ListView` with their covers, the justified grid as
+      a `Canvas` of rows at the core's frames (only the window's rows, laid out anew on the scroll's `SizeChanged` and
+      `ViewChanged`; an `ItemsRepeater` would have had to carry the page's head as items), tiles decoded by WIC at 400 px
+      and held in `Recent` (400, least recently shown out), a video's badge; each tile sits in its frame (a `Border`)
+      at the core's place, since a `Button` placed by `Canvas.SetLeft` reads to `validate_mobile_platform_guidelines` as
+      a floating button; "Add photos" through the open picker filtered to photo and video types; a drop of files as one
+      `Memory.Upload`, a folder said and not taken (`DropSort.GalleryCall`/`GallerySaid`); the Undo in the shell's
+      `InfoBar`; Refresh, F5 and Ctrl+R. `LightboxView.cs`: in the page's place over black (the shell has no navigation
+      of its own; Close and Escape return), a `CommandBar` with Close, Previous, Next, the position and name, Slideshow,
+      Details (a `ContentDialog`, one at a time), Download original (the save picker onto `ShellView.Saving`), Move to
+      trash; zoom in a `ScrollViewer` by Ctrl+wheel, a pinch and `+`/`-`/`0`; ←/→ and Escape on the window's content while
+      it stands (an accelerator on the element stopped after the save picker took the focus); a video through
+      `MediumPlayer.cs` (the file page's `MediaPlayerElement` over `ReaderStream`, shared). A Previous/Next over one stage
+      rather than a `FlipView`, which realizes its neighbours on its own where the core's `Lightbox` holds the page.
+      `RowCovers.cs` draws a Memory's row cover in Memories' list; New Memory in the shell's New, "Add chapter" in a
+      Memory's page in New's place.
+    - `MediaTiers.cs` answers `Media.Tiers`/`Media.Duration`: the photo through WIC, **its EXIF orientation read
+      (`System.Photo.Orientation`) and handed to WIC's flip and turn by the app** (scaled in the stored orientation
+      first; whether `ExifOrientationMode.RespectExifOrientation` alone turns a scaled read was not relied on), both JPEGs
+      encoded in memory; **a video's poster and length through `Windows.Media.Editing`** (`MediaClip.CreateFromFileAsync`,
+      `MediaComposition.GetThumbnailAsync`), which runs in the unpackaged app and the test process — the frame server
+      held in reserve was not needed; the test makes its clip with the same API, so no video is committed. HEIC was not
+      measured; an undecodable file answers no tiers and goes up alone. No new NuGet package.
+
+  Measured 2026-11-15 (`run.py build`: `Veyq.Tests` 44 with `MediaTiersTest` 5, `RecentTest`, `DropSortTest` and
+  `HeaderPlanTest`, 10 mutations each red; passes by `run.py drive`, `run.py run --devlogin --unlock`, en/light and
+  de/dark): a Memory made from New, a chapter in it; four media through the open picker in one batch (tiers 900×1600,
+  1280×720 and 1920×1080 — the VM decodes VP9 through the Store's extension — the WebM's upload ~4 min through the
+  tunnel); the grid justified and laid out anew at 900 wide; the lightbox zoomed by keys about its centre (`ChangeView`
+  clamps offsets to the old extent: zoom first, then the offsets once `ViewChanged` reports it), ←/→ paged, the
+  slideshow run to "Ended", the details' 25 rows, the GPS photo saved at its SHA-256 (`Get-FileHash`), the WebM played and
+  sought from 25 s to 270 s in about 2 s, a medium trashed and undone; a READ and a WRITE_ONLY link made, a web guest's
+  photo seen by the poll within 5 s; **two photos dragged from Explorer onto the gallery went up as one batch** (UAC on,
+  the app at medium integrity); a cover set and drawn as the hero and the Memory's row cover. **Memory:** idle 388 MB,
+  peak 515 MB through the WebM's upload and play and 453 MB through its play and seek — growth not the file's size.
+  `%TEMP%` before and after: only the build's own files. Not driven: a chapter's cover, the video's sound, HEIC, and
+  the lightbox's keys after a save and a tile in its `Border` again once built (each built and unit-checked).
   - **The MSIX** (built 2026-11-13, [ADR 0139](0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
     decisions 6 and 7; `windows/run.py package [--sign [PFX]] [--smoke]`). The Windows App SDK's single-project MSIX
     tooling (`Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.251221100, already in the lock) builds it under the .NET SDK's

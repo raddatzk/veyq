@@ -2364,7 +2364,7 @@
     "apple_en": "Move to Trash"
   },
   "memory_drop_folder": {
-    "note": "A folder dropped onto a Memory's gallery on a desktop is not taken (the CR's owner question 3).",
+    "note": "A folder dropped onto a Memory's gallery on a desktop is not taken (the owner, 2026-11-13: a folder walked into one Memory would flatten it).",
     "en": "“{1}” is a folder and was not added: drop its photos and videos instead.",
     "de": "„{1}“ ist ein Ordner und wurde nicht hinzugefügt: Zieh stattdessen seine Fotos und Videos hierher."
   },
