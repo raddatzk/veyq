@@ -14,7 +14,7 @@
 - **Serves (use-cases/enablers):** the member directory of [uc.spaces.add-member](../use-cases/uc.spaces.add-member.md),
   editing your own handle and name in [uc.spaces.edit-profile](../use-cases/uc.spaces.edit-profile.md),
   the **group member-add username search** ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §5),
-  and the person/profile view (built at `#people/<userId>`, ADR 0083, not the `~username` of
+  and the person/profile view (built at `#people/<username>`, ADR 0083, not the `~username` of
   [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md)).
 - **Depends on:** [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) +
   [uc.spaces.add-member](../use-cases/uc.spaces.add-member.md) (the tenant-join flows where a username is chosen),
@@ -131,8 +131,9 @@ read by tenant members only — never by a guest, never on a share page.
 - **E2 — name skipped, or no key on this device:** the name is optional at join; a member who skipped it, or whose
   tenant key does not open on this device (*waiting for the current key*), shows as just `@username` (+ owner-only
   email) until they seal a name from the profile with the key.
-- **E3 — username change:** re-checked for uniqueness in the tenant. The profile view is addressed by user id
-  (`#people/<userId>`), so no link to it breaks.
+- **E3 — username change:** re-checked for uniqueness in the tenant. The profile view is addressed by username
+  (`#people/<username>`, ADR 0083 decision 5a), so a link written with the old name no longer opens the profile, and one
+  to a name another member takes later opens theirs; a link by user id (`#people/<userId>`, still read) never breaks.
 
 ## Quality notes
 
@@ -160,4 +161,4 @@ read by tenant members only — never by a guest, never on a share page.
   [ADR 0007](../../../decisions/0007-membership-role-grant-relation.md) (membership = role + grant; email
   visibility), [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) (the group member-add search
   this feeds), [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md) (fragment routing; the profile view
-  is `#people/<userId>`, ADR 0083)
+  is `#people/<username>`, ADR 0083)

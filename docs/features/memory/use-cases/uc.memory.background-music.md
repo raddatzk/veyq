@@ -55,6 +55,9 @@
 - **A5 — Lock, sign-out, tenant switch, leaving a share.** A lock removes the bar and ends the music, and a sign-out or
   tenant switch loads a new page. A guest's music lasts as long as the share page.
 - **A6 — Memories switched off.** No button, no tab, no bar for Memories' music.
+- **A7 — Rename.** A track's menu offers **Rename** where a medium's meta may be written (a member who may write; never a
+  guest). The name is sealed into the track's listed tier; an emptied name gives the file's back. A peer's rename that
+  came first is shown in the dialog. The tab, the bar and the lock screen show the new name.
 - **E1 — Refused file.** Over 200 MiB, not an audio container core knows, or not playable in this browser: refused
   before upload, with the reason. A file whose silence cannot be found cheaply is not refused; it plays whole.
 - **E2 — Unplayable here.** A track this browser cannot play is skipped. If none plays, the bar says so and closes.

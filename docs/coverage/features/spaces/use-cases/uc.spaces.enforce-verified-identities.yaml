@@ -8,11 +8,11 @@ title: Actively verify a member's identity (safety number)
 # no CI run.
 acceptanceCriteria:
   - id: show-my-safety-number
-    text: A member's own profile shows their own safety number (6x5 digits over the vector-pinned fingerprint of their vault's identity key), their chain code (10 digits of their key-chain head) and a QR of both whose payload is the veyqid:2 marker, the 32-byte fingerprint digest and the 32-byte head, and nothing else - far below the jsqr bound. The chain code is shown only when the chain the server serves ends at the vault's identity; otherwise the page says so and shows neither.
+    text: A member's own profile shows, in the dialog its "Show" opens, their own safety number (6x5 digits over the vector-pinned fingerprint of their vault's identity key), their chain code (10 digits of their key-chain head) and a QR of both whose payload is the veyqid:2 marker, the 32-byte fingerprint digest and the 32-byte head, and nothing else - far below the jsqr bound. The chain code is shown only when the chain the server serves ends at the vault's identity; otherwise the page says so and shows neither.
     coverage:
       web: { unit: [src/core/people/PersonSafetyNumber.test.ts, src/core/people/PersonProfile.test.ts, src/features/account/safetyCode.test.ts] }
   - id: safety-number-verify
-    text: On another member's profile the caller compares the safety number and chain code of the key and head this device anchors in the tenant - by scanning the other's QR (digest AND head against the anchored ones) or reading the digits aloud. A match writes the caller's verification; a code of a different key, of the same key at another head (a withheld step), or "they don't match" warns and writes nothing; a QR that is no safety code is said as such, and a veyqid:1 code is said to come from an app to update; neither is accepted.
+    text: On another member's profile, in the dialog its "Compare" opens, the caller compares the safety number and chain code of the key and head this device anchors in the tenant - by scanning the other's QR (digest AND head against the anchored ones) or reading the digits aloud. A match writes the caller's verification; a code of a different key, of the same key at another head (a withheld step), or "they don't match" warns and writes nothing; a QR that is no safety code is said as such, and a veyqid:1 code is said to come from an app to update; neither is accepted.
     coverage:
       web: { unit: [src/core/people/PersonSafetyNumber.test.ts, src/features/account/safetyCode.test.ts] }
   - id: a-verification-is-the-verifiers-own-signed-row

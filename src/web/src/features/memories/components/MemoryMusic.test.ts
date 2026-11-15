@@ -34,6 +34,7 @@ function loaders(names: Record<string, string | undefined>, facts: Record<string
 function mountTab(over: Partial<{
   music: MediaItem[]; names: Record<string, string | undefined>; facts: Record<string, object | null>; canAdd: boolean
   canRemove: (id: string) => boolean; canDownload: boolean; canReport: boolean; playingId: string | null; pickReady: () => boolean
+  rename: (item: MediaItem, name: string | null) => Promise<void>
 }> = {}) {
   return mount(MemoryMusic, {
     props: {
@@ -46,6 +47,7 @@ function mountTab(over: Partial<{
       canReport: over.canReport ?? true,
       playingId: over.playingId ?? null,
       pickReady: over.pickReady,
+      rename: over.rename,
     },
     global: { plugins: [realI18n()] },
   })
@@ -150,5 +152,38 @@ describe('the Music tab', () => {
     const bare = mountTab({ canRemove: () => false, canDownload: false, canReport: false })
     await flushPromises()
     expect(bare.find('[data-testid="music-more"]').exists(), 'no menu without an entry').toBe(false)
+  })
+
+  // A7: a track's own name stands before its file's; Rename is offered only where the detail hands the write in (never a
+  // guest), and its dialog writes through it - a peer's rename that came first is shown with the conflict's words.
+  it("titles a track by its own name over its file's, and renames it through the write it is handed", async () => {
+    const rename = vi.fn<(item: MediaItem, name: string | null) => Promise<void>>(async () => {})
+    const w = mountTab({
+      music: [mediaItem({ mediaId: 'a' })],
+      names: { a: 'Zebra Song.mp3' },
+      facts: { a: { v: 1, trackName: 'Sunrise', durationMs: 185_000, trimStartMs: 0, trimEndMs: 185_000 } },
+      rename,
+    })
+    await flushPromises()
+    expect(w.find('[data-testid="music-title"]').text()).toBe('Sunrise')
+    await w.find('[data-testid="music-more"]').trigger('click')
+    const items = (w.findComponent(VeyqMenu).props('items') as VeyqMenuItem[]).filter((i) => i.visible !== false)
+    expect(items.map((i) => i.key)).toEqual(['rename', 'download', 'report', 'remove'])
+    items[0].command!(new Event('click'))
+    await flushPromises()
+    const dialog = w.findComponent({ name: 'MusicRenameDialog' })
+    expect(dialog.props('name')).toBe('Sunrise')
+    expect(dialog.props('fallbackName')).toBe('Zebra Song')
+    dialog.vm.$emit('save', 'Dawn')
+    await flushPromises()
+    expect(rename).toHaveBeenCalledTimes(1)
+    expect([(rename.mock.calls[0][0] as MediaItem).mediaId, rename.mock.calls[0][1]]).toEqual(['a', 'Dawn'])
+    expect(w.findComponent({ name: 'MusicRenameDialog' }).exists(), 'closed once written').toBe(false)
+
+    const guest = mountTab({ canRemove: () => false })
+    await flushPromises()
+    await guest.findAll('[data-testid="music-more"]')[0].trigger('click')
+    const guestItems = (guest.findComponent(VeyqMenu).props('items') as VeyqMenuItem[]).filter((i) => i.visible !== false)
+    expect(guestItems.map((i) => i.key), 'no write handed in: no Rename').not.toContain('rename')
   })
 })

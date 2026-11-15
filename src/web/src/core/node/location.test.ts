@@ -13,6 +13,7 @@ import {
   compareById,
   displayNamesOf,
   personHash,
+  isUserIdToken,
   PEOPLE_SEGMENT,
   TENANT_SCOPE,
 } from './location'
@@ -524,7 +525,7 @@ describe('the route grammar', () => {
 })
 
 // A person's profile is a fragment route (ADR 0083): token-less, `people` is the platform's word at a scope root.
-describe('a person\'s profile: #people/<userId>', () => {
+describe('a person\'s profile: #people/<username>', () => {
   const FILE = 'FILE'
   const hashOf = (t: TreeNode[], id: string) => hashForNode(t, id, TENANT_SCOPE)
   const resolveHash = (t: TreeNode[], hash: string) => {
@@ -538,6 +539,23 @@ describe('a person\'s profile: #people/<userId>', () => {
     expect(parseHash(personHash(UID))).toEqual({ scope: TENANT_SCOPE, segments: [], folder: false, person: UID })
     expect(parseHash(`#/people/${UID}`).person).toBe(UID)
     expect(parseHash(personHash('a b/c'))).toEqual({ scope: TENANT_SCOPE, segments: [], folder: false, person: 'a b/c' })
+  })
+
+  it('names the member by username where it is given, by id where none is or the username is shaped like an id', () => {
+    expect(personHash(UID, 'anna')).toBe('#people/anna')
+    expect(parseHash(personHash(UID, 'anna')).person).toBe('anna')
+    expect(personHash(UID, 'a.b_c-d')).toBe('#people/a.b_c-d')
+    expect(personHash(UID, null)).toBe(`#people/${UID}`)
+    expect(personHash(UID, '')).toBe(`#people/${UID}`)
+    expect(personHash(UID, 'bbbbbbbb-0000-4000-8000-000000000002')).toBe(`#people/${UID}`)
+  })
+
+  it('tells an id from a username by its canonical UUID shape alone', () => {
+    expect(isUserIdToken(UID)).toBe(true)
+    expect(isUserIdToken(UID.toUpperCase())).toBe(true)
+    expect(isUserIdToken('anna')).toBe(false)
+    expect(isUserIdToken(`${UID}x`)).toBe(false)
+    expect(isUserIdToken(UID.replace(/-/g, ''))).toBe(false)
   })
 
   it('is no path of the tree: other shapes stay plain segments, and a foreign ~username stays a personal-scope token', () => {

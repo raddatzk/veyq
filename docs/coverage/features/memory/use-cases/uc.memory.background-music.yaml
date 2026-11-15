@@ -89,6 +89,16 @@ acceptanceCriteria:
           - src/features/memories/components/MemoryMusic.test.ts
           - src/features/memories/components/MemoryDetail.music.test.ts
           - src/features/memories/components/MediumReview.test.ts
+  - id: rename
+    text: A track's menu offers Rename only where a medium's meta may be written (never a guest); the name is sealed into the listed tier's `trackName` by the version-checked write a GPX track's name uses, clamped to its bytes and inside the 512-base64 cap on a tier carrying every field an audio medium's holds; an emptied name gives the file's title back; a peer's rename that came first is shown; the tab and the player title a track by its own name over its file's; an export carries it as `track.name`, and an import leaves an archive's place name out for a track.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/components/MemoryMusic.test.ts
+          - src/features/memories/components/MusicRenameDialog.test.ts
+          - src/features/memories/media.test.ts
+          - src/features/memories/music/musicQueue.test.ts
+          - src/features/memories/exportImport.test.ts
   - id: export-import
     text: An export carries each track's file and its facts as the medium's optional `audio` field; an import restores them, and measures them on the importing device where the field is absent.
     coverage:

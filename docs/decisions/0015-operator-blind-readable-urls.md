@@ -123,8 +123,8 @@ routes stay history-mode.**
   all path semantics are client-side. (The blinded `slug_token` it *does* store is for per-parent uniqueness,
   not navigation.)
 - **`@group` is the routing seam for groups** ([ADR 0014](0014-group-scopes-and-governance.md)), **`~username`**
-  for the caller's personal scope ([ADR 0023](0023-per-tenant-member-identity.md)) and **`#people/<userId>`** for
-  a person's profile (ADR 0083).
+  for the caller's personal scope ([ADR 0023](0023-per-tenant-member-identity.md)) and **`#people/<username>`** for
+  a person's profile (ADR 0083; a user id where no username can stand).
 - **Limitation:** slugs are lossy + name-derived; the displayed label always comes from the decrypted name, not
   the slug. A name change changes the slug (old bookmarks to a renamed node may miss) — acceptable for a
   client-side convenience path.

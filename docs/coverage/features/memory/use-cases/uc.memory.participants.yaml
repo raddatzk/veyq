@@ -58,13 +58,15 @@ acceptanceCriteria:
           - src/features/memories/components/MemoryParticipants.test.ts
           - src/core/people/PersonGroup.test.ts
   - id: profile-route
-    text: A member opens `#people/<userId>` (the reader also takes `#/people/<userId>`), token-less, in the tenant scope's shell; `people` is a reserved route segment (no application can claim it, a folder, file or drop box called "People" at a scope root is numbered `people-2`) and a foreign `~username` stays a personal-scope token.
+    text: A member opens `#people/<username>` (a user id for a former member or a username shaped like one; an id-shaped token is always the id, an id link to a current member is replaced by the username link; the reader also takes `#/people/<token>`), token-less, in the tenant scope's shell; `people` is a reserved route segment (no application can claim it, a folder, file or drop box called "People" at a scope root is numbered `people-2`) and a foreign `~username` stays a personal-scope token.
     coverage:
       web:
         unit:
           - src/core/node/location.test.ts
           - src/core/applications/registry.test.ts
           - src/views/SpaceView.people.test.ts
+          - src/core/people/directory.test.ts
+          - src/core/people/PersonProfile.test.ts
   - id: profile-lists-accessible-memories
     text: The profile shows the person's display name, a letter avatar (a former member greyed) and, in Memories' section, the Memories where they are a participant and the viewer has access - from a client-side index over the tenant and group scopes (never the personal scope), revalidated by ETag, bounded at 500 Memories per scope with a partial note, and with loading, empty and error states.
     coverage:

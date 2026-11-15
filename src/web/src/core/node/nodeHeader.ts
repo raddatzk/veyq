@@ -41,7 +41,7 @@ export interface NodeHeaderChipFact {
 
 /** One person of a {@link NodeHeaderPeopleFact}. */
 export interface NodeHeaderPerson {
-  /** A member's id: their picture and their profile link (`#people/<id>`), on a member's page only. Null: a person with no
+  /** A member's id: their picture and their profile link (`#people/<username>`), on a member's page only. Null: a person with no
    *  member identity (a guest), drawn by name alone. */
   userId: string | null
   /** How the interface names them (already translated where it is a placeholder, "Former member"). */

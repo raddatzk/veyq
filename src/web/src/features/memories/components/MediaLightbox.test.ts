@@ -1576,10 +1576,12 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
     const w = mountLightbox(memoryKey, items, 0)
     await flushPromises()
     expect(w.find('.media-lightbox-topbar [data-audio-controls]').exists(), 'no queue: no controls').toBe(false)
+    expect(w.find('.media-lightbox').classes(), 'no music: one row').not.toContain('has-music')
     player.nowPlaying.value = { key: 'k', trackId: 'a', title: 'Summer Song', playing: true, positionMs: 0, durationMs: 1000 }
     try {
       await flushPromises()
       expect(w.find('.media-lightbox-topbar [data-testid="audio-mini-title"]').text()).toBe('Summer Song')
+      expect(w.find('.media-lightbox').classes(), 'music: a narrow screen gives it a row of its own').toContain('has-music')
       await press(w)
       expect(status(w)).toBe(t('media.slideshowPlaying'))
       w.find('[data-testid="audio-mini-toggle"]').element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, button: 0 }))

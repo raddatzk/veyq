@@ -666,7 +666,7 @@ export interface ApplicationRegistrar {
    *  `WRITE_ONLY` link. Throws on a second registration (by any application), for a kind that is not this application's,
    *  and for a kind whose drop page this application has not claimed (`shareBody` first). */
   folderUploadShare(kind: NodeKind, share: FolderUploadShare): void
-  /** Add a section to a person's profile page (`#people/<userId>`, ADR 0083): what an application knows of the person -
+  /** Add a section to a person's profile page (`#people/<username>`, ADR 0083): what an application knows of the person -
    *  Memories' "Memories with this person". The component takes the props `PersonSectionProps` and draws its own loading,
    *  empty and error states. Sections show in registration order; the same component twice throws. */
   personSection(component: Component): void

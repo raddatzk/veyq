@@ -14,8 +14,7 @@ import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import PersonAvatar from '../../core/people/PersonAvatar.vue'
-import { loadTenantPeople, type Person } from '../../core/people/directory'
-import { personHash } from '../../core/node/location'
+import { loadTenantPeople, profileHash, type Person } from '../../core/people/directory'
 import { loadPeopleOverview, orderPeople, type OverviewPerson } from '../account/peopleOverview'
 import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
 import TrustResetLink from '../account/trustReset/TrustResetLink.vue'
@@ -42,7 +41,7 @@ const verifiedByLine = (p: OverviewPerson): string =>
     .join(', ')
 const rotatedOn = (d: Date): string => d.toLocaleDateString(locale.value, { year: 'numeric', month: 'long', day: 'numeric' })
 const verifiedByMe = (p: OverviewPerson): boolean => p.verifiedBy.includes(account.userId)
-const profileOf = (userId: string) => ({ path: '/', hash: personHash(userId) })
+const profileOf = (userId: string) => ({ path: '/', hash: profileHash(userId) })
 
 async function load() {
   const mine = ++token

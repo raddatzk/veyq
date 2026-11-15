@@ -42,18 +42,19 @@ const now = player.nowPlaying
   align-items: center;
   gap: 0.5rem;
 }
+.veyq-audio-mini > button {
+  flex: none;
+}
+/* A surface sets how much room the title takes: `--veyq-audio-mini-title-max` and `--veyq-audio-mini-title-flex` (the
+   lightbox's row of its own on a narrow screen lets it fill the row). */
 .veyq-audio-mini__title {
   overflow: hidden;
+  flex: var(--veyq-audio-mini-title-flex, 0 1 auto);
   min-width: 0;
-  max-width: 16rem;
+  max-width: var(--veyq-audio-mini-title-max, 16rem);
   color: var(--app-muted);
   font-size: 0.85rem;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-@media (max-width: 720px) {
-  .veyq-audio-mini__title {
-    display: none;
-  }
 }
 </style>

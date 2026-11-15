@@ -5,6 +5,8 @@
 // audio by its bytes (core's `sniffStream`, never the browser's guess), and playable here - its length is read from this
 // browser's `<audio>` element (`audioFacts.ts`). Its trim is found only where that is cheap and is never a refusal. No
 // key, no request.
+import type { MediaMeta } from '../media'
+import { trackLabelOf } from '../track/trackLabel'
 import type { OpenedBlobMeta } from '../../../core/blob/meta'
 import { sniffStream, type StreamKind } from '../../../core/blob/sniff'
 import { measureAudioFile, type AudioFacts } from './audioFacts'
@@ -25,13 +27,22 @@ export function isAudioMeta(meta: Pick<OpenedBlobMeta, 'type'> | { readonly type
   return type.startsWith('audio/')
 }
 
-/** A track's title: the file's name without its extension (ADR 0135 decision 4: no tags are read), else null. */
+/** A file's title: its name without its extension (ADR 0135 decision 4: no tags are read), else null. */
 export function musicTitle(name: unknown): string | null {
   if (typeof name !== 'string') return null
   const trimmed = name.trim()
   const dot = trimmed.lastIndexOf('.')
   const title = (dot > 0 ? trimmed.slice(0, dot) : trimmed).trim()
   return title || null
+}
+
+/**
+ * A music track's title (ADR 0135 decision 4): the name a member gave it, else its file's (`musicTitle`), else null. The
+ * own name is the listed tier's `trackName`, the field a GPX track's own name uses too (a medium is one or the other),
+ * written by the same version-checked `setTrackLabel` and carried by an export as the medium's `track.name`.
+ */
+export function musicTrackTitle(meta: Pick<MediaMeta, 'trackName'> | null | undefined, fileName: unknown): string | null {
+  return trackLabelOf(meta).name ?? musicTitle(fileName)
 }
 
 /** A length as the list shows it: `m:ss`, `h:mm:ss` from an hour on. */

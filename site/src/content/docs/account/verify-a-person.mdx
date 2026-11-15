@@ -8,8 +8,8 @@ sources:
 
 import Screenshot from '../../../components/Screenshot.astro';
 
-Every member has a **safety number**, made from their key, and a shorter **chain code** beside it, which changes each
-time they secure their account. When your app and the other person's show the same number and the same chain code for
+Every member has a **safety number**, made from their key, and a shorter **chain code** beside it, which stands for the
+whole history of their key and changes each time they secure their account. When your app and the other person's show the same number and the same chain code for
 that person, you know the server gave you their real key and not someone else's. Comparing them is optional; it
 matters most when a key can't be confirmed.
 
@@ -20,17 +20,18 @@ Do this together with the other person, side by side or on a call.
 1. Open the other person's profile: choose their name where veyq shows it, for example among who was there in a
    Memory, or as who added a file or photo, or choose **Compare safety numbers** beside them in
    [Who's who](#see-whos-who-in-a-space).
-2. Under **Safety number**, choose one:
+2. Beside **Safety number**, choose **Compare**, then one of:
    - **Scan their code**, and point your camera at the code on their own profile page.
    - **Compare digits**, read the digits and the **Chain code** aloud with them, and choose **They match** or **They
      don't match**.
 3. If they match, the page says the person *is verified* and that *everyone in this space sees that you verified
    them*, and shows **Verified**.
 
-The other person finds their own number and chain code on their own profile page, under **Your safety number**. They
-open it the same way, by choosing their own name, for example on a file or photo they added.
+The other person finds their own number, chain code and code to scan on their own profile page: **Show** beside **Your
+safety number**. They open that page the same way, by choosing their own name, for example on a file or photo they
+added.
 
-<Screenshot id="account-safety-number" shows="Another member's profile with the Safety number block: the badge Not verified, the digits, the chain code, and the Scan their code and Compare digits buttons" />
+<Screenshot id="account-safety-number" shows="Another member's safety number, opened from their profile: the digits, the chain code, and the Scan their code and Compare digits buttons" />
 
 If the numbers do not match, do not mark the person as verified: the key you have may not be theirs. Ask them to
 check their own profile, and compare again. If only the chain code differs, one of you is missing a step, which the

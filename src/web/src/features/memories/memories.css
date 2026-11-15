@@ -865,6 +865,30 @@ a.lightbox-icon-button,
     display: block;
   }
 
+  /* While music plays, its controls take a row of their own under the title and the actions (MediaLightbox's
+     `has-music`): one row has no room for both on a phone. */
+  .media-lightbox.has-music .media-lightbox-topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: 64px 52px;
+    height: 116px;
+    row-gap: 0;
+    column-gap: 0.5rem;
+  }
+
+  .media-lightbox.has-music .media-lightbox-audio {
+    --veyq-audio-mini-title-max: none;
+    --veyq-audio-mini-title-flex: 1 1 auto;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-left: 0;
+    border-top: 1px solid var(--app-line);
+  }
+
+  .media-lightbox.has-music .media-lightbox-layout {
+    inset: 116px 0 0;
+  }
+
   .media-lightbox-viewer {
     position: absolute;
     inset: 0;
