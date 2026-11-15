@@ -1,6 +1,7 @@
 # ADR 0140 — The apps keep content as ciphertext, sealed to the device, by choice or within a limit; an unlock opens it offline
 - Status: Accepted
-- Built: no
+- Built: partly — built on every app and passed on Android, Linux and Windows (§ Consequences); Apple's passes, on a
+  real iPhone and a signed macOS build, are the owner's ([native-apps](../crosscutting/native-apps.md) § Open)
 - Date: 2026-11-15
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -58,7 +59,7 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
    - **Never kept:** a token (access, refresh, share, password token), a presigned URL (a bearer credential until it
      lapses), any answer of a write, any decrypted byte, any name or id in a file name (decision 2).
 2. **The store: one directory per account on this device, every file sealed, every name opaque.**
-   - **Its key** is a random 32-byte `K_off` per account per device, made at the store's first write and kept in the
+   - **Its key** is a random 32-byte `K_off` per account per device, made when the store is first opened and kept in the
      store's header wrapped (AES-256-GCM) under `HKDF(masterKey, info = "veyq/v1/offline-store")` — a device-local
      derivation as `TrustMarks`' is, and no new seal purpose in `contracts/crypto` (that table is the suite's, shared with
      the web, which has no store). A header that does not open under the unlocked Master Key (a rotated Master Key,
@@ -116,7 +117,8 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
    - **A device that keeps no trust** (every start with the Secret Key) gets no store: the feature is not offered there,
      and its Settings section says why.
 5. **The read path: the server first when reachable, the store as a copy of its answer.**
-   - **Which reads are kept** is one allowlist in the core: `getAccountKeyMaterial` (wraps and sealed keys only),
+   - **Which reads are kept** is one allowlist in the core (`offline/KeptRead`): `getAccountKeyMaterial` (wraps and sealed
+     keys only), `listMyTenants` (the tenants' domains an offline unlock needs; it carries no token or address),
      `listMyScopes`, `listNodes` per scope, `listNodeMedia` per Memory, `listFiles` per folder, `listApplicationBlobs` per
      node, and blob frames. A test derives the allowlisted answers' models from the generated client and fails on any
      field whose name or contract description marks a token or a URL — the set is derived, not listed by hand.
@@ -177,8 +179,9 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
    - **What can be pinned:** a Memory, a Chapter, a folder (everything below it the built applications open) and a file,
      through the header's "Available offline" toggle, offered where the node's kind declares it through the registry
      (`AppKinds`) — never by core calling an application.
-   - **A pin fetches whole:** the listings below the node, every tile and preview, and the originals decision 8 keeps
-     (a video's, a Depot file's, never a photo's), with progress and resumable (a blob file appends; a restart
+   - **A pin fetches whole:** the listings below the node, every tile and preview, every node's cover below it (named by
+     the node's sealed meta, which the store cannot read, so the pin's own sealed record keeps the covers' blob ids), and
+     the originals decision 8 keeps (a video's, a Depot file's, never a photo's), with progress and resumable (a blob file appends; a restart
      continues); the size is shown and confirmed before the first byte.
    - **Sync:** at each online open of the account and on each live poll that sees a pinned node's revision move
      (`listNodes`' `ETag`, `listNodeMedia`'s `mediaRevision`), the pin re-reads its listings and fetches what is new; what
@@ -218,6 +221,24 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
   seal or token (`SecretFreeSchemaTest`, [ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)
   decisions 1 and 2).
 - **A device whose trust is the Secret Key at every start gets no offline content** — the cost of decision 4.
+- **Decision 2's measurement held** (2026-11-15, `OfflineManifestLoadTest`, its `veyq-measure:` line; 100,000
+  entries, 21,268 KiB in 256 shards, the open being the header and every shard read, opened and decoded): the Windows VM's
+  release test binary 173–305 ms over three runs of five (a temporary `binaries.test(RELEASE)`, not kept), its debug
+  binary's median 779–869 ms (one run with 1,526 and 1,931 ms outliers); the Linux container's debug binary 455–463 ms;
+  macOS debug 417–433 ms warm, 1,507 ms first; the JVM 143–153 ms warm, 1,049–1,174 ms first (the JIT); ART below. So no
+  database.
+- **As built, beside the decisions:** the store's files go through the core's common seam `blob/DeviceFiles.kt`
+  (`Files.kt`'s calls are `nativeMain` only; the JVM's are `java.nio`'s), the ids of every account's store in one
+  device-store key (`veyq.offline-stores`, a wipe marked before its files go). **One store per account in the process**
+  (`OfflineStores.openShared`), closed before its wipe whoever holds it: a write that lands after a wipe would leave a
+  file in a directory that is gone. **A second connection of an account already held retires** (`VeyqAccount.retire`):
+  its session and keys end, never the record, the wrap copy or the store, which go only when the account leaves the
+  device (decision 11) — signed out instead, it wiped the store and forgot the record the held connection had just
+  enrolled. **Frames are kept in batches** of 16 (`ApplicationBlobs.KEEP_BATCH`): each keep rewrites the frame index and
+  its shard. **Offline the account has no members, capabilities or services:** a scope opens only at the very key this
+  device holds. **A pin dropped by the sweep** is named from the names the shell read in this run, else without one (the
+  store keeps no name). **Every app's host names its directory** (decision 3) and its kind's default limit; the core
+  holds no path helper.
 - **The passes, per platform (phase 6).** **Android** — 2026-11-15, a throwaway AVD (API 36 `google_apis` arm64,
   `sdk_gphone64_arm64`, deleted after), the debug build against the dev backend (`veyq.localhost:8080`), the app's
   language German (`adb shell cmd locale set-app-locales me.raddatz.veyq --locales de-DE`):
@@ -316,12 +337,24 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
   - *Not run here:* the MSIX (its package's `LocalState`), Windows Hello's presence level offline (the person types the
     PIN), a Copilot+ PC, the VM's own network off (it carries the pass's ssh; its settings are the owner's).
   The passes' families were revoked from Settings, the devices stopped trusting, and the test Memory went to the trash.
-  **iOS and macOS — not run.** Both build (`xcodebuild`, `CODE_SIGNING_ALLOWED=NO`, macOS and the iOS Simulator SDK,
+  **iOS and macOS — not run.** *What could be read without a device* (Xcode 27.2, iOS SDK 27.2):
+  `BackgroundTasks.framework`'s `BGTask.h` and `BGTaskRequest.h` declare `BGContinuedProcessingTask` and its request
+  `API_AVAILABLE(ios(26.0))`, unavailable on macOS (the app's deployment target is iOS 26, so no availability check);
+  the request's identifier is `<bundle id>.<context>.*`-wildcarded (`Info.plist`'s
+  `BGTaskSchedulerPermittedIdentifiers`: `me.raddatz.veyq.offline.*`); the throwing `submit` is deprecated from iOS 27.
+  Both build (`xcodebuild`, `CODE_SIGNING_ALLOWED=NO`, macOS and the iOS Simulator SDK,
   2026-11-15), but no pass ran: the iOS Simulators do not boot on the build Mac (CoreSimulator out of date), the
   Simulator cannot answer the background question anyway (`BGTaskScheduler.h`: no background processing there), an
   ad-hoc macOS build stores no device trust and so keeps no store, and the Mac's screen was locked for the click-through.
   The passes above, on a real iPhone and on a signed macOS build — including whether `BGContinuedProcessingTask`'s submit
   is accepted with the wildcard identifier and how long `beginBackgroundTask` lasts — are the owner's.
+- **What the docs site says.** [Use content offline](../../site/src/content/docs/getting-started/use-content-offline.mdx)
+  (EN and DE) tells a person the pin, the limit, what offline looks like and what wipes the store;
+  [Offline or unreachable](../../site/src/content/docs/help/offline.mdx) what the app shows offline and a suspended space
+  seen as offline (decision 6); [Known limitations](../../site/src/content/docs/security/known-limitations.md) § The
+  apps' offline store the residuals, [Threat model](../../site/src/content/docs/security/threat-model.md)'s stolen device
+  decision 4's window, and [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md) what a
+  pin's fetch and sync show the operator.
 - **Left out, each an inbox row:** writes made offline and sent later (#897, a conflict model per application); a
   scheduled sync of pins while the app is not running (#896); Expenses offline (#898).
 
