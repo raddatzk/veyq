@@ -78,7 +78,7 @@ import me.raddatz.veyq.mobile.session.StaySignedIn
 import me.raddatz.veyq.mobile.session.TrustChange
 
 /**
- * What the account's Settings page asks of whoever holds its model (`cr-app-account-settings` D1): each a call of core's
+ * What the account's Settings page asks of whoever holds its model (`uc.account.sessions`; ADR 0136 decision 2): each a call of core's
  * [AccountSettings], so the page decides nothing. [AppModel] holds the real one; a debug build's `DevSettings` plays one.
  */
 interface SettingsActions {
@@ -109,7 +109,7 @@ interface SettingsActions {
 private class Confirm(val title: String, val text: String, val action: String, val run: () -> Unit)
 
 /**
- * The account's Settings (`cr-app-account-settings`): the address it signs in with, this device — its name, how it stays
+ * The account's Settings (`uc.account.sessions`): the address it signs in with, this device — its name, how it stays
  * signed in, "Stop trusting this device" —, every session of the account and the devices with a saved key, the entry to
  * "Add a device" while the instance links devices, the system's page for the app's language, and signing out. A
  * full-screen destination with Material's lists, as Android's own Settings; every row is core's state, every action a

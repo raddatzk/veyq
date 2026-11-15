@@ -41,11 +41,10 @@ account wipe the store.
   scope's tree revision as `ETag`), ADR 0136, ADR 0137; `src/mobile/CLAUDE.md` whole, especially § Nothing on disk the
   app did not choose and § Secrets on screen; `docs/crosscutting/security-model.md` § What a trusted device rests on,
   per platform; `docs/crosscutting/native-apps.md`; `uc.account.trust-device` (E1, the anti-withholding rule).
-- **Sibling CRs:** `cr-app-account-settings` (planned at refine, phase 1 done) builds the Settings page this CR's
-  "Storage on this device" section joins — phase 5 here waits for its page on each platform, and is re-read when it
-  lands. `cr-memories-on-every-app` (in progress) moves the gallery, the lightbox and the uploads into core screen
+- **Sibling CRs:** the apps' account Settings page (`uc.account.sessions`, built on every app) is the page this CR's
+  "Storage on this device" section joins — phase 5 here builds on it as it is. `cr-memories-on-every-app` (in progress) moves the gallery, the lightbox and the uploads into core screen
   models — phase 3 here waits for its core phases, and its `GalleryModel.Door` is where Memories' reads go through the
-  store. `cr-desktop-app-packaging` (planned) decides the Flatpak's and the MSIX's data locations — D3 below names the
+  store. The desktop packages (ADR 0139, built) decide the Flatpak's and the MSIX's data locations — D3 below names the
   paths it must keep writable.
 - **Where what runs:** core tests on the JVM and macosArm64 (`./gradlew :core:jvmTest :core:macosArm64Test` from
   `src/mobile/`); the Linux container (`/usr/bin/python3 src/mobile/linux/run.py test`), the Windows VM
@@ -251,7 +250,7 @@ offline) and are not trivial: inbox #897.
 
 ### D10 — Where the person sees and sets it
 
-- **Settings, per account:** a "Storage on this device" section on the page `cr-app-account-settings` builds: the
+- **Settings, per account:** a "Storage on this device" section on the account's Settings page: the
   limit (a list of sizes and Off), used by the automatic tier, used by pins, the volume's free space, the pinned items
   (each removable), "Clear cache", "Remove all offline content".
 - **On a node:** the header's "Available offline" toggle with its state (fetching n of m, kept, paused: no space).
@@ -318,8 +317,8 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   → red); (b) a pin of a node trashed on the server is dropped with its notice (bite: keep pins outside the sweep → red);
   (c) a re-key that refetched frames is caught by the count (bite: clear frames on a moved revision → red).
 
-- [ ] **5 the Settings section and the screens on every app** — D10 on Android, iOS, macOS, Windows and Linux, after
-  `cr-app-account-settings`' page exists on each; the header toggle, the shell's banner, disabled writes; every word in
+- [ ] **5 the Settings section and the screens on every app** — D10 on Android, iOS, macOS, Windows and Linux, on the account's
+  Settings page; the header toggle, the shell's banner, disabled writes; every word in
   `words/words.json` (English and German). · Done when: `./gradlew :android:assembleDebug`, the Apple project's build,
   `run.py build`/`test` on Linux and Windows green; `scripts/validate_mobile_words.py` green; each app clicked once
   through: set the limit, pin a Memory, see used and pinned sizes, clear the cache.

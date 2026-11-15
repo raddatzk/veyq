@@ -444,7 +444,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ---- the account's Settings (cr-app-account-settings) ----
+    // ---- the account's Settings (uc.account.sessions) ----
 
     /** The signed-in account's Settings while its page is open: core's screen model, drawn by [SettingsScreen]. */
     private var settingsModel: me.raddatz.veyq.mobile.session.AccountSettings<VeyqAccount, me.raddatz.veyq.mobile.session.TenantSession>? = null

@@ -227,7 +227,7 @@ class DeviceLink private constructor(
     @Volatile
     private var drawn: String? = null
 
-    /** [Role.SCAN_SIGN_IN_CODE], [Role.SCAN_FROM_TRUSTED]: the camera's scan, the link's own (cr-core-qr-decoder D3). */
+    /** [Role.SCAN_SIGN_IN_CODE], [Role.SCAN_FROM_TRUSTED]: the camera's scan, the link's own (ADR 0141 decision 3). */
     val scan: QrScan<Unit>? =
         if (role == Role.SCAN_SIGN_IN_CODE || role == Role.SCAN_FROM_TRUSTED) QrScan(accepts = ::scanned, decode = decode, scope = scope) else null
 
@@ -312,7 +312,8 @@ class DeviceLink private constructor(
     /** This side's code as a PNG about [px] pixels wide (a whole number of pixels per module), or null where it shows none. */
     fun png(px: Int): ByteArray? {
         val m = matrix() ?: return null
-        val scale = maxOf(1, minOf(px, QrPng.MAX_SIDE) / m.size)
+        // the drawn grid's side, quiet zone included: the image stays within [px] (the bridge's `drawnCode` rule)
+        val scale = maxOf(1, minOf(px, QrPng.MAX_SIDE) / m.side)
         return QrPng.write(m, scale)
     }
 
@@ -596,8 +597,11 @@ class DeviceLink private constructor(
         /** The trusted device's *add a new device* over a signed-in [account]. */
         fun showForNewDevice(account: VeyqAccount): DeviceLink = showForNewDevice(account.primitives, AccountGranter(account))
 
-        /** The trusted device's *sign in with a QR code* over a signed-in [account]. */
-        fun scanSignInCode(account: VeyqAccount): DeviceLink = scanSignInCode(account.primitives, AccountGranter(account))
+        /** The trusted device's *sign in with a QR code* over a signed-in [account]; [decode] reads its camera's frames. */
+        fun scanSignInCode(
+            account: VeyqAccount,
+            decode: suspend (QrFrame) -> String? = { QrDecoder.decode(it) },
+        ): DeviceLink = scanSignInCode(account.primitives, AccountGranter(account), decode)
     }
 }
 

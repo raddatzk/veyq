@@ -74,7 +74,7 @@ impl Screens {
             }
             // the offer to stay signed in stands over the shell until it is answered (ADR 0123 decision 8)
             Gate::Signed { offer: Some(offer), .. } => {
-                self.offer.show(&offer.levels);
+                self.offer.show(&offer.levels, offer.linked);
                 self.face(&self.offer.page);
             }
             Gate::Signed { switching, .. } => {
@@ -150,7 +150,7 @@ fn activate(app: &adw::Application) {
         screens.window.connect_destroy(move |_| view.close());
         return;
     }
-    // a debug build's Settings harness: the page over a state of its own, no session (`cr-app-account-settings` phase 4)
+    // a debug build's Settings harness: the page over a state of its own, no session (`uc.account.sessions`)
     if dev_settings::requested() {
         eprintln!("veyq: the settings harness (debug build)");
         veyq::account_settings::show(&screens.window, &dev_settings::fake());

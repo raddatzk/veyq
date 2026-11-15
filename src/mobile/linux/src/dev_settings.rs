@@ -1,4 +1,4 @@
-//! Debug builds only — the account's Settings drawn without a server (`cr-app-account-settings` phase 4's visual pass),
+//! Debug builds only — the account's Settings drawn without a server (a visual pass's harness, `uc.account.sessions`),
 //! as [crate::dev_scan] is the camera's: started with `VEYQ_DEV_SETTINGS=1`, the window opens the Settings dialog over
 //! [fake], a state as the core would send it (every row the page has: this device, a named and an unnamed other session,
 //! one whose saved key can go, a device with a saved key and no session). No page is open in the core, so each action is

@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -57,6 +58,7 @@ import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.navigation.UseKey
 import me.raddatz.veyq.mobile.session.AccountSettings
 import me.raddatz.veyq.mobile.session.DeviceKeys
+import me.raddatz.veyq.mobile.session.DeviceLink
 import me.raddatz.veyq.mobile.session.DeviceStore
 import me.raddatz.veyq.mobile.session.SessionModel
 import me.raddatz.veyq.mobile.session.TenantSession
@@ -100,6 +102,12 @@ internal class Composition<A : Connection, T : Any>(
      * plays the host, or has none (every original goes up alone).
      */
     val tiers: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver = NoTiers,
+    /**
+     * The trusted device's link over a signed-in account (core's `DeviceLink.showForNewDevice`, `scanSignInCode` with
+     * [decode]): [role] is one of those two. The real account's in the library; a test plays a granter over a relay of
+     * its own, or has none (the trusted `Link.*` calls are then refused for the connection).
+     */
+    val trustedLink: (account: A, role: DeviceLink.Role, decode: suspend (me.raddatz.veyq.mobile.qr.QrFrame) -> String?) -> DeviceLink? = { _, _, _ -> null },
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
@@ -212,6 +220,14 @@ internal class HeldAccount<A : Connection, T : Any>(val model: AccountSettings<A
     }
 }
 
+/**
+ * A device link the host opened (`Link.*` of a role); [trusted] for the trusted device's two (they close with the tenant),
+ * [open] false once the host closed it, so a watch standing on it delivers null once.
+ */
+internal class HeldLink(val model: DeviceLink, val trusted: Boolean) {
+    val open = MutableStateFlow(true)
+}
+
 /** "New pot" the host opened ([Call.PotCreateOpen]) and the name it sent last ([Call.PotCreateName]), never echoed. */
 internal class HeldCreate(val sheet: PotCreateSheet) {
     val name = MutableStateFlow("")
@@ -294,6 +310,15 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     /** The QR scans the host opened ([Call.ScanOpen]): no tenant's, each until [Call.ScanClose] or [shutdown]. */
     private val scans = Registry<me.raddatz.veyq.mobile.qr.QrScan<*>>()
+
+    /** What a link's scan, by its scan id, is found as ([ScanShown.found]): its direction's scheme. */
+    private val linkScans = Registry<String>()
+
+    /**
+     * The device links the host opened (`Link.*` of a role), each until [Call.LinkClose]; the trusted device's also until
+     * the tenant closes, the new device's (no tenant yet) until [shutdown].
+     */
+    private val links = Registry<HeldLink>()
 
     /** The app's one upload queue (the phones' `AppModel.uploads`): emptied when the tenant closes. */
     private val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
@@ -798,6 +823,15 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     // the sign-in's own scan (the phones' too): its accepts reads the kit and hands it to the sign-in
                     // (`takeKit`), so the kit is taken as the code is read, watched or not, and never leaves the core
                     ScanKind.KIT -> session.scanKit(call.server, parts.decode)
+                    // the link's own scan: what it reads goes into the link (`DeviceLink.scan`), the found scheme its direction's
+                    ScanKind.LINK -> {
+                        val link = call.link?.let { links[it] }?.model ?: return noLink
+                        val scan = link.scan ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                        val marker = if (link.role == DeviceLink.Role.SCAN_FROM_TRUSTED) me.raddatz.veyq.mobile.crypto.PairingMarker.ADD_DEVICE
+                        else me.raddatz.veyq.mobile.crypto.PairingMarker.SIGN_IN
+                        linkScans.put(id, marker.prefix.removeSuffix(":"))
+                        scan
+                    }
                 })
                 Answer.ScanOpened(id)
             }
@@ -810,7 +844,16 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     .getOrElse { return Answer.Refused(Answer.Why.NOT_A_FRAME) }
                 Answer.FrameTaken(s.offer(frame))
             } ?: noScan
-            is Call.ScanClose -> scans.remove(call.scan)?.close().done(Answer.Why.NO_SUCH_SCAN)
+            // a link's scan is the link's: dropped here, closed with the link (`Link.Close`)
+            is Call.ScanClose -> scans.remove(call.scan)?.let { s -> if (linkScans.remove(call.scan) == null) s.close() }.done(Answer.Why.NO_SUCH_SCAN)
+            is Call.LinkShowForNewDevice -> trustedLink(parts, call.connection, DeviceLink.Role.SHOW_FOR_NEW_DEVICE)
+            is Call.LinkScanSignInCode -> trustedLink(parts, call.connection, DeviceLink.Role.SCAN_SIGN_IN_CODE)
+            is Call.LinkScanFromTrusted -> newDeviceLink(parts, session.scanFromTrusted(call.server, parts.decode))
+            is Call.LinkShowForSignIn -> newDeviceLink(parts, session.showForSignIn(call.server))
+            is Call.LinkCode -> links[call.link]?.let { drawnCode(it.model.matrix(), call.px, payload) } ?: noLink
+            is Call.LinkConfirm -> links[call.link]?.let { taken(it.model.confirm(call.label)) } ?: noLink
+            is Call.LinkEnterCode -> links[call.link]?.let { taken(it.model.enterCode(call.code)) } ?: noLink
+            is Call.LinkClose -> links.remove(call.link)?.let { closeLink(it); Answer.Done } ?: noLink
             is Call.ShellCreateMemory -> tenant.value?.models?.createMemory?.let { make ->
                 make(call.scopeId, call.parentId, call.name).let { Answer.Created(it.node, it.notice) }
             } ?: noTenant
@@ -958,8 +1001,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * every call that answers a code as a picture — a device link's `Link.Code` (its CR) the first —, so the text a code
      * holds never crosses the bridge. Refused `NO_BYTES` for a text no code holds.
      */
-    internal fun drawnCode(text: String, px: Int, payload: (ByteArray) -> Unit): Answer {
-        val matrix = runCatching { me.raddatz.veyq.mobile.qr.QrEncoder.encode(text) }.getOrElse { return Answer.Refused(Answer.Why.NO_BYTES) }
+    internal fun drawnCode(text: String, px: Int, payload: (ByteArray) -> Unit): Answer =
+        drawnCode(runCatching { me.raddatz.veyq.mobile.qr.QrEncoder.encode(text) }.getOrNull(), px, payload)
+
+    /** [drawnCode] of a code the core already encoded ([matrix]; a device link's, whose text stays in the link); refused `NO_BYTES` for none. */
+    private fun drawnCode(matrix: me.raddatz.veyq.mobile.qr.QrMatrix?, px: Int, payload: (ByteArray) -> Unit): Answer {
+        if (matrix == null) return Answer.Refused(Answer.Why.NO_BYTES)
         // version 40's side (185 modules) fits MAX_SIDE at scale 1, so a scale of at least 1 always writes
         val scale = maxOf(1, minOf(px, me.raddatz.veyq.mobile.qr.QrPng.MAX_SIDE) / matrix.side)
         payload(me.raddatz.veyq.mobile.qr.QrPng.write(matrix, scale))
@@ -996,6 +1043,45 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noDropBox = Answer.Refused(Answer.Why.NO_SUCH_DROPBOX)
     private val noFolder = Answer.Refused(Answer.Why.NO_SUCH_FOLDER)
     private val noScan = Answer.Refused(Answer.Why.NO_SUCH_SCAN)
+    private val noLink = Answer.Refused(Answer.Why.NO_SUCH_LINK)
+
+    private fun taken(taken: Boolean): Answer = if (taken) Answer.Done else Answer.Refused(Answer.Why.NOT_TAKEN)
+
+    /** The trusted device's link over the connection [connection] while a tenant is open: it closes with the tenant. */
+    private fun trustedLink(parts: Composition<A, T>, connection: String, role: DeviceLink.Role): Answer {
+        if (tenant.value == null) return noTenant
+        val account = parts.session.accounts.firstOrNull { it.key == connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+        val link = parts.trustedLink(account, role, parts.decode) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+        val id = ids.incrementAndFetch()
+        links.put(id, HeldLink(link, trusted = true))
+        return Answer.LinkOpened(id)
+    }
+
+    /**
+     * The new device's link from the sign-in ([link] null: no sign-in shown). Once it is done, the session it signed in
+     * is the open tenant, as a sign-in call's is ([opened]).
+     */
+    private fun newDeviceLink(parts: Composition<A, T>, link: DeviceLink?): Answer {
+        link ?: return Answer.Refused(Answer.Why.NO_SIGN_IN)
+        val id = ids.incrementAndFetch()
+        links.put(id, HeldLink(link, trusted = false))
+        scope.launch {
+            val end = link.state.first { it.step == DeviceLink.Step.DONE || it.step == DeviceLink.Step.ENDED }
+            if (end.step == DeviceLink.Step.DONE) parts.session.signedTo?.let { opened(it) }.also { managed(parts) }
+        }
+        return Answer.LinkOpened(id)
+    }
+
+    /**
+     * A link the host is done with: its watch delivers null, its scans leave the registry, and it ends — but a new
+     * device's link whose grant is being spent is left to finish (the core runs that tail to its end whatever a close
+     * says, ADR 0059 / phase 3's review), so its sign-in still opens the tenant here; it ends itself once done.
+     */
+    private fun closeLink(held: HeldLink) {
+        held.open.value = false
+        held.model.scan?.let { s -> scans.keys().forEach { k -> if (scans[k] === s) { scans.remove(k); linkScans.remove(k) } } }
+        if (held.model.current.step != DeviceLink.Step.FINISHING) held.model.close()
+    }
     private val noPage = Answer.Refused(Answer.Why.NO_SUCH_ACCOUNT_PAGE)
     private val noGallery = Answer.Refused(Answer.Why.NO_SUCH_GALLERY)
     private val noLightbox = Answer.Refused(Answer.Why.NO_SUCH_LIGHTBOX)
@@ -1115,6 +1201,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         dropBoxes.removeAll().forEach { it.page.close() }
         reports.removeAll()
         accountPages.removeAll().forEach { it.close() }
+        // the trusted device's links are the tenant's; a new device's (opened before any tenant) stays
+        links.keys().forEach { id -> if (links[id]?.trusted == true) links.remove(id)?.let(::closeLink) }
     }
 
     /**
@@ -1180,8 +1268,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.Save(w.save, null))
         is Watched.DropBox -> dropBoxes[w.box]?.let { h -> h.page.state.map { Update.DropBox(w.box, shownDropBox(h.page, it)) } }
             ?: flowOf(Update.DropBox(w.box, null))
-        is Watched.Scan -> scans[w.scan]?.let { s -> s.state.map { Update.Scan(w.scan, shownScan(it)) } }
+        is Watched.Scan -> scans[w.scan]?.let { s -> s.state.map { Update.Scan(w.scan, shownScan(it, linkScans[w.scan])) } }
             ?: flowOf(Update.Scan(w.scan, null))
+        is Watched.Link -> links[w.link]?.let { held ->
+            combine(held.model.state, held.open) { s, open -> Update.Link(w.link, if (open) shownLink(s) else null) }
+        } ?: flowOf(Update.Link(w.link, null))
         is Watched.Settings -> accountPages[w.settings]?.let { held ->
             combine(held.model.state, held.open) { s, open -> Update.Settings(w.settings, if (open) shownAccount(s) else null) }
         } ?: flowOf(Update.Settings(w.settings, null))
@@ -1473,12 +1564,18 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         failed = s.failed, busy = s.busy, errorRow = s.errorRow, error = s.error, renaming = s.renaming, retryName = s.retryName,
     )
 
-    private fun shownScan(s: me.raddatz.veyq.mobile.qr.QrScan.State<*>): ScanShown = when (s) {
+    /** A link's state as the host draws it: the core's, field for field, under the wire's own enum names. */
+    private fun shownLink(s: DeviceLink.Shown): LinkShown = LinkShown(
+        LinkRole.valueOf(s.role.name), LinkStep.valueOf(s.step.name), s.number, s.code, s.label,
+        s.refusal?.let { LinkRefusal.valueOf(it.name) }, s.hint?.let { LinkHint.valueOf(it.name) },
+    )
+
+    private fun shownScan(s: me.raddatz.veyq.mobile.qr.QrScan.State<*>, linkFound: String? = null): ScanShown = when (s) {
         me.raddatz.veyq.mobile.qr.QrScan.State.Starting -> ScanShown(ScanState.STARTING, null)
         me.raddatz.veyq.mobile.qr.QrScan.State.NoCamera -> ScanShown(ScanState.NO_CAMERA, null)
         me.raddatz.veyq.mobile.qr.QrScan.State.Denied -> ScanShown(ScanState.DENIED, null)
         me.raddatz.veyq.mobile.qr.QrScan.State.Scanning -> ScanShown(ScanState.SCANNING, null)
-        is me.raddatz.veyq.mobile.qr.QrScan.State.Found -> ScanShown(ScanState.FOUND, foundAs(s.value!!))
+        is me.raddatz.veyq.mobile.qr.QrScan.State.Found -> ScanShown(ScanState.FOUND, linkFound ?: foundAs(s.value!!))
         me.raddatz.veyq.mobile.qr.QrScan.State.Closed -> ScanShown(ScanState.CLOSED, null)
     }
 
@@ -1489,6 +1586,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /** Ends everything: the watches, the calls under way, the models. */
     fun shutdown() {
         scans.removeAll().forEach { it.close() }
+        links.removeAll().forEach { it.model.close() }
         scope.cancel()
     }
 
@@ -1520,6 +1618,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             Composition(
                 SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files, pictures = pictures,
                 settings = { session, account -> AccountSettings.of(session, account) }, tiers = tiers,
+                trustedLink = { account, role, decode ->
+                    when (role) {
+                        DeviceLink.Role.SHOW_FOR_NEW_DEVICE -> DeviceLink.showForNewDevice(account)
+                        DeviceLink.Role.SCAN_SIGN_IN_CODE -> DeviceLink.scanSignInCode(account, decode)
+                        else -> null
+                    }
+                },
             ) { t ->
                 Tenant(ShellModel(t, hidden, recent, now), { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load)
             }

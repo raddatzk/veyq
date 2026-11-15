@@ -111,6 +111,24 @@ impl ScanView {
         other: impl Fn(&ScanShown) -> Option<gtk::Widget> + 'static,
         changed: impl Fn(&ScanShown) + 'static,
     ) -> Rc<ScanView> {
+        Self::open_with(Call::ScanOpen { kind, server, link: None }, other, changed)
+    }
+
+    /// Opens device link [link]'s own scan (kind `LINK`, `cr-app-device-linking` D6) and its camera: what it reads goes
+    /// straight into the link in the core, never back here; the link's state says what came of it.
+    pub fn open_link(
+        link: i64,
+        other: impl Fn(&ScanShown) -> Option<gtk::Widget> + 'static,
+        changed: impl Fn(&ScanShown) + 'static,
+    ) -> Rc<ScanView> {
+        Self::open_with(Call::ScanOpen { kind: ScanKind::Link, server: None, link: Some(link) }, other, changed)
+    }
+
+    fn open_with(
+        opening: Call,
+        other: impl Fn(&ScanShown) -> Option<gtk::Widget> + 'static,
+        changed: impl Fn(&ScanShown) + 'static,
+    ) -> Rc<ScanView> {
         let picture = gtk::Picture::builder().content_fit(gtk::ContentFit::Contain).hexpand(true).vexpand(true).build();
         let other_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical).hexpand(true).vexpand(true).valign(gtk::Align::Fill).build();
         let widget = gtk::Stack::new();
@@ -127,7 +145,7 @@ impl ScanView {
         });
         let v = view.clone();
         glib::spawn_future_local(async move {
-            let scan = match bridge::call(&Call::ScanOpen { kind, server }).await {
+            let scan = match bridge::call(&opening).await {
                 Ok((Answer::ScanOpened { scan }, _)) => scan,
                 other => {
                     eprintln!("veyq: Scan.Open answered {other:?}");

@@ -14,7 +14,7 @@ import me.raddatz.veyq.mobile.session.TrustedDevice
 import me.raddatz.veyq.mobile.words.Msg
 
 /**
- * Debug builds only — the account's Settings page (`cr-app-account-settings` phase 2) drawn over a played account,
+ * Debug builds only — the account's Settings page (`uc.account.sessions`) drawn over a played account,
  * reached without a server or a sign-in: launched with the extra `veyq.devSettings=1`, the app shows [SettingsScreen]
  * over a fixed state — this device staying signed in, a second device with a saved key, a session the register does not
  * name, a signed-out device with a saved key, "Add a device" offered. Each action plays its effect on that state the way

@@ -5,7 +5,8 @@ import me.raddatz.veyq.mobile.qr.QrFrame
 import me.raddatz.veyq.mobile.qr.QrMatrix
 
 /**
- * The server's pairing relay as `PairingHandler` keeps it, played in memory for [DeviceLinkTest] and [SessionModelTest]:
+ * The server's pairing relay as `PairingHandler` keeps it, played in memory for `DeviceLinkTest`, `SessionModelTest` and
+ * `:bridge`'s `LinkDispatchTest` (here in `testDevice`, which both builds compile):
  * a channel per handle; one answer, written once; a delegation of the channel's one account, once, after the answer; one
  * envelope, after it; the collect that hands the envelope over spends the channel; every dead channel `404` alike.
  */

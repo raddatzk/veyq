@@ -1,4 +1,4 @@
-// The account's Settings (cr-app-account-settings; the web's Settings hub, its SessionsPanel the reference), Fluent's way,
+// The account's Settings (uc.account.sessions; the web's Settings hub, its SessionsPanel the reference), Fluent's way,
 // as Windows' own Settings draws a page: the pane's Settings item opens it in the shell's NavigationView content (WinUI's
 // guideline for the settings item), a column of cards under the web's section titles —
 //
@@ -8,11 +8,12 @@
 // - Devices and sessions: every session family, this device's first and marked, named from the register or by its dates,
 //   its sign-out (and, where the core offers it, "Sign out and remove saved key") behind the card's More, every step asked
 //   first (Dialogs.Confirm); "Sign out everywhere else";
+// - Add a device (only while the core offers it, addDevice: core.device-linking): "Show a code" and, where there is a
+//   camera, "Scan a code" — each a ceremony of DeviceLinkDialog over the window;
 // - Devices with a saved key: each removable, and "Remove every saved key except this device's";
 // - Sign out of this account here.
 //
-// Theme and language follow the system (D3): no card for them. "Add a device" is the core's (addDevice) but no screen of
-// this app yet, so it is left out until cr-app-device-linking builds one. Every state is the core's (Settings.Open,
+// Theme and language follow the system (D3): no card for them. Every state is the core's (Settings.Open,
 // Watched.Settings: SettingsShown), every action one call; why one did not come through is the state's refusal, said in an
 // InfoBar. Linux's account_settings.rs draws the same.
 using System;
@@ -45,6 +46,10 @@ internal sealed class AccountSettingsPage : IDisposable
     private bool _asking;
     private string? _told;
     private SettingsShown? _last;
+    /// <summary>The account this page is of (none for the debug harness's), for the device link's calls; whether a camera
+    /// is there for "Scan a code" (ADR 0141 decision 4: no camera, no entry).</summary>
+    private string? _connection;
+    private bool _camera;
 
     public UIElement Page { get; }
 
@@ -75,7 +80,8 @@ internal sealed class AccountSettingsPage : IDisposable
     /// core closed it (its tenant closed, its account signed out here).</summary>
     public static AccountSettingsPage Open(Window window, string connection, Action closedByCore)
     {
-        var page = new AccountSettingsPage(window, closedByCore);
+        var page = new AccountSettingsPage(window, closedByCore) { _connection = connection };
+        page.OfferScan();
         page.OpenIn(connection);
         return page;
     }
@@ -87,6 +93,39 @@ internal sealed class AccountSettingsPage : IDisposable
         var page = new AccountSettingsPage(window, () => { });
         page.Draw(shown);
         return page;
+    }
+
+    private async void OfferScan()
+    {
+        try
+        {
+            _camera = await QrCamera.PresentAsync();
+            Log.Write(_camera ? "Settings' link scan offered" : "Settings' link scan not offered: no camera");
+            if (!_disposed && _last is { } last) Draw(last);
+        }
+        catch (Exception e)
+        {
+            // an exception out of an async void would end the app in combase, with nothing in the log
+            Log.Write($"the camera's check failed: {e.GetType().Name}");
+        }
+    }
+
+    /// <summary>Opens the device link <paramref name="make"/> builds for this page's account (cr-app-device-linking).</summary>
+    private async void Link(Func<string, Call> make)
+    {
+        try
+        {
+            if (_connection is not { } connection)
+            {
+                Log.Write("settings add a device: no account in the core");
+                return;
+            }
+            await DeviceLinkDialog.Show(_window, make(connection));
+        }
+        catch (Exception e)
+        {
+            Log.Write($"veyq-link: the ceremony failed: {e.GetType().Name}");
+        }
     }
 
     private async void OpenIn(string connection)
@@ -299,6 +338,22 @@ internal sealed class AccountSettingsPage : IDisposable
         }
         _sections.Children.Add(Card("", Words.AccountSettingsRename(), new[] { Words.AccountSettingsRenameHint() }, "settings-device-name", _name, _rename));
         _sections.Children.Add(Trust(s));
+
+        // Add a device
+        if (s.addDevice)
+        {
+            _sections.Children.Add(Heading(Words.AccountSettingsAddDevice()));
+            _sections.Children.Add(Caption(Words.AccountSettingsAddDeviceSub()));
+            var show = TextButton(Words.LinkShow(), "settings-link-show");
+            show.Click += (_, _) => Link(connection => new Call.LinkShowForNewDevice { connection = connection });
+            _sections.Children.Add(Card("\uED14", Words.LinkShow(), new[] { Words.LinkIntro() }, "settings-link-show-card", show));
+            if (_camera)
+            {
+                var scan = TextButton(Words.LinkScan(), "settings-link-scan");
+                scan.Click += (_, _) => Link(connection => new Call.LinkScanSignInCode { connection = connection });
+                _sections.Children.Add(Card("\uE722", Words.LinkScan(), new[] { Words.LinkScanIntro() }, "settings-link-scan-card", scan));
+            }
+        }
 
         // Devices and sessions
         _sections.Children.Add(Heading(Words.AccountSettingsSessions()));

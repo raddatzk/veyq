@@ -10,7 +10,7 @@ invariants:
   - "the relay sees only the handle (ADR 0059 §11): the trusted device seals only to an answer whose MAC verifies under the channel key, the new device opens only an envelope whose MAC verifies"
   - "a linked device enrols at most a DEVICE_KEY wrap, never a DEVICE one (ADR 0059 §10)"
   - "the confirmation is a slide that names the device and says signing it out will not take the key back (ADR 0059 §7)"
-  - "no secret crosses the bridge: the QR's text, the channel key, the grant and the refresh token stay in the core; the desktops get the code as a picture and send frames in (cr-core-qr-decoder D2, D5)"
+  - "no secret crosses the bridge: the QR's text, the channel key, the grant and the refresh token stay in the core; the desktops get the code as a picture and send frames in (ADR 0141 decisions 2, 5)"
   - "the core's pairing crypto answers to contracts/crypto/vectors/v1.json, the same vectors @veyq/crypto answers to"
   - "the web's linking behaves as before; an app and the web link with each other in both directions and both roles"
 ---
@@ -27,10 +27,10 @@ directions and both roles**, interoperable with the web:
 | **new** (at the sign-in form) | **scans** the trusted device's code, shows the number | **shows** a `veyqsignin:` code, takes the six-digit code typed |
 
 Whichever device has a camera scans (ADR 0059 §1); a device without one offers only its showing half and says the
-other device scans (`cr-core-qr-decoder` D4).
+other device scans (ADR 0141 decision 4).
 
-**Depends on** `cr-core-qr-decoder` (all phases) and `cr-app-account-settings` (the Settings page whose "Add a device"
-entry this CR fills). The sign-in form is shared with `cr-app-kit-sign-in` (written in parallel): that CR adds the kit
+**Depends on** the core's QR codes (ADR 0141, built) and the apps' Settings page (`uc.account.sessions`, built; its "Add a device"
+entry this CR fills). The sign-in form is shared with the kit sign-in (`en.account.key-model` § The Emergency Kit, built): that work added the kit
 to the form, this one the two linking entries; both edit `SessionModel`'s `SignIn` gate, so whichever lands second
 rebases onto the other's fields and both CRs' phases on that gate run one after the other, never side by side.
 
@@ -45,7 +45,7 @@ rebases onto the other's fields and both CRs' phases on that gate run one after 
   six-digit draw), `pairingChannel.ts`, `pairingAnswerPolling.ts`, `grantEnvelopePolling.ts`, `onboardTail.ts`,
   `AddDevicePanel.vue`, `JoinDeviceCard.vue`, `SignInWithCodeCard.vue`, `GrantReceiverOutcome.vue`;
   `src/packages/crypto/src/v1.ts` (`pairingHandle`, `pairingChannelKey`, `pairingMac`), `seal.ts` (`pairing-grant`).
-- **Where what runs:** as in `cr-core-qr-decoder` § Context. A live test links **the principal's own account to a
+- **Where what runs:** the Kotlin on the developer's Mac, Linux in its container, Windows on the ARM64 VM, Android on a throwaway AVD (never `veyq_pixel`), Apple on a throwaway simulator and the macOS build; the dev backend is never started twice or stopped. A live test links **the principal's own account to a
   fresh core session** (the trusted side is a core login of the principal; the new side a second core client with no
   session) and signs the linked family out at the end; it never touches the owner's browser sessions. The instance has
   `core.device-linking` on (the dev stack's default — the phase's first read checks it).
@@ -111,7 +111,7 @@ direction's statement, a parser that accepts a trailing path).
 `session/DeviceLink.kt` (ADR 0136 decision 2's shape): `showForNewDevice()` (trusted, Add a new device),
 `scanSignInCode()` (trusted, Sign in with a QR code), `scanFromTrusted(server)` and `showForSignIn(server)` (new, from
 the sign-in form). Each role's states mirror the web's cards: the code shown (the QR as a matrix for the phones, a PNG
-for the desktops — `cr-core-qr-decoder` D2), waiting, the number to compare / the code to show / the code to type,
+for the desktops — ADR 0141 decision 2), waiting, the number to compare / the code to show / the code to type,
 the slide, sealing or collecting, done, and the refusals (no answer before the channel's expiry; a MAC that does not
 verify — said as "this code was not answered by your device", never retried in place, ADR 0059 §6 and
 uc.account.onboard-device E2; the capability off; the scan refused because it is the other direction's code, said
@@ -143,7 +143,7 @@ the web's words (`words/words.json` takes the web's English and German).
 code as a picture); `Link.Confirm(link, label)` (the slide's end), `Link.EnterCode(link, code)`, `Link.Close(link)`;
 `Watched.Link(link)` → `Update.Link(shown)` carrying the state, the number or six-digit code to show, the suggested
 label and the refusal — never the secret, the channel key, the grant or a token. Scanning goes through
-`cr-core-qr-decoder`'s `Scan.*` with the link's scan opened by the link (`Scan.Open` of kind `link`), so the scanned
+ADR 0141's `Scan.*` with the link's scan opened by the link (`Scan.Open` of kind `link`), so the scanned
 text goes straight into `DeviceLink` inside the core.
 
 ## Phases
@@ -381,18 +381,149 @@ text goes straight into `DeviceLink` inside the core.
     --stop` elsewhere); the link's own refusal was right, the cause was outside. Check `/api/setup` before chasing one.
   - **Without `?devlogin` the web joins through the app.** The coordinator's Vite reads no `.run/.env`, so the web was
     signed in only by being linked from the app first — which also proves app → web before every web-trusted run.
-- [ ] **5 the bridge** — D6 with `WireTest` samples, `DispatchTest` (open each role, a code picture, confirm, a tenant
+- [x] **5 the bridge** — D6 with `WireTest` samples, `DispatchTest` (open each role, a code picture, confirm, a tenant
   switch closing it) and `SecretFreeSchemaTest` unchanged. · Done when: `./gradlew :bridge:jvmTest` green.
+
+  **Status: done (2026-11-14).**
+
+  **Built:**
+  - Wire (`Wire.kt`): `Link.ShowForNewDevice(connection)`, `Link.ScanSignInCode(connection)` (the trusted device's; a
+    tenant open, refused `NO_TENANT_OPEN`/`NO_SUCH_CONNECTION`), `Link.ScanFromTrusted(server)`, `Link.ShowForSignIn(server)`
+    (the new device's, through `SessionModel.scanFromTrusted`/`showForSignIn`; refused `NO_SIGN_IN` outside the sign-in)
+    → `Answer.LinkOpened(link)`; `Link.Code(link, px)` → `Answer.Bytes(image/png)` beside the JSON (`drawnCode`, now
+    also over a matrix the core encoded, so the link's text never leaves it; `NO_BYTES` while none shows);
+    `Link.Confirm(link, label)` and `Link.EnterCode(link, code)` → `Done` or `NOT_TAKEN` (the core's atomic moves: one
+    confirmation, one code); `Link.Close(link)`; `Watched.Link` → `Update.Link(link, LinkShown?)`, `LinkShown` the core's
+    `Shown` field for field under wire enums of their own names (`LinkRole`, `LinkStep`, `LinkRefusal`, `LinkHint`).
+    A scanning role's camera: `Scan.Open(kind = LINK, link)` registers the link's own `QrScan` (found as its direction's
+    scheme, from `PairingMarker`; `NOT_OFFERED` on a showing link); `Scan.Close` of it only drops the id — the link closes
+    its scan.
+  - Dispatch (`Bridge.kt`): `Composition.trustedLink` (the library's `DeviceLink.showForNewDevice`/`scanSignInCode(account,
+    decode)`; a test plays a granter); trusted links close with the tenant (a switch, a sign-out), a new device's stay to
+    `Link.Close`/`shutdown`. A new device's link at DONE makes the account it signed in the open tenant (`opened(signedTo)`,
+    as a sign-in call's). `Link.Close` in FINISHING drops the id and the watch but leaves the core's link to finish: the
+    core's close there ends the state ENDED while its tail still signs in, so the bridge would never open that tenant.
+  - Core: `DeviceLink.scanSignInCode(account, decode)` (the bridge's decoder); `DeviceLink.png` scaled by the drawn grid's
+    side (it divided by the code's size without the quiet zone: a large `px` overran `QrPng.MAX_SIDE` and threw).
+    `PlayedPairing.kt` moved from `commonTest` to `testDevice`, so `:bridge`'s tests play the same relay.
+  - Hosts: the only changes the generated types forced — the Rust `Call::ScanOpen` literal gains `link: None`, the C#
+    initializer `link = null` (a generated record's nullable field is `required`).
+  - Tests: `LinkDispatchTest` (7), `SecretFreeSchemaTest.aDeviceLinkCrossesAsItsStateAlone`, `WireTest` samples of every
+    new call, answer, update and enum value, `LiveLinkBridgeTest` (2).
+
+  **Met:**
+  - `LinkDispatchTest` 7/7 over two bridges and a played relay: both directions end to end through the calls, the code
+    read back from `Link.Code`'s PNG through the core's decoder and fed to the other bridge's link scan as a camera's plane;
+    numbers equal; a blank and a second confirmation `NOT_TAKEN`; 32 racing confirmations → one `Done`, one delegation,
+    one seal; a short and a second six-digit code `NOT_TAKEN`; the new bridge's gate Signed with `offer.linked`, its
+    tenant open; a close in FINISHING still opens it; a tenant switch closes the trusted link (watch null, id refused, its
+    relay closed); every refusal by name; nothing sent outward on any watch carries the code's secret, a handle or a token.
+  - `SecretFreeSchemaTest`: no field of any root named like a pairing secret (handle, payload, grant, envelope, channel,
+    transport, marker; the check refuses a played shape with five such fields), and the link's outward shapes pinned to
+    their fields.
+  - Live (`VEYQ_LIVE=http://veyq.localhost:8080`, `VEYQ_ENV_FILE`): `LiveLinkBridgeTest` 2/2, not skipped — two
+    `Bridge.live` instances, both directions, the trusted bridge's Settings listing the linked family under the name
+    given, every device (both trusted logins, both linked devices) taken off by `LiveRun.removeAll`. Without `VEYQ_LIVE`:
+    2 skipped.
+  - Bites (scratchpad script, one mutation each, `/bin/cp -f` restore compared equal; each red by its named test's own
+    failure, never a compile error): a `payload` field on `LinkShown` → `aDeviceLinkCrossesAsItsStateAlone`; the new
+    device's tenant not opened at DONE → the end-to-end case; `Link.Close` in FINISHING not held off → the close case; trusted
+    links outliving the tenant → the switch case; a refused confirmation answered `Done` → the race case; a link scan's found
+    scheme wrong → both end-to-end cases; a trusted link without a tenant → the refusals case.
+  - After merging `claude/windows-cr-f6c73c` (at be14a6da8): `./gradlew :core:jvmTest :bridge:jvmTest` green (core 662,
+    bridge's classes all green, the live ones skipped); `linux/run.py build` green (clippy, cargo tests, build);
+    `windows/run.py build` green (`Veyq.Bridge.Tests` here and there, `Veyq.Tests`, the app and `Veyq.Drive` built); guards
+    (`scripts/validate_*.py` but guard_gaps) green. The bites ran at load 160–220 (another agent's runaway): slow, none
+    red by a timeout.
+
+  **Retrospective:**
+  - **A close and a sign-in are two lifetimes.** The core's rule (a close in FINISHING ends the screen, not the sign-in)
+    left its state ENDED while the account signed in, so a host keyed to DONE would never open that account. The bridge
+    keeps the two apart (the host's watch ends, the link runs on). The phones' `AppModel` keys on DONE too and cancels its
+    watch on close — whether a close within the tail leaves their shell unopened is not measured (inbox-worthy for phase 6).
+  - **Shared test fakes belong where both builds compile them.** The played relay sat in core's `commonTest`, which
+    `:bridge` does not see; moved to `testDevice` rather than copied.
 - [ ] **6 Linux and Windows** — the same screens as phase 4 on the desktops. · Done when: both `run.py build`/`test`
   green; each desktop's pass links with the web in both directions (the desktop showing; and scanning through its test
   camera); `NoCamera` offers only the showing halves on the Windows VM.
   **And the code stays out of capture** (§ Secrets on screen): Windows' showing screen and its scanner through
   `ScreenSecrets.Guard`, bitten as the sweep was — `Veyq.Drive`'s `shot` (BitBlt) shows the desktop behind the window,
   and the code with `VEYQ_DEV_CAPTURABLE=1`; Linux has no capture to keep it from (the section says why).
+
+  **Status: Linux met, Windows built (2026-11-15); the Windows VM pass waits for the VM (another agent's pass held it).**
+
+  **Built:**
+  - **Linux** (`device_link.rs`): one `AdwDialog` for all four roles over the bridge's `Link.*` calls and `Watched.Link`,
+    drawing `LinkShown` as Android's `DeviceLinkScreen` does (the same words, the same steps); the code a `GtkPicture` of
+    `Link.Code`'s PNG asked at the window's scale; the link's camera `ScanView::open_link` (`Scan.Open` of kind `LINK`, the
+    `qr_camera.rs` view the kit's scan uses); the six digits an `AdwEntryRow` that keeps digits only, six at most, sent once
+    by its button or Enter; a new device's link at `DONE` closes the dialog (the bridge opens the account under it), a
+    `Watched.Link` of `null` (the tenant closed) too; "Start over" opens a new link of the same role in the same dialog.
+    Settings gains "Add a device" (only while `addDevice`): "Show a code" and, where the Camera portal names a camera,
+    "Scan a code"; the sign-in gains "Scan a code from another device" (camera only) and "Sign in with a QR code", over
+    the server the form holds. Steps go to stderr (`veyq-link:` step, refusal, hint — never a code, a number or a name).
+  - **The slide on GTK** (D5): a `GtkScale` 0…1. A capture-phase `EventControllerLegacy` on the scale notes the press
+    and takes the first value the gesture moves it to as where it began; a release (on the scale, or anywhere over the
+    dialog's content — one past the scale's end never reaches the scale under Broadway) confirms only when it began at
+    ≤ 15 % and ends at ≥ 98 %, and springs back otherwise (an `AdwTimedAnimation`, stopped by the next press or key). A
+    click on the track warps there in one move, so its first value is where it ended and it does not confirm. Keys: the
+    arrows in ten steps, Return/Enter at the end confirms; Home, End and the Page keys are taken and move nothing; the
+    wheel is taken. Insensitive while the name is blank; the sentence is the scale's accessible label.
+  - **Windows** (`DeviceLinkDialog.cs`): the same in a `ContentDialog` (through `Dialogs.Show`) whose content is
+    `ScreenSecrets.Guard`'ed; `QrCamera.OpenLink`; the slide a `Slider` with the same rules (`PointerPressed`,
+    `PointerReleased` and `PointerCaptureLost` with `handledEventsToo`, `PreviewKeyDown` for the keys, a
+    `DispatcherTimer` spring-back); Settings' section and the sign-in's two entries as on Linux (`QrCamera.PresentAsync`
+    decides the scans: the VM has no camera, so `NoCamera` offers only the showing halves). `Veyq.Drive` gains
+    `slide <id> <from> <to>` (a SendInput mouse drag across an element).
+  - **Found and fixed on both desktops by the Linux pass:** the offer after a sign-in that offers no level (Linux without
+    the Secret Service — every linked Linux run here; a Windows device without Hello) drew nothing, not even "Not now":
+    `Offer::show` / `OfferView.Show` took the first draw of an empty list for a redraw, so the person stood on a page
+    with no button. Both now draw from "nothing drawn yet", and "Not now" after a link says `offer_not_now_linked_hint`
+    (`Offer.linked`), as Android's does.
+
+  **Met (Linux):**
+  - `linux/run.py build` green (clippy `-D warnings`, cargo tests 47 + the sandbox's 5, build), after merging
+    `claude/windows-cr-f6c73c` at 58d1247a6; `scripts/validate_mobile_words.py` green.
+  - **Linux ↔ web, all four runs** (the app under Broadway in the Fedora 44 container, `run.py run --port 8096
+    --devlogin [--fill] --no-secret-service`, its test camera `VEYQ_DEV_CAMERA` an image rewritten in place before each
+    scan; driven by Playwright's mouse and keyboard over Broadway; the web in headless system Chrome,
+    `channel: 'chrome'`, one persistent profile, its camera a `.y4m` of the app's code cropped from a Broadway
+    screenshot; no password typed anywhere — the web was signed in only by being linked):
+    A2 the web shows its sign-in code → Linux (Settings → Scan a code) scans it and shows six digits, typed into the web
+    → `CONFIRMING` → slid → `DONE`, the web signed in. A1 Linux shows → the web scans: numbers equal on both screens
+    (32950, 95180, 52080 across runs), slid, the web signed in. A3 Linux, at its sign-in, scans the web's add-a-device
+    code: numbers equal (55995), the web slid, `SCAN_FROM_TRUSTED: FINISHING → DONE`, `session Signed, offer: []`. A4
+    Linux shows its sign-in code → the web scans it, its six digits typed into Linux → the web slid →
+    `SHOW_FOR_SIGN_IN: DONE`, the offer's "Not now" with "This device got no password: …" (shot). That linked Linux
+    device was then itself the trusted one: it showed a code, the web joined (52080 on both) and the pointer slide sealed.
+  - **The slide by a pointer** (Playwright's mouse over Broadway): with a blank name a full drag does nothing; a click on
+    the track's end does not confirm; a drag to the middle springs back to 0 (shots); a drag from the knob carried past
+    the end confirms (`the slide's end: moved on`, `SEALING → DONE`). **By keyboard:** from the end Left, Home, Enter
+    left it at 0.9 and confirmed nothing (shot); Right, Enter confirmed (A1, A2).
+  - Bites (`/bin/cp -f` restore, compared equal): "Not now" after a link said in the plain words → `cargo test`'s
+    `the_offer_lists_what_the_core_offers_then_not_now` red. The release past the scale was red in the pass itself
+    (three carried drags did not confirm, the knob left at the end) and green after the fix, the same gesture.
+  - **Windows, built:** `windows/run.py build` green on the VM in a directory of its own (`VEYQ_WINDOWS_DIR=F:\veyq-link6`,
+    beside the Memories agent's): NuGet gates, `Veyq.Bridge.Tests` here and there, `Veyq.Tests`, the app and `Veyq.Drive`.
+    Bite: "Not now" after a link in the plain words → `TrustWordsTest.TheOfferListsWhatTheCoreOffersThenNotNow` red.
+  - Cleanup: every devlogin session of the Linux app signed out by Settings' "Sign out" before its window closed; the
+    A3 linked device (left on the empty offer page by the bug above) signed out from the A4 device's Settings row; the A4
+    device by "Sign out"; every web session by the web's own sign-out. Left: the device-register entries of the runs'
+    containers and of the web profile (no screen removes one, inbox #894's area).
+
+  **Deviations:**
+  - Neither GTK nor WinUI offers an accessible named action of the app's own (Android's `CustomAccessibilityAction`,
+    Apple's named action): the sentence is the slider's accessible name and a screen-reader user confirms by the keys.
+  - The Linux pass ran without the Secret Service (`--no-secret-service`): the shared `veyq-linux-home` volume may be
+    another agent's at the same time. So every linked Linux run was D4's run-only case (no level offered) — which is what
+    found the empty-offer bug; a linked Linux device staying signed in through the Secret Service is not run here.
+  - The phones' gap phase 5 named (a close in `FINISHING` leaving the new device's shell unopened) holds on both phones,
+    measured by reading `AppModel` (Android and Apple open the shell only on the link's `DONE` and stop their watch in
+    `closeLink`; the core ends the link `ENDED` while its tail signs in): not a core fix — inbox #918.
 - [ ] **7 docs and harvest** — ADR 0059 §2 and ADR 0004 § Transport: D1's sentence; `uc.account.onboard-device`
   notes the apps (no coverage change); `native-apps.md` § Account: the adoption blocker removed, what is built added;
   `site/src/content/docs/account/adding-another-device.mdx` and `getting-started/sign-in.mdx` (with their `de/` twins)
-  say the apps do both directions — the sign-in page is shared with `cr-app-kit-sign-in`, which owns its § kit, this
+  say the apps do both directions — the sign-in page is shared with the kit sign-in, whose § kit stays as it is, this
   CR its § QR code. · Done when: the trust-chain guards and the site's `pnpm run check` green; this CR deleted.
 
 ## Definition of done

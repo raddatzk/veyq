@@ -85,7 +85,7 @@ public sealed partial class MainWindow : Window
             Closed += (_, _) => scan.Dispose();
             return;
         }
-        // a debug build's Settings harness: the page over a state of its own, no session (cr-app-account-settings phase 4)
+        // a debug build's Settings harness: the page over a state of its own, no session (uc.account.sessions)
         if (DevSettings.Requested)
         {
             Log.Write("the settings harness (debug build)");

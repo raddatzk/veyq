@@ -11,6 +11,10 @@
 // which reads it and asks this side to draw its pages (KitDrawing); "Scan Emergency Kit" beside it, only where there is a
 // camera, scans its code (QrCamera, kind KIT). Either way the gate's kit fills the email and the server and the Secret Key
 // field says "From your Emergency Kit" — the key itself the core holds, never this side.
+//
+// Below them the two ways in from another device (ADR 0059 §1; cr-app-device-linking): "Scan a code from another device",
+// only where there is a camera, and "Sign in with a QR code" — each a ceremony of DeviceLinkDialog over the server the
+// form names (nothing a scan reads changes it).
 using System;
 using System.Linq;
 using Microsoft.UI.Xaml;
@@ -40,6 +44,9 @@ internal sealed class SignInView
     private readonly StackPanel _kitHeld;
     private readonly Button _openKit;
     private readonly Button _scanKit;
+    /// <summary>The two device-linking entries; the scan only where there is a camera.</summary>
+    private readonly Button _linkScan;
+    private readonly Button _linkShow;
     /// <summary>The kit's server replaced a different one the form held: said, never refused.</summary>
     private readonly TextBlock _otherServer;
     /// <summary>The kit the form last showed, so a new one fills the email and the server once.</summary>
@@ -65,6 +72,10 @@ internal sealed class SignInView
         _openKit.Click += (_, _) => PickKit();
         _scanKit = Field(new Button { Content = Words.SigninKitScan(), HorizontalAlignment = HorizontalAlignment.Stretch, Visibility = Visibility.Collapsed }, "signin-kit-scan");
         _scanKit.Click += (_, _) => ScanKit();
+        _linkScan = Field(new Button { Content = Words.SigninLinkScan(), HorizontalAlignment = HorizontalAlignment.Stretch, Visibility = Visibility.Collapsed }, "signin-link-scan");
+        _linkScan.Click += (_, _) => Link(server => new Call.LinkScanFromTrusted { server = server });
+        _linkShow = Field(new Button { Content = Words.SigninLinkShow(), HorizontalAlignment = HorizontalAlignment.Stretch }, "signin-link-show");
+        _linkShow.Click += (_, _) => Link(server => new Call.LinkShowForSignIn { server = server });
         _otherServer = Field(new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed }, "signin-kit-other-server");
         _otherServer.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
         _error = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
@@ -96,7 +107,7 @@ internal sealed class SignInView
         AutomationProperties.SetAutomationId(_heading, "signin-title");
         AutomationProperties.SetHeadingLevel(_heading, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1);
         var column = new StackPanel { Spacing = 16, MaxWidth = 420, Padding = new Thickness(24), VerticalAlignment = VerticalAlignment.Center };
-        foreach (var child in new UIElement[] { _heading, _server, _email, _password, _secretKey, _kitHeld, _openKit, _scanKit, _otherServer, _error, _submit, _cancel, _working }) column.Children.Add(child);
+        foreach (var child in new UIElement[] { _heading, _server, _email, _password, _secretKey, _kitHeld, _openKit, _scanKit, _otherServer, _error, _submit, _cancel, _working, _linkScan, _linkShow }) column.Children.Add(child);
         // a width-capped column straight in a ScrollViewer sat off centre once the window was resized (measured): the
         // ScrollViewer's child stretches, the column centres in it
         var stretch = new Grid();
@@ -112,13 +123,27 @@ internal sealed class SignInView
         try
         {
             var present = await QrCamera.PresentAsync();
-            Log.Write(present ? "the sign-in's kit scan offered" : "the sign-in's kit scan not offered: no camera");
+            Log.Write(present ? "the sign-in's kit and link scans offered" : "the sign-in's kit and link scans not offered: no camera");
             _scanKit.Visibility = present ? Visibility.Visible : Visibility.Collapsed;
+            _linkScan.Visibility = present ? Visibility.Visible : Visibility.Collapsed;
         }
         catch (Exception e)
         {
             // an exception out of an async void would end the app in combase, with nothing in the log
             Log.Write($"the camera's check failed: {e.GetType().Name}");
+        }
+    }
+
+    /// <summary>A device link from the sign-in over the server the form names (Link.ScanFromTrusted, Link.ShowForSignIn).</summary>
+    private async void Link(Func<string, Call> make)
+    {
+        try
+        {
+            await DeviceLinkDialog.Show(_window, make(_server.Text.Trim()));
+        }
+        catch (Exception e)
+        {
+            Log.Write($"veyq-link: the ceremony failed: {e.GetType().Name}");
         }
     }
 
@@ -235,6 +260,8 @@ internal sealed class SignInView
             _otherServer.Visibility = Visibility.Collapsed;
         }
         _openKit.IsEnabled = !gate.working;
+        _linkScan.IsEnabled = !gate.working;
+        _linkShow.IsEnabled = !gate.working;
         _heading.Text = gate.adding ? Words.SigninAddTitle() : Words.SigninTitle();
         _cancel.Visibility = gate.adding ? Visibility.Visible : Visibility.Collapsed;
         _cancel.IsEnabled = !gate.working;
