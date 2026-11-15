@@ -284,7 +284,7 @@ lightbox plays and starts again by itself when the video stops or the lightbox m
   `src/mobile/CLAUDE.md` names the packages `audio/` and `memories/music/`; the topic table lists 0142 under Native app
   and Memories. · Done when: every `/usr/bin/python3 scripts/validate_*.py` but `validate_guard_gaps.py` exits 0.
 
-- [ ] **2 the web: a lightbox video interrupts the music (D13)** — `src/web/src/core/audio/player.ts` gains
+- [x] **2 the web: a lightbox video interrupts the music (D13)** — `src/web/src/core/audio/player.ts` gains
   `interrupt()` (D13's rules: pause a playing queue, the end resumes only what it paused and only when no listener's
   play or pause, new queue or `stop` came between); `MediaLightbox.vue`'s `<video>` interrupts on `playing` and ends it
   on `pause`, `ended`, an item change (the slideshow's included) and its unmount. en.platform.audio-player and
@@ -297,6 +297,11 @@ lightbox plays and starts again by itself when the video stops or the lightbox m
   each resume it); **bites**, each one edit restored from a snapshot, each red at its own assertion: (a) the end resumes
   unconditionally → the listener's-pause case red; (b) the lightbox does not end the interruption on an item change →
   the next-item case red; (c) the end not dropped at `stop` → the stop case red.
+  *Done (2026-11-15):* as worded; besides, the two `AudioPlayer` fakes (`AudioBar.test.ts`, `AudioMiniControls.test.ts`)
+  gained an `interrupt` stub for the type, and uc.memory.background-music's coverage a criterion `a-video-pauses-the-music`.
+  A dropped end after a `stop` has nothing left to play, so the stop case asserts the end wakes not even the
+  `AudioContext` — the one thing a live end does where no deck holds a source; bite (c) went red there. The add-music Use
+  pages (EN, DE) do not speak of the lightbox: unchanged.
 
 - [ ] **3 the player (core `audio/`)** — `Order`, `Fades`, `MusicPlayer` with `interrupt()` (D13), `NowPlaying`, the
   deck port (D2) and the system controls' port (D3's core half), with a played deck for tests. · Done when: `./gradlew
@@ -388,7 +393,8 @@ Phases 1–9 checked with their Done-when met; `pnpm run check` in `src/web/` an
 checks green; the bites above each seen red and green again; the format matrices and the passes recorded per platform in
 ADR 0142; the Use pages in EN and DE updated with `pnpm run check` in `site/` green; every `scripts/validate_*.py` but
 guard_gaps green. No contract or backend change: `git diff --stat` over `contracts/ src/backend/` is empty at the end;
-`src/web/`'s diff is phase 2's alone (`core/audio/player.ts`, `MediaLightbox.vue`, their tests).
+`src/web/`'s diff is phase 2's alone (`core/audio/player.ts`, `MediaLightbox.vue`, their tests, and the two player fakes'
+`interrupt` stub).
 
 ## Retrospective
 

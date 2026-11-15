@@ -78,6 +78,13 @@ acceptanceCriteria:
           - src/sw/register.playback.test.ts
           - src/sw/mediaSw.test.ts
           - src/core/applications/registry.test.ts
+  - id: a-video-pauses-the-music
+    text: A video in the lightbox pauses the music while it plays (ADR 0142 decision 13) through the player's `interrupt()`, which shows the queue paused on the bar and the lock screen; the video's pause or end, the next item (by hand or the slideshow) and the lightbox's close resume it, unless a listener's play or pause, a new queue or a stop came between.
+    coverage:
+      web:
+        unit:
+          - src/core/audio/player.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
   - id: report-and-review
     text: A track's menu offers download, delete (to the trash) and report as an `ITEM`; the moderator's review of a reported audio medium plays it from the report's blob keys.
     coverage:
