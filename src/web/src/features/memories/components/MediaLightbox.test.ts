@@ -700,6 +700,65 @@ describe('MediaLightbox — video playback from the blob meta type (ADR 0047, #1
     expect(store.api.updateMediaMeta).not.toHaveBeenCalled()
     expect(wrapper.emitted('updated')).toBeFalsy()
   })
+
+  // ADR 0142 decision 13: a playing video interrupts core's music player; its pause, its end, the next item and closing
+  // each end the interruption (the player's own tests hold what the end resumes).
+  describe('the music', () => {
+    /** A video then a photo, the video played: its <video> is on the stage, the player's `interrupt` recorded. */
+    async function playedVideo() {
+      const memoryKey = v1.randomBytes(32)
+      const store = galleryFakeStore()
+      fakeApi(mediaApi, store.api)
+      fakeApi(blobApi, store.blob)
+      vi.stubGlobal('fetch', store.fetchStub)
+      await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([FTYP_MP4 as BlobPart]), mediaType: 'video/mp4' }, stubDeriver())
+      await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
+      const items = await listMedia(SCOPE_ID, NODE_ID)
+      const end = vi.fn()
+      const interrupt = vi.spyOn(audioPlayer(), 'interrupt').mockImplementation(() => end)
+      const w = mountLightbox(memoryKey, items, 0)
+      await flushPromises()
+      await w.find(`[aria-label="${t('media.playVideo')}"]`).trigger('click')
+      await flushPromises()
+      const video = () => w.find('.media-lightbox-stage video').element
+      expect(video(), 'the video is on the stage').toBeTruthy()
+      return { w, video, interrupt, end }
+    }
+
+    it("a video's playing pauses the player; its pause and its end each resume it", async () => {
+      const { w, video, interrupt, end } = await playedVideo()
+      expect(interrupt, 'not before it plays').not.toHaveBeenCalled()
+      video().dispatchEvent(new Event('playing'))
+      expect([interrupt.mock.calls.length, end.mock.calls.length]).toEqual([1, 0])
+      video().dispatchEvent(new Event('playing')) // again after a seek or a stall: still the one interruption
+      expect(interrupt).toHaveBeenCalledTimes(1)
+      video().dispatchEvent(new Event('pause'))
+      expect(end, 'its pause').toHaveBeenCalledTimes(1)
+      video().dispatchEvent(new Event('playing'))
+      expect(interrupt).toHaveBeenCalledTimes(2)
+      video().dispatchEvent(new Event('ended'))
+      expect(end, 'its end').toHaveBeenCalledTimes(2)
+      w.unmount()
+      expect(end, 'nothing held: closing ends nothing more').toHaveBeenCalledTimes(2)
+    })
+
+    it('the next item resumes it', async () => {
+      const { w, video, end } = await playedVideo()
+      video().dispatchEvent(new Event('playing'))
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+      await flushPromises()
+      expect(w.find('.media-lightbox-stage video').exists(), 'the photo is shown').toBe(false)
+      expect(end).toHaveBeenCalledTimes(1)
+      w.unmount()
+    })
+
+    it('closing the lightbox resumes it', async () => {
+      const { w, video, end } = await playedVideo()
+      video().dispatchEvent(new Event('playing'))
+      w.unmount()
+      expect(end).toHaveBeenCalledTimes(1)
+    })
+  })
 })
 
 describe('MediaLightbox — SW switchover (ADR 0047)', () => {
@@ -1593,6 +1652,25 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
       player.nowPlaying.value = null
       w.unmount()
     }
+  })
+
+  // ADR 0142 decision 13: the slideshow's step to the next item ends a playing video's interruption of the music.
+  it("the slideshow's next item resumes the music a playing video interrupted", async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seed(memoryKey, ['video/mp4', 'image/png', 'image/png'])
+    const end = vi.fn()
+    const interrupt = vi.spyOn(audioPlayer(), 'interrupt').mockImplementation(() => end)
+    const w = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    await w.find(`[aria-label="${t('media.playVideo')}"]`).trigger('click')
+    await flushPromises()
+    w.find('.media-lightbox-stage video').element.dispatchEvent(new Event('playing'))
+    expect(interrupt).toHaveBeenCalledTimes(1)
+    await press(w)
+    await advance(5000)
+    expect(position(w)).toBe(at(2))
+    expect(end).toHaveBeenCalledTimes(1)
+    w.unmount()
   })
 
   it('a video shows its poster for one interval and is never played', async () => {

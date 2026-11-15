@@ -286,4 +286,82 @@ describe('the player', () => {
     h.player.resume()
     expect([el.paused, h.player.nowPlaying.value!.playing, h.session.playbackState]).toEqual([false, true, 'playing'])
   })
+
+  // ADR 0142 decision 13: a lightbox video interrupts the music; its end resumes only what it paused, and only when no
+  // listener's play or pause, new queue or stop came between.
+  describe('interrupt', () => {
+    async function started() {
+      const h = harness({ durations: { 'blob:a': 62, 'blob:m': 62 } })
+      h.player.play({ key: 'n1', tracks: [track('a').t] })
+      await flushPromises()
+      return { h, el: playing(h)! }
+    }
+    const shown = (h: ReturnType<typeof harness>) => [h.player.nowPlaying.value?.playing, h.session.playbackState]
+
+    it('pauses a playing queue, and the lock screen shows it paused', async () => {
+      const { h, el } = await started()
+      h.player.interrupt()
+      expect([el.paused, ...shown(h)]).toEqual([true, false, 'paused'])
+      h.tick()
+      expect(h.player.nowPlaying.value?.playing, 'the tick reads it paused too').toBe(false)
+    })
+
+    it('its end resumes the queue, once', async () => {
+      const { h, el } = await started()
+      const end = h.player.interrupt()
+      end()
+      expect([el.paused, ...shown(h)]).toEqual([false, true, 'playing'])
+      h.player.pause()
+      end()
+      expect(el.paused, 'a second call of the end does nothing').toBe(true)
+    })
+
+    it("a listener's pause during it keeps the music paused after", async () => {
+      const { h, el } = await started()
+      const end = h.player.interrupt()
+      h.handlers.get('pause')!({}) // the lock screen's pause, the bar's the same door
+      end()
+      expect([el.paused, ...shown(h)]).toEqual([true, false, 'paused'])
+    })
+
+    it("a listener's play during it sounds both, and the end then does nothing", async () => {
+      const { h, el } = await started()
+      const end = h.player.interrupt()
+      h.player.resume()
+      expect(el.paused).toBe(false)
+      h.player.pause() // paused again by the listener: the end must not take it back
+      end()
+      expect([el.paused, ...shown(h)]).toEqual([true, false, 'paused'])
+    })
+
+    it('a stop during it makes the end do nothing - it wakes not even the AudioContext', async () => {
+      const { h } = await started()
+      const end = h.player.interrupt()
+      h.player.stop()
+      h.ctx.state = 'suspended' // the browser let the idle context sleep (iOS does on an interruption of its own)
+      h.ctx.resume.mockClear()
+      end()
+      expect([h.player.nowPlaying.value, h.session.playbackState, h.elements.every((e) => e.paused)]).toEqual([null, 'none', true])
+      expect(h.ctx.resume, 'a live end wakes the context, as a play does; a dropped one touches nothing').not.toHaveBeenCalled()
+    })
+
+    it('a new queue during it makes the end do nothing', async () => {
+      const { h } = await started()
+      const end = h.player.interrupt()
+      h.player.play({ key: 'n2', tracks: [track('m').t] })
+      await flushPromises()
+      const el = playing(h)!
+      h.player.pause()
+      end()
+      expect([el.paused, ...shown(h)]).toEqual([true, false, 'paused'])
+    })
+
+    it('a queue not playing when interrupted is not started by the end', async () => {
+      const { h, el } = await started()
+      h.player.pause()
+      const end = h.player.interrupt()
+      end()
+      expect([el.paused, ...shown(h)]).toEqual([true, false, 'paused'])
+    })
+  })
 })

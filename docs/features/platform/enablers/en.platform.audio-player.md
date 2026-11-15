@@ -5,8 +5,9 @@
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
 - **Status:** **built** — decided in [ADR 0135](../../../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md)
   decisions 6–8: `src/web/src/core/audio/` (`order.ts`, `fades.ts`, `player.ts`, `AudioBar.vue`), mounted by
-  `AppShell.vue` and `ShareView.vue`. The apps' port and a lightbox video's interruption are decided, not built
-  ([§ Decided, not built](#decided-not-built)).
+  `AppShell.vue` and `ShareView.vue`; a lightbox video's interruption (`interrupt()`) is built by
+  [ADR 0142](../../../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md)
+  decision 13. The apps' port is decided, not built ([§ Decided, not built](#decided-not-built)).
 - **Provides:** to every application, one player in the web shell. The application hands it a queue of tracks, and
   core plays it: in shuffled order, endlessly, crossfading, with a bar below the shell's footer that stays while the
   viewer moves between pages and spaces.
@@ -59,6 +60,12 @@ holds the keys, exactly as the lightbox does, and core plays the URL it gets. `r
   lightbox's slideshow) leaves them out.
 - **MediaSession:** the title, and play, pause, next, previous and seek, so the lock screen and the media keys work.
 - **One queue at a time:** a new queue replaces the one playing, crossfading into it.
+- **A video interrupts it** (ADR 0142 decision 13): `interrupt()` pauses a playing queue and returns an end, which
+  resumes the queue only when it was playing when interrupted and no listener's play or pause, new queue or stop came
+  between; the end is good once. A play pressed during the video sounds both, and the end then does nothing; a pause
+  pressed keeps it paused after the video. While interrupted the bar, the compact controls and the lock screen show it
+  paused. Memories' lightbox (`MediaLightbox.vue`) raises it when its `<video>` fires `playing` (a muted video counts)
+  and ends it on the video's `pause` and `ended`, an item change (by hand or the slideshow) and its unmount.
 
 ## Lifetime
 
@@ -80,18 +87,14 @@ Every source is released when the player unmounts. A sign-out also ends every pl
 
 [ADR 0142](../../../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md):
 
-- **A lightbox video interrupts the music, on the web and in the apps** (decision 13). The player gains `interrupt()`:
-  it pauses a playing queue and returns an end, which resumes the queue only when it was playing when interrupted and
-  no listener's play or pause, new queue or stop came between. Memories' lightbox raises it while its video plays and
-  ends it when the video pauses or ends, the lightbox moves to another item, or it closes. Until then a lightbox video
-  and the music both sound.
 - **The apps' player is the core's, a port of this one** (decisions 1–3): `Order`, `Fades`, `MusicPlayer` and
   `NowPlaying` in the Kotlin core's `audio/`, the same API and rules; each platform plays bytes on two decks behind one
   port (`load`, `play`, `pause`, `seek`, `ramp`, `clear`), the core timing the crossfade and the platform running the
   volume ramp; tracks open as a core `RangeReader`, never a key. On the phones the music plays on in the background and
   with the screen off (Android a `mediaPlayback` foreground service with a `MediaSession`, iOS a `.playback` audio
   session with Now Playing); the desktops lend their system controls (Now Playing, SMTC, MPRIS). One player per
-  signed-in account, stopped at a lock, a sign-out and a tenant switch.
+  signed-in account, stopped at a lock, a sign-out and a tenant switch. Its `MusicPlayer` carries `interrupt()` with the
+  web's rules, raised by the apps' lightbox (decision 13).
 
 ## Related
 

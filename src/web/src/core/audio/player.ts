@@ -12,6 +12,10 @@
 // source opened is no longer a fresh autoplay. Where Web Audio is missing or refuses an element, tracks change without a
 // fade. A track whose `open()` fails, or that the element cannot play, is skipped; when no track of the queue plays, the
 // queue ends and `notice` says so.
+//
+// A video elsewhere on the page **interrupts** the music (ADR 0142 decision 13): `interrupt()` pauses a playing queue and
+// returns its end, which resumes the queue only when it was playing when interrupted and nothing came between - a
+// listener's play or pause, a new queue, a `stop`. While interrupted the queue shows paused (the bar, the lock screen).
 import { shallowRef, type ShallowRef } from 'vue'
 import { PlayOrder, cryptoRandomInt, type RandomInt } from './order'
 import { fadeLengthAt, fadeOutAtMs, pressFadeMs, type Span } from './fades'
@@ -124,6 +128,9 @@ export type AudioPlayer = {
   previous(): void
   /** Seek within the span, in ms from its start. */
   seek(positionMs: number): void
+  /** Pause a playing queue for a video; the returned end resumes it, unless a listener's play or pause, a new queue or
+   *  a `stop` came between, or it was not playing. Calling the end again does nothing. */
+  interrupt(): () => void
 }
 
 export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
@@ -139,6 +146,9 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
   let failures = 0
   let ticker: unknown = null
   let lastPosition = 0
+  /** The live interruption's id (0: none). A listener's play or pause, a new queue and a `stop` drop it. */
+  let interruption = 0
+  let interruptions = 0
 
   function deckOf(): Deck {
     return {
@@ -407,6 +417,26 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
     } catch { /* no state */ }
   }
 
+  /** Pause the playing deck and show it paused - a listener's pause, or an interruption's. */
+  function halt(): void {
+    const deck = decks[active]
+    const other = decks[1 - active]
+    if (other.source && other.leaving) clear(other) // a crossfade in flight ends where it is
+    deck.el.pause()
+    if (nowPlaying.value) nowPlaying.value = { ...nowPlaying.value, playing: false }
+    if (env.mediaSession) env.mediaSession.playbackState = 'paused'
+  }
+  /** Play the active deck again - a listener's play, or an interruption's end. */
+  function go(): void {
+    wakeContext()
+    const deck = decks[active]
+    if (!deck.source) return
+    setGain(deck, 1)
+    void deck.el.play().catch(() => undefined)
+    if (nowPlaying.value) nowPlaying.value = { ...nowPlaying.value, playing: true }
+    if (env.mediaSession) env.mediaSession.playbackState = 'playing'
+  }
+
   const player: AudioPlayer = {
     nowPlaying,
     notice,
@@ -414,6 +444,7 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
       // first, in the press's own stack: the context and the elements (iOS)
       wakeContext()
       unlock()
+      interruption = 0
       notice.value = null
       const ids = next.tracks.map((t) => t.id)
       if (ids.length === 0) return
@@ -429,6 +460,7 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
       void bringIn(order.current(), fade)
     },
     stop() {
+      interruption = 0
       generation++
       if (ticker !== null) env.clearInterval(ticker)
       ticker = null
@@ -439,21 +471,12 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
       unbindSession()
     },
     pause() {
-      const deck = decks[active]
-      const other = decks[1 - active]
-      if (other.source && other.leaving) clear(other) // a crossfade in flight ends where it is
-      deck.el.pause()
-      if (nowPlaying.value) nowPlaying.value = { ...nowPlaying.value, playing: false }
-      if (env.mediaSession) env.mediaSession.playbackState = 'paused'
+      interruption = 0
+      halt()
     },
     resume() {
-      wakeContext()
-      const deck = decks[active]
-      if (!deck.source) return
-      setGain(deck, 1)
-      void deck.el.play().catch(() => undefined)
-      if (nowPlaying.value) nowPlaying.value = { ...nowPlaying.value, playing: true }
-      if (env.mediaSession) env.mediaSession.playbackState = 'playing'
+      interruption = 0
+      go()
     },
     next() {
       wakeContext()
@@ -480,6 +503,17 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
       if (nowPlaying.value) nowPlaying.value = { ...nowPlaying.value, positionMs: rel }
       lastPosition = rel
       positionState()
+    },
+    interrupt() {
+      const deck = decks[active]
+      if (!deck.source || deck.el.paused) return () => undefined // nothing plays: nothing to resume after
+      const id = (interruption = ++interruptions)
+      halt()
+      return () => {
+        if (interruption !== id) return // a listener's play or pause, a new queue or a stop came between
+        interruption = 0
+        go()
+      }
     },
   }
   return player
