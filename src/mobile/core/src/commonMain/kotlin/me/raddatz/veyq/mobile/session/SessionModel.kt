@@ -389,6 +389,13 @@ class SessionModel<A : Connection, T : Any>(
         return DeviceLink.showForSignIn(door.primitives, door.relay(o), { linkedIn(o, it) }, scope)
     }
 
+    /**
+     * The account [link] (a new device's, from [scanFromTrusted] or [showForSignIn]) signed in, once its tail did — also
+     * when its screen closed meanwhile ([DeviceLink.signedIn]) —, or null where it ended without. The shell opens on this,
+     * never on the link's [DeviceLink.Step.DONE] (inbox #918).
+     */
+    suspend fun signedInBy(link: DeviceLink): Opened<A, T>? = if (link.signedIn()) signedTo else null
+
     /** A link's tail (the app's sign-in tail): the account from the grant, no password trust, the linked offer, the shell. */
     private suspend fun linkedIn(server: String, grant: PairingGrant) {
         started = true

@@ -534,6 +534,25 @@ class DeviceLinkTest {
         advanceTimeBy(61_000)
         runCurrent()
         assertEquals(1, tail.completed, "closing the screen cut the sign-in's tail off after the token was spent")
+        assertEquals(Step.ENDED, joining.current.step)
+        assertTrue(joining.signedIn(), "the tail signed in, but the closed link said it did not (inbox #918)")
+    }
+
+    @Test
+    fun a_link_that_ends_without_its_tail_says_it_signed_nothing_in() = runTest {
+        val server = PlayedServer()
+        val failing = Tail().apply { fails = IllegalStateException("the tail failed") }
+        val (trusted, joining) = confirming(server.Account(), server.Side("new"), failing)
+        assertTrue(trusted.confirm("Phone"))
+        settle()
+        assertEquals(Step.ENDED, joining.current.step)
+        assertFalse(joining.signedIn())
+        assertFalse(trusted.signedIn(), "a trusted device's link said it signed in")
+
+        val closed = DeviceLink.showForSignIn(p, server.Side("new"), Tail()::receive, backgroundScope)
+        runCurrent()
+        closed.close()
+        assertFalse(closed.signedIn())
     }
 
     @Test

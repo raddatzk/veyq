@@ -280,16 +280,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         linkAgain = make
         _link.value = link
         // its steps to logcat (`veyq-link`): the step, the refusal and the hint — never a code, a number or a name
+        val newDevice = link.role == me.raddatz.veyq.mobile.session.DeviceLink.Role.SCAN_FROM_TRUSTED ||
+            link.role == me.raddatz.veyq.mobile.session.DeviceLink.Role.SHOW_FOR_SIGN_IN
+        // the new device signed in: the shell opens over the account the grant made, its offer over it — awaited apart from
+        // the watch, which a close ends: a close while the grant is spent ends the screen, not the sign-in (inbox #918)
+        if (newDevice) viewModelScope.launch { session.signedInBy(link)?.let { show(it) } }
         linkWatch = viewModelScope.launch {
             link.state.collect { s ->
                 android.util.Log.i("veyq-link", "${link.role}: ${s.step}" + (s.refusal?.let { ", $it" } ?: "") + (s.hint?.let { ", hint $it" } ?: ""))
-                val newDevice = link.role == me.raddatz.veyq.mobile.session.DeviceLink.Role.SCAN_FROM_TRUSTED ||
-                    link.role == me.raddatz.veyq.mobile.session.DeviceLink.Role.SHOW_FOR_SIGN_IN
-                // the new device is signed in: the shell opens over the account the grant made, its offer over it
-                if (newDevice && s.step == me.raddatz.veyq.mobile.session.DeviceLink.Step.DONE) {
-                    viewModelScope.launch { session.signedTo?.let { show(it) } }
-                    closeLink() // cancels this watch: last
-                }
+                if (newDevice && s.step == me.raddatz.veyq.mobile.session.DeviceLink.Step.DONE) closeLink() // cancels this watch: last
             }
         }
     }

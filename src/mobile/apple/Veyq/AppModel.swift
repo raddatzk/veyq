@@ -277,6 +277,14 @@ final class AppModel {
         linkShown = made.current
         // core calls the watch on its own threads: @Sendable, back on the main actor (src/mobile/CLAUDE.md § Traps)
         nonisolated(unsafe) let watched = made
+        // the new device signed in: the shell opens over the account the grant made, its offer over it — awaited apart
+        // from the watch, which a close ends: a close while the grant is spent ends the sheet, not the sign-in (inbox #918)
+        if made.role == .scanFromTrusted || made.role == .showForSignIn {
+            let session = session
+            Task { @MainActor [weak self] in
+                if let opened = try? await session.signedInBy(link: watched) { try? await self?.show(opened) }
+            }
+        }
         linkWatch = made.watch { @Sendable shown in
             nonisolated(unsafe) let shown = shown
             Task { @MainActor [weak self] in self?.linkChanged(watched, shown) }
@@ -288,11 +296,8 @@ final class AppModel {
         guard made === link else { return }
         linkShown = shown
         NSLog("veyq-link: %@: %@%@%@", "\(made.role)", "\(shown.step)", shown.refusal.map { ", \($0)" } ?? "", shown.hint.map { ", hint \($0)" } ?? "")
-        // the new device is signed in: the shell opens over the account the grant made, its offer over it
-        if (made.role == .scanFromTrusted || made.role == .showForSignIn) && shown.step == .done {
-            closeLink()
-            Task { if let opened = session.signedTo { try? await show(opened) } }
-        }
+        // the new device is signed in: its sheet goes (the shell opens on `signedInBy`, `openLink`)
+        if (made.role == .scanFromTrusted || made.role == .showForSignIn) && shown.step == .done { closeLink() }
     }
 
     #if DEBUG

@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -1058,29 +1057,29 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     /**
-     * The new device's link from the sign-in ([link] null: no sign-in shown). Once it is done, the session it signed in
-     * is the open tenant, as a sign-in call's is ([opened]).
+     * The new device's link from the sign-in ([link] null: no sign-in shown). Once its tail signed in — also after a
+     * `Link.Close` meanwhile (core's [DeviceLink.signedIn]) —, the session it signed in is the open tenant, as a sign-in
+     * call's is ([opened]).
      */
     private fun newDeviceLink(parts: Composition<A, T>, link: DeviceLink?): Answer {
         link ?: return Answer.Refused(Answer.Why.NO_SIGN_IN)
         val id = ids.incrementAndFetch()
         links.put(id, HeldLink(link, trusted = false))
         scope.launch {
-            val end = link.state.first { it.step == DeviceLink.Step.DONE || it.step == DeviceLink.Step.ENDED }
-            if (end.step == DeviceLink.Step.DONE) parts.session.signedTo?.let { opened(it) }.also { managed(parts) }
+            if (link.signedIn()) parts.session.signedTo?.let { opened(it) }.also { managed(parts) }
         }
         return Answer.LinkOpened(id)
     }
 
     /**
-     * A link the host is done with: its watch delivers null, its scans leave the registry, and it ends — but a new
-     * device's link whose grant is being spent is left to finish (the core runs that tail to its end whatever a close
-     * says, ADR 0059 / phase 3's review), so its sign-in still opens the tenant here; it ends itself once done.
+     * A link the host is done with: its watch delivers null, its scans leave the registry, and it ends — a new device's
+     * whose grant is being spent still signs in (the core runs that tail to its end whatever a close says, ADR 0059 /
+     * phase 3's review), and [newDeviceLink] opens its tenant on [DeviceLink.signedIn], not on the state's DONE.
      */
     private fun closeLink(held: HeldLink) {
         held.open.value = false
         held.model.scan?.let { s -> scans.keys().forEach { k -> if (scans[k] === s) { scans.remove(k); linkScans.remove(k) } } }
-        if (held.model.current.step != DeviceLink.Step.FINISHING) held.model.close()
+        held.model.close()
     }
     private val noPage = Answer.Refused(Answer.Why.NO_SUCH_ACCOUNT_PAGE)
     private val noGallery = Answer.Refused(Answer.Why.NO_SUCH_GALLERY)
