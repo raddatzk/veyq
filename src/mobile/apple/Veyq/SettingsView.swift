@@ -109,6 +109,13 @@ struct SettingsView: View {
         } message: { c in
             Text(c.message)
         }
+        // the name goes into the field as the alert appears, never before presenting it: a Mac's alert keeps its text
+        // field across presentations, and a value the binding already held when it was presented again never reached
+        // that field, which showed empty (inbox #917); the change made once it shows is pushed into the live field
+        .onChange(of: renaming) { _, open in
+            guard open else { return }
+            DispatchQueue.main.async { name = state.device.label }
+        }
         .alert(say(.accountSettingsRename), isPresented: $renaming) {
             TextField(say(.accountSettingsRenamePlaceholder), text: $name)
             Button(say(.signinCancel), role: .cancel) {}
@@ -157,7 +164,7 @@ struct SettingsView: View {
                 Label(state.device.label, systemImage: Self.deviceSymbol).fontWeight(.semibold)
                 Spacer()
                 Button {
-                    name = state.device.label
+                    name = "" // the label is set once the alert shows (`onChange(of: renaming)`), so it is always a change
                     renaming = true
                 } label: {
                     Image(systemName: "pencil")
