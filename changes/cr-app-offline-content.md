@@ -3,7 +3,7 @@ id: cr-app-offline-content
 title: Content kept on the device as ciphertext — a bounded cache of what was viewed and "Available offline" — opened offline on the native apps
 status: planned
 satisfies: []
-adrs: ["0047", "0058", "0005", "0012", "0081", "0123", "0136", "0137", "0105"]
+adrs: ["0140", "0047", "0058", "0005", "0012", "0081", "0123", "0136", "0137", "0105"]
 invariants:
   - "operator-blind E2EE: the device keeps only ciphertext as the server sent it (blob frames, sealed listings, wraps), each entry sealed again under a key of this account on this device; never plaintext, never a token, never a presigned URL; decrypted only in memory on view"
   - "no plaintext at rest but where the person saves it (ADR 0047's Consequences, every app) — unchanged; what changes is that the apps now keep CIPHERTEXT by choice (a pin) or as a bounded cache, stated as such"
@@ -273,8 +273,8 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
 
 ## Phases
 
-- [ ] **1 the ADR and the docs it changes** — the next free ADR number at phase 1 (`ls docs/decisions | tail -2`;
-  `0140` at refine), titled for D1/D4 ("The apps keep content as ciphertext, sealed to the device, by choice or within
+- [x] **1 the ADR and the docs it changes** — [ADR 0140](../docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md) (the next free number,
+  `ls docs/decisions | tail -3`), titled for D1/D4 ("The apps keep content as ciphertext, sealed to the device, by choice or within
   a limit; an unlock opens it offline"), holding D1–D11 and their rejected options; ADR 0047's last Consequences point
   at it (plaintext rule unchanged, ciphertext kept by choice or bounded); ADR 0058's Consequences add that the
   escalation reaches a device's store at its next contact (D4); `src/mobile/CLAUDE.md` § Nothing on disk the app did not
@@ -335,7 +335,7 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   open the pinned Chapter and play a pinned video; then the device's store listed and grepped for a plaintext marker (a
   medium uploaded with a known byte pattern and a known name), then sign out and the directory listed empty; the app's
   container listed as § Nothing on disk the app did not choose asks. · Done when: each pass's commands and outputs are
-  in ADR NNNN's Consequences, per platform, with what could not be run named (a real device, a Copilot+ PC).
+  in ADR 0140's Consequences, per platform, with what could not be run named (a real device, a Copilot+ PC).
 
 - [ ] **7 harvest** — `help/offline.mdx` (EN and DE) gains what the apps show offline and the suspended-space case
   (D6), and a Use page "Use content offline" (`getting-started/`, EN and DE) tells the pin, the limit and the wipe, both

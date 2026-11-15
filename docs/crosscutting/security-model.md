@@ -810,7 +810,25 @@ What the rows rest on:
   simulator with Face ID enrolled, Linux in that container with gnome-keyring, Windows on that VM with the owner
   answering Hello. ADR 0123's Consequences, the device trust, records each.
 
+**The offline store** ([ADR 0140](../decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md), planned; the apps only, never the
+web): content a person viewed (within a limit they set) or made available offline, kept as ciphertext exactly as the
+server sent it, each entry sealed again under a random key of the account on this device, itself wrapped under an HKDF
+of the Master Key; file names are an HMAC of what the entry is. To open it offline the device keeps a copy of its own
+wrap (the Master Key under its unlock key, ciphertext the server holds too), so **an offline unlock is the record's
+level and nothing more**: PRESENCE asks the person, LOGIN rests on the device's sign-in, a device that keeps no trust
+gets no store. Each platform's directory is in ADR 0140 decision 3, under the protection the rows above already name.
+
 **Residuals, written here so nothing implies more:**
+- **The offline store, without the keys:** someone who reads the store's directory but cannot pass the device's unlock
+  learns the number of entries, their sizes and the store's total — never content, names or ids.
+- **The offline store, after an escalation** (accepted, owner 2026-11-15): a thief who holds the device, passes its
+  authentication at the record's level and **keeps it offline** opens what the store held when it went offline, even
+  after the owner pressed "Sign out and remove saved key" on another device ([ADR 0058](../decisions/0058-revoke-never-takes-key-material.md)):
+  the escalation removes the wrap's copy and wipes the store at the device's next contact, not before. Online the same
+  thief, before the escalation, reads everything the account reads; the store adds that window, bounded to what was kept.
+- **The offline store, replayed:** each entry is authenticated, but someone who can write the device's disk can put back
+  older store files, and the app then shows an older state offline — content the account could read at that time, never
+  another account's and never a forged one. A counter against it would live on the same rollbackable disk.
 - **Windows, a local account without a password:** the Windows sign-in authenticates nobody, so LOGIN opens the Master
   Key for anyone at the PC. The app does not ask whether the account has a password, so LOGIN is offered there too
   (not measured on such an account: the VM's has one).

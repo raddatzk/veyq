@@ -1,0 +1,248 @@
+# ADR 0140 — The apps keep content as ciphertext, sealed to the device, by choice or within a limit; an unlock opens it offline
+- Status: Accepted
+- Built: no
+- Date: 2026-11-15
+- Model: [native-apps](../crosscutting/native-apps.md)
+
+## Context
+
+The owner wants the native apps to keep content on the device, available offline (2026-11-13): a storage limit under
+which what was viewed stays as long as it fits, the least recently viewed leaving first, and content made "available
+offline" explicitly, kept until undone. The web keeps nothing and stays so.
+
+What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless named):
+
+- **Every blob read goes through one class**, `blob/ApplicationBlobs.kt`'s `FrameSource`: it presigns once, fetches each
+  frame from the store and opens it with `suite.openFrame(K_blob, i, chunkCount, frame)`; Memories' `MemoryMedia`,
+  Depot's `DepotFiles`, Expenses' `PotSession.openReceipt` and `NodeCover.open` call it
+  (`grep -rn "RangeReader(\|framesTo(\|\.frames(\|\.download(\|FrameSource(" core/src/commonMain`). A frame is 256 KiB
+  of plaintext under AES-256-GCM, its index and count in the aad
+  (`grep -n "FRAME_PLAINTEXT\s*=\|fun sealFrame\|fun openFrame" core/src/commonMain/kotlin/me/raddatz/veyq/mobile/crypto/V1.kt`).
+- **No ciphertext is kept anywhere;** plaintext is held in memory only, each cache bounded
+  (`grep -rniE "LinkedHashMap|LruCache|NSCache|HashMap<String, ByteArray>" core/src/commonMain android/src/main apple/Veyq windows/Veyq linux/src`).
+  [ADR 0047](0047-inline-video-playback-range-streaming.md)'s Consequences hold the apps to *no plaintext at rest but
+  where the person saves it*, and `src/mobile/CLAUDE.md` § Nothing on disk the app did not choose extends that to what an
+  HTTP stack keeps on its own — ciphertext included, because the app never chose to keep it.
+- **Opening an account needs the server:** `VeyqAccount.resume` refreshes the token, reads `key-material` for this
+  device's `DEVICE_KEY` wrap, then opens it; unreachable is `SignInFailure.UNREACHABLE`, and the wrap is not kept on the
+  device (`sed -n 790,835p core/src/commonMain/kotlin/me/raddatz/veyq/mobile/session/Account.kt`).
+- **The reads exist, three with a conditional answer:** `listNodes` (the scope's tree revision as `ETag`,
+  [ADR 0081](0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)), `listNodeMedia`
+  (`mediaRevision`/`deleteRevision`) and `listApplicationBlobs` (`ETag`); the core sends no `If-None-Match` to `listNodes`
+  today, and trashed nodes are not in it, they are listed by `listTrashedNodes`
+  (`grep -rn "operationId: \(listNodes\|listMyScopes\|getAccountKeyMaterial\|listNodeMedia\|listFiles\|listApplicationBlobs\|listTrashedNodes\)$" contracts/api`
+  from the repository root).
+- **A re-key keeps every `K_blob`:** `NodeRekey` re-wraps each blob key under the node's new key, so a blob's frames and
+  id survive it and only its wrap in the listing changes
+  (`sed -n 28,34p core/src/commonMain/kotlin/me/raddatz/veyq/mobile/session/NodeRekey.kt`).
+- **No offline detection, no database, no app data directory:** no platform network monitor
+  (`grep -rniE "NWPathMonitor|ConnectivityManager|isOnline" core/src bridge/src android/src/main apple/Veyq windows/Veyq linux/src`
+  → no hit), no database engine in a build file
+  (`grep -rniE "sqlite|sqldelight|room|realm|rusqlite|GRDB" --include='*.kts' --include='*.toml' --include='*.props' --include='*.yml' .`
+  → comments only), no `expect` for an app data directory (`grep -rn "expect fun\|expect val\|expect class" core/src bridge/src`).
+  The device store is string key-value per platform; `TrustMarks` keeps per-account state under a slot named by an HKDF
+  of the Master Key (`grep -n "slot" core/src/commonMain/kotlin/me/raddatz/veyq/mobile/session/TrustMarks.kt`) — the
+  precedent for a device-local value derived from it.
+- **The core knows no suspended tenant:** a suspension whose routing is withdrawn reaches the app as an unreachable
+  server (`grep -rn -i "suspended\|tenantOffline" core/src/commonMain` → no hit;
+  [uc.admin.suspend-tenant](../features/admin/use-cases/uc.admin.suspend-tenant.md)).
+
+## Decision
+
+1. **What may be kept: ciphertext as the server sent it, re-sealed, by the person's choice or within a limit.**
+   ADR 0047's rule is re-read, not reversed: decrypted plaintext stays only where the person saves it, and the HTTP stack
+   still keeps nothing. What this adds is ciphertext **the app chooses** to keep — a pin is the person's choice, the
+   automatic tier is bounded by a limit the person sets — and nothing else.
+   - **Kept:** blob frames exactly as the store served them; the bodies of an allowlist of listing reads exactly as the
+     server answered (decision 5); this account's own `key-material` answer, its wraps and sealed keys only (decision 4).
+   - **Never kept:** a token (access, refresh, share, password token), a presigned URL (a bearer credential until it
+     lapses), any answer of a write, any decrypted byte, any name or id in a file name (decision 2).
+2. **The store: one directory per account on this device, every file sealed, every name opaque.**
+   - **Its key** is a random 32-byte `K_off` per account per device, made at the store's first write and kept in the
+     store's header wrapped (AES-256-GCM) under `HKDF(masterKey, info = "veyq/v1/offline-store")` — a device-local
+     derivation as `TrustMarks`' is, and no new seal purpose in `contracts/crypto` (that table is the suite's, shared with
+     the web, which has no store). A header that does not open under the unlocked Master Key (a rotated Master Key,
+     another account's store) is **wiped and the store started empty**: the store is a copy of what the server holds,
+     never the only one.
+   - **Each entry** is `nonce12 ‖ AES-256-GCM(K_off, nonce, content, aad = "veyq/offline/v1" ‖ accountId ‖ logicalKey)`.
+     The logical key names what the entry is (server, tenant, scope, kind, id), so an entry moved under another name,
+     into another account's directory or into another store fails to open. **A file's name is
+     `hex(HMAC(K_off, logicalKey))`:** a local attacker holding a server dump cannot match a blob id or a node id to a
+     file.
+   - **A blob is one file of its frames, appended in the order fetched,** each frame sealed as an entry of its own (its
+     index in the aad), with a sealed frame index (index → offset) rewritten beside it. A video watched to minute 3 is a
+     blob file with some frames; a later read appends.
+   - **The manifest** — each entry's logical key, size, last view and pin references, and per listing its revision and
+     `asOf` — is **256 shards** by the first byte of the opaque name, each sealed and rewritten whole and atomically
+     (written beside, `fsync`, renamed) when an entry in it changes, all of it read into memory at unlock. Last-view
+     updates are batched: at most one write per shard per 30 s, and one on going to the background.
+   - **No database engine.** The store's only queries are a lookup by key and an order by last view, which the
+     in-memory manifest answers. **The manifest's load at 100,000 entries on the slowest target** (the Windows VM) is
+     measured before anything is built on the store; above 1 s the database question is reopened with that number.
+   - **The directory's name** is a random id kept in the device store beside the trusted record, so a wipe needs no key
+     and works on a locked account. **One store per account;** the tenant is part of every logical key.
+3. **Where the store lives.** The host names the directory at start, as it names the device store's path, and the core
+   does all reading and writing ([ADR 0137](0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)
+   decision 3's line); `blob/Files.kt` gains `createDirectory`, `rename`, `sync` and `freeBytes` per platform source set.
+
+   | Platform | Directory | The platform's own protection |
+   |---|---|---|
+   | Android | `noBackupFilesDir/offline/` | app-private storage under file-based encryption (credential-encrypted, so unreadable before the first unlock after boot); outside Auto Backup by its directory |
+   | iOS | `Application Support/offline/` of the app's container, never the app group (the share extension never opens the store) | `NSFileProtectionCompleteUntilFirstUserAuthentication` on the directory; `isExcludedFromBackup` |
+   | macOS | `~/Library/Application Support/<bundle id>/offline/` in the app's sandbox container | the sandbox; `isExcludedFromBackup` keeps it out of Time Machine |
+   | Windows | `%LOCALAPPDATA%\veyq\offline\` (in the MSIX, the package's redirected local data, removed with the package) | the user's profile ACLs; not roamed |
+   | Linux | `$XDG_DATA_HOME/veyq/offline/` (in the Flatpak `~/.var/app/<id>/data/veyq/offline/`) | the user's home; in the Flatpak, the sandbox |
+
+   The desktop packages ([ADR 0139](0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md))
+   keep these paths writable.
+4. **Opening offline: this device's own wrap kept locally; an escalation lands at the next contact.** Offline the server
+   cannot serve the `DEVICE_KEY` wrap, so at each online unlock the core keeps **a copy of this device's own wrap** — the
+   Master Key sealed under the device's unlock key, ciphertext the server already holds — in the device store beside the
+   record, and for the password trust (`DEVICE`) its wrap the same way. Offline, the unlock opens that copy with the
+   device's unlock key at the record's level (PRESENCE still asks the person, LOGIN still rests on the device's sign-in),
+   then the store; the identity keys and scope grants come from the kept `key-material` and `listMyScopes` answers. That
+   session holds **no token** and is read-only (decision 7).
+   - **At reconnect** the normal resume runs. A refused refresh ends the record as today and **wipes the store**; a wrap
+     the server no longer serves (another device's "Sign out and remove saved key",
+     [ADR 0058](0058-revoke-never-takes-key-material.md) decision 2) **removes the local copy and wipes the store**. The
+     escalation still restores the Secret-Key floor — at the device's next contact instead of its next sign-in. The
+     device's own key material stays as [uc.account.trust-device](../features/account/use-cases/uc.account.trust-device.md)
+     E1 keeps it (its unlock and bind keys are never removed on a server's answer), so an operator who withholds the
+     wrap costs the device only its copy and its store — a copy of what that server holds anyway.
+   - **The residual, accepted (owner 2026-11-15):** a thief who holds the device, passes its authentication at the
+     record's level and **keeps it offline** opens what the store held when it went offline, even after the owner
+     escalated from another device. The same thief online, before the escalation, reads everything the account reads;
+     the store adds only the window after the escalation, bounded to what was kept.
+   - **A device that keeps no trust** (every start with the Secret Key) gets no store: the feature is not offered there,
+     and its Settings section says why.
+5. **The read path: the server first when reachable, the store as a copy of its answer.**
+   - **Which reads are kept** is one allowlist in the core: `getAccountKeyMaterial` (wraps and sealed keys only),
+     `listMyScopes`, `listNodes` per scope, `listNodeMedia` per Memory, `listFiles` per folder, `listApplicationBlobs` per
+     node, and blob frames. A test derives the allowlisted answers' models from the generated client and fails on any
+     field whose name or contract description marks a token or a URL — the set is derived, not listed by hand.
+   - **Online, the server's answer replaces the kept one — never merged.** Where a read has a revision, the core sends
+     the kept one as `If-None-Match`, and a `304` marks the kept body current. Nothing kept is ever shown beside a newer
+     answer, and after each replace a sweep drops what the current answers no longer reach (decision 6) — so a trashed or
+     revoked item cannot come back from an old copy.
+   - **Offline,** each screen model reads the kept answer of the same read, opens it with the same code, and carries
+     `offline: asOf`, the local time the server last confirmed it. A blob not kept is a tile without a picture and a
+     lightbox that says it is not available offline; a medium plays the frames kept and stops where they end.
+   - **Reachability is the core's, from request outcomes:** a transport failure (mapped to one `Unreachable` type in
+     `VeyqAccount.call`) turns the account offline; a probe (`GET /api/setup` on the existing `LivePoll` backoff, 5 s to
+     60 s) turns it online and refreshes the shell. A host may later nudge the probe.
+   - **The local copy's integrity:** each entry is authenticated (decision 2). **A local attacker who replays older
+     store files can show an older state offline** — content the account could read then, never another account's and
+     never a forged one. A residual: a monotonic counter would live on the same rollbackable disk.
+6. **Revocation, re-key, tenants: what the sweep drops.** After each online replace an entry stays only while a current
+   kept answer reaches it, marked from `listMyScopes` down through the listings to the blobs; a pinned entry is reached
+   through its pin, and the pin is dropped when its node is no longer reached.
+   - **A trashed node or medium, a removed membership** (the scope gone from `listMyScopes`, or `listNodes` answering
+     `403`/`404`), **a link or share no longer held, a tenant left:** its listings, blobs and pins go, a pin with the
+     notice that it is no longer available.
+   - **A re-key** (`NodeRekey`, a scope rotation, [ADR 0109](0109-a-scope-rotation-re-keys-every-node-below-it.md)):
+     the listings are re-read; the frames stay, since `K_blob` is kept, so nothing is refetched. A kept frame is opened
+     only with the wrap from the current listing.
+   - **A replaced file** (a new blob id): the old blob is no longer reached and goes.
+   - **A node the operator blocked** (`blockedByOperator`) **and a tenant the server answers as suspended**
+     ([ADR 0066](0066-tenant-suspension.md)): the safe side — what is kept below it is not shown and the automatic tier's
+     entries there are dropped; a pin stays as "not available right now" without content and fetches again once the
+     server serves it. Kept ciphertext is never a way around a hold or a suspension the server states.
+   - **Offline nothing is swept.** A suspension that withdraws the tenant's routing looks exactly like offline to the
+     app, so the kept content shows until the app reaches the server's refusal. Our reading (accepted, owner
+     2026-11-15), not a reviewed answer: a hold or a suspension stops the server making content available; the member's
+     own device copy was already delivered to them, as a saved file would be, and the app hides it the moment the server
+     says so.
+7. **Offline is read-only; no write is queued.** Every write a screen model offers is refused offline with one notice
+   (`offline_read_only`), its control disabled where the model's state says so.
+8. **Eviction and the limit.**
+   - **The unit** is an entry: a blob file (whatever frames it holds) or a kept listing. Its last view is set when a tile
+     is drawn, a preview or file shown, a reader read, a listing opened.
+   - **The limit** is per account on this device, set on the account's Settings page; `0` turns the automatic tier off,
+     and pins still work. **The default is 2 GB on phones and 10 GB on desktops, and the person sets any size**, not one
+     of a list of steps (owner 2026-11-15).
+   - **Lowering the limit** below what the automatic tier holds **evicts at once** down to it, not at the next write
+     (owner 2026-11-15). Pins are never evicted by it.
+   - **Eviction** runs after a write that takes the automatic tier over the limit: least recently viewed first, pinned
+     entries never, down to 90 % of the limit. A single video larger than a quarter of the limit is not kept by the
+     automatic tier — it would evict everything else; its frames still stream.
+   - **Originals** (owner 2026-11-15): an original is kept only where the app reads one to show the item — today a
+     video's frames and a Depot file, which has no other tier. **A photo's original is never kept by either tier;** its
+     preview stands in, as it does online. Where a later tier replaces a video's original for playback, that tier is
+     kept instead.
+   - **Pins count** in what is used and are shown apart; they may exceed the limit, and then the automatic tier keeps
+     nothing. **A free-space floor:** neither tier writes while the volume has less than 5 % free; a pin then pauses and
+     says so.
+   - "Clear cache" drops the automatic tier only; "Remove all offline content" drops the pins too, asked first.
+9. **Pins and their sync.**
+   - **What can be pinned:** a Memory, a Chapter, a folder (everything below it the built applications open) and a file,
+     through the header's "Available offline" toggle, offered where the node's kind declares it through the registry
+     (`AppKinds`) — never by core calling an application.
+   - **A pin fetches whole:** the listings below the node, every tile and preview, and the originals decision 8 keeps
+     (a video's, a Depot file's, never a photo's), with progress and resumable (a blob file appends; a restart
+     continues); the size is shown and confirmed before the first byte.
+   - **Sync:** at each online open of the account and on each live poll that sees a pinned node's revision move
+     (`listNodes`' `ETag`, `listNodeMedia`'s `mediaRevision`), the pin re-reads its listings and fetches what is new; what
+     left is swept (decision 6).
+   - **When it runs:** while the app runs with the account unlocked — the desktops whenever they run; Android as a
+     WorkManager worker in the app's process, promoted to a `dataSync` foreground service with a notification while a
+     pin fetches; iOS in the foreground and in the time `beginBackgroundTask` grants after it (and
+     `BGContinuedProcessingTask` where the system has it, measured before it is relied on). A scheduled wake-up while the
+     app is not running would need the Master Key without the person and is not part of this decision.
+10. **Where the person sees and sets it.**
+    - **The account's Settings page** gains "Storage on this device" (de: "Speicher auf diesem Gerät"): the limit (a free
+      size field and Off), what the automatic tier and the pins use, the volume's free space, the pinned items (each
+      removable), "Clear cache", "Remove all offline content".
+    - **A node's header** carries "Available offline" (de: "Offline verfügbar") with its state: fetching n of m, kept,
+      paused for lack of space.
+    - **Offline,** the shell's banner says "Offline — content as of {time}" (de: "Offline — Stand {time}") and every
+      write is disabled. The copy is the owner's (2026-11-15); every word lives in `src/mobile/words/words.json`.
+    - **The web: nothing.** It keeps no content and offers no offline page.
+11. **Wipe.** The store's directory is removed — every file, then the directory, then its id in the device store — at the
+    account's sign-out (both trust methods), "Stop trusting this device", removing the device, a refused refresh at
+    resume, a wrap no longer served (decision 4) and "Remove all offline content". A wipe a crash interrupted is finished
+    at the next start, because the id goes last. `TrustMarks` stay: they are not content.
+
+## Consequences
+
+- **The apps now keep ciphertext on disk, and the docs say so.** ADR 0047's Consequences and `src/mobile/CLAUDE.md`
+  § Nothing on disk the app did not choose name the store as the one thing the app chooses to keep; the HTTP stack's
+  rule is unchanged. The web is unchanged.
+- **What a local attacker without the keys learns:** the number of entries, their sizes and the store's total — never
+  content, names or ids. With the device's unlock at the record's level, decision 4's window and decision 5's replay
+  are the two residuals; [security-model](../crosscutting/security-model.md) § What a trusted device rests on, per
+  platform names both.
+- **ADR 0058's escalation reaches a device's store at its next contact,** not the moment it is pressed; its
+  Consequences say so.
+- **No contract, backend or web change:** every read the store keeps exists. The core gains a store, a reachability
+  state, an offline unlock and a read path per screen model; the bridge carries sizes, states and `asOf`, never a key,
+  seal or token (`SecretFreeSchemaTest`, [ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)
+  decisions 1 and 2).
+- **A device whose trust is the Secret Key at every start gets no offline content** — the cost of decision 4.
+- **Left out, each an inbox row:** writes made offline and sent later (#897, a conflict model per application); a
+  scheduled sync of pins while the app is not running (#896); Expenses offline (#898).
+
+## Alternatives considered
+
+- **Keeping decrypted tiles** (cheaper to show) — a plaintext copy at rest is exactly what ADR 0047 forbids, and the
+  reason the apps measured their `cache/` empty.
+- **An HTTP-level cache** (URLCache, OkHttp's) — it keys by URL, keeps tokens and headers, and is what the apps removed
+  on purpose (`src/mobile/CLAUDE.md` § Nothing on disk the app did not choose).
+- **An HKDF of the Master Key as the entry key itself** — a Master Key rotation would strand every entry with no rewrap
+  path; a random key with a wipe on mismatch costs one refetch.
+- **A frame per file** (4,000 files for a 1 GB video) and **a preallocated blob file with fixed slots** — sparse files
+  are not sparse on every file system the apps run on, and a fixed slot would show the blob's chunk count before a frame
+  is fetched.
+- **SQLite** — no driver is in the tree, Kotlin/Native would need one for five targets including `mingwX64` (whose
+  build of one the refine could not read from a linked artifact, so it is not claimed), and the store's two queries need
+  none; reopened only if decision 2's measurement fails.
+- **A cache directory** (`cacheDir`, `Library/Caches`, `$XDG_CACHE_HOME`) — the system or a cleaner may purge it, and a
+  pin promises to stay; the automatic tier would fit there, but two directories double the wipe paths for no gain.
+- **Opening offline only while the account stays open in memory** — a phone kills a background app within minutes, so
+  the feature would not exist on phones.
+- **An offline grace period read from the device clock** — the thief sets the clock.
+- **Merging a newer answer into the kept one** — an old copy would bring back a trashed or revoked item.
+- **The platforms' network monitors** (`NWPathMonitor`, `ConnectivityManager`) — the request outcomes already say it,
+  in one place for every platform.
+- **Queuing writes made offline** — each application would need a conflict model (revisions, epochs, re-keys while
+  offline); inbox #897.
+- **A list of limit steps** (Off, 500 MB … 50 GB) — the owner chose a free size (2026-11-15).
