@@ -1087,8 +1087,8 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   `.` or `,` — a decimal goes in by `set`, a UIA `set` while a form rebuilds may land on the box it replaces (wait for the
   rebuild), a UIA `select` leaves a `ComboBox`'s drop-down open, and an `AutoSuggestBox`'s inner box is `#TextBox`
   (Search's too): reach it by `press ed-date tab tab`.
-- Windows Settings "jumped back to the rename box after a UIA scroll" (phase 5's pass) is the drive's, not the app's
-  (measured 2026-11-15, offline CR phase 6): right after the page opens its first box holds the focus, and UIA's
+- Windows Settings "jumped back to the rename box after a UIA scroll" (a click-through's finding) is the drive's, not the app's
+  (measured 2026-11-15, ADR 0140's Windows pass): right after the page opens its first box holds the focus, and UIA's
   `SetScrollPercent(100)` then lands at 5.5 %, where that box stays in view; the mouse wheel (`wheel`) scrolled the same
   page to 31 % and it stayed, with the focus still in the box, and a `scroll` after the box was focused by UIA stayed at
   100 %. Scroll a WinUI page with `wheel` and read where it stands. A view's UIA rectangle can reach past the window

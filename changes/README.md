@@ -2310,6 +2310,25 @@ tag could not be retried, since its own checks refuse an existing tag. The build
 publication and added the `refused` job that rolls a half-done run back. So a refine of a workflow with more than one
 write lists, for each write, what a failure just after it leaves and which job or person restores it.
 
+### A device-local path is passed from every way the device can have been left
+
+The offline-content CR's core tests
+([ADR 0140](../docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md))
+opened the account offline after an online **unlock**, and they were green; the Linux pass signed in, closed the app
+and found nothing would open offline, because only an unlock had kept the server's instance salt that a
+password-trusted offline unlock needs. The same pass found that an account opened offline read no pins: every pin test
+had started online. A feature that runs from what the device kept is entered in as many ways as the device can have
+been left — signed in and closed, unlocked and closed, killed while fetching, opened offline first — and the CR lists
+them in its tests' done-when, not only the path the refine drew.
+
+### A first measurement is checked for its instrument before the phase is planned on it
+
+The same CR planned phase 4 to begin by measuring, on the simulator, whether `BGContinuedProcessingTask` exists. The
+framework's own header says the simulator supports no background processing at all, so the simulator could tell only
+that the symbol compiles; what mattered (a submit accepted, the time granted) moved to a real iPhone, a step the
+owner's. A refine that names a measurement reads what the instrument can observe — the header, the tool's docs, one
+dry run — and names a device that can answer, or says no device here can.
+
 ### A done-when names the proof; a command is one way to get it
 
 The same CR's phase 1 named `run_pipeline.py --job version` as its bar, and the phase's brief forbade pipeline runs
