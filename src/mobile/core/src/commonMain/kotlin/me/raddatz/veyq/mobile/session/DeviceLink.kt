@@ -227,7 +227,7 @@ class DeviceLink private constructor(
     @Volatile
     private var drawn: String? = null
 
-    /** [Role.SCAN_SIGN_IN_CODE], [Role.SCAN_FROM_TRUSTED]: the camera's scan, the link's own (cr-core-qr-decoder D3). */
+    /** [Role.SCAN_SIGN_IN_CODE], [Role.SCAN_FROM_TRUSTED]: the camera's scan, the link's own (ADR 0141 decision 3). */
     val scan: QrScan<Unit>? =
         if (role == Role.SCAN_SIGN_IN_CODE || role == Role.SCAN_FROM_TRUSTED) QrScan(accepts = ::scanned, decode = decode, scope = scope) else null
 

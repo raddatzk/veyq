@@ -42,9 +42,9 @@ internal static class TrustWords
 
     /// <summary>The offer's answers, in order: each level the core offers (Gate.Signed.offer, in the core's order), then
     /// "Not now" (null) — each with its title and line.</summary>
-    public static IReadOnlyList<(StaySignedIn? Level, string Title, string Hint)> Offer(IEnumerable<StaySignedIn> levels) =>
+    public static IReadOnlyList<(StaySignedIn? Level, string Title, string Hint)> Offer(IEnumerable<StaySignedIn> levels, bool linked = false) =>
         levels.Select(l => ((StaySignedIn?)l, Level(l).Title, Level(l).Hint))
-            .Append((null, Words.OfferNotNow(), Words.OfferNotNowHint()))
+            .Append((null, Words.OfferNotNow(), linked ? Words.OfferNotNowLinkedHint() : Words.OfferNotNowHint()))
             .ToList();
 
     /// <summary>The changes "Manage servers" lists for a server trusted by <paramref name="method"/> at

@@ -21,7 +21,9 @@ internal sealed class OfferView
     private readonly StackPanel _choices = new() { Spacing = 8 };
     private readonly ProgressRing _working;
     private readonly Action<string> _said;
-    private List<StaySignedIn> _shown = [];
+    /// <summary>The levels drawn last and whether the offer followed a device link; null before the first draw (an offer
+    /// with no level at all still draws its "Not now").</summary>
+    private (List<StaySignedIn> Levels, bool Linked)? _shown;
     private readonly List<Button> _buttons = [];
 
     public UIElement Page { get; }
@@ -52,15 +54,16 @@ internal sealed class OfferView
         Page = new ScrollViewer { Content = stretch, HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
     }
 
-    /// <summary>Draws <paramref name="offer"/>'s levels; the buttons are built anew only when they change.</summary>
+    /// <summary>Draws <paramref name="offer"/>'s levels; the buttons are built anew only when they change. After a device
+    /// link "Not now" says the device got no password (ADR 0059 §10).</summary>
     public void Show(Offer offer)
     {
-        if (_shown.SequenceEqual(offer.levels)) return;
-        _shown = [.. offer.levels];
+        if (_shown is { } shown && shown.Linked == offer.linked && shown.Levels.SequenceEqual(offer.levels)) return;
+        _shown = ([.. offer.levels], offer.linked);
         _choices.Children.Clear();
         _buttons.Clear();
         var first = true;
-        foreach (var (level, title, hint) in TrustWords.Offer(offer.levels))
+        foreach (var (level, title, hint) in TrustWords.Offer(offer.levels, offer.linked))
         {
             var content = new StackPanel { Spacing = 2 };
             content.Children.Add(new TextBlock { Text = title, Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"], TextWrapping = TextWrapping.Wrap });
