@@ -9,6 +9,10 @@
 // went, and another follows a file's Save a copy with its progress and Cancel. A list keeps where it was scrolled to when
 // the shell draws it anew — after an object opened from it closed, after an update — by its place (ListScrolls).
 //
+// Offline (ADR 0140 decision 10) an InfoBar under the bar says so, as of when (ShellShown.offlineBanner), not closable while
+// it lasts; New is not offered then and the header's writes are gone (the core's). An item no longer available offline
+// (ShellModel.State's gone) is said once in an InfoBar of its own, then told seen (Shell.OfflineGoneSeen).
+//
 // Every state is the core's (ShellModel.State and ShellShown); every action one call. Which item is selected, whether
 // back is enabled and what the title says follow the state, as Linux's shell.rs draws it.
 using System;
@@ -37,6 +41,11 @@ internal sealed class ShellView
     private readonly CommandBar _commands;
     private readonly PersonPicture _me;
     private readonly InfoBar _said;
+    /// <summary>"Offline — content as of …", open while the core shows the lists from the offline store.</summary>
+    private readonly InfoBar _offline;
+    /// <summary>The items no longer available offline, said once; and what it said last.</summary>
+    private readonly InfoBar _gone;
+    private string _goneSaid = "";
     /// <summary>A file's Save a copy under way: its progress and Cancel (Watched.Save, Save.Cancel), then how it ended.</summary>
     private readonly InfoBar _saving;
     /// <summary>What the uploads say once (a folder's outcome, a replace offered with its action).</summary>
@@ -128,6 +137,10 @@ internal sealed class ShellView
         head.Children.Add(_title);
         Grid.SetColumn(_commands, 1);
         head.Children.Add(_commands);
+        _offline = new InfoBar { IsOpen = false, IsClosable = false, Severity = InfoBarSeverity.Warning, Margin = new Thickness(12, 0, 12, 4) };
+        AutomationProperties.SetAutomationId(_offline, "offline-banner");
+        _gone = new InfoBar { IsOpen = false, IsClosable = true, Severity = InfoBarSeverity.Informational, Margin = new Thickness(12, 0, 12, 4) };
+        AutomationProperties.SetAutomationId(_gone, "offline-gone");
         _said = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
         AutomationProperties.SetAutomationId(_said, "said");
         _saving = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
@@ -141,15 +154,21 @@ internal sealed class ShellView
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         content.Children.Add(head);
-        Grid.SetRow(_said, 1);
+        Grid.SetRow(_offline, 1);
+        content.Children.Add(_offline);
+        Grid.SetRow(_gone, 2);
+        content.Children.Add(_gone);
+        Grid.SetRow(_said, 3);
         content.Children.Add(_said);
-        Grid.SetRow(_saving, 2);
+        Grid.SetRow(_saving, 4);
         content.Children.Add(_saving);
-        Grid.SetRow(_offer, 3);
+        Grid.SetRow(_offer, 5);
         content.Children.Add(_offer);
-        Grid.SetRow(_body, 4);
+        Grid.SetRow(_body, 6);
         content.Children.Add(_body);
 
         _nav = new NavigationView
@@ -364,12 +383,29 @@ internal sealed class ShellView
         _started = true;
         _state = state;
         Avatars.Listed($"{shown.connection}\n{shown.tenant.tenantId}", shown.pictures);
+        DrawOffline(state, shown);
         DrawSwitcher(state, shown);
         DrawPane(state, shown);
         DrawContent(state, shown);
         // the lists changed under a standing query: its hits anew
         if (_hits is not null && _search.Text.Length > 0) Query(_search.Text);
         if (first && shown.drawerOpensAtStart && _nav.DisplayMode != NavigationViewDisplayMode.Expanded) _nav.IsPaneOpen = true;
+    }
+
+    /// <summary>The offline banner, and each item no longer available offline said once, then told seen.</summary>
+    private void DrawOffline(ShellModelState state, ShellShown shown)
+    {
+        _offline.Message = shown.offlineBanner is { } b ? Said.Notice(b) : "";
+        _offline.IsOpen = shown.offlineBanner is not null;
+        // compared as said: a record's list compares by reference, and each update is read anew
+        var said = string.Join("\n", state.gone.Select(Said.Notice));
+        if (said == _goneSaid) return;
+        _goneSaid = said;
+        if (state.gone.Count == 0) return;
+        foreach (var n in state.gone) Log.Write($"offline gone: {n.msg}");
+        _gone.Message = said;
+        _gone.IsOpen = true;
+        Act.Send(new Call.ShellOfflineGoneSeen());
     }
 
     /// <summary>The switcher: the space shown and its tenant and server; the spaces, then each server's tenants in its

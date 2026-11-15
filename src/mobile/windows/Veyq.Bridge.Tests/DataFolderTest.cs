@@ -28,6 +28,9 @@ public sealed class DataFolderTest
                 DeviceStore.OpenIn(packaged).Answer(new HostRequest.StoreRead { name = "trusted" }));
 
             Assert.AreEqual(Path.Combine(localAppData, "veyq"), DataFolder.Resolve(null, localAppData));
+            // the offline stores live in whichever data folder this process has, the package's under the MSIX
+            Assert.AreEqual(Path.Combine(packageFolder, "offline"), DataFolder.Offline(packaged));
+            Assert.AreEqual(Path.Combine(localAppData, "veyq", "offline"), DataFolder.Offline(DataFolder.Resolve(null, localAppData)));
             Assert.AreEqual(new HostReply.Value { value = "dev" },
                 DeviceStore.OpenIn(DataFolder.Resolve(null, localAppData)).Answer(new HostRequest.StoreRead { name = "trusted" }));
         }

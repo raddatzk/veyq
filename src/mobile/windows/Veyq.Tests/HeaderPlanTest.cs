@@ -17,6 +17,8 @@ public sealed class HeaderPlanTest
         Assert.IsTrue(HeaderPlan.ByPage("download", "FILE"), "a file's download is its page's Save a copy");
         Assert.IsTrue(HeaderPlan.IsDrawn("replace", "FILE"), "a file's own Replace is drawn (its page does it)");
         Assert.IsTrue(HeaderPlan.IsDrawn("upload", "MEMORY") && HeaderPlan.IsDrawn("upload", "CHAPTER"), "a Memory's own Add photos is drawn (its page does it)");
+        Assert.IsTrue(HeaderPlan.IsDrawn("offline", "MEMORY") && HeaderPlan.IsDrawn("offline", "FOLDER"), "Available offline is drawn, a toggle among the secondary commands");
+        Assert.IsFalse(HeaderPlan.ByPage("offline", "FILE"), "Available offline is the header's own");
         Assert.IsTrue(HeaderPlan.ByPage("download", "EXPENSES_POT"));
         Assert.IsFalse(HeaderPlan.ByPage("download", "FOLDER"), "a folder's download is the header's ZIP");
         Assert.IsFalse(HeaderPlan.IsDrawn("an-applications-own", "FOLDER"), "an application's own action is its page's");

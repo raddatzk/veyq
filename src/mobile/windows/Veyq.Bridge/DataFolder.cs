@@ -3,7 +3,7 @@ using System.IO;
 namespace Veyq.Bridge;
 
 /// <summary>
-/// Where the app keeps its data on this device (the device store, the log). The packaged app (the MSIX) keeps it in its
+/// Where the app keeps its data on this device (the device store, the log, the offline stores). The packaged app (the MSIX) keeps it in its
 /// package's own folder (<c>ApplicationData.Current.LocalFolder</c>: <c>%LOCALAPPDATA%\Packages\&lt;family&gt;\LocalState</c>),
 /// so it starts as a clean install does and its uninstall takes it along; an unpackaged build (the development loop's)
 /// keeps it in <c>%LOCALAPPDATA%\veyq\</c>. The two never share it: a packaged app left to plain <c>%LOCALAPPDATA%</c>
@@ -22,4 +22,15 @@ public static class DataFolder
     /// </summary>
     public static string Resolve(string? packageLocalFolder, string localAppData) =>
         string.IsNullOrEmpty(packageLocalFolder) ? Unpackaged(localAppData) : packageLocalFolder;
+
+    /// <summary>
+    /// The accounts' offline stores (ADR 0140 decision 3) in <paramref name="dataFolder"/> (<see cref="Resolve"/>'s):
+    /// <c>%LOCALAPPDATA%\veyq\offline</c> unpackaged, the package's own <c>LocalState\offline</c> under the MSIX — removed
+    /// with the package, never roamed. The core makes it and fills it; the data folder is made here first.
+    /// </summary>
+    public static string Offline(string dataFolder)
+    {
+        Directory.CreateDirectory(dataFolder);
+        return Path.Combine(dataFolder, "offline");
+    }
 }
