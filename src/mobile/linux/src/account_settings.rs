@@ -180,7 +180,7 @@ impl Page {
         p
     }
 
-    /// Opens the device link [make] builds for this page's account over the dialog (`cr-app-device-linking`).
+    /// Opens the device link [make] builds for this page's account over the dialog (ADR 0059).
     fn link(&self, make: impl FnOnce(String) -> Call) {
         let Some(connection) = self.connection.borrow().clone() else {
             eprintln!("veyq: settings add a device: no account in the core");

@@ -78,7 +78,7 @@ import me.raddatz.veyq.mobile.session.DeviceLink.Role
 import me.raddatz.veyq.mobile.session.DeviceLink.Step
 
 /**
- * One device-linking ceremony on screen (ADR 0059; `cr-app-device-linking` phase 4), in any of its four roles: core's
+ * One device-linking ceremony on screen (ADR 0059), in any of its four roles: core's
  * [DeviceLink] decides every step, this draws its state and hands the person's acts back — the camera into its scan, the
  * six digits typed ([DeviceLink.enterCode]), the slide's end ([DeviceLink.confirm]), [onClose] (which closes the link).
  *
@@ -181,7 +181,7 @@ private fun Waiting(text: Int?) {
     }
 }
 
-/** The hint core raises once the other device has been silent for the first window (D4, Decided 2). */
+/** The hint core raises once the other device has been silent for the first window (both devices must use the same server, ADR 0059 §4). */
 @Composable
 private fun SameServer(shown: DeviceLink.Shown) {
     if (shown.hint == DeviceLink.Hint.SAME_SERVER) Copy(R.string.link_same_server, MaterialTheme.colorScheme.onSurfaceVariant)
@@ -287,7 +287,7 @@ private fun Confirming(link: DeviceLink, shown: DeviceLink.Shown, onClose: () ->
 }
 
 /**
- * The slide that confirms (ADR 0059 §7, D5): Material's [Slider] that confirms only at its end and springs back
+ * The slide that confirms (ADR 0059 §7, ADR 0136's Consequences): Material's [Slider] that confirms only at its end and springs back
  * otherwise — a deliberate gesture, not a tap. Keyboard: the arrow keys move it, Return at the end confirms (a key that
  * moves it never confirms by itself). A screen reader hears [sentence] and confirms through the custom action of that
  * name. [onConfirm] answers whether the link moved on; one that did not (a blank name) springs back.

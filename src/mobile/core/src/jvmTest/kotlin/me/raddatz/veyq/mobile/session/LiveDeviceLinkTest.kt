@@ -40,7 +40,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 
 /**
- * Device linking (`cr-app-device-linking` phase 3) against a running dev instance (`VEYQ_LIVE`), as the seeded principal
+ * Device linking (ADR 0059) against a running dev instance (`VEYQ_LIVE`), as the seeded principal
  * (`VEYQ_ENV_FILE`, or `.run/.env`). Both sides are core clients: the trusted one a fresh login of the principal, the new
  * one a device with no session. Only the families these cases create are touched — never the principal's other
  * sessions —, and every device they sign in with is taken off the account after each case (`LiveRun`). Without

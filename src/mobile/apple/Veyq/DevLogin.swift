@@ -22,7 +22,7 @@ enum DevLogin {
     }
 
     /// `VEYQ_DEV_LINK=show|scan|signin-scan|signin-show`: a device-linking pass where nothing may tap
-    /// (`cr-app-device-linking` phase 4). Once the app is signed in (`show`, `scan`: Settings' two entries) or shows its
+    /// (ADR 0059). Once the app is signed in (`show`, `scan`: Settings' two entries) or shows its
     /// sign-in (`signin-…`: the form's two entries, over `VEYQ_DEV_SERVER` or the dev backend) it opens that ceremony as
     /// its button does. `VEYQ_DEV_LINK_DIR=<dir>` is where the pass reads the screen and answers in the person's place:
     /// the app writes the code it shows (`app-code.png`) and the number or six digits on screen (`app-shown.txt`); the

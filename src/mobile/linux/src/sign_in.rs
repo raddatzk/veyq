@@ -10,7 +10,7 @@
 //! way the gate's `kit` fills the email and the server and the Secret Key row says "From your Emergency Kit" — the key
 //! itself the core holds, never this side.
 //!
-//! Below them the two ways in from another device (ADR 0059 §1; `cr-app-device-linking`): "Scan a code from another
+//! Below them the two ways in from another device (ADR 0059 §1): "Scan a code from another
 //! device", only where a camera is, and "Sign in with a QR code" — each a ceremony of [crate::device_link] over the
 //! server the form names (nothing a scan reads changes it).
 use std::cell::{Cell, RefCell};

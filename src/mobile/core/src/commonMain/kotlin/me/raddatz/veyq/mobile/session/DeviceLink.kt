@@ -51,7 +51,7 @@ import me.raddatz.veyq.mobile.qr.QrScan
 import kotlin.concurrent.Volatile
 
 /**
- * One device-linking ceremony (ADR 0059; `cr-app-device-linking` D4), in one of its four roles — the web's
+ * One device-linking ceremony (ADR 0059; ADR 0136's Consequences), in one of its four roles — the web's
  * `AddDevicePanel` (both trusted arms), `JoinDeviceCard` and `SignInWithCodeCard` (the new device's), call for call:
  *
  * | | Add a new device | Sign in with a QR code |
@@ -206,7 +206,7 @@ class DeviceLink private constructor(
      * The new device's sign-in by this link: true once its tail signed the account in, false once the link ended without
      * one (a refusal, a close before [Step.FINISHING], the trusted device's roles always). It outlives the screen: a close
      * in [Step.FINISHING] ends [state] as [Step.ENDED] while the tail still signs in (the spent token's successor must be
-     * kept), so a UI that opens the account on [Step.DONE] would never open it (inbox #918). What opens the shell is this.
+     * kept), so a UI that opens the account on [Step.DONE] would never open it (ADR 0136's Consequences). What opens the shell is this.
      */
     suspend fun signedIn(): Boolean = signedInBy.await()
 
@@ -465,7 +465,7 @@ class DeviceLink private constructor(
         try {
             // the token is spent here: the tail runs to its end even when the screen closes meanwhile, so a spent token's
             // successor is always kept (a close in FINISHING ends the screen, not the sign-in)
-            // its end is said inside the block: once a close cancelled the link, what follows it need not run (#918)
+            // its end is said inside the block: once a close cancelled the link, what follows it need not run
             withContext(NonCancellable) {
                 try {
                     receive!!(grant)

@@ -1,4 +1,4 @@
-// One device-linking ceremony on screen (ADR 0059; cr-app-device-linking phase 6), in any of its four roles: the core's
+// One device-linking ceremony on screen (ADR 0059), in any of its four roles: the core's
 // DeviceLink decides every step (Link.*, Watched.Link: LinkShown), this draws its state in a ContentDialog and hands the
 // person's acts back — the camera into the link's own scan (QrCamera.OpenLink), the six digits typed (Link.EnterCode),
 // the slide's end (Link.Confirm) and the close (Link.Close). Linux's device_link.rs and Android's DeviceLinkScreen, in
@@ -10,7 +10,7 @@
 // desktop behind the window while it shows. A new device's link that is done needs nothing here: the bridge opens the
 // account it signed in, the session's gate moves on under the dialog, which then closes.
 //
-// The slide (ADR 0059 §7, D5) is a Slider that confirms only when a pointer gesture that began at its start (≤ 15 %) ends
+// The slide (ADR 0059 §7, ADR 0136's Consequences) is a Slider that confirms only when a pointer gesture that began at its start (≤ 15 %) ends
 // at its end (≥ 98 %), and springs back otherwise — a click on the track's end moves it there in one move and does not
 // confirm, nor does a UIA RangeValue set. Keyboard: the arrow keys move it in ten steps, Enter at the end confirms; Home,
 // End and the Page keys are taken and move nothing. UIA offers no named action of its own in WinUI, so Narrator reads the
@@ -523,7 +523,7 @@ internal sealed class DeviceLinkDialog
         return t;
     }
 
-    /// <summary>The slide (D5): a slider from 0 to 1 that confirms only by a gesture carried from its start to its end, or
+    /// <summary>The slide (ADR 0059 §7): a slider from 0 to 1 that confirms only by a gesture carried from its start to its end, or
     /// by the arrow keys to the end and Enter. The sentence it confirms is its label, for the eye and for Narrator.</summary>
     private sealed class Slide
     {

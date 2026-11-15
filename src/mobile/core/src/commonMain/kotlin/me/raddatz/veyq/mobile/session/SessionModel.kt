@@ -392,7 +392,7 @@ class SessionModel<A : Connection, T : Any>(
     /**
      * The account [link] (a new device's, from [scanFromTrusted] or [showForSignIn]) signed in, once its tail did — also
      * when its screen closed meanwhile ([DeviceLink.signedIn]) —, or null where it ended without. The shell opens on this,
-     * never on the link's [DeviceLink.Step.DONE] (inbox #918).
+     * never on the link's [DeviceLink.Step.DONE] (ADR 0136's Consequences).
      */
     suspend fun signedInBy(link: DeviceLink): Opened<A, T>? = if (link.signedIn()) signedTo else null
 

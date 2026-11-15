@@ -687,7 +687,7 @@ internal sealed class Call {
     @Serializable @SerialName("Scan.Close") data class ScanClose(val scan: Long) : Call()
 
     /**
-     * A device link (ADR 0059; core's `DeviceLink`, `cr-app-device-linking` D6), answered with its id ([Answer.LinkOpened])
+     * A device link (ADR 0059; core's `DeviceLink`, ADR 0136's Consequences), answered with its id ([Answer.LinkOpened])
      * for [Watched.Link] and the `Link.*` calls. The trusted device's two, from Settings' "Add a device" over the
      * connection whose key is [connection] — *add a new device* shows a code, *sign in with a QR code* scans one —, need
      * a tenant open and close with it (refused `NO_TENANT_OPEN`, `NO_SUCH_CONNECTION`).

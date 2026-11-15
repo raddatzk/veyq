@@ -3127,7 +3127,7 @@
     "de": "dieses Gerät"
   },
   "link_slide_keys": {
-    "note": "under the slide: how a keyboard confirms it (cr-app-device-linking D5); no web twin",
+    "note": "under the slide: how a keyboard confirms it (ADR 0059 §7); no web twin",
     "en": "Arrow keys to the end, then Return",
     "de": "Pfeiltasten bis zum Ende, dann Eingabetaste"
   },
@@ -3192,7 +3192,7 @@
     "de": "Dieser Server verknüpft keine Geräte."
   },
   "link_same_server": {
-    "note": "cr-app-device-linking D4 and Decided 2: shown after the first poll window, or when the server does not know the channel",
+    "note": "two devices on different servers never meet (ADR 0059 §4): shown after the first poll window, or when the server does not know the channel",
     "en": "No answer yet? Both devices must use the same server.",
     "de": "Noch keine Antwort? Beide Geräte müssen denselben Server verwenden."
   },

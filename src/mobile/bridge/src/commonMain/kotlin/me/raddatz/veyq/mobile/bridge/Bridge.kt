@@ -1073,8 +1073,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     /**
      * A link the host is done with: its watch delivers null, its scans leave the registry, and it ends — a new device's
-     * whose grant is being spent still signs in (the core runs that tail to its end whatever a close says, ADR 0059 /
-     * phase 3's review), and [newDeviceLink] opens its tenant on [DeviceLink.signedIn], not on the state's DONE.
+     * whose grant is being spent still signs in (the core runs that tail to its end whatever a close says, ADR 0136's
+     * Consequences), and [newDeviceLink] opens its tenant on [DeviceLink.signedIn], not on the state's DONE.
      */
     private fun closeLink(held: HeldLink) {
         held.open.value = false

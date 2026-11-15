@@ -221,7 +221,7 @@ final class AppModel {
         AppleKit.shared.scan(session: session, typedServer: typedServer, timing: QrCamera.timing)
     }
 
-    // MARK: Device linking (ADR 0059; cr-app-device-linking)
+    // MARK: Device linking (ADR 0059)
 
     /// The ceremony on screen (`DeviceLinkView`), and its state as core last said it; nil while none is open.
     private(set) var link: DeviceLink?
@@ -278,7 +278,7 @@ final class AppModel {
         // core calls the watch on its own threads: @Sendable, back on the main actor (src/mobile/CLAUDE.md § Traps)
         nonisolated(unsafe) let watched = made
         // the new device signed in: the shell opens over the account the grant made, its offer over it — awaited apart
-        // from the watch, which a close ends: a close while the grant is spent ends the sheet, not the sign-in (inbox #918)
+        // from the watch, which a close ends: a close while the grant is spent ends the sheet, not the sign-in (ADR 0136's Consequences)
         if made.role == .scanFromTrusted || made.role == .showForSignIn {
             let session = session
             Task { @MainActor [weak self] in

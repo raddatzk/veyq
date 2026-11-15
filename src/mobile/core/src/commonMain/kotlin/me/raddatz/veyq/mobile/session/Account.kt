@@ -715,7 +715,7 @@ class VeyqAccount private constructor(
         }
 
         /**
-         * The new device's sign-in from a link's grant (ADR 0059 §2, `cr-app-device-linking` D1): the linker's marks raised
+         * The new device's sign-in from a link's grant (ADR 0059 §2, ADR 0004 § Transport): the linker's marks raised
          * first, then the handed-over refresh token spent **once** at `POST /api/token/refresh` with the token in the body —
          * the rotation adoption itself runs; an app keeps no cookie, so adoption is the browser's verb — and the family it
          * belongs to read from `listSessionFamilies`' `current` mark; then the identity under the granted Master Key, and
