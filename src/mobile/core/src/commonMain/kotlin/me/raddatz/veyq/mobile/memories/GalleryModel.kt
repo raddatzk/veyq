@@ -542,6 +542,12 @@ class GalleryModel(
 
     private var open: Lightbox? = null
 
+    /**
+     * The lightbox open over this page, until it closes: a view drawn anew over the same gallery shows it again — an
+     * Android activity a rotation recreated (#934) —, its medium, slideshow and reader as they were.
+     */
+    val openLightbox: Lightbox? get() = open?.takeIf { !it.current.closed }
+
     /** The lightbox opened at row [index] (one at a time: an open one closes). */
     fun lightbox(index: Int): Lightbox {
         open?.close()
