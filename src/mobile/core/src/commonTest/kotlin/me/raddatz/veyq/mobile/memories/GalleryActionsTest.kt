@@ -80,7 +80,10 @@ class GalleryActionsTest {
             asked++
             return moves
         }
+        /** Where set, a trash is on its way until it completes (a slow server). */
+        var trashOnItsWay: kotlinx.coroutines.CompletableDeferred<Unit>? = null
         override suspend fun trash(mediaId: String): GalleryModel.Removal {
+            trashOnItsWay?.await()
             sent += "trash:$mediaId"
             if (trashAnswer == GalleryModel.Removal.DONE) trashed += mediaId
             return trashAnswer
@@ -159,6 +162,43 @@ class GalleryActionsTest {
         assertEquals(listOf("trash:b", "restore:b"), door.sent)
         assertEquals(listOf("a", "b", "c"), g.ids(), "back at its place once read anew")
         assertNull(g.current.undo)
+    }
+
+    @Test
+    fun anUndoPressedWhileTheTrashIsOnItsWayRestoresOnlyOnceTheTrashLanded() = runTest {
+        val door = Door(three())
+        val g = open(door)
+        door.trashOnItsWay = kotlinx.coroutines.CompletableDeferred()
+        backgroundScope.launch { g.trash("b") }
+        runCurrent()
+        assertNotNull(g.current.undo, "the Undo is offered at once")
+        var said: Notice? = Notice(Msg.MEMORY_UNNAMED)
+        backgroundScope.launch { said = g.undo() }
+        runCurrent()
+        assertEquals(emptyList(), door.sent, "no restore before the trash landed")
+        door.trashOnItsWay!!.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("trash:b", "restore:b"), door.sent)
+        assertNull(said, "restored: nothing to say")
+        assertEquals(listOf("a", "b", "c"), g.ids(), "back at its place")
+    }
+
+    @Test
+    fun anUndoOfATrashThatDidNotGoRestoresNothing() = runTest {
+        val door = Door(three())
+        val g = open(door)
+        door.trashOnItsWay = kotlinx.coroutines.CompletableDeferred()
+        door.trashAnswer = GalleryModel.Removal.FAILED
+        backgroundScope.launch { g.trash("b") }
+        runCurrent()
+        var said: Notice? = Notice(Msg.MEMORY_UNNAMED)
+        backgroundScope.launch { said = g.undo() }
+        runCurrent()
+        door.trashOnItsWay!!.complete(Unit)
+        runCurrent()
+        assertEquals(listOf("trash:b"), door.sent, "nothing to restore")
+        assertNull(said)
+        assertEquals(listOf("a", "b", "c"), g.ids())
     }
 
     @Test
