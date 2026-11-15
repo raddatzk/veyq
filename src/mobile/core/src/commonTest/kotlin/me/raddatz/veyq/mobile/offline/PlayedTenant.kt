@@ -92,6 +92,8 @@ internal class PlayedTenant(files: DeviceFiles = deviceFiles, val clock: () -> L
         /** The node's key: a re-key ([rekey]) replaces it, and every wrap under it is sealed anew. */
         var key: ByteArray = p.randomBytes(32)
         var blocked = false
+        /** The node's cover ([cover]): its meta names it, sealed under the node's key as `NodeCover` writes it. */
+        var cover: Blob? = null
         var mediaRevision = 1
         val media = mutableListOf<Medium>()
         private val binding = arrayOf("scopeId" to scope.id, "nodeId" to id, "epoch" to 0L, "placementRevision" to 0L)
@@ -130,6 +132,35 @@ internal class PlayedTenant(files: DeviceFiles = deviceFiles, val clock: () -> L
         blobs[original.id] = original
         thumb?.let { blobs[it.id] = it }
         return Medium(node, name, original, thumb).also { node.media += it; node.mediaRevision++ }
+    }
+
+    /** Node [n]'s cover set to a one-frame picture with a marker: its meta names it, the tree's revision moves. */
+    fun cover(n: Node, label: String): Blob =
+        Blob(label, listOf("cover $label".encodeToByteArray()), "COVER", n.id, { n.key }, n.scope.id, null).also {
+            blobs[it.id] = it
+            n.cover = it
+            n.scope.revision++
+        }
+
+    private fun metaOf(n: Node): String? {
+        val c = n.cover ?: return null
+        val ref = kotlinx.serialization.json.buildJsonObject {
+            put("blobId", kotlinx.serialization.json.JsonPrimitive(c.id))
+            put("chunkCount", kotlinx.serialization.json.JsonPrimitive(c.frames.size))
+            put("byteSize", kotlinx.serialization.json.JsonPrimitive(c.byteSize))
+            put("wrappedBlobKey", kotlinx.serialization.json.JsonPrimitive(b64(c.wrapped)))
+            put("ownerId", kotlinx.serialization.json.JsonPrimitive(n.id))
+            put("role", kotlinx.serialization.json.JsonPrimitive("COVER"))
+        }
+        val meta = kotlinx.serialization.json.buildJsonObject {
+            put("cover", kotlinx.serialization.json.buildJsonObject {
+                put("source", kotlinx.serialization.json.buildJsonObject {
+                    put("kind", kotlinx.serialization.json.JsonPrimitive("upload"))
+                    put("ref", ref)
+                })
+            })
+        }
+        return me.raddatz.veyq.mobile.session.NodeMetaWrite.seal(suite, n.scope.id, n.id, n.key, meta)
     }
 
     fun trash(m: Medium) { m.trashed = true; m.node.mediaRevision++ }
@@ -176,7 +207,7 @@ internal class PlayedTenant(files: DeviceFiles = deviceFiles, val clock: () -> L
 
     private fun scopeJson(s: Scope) = """{"id":"${s.id}","kind":"PERSONAL","role":"OWNER","tenantId":"${s.tenant.id}","nameEpoch":0,"iconEpoch":0,"currentEpoch":0,"grantedEpoch":0,"wrappedGrant":"${b64(s.wrappedGrant)}","granterUserId":"$userId","grantSignature":"${b64(s.signature)}"}"""
 
-    private fun nodeJson(n: Node) = """{"blockedByOperator":${n.blocked},"createdAt":"2026-01-01T00:00:00.000Z","placementRevision":0,"id":"${n.id}","epoch":0,"scopeEpoch":0,"kind":"${n.kind}","encryptedName":"${b64(n.encryptedName)}","slugToken":"c2x1Zw==","orderIndex":0,"wrappedContentKey":"${b64(n.wrappedKey)}","metaRevision":0,"parentId":${n.parent?.let { "\"${it.id}\"" } ?: "null"}}"""
+    private fun nodeJson(n: Node) = """{"blockedByOperator":${n.blocked},"createdAt":"2026-01-01T00:00:00.000Z","placementRevision":0,"id":"${n.id}","epoch":0,"scopeEpoch":0,"kind":"${n.kind}","encryptedName":"${b64(n.encryptedName)}","slugToken":"c2x1Zw==","orderIndex":0,"wrappedContentKey":"${b64(n.wrappedKey)}","metaRevision":0,"wrappedMeta":${metaOf(n)?.let { "\"$it\"" } ?: "null"},"parentId":${n.parent?.let { "\"${it.id}\"" } ?: "null"}}"""
 
     private fun blobRef(b: Blob) = """"blobId":"${b.id}","chunkCount":${b.frames.size},"byteSize":${b.byteSize},"wrappedBlobKey":"${b64(b.wrapped)}"${b.meta?.let { ",\"wrappedBlobMeta\":\"${b64(it)}\"" } ?: ""}"""
 
