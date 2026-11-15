@@ -65,7 +65,9 @@ internal sealed class MemoryPage : IDisposable
     private readonly Dictionary<int, (Canvas Row, string Key, double Top)> _mounted = [];
     private readonly Recent<ImageSource> _tiles = new(TilesHeld);
     private readonly HashSet<string> _reading = [];
-    private readonly Dictionary<string, List<Image>> _waiting = [];
+    private readonly Dictionary<string, List<(Image Image, Grid Face)>> _waiting = [];
+    /// <summary>The tiles WIC did not decode: their glyph is drawn, never read again.</summary>
+    private readonly HashSet<string> _undecodable = [];
     private UIElement? _hero;
     private long? _id;
     private Watch? _watch;
@@ -412,21 +414,13 @@ internal sealed class MemoryPage : IDisposable
     {
         var name = row.name ?? Words.MemoryUnnamed(index + 1);
         var face = new Grid();
-        if (row.tile is { } blob)
+        if (row.tile is { } blob && !_undecodable.Contains(blob))
         {
             var image = new Image { Stretch = Stretch.UniformToFill, Width = width, Height = height };
             face.Children.Add(image);
-            ShowTile(image, row, blob);
+            ShowTile(image, face, row, blob);
         }
-        else
-        {
-            var glyph = HomeView.Glyph(row.blocked ? "" : row.video ? "" : "");
-            glyph.FontSize = 32;
-            glyph.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
-            glyph.HorizontalAlignment = HorizontalAlignment.Center;
-            glyph.VerticalAlignment = VerticalAlignment.Center;
-            face.Children.Add(glyph);
-        }
+        else face.Children.Add(KindGlyph(row));
         if (row.video && !row.blocked)
         {
             var badge = new Border
@@ -437,7 +431,7 @@ internal sealed class MemoryPage : IDisposable
                 Margin = new Thickness(6),
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Bottom,
-                Child = new FontIcon { Glyph = "", FontSize = 12, Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) },
+                Child = new FontIcon { Glyph = "\uE768", FontSize = 12, Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) },
             };
             face.Children.Add(badge);
         }
@@ -460,9 +454,21 @@ internal sealed class MemoryPage : IDisposable
         return tile;
     }
 
+    /// <summary>The kind's glyph a tile shows where it has no picture: none listed, or one WIC does not decode (a HEIC
+    /// without the HEIF extension's tiers goes up alone, its original listed as its tile).</summary>
+    private static FontIcon KindGlyph(GalleryRow row)
+    {
+        var glyph = HomeView.Glyph(row.blocked ? "\uE733" : row.video ? "\uE714" : "\uE91B");
+        glyph.FontSize = 32;
+        glyph.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+        glyph.HorizontalAlignment = HorizontalAlignment.Center;
+        glyph.VerticalAlignment = VerticalAlignment.Center;
+        return glyph;
+    }
+
     /// <summary>Shows tile <paramref name="blob"/> of <paramref name="row"/> in <paramref name="image"/>: from the held
     /// tiles, else read (Gallery.Tile) once for every image that waits for it.</summary>
-    private async void ShowTile(Image image, GalleryRow row, string blob)
+    private async void ShowTile(Image image, Grid face, GalleryRow row, string blob)
     {
         if (_tiles.Get(blob) is { } held)
         {
@@ -470,8 +476,9 @@ internal sealed class MemoryPage : IDisposable
             return;
         }
         if (!_waiting.TryGetValue(blob, out var waiting)) _waiting[blob] = waiting = [];
-        waiting.Add(image);
+        waiting.Add((image, face));
         if (!_reading.Add(blob) || _id is not { } gallery) return;
+        var read = false;
         try
         {
             var (answer, bytes) = await Core.CallAsync(new Call.GalleryTile { gallery = gallery, mediaId = row.mediaId });
@@ -480,14 +487,27 @@ internal sealed class MemoryPage : IDisposable
                 Log.Write($"Gallery.Tile answered {answer.GetType().Name}");
                 return;
             }
+            read = true;
             var source = await Decoded(bytes, TileEdge);
             if (_closed) return;
             _tiles.Put(blob, source);
-            if (_waiting.TryGetValue(blob, out var those)) foreach (var i in those) i.Source = source;
+            if (_waiting.TryGetValue(blob, out var those)) foreach (var (i, _) in those) i.Source = source;
         }
         catch (Exception e)
         {
-            Log.Write($"a tile did not decode ({e.GetType().Name})");
+            Log.Write($"a tile {(read ? "did not decode" : "was not read")} ({e.GetType().Name} 0x{e.HResult:X8})");
+            // the kind's glyph in its place, as where none is listed (it stayed an empty frame, measured 2026-11-15); the face
+            // is the one the image was put in, never its Parent, which reads null while that face still loads
+            if (!read) return;
+            _undecodable.Add(blob);
+            if (!_closed && _waiting.TryGetValue(blob, out var those))
+            {
+                foreach (var (i, f) in those)
+                {
+                    f.Children.Remove(i);
+                    f.Children.Insert(0, KindGlyph(row));
+                }
+            }
         }
         finally
         {
@@ -557,7 +577,7 @@ internal sealed class MemoryPage : IDisposable
             var title = new TextBlock { Text = chapter.name, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
             Grid.SetColumn(title, 1);
             line.Children.Add(title);
-            var chevron = HomeView.Glyph("");
+            var chevron = HomeView.Glyph("\uE76C");
             chevron.FontSize = 12;
             Grid.SetColumn(chevron, 2);
             line.Children.Add(chevron);
