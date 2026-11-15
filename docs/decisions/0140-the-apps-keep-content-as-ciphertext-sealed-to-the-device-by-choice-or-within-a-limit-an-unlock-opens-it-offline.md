@@ -4,6 +4,7 @@
   real iPhone and a signed macOS build, are the owner's ([native-apps](../crosscutting/native-apps.md) § Open)
 - Date: 2026-11-15
 - Model: [native-apps](../crosscutting/native-apps.md)
+- Replaced in part: decision 8's and decision 9's kept originals (a music track's too) by ADR 0142 (not built)
 
 ## Context
 
