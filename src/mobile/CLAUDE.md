@@ -606,8 +606,7 @@ own — ciphertext and metadata included, since the app never chose to keep them
 (in a header, ADR 0004; the device's wraps in the Keychain or its platform equivalent), never a stack's.
 
 **The one thing the app chooses to keep is its offline store** ([ADR 0140](../../docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md),
-the core's package `offline/`: the store, its wipe, the read path through it and the pins with their sync built; no host
-names its directory yet, so no app keeps anything): content a person viewed (bounded by a limit they set) or made available
+the core's package `offline/`; each host names its directory, ADR 0140 decision 3 — Android's `no_backup/offline/`): content a person viewed (bounded by a limit they set) or made available
 offline, as ciphertext exactly as the server sent it — blob frames and an allowlist of listing answers — each entry
 sealed again under a key of this account on this device, in one directory per account whose file names are opaque. It
 never holds a decrypted byte, a token or a presigned URL, and sign-out, "Stop trusting this device" and removing the
@@ -634,10 +633,15 @@ Per engine:
 - **OkHttp (Android, `Network.kt`):** no cache and `CookieJar.NO_COOKIES` are OkHttp's defaults, pinned explicitly.
   Measured 2026-11-13 on a throwaway API 36 emulator after the same pass: `run-as me.raddatz.veyq find . -type f`
   listed only `shared_prefs/veyq.trust.xml`, `shared_prefs/veyq-recent.xml` and `files/profileInstalled` — no `cache/`.
-  Since the pins' worker (ADR 0140 decision 9, `OfflineWork.kt`), WorkManager keeps its own records:
-  `databases/androidx.work.workdb` (with its `-wal`/`-shm`) and `shared_prefs/androidx.work.util.preferences.xml` — the
-  worker's class name, its state and times, no input data, so no content, id or key (remembered from WorkManager's
-  schema; not yet listed on a device).
+  Since the pins' worker (ADR 0140 decision 9, `OfflineWork.kt`), WorkManager keeps its own records under
+  `no_backup/`, not `databases/`: `no_backup/androidx.work.workdb` (with its `-wal`/`-shm`) and Room's lock file
+  `cache/data/user/0/me.raddatz.veyq/no_backup/androidx.work.workdb.lck` (empty) — so `cache/` is no longer empty; its
+  preferences (`last_force_stop_ms`, `next_job_scheduler_id`) are a table of that database, no
+  `shared_prefs/androidx.work.util.preferences.xml`. Measured 2026-11-15 on a throwaway API 36 emulator after a pin
+  (ADR 0140's Android pass, `sqlite3` over the pulled database): one `workspec` row — `PinWorker`, its state, an empty
+  input (`Data` of 8 bytes: no entries) —, its unique name `veyq-offline-pins` and its class as tag; no content, id or
+  key. The pass's listing also showed `shared_prefs/veyq.memories.xml` (`mediaAccessAsked` only) and, by the pass's
+  end (a second online unlock, then Stop trusting), `shared_prefs/veyq.device-secrets.xml` (`KeystoreDeviceKeys`).
 - **Curl (Linux, `Engine.linux.kt`):** libcurl has no response cache, and its cookie engine starts only with
   `CURLOPT_COOKIEFILE`/`COOKIEJAR`, which Ktor's engine never sets (remembered from libcurl's docs; the engine's klib
   references no cookie option). Not measured here.
