@@ -113,24 +113,32 @@ class SecretFreeSchemaTest {
     }
 
     /**
-     * What the offline store adds to the wire crosses as sizes and times alone (ADR 0140 decision 10, the CR's phase 3): a
-     * screen offline says as of when (`OfflineAsOf`: the shell's state, a gallery's), the Settings section how much is
-     * kept against the limit (`AccountSettings.Storage`) — never a key, a seal, an entry's name or what it holds. A field
-     * added to either is red here until it is named below, with why; and each is reached from the wire's roots.
+     * What the offline store adds to the wire crosses as sizes, times, states and the words to say them (ADR 0140 decision
+     * 10, the CR's phases 3 and 5): a screen offline says as of when (`OfflineAsOf`: the shell's state, a gallery's), a
+     * node's toggle where its fetch is (`OfflineToggle`), the Settings section how much is kept against the limit and the
+     * pinned items (`AccountSettings.Storage`, `OfflineItem`) — never a key, a seal, an entry's opaque name or what it holds.
+     * An item's [OfflineItem] `title` is its node's name from the tree the core holds (`TenantSession.trees`, as every
+     * list's row is named), never from the store, which keeps no name: the store's own record of a pin carries ids alone
+     * (`Pin` is not on the wire). A field added to any of these is red here until it is named below, with why; and each is
+     * reached from the wire's roots.
      */
     @Test
-    fun theOfflineStoreCrossesAsSizesAndTimesAlone() {
+    fun theOfflineStoreCrossesAsSizesTimesAndStatesAlone() {
         val schema = Schema(Roots.all)
         val fields = schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }.groupBy({ it.owner }, { it.name })
-        assertEquals(listOf("asOf"), fields["OfflineAsOf"], "a screen offline says more than as of when")
+        fun of(suffix: String) = fields.entries.single { (owner, _) -> owner == suffix || owner.endsWith(".$suffix") }.value
+        assertEquals(listOf("asOf"), of("OfflineAsOf"), "a screen offline says more than as of when")
+        assertEquals(listOf("limit", "automatic", "pinned", "free", "field", "items"), of("AccountSettings.Storage"), "the Settings section's storage says more than sizes, its field and its items")
+        assertEquals(listOf("amount", "unit", "off"), of("LimitField"))
         assertEquals(
-            listOf("limit", "automatic", "pinned", "free"),
-            fields.entries.single { (owner, _) -> owner.endsWith("AccountSettings.Storage") }.value,
-            "the Settings section's storage says more than sizes",
+            listOf("tenant", "scope", "node", "kind", "title", "status", "said", "bytes"), of("OfflineItem"),
+            "a pinned item says more than its ids, its name from the held tree, its state and its size",
         )
-        // where they ride: the shell's state, a gallery's, the Settings page's
+        assertEquals(listOf("on", "status", "said", "done", "total", "asking", "question"), of("OfflineToggle"), "a node's toggle says more than its state and sizes")
+        assertTrue(fields.keys.none { it in setOf("me.raddatz.veyq.mobile.offline.Pin", "me.raddatz.veyq.mobile.offline.PinRecord", "me.raddatz.veyq.mobile.offline.PinGone") }, "the store's own record of a pin is on the wire")
+        // where they ride: the shell's state, a gallery's, a header's, the Settings page's
         val holders = fields.filterValues { names -> "offline" in names || "storage" in names }.keys.map { it.substringAfterLast('.') }.toSet()
-        assertTrue(holders.containsAll(setOf("State", "GalleryShown", "SettingsShown")), "the offline states ride elsewhere: $holders")
+        assertTrue(holders.containsAll(setOf("State", "GalleryShown", "SettingsShown", "HeaderShown")), "the offline states ride elsewhere: $holders")
     }
 
     @Serializable @kotlinx.serialization.SerialName("Paired")

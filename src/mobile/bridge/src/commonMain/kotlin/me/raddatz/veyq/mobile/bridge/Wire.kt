@@ -181,6 +181,36 @@ internal sealed class Call {
     /** "Sign out" of this account on this device (`signOutHere`): the page closes and the way in follows. */
     @Serializable @SerialName("Settings.SignOutHere") data class SettingsSignOutHere(val settings: Long) : Call()
 
+    /**
+     * "Storage on this device" (ADR 0140 decision 10; core's `AccountSettings`): the limit typed in its free size field,
+     * [amount] in [unit] (`setOfflineLimit`: a positive number, a point or a comma its decimal sign; anything else is the
+     * state's `refusal`, `account_settings_storage_limit_invalid`), or Off ([SettingsOfflineLimitOff]). Lowering it evicts
+     * at once. Each answered [Answer.Done] once it ended, the section read anew ([SettingsShown.storage]).
+     */
+    @Serializable @SerialName("Settings.OfflineLimit") data class SettingsOfflineLimit(val settings: Long, val amount: String, val unit: me.raddatz.veyq.mobile.offline.LimitUnit) : Call()
+    @Serializable @SerialName("Settings.OfflineLimitOff") data class SettingsOfflineLimitOff(val settings: Long) : Call()
+
+    /** "Clear cache" (`clearOfflineCache`): what was kept of content viewed goes, the items available offline stay. */
+    @Serializable @SerialName("Settings.ClearCache") data class SettingsClearCache(val settings: Long) : Call()
+
+    /** A pinned item's Remove ([SettingsShown.storage]'s `items`, by its [node]): no longer available offline. */
+    @Serializable @SerialName("Settings.OfflineRemove") data class SettingsOfflineRemove(val settings: Long, val node: String) : Call()
+
+    /**
+     * "Remove all offline content", asked first: [SettingsAskRemoveAll] shows its question ([SettingsShown.askingRemoveAll],
+     * the words `account_settings_storage_remove_all_question` and `…_confirm`), [SettingsRemoveAll] confirms it — refused
+     * by the core (nothing goes) while it is not asked —, [SettingsCancelRemoveAll] leaves it.
+     */
+    @Serializable @SerialName("Settings.AskRemoveAll") data class SettingsAskRemoveAll(val settings: Long) : Call()
+    @Serializable @SerialName("Settings.RemoveAll") data class SettingsRemoveAll(val settings: Long) : Call()
+    @Serializable @SerialName("Settings.CancelRemoveAll") data class SettingsCancelRemoveAll(val settings: Long) : Call()
+
+    /**
+     * The notices of items no longer available offline ([me.raddatz.veyq.mobile.navigation.ShellModel.State]'s `gone`,
+     * each named where the shell held its name) said: not said again (`goneSeen`).
+     */
+    @Serializable @SerialName("Shell.OfflineGoneSeen") data object ShellOfflineGoneSeen : Call()
+
     @Serializable @SerialName("Shell.Choose") data class ShellChoose(val application: ApplicationId?) : Call()
     @Serializable @SerialName("Shell.SwitchSpace") data class ShellSwitchSpace(val scopeId: String) : Call()
     @Serializable @SerialName("Shell.Enter") data class ShellEnter(val folder: FolderRef) : Call()
@@ -374,6 +404,16 @@ internal sealed class Call {
 
     /** Pins or unpins (`toggleFavorite`): [Answer.Said] with the failure's notice, or none. */
     @Serializable @SerialName("Header.Pin") data class HeaderPin(val header: Long) : Call()
+
+    /**
+     * The header's "Available offline" (its plan's `offline` action, ADR 0140 decision 10; `NodeHeaderModel.toggleOffline`):
+     * on, it turns off at once; off, the size it would keep is asked ([HeaderShown.offline]'s `asking` and `question`,
+     * under the title `offline_pin_ask_title`) — nothing is kept until [HeaderOfflineConfirm] (`offline_pin_confirm`), or
+     * [HeaderOfflineCancel]. [Answer.Said] with why not, or none.
+     */
+    @Serializable @SerialName("Header.Offline") data class HeaderOffline(val header: Long) : Call()
+    @Serializable @SerialName("Header.OfflineConfirm") data class HeaderOfflineConfirm(val header: Long) : Call()
+    @Serializable @SerialName("Header.OfflineCancel") data class HeaderOfflineCancel(val header: Long) : Call()
 
     /**
      * To the trash (`trash`): [Answer.Trashed] with what it says and whether its undo is offered now (the state's undo,
@@ -1131,6 +1171,13 @@ internal sealed class Watched {
      */
     @Serializable @SerialName("GalleryLive") data class GalleryLive(val gallery: Long) : Watched()
 
+    /**
+     * Settings' "Storage on this device" read anew at each change of the pins or their fetches (`followStorage`), while it
+     * stands: a host watches it while the page shows. It delivers no update of its own — the section arrives on
+     * [Settings]' — and ends with the watch or the page.
+     */
+    @Serializable @SerialName("SettingsStorageLive") data class SettingsStorageLive(val settings: Long) : Watched()
+
     /** A lightbox opened by [Call.LightboxOpen]. */
     @Serializable @SerialName("Lightbox") data class Lightbox(val lightbox: Long) : Watched()
 }
@@ -1343,9 +1390,23 @@ internal class SettingsShown(
     val working: Boolean,
     @Serializable(with = MsgKey::class) val refusal: Msg?,
     @Serializable(with = MsgKey::class) val registerRefusal: Msg?,
-    /** "Storage on this device" (ADR 0140 decision 10): sizes only; null where this device keeps no store of the account. */
+    /**
+     * "Storage on this device" (ADR 0140 decision 10): sizes, the limit's field and the pinned items (each named from the
+     * tree the core holds, never from the store); null where this device keeps no store of the account — then
+     * [storageUnavailable] says why where it is to say (`account_settings_storage_no_trust`).
+     */
     val storage: me.raddatz.veyq.mobile.session.AccountSettings.Storage? = null,
+    @Serializable(with = MsgKey::class) val storageUnavailable: Msg? = null,
+    /** "Remove all offline content" asked ([Call.SettingsAskRemoveAll]): its question shows. */
+    val askingRemoveAll: Boolean = false,
+    /** The limit field's units, each with its word. */
+    val limitUnits: List<SettingsLimitUnit> = emptyList(),
 )
+
+/** A unit of the storage limit's field and its word. */
+@Serializable
+@SerialName("SettingsLimitUnit")
+internal class SettingsLimitUnit(val unit: me.raddatz.veyq.mobile.offline.LimitUnit, @Serializable(with = MsgKey::class) val word: Msg)
 
 /**
  * One session family: created and last used (epoch ms; null where the server sent none), whether it is this device's,
@@ -1718,6 +1779,8 @@ internal class HeaderShown(
     val archiveName: String,
     /** Where the frame of the node's cover sits (`State.cover`); null while it has none. Its picture: [Call.HeaderCoverPicture]. */
     val cover: NodeCover.Crop?,
+    /** "Available offline" (`State.offline`): its toggle's state; null where it is not offered. [Call.HeaderOffline]. */
+    val offline: me.raddatz.veyq.mobile.offline.OfflineToggle? = null,
 ) {
     /** `NodeHeader.Plan`: the bar's buttons, the menu, and the menu's last group after a separator. */
     @Serializable class Plan(val buttons: List<PlanAction>, val menu: List<PlanAction>, val last: List<PlanAction>)
@@ -1950,6 +2013,11 @@ internal class ShellShown(
      * for everyone else. A change of the set is a new update; the bytes never ride one (ADR 0137 decision 1).
      */
     val pictures: List<String>,
+    /**
+     * The banner offline (`ShellModel.State.banner`: "Offline — content as of {time}"); null online. Offline every write
+     * is refused and New is not offered ([canCreateHere]).
+     */
+    val offlineBanner: Notice? = null,
 ) {
     @Serializable class ShownServer(val connection: String, val label: String, val tenants: List<TenantRef>)
     @Serializable class ShownSpace(val space: SpaceRef, val name: Piece)

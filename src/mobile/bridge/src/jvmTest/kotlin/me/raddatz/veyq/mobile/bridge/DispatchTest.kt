@@ -602,6 +602,96 @@ class DispatchTest {
         b.shutdown()
     }
 
+    /** [PlayedAccount] with an offline store of its own (ADR 0140 decision 10): sizes, one pinned item, what was asked of it. */
+    private class StoringAccount : me.raddatz.veyq.mobile.session.AccountSettings.Door() {
+        val inner = PlayedAccount()
+        var limit = 10_000_000_000L
+        var automatic = 4_000L
+        var items = listOf(item())
+        val asked = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val changes = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 4)
+        override val deviceId get() = inner.deviceId
+        override val fallbackLabel get() = inner.fallbackLabel
+        override fun myWrapId() = inner.myWrapId()
+        override suspend fun email() = inner.email()
+        override suspend fun families() = inner.families()
+        override suspend fun revoke(family: String) = inner.revoke(family)
+        override suspend fun revokeOthers() = inner.revokeOthers()
+        override suspend fun savedKeys() = inner.savedKeys()
+        override suspend fun removeSavedKey(wrap: String) = inner.removeSavedKey(wrap)
+        override suspend fun capabilities() = inner.capabilities()
+        override suspend fun storage() = me.raddatz.veyq.mobile.session.AccountSettings.Storage(limit, automatic, items.sumOf { it.bytes }, 50_000_000_000, items = items)
+        override suspend fun setLimit(bytes: Long) { asked += "limit $bytes"; limit = bytes }
+        override suspend fun clearCache() { asked += "clear"; automatic = 0 }
+        override suspend fun removeAllOffline() { asked += "removeAll"; items = emptyList(); automatic = 0 }
+        override suspend fun unpin(node: String) { asked += "unpin $node"; items = items.filter { it.node != node } }
+        override val storageChanges get() = changes
+
+        companion object {
+            fun item() = me.raddatz.veyq.mobile.offline.OfflineItem(
+                "t1", "s1", "n1", "MEMORY", Notice(Msg.OFFLINE_ITEM_NAMED, "Summer"), me.raddatz.veyq.mobile.offline.OfflineStatus.KEPT,
+                Notice(Msg.OFFLINE_STATUS_KEPT), 7_000,
+            )
+        }
+    }
+
+    @Test
+    fun settingsStorageOnThisDeviceIsSetClearedAndRemovedThroughItsCalls() = runBlocking {
+        val played = StoringAccount()
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(
+                SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden,
+                settings = { session, account -> me.raddatz.veyq.mobile.session.AccountSettings(played, HeldBy(session, account), "p@a.example") { 0L } },
+            ) { _ -> Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}) }
+        }
+        b.signedIn()
+        val id = assertIs<Answer.SettingsOpened>(b.ask(Call.SettingsOpen("a.example#u1"))).settings
+        val page = b.watching(Watched.Settings(id))
+        val read = page.until { (it as Update.Settings).shown?.takeIf { s -> s.storage != null && !s.working } }
+        val st = read.storage!!
+        assertEquals(me.raddatz.veyq.mobile.offline.LimitField("10", me.raddatz.veyq.mobile.offline.LimitUnit.GB, false), st.field)
+        assertEquals(listOf("Summer"), st.items.map { it.title.args.single() })
+        assertEquals(listOf(Msg.STORAGE_UNIT_MB, Msg.STORAGE_UNIT_GB), read.limitUnits.map { it.word })
+
+        // the limit as typed, refused when it is no size, Off
+        assertEquals(Answer.Done, b.ask(Call.SettingsOfflineLimit(id, "2,5", me.raddatz.veyq.mobile.offline.LimitUnit.GB)))
+        page.until { (it as Update.Settings).shown?.storage?.takeIf { s -> s.limit == 2_500_000_000 } }
+        assertEquals(Answer.Done, b.ask(Call.SettingsOfflineLimit(id, "much", me.raddatz.veyq.mobile.offline.LimitUnit.GB)))
+        assertEquals(Msg.ACCOUNT_SETTINGS_STORAGE_LIMIT_INVALID, page.until { (it as Update.Settings).shown?.refusal })
+        assertEquals(Answer.Done, b.ask(Call.SettingsOfflineLimitOff(id)))
+        page.until { (it as Update.Settings).shown?.storage?.field?.takeIf { f -> f.off } }
+        assertEquals(Answer.Done, b.ask(Call.SettingsClearCache(id)))
+
+        // remove all: nothing before its question, its question cancelled, then confirmed
+        assertEquals(Answer.Done, b.ask(Call.SettingsRemoveAll(id)))
+        assertEquals(Answer.Done, b.ask(Call.SettingsAskRemoveAll(id)))
+        page.until { (it as Update.Settings).shown?.takeIf { s -> s.askingRemoveAll } }
+        assertEquals(Answer.Done, b.ask(Call.SettingsCancelRemoveAll(id)))
+        page.until { (it as Update.Settings).shown?.takeIf { s -> !s.askingRemoveAll } }
+        assertEquals(listOf("limit 2500000000", "limit 0", "clear"), played.asked.toList(), "a removal went before its question")
+
+        // a row's Remove; then the section follows the pins while its live watch stands
+        assertEquals(Answer.Done, b.ask(Call.SettingsOfflineRemove(id, "n1")))
+        page.until { (it as Update.Settings).shown?.storage?.items?.takeIf { i -> i.isEmpty() } }
+        b.watching(Watched.SettingsStorageLive(id))
+        played.items = listOf(StoringAccount.item())
+        // the follow subscribes on its own thread: emit until the section has the item again
+        val back = kotlinx.coroutines.withTimeout(10_000) {
+            var got: List<me.raddatz.veyq.mobile.offline.OfflineItem>? = null
+            while (got == null) {
+                played.changes.tryEmit(Unit)
+                got = kotlinx.coroutines.withTimeoutOrNull(200) { page.until { (it as Update.Settings).shown?.storage?.items?.takeIf { i -> i.isNotEmpty() } } }
+            }
+            got
+        }
+        assertEquals(1, back.size)
+        assertEquals(Answer.Done, b.ask(Call.SettingsAskRemoveAll(id)))
+        assertEquals(Answer.Done, b.ask(Call.SettingsRemoveAll(id)))
+        assertEquals("removeAll", played.asked.last())
+        b.shutdown()
+    }
+
     @Test
     fun signOutOnASettingsPageIsThisAccountsSignOutHere() = runBlocking {
         val played = PlayedAccount()
