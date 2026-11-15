@@ -1280,7 +1280,7 @@ internal class GalleryShown(
     val rows: List<GalleryRow>?,
     val failed: Boolean,
     /** What the page says in the grid's place where [failed]: offline, that the store does not hold it; else the load failed. */
-    val failure: Msg?,
+    @Serializable(with = MsgKey::class) val failure: Msg?,
     val count: Notice,
     val chapters: List<NodeAt>,
     val canUpload: Boolean,

@@ -1068,7 +1068,8 @@ class VeyqAccount private constructor(
             client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
             secretKey: () -> ByteArray,
         ): VeyqAccount {
-            val c = connect(primitives, server, client)
+            // the device kept: its instance salt, which a password-trusted unlock offline derives the login key from
+            val c = connect(primitives, server, client, device)
             return guarded(c) {
                 val session = login(primitives, c, email, password)
                 val material = keyMaterial(c)

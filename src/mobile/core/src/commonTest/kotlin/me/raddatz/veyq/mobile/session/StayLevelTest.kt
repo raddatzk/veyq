@@ -142,6 +142,26 @@ class StayLevelTest {
         assertTrue(resumed.masterKey.contentEquals(masterKey))
     }
 
+    /**
+     * A sign-in with the Secret Key keeps the server's instance salt, as an unlock does: a password-trusted device opens
+     * offline from it (ADR 0140 decision 4, `unlockOnDeviceOffline`), and before this one signed in and was closed
+     * without an online unlock had none — the Linux pass of phase 6 read "the server is unreachable" offline. Bite: the
+     * sign-in's `connect` without the device → red.
+     */
+    @Test
+    fun aSignInKeepsTheInstanceSaltAnOfflineUnlockNeeds() = runTest(timeout = 2.minutes) {
+        val keys = SoftwareDeviceKeys(p)
+        val device = testDevice(p, keys)
+        val secretKey = p.randomBytes(32)
+        val salt = p.randomBytes(16)
+        val kek = suite.kekPasswordSecret(secretKey, password, salt)
+        val server = Server(Wrap("PASSWORD", "w0", b64(suite.seal(Context("master-key"), kek, masterKey)), b64(suite.encodeKdfParams(V1.ARGON, salt))))
+        assertNull(device.instanceSalt("a.example"))
+        val account = VeyqAccount.signInWithKey(p, "http://a.example", email, password, secretKey, device, server.client)
+        assertTrue(account.masterKey.contentEquals(masterKey))
+        assertEquals(b64(instanceSalt), device.instanceSalt("a.example"), "the sign-in kept no instance salt: offline, no password unlock")
+    }
+
     @Test
     fun aCancelledPresencePromptChangesNothing() = runTest {
         val (keys, device, server) = stayingAtLogin()
