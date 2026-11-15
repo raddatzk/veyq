@@ -489,7 +489,7 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
 ## Owner questions
 
 Answered 2026-11-15: **2** — default 2 GB / 10 GB, any size, lowering evicts at once (D8). **3** — as recommended, but
-no photo original in either tier; only originals the app reads to show an item (D8, D9). **4** — the copy as proposed.
+no photo original in either tier; only originals the app reads to show an item (D8, D9). **4** — the copy as proposed. The rest of phase 4's and 5's words (`offline_*`, `account_settings_storage*` in `words/words.json`, EN and DE, Android's notification included) approved by the owner as written, 2026-11-15.
 **5** — accepted. **1** — accepted after the clarification that the store is ciphertext sealed to this device (D1, D2)
 and the residual needs a thief who also passes the device's own unlock at the record's level and keeps it offline.
 
