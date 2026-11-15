@@ -362,6 +362,56 @@ class MusicPlayerTest {
     }
 
     @Test
+    fun aTrackStillLoadingWhenTheVideoStartsStaysSilentUntilItsEnd() = runTest {
+        val h = harness(mapOf("a" to 62_000))
+        val gate = CompletableDeferred<Unit>()
+        h.player.play(PlayerQueue("n1", listOf(h.audio.Track("a", gate = gate).t)))
+        h.settle()
+        val video = h.player.interrupt()
+        h.settle()
+        gate.complete(Unit)
+        h.settle()
+        assertEquals(0, h.audio.decks.sumOf { it.plays }, "no sound during the video")
+        assertEquals(false, h.now!!.playing)
+        video.end()
+        h.settle()
+        assertEquals("a", h.playing().name)
+        assertEquals(true, h.now!!.playing)
+    }
+
+    @Test
+    fun aNextTrackStillLoadingWhenTheVideoStartsStaysSilentUntilItsEnd() = runTest {
+        val h = harness(mapOf("a" to 62_000, "b" to 62_000))
+        val gate = CompletableDeferred<Unit>()
+        h.player.play(PlayerQueue("n1", listOf(h.audio.Track("a").t, h.audio.Track("b", gate = gate).t), startId = "a"))
+        h.settle()
+        h.player.next()
+        h.settle()
+        val video = h.player.interrupt()
+        h.settle()
+        gate.complete(Unit)
+        h.settle()
+        assertTrue(h.audio.decks.none { it.playing }, "no sound during the video")
+        video.end()
+        h.settle()
+        assertEquals("b", h.playing().name)
+    }
+
+    @Test
+    fun aListenersPlayWhileTheHeldTrackLoadsStartsIt() = runTest {
+        val h = harness(mapOf("a" to 62_000))
+        val gate = CompletableDeferred<Unit>()
+        h.player.play(PlayerQueue("n1", listOf(h.audio.Track("a", gate = gate).t)))
+        h.settle()
+        h.player.interrupt()
+        h.settle()
+        h.player.resume()
+        gate.complete(Unit)
+        h.settle()
+        assertEquals("a", h.playing().name)
+    }
+
+    @Test
     fun anInterruptionWithNothingPlayingIsHarmless() = runTest {
         val h = harness()
         val video = h.player.interrupt()

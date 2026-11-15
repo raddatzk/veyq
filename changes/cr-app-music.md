@@ -320,7 +320,9 @@ lightbox plays and starts again by itself when the video stops or the lightbox m
   before its span moves on at once without a fade" (every deck ramps, D2); phase 2's interrupt cases each a twin, plus a
   queue paused before the video staying paused. Bites (a)–(f) each red at its own case and green again, and two more:
   the end resuming unconditionally → the listener's-pause/-play cases red; a new queue not counted → its case red.
-  A track still loading when `interrupt()` comes starts during the video (D13 pauses only a playing queue).
+  A track still loading when `interrupt()` came started during the video (D13 paused only a playing queue) — fixed in
+  phase 4 (coordinator 2026-11-15): such a track is held, silent until the interruption's end starts it; ADR 0142
+  decision 13 says so, and that the web's player keeps the gap.
 
 - [ ] **4 Memories' music (core `memories/music/`)** — `MusicQueue`, `AudioFacts`, `Frames`, `Wav`, `MusicUpload` (D7),
   `TrackLabel` (D10), the ITEM report (D11), `MusicModel` (D8), the header toggle (D6), the lightbox's compact-control
