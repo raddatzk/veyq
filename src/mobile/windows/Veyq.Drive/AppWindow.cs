@@ -151,9 +151,11 @@ internal sealed partial class AppWindow(string process)
                 // width at its vertical middle, with SendInput's mouse as a hand drags; `range` is the one move a drag is not
                 var e = Find(parts[1]);
                 var r = e.Current.BoundingRectangle;
+                var span = parts.Length > 2 ? parts[2].Split(' ', StringSplitOptions.RemoveEmptyEntries) : [];
+                if (span.Length != 2) throw new ArgumentException("slide <id> <from> <to>");
                 int At(string percent) => (int)(r.Left + r.Width * double.Parse(percent, CultureInfo.InvariantCulture) / 100);
                 var y = (int)(r.Top + r.Height / 2);
-                return Mouse.Drag(At(parts[2]), y, At(parts[3]), y);
+                return Mouse.Drag(At(span[0]), y, At(span[1]), y);
             }
             case "size":
                 Size(Window(), int.Parse(parts[1], CultureInfo.InvariantCulture), int.Parse(parts[2], CultureInfo.InvariantCulture));
