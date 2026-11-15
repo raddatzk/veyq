@@ -491,6 +491,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.SettingsStaySignedIn -> accountPages[call.settings]?.model?.stay(call.level)?.answer()?.also { managed(parts) } ?: noPage
             is Call.SettingsPasswordTrust -> accountPages[call.settings]?.model?.trustWithPassword(call.password)?.answer()?.also { managed(parts) } ?: noPage
             is Call.SettingsStopTrusting -> onPage(call.settings) { it.stopTrusting() }.also { managed(parts) }
+            is Call.SettingsOfflineLimit -> onPage(call.settings) { it.setOfflineLimit(call.amount, call.unit) }
+            is Call.SettingsOfflineLimitOff -> onPage(call.settings) { it.turnOfflineLimitOff() }
+            is Call.SettingsClearCache -> onPage(call.settings) { it.clearOfflineCache() }
+            is Call.SettingsOfflineRemove -> onPage(call.settings) { it.unpinOffline(call.node) }
+            is Call.SettingsAskRemoveAll -> onPage(call.settings) { it.askRemoveAllOffline() }
+            is Call.SettingsRemoveAll -> onPage(call.settings) { it.removeAllOffline() }
+            is Call.SettingsCancelRemoveAll -> onPage(call.settings) { it.cancelRemoveAllOffline() }
             is Call.SettingsSignOutHere -> {
                 val held = accountPages[call.settings] ?: return noPage
                 signedOutHere(parts, call.settings, held.model.signOutHere())
@@ -505,6 +512,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShellOpenAtTop -> shell?.openAtTop(call.ref).done()
             is Call.ShellSearch -> shell?.search(call.on).done()
             Call.ShellRefresh -> shell?.refresh().done()
+            Call.ShellOfflineGoneSeen -> shell?.goneSeen().done()
             Call.HomeGroups -> shell?.current?.let { Answer.Groups(it.lists.groups(it.shell)) } ?: noTenant
             is Call.SearchQuery -> shell?.current?.let { Answer.Hits(ShellWords.search(it.lists.objects, call.query)) } ?: noTenant
             is Call.PotOpen -> tenant.value?.models?.pot?.let { make ->
@@ -683,6 +691,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noHeader
             is Call.HeaderClose -> headers.remove(call.header)?.let { Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_HEADER)
             is Call.HeaderPin -> headers[call.header]?.let { Answer.Said(it.model.toggleFavorite()) } ?: noHeader
+            is Call.HeaderOffline -> headers[call.header]?.let { Answer.Said(it.model.toggleOffline()) } ?: noHeader
+            is Call.HeaderOfflineConfirm -> headers[call.header]?.let { Answer.Said(it.model.confirmOffline()) } ?: noHeader
+            is Call.HeaderOfflineCancel -> headers[call.header]?.let { it.model.cancelOffline(); Answer.Done } ?: noHeader
             is Call.HeaderTrash -> headers[call.header]?.let { h -> h.model.trash().let { Answer.Trashed(it, h.model.current.undo != null) } } ?: noHeader
             is Call.HeaderUndo -> headers[call.header]?.let { Answer.Said(it.model.undoTrash()) } ?: noHeader
             is Call.HeaderRename -> headers[call.header]?.let { it.model.rename(call.name).let { r -> Answer.Renamed(r.problem, r.notice) } } ?: noHeader
@@ -1240,6 +1251,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.Gallery(w.gallery, null))
         // the poll runs inside this watch's own job: a host's dropped watch cancels it, and it ends with its page
         is Watched.GalleryLive -> flow { galleries[w.gallery]?.live() }
+        // the section's follow runs inside this watch's own job, as a gallery's poll: it ends with the watch or the page
+        is Watched.SettingsStorageLive -> flow { accountPages[w.settings]?.model?.followStorage() }
         is Watched.Lightbox -> lightboxes[w.lightbox]?.let { held -> held.model.state.map { Update.Lightbox(w.lightbox, shownLightbox(held, it)) } }
             ?: flowOf(Update.Lightbox(w.lightbox, null))
         is Watched.Trash -> trashes[w.trash]?.let { t -> t.state.map { Update.Trash(w.trash, shownTrash(t, it)) } }
@@ -1315,6 +1328,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             headed = shell.openObject?.at ?: shell.space?.let(shell::folderAt),
             me = open.models.me,
             pictures = pictures.sorted(),
+            offlineBanner = s.banner,
         )
     }
 
@@ -1371,6 +1385,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         refusal = s.refusal,
         registerRefusal = s.registerRefusal,
         storage = s.storage,
+        storageUnavailable = s.storageUnavailable,
+        askingRemoveAll = s.askingRemoveAll,
+        limitUnits = me.raddatz.veyq.mobile.offline.LimitUnit.entries.map { SettingsLimitUnit(it, it.word) },
     )
 
     /** A Pot's settings as the host draws them ([PotSettingsShown]), each field one core function's answer. */
@@ -1413,6 +1430,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             gone = s.gone,
             archiveName = s.downloadName ?: NodeExport.fileName(m.node.name),
             cover = s.cover,
+            offline = s.offline,
         )
     }
 

@@ -27,6 +27,8 @@ object NodeHeader {
     const val DOWNLOAD = "download"
     const val REPORT = "report"
     const val DELETE = "delete"
+    /** "Available offline" (ADR 0140 decision 10): a toggle in the menu, its state the header's (`NodeHeaderModel.State.offline`). */
+    const val OFFLINE = "offline"
 
     /** Where an action may go: a button where it fits, else the menu ([ANY]); the menu ([MENU]); the menu's last group. */
     enum class Slot { ANY, MENU, LAST }
@@ -62,6 +64,8 @@ object NodeHeader {
         /** The server publishes a moderation key (ADR 0093: a legal duty, so wherever it does). */
         val report: Boolean,
         val delete: Boolean,
+        /** "Available offline": the account keeps an offline store on this device and the kind is pinned (ADR 0140 decision 9). */
+        val offline: Boolean = false,
     )
 
     /**
@@ -77,18 +81,27 @@ object NodeHeader {
      * A header's rights as both apps build them (the web's `NodePage`): the heart once the pin set is known, a link where
      * the kind shares and the tenant's links are on, the kind's rename, a cover where the kind takes one and its page
      * offers it, its copy and download doors, the report where the server publishes its key; the move and the delete
-     * always — then narrowed where the node is a guest's folder or lies in one ([inIdentityFolder]).
+     * always — then narrowed where the node is a guest's folder or lies in one ([inIdentityFolder]); "Available offline"
+     * where [offline] offers it. Offline ([online] false) every write is taken away (ADR 0140 decision 7): what is left
+     * reads — the download — or is this device's own ("Available offline").
      */
     fun rights(
         kind: String, favoriteKnown: Boolean, shareable: Boolean, linksOn: Boolean, rename: Boolean, takesCover: Boolean,
         coverOffered: Boolean, copy: Boolean, download: Boolean, report: Boolean, inGuestFolder: Boolean,
+        offline: Boolean = false, online: Boolean = true,
     ): Rights {
         val granted = Rights(
             favorite = favoriteKnown, share = shareable && linksOn, rename = rename, move = true,
-            cover = takesCover && coverOffered, copy = copy, download = download, report = report, delete = true,
+            cover = takesCover && coverOffered, copy = copy, download = download, report = report, delete = true, offline = offline,
         )
-        return if (inGuestFolder) inIdentityFolder(granted, kind) else granted
+        val narrowed = if (inGuestFolder) inIdentityFolder(granted, kind) else granted
+        return if (online) narrowed else readOnly(narrowed)
     }
+
+    /** [rights] while the server is unreachable: no write (the heart, the link, rename, move, cover, copy, report, delete). */
+    fun readOnly(rights: Rights): Rights = rights.copy(
+        favorite = false, share = false, rename = false, move = false, cover = false, copy = false, report = false, delete = false,
+    )
 
     /**
      * A core action's words in the header: the heart's by whether it is pinned, the share sheet's title of the kind, the
@@ -103,6 +116,7 @@ object NodeHeader {
         COVER -> if (hasCover) me.raddatz.veyq.mobile.words.Msg.COVER_CHANGE else me.raddatz.veyq.mobile.words.Msg.COVER_SET
         DOWNLOAD -> me.raddatz.veyq.mobile.words.Msg.NODE_DOWNLOAD
         REPORT -> me.raddatz.veyq.mobile.words.Msg.REPORT_ACTION
+        OFFLINE -> me.raddatz.veyq.mobile.words.Msg.OFFLINE_AVAILABLE
         else -> null
     }
 
@@ -130,6 +144,7 @@ object NodeHeader {
             (Action(COVER, Slot.MENU) to Placement.AFTER).takeIf { rights.cover },
             (Action(COPY, Slot.LAST) to Placement.after(MOVE)).takeIf { rights.copy },
             (Action(DOWNLOAD) to Placement.AFTER).takeIf { rights.download },
+            (Action(OFFLINE, Slot.MENU) to Placement.AFTER).takeIf { rights.offline },
             (Action(REPORT, Slot.LAST) to Placement.AFTER).takeIf { rights.report },
         )
         val actions = ordered(placed(core, standard + own), order)

@@ -22,7 +22,8 @@ import kotlin.test.assertTrue
  * added, a fetch interrupted and continued, a re-key that refetches nothing, a pin two pins share, a pin of a node trashed,
  * blocked or in a suspended tenant, and one store per account in the process.
  *
- * Bites (each one edit, seen red, then restored): (a) unpin by dropping every entry the node's pin reached
+ * Bites (each one edit, seen red, then restored): (d) covers dropped from a pin's reach (`AccountOffline.reach` without
+ * `Pin.covers`) → the chapter's cover is not kept and does not draw offline; (a) unpin by dropping every entry the node's pin reached
  * (`AccountOffline.removePin`) → the chapter's frames, which the chapter's own pin still reaches, go; (b) keep pins outside
  * the sweep (no `settlePins`, a pinned entry never swept) → the trashed Memory's pin and frames stay; (c) clear a blob's
  * frames when its listing's revision moved (`AccountOffline.keep`) → the re-key's sync fetches every frame again.
@@ -89,6 +90,45 @@ class OfflinePinsTest {
         MemoryMedia.stream(tenantOf(off), video, video.original) { played += it.decodeToString() }
         assertEquals((0 until 3).map { "original video frame $it" }, played)
         assertEquals(setOf("photo", "video", "later"), g.items.map { t.nameOf(it.mediaId) }.toSet())
+        off.retire()
+    }
+
+    @Test
+    fun a_pin_keeps_the_covers_of_its_node_and_its_chapters_and_they_open_offline() = runTest {
+        val t = play()
+        val s = t.scope("s1")
+        val m = t.node(s, "memory")
+        val chapter = t.node(s, "chapter", kind = "CHAPTER", parent = m)
+        t.medium(chapter, "c1")
+        t.cover(m, "memory-cover")
+        t.cover(chapter, "chapter-cover")
+        // a cover outside the pin: not kept
+        val other = t.node(s, "other")
+        t.cover(other, "other-cover")
+        t.remember()
+        val a = t.resume()
+        val o = assertNotNull(a.offline)
+        // the automatic tier off: only what the pin reaches is kept
+        o.setLimit(0)
+        val tenant = tenantOf(a)
+        val pins = pinsOf(a)
+        assertEquals(3, assertNotNull(pins.plan(tenant, s.id, m.id)).blobs, "the pin's size leaves out a cover")
+        pins.pin(tenant, s.id, m.id)
+        pins.sync()
+        assertEquals(setOf("c1-t", "memory-cover", "chapter-cover"), o.frames(t).keys, "the pin did not keep the covers (or kept one outside it)")
+        assertTrue(o.store.entries().filter { it.key.kind == KeptRead.FRAMES }.all { it.pins == setOf(m.id) }, "a kept cover does not carry its pin")
+        // a later sync's sweep keeps them
+        t.medium(chapter, "c2")
+        pins.sync()
+        assertEquals(setOf("c1-t", "c2-t", "memory-cover", "chapter-cover"), o.frames(t).keys)
+        a.retire()
+
+        // offline, after the account was closed: the chapter's cover draws from the store
+        t.reachable = false
+        val off = t.resume()
+        val offTenant = tenantOf(off)
+        assertEquals("cover chapter-cover", me.raddatz.veyq.mobile.session.NodeCover.openNode(offTenant, chapter.id)?.decodeToString())
+        assertEquals("cover memory-cover", me.raddatz.veyq.mobile.session.NodeCover.openNode(offTenant, m.id)?.decodeToString())
         off.retire()
     }
 

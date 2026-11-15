@@ -84,6 +84,13 @@ class AccountOffline internal constructor(
         )
     }
 
+    /** The bytes the store keeps that each pin reaches, by its node (an entry two pins reach counts in each). */
+    suspend fun pinnedBytes(): Map<String, Long> {
+        val out = HashMap<String, Long>()
+        for (e in store.entries()) for (p in e.pins) out[p] = (out[p] ?: 0L) + e.size
+        return out
+    }
+
     // ---- a listing's answer
 
     /** The pins that reach [key] now, null where the account pins nothing (an entry then keeps the pins it had). */
@@ -249,6 +256,8 @@ class AccountOffline internal constructor(
                 for (node in walk(rows) + "") belowNode(tenant, scope, node, reached)
             }
         }
+        // what the pins reach beside the listings: each pinned node's covers, which only the pin's record names
+        reached += reach().keys
         return reached
     }
 
@@ -370,6 +379,17 @@ class AccountOffline internal constructor(
         save(r.copy(pins = r.pins.map { if (it.node == node) it.copy(state = state) else it }))
     }
 
+    /**
+     * The covers the pin of [node] keeps (each node below it, its own included, to its cover's blob id): named by the
+     * nodes' sealed meta, which the store does not read, so the pin's fetch records them here ([reach] reads them).
+     */
+    internal suspend fun setPinCovers(node: String, covers: Map<String, String>) = pinLock.withLock {
+        val r = loaded()
+        val pin = r.pins.firstOrNull { it.node == node } ?: return@withLock
+        if (pin.covers == covers) return@withLock
+        save(r.copy(pins = r.pins.map { if (it.node == node) it.copy(covers = covers) else it }))
+    }
+
     /** The notices of [gone] said: they are not said again. */
     suspend fun seenGone() = pinLock.withLock {
         val r = loaded()
@@ -413,7 +433,10 @@ class AccountOffline internal constructor(
             }
             down(pin.node)
             val into = HashSet<EntryKey>()
-            for (n in below) belowNode(pin.tenant, pin.scope, n, into)
+            for (n in below) {
+                belowNode(pin.tenant, pin.scope, n, into)
+                pin.covers[n]?.let { into += blobKey(pin.tenant, pin.scope, it) }
+            }
             // a pinned file is listed in its folder's files (the space's top: ""): that listing is the pin's too, before it is kept
             val row = rows.firstOrNull { it.text("id") == pin.node }
             val parent = key(KeptRead.FILES, pin.tenant, pin.scope, row?.text("parentId") ?: "")
@@ -510,9 +533,15 @@ class AccountOffline internal constructor(
     }
 }
 
-/** A node this account keeps available offline on this device (ADR 0140 decision 9), named by its own ids. */
+/**
+ * A node this account keeps available offline on this device (ADR 0140 decision 9), named by its own ids; [covers] the
+ * cover blob of each node below it its last fetch found (node id to blob id: ids only, the meta that names them is sealed).
+ */
 @Serializable
-data class Pin(val tenant: String, val scope: String, val node: String, val kind: String, val state: State = State.WAITING) {
+data class Pin(
+    val tenant: String, val scope: String, val node: String, val kind: String, val state: State = State.WAITING,
+    val covers: Map<String, String> = emptyMap(),
+) {
     /**
      * Where its fetch is: [WAITING] for the next sync (pinned, or interrupted), [FETCHING], [KEPT] whole as of the last
      * sync, paused at the free-space floor ([NO_SPACE]), or [UNAVAILABLE] — its node blocked or its tenant suspended, its

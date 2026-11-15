@@ -38,5 +38,9 @@ pub fn fake() -> SettingsShown {
         working: false,
         refusal: None,
         register_refusal: None,
+        storage: None,
+        storage_unavailable: None,
+        asking_remove_all: false,
+        limit_units: vec![],
     }
 }

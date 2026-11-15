@@ -15,6 +15,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import me.raddatz.veyq.mobile.blob.ApplicationBlobs
 import me.raddatz.veyq.mobile.session.LivePoll
+import me.raddatz.veyq.mobile.session.NodeCover
+import me.raddatz.veyq.mobile.session.NodeMetaWrite
 import me.raddatz.veyq.mobile.session.OpenNode
 import me.raddatz.veyq.mobile.session.Reach
 import me.raddatz.veyq.mobile.session.TenantSession
@@ -110,6 +112,23 @@ class OfflinePins internal constructor(
     private val syncing = Mutex()
     private var loop: Job? = null
 
+    /**
+     * The name of [pin]'s node in the tree this account's session of its tenant reads (`TenantSession.trees`, a kept read
+     * offline) — never the store's: it keeps no name; null where no session of the tenant is held or the node is not in it.
+     */
+    suspend fun nameOf(pin: Pin): String? = sessions[pin.tenant]?.let { t ->
+        try {
+            t.node(pin.scope, pin.node)?.name
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Each change of the pins or of their fetches. */
+    val changes: kotlinx.coroutines.flow.Flow<Unit> get() = kotlinx.coroutines.flow.combine(pins, progress) { _, _ -> }
+
     /** Whether node [nodeId] is pinned. */
     fun pinned(nodeId: String): Boolean = pins.value.any { it.node == nodeId }
 
@@ -123,7 +142,7 @@ class OfflinePins internal constructor(
     suspend fun plan(tenant: TenantSession, scopeId: String, nodeId: String): Plan? {
         val kinds = kinds ?: return null
         val node = tenant.node(scopeId, nodeId)?.takeIf { kinds.pinnable(it.kind) } ?: return null
-        val blobs = blobsBelow(tenant, kinds, node)
+        val blobs = blobsBelow(tenant, kinds, node).blobs
         account.settle()
         var bytes = 0L
         for (b in blobs) bytes += offline.missing(keyOf(tenant, b), b.chunkCount, b.byteSize)
@@ -236,8 +255,11 @@ class OfflinePins internal constructor(
     private suspend fun fetch(tenant: TenantSession, kinds: PinKinds, pin: Pin) {
         // a node no longer in the tree: the reads' sweep says so (its pin dropped with a notice)
         val node = tenant.node(pin.scope, pin.node) ?: return
-        val blobs = blobsBelow(tenant, kinds, node)
+        val below = blobsBelow(tenant, kinds, node)
+        val blobs = below.blobs
         account.settle()
+        // the covers the pin keeps are named by the nodes' sealed meta, which the store cannot read: the pin records them
+        offline.setPinCovers(pin.node, below.covers)
         offline.applyPins()
         val todo = blobs.map { it to offline.missing(keyOf(tenant, it), it.chunkCount, it.byteSize) }.filter { it.second > 0 }
         if (todo.isEmpty()) {
@@ -277,11 +299,19 @@ class OfflinePins internal constructor(
         }
     }
 
-    /** The blobs of [root] and of every node below it in the open tree, by the kinds' rule; a node whose listing is refused keeps none. */
-    private suspend fun blobsBelow(tenant: TenantSession, kinds: PinKinds, root: OpenNode): List<PinBlob> {
+    /** What a pin keeps below a node: the blobs, and each node's cover blob by its node (what [AccountOffline.reach] reads). */
+    private class Below(val blobs: List<PinBlob>, val covers: Map<String, String>)
+
+    /**
+     * The blobs of [root] and of every node below it in the open tree, by the kinds' rule — and each node's cover (core's,
+     * every kind's: a Memory's and its chapters' covers draw offline, a folder's too); a node whose listing is refused keeps
+     * none of its kind's.
+     */
+    private suspend fun blobsBelow(tenant: TenantSession, kinds: PinKinds, root: OpenNode): Below {
         val nodes = tenant.trees()[root.scopeId].orEmpty()
         val children = nodes.groupBy { it.parentId }
         val out = ArrayList<PinBlob>()
+        val covers = LinkedHashMap<String, String>()
         val seen = HashSet<String>()
         suspend fun down(n: OpenNode) {
             if (!seen.add(n.id)) return
@@ -294,10 +324,19 @@ class OfflinePins internal constructor(
             } catch (e: Exception) {
                 // a refused listing keeps nothing of this node; the others still are
             }
+            coverOf(tenant, n)?.let { out += it; covers[n.id] = it.blobId }
             for (c in children[n.id].orEmpty()) down(c)
         }
         down(root)
-        return out.distinctBy { it.blobId }
+        return Below(out.distinctBy { it.blobId }, covers)
+    }
+
+    /** Node [n]'s cover, where its sealed meta names one whose key opens (`NodeCover.read`); null otherwise. */
+    private fun coverOf(tenant: TenantSession, n: OpenNode): PinBlob? {
+        val meta = runCatching { NodeMetaWrite.openForWrite(account.suite, n.scopeId, n.id, n.key, n.wrappedMeta) }.getOrNull() ?: return null
+        val c = NodeCover.read(meta) ?: return null
+        val key = ApplicationBlobs(tenant).openKey(n.scopeId, n, c.blobId, NodeCover.ROLE, c.wrappedBlobKey) ?: return null
+        return PinBlob(n.scopeId, c.blobId, c.chunkCount, c.byteSize, key)
     }
 
     private fun keyOf(tenant: TenantSession, b: PinBlob) = offline.blobKey(tenant.tenant.tenantId, b.scopeId, b.blobId)
