@@ -213,9 +213,14 @@ A Gradle build of its own, run through its own wrapper.
   suspended tenant dropped, a wrap not served and a refused refresh wiping the store at resume and at reconnect, the shell
   read-only offline, a store closed before its wipe —, `OfflineLimitTest` (the least recently viewed evicted, a pin never,
   the limit lowered or `0`, a medium kept in batches) and the JVM's `KeptReadsTest` (no kept body names or describes a
-  token or an address: derived from the generated models of `KeptRead` and the contracts' text); live, `LiveOfflineTest`
-  (`VEYQ_LIVE`: a gallery viewed online, a medium trashed from another session, the account unlocked again with the network
-  cut).
+  token or an address: derived from the generated models of `KeptRead` and the contracts' text); the pins and their sync
+  (ADR 0140 decision 9): `OfflinePinsTest` over `PlayedTenant` — the size before the first byte, the fetch (tiles, a
+  video's original, never a photo's), a medium added kept at the next sync, an interrupted fetch continued, a re-key that
+  fetches no frame (counted), an unpin that keeps what another pin reaches, a trashed node's pin dropped with its notice, a
+  blocked node's and a suspended tenant's kept without content, one store per account in the process; live,
+  `LiveOfflineTest` (`VEYQ_LIVE`: a gallery viewed online, a medium trashed from another session, the account unlocked
+  again with the network cut) and `LivePinsTest` (a Memory pinned through the session's door, a photo added from another
+  session kept after the next online open, its folder's subtree re-keyed with no frame fetched again, opened offline).
   The QR reader (`qr/`, a port of ZXing's QR path; its `NOTICE` beside it) changes only with ZXing's corpus still at
   upstream's thresholds: `QrCorpusTest` (JVM; `:core:fetchQrCorpus` fetches the images into `build/qr-corpus`, each held to
   its SHA-256 in `core/qr/zxing-corpus.sha256`, so the first run needs the network) and `QrDecoderTest` (every target, over
@@ -601,8 +606,8 @@ own — ciphertext and metadata included, since the app never chose to keep them
 (in a header, ADR 0004; the device's wraps in the Keychain or its platform equivalent), never a stack's.
 
 **The one thing the app chooses to keep is its offline store** ([ADR 0140](../../docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md),
-the core's package `offline/`: the store, its wipe and the read path through it built; no host names its directory yet,
-so no app keeps anything): content a person viewed (bounded by a limit they set) or made available
+the core's package `offline/`: the store, its wipe, the read path through it and the pins with their sync built; no host
+names its directory yet, so no app keeps anything): content a person viewed (bounded by a limit they set) or made available
 offline, as ciphertext exactly as the server sent it — blob frames and an allowlist of listing answers — each entry
 sealed again under a key of this account on this device, in one directory per account whose file names are opaque. It
 never holds a decrypted byte, a token or a presigned URL, and sign-out, "Stop trusting this device" and removing the
@@ -629,6 +634,10 @@ Per engine:
 - **OkHttp (Android, `Network.kt`):** no cache and `CookieJar.NO_COOKIES` are OkHttp's defaults, pinned explicitly.
   Measured 2026-11-13 on a throwaway API 36 emulator after the same pass: `run-as me.raddatz.veyq find . -type f`
   listed only `shared_prefs/veyq.trust.xml`, `shared_prefs/veyq-recent.xml` and `files/profileInstalled` — no `cache/`.
+  Since the pins' worker (ADR 0140 decision 9, `OfflineWork.kt`), WorkManager keeps its own records:
+  `databases/androidx.work.workdb` (with its `-wal`/`-shm`) and `shared_prefs/androidx.work.util.preferences.xml` — the
+  worker's class name, its state and times, no input data, so no content, id or key (remembered from WorkManager's
+  schema; not yet listed on a device).
 - **Curl (Linux, `Engine.linux.kt`):** libcurl has no response cache, and its cookie engine starts only with
   `CURLOPT_COOKIEFILE`/`COOKIEJAR`, which Ktor's engine never sets (remembered from libcurl's docs; the engine's klib
   references no cookie option). Not measured here.
