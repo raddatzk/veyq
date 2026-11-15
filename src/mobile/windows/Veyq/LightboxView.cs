@@ -56,6 +56,11 @@ internal sealed class LightboxView : IDisposable
     /// <summary>What the stage shows now: the medium's id, its picture's blob, whether its player is up.</summary>
     private (string MediaId, string? Picture, bool Playing)? _drawn;
     private ScrollViewer? _zoom;
+    /// <summary>Where the view's centre was before a zoom by keys, in the unzoomed picture's frame.</summary>
+    private (double X, double Y)? _centre;
+    /// <summary>Where the lightbox's keys are held while it stands (the window's content), and the keys.</summary>
+    private readonly UIElement _keyHost;
+    private readonly System.Collections.Generic.List<KeyboardAccelerator> _keys = [];
     private MediumPlayer? _player;
     private bool _closed;
 
@@ -102,6 +107,8 @@ internal sealed class LightboxView : IDisposable
         Grid.SetRow(_stage, 1);
         _view.Children.Add(_stage);
         AutomationProperties.SetAutomationId(_view, "lightbox");
+        _keyHost = (UIElement)window.Content;
+        _keyHost.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
         Keys();
         Open(index);
     }
@@ -154,7 +161,9 @@ internal sealed class LightboxView : IDisposable
         Draw();
     }
 
-    /// <summary>← → page, + - 0 zoom, Escape back — as accelerators of the view, so a focused button does not take them.</summary>
+    /// <summary>← → page, + - 0 zoom, Escape back — as accelerators of the window's content while the lightbox stands, so
+    /// they reach it wherever the focus went (after the save picker it was no longer in the view, measured 2026-11-15: ←
+    /// paged nothing); a text box still takes its own arrows first.</summary>
     private void Keys()
     {
         void Add(VirtualKey key, Action act, VirtualKeyModifiers modifiers = VirtualKeyModifiers.None)
@@ -165,9 +174,9 @@ internal sealed class LightboxView : IDisposable
                 e.Handled = true;
                 act();
             };
-            _view.KeyboardAccelerators.Add(a);
+            _keys.Add(a);
+            _keyHost.KeyboardAccelerators.Add(a);
         }
-        _view.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
         Add(VirtualKey.Left, () => Step(-1));
         Add(VirtualKey.Right, () => Step(1));
         Add((VirtualKey)187, () => ZoomBy(ZoomStep));               // = and + (VK_OEM_PLUS)
@@ -273,7 +282,17 @@ internal sealed class LightboxView : IDisposable
             };
             zoom.ViewChanged += (sv, e) =>
             {
-                if (!e.IsIntermediate) Log.Write($"lightbox zoom {((ScrollViewer)sv!).ZoomFactor:0.00}");
+                if (e.IsIntermediate) return;
+                var z = (ScrollViewer)sv!;
+                // the centre kept: put back once the scroll took the new zoom (an offset asked with the zoom was held to the
+                // extent before it, measured 2026-11-15: a zoom by keys stayed at the top left)
+                if (_centre is { } c)
+                {
+                    _centre = null;
+                    z.ChangeView(Math.Max(0, c.X * z.ZoomFactor - z.ViewportWidth / 2), Math.Max(0, c.Y * z.ZoomFactor - z.ViewportHeight / 2), null, disableAnimation: true);
+                    return;
+                }
+                Log.Write($"lightbox zoom {z.ZoomFactor:0.00} at {z.HorizontalOffset:0},{z.VerticalOffset:0} of {z.ExtentWidth:0}×{z.ExtentHeight:0}");
             };
             column.Children.Add(zoom);
             _zoom = zoom;
@@ -334,10 +353,9 @@ internal sealed class LightboxView : IDisposable
     {
         if (_zoom is not { } z) return;
         var to = Math.Clamp(factor, 1f, ZoomMax);
-        // the point at the view's centre kept there: its offset scaled with the zoom
-        var cx = (z.HorizontalOffset + z.ViewportWidth / 2) / z.ZoomFactor;
-        var cy = (z.VerticalOffset + z.ViewportHeight / 2) / z.ZoomFactor;
-        z.ChangeView(Math.Max(0, cx * to - z.ViewportWidth / 2), Math.Max(0, cy * to - z.ViewportHeight / 2), to, disableAnimation: true);
+        // the point at the view's centre, in the picture's own frame: put back there once the zoom is taken
+        _centre = ((z.HorizontalOffset + z.ViewportWidth / 2) / z.ZoomFactor, (z.VerticalOffset + z.ViewportHeight / 2) / z.ZoomFactor);
+        z.ChangeView(null, null, to, disableAnimation: true);
     }
 
     /// <summary>Plays the video through a reader the core opens for this medium (Medium.Reader); what the system cannot
@@ -489,6 +507,8 @@ internal sealed class LightboxView : IDisposable
             p.Dispose();
         }
         _stage.Content = null;
+        foreach (var k in _keys) _keyHost.KeyboardAccelerators.Remove(k);
+        _keys.Clear();
         _watch?.Dispose();
         if (_id is { } lightbox)
         {

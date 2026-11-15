@@ -60,6 +60,7 @@ internal static class RowCovers
                     var picture = await CutAsync(bytes, crop);
                     if (picture is null) return;
                     Covers.Put(nodeId, new Held(f, picture));
+                    Log.Write($"a row's cover drawn: {bytes.Length} B, crop {crop.width:0.00}×{crop.height:0.00}");
                     Show(image, glyph, picture);
                     return;
                 case Answer.Refused:

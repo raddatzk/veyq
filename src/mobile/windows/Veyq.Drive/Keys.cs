@@ -14,6 +14,7 @@ internal static partial class Keys
         ["ctrl"] = 0x11, ["alt"] = 0x12, ["shift"] = 0x10, ["win"] = 0x5B, ["enter"] = 0x0D, ["tab"] = 0x09,
         ["escape"] = 0x1B, ["space"] = 0x20, ["back"] = 0x08, ["delete"] = 0x2E, ["left"] = 0x25, ["up"] = 0x26,
         ["right"] = 0x27, ["down"] = 0x28, ["home"] = 0x24, ["end"] = 0x23, ["f5"] = 0x74, ["f6"] = 0x75,
+        ["plus"] = 0xBB, ["minus"] = 0xBD, // the main keyboard's + (with =) and -, as VK_OEM_PLUS and VK_OEM_MINUS
     };
 
     public static void Type(nint window, string chords)

@@ -398,9 +398,10 @@ internal sealed class MemoryPage : IDisposable
         foreach (var t in r.tiles)
         {
             if (!byId.TryGetValue(t.mediaId, out var m)) continue;
-            var tile = Tile(m.Row, m.Index, t.width, r.height);
-            Canvas.SetLeft(tile, t.left);
-            line.Children.Add(tile);
+            // the tile's frame at the core's place in the row: a grid's cell, nothing laid over a view
+            var frame = new Border { Width = t.width, Height = r.height, CornerRadius = new CornerRadius(4), Child = Tile(m.Row, m.Index, t.width, r.height) };
+            Canvas.SetLeft(frame, t.left);
+            line.Children.Add(frame);
         }
         return line;
     }
