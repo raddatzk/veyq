@@ -56,7 +56,7 @@ A Gradle build of its own, run through its own wrapper.
   `bridge.rs` and `Bridge.g.cs` (`:bridge:generateBindings`, into `build/generated/bridge`, never committed). `smoke/smoke.c` is a C
   host built against `bridge.h` alone. A rule found in the dispatch is a defect to move into the core; a field the UI
   does not draw, and any key, seal or token, is never part of a state the bridge sends (`SecretFreeSchemaTest`).
-  Beside the JSON go three channels ([ADR 0137](../../docs/decisions/0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)): bytes a UI shows as `Answer.Bytes`' payload (`Avatar.Picture`; the
+  Beside the JSON go three channels ([ADR 0137](../../docs/decisions/0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)): bytes a UI shows as `Answer.Bytes`' payload (`Avatar.Picture`; and a list row's cover as `Answer.RowCover`'s, sent only where the host does not hold its frame, `Shell.RowCover`; the
   state names the ids to ask for, an update never carries bytes), a blob's ranges through a reader held by id
   (`Answer.Reader`, `Reader.Read`, `Reader.Close`, closed with the tenant; `Bridge.openReader` the door), and files by
   the path the host's dialog gave, which the core opens (`Pot.Download` and `Receipt.Save` through `DeviceFiles`, core's
@@ -90,7 +90,7 @@ A Gradle build of its own, run through its own wrapper.
 - `linux/` — the Linux app (ADR 0136 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
   functions, the host function), `words`, `said` (money, days and sizes the desktop's way), `theme`, `create_action`
-  and one module per screen (`sign_in` with the unlock, `shell` with Search, `home`, `pot` with its download,
+  and one module per screen (`sign_in` with the unlock, `shell` with Search, `home` (a Memory's row with its cover, `Shell.RowCover`), `pot` with its download,
   `pot_settings` (a Pot's Settings place, editable in place) and `pot_create` (New pot),
   `entry_editor` (an entry's editor; `typed`: when a text field is set from the state), `receipt_viewer` (a receipt
   shown from memory: a picture through GTK, a PDF through poppler-rs) and `entry_history`, `file_page` (a Depot file's page
@@ -123,9 +123,15 @@ A Gradle build of its own, run through its own wrapper.
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
   each picture through `BitmapImage`, sets it on every `PersonPicture` of that id), `Act` (sends a
   call, logs its answer), `ScreenSecrets` (the window out of capture while a secret shows, § Secrets on screen), `PotSettingsView` (a Pot's Settings place, editable in place), `PotCreateDialog` (New pot),
-  `FilePage` (a Depot file's page; its Save a copy's `InfoBar` is `ShellView.Saving`; a medium in a `MediaPlayerElement` over
-  `MediaSource.CreateFromStream` of `ReaderStream`, a seekable .NET `Stream` whose reads are `Reader.Read` ranges, through
-  `AsRandomAccessStream`; `ReaderStreamTest`), `Uploads` (New's Upload files and Upload folder through `FileOpenPicker`
+  `FilePage` (a Depot file's page; its Save a copy's `InfoBar` is `ShellView.Saving`; a medium in `MediumPlayer`: a
+  `MediaPlayerElement` over `MediaSource.CreateFromStream` of `ReaderStream`, a seekable .NET `Stream` whose reads are
+  `Reader.Read` ranges, through `AsRandomAccessStream`; `ReaderStreamTest`), `MemoryPage` (a Memory's or a chapter's page:
+  its chapters with their covers, the justified grid the core lays out and windows — `Gallery.Layout`, only the rows near
+  the view placed on a `Canvas` —, tiles held in `Recent` (`RecentTest`), a drop of photos and videos, the trash's Undo in
+  the shell's `InfoBar`) with `LightboxView` (in the page's place over black: zoom, the slideshow, a video through
+  `MediumPlayer`, the details, Save) and `MediaTiers` (the host's answer to `Media.Tiers`/`Media.Duration`: WIC for a photo,
+  turned by its EXIF; `Windows.Media.Editing` for a video's poster and length; both JPEGs encoded in memory;
+  `MediaTiersTest`), `RowCovers` (a Memory's list row's cover through `Shell.RowCover`), `Uploads` (New's Upload files and Upload folder through `FileOpenPicker`
   and `FolderPicker`, a file's Replace, the queue's `AppBarButton` with its `Flyout`, what it says in an `InfoBar`),
   `DropBoxPage` (a drop box's page), `ListScrolls` (where each list was
   scrolled to; `ListScrollsTest`), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with
@@ -1133,7 +1139,14 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   reboot, and the VM has no automatic logon (`AutoAdminLogon 0`), so the console then waits for the person's password or PIN —
   which an agent never types — and every recipe needs that logged-on session. Without a reboot, `runas /trustlevel:0x20000` left
   the app at `0x3000`, and a restricted, medium-labelled copy of the drive's token still read elevated (`TokenElevation` 1) and its
-  sign-in could not reach the server (measured 2026-11-12).
+  sign-in could not reach the server (measured 2026-11-12). With UAC on (the owner's step, done by 2026-11-15) the app runs at medium integrity and
+  Explorer's drop lands: two photos dragged onto a Memory's gallery went up as one batch (`drag memory-page a.jpg|b.jpg`).
+- WinUI: a `KeyboardAccelerator` on an element fires only while the focus is inside it — after a system dialog (the save
+  picker) the focus came back elsewhere and the lightbox's ← → did nothing (measured 2026-11-15): a view whose keys must
+  hold while it stands adds them to the window's content and removes them when it goes (`LightboxView`). And
+  `ScrollViewer.ChangeView(h, v, zoom)` clamps the offsets to the extent before the zoom: a zoom by keys stayed at the top
+  left; zoom first, then set the offsets once `ViewChanged` reports the new zoom. A trash's Undo (6 s) outlasts no
+  `Veyq.Drive` call that also dumps a tree: trash and Undo go in one call (`wait gallery-undo`, `invoke gallery-undo`).
 - A camera pass on the Android emulator (2026-11-13): the virtual scene's wall poster is the test camera
   (`-virtualscene-poster wall=<png>`, an 8-bit RGB PNG — a 1-bit one silently does not load), but it hangs behind the
   scene camera's start, so the camera is moved to it over the emulator's gRPC: start with `-grpc <port> -grpc-use-token`

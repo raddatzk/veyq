@@ -63,8 +63,8 @@ pub fn shutdown() {
 #[derive(Debug)]
 pub struct Unreadable(pub serde_json::Error);
 
-/// A call's answer and the payload beside it: the bytes of an `Answer::Bytes` (a member's picture, a blob's range),
-/// copied out of the callback; None for every other answer.
+/// A call's answer and the payload beside it: the bytes of an `Answer::Bytes` (a member's picture, a blob's range) or of
+/// an `Answer::RowCover` that sent its picture, copied out of the callback; None for every other answer.
 pub type Answered = (Answer, Option<Vec<u8>>);
 
 /// One action of the core, answered once. Before the core started it is never answered. The call reaches the core when

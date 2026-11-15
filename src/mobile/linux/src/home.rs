@@ -1,9 +1,13 @@
 //! Home and an application's list (ADR 0122): Home's level as the core groups it — the folders, then the contents —
 //! under the filters the core offers, and an application's own list in its Favorites, Recent and the rest. Each drawn
 //! as GNOME draws a list of places: boxed lists in a clamped, scrolled column, a filter as a toggle group.
-use adw::prelude::*;
+use std::cell::RefCell;
+use std::collections::HashMap;
 
-use crate::bridge::{self, wire::ApplicationId, wire::ArrangedList, wire::Call, wire::NodeRef, wire::ObjectRef,
+use adw::prelude::*;
+use gtk::{gdk, glib};
+
+use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::ArrangedList, wire::Call, wire::Crop, wire::NodeRef, wire::ObjectRef,
     wire::ShellModelState, wire::ShellShown, wire::FolderRef};
 use crate::drop::Drops;
 use crate::{said, words};
@@ -35,13 +39,113 @@ pub fn app_name(shown: &ShellShown, app: ApplicationId) -> String {
     shown.application_words.iter().find(|w| w.application == app).map(|w| said::key(&w.word)).unwrap_or_default()
 }
 
-/// A row that opens [r] in its application when activated.
+/// A row that opens [r] in its application when activated; a Memory's shows its cover where it has one ([cover_prefix]).
 pub fn object_row(r: &ObjectRef) -> adw::ActionRow {
     let row = adw::ActionRow::builder().title(glib_escape(&r.name)).activatable(true).build();
-    row.add_prefix(&gtk::Image::from_icon_name(kind_icon(&r.kind)));
+    let icon = gtk::Image::from_icon_name(kind_icon(&r.kind));
+    if r.kind == "MEMORY" {
+        row.add_prefix(&cover_prefix(icon, &r.node_id));
+    } else {
+        row.add_prefix(&icon);
+    }
     let open = r.clone();
     row.connect_activated(move |_| bridge::send(Call::ShellOpen { r#ref: open.clone() }));
     row
+}
+
+/// The longest side a list row's cover is held at (it is drawn 64 × 36).
+const ROW_COVER_EDGE: i32 = 128;
+
+/// How many rows' covers are held at once.
+const ROW_COVERS_HELD: usize = 256;
+
+thread_local! {
+    /// The list rows' covers by node id: the frame each was cut for (the core's `RowCover.frame`) and the cut picture —
+    /// a list is drawn anew on every state, and a held frame is answered without its picture.
+    static ROW_COVERS: RefCell<HashMap<String, (String, gdk::Texture)>> = RefCell::new(HashMap::new());
+}
+
+/// [icon] in a row's prefix, replaced by node [node_id]'s cover once the core names one (`Shell.RowCover`): the
+/// framed part of the stored picture, cut where the core says (`Cover.Cut`), as the chapters' rows and the phones'.
+fn cover_prefix(icon: gtk::Image, node_id: &str) -> gtk::Stack {
+    let cover = gtk::Picture::builder().content_fit(gtk::ContentFit::Cover).can_shrink(true).width_request(64).height_request(36).valign(gtk::Align::Center).build();
+    cover.set_overflow(gtk::Overflow::Hidden);
+    cover.add_css_class("card");
+    let prefix = gtk::Stack::new();
+    prefix.add_child(&icon);
+    prefix.add_child(&cover);
+    let held = ROW_COVERS.with(|c| c.borrow().get(node_id).cloned());
+    if let Some((_, t)) = &held {
+        cover.set_paintable(Some(t));
+        prefix.set_visible_child(&cover);
+    }
+    let (node_id, cover, icon, weak) = (node_id.to_owned(), cover.downgrade(), icon.downgrade(), prefix.downgrade());
+    glib::spawn_future_local(async move {
+        let held_frame = held.map(|(f, _)| f);
+        let answered = bridge::call(&Call::ShellRowCover { node_id: node_id.clone(), held: held_frame }).await;
+        let shown = match answered {
+            Ok((Answer::RowCover { sent: false, .. }, _)) => return,
+            Ok((Answer::RowCover { frame, crop, sent: true, .. }, Some(bytes))) => match row_cover(bytes, crop).await {
+                Some(t) => {
+                    ROW_COVERS.with(|c| {
+                        let mut c = c.borrow_mut();
+                        if c.len() >= ROW_COVERS_HELD && !c.contains_key(&node_id)
+                            && let Some(k) = c.keys().next().cloned()
+                        {
+                            c.remove(&k);
+                        }
+                        c.insert(node_id.clone(), (frame, t.clone()));
+                    });
+                    Some(t)
+                }
+                None => None,
+            },
+            Ok((Answer::Refused { .. }, _)) => {
+                ROW_COVERS.with(|c| c.borrow_mut().remove(&node_id));
+                None
+            }
+            other => return eprintln!("veyq: Shell.RowCover answered {:?}", other.map(|(a, _)| a)),
+        };
+        let (Some(cover), Some(icon), Some(prefix)) = (cover.upgrade(), icon.upgrade(), weak.upgrade()) else { return };
+        match shown {
+            Some(t) => {
+                cover.set_paintable(Some(&t));
+                prefix.set_visible_child(&cover);
+            }
+            None => prefix.set_visible_child(&icon),
+        }
+    });
+    prefix
+}
+
+/// A row's cover from the stored picture [bytes]: decoded by GTK, the part [crop] frames cut out where the core says, held
+/// small.
+async fn row_cover(bytes: Vec<u8>, crop: Crop) -> Option<gdk::Texture> {
+    let texture = gdk::Texture::from_bytes(&glib::Bytes::from_owned(bytes)).inspect_err(|e| eprintln!("veyq: a row's cover did not decode: {e}")).ok()?;
+    let (width, height) = (texture.width(), texture.height());
+    let Ok((Answer::CoverCut { x, y, width: cw, height: ch }, _)) = bridge::call(&Call::CoverCut { crop, width, height }).await else {
+        eprintln!("veyq: a row's cover was not cut");
+        return None;
+    };
+    Some(crate::file_page::within_edge(&cut(&texture, x, y, cw, ch)?, ROW_COVER_EDGE))
+}
+
+/// The part ([x], [y], [width] × [height] pixels) of [texture], as a texture of its own; None where it is not inside it.
+pub fn cut(texture: &gdk::Texture, x: i32, y: i32, width: i32, height: i32) -> Option<gdk::Texture> {
+    let (tw, th) = (texture.width(), texture.height());
+    if width <= 0 || height <= 0 || x < 0 || y < 0 || x + width > tw || y + height > th {
+        return None;
+    }
+    let mut downloader = gdk::TextureDownloader::new(texture);
+    downloader.set_format(gdk::MemoryFormat::B8g8r8a8Premultiplied);
+    let (whole, stride) = downloader.download_bytes();
+    let row = width as usize * 4;
+    let mut part = Vec::with_capacity(row * height as usize);
+    for r in y..y + height {
+        let at = r as usize * stride + x as usize * 4;
+        part.extend_from_slice(&whole[at..at + row]);
+    }
+    Some(gdk::MemoryTexture::new(width, height, gdk::MemoryFormat::B8g8r8a8Premultiplied, &glib::Bytes::from_owned(part), row).upcast())
 }
 
 /// A row's title is markup in libadwaita: a name is shown as it is written.
@@ -157,4 +261,26 @@ pub fn list(list: Option<&ArrangedList>) -> gtk::Widget {
         content.append(&group);
     }
     scroll.upcast()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A row's cover is the part of the stored picture the core's cut names, nothing outside it.
+    #[test]
+    fn a_rows_cover_is_the_part_the_cut_names() {
+        // 3 × 2, each pixel's blue byte its index (B, G, R, A premultiplied, opaque)
+        let pixels: Vec<u8> = (0..6u8).flat_map(|i| [i, 0, 0, 255]).collect();
+        let texture: gdk::Texture = gdk::MemoryTexture::new(3, 2, gdk::MemoryFormat::B8g8r8a8Premultiplied, &glib::Bytes::from_owned(pixels), 12).upcast();
+        let part = cut(&texture, 1, 0, 2, 2).expect("inside the picture");
+        assert_eq!((part.width(), part.height()), (2, 2));
+        let mut downloader = gdk::TextureDownloader::new(&part);
+        downloader.set_format(gdk::MemoryFormat::B8g8r8a8Premultiplied);
+        let (bytes, stride) = downloader.download_bytes();
+        let blue: Vec<u8> = (0..2).flat_map(|r| (0..2).map(move |c| (r, c))).map(|(r, c)| bytes[r * stride + c * 4]).collect();
+        assert_eq!(blue, vec![1, 2, 4, 5], "the columns 1 and 2 of both rows");
+        assert!(cut(&texture, 2, 0, 2, 2).is_none(), "a cut past the picture's edge");
+        assert!(cut(&texture, 0, 0, 0, 2).is_none(), "an empty cut");
+    }
 }

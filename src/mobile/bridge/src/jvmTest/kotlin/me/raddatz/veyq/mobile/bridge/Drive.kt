@@ -29,7 +29,7 @@ internal suspend fun Bridge<*, *>.askWithPayload(json: String, timeout: Duration
     val (a, payload) = withTimeout(timeout) { answered.await() }
     check(count == 1) { "answered $count times" }
     val answer = wire.decodeFromString(Answer.serializer(), a)
-    check((answer is Answer.Bytes) == (payload != null)) { "$answer with a payload of ${payload?.size}" }
+    check((answer is Answer.Bytes || answer is Answer.RowCover && answer.sent) == (payload != null)) { "$answer with a payload of ${payload?.size}" }
     return answer to payload
 }
 

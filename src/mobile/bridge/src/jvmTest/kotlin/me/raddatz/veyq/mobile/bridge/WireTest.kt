@@ -165,7 +165,7 @@ class WireTest {
             Call.SettingsRemoveSavedKey(50, "dev-3"), Call.SettingsRemoveOtherSavedKeys(50), Call.SettingsStaySignedIn(50, StaySignedIn.LOGIN),
             Call.SettingsPasswordTrust(50, "typed"), Call.SettingsStopTrusting(50), Call.SettingsSignOutHere(50),
             // Memories
-            Call.ShellCreateMemory("scope-1", null, "Ostsee 2026"), Call.ShellCreateMemory("scope-1", "folder-1", "Tag eins"),
+            Call.ShellCreateMemory("scope-1", null, "Ostsee 2026"), Call.ShellCreateMemory("scope-1", "folder-1", "Tag eins"), Call.ShellRowCover("memory-1", null), Call.ShellRowCover("memory-1", "b-1@0.25,0.0,0.5,1.0"),
             Call.GalleryOpen(memory), Call.GalleryClose(60), Call.GalleryReload(60), Call.GalleryTile(60, "m1"), Call.GalleryChapterCover(60, "c1"), Call.GalleryLayout(60, 1024.5, 3200.25, 768.0), Call.GalleryLayout(60, 0.0, 0.0, 0.0),
             Call.GalleryTrash(60, "m1"), Call.GalleryUndo(60), Call.GalleryPurge(60), Call.GalleryCancelAsk(60), Call.GallerySeen(60),
             Call.GalleryCreateChapter(60, "Tag zwei"), Call.MemoryUpload(60, listOf("/home/p/Bilder/Strand 中文.jpg", "C:\\Users\\p\\clip.webm")),
@@ -201,7 +201,7 @@ class WireTest {
             Answer.SettingsOpened(50), Answer.Refused(Answer.Why.NO_SUCH_ACCOUNT_PAGE), Answer.ScanOpened(40), Answer.FrameTaken(true), Answer.FrameTaken(false), Answer.Refused(Answer.Why.NOT_A_FRAME), Answer.Refused(Answer.Why.NO_SUCH_SCAN), Answer.Refused(Answer.Why.NO_KIT),
             Answer.LinkOpened(70), Answer.Refused(Answer.Why.NO_SUCH_LINK), Answer.Refused(Answer.Why.NO_SIGN_IN), Answer.Refused(Answer.Why.NOT_TAKEN),
             Answer.GalleryOpened(60), Answer.LightboxOpened(61), Answer.GridLayout(listOf(GridRow(4, 0.0, 183.0, listOf(GridTile("m1", 0.0, 244.0), GridTile("m2", 252.0, 137.25))),
-                GridRow(5, 191.0, 150.0, listOf(GridTile("m3", 0.0, 200.0)))), 341.0, 9), Answer.GridLayout(emptyList(), 0.0, 0), Answer.Created(memory, null), Answer.Created(null, Notice(Msg.MEMORY_SLUG_TAKEN)),
+                GridRow(5, 191.0, 150.0, listOf(GridTile("m3", 0.0, 200.0)))), 341.0, 9), Answer.GridLayout(emptyList(), 0.0, 0), Answer.Created(memory, null), Answer.RowCover("b-1@0.25,0.0,0.5,1.0", me.raddatz.veyq.mobile.session.NodeCover.Crop(0.25, 0.0, 0.5, 1.0), true, "image/jpeg"), Answer.RowCover("b-1@0,0,1,1", me.raddatz.veyq.mobile.session.NodeCover.Crop.FULL, false, null), Answer.Created(null, Notice(Msg.MEMORY_SLUG_TAKEN)),
             Answer.Queued(2, Notice(Msg.MEMORY_NOT_MEDIA, listOf(1))), Answer.Refused(Answer.Why.NOT_OFFERED), Answer.Refused(Answer.Why.NO_SUCH_GALLERY),
             Answer.MediumDetails(
                 listOf(

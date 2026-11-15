@@ -36,6 +36,7 @@ internal sealed class NodeHeader : IDisposable
     private Watch? _watch;
     private Facts? _later;
     private long? _laterFile;
+    private long? _laterGallery;
     private bool _laterSet;
     private bool _closed;
     private bool _seenUndo;
@@ -118,7 +119,7 @@ internal sealed class NodeHeader : IDisposable
             return;
         }
         _id = header;
-        if (_laterSet) Act.Send(new Call.HeaderFacts { header = header, facts = _later, file = _laterFile, gallery = null });
+        if (_laterSet) Act.Send(new Call.HeaderFacts { header = header, facts = _later, file = _laterFile, gallery = _laterGallery });
         _watch = Core.Watch(new Watched.Header { header = header }, update =>
         {
             if (_closed || update is not Update.Header h) return;
@@ -203,29 +204,30 @@ internal sealed class NodeHeader : IDisposable
     private static string Ids(Plan? p) => p is null ? "" : string.Join(" | ", new[] { p.buttons, p.menu, p.last }.Select(g => string.Join(",", g.Select(a => a.id))));
 
     /// <summary>What the kind's page knows now (a Pot read: whether it takes writes) and, for a file's page, its id
-    /// <paramref name="file"/>: the page's own actions (Replace) join the plan.</summary>
-    public void Facts(Facts? facts, long? file = null)
+    /// <paramref name="file"/>, for a Memory's or a chapter's its gallery's <paramref name="gallery"/>: the page's own
+    /// actions (Replace, Add photos) join the plan.</summary>
+    public void Facts(Facts? facts, long? file = null, long? gallery = null)
     {
-        if (_id is { } header) Act.Send(new Call.HeaderFacts { header = header, facts = facts, file = file, gallery = null });
-        else (_later, _laterFile, _laterSet) = (facts, file, true);
+        if (_id is { } header) Act.Send(new Call.HeaderFacts { header = header, facts = facts, file = file, gallery = gallery });
+        else (_later, _laterFile, _laterGallery, _laterSet) = (facts, file, gallery, true);
     }
 
     /// <summary>The header's commands for the bar: its primary ones (the plan's buttons) and its secondary ones (the
     /// menu, a separator, the last group), from the plan's groups (HeaderPlan). <paramref name="pageDownload"/> is the
     /// page's own download where it has one (HeaderPlan.ByPage: a Pot's, a file's Save a copy), <paramref name="pageReplace"/>
-    /// a file page's own Replace.</summary>
-    public (List<ICommandBarElement> Primary, List<ICommandBarElement> Secondary) Commands(Action pageDownload, Action? pageReplace = null)
+    /// a file page's own Replace, <paramref name="pageUpload"/> a Memory's page's own Add photos.</summary>
+    public (List<ICommandBarElement> Primary, List<ICommandBarElement> Secondary) Commands(Action pageDownload, Action? pageReplace = null, Action? pageUpload = null)
     {
         var primary = new List<ICommandBarElement>();
         var secondary = new List<ICommandBarElement>();
         if (Shown is not { gone: false, plan: { } plan } s) return (primary, secondary);
         var kind = s.node.kind;
-        foreach (var a in HeaderPlan.Primary(plan, kind)) primary.Add(Command(a, s, pageDownload, pageReplace));
-        foreach (var a in HeaderPlan.Secondary(plan, kind)) secondary.Add(a is null ? new AppBarSeparator() : Command(a, s, pageDownload, pageReplace));
+        foreach (var a in HeaderPlan.Primary(plan, kind)) primary.Add(Command(a, s, pageDownload, pageReplace, pageUpload));
+        foreach (var a in HeaderPlan.Secondary(plan, kind)) secondary.Add(a is null ? new AppBarSeparator() : Command(a, s, pageDownload, pageReplace, pageUpload));
         return (primary, secondary);
     }
 
-    private AppBarButton Command(PlanAction a, HeaderShown s, Action pageDownload, Action? pageReplace)
+    private AppBarButton Command(PlanAction a, HeaderShown s, Action pageDownload, Action? pageReplace, Action? pageUpload)
     {
         var label = a.word is { } w ? Veyq.Said.Key(w) : a.id;
         var icon = a.id switch
@@ -240,6 +242,7 @@ internal sealed class NodeHeader : IDisposable
             "report" => new SymbolIcon(Symbol.Flag),
             "cover" => new SymbolIcon(Symbol.Pictures),
             "replace" => new SymbolIcon(Symbol.Upload),
+            "upload" => new SymbolIcon(Symbol.Upload),
             _ => new SymbolIcon(Symbol.More),
         };
         var button = new AppBarButton { Icon = icon, Label = label };
@@ -254,6 +257,7 @@ internal sealed class NodeHeader : IDisposable
                 case "delete": Delete(); break;
                 case "download" when HeaderPlan.ByPage(a.id, s.node.kind): pageDownload(); break;
                 case "replace": pageReplace?.Invoke(); break;
+                case "upload": pageUpload?.Invoke(); break;
                 case "download": Download(); break;
                 case "move": MoveDialog.Open(_window, s.node, copy: false, UndoBar); break;
                 case "copy": MoveDialog.Open(_window, s.node, copy: true, UndoBar); break;

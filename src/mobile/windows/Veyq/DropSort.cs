@@ -74,4 +74,16 @@ internal static class DropSort
         }
         return calls;
     }
+
+    /// <summary>What a drop or a pick onto gallery <paramref name="gallery"/> sends (Linux's memory_page::calls): the files as
+    /// one Memory.Upload — the core leaves out what is no photo or video and says so —, nothing for a folder (owner question
+    /// 3: said, not taken) or for an item with no local path.</summary>
+    public static Call? GalleryCall(long gallery, Sorted sorted) =>
+        sorted.Files.Count > 0 ? new Call.MemoryUpload { gallery = gallery, paths = sorted.Files.ToList() } : null;
+
+    /// <summary>What a drop or a pick onto a gallery says at once, before the core answers: each folder not taken, each item
+    /// that is not on this computer.</summary>
+    public static IReadOnlyList<string> GallerySaid(Sorted sorted) =>
+        sorted.Folders.Select(f => Words.MemoryDropFolder(System.IO.Path.GetFileName(f.TrimEnd('\\', '/')) is { Length: > 0 } n ? n : f))
+            .Concat(sorted.Refused.Select(Words.DepotDropNotLocal)).ToList();
 }

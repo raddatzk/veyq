@@ -4,7 +4,7 @@
 // Search as its AutoSuggestBox (Ctrl+E, Ctrl+F), Home, Favorites, Recent and the applications as its items, and Settings
 // at its foot, which opens the account's Settings (AccountSettingsPage) in the content. The content shows what the core's
 // shell says is open — Home, an application's list, a Pot, a file
-// (FilePage), a drop box (DropBoxPage), or an object this app does not draw yet — under its title and a CommandBar whose first command is New; an
+// (FilePage), a drop box (DropBoxPage), a Memory or a chapter (MemoryPage, its lightbox LightboxView), or an object this app does not draw yet — under its title and a CommandBar whose first command is New; an
 // open Pot's Download is among its secondary commands (the bar's own More), an InfoBar under the bar says how a download
 // went, and another follows a file's Save a copy with its progress and Cancel. A list keeps where it was scrolled to when
 // the shell draws it anew — after an object opened from it closed, after an update — by its place (ListScrolls).
@@ -46,6 +46,7 @@ internal sealed class ShellView
     private readonly ListScrolls _scrolls = new();
     private FilePage? _file;
     private DropBoxPage? _dropBox;
+    private MemoryPage? _memory;
     /// <summary>The account's Settings while the pane's Settings item shows it, in place of what the shell says.</summary>
     private AccountSettingsPage? _account;
     private readonly Window _window;
@@ -185,7 +186,7 @@ internal sealed class ShellView
             else Act.Send(new Call.ShellBack());
         };
 
-        // F5 and Ctrl+R refresh an open Pot (its CommandBar's Refresh), else the shell's lists, as Explorer and Edge refresh
+        // F5 and Ctrl+R refresh an open Pot or Memory (its CommandBar's Refresh), else the shell's lists, as Explorer and Edge refresh
         foreach (var (key, modifiers) in new[] { (VirtualKey.F5, VirtualKeyModifiers.None), (VirtualKey.R, VirtualKeyModifiers.Control) })
         {
             var accelerator = new KeyboardAccelerator { Key = key, Modifiers = modifiers };
@@ -193,6 +194,7 @@ internal sealed class ShellView
             {
                 e.Handled = true;
                 if (_pot is { } pot) pot.Refresh();
+                else if (_memory is { } memory) memory.Reload();
                 else RefreshLists();
             };
             _nav.KeyboardAccelerators.Add(accelerator);
@@ -516,6 +518,7 @@ internal sealed class ShellView
             _file = null;
             _dropBox?.Dispose();
             _dropBox = null;
+            DropMemory();
             body = _pot.Page;
         }
         else if (shell.openObject is { kind: "FILE" } file)
@@ -525,6 +528,7 @@ internal sealed class ShellView
             _pot = null;
             _dropBox?.Dispose();
             _dropBox = null;
+            DropMemory();
             var node = new NodeAt { scopeId = file.scopeId, nodeId = file.nodeId, kind = file.kind, name = file.name };
             if (_file is null || _file.Node != node)
             {
@@ -541,6 +545,7 @@ internal sealed class ShellView
             _pot = null;
             _file?.Dispose();
             _file = null;
+            DropMemory();
             var node = new NodeAt { scopeId = box.scopeId, nodeId = box.nodeId, kind = box.kind, name = box.name };
             if (_dropBox is null || _dropBox.Node != node)
             {
@@ -548,6 +553,37 @@ internal sealed class ShellView
                 _dropBox = new DropBoxPage(_window, node, _said);
             }
             body = _dropBox.Page;
+        }
+        else if (shell.openObject is { kind: "MEMORY" or "CHAPTER" } memory)
+        {
+            if (_pot is not null) _said.IsOpen = false;
+            _pot?.Dispose();
+            _pot = null;
+            _file?.Dispose();
+            _file = null;
+            _dropBox?.Dispose();
+            _dropBox = null;
+            var node = new NodeAt { scopeId = memory.scopeId, nodeId = memory.nodeId, kind = memory.kind, name = memory.name };
+            if (_memory is null || _memory.Node != node)
+            {
+                DropMemory();
+                long? told = null;
+                _memory = new MemoryPage(_window, node, Say, _said, Saving)
+                {
+                    // each state: its "Add chapter", and once its id, the header's own upload (Header.Facts' gallery)
+                    Changed = (_, gallery) =>
+                    {
+                        if (told != gallery)
+                        {
+                            told = gallery;
+                            _header?.Facts(new Facts { canWrite = true, hasContent = true }, null, gallery);
+                        }
+                        DrawCommands();
+                    },
+                };
+            }
+            _memory.Hero(_header?.Hero);
+            body = _memory.Page;
         }
         else
         {
@@ -558,6 +594,7 @@ internal sealed class ShellView
             _file = null;
             _dropBox?.Dispose();
             _dropBox = null;
+            DropMemory();
             if (shell.openObject is { } other) body = NotBuilt(other);
             else
             {
@@ -600,14 +637,18 @@ internal sealed class ShellView
         var page = _pot;
         // a Pot's page creates one thing, an entry (as Android's and Apple's Pot screens): the level's New is not offered
         // beside it — two Add commands side by side would ask which one adds what
-        if (page is null && shown.canCreateHere && shown.creates.Count > 0)
+        var memory = _memory;
+        // a Memory's page creates one thing too, a chapter (its "Add chapter", where its gallery offers one): New is not
+        // offered beside it, as on a Pot's page
+        if (page is null && memory is null && shown.canCreateHere && shown.creates.Count > 0)
         {
-            // what the core offers here (AppKinds.createsWhere): a folder and a Pot, on Home files and a folder uploaded too
+            // what the core offers here (AppKinds.createsWhere): a folder, a Pot and a Memory, on Home files and a folder uploaded too
             _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "new",
-                // New Memory is drawn with Memories' screens (the CR's phase 5); a chapter is a Memory's page's own
-                shown.creates.Where(c => c.create is not (Create.Memory or Create.Chapter)).Select(c => (Said.Key(c.word), $"new:{c.create}", c.create switch
+                // a chapter is a Memory's page's own, never a level's
+                shown.creates.Where(c => c.create is not Create.Chapter).Select(c => (Said.Key(c.word), $"new:{c.create}", c.create switch
                 {
                     Create.Folder => (Action?)NewFolder,
+                    Create.Memory => NewMemory,
                     Create.Pot => () => PotCreateDialog.Open(_window, Say),
                     Create.UploadFiles => () => { if (Level() is { } l) _uploads.PickFiles(l, Say); },
                     Create.UploadFolder => () => { if (Level() is { } l) _uploads.PickFolder(l, Say); },
@@ -616,6 +657,10 @@ internal sealed class ShellView
         }
         // an open Pot's "Add entry" is the content's creating action, first, where its places show and it takes writes
         if (page is { CanAdd: true }) _commands.PrimaryCommands.Add(CreateAction.Button(Words.PotAdd(), "pot-add", page.AddEntry));
+        if (memory?.Shown is { } gallery && gallery.creates.Any(c => c.create == Create.Chapter))
+        {
+            _commands.PrimaryCommands.Add(CreateAction.Button(Words.MemoryAddChapter(), "memory-add-chapter", memory.CreateChapter));
+        }
         // the upload queue while it lists anything
         if (_uploads.Button is { } uploads) _commands.PrimaryCommands.Add(uploads);
         // a space's top level is no link's root: its share offers "Add files only" alone (the web's level share)
@@ -636,7 +681,7 @@ internal sealed class ShellView
         }, () =>
         {
             if (file?.Id is { } id) _uploads.Replace(id, Say);
-        });
+        }, () => memory?.Add());
         foreach (var c in primary) _commands.PrimaryCommands.Add(c);
         if (page is not null)
         {
@@ -644,6 +689,14 @@ internal sealed class ShellView
             var refresh = new AppBarButton { Icon = new SymbolIcon(Symbol.Refresh), Label = Words.PotRefresh() };
             AutomationProperties.SetAutomationId(refresh, "pot-refresh");
             refresh.Click += (_, _) => page.Refresh();
+            _commands.PrimaryCommands.Add(refresh);
+        }
+        else if (memory is not null)
+        {
+            // a Memory's Refresh: its gallery read anew (F5 and Ctrl+R too)
+            var refresh = new AppBarButton { Icon = new SymbolIcon(Symbol.Refresh), Label = Words.PotRefresh() };
+            AutomationProperties.SetAutomationId(refresh, "memory-refresh");
+            refresh.Click += (_, _) => memory.Reload();
             _commands.PrimaryCommands.Add(refresh);
         }
         else if (_dropBox is not null)
@@ -684,6 +737,47 @@ internal sealed class ShellView
     {
         if (_shown is not { } shown || !shown.canCreateHere || !shown.creates.Any(c => c.create == Create.UploadFiles)) return null;
         return Level() is { } level ? new Drops(level, Say) : null;
+    }
+
+    /// <summary>The Memory's page let go (closed in the core), its hero handed back.</summary>
+    private void DropMemory()
+    {
+        _memory?.Dispose();
+        _memory = null;
+    }
+
+    /// <summary>New Memory (Shell.CreateMemory) in the level shown, named in a dialog that asks again with the core's
+    /// problem; the Memory made opens (the web's MemoryNodeDialog).</summary>
+    private async void NewMemory() => await NewMemory("", null);
+
+    private async System.Threading.Tasks.Task NewMemory(string name, string? problem)
+    {
+        if (_state is not { } state || state.shell.space is not { } space) return;
+        var parent = state.shell.path.Count > 0 ? state.shell.path[^1].nodeId : null;
+        var typed = await Dialogs.AskName(_window, "new-memory", Words.MemoryCreateMemoryTitle(), Words.NodeName(), name, problem, Words.FolderCreate());
+        if (typed is null) return;
+        try
+        {
+            var (answer, _) = await Core.CallAsync(new Call.ShellCreateMemory { scopeId = space, parentId = parent, name = typed });
+            switch (answer)
+            {
+                case Answer.Created { node: { } made }:
+                    Log.Write("new memory: made");
+                    MemoryPage.OpenNode(made);
+                    break;
+                case Answer.Created { notice: { } n }:
+                    Log.Write($"new memory: {n.msg}");
+                    await NewMemory(typed, Said.Notice(n));
+                    break;
+                default:
+                    Log.Write($"Shell.CreateMemory answered {answer.GetType().Name}");
+                    break;
+            }
+        }
+        catch (Exception e)
+        {
+            Log.Write($"Shell.CreateMemory failed ({e.GetType().Name})");
+        }
     }
 
     /// <summary>New's folder (Shell.CreateFolder), named in a dialog that asks again with the core's problem.</summary>
