@@ -1161,8 +1161,10 @@ implementation exists but what holds it to the first.
       `InfoBar`; Refresh, F5 and Ctrl+R. `LightboxView.cs`: in the page's place over black (the shell has no navigation
       of its own; Close and Escape return), a `CommandBar` with Close, Previous, Next, the position and name, Slideshow,
       Details (a `ContentDialog`, one at a time), Download original (the save picker onto `ShellView.Saving`), Move to
-      trash; zoom in a `ScrollViewer` by Ctrl+wheel, a pinch and `+`/`-`/`0`; ←/→ and Escape on the window's content while
-      it stands (an accelerator on the element stopped after the save picker took the focus); a video through
+      trash; zoom in a `ScrollViewer` by Ctrl+wheel, a pinch and `+`/`-`/`0`, and Escape, as accelerators of the window's
+      content while it stands (one on the element stopped after the save picker took the focus); ←/→ on that content's
+      `PreviewKeyDown`, since after the picker the focus is back on the bar's Save and the `CommandBar` takes the arrows
+      for its own focus moves before any accelerator (a text box and a slider keep theirs); a video through
       `MediumPlayer.cs` (the file page's `MediaPlayerElement` over `ReaderStream`, shared). A Previous/Next over one stage
       rather than a `FlipView`, which realizes its neighbours on its own where the core's `Lightbox` holds the page.
       `RowCovers.cs` draws a Memory's row cover in Memories' list; New Memory in the shell's New, "Add chapter" in a
@@ -1172,8 +1174,9 @@ implementation exists but what holds it to the first.
       first; whether `ExifOrientationMode.RespectExifOrientation` alone turns a scaled read was not relied on), both JPEGs
       encoded in memory; **a video's poster and length through `Windows.Media.Editing`** (`MediaClip.CreateFromFileAsync`,
       `MediaComposition.GetThumbnailAsync`), which runs in the unpackaged app and the test process — the frame server
-      held in reserve was not needed; the test makes its clip with the same API, so no video is committed. HEIC was not
-      measured; an undecodable file answers no tiers and goes up alone. No new NuGet package.
+      held in reserve was not needed; the test makes its clip with the same API, so no video is committed. An
+      undecodable file answers no tiers and goes up alone; its original is then its listed tile, which WIC does not
+      decode either, so the grid draws the kind's glyph there and does not read it again. No new NuGet package.
 
   Measured 2026-11-15 (`run.py build`: `Veyq.Tests` 44 with `MediaTiersTest` 5, `RecentTest`, `DropSortTest` and
   `HeaderPlanTest`, 10 mutations each red; passes by `run.py drive`, `run.py run --devlogin --unlock`, en/light and
@@ -1186,8 +1189,17 @@ implementation exists but what holds it to the first.
   photo seen by the poll within 5 s; **two photos dragged from Explorer onto the gallery went up as one batch** (UAC on,
   the app at medium integrity); a cover set and drawn as the hero and the Memory's row cover. **Memory:** idle 388 MB,
   peak 515 MB through the WebM's upload and play and 453 MB through its play and seek — growth not the file's size.
-  `%TEMP%` before and after: only the build's own files. Not driven: a chapter's cover, the video's sound, HEIC, and
-  the lightbox's keys after a save and a tile in its `Border` again once built (each built and unit-checked).
+  `%TEMP%` before and after: only the build's own files.
+
+  Driven 2026-11-15 after (the same way, de/light): **a video's sound** — an H.264/AAC 440 Hz tone played in the lightbox
+  while the default output's `IAudioMeterInformation` was sampled every 200 ms from the ssh session: peak up to 0.153,
+  94 of 125 samples above 0.01, 0.000 at rest; a chapter's cover set through the cover dialog and drawn on its row; a
+  HEIC (HEVC, made by `sips`) decoded to tiers 1536×1024 (the HEIF and HEVC extensions on the VM), and a HEIC WIC does
+  not decode (the web's 808 B EXIF fixture, `C00D36BE`) up alone, its tile the kind's glyph — it had stayed an empty
+  frame —; the lightbox's ←/→ after the save picker, saved and cancelled — they had paged nothing with the arrows as
+  accelerators, while `+` zoomed —; the grid's tiles in their `Border`s, drawn and opened. The pass found the
+  Memories glyphs committed as empty strings (a video's badge without its play sign, the chapter's chevron, the
+  lightbox's Details): escapes now.
   - **The MSIX** (built 2026-11-13, [ADR 0139](0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)
     decisions 6 and 7; `windows/run.py package [--sign [PFX]] [--smoke]`). The Windows App SDK's single-project MSIX
     tooling (`Microsoft.Windows.SDK.BuildTools.MSIX` 1.7.251221100, already in the lock) builds it under the .NET SDK's

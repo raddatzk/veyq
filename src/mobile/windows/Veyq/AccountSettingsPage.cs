@@ -40,6 +40,10 @@ internal sealed class AccountSettingsPage : IDisposable
     /// <summary>This device's name, kept across redraws: what is typed stays while the cards around it are drawn anew.</summary>
     private readonly TextBox _name = new() { MinWidth = 240 };
     private readonly Button _rename = new() { Content = Words.NodeRename() };
+    /// <summary>The panel the name's box and button were last put in: they are taken out of it by name, never through their
+    /// Parent, which reads null while that card still loads — two draws in a row (a sign-out's) then added them to the next
+    /// card while still the old one's children, and WinUI threw 0x800F1000 (measured 2026-11-15).</summary>
+    private Panel? _nameHolder;
     private string? _label;
     private string? _refusal;
     /// <summary>"Back to your password" asks in place, kept across the redraws; and what its last try was told.</summary>
@@ -160,7 +164,7 @@ internal sealed class AccountSettingsPage : IDisposable
                 catch (Exception e)
                 {
                     // out of a watch's callback it would end the app in combase, with nothing in the log
-                    Log.Write($"the settings did not draw: {e.GetType().Name} 0x{e.HResult:X8}: {e.Message}");
+                    Log.Write($"the settings did not draw: {e.GetType().Name} 0x{e.HResult:X8}: {e.Message} | {string.Join(" | ", (e.StackTrace ?? "").Split('\n').Select(l => l.Trim()).Take(8))}");
                 }
             }, e => Log.Write($"a settings update: {e.Message}"));
         }
@@ -266,7 +270,11 @@ internal sealed class AccountSettingsPage : IDisposable
     }
 
     /// <summary>A card as Windows' Settings draws one: its icon, its title and lines, and its controls at the end.</summary>
-    private static Border Card(string glyph, string title, IEnumerable<string> lines, string automationId, params UIElement[] end)
+    private static Border Card(string glyph, string title, IEnumerable<string> lines, string automationId, params UIElement[] end) =>
+        Card(glyph, title, lines, automationId, out _, end);
+
+    /// <summary>A card, and the panel its controls were put in.</summary>
+    private static Border Card(string glyph, string title, IEnumerable<string> lines, string automationId, out Panel holder, params UIElement[] end)
     {
         var grid = new Grid { ColumnSpacing = 16, MinHeight = 44 };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -282,6 +290,7 @@ internal sealed class AccountSettingsPage : IDisposable
         var controls = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
         foreach (var e in end) controls.Children.Add(e);
         Grid.SetColumn(controls, 2);
+        holder = controls;
         grid.Children.Add(controls);
         var card = new Border
         {
@@ -307,8 +316,9 @@ internal sealed class AccountSettingsPage : IDisposable
     {
         _last = s;
         // the name's box and button are moved into each redraw: off their old card first
-        (_name.Parent as Panel)?.Children.Remove(_name);
-        (_rename.Parent as Panel)?.Children.Remove(_rename);
+        _nameHolder?.Children.Remove(_name);
+        _nameHolder?.Children.Remove(_rename);
+        _nameHolder = null;
         _sections.Children.Clear();
         if (_refusal != s.refusal)
         {
@@ -336,7 +346,7 @@ internal sealed class AccountSettingsPage : IDisposable
             if (_label is null || _name.FocusState == FocusState.Unfocused) _name.Text = s.device;
             _label = s.device;
         }
-        _sections.Children.Add(Card("", Words.AccountSettingsRename(), new[] { Words.AccountSettingsRenameHint() }, "settings-device-name", _name, _rename));
+        _sections.Children.Add(Card("", Words.AccountSettingsRename(), new[] { Words.AccountSettingsRenameHint() }, "settings-device-name", out _nameHolder, _name, _rename));
         _sections.Children.Add(Trust(s));
 
         // Add a device
