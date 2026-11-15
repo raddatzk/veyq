@@ -76,7 +76,7 @@ object OfflineFetching {
 /**
  * An account's pins and their sync on this device (ADR 0140 decision 9), over its offline store ([offline]).
  *
- * - **A pin** is a node of a pinnable kind ([PinKinds.pinnable]); [plan] tells what pinning it would fetch before the first
+ * - **A pin** is a node of a pinnable kind ([PinKinds.pinnable]); [plan] tells what pinning it would keep before the first
  *   byte (shown and confirmed), [pin] keeps it, [unpin] takes it off. A pin is held in the store's own record
  *   ([AccountOffline.pins]) and outlives the app.
  * - **Its fetch** walks the node's tree below it (the open tree: nothing the operator blocked), reads each node's listings
@@ -135,18 +135,20 @@ class OfflinePins internal constructor(
     /** Whether a node of [kind] can be pinned here (the kinds are the session door's, once a tenant opened). */
     fun pinnable(kind: String): Boolean = kinds?.pinnable(kind) == true
 
-    /** What pinning a node would fetch: the bytes the store does not hold yet, of how many blobs. */
+    /** What pinning a node would keep on this device: the stored bytes of every blob it keeps, of how many blobs. */
     class Plan(val bytes: Long, val blobs: Int)
 
-    /** The size of pinning node [nodeId] of [scopeId], before the first byte (decision 9); null where it cannot be pinned. */
+    /**
+     * The size of pinning node [nodeId] of [scopeId], before the first byte (decision 9): what the pin keeps (the question
+     * says "This keeps …"), every blob whole — the frames viewing kept already included, which the pin keeps too (#935: a
+     * Memory whose videos were played asked "0 B" of the ~6 MB its pin then held); its fetch takes what is not kept yet.
+     * Null where it cannot be pinned.
+     */
     suspend fun plan(tenant: TenantSession, scopeId: String, nodeId: String): Plan? {
         val kinds = kinds ?: return null
         val node = tenant.node(scopeId, nodeId)?.takeIf { kinds.pinnable(it.kind) } ?: return null
         val blobs = blobsBelow(tenant, kinds, node).blobs
-        account.settle()
-        var bytes = 0L
-        for (b in blobs) bytes += offline.missing(keyOf(tenant, b), b.chunkCount, b.byteSize)
-        return Plan(bytes, blobs.size)
+        return Plan(blobs.sumOf { it.byteSize }, blobs.size)
     }
 
     /** Node [nodeId] of [scopeId] pinned and its fetch started; false where it cannot be pinned. Offline, it waits. */
