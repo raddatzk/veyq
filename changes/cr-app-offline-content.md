@@ -431,7 +431,7 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   container listing (`databases/androidx.work.workdb`, `shared_prefs/androidx.work.util.preferences.xml`, named in
   `src/mobile/CLAUDE.md`); Apple's unmeasured list above.
 
-- [ ] **5 the Settings section and the screens on every app** — D10 on Android, iOS, macOS, Windows and Linux, on the account's
+- [x] **5 the Settings section and the screens on every app** — D10 on Android, iOS, macOS, Windows and Linux, on the account's
   Settings page; the header toggle, the shell's banner, disabled writes; each host passes D3's directory as
   `ThisDevice(offlineRoot)` and its kind's default as `offlineLimit` (`AccountOffline.PHONE_LIMIT` on Android and iOS,
   `DESKTOP_LIMIT` on macOS, Windows and Linux) — until then no app keeps anything (coordinator 2026-11-15: the hosts naming
@@ -463,7 +463,13 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   word in `words.json` EN+DE (`offline_*`, `account_settings_storage_*`, `storage_unit_*`), the owner's copy where
   given. (5) No D3 path helper in core: the hosts name the directory.
 
-- [ ] **6 the passes** — first, Android's cold load of the manifest (ART), unmeasured so far: D2's 100,000-entry load
+- [ ] **6 the passes** — carried from phase 5's click-throughs (coordinator 2026-11-15): "Clear cache" left about 19 kB
+  "Recently viewed" on Android, Linux and Windows — check whether that is the open screen's listings kept again at once
+  (fine) or a clear that misses entries (a bug); the limit field shows the core's "1.5" in a German UI — the core
+  formats the field per the locale's decimal sign; Windows Settings jumped back to the focused rename box after a UIA
+  scroll — tell a drive artifact from real behaviour; WorkManager's files live under `no_backup/`, not `databases/` —
+  correct `src/mobile/CLAUDE.md`; the macOS and iOS click-throughs need a signed build on an unlocked Mac (owner). Then
+  first, Android's cold load of the manifest (ART), unmeasured so far: D2's 100,000-entry load
   (`OfflineManifestLoadTest`) on the emulator's first run, beside phase 2's JVM 1,049–1,174 ms and macOS 1,507 ms first
   runs; phase 3 left it alone, as nothing on its read path showed it (coordinator 2026-11-15). Then per platform against
   the dev instance: sign in, view a Memory, pin a Chapter, cut the network
