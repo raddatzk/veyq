@@ -54,6 +54,25 @@ internal static partial class Mouse
         Thread.Sleep(300);
     }
 
+    /// <summary>The wheel turned <paramref name="notches"/> notches with the pointer at x, y on the screen, one at a time as a
+    /// hand turns it: a positive count is WHEEL_DELTA as sent (Win32's forward turn, away from the person), a negative one
+    /// the other way. Which way a view then moves is the host's: on the test VM a negative count moved Settings down
+    /// (measured 2026-11-15), so a pass reads where the view stands (`Settled`), never assumes it.</summary>
+    public static void Wheel(int x, int y, int notches)
+    {
+        Move(x, y);
+        Thread.Sleep(150);
+        for (var i = 0; i < Math.Abs(notches); i++)
+        {
+            var input = new Input { Type = 0, Mi = new MouseInput { Data = unchecked((uint)(Math.Sign(notches) * WheelDelta)), Flags = MouseWheel } };
+            if (SendInput(1, [input], Marshal.SizeOf<Input>()) != 1)
+            {
+                throw new InvalidOperationException($"SendInput sent no wheel input ({Marshal.GetLastPInvokeError()})");
+            }
+            Thread.Sleep(60);
+        }
+    }
+
     private static void Move(int x, int y) => Send(MouseMove, x, y);
 
     private static void Send(uint flags, int x, int y)
@@ -70,7 +89,8 @@ internal static partial class Mouse
         }
     }
 
-    private const uint MouseMove = 0x0001, MouseLeftDown = 0x0002, MouseLeftUp = 0x0004, MouseAbsolute = 0x8000;
+    private const uint MouseMove = 0x0001, MouseLeftDown = 0x0002, MouseLeftUp = 0x0004, MouseWheel = 0x0800, MouseAbsolute = 0x8000;
+    private const int WheelDelta = 120;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct Input
