@@ -19,8 +19,12 @@ struct MemoryScreen: View {
     @State private var pickingPhotos = false
     @State private var photos: [PhotosPickerItem] = []
     @State private var pickingFiles = false
+    @State private var namingChapter = false
+    @State private var chapterName = ""
+    @State private var chapterProblem: String?
     /// The grid's width between the page's margins, as last measured.
     @State private var gridWidth: CGFloat = 0
+    @Environment(\.scenePhase) private var phase
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -28,6 +32,9 @@ struct MemoryScreen: View {
     private var node: NodeAt { ref.at }
     private var state: GalleryModel.State? { model.galleryState(node) }
     private var rows: [GalleryModel.Row] { state?.rows ?? [] }
+    /// What the page adds (core's: the rights' upload, a chapter where it makes one).
+    private var uploads: Bool { state?.rights.upload ?? false }
+    private var chapterHere: Bool { model.galleryModel(node)?.creates.contains(MemoryCreate.shared.CHAPTER) ?? false }
     /// The room between the grid and the page's edges: the grid's own gap, so every side of a tile breathes alike.
     private static let margin = CGFloat(MediaGridLayout.shared.GAP)
 
@@ -40,10 +47,16 @@ struct MemoryScreen: View {
                     Text(say(.memoryChapters)).font(.headline).padding(.horizontal)
                     ForEach(chapters, id: \.nodeId) { c in
                         Button {
-                            if let o = c.asObject() { model.open(o) }
+                            if let o = GalleryModel.companion.rowPage(row: c) { model.open(o) }
                         } label: {
-                            Label(c.name, systemImage: Names.kindSymbol(c.kind)).frame(maxWidth: .infinity, alignment: .leading)
+                            HStack(spacing: 12) {
+                                ChapterCover(model: model, node: node, chapter: c)
+                                Text(c.name)
+                                Spacer(minLength: 0)
+                            }
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                         .padding(.horizontal)
                     }
                 }
@@ -71,10 +84,53 @@ struct MemoryScreen: View {
         }
         .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { gridWidth = max(0, $0 - 2 * Self.margin) }
         .navigationTitle(ref.name)
-        // photos and videos come from the photo library or from files
-        .createMenu(say(.memoryAdd), shown: true) {
-            Button { pickingPhotos = true } label: { Label(say(.photoLibrary), systemImage: "photo.on.rectangle") }
-            Button { pickingFiles = true } label: { Label(say(.tabDepotFiles), systemImage: "folder") }
+        // photos and videos come from the photo library or from files; a Memory makes its chapters here too
+        .createMenu(say(uploads ? .memoryAdd : .memoryAddChapter), shown: uploads || chapterHere) {
+            if uploads {
+                Button { pickingPhotos = true } label: { Label(say(.photoLibrary), systemImage: "photo.on.rectangle") }
+                Button { pickingFiles = true } label: { Label(say(.tabDepotFiles), systemImage: "folder") }
+            }
+            if chapterHere {
+                Button { chapterName = ""; chapterProblem = nil; namingChapter = true } label: {
+                    Label(say(.memoryAddChapter), systemImage: "rectangle.stack.badge.plus")
+                }
+            }
+        }
+        .alert(say(.memoryCreateChapterTitle), isPresented: $namingChapter) {
+            TextField(say(.nodeName), text: $chapterName)
+            Button(say(.folderCreate)) {
+                let name = chapterName
+                guard let gallery = model.galleryModel(node) else { return }
+                Task {
+                    if let p = await model.createChapter(gallery, name: name) { chapterProblem = p; namingChapter = true }
+                }
+            }
+            Button(say(.signinCancel), role: .cancel) {}
+        } message: {
+            if let chapterProblem { Text(chapterProblem) }
+        }
+        // a medium's delete said: "Moved to trash" with its Undo while core offers it, what a restore refused
+        .overlay(alignment: .bottom) {
+            if state?.undo != nil || state?.said != nil, let gallery = model.galleryModel(node), open == nil {
+                GalleryNotice(gallery: gallery, undo: state?.undo, said: state?.said)
+            }
+        }
+        .confirmationDialog(
+            say(.memoryDeleteOwnTitle),
+            isPresented: Binding(get: { state?.purging != nil }, set: { if !$0 { model.galleryModel(node)?.cancelAsk() } }),
+            titleVisibility: .visible
+        ) {
+            Button(say(.memoryDeleteOwnAccept), role: .destructive) {
+                guard let gallery = model.galleryModel(node) else { return }
+                Task { _ = try? await gallery.purge() }
+            }
+            Button(say(.signinCancel), role: .cancel) { model.galleryModel(node)?.cancelAsk() }
+        } message: {
+            if let gallery = model.galleryModel(node) { Text(say(notice: gallery.purgeQuestion)) }
+        }
+        // live while the page is on screen and the app active: what another device or a guest adds shows up (core's poll)
+        .task(id: GalleryLiveKey(node: node, active: phase == .active)) {
+            if phase == .active { await model.liveGallery(node) }
         }
         .photosPicker(isPresented: $pickingPhotos, selection: $photos, matching: .any(of: [.images, .videos]), preferredItemEncoding: .current)
         .onChange(of: photos) {
@@ -102,12 +158,12 @@ struct MemoryScreen: View {
         .task(id: ref) { _ = model.galleryModel(node) }
         #if os(iOS)
         .fullScreenCover(item: $open, onDismiss: { open = nil }) { start in
-            Lightbox(model: model, box: start.box, mode: .cover) { open = nil }
+            Lightbox(model: model, gallery: start.gallery, box: start.box, mode: .cover) { open = nil }
         }
         #else
         // in the window's content, where the gallery was: its back (and Escape) return to the gallery
         .navigationDestination(item: $open) { start in
-            Lightbox(model: model, box: start.box, mode: .inline) { open = nil }
+            Lightbox(model: model, gallery: start.gallery, box: start.box, mode: .inline) { open = nil }
         }
         #endif
     }
@@ -119,7 +175,7 @@ struct MemoryScreen: View {
             #if os(macOS)
             if NSEvent.modifierFlags.contains(.command) { return openInWindow(row.mediaId) }
             #endif
-            if let gallery = model.galleryModel(node) { open = LightboxStart(box: gallery.lightbox(index: Int32(index))) }
+            if let gallery = model.galleryModel(node) { open = LightboxStart(gallery: gallery, box: gallery.lightbox(index: Int32(index))) }
         } label: {
             MediaTile(model: model, node: node, row: row, width: CGFloat(frame.width), height: CGFloat(frame.height))
         }
@@ -163,10 +219,91 @@ private struct PickedMedia: Transferable {
 
 /// Where the lightbox opens (a cover's or a navigation destination's item): core's lightbox over the gallery.
 private struct LightboxStart: Identifiable, Hashable {
+    let gallery: GalleryModel
     let box: VeyqCore.Lightbox
     var id: ObjectIdentifier { ObjectIdentifier(box) }
     static func == (a: Self, b: Self) -> Bool { a.id == b.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
+}
+
+/// What restarts a gallery's live poll: another page, the app becoming active or not.
+private struct GalleryLiveKey: Equatable {
+    let node: NodeAt
+    let active: Bool
+}
+
+/// A chapter's row picture: its cover, the stored picture core reads for one of this Memory's chapters
+/// (`GalleryModel.chapterCover`), cropped to the tile; the kind's symbol where it has none.
+private struct ChapterCover: View {
+    let model: AppModel
+    let node: NodeAt
+    let chapter: NodeRef
+    @State private var picture: CGImage?
+
+    var body: some View {
+        Group {
+            if let picture {
+                Image(decorative: picture, scale: 1).resizable().scaledToFill()
+            } else {
+                Image(systemName: Names.kindSymbol(chapter.kind)).foregroundStyle(Role.accent)
+            }
+        }
+        .frame(width: 40, height: 40)
+        .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+        .task(id: chapter.nodeId) {
+            guard let gallery = model.galleryModel(node),
+                  let data = try? await AppleMemories.shared.chapterCover(gallery: gallery, nodeId: chapter.nodeId) else { return }
+            picture = CoverImages.image(data as Data, maxPixels: 160)
+        }
+    }
+}
+
+/// What a gallery says at the page's foot: a trashed medium's "Moved to trash" with its Undo for as long as core offers it
+/// (`State.undo`, the node trash's window: this view keeps no clock), else what a refused restore said (`State.said`), gone
+/// once read.
+private struct GalleryNotice: View {
+    let gallery: GalleryModel
+    let undo: Notice?
+    let said: Notice?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(say(notice: undo ?? said!)).font(.subheadline).foregroundStyle(Role.text)
+            Spacer(minLength: 0)
+            if undo != nil {
+                Button(say(.trashUndo)) { Task { _ = try? await gallery.undo() } }.fontWeight(.semibold)
+            } else {
+                Button(say(.ok)) { gallery.seen() }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Role.surface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 24)
+    }
+}
+
+/// Core's gallery state held for SwiftUI where no page holds it (a lightbox's notices): mirrored on the main actor.
+@MainActor
+@Observable
+final class GalleryBox {
+    let gallery: GalleryModel
+    private(set) var state: GalleryModel.State
+    @ObservationIgnored private var watch: GalleryModel.Watch?
+
+    init(_ gallery: GalleryModel) {
+        self.gallery = gallery
+        state = gallery.current
+        watch = gallery.watch { @Sendable _ in
+            Task { @MainActor [weak self] in
+                if let current = self?.gallery.current { self?.state = current }
+            }
+        }
+    }
+
+    func stop() { watch?.stop() }
 }
 
 /// One tile at the size the justified grid gave it: the medium's grid tier cropped to fill (its aspect is the tile's,
@@ -244,6 +381,7 @@ private struct Lightbox: View {
     let mode: LightboxMode
     let onClose: () -> Void
     @State private var held: LightboxBox
+    @State private var gallery: GalleryBox
     @State private var details = false
     @State private var downloading = false
     @State private var downloaded: URL?
@@ -252,11 +390,12 @@ private struct Lightbox: View {
     @Environment(\.openWindow) private var openWindow
     #endif
 
-    init(model: AppModel, box: VeyqCore.Lightbox, mode: LightboxMode, onClose: @escaping () -> Void) {
+    init(model: AppModel, gallery: GalleryModel, box: VeyqCore.Lightbox, mode: LightboxMode, onClose: @escaping () -> Void) {
         self.model = model
         self.mode = mode
         self.onClose = onClose
         _held = State(initialValue: LightboxBox(box))
+        _gallery = State(initialValue: GalleryBox(gallery))
     }
 
     private var state: VeyqCore.Lightbox.State { held.state }
@@ -283,11 +422,14 @@ private struct Lightbox: View {
     private var pages: some View {
             // the pages, then the caption — stacked, not floated over the picture
             VStack(alignment: .leading, spacing: 0) {
-                TabView(selection: Binding(get: { Int(state.index) }, set: { held.box.go(index: Int32($0)) })) {
+                // the person's paging pages the model (and pauses its slideshow); the model's own step — the slideshow's, a
+                // re-read — moves the selection, which then asks nothing back
+                TabView(selection: Binding(get: { Int(state.index) }, set: { if $0 != Int(held.box.current.index) { held.box.go(index: Int32($0)) } })) {
                     ForEach(Array(state.rows.enumerated()), id: \.element.mediaId) { i, row in
-                        LightboxPage(model: model, held: held, row: row, playing: Int(state.index) == i ? state.reader : nil).tag(i)
+                        LightboxPage(model: model, held: held, row: row, playing: Int(state.index) == i ? state.reader : nil, current: Int(state.index) == i).tag(i)
                     }
                 }
+                .animation(.default, value: state.index)
                 #if os(iOS)
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 #endif
@@ -319,6 +461,14 @@ private struct Lightbox: View {
                 #endif
             }
             .background(Color.black.ignoresSafeArea())
+            // a medium trashed here: "Moved to trash" with its Undo while core offers it
+            .overlay(alignment: .bottom) {
+                if gallery.state.undo != nil || gallery.state.said != nil {
+                    GalleryNotice(gallery: gallery.gallery, undo: gallery.state.undo, said: gallery.state.said).padding(.bottom, 72)
+                }
+            }
+            // the last medium trashed: nothing is left to show
+            .onChange(of: state.rows.isEmpty) { _, empty in if empty { onClose() } }
             .navigationTitle(say(.memoryItemPosition, Int(state.index) + 1, state.rows.count))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -359,11 +509,22 @@ private struct Lightbox: View {
             #endif
             .environment(\.colorScheme, .dark)
             // the lightbox went: core closes a playing video's reader with it
-            .onDisappear { held.close() }
+            .onDisappear {
+                held.close()
+                gallery.stop()
+            }
     }
 
-    /// Details and Save: the iOS toolbar's primary group, a Mac's own bar.
+    /// The slideshow (core's clock, its end on the last medium; here only its switch), Details, Save and Move to trash: the
+    /// iOS toolbar's primary group, a Mac's own bar.
     @ViewBuilder private var actions: some View {
+        if state.rows.count > 1 {
+            let playing = state.slideshow == .playing
+            Button { held.box.slideshow(on: !playing) } label: {
+                Label(say(playing ? .memorySlideshowPause : .memorySlideshowStart), systemImage: playing ? "pause.fill" : "play.rectangle")
+            }
+            .disabled(!playing && Int(state.index) >= state.rows.count - 1)
+        }
         Button { details = true } label: { Label(say(.memoryDetails), systemImage: "info.circle") }
         if let row = current, !row.blocked {
             if downloading {
@@ -371,6 +532,10 @@ private struct Lightbox: View {
             } else {
                 Button { Task { await download() } } label: { Label(say(.memoryDownload), systemImage: "arrow.down.circle") }
             }
+        }
+        if let row = current, gallery.gallery.deletes(mediaId: row.mediaId) {
+            let box = held.box
+            Button(role: .destructive) { Task { _ = try? await box.trash() } } label: { Label(say(.memoryTrash), systemImage: "trash") }
         }
     }
 
@@ -415,8 +580,15 @@ private struct LightboxPage: View {
     let row: GalleryModel.Row
     /// The current video's original while it plays (core's lightbox holds it); nil otherwise.
     let playing: RangeReader?
+    /// Whether it is the page shown (a page left goes back to its fit).
+    let current: Bool
     @State private var picture: CGImage?
     @State private var read = false
+    /// The platform's zoom (ADR 0136's Consequences: a pinch, a double tap; the model knows nothing of it) and its pan while zoomed in.
+    @State private var scale: CGFloat = 1
+    @State private var settled: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var panned: CGSize = .zero
 
     var body: some View {
         ZStack {
@@ -426,7 +598,7 @@ private struct LightboxPage: View {
                 MediaVideo(held: held, row: row, reader: playing)
             } else {
                 if let picture {
-                    Image(decorative: picture, scale: 1).resizable().scaledToFit()
+                    zoomable(Image(decorative: picture, scale: 1).resizable().scaledToFit())
                 } else if !read {
                     ProgressView().tint(.white)
                 } else if !row.isVideo {
@@ -442,6 +614,8 @@ private struct LightboxPage: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipped()
+        .onChange(of: current) { _, shown in if !shown { zoom(1) } }
         .task(id: row.mediaId) {
             // a video without a poster has none to show: its original is no picture
             if let blob = row.picture {
@@ -453,6 +627,45 @@ private struct LightboxPage: View {
             }
             read = true
         }
+    }
+}
+
+extension LightboxPage {
+    /// The most a picture is zoomed in (a pinch), and what a double tap zooms it to.
+    private static let zoomMax: CGFloat = 5
+    private static let zoomTap: CGFloat = 2.5
+
+    private func zoom(_ to: CGFloat) {
+        scale = min(max(to, 1), Self.zoomMax)
+        settled = scale
+        if scale == 1 { offset = .zero; panned = .zero }
+    }
+
+    /// `image` zoomed by a pinch and a double tap, panned by a drag while zoomed in (the pages' swipe waits until it is back
+    /// at its fit); a touch pauses the slideshow (the web pauses on any pointer).
+    func zoomable(_ image: some View) -> some View {
+        image
+            .scaleEffect(scale)
+            .offset(offset)
+            .gesture(
+                MagnifyGesture()
+                    .onChanged { v in
+                        held.box.slideshow(on: false)
+                        scale = min(max(settled * v.magnification, 1), Self.zoomMax)
+                    }
+                    .onEnded { _ in zoom(scale) }
+            )
+            .highPriorityGesture(
+                DragGesture()
+                    .onChanged { v in offset = CGSize(width: panned.width + v.translation.width, height: panned.height + v.translation.height) }
+                    .onEnded { _ in panned = offset },
+                including: scale > 1 ? .all : .subviews
+            )
+            .onTapGesture(count: 2) {
+                held.box.slideshow(on: false)
+                withAnimation { zoom(scale > 1 ? 1 : Self.zoomTap) }
+            }
+            .onTapGesture { held.box.slideshow(on: false) }
     }
 }
 
@@ -601,7 +814,7 @@ struct LightboxWindow: View {
     var body: some View {
         Group {
             if let opened, model.holdsWindowGallery(opened.gallery) {
-                Lightbox(model: model, box: opened.box, mode: .window) { dismiss() }
+                Lightbox(model: model, gallery: opened.gallery, box: opened.box, mode: .window) { dismiss() }
             } else if missing {
                 Text(say(.memoryGalleryFailed)).foregroundStyle(Role.muted).padding()
             } else {

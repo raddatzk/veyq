@@ -317,7 +317,10 @@ class GalleryModel(
 
     // ---- a medium deleted: a member's trash with its Undo, a guest's own purge asked first ----
 
-    private class Undoing(val mediaId: String, val name: Any)
+    /** A trashed medium's Undo while it is offered; [trashed] completes with what its trash came to. */
+    private class Undoing(val mediaId: String, val name: Any) {
+        val trashed = kotlinx.coroutines.CompletableDeferred<Removal>()
+    }
 
     private var undoing: Undoing? = null
     private var undoWindow: Job? = null
@@ -351,8 +354,10 @@ class GalleryModel(
         pending += mediaId
         _state.update { s -> s.copy(rows = s.rows?.filter { it.mediaId != mediaId }) }
         val said = Notice(Msg.MEMORY_MOVED_TO_TRASH)
-        offerUndo(Undoing(mediaId, name), said)
+        val u = Undoing(mediaId, name)
+        offerUndo(u, said)
         val done = runCatching { door.trash(mediaId) }.getOrDefault(Removal.FAILED)
+        u.trashed.complete(done)
         if (done != Removal.DONE) {
             if (undoing?.mediaId == mediaId) endUndo()
             pending -= mediaId
@@ -378,12 +383,16 @@ class GalleryModel(
 
     /**
      * The Undo of the last trash while it is offered: the medium restored and the gallery read anew (it comes back at its
-     * place). Why not — named with its reason, as the web's —, or null; nothing once its window passed.
+     * place). Why not — named with its reason, as the web's —, or null; nothing once its window passed. An Undo pressed
+     * while the trash is still on its way waits for it: a restore sent first would find nothing to restore, and the trash
+     * landing after it would take the medium for good (measured on Android, 2026-11-15).
      */
     suspend fun undo(): Notice? {
         val u = undoing ?: return null
         undoWindow?.cancel()
         endUndo()
+        // a trash that did not go has read the gallery anew already: nothing to restore
+        if (u.trashed.await() != Removal.DONE) return null
         pending -= u.mediaId
         val r = runCatching { door.restore(u.mediaId) }.getOrDefault(Removal.FAILED)
         read()
@@ -515,6 +524,22 @@ class GalleryModel(
 
         /** The page's own header action: photos and videos added ([upload]). */
         const val UPLOAD = "upload"
+
+        /**
+         * Memory or chapter [node] as the page an app opens (Memories' object): a chapter is no object of a list
+         * (`applicationOf` names no application for it, so `NodeRef.asObject` gives none), yet a chapter row and a chapter
+         * just made open it. Null for any other kind.
+         */
+        fun page(node: NodeAt): me.raddatz.veyq.mobile.navigation.ObjectRef? =
+            if (node.kind == MEMORY || node.kind == CHAPTER) {
+                me.raddatz.veyq.mobile.navigation.ObjectRef(node.scopeId, node.nodeId, node.kind, me.raddatz.veyq.mobile.navigation.ApplicationId.MEMORIES, node.name)
+            } else {
+                null
+            }
+
+        /** [page] of a listed node (a Memory's chapter row). */
+        fun rowPage(row: me.raddatz.veyq.mobile.navigation.NodeRef): me.raddatz.veyq.mobile.navigation.ObjectRef? =
+            page(NodeAt(row.scopeId, row.nodeId, row.kind, row.name))
 
         /**
          * [rows] laid out as the justified grid [width] wide (the web's `MediaGrid.vue`, [MediaGridLayout]): each tile's frame

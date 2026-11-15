@@ -28,7 +28,7 @@ import java.io.File
 import java.io.RandomAccessFile
 
 /**
- * Debug builds only — a Memory's page (`MemoryGallery`, the CR's phase 1: core's `GalleryModel` and `Lightbox`) drawn over a
+ * Debug builds only — a Memory's page (`MemoryGallery` over core's `GalleryModel` and `Lightbox`, ADR 0136's Consequences) drawn over a
  * played gallery, reached without a server or a sign-in: launched with the extra `veyq.devMemory=1`, the app shows a Memory
  * "Dev memory" with two chapters, three photos drawn here (one with a camera and a place), a blocked medium, and — where
  * `files/veyq-memory.mp4` was pushed into the app's external files directory — that video, played through core's range

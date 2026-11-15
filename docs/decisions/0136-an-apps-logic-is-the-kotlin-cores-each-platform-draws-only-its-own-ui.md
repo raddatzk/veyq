@@ -271,6 +271,66 @@ four times.
   - Where the apps disagreed, one rule (technical, open to the owner's veto): the drop box folder's delete says
     `dropbox_delete_folder`, the tray's close `upload_close`; a folder upload's failure says its own words, never
     `share_failed`.
+- **Memories' screens are core screen models** (2026-11-13/15, before Linux and Windows drew them; decision 2's shape,
+  each rule a `commonTest` case over a gallery the test plays, killed by a mutation — `GalleryModelTest`,
+  `GalleryActionsTest`, `GalleryPageTest`, `MediaUploadsTest`, `MemoryRightsTest`, `MemoryCreateTest`,
+  `MediaGridLayoutTest`; what the bridge and the desktops built and measured is ADR 0123's Consequences). Android and
+  Apple held these in their app models and draw them from the core now:
+  - `memories/GalleryModel` (`ShellModel.galleryModel`, `galleryAt`): a Memory's or a chapter's page — its rows (each
+    naming the blob ids of its grid and lightbox tiers, which a platform's decoded-picture cache keys by: the core caches
+    no bytes), a Memory's chapters with their covers and each chapter's `page` to open (a chapter is no list's object, so
+    the lists' kind mapping could not open one), the rights, what is said. It reads anew on each revision of the shell's
+    lists, when an upload of this device lands in **this** node, and when the live poll's revision moved (`startLive()`:
+    core's `LivePoll` at the web's `ITEMS` cadence, `listNodeMedia` with the first page's revision as `If-None-Match`,
+    nothing read while nothing moved, ended with the page) — nothing else. A GPX track and a music track are no photo
+    view's media (`GalleryMedium`, the web's `isGalleryMedium`, ADR 0135 decision 2) and an audio file is no medium to add.
+  - **The gallery is the web's justified grid on every app** (`memories/MediaGridLayout`, `mediaGridLayout.ts` ported
+    once: aspects from the sealed dimensions bounded 3:4 … 4:3, the 4:3 fallback, the 8 gap, each row filled to the width
+    and the last at the target height, 150 up to a width of 720 and 200 beyond; `Layout.window` the rows near the view,
+    ADR 0105). A platform places tiles at the frames `GalleryModel.layout` hands it. Rejected: square tiles on the phones
+    beside the justified grid elsewhere (two looks for one gallery) and a layout per platform (four copies of a rule).
+  - `memories/Lightbox` (`GalleryModel.lightbox(index)`, `lightboxOn(mediaId)`): the index kept by the medium's id across
+    a re-read (the one now at its place when it went, the web's rule); a video's original as a `RangeReader`, opened only
+    for a video not blocked and **closed by the model** when the lightbox pages away, the player's view leaves (`stop`),
+    the lightbox or its gallery closes, or a re-read takes the medium (`RangeReader.close()`: every read after throws);
+    the details (`MediaDetails.rows`, the EXIF tier read once per medium, the uploaders once per gallery for every owner
+    key it shows); the save of an original (Depot's `FileSave` over the original's frames under
+    `MediaDetails.downloadName`, outliving the lightbox); **the slideshow, the web's**: `SLIDESHOW_MS` (5 s, held to
+    `MediaLightbox.vue`'s `SLIDESHOW_INTERVAL_MS` by `LightboxPinsTest`), a video's poster held one interval and never
+    played, ending on the last medium, any `go` or `play` pausing it, on the model's clock — no view keeps a timer. Zoom
+    is the platform's gesture and view; the model knows nothing of it.
+  - `memories/MemoryRights` — the web's `rights.ts` ported, fail-closed, for a member and each link role on a MEMORY, a
+    CHAPTER, a FOLDER and a space's top ([memories](../apps/memories.md) § the rights matrix), the rights no app draws yet
+    among them (edit meta, banner, marks, filter), so the CRs that draw those add no rule. **One model for member and
+    guest** (share view = member view, inbox #401): `GalleryModel` takes an access and offers an action only where the
+    rights say yes. The apps open a gallery as a member only today (a received link is #435's), so the change that lets
+    one open a link adds a source, never a view. Rejected: a member-only model now and a guest's later.
+  - **Trash with Undo** (`GalleryModel.trash`, `Lightbox.trash`): the medium out of the rows at once, `deleteMedia`, the
+    Undo held for `TRASH_UNDO_MS` (6 s, a node trash's) through `restoreMedia`, which, as on the web, nothing else
+    reaches. **An Undo waits for its trash:** pressed while the trash was on its way, the restore went first, found
+    nothing, and the trash landing after it took the medium for good (measured on Android under load; a test of an Undo
+    needs a door that holds a call open). A guest's own medium is a purge, asked first, without Undo.
+  - `memories/MemoryCreate`: a Memory where its placement allows (a space's top, a folder; `AppKinds.Create.MEMORY` in
+    every level's New), a chapter only on a Memory's page (`GalleryModel.createChapter`); a sibling whose name folds the
+    same refused before anything is sent, the server's refusals said as the web's `MemoryNodeDialog` says them; the new
+    node opens.
+  - `memories/MediaUploads` (`ShellModel.mediaUploads`, one per open tenant over the app's one queue) holds the settle —
+    a medium in tells its node's gallery, a batch's end the lists — and hands each picked file back to the platform once
+    the queue is done with it (done, cancelled, or abandoned after a failure; a failed one's kept for its retry; every one
+    when the tenant closes), read from the queue's **state**, not its settle callbacks, so a tenant opened again over the
+    same queue (`handOver`) loses none. The settle is not the page's: an upload outlives the page it was started from.
+    The tier spec is `MediaUpload`'s (`PREVIEW_EDGE` 2048 at 0.85, `THUMBNAIL_EDGE` 512 at 0.8, a poster at
+    `posterAtMs(duration)` = min(100 ms, duration / 2); `MediaTierSpecTest` reads the web's `mediaDeriver.ts`);
+    decoding and encoding stay the platform's. Rejected: tiers made in the core (a JPEG codec and a video decoder in
+    Kotlin/Native, against decision 1). The tray stays `DepotUploads`', which already ran Memories' batches.
+  - A Memory's and a chapter's header is shareable: the share sheet offers READ, READ_WRITE and WRITE_ONLY, and a
+    WRITE_ONLY link seals to the node's own drop key, made by its first link and reused by every later one
+    (`ShareLinks.dropFields`, the web's `share.ts`); an upload-only link is neither edited nor renewed in the apps
+    (switched off and minted anew). "Add photos" joins the header's plan where the rights upload. The hero shows only
+    once a cover exists, on every app (owner 2026-11-13; the web always frames one).
+  - Where the phones disagreed, one rule (technical, open to the owner's veto): the uploaders read once per gallery
+    (Android's), the slideshow the web's, the Undo the node trash's 6 s, a Mac's saved original through the save panel
+    into `FileSink` (iOS keeps `fileMover`, ADR 0047's Consequences).
 - The repository's Rust (`src/mobile/linux/`) is held to the no-deprecated rule by reading: cargo has no deprecation
   gate, as the JavaScript install has.
   The repository's C# (`src/mobile/windows/`) has one: `run.py build` is red on any NuGet package `dotnet package list`

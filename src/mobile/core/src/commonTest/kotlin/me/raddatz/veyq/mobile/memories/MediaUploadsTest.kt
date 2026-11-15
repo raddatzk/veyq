@@ -13,7 +13,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * Memories' uploads' settle, the core's (the CR's phase 1 moved it out of both phones): a medium in tells its node's gallery,
+ * Memories' uploads' settle, the core's (moved out of both phones, ADR 0136's Consequences): a medium in tells its node's gallery,
  * a batch's end reads the lists, and a picked file is handed back once the queue is done with it — done, cancelled or
  * abandoned, never while a retry may still read it — and every one when the tenant closes (Apple's Photos copies).
  */

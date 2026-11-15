@@ -288,6 +288,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         ?: ObjectScreen(shell.openObject!!, shell.selectedTab)
                     shell.application == null -> HomeScreen(s, model, onEnter = model::enter, onOpen = model::open, onFilter = model::filter)
                     shell.application == ApplicationId.EXPENSES -> ExpensesList(s, model)
+                    shell.application == ApplicationId.MEMORIES -> MemoriesList(s, model)
                     else -> ArrangedListScreen(s.applicationList(shell.application!!), onOpen = model::open, state = listStates.of("app:${shell.application}"))
                 }
               }
@@ -329,12 +330,14 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
     val palette = LocalPalette.current
     var naming by remember { mutableStateOf(false) }
     var creatingPot by remember { mutableStateOf(false) }
+    var namingMemory by remember { mutableStateOf(false) }
     // what the drawer's "New" asked for
     val asked by model.newRequest.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(asked) {
         when (asked) {
             "folder" -> naming = true
             "pot" -> creatingPot = true
+            "memory" -> namingMemory = true
         }
         if (asked != null) model.newRequestTaken()
     }
@@ -349,10 +352,11 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
         val space = s.shell.space
         if (tree != null && space != null) model.uploadFolderPicked(space, s.shell.folder?.nodeId, tree)
     }
-    // The level's "New" (the web's menu): a folder here, a Pot here, or files uploaded here.
+    // The level's "New" (the web's menu): a folder here, a Pot here, files uploaded here, or a Memory here (core's
+    // `AppKinds.createsWhere`: a Memory's placement allows every level New makes into).
     // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
     CreateAction(stringResource(R.string.create_new), shown = model.canCreateHere, onClick = {}, state = LocalListStates.current.of("home:${s.shell.space}/${s.shell.folder?.nodeId}"), menu = { close ->
-        me.raddatz.veyq.mobile.AppKinds.homeCreates.forEach { c ->
+        me.raddatz.veyq.mobile.AppKinds.createsWhere(isHome = true).forEach { c ->
             androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = {
                 close()
                 when (c) {
@@ -360,8 +364,9 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                     me.raddatz.veyq.mobile.AppKinds.Create.POT -> creatingPot = true
                     me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES -> pickFiles.launch(arrayOf("*/*"))
                     me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FOLDER -> pickFolder.launch(null)
-                    // not among Home's creates on a phone yet: New Memory and New chapter are the CR's phase 6
-                    me.raddatz.veyq.mobile.AppKinds.Create.MEMORY, me.raddatz.veyq.mobile.AppKinds.Create.CHAPTER -> {}
+                    me.raddatz.veyq.mobile.AppKinds.Create.MEMORY -> namingMemory = true
+                    // a Memory's page's own New, never a level's (`createsWhere` holds none)
+                    me.raddatz.veyq.mobile.AppKinds.Create.CHAPTER -> {}
                 }
             })
         }
@@ -420,20 +425,27 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
         }
     }
     }
-    if (naming) FolderNameDialog(onClose = { naming = false }) { name -> model.createFolder(name) }
+    if (naming) NameDialog(stringResource(R.string.folder_new), onClose = { naming = false }) { name -> model.createFolder(name) }
     if (creatingPot) PotCreateSheet(s, model) { creatingPot = false }
+    val space = s.shell.space
+    if (namingMemory && space != null) NameDialog(stringResource(R.string.memory_create_memory_title), onClose = { namingMemory = false }) { name ->
+        model.createMemory(space, s.shell.folder?.nodeId, name)
+    }
 }
 
-/** Core's name dialog for a new folder (`FolderNameDialog`): the name, trimmed on save; a refusal says why and stays. */
+/**
+ * A new node's name ([title]: a folder's, core's `FolderNameDialog`; a Memory's or a chapter's, the web's
+ * `MemoryNodeDialog`): the name, trimmed on save; a refusal says why and stays.
+ */
 @Composable
-private fun FolderNameDialog(onClose: () -> Unit, onCreate: suspend (String) -> String?) {
+internal fun NameDialog(title: String, onClose: () -> Unit, onCreate: suspend (String) -> String?) {
     var name by remember { mutableStateOf("") }
     var problem by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     androidx.compose.material3.AlertDialog(
         onDismissRequest = { if (!saving) onClose() },
-        title = { Text(stringResource(R.string.folder_new)) },
+        title = { Text(title) },
         text = {
             androidx.compose.material3.OutlinedTextField(
                 name, { name = it; problem = null }, singleLine = true, label = { Text(stringResource(R.string.folder_name)) },
@@ -577,10 +589,16 @@ private fun Drawer(
                         Text(stringResource(R.string.drawer_new))
                     }
                     androidx.compose.material3.DropdownMenu(newMenu, { newMenu = false }) {
-                        me.raddatz.veyq.mobile.AppKinds.drawerCreates.forEach { c ->
+                        me.raddatz.veyq.mobile.AppKinds.createsWhere(isHome = false).forEach { c ->
                             androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = {
                                 newMenu = false
-                                onNew(if (c == me.raddatz.veyq.mobile.AppKinds.Create.POT) "pot" else "folder")
+                                onNew(
+                                    when (c) {
+                                        me.raddatz.veyq.mobile.AppKinds.Create.POT -> "pot"
+                                        me.raddatz.veyq.mobile.AppKinds.Create.MEMORY -> "memory"
+                                        else -> "folder"
+                                    },
+                                )
                             })
                         }
                     }
@@ -671,6 +689,19 @@ private fun ExpensesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) 
         ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), onOpen = onOpen, state = list, bottom = bottom)
     }
     if (creating) PotCreateSheet(s, model) { creating = false }
+}
+
+/** Memories' own list (its Memories), with "New Memory" (made at the top of the space shown, then opened; core's `MemoryCreate`). */
+@Composable
+private fun MemoriesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) -> Unit = model::open) {
+    var creating by remember { mutableStateOf(false) }
+    val space = s.shell.space ?: s.spaces.firstOrNull()?.scopeId
+    CreateAction(stringResource(R.string.memory_new), shown = space != null, onClick = { creating = true }, state = LocalListStates.current.of("app:MEMORIES")) { list, bottom ->
+        ArrangedListScreen(s.applicationList(ApplicationId.MEMORIES), onOpen = onOpen, state = list, bottom = bottom)
+    }
+    if (creating && space != null) NameDialog(stringResource(R.string.memory_create_memory_title), onClose = { creating = false }) { name ->
+        model.createMemory(space, null, name)
+    }
 }
 
 @Composable
@@ -883,6 +914,7 @@ private fun ListBeside(s: Screen.Signed, model: AppModel) {
         Box(Modifier.width(LIST_PANE_WIDTH).fillMaxSize()) {
             androidx.compose.runtime.CompositionLocalProvider(LocalOpenObject provides shell.openObject?.nodeId) {
                 if (app == ApplicationId.EXPENSES) ExpensesList(s, model, onOpen = model::openBeside)
+                else if (app == ApplicationId.MEMORIES) MemoriesList(s, model, onOpen = model::openBeside)
                 else ArrangedListScreen(s.applicationList(app), onOpen = model::openBeside)
             }
         }
