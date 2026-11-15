@@ -483,11 +483,12 @@ impl Inner {
         for (group, ids) in [(&first, &plan.menu), (&last, &plan.last)] {
             for a in ids.iter().filter(|a| drawn(&a.id, kind)) {
                 group.append(a.word.as_deref().map(said::key).as_deref(), Some(&action_of(&a.id, kind)));
-                // the pin's status under its check item: an item with no action, drawn insensitive
+                // the pin's status under its check item, drawn insensitive
                 if a.id == "offline"
                     && let Some(line) = s.offline.as_ref().and_then(|o| o.said.as_ref())
                 {
-                    group.append(Some(&said::notice(line)), None);
+                    // an action no one registers draws the item insensitive: a status, not a command
+                    group.append(Some(&said::notice(line)), Some("win.header-offline-status"));
                 }
             }
         }

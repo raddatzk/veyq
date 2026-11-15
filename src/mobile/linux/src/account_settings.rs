@@ -295,8 +295,23 @@ impl Page {
         self.units.borrow().get(self.unit.selected() as usize).copied()
     }
 
-    /// Draws [s]: every group anew, the name's row kept.
+    /// Draws [s]: every group anew, the name's row kept, the page left where it was scrolled to (the storage section
+    /// redraws it at each change of a pin's fetch).
     fn draw(self: &Rc<Self>, s: &SettingsShown) {
+        let scroll = self.page.first_child().and_downcast::<gtk::ScrolledWindow>().map(|w| w.vadjustment());
+        let at = scroll.as_ref().map(|a| a.value());
+        self.draw_groups(s);
+        if let (Some(a), Some(at)) = (scroll, at.filter(|v| *v > 0.0)) {
+            a.set_value(at);
+            // the groups' new heights arrive with the next allocation, and a closing dialog hands the focus back to a row
+            // the redraw replaced (the page then scrolls to whatever takes it): set it again after both
+            let again = a.clone();
+            glib::idle_add_local_once(move || again.set_value(at));
+            glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || a.set_value(at));
+        }
+    }
+
+    fn draw_groups(self: &Rc<Self>, s: &SettingsShown) {
         if let Some(g) = self.rename_group.borrow_mut().take() {
             g.remove(&self.rename);
         }
