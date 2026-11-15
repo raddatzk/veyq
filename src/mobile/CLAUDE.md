@@ -645,9 +645,13 @@ Per engine:
   end (a second online unlock, then Stop trusting), `shared_prefs/veyq.device-secrets.xml` (`KeystoreDeviceKeys`).
 - **Curl (Linux, `Engine.linux.kt`):** libcurl has no response cache, and its cookie engine starts only with
   `CURLOPT_COOKIEFILE`/`COOKIEJAR`, which Ktor's engine never sets (remembered from libcurl's docs; the engine's klib
-  references no cookie option). Not measured here.
+  references no cookie option). Measured 2026-11-15 (ADR 0140's Linux pass, after a sign-in, a pin, a video played
+  offline and a sign-out): the home held `veyq/device-store.json`, the empty `veyq/offline/`, gnome-keyring's files and
+  GStreamer's plugin registry under `~/.cache/gstreamer-1.0/` — nothing an HTTP stack keeps.
 - **WinHTTP (Windows, `Engine.mingw.kt`):** WinHTTP has no response cache (unlike WinINet), and the cookies it handles
-  live in the session handle's memory, never on disk (remembered from Microsoft's docs). Not measured here.
+  live in the session handle's memory, never on disk (remembered from Microsoft's docs). Measured 2026-11-15 (ADR 0140's
+  Windows pass, the unpackaged debug build): the data folder held `device-store.json`, the empty `offline\` and
+  `log.txt`, and the files the pass wrote under `%TEMP%` and `INetCache` held none of its content's names or bytes.
 A new engine, or a new client built outside these factories, states its cache and cookie store here and is measured
 as the Darwin one was: the app's container listed after a pass.
 

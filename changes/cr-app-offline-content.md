@@ -478,6 +478,9 @@ removed last). R10's paths are where it is wired; `TrustMarks` stay as they are 
   medium uploaded with a known byte pattern and a known name), then sign out and the directory listed empty; the app's
   container listed as § Nothing on disk the app did not choose asks. · Done when: each pass's commands and outputs are
   in ADR 0140's Consequences, per platform, with what could not be run named (a real device, a Copilot+ PC).
+  **Run 2026-11-15:** Android (6a), Linux and Windows (6b) — in ADR 0140's Consequences; the Windows scroll jump is
+  UIA's, not the app's (`src/mobile/CLAUDE.md` § Traps); the passes' three core faults fixed and bitten (the gallery's
+  words offline, the instance salt a sign-in keeps, the pins an offline open reads). Open: Apple's pass (the owner's).
 
 - [ ] **7 harvest** — `help/offline.mdx` (EN and DE) and security-model's residuals gain what the apps show offline and the suspended-space case (owner question 5)
   (D6), and a Use page "Use content offline" (`getting-started/`, EN and DE) tells the pin, the limit and the wipe, both
