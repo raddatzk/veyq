@@ -830,6 +830,110 @@ D8 (Windows) first, then the same screens as phase 4 in Fluent.
   pass drove them); peak working set's growth over idle not scaling with the file (the Depot CR's bound); `%TEMP%` listed
   before and after showing nothing decrypted; the drop held by its Veyq.Tests case (native-apps' UAC owner step stands).
 
+**Status: built, unit-proven and passed on the VM (en/light, de/dark), every new check bitten (2026-11-15).** Memories' list
+draws each Memory row's cover on both desktops (phase 4's deviation closed); a drop onto the gallery landed on the VM.
+
+**Built:**
+- **Bridge** — `Shell.RowCover(nodeId, held)` → `Answer.RowCover(frame, crop, sent, mediaType)`: a list row's cover (core's
+  `NodeCover.row` over `ShellModel.rowCover`; the phones' `openFramed`), the stored picture beside the JSON only where the
+  host does not hold that frame (`frameOf`: blob and crop), so a list drawn anew on every state opens a cover's blob only
+  once it changed; refused `NO_COVER`. A RowCover that sent is the second answer with a payload (`Bridge.call`'s gate, the
+  test driver's check, both hosts' doc). `NodeCoverTest` +1, `MemoriesDispatchTest` and `WireTest` sample it;
+  `SecretFreeSchemaTest` unchanged and green (the field is `frame`, no key-named field).
+- **Linux** — `home::object_row` draws a Memory's cover in its prefix (`Shell.RowCover`, cut through `Cover.Cut`, held by
+  node id with its frame, at most 256); `home::cut` with `a_rows_cover_is_the_part_the_cut_names`.
+- **Windows** (`src/mobile/windows/Veyq`): `MemoryPage` (the head's cover, the count, the chapters as a `ListView` with
+  their covers through `Gallery.ChapterCover`, the justified grid as a `Canvas` of rows placed at the core's frames — only
+  the window's rows `Gallery.Layout` names, laid out anew on the scroll's `SizeChanged` and `ViewChanged` —, tiles decoded
+  by WIC at 400 px and held in `Recent` (400, least recently shown out), a video's play badge; "Add photos" — the header's
+  own `upload` — through the open picker filtered to photo and video types; a drop of files onto the page as one
+  `Memory.Upload`, a folder said with `memory_drop_folder` (`DropSort.GalleryCall`/`GallerySaid`); the trash's Undo in the
+  shell's `InfoBar` held while the state offers it; the live poll's watch while the page stands; Refresh, F5 and Ctrl+R
+  read it anew; New chapter from the page's own "Add chapter"); `LightboxView` (in the page's place over black, a
+  `CommandBar` with Close, Previous, Next, the position and name, Slideshow, Details, Download original, Move to trash;
+  zoom in a `ScrollViewer` by Ctrl+wheel, a pinch and `+`/`-`/`0`; ←/→ and Escape as the window content's accelerators
+  while it stands; the details in a `ContentDialog`; Save through the save picker onto `ShellView.Saving`; a video's poster
+  with Play, played through `MediumPlayer`); `MediumPlayer` (the file page's `MediaPlayerElement` over `ReaderStream`,
+  moved out of `FilePage` and shared); `MediaTiers` (the host's `Media.Tiers`/`Media.Duration`, see the measurements;
+  `Core.Draw` hands both to the thread pool as the kit's drawings); `RowCovers` (a Memory's list row's cover); New Memory in
+  the shell's New (`Shell.CreateMemory`, the made Memory opens); `HeaderPlan` draws `upload`, `NodeHeader.Facts` hands the
+  gallery's id. A Memory's page offers "Add chapter" in place of New, as a Pot's page offers "Add entry". `Veyq.Drive`
+  names `plus` and `minus`. New tests: `MediaTiersTest` (5), `RecentTest`, `DropSortTest` +1, `HeaderPlanTest` +1.
+
+**D8's Windows measurements (2026-11-15, the VM: Windows 11 26H2 ARM64, the app x64 under emulation, unpackaged):**
+- **EXIF orientation:** the tiers read `System.Photo.Orientation` and hand WIC its flip and turn themselves
+  (`MediaTiers.Transform`, scaled in the stored orientation first) — a 3000×1000 JPEG with orientation 6 came out 1000×3000
+  with its left half on top (`MediaTiersTest`); in the pass a 1600×900 JPEG stored with orientation 6 went up 900×1600 and
+  was drawn upright in the grid and the lightbox. Whether `ExifOrientationMode.RespectExifOrientation` alone turns a
+  *scaled* read was not relied on and not measured.
+- **The poster:** `MediaComposition.GetThumbnailAsync` runs in the unpackaged app and in the test process (no frame
+  server needed): a clip `MediaComposition` rendered red for 1 s then blue was blue at 1.5 s and red at 0.1 s, 320×240,
+  its length 2 s from `MediaClip.OriginalDuration`. In the pass the 20 s H.264/AAC MP4's poster came out 1280×720 and the
+  600 MiB VP9/Opus WebM's 1920×1080 (its length 300 008 ms): the VM decodes VP9 (the Store's extension is installed there).
+- **HEIC:** not measured (no HEIC picked in the pass); an undecodable file answers no tiers and goes up alone
+  (`MediaTiersTest`'s junk file, as a photo and as a video).
+- **No new NuGet package** (`Windows.Media.Editing` and WIC are the SDK's); the deprecation and vulnerability gate green.
+
+**Met:** `./gradlew --continue :core:jvmTest :core:macosArm64Test :bridge:jvmTest` from `src/mobile` green (core jvm 663, 10
+skipped — the live cases; macosArm64 473; bridge 78, 2 skipped). `python3 src/mobile/windows/run.py build` green
+(Veyq.Bridge.Tests 4 + 5, Veyq.Tests 44; "no package is deprecated or vulnerable"). `python3 src/mobile/linux/run.py build`
+green (the SDK's `cargo test` 47 passed, the container's 5). Guards (`/usr/bin/python3 scripts/validate_*.py` but
+guard_gaps) green — `validate_mobile_platform_guidelines` first flagged a grid tile (a `Button`) placed by `Canvas.SetLeft`
+as a floating button; the tile now sits in its frame (a `Border`) at the core's place, which is what draws it.
+**Bitten** (mutation → its test red → restored; each mutation in a test of its own per build, two `run.py build`s, by a
+script with its backups beside it), Windows 10 of 10: transverse's flip swapped (`EachExifOrientation…`), the poster at 0
+(`AVideosPoster…`), the payload thumbnail first and an undecodable file answered with a size (`AFileThatDoesNotDecode…`),
+the orientation not read (`APhotoIsTurned…`), a small photo enlarged (`ASizeFits…`), a dropped folder sent and a dropped
+folder not said (`ADropOntoAGallery…`), the most recent tile evicted (`RecentTest`), `upload` not drawn (`HeaderPlanTest`);
+the bridge and core 5 of 5 (`./gradlew :core:jvmTest --tests '*NodeCoverTest*'`, `:bridge:jvmTest --tests
+'*MemoriesDispatchTest*'`): a held frame opened again, the frame without its crop, the picture not sent, the payload gated
+out, `sent` true for a held frame; Linux 1 of 1: the cut ignoring its x (`a_rows_cover_is_the_part_the_cut_names`).
+After merging `claude/windows-cr-f6c73c` at `6d2dd7464` (no conflict; device linking's phase 6 among it) the proof ran
+again, all green: the three Gradle suites (core jvm 663, macosArm64 473, bridge 88 with 4 skipped), `windows/run.py build`
+(Veyq.Tests 44), `linux/run.py build` (48 passed, the container's 5), the guards.
+**VM pass** (`VEYQ_LIVE=http://veyq.localhost:8080 run.py run --devlogin --unlock --width 1280 --height 860`, the
+coordinator's tunnel loop serving 8080/8081, driven by `run.py drive`, the app's log read first; media made on this Mac:
+the web's GPS/EXIF fixture, a 1600×900 JPEG with orientation 6, a 20 s H.264/AAC MP4, a 602 076 679 B VP9/Opus WebM, three
+plasma JPEGs of three shapes): **en/light** — "Windows memory" made from New (opened, "0 items", the header's plan gained
+`upload` once the gallery's id was told); a chapter "Day one" made with Add chapter (opened; back shows it among the
+Memory's chapters); through the open picker (`type 1148 F:\pass5`, Enter, a row selected, four names typed) the four media in
+one batch, each tile from this host's tiers (`media tiers: 900×1600`, `1280×720`, `1920×1080`), the WebM's upload done after
+~4 min through the tunnel; the grid justified (a widow row at 200 in 911 px); the lightbox "3 of 4" zoomed (`+` ×3 to 1.95,
+`0` back), ←/→ paged, the slideshow run from the third to the last ("Ended" on 4 of 4), the details (25 rows: camera, lens,
+aperture, "Added by" …), the GPS photo's original saved through the save picker at its SHA-256 (`c7b895d6…`, `Get-FileHash`
+equal to the file picked), the WebM played through the core's reader (`medium opened: 300 s, 1920×1080`) and sought from 25 s
+to 270 s in about 2 s, a medium trashed ("Moved to trash" with Undo in the InfoBar) and undone (back to its row); a READ
+link and a WRITE_ONLY link made in the share sheet, a guest's photo added through the WRITE_ONLY link on the web's guest
+page (headless Chrome, Vite's origin) shown in the gallery by the live poll within 5 s; **two photos dragged from Explorer
+onto the gallery went up as one batch** (`a drag entered the gallery: files True`, `memory upload: 2 files`, "6 items" — the
+first drop the Windows app took, now that the VM runs with UAC on and the app at medium integrity); a cover set through the
+cover dialog drawn as the page's hero and as the Memory's row in Memories' list (`a row's cover drawn`). **de/dark** — the
+words ("6 Objekte", "Kapitel hinzufügen", "Fotos hinzufügen", "1 von 6", "Original herunterladen", "In den Papierkorb"), the
+row's cover in "Erinnerungen", a zoom by keys keeping the centre (`1,95 at 449,334 of 1842×1367`), → and Escape, a window
+900 wide laid the grid out anew (803 px: five tiles justified, a widow), the WebM played and sought to 141 s, a medium
+trashed and undone. **Memory:** idle and signed in at Home 388 MB working set (peak 405); through the WebM's upload and
+play (en) the peak was 515 MB, through its play and seek (de) 453 MB — growth of 48–110 MB over idle for a 574 MiB file, not
+the file's size. **`%TEMP%`** listed before and after the de/dark pass: only the build's own files new
+(`Microsoft.NET.Workload_*.log`, `VBCSCompiler`), nothing of the app. The Memory was trashed and purged after
+(`VEYQ_DEV_MEMORY_PURGE='Windows memory' ./gradlew :core:jvmTest --tests '*DevMemoryTest*'`: "trashed and purged"); the
+pass reused the development store's trusted device (`session Unlock`), so it enrolled none.
+
+**Deviation:** D11's `ItemsRepeater` became a `Canvas` of the window's rows `Gallery.Layout` names (Linux's, D14's own
+alternative: the repeater would have had to carry the page's head and chapters as items); D11's `FlipView` became
+Previous/Next and the arrows over one stage, since the core's `Lightbox` holds the page and a `FlipView` realizes its
+neighbours on its own; the details are a `ContentDialog` (one at a time, `Dialogs.Show`) rather than a `TeachingTip`. The
+lightbox shows in the page's place, not a navigation of its own (the shell has none); Close and Escape return. Not driven:
+a chapter's cover (none was set; the row reads it as the Memory's page does), the video's sound, HEIC. The two fixes the
+pass found (keys after the save picker, the zoom's centre) were rebuilt and the centre seen in the de/dark run; the keys'
+move to the window's content and the tile's `Border` were built and unit-checked, not driven again.
+
+**Retrospective:** the tiers' poster through `Windows.Media.Editing` worked unpackaged at once — the frame server D8 held in
+reserve was not needed; making the test's clip with the same API kept the test free of a committed video. Both pass bugs
+were focus and timing in WinUI that no unit test sees: an accelerator scoped to an element stops when a system dialog takes
+the focus, and `ChangeView` with a new zoom clamps the offset to the old extent. The Undo's 6 s window outlasted no
+`drive` call that also took a tree: trash and Undo go in one call (`wait gallery-undo`). The drop that never landed on the
+VM (UAC off, the app elevated) landed as soon as UAC was on.
+
 ### Phase 6 — The phones draw the new functions
 
 **Landed ahead of the rest (2026-11-13): D14 on both phones and D15 on the Mac** — the justified grid drawn on Android

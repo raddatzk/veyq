@@ -1139,7 +1139,14 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   reboot, and the VM has no automatic logon (`AutoAdminLogon 0`), so the console then waits for the person's password or PIN —
   which an agent never types — and every recipe needs that logged-on session. Without a reboot, `runas /trustlevel:0x20000` left
   the app at `0x3000`, and a restricted, medium-labelled copy of the drive's token still read elevated (`TokenElevation` 1) and its
-  sign-in could not reach the server (measured 2026-11-12).
+  sign-in could not reach the server (measured 2026-11-12). With UAC on (the owner's step, done by 2026-11-15) the app runs at medium integrity and
+  Explorer's drop lands: two photos dragged onto a Memory's gallery went up as one batch (`drag memory-page a.jpg|b.jpg`).
+- WinUI: a `KeyboardAccelerator` on an element fires only while the focus is inside it — after a system dialog (the save
+  picker) the focus came back elsewhere and the lightbox's ← → did nothing (measured 2026-11-15): a view whose keys must
+  hold while it stands adds them to the window's content and removes them when it goes (`LightboxView`). And
+  `ScrollViewer.ChangeView(h, v, zoom)` clamps the offsets to the extent before the zoom: a zoom by keys stayed at the top
+  left; zoom first, then set the offsets once `ViewChanged` reports the new zoom. A trash's Undo (6 s) outlasts no
+  `Veyq.Drive` call that also dumps a tree: trash and Undo go in one call (`wait gallery-undo`, `invoke gallery-undo`).
 - A camera pass on the Android emulator (2026-11-13): the virtual scene's wall poster is the test camera
   (`-virtualscene-poster wall=<png>`, an 8-bit RGB PNG — a 1-bit one silently does not load), but it hangs behind the
   scene camera's start, so the camera is moved to it over the emulator's gRPC: start with `-grpc <port> -grpc-use-token`
