@@ -92,4 +92,12 @@ object AppleAudio {
         if (n > 0) head.usePinned { memcpy(it.addressOf(0), data.bytes, n.toULong()) }
         return Sniff.stream(head)?.mime
     }
+
+    /** A track over [data] held in memory (debug only, as [reader]: the player driven over real decks without a server). */
+    fun localTrack(id: String, title: String, data: NSData, mime: String): PlayerTrack =
+        PlayerTrack(id, title) { reader(data).let { r -> TrackSource(r, mime) { r.close() } } }
+
+    /** A player over [newDeck] and [controls] with the platform's randomness (debug only, as [reader]). */
+    fun localPlayer(newDeck: (Deck.Events) -> Deck, controls: SystemControls?): MusicPlayer =
+        MusicPlayer(newDeck, controls, { n -> kotlin.random.Random.nextInt(n) })
 }
