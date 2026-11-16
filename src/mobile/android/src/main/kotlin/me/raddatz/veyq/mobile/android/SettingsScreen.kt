@@ -63,6 +63,9 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material3.Switch
+import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -136,7 +139,7 @@ private class Confirm(val title: String, val text: String, val action: String, v
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(state: AccountSettings.State, actions: SettingsActions) {
+fun SettingsScreen(state: AccountSettings.State, actions: SettingsActions, maps: me.raddatz.veyq.mobile.map.MapServices? = null) {
     val context = LocalContext.current
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -214,6 +217,7 @@ fun SettingsScreen(state: AccountSettings.State, actions: SettingsActions) {
                 addDevice(camera, !state.working, actions)
             }
             storage(state, context, onLimit = { limiting = true }, actions)
+            maps?.let { mapServices(it) }
             appearance(context)
             item(key = "sign-out") {
                 Column(Modifier.padding(16.dp)) {
@@ -646,6 +650,63 @@ private fun LimitDialog(field: me.raddatz.veyq.mobile.offline.LimitField, action
                 TextButton(onClick = onClose) { Text(stringResource(R.string.signin_cancel)) }
             }
         },
+    )
+}
+
+/**
+ * "Map services" (uc.memory.place A5, A6; ADR 0143 D2): this device's one consent, worded as a setting — which services the
+ * server names (the map's host, the place names' host), what they receive, the switch that gives or withdraws the consent
+ * for exactly those hosts (off: every map and lookup stops at once), and where an earlier consent named other hosts, which.
+ * A server that shows no maps has nothing to consent to; offline the hosts are unknown, so only a consent given can be
+ * withdrawn.
+ */
+private fun LazyListScope.mapServices(maps: me.raddatz.veyq.mobile.map.MapServices) {
+    item(key = "maps-divider") { HorizontalDivider(Modifier.padding(top = 16.dp)) }
+    header("maps", { say(me.raddatz.veyq.mobile.words.Msg.SETTINGS_MAPS) }, { say(me.raddatz.veyq.mobile.words.Msg.SETTINGS_MAPS_SUB) })
+    item(key = "maps") { MapServicesRows(maps) }
+}
+
+@Composable
+private fun MapServicesRows(maps: me.raddatz.veyq.mobile.map.MapServices) {
+    val state by maps.state.collectAsStateWithLifecycle()
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val note: @Composable (String) -> Unit = { Text(it, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
+    when (state) {
+        me.raddatz.veyq.mobile.map.MapState.NotOffered -> note(say(me.raddatz.veyq.mobile.words.Msg.SETTINGS_MAPS_NOT_OFFERED))
+        me.raddatz.veyq.mobile.map.MapState.Offline -> {
+            note(say(me.raddatz.veyq.mobile.words.Msg.MAP_NEEDS_CONNECTION))
+            val given = maps.consentGivenFor != null
+            MapsSwitch(checked = given, enabled = given) { if (!it) maps.turnOff() }
+        }
+        else -> Column {
+            val none = say(me.raddatz.veyq.mobile.words.Msg.SETTINGS_MAPS_NONE)
+            ListItem(
+                overlineContent = { Text(say(me.raddatz.veyq.mobile.words.Msg.SETTINGS_MAPS_TILES)) },
+                headlineContent = { Text(maps.currentHosts.tiles ?: none) }, colors = listColors(),
+            )
+            ListItem(
+                overlineContent = { Text(say(me.raddatz.veyq.mobile.words.Msg.SETTINGS_MAPS_PLACES)) },
+                headlineContent = { Text(maps.currentHosts.places ?: none) }, colors = listColors(),
+            )
+            note(say(me.raddatz.veyq.mobile.words.Msg.SETTINGS_MAPS_RECEIVE))
+            MapsSwitch(checked = state == me.raddatz.veyq.mobile.map.MapState.Shown, enabled = true) { on -> if (on) maps.turnOn() else maps.turnOff() }
+            if (maps.renewal != null) {
+                val given = maps.consentGivenFor
+                if (given == null || (given.tiles == null && given.places == null)) note(say(me.raddatz.veyq.mobile.words.Msg.SETTINGS_MAPS_GIVEN_FOR_UNRECORDED))
+                else note(say(me.raddatz.veyq.mobile.words.Msg.SETTINGS_MAPS_GIVEN_FOR, given.tiles ?: none, given.places ?: none))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MapsSwitch(checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    ListItem(
+        headlineContent = { Text(say(me.raddatz.veyq.mobile.words.Msg.SETTINGS_MAPS_SWITCH)) },
+        supportingContent = { Text(say(me.raddatz.veyq.mobile.words.Msg.SETTINGS_MAPS_SWITCH_HINT)) },
+        leadingContent = { Icon(Icons.Outlined.Map, null) },
+        trailingContent = { Switch(checked, onChange, enabled = enabled, modifier = Modifier.testTag("settings-maps-switch")) },
+        colors = listColors(),
     )
 }
 
