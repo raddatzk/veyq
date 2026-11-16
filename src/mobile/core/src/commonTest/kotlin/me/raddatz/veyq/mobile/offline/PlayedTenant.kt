@@ -63,6 +63,10 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
     var cutAfterStoreGets: Int? = null
     /** Every request's path, in order. */
     val requests = mutableListOf<String>()
+    /** The tenant's capability set as `getTenantCapabilities` answers it (the JSON array of entries); null: not served. */
+    var capabilities: String? = null
+    /** Every request to a third party under `map.example` (a map service, ADR 0143 D3), as sent: its URL and headers. */
+    val mapRequests = mutableListOf<HttpRequestData>()
 
     /** Every id the server hands out is a UUID (the seals' contexts require one); [id] makes one of a test's name. */
     private val names = HashMap<String, String>()
@@ -226,6 +230,11 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
         val path = r.url.encodedPath
         requests += path
         if (!reachable) throw IllegalStateException("the network is down")
+        if (r.url.host.endsWith("map.example")) {
+            mapRequests += r
+            return if (path == "/reverse") json("""{"address":{"city":"Berlin","country":"Deutschland"}}""")
+            else respond(byteArrayOf(1, 2, 3), HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "image/png"))
+        }
         if (r.url.host == "store.example") {
             if (cutAfterStoreGets?.let { storeGets >= it } == true) {
                 reachable = false
@@ -248,6 +257,8 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
             path == "/api/scopes/my-tenants" -> json(tenants.joinToString(",", "[", "]") { """{"tenantId":"${it.id}","name":"${it.id}","domain":"${it.domain}","role":"OWNER","status":"ACTIVE","iconEpoch":0}""" })
             path == "/api/account/device-register" -> json("""{"revision":0,"blob":null}""")
             path == "/api/session/logout" -> respond("", HttpStatusCode.NoContent)
+            path.matches(Regex("/api/tenants/[^/]+/capabilities")) ->
+                capabilities?.let { json("""{"capabilities":$it,"applicationErasures":[]}""") } ?: json("{}", HttpStatusCode.NotFound)
             path == "/api/scopes" -> json(scopes.filter { it.tenant == tenant && (it.member || it.stillListed) }.joinToString(",", "[", "]") { scopeJson(it) })
             path.endsWith("/blob-downloads-batch") -> {
                 val body = (r.body as OutgoingContent.ByteArrayContent).bytes().decodeToString()

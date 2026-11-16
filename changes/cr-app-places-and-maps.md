@@ -296,7 +296,7 @@ a recipient the notice does not name is the cheap safe side to close now). `revi
   active. · Done when: `./gradlew check` in `src/backend/` green; **bite:** the Apple line rendered regardless of the
   switch → the renderer test red.
 
-- [ ] **3 the map services (core `map/`)** — D2, D3, D4: `MapServices`, `MapTiles` with the viewport math and the
+- [x] **3 the map services (core `map/`)** — D2, D3, D4: `MapServices`, `MapTiles` with the viewport math and the
   memory LRU, `Geocoder`, clustering and framing, `PlayedMapServices`; `TenantSession` keeps `serviceAttribution`.
   Tests: R14's `geocode`, `placeName`, `spaceMap` and consent cases ported; tile math against known `{z,x,y}` (Berlin at
   z 12 is `2200/1343`); the consent's hosts (a new tile host asks again, a removed geocoder does not, a host-less record
