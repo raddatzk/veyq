@@ -26,7 +26,7 @@ has for tenant-owner invites ([uc.admin.create-tenant](../../admin/use-cases/uc.
 
 1. The owner opens **"members"** and sees, beside the joined members
    ([uc.spaces.add-member](uc.spaces.add-member.md) directory), a list of **pending invites** — a mailed one by its
-   email, a link invite as **Link invitation** with its expiry ([ADR 0129](../../../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 2). Owner-gated; a non-owner sees the directory but not the pending list nor the
+   email, a link invite by its label, or as **Link invitation** where it has none, with its expiry ([ADR 0129](../../../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decisions 2 and 7). Owner-gated; a non-owner sees the directory but not the pending list nor the
    management actions. (Every member reads the open invites' public keys, without email, through
    `listOpenInvites` — what a rotation needs to carry them, [uc.spaces.add-member](uc.spaces.add-member.md) A2.)
 2. **Re-issue.** For a pending invite whose link the invitee lost or ignored, the owner re-issues it: their client
@@ -48,16 +48,23 @@ has for tenant-owner invites ([uc.admin.create-tenant](../../admin/use-cases/uc.
    ciphertext ([ADR 0111](../../../decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
    § Consequences).
 
+4. **Label.** The owner sets, changes or clears a link invite's label (`setMemberInviteLabel`): their client seals it
+   as a tenant value bound to that invite and the server replaces the stored ciphertext and records them as its last
+   editor (ADR 0129 decision 7). A re-issue keeps it: the client seals the label it opened for the new invite. A mailed
+   invite has no label (`404 invite_not_found`), and neither has an invite that ended.
+
 ## Alternate / exception flows
 
 - **A1 — the invitee joined between list and action:** a re-issue/revoke targets an already-consumed invite → a
   no-op / not-found; the now-joined person shows in the member directory, not the pending list.
 - **E1 — a non-owner attempts management:** rejected (`403 not_tenant_owner`) — inviting stays owner-only.
+- **E2 — a label that does not open** (a server that served another invite's label, or one under a key this client
+  cannot anchor): the row shows **Link invitation**, never what it could not verify, and a re-issue seals no label.
 
 ## Quality notes
 
 - **Operator-blind.** Listing returns only invite **metadata** (email, status, expiry) the server already
-  stores; the secret is never stored plaintext (only its hash), and a mailed invite's re-issue returns **no secret at
+  stores, and a link invite's label only as ciphertext under a key of the tenant; the secret is never stored plaintext (only its hash), and a mailed invite's re-issue returns **no secret at
   all** — not even to the owner who asked for it ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)
   §2). Handing a named person's invite token back to a third party is exactly the routing this flow exists to
   avoid, so the response carries only the invite's state. A link invite is the owner's own to hand over, so its

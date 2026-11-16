@@ -8,8 +8,8 @@ When a topic is refined, its ideas move into durable state under [`features/`](f
 > **A done row is deleted** (owner 2026-10-19), like a CR when it is done: what it taught lives in the ADRs,
 > features and coverage it changed, and its history in git (`git log -S'| <n> |' -- docs/inbox.md`). A row that is
 > built but still owes a measurement or a proof is not done. **Row numbers stay reserved and are never reused** — a
-> citation `#<n>` in a doc, a test or a commit keeps naming that one topic. **Highest number used so far: 859** —
-> the next row is 860; raise this line with every new row.
+> citation `#<n>` in a doc, a test or a commit keeps naming that one topic. **Highest number used so far: 860** —
+> the next row is 861; raise this line with every new row.
 >
 > An open row holds its title, tags, status, the next step and the links that matter — no history. Its status names
 > where it stands against V1: **V1** (on the V1 line), **end of V1** (needs a remote or a release, done at the very
@@ -189,3 +189,4 @@ other, so when scope shrinks the copy is corrected in the same pass, not filed.
 | 853 | **A Memory's page of its Chapters' journals** | feature, journal, memory | **inbox · after the journal** (filed 2026-11-13, owner: "merging them upward") — read-only, under the Memory's own journal, each Chapter's text in the Chapters tab's order, headed by its name and linking to its journal ([ADR 0133](decisions/0133-a-memorys-journal-is-a-sealed-crdt-log-whose-snapshots-only-members-write.md) decision 1; the model does not block it). Next: refine — one read per Chapter or a batched read, a live view of N journals against the stream's 16-list bound, where search hits land. |
 | 854 | **Live cursors in the journal** | feature, journal | **inbox · after cr-live-stream** (filed 2026-11-13, owner: who is here first) — ephemeral messages sealed under `K_jrev`, one fixed size, a few a second, relayed by the stream with the server-attested sender and never stored ([ADR 0134](decisions/0134-core-pushes-a-lists-new-position-to-the-clients-that-edit-it-on-a-stream.md) decision 4). Next: a CR when the owner wants them. |
 | 855 | **The journal in the native apps** | native, journal | **inbox · with the native apps** (filed 2026-11-13) — Yrs bound for Kotlin and Swift through UniFFI by us (no maintained binding exists), reading the projection first (no CRDT needed), editing second by diffing a text field into the `Y.Text` ([ADR 0133](decisions/0133-a-memorys-journal-is-a-sealed-crdt-log-whose-snapshots-only-members-write.md) decision 2); unsent updates survive a restart there, which the web cannot. Next: with #438's apps. |
+| 860 | **A member invite link carries a private label** | feature, spaces, invites, web | **planned** (refined with the owner 2026-11-15) — [ADR 0129](decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decision 7: an optional label at mint, changeable by any owner, the pending row's title; sealed as a tenant value bound to the invite, re-wrapped at a rotation. Next: [cr-member-invite-link-label](../changes/cr-member-invite-link-label.md). |
