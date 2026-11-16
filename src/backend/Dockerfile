@@ -52,8 +52,10 @@ COPY VERSION /repo/VERSION
 # its sibling for ADR 0069: the policy file exists and index.html has no CSP <meta> — the two things the
 # backend's app shell refuses to boot without, caught here rather than at a self-hoster's first start.
 # verify:license-sources holds that the bundle's licence file names each package's source (MPL-2.0 §3.2), which the
-# runtime stage copies out of this dist.
-RUN pnpm run build && pnpm run verify:no-backdoor && pnpm run verify:csp && pnpm run verify:license-sources
+# runtime stage copies out of this dist. verify:boot-watchdog holds that the start watchdog shipped import-free and
+# is loaded async by index.html (ADR 0136 decision 2): an image without it starts blank again where a start hangs.
+RUN pnpm run build && pnpm run verify:no-backdoor && pnpm run verify:csp && pnpm run verify:license-sources \
+    && pnpm run verify:boot-watchdog
 
 # --- backend (JVM) ---------------------------------------------------------------------------------------
 # The JDK is the backend's one Java major (gradle/libs.versions.toml's `java`, ADR 0119): Gradle's toolchain finds it here.
