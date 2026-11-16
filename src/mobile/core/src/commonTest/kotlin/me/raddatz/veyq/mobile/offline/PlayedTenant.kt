@@ -12,7 +12,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
 import me.raddatz.veyq.mobile.blob.DeviceFiles
-import me.raddatz.veyq.mobile.blob.deviceFiles
 import me.raddatz.veyq.mobile.crypto.BlobMeta
 import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.IdentityPrivate
@@ -35,7 +34,7 @@ import me.raddatz.veyq.mobile.session.testPrimitives
  * ([reachable]). Every listing answers its revision as the server does: `listNodes` an `ETag`, `listNodeMedia` its
  * `mediaRevision`, each `304` on a matching `If-None-Match`.
  */
-internal class PlayedTenant(files: DeviceFiles = deviceFiles, val clock: () -> Long = { 0L }) {
+internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () -> Long = { 0L }) {
     val p = testPrimitives
     val suite = V1(p)
     val server = "http://a.example"

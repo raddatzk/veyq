@@ -367,8 +367,33 @@ class OfflinePinsTest {
     }
 
     @Test
+    fun a_pin_pauses_at_the_free_space_floor_and_is_kept_once_there_is_room() = runTest {
+        // a volume under 5 % free (ADR 0140 decision 8): the pin's fetch takes nothing and says so
+        val volume = SizedVolume(total = 1_000_000_000, free = 49_999_999)
+        val t = PlayedTenant(volume).also { played += it }
+        val s = t.scope("s1")
+        val m = t.node(s, "memory")
+        t.medium(m, "photo", frames = 2)
+        t.remember()
+        val a = t.resume()
+        val tenant = tenantOf(a)
+        val pins = pinsOf(a)
+        assertTrue(pins.pin(tenant, s.id, m.id))
+        pins.sync()
+        assertEquals(Pin.State.NO_SPACE, pins.pins.value.single().state)
+        val o = assertNotNull(a.offline)
+        assertEquals(emptyMap(), o.frames(t), "the floor kept a frame")
+        // room again: the next sync keeps it
+        volume.free = volume.total / 2
+        pins.sync()
+        assertEquals(Pin.State.KEPT, pins.pins.value.single().state)
+        assertEquals(mapOf("photo-t" to setOf(0)), o.frames(t))
+        a.retire()
+    }
+
+    @Test
     fun a_second_connection_of_the_account_shares_its_store() = runTest {
-        val stores = OfflineStores(freshTestDirectory().also { dirs += it }, MemoryDeviceStore(), testPrimitives)
+        val stores = OfflineStores(freshTestDirectory().also { dirs += it }, MemoryDeviceStore(), testPrimitives, SizedVolume()) { 0L }
         val key = testPrimitives.randomBytes(32)
         val first = stores.openShared("a.example#u1", key, "http://a.example", 1_000_000)
         val second = stores.openShared("a.example#u1", key, "http://a.example", 1_000_000)

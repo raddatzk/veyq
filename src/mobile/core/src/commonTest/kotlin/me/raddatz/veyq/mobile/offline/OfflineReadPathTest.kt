@@ -38,7 +38,7 @@ import kotlin.test.assertTrue
 class OfflineReadPathTest {
     private val played = mutableListOf<PlayedTenant>()
 
-    private fun play(files: DeviceFiles = deviceFiles, clock: () -> Long = { 0L }) = PlayedTenant(files, clock).also { played += it }
+    private fun play(files: DeviceFiles = SizedVolume(), clock: () -> Long = { 0L }) = PlayedTenant(files, clock).also { played += it }
 
     @AfterTest
     fun cleanUp() = played.forEach { removeAll(it.root) }

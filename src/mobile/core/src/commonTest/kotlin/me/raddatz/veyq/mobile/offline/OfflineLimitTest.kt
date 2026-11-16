@@ -2,13 +2,13 @@ package me.raddatz.veyq.mobile.offline
 
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.blob.DeviceFiles
-import me.raddatz.veyq.mobile.blob.deviceFiles
 import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.session.MemoryDeviceStore
 import me.raddatz.veyq.mobile.session.testPrimitives
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -17,8 +17,14 @@ import kotlin.test.assertTrue
  * never; lowering the limit evicts at once; `0` keeps nothing automatically; and a medium read is kept in batches — one
  * frame index and one manifest shard written per batch, never per frame.
  *
+ * The free-space floor: a write is taken only where the volume keeps 5 % free after it — at 5 % it keeps, a byte under
+ * it does not. The volume is a [SizedVolume], so neither this nor any other test reads how full the host is.
+ *
  * Bites: evict by size (the largest first) instead of by last view → the most recently viewed entry goes and the oldest
- * stays; append each frame on its own (`ApplicationBlobs.KEEP_BATCH = 1`) → the writes grow with the frames.
+ * stays; append each frame on its own (`ApplicationBlobs.KEEP_BATCH = 1`) → the writes grow with the frames; the floor
+ * strict (`>` for `>=` in `AccountOffline.mayWrite`) → the write leaving exactly 5 % is refused; no floor
+ * (`FLOOR_PERCENT = 0`) → the writes under it are taken, and `OfflinePinsTest`'s pin is kept instead of `NO_SPACE`;
+ * [SizedVolume] answering the host's volume → on a host under 5 % free every test that keeps anything goes red.
  */
 class OfflineLimitTest {
     private val p = testPrimitives
@@ -29,8 +35,8 @@ class OfflineLimitTest {
 
     private var now = 0L
 
-    private fun open(): AccountOffline =
-        OfflineStores(root, MemoryDeviceStore(), p, deviceFiles) { now }.openFor("a.example#u1", p.randomBytes(32), "http://a.example", 1_000_000)
+    private fun open(files: DeviceFiles = SizedVolume()): AccountOffline =
+        OfflineStores(root, MemoryDeviceStore(), p, files) { now }.openFor("a.example#u1", p.randomBytes(32), "http://a.example", 1_000_000)
 
     private fun key(o: AccountOffline, id: String) = o.blobKey("t1", "s1", id)
 
@@ -80,6 +86,23 @@ class OfflineLimitTest {
         o.close()
     }
 
+    @Test
+    fun the_free_space_floor_keeps_five_percent_of_the_volume_free() = runTest {
+        val volume = SizedVolume(total = 100_000, free = 5_100)
+        val o = open(volume)
+        // 100 bytes more leave exactly 5 % free: kept
+        assertTrue(o.keepFrames(key(o, "at"), mapOf(0 to ByteArray(100)), 100), "a write leaving 5 % free was refused")
+        // one byte less free: the same write would leave under 5 %, refused and nothing kept
+        volume.free = 5_099
+        assertFalse(o.keepFrames(key(o, "under"), mapOf(0 to ByteArray(100)), 100), "a write leaving under 5 % free was taken")
+        assertEquals(setOf("at"), o.kept())
+        // a volume already under 5 % free keeps nothing, however small
+        volume.free = 4_999
+        assertFalse(o.keepFrames(key(o, "tiny"), mapOf(0 to ByteArray(1)), 1))
+        assertEquals(setOf("at"), o.kept())
+        o.close()
+    }
+
     /** Counts renames: each whole-file replace of the store (a frame index, a manifest shard) ends in one. */
     private class Counting(val inner: DeviceFiles) : DeviceFiles by inner {
         var renames = 0
@@ -88,7 +111,7 @@ class OfflineLimitTest {
 
     @Test
     fun a_medium_read_is_kept_in_batches_not_frame_by_frame() = runTest {
-        val files = Counting(deviceFiles)
+        val files = Counting(SizedVolume())
         val t = PlayedTenant(files)
         try {
             val s = t.scope("s1")
