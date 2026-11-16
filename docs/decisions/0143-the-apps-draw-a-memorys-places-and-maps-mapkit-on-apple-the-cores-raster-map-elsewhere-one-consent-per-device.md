@@ -189,6 +189,22 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
 - **Apple is a recipient on iOS and macOS.** The consent there names Apple Maps for the map and the operator's geocoder
   for place names; the notice names Apple (decision 13). What MapKit keeps on disk is Apple's, named in
   [`src/mobile/CLAUDE.md`](../../src/mobile/CLAUDE.md) § Nothing on disk.
+- **Measured 2026-11-16 on Android (phase 6): the Compose map's pan and pinch, frame time recorded.** A throwaway API 36
+  emulator (Pixel 8 profile, `-gpu host`, 60 Hz panel; `dumpsys display`: `renderFrameRate 60.0`) on the developer's Mac,
+  the Memories bar's Map tab over Lisbon at zoom 16 with real tiles from `tile.openstreetmap.org` after the consent was
+  given in the app: a scripted gesture injected as raw multi-touch events at 60 Hz (`adb exec-in` into the emulator's
+  `virtio_input_multi_touch` device, paced from the Mac) — four one-finger pans and a pinch out by 5× and back by 3.3× —
+  crossing levels 16 to 18 and drawing 32 distinct tiles (25–32 per run, counted by a log line kept for the run only).
+  `dumpsys gfxinfo` over the gesture, two runs at a 1-minute load of 5–6 on the 14-core host: 267 and 279 frames, **50th
+  percentile 32 / 27 ms, 90th 61 / 42 ms, 99th 105 / 89 ms**, 38 % / 30 % janky, no slow bitmap upload (tiles are
+  decoded as `HARDWARE` bitmaps off the main thread). **The same emulator drags a plain list** (Home, the same 60 Hz
+  injected drags) at 50th 32 ms, 90th 61 ms, 99th 150 ms, 20 % janky: it holds no 60 Hz frame budget for any screen, so
+  "without a dropped frame" is not observable here, and the map's frame time is the list's at the median with a longer
+  tail where a pinch crosses a level. Two changes the measurement bought: the tiles are asked from a snapshot flow and
+  read only in the draw phase (a moving view redraws the canvas, nothing recomposes), and a level's stand-in tiles are
+  drawn only where a tile is still missing (no overdraw once settled). Under a host load of 20+ the same gesture fell to
+  34–69 frames, so a number from a busy machine says nothing; a phone's GPU profile bars remain the owner's device pass
+  (phase 9). D1's Compose `Canvas` stands: no library would change the emulator's budget, and the median matches a list.
 - **Measured 2026-11-16 on macOS 26.7 (phase 7), before the Apple map was built:** a probe built as the Mac app is —
   unsandboxed, ad-hoc signed (`codesign -s -`), **no entitlement at all** (`codesign -d --entitlements -` empty) — ran
   headless from its binary while the screen was locked; `MKMapSnapshotter` answered a drawn map of Munich and one of

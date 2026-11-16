@@ -3002,6 +3002,16 @@
     "en": "Remove",
     "de": "Entfernen"
   },
+  "track_nothing_on_map": {
+    "note": "The Map view where no photo has a location and there is no track (the web's memories.tracks.nothingOnTheMap).",
+    "en": "Nothing to show on the map yet: no photo here has a location, and there is no track.",
+    "de": "Noch nichts auf der Karte: Kein Foto hier hat einen Standort, und es gibt keinen Track."
+  },
+  "track_actions": {
+    "note": "A track's overflow menu, for a screen reader: {1} its name.",
+    "en": "Actions for {1}",
+    "de": "Aktionen für {1}"
+  },
   "settings_maps": {
     "note": "Settings' section: this device's consent to the map services (ADR 0143 D2).",
     "en": "Map services",

@@ -164,9 +164,12 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     // photos or music (ADR 0142 decision 6): the switch shows where the node has music or whoever looks may add some
     var view by androidx.compose.runtime.saveable.rememberSaveable(gallery) { mutableStateOf(MemoryView.PHOTOS) }
     val musicOffered = me.raddatz.veyq.mobile.memories.music.MusicModel.shown(state)
-    val viewSwitch: @Composable () -> Unit = { MemoryViewSwitch(view) { view = it } }
+    // Photos | Music | Map: Map always, as the web's tab is (ADR 0143 D8)
+    val viewSwitch: @Composable () -> Unit = { MemoryViewSwitch(view, musicOffered) { view = it } }
     val music = if (musicOffered && view == MemoryView.MUSIC) remember(gallery) { model.musicModel(gallery) } else null
+    val tracks = if (view == MemoryView.MAP) remember(gallery) { model.trackList(gallery) } else null
     Box(Modifier.fillMaxSize()) {
+    if (tracks != null) MemoryMapView(gallery, tracks, model, snackbar, viewSwitch) else
     if (music != null) MusicView(gallery, music, model, snackbar, viewSwitch) else
     CreateAction(
         stringResource(if (state.rights.upload) R.string.memory_add else R.string.memory_add_chapter),
@@ -185,7 +188,9 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     val byId = remember(rows) { rows.orEmpty().withIndex().associateBy({ it.value.mediaId }, { it }) }
     LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = bottom)) {
         item(key = "hero") { hero(16.dp) }
-        if (musicOffered) stickyHeader(key = "views") { viewSwitch() }
+        // the date and the place under the header (ADR 0143 D5)
+        item(key = "facts") { MemoryFactsLine(gallery, model) }
+        stickyHeader(key = "views") { viewSwitch() }
         if (state.chapters.isNotEmpty()) {
             item(key = "chapters") {
                 Text(stringResource(R.string.memory_chapters), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
@@ -454,7 +459,7 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
             }
         }
         if (details) {
-            ModalBottomSheet(onDismissRequest = { details = false }) { MediaDetailsSheet(row, box) }
+            ModalBottomSheet(onDismissRequest = { details = false }) { MediaDetailsSheet(row, box, model) }
         }
     }
 }
@@ -559,8 +564,13 @@ private fun MediaVideo(row: GalleryModel.Row, reader: RangeReader, box: MemoryLi
  * only where nothing is known.
  */
 @Composable
-private fun MediaDetailsSheet(row: GalleryModel.Row, box: MemoryLightbox) {
-    val details by produceState<me.raddatz.veyq.mobile.memories.Lightbox.Details?>(null, row.mediaId) { value = box.details(row.mediaId) }
+private fun MediaDetailsSheet(row: GalleryModel.Row, box: MemoryLightbox, model: AppModel) {
+    // read anew when the gallery re-lists the medium (its place name sealed, below, shows then)
+    val details by produceState<me.raddatz.veyq.mobile.memories.Lightbox.Details?>(null, row.mediaId, row) {
+        value = box.details(row.mediaId)
+    }
+    // the photo's place name, looked up once ever and sealed where the core's gates allow it (ADR 0143 D7)
+    LaunchedEffect(row.mediaId) { box.resolvePlace(row.mediaId) }
     val d = details
     val rows = d?.rows.orEmpty()
     val uploaderName = d?.uploader?.let { piece(MediaDetails.uploaderWords(it)) }
@@ -568,6 +578,8 @@ private fun MediaDetailsSheet(row: GalleryModel.Row, box: MemoryLightbox) {
     val placeAt = d?.uploaderAt ?: 0
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         Text(stringResource(R.string.memory_details), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+        // the photo's small map at its point, with its direction where the camera recorded one (ADR 0143 D7)
+        d?.map?.let { PhotoMap(it, model) }
         if (d != null && rows.isEmpty() && uploaderName == null) {
             Text(stringResource(R.string.memory_no_detail), color = role(LocalPalette.current.muted), modifier = Modifier.padding(16.dp))
         }

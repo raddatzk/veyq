@@ -713,6 +713,11 @@ private fun ExpensesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) 
 private fun MemoriesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) -> Unit = model::open) {
     var creating by remember { mutableStateOf(false) }
     val space = s.shell.space ?: s.spaces.firstOrNull()?.scopeId
+    // the bar's Map tab: every located Memory of the same list on a map (ADR 0143 D6)
+    if (s.shell.selectedTab?.key == "memories.map") {
+        MemoriesMapTab(s, model)
+        return
+    }
     CreateAction(stringResource(R.string.memory_new), shown = space != null && s.online, onClick = { creating = true }, state = LocalListStates.current.of("app:MEMORIES")) { list, bottom ->
         ArrangedListScreen(s.applicationList(ApplicationId.MEMORIES), onOpen = onOpen, state = list, bottom = bottom)
     }
@@ -757,7 +762,7 @@ internal class ListStates {
 internal val LocalListStates = androidx.compose.runtime.staticCompositionLocalOf { ListStates() }
 
 /** Each listed node's cover, by node id (the model's), as the rows draw them. */
-private val LocalCovers = androidx.compose.runtime.staticCompositionLocalOf<Map<String, Pair<String, androidx.compose.ui.graphics.ImageBitmap>>> { emptyMap() }
+internal val LocalCovers = androidx.compose.runtime.staticCompositionLocalOf<Map<String, Pair<String, androidx.compose.ui.graphics.ImageBitmap>>> { emptyMap() }
 
 @Composable
 private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit) {

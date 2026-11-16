@@ -33,7 +33,13 @@ A Gradle build of its own, run through its own wrapper.
   and its GPX tracks in `memories/tracks/`. Apple draws them with MapKit (decision 1): `MapViews.swift` (the gate that
   mounts a `Map` only while `MapServices.state` is `Shown`, the consent's offer naming Apple Maps, the facts line and the
   two editors, the bar's Map tab, a photo's map, Settings' Map services) and `MemoryMapView.swift` (the Map view's
-  tracks), over `AppModel`'s map services; `AppleMemories.saveTrack` and `watchPlace` adapt what Swift cannot call.
+  tracks), over `AppModel`'s map services; `AppleMemories.saveTrack` and `watchPlace` adapt what Swift cannot call. Android draws
+  the core's raster map in Compose (decision 1, no map library): `MapView.kt` (`RasterMap` — the tiles the core's tile view
+  hands, drawn from the floor level scaled, a pan, a pinch and a double tap reported back as a `Viewport`; `MapPlace`, the
+  consent's offer or the reason no map stands; the attribution and *Turn map services off* along every map's edge),
+  `MemoriesMapTab.kt` (the bar's Map tab), `MemoryPlaces.kt` (the facts line, the date and place editors, a photo's map)
+  and `MemoryMapView.kt` (the Map view's tracks), over `AppModel.maps`; Settings' Map services in `SettingsScreen.kt`.
+  A tile is decoded in memory only (at most 96 kept for drawing) and the core's tile view decides which may be asked.
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
   decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's
   (`session/Account.kt`, `SessionModel.kt`: every sign-in enrols the password trust, `Gate.Signed.offer` offers staying
@@ -701,7 +707,11 @@ Per engine:
   (ADR 0140's Android pass, `sqlite3` over the pulled database): one `workspec` row — `PinWorker`, its state, an empty
   input (`Data` of 8 bytes: no entries) —, its unique name `veyq-offline-pins` and its class as tag; no content, id or
   key. The pass's listing also showed `shared_prefs/veyq.memories.xml` (`mediaAccessAsked` only) and, by the pass's
-  end (a second online unlock, then Stop trusting), `shared_prefs/veyq.device-secrets.xml` (`KeystoreDeviceKeys`).
+  end (a second online unlock, then Stop trusting), `shared_prefs/veyq.device-secrets.xml` (`KeystoreDeviceKeys`). Measured
+  2026-11-16 on a throwaway API 36 emulator after ADR 0143's Android map pass (the consent given, real tiles over a pan
+  and a pinch, a place, a range, a track, a photo's map): the same listing (beside the offline store's opaque files) and
+  nothing else — no tile, no geocoder answer, no viewport; the consent is `maps-consent` in `shared_prefs/veyq.trust.xml`,
+  the hosts it was given for (`{"tiles":"tile.openstreetmap.org","places":"nominatim.openstreetmap.org"}`) and no more.
 - **Curl (Linux, `Engine.linux.kt`):** libcurl has no response cache, and its cookie engine starts only with
   `CURLOPT_COOKIEFILE`/`COOKIEJAR`, which Ktor's engine never sets (remembered from libcurl's docs; the engine's klib
   references no cookie option). Measured 2026-11-15 (ADR 0140's Linux pass, after a sign-in, a pin, a video played

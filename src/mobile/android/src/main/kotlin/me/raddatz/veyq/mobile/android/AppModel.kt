@@ -168,6 +168,22 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         _music.value = null
     }
 
+    // ---- the map services (ADR 0143 D2): one per open tenant, closed where the tenant's models close ----
+
+    private val _maps = MutableStateFlow<me.raddatz.veyq.mobile.map.MapServices?>(null)
+
+    /**
+     * The open tenant's map services on this device (core's `MapServices`, built by the shell beside its uploads): what
+     * its server serves, this device's consent, the tiles and the geocoder. Closed — its tiles dropped, its geocoder's
+     * queue cleared — at a lock, a sign-out and a tenant switch; null while no tenant is open.
+     */
+    val maps: StateFlow<me.raddatz.veyq.mobile.map.MapServices?> = _maps.asStateFlow()
+
+    private fun closeMaps() {
+        _maps.value?.close()
+        _maps.value = null
+    }
+
     init {
         viewModelScope.launch { session.gate.collect(::gateChanged) }
         // a pin's fetch keeps the process once the app is left: WorkManager's worker, a dataSync foreground service
@@ -176,7 +192,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     private fun gateChanged(g: me.raddatz.veyq.mobile.session.SessionModel.Gate) {
         // the session locked, signed out or starting again: the tenant's music stops with it (ADR 0142 decision 1)
-        if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) stopMusic()
+        if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) {
+            stopMusic()
+            closeMaps()
+        }
         _offer.value = (g as? me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed)?.offer
         trustLog("gate ${g::class.simpleName}" + when (g) {
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> ", offer: ${g.offer?.levels}"
@@ -598,6 +617,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         openFile = null
         openMusic?.close()
         openMusic = null
+        openTracks?.close()
+        openTracks = null
         openGallery?.close()
         openGallery = null
         val pots = me.raddatz.veyq.mobile.expenses.PotModel(t, System::currentTimeMillis)
@@ -612,6 +633,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             stopMusic()
             _music.value = model.musicPlayer({ events -> MediaDeck(getApplication(), events) }, musicControls)
         }
+        // the map services follow the shell: built over this tenant, the place names the shell looks up come from them
+        closeMaps()
+        _maps.value = model.mapServices(me.raddatz.veyq.mobile.map.TileRecipient.TILE_HOST) { appLanguage() }
         _depot.value?.close()
         _depot.value = model.depotUploads(uploads) { viewModelScope.launch { refreshLists(t) } }
         // Android reads a pick in place: a file the queue is done with leaves nothing to remove
@@ -763,7 +787,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         // the file on screen reads itself anew: a replaced blob is shown
         openFile?.reload()
         val app = getApplication<Application>()
-        _rowDetails.value = read.details.mapValues { (_, facts) -> facts.map { app.piece(it) } }
+        // a Memory's row says its date as its second line (ADR 0143 D5)
+        val shell = shellModel
+        val dates = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { shell?.memoryDates().orEmpty() }.mapNotNull { (id, d) -> app.memoryDateText(d)?.let { id to it } }.toMap()
+        if (tenantSession !== t) return
+        _rowDetails.value = read.details.mapValues { (_, facts) -> facts.map { app.piece(it) } } +
+            dates.mapValues { (id, d) -> read.details[id].orEmpty().map { app.piece(it) } + d }
         readCovers(t, read.covers)
     }
 
@@ -922,6 +951,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val uploads = media ?: return null
         openMusic?.close()
         openMusic = null
+        openTracks?.close()
+        openTracks = null
         openGallery?.close()
         val app = getApplication<Application>()
         val music = _music.value?.let { p -> me.raddatz.veyq.mobile.memories.GalleryModel.Music(p) { n -> app.words(me.raddatz.veyq.mobile.words.Msg.MUSIC_UNTITLED, n) } }
@@ -933,8 +964,67 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         if (openGallery !== gallery) return
         openMusic?.close()
         openMusic = null
+        openTracks?.close()
+        openTracks = null
         gallery.close()
         openGallery = null
+    }
+
+    // ---- a Memory's date, place and Map view (ADR 0143 D5, D8) ----
+
+    /** The app's language, as the geocoder's `accept-language` (the web's reader's): the per-app one Android applies. */
+    private fun appLanguage(): String =
+        getApplication<Application>().resources.configuration.locales.get(0)?.language?.takeIf { it.isNotEmpty() } ?: java.util.Locale.getDefault().language
+
+    /** [gallery]'s date editor (core's `DateEditor`), where whoever looks may edit its meta online; null otherwise. */
+    fun dateEditor(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.memories.place.DateEditor? = shellModel?.dateEditor(gallery)
+
+    /** [gallery]'s place editor (core's `PlaceEditor` over the map services), where whoever looks may edit its meta online. */
+    fun placeEditor(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.memories.place.PlaceEditor? = shellModel?.placeEditor(gallery)
+
+    /** The Memories bar's Map tab's pins over [memories] (its All tab's set; core's `MemoriesMap`). */
+    suspend fun memoriesMap(memories: List<me.raddatz.veyq.mobile.navigation.ObjectRef>): me.raddatz.veyq.mobile.memories.place.MemoriesMap? {
+        val m = shellModel ?: return null
+        // each pin's meta opened off the main thread
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            m.memoriesMap(memories.map { me.raddatz.veyq.mobile.navigation.NodeRef(it.scopeId, it.nodeId, null, it.kind, it.name) })
+        }
+    }
+
+    /** The open gallery's Map view's tracks (core's `TrackList`): one at a time, closed with its gallery. */
+    private var openTracks: me.raddatz.veyq.mobile.memories.tracks.TrackList? = null
+
+    /** [gallery]'s Map view's tracks, its picked GPX files queued through [media]. */
+    fun trackList(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.memories.tracks.TrackList? {
+        openTracks?.takeIf { it.gallery === gallery }?.let { return it }
+        val m = shellModel ?: return null
+        val uploads = media ?: return null
+        openTracks?.close()
+        return m.trackList(gallery, uploads, left = {}).also { openTracks = it }
+    }
+
+    /** The GPX files the system's picker granted ([uris]) offered to [tracks] (core's checks; the accepted ones' labels asked there). */
+    fun addTracks(tracks: me.raddatz.veyq.mobile.memories.tracks.TrackList, uris: List<android.net.Uri>) {
+        viewModelScope.launch {
+            val sources = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { uris.mapNotNull { picked(it) }.map { source(it) } }
+            tracks.add(sources)
+        }
+    }
+
+    /** Track [mediaId] of [tracks] saved to the document the person made at [uri] (the gallery's save); a document it did not fill goes again. */
+    fun saveGpx(tracks: me.raddatz.veyq.mobile.memories.tracks.TrackList, mediaId: String, uri: android.net.Uri): me.raddatz.veyq.mobile.depot.FileSave? {
+        val resolver = getApplication<Application>().contentResolver
+        val save = tracks.save(mediaId) { produce ->
+            val out = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openOutputStream(uri) } ?: return@save false
+            out.use { o -> produce { o.write(it) } }
+        } ?: return null
+        viewModelScope.launch {
+            val ended = save.state.first { it.end != null }
+            if (ended.end != me.raddatz.veyq.mobile.depot.FileSave.End.SAVED) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) } }
+            }
+        }
+        return save
     }
 
     /** The open gallery's Music view (core's `MusicModel`, ADR 0142 decision 8); one at a time, closed with its gallery. */
