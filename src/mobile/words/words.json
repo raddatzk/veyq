@@ -2656,6 +2656,16 @@
     "en": "{1:int} m down",
     "de": "{1:int} m bergab"
   },
+  "track_distance_km": {
+    "note": "A track's distance in kilometres; {1} the number as the desktop writes it (one decimal). Linux and Windows, which have no unit formatter of the system's.",
+    "en": "{1} km",
+    "de": "{1} km"
+  },
+  "track_distance_m": {
+    "note": "A track's distance in whole metres; {1} the number as the desktop writes it. Linux and Windows.",
+    "en": "{1} m",
+    "de": "{1} m"
+  },
   "track_edit_conflict": {
     "note": "A label edit lost to another member's (TrackLabel.relabel's conflict).",
     "en": "Someone else changed this track meanwhile. Their name and activity are shown now.",
@@ -2840,6 +2850,16 @@
     "note": "Where a map would stand while offline (ADR 0143 D9; owner copy 2026-11-16).",
     "en": "The map needs a connection.",
     "de": "Die Karte braucht eine Verbindung."
+  },
+  "map_zoom_in": {
+    "note": "The raster map's zoom button on Linux and Windows (ADR 0143 D1), its tooltip and its name for a screen reader.",
+    "en": "Zoom in",
+    "de": "Vergrößern"
+  },
+  "map_zoom_out": {
+    "note": "The raster map's zoom button on Linux and Windows (ADR 0143 D1), its tooltip and its name for a screen reader.",
+    "en": "Zoom out",
+    "de": "Verkleinern"
   },
   "map_cluster_title": {
     "note": "The list of Memories sharing one spot at the map's highest zoom (ADR 0143 D6; owner copy 2026-11-16).",
