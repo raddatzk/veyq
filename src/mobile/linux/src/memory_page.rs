@@ -9,7 +9,10 @@
 //! offers it; what the page says otherwise is a toast too. The page is read anew live while it stands
 //! (`Watched.GalleryLive`, the web's poll). Where the node has music or whoever looks may add some (`musicView`), a
 //! toggle group under the head switches between its photos and its Music view ([crate::music_view], ADR 0142 decision
-//! 6); the header's music action plays or stops the node's music (`Gallery.Music`).
+//! 6); the header's music action plays or stops the node's music (`Gallery.Music`). The toggle group's Map always stands
+//! (ADR 0143 decision 8): the node's Map view ([crate::memory_map_view]) with its photos' dots and GPX tracks. Under the
+//! head, the facts line: the node's date and place, each opening its editor where whoever looks may edit them
+//! ([crate::memory_facts]).
 //!
 //! Every state is the core's `GalleryModel` (`Gallery.Open`, `Watched.Gallery`): the rows, the chapters, what it offers
 //! (rights only remove functions: share view = member view). Nothing decrypted is written to show it (ADR 0047).
@@ -25,6 +28,8 @@ use crate::bridge::{self, Watch, wire::Answer, wire::ApplicationId, wire::Call, 
 use crate::drop::Sorted;
 use crate::home::{glib_escape, kind_icon};
 use crate::lightbox::Lightbox;
+use crate::memory_facts::FactsLine;
+use crate::memory_map_view::MemoryMapView;
 use crate::music_view::MusicView;
 use crate::{header, said, words};
 
@@ -52,12 +57,17 @@ struct Inner {
     column: gtk::Box,
     hero_slot: gtk::Box,
     hero: RefCell<Option<gtk::Widget>>,
-    /// Photos | Music, shown where the gallery offers its Music view; the photos' part (the chapters and the grid) and the
-    /// Music view's place, one of them shown.
+    /// The facts line under the head: its date and its place.
+    facts: FactsLine,
+    /// Photos | Music | Map (Music where the gallery offers its Music view, and whether it is listed now); the photos'
+    /// part (the chapters and the grid), the Music view's place and the Map view's, one of them shown.
     switch: adw::ToggleGroup,
+    music_listed: Cell<Option<bool>>,
     photos: gtk::Box,
     music_slot: gtk::Box,
     music: RefCell<Option<MusicView>>,
+    map_slot: gtk::Box,
+    map: RefCell<Option<MemoryMapView>>,
     chapters: adw::PreferencesGroup,
     chapter_rows: RefCell<Vec<adw::ActionRow>>,
     /// What shows in the grid's place while it holds no row: reading, empty, failed.
@@ -126,18 +136,19 @@ impl MemoryPage {
         column.set_margin_end(MARGIN);
         let hero_slot = gtk::Box::new(gtk::Orientation::Vertical, 0);
         column.append(&hero_slot);
-        // the view switch (GNOME: a toggle group for a few views of one content, AdwToggleGroup)
+        let facts = FactsLine::new(window);
+        column.append(facts.widget());
+        // the view switch (GNOME: a toggle group for a few views of one content, AdwToggleGroup); its toggles once the
+        // gallery says whether it offers music
         let switch = adw::ToggleGroup::builder().halign(gtk::Align::Center).visible(false).build();
-        for (name, label) in [("photos", words::music_view_photos()), ("music", words::music_view_music())] {
-            switch.add(adw::Toggle::builder().name(name).label(label).build());
-        }
-        switch.set_active_name(Some("photos"));
         switch.set_widget_name("memory-view");
         column.append(&switch);
         let photos = gtk::Box::new(gtk::Orientation::Vertical, 18);
         column.append(&photos);
         let music_slot = gtk::Box::builder().orientation(gtk::Orientation::Vertical).visible(false).build();
         column.append(&music_slot);
+        let map_slot = gtk::Box::builder().orientation(gtk::Orientation::Vertical).visible(false).build();
+        column.append(&map_slot);
         let chapters = adw::PreferencesGroup::builder().title(words::memory_chapters()).visible(false).build();
         photos.append(&chapters);
         let status = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -154,10 +165,14 @@ impl MemoryPage {
             column,
             hero_slot,
             hero: RefCell::new(None),
+            facts,
             switch,
+            music_listed: Cell::new(None),
             photos,
             music_slot,
             music: RefCell::new(None),
+            map_slot,
+            map: RefCell::new(None),
             chapters,
             chapter_rows: RefCell::new(Vec::new()),
             status,
@@ -313,6 +328,7 @@ impl Drop for MemoryPage {
         }
         self.inner.lightbox.borrow_mut().take();
         self.inner.music.borrow_mut().take();
+        self.inner.map.borrow_mut().take();
         self.inner.watch.borrow_mut().take();
         self.inner.live.borrow_mut().take();
         if let Some(t) = self.inner.undo_toast.borrow_mut().take() {
@@ -439,24 +455,60 @@ impl Inner {
         });
     }
 
-    /// Shows the view the switch names: the photos, or the node's Music view (opened in the core while it shows).
+    /// Shows the view the switch names: the photos, the node's Music view or its Map view (each opened in the core while
+    /// it shows).
     fn switch_view(self: &Rc<Self>) {
-        let music = self.switch.active_name().as_deref() == Some("music") && self.switch.is_visible();
-        self.photos.set_visible(!music);
+        let active = self.switch.active_name();
+        let music = active.as_deref() == Some("music") && self.switch.is_visible();
+        let map = active.as_deref() == Some("map") && self.switch.is_visible();
+        self.photos.set_visible(!music && !map);
         self.music_slot.set_visible(music);
-        if music == self.music.borrow().is_some() {
+        self.map_slot.set_visible(map);
+        if music != self.music.borrow().is_some() {
+            eprintln!("veyq: memory view: {}", if music { "music" } else if map { "map" } else { "photos" });
+            while let Some(child) = self.music_slot.first_child() {
+                self.music_slot.remove(&child);
+            }
+            *self.music.borrow_mut() = None;
+            if let (true, Some(gallery)) = (music, self.id.get()) {
+                let view = MusicView::open(gallery, &self.window, &self.toasts);
+                self.music_slot.append(view.widget());
+                *self.music.borrow_mut() = Some(view);
+            }
+        }
+        if map != self.map.borrow().is_some() {
+            eprintln!("veyq: memory view: {}", if map { "map" } else if music { "music" } else { "photos" });
+            while let Some(child) = self.map_slot.first_child() {
+                self.map_slot.remove(&child);
+            }
+            *self.map.borrow_mut() = None;
+            if let (true, Some(gallery)) = (map, self.id.get()) {
+                let view = MemoryMapView::open(gallery, &self.window, &self.toasts);
+                self.map_slot.append(view.widget());
+                *self.map.borrow_mut() = Some(view);
+            }
+        }
+    }
+
+    /// The switch's toggles: Photos, Music where the gallery offers it, Map; the view shown kept where it is still listed.
+    fn list_views(self: &Rc<Self>, music: bool) {
+        if self.music_listed.replace(Some(music)) == Some(music) {
             return;
         }
-        eprintln!("veyq: memory view: {}", if music { "music" } else { "photos" });
-        while let Some(child) = self.music_slot.first_child() {
-            self.music_slot.remove(&child);
+        let active = self.switch.active_name().map(|n| n.to_string()).filter(|n| music || n != "music").unwrap_or_else(|| "photos".into());
+        self.switch.remove_all();
+        let mut views = vec![("photos", words::music_view_photos())];
+        if music {
+            views.push(("music", words::music_view_music()));
         }
-        *self.music.borrow_mut() = None;
-        if let (true, Some(gallery)) = (music, self.id.get()) {
-            let view = MusicView::open(gallery, &self.window, &self.toasts);
-            self.music_slot.append(view.widget());
-            *self.music.borrow_mut() = Some(view);
+        views.push(("map", words::memory_view_map()));
+        for (name, label) in views {
+            self.switch.add(adw::Toggle::builder().name(name).label(label).build());
         }
+        self.switch.set_active_name(Some(&active));
+        self.switch.set_visible(true);
+        let this = self.clone();
+        glib::idle_add_local_once(move || this.switch_view());
     }
 
     /// The grid's width: the scroll's, less the page's margins.
@@ -707,14 +759,10 @@ impl Inner {
             Some((Some(_), _)) => {}
         }
         let Some(s) = shown.as_ref() else { return };
-        if self.switch.is_visible() != s.music_view {
-            self.switch.set_visible(s.music_view);
-            if !s.music_view {
-                self.switch.set_active_name(Some("photos"));
-            }
-            let this = self.clone();
-            glib::idle_add_local_once(move || this.switch_view());
+        if let Some(gallery) = self.id.get() {
+            self.facts.draw(s, gallery);
         }
+        self.list_views(s.music_view);
         // the offer ended (its window, or the undo): the toast goes with it — once a state showed the offer, so an update
         // from before the trash that arrives after its answer ends nothing (src/mobile/CLAUDE.md § Traps)
         if let Some(undo) = &s.undo {

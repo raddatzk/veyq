@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use adw::prelude::*;
 use gtk::{gdk, glib};
 
-use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::ArrangedList, wire::Call, wire::Crop, wire::NodeRef, wire::ObjectRef,
+use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::ArrangedList, wire::Call, wire::Crop, wire::MemoryDateShown, wire::NodeRef, wire::ObjectRef,
     wire::ShellModelState, wire::ShellShown, wire::FolderRef};
 use crate::drop::Drops;
 use crate::{said, words};
@@ -45,12 +45,70 @@ pub fn object_row(r: &ObjectRef) -> adw::ActionRow {
     let icon = gtk::Image::from_icon_name(kind_icon(&r.kind));
     if r.kind == "MEMORY" {
         row.add_prefix(&cover_prefix(icon, &r.node_id));
+        dated(&row, &r.node_id);
     } else {
         row.add_prefix(&icon);
     }
     let open = r.clone();
     row.connect_activated(move |_| bridge::send(Call::ShellOpen { r#ref: open.clone() }));
     row
+}
+
+thread_local! {
+    /// Every Memory's and chapter's date the core unseals from the meta it holds (`Memories.Dates`), by node id; the
+    /// objects they were asked for last, and whether an ask is in flight.
+    static ROW_DATES: RefCell<HashMap<String, MemoryDateShown>> = RefCell::new(HashMap::new());
+    static DATES_ASKED: RefCell<(String, bool)> = const { RefCell::new((String::new(), false)) };
+    /// The rows drawn that show a date, each told it again when the dates arrive.
+    static DATED_ROWS: RefCell<Vec<(String, glib::WeakRef<adw::ActionRow>)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// A Memory's row's second line, its date (ADR 0143 decision 5; the facts line's way of saying it), set now where it is
+/// held and again whenever the dates arrive.
+fn dated(row: &adw::ActionRow, node_id: &str) {
+    if let Some(text) = ROW_DATES.with(|d| d.borrow().get(node_id).and_then(crate::memory_facts::date_text)) {
+        row.set_subtitle(&glib_escape(&text));
+    }
+    DATED_ROWS.with(|r| {
+        let mut r = r.borrow_mut();
+        r.retain(|(_, w)| w.upgrade().is_some());
+        r.push((node_id.to_owned(), row.downgrade()));
+    });
+}
+
+/// The rows' dates asked for (`Memories.Dates`) unless they were for the objects [key] names (or [again]: a page closed
+/// back onto the list, its date maybe edited); each row drawn is told its date once they arrive.
+pub fn ask_dates(key: &str, again: bool) {
+    let ask = DATES_ASKED.with(|a| {
+        let mut a = a.borrow_mut();
+        if a.1 || (a.0 == key && !again) {
+            return false;
+        }
+        *a = (key.to_owned(), true);
+        true
+    });
+    if !ask {
+        return;
+    }
+    glib::spawn_future_local(async {
+        let answered = bridge::call(&Call::MemoriesDates).await.map(|(a, _)| a);
+        DATES_ASKED.with(|a| a.borrow_mut().1 = false);
+        let dates = match answered {
+            Ok(Answer::MemoryDates { dates }) => dates,
+            other => return eprintln!("veyq: Memories.Dates answered {other:?}"),
+        };
+        let next: HashMap<String, MemoryDateShown> = dates.into_iter().map(|d| (d.node_id, d.date)).collect();
+        eprintln!("veyq: memory dates: {} of {} dated", next.values().filter(|d| crate::memory_facts::date_text(d).is_some()).count(), next.len());
+        ROW_DATES.with(|d| *d.borrow_mut() = next);
+        DATED_ROWS.with(|r| {
+            for (node, row) in r.borrow().iter() {
+                if let Some(row) = row.upgrade() {
+                    let text = ROW_DATES.with(|d| d.borrow().get(node).and_then(crate::memory_facts::date_text)).unwrap_or_default();
+                    row.set_subtitle(&glib_escape(&text));
+                }
+            }
+        });
+    });
 }
 
 /// The longest side a list row's cover is held at (it is drawn 64 × 36).
@@ -74,38 +132,13 @@ fn cover_prefix(icon: gtk::Image, node_id: &str) -> gtk::Stack {
     let prefix = gtk::Stack::new();
     prefix.add_child(&icon);
     prefix.add_child(&cover);
-    let held = ROW_COVERS.with(|c| c.borrow().get(node_id).cloned());
-    if let Some((_, t)) = &held {
-        cover.set_paintable(Some(t));
+    if let Some((_, t)) = ROW_COVERS.with(|c| c.borrow().get(node_id).cloned()) {
+        cover.set_paintable(Some(&t));
         prefix.set_visible_child(&cover);
     }
     let (node_id, cover, icon, weak) = (node_id.to_owned(), cover.downgrade(), icon.downgrade(), prefix.downgrade());
     glib::spawn_future_local(async move {
-        let held_frame = held.map(|(f, _)| f);
-        let answered = bridge::call(&Call::ShellRowCover { node_id: node_id.clone(), held: held_frame }).await;
-        let shown = match answered {
-            Ok((Answer::RowCover { sent: false, .. }, _)) => return,
-            Ok((Answer::RowCover { frame, crop, sent: true, .. }, Some(bytes))) => match row_cover(bytes, crop).await {
-                Some(t) => {
-                    ROW_COVERS.with(|c| {
-                        let mut c = c.borrow_mut();
-                        if c.len() >= ROW_COVERS_HELD && !c.contains_key(&node_id)
-                            && let Some(k) = c.keys().next().cloned()
-                        {
-                            c.remove(&k);
-                        }
-                        c.insert(node_id.clone(), (frame, t.clone()));
-                    });
-                    Some(t)
-                }
-                None => None,
-            },
-            Ok((Answer::Refused { .. }, _)) => {
-                ROW_COVERS.with(|c| c.borrow_mut().remove(&node_id));
-                None
-            }
-            other => return eprintln!("veyq: Shell.RowCover answered {:?}", other.map(|(a, _)| a)),
-        };
+        let Some(shown) = asked_row_cover(&node_id).await else { return };
         let (Some(cover), Some(icon), Some(prefix)) = (cover.upgrade(), icon.upgrade(), weak.upgrade()) else { return };
         match shown {
             Some(t) => {
@@ -116,6 +149,49 @@ fn cover_prefix(icon: gtk::Image, node_id: &str) -> gtk::Stack {
         }
     });
     prefix
+}
+
+/// Node [node_id]'s list-row cover (a Memories map's pin shows it too, ADR 0143 decision 6): the one held, else asked for
+/// (`Shell.RowCover`); none where it has none.
+pub async fn row_cover_texture(node_id: &str) -> Option<gdk::Texture> {
+    let held = ROW_COVERS.with(|c| c.borrow().get(node_id).map(|(_, t)| t.clone()));
+    match asked_row_cover(node_id).await {
+        Some(asked) => asked,
+        None => held,
+    }
+}
+
+/// Node [node_id]'s cover asked for anew (`Shell.RowCover`, naming the frame held): Some(the cover, or none where it has
+/// none now), or None where the held one stands (or the ask failed).
+async fn asked_row_cover(node_id: &str) -> Option<Option<gdk::Texture>> {
+    let held_frame = ROW_COVERS.with(|c| c.borrow().get(node_id).map(|(f, _)| f.clone()));
+    let answered = bridge::call(&Call::ShellRowCover { node_id: node_id.to_owned(), held: held_frame }).await;
+    match answered {
+        Ok((Answer::RowCover { sent: false, .. }, _)) => None,
+        Ok((Answer::RowCover { frame, crop, sent: true, .. }, Some(bytes))) => Some(match row_cover(bytes, crop).await {
+            Some(t) => {
+                ROW_COVERS.with(|c| {
+                    let mut c = c.borrow_mut();
+                    if c.len() >= ROW_COVERS_HELD && !c.contains_key(node_id)
+                        && let Some(k) = c.keys().next().cloned()
+                    {
+                        c.remove(&k);
+                    }
+                    c.insert(node_id.to_owned(), (frame, t.clone()));
+                });
+                Some(t)
+            }
+            None => None,
+        }),
+        Ok((Answer::Refused { .. }, _)) => {
+            ROW_COVERS.with(|c| c.borrow_mut().remove(node_id));
+            Some(None)
+        }
+        other => {
+            eprintln!("veyq: Shell.RowCover answered {:?}", other.map(|(a, _)| a));
+            None
+        }
+    }
 }
 
 /// A row's cover from the stored picture [bytes]: decoded by GTK, the part [crop] frames cut out where the core says, held

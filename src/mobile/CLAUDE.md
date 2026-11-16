@@ -154,8 +154,15 @@ A Gradle build of its own, run through its own wrapper.
   `memory_page` (a Memory's or a chapter's page: its chapters with their covers, the justified grid the core lays out and
   windows — `Gallery.Layout`, only the rows near the view mounted —, a drop of photos and videos, the trash's Undo; an
   `AdwToggleGroup` Photos | Music where the page offers music, its Music view `music_view`: a clamped boxed list, each
-  row's menu Rename, Download, Remove, Report, "Add music" through GTK's `FileDialog`) with
-  `lightbox` (an `AdwNavigationPage` pushed over the content: zoom, the slideshow, a video through `player`, the details,
+  row's menu Rename, Download, Remove, Report, "Add music" through GTK's `FileDialog`; and Map always, its Map view
+  `memory_map_view`: the map, "Add GPX track" with each file's label asked first, the tracks' boxed list with its show
+  switch, dashed swatch and menu Edit, Download GPX, Remove, Report), the facts line and the date and place editors under
+  its head (`memory_facts`, `AdwDialog`s), the core's raster map they all draw (`raster_map`, ADR 0143 decision 1: a
+  `gtk::Widget` of its own whose `snapshot` appends the tiles' textures by the viewport's one formula and strokes each
+  track as a `gsk::Path` with its activity's dash; the pins hit-tested, no widget; the consent's offer in its place; the
+  attribution always at its foot), the Memories bar's Map tab `memories_map` (the bar's places above the list, as a Pot's),
+  a row's date (`home::ask_dates`, `Memories.Dates`), Settings → Map services `map_services`) with
+  `lightbox` (an `AdwNavigationPage` pushed over the content: zoom, the slideshow, a video through `player`, the details (a photo's small map and its place's name, `Lightbox.Map`, `Lightbox.Place`),
   Save, the music's compact controls, `Lightbox.Video` from its player) and `media_tiers` (the host's answer to
   `Media.Tiers`/`Media.Duration`: gdk-pixbuf over glycin for a photo, turned by its EXIF; a GStreamer `playbin` frame for
   a video's poster; a length from `playbin` with its video only, else its sound only; both JPEGs encoded in memory), the
@@ -189,8 +196,13 @@ A Gradle build of its own, run through its own wrapper.
   `Reader.Read` ranges, through `AsRandomAccessStream`; `ReaderStreamTest`), `MemoryPage` (a Memory's or a chapter's page:
   its chapters with their covers, the justified grid the core lays out and windows — `Gallery.Layout`, only the rows near
   the view placed on a `Canvas` —, tiles held in `Recent` (`RecentTest`), a drop of photos and videos, the trash's Undo in
-  the shell's `InfoBar`; a `SelectorBar` Photos | Music where the page offers music, its `MusicView`) with `LightboxView` (in
-  the page's place over black: zoom, the slideshow, a video through `MediumPlayer`, the details, Save, the music's compact
+  the shell's `InfoBar`; a `SelectorBar` Photos | Music | Map, Music where the page offers it, its `MusicView` and its
+  `MemoryMapView` (ADR 0143 decision 8: the map, Add GPX track with each file's label asked first, the tracks with their
+  show switch, dashed swatch and menu); the facts line and the date and place editors `MemoryFacts`; the core's raster map
+  `RasterMap`, ADR 0143 decision 1: a `Canvas` of tile `Image`s by the viewport's one formula, each track a dashed
+  `Polyline`, the pins hit-tested and no `Button`, the consent's offer in its place, the attribution always at its foot;
+  the Memories bar's Map tab in `ShellView`, a row's date `RowDates`, Settings → Map services `MapServicesSection`) with `LightboxView` (in
+  the page's place over black: zoom, the slideshow, a video through `MediumPlayer`, the details (a photo's small map and its place's name), Save, the music's compact
   controls, `Lightbox.Video` from its player) and `MediaTiers` (the host's answer to `Media.Tiers`/`Media.Duration`: WIC
   for a photo, turned by its EXIF; `Windows.Media.Editing` for a video's poster and length, `MediaSource.OpenAsync` where
   a clip refuses the file (an Ogg track); both JPEGs encoded in memory; `MediaTiersTest`), `MusicBar` (the account's

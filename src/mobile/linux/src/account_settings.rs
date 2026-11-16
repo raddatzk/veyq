@@ -30,6 +30,7 @@ use gtk::{gio, glib};
 
 use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::LimitField, wire::LimitUnit, wire::OfflineItem, wire::SettingsFamily, wire::SettingsShown, wire::Storage, wire::Update, wire::Watched};
 use crate::manage::{self, Change};
+use crate::map_services::MapServices;
 use crate::{said, sign_in, words};
 
 /// One Settings dialog: its widgets, the page's id in the core once opened (none for the debug harness's), and what was
@@ -64,6 +65,8 @@ struct Page {
     storage_watch: RefCell<Option<Watch>>,
     /// "Remove all offline content"'s question while the core asks it.
     remove_all_ask: RefCell<Option<adw::AlertDialog>>,
+    /// Map services (ADR 0143 decision 2): this device's consent, followed while the dialog shows; built once.
+    maps: MapServices,
 }
 
 /// Opens [connection]'s Settings over [window]; the core reads and delivers what it shows.
@@ -187,6 +190,7 @@ impl Page {
             drawing: Cell::new(false),
             storage_watch: RefCell::new(None),
             remove_all_ask: RefCell::new(None),
+            maps: MapServices::new(),
         });
         // the limit typed, set in the unit chosen (the core parses it and says why where it is no size)
         let weak = Rc::downgrade(&p);
@@ -322,7 +326,8 @@ impl Page {
             self.page.remove(&g);
         }
         let add_device = s.add_device.then(|| self.add_device.clone());
-        let groups = vec![self.account(s), self.device(s), add_device, self.sessions(s), self.saved_keys(s), self.storage(s), self.offline_items(s), self.sign_out()];
+        let maps = Some(self.maps.group().clone());
+        let groups = vec![self.account(s), self.device(s), add_device, self.sessions(s), self.saved_keys(s), self.storage(s), self.offline_items(s), maps, self.sign_out()];
         for g in groups.iter().flatten() {
             self.page.add(g);
         }

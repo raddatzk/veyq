@@ -75,6 +75,9 @@ internal sealed class AccountSettingsPage : IDisposable
 
     public UIElement Page { get; }
 
+    /// <summary>Settings → Map services, followed while the page shows.</summary>
+    private readonly MapServicesSection _maps = new();
+
     private AccountSettingsPage(Window window, Action closedByCore)
     {
         _window = window;
@@ -215,6 +218,7 @@ internal sealed class AccountSettingsPage : IDisposable
     public void Dispose()
     {
         _disposed = true;
+        _maps.Dispose();
         _storageWatch?.Dispose();
         _storageWatch = null;
         _watch?.Dispose();
@@ -470,6 +474,10 @@ internal sealed class AccountSettingsPage : IDisposable
         }
 
         DrawStorage(s);
+
+        // Map services (ADR 0143 decision 2): this device's consent, its own watch
+        if (_maps.Panel is FrameworkElement { Parent: Panel holder }) holder.Children.Remove(_maps.Panel);
+        _sections.Children.Add(_maps.Panel);
 
         // Sign out
         _sections.Children.Add(Heading(Words.DrawerSignOut()));

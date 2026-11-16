@@ -38,4 +38,17 @@ internal sealed class Recent<T>(int capacity) where T : class
         if (!_held.Remove(key, out var node)) return;
         _order.Remove(node);
     }
+
+    /// <summary>Everything let go at once (a map's tiles at a withdrawal).</summary>
+    public void Clear()
+    {
+        _held.Clear();
+        _order.Clear();
+    }
+
+    /// <summary>What is held, the least recently shown first, without making any of it more recent.</summary>
+    public IEnumerable<(string Key, T Value)> Entries()
+    {
+        foreach (var e in _order) yield return e;
+    }
 }

@@ -11,6 +11,25 @@ include!(concat!(env!("OUT_DIR"), "/words.rs"));
 /// The gettext domain of every word.
 pub const DOMAIN: &str = "veyq";
 
+/// The words' language (`en`, `de`) — the geocoder's `accept-language`, as the web's is the reader's (ADR 0143 decision 2):
+/// the person's first language a catalog is written in, in glib's order of `LANGUAGE`, `LC_ALL`, `LC_MESSAGES` and
+/// `LANG` (gettext's own), else English.
+pub fn language() -> &'static str {
+    language_of(&glib::language_names().iter().map(|n| n.to_string()).collect::<Vec<_>>())
+}
+
+/// The first of [names] (locale names, `de_DE.UTF-8`, `de`, `C`) whose language has a catalog; English else.
+pub fn language_of(names: &[String]) -> &'static str {
+    for n in names {
+        match n.split(['_', '.', '@']).next() {
+            Some("de") => return "de",
+            Some("en") => return "en",
+            _ => {}
+        }
+    }
+    "en"
+}
+
 /// One argument of a word: a `{n}` placeholder's text or a `{n:int}` placeholder's number.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Arg<'a> {
@@ -100,6 +119,16 @@ fn fill(text: &str, args: &[Arg]) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// The geocoder's language is the first the person reads that a catalog is written in; a locale without one is English.
+    #[test]
+    fn the_words_language_is_the_first_with_a_catalog() {
+        let names = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(language_of(&names(&["fr_FR.UTF-8", "de_DE.UTF-8", "de", "C"])), "de");
+        assert_eq!(language_of(&names(&["en_GB", "de"])), "en");
+        assert_eq!(language_of(&names(&["C"])), "en");
+    }
+
     use super::*;
     use std::ffi::c_int;
 

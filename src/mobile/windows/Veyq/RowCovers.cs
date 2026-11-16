@@ -26,10 +26,10 @@ internal static class RowCovers
     private static readonly Recent<Held> Covers = new(256);
 
     /// <summary><paramref name="glyph"/> in a row's first column, replaced by node <paramref name="nodeId"/>'s cover once
-    /// the core names one.</summary>
-    public static UIElement Prefix(FontIcon glyph, string nodeId)
+    /// the core names one; drawn <paramref name="width"/> × <paramref name="height"/> (a row's 64 × 36, a map pin's round 36).</summary>
+    public static UIElement Prefix(FontIcon glyph, string nodeId, double width = 64, double height = 36)
     {
-        var image = new Image { Width = 64, Height = 36, Stretch = Stretch.UniformToFill, Visibility = Visibility.Collapsed };
+        var image = new Image { Width = width, Height = height, Stretch = Stretch.UniformToFill, Visibility = Visibility.Collapsed };
         var frame = new Border { CornerRadius = new CornerRadius(4), Child = image, VerticalAlignment = VerticalAlignment.Center };
         var cell = new Grid { VerticalAlignment = VerticalAlignment.Center };
         cell.Children.Add(glyph);

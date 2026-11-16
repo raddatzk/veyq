@@ -456,7 +456,7 @@ impl Inner {
 }
 
 /// The Pot's places as a toggle group above its body (GNOME's inline view switcher); a choice is the shell's.
-fn places(tabs: &[ShownTab], selected: Option<&BarTab>) -> gtk::Widget {
+pub fn places(tabs: &[ShownTab], selected: Option<&BarTab>) -> gtk::Widget {
     let group = adw::ToggleGroup::builder().halign(gtk::Align::Center).margin_top(12).margin_bottom(6).build();
     for t in tabs {
         group.add(adw::Toggle::builder().label(said::key(&t.word)).name(t.tab.key.clone()).build());

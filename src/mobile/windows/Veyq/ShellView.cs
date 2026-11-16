@@ -58,6 +58,16 @@ internal sealed class ShellView
     private FilePage? _file;
     private DropBoxPage? _dropBox;
     private MemoryPage? _memory;
+    /// <summary>The Memories application's places (its bar's tabs, ADR 0143 decision 6): the SelectorBar over the list or
+    /// the Memories map, what the bar was drawn from, and the map while its tab is chosen.</summary>
+    private Grid? _places;
+    private string _placesDrawn = "";
+    private readonly Grid _mapHolder = new();
+    private readonly StackPanel _mapEmpty = new() { Spacing = 4, Padding = new Thickness(16), Margin = new Thickness(16), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, CornerRadius = new CornerRadius(8), Visibility = Visibility.Collapsed };
+    private RasterMap? _memoriesMap;
+    private bool _mapOpening;
+    /// <summary>Whether the last state had an object open (a page closing back onto a list asks the rows' dates again).</summary>
+    private bool _openBefore;
     /// <summary>The account's Settings while the pane's Settings item shows it, in place of what the shell says.</summary>
     private AccountSettingsPage? _account;
     private readonly Window _window;
@@ -394,6 +404,10 @@ internal sealed class ShellView
         DrawSwitcher(state, shown);
         DrawPane(state, shown);
         DrawContent(state, shown);
+        // the rows' dates: asked when the objects change, and again when a page closes back onto a list (an edited date)
+        var back = _openBefore && state.shell.openObject is null;
+        _openBefore = state.shell.openObject is not null;
+        RowDates.Ask($"{shown.connection}\n{shown.tenant.tenantId}\n{string.Join(",", state.lists.objects.Select(o => o.nodeId))}", back, Redraw);
         // the lists changed under a standing query: its hits anew
         if (_hits is not null && _search.Text.Length > 0) Query(_search.Text);
         if (first && shown.drawerOpensAtStart && _nav.DisplayMode != NavigationViewDisplayMode.Expanded) _nav.IsPaneOpen = true;
@@ -529,6 +543,7 @@ internal sealed class ShellView
             _shown = shown;
             _title.Text = Words.DrawerSettings();
             _nav.IsBackEnabled = true;
+            CloseMemoriesMap();
             if (!ReferenceEquals(_body.Content, account.Page)) _body.Content = account.Page;
             DrawCommands();
             return;
@@ -639,14 +654,122 @@ internal sealed class ShellView
             _dropBox = null;
             DropMemory();
             if (shell.openObject is { } other) body = NotBuilt(other);
+            else if (shell.application is ApplicationId.Memories && shown.tabs.Count > 1) body = MemoriesPlaces(state, shown);
             else
             {
                 body = shell.application is not null ? HomeView.List(shown.list) : HomeView.Home(state, shown, LevelDrops());
                 if (body is ScrollViewer list) Keep(list, ListScrolls.Place(shell.application, shell.space, shell.path.Count > 0 ? shell.path[^1].nodeId : null, shell.filter));
             }
         }
+        if (!ReferenceEquals(body, _places)) CloseMemoriesMap();
         if (!ReferenceEquals(_body.Content, body)) _body.Content = body;
         DrawCommands();
+    }
+
+    /// <summary>The Memories application's places: its bar's tabs as a SelectorBar (as a Pot's places; a choice is the
+    /// shell's), under it the list or the Memories map — every located Memory a pin (Map.OpenMemories), kept while its tab
+    /// stays chosen.</summary>
+    private UIElement MemoriesPlaces(ShellModelState state, ShellShown shown)
+    {
+        if (_places is null)
+        {
+            _places = new Grid();
+            _places.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            _places.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            AutomationProperties.SetAutomationId(_mapEmpty, "memories-map-empty");
+            _mapEmpty.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AcrylicInAppFillColorDefaultBrush"];
+            _mapEmpty.Children.Add(new TextBlock { Text = Words.MemoriesMapEmpty(), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"], HorizontalAlignment = HorizontalAlignment.Center });
+            _mapEmpty.Children.Add(new TextBlock { Text = Words.MemoriesMapEmptyHint(), TextWrapping = TextWrapping.Wrap, MaxWidth = 360, TextAlignment = TextAlignment.Center });
+        }
+        var drawn = string.Join(",", shown.tabs.Select(t => $"{t.tab.key}={t.word}")) + "|" + shown.selectedTab?.key;
+        if (drawn != _placesDrawn)
+        {
+            _placesDrawn = drawn;
+            foreach (var old in _places.Children.Where(c => Grid.GetRow((FrameworkElement)c) == 0).ToList()) _places.Children.Remove(old);
+            var bar = new SelectorBar { Margin = new Thickness(12, 0, 12, 0) };
+            AutomationProperties.SetAutomationId(bar, "memories-places");
+            SelectorBarItem? chosen = null;
+            foreach (var t in shown.tabs)
+            {
+                var item = new SelectorBarItem { Text = Said.Key(t.word), Tag = t.tab.key };
+                AutomationProperties.SetAutomationId(item, $"place:{t.tab.key}");
+                bar.Items.Add(item);
+                if (t.tab.key == shown.selectedTab?.key) chosen = item;
+            }
+            bar.SelectedItem = chosen;
+            var current = shown.selectedTab?.key;
+            bar.SelectionChanged += (b, _) =>
+            {
+                if (b.SelectedItem?.Tag is string key && key != current) Act.Send(new Call.ShellSelect { tab = new BarTab { key = key } });
+            };
+            _places.Children.Add(bar);
+        }
+        UIElement content;
+        if (shown.selectedTab?.key == "memories.map")
+        {
+            if (_memoriesMap is null) OpenMemoriesMap();
+            content = _mapHolder;
+        }
+        else
+        {
+            CloseMemoriesMap();
+            content = HomeView.List(shown.list);
+            if (content is ScrollViewer list) Keep(list, ListScrolls.Place(state.shell.application, state.shell.space, null, state.shell.filter));
+        }
+        foreach (var old in _places.Children.Where(c => Grid.GetRow((FrameworkElement)c) == 1 && !ReferenceEquals(c, content)).ToList()) _places.Children.Remove(old);
+        if (!_places.Children.Contains(content))
+        {
+            if (content is FrameworkElement { Parent: Panel p }) p.Children.Remove(content);
+            Grid.SetRow((FrameworkElement)content, 1);
+            _places.Children.Add(content);
+        }
+        return _places;
+    }
+
+    private async void OpenMemoriesMap()
+    {
+        if (_mapOpening) return;
+        _mapOpening = true;
+        try
+        {
+            var (answer, _) = await Core.CallAsync(new Call.MapOpenMemories());
+            if (answer is not Answer.MapOpened { map: var map })
+            {
+                Log.Write($"Map.OpenMemories answered {(answer is Answer.Refused r ? $"Refused {r.why}" : answer.GetType().Name)}");
+                return;
+            }
+            if (_shown?.selectedTab?.key != "memories.map" || _memoriesMap is not null || !ReferenceEquals(_body.Content, _places))
+            {
+                Act.Send(new Call.MapClose { map = map });
+                return;
+            }
+            Log.Write($"memories map {map} open");
+            _memoriesMap = new RasterMap(_window, map, closesItself: true)
+            {
+                Changed = s => _mapEmpty.Visibility = s is { state: MapStatus.MapStateShown, clusters.Count: 0 } ? Visibility.Visible : Visibility.Collapsed,
+            };
+            _mapHolder.Children.Clear();
+            _mapHolder.Children.Add(_memoriesMap.View);
+            _mapHolder.Children.Add(_mapEmpty);
+        }
+        catch (Exception e)
+        {
+            Log.Write($"the Memories map did not open ({e.GetType().Name})");
+        }
+        finally
+        {
+            _mapOpening = false;
+        }
+    }
+
+    private void CloseMemoriesMap()
+    {
+        if (_memoriesMap is null) return;
+        _mapHolder.Children.Clear();
+        _memoriesMap.Dispose();
+        _memoriesMap = null;
+        _mapEmpty.Visibility = Visibility.Collapsed;
+        Log.Write("memories map closed");
     }
 
     /// <summary>The header of the node the content heads (ShellShown.headed): opened anew when the node (or its name)

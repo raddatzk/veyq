@@ -18,6 +18,10 @@ public static partial class Words
 
     private static string Single(string key, string english) => Lookup(key) ?? english;
 
+    /// <summary>The language the words are said in (the catalog that answered, <c>_language</c>): the geocoder's
+    /// <c>accept-language</c> (ADR 0143 decision 2, <c>Config.language</c>); English where no catalog answered.</summary>
+    public static string Language() => Lookup("_language") is { Length: > 0 } language ? language : "en";
+
     /// <summary>
     /// A plural's form for <paramref name="n"/>: the category by the rule of the language the catalog that answered names
     /// (<c>_language</c>), so a German catalog's forms are never picked by an English rule; its English where no catalog
