@@ -2125,9 +2125,9 @@ components:
       description: >
         One page of what a rotation moves under the scope key (`listScopeRekeyParts`): every value key wrapped under it,
         each with the address its wrap is bound to (never a value's ciphertext), and each scope-root node's entry. A
-        kind the scope has none of is an empty list: no member profiles or verifications outside a TENANT, no group name
-        outside a GROUP.
-      required: [currentEpoch, rootNodes, shares, members, verifications, more]
+        kind the scope has none of is an empty list: no member profiles, verifications or invite labels outside a TENANT,
+        no group name outside a GROUP.
+      required: [currentEpoch, rootNodes, shares, members, verifications, inviteLabels, more]
       properties:
         currentEpoch:
           x-veyq-visibility: structure
@@ -2168,6 +2168,13 @@ components:
           description: TENANT only — each verification's value key (one member's verification of another, `member-verification`).
           maxItems: 256
           items: { $ref: "#/components/schemas/ScopeRekeyVerification" }
+        inviteLabels:
+          type: array
+          description: >
+            TENANT only — each open link invite's private label's value key (`member-invite-label`, ADR 0129 decision 7),
+            where it has one. The wrap only: the sealed label is the owners' and never served here.
+          maxItems: 256
+          items: { $ref: "#/components/schemas/ScopeRekeyInviteLabel" }
         more:
           x-veyq-visibility: flag
           type: boolean
@@ -2340,6 +2347,23 @@ components:
           maxLength: 128
           example: d3JhcHBlZC12YWx1ZS1rZXk=
 
+    ScopeRekeyInviteLabel:
+      type: object
+      required: [inviteId, wrappedValueKey]
+      properties:
+        inviteId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The open link invite — the label is bound to (tenant scope, this id), and so is its address.
+          example: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+        wrappedValueKey:
+          type: string
+          description: The label's value key under the tenant key, as `PendingMemberInvite.wrappedLabelValueKey`.
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+
     ScopeRekeyStage:
       type: object
       description: >
@@ -2390,6 +2414,11 @@ components:
           type: array
           maxItems: 256
           items: { $ref: "#/components/schemas/ScopeRekeyVerificationWrap" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 256)'
+        inviteLabels:
+          type: array
+          maxItems: 256
+          items: { $ref: "#/components/schemas/ScopeRekeyInviteLabelWrap" }
           x-field-extra-annotation: '@field:jakarta.validation.Valid @field:jakarta.validation.constraints.Size(max = 256)'
 
     ScopeRekeyRewrap:
@@ -2544,6 +2573,37 @@ components:
             - $ref: "#/components/schemas/ScopeRekeyRewrap"
             - type: "null"
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
+    ScopeRekeyInviteLabelWrap:
+      type: object
+      description: An open link invite's label's value key under the new tenant key (`value-key`); the sealed label stays byte-identical.
+      required: [inviteId, wrappedValueKey, replacedValueKey]
+      additionalProperties: false
+      x-class-extra-annotation: '@me.raddatz.veyq.core.http.UnknownFieldsRefused'
+      properties:
+        inviteId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        wrappedValueKey:
+          type: string
+          description: The label's `K_v` under the new tenant key.
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: bmV3LXdyYXBwZWQtdmFsdWUta2V5
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        replacedValueKey:
+          type: string
+          description: >
+            The `wrappedValueKey` it replaces, as `listScopeRekeyParts` served it. A row that holds another by the commit is `409 rekey_parts_stale`: a write since the read minted a fresh `K_v` (ADR 0115 decision 2).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ScopeRekeyVerificationWrap:
       type: object
