@@ -81,4 +81,41 @@ Single phase, `src/web/` and `site/` only; no contract, no backend.
 
 ## Retrospective
 
-(filled in by the implementer)
+**What the CR got wrong against the code (each fixed toward ADR 0136's invariants):**
+- *"Whether it lands hashed under `/assets/` (Vite rewriting the `index.html` tag) is the implementer's call"* was not a
+  real choice: Vite's html plugin folds EVERY module script of a page into ONE entry (`vite:build-html`), so a second
+  `<script type="module" src>` would have become part of the app's own entry chunk. The watchdog is a rollup input of its
+  own at an unhashed `/boot-watchdog.js` (like `sw.js`), named in index.html with `vite-ignore`.
+- *"listed in `index.html` before the app's entry"* is not enough either: Vite moves the app's entry into `<head>`, and a
+  non-async module script runs only after every earlier one's graph has loaded. The watchdog is `async`, and reads the
+  app's state attribute on load in case the app signalled first.
+- `vite:preloadError` with an unconditional `preventDefault()` would make the failed import resolve to `undefined`
+  instead of rejecting. It is suppressed only when the watchdog reloads (the signal event is cancelable, and the
+  watchdog cancels it); otherwise the error propagates as before.
+- `validate_stylesheet_anchors.py` read markup under `src/` only, so the start screen's classes in `index.html` would have
+  been "dead". The guard now reads the package's `index.html` (bitten; guard gaps green).
+
+**Decided where the CR was silent (reported back):** the step marker also names `route` (after `boot()`, while the
+first route resolves) and `load` (no step ever marked: the app's code did not start), since `vault` would otherwise name a
+hang it is not; after the mount a `failed` still gets the one reload, but there is no panel to show (decision 4's
+"else its button" holds before the mount only) — both written into ADR 0136. The dark start screen restates base.css's
+dark values for the roles it paints (a sheet cannot read `:root.veyq-dark`'s custom properties without the class),
+pinned equal by `startScreen.test.ts`. `src/backend/Dockerfile`'s frontend stage does not run `verify:boot-watchdog`
+(the CR's scope was `src/web/` and `site/`); `pnpm run check` does.
+
+**Proof:** `pnpm run check` (src/web) green, 7053 tests; `pnpm run check` (tests/e2e) and (site) green; the trust chain
+green with `/usr/bin/python3`, `validate_guard_gaps.py --force` included. Browser pass in headless system Chrome against
+the BUILT dist served with its emitted policy as a header (a scratch server standing in for the app shell, with a stub
+`/api/setup` and refresh, because the owner's dev backend was in a failed hot-reload state and a second quarkusDev was
+off limits): normal start mounted, no panel, no violation; setup status held: reload at 15.1 s, German panel at 30.2 s
+naming `status`, Neu laden to sign-in, no violation; app entry chunk held: the watchdog still ran and named `load`; dark
+OS + reduced motion + 375 px: dark roles, no animation, no horizontal scroll. Lane L1 spec written, not run.
+
+**Improvement points:**
+- A CR that plans markup or a script in `index.html` should name what Vite does with it (folding, ordering, asset
+  rewriting); "the implementer's call" hid that one option did not exist. A one-line spike at refine (`vite build` on a
+  two-script page) would have settled it.
+- "Signal failed and preventDefault" read as one step; an error-suppression line in a CR should say what the caller sees
+  when nothing reloads.
+- The browser pass hint assumed a usable dev backend; when the owner's is mid-reload a stubbed `/api` against the real
+  built shell is the honest substitute — the brief could name it as the fallback.

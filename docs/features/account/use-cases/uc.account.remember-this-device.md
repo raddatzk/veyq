@@ -150,4 +150,4 @@ your password.
 - Related use-cases: [unlock](uc.account.unlock.md) (the floor — the first-sign-in path),
   [trust-device](uc.account.trust-device.md) (the DEVICE wrap),
   [sessions](uc.account.sessions.md) (removing this wrap for a device that is not in hand).
-- End-user view (docs site): [Sign in](../../../../site/src/content/docs/getting-started/sign-in.mdx)
+- End-user view (docs site): [Sign in](../../../../site/src/content/docs/getting-started/sign-in.mdx) · [Offline or unreachable](../../../../site/src/content/docs/help/offline.mdx) (E5's "Taking longer than usual")

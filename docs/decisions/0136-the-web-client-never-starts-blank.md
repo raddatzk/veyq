@@ -1,7 +1,7 @@
 # ADR 0136 — The web client never starts blank
 
 - Status: Accepted
-- Built: no
+- Built: yes
 - Date: 2026-11-16
 - Model: [uc.account.remember-this-device](../features/account/use-cases/uc.account.remember-this-device.md) E5
 
@@ -39,7 +39,8 @@ The fix must not depend on which step hangs, because the next WebKit release may
    text). It waits for the app's "mounted" signal. Without it after **15 s**, or at once on the app's "failed" signal:
    - the **first** time within 5 minutes it reloads the page once, the reload the owner does by hand today;
    - otherwise it shows, over the start screen, "Taking longer than usual" with a **Reload** button and the boot step
-     that has not finished (setup status, session, vault), so a report can name it.
+     that has not finished (`status`, `session`, `vault`; `route` for the first route after them, `load` where the app's
+     code never started), so a report can name it.
 
    "Within 5 minutes" is a timestamp in `sessionStorage`; where storage throws, there is no automatic reload, only the
    button. So a server that hangs every request costs one automatic reload, never a loop. 15 s is above any boot this
@@ -49,7 +50,9 @@ The fix must not depend on which step hangs, because the next WebKit release may
    after the mount and "failed" when `bootstrap()` or `router.isReady()` rejects. The signals are document attributes
    or events, nothing stored, nothing sent.
 4. **Every chunk failure reloads the same way.** A `vite:preloadError` (a chunk the server no longer has after an
-   upgrade) goes through decision 2's once-per-5-minutes reload, else its button.
+   upgrade) goes through decision 2's once-per-5-minutes reload, else its button. Its error is suppressed only when the
+   page reloads; otherwise it propagates, so the start fails visibly. After the mount the start screen is gone: a chunk
+   failure then gets the one reload, or within the five minutes the navigation's own error, never a panel.
 5. **"This server can't be reached right now" gets a Reload button.** Today the banner names the state and offers
    nothing; a request that failed at start is retried by starting again.
 6. **No deadline inside `boot()`.** A deadline per step would have to decide, per step, what a timeout means for the

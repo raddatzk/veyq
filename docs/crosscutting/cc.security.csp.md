@@ -69,7 +69,9 @@ The bracketed sources are appended by the backend on every response; the built p
 Why each non-obvious source is there:
 
 - **`script-src 'self' 'wasm-unsafe-eval'`, with no `'unsafe-eval'` and no `'unsafe-inline'`.** The entry is a hashed
-  same-origin module. The app has no inline script and no `eval`/`Function` (Argon2id is pure-JS `@noble`), so scripts
+  same-origin module; beside it the start watchdog ([ADR 0136](../decisions/0136-the-web-client-never-starts-blank.md)) is
+  a same-origin file of its own, `/boot-watchdog.js`, unhashed and revalidated like `sw.js`, that writes text and
+  attributes only. The app has no inline script and no `eval`/`Function` (Argon2id is pure-JS `@noble`), so scripts
   stay strictly same-origin. `'wasm-unsafe-eval'` lets the page compile WebAssembly, not evaluate JavaScript: the client
   encodes a space icon and a member picture with its own build of libwebp (`src/web/webp-encoder/`, [ADR 0127](../decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md)),
   because Safari's canvas answers WebP with a PNG. An attacker who could hand the page a module would first need to run
