@@ -66,6 +66,8 @@ kotlin {
             implementation(kotlin("test"))
             implementation(libs.coroutines.test)
             implementation(libs.ktor.client.okhttp)
+            // a tile server the map tests play (MapDispatchTest): no test calls a real one
+            implementation(libs.ktor.client.mock)
         }
     }
 }
