@@ -32,7 +32,8 @@ import kotlin.coroutines.ContinuationInterceptor
  * is released at once.
  *
  * Every call is answered on the player's own lane, one at a time, in the order made — as the web's single thread does.
- * [interrupt] is a lightbox video's (ADR 0142 decision 13).
+ * [interrupt] is a lightbox video's (ADR 0142 decision 13). A listener's [pause] holds a track still loading as an
+ * interruption does: once loaded it is the active deck, paused, and only a play starts it.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class MusicPlayer(
@@ -122,10 +123,15 @@ class MusicPlayer(
      *  decision 13 — a load still pending when the video started stays silent until the video ends). */
     private var held: Interruption? = null
 
+    /** The listener paused, and no play, track change, new queue or stop came after: it holds the music as an
+     *  interruption does — a track that finishes loading becomes the active deck, paused, and only a play starts it. */
+    private var pausedByListener = false
+
     /** What a listener did: an interruption's end no longer resumes, and a held track is no longer held. */
     private fun listen() {
         listened++
         held = null
+        pausedByListener = false
     }
 
     // --- the commands: each answered on the lane, in the order made ------------------------------------------------------
@@ -145,6 +151,7 @@ class MusicPlayer(
     override fun pause() {
         scope.launch {
             listen()
+            pausedByListener = true
             doPause()
         }
     }
@@ -159,6 +166,7 @@ class MusicPlayer(
     override fun next() {
         scope.launch {
             val order = order ?: return@launch
+            pausedByListener = false // a track change plays, as it did before the pause held loads
             val slot = slots[active]
             slot.leaving = true
             bringIn(order.next(), pressFadeMs(slot.span))
@@ -173,6 +181,7 @@ class MusicPlayer(
             when (val step = order.previous(into)) {
                 PreviousStep.Restart -> doSeek(0)
                 is PreviousStep.Back -> {
+                    pausedByListener = false // a track change plays, as it did before the pause held loads
                     slot.leaving = true
                     bringIn(step.id, pressFadeMs(slot.span))
                 }
@@ -194,7 +203,8 @@ class MusicPlayer(
     fun interrupt(): Interruption {
         val interruption = Interruption()
         scope.launch {
-            if (queue != null && (slots[active].playing || starting)) {
+            // a load the listener paused stays paused: nothing to resume after
+            if (queue != null && (slots[active].playing || (starting && !pausedByListener))) {
                 doPause()
                 interruption.paused = true
                 interruption.at = listened
@@ -347,8 +357,8 @@ class MusicPlayer(
             (prepared ?: load(incoming, track)).await()
             if (gen != generation) return
             incoming.preparedId = null
-            if (held != null) {
-                // an interruption came while it loaded: it waits, at full volume, for the interruption's end
+            if (held != null || pausedByListener) {
+                // an interruption or the listener's pause came while it loaded: it waits, at full volume, for the end or a play
                 incoming.deck.ramp(1.0, 0)
                 return hold(incoming, outgoing, track)
             }
@@ -386,8 +396,8 @@ class MusicPlayer(
         startTicker()
     }
 
-    /** [track] loaded on [incoming] while an interruption holds the music: it becomes the playing deck, paused; the outgoing
-     *  one (paused by the interruption) is let go at once. The interruption's end plays it. */
+    /** [track] loaded on [incoming] while an interruption or the listener's pause holds the music: it becomes the playing
+     *  deck, paused; the outgoing one (paused) is let go at once. The interruption's end or a play plays it. */
     private fun hold(incoming: Slot, outgoing: Slot, track: PlayerTrack) {
         failures = 0
         active = 1 - active
