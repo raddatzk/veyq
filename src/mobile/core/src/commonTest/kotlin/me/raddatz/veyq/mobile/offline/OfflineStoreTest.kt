@@ -33,7 +33,7 @@ class OfflineStoreTest {
     @AfterTest
     fun cleanUp() = removeAll(root)
 
-    private fun stores(device: MemoryDeviceStore = MemoryDeviceStore(), files: DeviceFiles = deviceFiles) =
+    private fun stores(device: MemoryDeviceStore = MemoryDeviceStore(), files: DeviceFiles = SizedVolume()) =
         OfflineStores(root, device, p, files, clock)
 
     private fun key(kind: String, id: String, scope: String = "s-1") = EntryKey(server, "t-1", scope, kind, id)
