@@ -79,7 +79,7 @@ object MediaUpload {
     }
 
     /** What the device works out before anything is sent: no key, no request (the job's on-device stage). */
-    private class Prepared(val type: String, val sha256: String, val derived: Derived, val metaTier: JsonObject?, val exif: JsonObject?)
+    internal class Prepared(val type: String, val sha256: String, val derived: Derived, val metaTier: JsonObject?, val exif: JsonObject?)
 
     /** The type of [original] and its bytes' head, then its SHA-256 and metadata, with the tiers from [derive]. */
     private suspend fun prepare(original: Original, now: Long, derive: suspend (type: String) -> Derived): Prepared {
@@ -163,7 +163,7 @@ object MediaUpload {
         }
     }
 
-    private suspend fun once(
+    internal suspend fun once(
         tenant: TenantSession, scopeId: String, nodeId: String, original: Original, prepared: Prepared, progress: (Double) -> Unit,
     ): Result {
         val type = prepared.type
@@ -249,7 +249,7 @@ object MediaUpload {
     }
 
     /** The original's SHA-256 over its plaintext, read a frame at a time, base64url without padding (`digest.ts`). */
-    private suspend fun sha256(source: ByteSource): String {
+    internal suspend fun sha256(source: ByteSource): String {
         val h = Sha256()
         var at = 0L
         while (at < source.size) {

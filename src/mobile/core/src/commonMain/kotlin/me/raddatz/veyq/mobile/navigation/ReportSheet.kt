@@ -31,6 +31,11 @@ class ReportSheet(
     val node: NodeAt,
     private val door: Door,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    /**
+     * Whether "only its name" is offered beside the whole: a node's report offers it; an item's (a Memory's music track,
+     * ADR 0142 decision 11) has no name of its own to report apart, so the sheet shows no choice and sends it whole.
+     */
+    val offersName: Boolean = true,
 ) {
     /** What the sheet sends ([ShellModel.reportSheet] over a tenant, a test over a server it plays). */
     interface Door {
@@ -87,7 +92,7 @@ class ReportSheet(
     /** A change of the form, taken only while it may still change (nothing under way, nothing sent). */
     private fun edit(change: (State) -> State) = _state.update { if (it.sending || it.sent != null) it else change(it) }
 
-    fun whole(on: Boolean) = edit { it.copy(whole = on) }
+    fun whole(on: Boolean) = edit { if (offersName) it.copy(whole = on) else it }
 
     /** The category by its token; one the contract does not know is not taken. */
     fun category(token: String) = edit { s -> if (NodeReport.CATEGORIES.any { it.token == token }) s.copy(category = token) else s }

@@ -35,6 +35,8 @@ class MediaUploadsTest {
         val left = mutableListOf<String>()
         var changes = 0
         override fun job(scopeId: String, nodeId: String, source: UploadSource): UploadQueue.Job = Job(source.name).also { jobs[source.name] = it }
+        override fun musicJob(scopeId: String, nodeId: String, track: me.raddatz.veyq.mobile.memories.music.MusicUpload.Check.Taken): UploadQueue.Job =
+            Job(track.source.name).also { jobs[track.source.name] = it }
         override fun changed() {
             changes++
         }

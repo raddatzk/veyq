@@ -181,6 +181,8 @@ class MemoriesDispatchTest {
         /** Memories' uploads over the app's queue, each job the core's shape: its tiers prepared ahead, its file read in frames. */
         fun uploads(queue: UploadQueue, deriver: MediaUpload.Deriver) = MediaUploads(queue, object : MediaUploads.Door {
             override fun job(scopeId: String, nodeId: String, source: UploadSource) = Job(source, deriver, nodeId)
+            override fun musicJob(scopeId: String, nodeId: String, track: me.raddatz.veyq.mobile.memories.music.MusicUpload.Check.Taken) =
+                Job(track.source, deriver, nodeId)
             override fun changed() {
                 sent += "changed"
             }

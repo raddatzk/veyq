@@ -2569,6 +2569,53 @@
       "other": "{1:int} Dateien wurden nicht hinzugefügt: In eine Erinnerung kommen nur Fotos und Videos."
     }
   },
+  "music_play": {
+    "note": "A Memory's or a chapter's header action: its music starts (ADR 0142 decision 6).",
+    "en": "Play music",
+    "de": "Musik abspielen",
+    "apple_en": "Play Music"
+  },
+  "music_stop": {
+    "note": "The same header action while this node's music plays: it stops.",
+    "en": "Stop music",
+    "de": "Musik beenden",
+    "apple_en": "Stop Music"
+  },
+  "music_add": {
+    "note": "The Music view's action: audio files picked and added as tracks.",
+    "en": "Add music",
+    "de": "Musik hinzufügen",
+    "apple_en": "Add Music"
+  },
+  "music_untitled": {
+    "note": "A track whose file has no name: its place in the Music view's sorted list (the core's MusicQueue).",
+    "en": "Track {1:int}",
+    "de": "Titel {1:int}"
+  },
+  "music_too_large": {
+    "note": "{1} the picked file's name: refused before anything is uploaded (MusicUpload.MAX_BYTES).",
+    "en": "{1} is larger than 200 MB.",
+    "de": "{1} ist größer als 200 MB."
+  },
+  "music_not_audio": {
+    "note": "{1} the picked file's name: its bytes are no audio file.",
+    "en": "{1} is no audio file.",
+    "de": "{1} ist keine Audiodatei."
+  },
+  "music_unplayable": {
+    "note": "{1} the picked file's name: this device's player cannot read it (owner's copy, 2026-11-15).",
+    "en": "{1} can't be played on this device.",
+    "de": "{1} kann auf diesem Gerät nicht abgespielt werden."
+  },
+  "music_rename_conflict": {
+    "note": "A rename lost to another member's rename meanwhile (TrackLabel's conflict).",
+    "en": "Someone else renamed this track meanwhile. Their name is shown now.",
+    "de": "Jemand anderes hat diesen Titel inzwischen umbenannt. Jetzt wird sein Name angezeigt."
+  },
+  "music_rename_failed": {
+    "en": "The track could not be renamed.",
+    "de": "Der Titel konnte nicht umbenannt werden."
+  },
   "memory_moved_to_trash": {
     "en": "Moved to trash",
     "de": "In den Papierkorb verschoben"
