@@ -29,11 +29,19 @@ test.afterEach(async () => {
   }
 })
 
-/** Hold every setup-status request [page] sends — never answered — until the returned release is called. */
-async function holdSetupStatus(page: Page): Promise<() => Promise<void>> {
-  const handler = () => {}
-  await page.route(SETUP_STATUS, handler)
-  return () => page.unroute(SETUP_STATUS, handler)
+/**
+ * Hold every setup-status request [page] sends — never answered — until the returned release is called; from then on
+ * new ones are answered. A request held before the release stays held for good: unrouting would hand it to the network,
+ * the stalled start would finish on its own and mount over the slow panel the test is about to click (it did, on CI).
+ */
+async function holdSetupStatus(page: Page): Promise<() => void> {
+  let holding = true
+  await page.route(SETUP_STATUS, (route) => {
+    if (!holding) return route.continue()
+  })
+  return () => {
+    holding = false
+  }
 }
 
 /** Count the documents [page] loads, so a test can wait for the watchdog's one reload. */
@@ -71,7 +79,7 @@ test(
     await expect(slow).toContainText('Wartet noch auf Schritt: status')
     expect(loads.count).toBe(2)
 
-    await release()
+    release()
     await slow.getByRole('button', { name: 'Neu laden' }).click()
     await expect(signIn(page)).toBeVisible({ timeout: 30_000 })
     await expect(page.locator('#veyq-start-slow')).toHaveCount(0)
