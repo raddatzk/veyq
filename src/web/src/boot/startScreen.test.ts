@@ -1,12 +1,20 @@
+// @vitest-environment happy-dom
 // The start screen of index.html (ADR 0136 decision 1) and its sheet `styles/start.css`.
 //   - It paints under the built CSP (cc.security.csp): no `style="…"` attribute, no inline script, no <style>.
 //   - Before the app applied the stored theme it follows the OS, with base.css's dark values for the roles it paints
 //     with, spelled again in start.css (a sheet cannot read another rule's custom properties) — held equal here.
 import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
-const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
-const INDEX = readFileSync(new URL('../../index.html', import.meta.url), 'utf8').replace(/<!--[\s\S]*?-->/g, '')
+// Paths through node:path: under happy-dom `URL` is the DOM's, which node:fs does not take.
+const here = dirname(fileURLToPath(import.meta.url))
+const read = (path: string) => readFileSync(resolve(here, path), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')
+// Parsed, not matched: the parser drops comments and reads tags and attributes in any case, which a regex over the
+// text would have to get right by hand.
+const INDEX = new DOMParser().parseFromString(readFileSync(resolve(here, '../../index.html'), 'utf8'), 'text/html')
+const SCRIPTS = [...INDEX.querySelectorAll('script')]
 const START = read('../styles/start.css')
 const BASE = read('../styles/base.css')
 
@@ -17,21 +25,24 @@ function declarations(block: string): Map<string, string> {
 
 describe('the start screen', () => {
   it('carries no style attribute, no <style> and no inline script', () => {
-    expect(INDEX).not.toMatch(/\sstyle\s*=/)
-    expect(INDEX).not.toMatch(/<style\b/)
-    const scripts = [...INDEX.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)]
-    expect(scripts.length).toBe(2)
-    for (const [, attributes, body] of scripts) {
-      expect(attributes).toMatch(/\bsrc="/)
-      expect(body.trim()).toBe('')
+    expect(INDEX.querySelectorAll('[style]')).toHaveLength(0)
+    expect(INDEX.querySelectorAll('style')).toHaveLength(0)
+    expect(SCRIPTS).toHaveLength(2)
+    for (const script of SCRIPTS) {
+      expect(script.getAttribute('src')).toBeTruthy()
+      expect(script.textContent?.trim()).toBe('')
     }
   })
 
   it('loads the watchdog async, before the app’s entry, and leaves it out of the app’s bundle', () => {
-    const watchdog = INDEX.indexOf('/boot-watchdog.js')
-    expect(watchdog).toBeGreaterThan(0)
-    expect(watchdog).toBeLessThan(INDEX.indexOf('/src/main.ts'))
-    expect(INDEX).toMatch(/<script type="module" async src="\/boot-watchdog\.js" vite-ignore><\/script>/)
+    const watchdog = SCRIPTS.findIndex((script) => script.getAttribute('src') === '/boot-watchdog.js')
+    const app = SCRIPTS.findIndex((script) => script.getAttribute('src') === '/src/main.ts')
+    expect(watchdog).toBeGreaterThanOrEqual(0)
+    expect(app).toBeGreaterThan(watchdog)
+    const tag = SCRIPTS[watchdog]
+    expect(tag.getAttribute('type')).toBe('module')
+    expect(tag.hasAttribute('async')).toBe(true)
+    expect(tag.hasAttribute('vite-ignore')).toBe(true)
   })
 
   it('in the OS’s dark mode uses base.css’s dark values', () => {
