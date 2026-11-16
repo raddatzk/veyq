@@ -128,7 +128,7 @@ class TenantMailSettingsEntity : PanacheEntityBase {
  * A MEMBER invite is a **placeholder member** (ADR 0111 decisions 1-2): it holds the invite key the owner signed and a
  * grant wrapped to it, the columns a membership's grant has. Every statement that moves an invite out of `ACTIVE` nulls
  * them in the same statement ([INVITE_KEY_DROPPED]), so an accepted, revoked, superseded or expired invite holds no key,
- * no grant and no anchor.
+ * no grant, no anchor and no label.
  */
 @Entity
 @Table(name = "veyq_tenant_invite")
@@ -211,6 +211,20 @@ class TenantInviteEntity : PanacheEntityBase {
     @Column(name = "anchor_grant_signature")
     var anchorGrantSignature: String? = null
 
+    /** A live **link** invite's private label (ADR 0129 decision 7): sealed under a value key of its own
+     *  (`member-invite-label`, bound to the tenant and this invite) whose wrap [wrappedLabelValueKey] is under the tenant
+     *  scope's current key — so a tenant rotation re-wraps it (`ScopeRekeyCommit`) and never the label. Served only in the
+     *  owners' pending list. [labelEditorUserId] is the owner who last wrote it (ADR 0093 § 8), null exactly while the
+     *  label is. Null on a mailed invite, an owner invite and every invite that is no longer ACTIVE. */
+    @Column(name = "sealed_label")
+    var sealedLabel: String? = null
+
+    @Column(name = "wrapped_label_value_key", length = 128)
+    var wrappedLabelValueKey: String? = null
+
+    @Column(name = "label_editor_user_id", columnDefinition = "uuid")
+    var labelEditorUserId: String? = null
+
     companion object : PanacheCompanionBase<TenantInviteEntity, String> {
         const val ACTIVE = "ACTIVE"
         const val SUPERSEDED = "SUPERSEDED"
@@ -225,10 +239,11 @@ class TenantInviteEntity : PanacheEntityBase {
         val TERMINAL = listOf(SUPERSEDED, CONSUMED, EXPIRED)
 
         /** The assignments every status transition out of `ACTIVE` carries in its own bulk update: the invite's key,
-         *  grant and anchor go with its last chance to be redeemed. */
+         *  grant and anchor go with its last chance to be redeemed, and its label (ADR 0129 decision 7) with them. */
         const val INVITE_KEY_DROPPED =
             "invitePublicKey = null, inviteKeySignature = null, signerUserId = null, signerIdentityPublicKey = null, " +
                 "wrappedGrant = null, grantedEpoch = null, grantSignature = null, granterUserId = null, " +
-                "granterIdentityPublicKey = null, anchorWrappedGrant = null, anchorEpoch = null, anchorGrantSignature = null"
+                "granterIdentityPublicKey = null, anchorWrappedGrant = null, anchorEpoch = null, anchorGrantSignature = null, " +
+                "sealedLabel = null, wrappedLabelValueKey = null, labelEditorUserId = null"
     }
 }

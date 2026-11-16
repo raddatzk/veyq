@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.node.rekey
 
+import me.raddatz.veyq.core.admin.tenant.TenantInviteEntity
 import me.raddatz.veyq.core.admin.tenant.VerificationEntity
 import me.raddatz.veyq.core.content.NodesStore
 import me.raddatz.veyq.core.identity.TenantProfileEntity
@@ -27,6 +28,8 @@ data class ScopeRekeyPage(
     val shares: List<ShareEntity>,
     val members: List<TenantProfileEntity>,
     val verifications: List<VerificationEntity>,
+    /** TENANT only: each open link invite holding a private label (ADR 0129 decision 7). */
+    val inviteLabels: List<TenantInviteEntity>,
     val more: Boolean,
     val cursor: String?,
 )
@@ -48,10 +51,11 @@ data class ScopeRekeyPage(
  * | `shares` | each link not deleted that holds a recovery copy | `wrappedRecoveryValueKey` | core |
  * | `members` | TENANT only: each profile holding a sealed field | `wrappedNameValueKey`, `wrappedAvatarValueKey`, `wrappedJoinRecordValueKey` | core |
  * | `verifs` | TENANT only: each verification | `wrappedValueKey` | core |
+ * | `invites` | TENANT only: each open link invite holding a label | `wrappedLabelValueKey` | core |
  * | — | each application's rows | its own wraps | its [ScopeRekeyParticipant] |
  *
  * Never a value's ciphertext — a group's `encryptedName`, an icon, a recovery copy, a member's name, picture or join
- * record, a verification — nor its epoch: a stage that would write one is refused ([Verdict.WRITES_VALUE], `422
+ * record, a verification, an invite's label — nor its epoch: a stage that would write one is refused ([Verdict.WRITES_VALUE], `422
  * rekey_writes_value`), so a rotator, owner and member alike, can make a value unreadable (a wrap under a key it drops,
  * as any member could junk it) and never rewrite another member's. A pending group invitee's name key is sealed to the
  * invitee, no wrap under the scope key: a rotation leaves it. `scripts/validate_scope_rekey_arity.py` holds both halves:
@@ -120,7 +124,7 @@ class ScopeRekeyCommit(
             groupName = scope.wrappedNameValueKey?.takeIf { first && scope.kind == ScopeEntity.GROUP }?.let { it to scope.nameEpoch },
             icon = scope.wrappedIconValueKey?.takeIf { first }?.let { it to scope.iconEpoch },
             rootNodes = out.nodes, shares = out.shares, members = out.members,
-            verifications = out.verifications, more = more, cursor = last?.toString(),
+            verifications = out.verifications, inviteLabels = out.invites, more = more, cursor = last?.toString(),
         )
     }
 
@@ -129,11 +133,13 @@ class ScopeRekeyCommit(
         val shares = mutableListOf<ShareEntity>()
         val members = mutableListOf<TenantProfileEntity>()
         val verifications = mutableListOf<VerificationEntity>()
+        val invites = mutableListOf<TenantInviteEntity>()
 
         fun lastId(kind: String): String = when (kind) {
             NODES -> nodes.last().id
             SHARES -> shares.last().id
             MEMBERS -> members.last().userId
+            INVITES -> invites.last().id
             else -> verifications.last().let { "${it.verifierUserId}|${it.subjectUserId}" }
         }
     }
@@ -148,6 +154,9 @@ class ScopeRekeyCommit(
             SHARES -> page(keyset(ShareEntity, "scopeId = :s and $SHARE_WRAPPED", "id", after, sid, n), into.shares)
             MEMBERS -> if (!tenant) 0 else page(
                 keyset(TenantProfileEntity, "tenantId = :s and $PROFILE_WRAPPED", "userId", after, sid, n), into.members,
+            )
+            INVITES -> if (!tenant) 0 else page(
+                keyset(TenantInviteEntity, "tenantId = :s and $INVITE_LABELLED", "id", after, sid, n), into.invites,
             )
             else -> if (!tenant) 0 else {
                 val params = mutableMapOf<String, Any>("s" to sid)
@@ -205,6 +214,7 @@ class ScopeRekeyCommit(
         if (scope.kind == ScopeEntity.TENANT) {
             plan.members(TenantProfileEntity.find("tenantId = ?1 and $PROFILE_WRAPPED", scopeId).list())
             plan.verifications(VerificationEntity.find("tenantId", scopeId).list())
+            plan.inviteLabels(TenantInviteEntity.find("tenantId = ?1 and $INVITE_LABELLED", scopeId).list())
         }
         plan.roots(NodeEntity.find("scopeId = ?1 and parentId = ?1", scopeId).list())
         plan.verdict?.let { return refuse(it) }
@@ -290,6 +300,12 @@ class ScopeRekeyCommit(
             writes += { v.wrappedValueKey = wrap }
         }
 
+        fun inviteLabels(rows: List<TenantInviteEntity>) = rows.forEach { i ->
+            val wrap = take(i.id, INVITE_LABEL_WRAP, i.wrappedLabelValueKey) ?: return@forEach
+            // The label and the owner who wrote it stay (ADR 0093 § 8): the same key, re-wrapped.
+            writes += { i.wrappedLabelValueKey = wrap }
+        }
+
         fun roots(rows: List<NodeEntity>) = rows.forEach { n ->
             // A trashed root holds its freed slug (its own id, `NodesStore.deleteSubtree`): no name in it, and the
             // restore supplies a fresh token — kept, as the node's own commit keeps it.
@@ -319,8 +335,10 @@ class ScopeRekeyCommit(
         const val SHARES = "shares"
         const val MEMBERS = "members"
         const val VERIFS = "verifs"
-        /** The listing's kinds, in the order it serves them. */
-        val KINDS = listOf(NODES, SHARES, MEMBERS, VERIFS)
+        const val INVITES = "invites"
+        /** The listing's kinds, in the order it serves them — a new kind is appended, so a cursor already answered
+         *  still names its place. */
+        val KINDS = listOf(NODES, SHARES, MEMBERS, VERIFS, INVITES)
 
         /** The scope row's two wraps are rows of their own in the stage: a row staged again replaces all its fields,
          *  and the name's and the icon's are staged apart (`stageScopeRekey`'s `groupName`, `icon`). */
@@ -339,15 +357,22 @@ class ScopeRekeyCommit(
         const val MEMBER_AVATAR_WRAP = "member.wrappedAvatarValueKey"
         const val MEMBER_JOIN_WRAP = "member.wrappedJoinRecordValueKey"
         const val VERIFICATION_WRAP = "verification.wrappedValueKey"
+        const val INVITE_LABEL_WRAP = "invite.wrappedLabelValueKey"
 
         /** Every field core's stage may hold — anything else is a write of a value, refused at the commit. */
         val STAGED_FIELDS = setOf(
             ROOT_WRAP, ROOT_NAME, ROOT_SLUG,
             GROUP_NAME_WRAP, ICON_WRAP, SHARE_WRAP, MEMBER_NAME_WRAP, MEMBER_AVATAR_WRAP, MEMBER_JOIN_WRAP, VERIFICATION_WRAP,
+            INVITE_LABEL_WRAP,
         )
 
         /** A link holding a recovery copy, and so its value key's wrap — the listing's and the commit's one filter. */
         private const val SHARE_WRAPPED = "deleted = false and wrappedRecoveryValueKey is not null"
+
+        /** An open member invite holding a label's value key under the tenant key (ADR 0129 decision 7) — the listing's
+         *  and the commit's one filter. Not by expiry: a row past it until the sweep still holds its wrap, and a filter
+         *  that moved with the clock between the listing and the commit would ask for a wrap nobody was served. */
+        private const val INVITE_LABELLED = "status = '${TenantInviteEntity.ACTIVE}' and role = '${TenantInviteEntity.MEMBER}' and wrappedLabelValueKey is not null"
 
         /** A profile with a value key under the tenant key — the listing's and the commit's one filter. */
         private const val PROFILE_WRAPPED =

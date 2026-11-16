@@ -286,6 +286,10 @@ class OperatorBlindProbeTest {
             Call("POST", "/api/tenants/${s.tenantId}/member-invites/$someId/reissue", """{${TestGrants.memberInviteJson(s.tenantId, "invitee-${UUID.randomUUID()}@example.com", epoch = 0)}}""")
         },
         "revokeMemberInvite" to Probe(Address.TENANT) { s -> Call("DELETE", "/api/tenants/${s.tenantId}/member-invites/$someId") },
+        // A link invite's private label (ADR 0129 decision 7): owner-gated on the tenant like revoke, probed the same way.
+        "setMemberInviteLabel" to Probe(Address.TENANT) { s ->
+            Call("PUT", "/api/tenants/${s.tenantId}/member-invites/$someId/label", """{"sealedLabel":"bGFiZWw=","wrappedLabelValueKey":"d3JhcA==","epoch":0}""")
+        },
         // A link invite (ADR 0129): owner-gated on the tenant like the mailed mint and re-issue, probed the same way. Its
         // body is the mailed one's without the address and the sealed part.
         "createMemberInviteLink" to Probe(Address.TENANT) { s ->
