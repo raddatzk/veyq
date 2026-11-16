@@ -343,3 +343,9 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
   (ADR 0136), for three elements; the core already reads XMP itself.
 - **Drawing the tracks over a blank plane offline** — a map without its map, a second look to design on five platforms
   for a state a connection ends.
+
+Explained for users on the docs site: [Set the location](../../site/src/content/docs/memories/set-the-location.mdx) and
+[Add GPX tracks](../../site/src/content/docs/memories/add-gpx-tracks.mdx) (§ In the app),
+[Is my data safe?](../../site/src/content/docs/privacy/is-my-data-safe.md) (§ Maps, only when you turn them on); for
+Server Owners [Capabilities](../../site/src/content/docs/run/capabilities.mdx) (§ External services); for researchers
+the [threat model](../../site/src/content/docs/security/threat-model.md) (the third-party row).

@@ -181,4 +181,5 @@ Windows) follow the flows above, with these differences. Built on every app; pas
   third-party services are a separate consented boundary)
 - Future: **on-device coarse names** (a bundled gazetteer, ADR 0016); **derived** place from GPS clusters
   aggregated across a Memory *plus its chapters*
-- End-user view (docs site): [Set the location](../../../../site/src/content/docs/memories/set-the-location.mdx)
+- End-user view (docs site): [Set the location](../../../../site/src/content/docs/memories/set-the-location.mdx);
+  what a map sends, in the app on Apple too: [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md)
