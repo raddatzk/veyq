@@ -2,6 +2,7 @@
 title: "GPX-Tracks hinzufügen"
 sources:
   - docs/features/memory/use-cases/uc.memory.tracks.md
+  - docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md
 ---
 
 Eine Erinnerung kann den Weg zeigen, den du gegangen bist: eine Wanderung, eine Radtour oder einen Segeltag,
@@ -51,6 +52,21 @@ auch, wie bei einem Foto.
 
 Tracks sind keine Fotos: Sie stehen nicht in der Galerie und zählen dort nicht mit, aber ein Download oder eine Kopie der
 Erinnerung nimmt ihre Dateien mit, mit dem Namen und der Aktivität, die du ihnen gegeben hast.
+
+## In der App
+
+Die veyq-[App](/de/getting-started/install-the-app/) zeigt die Tracks einer Erinnerung wie der Browser, mit diesen
+Unterschieden:
+
+- **Wo du sie findest:** **Karte** neben **Fotos** über der Galerie wechselt zur Karte und ihren Tracks, und dort steht
+  **GPX-Track hinzufügen**. Das Menü neben einem Track bietet **Bearbeiten**, **GPX herunterladen**, **Entfernen** und
+  **Melden**; gleich nachdem du einen Track entfernt hast, holt **Rückgängig** ihn zurück.
+- **Die Karte** braucht dieselben **Kartendienste** wie jede Karte in der App; auf einem iPhone, iPad oder Mac kommt sie
+  von Apple Maps ([Den Ort festlegen](/de/memories/set-the-location/#in-der-app)). So oder so wird die Linie auf deinem
+  Gerät gezeichnet.
+- **Offline:** Eine Erinnerung, die du [offline verfügbar](/de/getting-started/use-content-offline/) gemacht hast,
+  behält ihre Tracks. Ihre Kartenansicht listet sie mit ihren Zahlen, und du kannst sie herunterladen, aber es erscheint
+  keine Karte, und nichts lässt sich ändern.
 
 ## Wer was darf
 

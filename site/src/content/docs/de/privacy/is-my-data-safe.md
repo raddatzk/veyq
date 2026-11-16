@@ -11,6 +11,8 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-uploader.md
   - docs/features/admin/use-cases/uc.admin.privacy-notice.md
   - docs/features/expenses/use-cases/uc.expenses.exchange-rates.md
+  - docs/features/memory/use-cases/uc.memory.place.md
+  - docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md
 ---
 
 **In einem Satz:** veyq ist **Ende-zu-Ende-verschlüsselt** — deine Fotos, Videos, Tagebuchtexte und
@@ -102,6 +104,20 @@ heute jemand eine Ausgabe in einer anderen Währung einträgt.
 
 Auch die Person, der dein Bereich gehört, kann das abschalten. Dann, oder wenn die Kurse nicht geladen werden können,
 gibst du den Kurs selbst ein; ein gespeicherter Kurs ändert sich nie.
+
+## Karten, nur wenn du sie einschaltest
+
+Auch eine Karte und der Name eines Orts brauchen Hilfe von außen, aber nichts wird verschickt, bevor du die
+**Kartendienste** einschaltest ([Den Ort festlegen](/de/memories/set-the-location/#kartendienste)). Dann lädt dein Gerät
+die Kartenbilder für den Ausschnitt, den du ansiehst, und schickt den Punkt eines Orts an einen Dienst, der ihn benennt
+— **direkt von deinem Gerät**, nie über den Server. Diese Dienste erfahren diesen Ausschnitt oder diesen Punkt, deine
+Internetadresse und welchen veyq-Server du nutzt; nie, welche Erinnerung es ist, wessen, oder wohin ein Track von dir
+führt: Fotos und Tracks werden auf deinem Gerät in die Karte gezeichnet.
+
+**Auf einem iPhone, iPad oder Mac zeigt die veyq-App Karten von Apple Maps** (Apple Inc., USA) statt vom
+Kartenanbieter deines Servers. Apple sieht dann den Kartenausschnitt, den du ansiehst, und die IP-Adresse deines Geräts.
+Die App nennt Apple Maps, wenn sie dich bittet, die Kartendienste einzuschalten, und die Datenschutzhinweise deines
+Servers nennen es auch. Ortsnamen kommen weiter vom Dienst für Ortsnamen deines Servers.
 
 ## Wenn du teilst
 

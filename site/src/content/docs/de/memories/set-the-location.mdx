@@ -3,6 +3,7 @@ title: "Den Ort festlegen"
 sources:
   - docs/features/memory/use-cases/uc.memory.place.md
   - docs/features/admin/use-cases/uc.admin.configure-external-services.md
+  - docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -65,3 +66,29 @@ nicht zu sehen.
 Der Ort wird zusammen mit der Erinnerung auf deinem Gerät verschlüsselt; veyqs Server erfährt weder den Ort noch die
 Koordinaten. Das Einzige, was dein Gerät je verlässt, ist der Punkt, der an den Kartenanbieter geht, und nur, wenn du
 die Kartendienste eingeschaltet hast.
+
+## In der App
+
+Die veyq-[App](/de/getting-started/install-the-app/) legt einen Ort fest wie der Browser, mit diesen Unterschieden:
+
+- **Wo du ihn findest:** Datum und Ort stehen unter dem Namen der Erinnerung; wähle den Ort oder **Ort festlegen**,
+  solange es keinen gibt. Der Pin bleibt in der Mitte der Karte: Verschiebe die Karte, um die Stelle zu verschieben.
+  Kommt die Karte zur Ruhe, werden die dort gefundenen Namen angeboten, von der Straße bis zum Land; wähle einen oder
+  tippe einen eigenen ein.
+- **Kartendienste gelten für das Gerät:** Schalte sie unter **Einstellungen** → **Kartendienste** mit **Kartendienste
+  auf diesem Gerät** ein oder aus, oder mit **Kartendienste ausschalten** auf einer Karte. Was du wählst, gilt für jedes
+  Konto auf diesem Gerät und für kein anderes Gerät.
+- **Auf einem iPhone, iPad oder Mac kommt die Karte von Apple Maps:** Die App zeigt dort Apples Karte statt der des
+  Kartenanbieters deines Servers. Darum nennt sie **Apple Maps**, wenn sie anbietet, die Kartendienste einzuschalten,
+  und Apple sieht den Kartenausschnitt, den du ansiehst, und die IP-Adresse deines Geräts. Ortsnamen kommen weiter vom
+  Dienst für Ortsnamen deines Servers. Zeigt dein Server keine Karten, zeigt die App dort auch keine.
+- **Die Karte deiner Erinnerungen** ist der Tab **Karte** von Erinnerungen, neben ihrer Liste: Jede Erinnerung mit einem Ort ist ein
+  Pin. Nah beieinander liegende Pins werden zu einem mit einer Zahl zusammengefasst; wählst du ihn, vergrößert die Karte,
+  und stehen alle an einer Stelle, listet sie sie auf (*3 Erinnerungen hier*).
+- **Der Ort eines Fotos:** Die Details eines Fotos zeigen eine kleine Karte, wo es aufgenommen wurde, und den Namen des
+  Orts, einmal nachgeschlagen.
+- **Offline** wird der Ort angezeigt, lässt sich aber nicht ändern, und es erscheint keine Karte: *Die Karte braucht eine
+  Verbindung.*
+- **Nichts behalten:** Unter Android, Windows und Linux behält die App Kartenbilder nur, solange sie läuft. Auf einem
+  iPhone, iPad oder Mac behält Apples eigener Kartendienst einen Zwischenspeicher der geladenen Kartenbilder, den die App
+  nicht leeren kann.

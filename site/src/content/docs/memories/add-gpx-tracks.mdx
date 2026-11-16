@@ -2,6 +2,7 @@
 title: "Add GPX tracks"
 sources:
   - docs/features/memory/use-cases/uc.memory.tracks.md
+  - docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md
 ---
 
 A Memory can show the way you went: a hike, a ride or a sailing day, recorded by your watch, your phone or a bike computer
@@ -47,6 +48,18 @@ goes to the Memory's **Trash** tab with the photos you removed, and you can brin
 
 Tracks are not photos: they are not in the gallery and not in its count, but a download or a copy of the Memory carries
 their files, with the name and the activity you gave them.
+
+## In the app
+
+The veyq [app](/getting-started/install-the-app/) shows a Memory's tracks as the browser does, with these differences:
+
+- **Where to find it:** **Map** beside **Photos** above the gallery switches to the map and its tracks, and **Add GPX
+  track** is there. The menu beside a track offers **Edit**, **Download GPX**, **Remove** and **Report**; right after you
+  remove a track, **Undo** brings it back.
+- **The map** needs the same **Map services** as every map in the app; on an iPhone, iPad or Mac it comes from Apple Maps
+  ([Set the location](/memories/set-the-location/#in-the-app)). Either way the line is drawn on your device.
+- **Offline:** a Memory you made [available offline](/getting-started/use-content-offline/) keeps its tracks. Its map
+  view lists them with their numbers, and you can download them, but no map is shown and nothing can be changed.
 
 ## Who can do what
 

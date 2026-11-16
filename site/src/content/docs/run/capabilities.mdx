@@ -10,6 +10,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.capability-requirements.md
   - docs/features/admin/use-cases/uc.admin.configure-external-services.md
   - docs/features/platform/use-cases/uc.platform.switch-application-off.md
+  - docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md
   - docs/features/platform/use-cases/uc.platform.erase-switched-off-application.md
   - contracts/platform/capabilities.json
   - docs/features/expenses/use-cases/uc.expenses.exchange-rates.md
@@ -89,7 +90,7 @@ replica both recipes run.
 
 ## External services
 
-Four entries are outside services a member's browser calls directly, never through your server: the map tiles
+Four entries are outside services a member's browser or app calls directly, never through your server: the map tiles
 (`memories.map`), the geocoder that names places (`memories.places`), the breached-password check
 (`core.breached-password`) and Expenses' day exchange rates (`expenses.exchange-rates`). Their addresses are yours to
 set, in **Server → External services** or with the CLI:
@@ -115,6 +116,13 @@ a mirror or a Frankfurter you run yourself. An address without its placeholders,
 takes none, is refused. A tenant owner may switch the maps, the place names and the exchange rates off for their own
 space, and the exchange rates' switch reaches that space's link guests too; the policy follows your level only. The
 admin console's own first-run screen reaches only the default breach-check address.
+
+The veyq apps call the same addresses, never through your server, and say which instance they come from in their
+`User-Agent` (`veyq/<version> (+https://veyq.app; <instance origin>)`) where a browser sends its `Referer`. **The apps
+on iPhone, iPad and Mac do not use the tile address set here:** they draw Apple's map (MapKit), so Apple Maps receives
+the region a member views, and the privacy notice names Apple while the map is on. They honour its switch: with
+`memories.map` off or without an address, for the instance or for a space, they show no map either. Their place names
+come from the geocoder set here, as every other client's.
 
 ## Requirements
 
