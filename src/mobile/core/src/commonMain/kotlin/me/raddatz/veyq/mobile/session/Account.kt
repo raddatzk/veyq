@@ -412,6 +412,8 @@ class VeyqAccount private constructor(
         val on = capabilities?.map { it.id }?.toSet()
         // The external services' addresses the tenant's set names (ADR 0088 decision 7): none when the set did not read.
         val services = capabilities.orEmpty().mapNotNull { c -> c.serviceUrl?.let { c.id to it } }.toMap()
+        // the tile provider's attribution beside its address (`memories.map`, shown on every map: ADR 0018)
+        val attributions = capabilities.orEmpty().mapNotNull { c -> c.serviceAttribution?.let { c.id to it } }.toMap()
         val off = on?.let { KNOWN_APPLICATIONS - it } ?: emptySet()
         val grants = grants(base)
         val open = mutableListOf<TenantSession.OpenScope>()
@@ -434,7 +436,10 @@ class VeyqAccount private constructor(
         others.forEach { openOne(it, view) }
         val people = if (tenantScope == null || members == null) emptyMap()
         else People.of(JoinRecords(suite), tenant.tenantId, tenantScope.key, tenantScope.summary.grantedEpoch.toLong(), members)
-        return TenantSession(this, tenant, base, open, off, closed, people, services, ShareLinks.Rules.of(capabilities))
+        return TenantSession(
+            this, tenant, base, open, off, closed, people, services, ShareLinks.Rules.of(capabilities),
+            attributions = attributions, servicesRead = capabilities != null,
+        )
     }
 
     private suspend fun openOffline(tenant: TenantRef, base: String, summaries: List<ScopeSummary>): TenantSession {
@@ -1387,9 +1392,19 @@ class TenantSession internal constructor(
     private val services: Map<String, String> = emptyMap(),
     /** The tenant's guest links as its capability set has them ([ShareLinks.Rules.UNKNOWN] when it did not read). */
     val linkRules: ShareLinks.Rules = ShareLinks.Rules.UNKNOWN,
+    /** The external services' attributions by capability id (`serviceAttribution`: the tiles' on `memories.map`). */
+    private val attributions: Map<String, String> = emptyMap(),
+    /**
+     * Whether the tenant's capability set was read when it opened: false offline (ADR 0140 decision 4) or when the read
+     * failed, so which services and hosts are served now is unknown (the map's "needs a connection", ADR 0143 D9).
+     */
+    val servicesRead: Boolean = false,
 ) : Library {
     /** The address the tenant configured for external service [capabilityId], or null: off, or not read. */
     fun serviceUrl(capabilityId: String): String? = services[capabilityId]
+
+    /** The attribution the tenant configured for external service [capabilityId] (plain text), or null. */
+    fun serviceAttribution(capabilityId: String): String? = attributions[capabilityId]
 
     internal class OpenScope(val summary: ScopeSummary, val key: ByteArray, val name: String)
 
