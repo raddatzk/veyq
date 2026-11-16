@@ -46,7 +46,7 @@ internal static class MemoryFacts
         }
         if (s.place is not null || s.editsFacts)
         {
-            line.Children.Add(Fact("", s.place ?? Words.MemoryPlaceSet(), s.place is null, s.editsFacts, Words.MemoryPlaceEdit(), "memory-place",
+            line.Children.Add(Fact("", s.place ?? Words.MemoryPlaceSet(), s.place is null, s.editsFacts, Words.MemoryPlaceEdit(), "memory-place",
                 () => PlaceEditor.Open(window, gallery)));
         }
         return line;
@@ -101,6 +101,9 @@ internal sealed class DateEditor
     private readonly TextBlock _problem = new() { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
     private readonly ContentDialog _dialog;
     private bool _drawing;
+    /// <summary>The mode the state shows: RadioButtons raises SelectionChanged after the draw, and that one is no choice.</summary>
+    private DateMode? _mode;
+    private string _fromDay = "", _toDay = "";
     private Watch? _watch;
 
     private static readonly DateMode[] Modes = [DateMode.Auto, DateMode.Single, DateMode.Range, DateMode.Ongoing];
@@ -139,18 +142,18 @@ internal sealed class DateEditor
         _problem.Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
         _modes.SelectionChanged += (_, _) =>
         {
-            if (_drawing || _modes.SelectedIndex < 0) return;
+            if (_drawing || _modes.SelectedIndex < 0 || Modes[_modes.SelectedIndex] == _mode) return;
             Log.Write($"date editor: mode {Modes[_modes.SelectedIndex]}");
             Act.Send(new Call.DateMode { date = _date, mode = Modes[_modes.SelectedIndex] });
         };
         _from.DateChanged += (_, e) =>
         {
-            if (_drawing) return;
+            if (_drawing || MemoryFacts.Day(e.NewDate) == _fromDay) return;
             Act.Send(new Call.DateFrom { date = _date, day = MemoryFacts.Day(e.NewDate) });
         };
         _to.DateChanged += (_, e) =>
         {
-            if (_drawing) return;
+            if (_drawing || MemoryFacts.Day(e.NewDate) == _toDay) return;
             Act.Send(new Call.DateTo { date = _date, day = MemoryFacts.Day(e.NewDate) });
         };
         var content = new StackPanel { Spacing = 12, MinWidth = 360 };
@@ -216,6 +219,8 @@ internal sealed class DateEditor
         _drawing = true;
         try
         {
+            _mode = s.mode;
+            (_fromDay, _toDay) = (s.from, s.to);
             _modes.SelectedIndex = Array.IndexOf(Modes, s.mode);
             _from.Header = s.mode switch { DateMode.Range => Words.MemoryDateFrom(), DateMode.Ongoing => Words.MemoryDateStart(), _ => Words.MemoryDateDay() };
             _to.Header = Words.MemoryDateTo();
@@ -259,6 +264,10 @@ internal sealed class PlaceEditor
     private readonly Button _remove = new() { Content = Words.MemoryPlaceRemove() };
     private readonly TextBlock _problem = new() { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
     private readonly TypedText _typed = new();
+    /// <summary>The text the state set last: TextBox raises TextChanged later, after the draw, and that one is no edit of
+    /// the person's (EntryEditorPage's rule).</summary>
+    private string? _set;
+    private string? _chosen;
     private readonly ContentDialog _dialog;
     private bool _drawing;
     private Watch? _watch;
@@ -286,11 +295,11 @@ internal sealed class PlaceEditor
     {
         _window = window;
         _place = place;
-        var content = new StackPanel { Spacing = 10, MinWidth = 520 };
+        var content = new StackPanel { Spacing = 10, MinWidth = 680 };
         if (map is { } m)
         {
             _map = new RasterMap(window, m, closesItself: false);
-            _map.View.Height = 300;
+            _map.View.Height = 340;
             content.Children.Add(_map.View);
         }
         var modeLine = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
@@ -309,7 +318,7 @@ internal sealed class PlaceEditor
         AutomationProperties.SetName(_levels, Words.MemoryPlaceName());
         _levels.SelectionChanged += (_, _) =>
         {
-            if (_drawing || _levels.SelectedItem is not ComboBoxItem { Tag: string level }) return;
+            if (_drawing || _levels.SelectedItem is not ComboBoxItem { Tag: string level } || level == _chosen) return;
             Log.Write($"place editor: level {level}");
             Act.Send(new Call.PlaceLevel { place = _place, level = level });
         };
@@ -318,6 +327,12 @@ internal sealed class PlaceEditor
         _name.TextChanged += (_, _) =>
         {
             if (_drawing) return;
+            if (_set is { } set && set == _name.Text)
+            {
+                _set = null;
+                return;
+            }
+            _set = null;
             _typed.Sent(_name.Text);
             Act.Send(new Call.PlaceName { place = _place, name = _name.Text });
         };
@@ -405,7 +420,11 @@ internal sealed class PlaceEditor
             _moveHint.Text = Words.MemoryPlaceMoveToSet();
             _moveHint.Visibility = s.withMap ? Visibility.Visible : Visibility.Collapsed;
             _follow.Visibility = s.canFollow && s.mode == PlaceMode.Fixed ? Visibility.Visible : Visibility.Collapsed;
-            if (_typed.Take(_name.FocusState != FocusState.Unfocused, _name.Text, s.name) is { } text) _name.Text = text;
+            if (_typed.Take(_name.FocusState != FocusState.Unfocused, _name.Text, s.name) is { } text)
+            {
+                _set = text;
+                _name.Text = text;
+            }
             var levels = s.levels.Select(l => l.level).ToList();
             var drawn = _levels.Items.OfType<ComboBoxItem>().Select(i => (i.Tag as string, i.Content as string)).ToList();
             if (!drawn.SequenceEqual(s.levels.Select(l => ((string?)l.level, (string?)l.name))))
@@ -418,6 +437,7 @@ internal sealed class PlaceEditor
                     _levels.Items.Add(item);
                 }
             }
+            _chosen = s.chosenLevel;
             _levels.SelectedIndex = s.chosenLevel is { } chosen ? levels.IndexOf(chosen) : -1;
             _levels.Visibility = s.levelPicker && s.naming == PlaceNaming.Geocoded && s.levels.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             _toggle.Content = s.naming == PlaceNaming.Geocoded ? Words.MemoryPlaceNameOwn() : Words.MemoryPlaceNameFromMap();

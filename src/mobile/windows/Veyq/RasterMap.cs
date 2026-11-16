@@ -64,7 +64,7 @@ internal sealed class RasterMap : IDisposable
     private readonly StackPanel _chrome = new() { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(8) };
     private readonly FontIcon _centrePin = new()
     {
-        Glyph = "", FontSize = 32, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        Glyph = "", FontSize = 32, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
         IsHitTestVisible = false, Visibility = Visibility.Collapsed,
         // its point at the map's centre: the glyph's foot, half its height above the middle
         RenderTransform = new TranslateTransform { Y = -16 },
@@ -127,13 +127,14 @@ internal sealed class RasterMap : IDisposable
         };
         AutomationProperties.SetAutomationId(_attributionText, $"map-attribution:{map}");
         _root.Children.Add(_attribution);
-        _chrome.Children.Add(ChromeButton(Symbol.Map, Words.MapOff(), "map-off", () =>
+        // "Turn map services off": Fluent's power glyph, the switch's own sign
+        _chrome.Children.Add(ChromeButton(new FontIcon { Glyph = "", FontSize = 16 }, Words.MapOff(), "map-off", () =>
         {
             Log.Write($"map {_map}: turn map services off");
             Act.Send(new Call.MapTurnOff());
         }));
-        _chrome.Children.Add(ChromeButton(Symbol.ZoomIn, Words.MapZoomIn(), "map-zoom-in", () => ZoomBy(1, _width / 2, _height / 2)));
-        _chrome.Children.Add(ChromeButton(Symbol.ZoomOut, Words.MapZoomOut(), "map-zoom-out", () => ZoomBy(-1, _width / 2, _height / 2)));
+        _chrome.Children.Add(ChromeButton(new SymbolIcon(Symbol.ZoomIn), Words.MapZoomIn(), "map-zoom-in", () => ZoomBy(1, _width / 2, _height / 2)));
+        _chrome.Children.Add(ChromeButton(new SymbolIcon(Symbol.ZoomOut), Words.MapZoomOut(), "map-zoom-out", () => ZoomBy(-1, _width / 2, _height / 2)));
         _chrome.Visibility = Visibility.Collapsed;
         _root.Children.Add(_chrome);
         _root.Children.Add(_status);
@@ -156,9 +157,9 @@ internal sealed class RasterMap : IDisposable
 
     /// <summary>A button of the map's own (Windows Maps' at its top end): an icon, its name for a screen reader and its
     /// tooltip.</summary>
-    private static Button ChromeButton(Symbol symbol, string name, string id, Action act)
+    private static Button ChromeButton(IconElement icon, string name, string id, Action act)
     {
-        var button = new Button { Content = new SymbolIcon(symbol), Padding = new Thickness(6), Width = 36, Height = 36 };
+        var button = new Button { Content = icon, Padding = new Thickness(6), Width = 36, Height = 36 };
         AutomationProperties.SetAutomationId(button, id);
         AutomationProperties.SetName(button, name);
         ToolTipService.SetToolTip(button, name);
