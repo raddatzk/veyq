@@ -220,6 +220,9 @@ class GalleryModel(
         val date: me.raddatz.veyq.mobile.memories.place.MemoryDate
             get() = me.raddatz.veyq.mobile.memories.place.MemoryDate.effective(facts?.date, autoRange)
 
+        /** Whether the date and the place may be edited here (their editors, ADR 0143 D5): the meta writable by whoever looks, online. */
+        val editsFacts: Boolean get() = rights.editMeta && offline == null
+
         /** Every photo's GPS point (the place editor's dots and the Map view's). */
         val gpsPoints: List<me.raddatz.veyq.mobile.map.LatLng>
             get() = me.raddatz.veyq.mobile.memories.place.MemoryLocation.gpsPoints(rows.orEmpty().map { it.item })

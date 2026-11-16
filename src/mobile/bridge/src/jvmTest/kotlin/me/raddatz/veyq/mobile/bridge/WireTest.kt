@@ -83,6 +83,7 @@ class WireTest {
         me = "user-1", pictures = listOf("user-1", "user-2"),
     )
     private val memory = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "m-1", "MEMORY", "Ostsee 2026")
+    private val pin = PinShown(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "m-1", "MEMORY", "Ostsee 2026"), ObjectRef("scope-1", "m-1", "MEMORY", ApplicationId.MEMORIES, "Ostsee 2026"), "m-1")
     private val nowPlaying = NowPlayingShown("t1", "Fado", "Ostsee 2026", ObjectRef("scope-1", "m-1", "MEMORY", ApplicationId.MEMORIES, "Ostsee 2026"), true, 61_500, 187_000)
     private val photo = GalleryRow("m1", "IMG_0001.jpg", "image/jpeg", video = false, blocked = false, tile = "blob-t1", picture = "blob-p1",
         capturedAt = 1_790_000_000_000, width = 4000, height = 3000, said = null, canDelete = true)
@@ -90,7 +91,7 @@ class WireTest {
 
     /** Each root's values: every variant of a sealed root once. */
     private val samples: Map<KSerializer<*>, List<Any>> = mapOf(
-        Config.serializer() to listOf(Config("Fedora 44", 0, ""), Config("WIN-VM", 0x2051C, "veyq wants to open your account", "C:\\Users\\p\\AppData\\Local\\veyq\\offline"), Config("Fedora 44", 0, "", "/home/p/.local/share/veyq/offline")),
+        Config.serializer() to listOf(Config("Fedora 44", 0, ""), Config("WIN-VM", 0x2051C, "veyq wants to open your account", "C:\\Users\\p\\AppData\\Local\\veyq\\offline"), Config("Fedora 44", 0, "", "/home/p/.local/share/veyq/offline"), Config("Fedora 44", 0, "", null, "de")),
         Call.serializer() to listOf(
             Call.SessionStart, Call.SessionSignIn("veyq.localhost:8080", "p@example.org", "typed", "A3-TYPED"),
             Call.SessionStaySignedIn(StaySignedIn.PRESENCE), Call.SessionStaySignedIn(StaySignedIn.LOGIN), Call.SessionNotNow,
@@ -181,9 +182,21 @@ class WireTest {
             Call.MusicDownload(80, "t1", "C:\\Users\\p\\Musik\\Fado.mp3"), Call.MusicReport(80, "t1"),
             Call.MusicAdd(80, listOf("/home/p/Musik/Fado.mp3", "/home/p/Musik/Alfama 中文.m4a")), Call.MusicSeen(80),
             Call.AudioEnded(90, 3), Call.AudioFailed(91, 4),
+            Call.MapOpenMemories, Call.MapView(100, null, null, null, 800.0, 600.0, 2.0), Call.MapView(100, 0.537, 0.3278, 12.5, 800.0, 600.0, 1.25),
+            Call.MapTile(100, "12/2200/1343"), Call.MapTap(100, "m-1"), Call.MapClose(100), Call.MapTurnOn, Call.MapTurnOff, Call.MemoriesDates,
+            Call.LightboxMap(61, "m1"), Call.LightboxPlace(61, "m1"), Call.DateOpen(60), Call.DateChoose(101, DateMode.RANGE),
+            Call.DateFrom(101, "2026-07-01"), Call.DateTo(101, ""), Call.DateSave(101), Call.DateClose(101), Call.PlaceOpen(60),
+            Call.PlaceTyped(102, "Am Kupfergraben 中文"), Call.PlaceLevel(102, "city"), Call.PlaceToggleName(102), Call.PlaceFollow(102),
+            Call.PlaceSave(102), Call.PlaceRemove(102), Call.PlaceClose(102), Call.TracksOpen(60), Call.TracksClose(103),
+            Call.TracksShow(103, "t1", false), Call.TracksSelect(103, "t1"), Call.TracksSelect(103, null),
+            Call.TracksAdd(103, listOf("/home/p/Touren/Spree.gpx", "C:\\Users\\p\\Touren\\Alpen.gpx")),
+            Call.TracksConfirm(103, listOf(TrackLabelShown("Morgenrunde", "cycling"), TrackLabelShown(null, null))), Call.TracksCancel(103),
+            Call.TracksEdit(103, "t1", TrackLabelShown("Spree", "running")), Call.TracksRemove(103, "t1"),
+            Call.TracksDownload(103, "t1", "/home/p/Downloads/Spree.gpx"), Call.TracksReport(103, "t1"), Call.TracksSeen(103),
         ),
         Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.DropBox(30), Watched.Scan(40), Watched.Link(70), Watched.Settings(50),
-            Watched.Gallery(60), Watched.GalleryLive(60), Watched.SettingsStorageLive(50), Watched.Lightbox(61), Watched.Player, Watched.Music(80)),
+            Watched.Gallery(60), Watched.GalleryLive(60), Watched.SettingsStorageLive(50), Watched.Lightbox(61), Watched.Player, Watched.Music(80),
+            Watched.Map(100), Watched.MapServices, Watched.Date(101), Watched.Place(102), Watched.Tracks(103)),
         HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full"), HostReply.Pixels(2400, 3394),
             HostReply.Tiers(2048, 1536, 412_000), HostReply.Tiers(null, null, 0)),
         Answer.serializer() to listOf(
@@ -222,6 +235,13 @@ class WireTest {
             Answer.MediumDetails(emptyList(), null, 0),
             Answer.MusicOpened(80), Answer.MusicAdded(listOf(Notice(Msg.MUSIC_NOT_AUDIO, listOf("notes.txt")))), Answer.MusicAdded(emptyList()),
             Answer.Refused(Answer.Why.NO_PLAYER), Answer.Refused(Answer.Why.NO_SUCH_MUSIC), Answer.Refused(Answer.Why.NO_SUCH_DECK),
+            Answer.MediumDetails(emptyList(), null, 0, map = true), Answer.MapOpened(100), Answer.MapTapped(pin, emptyList()), Answer.MapTapped(null, listOf(pin, pin)),
+            Answer.MemoryDates(listOf(NodeDate("m-1", MemoryDateShown(DateMode.ONGOING, "2026-07-01", null)))), Answer.PlaceResolved("Mitte"), Answer.PlaceResolved(null),
+            Answer.DateOpened(101), Answer.PlaceOpened(102, 100), Answer.PlaceOpened(102, null), Answer.TracksOpened(103, 100), Answer.TracksOpened(103, null),
+            Answer.FactsSaved(FactsSave.SAVED), Answer.FactsSaved(FactsSave.REOPENED), Answer.FactsSaved(FactsSave.FAILED),
+            Answer.TracksAdded(listOf(Notice(Msg.TRACK_PROBLEM_INVALID, listOf("notes.gpx")))),
+            Answer.Refused(Answer.Why.NO_SUCH_MAP), Answer.Refused(Answer.Why.NO_MAP_SERVICES), Answer.Refused(Answer.Why.NO_SUCH_DATE),
+            Answer.Refused(Answer.Why.NO_SUCH_PLACE), Answer.Refused(Answer.Why.NO_SUCH_TRACKS),
         ),
         Update.serializer() to listOf(
             Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080")),
@@ -436,6 +456,34 @@ class WireTest {
                 canAdd = true, canRename = true, canDownload = true, canReport = false, offline = false, checking = true, said = Notice(Msg.MUSIC_RENAME_CONFLICT),
             )),
             Update.Music(80, MusicShown(memory, null, false, false, false, false, true, false, null)), Update.Music(81, null),
+            Update.Gallery(60, GalleryShown(memory, null, false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,
+                date = MemoryDateShown(DateMode.RANGE, "2026-07-01", "2026-07-14"), place = "Berlin", editsFacts = true, tracks = 2)),
+            Update.Map(100, MapShown(
+                MapStatus.Shown, MapViewShown(52.52, 13.405, 0.537236, 0.327917, 12.5, 800.0, 600.0, 1),
+                listOf(TileShown("12/2200/1343", 2200.0 / 4096, 1343.0 / 4096, 1.0 / 4096)), "© OpenStreetMap contributors",
+                listOf(TrackLineShown("t1", 0xFFE6194BL, listOf(10, 7), true, listOf(listOf(MapPointShown(0.5372, 0.3279), MapPointShown(0.5373, 0.3280))))),
+                listOf(MapPointShown(0.5372, 0.3279)), listOf(ClusterShown(MapPointShown(0.5372, 0.3279), 2, pin)), PhotoShown(MapPointShown(0.5372, 0.3279), 270), centrePin = true,
+            )),
+            Update.Map(100, MapShown(MapStatus.Consent("tile.openstreetmap.org", null, renewal = true), null, emptyList(), null, emptyList(), emptyList(), emptyList(), null, false)),
+            Update.Map(100, MapShown(MapStatus.NotOffered, null, emptyList(), null, emptyList(), emptyList(), emptyList(), null, false)),
+            Update.Map(100, MapShown(MapStatus.Offline, null, emptyList(), null, emptyList(), emptyList(), emptyList(), null, false)), Update.Map(104, null),
+            Update.MapServices(MapServicesShown(MapStatus.Shown, "tile.openstreetmap.org", "nominatim.openstreetmap.org")), Update.MapServices(null),
+            Update.Date(101, DateShown(DateMode.RANGE, "2026-07-20", "2026-07-14", rangeInvalid = true, canSave = false, auto = MemoryDateShown(DateMode.AUTO, null, null))),
+            Update.Date(101, null),
+            Update.Place(102, PlaceShown(true, PlaceMode.FIXED, "Berlin", PlaceNaming.GEOCODED, listOf(LevelShown("suburb", "Mitte"), LevelShown("city", "Berlin")), "city",
+                levelPicker = true, canSave = true, canFollow = true, canRemove = false)),
+            Update.Place(102, PlaceShown(false, PlaceMode.AUTO, "", PlaceNaming.MANUAL, emptyList(), null, false, false, false, true)), Update.Place(102, null),
+            Update.Tracks(103, TracksShown(
+                memory, listOf(
+                    TrackShown("t1", "Spree", 1, "Spree", null, "cycling", listOf(10, 7), "Spree.gpx", 0xFFE6194BL, TrackStatus.READY,
+                        listOf(TrackFactShown(12.3, true, null), TrackFactShown(null, false, Notice(Msg.TRACK_DURATION_HOURS, listOf(1, 5)))),
+                        shown = true, selected = false, blocked = false, canRemove = true),
+                    TrackShown("t2", null, 2, null, null, null, null, null, 0xFF3CB44BL, TrackStatus.LOADING, emptyList(), false, false, true, false),
+                ),
+                listOf("hiking", "cycling"), canAdd = true, canEdit = true, canDownload = true, canReport = false, offline = false, checking = true,
+                asking = listOf(AskedTrackShown("Alpen.gpx", "Alpen"), AskedTrackShown("track.gpx", null)), said = Notice(Msg.TRACK_EDIT_CONFLICT),
+            )),
+            Update.Tracks(103, TracksShown(memory, null, emptyList(), false, false, false, false, true, false, emptyList(), null)), Update.Tracks(104, null),
         ),
         HostRequest.serializer() to listOf(HostRequest.StoreRead("veyq.recent"), HostRequest.StoreWrite("veyq.recent", "s\tn\t1"), HostRequest.StoreRemove("veyq.recent"),
             HostRequest.PdfPages("/home/p/Notfall-Kit.pdf"), HostRequest.PdfPage("/home/p/Notfall-Kit.pdf", 2, 2400), HostRequest.PictureLuma("/home/p/kit.jpg", 2400),

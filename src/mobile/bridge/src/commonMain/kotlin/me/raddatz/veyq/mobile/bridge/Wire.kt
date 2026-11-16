@@ -48,11 +48,12 @@ internal val wire = Json {
  * for a prompt without an owner); [prompt] the words that prompt shows (the host's `device_unlock_prompt`, empty where
  * none shows); [offlineRoot] the directory the host names for the accounts' offline stores (ADR 0140 decision 3:
  * `$XDG_DATA_HOME/veyq/offline` on Linux, the app's data folder's `offline` on Windows), null where it keeps none — the
- * core makes and fills it, each bridge host a desktop, so a store starts with `AccountOffline.DESKTOP_LIMIT`. None of
- * them secret: the device keys themselves are the core's (`platformDeviceKeys`).
+ * core makes and fills it, each bridge host a desktop, so a store starts with `AccountOffline.DESKTOP_LIMIT`; [language]
+ * the app's words' language (`en`, `de`), the geocoder's `accept-language` as the web's is the reader's (ADR 0143
+ * decision 2). None of them secret: the device keys themselves are the core's (`platformDeviceKeys`).
  */
 @Serializable
-internal class Config(val device: String, val window: Long = 0, val prompt: String = "", val offlineRoot: String? = null)
+internal class Config(val device: String, val window: Long = 0, val prompt: String = "", val offlineRoot: String? = null, val language: String = "en")
 
 /**
  * One action of the host ([veyq_call]): each a model's own function, dispatched by [Bridge] one line per case. The
@@ -978,6 +979,154 @@ internal sealed class Call {
 
     /** Deck [deck]'s platform player stopped playing load [load] after it loaded (a stream error: `Deck.Events.failed`). */
     @Serializable @SerialName("Audio.Failed") data class AudioFailed(val deck: Long, val load: Long) : Call()
+
+    // --- a Memory's date, place and maps (ADR 0143): the core's raster map, the editors, the Map view ---------------------
+
+    /**
+     * The Memories bar's Map tab (`ShellModel.memoriesMap` over the application's All list, ADR 0143 decision 6): every
+     * located Memory a pin, answered with the map's id ([Answer.MapOpened]) for [Watched.Map] and the `Map.*` calls; it
+     * closes with [MapClose] or the tenant. Refused `NO_MAP_SERVICES` where the tenant has no map services.
+     */
+    @Serializable @SerialName("Map.OpenMemories") data object MapOpenMemories : Call()
+
+    /**
+     * What map [map] shows (ADR 0143 decision 11): its centre ([x], [y]) in normalised Web Mercator space and its fractional
+     * [zoom], its size in layout pixels and the host's pixels per layout pixel ([scale], carried for the host's own drawing:
+     * the tiles are chosen in layout pixels, as the web's). Sent as a gesture settles and at most every 100 ms during one;
+     * a centre moved by the host is the member's (a place's map then takes it as the place, `PlaceEditor.frame`). Without
+     * a centre (the first, and a resize) the size alone: the map opens at the core's view for that size, or keeps its own.
+     * Applied in the order the host called. The core's view comes back in [MapShown.view]; the host adopts it when its
+     * [MapViewShown.moved] turns.
+     */
+    @Serializable @SerialName("Map.View") data class MapView(
+        val map: Long, val x: Double?, val y: Double?, val zoom: Double?, val width: Double, val height: Double, val scale: Double,
+    ) : Call()
+
+    /**
+     * Tile [tile] (`z/x/y`, a [TileShown.tile] of the view shown) of map [map]: its bytes as the tile host served them
+     * (PNG or JPEG, decoded by the host), [Answer.Bytes] (ADR 0137 decision 1). Refused `NO_BYTES` for a tile not in view,
+     * before the consent, after a withdrawal, or one the host did not answer; the host translates its last frame by the
+     * drag meanwhile.
+     */
+    @Serializable @SerialName("Map.Tile") data class MapTile(val map: Long, val tile: String) : Call()
+
+    /**
+     * A tap on the cluster whose first pin is node [nodeId] ([ClusterShown.pin]) of the Memories map [map]
+     * (`MemoriesMap.tap`): [Answer.MapTapped] — its one Memory to open, or its pins listed where they share a spot; else
+     * the map frames them (its view moved). Refused `NOT_OFFERED` on a map without pins.
+     */
+    @Serializable @SerialName("Map.Tap") data class MapTap(val map: Long, val nodeId: String) : Call()
+
+    @Serializable @SerialName("Map.Close") data class MapClose(val map: Long) : Call()
+
+    /**
+     * This device's consent to the tenant's map services given for the hosts served now (`MapServices.turnOn`: the consent's
+     * *Turn on*, on a map and in the settings), or withdrawn (`turnOff`: *Turn map services off*), which stops every map at
+     * once. Refused `NO_MAP_SERVICES` while no tenant with map services is open.
+     */
+    @Serializable @SerialName("Map.TurnOn") data object MapTurnOn : Call()
+    @Serializable @SerialName("Map.TurnOff") data object MapTurnOff : Call()
+
+    /** The date of every Memory and chapter this tenant opens (`ShellModel.memoryDates`): a Memories row's second line. */
+    @Serializable @SerialName("Memories.Dates") data object MemoriesDates : Call()
+
+    /**
+     * Medium [mediaId]'s small map in lightbox [lightbox]'s details (`Lightbox.Details.map`, ADR 0143 decision 7): its
+     * point at zoom 15 with its direction, [Answer.MapOpened]; it closes with the lightbox. Refused `NOT_OFFERED` for a
+     * medium without GPS ([Answer.MediumDetails.map] false).
+     */
+    @Serializable @SerialName("Lightbox.Map") data class LightboxMap(val lightbox: Long, val mediaId: String) : Call()
+
+    /**
+     * Medium [mediaId]'s place name resolved once, as its details show (`Lightbox.resolvePlace`; never while the slideshow
+     * runs): [Answer.PlaceResolved] with the name sealed, or none.
+     */
+    @Serializable @SerialName("Lightbox.Place") data class LightboxPlace(val lightbox: Long, val mediaId: String) : Call()
+
+    /**
+     * Gallery [gallery]'s date editor (`ShellModel.dateEditor`, ADR 0143 decision 5), answered [Answer.DateOpened] for
+     * [Watched.Date]; refused `NOT_OFFERED` where whoever looks may not edit its meta or offline ([GalleryShown.editsFacts]).
+     * It closes with [DateClose], its gallery or the tenant. Its fields are set in the order the host called.
+     */
+    @Serializable @SerialName("Date.Open") data class DateOpen(val gallery: Long) : Call()
+    @Serializable @SerialName("Date.Mode") data class DateChoose(val date: Long, val mode: DateMode) : Call()
+
+    /** The start day (`yyyy-MM-dd`, the host's date picker's), or empty. */
+    @Serializable @SerialName("Date.From") data class DateFrom(val date: Long, val day: String) : Call()
+    @Serializable @SerialName("Date.To") data class DateTo(val date: Long, val day: String) : Call()
+
+    /** Saves what the fields hold (`DateEditor.save`): [Answer.FactsSaved]; refused `NOT_TAKEN` where nothing may be saved. */
+    @Serializable @SerialName("Date.Save") data class DateSave(val date: Long) : Call()
+    @Serializable @SerialName("Date.Close") data class DateClose(val date: Long) : Call()
+
+    /**
+     * Gallery [gallery]'s place editor (`ShellModel.placeEditor`, ADR 0143 decision 5), answered [Answer.PlaceOpened] with
+     * its map's id (null without map services) for [Watched.Place] and [Watched.Map]; a member's pan of that map
+     * ([MapView] with a centre) is the place's frame. Refused `NOT_OFFERED` as [DateOpen]. It closes with [PlaceClose] (its
+     * map too), its gallery or the tenant.
+     */
+    @Serializable @SerialName("Place.Open") data class PlaceOpen(val gallery: Long) : Call()
+
+    /** The member typed [name] as the place's name (`PlaceEditor.typeName`): theirs now. Applied in the order the host called. */
+    @Serializable @SerialName("Place.Name") data class PlaceTyped(val place: Long, val name: String) : Call()
+
+    /** The level picked from the picker ([LevelShown.level], `PlaceEditor.pickLevel`). */
+    @Serializable @SerialName("Place.Level") data class PlaceLevel(val place: Long, val level: String) : Call()
+
+    /** Between an own name and the map's (`PlaceEditor.toggleNameMode`). */
+    @Serializable @SerialName("Place.ToggleName") data class PlaceToggleName(val place: Long) : Call()
+
+    /** *Follow the photos* (`PlaceEditor.followAgain`): the place is the photos' medoid again, and its map moves there. */
+    @Serializable @SerialName("Place.Follow") data class PlaceFollow(val place: Long) : Call()
+
+    /** Saves the place the fields hold (`PlaceEditor.save`): [Answer.FactsSaved]; refused `NOT_TAKEN` without a name. */
+    @Serializable @SerialName("Place.Save") data class PlaceSave(val place: Long) : Call()
+
+    /** *Remove place* (`PlaceEditor.remove`): the date and the cover kept. [Answer.FactsSaved]. */
+    @Serializable @SerialName("Place.Remove") data class PlaceRemove(val place: Long) : Call()
+    @Serializable @SerialName("Place.Close") data class PlaceClose(val place: Long) : Call()
+
+    /**
+     * Gallery [gallery]'s Map view (`ShellModel.trackList`, core's `TrackList`, ADR 0143 decision 8): its tracks read one at
+     * a time while it is open, answered [Answer.TracksOpened] with its map's id (null without map services: the list alone)
+     * for [Watched.Tracks] and [Watched.Map]. It closes with [TracksClose] (its map too), its gallery or the tenant.
+     */
+    @Serializable @SerialName("Tracks.Open") data class TracksOpen(val gallery: Long) : Call()
+    @Serializable @SerialName("Tracks.Close") data class TracksClose(val tracks: Long) : Call()
+
+    /** Track [mediaId] shown on the map or hidden (`TrackList.setShown`; this view only). */
+    @Serializable @SerialName("Tracks.Show") data class TracksShow(val tracks: Long, val mediaId: String, val shown: Boolean) : Call()
+
+    /** Track [mediaId] selected (`TrackList.select`; null: none): drawn heavier, and its map frames it. */
+    @Serializable @SerialName("Tracks.Select") data class TracksSelect(val tracks: Long, val mediaId: String?) : Call()
+
+    /**
+     * The GPX files at [paths] (as the host's open dialog gave them, filtered to `.gpx`) offered as tracks (`TrackList.add`):
+     * each checked on the device; [Answer.TracksAdded] with what is said of those refused, the rest asked for their labels
+     * ([TracksShown.asking]) before anything is uploaded. A path that is no file that reads is left out.
+     */
+    @Serializable @SerialName("Tracks.Add") data class TracksAdd(val tracks: Long, val paths: List<String>) : Call()
+
+    /** The asked files uploaded with [labels], one per [TracksShown.asking] in its order (`TrackList.confirm`): [Answer.Queued]. */
+    @Serializable @SerialName("Tracks.Confirm") data class TracksConfirm(val tracks: Long, val labels: List<TrackLabelShown>) : Call()
+
+    /** *Cancel* on the labels (`TrackList.cancel`): nothing is uploaded. */
+    @Serializable @SerialName("Tracks.Cancel") data class TracksCancel(val tracks: Long) : Call()
+
+    /** Track [mediaId] labelled [label] (`TrackList.edit`): [Answer.Said] with why it did not land, or none. */
+    @Serializable @SerialName("Tracks.Edit") data class TracksEdit(val tracks: Long, val mediaId: String, val label: TrackLabelShown) : Call()
+
+    /** Track [mediaId] deleted the gallery's way (`TrackList.remove`): [GalleryTrash]'s answers; its Undo is [GalleryUndo]. */
+    @Serializable @SerialName("Tracks.Remove") data class TracksRemove(val tracks: Long, val mediaId: String) : Call()
+
+    /** Track [mediaId]'s GPX saved into the file at [path] the host's save dialog gave (`TrackList.save`): [Answer.Saving]. */
+    @Serializable @SerialName("Tracks.Download") data class TracksDownload(val tracks: Long, val mediaId: String, val path: String) : Call()
+
+    /** Track [mediaId]'s report, an ITEM (`TrackList.reportSheet`): [Answer.ReportOpened]; refused `NOT_OFFERED`. */
+    @Serializable @SerialName("Tracks.Report") data class TracksReport(val tracks: Long, val mediaId: String) : Call()
+
+    /** What [TracksShown.said] said was seen (`TrackList.seen`). */
+    @Serializable @SerialName("Tracks.Seen") data class TracksSeen(val tracks: Long) : Call()
 }
 
 /**
@@ -1153,13 +1302,50 @@ internal sealed class Answer {
      * A medium's details ([Call.LightboxDetails]), in the web's order: each row with its label and how it shows; who added
      * it ([uploader]; null: not known) and where that row stands among them ([uploaderAt], `MediaDetails.uploaderAt`).
      */
-    @Serializable @SerialName("MediumDetails") data class MediumDetails(val rows: List<DetailRow>, val uploader: Piece?, val uploaderAt: Int) : Answer()
+    @Serializable @SerialName("MediumDetails") data class MediumDetails(
+        val rows: List<DetailRow>, val uploader: Piece?, val uploaderAt: Int,
+        /** Whether the medium has a small map ([Call.LightboxMap]: its GPS, `Lightbox.Details.map`). */
+        val map: Boolean = false,
+    ) : Answer()
 
     /** A page's Music view opened ([Call.MusicOpen]): its id, for [Watched.Music] and its calls. */
     @Serializable @SerialName("MusicOpened") data class MusicOpened(val music: Long) : Answer()
 
     /** Picked files added as tracks ([Call.MusicAdd]): what is said of each one refused, in the order picked (none: all queued). */
     @Serializable @SerialName("MusicAdded") data class MusicAdded(val said: List<Notice>) : Answer()
+
+    /** A map opened ([Call.MapOpenMemories], [Call.LightboxMap]): its id, for [Watched.Map] and the `Map.*` calls. */
+    @Serializable @SerialName("MapOpened") data class MapOpened(val map: Long) : Answer()
+
+    /**
+     * A cluster tapped ([Call.MapTap]): the Memory to open ([open]: [PinShown.page] through `Shell.Open`), or the pins
+     * that share a spot ([listed]); both empty where the map framed them (its view moved).
+     */
+    @Serializable @SerialName("MapTapped") data class MapTapped(val open: PinShown?, val listed: List<PinShown>) : Answer()
+
+    /** Each Memory's and chapter's date by its node ([Call.MemoriesDates]). */
+    @Serializable @SerialName("MemoryDates") data class MemoryDates(val dates: List<NodeDate>) : Answer()
+
+    /** A photo's place name ([Call.LightboxPlace]): the name sealed now, or null. */
+    @Serializable @SerialName("PlaceResolved") data class PlaceResolved(val name: String?) : Answer()
+
+    /** A date editor opened ([Call.DateOpen]). */
+    @Serializable @SerialName("DateOpened") data class DateOpened(val date: Long) : Answer()
+
+    /** A place editor opened ([Call.PlaceOpen]) and its map (null: no map services). */
+    @Serializable @SerialName("PlaceOpened") data class PlaceOpened(val place: Long, val map: Long?) : Answer()
+
+    /** A Map view opened ([Call.TracksOpen]) and its map (null: no map services). */
+    @Serializable @SerialName("TracksOpened") data class TracksOpened(val tracks: Long, val map: Long?) : Answer()
+
+    /**
+     * What an editor's save came to (`EditorSave`): saved; re-opened on a peer's value written meanwhile (the editor's state
+     * shows it now); or failed.
+     */
+    @Serializable @SerialName("FactsSaved") data class FactsSaved(val outcome: FactsSave) : Answer()
+
+    /** Picked GPX files offered ([Call.TracksAdd]): what is said of each one refused, in the order picked. */
+    @Serializable @SerialName("TracksAdded") data class TracksAdded(val said: List<Notice>) : Answer()
 
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
@@ -1194,6 +1380,10 @@ internal sealed class Answer {
 
         /** The music: no player (no tenant open, or a composition without decks); no Music view by that id; no deck by that id. */
         NO_PLAYER, NO_SUCH_MUSIC, NO_SUCH_DECK,
+
+        /** The maps: no map by that id (closed, or its page or tenant was); the tenant has no map services; no date or place
+         *  editor, no Map view by that id. */
+        NO_SUCH_MAP, NO_MAP_SERVICES, NO_SUCH_DATE, NO_SUCH_PLACE, NO_SUCH_TRACKS,
     }
 }
 
@@ -1286,6 +1476,21 @@ internal sealed class Watched {
 
     /** A Music view opened by [Call.MusicOpen]. */
     @Serializable @SerialName("Music") data class Music(val music: Long) : Watched()
+
+    /** A map opened by [Call.MapOpenMemories], [Call.LightboxMap], [Call.PlaceOpen] or [Call.TracksOpen]. */
+    @Serializable @SerialName("Map") data class Map(val map: Long) : Watched()
+
+    /** The open tenant's map services (Settings → Map services): what a map shows and whom the consent names. */
+    @Serializable @SerialName("MapServices") data object MapServices : Watched()
+
+    /** A date editor opened by [Call.DateOpen]. */
+    @Serializable @SerialName("Date") data class Date(val date: Long) : Watched()
+
+    /** A place editor opened by [Call.PlaceOpen]. */
+    @Serializable @SerialName("Place") data class Place(val place: Long) : Watched()
+
+    /** A Map view opened by [Call.TracksOpen]. */
+    @Serializable @SerialName("Tracks") data class Tracks(val tracks: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -1366,6 +1571,21 @@ internal sealed class Update {
 
     /** A Music view; null for an id the bridge does not hold (closed, or its gallery or tenant was). */
     @Serializable @SerialName("Music") data class Music(val music: Long, val shown: MusicShown?) : Update()
+
+    /** A map; null for an id the bridge does not hold (closed, or its page or tenant was). */
+    @Serializable @SerialName("Map") data class Map(val map: Long, val shown: MapShown?) : Update()
+
+    /** The open tenant's map services; null while no tenant with map services is open. */
+    @Serializable @SerialName("MapServices") data class MapServices(val shown: MapServicesShown?) : Update()
+
+    /** A date editor; null once it closed (or its gallery or tenant did). */
+    @Serializable @SerialName("Date") data class Date(val date: Long, val shown: DateShown?) : Update()
+
+    /** A place editor; null once it closed (or its gallery or tenant did). */
+    @Serializable @SerialName("Place") data class Place(val place: Long, val shown: PlaceShown?) : Update()
+
+    /** A Map view; null once it closed (or its gallery or tenant did). */
+    @Serializable @SerialName("Tracks") data class Tracks(val tracks: Long, val shown: TracksShown?) : Update()
 }
 
 /**
@@ -1404,6 +1624,14 @@ internal class GalleryShown(
     val musicView: Boolean = false,
     /** This node's music is the player's queue now, playing or paused (the header's action then stops it). */
     val musicHere: Boolean = false,
+    /** The date the header's facts line shows (`GalleryModel.State.date`: a manual one as sealed, else the `auto` range); null before it reads. */
+    val date: MemoryDateShown? = null,
+    /** The place's name the facts line shows (`MemoryFacts.Facts.placeName`); null: none, or pending. */
+    val place: String? = null,
+    /** Whether the facts line's date and place open their editors ([Call.DateOpen], [Call.PlaceOpen]; `GalleryModel.State.editsFacts`). */
+    val editsFacts: Boolean = false,
+    /** How many GPX tracks the node holds (its Map view's, [Call.TracksOpen]; the view itself is offered always). */
+    val tracks: Int = 0,
 )
 
 /**
@@ -1526,6 +1754,241 @@ internal class MusicTrackShown(
     val blocked: Boolean,
     val canRemove: Boolean,
 )
+
+/**
+ * A map as the host draws it (ADR 0143 decisions 1 and 11; the core's map: `MapServices`, `MapTiles.TileView`,
+ * `Viewport`): what its place shows ([state]); the view the core holds ([view]; null until the host's first
+ * [Call.MapView]); the tiles that cover it, each placed in normalised Web Mercator space and asked by its id with
+ * [Call.MapTile] — none unless [state] is shown —; the tile provider's [attribution], drawn beside it; and the overlays,
+ * every point projected by the core: the Map view's [tracks], the photos' [dots], the Memories map's [clusters], a photo's
+ * [photo], and the place editor's fixed pin at the centre ([centrePin]). The host's one formula from a normalised point
+ * `p` to its pixels is `((p.x − view.x) · 256 · 2^zoom + width/2, (p.y − view.y) · 256 · 2^zoom + height/2)`; nothing else
+ * is computed there. No address, key or token rides here: the tile host is named in [MapStatus.Consent] alone.
+ */
+@Serializable
+@SerialName("MapShown")
+internal class MapShown(
+    val state: MapStatus,
+    val view: MapViewShown?,
+    val tiles: List<TileShown>,
+    val attribution: String?,
+    val tracks: List<TrackLineShown>,
+    val dots: List<MapPointShown>,
+    val clusters: List<ClusterShown>,
+    val photo: PhotoShown?,
+    val centrePin: Boolean,
+)
+
+/** What a map's place shows (core's `MapState`). */
+@Serializable
+internal sealed class MapStatus {
+    /** No map is served (switched off, or not configured): no map. */
+    @Serializable @SerialName("MapState.NotOffered") data object NotOffered : MapStatus()
+
+    /** Offline: the capabilities were not read, so no map; the place says a map needs a connection. */
+    @Serializable @SerialName("MapState.Offline") data object Offline : MapStatus()
+
+    /**
+     * This device's consent is asked for the tile host [tileHost] and the geocoder host [geocoderHost] (host names, as
+     * the consent shows them; null where not served), [renewal] where an earlier consent named other hosts.
+     */
+    @Serializable @SerialName("MapState.Consent") data class Consent(val tileHost: String?, val geocoderHost: String?, val renewal: Boolean) : MapStatus()
+
+    /** The map is shown: the consent holds for the hosts served now. */
+    @Serializable @SerialName("MapState.Shown") data object Shown : MapStatus()
+}
+
+/**
+ * The view the core holds: its centre in degrees ([lat], [lng]) and in normalised Mercator space ([x], [y]), its
+ * fractional [zoom], its size in layout pixels; [moved] turns each time the core moved it itself (its opening, a cluster
+ * framed, *Follow the photos*, a track selected), so the host adopts it then and keeps its own gesture otherwise.
+ */
+@Serializable
+@SerialName("MapViewShown")
+internal class MapViewShown(
+    val lat: Double, val lng: Double, val x: Double, val y: Double, val zoom: Double, val width: Double, val height: Double, val moved: Long,
+)
+
+/** One tile in view (core's `PlacedTile`): its id `z/x/y` for [Call.MapTile], its top-left corner and edge in normalised space. */
+@Serializable
+@SerialName("TileShown")
+internal class TileShown(val tile: String, val x: Double, val y: Double, val size: Double)
+
+/** A point in normalised Web Mercator space (core's `MapPoint`). */
+@Serializable
+@SerialName("MapPointShown")
+internal class MapPointShown(val x: Double, val y: Double)
+
+/**
+ * A track's line on the Map view's map (core's `TrackList.Entry`, drawn while shown and read): its medium, its [color]
+ * (ARGB), its activity's [dash] (on-off lengths in pixels; null: solid), whether it is the selected one (drawn heavier),
+ * and each segment's simplified points.
+ */
+@Serializable
+@SerialName("TrackLineShown")
+internal class TrackLineShown(val mediaId: String, val color: Long, val dash: List<Int>?, val selected: Boolean, val segments: List<List<MapPointShown>>)
+
+/**
+ * A cluster of the Memories map at the zoom shown (core's `MemoriesMap.clusters`): drawn at its members' centroid [at],
+ * [count] Memories, its first [pin] (the one a lone pin shows, and the one [Call.MapTap] names it by).
+ */
+@Serializable
+@SerialName("ClusterShown")
+internal class ClusterShown(val at: MapPointShown, val count: Int, val pin: PinShown)
+
+/**
+ * A located Memory (core's `MemoriesMap.Pin`): its [node], its page ([page], what `Shell.Open` opens), and the node whose
+ * cover it shows ([cover]: its own id, asked with `Shell.RowCover`; null where its row has none).
+ */
+@Serializable
+@SerialName("PinShown")
+internal class PinShown(val node: NodeAt, val page: ObjectRef?, val cover: String?)
+
+/** A photo's point on its small map, with the direction it faced (whole degrees, true north; null: not known). */
+@Serializable
+@SerialName("PhotoShown")
+internal class PhotoShown(val at: MapPointShown, val direction: Int?)
+
+/**
+ * The tenant's map services as Settings → Map services shows them: what a map's place shows now ([state]) and the hosts
+ * this device's consent was given for ([consentTileHost], [consentGeocoderHost]; both null without one).
+ */
+@Serializable
+@SerialName("MapServicesShown")
+internal class MapServicesShown(val state: MapStatus, val consentTileHost: String?, val consentGeocoderHost: String?)
+
+/** A Memory's date mode (core's `MemoryDate.Mode`). */
+@Serializable
+internal enum class DateMode { AUTO, SINGLE, RANGE, ONGOING }
+
+/** A Memory's date (core's `MemoryDate`): its mode and its days (`yyyy-MM-dd`, the host says them; null: none). */
+@Serializable
+@SerialName("MemoryDateShown")
+internal class MemoryDateShown(val mode: DateMode, val from: String?, val to: String?)
+
+/** A node's date, by its id ([Answer.MemoryDates]). */
+@Serializable
+@SerialName("NodeDate")
+internal class NodeDate(val nodeId: String, val date: MemoryDateShown)
+
+/**
+ * The date editor as the host draws it (core's `DateEditor.State`): the [mode] and the two days its pickers hold, whether
+ * a range ends before it starts ([rangeInvalid], said, never saved), whether Save is offered, and the `auto` range the
+ * media give now ([auto], the auto mode's preview).
+ */
+@Serializable
+@SerialName("DateShown")
+internal class DateShown(val mode: DateMode, val from: String, val to: String, val rangeInvalid: Boolean, val canSave: Boolean, val auto: MemoryDateShown)
+
+/** How a place is positioned (core's `MemoryLocation.DerivedMode`) and named (`NameSource`). */
+@Serializable
+internal enum class PlaceMode { AUTO, FIXED }
+
+@Serializable
+internal enum class PlaceNaming { GEOCODED, MANUAL }
+
+/** One level of the reverse lookup (core's `GeoLevel`): its token ([level], what [Call.PlaceLevel] picks) and its name. */
+@Serializable
+@SerialName("LevelShown")
+internal class LevelShown(val level: String, val name: String)
+
+/**
+ * The place editor as the host draws it (core's `PlaceEditor.State`): whether its map stands ([withMap]; else the name
+ * field alone, the consent's offer where the map would stand), [mode] (`auto` follows the photos), the [name] and how it
+ * came ([naming]), the level picker's [levels] and the one chosen, whether the picker is offered ([levelPicker]), whether
+ * Save is offered, whether *Follow the photos* is ([canFollow]: the photos have a medoid) and *Remove place*
+ * ([canRemove]: the Memory has a place).
+ */
+@Serializable
+@SerialName("PlaceShown")
+internal class PlaceShown(
+    val withMap: Boolean,
+    val mode: PlaceMode,
+    val name: String,
+    val naming: PlaceNaming,
+    val levels: List<LevelShown>,
+    val chosenLevel: String?,
+    val levelPicker: Boolean,
+    val canSave: Boolean,
+    val canFollow: Boolean,
+    val canRemove: Boolean,
+)
+
+/** What an editor's save came to ([Answer.FactsSaved]). */
+@Serializable
+internal enum class FactsSave { SAVED, REOPENED, FAILED }
+
+/** What a member gives a GPX track ([Call.TracksConfirm], [Call.TracksEdit]): its own name (null: named by its file), its activity token. */
+@Serializable
+@SerialName("TrackLabelShown")
+internal class TrackLabelShown(val name: String?, val activity: String?)
+
+/** A track's read (core's `TrackList.Status`). */
+@Serializable
+internal enum class TrackStatus { LOADING, READY, FAILED }
+
+/**
+ * A Map view as the host draws it (core's `TrackList.State`, ADR 0143 decision 8): its [node], its [tracks] as the list
+ * orders them (null while the gallery's first read runs), the [activities] a track may be given (tokens, each said by its
+ * words), what it offers whoever looks ([canAdd], [canEdit], [canDownload], [canReport]; each track's delete
+ * [TrackShown.canRemove]), [offline] (read-only, no map), whether picked files are being checked ([checking]), the
+ * accepted files whose labels are asked now ([asking]: [Call.TracksConfirm] or [Call.TracksCancel]) and what the last add
+ * or edit left to say ([said], until [Call.TracksSeen]).
+ */
+@Serializable
+@SerialName("TracksShown")
+internal class TracksShown(
+    val node: NodeAt,
+    val tracks: List<TrackShown>?,
+    val activities: List<String>,
+    val canAdd: Boolean,
+    val canEdit: Boolean,
+    val canDownload: Boolean,
+    val canReport: Boolean,
+    val offline: Boolean,
+    val checking: Boolean,
+    val asking: List<AskedTrackShown>,
+    val said: Notice?,
+)
+
+/**
+ * One track as the Map view lists it (`TrackList.Entry`): its medium, its [name] (null: said by its [number]), the name
+ * it falls back to ([fileTrackName], the edit's hint), the member's own ([ownName]), its [activity] token and [dash], its
+ * file's name (the download's), its [color] (ARGB), its read's [status], the [facts] beside it, whether it is [shown] and
+ * [selected] on the map, whether the operator [blocked] it, and whether its delete is offered ([canRemove]).
+ */
+@Serializable
+@SerialName("TrackShown")
+internal class TrackShown(
+    val mediaId: String,
+    val name: String?,
+    val number: Int,
+    val fileTrackName: String?,
+    val ownName: String?,
+    val activity: String?,
+    val dash: List<Int>?,
+    val fileName: String?,
+    val color: Long,
+    val status: TrackStatus,
+    val facts: List<TrackFactShown>,
+    val shown: Boolean,
+    val selected: Boolean,
+    val blocked: Boolean,
+    val canRemove: Boolean,
+)
+
+/**
+ * One of a track's facts (core's `TrackFacts.Fact`): a distance — [distance] metres (whole) or kilometres (one decimal,
+ * [kilometres]), its number written in the host's locale — or a phrase in [words].
+ */
+@Serializable
+@SerialName("TrackFactShown")
+internal class TrackFactShown(val distance: Double?, val kilometres: Boolean, val words: Notice?)
+
+/** A picked file waiting for its label (`TrackList.Asked`): its name, and the name it falls back to (the field's hint). */
+@Serializable
+@SerialName("AskedTrackShown")
+internal class AskedTrackShown(val fileName: String, val fileTrackName: String?)
 
 /**
  * One row of a gallery's justified grid ([Answer.GridLayout], `MediaGridLayout.Row`): its [index] among all rows, its [top]

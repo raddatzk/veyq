@@ -141,6 +141,36 @@ class SecretFreeSchemaTest {
         assertTrue(holders.containsAll(setOf("State", "GalleryShown", "SettingsShown", "HeaderShown")), "the offline states ride elsewhere: $holders")
     }
 
+    /**
+     * A map crosses as its picture alone (ADR 0143 decision 11, the CR's phase 5): the tiles in view by their `z/x/y` and
+     * their place, the overlays as normalised points, the attribution and the hosts the consent names in fields of their
+     * own — never a tile's address, the template, the geocoder's address, a bearer or a cookie (a tile is asked by its id,
+     * `Map.Tile`, and its bytes ride beside the JSON). The map's outward shapes carry exactly these fields; one added is red
+     * here until it is named below, with why — and a field named like an address or a secret is red in the checks above.
+     */
+    @Test
+    fun aMapCrossesAsItsPictureAlone() {
+        val schema = Schema(Roots.outward)
+        val fields = schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }.groupBy({ it.owner }, { it.name })
+        fun of(name: String) = fields[name] ?: fields.entries.single { (owner, _) -> owner.endsWith(".$name") }.value
+        assertEquals(
+            listOf("state", "view", "tiles", "attribution", "tracks", "dots", "clusters", "photo", "centrePin"), of("MapShown"),
+            "a map says more than its state, its view, its tiles' places, its attribution and its overlays",
+        )
+        assertEquals(listOf("tile", "x", "y", "size"), of("TileShown"), "a tile says more than its z/x/y and its place")
+        assertEquals(listOf("tileHost", "geocoderHost", "renewal"), of("MapState.Consent"), "the consent names more than two hosts")
+        assertEquals(listOf("state", "consentTileHost", "consentGeocoderHost"), of("MapServicesShown"))
+        assertEquals(listOf("lat", "lng", "x", "y", "zoom", "width", "height", "moved"), of("MapViewShown"))
+        assertEquals(listOf("mediaId", "color", "dash", "selected", "segments"), of("TrackLineShown"), "a track's line says more than its points and its look")
+        assertEquals(listOf("node", "page", "cover"), of("PinShown"))
+        // the checks above against what they must refuse on a map
+        assertEquals(listOf("Mapped.tileUrl: a link's address"), addresses(listOf(Mapped.serializer()), linkAddresses))
+        assertEquals(listOf("Mapped.bearer: named like a secret", "Mapped.cookie: named like a secret"), leaks(listOf(Mapped.serializer()), identifiers))
+    }
+
+    @Serializable @kotlinx.serialization.SerialName("Mapped")
+    class Mapped(val tile: String, val tileUrl: String, val bearer: String?, val cookie: String?)
+
     @Serializable @kotlinx.serialization.SerialName("Paired")
     class Paired(val number: String, val handle: String, val payload: String, val grantEnvelope: String, val channel: String, val transport: String)
 
@@ -226,7 +256,7 @@ class SecretFreeSchemaTest {
     }
 
     companion object {
-        private val SECRET = Regex("key|seal|token|secret|passw|private|wrap", RegexOption.IGNORE_CASE)
+        private val SECRET = Regex("key|seal|token|secret|passw|private|wrap|bearer|authori[sz]|cookie|credential", RegexOption.IGNORE_CASE)
 
         /**
          * A key named as the web and the ADRs name one (`K_blob`, `K_share`, `kNode`): a `K` or `k` followed by an underscore

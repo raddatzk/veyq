@@ -22,6 +22,9 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.blob.RangeReader
+import me.raddatz.veyq.mobile.map.TileRecipient
+import me.raddatz.veyq.mobile.map.Viewport
+import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.blob.Sniff
 import me.raddatz.veyq.mobile.crypto.Primitives
 import me.raddatz.veyq.mobile.expenses.Currencies
@@ -113,6 +116,8 @@ internal class Composition<A : Connection, T : Any>(
      * or has none — then no player is made and no page plays music.
      */
     val audio: HostAudio? = null,
+    /** The app's words' language (`Config.language`): the geocoder's `accept-language` (ADR 0143 decision 2). */
+    val language: String = "en",
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
@@ -208,7 +213,50 @@ internal class Tenant(
     /** A list row's cover (`ShellModel.rowCover`): its frame and crop, its picture only where the host holds another frame. */
     val rowCover: (suspend (nodeId: String, held: String?) -> me.raddatz.veyq.mobile.session.NodeCover.Row?)? =
         shell?.let { s -> { nodeId, held -> s.rowCover(nodeId, held) } },
+    /**
+     * This tenant's map services on this device (`ShellModel.mapServices`, ADR 0143 decision 2): the tile host's map (a
+     * desktop draws the core's raster map), place names in [language]; one per tenant opened, closed when it closes. A
+     * test's tenant plays one over a tile server of its own, or has none (no map; the editors' name field alone).
+     */
+    val mapServices: ((language: () -> String) -> me.raddatz.veyq.mobile.map.MapServices)? =
+        shell?.let { s -> { language -> s.mapServices(TileRecipient.TILE_HOST, language) } },
+    /** A page's date editor (`ShellModel.dateEditor`): null where it is not offered. */
+    val dateEditor: ((gallery: me.raddatz.veyq.mobile.memories.GalleryModel) -> me.raddatz.veyq.mobile.memories.place.DateEditor?)? =
+        shell?.let { s -> { g -> s.dateEditor(g) } },
+    /** A page's place editor (`ShellModel.placeEditor`, over [mapServices]' place names): null where it is not offered. */
+    val placeEditor: ((gallery: me.raddatz.veyq.mobile.memories.GalleryModel) -> me.raddatz.veyq.mobile.memories.place.PlaceEditor?)? =
+        shell?.let { s -> { g -> s.placeEditor(g) } },
+    /**
+     * The Memories bar's Map tab (`ShellModel.memoriesMap`) over the application's All list as the shell holds it now (ADR
+     * 0143 decision 6: the Map tab's set is the All tab's).
+     */
+    val memoriesMap: (suspend () -> me.raddatz.veyq.mobile.memories.place.MemoriesMap)? = shell?.let { s ->
+        {
+            val all = s.state.value?.lists?.applicationList(ApplicationId.MEMORIES)?.all.orEmpty()
+            s.memoriesMap(all.map { NodeRef(it.scopeId, it.nodeId, null, it.kind, it.name) })
+        }
+    },
+    /** Every Memory's and chapter's date by node (`ShellModel.memoryDates`): a row's second line. */
+    val memoryDates: (suspend () -> Map<String, me.raddatz.veyq.mobile.memories.place.MemoryDate>)? = shell?.let { s -> { s.memoryDates() } },
+    /**
+     * A page's Map view (`ShellModel.trackList`) over the tenant's Memories [uploads]. A desktop reads each picked file in
+     * place, so one not taken needs nothing done. A test's tenant plays one over a door of its own.
+     */
+    val trackList: ((
+        gallery: me.raddatz.veyq.mobile.memories.GalleryModel, uploads: me.raddatz.veyq.mobile.memories.MediaUploads,
+    ) -> me.raddatz.veyq.mobile.memories.tracks.TrackList)? = shell?.let { s -> { g, uploads -> s.trackList(g, uploads, left = {}) } },
 )
+
+/** A date editor the host opened ([Call.DateOpen]) on gallery [gallery]. */
+internal class HeldDate(val gallery: Long, val model: me.raddatz.veyq.mobile.memories.place.DateEditor)
+
+/** A place editor the host opened ([Call.PlaceOpen]) on gallery [gallery], its map's id (null: no map services). */
+internal class HeldPlace(val gallery: Long, val page: me.raddatz.veyq.mobile.memories.GalleryModel, val model: me.raddatz.veyq.mobile.memories.place.PlaceEditor, val map: Long?) {
+    val open = MutableStateFlow(true)
+}
+
+/** A Map view the host opened ([Call.TracksOpen]) on gallery [gallery], its map's id (null: no map services). */
+internal class HeldTracks(val gallery: Long, val model: me.raddatz.veyq.mobile.memories.tracks.TrackList, val map: Long?)
 
 /** A Music view the host opened ([Call.MusicOpen]) over gallery [gallery]. */
 internal class HeldMusic(val gallery: Long, val model: me.raddatz.veyq.mobile.memories.music.MusicModel)
@@ -386,6 +434,17 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         }
     }
 
+    /**
+     * The open tenant's map services (ADR 0143 decision 2; null while none is open, or the tenant has none), the maps the
+     * host opened, and the pages' date and place editors and Map views: each the tenant's, gone when it closes — the
+     * services closed (their tiles dropped, the geocoder's queue cleared), every map's window closed.
+     */
+    private val mapServices = MutableStateFlow<me.raddatz.veyq.mobile.map.MapServices?>(null)
+    private val maps = Registry<HeldMap>()
+    private val dates = Registry<HeldDate>()
+    private val places = Registry<HeldPlace>()
+    private val trackLists = Registry<HeldTracks>()
+
     /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
     private val manage = MutableStateFlow<List<ManagedShown>?>(null)
     private val managing = AtomicReference<Job?>(null)
@@ -410,6 +469,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             // a link's label and password are typed too: a Save sent after the last keystroke finds it applied
             is Call.ShareLabel -> shares[call.share]?.label(call.label).done(Answer.Why.NO_SUCH_SHARE)
             is Call.SharePassword -> shares[call.share]?.password(call.password).done(Answer.Why.NO_SUCH_SHARE)
+            // a map's views come at gesture pace, a place's name and a date's fields as typed and picked: in the host's order
+            is Call.MapView, is Call.PlaceTyped, is Call.DateChoose, is Call.DateFrom, is Call.DateTo -> ordered(call)
             else -> null
         }
         scope.launch {
@@ -432,6 +493,16 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 else -> null
             })
         }
+    }
+
+    /** The maps' and the editors' calls applied on the host's thread, in its order. */
+    private fun ordered(call: Call): Answer = when (call) {
+        is Call.MapView -> maps[call.map]?.view(call.x, call.y, call.zoom, call.width, call.height).done(Answer.Why.NO_SUCH_MAP)
+        is Call.PlaceTyped -> places[call.place]?.model?.typeName(call.name).done(Answer.Why.NO_SUCH_PLACE)
+        is Call.DateChoose -> dates[call.date]?.model?.mode(me.raddatz.veyq.mobile.memories.place.MemoryDate.Mode.valueOf(call.mode.name)).done(Answer.Why.NO_SUCH_DATE)
+        is Call.DateFrom -> dates[call.date]?.model?.from(call.day).done(Answer.Why.NO_SUCH_DATE)
+        is Call.DateTo -> dates[call.date]?.model?.to(call.day).done(Answer.Why.NO_SUCH_DATE)
+        else -> Answer.Refused(Answer.Why.NOT_A_CALL)
     }
 
     /** [Call.EditorChange] on its editor: done, or no such editor. */
@@ -934,6 +1005,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noTenant
             is Call.GalleryClose -> galleries.remove(call.gallery)?.let { g ->
                 closeLightboxesOf(call.gallery)
+                closeFactsOf(call.gallery)
                 musics.removeIf { it.gallery == call.gallery }.forEach { it.model.close() }
                 g.close()
                 Answer.Done
@@ -978,6 +1050,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noGallery
             is Call.LightboxClose -> lightboxes.remove(call.lightbox)?.let { held ->
                 dropReadersOf(call.lightbox)
+                maps.removeIf { it.lightbox == call.lightbox }.forEach { it.close() }
                 held.model.close()
                 Answer.Done
             } ?: noLightbox
@@ -990,7 +1063,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.LightboxSlideshow -> lightboxes[call.lightbox]?.model?.slideshow(call.on).done(Answer.Why.NO_SUCH_LIGHTBOX)
             is Call.LightboxDetails -> lightboxes[call.lightbox]?.let { held ->
                 val d = held.model.details(call.mediaId) ?: return Answer.Refused(Answer.Why.NO_MEDIUM)
-                Answer.MediumDetails(d.rows.map(::detailRow), d.uploader?.let(me.raddatz.veyq.mobile.memories.MediaDetails::uploaderWords), d.uploaderAt)
+                Answer.MediumDetails(d.rows.map(::detailRow), d.uploader?.let(me.raddatz.veyq.mobile.memories.MediaDetails::uploaderWords), d.uploaderAt, map = d.map != null)
             } ?: noLightbox
             is Call.LightboxTrash -> lightboxes[call.lightbox]?.let { held -> trashed(held.page, held.model.trash()) } ?: noLightbox
             is Call.LightboxStop -> lightboxes[call.lightbox]?.model?.stop().done(Answer.Why.NO_SUCH_LIGHTBOX)
@@ -1052,7 +1125,185 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.MusicSeen -> musics[call.music]?.model?.seen().done(Answer.Why.NO_SUCH_MUSIC)
             is Call.AudioEnded -> decks[call.deck]?.ended(call.load).done(Answer.Why.NO_SUCH_DECK)
             is Call.AudioFailed -> decks[call.deck]?.failed(call.load).done(Answer.Why.NO_SUCH_DECK)
+            // these are applied on the host's thread, in its order ([call])
+            is Call.MapView, is Call.PlaceTyped, is Call.DateChoose, is Call.DateFrom, is Call.DateTo -> ordered(call)
+            Call.MapOpenMemories -> tenant.value?.models?.let { t ->
+                val services = mapServices.value ?: return noMapServices
+                val pins = t.memoriesMap?.invoke() ?: return noMapServices
+                val opening = { w: Double, h: Double -> pins.framing(w, h) ?: world(w, h) }
+                Answer.MapOpened(held(HeldMap(services, opening, flowOf(MapOverlays()), pins = pins)))
+            } ?: noTenant
+            is Call.MapTile -> maps[call.map]?.let { held ->
+                val bytes = held.tile(call.tile) ?: return Answer.Refused(Answer.Why.NO_BYTES)
+                payload(bytes)
+                Answer.Bytes(Sniff.image(bytes)?.mime)
+            } ?: noMap
+            is Call.MapTap -> maps[call.map]?.let { held ->
+                val pins = held.pins ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val view = held.frame.value?.view ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val cluster = pins.clusters(view.zoom).firstOrNull { it.members.first().nodeId == call.nodeId }
+                    ?: return Answer.Refused(Answer.Why.NO_SUCH_ROW)
+                when (val tap = pins.tap(cluster, view)) {
+                    is me.raddatz.veyq.mobile.memories.place.MemoriesMap.Tap.Open -> Answer.MapTapped(HeldMap.pin(tap.pin), emptyList())
+                    is me.raddatz.veyq.mobile.memories.place.MemoriesMap.Tap.List -> Answer.MapTapped(null, tap.pins.map(HeldMap::pin))
+                    is me.raddatz.veyq.mobile.memories.place.MemoriesMap.Tap.Frame -> Answer.MapTapped(null, emptyList()).also { held.moveTo(tap.view) }
+                }
+            } ?: noMap
+            is Call.MapClose -> maps.remove(call.map)?.close().done(Answer.Why.NO_SUCH_MAP)
+            Call.MapTurnOn -> mapServices.value?.let { services ->
+                services.turnOn()
+                // a place editor shown without its map gets it where the name field's offer stood
+                places.values().forEach { it.model.mapsTurnedOn() }
+            }.done(Answer.Why.NO_MAP_SERVICES)
+            Call.MapTurnOff -> mapServices.value?.turnOff().done(Answer.Why.NO_MAP_SERVICES)
+            Call.MemoriesDates -> tenant.value?.models?.memoryDates?.let { read ->
+                Answer.MemoryDates(read().map { (nodeId, date) -> NodeDate(nodeId, dateShown(date)) })
+            } ?: noTenant
+            is Call.LightboxMap -> lightboxes[call.lightbox]?.let { held ->
+                val services = mapServices.value ?: return noMapServices
+                val photo = held.model.details(call.mediaId)?.map ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val opening = { w: Double, h: Double -> Viewport(photo.at, photo.zoom, w, h) }
+                Answer.MapOpened(held(HeldMap(services, opening, flowOf(MapOverlays(photo = photo.at, direction = photo.directionTrue)), lightbox = call.lightbox)))
+            } ?: noLightbox
+            is Call.LightboxPlace -> lightboxes[call.lightbox]?.let { Answer.PlaceResolved(it.model.resolvePlace(call.mediaId)) } ?: noLightbox
+            is Call.DateOpen -> galleries[call.gallery]?.let { g ->
+                val make = tenant.value?.models?.dateEditor ?: return noTenant
+                val editor = make(g) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = ids.incrementAndFetch()
+                dates.put(id, HeldDate(call.gallery, editor))
+                Answer.DateOpened(id)
+            } ?: noGallery
+            is Call.DateSave -> dates[call.date]?.let { held -> held.model.save()?.let(::factsSaved) ?: Answer.Refused(Answer.Why.NOT_TAKEN) } ?: noDate
+            is Call.DateClose -> dates.remove(call.date)?.let { Answer.Done } ?: noDate
+            is Call.PlaceOpen -> galleries[call.gallery]?.let { g ->
+                val make = tenant.value?.models?.placeEditor ?: return noTenant
+                val editor = make(g) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val map = mapServices.value?.let { services ->
+                    held(HeldMap(services, { w, h -> editor.initialView(w, h) }, flowOf(MapOverlays(dots = editor.points)), gallery = call.gallery, place = editor))
+                }
+                val id = ids.incrementAndFetch()
+                places.put(id, HeldPlace(call.gallery, g, editor, map))
+                editor.open()
+                Answer.PlaceOpened(id, map)
+            } ?: noGallery
+            is Call.PlaceLevel -> places[call.place]?.let { held ->
+                val level = me.raddatz.veyq.mobile.map.GeoLevel.Key.of(call.level) ?: return Answer.Refused(Answer.Why.NOT_TAKEN)
+                held.model.pickLevel(level)
+                Answer.Done
+            } ?: noPlace
+            is Call.PlaceToggleName -> places[call.place]?.model?.toggleNameMode().done(Answer.Why.NO_SUCH_PLACE)
+            is Call.PlaceFollow -> places[call.place]?.let { held ->
+                val medoid = held.model.medoid ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                held.model.followAgain()
+                // the platform recentres its map on the medoid (`PlaceEditor.followAgain`)
+                held.map?.let { maps[it] }?.let { m -> m.frame.value?.view?.let { v -> m.moveTo(v.copy(center = medoid)) } }
+                Answer.Done
+            } ?: noPlace
+            is Call.PlaceSave -> places[call.place]?.let { held -> held.model.save()?.let(::factsSaved) ?: Answer.Refused(Answer.Why.NOT_TAKEN) } ?: noPlace
+            is Call.PlaceRemove -> places[call.place]?.let { held -> factsSaved(held.model.remove()) } ?: noPlace
+            is Call.PlaceClose -> places.remove(call.place)?.let { closePlace(it); Answer.Done } ?: noPlace
+            is Call.TracksOpen -> galleries[call.gallery]?.let { g ->
+                val make = tenant.value?.models?.trackList ?: return noTenant
+                val uploads = mediaUploads.value ?: return noTenant
+                val list = make(g, uploads)
+                val map = mapServices.value?.let { services ->
+                    val overlays = combine(list.state, g.state) { t, page -> MapOverlays(tracks = trackLines(t), dots = page.gpsPoints) }
+                    val opening = { w: Double, h: Double ->
+                        val points = list.current.drawn.flatMap { it.lines.flatten() } + g.current.gpsPoints
+                        Viewport.fit(points, w, h) ?: world(w, h)
+                    }
+                    held(HeldMap(services, opening, overlays, gallery = call.gallery))
+                }
+                val id = ids.incrementAndFetch()
+                trackLists.put(id, HeldTracks(call.gallery, list, map))
+                // the tracks are read only while the view shows (ADR 0143 decision 8)
+                list.active(true)
+                Answer.TracksOpened(id, map)
+            } ?: noGallery
+            is Call.TracksClose -> trackLists.remove(call.tracks)?.let { closeTracks(it); Answer.Done } ?: noTracks
+            is Call.TracksShow -> trackLists[call.tracks]?.model?.setShown(call.mediaId, call.shown).done(Answer.Why.NO_SUCH_TRACKS)
+            is Call.TracksSelect -> trackLists[call.tracks]?.let { held ->
+                held.model.select(call.mediaId)
+                // a selected track is framed (the web's `fitBounds` on it)
+                val lines = held.model.current.entries.orEmpty().firstOrNull { it.mediaId == call.mediaId }?.lines?.flatten().orEmpty()
+                held.map?.let { maps[it] }?.let { m ->
+                    m.frame.value?.view?.let { v -> Viewport.fit(lines, v.width, v.height)?.let(m::moveTo) }
+                }
+                Answer.Done
+            } ?: noTracks
+            is Call.TracksAdd -> trackLists[call.tracks]?.let { held ->
+                // each path opened by the core and read at offsets; a path that is no file that reads is left out
+                val sources = call.paths.mapNotNull { path -> parts.files.source(path) }
+                Answer.TracksAdded(held.model.add(sources))
+            } ?: noTracks
+            is Call.TracksConfirm -> trackLists[call.tracks]?.let { held ->
+                Answer.Queued(held.model.confirm(call.labels.map { me.raddatz.veyq.mobile.memories.music.TrackLabel.Label(it.name, it.activity) }))
+            } ?: noTracks
+            is Call.TracksCancel -> trackLists[call.tracks]?.model?.cancel().done(Answer.Why.NO_SUCH_TRACKS)
+            is Call.TracksEdit -> trackLists[call.tracks]?.let { held ->
+                Answer.Said(held.model.edit(call.mediaId, me.raddatz.veyq.mobile.memories.music.TrackLabel.Label(call.label.name, call.label.activity)))
+            } ?: noTracks
+            is Call.TracksRemove -> trackLists[call.tracks]?.let { held -> trashed(held.model.gallery, held.model.remove(call.mediaId)) } ?: noTracks
+            is Call.TracksDownload -> trackLists[call.tracks]?.let { held ->
+                val save = held.model.save(call.mediaId) { produce -> parts.files.write(call.path, produce) }
+                    ?: return Answer.Refused(Answer.Why.NOTHING_TO_DOWNLOAD)
+                val id = ids.incrementAndFetch()
+                saves.put(id, save)
+                Answer.Saving(id)
+            } ?: noTracks
+            is Call.TracksReport -> trackLists[call.tracks]?.let { held ->
+                val sheet = held.model.reportSheet(call.mediaId) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = ids.incrementAndFetch()
+                reports.put(id, sheet)
+                Answer.ReportOpened(id)
+            } ?: noTracks
+            is Call.TracksSeen -> trackLists[call.tracks]?.model?.seen().done(Answer.Why.NO_SUCH_TRACKS)
         }
+    }
+
+    /** [map] held under a new id, for [Watched.Map] and the `Map.*` calls. */
+    private fun held(map: HeldMap): Long = ids.incrementAndFetch().also { maps.put(it, map) }
+
+    /** The world view of a map of [width] × [height] (`MemoryLocation`'s): where a map with nothing to frame opens. */
+    private fun world(width: Double, height: Double) =
+        Viewport(me.raddatz.veyq.mobile.memories.place.MemoryLocation.WORLD_CENTER, me.raddatz.veyq.mobile.memories.place.MemoryLocation.WORLD_ZOOM, width, height)
+
+    /** A place editor goes, its pending lookup dropped, its map closed. */
+    private fun closePlace(held: HeldPlace) {
+        held.open.value = false
+        held.model.close()
+        held.map?.let { maps.remove(it) }?.close()
+    }
+
+    /** A Map view goes, its parsed tracks let go, its map closed. */
+    private fun closeTracks(held: HeldTracks) {
+        held.model.close()
+        held.map?.let { maps.remove(it) }?.close()
+    }
+
+    /** Gallery [gallery]'s editors, Map view and maps go with it. */
+    private fun closeFactsOf(gallery: Long) {
+        dates.removeIf { it.gallery == gallery }
+        places.removeIf { it.gallery == gallery }.forEach(::closePlace)
+        trackLists.removeIf { it.gallery == gallery }.forEach(::closeTracks)
+        maps.removeIf { it.gallery == gallery }.forEach { it.close() }
+    }
+
+    /** What an editor's save came to, as the host is told it. */
+    private fun factsSaved(r: me.raddatz.veyq.mobile.memories.place.EditorSave): Answer = Answer.FactsSaved(
+        when (r) {
+            me.raddatz.veyq.mobile.memories.place.EditorSave.Saved -> FactsSave.SAVED
+            is me.raddatz.veyq.mobile.memories.place.EditorSave.Reopen -> FactsSave.REOPENED
+            me.raddatz.veyq.mobile.memories.place.EditorSave.Failed -> FactsSave.FAILED
+        },
+    )
+
+    /** A Memory's date as the host says it. */
+    private fun dateShown(d: me.raddatz.veyq.mobile.memories.place.MemoryDate) = MemoryDateShown(DateMode.valueOf(d.mode.name), d.from, d.to)
+
+    /** The Map view's tracks drawn now, as lines in normalised space (`TrackList.State.drawn`). */
+    private fun trackLines(s: me.raddatz.veyq.mobile.memories.tracks.TrackList.State) = s.drawn.map { e ->
+        TrackLineShown(e.mediaId, e.color, e.dash, s.selected == e.mediaId, e.lines.map { seg -> seg.map(HeldMap::point) })
     }
 
     /** A medium's delete as its answer: a trash with whether its Undo is offered now, or nothing said (a purge asked). */
@@ -1090,6 +1341,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /** Gallery [gallery]'s lightboxes close and go from the registry, with the readers they opened. */
     private fun closeLightboxesOf(gallery: Long) {
         lightboxes.removeIf { it.gallery == gallery }.forEach { it.model.close() }
+        maps.removeIf { m -> m.lightbox != null && lightboxes[m.lightbox] == null }.forEach { it.close() }
         lightboxReaders.keys().forEach { reader ->
             val l = lightboxReaders[reader] ?: return@forEach
             if (lightboxes[l] == null) { lightboxReaders.remove(reader); readers.remove(reader) }
@@ -1153,6 +1405,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noScan = Answer.Refused(Answer.Why.NO_SUCH_SCAN)
     private val noLink = Answer.Refused(Answer.Why.NO_SUCH_LINK)
     private val noMusic = Answer.Refused(Answer.Why.NO_SUCH_MUSIC)
+    private val noMap = Answer.Refused(Answer.Why.NO_SUCH_MAP)
+    private val noMapServices = Answer.Refused(Answer.Why.NO_MAP_SERVICES)
+    private val noDate = Answer.Refused(Answer.Why.NO_SUCH_DATE)
+    private val noPlace = Answer.Refused(Answer.Why.NO_SUCH_PLACE)
+    private val noTracks = Answer.Refused(Answer.Why.NO_SUCH_TRACKS)
 
     private fun taken(taken: Boolean): Answer = if (taken) Answer.Done else Answer.Refused(Answer.Why.NOT_TAKEN)
 
@@ -1281,6 +1538,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         player.value = parts.await().audio?.let { audio ->
             t.musicPlayer?.invoke({ events -> audio.deck(ids.incrementAndFetch(), deckReaders, events).also { decks.put(it.id, it) } }, audio.controls)
         }
+        // the tenant's map services on this device (ADR 0143 decision 2): the shell's place names come from them from now on
+        val language = parts.await().language
+        mapServices.value = t.mapServices?.invoke { language }
         scope.launch { runCatching { t.loadPictures() } }
         t.shell?.load(openLastUsed = true)
         return Answer.Done
@@ -1300,6 +1560,14 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         player.value?.stop()
         player.value = null
         decks.removeAll()
+        // the maps are the tenant's (ADR 0143 decision 4): every map's window closed, the editors and Map views gone, and
+        // the services closed — the tiles dropped, what is in flight cancelled, the geocoder's queue cleared
+        maps.removeAll().forEach { it.close() }
+        dates.removeAll()
+        places.removeAll().forEach(::closePlace)
+        trackLists.removeAll().forEach(::closeTracks)
+        mapServices.value?.close()
+        mapServices.value = null
         // a page closes its lightbox, and the lightbox its reader
         galleries.removeAll().forEach { it.close() }
         lightboxes.removeAll().forEach { it.model.close() }
@@ -1370,6 +1638,23 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         }
         is Watched.Music -> musics[w.music]?.let { held -> held.model.state.map { Update.Music(w.music, shownMusic(held, it)) } }
             ?: flowOf(Update.Music(w.music, null))
+        is Watched.Map -> maps[w.map]?.let { held -> held.shown().map { Update.Map(w.map, it) } } ?: flowOf(Update.Map(w.map, null))
+        Watched.MapServices -> mapServices.flatMapLatest { services ->
+            services?.state?.map { s ->
+                val given = services.consentGivenFor
+                Update.MapServices(MapServicesShown(HeldMap.mapState(s), given?.tiles, given?.places))
+            } ?: flowOf(Update.MapServices(null))
+        }
+        is Watched.Date -> dates[w.date]?.let { held ->
+            held.model.state.map { s ->
+                Update.Date(w.date, DateShown(DateMode.valueOf(s.mode.name), s.from, s.to, s.rangeInvalid, s.canSave, dateShown(held.model.autoRange)))
+            }
+        } ?: flowOf(Update.Date(w.date, null))
+        is Watched.Place -> places[w.place]?.let { held ->
+            combine(held.model.state, held.page.state, held.open) { s, page, open -> Update.Place(w.place, if (open) shownPlace(held, s, page) else null) }
+        } ?: flowOf(Update.Place(w.place, null))
+        is Watched.Tracks -> trackLists[w.tracks]?.let { held -> held.model.state.map { Update.Tracks(w.tracks, shownTracks(held, it)) } }
+            ?: flowOf(Update.Tracks(w.tracks, null))
         is Watched.Trash -> trashes[w.trash]?.let { t -> t.state.map { Update.Trash(w.trash, shownTrash(t, it)) } }
             ?: flowOf(Update.Trash(w.trash, null))
         is Watched.Move -> moves[w.move]?.let { m -> m.state.map { Update.Move(w.move, shownMove(m, it)) } }
@@ -1567,6 +1852,53 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         offline = s.offline,
         musicView = me.raddatz.veyq.mobile.memories.music.MusicModel.shown(s),
         musicHere = s.musicHere,
+        date = s.facts?.let { dateShown(s.date) },
+        place = s.facts?.placeName,
+        editsFacts = s.editsFacts,
+        tracks = s.tracks.size,
+    )
+
+    /** A place editor as the host draws it ([PlaceShown]), each field the editor's own answer. */
+    private fun shownPlace(
+        held: HeldPlace, s: me.raddatz.veyq.mobile.memories.place.PlaceEditor.State, page: me.raddatz.veyq.mobile.memories.GalleryModel.State,
+    ) = PlaceShown(
+        withMap = s.withMap,
+        mode = PlaceMode.valueOf(s.derivedMode.name),
+        name = s.name,
+        naming = PlaceNaming.valueOf(s.nameSource.name),
+        levels = s.levels.map { LevelShown(it.key.token, it.name) },
+        chosenLevel = s.chosenLevel?.token,
+        levelPicker = s.showLevelPicker,
+        canSave = s.canSave,
+        canFollow = held.model.medoid != null,
+        canRemove = page.facts?.location != null,
+    )
+
+    /** A Map view as the host draws it ([TracksShown]), each field the list's own answer. */
+    private fun shownTracks(held: HeldTracks, s: me.raddatz.veyq.mobile.memories.tracks.TrackList.State) = TracksShown(
+        node = held.model.gallery.node,
+        tracks = s.entries?.map { e ->
+            TrackShown(
+                mediaId = e.mediaId, name = e.name, number = e.number, fileTrackName = e.fileTrackName, ownName = e.ownName,
+                activity = e.activity, dash = e.dash, fileName = e.fileName, color = e.color, status = TrackStatus.valueOf(e.status.name),
+                facts = e.facts.map { f ->
+                    when (f) {
+                        is me.raddatz.veyq.mobile.memories.tracks.TrackFacts.Fact.Distance -> TrackFactShown(f.value, f.kilometres, null)
+                        is me.raddatz.veyq.mobile.memories.tracks.TrackFacts.Fact.Words -> TrackFactShown(null, false, f.notice)
+                    }
+                },
+                shown = e.mediaId !in s.hidden, selected = s.selected == e.mediaId, blocked = e.blocked, canRemove = held.model.removes(e.mediaId),
+            )
+        },
+        activities = me.raddatz.veyq.mobile.memories.music.TrackLabel.ACTIVITIES,
+        canAdd = s.rights.add,
+        canEdit = s.rights.edit,
+        canDownload = s.rights.download,
+        canReport = s.rights.report,
+        offline = s.offline,
+        checking = s.checking,
+        asking = s.asking.map { AskedTrackShown(it.fileName, it.fileTrackName) },
+        said = s.said,
     )
 
     /** Why the last queue ended by itself, in words ([PlayerShown.notice]). */
@@ -1787,6 +2119,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             Composition(
                 SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files, pictures = pictures,
                 settings = { session, account, separator -> AccountSettings.of(session, account, separator) }, tiers = tiers, audio = audio,
+                language = config.language,
                 trustedLink = { account, role, decode ->
                     when (role) {
                         DeviceLink.Role.SHOW_FOR_NEW_DEVICE -> DeviceLink.showForNewDevice(account)

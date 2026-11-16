@@ -326,11 +326,22 @@ a recipient the notice does not name is the cheap safe side to close now). `revi
   relabelled, removed and restored; pinned 1 of 1 frames), and bite (e)'s live half red (`expected:<1> but was:<0>`)
   then green.
 
-- [ ] **5 the bridge** — D11: `Watched.Map` → `MapShown`, the place, date and track calls, `Map.Tile` as bytes, Memories'
+- [x] **5 the bridge** — D11: `Watched.Map` → `MapShown`, the place, date and track calls, `Map.Tile` as bytes, Memories'
   bar tabs and the Map view in the gallery's state; `MapShown` under `SecretFreeSchemaTest`; a map's tiles dropped with
   its page and tenant (`DispatchTest`'s pattern). · Done when: `:bridge:jvmTest` green; **bites:** (a) a tile URL or a
   bearer in `MapShown` → `SecretFreeSchemaTest` red; (b) a map left open after `closeTenant()` → its tile still answered,
   red.
+  *Done 2026-11-16:* `:bridge:jvmTest` (99) and `:core:jvmTest` (944) green; `MapDispatchTest` plays the tile server and
+  the geocoder (no tile before the consent, each tile in view as `Answer.Bytes`, none after the withdrawal; the Memories
+  map's clusters and taps; the date and place editors, a member's pan the place; the Map view's tracks as lines; every map
+  gone with its lightbox, its gallery and its tenant). Bites red then green: (a) a `tileUrl` on `MapShown` →
+  `nothingTheCoreSends…` and `aMapCrossesAsItsPictureAlone` red (`SECRET` now also sees `bearer`, `authori[sz]`, `cookie`,
+  `credential`); (b) the maps' lines dropped from `closeTenant()` → the Memories map's tile answered `Bytes` after the
+  sign-out, red. Shapes the CR left open, decided: the map's owner calls (`Map.OpenMemories`, `Lightbox.Map`,
+  `Place.Open`/`Tracks.Open` answering the map's id), `Map.View`'s centre in normalised space (the host inverts its one
+  formula; no centre: the core's opening view), `MapViewShown.moved`, `Map.Tap`, `Tracks.Select|Confirm|Cancel|Seen`,
+  `Memories.Dates`, `Lightbox.Place`, `Watched.MapServices`, `Config.language`; a tile's field is `tile` (`z/x/y`), not
+  `key`. Core: `GalleryModel.State.editsFacts`, which `ShellModel`'s two editors now use.
 
 - [ ] **6 Android** — D1's Compose map, the editors, the facts line, the Map tab, the photo panel's map, the Map view with
   its picker and dialogs, Settings → Map services, every word from `words.json` (EN+DE). First, measured on the emulator:
