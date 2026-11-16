@@ -47,6 +47,7 @@ import { HttpStatus, isCodedError } from '../../shared/httpError'
 import { memberAvatarContext } from '../account/profile/memberAvatar'
 import { memberNameContext } from '../account/profile/memberName'
 import type { ScopeKey } from './epochs'
+import { inviteLabelContext } from './inviteLabel'
 import { groupNameContext } from './inviteName'
 import { iconContext } from './spaceIcon'
 import { rewrapValueKey } from './valueKey'
@@ -143,12 +144,16 @@ async function stageOf(
   }))
   const members = page.members.map((m) => rewrapMember(scopeId, rewrap, m))
   const verifications = page.verifications.map((v) => rewrapVerification(scopeId, rewrap, v))
+  // An open link invite's private label (ADR 0129 decision 7): its value key moves, the label never.
+  const inviteLabels = page.inviteLabels.map((i) => ({
+    inviteId: i.inviteId, ...rewrap(inviteLabelContext({ scopeId, inviteId: i.inviteId }), i.wrappedValueKey),
+  }))
   // The name and the icon ride on the first page only.
   const groupName = first && page.groupName
     ? rewrap(groupNameContext(scopeId, page.groupName.nameEpoch), page.groupName.wrappedNameValueKey) : null
   const icon = first && page.icon ? rewrap(iconContext({ scopeId, iconEpoch: page.icon.iconEpoch }), page.icon.wrappedIconValueKey) : null
-  if (!groupName && !icon && ![rootNodes, shares, members, verifications].some((l) => l.length)) return null
-  return { fromEpoch: oldKey.epoch, groupName, icon, rootNodes, shares, members, verifications }
+  if (!groupName && !icon && ![rootNodes, shares, members, verifications, inviteLabels].some((l) => l.length)) return null
+  return { fromEpoch: oldKey.epoch, groupName, icon, rootNodes, shares, members, verifications, inviteLabels }
 }
 
 /** A scope-root entry under the new key: the node's unchanged key re-wrapped, its name re-sealed and — for a live node —

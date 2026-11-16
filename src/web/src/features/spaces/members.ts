@@ -9,6 +9,7 @@ import { commitRotation, openScopeById, rekeyClosedScopes } from './scopes'
 import { buildMemberInvite, buildMemberInviteLink, inviteLinkOf, type InviteSecret } from './memberInvite'
 import { recipientIdentityDigest, sealGrant } from './grant'
 import { zeroScopeKey } from './epochs'
+import { normalizeInviteLabel, openInviteLabel, sealInviteLabel } from './inviteLabel'
 import { anchorIdentity, IdentityUnanchoredError, type ServedIdentity } from '../account/identityPins'
 import { identityPrivate } from '../../app/vault'
 import { tenantViewOfScope } from '../account/tenantTrust'
@@ -60,14 +61,15 @@ export type MemberInviteLinkResult = { inviteId: string; link: string; expiresAt
  * Mint a member invite bound to nobody, whose link the owner hands over (ADR 0129 decision 1) — owner-gated, and refused
  * like the mailed one where the tenant cannot send (`503 mail_unavailable`). The invite is the mailed way's placeholder
  * member ({@link buildMemberInviteLink}); the server sends nothing and answers the token, which this client writes into
- * the link with the sealed part and [secret]'s code. A `409 stale_epoch` is rebuilt once, as an invite's.
+ * the link with the sealed part and [secret]'s code. A `409 stale_epoch` is rebuilt once, as an invite's. [label] is the
+ * owners' optional private label for the pending list (ADR 0129 decision 7).
  */
 export async function createMemberInviteLink(
-  tenantId: string, secret: InviteCode, onPhase?: (phase: InvitePhase) => void,
+  tenantId: string, secret: InviteCode, onPhase?: (phase: InvitePhase) => void, label?: string | null,
 ): Promise<MemberInviteLinkResult> {
   return onceMoreIfStale(async () => {
     onPhase?.('securing')
-    const { request: memberInviteLinkRequest, sealed } = await buildMemberInviteLink(tenantId, secret)
+    const { request: memberInviteLinkRequest, sealed } = await buildMemberInviteLink(tenantId, secret, label)
     onPhase?.('sending')
     const minted = await withRefresh(() => tenantsApi().createMemberInviteLink({ tenantId, memberInviteLinkRequest }))
     return { inviteId: minted.inviteId, link: inviteLinkOf(minted.bootstrapSecret, sealed, secret.code), expiresAt: minted.inviteExpiresAt }
@@ -75,13 +77,14 @@ export async function createMemberInviteLink(
 }
 
 /** Re-issue a pending LINK invite: end it and mint a new one in its place — a new token, invite key, grant, link and code
- *  (ADR 0129 decision 2) — owner-gated. The old link opens nothing once this answers. */
+ *  (ADR 0129 decision 2) — owner-gated. The old link opens nothing once this answers. [label] is the old invite's label as
+ *  this client opened it, sealed anew for the new invite (decision 7); null where it had none or it did not open. */
 export async function reissueMemberInviteLink(
-  tenantId: string, inviteId: string, secret: InviteCode, onPhase?: (phase: InvitePhase) => void,
+  tenantId: string, inviteId: string, secret: InviteCode, onPhase?: (phase: InvitePhase) => void, label?: string | null,
 ): Promise<MemberInviteLinkResult> {
   return onceMoreIfStale(async () => {
     onPhase?.('securing')
-    const { request: memberInviteLinkRequest, sealed } = await buildMemberInviteLink(tenantId, secret)
+    const { request: memberInviteLinkRequest, sealed } = await buildMemberInviteLink(tenantId, secret, label)
     onPhase?.('sending')
     const minted = await withRefresh(() => tenantsApi().reissueMemberInviteLink({ tenantId, inviteId, memberInviteLinkRequest }))
     return { inviteId: minted.inviteId, link: inviteLinkOf(minted.bootstrapSecret, sealed, secret.code), expiresAt: minted.inviteExpiresAt }
@@ -101,6 +104,46 @@ async function onceMoreIfStale<T>(call: () => Promise<T>): Promise<T> {
 /** List the tenant's pending member invites (invited-but-not-joined) — owner-gated (uc.spaces.manage-member-invites). */
 export function listMemberInvites(tenantId: string): Promise<PendingMemberInvite[]> {
   return withRefresh(() => tenantsApi().listMemberInvites({ tenantId }))
+}
+
+/**
+ * The labels of [invites] that open (ADR 0129 decision 7), by invite id, opened with the tenant's key the caller holds — a
+ * label that is absent or does not open is no entry (the row says "Link invitation", uc.spaces.manage-member-invites E2).
+ * An empty map where the tenant key cannot be opened.
+ */
+export async function openMemberInviteLabels(tenantId: string, invites: PendingMemberInvite[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  if (!invites.some((i) => i.sealedLabel)) return out
+  const opened = await openScopeById(tenantId)
+  if (!opened) return out
+  try {
+    for (const i of invites) {
+      const label = openInviteLabel(opened.epochs, { scopeId: tenantId, inviteId: i.inviteId }, i.sealedLabel, i.wrappedLabelValueKey)
+      if (label) out.set(i.inviteId, label)
+    }
+  } finally {
+    zeroScopeKey(opened.epochs)
+  }
+  return out
+}
+
+/** Set, change or clear (empty [label]) a pending link invite's private label — sealed for that invite under the tenant's
+ *  current key, owner-gated; a `409 stale_epoch` (a rotation in between) is sealed again once. */
+export async function setMemberInviteLabel(tenantId: string, inviteId: string, label: string | null): Promise<void> {
+  const text = normalizeInviteLabel(label)
+  return onceMoreIfStale(async () => {
+    let setMemberInviteLabelRequest = { sealedLabel: null as string | null, wrappedLabelValueKey: null as string | null, epoch: null as number | null }
+    if (text) {
+      const opened = await openScopeById(tenantId)
+      if (!opened) throw new Error('cannot open the tenant scope to label the invite — the vault is locked or no grant is held')
+      try {
+        setMemberInviteLabelRequest = { ...sealInviteLabel(opened.epochs, { scopeId: tenantId, inviteId }, text), epoch: opened.epochs.epoch }
+      } finally {
+        zeroScopeKey(opened.epochs)
+      }
+    }
+    await withRefresh(() => tenantsApi().setMemberInviteLabel({ tenantId, inviteId, setMemberInviteLabelRequest }))
+  })
 }
 
 /** Re-issue a pending member invite: supersede it (its key and grant go) and mail a new one to the same [email] — a new
