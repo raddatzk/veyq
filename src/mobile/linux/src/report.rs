@@ -35,6 +35,8 @@ struct Inner {
     stack: gtk::Stack,
     send: gtk::Button,
     cancel: gtk::Button,
+    /// "What do you report?": hidden where the sheet offers no choice (a track's report, ADR 0142 decision 11).
+    scope: adw::PreferencesGroup,
     whole: gtk::CheckButton,
     name_only: gtk::CheckButton,
     scope_hint: gtk::Label,
@@ -54,6 +56,12 @@ struct Inner {
 
 /// Opens the report sheet of [node] over [parent].
 pub fn open(parent: &impl IsA<gtk::Widget>, node: &NodeAt) {
+    open_by(parent, node, Call::ReportOpen { node: node.clone() });
+}
+
+/// Opens the report sheet the core opens for [call] (a node's `Report.Open`, a track's `Music.Report`: both answered
+/// `ReportOpened`), titled by [node], over [parent].
+pub fn open_by(parent: &impl IsA<gtk::Widget>, node: &NodeAt, call: Call) {
     let header = adw::HeaderBar::builder().title_widget(&adw::WindowTitle::new(&words::report_title(), &node.name)).show_end_title_buttons(false).show_start_title_buttons(false).build();
     let cancel = gtk::Button::with_label(&words::entry_cancel());
     let send = gtk::Button::with_label(&words::report_send());
@@ -146,6 +154,7 @@ pub fn open(parent: &impl IsA<gtk::Widget>, node: &NodeAt) {
         stack,
         send: send.clone(),
         cancel: cancel.clone(),
+        scope: scope.clone(),
         whole,
         name_only,
         scope_hint,
@@ -171,7 +180,6 @@ pub fn open(parent: &impl IsA<gtk::Widget>, node: &NodeAt) {
     });
     dialog.present(Some(parent));
     let weak = Rc::downgrade(&inner);
-    let call = Call::ReportOpen { node: node.clone() };
     glib::spawn_future_local(async move {
         let Ok((Answer::ReportOpened { report }, _)) = bridge::call(&call).await else {
             eprintln!("veyq: the report sheet did not open in the core");
@@ -346,6 +354,7 @@ impl Inner {
             self.cancel.set_visible(false);
         } else {
             self.stack.set_visible_child_name("form");
+            self.scope.set_visible(s.offers_name);
             self.whole.set_active(s.whole);
             self.name_only.set_active(!s.whole);
             self.scope_hint.set_label(&said::key(&s.scope_hint));

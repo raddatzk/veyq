@@ -79,7 +79,7 @@ impl Screens {
             }
             Gate::Signed { switching, .. } => {
                 self.shell.switching(*switching);
-                self.face(&self.shell.split);
+                self.face(&self.shell.root);
             }
             // Only the share extension reaches it (ADR 0138), which this app has none of: said on stderr, the window
             // stays where it is.

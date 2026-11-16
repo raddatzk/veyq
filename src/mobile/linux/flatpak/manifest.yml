@@ -21,6 +21,8 @@ separate-locales: false
 # org.freedesktop.secrets answers: without this name the probe fails (ServiceUnknown) and nothing is offered after a
 # sign-in, measured on the Fedora VM 2026-11-13 (native-apps § Platforms). With it, all five calls answer and the items
 # still land in the app's own keyring.
+# The desktop's media controls (ADR 0142 decision 3): MPRIS on the session bus under the app's own MPRIS name, which the
+# app owns while a Memory's music plays (`music_host`).
 finish-args:
   - --share=network
   - --share=ipc
@@ -29,6 +31,7 @@ finish-args:
   - --device=dri
   - --socket=pulseaudio
   - --talk-name=org.freedesktop.secrets
+  - --own-name=org.mpris.MediaPlayer2.@APP_ID@
 # What the runtime lacks of what the app loads (decision 5), measured against org.gnome.Platform//51 on 2026-11-13
 # (`flatpak run --command=bash org.gnome.Platform//51`): it carries libsecret, glycin with its WebP loader, GStreamer
 # with giostreamsrc and, through codecs-extra, VP9, H.264 and Opus, the CA bundle at /etc/ssl/cert.pem (what the

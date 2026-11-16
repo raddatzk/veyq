@@ -7,7 +7,9 @@
 //! videos, and a drop of files onto the page adds them (`Memory.Upload`) — a dropped folder is said and not taken (the owner,
 //! 2026-11-13). A medium trashed (from the lightbox) is out at once with Undo in a toast for as long as the core
 //! offers it; what the page says otherwise is a toast too. The page is read anew live while it stands
-//! (`Watched.GalleryLive`, the web's poll).
+//! (`Watched.GalleryLive`, the web's poll). Where the node has music or whoever looks may add some (`musicView`), a
+//! toggle group under the head switches between its photos and its Music view ([crate::music_view], ADR 0142 decision
+//! 6); the header's music action plays or stops the node's music (`Gallery.Music`).
 //!
 //! Every state is the core's `GalleryModel` (`Gallery.Open`, `Watched.Gallery`): the rows, the chapters, what it offers
 //! (rights only remove functions: share view = member view). Nothing decrypted is written to show it (ADR 0047).
@@ -23,6 +25,7 @@ use crate::bridge::{self, Watch, wire::Answer, wire::ApplicationId, wire::Call, 
 use crate::drop::Sorted;
 use crate::home::{glib_escape, kind_icon};
 use crate::lightbox::Lightbox;
+use crate::music_view::MusicView;
 use crate::{header, said, words};
 
 /// The page's margin around the grid and the chapters, in logical pixels (GNOME's 12).
@@ -49,6 +52,12 @@ struct Inner {
     column: gtk::Box,
     hero_slot: gtk::Box,
     hero: RefCell<Option<gtk::Widget>>,
+    /// Photos | Music, shown where the gallery offers its Music view; the photos' part (the chapters and the grid) and the
+    /// Music view's place, one of them shown.
+    switch: adw::ToggleGroup,
+    photos: gtk::Box,
+    music_slot: gtk::Box,
+    music: RefCell<Option<MusicView>>,
     chapters: adw::PreferencesGroup,
     chapter_rows: RefCell<Vec<adw::ActionRow>>,
     /// What shows in the grid's place while it holds no row: reading, empty, failed.
@@ -117,13 +126,25 @@ impl MemoryPage {
         column.set_margin_end(MARGIN);
         let hero_slot = gtk::Box::new(gtk::Orientation::Vertical, 0);
         column.append(&hero_slot);
+        // the view switch (GNOME: a toggle group for a few views of one content, AdwToggleGroup)
+        let switch = adw::ToggleGroup::builder().halign(gtk::Align::Center).visible(false).build();
+        for (name, label) in [("photos", words::music_view_photos()), ("music", words::music_view_music())] {
+            switch.add(adw::Toggle::builder().name(name).label(label).build());
+        }
+        switch.set_active_name(Some("photos"));
+        switch.set_widget_name("memory-view");
+        column.append(&switch);
+        let photos = gtk::Box::new(gtk::Orientation::Vertical, 18);
+        column.append(&photos);
+        let music_slot = gtk::Box::builder().orientation(gtk::Orientation::Vertical).visible(false).build();
+        column.append(&music_slot);
         let chapters = adw::PreferencesGroup::builder().title(words::memory_chapters()).visible(false).build();
-        column.append(&chapters);
+        photos.append(&chapters);
         let status = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        column.append(&status);
+        photos.append(&status);
         let grid = gtk::Fixed::builder().hexpand(true).build();
         grid.update_property(&[gtk::accessible::Property::Label(&words::app_memories())]);
-        column.append(&grid);
+        photos.append(&grid);
         // External, not Never: the grid's rows are as wide as the width they were laid out at, and Never would hand that width on as
         // the page's minimum — the window could not shrink, so it never laid out anew (measured in Broadway, 2026-11-14)
         let root = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::External).vexpand(true).child(&column).build();
@@ -133,6 +154,10 @@ impl MemoryPage {
             column,
             hero_slot,
             hero: RefCell::new(None),
+            switch,
+            photos,
+            music_slot,
+            music: RefCell::new(None),
             chapters,
             chapter_rows: RefCell::new(Vec::new()),
             status,
@@ -241,6 +266,14 @@ impl MemoryPage {
         });
     }
 
+    /// The header's music action: the node's music started shuffled, or stopped where it plays (`Gallery.Music`).
+    pub fn music(&self) {
+        if let Some(gallery) = self.inner.id.get() {
+            eprintln!("veyq: gallery music pressed");
+            bridge::send(Call::GalleryMusic { gallery });
+        }
+    }
+
     /// Refresh (F5, Ctrl+R): the gallery read anew (`Gallery.Reload`).
     pub fn reload(&self) {
         if let Some(gallery) = self.inner.id.get() {
@@ -279,6 +312,7 @@ impl Drop for MemoryPage {
             id.remove();
         }
         self.inner.lightbox.borrow_mut().take();
+        self.inner.music.borrow_mut().take();
         self.inner.watch.borrow_mut().take();
         self.inner.live.borrow_mut().take();
         if let Some(t) = self.inner.undo_toast.borrow_mut().take() {
@@ -396,6 +430,33 @@ impl Inner {
             took
         });
         this.root.add_controller(target);
+        // the view switch: the Music view opened while it shows, closed when the photos show again
+        let weak = Rc::downgrade(this);
+        this.switch.connect_active_name_notify(move |_| {
+            if let Some(inner) = weak.upgrade() {
+                inner.switch_view();
+            }
+        });
+    }
+
+    /// Shows the view the switch names: the photos, or the node's Music view (opened in the core while it shows).
+    fn switch_view(self: &Rc<Self>) {
+        let music = self.switch.active_name().as_deref() == Some("music") && self.switch.is_visible();
+        self.photos.set_visible(!music);
+        self.music_slot.set_visible(music);
+        if music == self.music.borrow().is_some() {
+            return;
+        }
+        eprintln!("veyq: memory view: {}", if music { "music" } else { "photos" });
+        while let Some(child) = self.music_slot.first_child() {
+            self.music_slot.remove(&child);
+        }
+        *self.music.borrow_mut() = None;
+        if let (true, Some(gallery)) = (music, self.id.get()) {
+            let view = MusicView::open(gallery, &self.window, &self.toasts);
+            self.music_slot.append(view.widget());
+            *self.music.borrow_mut() = Some(view);
+        }
     }
 
     /// The grid's width: the scroll's, less the page's margins.
@@ -646,6 +707,14 @@ impl Inner {
             Some((Some(_), _)) => {}
         }
         let Some(s) = shown.as_ref() else { return };
+        if self.switch.is_visible() != s.music_view {
+            self.switch.set_visible(s.music_view);
+            if !s.music_view {
+                self.switch.set_active_name(Some("photos"));
+            }
+            let this = self.clone();
+            glib::idle_add_local_once(move || this.switch_view());
+        }
         // the offer ended (its window, or the undo): the toast goes with it — once a state showed the offer, so an update
         // from before the trash that arrives after its answer ends nothing (src/mobile/CLAUDE.md § Traps)
         if let Some(undo) = &s.undo {
