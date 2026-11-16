@@ -336,6 +336,8 @@ struct Bar: View {
                 ForEach(tabs, id: \.self) { key in
                     Tab(Names.tab(key, app: model.shell.application, kind: model.shell.openObject?.kind), systemImage: Names.tabSymbol(key, app: model.shell.application, kind: model.shell.openObject?.kind), value: key) {
                         NavigationStack { content(key).modifier(Picking(model: model)).toolbar { toolbar }.background(Role.bg) }
+                            // the music bar above the tab bar, as Music's own mini player (ADR 0142 decision 5)
+                            .safeAreaInset(edge: .bottom, spacing: 0) { MusicBar(model: model) }
                     }
                 }
                 Tab(value: Self.search, role: .search) {
@@ -375,6 +377,8 @@ struct Bar: View {
                 }
                 .background(Role.bg)
             }
+            // the music bar along the window's bottom (ADR 0142 decision 5)
+            .safeAreaInset(edge: .bottom, spacing: 0) { MusicBar(model: model) }
         }
     }
 

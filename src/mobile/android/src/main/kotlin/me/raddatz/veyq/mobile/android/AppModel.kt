@@ -147,6 +147,27 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** The offer to stay signed in a sign-in left open (core's `Gate.Signed.offer`), drawn over the shell; null once answered. */
     val offer: StateFlow<me.raddatz.veyq.mobile.session.SessionModel.Offer?> = _offer.asStateFlow()
 
+    // ---- the music (ADR 0142): declared above the gate's collector in `init`, which may stop it at once ----
+
+    /** The system's media controls, the media session and its foreground service, one for the app ([AndroidMusicControls]). */
+    private val musicControls by lazy { AndroidMusicControls(getApplication()) }
+
+    private val _music = MutableStateFlow<me.raddatz.veyq.mobile.audio.MusicPlayer?>(null)
+
+    /**
+     * The open account's one music player (core's `MusicPlayer`, ADR 0142 decision 1), its decks Android's [MediaDeck]s:
+     * built when a tenant opens, stopped where the tenant's models close — a sign-out, a switch, the session locked or gone.
+     * Null while no tenant is open. The shell's bar draws it; every gallery plays through it.
+     */
+    val music: StateFlow<me.raddatz.veyq.mobile.audio.MusicPlayer?> = _music.asStateFlow()
+
+    private fun stopMusic() {
+        openMusic?.close()
+        openMusic = null
+        _music.value?.stop()
+        _music.value = null
+    }
+
     init {
         viewModelScope.launch { session.gate.collect(::gateChanged) }
         // a pin's fetch keeps the process once the app is left: WorkManager's worker, a dataSync foreground service
@@ -154,6 +175,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun gateChanged(g: me.raddatz.veyq.mobile.session.SessionModel.Gate) {
+        // the session locked, signed out or starting again: the tenant's music stops with it (ADR 0142 decision 1)
+        if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) stopMusic()
         _offer.value = (g as? me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed)?.offer
         trustLog("gate ${g::class.simpleName}" + when (g) {
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> ", offer: ${g.offer?.levels}"
@@ -452,6 +475,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             out.wasCurrent -> {
                 shellWatch?.cancel()
                 shellModel = null
+                stopMusic()
                 _depot.value?.close()
                 _depot.value = null
                 openGallery?.close()
@@ -572,6 +596,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         rows = me.raddatz.veyq.mobile.RowDetails.Read.EMPTY
         openFile?.close()
         openFile = null
+        openMusic?.close()
+        openMusic = null
         openGallery?.close()
         openGallery = null
         val pots = me.raddatz.veyq.mobile.expenses.PotModel(t, System::currentTimeMillis)
@@ -581,6 +607,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val model = me.raddatz.veyq.mobile.navigation.ShellModel(t, hidden, recent, System::currentTimeMillis)
         shellWatch?.cancel()
         shellModel = model
+        // another tenant's music stops; the same tenant opened again plays on
+        if (switched || _music.value == null) {
+            stopMusic()
+            _music.value = model.musicPlayer({ events -> MediaDeck(getApplication(), events) }, musicControls)
+        }
         _depot.value?.close()
         _depot.value = model.depotUploads(uploads) { viewModelScope.launch { refreshLists(t) } }
         // Android reads a pick in place: a file the queue is done with leaves nothing to remove
@@ -889,15 +920,82 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         openGallery?.takeIf { it.node == node }?.let { return it }
         val m = shellModel ?: return null
         val uploads = media ?: return null
+        openMusic?.close()
+        openMusic = null
         openGallery?.close()
-        return m.galleryModel(node, uploads).also { openGallery = it }
+        val app = getApplication<Application>()
+        val music = _music.value?.let { p -> me.raddatz.veyq.mobile.memories.GalleryModel.Music(p) { n -> app.words(me.raddatz.veyq.mobile.words.Msg.MUSIC_UNTITLED, n) } }
+        return m.galleryModel(node, uploads, music).also { openGallery = it }
     }
 
-    /** The gallery page went: its lightbox and any video's reader close with it. */
+    /** The gallery page went: its lightbox and any video's reader close with it, and its Music view (the music plays on). */
     fun closeGallery(gallery: me.raddatz.veyq.mobile.memories.GalleryModel) {
         if (openGallery !== gallery) return
+        openMusic?.close()
+        openMusic = null
         gallery.close()
         openGallery = null
+    }
+
+    /** The open gallery's Music view (core's `MusicModel`, ADR 0142 decision 8); one at a time, closed with its gallery. */
+    private var openMusic: me.raddatz.veyq.mobile.memories.music.MusicModel? = null
+
+    /** [gallery]'s Music view: its tracks, the picked files checked with Android's [musicMeasure], queued through [media]. */
+    fun musicModel(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.memories.music.MusicModel? {
+        openMusic?.takeIf { it.gallery === gallery }?.let { return it }
+        val m = shellModel ?: return null
+        val uploads = media ?: return null
+        openMusic?.close()
+        return m.musicModel(gallery, uploads, musicMeasure, left = {}).also { openMusic = it }
+    }
+
+    /**
+     * A picked file's length as Android's player would play it (core's `MusicUpload.Measure`, ADR 0142 decision 7):
+     * `MediaMetadataRetriever` over the document; null where it cannot read it, and the file is refused as unplayable.
+     */
+    private val musicMeasure = object : me.raddatz.veyq.mobile.memories.music.MusicUpload.Measure {
+        override fun durationMs(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, done: (Long?) -> Unit) {
+            val uri = (source as? ContentSource)?.uri ?: return done(null)
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val ms = runCatching {
+                    val r = android.media.MediaMetadataRetriever()
+                    try {
+                        r.setDataSource(getApplication(), uri)
+                        r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()
+                    } finally {
+                        r.release()
+                    }
+                }.getOrNull()
+                done(ms)
+            }
+        }
+    }
+
+    /** The audio files the system's picker granted ([uris]) added to [music]'s node as tracks (core's checks, its refusals said there). */
+    fun addMusic(music: me.raddatz.veyq.mobile.memories.music.MusicModel, uris: List<android.net.Uri>) {
+        viewModelScope.launch {
+            val sources = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { uris.mapNotNull { picked(it) }.map { source(it) } }
+            music.add(sources)
+        }
+    }
+
+    /**
+     * Track [mediaId] of [music] saved to the document the person made at [uri] (core's `FileSave`, as a lightbox's
+     * original is): a document it did not fill goes again. The save, whose end the view says; null where it is not offered.
+     */
+    fun saveTrack(music: me.raddatz.veyq.mobile.memories.music.MusicModel, mediaId: String, uri: android.net.Uri): me.raddatz.veyq.mobile.depot.FileSave? {
+        val resolver = getApplication<Application>().contentResolver
+        val save = music.save(mediaId) { produce ->
+            val out = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openOutputStream(uri) } ?: return@save false
+            out.use { o -> produce { o.write(it) } }
+        } ?: return null
+        viewModelScope.launch {
+            val ended = save.state.first { it.end != null }
+            if (ended.end != me.raddatz.veyq.mobile.depot.FileSave.End.SAVED) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) } }
+            }
+        }
+        return save
     }
 
     /**

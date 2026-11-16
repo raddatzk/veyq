@@ -15,6 +15,8 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             devLogin(intent) // a recreation (rotation, dark mode) keeps its session
             receive(intent)
+            // a debug build's format matrix of the music's decks, logged (DevAudio)
+            if (DevAudio.requested(intent)) DevAudio.run(applicationContext)
         }
         val devScan = DevScan.requested(intent) // a debug build's QR camera harness, no sign-in (DevScan)
         val devSettings = DevSettings.requested(intent) // a debug build's Settings page over a played account (DevSettings)

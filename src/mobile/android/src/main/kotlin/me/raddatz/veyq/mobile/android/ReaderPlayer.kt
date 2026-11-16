@@ -22,9 +22,16 @@ import me.raddatz.veyq.mobile.blob.RangeReader
  * device —, so the plaintext is never held whole nor written anywhere. The platform's media controls; a tap shows or
  * hides them. Drawn into a texture, not a surface view, so it pages and fades with a dialog's window (src/mobile/CLAUDE.md
  * § Traps). [key] names the medium (a new one starts a new player); [failed] is drawn where it does not play.
+ *
+ * It asks for no audio focus (a bare `MediaPlayer` does not): a Memory's music, which holds the focus, would take a
+ * video's request as a loss and pause with nothing to resume it. The music pauses for a lightbox's video through the core
+ * instead — [onPlaying] hears the player start and stop (ADR 0142 decision 13).
  */
 @Composable
-internal fun ReaderPlayer(reader: RangeReader?, key: Any, initialAspect: Float, modifier: Modifier = Modifier, failed: @Composable () -> Unit) {
+internal fun ReaderPlayer(
+    reader: RangeReader?, key: Any, initialAspect: Float, modifier: Modifier = Modifier, onPlaying: ((Boolean) -> Unit)? = null,
+    failed: @Composable () -> Unit,
+) {
     val context = LocalContext.current
     var broken by remember(key) { mutableStateOf(reader == null) }
     var aspect by remember(key) { mutableStateOf(initialAspect) }
@@ -35,10 +42,18 @@ internal fun ReaderPlayer(reader: RangeReader?, key: Any, initialAspect: Float, 
     val player = remember(key) { android.media.MediaPlayer() }
     val controller = remember(key) { android.widget.MediaController(context) }
     val prepared = remember(key) { booleanArrayOf(false) }
+    val playing = remember(key) { booleanArrayOf(false) }
+    val tell by androidx.compose.runtime.rememberUpdatedState(onPlaying)
+    fun said(on: Boolean) {
+        if (playing[0] == on) return
+        playing[0] = on
+        tell?.invoke(on)
+    }
     DisposableEffect(player) {
         onDispose {
             controller.hide()
             player.release()
+            said(false)
         }
     }
     Box(
@@ -53,10 +68,13 @@ internal fun ReaderPlayer(reader: RangeReader?, key: Any, initialAspect: Float, 
                     player.setOnVideoSizeChangedListener { _, w, h -> if (w > 0 && h > 0) aspect = w.toFloat() / h }
                     player.setOnErrorListener { _, _, _ ->
                         broken = true
+                        said(false)
                         true
                     }
+                    player.setOnCompletionListener { said(false) }
                     player.setOnPreparedListener {
                         it.start()
+                        said(true)
                         controller.show()
                     }
                     view.surfaceTextureListener = object : android.view.TextureView.SurfaceTextureListener {
@@ -76,7 +94,7 @@ internal fun ReaderPlayer(reader: RangeReader?, key: Any, initialAspect: Float, 
 
                         override fun onSurfaceTextureUpdated(texture: android.graphics.SurfaceTexture) = Unit
                     }
-                    controller.setMediaPlayer(PlayerControl(player))
+                    controller.setMediaPlayer(PlayerControl(player, ::said))
                     controller.setAnchorView(view)
                 }
             },
@@ -104,9 +122,9 @@ internal class ReaderSource(private val reader: RangeReader) : android.media.Med
 }
 
 /** The platform's media controls over [player]; a call after it was released does nothing. */
-private class PlayerControl(private val player: android.media.MediaPlayer) : android.widget.MediaController.MediaPlayerControl {
-    override fun start() { runCatching { player.start() } }
-    override fun pause() { runCatching { player.pause() } }
+private class PlayerControl(private val player: android.media.MediaPlayer, private val playing: (Boolean) -> Unit) : android.widget.MediaController.MediaPlayerControl {
+    override fun start() { runCatching { player.start(); playing(true) } }
+    override fun pause() { runCatching { player.pause(); playing(false) } }
     override fun getDuration(): Int = runCatching { player.duration }.getOrDefault(0)
     override fun getCurrentPosition(): Int = runCatching { player.currentPosition }.getOrDefault(0)
     override fun seekTo(pos: Int) { runCatching { player.seekTo(pos) } }

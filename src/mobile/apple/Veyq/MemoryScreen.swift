@@ -24,6 +24,10 @@ struct MemoryScreen: View {
     @State private var chapterProblem: String?
     /// The grid's width between the page's margins, as last measured.
     @State private var gridWidth: CGFloat = 0
+    /// Photos or music (ADR 0142 decision 6), and the Music view's model while it is asked for.
+    @State private var view: MemoryView = .photos
+    @State private var music: MusicModel?
+    @State private var pickingMusic = false
     @Environment(\.scenePhase) private var phase
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
@@ -38,11 +42,41 @@ struct MemoryScreen: View {
     /// The room between the grid and the page's edges: the grid's own gap, so every side of a tile breathes alike.
     private static let margin = CGFloat(MediaGridLayout.shared.GAP)
 
+    /// Whether the page offers its Music view: it has music, or whoever looks may add some (core's).
+    private var musicOffered: Bool { state.map { MusicModel.companion.shown(gallery: $0) } ?? false }
+    private var showsMusic: Bool { view == .music && musicOffered }
+    private var musicAdds: Bool { showsMusic && (model.musicShown?.rights.add ?? false) }
+
     var body: some View {
+        photoChrome(Group {
+            if showsMusic, let music {
+                MusicList(model: model, music: music, viewSwitch: MemoryViewSwitch(view: $view))
+            } else {
+                photoGrid
+            }
+        }
+        .navigationTitle(ref.name))
+        .task(id: showsMusic) {
+            guard showsMusic, let gallery = model.galleryModel(node) else { return }
+            music = model.musicModel(gallery)
+        }
+        // "Add music" in the Music view: the system's picker, filtered to audio (ADR 0142 decision 7)
+        .createAction(say(.musicAdd), shown: musicAdds) { pickingMusic = true }
+        .background(EmptyView().fileImporter(isPresented: $pickingMusic, allowedContentTypes: musicPickTypes, allowsMultipleSelection: true) { result in
+            guard case .success(let urls) = result, !urls.isEmpty, let music else { return }
+            // what is refused is said by the Music view (core's `said`)
+            Task { await model.addMusic(music, urls: urls) }
+        })
+    }
+
+    private var photoGrid: some View {
         ScrollView {
             // lazy: only the rows near the viewport are built (ADR 0105), the grid's rows among the page's own
             LazyVStack(alignment: .leading, spacing: Self.margin) {
                 NodeHeroRow()
+                if musicOffered {
+                    MemoryViewSwitch(view: $view).padding(.horizontal)
+                }
                 if let chapters = state?.chapters, !chapters.isEmpty {
                     Text(say(.memoryChapters)).font(.headline).padding(.horizontal)
                     ForEach(chapters, id: \.nodeId) { c in
@@ -84,9 +118,14 @@ struct MemoryScreen: View {
             }
         }
         .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { gridWidth = max(0, $0 - 2 * Self.margin) }
-        .navigationTitle(ref.name)
+    }
+
+    /// The page beyond its two views: the photos' creating menu, the chapter's naming, a delete's notice and question (a
+    /// track's too), the live poll, the pickers and the lightbox.
+    private func photoChrome(_ content: some View) -> some View {
+        content
         // photos and videos come from the photo library or from files; a Memory makes its chapters here too
-        .createMenu(say(uploads ? .memoryAdd : .memoryAddChapter), shown: uploads || chapterHere) {
+        .createMenu(say(uploads ? .memoryAdd : .memoryAddChapter), shown: !showsMusic && (uploads || chapterHere)) {
             if uploads {
                 Button { pickingPhotos = true } label: { Label(say(.photoLibrary), systemImage: "photo.on.rectangle") }
                 Button { pickingFiles = true } label: { Label(say(.tabDepotFiles), systemImage: "folder") }
@@ -423,6 +462,10 @@ private struct Lightbox: View {
     private var pages: some View {
             // the pages, then the caption — stacked, not floated over the picture
             VStack(alignment: .leading, spacing: 0) {
+                // the music's compact controls while a queue is loaded, a row of their own (ADR 0142 decision 5)
+                if let now = state.music, let commands = held.box.musicControls {
+                    MusicCompactControls(now: now, commands: commands).padding(.horizontal).padding(.vertical, 8)
+                }
                 // the person's paging pages the model (and pauses its slideshow); the model's own step — the slideshow's, a
                 // re-read — moves the selection, which then asks nothing back
                 TabView(selection: Binding(get: { Int(state.index) }, set: { if $0 != Int(held.box.current.index) { held.box.go(index: Int32($0)) } })) {
@@ -691,8 +734,19 @@ private struct MediaVideo: View {
             let p = Playback(reader: reader, mime: row.type)
             playback = p
             p.player.play()
+            // the video's own play state interrupts the music while it plays (ADR 0142 decision 13); a wait for data is
+            // neither, so the music does not come back between two stalls
+            let box = held.box
+            for await status in p.player.publisher(for: \.timeControlStatus).values {
+                switch status {
+                case .playing: box.videoPlaying(playing: true)
+                case .paused: box.videoPlaying(playing: false)
+                default: break
+                }
+            }
         }
         .onDisappear {
+            held.box.videoPlaying(playing: false)
             playback?.player.pause()
             playback = nil
             // the player's view left: the reader goes with it

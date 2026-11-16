@@ -5,7 +5,7 @@ a Kotlin Multiplatform base under each platform's own UI ([ADR 0123](../../docs/
 A Gradle build of its own, run through its own wrapper.
 
 - `core/` — the shared base: the v1 suite (`crypto/`), the generated API client (`build/generated/openapi`, from
-  `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), the music player (`audio/`, ADR 0142 decisions 1–3 and 13: the order, the fades, `MusicPlayer` with its interruption, and the two ports each platform implements — `Deck` and `SystemControls`, carried over the bridge as host requests, drawn by no app yet), a photo's and a video's metadata read from their bytes (`media/`),
+  `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), the music player (`audio/`, ADR 0142 decisions 1–3 and 13: the order, the fades, `MusicPlayer` with its interruption, and the two ports each platform implements — `Deck` and `SystemControls`: Android's `MusicPlayback.kt` — `MediaDeck`, `AndroidMusicControls` with its `MusicService` —, Apple's through `appleMain`'s `AppleAudio` — `MusicPlayback.swift`; carried over the bridge as host requests for Linux and Windows), a photo's and a video's metadata read from their bytes (`media/`),
   files on the device by the path a platform's dialog gave (`blob/FileSink`, `blob/FileSource`, `nativeMain`: the
   core opens, writes and reads them, and removes a download that did not finish; the one call that differs is
   `blob/Files.kt`'s, `posixMain` for Apple and Linux, `mingwMain` for Windows; [ADR 0137](../../docs/decisions/0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md) decision 3), when the members'

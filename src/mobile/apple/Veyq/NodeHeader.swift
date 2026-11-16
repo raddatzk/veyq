@@ -49,8 +49,16 @@ struct KindPage {
     }
 
     /// Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover; its ZIP and its copy (a plain folder).
-    /// Memories' Memory and chapter: their gallery (`MemoryScreen`); their cover is core's.
-    private static let memory = KindPage(header: { _, _ in HeaderContribution() }, body: { ref, _, model in AnyView(MemoryScreen(model: model, ref: ref)) })
+    /// Memories' Memory and chapter: their gallery (`MemoryScreen`); their cover is core's. Their header plays or stops their
+    /// music (core's `GalleryModel.headerActions`' MUSIC, ADR 0142 decision 6); adding photos is the page's creating menu.
+    private static let memory = KindPage(header: { node, model in
+        guard let gallery = model.galleryModel(node), let state = model.galleryState(node) else { return HeaderContribution() }
+        return HeaderContribution(actions: gallery.headerActions.filter { $0.id == GalleryModel.companion.MUSIC }.map { a in
+            OwnAction(id: a.id, label: gallery.label(id: a.id).map { say($0) } ?? a.id, systemImage: state.musicHere ? "stop.fill" : "music.note", slot: a.slot) {
+                gallery.toggleMusic()
+            }
+        })
+    }, body: { ref, _, model in AnyView(MemoryScreen(model: model, ref: ref)) })
 
     private static let dropBox = KindPage(header: { node, model in
         HeaderContribution(

@@ -126,6 +126,7 @@ internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
 }
 
 /** [gallery]'s page as [MemoryScreen] draws it (a debug build's `DevMemory` draws it over a played gallery). */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     val palette = LocalPalette.current
@@ -160,7 +161,13 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     val chapterHere = me.raddatz.veyq.mobile.memories.MemoryCreate.CHAPTER in gallery.creates
     var namingChapter by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
+    // photos or music (ADR 0142 decision 6): the switch shows where the node has music or whoever looks may add some
+    var view by androidx.compose.runtime.saveable.rememberSaveable(gallery) { mutableStateOf(MemoryView.PHOTOS) }
+    val musicOffered = me.raddatz.veyq.mobile.memories.music.MusicModel.shown(state)
+    val viewSwitch: @Composable () -> Unit = { MemoryViewSwitch(view) { view = it } }
+    val music = if (musicOffered && view == MemoryView.MUSIC) remember(gallery) { model.musicModel(gallery) } else null
     Box(Modifier.fillMaxSize()) {
+    if (music != null) MusicView(gallery, music, model, snackbar, viewSwitch) else
     CreateAction(
         stringResource(if (state.rights.upload) R.string.memory_add else R.string.memory_add_chapter),
         shown = state.rights.upload || chapterHere,
@@ -178,6 +185,7 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     val byId = remember(rows) { rows.orEmpty().withIndex().associateBy({ it.value.mediaId }, { it }) }
     LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = bottom)) {
         item(key = "hero") { hero(16.dp) }
+        if (musicOffered) stickyHeader(key = "views") { viewSwitch() }
         if (state.chapters.isNotEmpty()) {
             item(key = "chapters") {
                 Text(stringResource(R.string.memory_chapters), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
@@ -390,6 +398,7 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
             // black behind the bars and the cutout, nothing drawn under them
             contentWindowInsets = WindowInsets.safeDrawing,
             topBar = {
+                Column {
                 TopAppBar(
                     windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
                     title = { Text(stringResource(R.string.memory_item_position, pager.currentPage + 1, rows.size)) },
@@ -421,6 +430,11 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
                         navigationIconContentColor = Color.White, actionIconContentColor = Color.White,
                     ),
                 )
+                // the music's compact controls while a queue is loaded, a row of their own (ADR 0142 decision 5)
+                val now = state.music
+                val commands = box.musicControls
+                if (now != null && commands != null) MusicCompactControls(now, commands)
+                }
             },
         ) { padding ->
             Column(Modifier.padding(padding).fillMaxSize()) {
@@ -533,7 +547,8 @@ private fun MediaVideo(row: GalleryModel.Row, reader: RangeReader, box: MemoryLi
     val aspect = if (w != null && h != null) w.toFloat() / h else 16f / 9f
     // the player's view left (the page recomposed away): the model's reader goes with it
     DisposableEffect(reader) { onDispose { if (box.current.reader === reader) box.stop() } }
-    ReaderPlayer(reader, row.mediaId, aspect) {
+    // its play state interrupts the music while it plays, and the music plays again after (ADR 0142 decision 13)
+    ReaderPlayer(reader, row.mediaId, aspect, onPlaying = box::videoPlaying) {
         Text(stringResource(R.string.memory_video_failed), color = Color.White, modifier = Modifier.padding(24.dp))
     }
 }

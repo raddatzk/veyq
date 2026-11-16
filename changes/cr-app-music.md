@@ -406,12 +406,48 @@ lightbox plays and starts again by itself when the video stops or the lightbox m
   self-check case), then (a) red at `nothingTheCoreSendsCarriesAKeyASealATokenASecretOrBytes` and green restored; (b) the
   player's stop removed from `closeTenant()` → red at "a track's reader outlived the sign-out", green restored.
 
-- [ ] **6 Android and Apple (iOS, macOS)** — D2's decks, D3's background and system controls, D5's bar and compact
+- [x] **6 Android and Apple (iOS, macOS)** — D2's decks, D3's background and system controls, D5's bar and compact
   controls, D6's view switch and Music view, D7's picker, every word from `words.json` (EN+DE). First, measured on the
   emulator and the macOS build: which of D9's formats each platform's player loads from a reader (the matrix in the
   phase's report). · Done when: `./gradlew :android:assembleDebug`, the Apple project's builds (iOS simulator SDK,
   macOS) and `scripts/validate_mobile_words.py` green; each app clicked once: add a track, play, next, seek, rename,
   leave the Memory and keep hearing it, play a video in the lightbox (the music pauses and resumes, D13), close the bar.
+  *Done 2026-11-16, but Apple's click-through (an owner step, below):* **the format matrix** — ffmpeg's 12 s tones
+  (WAV 16/24-bit/float, MP3, M4A AAC, M4A ALAC, raw ADTS, FLAC, Ogg Vorbis, Ogg Opus), each typed by `Sniff.stream`, put
+  behind a core `RangeReader` and loaded and played 1.5 s by the platform's deck (debug harnesses: Android's extra
+  `veyq.devAudio=matrix`, logcat `veyq-audio`; Apple's `VEYQ_DEV_AUDIO_MATRIX=<dir>`, the unified log), its length read as
+  an upload reads it. **Android** (emulator, API 36 `google_apis` arm64): every format loads, plays and is measured but
+  **ALAC**, which loads and measures (12000 ms) and then fails at play (`NuPlayerDecoder: Failed to create audio/alac
+  decoder`): the deck reports `failed`, the player skips it and the Music view marks it "Doesn't play on this device" —
+  seen live. **macOS** (26): all ten load, play and measure, both Ogg files included (D9's "likely every Ogg" does not
+  hold on a Mac). **iOS**: not measured (no simulator boots on this Mac). Built: Android `MusicPlayback.kt` (`MediaDeck`:
+  `MediaPlayer` over `ReaderSource`, a `VolumeShaper` per ramp, a partial wake lock while it plays; `AndroidMusicControls`:
+  a framework `MediaSession`, its `MediaStyle` notification held by `MusicService` — `mediaPlayback` — from the first track
+  shown to the queue's stop, audio focus, becoming-noisy), `MusicScreen.kt` (the bar above the application's bar, the
+  lightbox's compact controls, Photos | Music as `PrimaryTabRow`, the Music view with each track's overflow menu, Add music
+  through `OpenMultipleDocuments` `audio/*`), the header's music action, `ReaderPlayer`'s play state (no focus of its own);
+  Apple through `appleMain`'s `AppleAudio` (a callback `AppleDeck` Swift implements: Swift cannot implement Kotlin's
+  `suspend`), `MusicPlayback.swift` (`AVDeck`, `SystemMusicControls`: Now Playing + remote commands; iOS `.playback`,
+  `UIBackgroundModes` `audio`, interruptions, a lost route) and `MusicScreen.swift` (the segmented Picker, the Music view
+  with swipe actions and a context menu, `.createAction` + `fileImporter`, the bar, the compact controls, the video's
+  `timeControlStatus` reported). **Android clicked once** against the dev instance: four tracks added (the picker, one
+  then three), a track pressed, next, a seek (18 s → 32 s), the 5 s crossfade (two players overlapping 5 s, the shaper's
+  ramp), the ALAC track skipped and marked, a rename ("Alpha Song", sorted first), a download byte-equal to the upload, the
+  report sheet as an ITEM (no scope choice), a remove with its Undo offered, the header's Play/Stop music, another Memory
+  opened with the music going on and the bar's node name opening the Memory again, the lightbox's compact controls, a
+  video's play pausing the music to the millisecond and its end resuming it (twice), closing the lightbox mid-video
+  resuming it, closing the bar (service, notification, session and players gone), a sign-out stopping it. Beyond the
+  Done-when, already: a minute with the screen off (`mWakefulness=Asleep`) through two track changes; the session's
+  `pause`/`play`/`next`/`headsethook` (`cmd media_session dispatch`, a headset's path) with the screen off; the quick
+  settings' player (pause, play, next) shown and working **without `POST_NOTIFICATIONS` granted** (`granted=false`).
+  **Apple:** both builds green and its player played headless on macOS (`VEYQ_DEV_AUDIO_PLAY=1`: a queue of MP3, M4A and
+  FLAC over two `AVDeck`s, Now Playing's title, rate and position, next, a seek, an interruption pausing with Now Playing
+  at rate 0 and its end resuming, the crossfade, a stop clearing Now Playing); **not clicked**: the Mac's screen was locked
+  (`CGSSessionScreenIsLocked` true) for the whole phase, so no window could be driven — **owner step**: on the unlocked
+  Mac, the macOS build signed in (`VEYQ_DEV_*`), the same click-through. iOS is compile-only (no simulator boots here);
+  its background play, lock screen and interruptions are phase 8b's device pass. `:core:jvmTest` ran red only in the offline
+  store's tests (20, `OfflinePins|Limit|ReadPath|Screens`: `NO_SPACE`): this Mac's volume was 96 % full, under the store's
+  5 % floor — no code of this phase touches them.
 
 - [ ] **7 Windows and Linux** — the same over the bridge, D3's SMTC and MPRIS, the Flatpak's `--own-name`. First,
   measured: D9's format matrix on the VM (Web Media extension present and removed) and in the container and the Flatpak;
