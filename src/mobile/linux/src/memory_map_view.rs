@@ -308,9 +308,9 @@ impl Inner {
         entry("remove", words::track_remove(), !s.offline && t.can_remove, Inner::remove);
         entry("report", words::report_action(), s.can_report && !s.offline, Inner::report);
         if menu.n_items() > 0 {
-            let button = gtk::MenuButton::builder().icon_name("view-more-symbolic").menu_model(&menu).valign(gtk::Align::Center).tooltip_text(words::music_actions(&name)).build();
+            let button = gtk::MenuButton::builder().icon_name("view-more-symbolic").menu_model(&menu).valign(gtk::Align::Center).tooltip_text(words::track_actions(&name)).build();
             button.add_css_class("flat");
-            button.update_property(&[gtk::accessible::Property::Label(&words::music_actions(&name))]);
+            button.update_property(&[gtk::accessible::Property::Label(&words::track_actions(&name))]);
             button.set_widget_name(&format!("track-actions:{}", t.media_id));
             row.add_suffix(&button);
             row.insert_action_group("track", Some(&group));

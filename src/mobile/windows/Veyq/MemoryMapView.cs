@@ -241,8 +241,8 @@ internal sealed class MemoryMapView : IDisposable
                 VerticalAlignment = VerticalAlignment.Center,
             };
             AutomationProperties.SetAutomationId(more, $"track-more:{t.mediaId}");
-            AutomationProperties.SetName(more, Words.MusicActions(name));
-            ToolTipService.SetToolTip(more, Words.MusicActions(name));
+            AutomationProperties.SetName(more, Words.TrackActions(name));
+            ToolTipService.SetToolTip(more, Words.TrackActions(name));
             Grid.SetColumn(more, 3);
             row.Children.Add(more);
             row.ContextFlyout = Menu(t, s, name);
