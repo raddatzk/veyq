@@ -16,8 +16,17 @@ namespace Veyq;
 
 internal sealed class MapServicesSection : IDisposable
 {
+    // Built once and only filled in from each state: the switch is never taken out of its row (a ToggleSwitch re-parented
+    // while its own toggle's transition ran ended the app in combase, 0xc000027b, measured 2026-11-16 on the VM).
     private readonly StackPanel _panel = new() { Spacing = 4 };
-    private readonly ToggleSwitch _switch = new() { OnContent = null, OffContent = null };
+    private readonly ToggleSwitch _switch = new() { OnContent = null, OffContent = null, VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock _notOffered = new() { TextWrapping = TextWrapping.Wrap };
+    private readonly Border _notOfferedCard;
+    private readonly TextBlock _tiles = new() { IsTextSelectionEnabled = true };
+    private readonly TextBlock _places = new() { IsTextSelectionEnabled = true };
+    private readonly Border _servicesCard;
+    private readonly TextBlock _givenFor = Caption("");
+    private readonly Border _toggleCard;
     private Watch? _watch;
     private MapServicesShown? _shown;
     private bool _drawing;
@@ -30,6 +39,36 @@ internal sealed class MapServicesSection : IDisposable
         AutomationProperties.SetAutomationId(_panel, "settings-maps");
         AutomationProperties.SetAutomationId(_switch, "settings-maps-switch");
         AutomationProperties.SetName(_switch, Words.SettingsMapsSwitch());
+        AutomationProperties.SetAutomationId(_notOffered, "settings-maps-not-offered");
+        AutomationProperties.SetAutomationId(_tiles, "settings-maps-tiles");
+        AutomationProperties.SetAutomationId(_places, "settings-maps-places");
+        AutomationProperties.SetAutomationId(_givenFor, "settings-maps-given-for");
+        var heading = new TextBlock { Text = Words.SettingsMaps(), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"], Margin = new Thickness(0, 20, 0, 4) };
+        AutomationProperties.SetHeadingLevel(heading, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
+        _panel.Children.Add(heading);
+        _panel.Children.Add(Caption(Words.SettingsMapsSub()));
+        _notOfferedCard = Card(_notOffered);
+        _panel.Children.Add(_notOfferedCard);
+        var services = new StackPanel { Spacing = 8 };
+        services.Children.Add(Row(Words.SettingsMapsTiles(), _tiles));
+        services.Children.Add(Row(Words.SettingsMapsPlaces(), _places));
+        services.Children.Add(Caption(Words.SettingsMapsReceive()));
+        _servicesCard = Card(services);
+        _panel.Children.Add(_servicesCard);
+        var line = new Grid { ColumnSpacing = 16 };
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        text.Children.Add(new TextBlock { Text = Words.SettingsMapsSwitch(), TextWrapping = TextWrapping.Wrap });
+        text.Children.Add(Caption(Words.SettingsMapsSwitchHint()));
+        line.Children.Add(text);
+        Grid.SetColumn(_switch, 1);
+        line.Children.Add(_switch);
+        var toggle = new StackPanel { Spacing = 4 };
+        toggle.Children.Add(line);
+        toggle.Children.Add(_givenFor);
+        _toggleCard = Card(toggle);
+        _panel.Children.Add(_toggleCard);
         _switch.Toggled += (_, _) =>
         {
             if (_drawing) return;
@@ -54,6 +93,18 @@ internal sealed class MapServicesSection : IDisposable
         Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
     };
 
+    private static Grid Row(string label, TextBlock value)
+    {
+        var row = new Grid { ColumnSpacing = 16 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.Children.Add(new TextBlock { Text = label });
+        value.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+        Grid.SetColumn(value, 1);
+        row.Children.Add(value);
+        return row;
+    }
+
     private static Border Card(UIElement child) => new()
     {
         Child = child,
@@ -66,68 +117,34 @@ internal sealed class MapServicesSection : IDisposable
 
     private void Draw()
     {
-        _panel.Children.Clear();
-        _switch.Header = null;
         if (_shown is not { } s)
         {
             _panel.Visibility = Visibility.Collapsed;
             return;
         }
         _panel.Visibility = Visibility.Visible;
-        var heading = new TextBlock { Text = Words.SettingsMaps(), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"], Margin = new Thickness(0, 20, 0, 4) };
-        AutomationProperties.SetHeadingLevel(heading, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
-        _panel.Children.Add(heading);
-        _panel.Children.Add(Caption(Words.SettingsMapsSub()));
-        if (s.state is MapStatus.MapStateNotOffered or MapStatus.MapStateOffline)
-        {
-            var not = new TextBlock { Text = s.state is MapStatus.MapStateOffline ? Words.MapNeedsConnection() : Words.SettingsMapsNotOffered(), TextWrapping = TextWrapping.Wrap };
-            AutomationProperties.SetAutomationId(not, "settings-maps-not-offered");
-            _panel.Children.Add(Card(not));
-            return;
-        }
+        var none = s.state is MapStatus.MapStateNotOffered or MapStatus.MapStateOffline;
+        _notOffered.Text = s.state is MapStatus.MapStateOffline ? Words.MapNeedsConnection() : Words.SettingsMapsNotOffered();
+        _notOfferedCard.Visibility = none ? Visibility.Visible : Visibility.Collapsed;
+        _servicesCard.Visibility = none ? Visibility.Collapsed : Visibility.Visible;
+        _toggleCard.Visibility = none ? Visibility.Collapsed : Visibility.Visible;
+        if (none) return;
         // the hosts served now: the consent's ask names them; once it holds they are those it was given for
         var (tiles, places) = s.state is MapStatus.MapStateConsent c ? (c.tileHost, c.geocoderHost) : (s.consentTileHost, s.consentGeocoderHost);
-        var services = new StackPanel { Spacing = 8 };
-        foreach (var (label, host, id) in new[] { (Words.SettingsMapsTiles(), tiles, "settings-maps-tiles"), (Words.SettingsMapsPlaces(), places, "settings-maps-places") })
+        _tiles.Text = tiles ?? Words.SettingsMapsNone();
+        _places.Text = places ?? Words.SettingsMapsNone();
+        var on = s.state is MapStatus.MapStateShown;
+        if (_switch.IsOn != on)
         {
-            var row = new Grid { ColumnSpacing = 16 };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.Children.Add(new TextBlock { Text = label });
-            var value = new TextBlock { Text = host ?? Words.SettingsMapsNone(), IsTextSelectionEnabled = true, Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] };
-            AutomationProperties.SetAutomationId(value, id);
-            Grid.SetColumn(value, 1);
-            row.Children.Add(value);
-            services.Children.Add(row);
+            _drawing = true;
+            _switch.IsOn = on;
+            _drawing = false;
         }
-        services.Children.Add(Caption(Words.SettingsMapsReceive()));
-        _panel.Children.Add(Card(services));
-        var toggle = new StackPanel { Spacing = 4 };
-        var line = new Grid { ColumnSpacing = 16 };
-        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(new TextBlock { Text = Words.SettingsMapsSwitch(), TextWrapping = TextWrapping.Wrap });
-        text.Children.Add(Caption(Words.SettingsMapsSwitchHint()));
-        line.Children.Add(text);
-        if (_switch.Parent is Panel old) old.Children.Remove(_switch);
-        _drawing = true;
-        _switch.IsOn = s.state is MapStatus.MapStateShown;
-        _drawing = false;
-        _switch.VerticalAlignment = VerticalAlignment.Center;
-        Grid.SetColumn(_switch, 1);
-        line.Children.Add(_switch);
-        toggle.Children.Add(line);
-        if (s.state is MapStatus.MapStateConsent { renewal: true })
-        {
-            var note = s.consentTileHost is null && s.consentGeocoderHost is null
-                ? Words.SettingsMapsGivenForUnrecorded()
-                : Words.SettingsMapsGivenFor(s.consentTileHost ?? Words.SettingsMapsNone(), s.consentGeocoderHost ?? Words.SettingsMapsNone());
-            var given = Caption(note);
-            AutomationProperties.SetAutomationId(given, "settings-maps-given-for");
-            toggle.Children.Add(given);
-        }
-        _panel.Children.Add(Card(toggle));
+        var renewal = s.state is MapStatus.MapStateConsent { renewal: true };
+        _givenFor.Text = !renewal ? ""
+            : s.consentTileHost is null && s.consentGeocoderHost is null ? Words.SettingsMapsGivenForUnrecorded()
+            : Words.SettingsMapsGivenFor(s.consentTileHost ?? Words.SettingsMapsNone(), s.consentGeocoderHost ?? Words.SettingsMapsNone());
+        _givenFor.Visibility = renewal ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public void Dispose()
