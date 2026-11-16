@@ -2621,6 +2621,103 @@
     "en": "None of these tracks can be played on this device.",
     "de": "Keiner dieser Titel kann auf diesem Gerät abgespielt werden."
   },
+  "music_view_photos": {
+    "note": "The view switch inside a Memory's screen: its photos and videos (ADR 0142 decision 6; owner copy 2026-11-15).",
+    "en": "Photos",
+    "de": "Fotos"
+  },
+  "music_view_music": {
+    "note": "The view switch's other side: the node's music.",
+    "en": "Music",
+    "de": "Musik"
+  },
+  "music_empty_hint": {
+    "note": "The Music view without a track (the web's memories.music.emptyHint).",
+    "en": "No music yet. Add audio files: they play in the background, shuffled, for everyone who opens this page.",
+    "de": "Noch keine Musik. Füge Audiodateien hinzu: Sie spielen im Hintergrund, zufällig gemischt, für alle, die diese Seite öffnen."
+  },
+  "music_play_from": {
+    "note": "A track's row in the Music view, read out: pressing it plays it first.",
+    "en": "Play {1}",
+    "de": "{1} abspielen"
+  },
+  "music_actions": {
+    "note": "A track's menu button, read out.",
+    "en": "Actions for {1}",
+    "de": "Aktionen für {1}"
+  },
+  "music_track_unplayable": {
+    "note": "The mark on a track that did not play on this device this session (ADR 0142 decision 9; owner copy).",
+    "en": "Doesn't play on this device",
+    "de": "Wird auf diesem Gerät nicht abgespielt"
+  },
+  "music_rename": {
+    "en": "Rename",
+    "de": "Umbenennen"
+  },
+  "music_rename_title": {
+    "en": "Rename track",
+    "de": "Titel umbenennen",
+    "apple_en": "Rename Track"
+  },
+  "music_name_label": {
+    "en": "Name",
+    "de": "Name"
+  },
+  "music_name_hint": {
+    "en": "Leave it empty to name the track by its file.",
+    "de": "Leer lassen, um den Titel nach seiner Datei zu benennen."
+  },
+  "music_download": {
+    "en": "Download",
+    "de": "Herunterladen"
+  },
+  "music_download_failed": {
+    "en": "The track could not be downloaded.",
+    "de": "Der Titel konnte nicht heruntergeladen werden."
+  },
+  "music_remove": {
+    "en": "Remove",
+    "de": "Entfernen"
+  },
+  "music_previous": {
+    "note": "The music bar's and the lightbox's compact controls (the web's audio.*).",
+    "en": "Previous",
+    "de": "Zurück"
+  },
+  "music_next": {
+    "en": "Next",
+    "de": "Weiter"
+  },
+  "music_resume": {
+    "note": "The bar's play button (a paused queue goes on).",
+    "en": "Play",
+    "de": "Abspielen"
+  },
+  "music_pause": {
+    "en": "Pause",
+    "de": "Pausieren"
+  },
+  "music_close": {
+    "note": "The bar's close: the music stops.",
+    "en": "Close",
+    "de": "Schließen"
+  },
+  "music_progress": {
+    "note": "The bar's position slider, read out.",
+    "en": "Position in {1}",
+    "de": "Position in {1}"
+  },
+  "music_open_node": {
+    "note": "The bar's node name, read out: it opens the Memory or chapter whose music plays.",
+    "en": "Open {1}",
+    "de": "{1} öffnen"
+  },
+  "music_notification_channel": {
+    "note": "Android's notification channel for the playing music, as the system settings list it (owner copy).",
+    "en": "Music",
+    "de": "Musik"
+  },
   "memory_moved_to_trash": {
     "en": "Moved to trash",
     "de": "In den Papierkorb verschoben"
