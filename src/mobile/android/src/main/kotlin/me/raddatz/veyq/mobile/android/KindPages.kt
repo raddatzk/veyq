@@ -1,6 +1,8 @@
 package me.raddatz.veyq.mobile.android
 
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.MusicOff
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.runtime.getValue
@@ -50,8 +52,8 @@ internal object KindPages {
         )
     }, body = { ref, _, model -> DropBoxScreen(ref, model) })
 
-    /** Memories' Memory and chapter: their gallery (`MemoryScreen`); their cover is core's. */
-    private val memory = KindPage(header = { _, _ -> HeaderContribution() }, body = { ref, _, model -> MemoryScreen(ref, model) })
+    /** Memories' Memory and chapter: their music's play/stop (core's), their gallery (`MemoryScreen`); their cover is core's. */
+    private val memory = KindPage(header = { node, model -> memoryHeader(node, model) }, body = { ref, _, model -> MemoryScreen(ref, model) })
 
     fun of(kind: String): KindPage? = when (kind) {
         "MEMORY", "CHAPTER" -> memory
@@ -61,6 +63,26 @@ internal object KindPages {
         me.raddatz.veyq.mobile.depot.DepotFiles.FILE -> file
         else -> null
     }
+}
+
+/**
+ * A Memory's or a chapter's own header action: its music played or stopped (core's `GalleryModel.headerActions`' MUSIC,
+ * ADR 0142 decision 6). Adding photos is the page's creating action (`CreateAction`), not the header's.
+ */
+@Composable
+private fun memoryHeader(node: NodeAt, model: AppModel): HeaderContribution {
+    val gallery = androidx.compose.runtime.remember(node) { model.galleryModel(node) } ?: return HeaderContribution()
+    // read here, whatever is offered: the action appears once the gallery's first read finds music
+    val musicHere = gallery.state.collectAsStateWithLifecycle().value.musicHere
+    return HeaderContribution(
+        actions = gallery.headerActions.filter { it.id == me.raddatz.veyq.mobile.memories.GalleryModel.MUSIC }.map { a ->
+            OwnAction(
+                a.id, say(gallery.label(a.id)!!),
+                if (musicHere) androidx.compose.material.icons.Icons.Outlined.MusicOff else androidx.compose.material.icons.Icons.Outlined.MusicNote,
+                a.slot,
+            ) { gallery.toggleMusic() }
+        },
+    )
 }
 
 @Composable

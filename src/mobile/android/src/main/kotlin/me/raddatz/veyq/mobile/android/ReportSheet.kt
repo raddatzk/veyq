@@ -48,10 +48,17 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ReportSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: AppModel, onClose: () -> Unit) {
+    val sheet = remember(ref) { model.reportSheet(ref) } ?: return
+    ReportSheet(sheet, onClose)
+}
+
+/** Core's report [sheet] drawn: a node's, or a medium's as an ITEM (a music track, ADR 0142 decision 11), which is reported whole only. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ReportSheet(sheet: me.raddatz.veyq.mobile.navigation.ReportSheet, onClose: () -> Unit) {
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val sheet = remember(ref) { model.reportSheet(ref) } ?: return
     val st by sheet.state.collectAsState()
     val sending = st.sending
     // the typed text is held here too, set from the sheet's own state at once (a field must not wait for the flow)
@@ -71,13 +78,15 @@ internal fun ReportSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: A
             }
             Text(stringResource(R.string.report_intro), style = MaterialTheme.typography.bodyMedium, color = role(palette.muted))
             Spacer(Modifier.padding(6.dp))
-            Text(stringResource(R.string.report_scope), fontWeight = FontWeight.SemiBold)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = st.whole, onClick = { sheet.whole(true) }, label = { Text(stringResource(R.string.report_scope_whole)) }, enabled = !sending)
-                FilterChip(selected = !st.whole, onClick = { sheet.whole(false) }, label = { Text(stringResource(R.string.report_scope_name)) }, enabled = !sending)
+            if (sheet.offersName) {
+                Text(stringResource(R.string.report_scope), fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = st.whole, onClick = { sheet.whole(true) }, label = { Text(stringResource(R.string.report_scope_whole)) }, enabled = !sending)
+                    FilterChip(selected = !st.whole, onClick = { sheet.whole(false) }, label = { Text(stringResource(R.string.report_scope_name)) }, enabled = !sending)
+                }
+                Text(say(st.scopeHint), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+                Spacer(Modifier.padding(6.dp))
             }
-            Text(say(st.scopeHint), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
-            Spacer(Modifier.padding(6.dp))
             Text(stringResource(R.string.report_category), fontWeight = FontWeight.SemiBold)
             for (c in sheet.categories) {
                 val token = c.token

@@ -252,6 +252,10 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 }
             },
             bottomBar = {
+                Column {
+                // the music bar while a queue is loaded: above the application's bar on a phone, along the window's
+                // bottom where a rail holds the places (ADR 0142 decision 5)
+                MusicBar(model)
                 if (!rail) NavigationBar(containerColor = role(palette.surface)) {
                     val colors = NavigationBarItemDefaults.colors(
                         selectedIconColor = role(palette.accent),
@@ -263,6 +267,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                     for (p in places) {
                         NavigationBarItem(selected = p.selected, onClick = p.onClick, icon = { Icon(p.icon, null) }, label = { Text(p.label) }, colors = colors)
                     }
+                }
                 }
             },
         ) { padding ->
