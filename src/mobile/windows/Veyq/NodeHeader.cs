@@ -221,14 +221,15 @@ internal sealed class NodeHeader : IDisposable
     /// <summary>The header's commands for the bar: its primary ones (the plan's buttons) and its secondary ones (the
     /// menu, a separator, the last group), from the plan's groups (HeaderPlan). <paramref name="pageDownload"/> is the
     /// page's own download where it has one (HeaderPlan.ByPage: a Pot's, a file's Save a copy), <paramref name="pageReplace"/>
-    /// a file page's own Replace, <paramref name="pageUpload"/> a Memory's page's own Add photos.</summary>
-    public (List<ICommandBarElement> Primary, List<ICommandBarElement> Secondary) Commands(Action pageDownload, Action? pageReplace = null, Action? pageUpload = null)
+    /// a file page's own Replace, <paramref name="pageUpload"/> a Memory's page's own Add photos, <paramref name="pageMusic"/>
+    /// its music's play or stop (Gallery.Music, ADR 0142 decision 6).</summary>
+    public (List<ICommandBarElement> Primary, List<ICommandBarElement> Secondary) Commands(Action pageDownload, Action? pageReplace = null, Action? pageUpload = null, Action? pageMusic = null)
     {
         var primary = new List<ICommandBarElement>();
         var secondary = new List<ICommandBarElement>();
         if (Shown is not { gone: false, plan: { } plan } s) return (primary, secondary);
         var kind = s.node.kind;
-        foreach (var a in HeaderPlan.Primary(plan, kind)) primary.Add(Command(a, s, pageDownload, pageReplace, pageUpload));
+        foreach (var a in HeaderPlan.Primary(plan, kind)) primary.Add(Command(a, s, pageDownload, pageReplace, pageUpload, pageMusic));
         foreach (var a in HeaderPlan.Secondary(plan, kind))
         {
             if (a is { id: "offline" })
@@ -236,7 +237,7 @@ internal sealed class NodeHeader : IDisposable
                 secondary.AddRange(Offline(a, s));
                 continue;
             }
-            secondary.Add(a is null ? new AppBarSeparator() : Command(a, s, pageDownload, pageReplace, pageUpload));
+            secondary.Add(a is null ? new AppBarSeparator() : Command(a, s, pageDownload, pageReplace, pageUpload, pageMusic));
         }
         return (primary, secondary);
     }
@@ -301,7 +302,7 @@ internal sealed class NodeHeader : IDisposable
             confirmed ? "Header.OfflineConfirm" : "Header.OfflineCancel");
     }
 
-    private AppBarButton Command(PlanAction a, HeaderShown s, Action pageDownload, Action? pageReplace, Action? pageUpload)
+    private AppBarButton Command(PlanAction a, HeaderShown s, Action pageDownload, Action? pageReplace, Action? pageUpload, Action? pageMusic)
     {
         var label = a.word is { } w ? Veyq.Said.Key(w) : a.id;
         var icon = a.id switch
@@ -317,6 +318,8 @@ internal sealed class NodeHeader : IDisposable
             "cover" => new SymbolIcon(Symbol.Pictures),
             "replace" => new SymbolIcon(Symbol.Upload),
             "upload" => new SymbolIcon(Symbol.Upload),
+            // the music's play, or its stop while this node's music is the player's queue (the core's word says which)
+            "music" => new SymbolIcon(a.word == "music_stop" ? Symbol.Stop : Symbol.Audio),
             _ => new SymbolIcon(Symbol.More),
         };
         var button = new AppBarButton { Icon = icon, Label = label };
@@ -332,6 +335,7 @@ internal sealed class NodeHeader : IDisposable
                 case "download" when HeaderPlan.ByPage(a.id, s.node.kind): pageDownload(); break;
                 case "replace": pageReplace?.Invoke(); break;
                 case "upload": pageUpload?.Invoke(); break;
+                case "music": pageMusic?.Invoke(); break;
                 case "download": Download(); break;
                 case "move": MoveDialog.Open(_window, s.node, copy: false, UndoBar); break;
                 case "copy": MoveDialog.Open(_window, s.node, copy: true, UndoBar); break;

@@ -7,6 +7,10 @@
 // (Lightbox.Details; one dialog at a time, Dialogs.Show); Save writes the original where the save picker says (Medium.Save,
 // the shell's InfoBar with its progress and Cancel). The slideshow's clock is the core's.
 //
+// While the account's player holds a queue the bar carries the music's compact controls (LightboxShown.music: its title,
+// Previous, Play or Pause, Next — the web's AudioMiniControls; their commands Player.*), and the video tells the core when
+// it plays and stops (Lightbox.Video): the music pauses while it plays and goes on after (ADR 0142 decisions 5 and 13).
+//
 // Every state is the core's (Lightbox.Open, Watched.Lightbox); every action one call. Nothing decrypted is written to show
 // it (ADR 0047): the picture is decoded in memory, a video read in ranges.
 using System;
@@ -65,6 +69,10 @@ internal sealed class LightboxView : IDisposable
     private readonly KeyEventHandler _arrows;
     private MediumPlayer? _player;
     private bool _closed;
+    /// <summary>The music's compact controls, shown while the player holds a queue.</summary>
+    private readonly StackPanel _music = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
+    private readonly TextBlock _musicTitle = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 220, Margin = new Thickness(0, 0, 4, 0) };
+    private readonly AppBarButton _musicToggle;
 
     public UIElement View => _view;
 
@@ -101,7 +109,31 @@ internal sealed class LightboxView : IDisposable
         AutomationProperties.SetAutomationId(_subtitle, "lightbox-name");
         heading.Children.Add(_title);
         heading.Children.Add(_subtitle);
-        _bar.Content = heading;
+        AppBarButton Mini(string glyph, string label, string id, Func<Call> call)
+        {
+            var b = new AppBarButton { Icon = new FontIcon { Glyph = glyph }, Label = label, LabelPosition = CommandBarLabelPosition.Collapsed, Width = 48 };
+            AutomationProperties.SetAutomationId(b, id);
+            AutomationProperties.SetName(b, label);
+            ToolTipService.SetToolTip(b, label);
+            b.Click += (_, _) => Act.Send(call());
+            return b;
+        }
+        AutomationProperties.SetAutomationId(_musicTitle, "lightbox-music-title");
+        _music.Children.Add(_musicTitle);
+        _music.Children.Add(Mini("\uE892", Words.MusicPrevious(), "lightbox-music-previous", () => new Call.PlayerPrevious()));
+        _musicToggle = Mini("\uE769", Words.MusicPause(), "lightbox-music-toggle",
+            () => _shown?.music?.playing == true ? new Call.PlayerPause() : new Call.PlayerResume());
+        _music.Children.Add(_musicToggle);
+        _music.Children.Add(Mini("\uE893", Words.MusicNext(), "lightbox-music-next", () => new Call.PlayerNext()));
+        AutomationProperties.SetAutomationId(_music, "lightbox-music");
+        var content = new Grid();
+        content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        content.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        content.Children.Add(heading);
+        Grid.SetColumn(_music, 1);
+        content.Children.Add(_music);
+        _bar.Content = content;
+        _bar.HorizontalContentAlignment = HorizontalAlignment.Stretch;
         _bar.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         _view.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _view.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -235,6 +267,7 @@ internal sealed class LightboxView : IDisposable
     private void Draw()
     {
         if (_shown is not { row: { } row } s) return;
+        DrawMusic(s.music);
         var name = row.name ?? Words.MemoryUnnamed(s.index + 1);
         _title.Text = s.position is { } p ? Said.Notice(p) : "";
         _subtitle.Text = name;
@@ -329,6 +362,19 @@ internal sealed class LightboxView : IDisposable
         _stage.Content = column;
     }
 
+    /// <summary>The music's compact controls: shown while the player holds a queue, its play or pause as it plays.</summary>
+    private void DrawMusic(NowPlayingShown? now)
+    {
+        _music.Visibility = now is null ? Visibility.Collapsed : Visibility.Visible;
+        if (now is null) return;
+        _musicTitle.Text = now.title;
+        var label = now.playing ? Words.MusicPause() : Words.MusicResume();
+        _musicToggle.Icon = new FontIcon { Glyph = now.playing ? "\uE769" : "\uE768" };
+        _musicToggle.Label = label;
+        AutomationProperties.SetName(_musicToggle, label);
+        ToolTipService.SetToolTip(_musicToggle, label);
+    }
+
     /// <summary>The medium's picture (Lightbox.Picture: its preview, else its original), decoded in memory into
     /// <paramref name="into"/>.</summary>
     private async void Load(string mediaId, Image into)
@@ -395,6 +441,12 @@ internal sealed class LightboxView : IDisposable
                 if (_closed) return;
                 StopPlayer(tellCore: true);
                 _stage.Content = Message(Words.MemoryVideoFailed(), "\uE714");
+            }, playing =>
+            {
+                // the music pauses while the video plays and goes on after it (ADR 0142 decision 13)
+                if (_closed || _id is not { } box) return;
+                Log.Write($"lightbox video playing {playing}");
+                Act.Send(new Call.LightboxVideo { lightbox = box, playing = playing });
             });
             _player = player;
             _zoom = null;

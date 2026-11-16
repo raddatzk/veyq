@@ -47,9 +47,13 @@ internal sealed class ReportDialog
     private ReportDialog(Window window) => _window = window;
 
     /// <summary>Opens the report sheet of <paramref name="node"/> over <paramref name="window"/>.</summary>
-    public static void Open(Window window, NodeAt node) => new ReportDialog(window).Show(node);
+    public static void Open(Window window, NodeAt node) => new ReportDialog(window).Show(new Call.ReportOpen { node = node });
 
-    private async void Show(NodeAt node)
+    /// <summary>Opens the report sheet the core opens for <paramref name="open"/> (a music track's, Music.Report: an ITEM,
+    /// ADR 0142 decision 11) over <paramref name="window"/>; its state draws the same sheet.</summary>
+    public static void Open(Window window, Call open) => new ReportDialog(window).Show(open);
+
+    private async void Show(Call open)
     {
         if (Dialogs.Open) return;
         var dialog = new ContentDialog
@@ -74,7 +78,7 @@ internal sealed class ReportDialog
         };
         _dialog = dialog;
         Draw();
-        Watch(node);
+        Watch(open);
         await Dialogs.Show(_window, dialog);
         _closed = true;
         _watch?.Dispose();
@@ -96,12 +100,12 @@ internal sealed class ReportDialog
         }
     }
 
-    private async void Watch(NodeAt node)
+    private async void Watch(Call open)
     {
         Answer answer;
         try
         {
-            (answer, _) = await Core.CallAsync(new Call.ReportOpen { node = node });
+            (answer, _) = await Core.CallAsync(open);
         }
         catch (Exception e)
         {
