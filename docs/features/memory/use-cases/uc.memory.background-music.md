@@ -6,7 +6,8 @@
   `features/memories/music/` and `MemoryMusic.vue`. It replaces the Spotify and Apple Music playlists, which ADR 0135
   removed. A lightbox video's pause of the music is built on the web
   ([ADR 0142](../../../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md)
-  decision 13); the apps' music is decided, not built ([§ Decided, not built](#decided-not-built)).
+  decision 13); the apps' music is built by the same ADR ([§ In the apps](#in-the-apps)) and passed on Android, Windows
+  and Linux; Apple's passes are open ([native-apps](../../../crosscutting/native-apps.md) § Open).
 - **Primary actor:** Anyone who may upload into the Memory or Chapter on screen (`memoryRights.upload`): a member who
   may write its scope, or a guest of a link that may upload. **Secondary:** anyone who opens it — a member, or a guest
   of any link onto it — listens.
@@ -85,17 +86,31 @@
 A Memory sounds the way it was: its own songs play in the background for everyone who opens it, guests included, with
 no account at any service and nothing leaving the instance.
 
-## Decided, not built
+## In the apps
 
 [ADR 0142](../../../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md):
+the apps (Android, iOS, macOS, Windows, Linux) follow the flows above, with these differences.
 
-- **The apps** (Android, iOS, macOS, Windows, Linux) play a node's music as the web does, from the header's toggle and a
-  Music view beside the gallery (Photos | Music), with a bar and the lightbox's compact controls; add a track from that
-  view with its facts sealed as the web seals them, rename, download, remove and report one. **On the phones it plays on
-  in the background and with the screen off**, with the lock screen's and the headset's controls; the desktops offer
-  their system media controls. A track added from an app is trimmed only where it is a WAV (inbox #932); a track the
-  device cannot play is skipped and marked "doesn't play on this device". A pinned Memory's music plays offline. A video
-  in the apps' lightbox pauses the music as main flow step 4 says of the web (decision 13).
+- **Where:** the Music tab is a view switch inside the Memory's page (**Photos** | **Music**); the header's **Play
+  music**/**Stop music** sits among the page's header actions (an icon where it fits, else the header's menu); **Add
+  music** is the Music view's own creating action. A track's menu offers rename, download, remove and report (as an
+  `ITEM`, with no "only its name" choice); a remove offers **Undo** like any medium's.
+- **Add (step 3):** the length is read by the platform's own reader of the picked file (a raw ADTS file's by counting
+  its frames), and **the silence is found only in a WAV**: every decoded format added from an app is sealed untrimmed and
+  keeps its silent edges wherever it plays (inbox #932). A file the device cannot read is refused with "can't be played
+  on this device".
+- **Listen:** the bar sits above the application's bar on a phone and along the window's bottom on a desktop; the
+  lightbox's compact controls sit in its top bar. **On the phones the music plays on in the background and with the
+  screen off**, with the notification, lock screen and headset buttons (Android: a media foreground service; iOS: a
+  background audio session); Android pauses when the headphones go. The desktops lend their system media controls (Now
+  Playing on a Mac, the SMTC flyout and media keys on Windows, MPRIS on Linux). A lightbox video pauses the music as
+  step 4 says (decision 13).
+- **E2 on a device:** a track the device's player cannot decode is skipped and marked "Doesn't play on this device" in
+  the Music view for the rest of the session; measured (ADR 0142's Consequences): Android's emulator does not play an
+  ALAC M4A, Windows without the Web Media extension no Ogg, Linux's Flatpak and the Mac play all ten formats tried.
+- **Offline:** a Memory made available offline keeps its tracks whole and plays them without a connection; its Music
+  view is then read-only (no add, rename, remove or report).
+- **Not in the apps:** a guest's listening (the apps open a gallery as a member only, inbox #435).
 
 ## Related
 
