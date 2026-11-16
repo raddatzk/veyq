@@ -332,12 +332,20 @@ a recipient the notice does not name is the cheap safe side to close now). `revi
   bearer in `MapShown` → `SecretFreeSchemaTest` red; (b) a map left open after `closeTenant()` → its tile still answered,
   red.
 
-- [ ] **6 Android** — D1's Compose map, the editors, the facts line, the Map tab, the photo panel's map, the Map view with
+- [x] **6 Android** — D1's Compose map, the editors, the facts line, the Map tab, the photo panel's map, the Map view with
   its picker and dialogs, Settings → Map services, every word from `words.json` (EN+DE). First, measured on the emulator:
   a pan and a pinch over 30 tiles at 60 Hz without a dropped frame in the GPU profile bars, or the frame time recorded.
   · Done when: `./gradlew :android:assembleDebug` and `scripts/validate_mobile_words.py` green; clicked once: consent in
   context, set a place by panning and picking a level, set a range, the Map tab's pins, add a track and edit it, turn map
   services off on a map.
+  *Done 2026-11-16:* `:android:assembleDebug`, `validate_mobile_words.py` and `validate_mobile_platform_guidelines.py`
+  green; the frame time recorded in ADR 0143's Consequences (pan and pinch over 32 tiles: 50th 27–32 ms, the emulator's
+  plain list the same — it holds no 60 Hz budget, so "no dropped frame" is the owner's device pass). Clicked once on a
+  throwaway API 36 emulator against the dev instance with real OSM tiles: the consent in context naming both hosts, a
+  place set by panning (`auto` → *Your own spot*) and picking a level, a range (May 3–10), the Map tab's pin opening its
+  Memory, a GPX track added with its activity (dashed), then renamed and re-labelled, a photo's map and its name
+  sealed once, *Turn map services off* on the Map view tearing the map down, Settings → Map services turning it on again.
+  The words are phase 7's (Apple) where they exist; Android added `track_nothing_on_map` and `track_actions`.
 
 - [x] **7 Apple (iOS, macOS)** — D1's MapKit views, the rest as phase 6, Settings → Map services naming Apple Maps. First,
   measured on the macOS build: a `Map` loads without a Maps entitlement (D12); and **what MapKit keeps on disk** — the
