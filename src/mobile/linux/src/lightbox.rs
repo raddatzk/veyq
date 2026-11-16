@@ -537,14 +537,16 @@ impl Inner {
         });
     }
 
-    /// The details (`Lightbox.Details`) in a dialog of rows, "Added by" where the core places it.
+    /// The details (`Lightbox.Details`) in a dialog of rows, "Added by" where the core places it; a photo with a position
+    /// shows it on a small map (`Lightbox.Map`, ADR 0143 decision 7) and its place's name once the geocoder named it
+    /// (`Lightbox.Place`, sealed once ever; the dialog opens at once and the row joins above the coordinate).
     fn show_details(self: &Rc<Self>) {
         let Some(lightbox) = self.id.get() else { return };
         let Some(media_id) = self.shown.borrow().as_ref().and_then(|s| s.row.as_ref().map(|r| r.media_id.clone())) else { return };
         let window = self.window.clone();
         glib::spawn_future_local(async move {
-            let (rows, uploader, at) = match bridge::call(&Call::LightboxDetails { lightbox, media_id }).await.map(|(a, _)| a) {
-                Ok(Answer::MediumDetails { rows, uploader, uploader_at, .. }) => (rows, uploader, uploader_at),
+            let (rows, uploader, at, has_map) = match bridge::call(&Call::LightboxDetails { lightbox, media_id: media_id.clone() }).await.map(|(a, _)| a) {
+                Ok(Answer::MediumDetails { rows, uploader, uploader_at, map }) => (rows, uploader, uploader_at, map),
                 other => return eprintln!("veyq: Lightbox.Details answered {other:?}"),
             };
             let group = adw::PreferencesGroup::new();
@@ -567,17 +569,68 @@ impl Inner {
             if lines.is_empty() {
                 group.add(&adw::ActionRow::builder().title(glib_escape(&words::memory_no_detail())).build());
             }
+            let place_label = words::memory_field_place();
+            let asks_place = has_map && !lines.iter().any(|(l, _)| *l == place_label);
+            // the place's row stands where it joins (above the coordinate), hidden until the geocoder named it
+            let place_row = adw::ActionRow::builder().title(glib_escape(&place_label)).subtitle_selectable(true).visible(false).build();
+            place_row.add_css_class("property");
+            let location = words::memory_field_location();
+            let mut placed = !asks_place;
             for (label, value) in lines {
+                if !placed && label == location {
+                    group.add(&place_row);
+                    placed = true;
+                }
                 let row = adw::ActionRow::builder().title(glib_escape(&label)).subtitle(glib_escape(&value)).subtitle_selectable(true).build();
                 row.add_css_class("property");
                 group.add(&row);
             }
+            if !placed {
+                group.add(&place_row);
+            }
             let page = adw::PreferencesPage::new();
+            let map = if has_map {
+                match bridge::call(&Call::LightboxMap { lightbox, media_id: media_id.clone() }).await.map(|(a, _)| a) {
+                    Ok(Answer::MapOpened { map }) => {
+                        let m = crate::raster_map::RasterMap::open(map, 200, true, &window);
+                        let map_group = adw::PreferencesGroup::new();
+                        map_group.add(m.widget());
+                        page.add(&map_group);
+                        Some(m)
+                    }
+                    other => {
+                        eprintln!("veyq: Lightbox.Map answered {other:?}");
+                        None
+                    }
+                }
+            } else {
+                None
+            };
             page.add(&group);
+            if asks_place {
+                let row = place_row.downgrade();
+                glib::spawn_future_local(async move {
+                    match bridge::call(&Call::LightboxPlace { lightbox, media_id }).await.map(|(a, _)| a) {
+                        Ok(Answer::PlaceResolved { name: Some(name) }) => {
+                            eprintln!("veyq: lightbox details: the place's name resolved");
+                            if let Some(row) = row.upgrade() {
+                                row.set_subtitle(&glib_escape(&name));
+                                row.set_visible(true);
+                            }
+                        }
+                        other => eprintln!("veyq: Lightbox.Place answered {other:?}"),
+                    }
+                });
+            }
             let view = adw::ToolbarView::new();
             view.add_top_bar(&adw::HeaderBar::new());
             view.set_content(Some(&page));
             let dialog = adw::Dialog::builder().title(words::memory_details()).child(&view).content_width(420).content_height(560).build();
+            // the photo's map held while the dialog shows, closed in the core with it
+            let held = RefCell::new(map);
+            dialog.connect_closed(move |_| {
+                held.borrow_mut().take();
+            });
             dialog.present(Some(&window));
         });
     }

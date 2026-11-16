@@ -137,8 +137,8 @@ fn activate(app: &adw::Application) {
     }
     let offline_root = data.is_dir().then(|| data.join("offline")).and_then(|p| p.to_str().map(str::to_owned));
     // no window owns a prompt here: the Secret Service asks nothing of its own (ADR 0136's Consequences)
-    // the geocoder's language: English until the app's maps hand it the words' own (the places CR's phase 8)
-    let config = Config { device: glib::host_name().to_string(), window: 0, prompt: String::new(), offline_root, language: "en".into() };
+    // the geocoder's language is the words' own (ADR 0143 decision 2)
+    let config = Config { device: glib::host_name().to_string(), window: 0, prompt: String::new(), offline_root, language: words::language().into() };
     match bridge::start(&config, store) {
         Start::Started | Start::AlreadyStarted => {}
         Start::NoAes => {

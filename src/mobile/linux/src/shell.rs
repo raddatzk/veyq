@@ -26,6 +26,7 @@ use gtk::{gio, glib};
 use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::Facts, wire::NodeAt, wire::ObjectRef, wire::ShellModelState, wire::ShellShown};
 use crate::drop_box::DropBoxPage;
 use crate::file_page::FilePage;
+use crate::memories_map::MemoriesMap;
 use crate::memory_page::{self, MemoryPage};
 use crate::music_bar::MusicBar;
 use crate::header::{self, Header};
@@ -90,6 +91,8 @@ pub struct Shell {
     file: RefCell<Option<FilePage>>,
     drop_box: RefCell<Option<DropBoxPage>>,
     memory: RefCell<Option<MemoryPage>>,
+    /// The Memories bar's Map tab while it is chosen ([MemoriesMap]); its map closes when it goes.
+    memories_map: RefCell<Option<MemoriesMap>>,
     /// The content's navigation, where a Memory's lightbox is pushed over the page ([crate::lightbox]).
     nav: adw::NavigationView,
     /// "Offline — content as of …", revealed while the core shows the lists from the offline store.
@@ -242,6 +245,7 @@ impl Shell {
             file: RefCell::new(None),
             drop_box: RefCell::new(None),
             memory: RefCell::new(None),
+            memories_map: RefCell::new(None),
             nav,
             banner,
             gone_said: RefCell::new(Vec::new()),
@@ -783,6 +787,14 @@ impl Shell {
         self.content_header.set_show_back_button(!shown.can_go_back);
 
         self.draw_header(shown);
+        // the Memories bar's Map tab stands while it is chosen and nothing is open; a page closing back onto the list asks
+        // the rows' dates again (its own may have been edited)
+        let memories = shell.application == Some(ApplicationId::Memories) && shell.open_object.is_none();
+        let map_tab = memories && shown.selected_tab.as_ref().is_some_and(|t| t.key == "memories.map");
+        if !map_tab {
+            self.memories_map.borrow_mut().take();
+        }
+        let back_from_page = self.memory.borrow().is_some();
         let body: gtk::Widget = match &shell.open_object {
             Some(o) if o.kind == "EXPENSES_POT" => {
                 self.file.borrow_mut().take();
@@ -889,11 +901,30 @@ impl Shell {
                 self.file.borrow_mut().take();
                 self.drop_box.borrow_mut().take();
                 self.memory.borrow_mut().take();
-                let list = if shell.application.is_some() { home::list(shown.list.as_ref()) } else { home::home(state, shown, self.drops().as_ref()) };
-                if let Some(scroll) = list.downcast_ref::<gtk::ScrolledWindow>() {
-                    self.scrolls.keep(scroll, ListScrolls::place(state));
+                if map_tab {
+                    let mut page = self.memories_map.borrow_mut();
+                    let page = page.get_or_insert_with(|| MemoriesMap::open(self.window.upcast_ref()));
+                    page.places(&shown.tabs, shown.selected_tab.as_ref());
+                    page.widget().clone().upcast()
+                } else {
+                    let list = if shell.application.is_some() { home::list(shown.list.as_ref()) } else { home::home(state, shown, self.drops().as_ref()) };
+                    if let Some(scroll) = list.downcast_ref::<gtk::ScrolledWindow>() {
+                        self.scrolls.keep(scroll, ListScrolls::place(state));
+                    }
+                    if memories {
+                        let key = shown.list.as_ref().map(|l| l.all.iter().chain(&l.favorites).chain(&l.recent).map(|o| o.node_id.as_str()).collect::<Vec<_>>().join(","));
+                        home::ask_dates(&key.unwrap_or_default(), back_from_page);
+                    }
+                    if memories && shown.tabs.len() > 1 {
+                        // the bar's places above the list, as the Map tab and the Pot draw them
+                        let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).build();
+                        column.append(&crate::pot::places(&shown.tabs, shown.selected_tab.as_ref()));
+                        column.append(&list);
+                        column.upcast()
+                    } else {
+                        list
+                    }
                 }
-                list
             }
         };
         let pot_open = self.pot.borrow().is_some();
