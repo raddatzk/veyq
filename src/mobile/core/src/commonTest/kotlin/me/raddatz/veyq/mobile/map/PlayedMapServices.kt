@@ -7,9 +7,12 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.StandardTestDispatcher
 import me.raddatz.veyq.mobile.session.MemoryDeviceStore
+import me.raddatz.veyq.mobile.session.Reach
 
 /**
  * A tile server and a geocoder the test plays (ADR 0143 D2): every request the map path sends is counted with its URL
@@ -60,8 +63,11 @@ class PlayedMapServices(private val test: TestScope) {
     val consent: MapConsent get() = MapConsent.of(store)
 
     /** The map services of a tenant whose server serves [offer], on this device, on the test's virtual time. */
-    fun services(offer: MapOffer = OFFER, recipient: TileRecipient = TileRecipient.TILE_HOST): MapServices =
-        MapServices(offer, consent, http(), recipient, now = { test.testScheduler.currentTime }, context = dispatcher)
+    fun services(
+        offer: MapOffer = OFFER,
+        recipient: TileRecipient = TileRecipient.TILE_HOST,
+        reach: StateFlow<Reach> = MutableStateFlow(Reach.Online),
+    ): MapServices = MapServices(offer, consent, http(), recipient, reach, now = { test.testScheduler.currentTime }, context = dispatcher)
 
     companion object {
         const val ORIGIN = "https://family.example"

@@ -1,9 +1,14 @@
 package me.raddatz.veyq.mobile.map
 
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import me.raddatz.veyq.mobile.session.Reach
 import me.raddatz.veyq.mobile.session.TenantSession
 import kotlin.coroutines.CoroutineContext
 
@@ -22,7 +27,8 @@ sealed interface MapState {
     /** No map is served (switched off by the operator or the space's owner, or not configured): no map, on Apple too. */
     data object NotOffered : MapState
 
-    /** The capabilities were not read (offline): which hosts are served now is unknown, so no map (D9). */
+    /** Offline — the capabilities were not read, or the account lost its server since: which hosts are served now is
+     *  unknown, so no map (D9). */
     data object Offline : MapState
 
     /** This device's consent is asked for [hosts]; [renewal] where an earlier one named other hosts. */
@@ -40,6 +46,9 @@ sealed interface MapState {
  * what is in flight and clears the geocoder's queue. [close] does the same and ends it (a lock, a sign-out, a tenant
  * switch).
  *
+ * Offline no map is drawn (D9): where the capabilities were not read, and from the moment the account's [reach] loses
+ * its server until it is back — the consent holds again then, unasked.
+ *
  * **On Apple the tiles' recipient is Apple Maps** ([TileRecipient.APPLE_MAPS]): the consent names [APPLE_MAPS] in place
  * of the tile host, MapKit fetches its own map, and the core's [state] is what mounts it — `memories.map` off means no
  * map there too (owner, 2026-11-16). The geocoder is the operator's on every platform.
@@ -49,6 +58,7 @@ class MapServices(
     private val consent: MapConsent,
     http: MapHttp,
     val recipient: TileRecipient = TileRecipient.TILE_HOST,
+    private val reach: StateFlow<Reach> = MutableStateFlow(Reach.Online),
     now: () -> Long = ::wallClockMs,
     context: CoroutineContext = Dispatchers.Default,
 ) {
@@ -92,6 +102,12 @@ class MapServices(
 
     private val stopObserving = consent.observe(::consentChanged)
 
+    /** Follows the account's reach: offline mid-session the map goes, back online it returns (D9). */
+    private val watch = CoroutineScope(SupervisorJob() + context).also { scope ->
+        // the reach read at the start may have moved before this runs: every value is compared with what is shown
+        scope.launch { reach.collect { if (compute() != _state.value) consentChanged() } }
+    }
+
     /** Gives this device's consent for the hosts served now (the prompt's and the settings' *Turn on*). */
     fun turnOn() {
         if (offered) consent.give(currentHosts)
@@ -103,6 +119,7 @@ class MapServices(
     /** The tenant's map path ends — a lock, a sign-out, a tenant switch: the tiles dropped, the queue cleared, nothing asked again. */
     fun close() {
         stopObserving()
+        watch.cancel()
         tiles?.close()
         geocoder?.clear()
     }
@@ -116,7 +133,7 @@ class MapServices(
     }
 
     private fun compute(): MapState = when {
-        !offer.read -> MapState.Offline
+        !offer.read || reach.value !is Reach.Online -> MapState.Offline
         !offered -> MapState.NotOffered
         MapConsent.holds(consent.given.value, currentHosts) -> MapState.Shown
         else -> MapState.Consent(currentHosts, renewal = consent.given.value != null)
@@ -138,6 +155,7 @@ class MapServices(
             MapConsent.of(tenant.account.deviceStore),
             MapHttp(tenant.account.outside, tenant.origin),
             recipient,
+            tenant.account.reach,
         )
     }
 }
