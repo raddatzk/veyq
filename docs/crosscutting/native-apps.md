@@ -446,7 +446,7 @@ the unlocked Mac the click-through, Now Playing and the media keys (the screen w
 elsewhere: Android's lock-screen controls (the AVD has no keyguard) and a real phone's decoders (the matrix is the
 emulator's); the signed-in Flatpak's own MPRIS on a desktop (`playerctl`; a release build has no devlogin); the MSIX's
 SMTC source name (the unpackaged build has no package identity, so the flyout names no app). A decoded format added from an app keeps its silent edges
-(#932); a Windows lightbox video lists a second, untitled media session (#938).
+(#932).
 
 **Uploads**: an upload that goes on while the app is in the background (Android a foreground service, iOS a
 background task); placeholder tiles in the gallery for what is under way; the list behind Apple's button seen open.

@@ -265,8 +265,14 @@ is the Kotlin core's and each platform draws only its own UI; this ADR applies i
     stopped). **The flyout** (the quick settings, Win+A, shot while minimised): the track's title with previous,
     play/pause and next, its play/pause glyph following the state; the source reads "Unbekannte Anwendung" because the
     unpackaged build has no package identity (the MSIX's name is the owner's pass). Seen beside it: while the lightbox's
-    video plays, its own `MediaPlayer` lists a second, untitled session of the app, which stays `Paused` after the video's
-    end until the lightbox closes; a media key still drove the music (inbox #938).
+    video played, its own `MediaPlayer` listed a second, untitled session of the app, which stayed `Paused` after the
+    video's end until the lightbox closed; a media key still drove the music. **So no medium lends the system controls**
+    (2026-11-16): `MediumPlayer` — the lightbox's video and a Depot file's medium — and the QR camera's preview turn their
+    `MediaPlayer`'s `CommandManager` off, as the decks do, so the music's SMTC is the app's only session (Android's medium
+    asks no audio focus either). Measured on the VM (the same setup; the SMTC sampled each second while the lightbox opened):
+    a 60 s track `Playing`, then the lightbox's 20 s video played (14:14:27–14:14:47) — `sessions: 1`, the music's,
+    `Paused` (decision 13's interruption) —, at its end `sessions: 1`, `Playing`, and so after `lightbox-close`: never a
+    second session. The Depot medium and the camera preview were not driven.
   - *Linux* (e): the Flatpak built from this tree (`run.py flatpak`, 1.1030 aarch64), installed in the builder's
     container and run in its sandbox under a session bus **outside** it (`dbus-run-session` around `flatpak run`, so the
     app talks through its bus proxy, as on a desktop) and the runtime's Broadway: at its sign-in the bus lists
