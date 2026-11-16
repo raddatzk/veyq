@@ -110,6 +110,21 @@ A Gradle build of its own, run through its own wrapper.
   track's title the host's `Words.Say`. A host answers the deck and control requests from its UI thread, in the order
   sent (Linux `music_host` through `bridge::reply`, Windows `MusicHost` through `Core.Player`), never inside the host
   function; a track's report is `ReportShown.offersName` false (no "only its name").
+  A Memory's date, place and maps (ADR 0143 decision 11): the tenant's map services are made when it opens and closed when
+  it closes (`Composition.language`, from `Config.language`, is the geocoder's); a map is opened by its owner's call —
+  `Map.OpenMemories` (the bar's Map tab), `Lightbox.Map` (a photo's), `Place.Open` and `Tracks.Open` (answered with the
+  map's id beside the editor's or the view's) — and drawn from `Watched.Map` (`MapShown`: the state `MapState.NotOffered|
+  Consent(tileHost, geocoderHost, renewal)|Shown|Offline`, the view the core holds with its `moved` count, the tiles in
+  view as `{tile, x, y, size}` in normalised Mercator space, the attribution, track lines, dots, clusters, a photo's
+  point (`photo`), the place's centre pin), sized and panned by `Map.View(map, x?, y?, zoom?, width, height, scale)` (applied in the
+  host's order; no centre: the core's opening view for that size), its tiles `Map.Tile(map, tile)` → `Answer.Bytes`, a
+  cluster `Map.Tap`, closed by `Map.Close`, its page (a gallery, a lightbox) or the tenant; the consent `Map.TurnOn|TurnOff`
+  and `Watched.MapServices` (Settings). The facts line rides `GalleryShown` (`date`, `place`, `editsFacts`, `tracks`); a
+  row's date `Memories.Dates`; the editors `Date.Open|Mode|From|To|Save|Close` (`Watched.Date`) and
+  `Place.Open|Name|Level|ToggleName|Follow|Save|Remove|Close` (`Watched.Place`; a centre the host moved on the place's map
+  is the member's pan); a photo's name `Lightbox.Place`; the Map view `Tracks.Open|Show|Select|Add(paths)|Confirm|Cancel|
+  Edit|Remove|Download|Report|Seen|Close` (`Watched.Tracks`). No address crosses: a tile is asked by its id, the hosts are
+  names in their own fields (`SecretFreeSchemaTest.aMapCrossesAsItsPictureAlone`).
   A device link (ADR 0059) is opened by its role's call — the trusted device's `Link.ShowForNewDevice`/`ScanSignInCode`
   over a connection (a tenant open; they close with it), the new device's `Link.ScanFromTrusted`/`ShowForSignIn` over the
   sign-in form's server — answered `LinkOpened(link)` for `Watched.Link` (`LinkShown`: the core's `DeviceLink.Shown`).
