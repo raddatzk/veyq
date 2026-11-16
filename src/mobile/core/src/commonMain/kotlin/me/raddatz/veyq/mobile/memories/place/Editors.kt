@@ -90,7 +90,8 @@ class DateEditor(stored: MemoryDate?, val autoRange: MemoryDate, private val sav
  *   returns to `auto`.
  * - **The name** comes from the reverse lookup [RESOLVE_DELAY_MS] after the map settles, at the chosen or the default
  *   level ([pickLevel], the level picker's options are [State.levels]); typing ([typeName]) makes it `manual` and freezes
- *   it; [toggleNameMode] switches between the two.
+ *   it; [toggleNameMode] switches between the two. A zoom without a pan asks nothing new, on purpose: the lookup is
+ *   always made at `zoom=18` ([Geocoder]) and its one answer holds every level the picker offers.
  * - **Without a map** ([State.withMap] false: none served, or this device's consent not given) it is the name field alone,
  *   no request leaving the device; [mapsTurnedOn] when the consent is given in it.
  * - [build] the place the fields hold, [save] it; *Remove place* is [remove] — the date and the cover kept either way.

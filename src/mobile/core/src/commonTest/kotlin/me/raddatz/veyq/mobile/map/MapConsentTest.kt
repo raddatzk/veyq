@@ -204,8 +204,9 @@ class MapConsentTest {
 
     @Test
     fun anAccountThatLosesItsServerMidSessionDrawsNoMapUntilItIsBackAndFetchesNothingMeanwhile() = runTest {
-        // the pass of ADR 0143 phase 9 (Android): signed in online, then the connection gone — the capabilities were read
-        // before, yet the app is offline now and the map must go (D9), on every map of the tenant, and come back with it
+        // ADR 0143's Android pass (its Consequences): signed in online, then the connection gone — the
+        // capabilities were read before, yet the app is offline now and the map must go (D9), on every map of the
+        // tenant, and come back with it
         val played = PlayedMapServices(this)
         val reach = MutableStateFlow<Reach>(Reach.Online)
         val s = played.services(reach = reach)

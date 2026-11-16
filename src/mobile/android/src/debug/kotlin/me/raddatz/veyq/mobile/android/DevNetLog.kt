@@ -4,11 +4,11 @@ import android.util.Log
 import okhttp3.Interceptor
 
 /**
- * Debug builds only: the request log of a device pass (ADR 0143's phase 9). Every request to a host outside the
- * developer's `*.localhost` instance — a map tile, a geocode, an exchange-rate table — goes to logcat (`veyq-net`) as it
- * leaves OkHttp: its method, host and path, the `User-Agent` actually sent, and whether a `Referer`, a `Cookie` or an
- * `Authorization` header went with it — their presence only, never a value. The instance's own requests (and the
- * store's presigned URLs, whose query is a credential) are not logged.
+ * Debug builds only: the request log of a device pass (ADR 0143's Consequences, the Android map pass). Every request
+ * to a host outside the developer's `*.localhost` instance — a map tile, a geocode, an exchange-rate table — goes to
+ * logcat (`veyq-net`) as it leaves OkHttp: its method, host and path, the `User-Agent` actually sent, and whether a
+ * `Referer`, a `Cookie` or an `Authorization` header went with it — their presence only, never a value. The instance's
+ * own requests (and the store's presigned URLs, whose query is a credential) are not logged.
  */
 object DevNetLog {
     val interceptor: Interceptor? = Interceptor { chain ->
