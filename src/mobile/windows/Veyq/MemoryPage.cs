@@ -10,9 +10,11 @@
 // InfoBar for as long as the core offers it. The page is read anew live while it stands (Watched.GalleryLive, the web's
 // poll).
 //
-// Where the node has music or whoever looks may add some (GalleryShown.musicView), a SelectorBar under its head switches
-// between its photos and its Music view (MusicView; ADR 0142 decision 6: Fluent's SelectorBar, Linux's AdwToggleGroup); the
-// header's own music action plays or stops the node's music (Gallery.Music).
+// Under its head the facts line (its date and place, each opening its editor where whoever looks may edit its meta:
+// MemoryFacts, ADR 0143 decision 5), then a SelectorBar switching between its photos, its Music view where the node has
+// music or whoever looks may add some (GalleryShown.musicView; MusicView, ADR 0142 decision 6: Fluent's SelectorBar, Linux's
+// AdwToggleGroup) and its Map view, always (MemoryMapView, ADR 0143 decision 8); the header's own music action plays or
+// stops the node's music (Gallery.Music).
 //
 // Every state is the core's GalleryModel (Gallery.Open, Watched.Gallery): the rows, the chapters, what it offers (rights
 // only remove functions: share view = member view). Nothing decrypted is written to show it (ADR 0047).
@@ -91,6 +93,13 @@ internal sealed class MemoryPage : IDisposable
     private readonly SelectorBarItem _musicItem = new() { Text = Words.MusicViewMusic() };
     private readonly Border _musicSlot = new() { Visibility = Visibility.Collapsed };
     private MusicView? _music;
+    /// <summary>The Map view's place (ADR 0143 decision 8: offered always, as the web's tab is) and the view while it shows.</summary>
+    private readonly SelectorBarItem _mapItem = new() { Text = Words.MemoryViewMap() };
+    private readonly Border _mapSlot = new() { Visibility = Visibility.Collapsed };
+    private MemoryMapView? _mapView;
+    /// <summary>The facts line under the head (its date and place, ADR 0143 decision 5) and what it was drawn from.</summary>
+    private readonly Border _factsSlot = new();
+    private (MemoryDateShown?, string?, bool)? _factsDrawn;
 
     public NodeAt Node { get; }
 
@@ -115,14 +124,18 @@ internal sealed class MemoryPage : IDisposable
         _undoBar = undoBar;
         _saving = saving;
         _column.Children.Add(_heroSlot);
+        _column.Children.Add(_factsSlot);
         AutomationProperties.SetAutomationId(_views, "memory-views");
         AutomationProperties.SetAutomationId(_photosItem, "memory-view-photos");
         AutomationProperties.SetAutomationId(_musicItem, "memory-view-music");
         _views.Items.Add(_photosItem);
         _views.Items.Add(_musicItem);
+        AutomationProperties.SetAutomationId(_mapItem, "memory-view-map");
+        _views.Items.Add(_mapItem);
         _views.SelectionChanged += (_, _) => ShowView();
         _column.Children.Add(_views);
         _column.Children.Add(_musicSlot);
+        _column.Children.Add(_mapSlot);
         AutomationProperties.SetAutomationId(_count, "memory-count");
         _column.Children.Add(_count);
         var heading = new TextBlock { Text = Words.MemoryChapters(), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] };
@@ -292,6 +305,21 @@ internal sealed class MemoryPage : IDisposable
     private void ShowView()
     {
         var music = _views.Visibility == Visibility.Visible && ReferenceEquals(_views.SelectedItem, _musicItem);
+        var map = _views.Visibility == Visibility.Visible && ReferenceEquals(_views.SelectedItem, _mapItem);
+        if (map && _mapView is null && _id is { } at)
+        {
+            _mapView = new MemoryMapView(_window, at, _say, _saving);
+            _mapSlot.Child = _mapView.View;
+            Log.Write("memory page: the Map view");
+        }
+        else if (!map && _mapView is not null)
+        {
+            _mapSlot.Child = null;
+            _mapView.Dispose();
+            _mapView = null;
+            Log.Write("memory page: the Map view left");
+        }
+        _mapSlot.Visibility = map ? Visibility.Visible : Visibility.Collapsed;
         if (music && _music is null && _id is { } gallery)
         {
             _music = new MusicView(_window, gallery, _say, _saving);
@@ -306,12 +334,13 @@ internal sealed class MemoryPage : IDisposable
             Log.Write("memory page: the photos");
         }
         _musicSlot.Visibility = music ? Visibility.Visible : Visibility.Collapsed;
-        var photos = music ? Visibility.Collapsed : Visibility.Visible;
+        var other = music || map;
+        var photos = other ? Visibility.Collapsed : Visibility.Visible;
         _count.Visibility = photos;
         _status.Visibility = photos;
         _grid.Visibility = photos;
-        _chapters.Visibility = music ? Visibility.Collapsed : _shown?.chapters.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
-        if (!music) Relayout();
+        _chapters.Visibility = other ? Visibility.Collapsed : _shown?.chapters.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (!other) Relayout();
     }
 
     /// <summary>Refresh (F5, Ctrl+R): the gallery read anew (Gallery.Reload).</summary>
@@ -672,11 +701,14 @@ internal sealed class MemoryPage : IDisposable
         };
         if (s?.rows is { Count: 0 }) DropRows();
         if (s is null) return;
-        var views = s.musicView ? Visibility.Visible : Visibility.Collapsed;
-        if (_views.Visibility != views)
+        DrawFacts(s);
+        // Photos | Music | Map: the Map view always (the web's tab), Music where the node offers it
+        var music = s.musicView ? Visibility.Visible : Visibility.Collapsed;
+        if (_views.Visibility != Visibility.Visible || _musicItem.Visibility != music)
         {
-            _views.Visibility = views;
-            if (!s.musicView) _views.SelectedItem = _photosItem;
+            _views.Visibility = Visibility.Visible;
+            _musicItem.Visibility = music;
+            if (!s.musicView && ReferenceEquals(_views.SelectedItem, _musicItem)) _views.SelectedItem = _photosItem;
             ShowView();
         }
         // the offer ended (its window, or the undo): the Undo goes with it — once a state showed the offer, so an update
@@ -723,6 +755,16 @@ internal sealed class MemoryPage : IDisposable
         }
     }
 
+    /// <summary>The facts line under the head, drawn anew only when its date, place or rights changed.</summary>
+    private void DrawFacts(GalleryShown s)
+    {
+        var drawn = (s.date, s.place, s.editsFacts);
+        if (_factsDrawn == drawn || _id is not { } gallery) return;
+        _factsDrawn = drawn;
+        Log.Write($"memory facts: date {MemoryFacts.DateText(s.date) ?? "-"}, place {(s.place is null ? "-" : "named")}, edits {s.editsFacts}, tracks {s.tracks}");
+        _factsSlot.Child = MemoryFacts.Line(_window, gallery, s);
+    }
+
     private async void AskPurge(long gallery, string question)
     {
         try
@@ -767,6 +809,8 @@ internal sealed class MemoryPage : IDisposable
         CloseLightbox();
         _music?.Dispose();
         _music = null;
+        _mapView?.Dispose();
+        _mapView = null;
         _watch?.Dispose();
         _live?.Dispose();
         if (_seenUndo)

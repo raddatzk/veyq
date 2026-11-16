@@ -494,6 +494,33 @@ internal sealed class LightboxView : IDisposable
             if (d.uploader is { } u) lines.Insert(Math.Clamp(d.uploaderAt, 0, lines.Count), (Words.MemoryFieldUploadedBy(), Said.Piece(u)));
             Log.Write($"lightbox details: {lines.Count} rows{(d.uploader is null ? "" : ", the uploader among them")}");
             var list = new StackPanel { Spacing = 10 };
+            // a photo with GPS: its small map at zoom 15 with its direction (ADR 0143 decision 7), and its place's name
+            // resolved once and sealed (Lightbox.Place), the LOCATION row kept
+            RasterMap? map = null;
+            if (d.map)
+            {
+                var (opened, _) = await Core.CallAsync(new Call.LightboxMap { lightbox = lightbox, mediaId = mediaId });
+                if (opened is Answer.MapOpened { map: var id })
+                {
+                    Log.Write($"lightbox details: map {id}");
+                    map = new RasterMap(_window, id, closesItself: true);
+                    map.View.Height = 200;
+                    map.View.MinWidth = 360;
+                    list.Children.Add(map.View);
+                }
+                else Log.Write($"Lightbox.Map answered {opened.GetType().Name}");
+                var placeLabel = Words.MemoryFieldPlace();
+                if (!lines.Any(l => l.Label == placeLabel))
+                {
+                    var (resolved, _) = await Core.CallAsync(new Call.LightboxPlace { lightbox = lightbox, mediaId = mediaId });
+                    if (resolved is Answer.PlaceResolved { name: { } name })
+                    {
+                        Log.Write("lightbox details: the place's name resolved");
+                        lines.Insert(Math.Clamp(lines.FindIndex(l => l.Label == Words.MemoryFieldLocation()) is var at and >= 0 ? at : lines.Count, 0, lines.Count), (placeLabel, name));
+                    }
+                    else Log.Write($"Lightbox.Place answered {(resolved is Answer.PlaceResolved ? "no name" : resolved.GetType().Name)}");
+                }
+            }
             if (lines.Count == 0) list.Children.Add(new TextBlock { Text = Words.MemoryNoDetail(), TextWrapping = TextWrapping.Wrap });
             foreach (var (label, value) in lines)
             {
@@ -513,6 +540,7 @@ internal sealed class LightboxView : IDisposable
             };
             AutomationProperties.SetAutomationId(dialog, "lightbox-details-dialog");
             await Dialogs.Show(_window, dialog);
+            map?.Dispose();
         }
         catch (Exception e)
         {
