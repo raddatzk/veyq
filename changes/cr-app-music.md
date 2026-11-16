@@ -363,12 +363,30 @@ lightbox plays and starts again by itself when the video stops or the lightbox m
   dev instance's moderation queue. Bites (a)–(f) each red at its own assertion and green again; (c) also live (the pin's
   plan counts no blob).
 
-- [ ] **5 the bridge** — `Watched.Player` → `PlayerShown`, `Watched.Music` → `MusicShown`, the calls (`Player.Play|
+- [x] **5 the bridge** — `Watched.Player` → `PlayerShown`, `Watched.Music` → `MusicShown`, the calls (`Player.Play|
   Pause|Resume|Next|Previous|Seek|Stop|OpenNode`, `Music.Play|Rename|Remove|Download|Report|Add(paths)`), the deck host
   requests and events (D2), the system-controls commands as calls; `PlayerShown` and `MusicShown` under
   `SecretFreeSchemaTest`; a player's readers dropped with its tenant (`DispatchTest`'s pattern). · Done when:
   `:bridge:jvmTest` green; **bites**: (a) a `K_blob` field added to `MusicShown` → `SecretFreeSchemaTest` red; (b) the
   player left out of `closeTenant()` → a reader outliving the sign-out, red.
+  *Done 2026-11-16:* `Wire.kt` gains the calls `Gallery.Music` (the header's play or stop: the CR's `Player.Play` is no
+  player command — the bar never starts a queue — so it is the gallery's toggle), `Lightbox.Video(playing)` (D13),
+  `Player.Pause|Resume|Next|Previous|Seek|Stop|OpenNode` (the system's commands come back as these, the system's play is
+  `Resume`), `Music.Open|Close|Play|Rename|Remove|Download|Report|Add|Seen`, the deck events `Audio.Ended|Failed(deck,
+  load)`; the shown `PlayerShown`, `NowPlayingShown` (no queue key: `key` is a secret's name on the wire), `MusicShown`,
+  `MusicTrackShown`, `GalleryShown.musicView|musicHere`, `LightboxShown.music`; the host requests `Audio.Load(deck, load,
+  reader, size, mediaType)|Play|Position` (asked) and `Audio.Pause|Seek|Ramp|Clear`, `Controls.Bind|Show|Clear` (told:
+  `Host.tell`, the reply dropped), and `Words.Say(notice)` — the untitled title the core needs as a string, the host's words
+  (`HostAudio.untitled`). The decks ask through `Host.asking`, which suspends instead of blocking the player's lane; a load's
+  reader is held by id like any (`HeldReaders`) and dropped at the deck's clear; each load is numbered so a late event of a
+  cleared deck is dropped. A picked track's length is the existing `Media.Duration` (`HostAudio.measure`). The player is
+  made at a tenant's open (`Tenant.musicPlayer`, `Composition.audio`) and stopped in `closeTenant()`. One word added,
+  `music_nothing_plays` (the owner's copy of question 1), for `PlayerShown.notice`. Tests: `MusicDispatchTest` (4: decks,
+  events, commands, controls and the lightbox's interruption; a queue none of whose tracks loads; the Music view's calls;
+  the tenant's end), `WireTest`'s samples for every new variant. Bites: (a) `K_blob` on `MusicShown` stayed **green** —
+  `SecretFreeSchemaTest`'s name rule did not see the web's key symbols; the rule gained `^[kK](_|[A-Z])` (with its own
+  self-check case), then (a) red at `nothingTheCoreSendsCarriesAKeyASealATokenASecretOrBytes` and green restored; (b) the
+  player's stop removed from `closeTenant()` → red at "a track's reader outlived the sign-out", green restored.
 
 - [ ] **6 Android and Apple (iOS, macOS)** — D2's decks, D3's background and system controls, D5's bar and compact
   controls, D6's view switch and Music view, D7's picker, every word from `words.json` (EN+DE). First, measured on the
