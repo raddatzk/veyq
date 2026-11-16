@@ -2337,6 +2337,22 @@ scenario proved the same thing. Name what must be shown; the command is an examp
 *record* a value somewhere, grep where it would come from: the same CR planned to record the major entry, which the
 tools image already carried (`/opt/veyq/release.json`).
 
+### A measurement lands in its ADR in the phase that makes it
+
+The apps' music CR (ADR 0142) measured the format matrix on four platforms in two phases. Phase 7 wrote Windows' and
+Linux's into the ADR's Consequences; phase 6 left Android's and the Mac's in its own phase note, so until the harvest
+the ADR said that a platform not listed there was not measured yet — for two that were. A phase whose done-when
+records a measurement writes it where it binds (the ADR's Consequences, the doc of state) in the same phase; the CR's
+note says only that it did.
+
+### A permission a refine plans is put through the packager's own linter at refine
+
+The same CR planned a Flatpak finish-arg (`--own-name` for the MPRIS name) from the protocol's docs. `flatpak-builder-lint`
+refused it at build (`finish-args-unnecessary-appid-mpris-own-name`: Flatpak grants an app that name by default), and
+the ADR, the CR and the Consequences' permission list had to be corrected after the fact. A refine that adds a
+permission, a capability or a manifest entry runs the platform's own checker over it once (the linter, the store's
+validator, a build of the manifest alone), as a first measurement is checked for its instrument.
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong

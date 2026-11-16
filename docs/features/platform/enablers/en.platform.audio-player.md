@@ -7,7 +7,9 @@
   decisions 6–8: `src/web/src/core/audio/` (`order.ts`, `fades.ts`, `player.ts`, `AudioBar.vue`), mounted by
   `AppShell.vue` and `ShareView.vue`; a lightbox video's interruption (`interrupt()`) is built by
   [ADR 0142](../../../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md)
-  decision 13. The apps' port is decided, not built ([§ Decided, not built](#decided-not-built)).
+  decision 13. The apps' port is built by the same ADR ([§ In the apps](#in-the-apps)): the Kotlin core's `audio/`,
+  each platform's decks and system controls; its passes on Android, Windows and Linux are in ADR 0142's Consequences,
+  Apple's are open ([native-apps](../../../crosscutting/native-apps.md) § Open).
 - **Provides:** to every application, one player in the web shell. The application hands it a queue of tracks, and
   core plays it: in shuffled order, endlessly, crossfading, with a bar below the shell's footer that stays while the
   viewer moves between pages and spaces.
@@ -84,18 +86,32 @@ Every source is released when the player unmounts. A sign-out also ends every pl
 - **Depot's file viewer:** keeps its own inline `<audio>`.
 - **A volume control:** the device has one.
 
-## Decided, not built
+## In the apps
 
-[ADR 0142](../../../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md):
+[ADR 0142](../../../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md)
+decisions 1–3, 5 and 13:
 
-- **The apps' player is the core's, a port of this one** (decisions 1–3): `Order`, `Fades`, `MusicPlayer` and
-  `NowPlaying` in the Kotlin core's `audio/`, the same API and rules; each platform plays bytes on two decks behind one
-  port (`load`, `play`, `pause`, `seek`, `ramp`, `clear`), the core timing the crossfade and the platform running the
-  volume ramp; tracks open as a core `RangeReader`, never a key. On the phones the music plays on in the background and
-  with the screen off (Android a `mediaPlayback` foreground service with a `MediaSession`, iOS a `.playback` audio
-  session with Now Playing); the desktops lend their system controls (Now Playing, SMTC, MPRIS). One player per
-  signed-in account, stopped at a lock, a sign-out and a tenant switch. Its `MusicPlayer` carries `interrupt()` with the
-  web's rules, raised by the apps' lightbox (decision 13).
+- **The player is the core's, a port of this one:** `Order`, `Fades`, `MusicPlayer` and `NowPlaying` in the Kotlin
+  core's `audio/`, with the same API and rules and the same tests as twins (`OrderTest`, `FadesTest`, `MusicPlayerTest`,
+  on virtual time). It holds a loading track while the queue is interrupted or the listener paused it, as `player.ts`
+  does.
+- **A platform plays bytes on two decks behind one port** (`Deck`: load, play, pause, seek, position, ramp, clear; the
+  events ended and failed). The core times the crossfade and asks each deck for a volume ramp; the platform runs it
+  (Android a `VolumeShaper` on `MediaPlayer`; Apple, Windows and Linux the volume of `AVPlayer`, `MediaPlayer` and
+  `gtk::MediaFile` stepped, under the port's 50 ms a step). Tracks open as a core `RangeReader`, never a key. On Linux
+  and Windows the decks are the host's, reached through the bridge's `Audio.*` host requests.
+- **Background play and the system's controls** (decision 3): Android a `mediaPlayback` foreground service with a
+  framework `MediaSession` and its notification, audio focus and becoming-noisy; iOS a `.playback` audio session with
+  `UIBackgroundModes` `audio`, Now Playing and the remote commands; macOS Now Playing and the media keys; Windows the
+  window's SMTC with the decks' own `CommandManager` off; Linux MPRIS over gio's D-Bus while a queue is loaded.
+- **The bar and the compact controls** are each platform's, drawn from `NowPlaying` (on Linux and Windows the watched
+  `PlayerShown`): above the application's bar on a phone, along the window's bottom on a desktop; the node's name opens
+  the node by its route.
+- **Lifetime:** one player per signed-in account, made at the tenant's open and stopped where `closeTenant()` closes it
+  — a lock, a sign-out, a tenant switch.
+- **The lightbox raises `interrupt()`** from the core's lightbox model, each platform's video player reporting playing
+  and paused (`Lightbox.Video` across the bridge). Android's video asks for no audio focus of its own, so the music
+  service's focus listener does not take it as a loss.
 
 ## Related
 

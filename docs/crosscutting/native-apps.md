@@ -181,7 +181,7 @@ lightbox and the uploads' settle are the core's (ADR 0136's Consequences), and e
 chapter, the chapters with their covers, the web's justified grid, the live poll, zoom, the slideshow, a medium trashed
 with Undo (a guest's own purged after asking, held by the core's tests: the apps open a gallery as a member only), a
 Memory's links, and the hero once a cover exists; GPX tracks and music are left out of the gallery, as the web's photo
-views leave them. Measured on Android (2026-11-15; a member's upload through the web seen through the poll and a GPX
+views leave them (music has its own view, below). Measured on Android (2026-11-15; a member's upload through the web seen through the poll and a GPX
 track left out of the gallery the same day, a throwaway emulator), on Linux (the container and the Fedora VM, 2026-11-13/14) and on
 Windows (the VM, 2026-11-15), each with a WRITE_ONLY guest's upload seen through the poll; on Apple the moved rules were
 passed on iOS and macOS (2026-11-13), the new functions only built (§ Open). The desktops make a medium's tiers through
@@ -219,6 +219,21 @@ network cut, the app closed, started and unlocked offline, the pinned video play
 a plaintext marker and the media's names (no hit), and the store empty after sign-out (ADR 0140's Consequences, each
 pass); the manifest's load at 100,000 entries 173–869 ms on the Windows VM, 199–277 ms cold on ART. The Use page that
 says this to a person: [Use content offline](../../site/src/content/docs/getting-started/use-content-offline.mdx).
+
+**Music, on all four apps** ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md)). The web's player ported into the core's
+`audio/` (`MusicPlayer`, its order, fades and the lightbox video's interruption) and Memories' music into
+`memories/music/` (the queue, the facts, the WAV trim, the upload's refusals, the rename, the Music view's model), each
+web test with a Kotlin twin; each platform plays bytes on two decks behind the core's `Deck` port (Android `MediaPlayer`
+with a `VolumeShaper`, Apple `AVPlayer`, Windows `MediaPlayer`, Linux `gtk::MediaFile`; the desktops' through the bridge's
+`Audio.*` host requests) and lends its system controls — Android a `mediaPlayback` foreground service with its
+`MediaSession` and notification, iOS a `.playback` session with Now Playing, macOS Now Playing, Windows the window's SMTC,
+Linux MPRIS. Every app draws the header's Play/Stop music, the Photos | Music view switch, the Music view (add, rename,
+download, remove with Undo, an `ITEM` report), the bar and the lightbox's compact controls; a pinned Memory's tracks are
+kept like a video's original and play offline. The format matrices and the passes are ADR 0142's Consequences: Android
+(a throwaway AVD: 5 min with the screen off, a headset's next, the notification without `POST_NOTIFICATIONS`, offline),
+Windows (the VM: the SMTC minimised and the media keys), Linux (the container's MPRIS with `playerctl`; the Flatpak's
+MPRIS name) and the web's video interruption, measured 2026-11-16; Apple's are open (below). The Use page:
+[Add background music](../../site/src/content/docs/memories/add-background-music.mdx).
 
 ## Open
 
@@ -422,9 +437,16 @@ each app's lists read after a write). A guest's deleted folder is restorable onl
 
 **Memories**: curating a Memory — its date, place and map, participants, a medium's capture time, the banner (inbox
 #890); item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
-re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); its music —
-planned ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md), #906): the core's player and Music view, each platform's two decks, background play on
-the phones and the system's media controls, a pinned Memory's tracks kept like a video's original — and GPX tracks (#907); a guest's view of a received link (#435, a source for the same model).
+re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); GPX tracks (#907); a guest's view of a
+received link (#435, a source for the same model).
+
+**Music** ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md), built above): **Apple's passes are the owner's** — on a real iPhone the background play,
+the lock screen, Control Center and a call's interruption, and iOS's format matrix (no simulator boots on this Mac); on
+the unlocked Mac the click-through, Now Playing and the media keys (the screen was locked through every pass). Not run
+elsewhere: Android's lock-screen controls (the AVD has no keyguard) and a real phone's decoders (the matrix is the
+emulator's); the signed-in Flatpak's own MPRIS on a desktop (`playerctl`; a release build has no devlogin); the MSIX's
+SMTC source name (the unpackaged build has no package identity, so the flyout names no app). A decoded format added from an app keeps its silent edges
+(#932); a Windows lightbox video lists a second, untitled media session (#938).
 
 **Uploads**: an upload that goes on while the app is in the background (Android a foreground service, iOS a
 background task); placeholder tiles in the gallery for what is under way; the list behind Apple's button seen open.

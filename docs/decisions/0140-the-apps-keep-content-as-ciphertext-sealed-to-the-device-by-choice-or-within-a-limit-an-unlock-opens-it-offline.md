@@ -4,7 +4,7 @@
   real iPhone and a signed macOS build, are the owner's ([native-apps](../crosscutting/native-apps.md) § Open)
 - Date: 2026-11-15
 - Model: [native-apps](../crosscutting/native-apps.md)
-- Replaced in part: decision 8's and decision 9's kept originals (a music track's too) by ADR 0142 (not built)
+- Replaced in part: decision 8's and decision 9's kept originals (a music track's too) by ADR 0142 (built)
 
 ## Context
 
@@ -169,7 +169,8 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
      entries never, down to 90 % of the limit. A single video larger than a quarter of the limit is not kept by the
      automatic tier — it would evict everything else; its frames still stream.
    - **Originals** (owner 2026-11-15): an original is kept only where the app reads one to show the item — today a
-     video's frames and a Depot file, which has no other tier. **A photo's original is never kept by either tier;** its
+     video's frames, a music track's ([ADR 0142](0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md)
+     decision 12) and a Depot file, which has no other tier. **A photo's original is never kept by either tier;** its
      preview stands in, as it does online. Where a later tier replaces a video's original for playback, that tier is
      kept instead.
    - **Pins count** in what is used and are shown apart; they may exceed the limit, and then the automatic tier keeps
@@ -182,7 +183,7 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
      (`AppKinds`) — never by core calling an application.
    - **A pin fetches whole:** the listings below the node, every tile and preview, every node's cover below it (named by
      the node's sealed meta, which the store cannot read, so the pin's own sealed record keeps the covers' blob ids), and
-     the originals decision 8 keeps (a video's, a Depot file's, never a photo's), with progress and resumable (a blob file appends; a restart
+     the originals decision 8 keeps (a video's, a music track's, a Depot file's, never a photo's), with progress and resumable (a blob file appends; a restart
      continues); the size is shown and confirmed before the first byte.
    - **Sync:** at each online open of the account and on each live poll that sees a pinned node's revision move
      (`listNodes`' `ETag`, `listNodeMedia`'s `mediaRevision`), the pin re-reads its listings and fetches what is new; what

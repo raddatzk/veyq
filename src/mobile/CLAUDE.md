@@ -26,7 +26,7 @@ A Gradle build of its own, run through its own wrapper.
   page by medium id, a video's `RangeReader` closed by the model when the page goes, the details, the save, the
   slideshow on the model's clock; the web's rights ported fail-closed, `MemoryRights`; New Memory and Add chapter,
   `MemoryCreate`; the uploads' settle and each picked file handed back once the queue is done with it, `MediaUploads`;
-  the tier spec, `MediaUpload`'s; ADR 0136's Consequences; its music, `memories/music/` (ADR 0142 decisions 4–12): a node's tracks listed and numbered once and its queue, `MusicQueue`; their facts, `AudioFacts` (a WAV's trim from its PCM, `Wav`; an ADTS file's length counted, `Frames`); a picked file checked and uploaded, `MusicUpload`; a rename of the raw listed tier, `TrackLabel`; the Music view, `MusicModel` over the gallery, whose header plays and stops the music and whose lightbox's video interrupts it; a medium's ITEM report, `MediumReport` — not yet drawn by any app), which
+  the tier spec, `MediaUpload`'s; ADR 0136's Consequences; its music, `memories/music/` (ADR 0142 decisions 4–12): a node's tracks listed and numbered once and its queue, `MusicQueue`; their facts, `AudioFacts` (a WAV's trim from its PCM, `Wav`; an ADTS file's length counted, `Frames`); a picked file checked and uploaded, `MusicUpload`; a rename of the raw listed tier, `TrackLabel`; the Music view, `MusicModel` over the gallery, whose header plays and stops the music and whose lightbox's video interrupts it; a medium's ITEM report, `MediumReport` — drawn for a track by every app's Music view, a photo's or a video's not yet: inbox #891), which
   uses core's session and is never used by it; an application's spec is generated into `api.<application>`.
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
   decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's
@@ -798,6 +798,10 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   nothing of the model in it. A persist closure is one too (`AppModel.init`'s, which say so):
   `RecentUses`' and `Hidden`'s crashed the sign-out of the last server (`RecentUses.clear` runs on a core thread,
   measured 2026-11-11), which only a pass that signs out of its last account reaches — so an Apple pass ends that way.
+- Swift cannot implement a Kotlin `suspend fun`: an interface the Apple app implements (a port such as the music's
+  `Deck`) is exported with its suspending members as completion handlers Swift may call but not provide. The port Swift
+  implements takes callbacks instead, and `appleMain` adapts it into the core's interface with
+  `suspendCancellableCoroutine` (`audio/AppleAudio.kt`'s `AppleDeck`, each callback once, on any thread).
 - `simctl launch --stdout` wrote no file (measured 2026-11-11): the Apple app's lines are read from the unified log
   (`NSLog`, read with `log show`), Android's from logcat — text before every screenshot.
 - A screen model that decrypts or walks a tree runs it off its caller's thread (`withContext(Dispatchers.Default)`, as
@@ -949,6 +953,10 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   typed, `run --devlogin` signs in. A hidden pane lags Broadway's frames, so a screenshot can show the state before the
   last action: hover before each one, and read the state from the app's stderr first. A Broadway window keeps its own
   size until it is maximized once; after that a viewport resize moves it across the 600 sp breakpoint live.
+  Headless Chrome (Playwright, no pane at all) is no cure: Broadway there repaints only after input reaches it, so a
+  change the app makes by itself — the next track, the music bar's position — shows in a shot only after the pointer
+  moved (the music's Linux pass, 2026-11-16). Before reading a change nobody pressed, move the pointer over a neutral
+  spot, or read the state from the bridge or stderr.
 - A new dependency or target owes the verification-metadata write from an empty Gradle home
   (`GRADLE_USER_HOME=<empty dir> ./gradlew --write-verification-metadata sha256 <the tasks that resolve it>`). The
   Linux targets' warm write missed 90 lines of parent POMs and BOMs that a fresh runner fetches. A new module that
@@ -1036,7 +1044,11 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   (`glycin-loaders`, which gtk4 pulls in Fedora; without them "No image loaders are configured" and every person shows
   initials), so a Flatpak's runtime must carry them. Windows decodes it through the Store's Webp Image Extensions, not
   the OS image's WIC: without the package the decode throws (`COMException`), so MSIX must depend on it. Its
-  registration needs the logged-on session; over ssh it is refused (`0x80070005`).
+  registration needs the logged-on session; over ssh it is refused (`0x80070005`). The same holds for any provisioned
+  Store extension a pass removes to measure its absence: the music's Web Media pass (2026-11-16) removed it with
+  `Remove-AppxPackage` and could register it again (`Add-AppxPackage -Register` of its provisioned manifest) only in the
+  logged-on session — from ssh's session 0 it is refused `0x80070005`, so a pass that removes one ends by registering it
+  there.
 - GTK's own file dialog in the Fedora container speaks English under `LANGUAGE=de` (Home, Cancel, Save): the image
   carries no gtk4 catalogs; only our words in it (its title) are German. On a desktop the portal's dialog is the
   system's. The container's working directory is the read-only source mount, where GTK's dialog opens — a write there
@@ -1237,6 +1249,10 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   leaves the transport controls scrubbing (the playback rate 0, the position held) until a key reaches the slider: follow it
   with `press ProgressSlider left`. A seek lands on a keyframe, and the VM's software decode under emulation draws behind
   the position; the log's `medium at <s> s` and `MediaOpened` are read first.
+- A pass never prints an app's environment — `env` in its container, `docker inspect`, `/proc/<pid>/environ`: with `VEYQ_LIVE` it holds the seeded dev principal's password and Secret Key
+  (`VEYQ_DEV_*`, `linux/run.py`'s `in_container` passes them by name so its printed command shows none). A music pass
+  printed a container's environment and with it those secrets (2026-11-16). Read one variable by name when a pass needs
+  to know it is set.
 - `linux/run.py run` leaves the container's zone UTC (an instant there is said in UTC); `run.py test` links Berlin. A
   pass reading times off the Linux app reads them as UTC.
 - Never hold a XAML element through a `WeakReference`: once its managed wrapper was collected, `TryGetTarget` resolves

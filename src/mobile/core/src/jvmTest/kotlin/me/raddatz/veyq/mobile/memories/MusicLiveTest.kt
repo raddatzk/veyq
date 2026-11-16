@@ -53,6 +53,8 @@ import kotlin.time.Duration.Companion.minutes
  * a device of its own pins the Memory: both tracks' originals are kept, every frame of each.
  *
  * The Memory is trashed and purged and every device taken off the account however the case ends; the store is wiped.
+ * The ITEM report is not: each run leaves one open report in the dev instance's moderation queue (nothing here may
+ * decide it), named "veyq live test (MusicLiveTest)" in its reason.
  */
 class MusicLiveTest {
     private val liveRun = LiveRun()

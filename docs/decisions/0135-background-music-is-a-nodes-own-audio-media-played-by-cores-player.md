@@ -5,7 +5,7 @@
 - Date: 2026-11-14
 - Model: [uc.memory.background-music](../features/memory/use-cases/uc.memory.background-music.md) (the player:
   [en.platform.audio-player](../features/platform/enablers/en.platform.audio-player.md))
-- Replaced in part: decision 8 (a lightbox video interrupts the music instead of both sounding) and the Consequences' hidden-tab residual, for the apps, by ADR 0142 (not built)
+- Replaced in part: decision 8 (a lightbox video interrupts the music instead of both sounding) and the Consequences' hidden-tab residual, for the apps, by ADR 0142 (built)
 
 ## Context
 
@@ -124,6 +124,9 @@ What exists to build on, read on `main` at `8574dda3b`:
    - **The bar:** core draws it below the shell's footer. It shows the title, previous, play/pause, next, a progress bar
      over the trimmed span that the listener can drag, and close. It is drawn only while a queue is loaded.
    - **One player:** a new queue replaces the one playing, with a crossfade.
+   - **A lightbox video interrupts it** ([ADR 0142](0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md)
+     decision 13): while a video in the lightbox plays, the music pauses; it starts again by itself when the video
+     pauses or ends, the lightbox moves on or closes, unless the listener played or paused it meanwhile.
    - **Lifetime:** the member's shell keeps it while the session is signed in and unlocked. A lock unmounts it and
      revokes its playback handles; a sign-out and a tenant switch load a new document. The share page keeps it as long
      as the page.
@@ -149,7 +152,7 @@ What exists to build on, read on `main` at `8574dda3b`:
 - **A guest of a link hears the music exactly as a member does.**
 - **Residuals:**
   - A phone may suspend a hidden tab, and with it the page that decrypts the chunks, so background playback with the
-    screen off is up to the browser.
+    screen off is up to the browser. The apps play on in the background (ADR 0142 decision 3).
   - A long M4A, FLAC or Ogg file keeps the silence at its ends, because decoding it whole would cost a phone too much
     memory (decision 4).
   - Leftovers stay in place and nothing reads them: playlists sealed into a node's meta while the flag was on, a

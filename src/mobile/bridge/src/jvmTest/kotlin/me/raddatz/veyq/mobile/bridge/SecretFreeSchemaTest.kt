@@ -230,7 +230,7 @@ class SecretFreeSchemaTest {
 
         /**
          * A key named as the web and the ADRs name one (`K_blob`, `K_share`, `kNode`): a `K` or `k` followed by an underscore
-         * or a capital, which [SECRET] does not see (a music track's `K_blob` crossed it unseen, cr-app-music phase 5's bite).
+         * or a capital, which [SECRET] does not see (a music track's `K_blob` on `MusicShown` crossed it unseen in a bite, ADR 0142's bridge, 2026-11-16).
          */
         private val KEY_SYMBOL = Regex("^[kK](_|[A-Z])")
         private val ADDRESS = Regex("url|address", RegexOption.IGNORE_CASE)

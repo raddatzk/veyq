@@ -3,6 +3,7 @@ title: "Add background music"
 sources:
   - docs/features/memory/use-cases/uc.memory.background-music.md
   - docs/features/platform/enablers/en.platform.audio-player.md
+  - docs/decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md
 ---
 
 A Memory can sound the way it was: add the songs you listened to as **audio files**, and everyone who opens the Memory
@@ -16,7 +17,7 @@ veyq uses no streaming service: the music is your own files, stored encrypted li
 3. Each file is listed by its name without the extension, with its length.
 
 veyq checks each file on your device before it uploads it, and tells you which one it did not add and why: a file larger
-than 200 MB, a file that is no audio file, or one this browser cannot play. On your device it also finds the silence at
+than 200 MB, a file that is no audio file, or one this browser or device cannot play. On your device it also finds the silence at
 the start and the end of each song, so the music runs on without gaps; where that would take too long for a large file,
 the song simply plays whole.
 
@@ -30,24 +31,53 @@ In the bar you can pause and play, go to the **Next** or the **Previous** song, 
 song. **Previous** starts the song over when it has played for more than a few seconds. The keys and the lock screen of
 your phone or computer work too.
 
+When you play a video in the Memory, the music pauses. It starts again by itself when the video stops or ends, when you
+go to another photo, or when you close the video. If you pause or play the music yourself in between, it stays as you
+left it.
+
 The music goes on while you move on - to another Memory, to your settings, to another space. **Stop music** at the top of
 the Memory, or **Close** in the bar, ends it; starting another Memory's music replaces it. Signing out ends it too.
 
 A chapter plays only its own songs. Music you started on its Memory goes on while you look at the chapter.
 
-## Download, remove or report a song
+## Rename, download, remove or report a song
 
-The **⋯** beside a song offers **Download**, which saves the file as it was added, **Remove** and **Report**. A removed song
-goes to the Memory's **Trash** tab with the photos you removed, and you can bring it back from there
+The **⋯** beside a song offers **Rename**, **Download**, which saves the file as it was added, **Remove** and **Report**.
+**Rename** gives the song a name of its own, for everyone; leave the name empty to name it by its file again. A removed
+song goes to the Memory's **Trash** tab with the photos you removed, and you can bring it back from there
 ([Remove photos and bring them back](/memories/photo-trash/)).
 
 Songs are not photos: they are not in the gallery and not in its count, and the search does not find them, but a download
 or a copy of the Memory carries their files.
 
+## In the app
+
+The veyq [app](/getting-started/install-the-app/) plays a Memory's music as the browser does, with these differences:
+
+- **Where to find it:** **Photos** and **Music** above the gallery switch between the photos and the songs.
+  **Play music** is at the top of the Memory, as a note button or, where the top has no room, in its menu. The bar is
+  at the bottom of the window, on a phone just above the bar of tabs.
+- **A song's actions:** the menu beside a song (on an iPhone, swipe the song or touch and hold it) offers **Rename**,
+  **Download**, **Remove** and **Report**. Right after you remove a song, **Undo** brings it back.
+- **It plays on:** on Android the music goes on when you leave the app or turn the screen off. Its notification, the
+  lock screen and your headphones' buttons control it, and it pauses when you unplug your headphones. On Windows the
+  media keys and the media controls in the quick settings control it, also while the app is minimised; on Linux, your
+  desktop's media controls.
+- **Formats:** which songs play depends on the device. On Android, an M4A file in Apple Lossless (ALAC) may not play.
+  On Windows, Ogg files play only with Microsoft's *Web Media Extensions*, which Windows 11 brings along. The Linux app
+  plays every format listed above. A song this device cannot play is not added from it (*… can't be played on this
+  device.*); one added on another device is skipped here and marked **Doesn't play on this device**. You can still
+  download it.
+- **Silence at the edges:** the app finds the silence at the start and the end of a song only in a WAV file. A song in
+  any other format that you add from the app keeps its silent start and end, wherever it plays. Add it in the browser
+  if you want the music to run on without gaps.
+- **Offline:** a Memory you made [available offline](/getting-started/use-content-offline/) keeps its songs, and its
+  music plays without a connection. Offline, songs cannot be added, renamed, removed or reported.
+
 ## Who can do what
 
-Everyone who may add photos to the Memory can add music, and everyone who may remove photos can remove a song. People you
-share a link with hear the music and see the songs as you do; with a link that lets them add photos, they can add music
+Everyone who may add photos to the Memory can add music, and everyone who may remove photos can remove a song. Members who
+may change the Memory can rename a song. People you share a link with hear the music and see the songs as you do; with a link that lets them add photos, they can add music
 and remove their own.
 
 The server stores each song encrypted, like a photo, and cannot even tell that it is music: it never learns a title, a
