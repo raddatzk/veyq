@@ -12,7 +12,7 @@
 // A tenant that cannot send is refused either way before anything is minted (ADR 0129 decision 3).
 // The code is minted as the dialog opens and its link key's Argon2id derivation started then (inbox #566), so the send does
 // not wait for it; while the send runs, a status line says which phase it is in (sealing on this device, then sending).
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
@@ -30,6 +30,7 @@ import {
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { formatInviteCode } from '@veyq/crypto/invite'
 import { MIN_PASSWORD_LENGTH } from '../../shared/passwordPolicy'
+import { INVITE_LABEL_MAX_LENGTH } from './inviteLabel'
 
 const props = defineProps<{ tenantId: string; tenantName: string }>()
 const visible = defineModel<boolean>('visible', { required: true })
@@ -45,6 +46,9 @@ const wayOptions = computed(() => [
 ])
 // The link invite just minted, shown once on the result view; never stored anywhere.
 const minted = ref<MemberInviteLinkResult | null>(null)
+// The owners' private label for the link (ADR 0129 decision 7): sealed for the invite, never in the link.
+const linkLabel = ref('')
+const linkLabelId = useId()
 watch(way, () => (error.value = '')) // a refusal of one way says nothing about the other
 
 const email = ref('')
@@ -81,6 +85,7 @@ watch(
       error.value = ''
       way.value = 'link'
       minted.value = null
+      linkLabel.value = ''
       email.value = ''
       sentTo.value = ''
       usePassword.value = false
@@ -121,7 +126,7 @@ const { run: runCreateLink, pending: creatingLink } = useAsyncAction(
     const secret = prepared ?? prepareInviteCode()
     prepared = null // this mint owns it now
     try {
-      minted.value = await createMemberInviteLink(props.tenantId, secret, (p) => (phase.value = p))
+      minted.value = await createMemberInviteLink(props.tenantId, secret, (p) => (phase.value = p), linkLabel.value)
     } catch (e) {
       secret.ahead.discard() // a failed mint's derivation is zeroed; its code is never reused
       if (visible.value) prepare()
@@ -194,6 +199,19 @@ async function submit() {
     <!-- The link way: no address, one button; the result below shows the link once. -->
     <div v-if="way === 'link' && !minted" class="veyq-form">
       <p class="dialog-intro">{{ t('members.linkIntro') }}</p>
+      <div class="veyq-form-field">
+        <label :for="linkLabelId">{{ t('members.linkLabel') }}</label>
+        <VeyqInput
+          v-bind="NOT_A_LOGIN"
+          :id="linkLabelId"
+          v-model="linkLabel"
+          :maxlength="INVITE_LABEL_MAX_LENGTH"
+          :disabled="loading"
+          data-testid="invite-link-label"
+          @keydown.enter.prevent="createLink"
+        />
+        <span class="veyq-form-copy">{{ t('members.linkLabelHint') }}</span>
+      </div>
       <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
       <p v-if="creatingLink && phase" class="dialog-intro invite-progress" role="status" data-testid="invite-progress">
         <VeyqIcon name="spinner" spin />{{ phase === 'sending' ? t('members.linkCreating') : t('members.inviteSecuring') }}

@@ -25,7 +25,8 @@ vi.mock('@veyq/crypto/argonWorker', async () => {
   }
 })
 
-import { createMemberInviteLink, inviteMember, prepareInviteCode, reissueMemberInvite, reissueMemberInviteLink } from './members'
+import { createMemberInviteLink, inviteMember, prepareInviteCode, reissueMemberInvite, reissueMemberInviteLink, setMemberInviteLabel } from './members'
+import { openInviteLabel } from './inviteLabel'
 import { tenantsApi } from '../../api/client'
 import { listMyTenants, openScopeById } from './scopes'
 import { identityPrivate } from '../../app/vault'
@@ -339,6 +340,40 @@ describe('a link invite (ADR 0129 decision 1): the server answers the token, thi
       ['epoch', 'expiresAt', 'grantSignature', 'inviteId', 'inviteKeySignature', 'invitePublicKey', 'recipientIdentityDigest', 'wrappedGrant'],
     )
     expect(req.epoch).toBe(EPOCH)
+  })
+
+  // ADR 0129 decision 7: the label is sealed for this invite under the tenant key of the grant's epoch, never in the link.
+  it('seals a typed label for the posted invite under the tenant key, and leaves it out of the link', async () => {
+    const create = vi.fn<TenantsApi['createMemberInviteLink']>().mockResolvedValue(MINTED)
+    fakeApi(tenantsApi, { createMemberInviteLink: create })
+    const result = await createMemberInviteLink(T, { mode: 'code', code: CODE }, undefined, '  Oma  ')
+    const req = create.mock.calls[0][0].memberInviteLinkRequest
+    const tenant = { epoch: EPOCH, key: TENANT_KEY }
+    expect(openInviteLabel(tenant, { scopeId: T, inviteId: req.inviteId }, req.sealedLabel, req.wrappedLabelValueKey)).toBe('Oma')
+    // bound to this invite: as another invite's it opens to nothing
+    expect(openInviteLabel(tenant, { scopeId: T, inviteId: crypto.randomUUID() }, req.sealedLabel, req.wrappedLabelValueKey)).toBeNull()
+    expect(result.link).not.toContain(req.sealedLabel!)
+    expect(lastOpened!.epochs.key.every((b) => b === 0)).toBe(true) // the tenant key the label was sealed under is wiped
+  })
+
+  it('a blank label sends no label fields at all', async () => {
+    const create = vi.fn<TenantsApi['createMemberInviteLink']>().mockResolvedValue(MINTED)
+    fakeApi(tenantsApi, { createMemberInviteLink: create })
+    await createMemberInviteLink(T, { mode: 'code', code: CODE }, undefined, '   ')
+    expect(create.mock.calls[0][0].memberInviteLinkRequest).not.toHaveProperty('sealedLabel')
+  })
+
+  it('a later label is sealed for its invite at the current epoch, and an empty one clears it', async () => {
+    const set = vi.fn<TenantsApi['setMemberInviteLabel']>().mockResolvedValue(undefined)
+    fakeApi(tenantsApi, { setMemberInviteLabel: set })
+    const INVITE = '1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c'
+    await setMemberInviteLabel(T, INVITE, 'Kletterkurs')
+    const body = set.mock.calls[0][0].setMemberInviteLabelRequest
+    expect(set.mock.calls[0][0]).toMatchObject({ tenantId: T, inviteId: INVITE })
+    expect(body.epoch).toBe(EPOCH)
+    expect(openInviteLabel({ epoch: EPOCH, key: TENANT_KEY }, { scopeId: T, inviteId: INVITE }, body.sealedLabel, body.wrappedLabelValueKey)).toBe('Kletterkurs')
+    await setMemberInviteLabel(T, INVITE, ' ')
+    expect(set.mock.calls[1][0].setMemberInviteLabelRequest).toEqual({ sealedLabel: null, wrappedLabelValueKey: null, epoch: null })
   })
 
   it('hands over this origin\'s accept page with token, sealed part and the code — which opens to the posted invite key', async () => {

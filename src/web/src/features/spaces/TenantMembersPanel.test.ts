@@ -19,6 +19,8 @@ vi.mock('./members', () => ({
   SetTenantMemberRoleRequestRoleEnum: { Owner: 'OWNER', Member: 'MEMBER' },
   memberError: vi.fn(),
   prepareInviteCode: vi.fn(),
+  openMemberInviteLabels: vi.fn(),
+  setMemberInviteLabel: vi.fn(),
 }))
 vi.mock('./scopes', () => ({
   listMyTenants: vi.fn(),
@@ -48,7 +50,7 @@ vi.mock('../../app/activeSpace', async (orig) => ({
 }))
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
-import { listScopeMembers, listMemberInvites, reissueMemberInvite, reissueMemberInviteLink, revokeMemberInvite, removeTenantMember, rekeySpace, setTenantMemberRole, memberError, prepareInviteCode, type InvitePhase } from './members'
+import { listScopeMembers, listMemberInvites, reissueMemberInvite, reissueMemberInviteLink, revokeMemberInvite, removeTenantMember, rekeySpace, setTenantMemberRole, memberError, prepareInviteCode, openMemberInviteLabels, setMemberInviteLabel, type InvitePhase } from './members'
 import { rekeyScope, rekeyingCause } from '../../core/node/rekey/rekeyScope'
 import { listMyTenants, openMyTenantIcon, revokeScopeShares, scopeLifecycle } from './scopes'
 import { tenantBadges } from '../account/tenantTrust'
@@ -69,7 +71,7 @@ import { rewrapValueKey } from './valueKey'
 const stubs = {
   VeyqButton: { props: ['label', 'icon', 'ariaLabel'], template: '<button :aria-label="ariaLabel">{{ label }}</button>' },
   VeyqMessage: { template: '<div class="msg"><slot /></div>' },
-  VeyqInput: { props: ['modelValue'], template: '<input :value="modelValue" />' },
+  VeyqInput: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
   InviteMemberDialog: true,
   VeyqDialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="stub-dialog"><slot /></div>' },
 }
@@ -81,6 +83,7 @@ const prepared = () => vi.mocked(prepareInviteCode).mock.results.map((r) => r.va
 
 beforeEach(() => {
   vi.mocked(prepareInviteCode).mockImplementation(preparedCode)
+  vi.mocked(openMemberInviteLabels).mockResolvedValue(new Map())
   vi.mocked(tenantBadges).mockResolvedValue({})
   vi.mocked(memberError).mockResolvedValue({ status: 0, code: null })
   vi.mocked(openMyTenantIcon).mockResolvedValue(null)
@@ -257,7 +260,7 @@ describe('TenantMembersPanel - a pending link invite', () => {
     const code = prepared()[0]
     await wrapper.get('.invite-row').get(`[aria-label="${t('members.reissueLink')}"]`).trigger('click')
     await flushPromises()
-    expect(reissueMemberInviteLink).toHaveBeenCalledWith('t-1', 'inv-link', code, expect.any(Function))
+    expect(reissueMemberInviteLink).toHaveBeenCalledWith('t-1', 'inv-link', code, expect.any(Function), null)
     expect(reissueMemberInvite).not.toHaveBeenCalled()
     const result = wrapper.get('[data-testid="reissued-invite-link"]')
     expect(result.get<HTMLTextAreaElement>('[data-testid="invite-link-message"]').element.value).toContain(LINK)
@@ -276,6 +279,69 @@ describe('TenantMembersPanel - a pending link invite', () => {
     expect(wrapper.find('[data-testid="reissued-invite-link"]').exists()).toBe(false)
     expect(wrapper.text()).toContain(t('members.mailUnavailable'))
     expect(code.ahead.discard).toHaveBeenCalled()
+  })
+
+  // ADR 0129 decision 7: a link invite's private label names its row; the owner renames it, and a re-issue keeps it.
+  it('a labelled link reads its label, with "Link invitation" and the expiry below; an unlabelled one stays as it was', async () => {
+    const twoLinks: PendingMemberInvite[] = [LINKED[0], { inviteId: 'inv-plain', inviteStatus: 'ACTIVE', inviteExpiresAt: EXPIRES }]
+    vi.mocked(openMemberInviteLabels).mockResolvedValue(new Map([['inv-link', 'Oma']]))
+    const wrapper = await mountPanel('OWNER', twoLinks)
+    expect(openMemberInviteLabels).toHaveBeenCalledWith('t-1', twoLinks)
+    const [labelled, plain] = wrapper.findAll('.invite-row')
+    expect(labelled.get('.veyq-row-title').text()).toBe('Oma')
+    expect(labelled.get('[data-testid="invite-expiry"]').text()).toContain(t('members.pendingLink'))
+    expect(labelled.get('[data-testid="invite-expiry"]').text()).toContain('2026')
+    expect(plain.get('.veyq-row-title').text()).toBe(t('members.pendingLink'))
+  })
+
+  it('a label that does not open leaves the row a link invitation, and the panel loads', async () => {
+    vi.mocked(openMemberInviteLabels).mockRejectedValue(new Error('vault locked'))
+    const wrapper = await mountPanel('OWNER', LINKED)
+    expect(wrapper.get('.invite-row').get('.veyq-row-title').text()).toBe(t('members.pendingLink'))
+  })
+
+  it('a mailed invite offers no rename: it is named by its address', async () => {
+    const wrapper = await mountPanel('OWNER', LINKED)
+    const [link, mail] = wrapper.findAll('.invite-row')
+    expect(link.find('[data-testid="invite-label-edit"]').exists()).toBe(true)
+    expect(mail.find('[data-testid="invite-label-edit"]').exists()).toBe(false)
+  })
+
+  it('a re-issue seals the label it opened for the new invite', async () => {
+    vi.mocked(openMemberInviteLabels).mockResolvedValue(new Map([['inv-link', 'Oma']]))
+    vi.mocked(reissueMemberInviteLink).mockResolvedValue({ inviteId: 'inv-new', link: LINK, expiresAt: EXPIRES })
+    const wrapper = await mountPanel('OWNER', LINKED)
+    await wrapper.get('.invite-row').get(`[aria-label="${t('members.reissueLink')}"]`).trigger('click')
+    await flushPromises()
+    expect(reissueMemberInviteLink).toHaveBeenCalledWith('t-1', 'inv-link', prepared()[0], expect.any(Function), 'Oma')
+  })
+
+  it('renames a link invite through the dialog, prefilled, and reloads the list', async () => {
+    vi.mocked(openMemberInviteLabels).mockResolvedValue(new Map([['inv-link', 'Oma']]))
+    vi.mocked(setMemberInviteLabel).mockResolvedValue(undefined)
+    const wrapper = await mountPanel('OWNER', LINKED)
+    expect(wrapper.find('[data-testid="invite-label-input"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="invite-label-edit"]').trigger('click')
+    const input = wrapper.get<HTMLInputElement>('[data-testid="invite-label-input"]')
+    expect(input.element.value).toBe('Oma')
+    await input.setValue('Opa')
+    await wrapper.get('.stub-dialog form').trigger('submit')
+    await flushPromises()
+    expect(setMemberInviteLabel).toHaveBeenCalledWith('t-1', 'inv-link', 'Opa')
+    expect(listMemberInvites).toHaveBeenCalledTimes(2) // reloaded
+    expect(wrapper.find('[data-testid="invite-label-input"]').exists()).toBe(false)
+  })
+
+  it('control: a refused rename keeps the dialog open and says so', async () => {
+    vi.mocked(setMemberInviteLabel).mockRejectedValue(httpError(500, 'internal'))
+    const wrapper = await mountPanel('OWNER', LINKED)
+    await wrapper.get('[data-testid="invite-label-edit"]').trigger('click')
+    await wrapper.get('[data-testid="invite-label-input"]').setValue('Opa')
+    await wrapper.get('.stub-dialog form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="invite-label-input"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain(t('members.labelFailed'))
+    expect(listMemberInvites).toHaveBeenCalledTimes(1)
   })
 })
 

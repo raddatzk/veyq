@@ -2,11 +2,14 @@ package me.raddatz.veyq.core.node.rekey
 
 import me.raddatz.veyq.core.TestIds
 import me.raddatz.veyq.core.account.rotation.RotationRegrantEntity
+import me.raddatz.veyq.core.admin.tenant.TenantStore
 import me.raddatz.veyq.core.admin.tenant.VerificationEntity
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.admin.tenant.VerificationKey
 import me.raddatz.veyq.core.identity.TenantProfileEntity
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.TestGrants
+import me.raddatz.veyq.core.membership.TestInviteKey
 import me.raddatz.veyq.core.node.NodeEntity
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.sharing.ShareEntity
@@ -24,6 +27,7 @@ import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import io.restassured.response.ValidatableResponse
+import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
@@ -51,6 +55,8 @@ import java.util.UUID
  */
 @QuarkusTest
 class ScopeRekeySliceTest {
+
+    @Inject lateinit var tenantStore: TenantStore
 
     @Test
     fun everyStagedGroupWrapIsSwappedInTheRootsReSealedAndEveryNodeIsDue() {
@@ -424,6 +430,14 @@ class ScopeRekeySliceTest {
         val shape = Regex(sincePattern())
         val g = groupWorld()
         val t = tenantWorld()
+        // A labelled link invite, so the tenant's listing reaches the `invites` kind too (ADR 0129 decision 7).
+        val invite = TestInviteKey()
+        tx {
+            tenantStore.mintMemberInvite(
+                t.tenantId, null, "label-cursor-${invite.inviteId}", Instant.now().plusSeconds(3600),
+                invite.stored(t.owner).copy(label = SealedValue("bGFiZWw=", wrapOf("bGFiZWw="))),
+            )
+        }
         val kinds = mutableSetOf<String>()
         for ((owner, scopeId) in listOf(g.owner to g.scopeId, t.owner to t.tenantId)) {
             var since: String? = null
@@ -441,7 +455,7 @@ class ScopeRekeySliceTest {
         val (u, v) = UUID.randomUUID() to UUID.randomUUID()
         for (refused in listOf(
             "0".repeat(79), "nodes,zzzz", "nodes,${u.toString().uppercase()}", "shares,0", "shares,${"A".repeat(44)}",
-            "members,$u,", "verifs,$u", "verifs,a|b", "verifs,$u|$v|$u", "groups,$u", ",$u", "nodes",
+            "members,$u,", "invites,$u|$v", "invites,a", "verifs,$u", "verifs,a|b", "verifs,$u|$v|$u", "groups,$u", ",$u", "nodes",
         )) {
             assertFalse(shape.matches(refused), "the contract admits '$refused'")
             parts(t.owner, t.tenantId, since = refused, limit = 256).statusCode(400).body("code", equalTo("invalid_request"))

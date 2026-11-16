@@ -12,6 +12,7 @@ import me.raddatz.veyq.core.config.VeyqConfig
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.http.FailureStatus
 import me.raddatz.veyq.core.http.Failures
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.identity.AccountStore
@@ -175,6 +176,8 @@ data class InviteKeyInput(
     val epoch: Int,
     val grant: SignedGrant,
     val recipientIdentityDigest: String,
+    /** A link invite's private label (ADR 0129 decision 7), its wrap under the tenant key of [epoch]; never a mailed one's. */
+    val label: SealedValue? = null,
 )
 
 /** A **mailed** member invite as the owner's client built it: the email, the invite's [key], and the link's sealed
@@ -261,6 +264,17 @@ sealed interface RevokeMemberInviteOutcome {
     data object NotFound : RevokeMemberInviteOutcome, HttpFailure by Failures.tenantNotFound
     data object NotOwner : RevokeMemberInviteOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
     data object InviteNotFound : RevokeMemberInviteOutcome, HttpFailure by httpFailure("invite_not_found", FailureStatus.NOT_FOUND)
+}
+
+/** Result of a tenant owner setting, changing or clearing a link invite's private label (ADR 0129 decision 7). */
+sealed interface SetInviteLabelOutcome {
+    data object Done : SetInviteLabelOutcome
+    data object Suspended : SetInviteLabelOutcome, HttpFailure by Failures.tenantSuspended
+    data object NotFound : SetInviteLabelOutcome, HttpFailure by Failures.tenantNotFound
+    data object NotOwner : SetInviteLabelOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
+    /** No pending link invite of that id: a mailed one, one that ended, or none. */
+    data object InviteNotFound : SetInviteLabelOutcome, HttpFailure by httpFailure("invite_not_found", FailureStatus.NOT_FOUND)
+    data object StaleEpoch : SetInviteLabelOutcome, HttpFailure by Failures.staleEpoch
 }
 
 /** Result of a tenant owner removing a member — the ACL-revoke cascade + orphan rule (cr-0091). */
@@ -694,6 +708,7 @@ class TenantHandler(
         signerIdentityPublicKey = VeyqUser.findById(callerId)?.identityPublicKey ?: "",
         epoch = input.epoch,
         grant = input.grant,
+        label = input.label,
     )
 
     /** The sealed part as the link's fragment carries it — base64url, unpadded, after the token and a `.` — or null for
@@ -770,6 +785,25 @@ class TenantHandler(
         // owner hears what a spent invite always answers — never "revoked" for a person who has already joined.
         if (!store.revokeInvite(invite.id)) return RevokeMemberInviteOutcome.InviteNotFound
         return RevokeMemberInviteOutcome.Done
+    }
+
+    /**
+     * A tenant **owner** sets, changes or clears a pending **link** invite's private label (ADR 0129 decision 7): the
+     * ciphertext and its value key's wrap, stored verbatim, the caller recorded as its last editor (ADR 0093 § 8).
+     * Owner-gated like every invite management; a [label] wrapped under an epoch that is no longer the tenant's current
+     * one is [SetInviteLabelOutcome.StaleEpoch], decided under the rotation's lock.
+     */
+    @Transactional
+    fun setMemberInviteLabel(callerId: String, tenantId: String, inviteId: String, label: SealedValue?, epoch: Int?): SetInviteLabelOutcome {
+        access.check(callerId, tenantId, WRITE)
+            .refusal(SetInviteLabelOutcome.NotFound, SetInviteLabelOutcome.Suspended)?.let { return it }
+        store.findTenant(tenantId) ?: return SetInviteLabelOutcome.NotFound
+        if (!store.isOwner(callerId, tenantId)) return SetInviteLabelOutcome.NotOwner
+        return when (store.setLinkInviteLabel(tenantId, inviteId, label, epoch, callerId)) {
+            SetInviteLabel.SET -> SetInviteLabelOutcome.Done
+            SetInviteLabel.NOT_FOUND -> SetInviteLabelOutcome.InviteNotFound
+            SetInviteLabel.STALE_EPOCH -> SetInviteLabelOutcome.StaleEpoch
+        }
     }
 
     /**

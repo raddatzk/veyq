@@ -81,7 +81,8 @@ acceptanceCriteria:
     # writes the link with the code in it. Mail stays a precondition, so a tenant that cannot send refuses this way too.
     text: >-
       The owner may instead mint a member invite as a link, the invite dialog's first way. The client builds the invite
-      as for a mailed one under a generated code and posts it without address or sealed part; the server runs the same
+      as for a mailed one under a generated code and posts it without address or sealed part, with an optional private
+      label sealed for the invite (uc.spaces.manage-member-invites); the server runs the same
       checks, refuses a tenant that cannot send with 503 `mail_unavailable` and a non-owner with 403 `not_tenant_owner`,
       each with nothing minted, sends nothing, and answers the single-use token to the owner only. The client writes
       `…/tenant/accept#<token>.<sealed>.<code>` on its own origin and shows it once inside an editable message (the

@@ -79,6 +79,9 @@ EXCLUSIONS = {
     "VerificationEntity.sealed_statement": "a member's verification under a value key of its own (ADR 0111 decision 12) — "
                                            "the rotation's scope commit re-wraps that key",
     "VerificationEntity.wrapped_value_key": "that verification's value key under K_tenant — the rotation's scope commit",
+    "TenantInviteEntity.sealed_label": "a link invite's private label under a value key of its own (ADR 0129 decision 7) — "
+                                       "the rotation's scope commit re-wraps that key",
+    "TenantInviteEntity.wrapped_label_value_key": "that label's value key under K_tenant — the rotation's scope commit",
     "ItemFavoritesEntity.wrapped_value_key": "a member's item marks' value key under the scope key, no node's (ADR 0068) — "
                                              "Memories' scope re-key participant re-wraps it (validate_scope_rekey_arity.py)",
     "TenantInviteEntity.wrapped_grant": "a tenant epoch key sealed to an open invite's key, written by the rotation (ADR 0111)",

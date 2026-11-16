@@ -17,6 +17,7 @@ import { me } from './grantTrust'
 import { listMyTenants, openScopeById } from './scopes'
 import { zeroScopeKey } from './epochs'
 import { recipientIdentityDigest, sealGrant } from './grant'
+import { normalizeInviteLabel, sealInviteLabel } from './inviteLabel'
 import { myChainHead } from '../account/tenantTrust'
 import type { MemberInviteLinkRequest, MemberInviteRequest } from '../../api/generated/tenants'
 
@@ -84,12 +85,13 @@ export async function buildMemberInvite(tenantId: string, email: string, secret:
  * Build a **link** invite into the tenant [tenantId] (ADR 0129 decision 1): the same invite key, signature and grant as
  * {@link buildMemberInvite}, bound to nobody, its link sealed under the generated [secret]'s code. The request carries no
  * address and no sealed part — `sealed` (base64url, the link's middle segment) stays on this device, and the owner's
- * client writes it into the link with the token the server answers and the code ({@link inviteLinkOf}).
+ * client writes it into the link with the token the server answers and the code ({@link inviteLinkOf}). An optional
+ * [label] — the owners' name for whom the link is for (ADR 0129 decision 7) — is sealed for this invite as a tenant value.
  */
 export async function buildMemberInviteLink(
-  tenantId: string, secret: Extract<InviteSecret, { mode: 'code' }>,
+  tenantId: string, secret: Extract<InviteSecret, { mode: 'code' }>, label?: string | null,
 ): Promise<{ request: MemberInviteLinkRequest; sealed: string }> {
-  return withOwner(tenantId, secret, (signer, tenant, ttl) => sealInvite(tenantId, secret, signer, tenant, ttl))
+  return withOwner(tenantId, secret, (signer, tenant, ttl) => sealInvite(tenantId, secret, signer, tenant, ttl, label))
 }
 
 /** The link a link invite is handed over as: this origin's accept page, its fragment `token.sealed.code`
@@ -151,7 +153,7 @@ export async function sealMemberInvite(
 /** What both ways of inviting share (ADR 0129 decision 1): the invite key, the owner's signature, the grant — the request
  *  bound to nobody — and the link's sealed part (base64url), which only the mailed way sends. */
 async function sealInvite(
-  tenantId: string, secret: InviteSecret, signer: InviteSigner, tenant: InviteEpoch, ttlSeconds: number,
+  tenantId: string, secret: InviteSecret, signer: InviteSigner, tenant: InviteEpoch, ttlSeconds: number, label?: string | null,
 ): Promise<{ request: MemberInviteLinkRequest; sealed: string }> {
   const secretBytes = invite.inviteLinkSecret(secret.mode, secret.mode === 'code' ? secret.code : secret.password)
   if (!secretBytes) throw new Error('invite secret is not a code or a password')
@@ -175,6 +177,9 @@ async function sealInvite(
     const sealed = invite.sealInviteLink({ tenantId, inviteId }, secret.mode, kek, salt, {
       seed, signerHead: signer.head, signerUserId: signer.userId,
     })
+    // Under the same epoch as the grant, bound to this invite: a re-issue's new id seals it anew.
+    const text = normalizeInviteLabel(label)
+    const sealedLabel = text ? sealInviteLabel(tenant, { scopeId: tenantId, inviteId }, text) : null
     return {
       request: {
         inviteId,
@@ -185,6 +190,7 @@ async function sealInvite(
         wrappedGrant: grant.wrappedGrant,
         grantSignature: grant.grantSignature,
         recipientIdentityDigest: recipientIdentityDigest(invitePublicKeyB64),
+        ...(sealedLabel ?? {}),
       },
       sealed,
     }

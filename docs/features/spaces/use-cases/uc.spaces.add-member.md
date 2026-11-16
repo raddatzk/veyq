@@ -112,9 +112,9 @@ sequenceDiagram
   that key through the owner's chain from the head in the link — the step signed by the old identity **and** the old
   Secret-Key proof key. The invite keeps working; anything the owner's retired key signs is refused.
 - **A5 — the owner shares a link instead** ([ADR 0129](../../../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md) decisions 1, 2 and 6). **Share a link**, the dialog's first
-  way, asks for no address. The client builds the invite as in step 1, always under a generated code, and posts it
+  way, asks for no address, only an optional label for the owners' pending list (decision 7). The client builds the invite as in step 1, always under a generated code, and posts it
   without address or sealed part (`createMemberInviteLink`); the server runs step 2's checks, mail as a precondition
-  and the tenant's invite budget, sends **nothing**, and answers the single-use token to this owner only. The client
+  and the tenant's invite budget, stores the label's ciphertext if there is one, sends **nothing**, and answers the single-use token to this owner only. The client
   writes `…/tenant/accept#<token>.<sealed>.<code>` on its own origin and shows it once inside an editable message (the
   space's name, the link, its expiry, "works once"), to copy, hand to the system share sheet where the browser has one,
   or open in the owner's mail program, beside the warning that whoever has the link can join. Several link invites may

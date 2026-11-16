@@ -667,6 +667,73 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invite_not_found }
 
+  /api/tenants/{tenantId}/member-invites/{inviteId}/label:
+    put:
+      tags: [tenants]
+      operationId: setMemberInviteLabel
+      summary: Set, change or clear a pending link invite's private label (owner-gated).
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          The write carries the whole label of one invite, which only the tenant's owners write; the later write
+          replaces it, and the epoch is decided under the tenant scope's lock.
+      description: >
+        Replaces the label of the given pending **link** invite ([ADR 0129](../../docs/decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md)
+        decision 7) and records the caller as its last editor (ADR 0093 § 8); all three fields null clears both. The
+        server stores the ciphertext verbatim and opens nothing. A mailed invite has no label, and an invite that ended
+        has nothing left to name: both `404 invite_not_found`. Owner-gated.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/InviteId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SetMemberInviteLabelRequest" }
+            example: { sealedLabel: c2VhbGVkLWxhYmVs, wrappedLabelValueKey: d3JhcHBlZC12YWx1ZS1rZXk=, epoch: 0 }
+      responses:
+        "204":
+          description: The label was replaced (or cleared).
+        "400":
+          description: >
+            The request was malformed — a label without its wrap or epoch, or a wrap or epoch without a label
+            (`invalid_request`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner. Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No such pending link invite for this tenant (`invite_not_found` — a mailed one, or one that ended); or no
+            such tenant, or the caller is not a member of it (`tenant_not_found`, ADR 0042).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_not_found }
+        "409":
+          description: >
+            `epoch` is no longer the tenant scope's current one (`stale_epoch` — a rotation ran; re-open the scope and
+            seal again).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: stale_epoch }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+
   /api/tenants/{tenantId}/member-invite-links:
     post:
       tags: [tenants]
@@ -3126,6 +3193,18 @@ components:
         bound to nobody, and the link's sealed part stays on the owner's client. `MemberInviteRequest` is a mailed
         invite's: these fields, the address and the sealed part.
       required: [inviteId, invitePublicKey, inviteKeySignature, expiresAt, epoch, wrappedGrant, grantSignature, recipientIdentityDigest]
+      # Both or neither, as InviteeNameKey's: under `dependentSchemas`, never at the schema's top.
+      dependentSchemas:
+        sealedLabel:
+          if: { properties: { sealedLabel: { type: string } } }
+          then:
+            required: [wrappedLabelValueKey]
+            properties: { wrappedLabelValueKey: { type: string } }
+        wrappedLabelValueKey:
+          if: { properties: { wrappedLabelValueKey: { type: string } } }
+          then:
+            required: [sealedLabel]
+            properties: { sealedLabel: { type: string } }
       properties:
         inviteId:
           x-veyq-visibility: id
@@ -3133,7 +3212,7 @@ components:
           format: uuid
           description: >
             The client-minted UUIDv4 id of the invite (ADR 0072 Decision 3) — bound into the owner's `invite-key`
-            signature, the link's seal, and the grant's signature as its recipient. Taken ⇒ `409 id_taken`.
+            signature, the link's seal, the grant's signature as its recipient, and the label's seal. Taken ⇒ `409 id_taken`.
           example: 1f2d3e4a-5b6c-4c3f-8e2a-9b1d4a6e8b2c
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
         invitePublicKey:
@@ -3202,6 +3281,28 @@ components:
           maxLength: 64
           example: ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGlnZXN0ZGk=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedLabel:
+          type: [string, "null"]
+          description: >
+            OPTIONAL private label for the owners' pending list (ADR 0129 decision 7) — "for whom" — sealed under a
+            field key derived from a fresh value key (`member-invite-label`, bound to the tenant scope and this invite's
+            id; opaque base64). Never served to anyone but the tenant's owners, never in `listOpenInvites`. With
+            `wrappedLabelValueKey`, both or neither (`400 invalid_request`).
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLWxhYmVs
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedLabelValueKey:
+          type: [string, "null"]
+          description: >
+            With `sealedLabel` (required there, and only there): its value key `K_v` wrapped under the tenant key of
+            `epoch`, the same as the grant's (seal purpose `value-key`, bound to the tenant scope, that epoch and the address of its
+            `member-invite-label` seal; ADR 0115).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     MemberInviteRequest:
       type: object
@@ -3315,7 +3416,7 @@ components:
       description: >
         A pending member invite as its owner lists it. `email` is present for a mailed invite and absent for a link
         invite, which is bound to nobody ([ADR 0129](../../docs/decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md)
-        decision 2) — the owner tells a link invite by its expiry.
+        decision 2) — the owner tells a link invite by its label where it has one (decision 7), else by its expiry.
       required: [inviteId, inviteStatus, inviteExpiresAt]
       properties:
         inviteId:
@@ -3340,6 +3441,73 @@ components:
           type: string
           format: date-time
           example: 2026-07-11T12:00:00Z
+        sealedLabel:
+          type: [string, "null"]
+          description: >
+            A link invite's private label as stored (`member-invite-label`, ADR 0129 decision 7), opaque base64; null or
+            absent where it has none, and always for a mailed invite. The owner's client opens it, and shows **Link
+            invitation** where it does not open.
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLWxhYmVs
+        wrappedLabelValueKey:
+          type: [string, "null"]
+          description: The label's value key under the tenant scope's current key (`value-key`), beside `sealedLabel`.
+          contentEncoding: base64
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+
+    SetMemberInviteLabelRequest:
+      type: object
+      description: >
+        A link invite's private label as an owner sets, changes or clears it (ADR 0129 decision 7): sealed under a fresh
+        value key bound to the tenant and the invite, that key wrapped under the tenant key of `epoch`. No label (both
+        absent or null) clears it; an `epoch` beside no label is ignored. Nothing is required, because a missing field and
+        a `null` bind alike.
+      # Both or neither, as InviteeNameKey's: under `dependentSchemas`, never at the schema's top.
+      dependentSchemas:
+        sealedLabel:
+          if: { properties: { sealedLabel: { type: string } } }
+          then:
+            required: [wrappedLabelValueKey, epoch]
+            properties: { wrappedLabelValueKey: { type: string }, epoch: { type: integer } }
+        wrappedLabelValueKey:
+          if: { properties: { wrappedLabelValueKey: { type: string } } }
+          then:
+            required: [sealedLabel]
+            properties: { sealedLabel: { type: string } }
+      properties:
+        sealedLabel:
+          type: [string, "null"]
+          description: >
+            OPTIONAL private label for the owners' pending list (ADR 0129 decision 7) — "for whom" — sealed under a
+            field key derived from a fresh value key (`member-invite-label`, bound to the tenant scope and this invite's
+            id; opaque base64). Never served to anyone but the tenant's owners, never in `listOpenInvites`. With
+            `wrappedLabelValueKey`, both or neither (`400 invalid_request`).
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLWxhYmVs
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedLabelValueKey:
+          type: [string, "null"]
+          description: >
+            With `sealedLabel` (required there, and only there): its value key `K_v` wrapped under the tenant key of
+            `epoch` (seal purpose `value-key`, bound to the tenant scope, that epoch and the address of its
+            `member-invite-label` seal; ADR 0115).
+          contentEncoding: base64
+          minLength: 1
+          maxLength: 128
+          example: d3JhcHBlZC12YWx1ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        epoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The tenant scope epoch whose key `wrappedLabelValueKey` is under — its current one, checked under its row
+            lock (`409 stale_epoch`); required with a label (`400 invalid_request` without), ignored without one.
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
 
     MemberInviteState:
       type: object

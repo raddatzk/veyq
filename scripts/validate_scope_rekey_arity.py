@@ -92,6 +92,10 @@ UNDER_VALUE_KEY = {
         "values": ["TenantProfileEntity.sealed_join_record"], "wraps": ["TenantProfileEntity.wrapped_join_record_value_key"],
     },
     "member-verification": {"values": ["VerificationEntity.sealed_statement"], "wraps": ["VerificationEntity.wrapped_value_key"]},
+    # A link member invite's private label (ADR 0129 decision 7): its wrap moves with the tenant key, the label never.
+    "member-invite-label": {
+        "values": ["TenantInviteEntity.sealed_label"], "wraps": ["TenantInviteEntity.wrapped_label_value_key"],
+    },
     # Memories' item marks: rewritten by its participant (ADR 0068, no node key).
     "item-favorites": {"values": ["ItemFavoritesEntity.ciphertext"], "wraps": ["ItemFavoritesEntity.wrapped_value_key"]},
 }
