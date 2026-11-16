@@ -367,7 +367,10 @@ a recipient the notice does not name is the cheap safe side to close now). `revi
   simulator SDK (`CODE_SIGNING_ALLOWED=NO`) green; `validate_mobile_words.py`, `validate_mobile_platform_guidelines.py`
   and every guard but guard_gaps green. **Not run:** the click-through on the Mac — the screen was locked all session
   (`ioreg`: `CGSSessionScreenIsLocked=Yes`), so it is the owner's step (or phase 9's pass); iOS on a simulator (none
-  boots on this Mac) and iOS's on-disk listing (a device's, phase 9).
+  boots on this Mac) and iOS's on-disk listing (a device's, phase 9). A second try the same day (17:35–17:55): the merged tip's macOS
+  build (ad hoc) green and the app signed in by the dev helper, but the screen locked again before a window could be
+  captured (`CGSSessionScreenIsLocked` true, 5 min waited) — nothing clicked; its device family signed out after
+  (`DevSecondSessionTest`'s `VEYQ_DEV_SIGN_OUT_LABEL`). Still the owner's.
 
 - [ ] **8 Windows and Linux** — D1's canvases over the bridge, Memories' bar tabs, the rest as phase 6. First, measured:
   a dashed `gsk::Path` stroke in the container's GTK and a dashed `Polyline` on the VM (the `StrokeDashArray`), else the
