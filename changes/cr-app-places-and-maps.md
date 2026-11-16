@@ -362,6 +362,11 @@ a recipient the notice does not name is the cheap safe side to close now). `revi
 
 ## Owner questions
 
+Answered 2026-11-15/16 by the owner: **1** — place names come from the **operator-configured geocoder** on Apple too,
+while the map itself is drawn by **MapKit** (the recommendation). **2** — (a) yes, the consent on iPhone, iPad and Mac
+names Apple Maps as the map service; (b) off means off everywhere: when the operator or the space's owner turned maps
+off, MapKit draws no map either. **3** — the new and changed words and the privacy notice's lines as proposed (EN and DE).
+
 1. **On Apple, which geocoder names a place?** Apple's (`MKReverseGeocodingRequest`; `CLGeocoder` is deprecated from 26,
    R13) — Apple then also learns the coordinates being named, which it largely sees already as the map's region — or the
    operator-configured one, as the web and the other apps. *Recommendation: the operator's.* Apple's current API answers
