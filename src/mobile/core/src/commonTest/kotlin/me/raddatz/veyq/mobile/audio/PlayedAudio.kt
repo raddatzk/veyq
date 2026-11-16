@@ -24,6 +24,11 @@ class PlayedAudio(private val lengths: Map<String, Long> = emptyMap()) {
     /** Every reader a track opened and that is not closed again: what a player leaked once its queue is gone. */
     val openReaders: Int get() = names.keys.count { !it.isClosed }
 
+    /** [reader] plays as the track named [name] (a reader an application's `open()` made, not a [Track]'s). */
+    fun register(reader: RangeReader, name: String) {
+        names[reader] = name
+    }
+
     fun newDeck(events: Deck.Events): Deck = PlayedDeck(decks.size, events).also { decks += it }
 
     /** The deck playing a track now, if any. */

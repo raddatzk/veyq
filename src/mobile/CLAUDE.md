@@ -26,7 +26,7 @@ A Gradle build of its own, run through its own wrapper.
   page by medium id, a video's `RangeReader` closed by the model when the page goes, the details, the save, the
   slideshow on the model's clock; the web's rights ported fail-closed, `MemoryRights`; New Memory and Add chapter,
   `MemoryCreate`; the uploads' settle and each picked file handed back once the queue is done with it, `MediaUploads`;
-  the tier spec, `MediaUpload`'s; ADR 0136's Consequences; its music, planned in `memories/music/`, ADR 0142), which
+  the tier spec, `MediaUpload`'s; ADR 0136's Consequences; its music, `memories/music/` (ADR 0142 decisions 4–12): a node's tracks listed and numbered once and its queue, `MusicQueue`; their facts, `AudioFacts` (a WAV's trim from its PCM, `Wav`; an ADTS file's length counted, `Frames`); a picked file checked and uploaded, `MusicUpload`; a rename of the raw listed tier, `TrackLabel`; the Music view, `MusicModel` over the gallery, whose header plays and stops the music and whose lightbox's video interrupts it; a medium's ITEM report, `MediumReport` — not yet drawn by any app), which
   uses core's session and is never used by it; an application's spec is generated into `api.<application>`.
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
   decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's

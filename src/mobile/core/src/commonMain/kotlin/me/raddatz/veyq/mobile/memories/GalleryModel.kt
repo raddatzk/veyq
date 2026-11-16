@@ -16,7 +16,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import me.raddatz.veyq.mobile.audio.MusicPlayer
 import me.raddatz.veyq.mobile.blob.RangeReader
+import me.raddatz.veyq.mobile.memories.music.MusicQueue
+import me.raddatz.veyq.mobile.memories.music.MusicTrack
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.depot.FileSave
 import me.raddatz.veyq.mobile.navigation.NodeAt
@@ -49,6 +52,11 @@ import me.raddatz.veyq.mobile.words.Notice
  * of when; a tile it did not keep reads as none. It is read-only then: [State.rights] offers no write, and every write
  * is refused with one notice ([Msg.OFFLINE_READ_ONLY]). Back online it reads anew.
  *
+ * **Its music** (ADR 0142 decisions 4–6 and 13, with [music]: the account's one player): the node's audio media are its
+ * music, never rows — [State.music], listed and numbered as its Music view lists them ([MusicQueue.tracks]) —; the header's
+ * music action plays or stops them ([MUSIC], [toggleMusic]), a track's delete is a medium's ([trash]), and a video the
+ * lightbox plays interrupts what plays ([Lightbox.videoPlaying]).
+ *
  * Each app draws [state] (or [watch]); [close] when the page goes (a lightbox on it closes with it).
  */
 class GalleryModel(
@@ -59,9 +67,14 @@ class GalleryModel(
     private val saves: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     /** Who looks: the apps open a gallery as a member today; a link's guest is a source, never another view. */
     access: MemoryRights.Access = MemoryRights.Access.Member(),
+    /** The account's music player and how an untitled track is named; null: the page plays no music. */
+    val music: Music? = null,
     /** A clock in milliseconds for the live poll's catch-up gap (only its differences count). */
     private val now: () -> Long = monotonicMs(),
 ) {
+    /** What the page plays its music with (ADR 0142 decision 1): the account's one [player]; [untitled] names a track by its number. */
+    class Music(val player: MusicPlayer, val untitled: (Int) -> String)
+
     /** What the page reads ([me.raddatz.veyq.mobile.navigation.ShellModel.galleryModel] over a tenant, a test over its own). */
     interface Door {
         /** The node's gallery as listed now (`MemoryMedia.list`); null or a throw where it did not read. */
@@ -175,8 +188,15 @@ class GalleryModel(
         val said: Notice? = null,
         /** Shown from the offline store, read-only, its content as of when (ADR 0140 decision 5); null online. */
         val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null,
+        /** The node's music: its audio media, sorted and numbered as its Music view lists them (a blocked one included). */
+        val music: List<MusicTrack> = emptyList(),
+        /** This node's music is the player's queue now (playing or paused): the header offers its stop. */
+        val musicHere: Boolean = false,
     ) {
         val count: Int get() = rows?.size ?: 0
+
+        /** Whether the node has music that plays: a track the operator did not block. */
+        val hasMusic: Boolean get() = music.any { !it.blocked }
 
         /**
          * What the page says where the gallery did not read ([failed]): offline, that the store does not hold it (a node
@@ -203,19 +223,52 @@ class GalleryModel(
      * The page's own header actions, joining core's where the kind's order puts them (`AppKinds.headerOrder`): adding
      * photos and videos where the rights let whoever looks upload.
      */
-    val headerActions: List<NodeHeader.Action> get() = listOfNotNull(NodeHeader.Action(UPLOAD).takeIf { rights.upload })
+    val headerActions: List<NodeHeader.Action> get() = listOfNotNull(
+        NodeHeader.Action(UPLOAD).takeIf { rights.upload },
+        // offline too: a pinned node's music plays (ADR 0142 decision 12)
+        NodeHeader.Action(MUSIC).takeIf { music != null && (current.hasMusic || current.musicHere) },
+    )
 
     /** What the page's own New makes here ([MemoryCreate.offered] on this node, where the rights allow): a chapter on a Memory. */
     val creates: List<String> get() = MemoryCreate.offered(node.kind).filter { it == MemoryCreate.CHAPTER && rights.createChapter }
 
-    /** An own header action's words ([headerActions]: adding photos and videos); null for another id. */
-    fun label(id: String): Msg? = if (id == UPLOAD) Msg.MEMORY_ADD else null
+    /** An own header action's words ([headerActions]: adding photos and videos, the music's play or stop); null for another id. */
+    fun label(id: String): Msg? = when (id) {
+        UPLOAD -> Msg.MEMORY_ADD
+        MUSIC -> if (current.musicHere) Msg.MUSIC_STOP else Msg.MUSIC_PLAY
+        else -> null
+    }
+
+    // ---- the music ----
+
+    /** The header's music action: this node's music stopped where it is the player's queue, else started. */
+    fun toggleMusic() {
+        val m = music ?: return
+        if (current.musicHere) m.player.stop() else playMusic()
+    }
+
+    /**
+     * The node's music played (ADR 0135 decision 6): [startId] first, then the rest shuffled; null shuffled from the start.
+     * A snapshot of the tracks listed now (one added later plays from the next start); nothing where none plays.
+     */
+    fun playMusic(startId: String? = null) {
+        val m = music ?: return
+        val tracks = current.music
+        if (tracks.none { !it.blocked }) return
+        m.player.play(MusicQueue.queue(node, tracks, m.untitled, { item -> door.reader(item)?.let { MusicQueue.source(item, it) } }, startId))
+    }
+
+    /** The player's queue key of this node's music. */
+    val musicKey: String get() = MusicQueue.key(node.scopeId, node.nodeId)
+
+    /** A music track of the node, by its medium id. */
+    internal fun track(mediaId: String): MusicTrack? = current.music.firstOrNull { it.mediaId == mediaId }
 
     /**
      * Whether medium [mediaId] offers its delete to whoever looks ([trash]): every one a member's (to the trash), a guest's
      * own one only (a purge); none where the rights delete nothing or it is not shown.
      */
-    fun deletes(mediaId: String): Boolean = row(mediaId) != null && when (rights.deleteMedia) {
+    fun deletes(mediaId: String): Boolean = known(mediaId) && when (rights.deleteMedia) {
         MemoryRights.DeleteMedia.ANY -> true
         MemoryRights.DeleteMedia.OWN -> door.isOwn(mediaId)
         MemoryRights.DeleteMedia.NONE -> false
@@ -241,6 +294,11 @@ class GalleryModel(
 
     init {
         scope.launch { door.revisions.collect { read() } }
+        music?.let { m ->
+            scope.launch {
+                m.player.state.collect { p -> _state.update { it.copy(musicHere = p.nowPlaying?.key == musicKey) } }
+            }
+        }
         scope.launch { door.uploaded.collect { if (it == node.nodeId) read() } }
         scope.launch {
             door.online.collect { on ->
@@ -294,7 +352,11 @@ class GalleryModel(
             val withChapters = if (chapters != null) s.copy(chapters = chapters) else s
             if (read == null) withChapters.copy(failed = true)
             // a photo view's media only: a track and a music track are another view's (GalleryMedium, ADR 0135 decision 2)
-            else withChapters.copy(rows = read.items.filter { it.mediaId !in pending && GalleryMedium.shows(it.type, it.name) }.map(::Row), failed = false)
+            else withChapters.copy(
+                rows = read.items.filter { it.mediaId !in pending && GalleryMedium.shows(it.type, it.name) }.map(::Row),
+                music = MusicQueue.tracks(read.items.filter { it.mediaId !in pending }),
+                failed = false,
+            )
         }
     }
 
@@ -328,6 +390,9 @@ class GalleryModel(
     fun startLive(): Watch = Watch(scope.launch { live() })
 
     private fun row(mediaId: String): Row? = current.rows?.firstOrNull { it.mediaId == mediaId }
+
+    /** Whether [mediaId] is shown here: a row of the grid or a track of the music. */
+    private fun known(mediaId: String): Boolean = row(mediaId) != null || track(mediaId) != null
 
     /** The grid's tier of medium [mediaId], whole, for the platform to decode; null where it has none or it did not read. */
     suspend fun tile(mediaId: String): ByteArray? {
@@ -373,6 +438,7 @@ class GalleryModel(
 
     /** The name a refusal says a medium by: its original's sealed name, else its place in the grid (`Item {n}`). */
     private fun nameOf(mediaId: String): Any {
+        track(mediaId)?.let { t -> return t.title ?: Notice(Msg.MUSIC_UNTITLED, t.number) }
         val rows = current.rows.orEmpty()
         val at = rows.indexOfFirst { it.mediaId == mediaId }
         return rows.getOrNull(at)?.name?.takeIf { it.isNotBlank() } ?: Notice(Msg.MEMORY_UNNAMED, if (at >= 0) at + 1 else 1)
@@ -384,7 +450,7 @@ class GalleryModel(
      * web's) —; a guest's own one asked first ([State.purging], then [purge]). What to say at once, or null.
      */
     suspend fun trash(mediaId: String): Notice? {
-        if (row(mediaId) == null) return null
+        if (!known(mediaId)) return null
         if (current.offline != null) return readOnlyNotice
         return when (rights.deleteMedia) {
             MemoryRights.DeleteMedia.ANY -> trashAny(mediaId)
@@ -399,7 +465,7 @@ class GalleryModel(
     private suspend fun trashAny(mediaId: String): Notice {
         val name = nameOf(mediaId) // before the removal: a refused restore names it
         pending += mediaId
-        _state.update { s -> s.copy(rows = s.rows?.filter { it.mediaId != mediaId }) }
+        _state.update { s -> s.copy(rows = s.rows?.filter { it.mediaId != mediaId }, music = s.music.filter { it.mediaId != mediaId }) }
         val said = Notice(Msg.MEMORY_MOVED_TO_TRASH)
         val u = Undoing(mediaId, name)
         offerUndo(u, said)
@@ -458,7 +524,7 @@ class GalleryModel(
 
     /** "Delete" on a guest's own medium [mediaId]: asked first (it is purged for good, no Undo). Not for another's. */
     fun askPurge(mediaId: String) {
-        if (current.offline != null || rights.deleteMedia != MemoryRights.DeleteMedia.OWN || row(mediaId) == null || !door.isOwn(mediaId)) return
+        if (current.offline != null || rights.deleteMedia != MemoryRights.DeleteMedia.OWN || !known(mediaId) || !door.isOwn(mediaId)) return
         _state.update { it.copy(purging = mediaId) }
     }
 
@@ -483,7 +549,7 @@ class GalleryModel(
             _state.update { it.copy(said = said) }
             return said
         }
-        _state.update { s -> s.copy(rows = s.rows?.filter { it.mediaId != mediaId }) }
+        _state.update { s -> s.copy(rows = s.rows?.filter { it.mediaId != mediaId }, music = s.music.filter { it.mediaId != mediaId }) }
         return null
     }
 
@@ -518,6 +584,12 @@ class GalleryModel(
         }
         val rows = MediaDetails.rows(item, exif)
         Lightbox.Details(mediaId, rows, key?.let { uploaders[it] }, MediaDetails.uploaderAt(rows))
+    }
+
+    /** Music track [mediaId]'s original saved through [into] as the lightbox saves a medium's ([Lightbox.save]); null where it is not one or may not be. */
+    internal fun saveTrack(mediaId: String, into: suspend (produce: suspend (sink: (ByteArray) -> Unit) -> Boolean) -> Boolean): FileSave? {
+        val t = track(mediaId) ?: return null
+        return save(Row(t.item), t.number - 1, into)
     }
 
     internal fun reader(row: Row): RangeReader? = if (rights.download && row.isVideo && !row.blocked) door.reader(row.item) else null
@@ -580,6 +652,9 @@ class GalleryModel(
         /** The page's own header action: photos and videos added ([upload]). */
         const val UPLOAD = "upload"
 
+        /** The page's own header action: its music played or stopped ([toggleMusic], ADR 0142 decision 6). */
+        const val MUSIC = "music"
+
         /**
          * Memory or chapter [node] as the page an app opens (Memories' object): a chapter is no object of a list
          * (`applicationOf` names no application for it, so `NodeRef.asObject` gives none), yet a chapter row and a chapter
@@ -628,6 +703,12 @@ class GalleryModel(
  * poster for one interval and is never played by it —, ends ON the last medium, and pauses on any [go] or [play] (the
  * web pauses on any key, pointer or wheel; a platform whose view is touched pauses it with [slideshow] off).
  * Zoom is the platform's; the model knows nothing of it.
+ *
+ * **The music** (ADR 0142 decisions 5 and 13): while the account's player holds a queue, [State.music] is what the compact
+ * controls draw ([musicControls] their commands; closing the lightbox stops nothing, and the slideshow's pause leaves the
+ * music alone). A video it plays interrupts the music: the platform's player reports it playing ([videoPlaying] true) and
+ * paused or ended (false); paging to another medium, [stop] and [close] end the interruption too, and the music plays on
+ * where nothing a listener did came between (the player's rule).
  */
 class Lightbox internal constructor(
     private val gallery: GalleryModel,
@@ -651,6 +732,8 @@ class Lightbox internal constructor(
         /** The slideshow: running, paused, ended on the last medium; null before it first started. */
         val slideshow: Slideshow? = null,
         val closed: Boolean = false,
+        /** What the account's player plays (any node's queue), for the compact controls; null: they are not shown. */
+        val music: me.raddatz.veyq.mobile.audio.NowPlaying? = null,
     ) {
         val count: Int get() = rows.size
         val row: GalleryModel.Row? get() = rows.getOrNull(index)
@@ -672,6 +755,27 @@ class Lightbox internal constructor(
         _state = MutableStateFlow(State(rows, if (rows.isEmpty()) -1 else start.coerceIn(0, rows.size - 1)))
         state = _state.asStateFlow()
         scope.launch { gallery.state.collect { s -> s.rows?.let(::follow) } }
+        gallery.music?.let { m -> scope.launch { m.player.state.collect { p -> _state.update { it.copy(music = p.nowPlaying) } } } }
+    }
+
+    /** The compact controls' commands (previous, play/pause, next): the account's player; null where the page plays no music. */
+    val musicControls: me.raddatz.veyq.mobile.audio.PlayerCommands? get() = gallery.music?.player
+
+    private var interruption: MusicPlayer.Interruption? = null
+
+    /**
+     * The video the lightbox shows started ([playing] true; a muted one too) or paused or ended (false), as the platform's
+     * player reports it: the music is interrupted while it plays, and plays again after (ADR 0142 decision 13).
+     */
+    fun videoPlaying(playing: Boolean) {
+        if (!playing) return endInterruption()
+        if (current.closed || interruption != null) return
+        interruption = gallery.music?.player?.interrupt()
+    }
+
+    private fun endInterruption() {
+        interruption?.end()
+        interruption = null
     }
 
     class Watch internal constructor(private val job: Job) {
@@ -703,6 +807,7 @@ class Lightbox internal constructor(
             s.copy(rows = rows, index = index, reader = if (same) s.reader else null)
         }
         if (rows.isNotEmpty()) wanted = null
+        if (stale != null) endInterruption()
         stale?.close()
     }
 
@@ -714,11 +819,15 @@ class Lightbox internal constructor(
 
     private fun step(index: Int) {
         var stale: RangeReader? = null
+        var moved = false
         _state.update { s ->
             if (s.closed || index !in s.rows.indices || index == s.index) return@update s
             stale = s.reader
+            moved = true
             s.copy(index = index, reader = null)
         }
+        // another medium: a video that played on the one left no longer does
+        if (moved) endInterruption()
         stale?.close()
     }
 
@@ -790,6 +899,7 @@ class Lightbox internal constructor(
     fun stop() {
         var stale: RangeReader? = null
         _state.update { s -> stale = s.reader; s.copy(reader = null) }
+        endInterruption()
         stale?.close()
     }
 
@@ -831,6 +941,7 @@ class Lightbox internal constructor(
         var stale: RangeReader? = null
         ticking?.cancel()
         _state.update { s -> stale = s.reader; s.copy(reader = null, closed = true, slideshow = s.slideshow?.let { if (it == Slideshow.PLAYING) Slideshow.PAUSED else it }) }
+        endInterruption()
         stale?.close()
         scope.cancel()
     }

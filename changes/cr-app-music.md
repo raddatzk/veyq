@@ -320,9 +320,11 @@ lightbox plays and starts again by itself when the video stops or the lightbox m
   before its span moves on at once without a fade" (every deck ramps, D2); phase 2's interrupt cases each a twin, plus a
   queue paused before the video staying paused. Bites (a)–(f) each red at its own case and green again, and two more:
   the end resuming unconditionally → the listener's-pause/-play cases red; a new queue not counted → its case red.
-  A track still loading when `interrupt()` comes starts during the video (D13 pauses only a playing queue).
+  A track still loading when `interrupt()` came started during the video (D13 paused only a playing queue) — fixed in
+  phase 4 (coordinator 2026-11-15): such a track is held, silent until the interruption's end starts it; ADR 0142
+  decision 13 says so, and that the web's player keeps the gap.
 
-- [ ] **4 Memories' music (core `memories/music/`)** — `MusicQueue`, `AudioFacts`, `Frames`, `Wav`, `MusicUpload` (D7),
+- [x] **4 Memories' music (core `memories/music/`)** — `MusicQueue`, `AudioFacts`, `Frames`, `Wav`, `MusicUpload` (D7),
   `TrackLabel` (D10), the ITEM report (D11), `MusicModel` (D8), the header toggle (D6), the lightbox's compact-control
   state (D5) and its video's interruption (D13), D12's `keeps`/`pinned`. Tests: R13's Memories cases ported; a **cross-surface fixture** — a listed tier as
   the web's `media.ts` seals it (`durationMs`, `trimStartMs`, `trimEndMs`, `trackName`, plus a field core does not know)
@@ -335,6 +337,31 @@ lightbox plays and starts again by itself when the video stops or the lightbox m
   `video/mp4`, red; (c) `keeps` without audio → the pinned tracks' frame count 0, red; (d) an `audio` fact with
   start ≥ end accepted → `AudioFacts` validation case red; (e) the queue numbering its unsorted list → D4's one-numbering
   case red; (f) a 200 MiB + 1 byte file accepted → red.
+  *Done 2026-11-16:* `memories/music/` holds `Frames`, `Wav`, `AudioFacts` (with `Decoded`), `MusicQueue` (with
+  `MusicTrack`: the view's sorted list numbers an untitled track once, the queue plays in listing order under the same
+  title), `MusicUpload` (`check` → `Check.Taken|Refused`, the platform's length through `MusicUpload.Measure`; `Job` seals
+  the sniffed type, the listed tier `metaTier` = the file's date + the three facts, no derived tier), `TrackLabel` (raw
+  read-modify-write over `NodeMetaWrite`'s state, at most two sends) and `MusicModel` (D8, over the gallery). Beside it:
+  `memories/MediumReport` (D11's keys) with `NodeReport.reportItem` (a function, not a `Scope` value: `Scope` maps to
+  NODE/NAME and an ITEM's keys are the application's); `ReportSheet(offersName = false)` for an item; `MemoryMedia.Meta`
+  gains `trackName` and `facts`, `Item` its `metaRevision`, raw `wrappedMeta` and `isAudio`; `keeps`/`pinned` play an audio
+  original as a video's (D12); `GalleryModel` takes `GalleryModel.Music(player, untitled)` — `State.music`/`musicHere`, the
+  header's `MUSIC` action (after `share`, the web's order) with `toggleMusic`/`playMusic`, a track's trash with Undo — and
+  its `Lightbox` gains `State.music`, `musicControls` and `videoPlaying(Boolean)` (item change, `stop`, `close` end the
+  interruption); `MediaUploads.uploadMusic` with `Door.musicJob`; `ShellModel.musicPlayer(newDeck, controls)` and
+  `musicModel(gallery, uploads, measure, left)`. Nine words in `words.json` (`music_play|stop|add|untitled|too_large|
+  not_audio|unplayable|rename_conflict|rename_failed`, EN+DE, the unplayable one the owner's copy). The untitled title
+  is a `(Int) -> String` handed in (the web's seam): the core renders no word, so phase 5 needs it from the host.
+  Tests: `FramesTest` (5), `WavTest` (4), `AudioFactsTest` (12: the scan's 7, the apps' measuring 4, `audioFactsFrom`), `MusicQueueTest`
+  (7), `MusicUploadTest` (6), `TrackLabelTest` (7, the cross-surface fixture: a tier as `media.ts` seals it with two
+  fields no surface knows, opened by the core, renamed with every other field byte-equal in its place), `MusicModelTest`
+  (13, the lightbox's interruption among them). Where the web measures by decoding, the apps' twin asserts the narrower
+  D7 rule (a WAV whose format is not read, and every decoded format, untrimmed with nothing read). `MusicLiveTest`
+  (`VEYQ_LIVE`) green: WAV trimmed 2000..5000 of 7000 ms, MP3 untrimmed 10449 ms, typed by its bytes against the claimed
+  `video/mp4`, rename conflict naming the peer's "Alpha", ITEM report SENT with its BLOB key opening the WAV, pin keeps both
+  originals whole; the Memory trashed and purged, every device removed. Each live run leaves one open ITEM report in the
+  dev instance's moderation queue. Bites (a)–(f) each red at its own assertion and green again; (c) also live (the pin's
+  plan counts no blob).
 
 - [ ] **5 the bridge** — `Watched.Player` → `PlayerShown`, `Watched.Music` → `MusicShown`, the calls (`Player.Play|
   Pause|Resume|Next|Previous|Seek|Stop|OpenNode`, `Music.Play|Rename|Remove|Download|Report|Add(paths)`), the deck host

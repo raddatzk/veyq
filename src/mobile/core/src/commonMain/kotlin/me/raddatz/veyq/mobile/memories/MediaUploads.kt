@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.blob.UploadQueue
+import me.raddatz.veyq.mobile.memories.music.MusicUpload
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
@@ -41,6 +42,9 @@ class MediaUploads(
     interface Door {
         /** [source] added to node [nodeId] of [scopeId], as a job of the queue ([MediaUpload.Job]). */
         fun job(scopeId: String, nodeId: String, source: UploadSource): UploadQueue.Job
+
+        /** A checked music track added to node [nodeId] of [scopeId], as a job of the queue ([MusicUpload.Job]). */
+        fun musicJob(scopeId: String, nodeId: String, track: MusicUpload.Check.Taken): UploadQueue.Job
 
         /** A batch ended: the lists are read anew. */
         fun changed()
@@ -89,7 +93,19 @@ class MediaUploads(
         val (media, others) = sources.partition { MediaUpload.isMedia(it.type, it.name) }
         others.forEach { door.left(it) }
         if (media.isEmpty()) return 0
-        val jobs = media.map { door.job(scopeId, nodeId, it) to it }
+        return enqueue(nodeId, label, media.map { door.job(scopeId, nodeId, it) to it })
+    }
+
+    /**
+     * Music tracks checked on the device ([MusicUpload.check]) queued into Memory or chapter [nodeId] of [scopeId],
+     * one batch labelled [label]; the number queued. Each is handed back as a medium's is, once the queue is done with it.
+     */
+    fun uploadMusic(scopeId: String, nodeId: String, label: String, tracks: List<MusicUpload.Check.Taken>): Int {
+        if (tracks.isEmpty()) return 0
+        return enqueue(nodeId, label, tracks.map { door.musicJob(scopeId, nodeId, it) to it.source })
+    }
+
+    private fun enqueue(nodeId: String, label: String, jobs: List<Pair<UploadQueue.Job, UploadSource>>): Int {
         scope.launch {
             jobs.forEach { (job, source) -> held[job] = source }
             queue.enqueue(

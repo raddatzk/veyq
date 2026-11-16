@@ -45,6 +45,10 @@ object MemoryMedia {
     class Meta(
         val width: Int?, val height: Int?, val capturedAt: Long?, val capturedAtOverride: Long?, val capturedAtSource: String?,
         val gpsLat: Double?, val gpsLng: Double?, val placeName: String?, val placeLevel: String?,
+        /** A track's own name, as a member gave it (`trackName`, ADR 0135 decision 4: a music track's title before its file's). */
+        val trackName: String? = null,
+        /** A music track's facts, where the tier holds all three and they make a span (`AudioFacts.from`). */
+        val facts: me.raddatz.veyq.mobile.memories.music.AudioFacts? = null,
     ) {
         /** The user's correction if set, else the derived capture time (`effectiveCapturedAt`). */
         val effectiveCapturedAt: Long? get() = capturedAtOverride ?: capturedAt
@@ -66,8 +70,15 @@ object MemoryMedia {
         /** The operator blocked it: no bytes are served (`451`). */
         val blocked: Boolean,
         internal val key: ByteArray,
+        /** The revision its listed tier is at: what a write of it states (`updateMediaMeta`, ADR 0077). */
+        val metaRevision: Long = 0,
+        /** Its listed tier as listed (sealed): what a write re-opens raw (`TrackLabel`), never the parsed [meta]. */
+        internal val wrappedMeta: String? = null,
     ) {
         val isVideo: Boolean get() = type?.startsWith("video/") == true
+
+        /** A music track: its original's sealed type is an audio one (ADR 0135 decision 2; `GalleryMedium.isAudio`). */
+        val isAudio: Boolean get() = GalleryMedium.isAudio(type)
 
         /** The lightbox shows a picture of it: not for a video without a poster, whose original is no picture. */
         val hasPicture: Boolean get() = !(isVideo && preview == null)
@@ -144,7 +155,7 @@ object MemoryMedia {
             Item(
                 scopeId, nodeId, row.mediaId, original, tier(MediaDerivativeKind.THUMBNAIL), tier(MediaDerivativeKind.PREVIEW),
                 openMeta(suite, scopeId, row.mediaId, key, row.wrappedMeta), opened?.type?.takeIf { it.isNotBlank() }, opened?.name,
-                row.ownerKey, row.blockedByOperator, key,
+                row.ownerKey, row.blockedByOperator, key, row.metaRevision ?: 0, row.wrappedMeta,
             )
         }
         return Gallery(order(items), mediaRevision, deleteRevision, read.offline)
@@ -174,20 +185,25 @@ object MemoryMedia {
     }
 
     /**
-     * Whether the offline store keeps what is read of [blob] (ADR 0140 decision 8): a tile and a preview, and a video's
-     * original (its frames as played) — never a photo's original, for which the preview stands in.
+     * Whether the offline store keeps what is read of [blob] (ADR 0140 decision 8): a tile and a preview, and a video's or
+     * a music track's original (its frames as played, ADR 0142 decision 12) — never a photo's original, for which the
+     * preview stands in.
      */
-    private fun keeps(item: Item, blob: Blob): Boolean = roleOf(item, blob) != ORIGINAL || item.isVideo
+    internal fun keeps(item: Item, blob: Blob): Boolean = roleOf(item, blob) != ORIGINAL || playsOriginal(item)
+
+    /** Whether [item] is played from its original: a video, a music track. */
+    private fun playsOriginal(item: Item): Boolean = item.isVideo || item.isAudio
 
     /**
      * What a pin of Memory or chapter [node] keeps (ADR 0140 decisions 8 and 9): each medium's tiles and preview and a
-     * video's original — what [keeps] keeps when it is viewed —, a medium the operator blocked none; each blob with its key.
+     * video's and a music track's original — what [keeps] keeps when it is played —, a medium the operator blocked none;
+     * each blob with its key.
      */
     internal suspend fun pinned(tenant: TenantSession, node: me.raddatz.veyq.mobile.session.OpenNode): List<me.raddatz.veyq.mobile.offline.PinBlob> {
         val g = list(tenant, node.scopeId, node.id) ?: return emptyList()
         val suite = tenant.account.suite
         return g.items.filter { !it.blocked }.flatMap { item ->
-            listOfNotNull(item.thumbnail, item.preview, item.original.takeIf { item.isVideo }).filter { keeps(item, it) }.mapNotNull { b ->
+            listOfNotNull(item.thumbnail, item.preview, item.original.takeIf { playsOriginal(item) }).filter { keeps(item, it) }.mapNotNull { b ->
                 openBlobKey(suite, item.scopeId, item.mediaId, item.key, b, roleOf(item, b))?.let {
                     me.raddatz.veyq.mobile.offline.PinBlob(item.scopeId, b.blobId, b.chunkCount, b.byteSize, it)
                 }
@@ -223,6 +239,7 @@ object MemoryMedia {
             if (geo) w!!.toInt() else null, if (geo) h!!.toInt() else null,
             num("capturedAt")?.toLong(), num("capturedAtOverride")?.toLong(), source,
             num("gpsLat"), num("gpsLng"), str("placeName"), str("placeLevel"),
+            str("trackName"), me.raddatz.veyq.mobile.memories.music.AudioFacts.from(o),
         )
     }
 

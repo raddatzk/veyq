@@ -115,6 +115,19 @@ class MusicPlayer(
      *  between (ADR 0142 decision 13). */
     private var listened = 0
 
+    /** A track is being brought in: opened and loaded, not yet playing ([bringIn] between its start and its sound). */
+    private var starting = false
+
+    /** The interruption that holds the music: while it is set, a track that finishes loading does not start (ADR 0142
+     *  decision 13 — a load still pending when the video started stays silent until the video ends). */
+    private var held: Interruption? = null
+
+    /** What a listener did: an interruption's end no longer resumes, and a held track is no longer held. */
+    private fun listen() {
+        listened++
+        held = null
+    }
+
     // --- the commands: each answered on the lane, in the order made ------------------------------------------------------
 
     /** Plays [queue], replacing the one playing with a 1 s crossfade. */
@@ -124,21 +137,21 @@ class MusicPlayer(
 
     fun stop() {
         scope.launch {
-            listened++
+            listen()
             doStop()
         }
     }
 
     override fun pause() {
         scope.launch {
-            listened++
+            listen()
             doPause()
         }
     }
 
     override fun resume() {
         scope.launch {
-            listened++
+            listen()
             doResume()
         }
     }
@@ -174,15 +187,18 @@ class MusicPlayer(
     /**
      * A lightbox video started (ADR 0142 decision 13): a playing queue pauses. The [Interruption]'s [Interruption.end] —
      * the video paused or ended, the lightbox moved on or closed — resumes it, but only when it was playing when
-     * interrupted and nothing came between: a listener's play or pause, a new queue, a stop.
+     * interrupted and nothing came between: a listener's play or pause, a new queue, a stop. A track still loading when
+     * it comes (the queue's first, or the next one on its way in) is held: it does not start during the video, and the
+     * end starts it.
      */
     fun interrupt(): Interruption {
         val interruption = Interruption()
         scope.launch {
-            if (queue != null && slots[active].playing) {
+            if (queue != null && (slots[active].playing || starting)) {
                 doPause()
                 interruption.paused = true
                 interruption.at = listened
+                held = interruption
             }
         }
         return interruption
@@ -198,6 +214,7 @@ class MusicPlayer(
             scope.launch {
                 if (ended) return@launch
                 ended = true
+                if (held === this@Interruption) held = null
                 if (paused && at == listened && queue != null) doResume()
             }
         }
@@ -206,7 +223,7 @@ class MusicPlayer(
     // --- the lane's own work ---------------------------------------------------------------------------------------------
 
     private suspend fun doPlay(next: PlayerQueue) {
-        listened++
+        listen()
         _state.update { it.copy(notice = null) }
         val ids = next.tracks.map { it.id }
         if (ids.isEmpty()) return
@@ -225,6 +242,7 @@ class MusicPlayer(
 
     private fun doStop() {
         generation++
+        starting = false
         ticker?.cancel()
         ticker = null
         for (slot in slots) clear(slot)
@@ -324,10 +342,16 @@ class MusicPlayer(
         val incoming = slots[1 - active]
         val prepared = if (incoming.preparedId == track.id) incoming.loading else null
         show(track, playing = false)
+        starting = true
         try {
             (prepared ?: load(incoming, track)).await()
             if (gen != generation) return
             incoming.preparedId = null
+            if (held != null) {
+                // an interruption came while it loaded: it waits, at full volume, for the interruption's end
+                incoming.deck.ramp(1.0, 0)
+                return hold(incoming, outgoing, track)
+            }
             incoming.deck.ramp(1.0, fadeMs)
             incoming.deck.play()
             incoming.playing = true
@@ -339,6 +363,8 @@ class MusicPlayer(
             if (gen != generation) return
             clear(incoming)
             return skip(track.id)
+        } finally {
+            if (gen == generation) starting = false
         }
         if (gen != generation) return
         failures = 0
@@ -357,6 +383,16 @@ class MusicPlayer(
             }
         }
         show(track, playing = true)
+        startTicker()
+    }
+
+    /** [track] loaded on [incoming] while an interruption holds the music: it becomes the playing deck, paused; the outgoing
+     *  one (paused by the interruption) is let go at once. The interruption's end plays it. */
+    private fun hold(incoming: Slot, outgoing: Slot, track: PlayerTrack) {
+        failures = 0
+        active = 1 - active
+        if (outgoing.source != null) clear(outgoing)
+        show(track, playing = false)
         startTicker()
     }
 

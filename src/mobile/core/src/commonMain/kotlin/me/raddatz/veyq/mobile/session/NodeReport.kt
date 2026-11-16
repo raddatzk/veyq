@@ -105,6 +105,31 @@ object NodeReport {
         val node = tenant.trees()[scopeId]?.firstOrNull { it.id == nodeId } ?: return Sent(Outcome.NOT_FOUND)
         val keys = keysOf(tenant, scopeId, node, scope) ?: return Sent(Outcome.UNAVAILABLE)
         val kind = if (scope == Scope.WHOLE) ReportSubmissionItemsInner.Kind.NODE else ReportSubmissionItemsInner.Kind.NAME
+        return submit(tenant, scopeId, cat, kind, nodeId, keys, reason, contact)
+    }
+
+    /**
+     * Reports item [itemId] of space [scopeId] — an `ITEM`, one thing inside a node (a Memory's medium, ADR 0142 decision
+     * 11) — in [category] for [reason], with [contact]: [keys] are what its application hands over (a medium's: every
+     * blob's `K_blob`, its meta's field key), null where none open here ([Outcome.UNAVAILABLE]).
+     */
+    @Throws(Exception::class)
+    suspend fun reportItem(
+        tenant: TenantSession, scopeId: String, itemId: String, keys: List<Report.Key>?, category: String, reason: String, contact: String,
+    ): Sent {
+        val cat = ReportSubmission.Category.entries.firstOrNull { it.value == category } ?: return Sent(Outcome.FAILED)
+        if (reason.isBlank()) return Sent(Outcome.FAILED)
+        if (keys.isNullOrEmpty()) return Sent(Outcome.UNAVAILABLE)
+        return submit(tenant, scopeId, cat, ReportSubmissionItemsInner.Kind.ITEM, itemId, keys, reason, contact)
+    }
+
+    /** One item of [kind] with [keys] sealed and sent, the moderation epoch read anew once where it changed meanwhile. */
+    private suspend fun submit(
+        tenant: TenantSession, scopeId: String, cat: ReportSubmission.Category, kind: ReportSubmissionItemsInner.Kind, id: String,
+        keys: List<Report.Key>, reason: String, contact: String,
+    ): Sent {
+        val account = tenant.account
+        val suite = account.suite
         repeat(2) { attempt ->
             val key = published(tenant) ?: return Sent(Outcome.MODERATION_OFF)
             val reportKey = Report.newKey(suite)
@@ -114,7 +139,7 @@ object NodeReport {
                     category = cat,
                     epoch = key.epoch,
                     sealedReport = b64(Report.seal(suite, key.epoch, key.kem, reportKey, reason)),
-                    items = listOf(ReportSubmissionItemsInner(kind, b64(Report.sealShare(suite, reportKey, Report.Item.Of(kind.value, nodeId), keys)), nodeId)),
+                    items = listOf(ReportSubmissionItemsInner(kind, b64(Report.sealShare(suite, reportKey, Report.Item.Of(kind.value, id), keys)), id)),
                     sealedContact = trimmed.takeIf { it.isNotEmpty() }?.let { b64(Report.sealContact(suite, key.epoch, key.kem, it)) },
                     receiptAddress = trimmed.takeIf { it.isNotEmpty() },
                 )
