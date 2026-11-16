@@ -509,28 +509,34 @@ internal sealed class LightboxView : IDisposable
                     list.Children.Add(map.View);
                 }
                 else Log.Write($"Lightbox.Map answered {opened.GetType().Name}");
-                var placeLabel = Words.MemoryFieldPlace();
-                if (!lines.Any(l => l.Label == placeLabel))
-                {
-                    var (resolved, _) = await Core.CallAsync(new Call.LightboxPlace { lightbox = lightbox, mediaId = mediaId });
-                    if (resolved is Answer.PlaceResolved { name: { } name })
-                    {
-                        Log.Write("lightbox details: the place's name resolved");
-                        lines.Insert(Math.Clamp(lines.FindIndex(l => l.Label == Words.MemoryFieldLocation()) is var at and >= 0 ? at : lines.Count, 0, lines.Count), (placeLabel, name));
-                    }
-                    else Log.Write($"Lightbox.Place answered {(resolved is Answer.PlaceResolved ? "no name" : resolved.GetType().Name)}");
-                }
             }
+            var placeLabel = Words.MemoryFieldPlace();
+            var asksPlace = d.map && !lines.Any(l => l.Label == placeLabel);
             if (lines.Count == 0) list.Children.Add(new TextBlock { Text = Words.MemoryNoDetail(), TextWrapping = TextWrapping.Wrap });
-            foreach (var (label, value) in lines)
+            StackPanel Line(string label, string value)
             {
                 var row = new StackPanel { Spacing = 0 };
                 row.Children.Add(new TextBlock { Text = label, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
                 var text = new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
                 AutomationProperties.SetName(text, $"{label}: {value}");
                 row.Children.Add(text);
+                return row;
+            }
+            var location = Words.MemoryFieldLocation();
+            StackPanel? locationRow = null;
+            foreach (var (label, value) in lines)
+            {
+                var row = Line(label, value);
+                if (label == location) locationRow = row;
                 list.Children.Add(row);
             }
+            // the photo's place named once (ADR 0143 decision 7), while the dialog shows: the geocoder's queue may take a
+            // while, so its row joins above the coordinate once it arrives
+            if (asksPlace) ResolvePlace(lightbox, mediaId, name =>
+            {
+                var at = locationRow is null ? list.Children.Count : list.Children.IndexOf(locationRow);
+                list.Children.Insert(at < 0 ? list.Children.Count : at, Line(placeLabel, name));
+            });
             var dialog = new ContentDialog
             {
                 Title = Words.MemoryDetails(),
@@ -545,6 +551,26 @@ internal sealed class LightboxView : IDisposable
         catch (Exception e)
         {
             Log.Write($"the details were not shown ({e.GetType().Name})");
+        }
+    }
+
+    /// <summary>Medium <paramref name="mediaId"/>'s place name resolved and sealed once (Lightbox.Place), handed to
+    /// <paramref name="named"/> where there is one.</summary>
+    private async void ResolvePlace(long lightbox, string mediaId, Action<string> named)
+    {
+        try
+        {
+            var (resolved, _) = await Core.CallAsync(new Call.LightboxPlace { lightbox = lightbox, mediaId = mediaId });
+            if (resolved is Answer.PlaceResolved { name: { } name } && !_closed)
+            {
+                Log.Write("lightbox details: the place's name resolved");
+                named(name);
+            }
+            else Log.Write($"Lightbox.Place answered {(resolved is Answer.PlaceResolved ? "no name" : resolved.GetType().Name)}");
+        }
+        catch (Exception e)
+        {
+            Log.Write($"Lightbox.Place failed ({e.GetType().Name})");
         }
     }
 
