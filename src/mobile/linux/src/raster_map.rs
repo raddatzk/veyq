@@ -46,6 +46,10 @@ const DOT_RADIUS: f64 = 4.5;
 const PHOTO_RADIUS: f64 = 7.0;
 /// How often a gesture tells the core where it stands, at most.
 const TELL_EVERY: Duration = Duration::from_millis(100);
+/// How many zooms away a held tile may still be drawn under the view's own while they arrive.
+const UNDER_ZOOMS: i32 = 2;
+/// The widest a tile is drawn (eight times its own edge); a wider one waits for the view's own tiles.
+const MAX_TILE_PX: f32 = 2048.0;
 
 /// Where a normalised point ([x], [y]) is drawn in a [width] × [height] widget whose view is centred on ([cx], [cy]) at
 /// [zoom]: the viewport's one formula (ADR 0143 decision 11).
@@ -329,7 +333,7 @@ pub fn offer(state: &MapStatus) -> gtk::Widget {
             column.append(&line);
         }
     }
-    column.upcast()
+    adw::Clamp::builder().maximum_size(560).child(&column).build().upcast()
 }
 
 /// *Turn map services off*: this device's consent withdrawn at once (GDPR Art. 7(3)); every map drops its tiles.
@@ -739,6 +743,13 @@ impl Inner {
         if !self.has_view.get() {
             return;
         }
+        snapshot.push_clip(&bounds);
+        self.draw_map(snapshot, s, w, h);
+        snapshot.pop();
+    }
+
+    fn draw_map(&self, snapshot: &gtk::Snapshot, s: &MapShown, w: f64, h: f64) {
+        let canvas = &self.canvas;
         let (cx, cy, zoom) = self.view.get();
         let at = |x: f64, y: f64| px(x, y, cx, cy, zoom, w, h);
         let rect = |x: f64, y: f64, size: f64| {
@@ -747,11 +758,15 @@ impl Inner {
             let (l, t, r, b) = (l.round(), t.round(), r.round(), b.round());
             graphene::Rect::new(l as f32, t as f32, (r - l) as f32, (b - t) as f32)
         };
-        let in_view = |r: &graphene::Rect| r.x() < w as f32 && r.y() < h as f32 && r.x() + r.width() > 0.0 && r.y() + r.height() > 0.0;
+        // a tile drawn far beyond its own size is left out: GSK renders a scaled texture whole, so a tile of zoom 2 shown
+        // at zoom 11 (130,000 px wide, while the view zoomed ahead of the core's tiles) had the app killed for its memory
+        // (measured in the container, 2026-11-16)
+        let in_view = |r: &graphene::Rect| r.width() <= MAX_TILE_PX && r.x() < w as f32 && r.y() < h as f32 && r.x() + r.width() > 0.0 && r.y() + r.height() > 0.0;
         // the tiles: those of other zooms held underneath (the last view's, until the new ones arrive), then the view's own
         let held = self.held.borrow();
         let current = s.tiles.first().and_then(|t| t.tile.split('/').next()).and_then(|z| z.parse::<i32>().ok());
-        let mut under: Vec<&Held> = held.0.values().filter(|t| Some(t.z) != current).collect();
+        let near = |z: i32| current.is_some_and(|c| (c - z).abs() <= UNDER_ZOOMS);
+        let mut under: Vec<&Held> = held.0.values().filter(|t| Some(t.z) != current && near(t.z)).collect();
         under.sort_by_key(|t| -(t.z - current.unwrap_or(t.z)).abs());
         for t in under {
             let r = rect(t.x, t.y, t.size);
@@ -760,8 +775,9 @@ impl Inner {
             }
         }
         for t in &s.tiles {
-            if let Some(h) = held.0.get(&t.tile) {
-                snapshot.append_scaled_texture(&h.texture, gsk::ScalingFilter::Linear, &rect(t.x, t.y, t.size));
+            let r = rect(t.x, t.y, t.size);
+            if let Some(h) = held.0.get(&t.tile).filter(|_| in_view(&r)) {
+                snapshot.append_scaled_texture(&h.texture, gsk::ScalingFilter::Linear, &r);
             }
         }
         drop(held);

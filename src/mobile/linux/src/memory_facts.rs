@@ -84,9 +84,10 @@ impl FactsLine {
         self.gallery.set(Some(gallery));
         let date = s.date.as_ref().and_then(date_text);
         let edits = s.edits_facts;
-        self.date.set_visible(date.is_some() || edits);
+        let (shows_date, shows_place) = (date.is_some() || edits, s.place.is_some() || edits);
+        self.date.set_visible(shows_date);
         self.date_content.set_label(&date.clone().unwrap_or_else(words::memory_date_none));
-        self.place.set_visible(s.place.is_some() || edits);
+        self.place.set_visible(shows_place);
         self.place_content.set_label(&s.place.clone().unwrap_or_else(words::memory_place_set));
         for (b, tip, has) in [(&self.date, words::memory_date_edit(), date.is_some()), (&self.place, words::memory_place_edit(), s.place.is_some())] {
             b.set_can_target(edits);
@@ -94,7 +95,9 @@ impl FactsLine {
             b.set_tooltip_text(edits.then_some(tip.as_str()));
             if has { b.remove_css_class("dim-label") } else { b.add_css_class("dim-label") }
         }
-        self.root.set_visible(self.date.is_visible() || self.place.is_visible());
+        // set from what it shows, never read back: a hidden line's children read as hidden too
+        self.root.set_visible(shows_date || shows_place);
+        eprintln!("veyq: facts line: date {}, place {}, edits {edits}", date.is_some(), s.place.is_some());
     }
 }
 
