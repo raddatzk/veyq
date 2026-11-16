@@ -15,9 +15,11 @@ class FakeElement implements MediaElementLike {
   private listeners = new Map<string, Set<() => void>>()
   constructor(private readonly durations: Record<string, number>) {}
   get src() { return this.url }
-  /** Setting a source: the element reads its metadata a moment later (an error for a broken one). */
+  /** Setting a source: the element stops (a media element's load algorithm pauses it) and reads its metadata a moment
+   *  later (an error for a broken one). */
   set src(v: string) {
     this.url = v
+    this.paused = true
     queueMicrotask(() => {
       if (this.url !== v || !v || v === SILENT) return
       this.emit(v.includes('broken') ? 'error' : 'loadedmetadata')
@@ -354,6 +356,58 @@ describe('the player', () => {
       h.player.pause()
       end()
       expect([el.paused, ...shown(h)]).toEqual([true, false, 'paused'])
+    })
+
+    /** A track whose `open()` waits for the test: `resolve()` hands its source over. */
+    function slow(id: string) {
+      let resolve!: () => void
+      const release = vi.fn()
+      const t: PlayerTrack = { id, title: `Song ${id}`, startMs: 1000, endMs: 61_000, open: () => new Promise((r) => { resolve = () => r({ url: `blob:${id}`, release }) }) }
+      return { t, resolve: () => resolve(), release }
+    }
+    const sounding = (h: ReturnType<typeof harness>) => h.elements.filter((e) => !e.paused && e.src !== SILENT).map((e) => e.src)
+
+    it("the queue's first track still loading when it comes stays silent until the end starts it", async () => {
+      const h = harness({ durations: { 'blob:s': 62 } })
+      const s = slow('s')
+      h.player.play({ key: 'n1', tracks: [s.t] })
+      const end = h.player.interrupt()
+      s.resolve()
+      await flushPromises()
+      expect([sounding(h), ...shown(h)], 'loaded during the video: held, shown paused').toEqual([[], false, 'paused'])
+      end()
+      expect([sounding(h), ...shown(h)]).toEqual([['blob:s'], true, 'playing'])
+    })
+
+    it('the next track still loading when it comes (a crossfade ahead) stays silent until the end starts it', async () => {
+      const h = harness({ durations: { 'blob:a': 62, 'blob:s': 62 } })
+      const s = slow('s')
+      h.player.play({ key: 'n1', tracks: [track('a').t, s.t], startId: 'a' })
+      await flushPromises()
+      playing(h)!.currentTime = 56 // the fade's start: the next one is opened and awaited
+      h.tick()
+      const end = h.player.interrupt()
+      expect([sounding(h), ...shown(h)], 'the outgoing one paused').toEqual([[], false, 'paused'])
+      s.resolve()
+      await flushPromises()
+      expect([sounding(h), ...shown(h)], 'loaded during the video: held, shown paused').toEqual([[], false, 'paused'])
+      expect(h.player.nowPlaying.value?.trackId).toBe('s')
+      end()
+      expect([sounding(h), ...shown(h)]).toEqual([['blob:s'], true, 'playing'])
+    })
+
+    it("a listener's play while the track loads lets it start when it has loaded, and the end then does nothing", async () => {
+      const h = harness({ durations: { 'blob:s': 62 } })
+      const s = slow('s')
+      h.player.play({ key: 'n1', tracks: [s.t] })
+      const end = h.player.interrupt()
+      h.player.resume() // the bar's play: the listener wants it now
+      s.resolve()
+      await flushPromises()
+      expect([sounding(h), ...shown(h)]).toEqual([['blob:s'], true, 'playing'])
+      h.player.pause()
+      end()
+      expect(sounding(h), 'the end, dropped by the play, does not take the pause back').toEqual([])
     })
 
     it('a queue not playing when interrupted is not started by the end', async () => {

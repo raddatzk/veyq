@@ -170,9 +170,8 @@ is the Kotlin core's and each platform draws only its own UI; this ADR applies i
       `stop`. A listener who presses play during the video hears both by their own choice; one who presses pause keeps
       it paused after the video. While interrupted, the bar, the compact controls and the system controls show the
       queue paused. **A track still loading** when the video starts — the queue's first, or the next one on its way in —
-      is held by the core's player: it does not start during the video, and the end starts it (if nothing came between).
-      The web's `player.ts` does not hold it (its `interrupt()` finds nothing playing and returns an end that does
-      nothing): a gap of the web's, left as it is by this ADR's web change.
+      is held, by the core's `MusicPlayer` and the web's `player.ts` alike: it does not start during the video, and the
+      end starts it (if nothing came between).
     - **Who raises it:** the lightbox, from its video's own playing, pause and ended events, its item change and its
       close — on the web `MediaLightbox.vue` over `core/audio/player.ts`; in the apps the core's lightbox model over
       `MusicPlayer`, each platform's video player reporting playing and paused. A muted video counts as playing: the
