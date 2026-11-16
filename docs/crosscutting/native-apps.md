@@ -435,9 +435,11 @@ share is offered** in their shells (`folder == null && rules.on && rules.dropBox
 refresh**: nothing polls a drop box; `ShellModel.refresh` reads the tree anew (the desktops' F5, the uploads' settle,
 each app's lists read after a write). A guest's deleted folder is restorable only by Undo (inbox #904).
 
-**Memories**: curating a Memory — its date, place and map, participants, a medium's capture time, the banner (inbox
+**Memories**: a Memory's date and place, its maps and its GPX tracks — decided in
+[ADR 0143](../decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md) (MapKit on Apple, the core's raster map elsewhere, one consent per device),
+not built (#890's date and place, #907); curating a Memory's participants, a medium's capture time, the banner (inbox
 #890); item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
-re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); GPX tracks (#907); a guest's view of a
+re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a
 received link (#435, a source for the same model).
 
 **Music** ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md), built above): **Apple's passes are the owner's** — on a real iPhone the background play,

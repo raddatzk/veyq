@@ -14,8 +14,14 @@ data class NoticeConditions(
     val ifNoValue: String? = null,
 )
 
+/**
+ * One line of a passage; a line with a [switch] renders exactly while that capability is active for the host's space,
+ * as a passage bound to one does — the Apple Maps line of `browser-services` (ADR 0143 decision 13).
+ */
+data class NoticeLine(val line: SectionLine, val switch: String? = null)
+
 /** One passage of the notice; [id] is its anchor, a [separate] one a right to object (GDPR Art. 21(4)). */
-data class NoticePassage(val id: String, val separate: Boolean, val conditions: NoticeConditions, val lines: List<SectionLine>)
+data class NoticePassage(val id: String, val separate: Boolean, val conditions: NoticeConditions, val lines: List<NoticeLine>)
 
 /**
  * The privacy notice's fixed text, as `contracts/terms/privacy-notice.json` holds it (ADR 0035 decision 8).
@@ -50,7 +56,9 @@ data class PrivacyNoticeText(
                         ifValue = p.path("ifValue").textValue(),
                         ifNoValue = p.path("ifNoValue").textValue(),
                     ),
-                    lines = p.required("lines").map { l -> SectionLine(SectionTexts.of(l), l.path("optional").asBoolean(false)) },
+                    lines = p.required("lines").map { l ->
+                        NoticeLine(SectionLine(SectionTexts.of(l), l.path("optional").asBoolean(false)), l.path("switch").textValue())
+                    },
                 )
             }
             require(passages.map { it.id }.toSet().size == passages.size) { "every passage of the notice has its own id" }

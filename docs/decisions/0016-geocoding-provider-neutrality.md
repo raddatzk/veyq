@@ -4,6 +4,7 @@
 - Built: partly (not built: a space owner's enabling notice, the tenant language for shared names)
 - Date: 2026-07-01
 - Model: [Memories § Places and the map](../apps/memories.md#places-and-the-map)
+- Replaced in part: the consent per browser and the `Referer` as the identification, for the apps (one consent per device, a `User-Agent` naming the app and the instance), by ADR 0143 (not built)
 
 ## Context
 
@@ -135,7 +136,9 @@ shell's `Referrer-Policy: strict-origin-when-cross-origin` ([ADR 0069](0069-back
 keeps our origin in `Referer` cross-origin, and never a path. Tightening it to `no-referrer` — an ordinary,
 otherwise-desirable hardening — would silently put every instance outside the provider's policy. Whoever
 tightens it owes this seam an explicit identifying header instead; the trap is also written on the fetch itself,
-where someone editing it will see it.
+where someone editing it will see it. **The apps send no `Referer`**: their requests name the app and the instance in
+a `User-Agent`, as the policy asks of an application, and their consent is one per device
+([ADR 0143](0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md) decisions 2 and 3).
 
 **What this does not reopen.** Reading each medium's sealed EXIF to compute a Memory's medoid was rejected — N fetches
 for one answer, on every open; the GPS rides the listed capture tier instead

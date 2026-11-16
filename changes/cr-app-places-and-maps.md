@@ -283,7 +283,7 @@ a recipient the notice does not name is the cheap safe side to close now). `revi
 
 ## Phases
 
-- [ ] **1 the ADR and the docs it changes** — ADR 0143 (the next free number, `ls docs/decisions | tail -3`) holding
+- [x] **1 the ADR and the docs it changes** — ADR 0143 (the next free number, `ls docs/decisions | tail -3`) holding
   D1–D13, their rejected alternatives, and the Consequences: the security rows of D10, the tile-cache residual (#939), the
   offline map (D9). ADR 0016 and 0018 point at it (the apps' identification; Apple Maps as a recipient on Apple), ADR
   0130 (the apps' Map view), ADR 0140 decision 8 (a GPX track's original kept); `security-model.md`'s third-party
@@ -291,7 +291,7 @@ a recipient the notice does not name is the cheap safe side to close now). `revi
   (Memories) points #890's date and place and #907 here; `src/mobile/CLAUDE.md` names `map/`, `memories/place/`,
   `memories/tracks/`. · Done when: every `/usr/bin/python3 scripts/validate_*.py` but `validate_guard_gaps.py` exits 0.
 
-- [ ] **2 the notice (contracts)** — D13 in `contracts/terms/privacy-notice.json` (EN+DE, `revision` + 1) and the
+- [x] **2 the notice (contracts)** — D13 in `contracts/terms/privacy-notice.json` (EN+DE, `revision` + 1) and the
   renderer's switch for the Apple line; `PrivacyNoticeRendererTest` asserts the line shows only while `memories.map` is
   active. · Done when: `./gradlew check` in `src/backend/` green; **bite:** the Apple line rendered regardless of the
   switch → the renderer test red.

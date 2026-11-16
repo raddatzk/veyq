@@ -68,7 +68,8 @@ data class RenderedNotice(
  * § 14). Pure: the values and which capabilities are active on the host come in, markdown passages go out.
  *
  * - A passage renders exactly while its conditions hold ([NoticeConditions]): a passage bound to a switch is there
- *   exactly while [active] says it is on — "it states only what the running instance does".
+ *   exactly while [active] says it is on — "it states only what the running instance does". A line bound to a switch
+ *   ([NoticeLine.switch]) likewise.
  * - The placeholder rules are the operator section's ([FixedTextLines]); a list value ({recipients}, {browserServices})
  *   becomes one bullet per item, and an empty one shows the gap.
  * - A passage whose every line was dropped is absent too, rather than a heading over nothing.
@@ -82,8 +83,8 @@ object PrivacyNoticeRenderer {
                 (c.ifValue == null || !empty(c.ifValue, values, text)) &&
                 (c.ifNoValue == null || empty(c.ifNoValue, values, text))
         }.mapNotNull { p ->
-            val en = renderPassage(text, p, values, en = true)
-            val de = renderPassage(text, p, values, en = false)
+            val en = renderPassage(text, p, values, active, en = true)
+            val de = renderPassage(text, p, values, active, en = false)
             if (en.isEmpty() && de.isEmpty()) null else RenderedPassage(p.id, p.separate, SectionTexts(en = en, de = de))
         }
         return RenderedNotice(revision = text.revision, passages = passages)
@@ -108,8 +109,8 @@ object PrivacyNoticeRenderer {
         "tile.openstreetmap.org" to "OpenStreetMap Foundation",
     )
 
-    private fun renderPassage(text: PrivacyNoticeText, p: NoticePassage, values: NoticeValues, en: Boolean): String {
-        val lines = p.lines.flatMap { line ->
+    private fun renderPassage(text: PrivacyNoticeText, p: NoticePassage, values: NoticeValues, active: (String) -> Boolean, en: Boolean): String {
+        val lines = p.lines.filter { it.switch == null || active(it.switch) }.flatMap { (line) ->
             FixedTextLines.render(line.text.pick(en), line.optional, text.gap.pick(en)) { value(it, values, text, en) }
                 ?: emptyList()
         }

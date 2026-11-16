@@ -1,0 +1,243 @@
+# ADR 0143 — The apps draw a Memory's places and maps: MapKit on Apple, the core's raster map elsewhere, one consent per device
+- Status: Accepted
+- Built: partly — decision 13 (the privacy notice's lines); the rest is not built
+- Date: 2026-11-16
+- Model: [native-apps](../crosscutting/native-apps.md) (the services and the consent:
+  [Memories § Places and the map](../apps/memories.md#places-and-the-map))
+
+## Context
+
+The web curates a Memory's **date** and **place** ([uc.memory.date](../features/memory/use-cases/uc.memory.date.md),
+[uc.memory.place](../features/memory/use-cases/uc.memory.place.md)) and draws **maps**: a level's map with every located
+Memory as a pin, the photo panel's map, and a Memory's **Map** tab with its photos and **GPX tracks**
+([uc.memory.tracks](../features/memory/use-cases/uc.memory.tracks.md),
+[ADR 0130](0130-a-gpx-track-is-a-medium-of-its-memory-drawn-on-its-map.md)) — under one consent per browser for the tile
+service and the geocoder ([ADR 0016](0016-geocoding-provider-neutrality.md),
+[ADR 0018](0018-map-tiles-provider-neutrality.md)). The apps show a medium's place as text and nothing else: no Memory's
+date or place, no map, no track.
+
+What the apps have to build on (read 2026-11-16):
+
+- **The services are capabilities, not endpoints.** `memories.map` (a `{z}/{x}/{y}` template and its attribution) and
+  `memories.places` (a Nominatim-compatible base) reach a client as a capability's `serviceUrl` and `serviceAttribution`;
+  the seeded defaults are OpenStreetMap's standard tile server and public Nominatim. There is no backend proxy and no
+  tile or geocoding route. The core's `TenantSession` keeps `serviceUrl` and drops the attribution; offline it reads no
+  capabilities.
+- **A third party is called through `VeyqAccount.outside`** (no bearer, no cookie); no request of the apps sets a
+  `User-Agent`, so Ktor's default goes out. The core has no map, tile, geocoder, GPX or consent code.
+- **The providers' policies** (operations.osmfoundation.org, read 2026-11-16): an app identifies itself by a distinct,
+  stable `User-Agent` (a library's default is blocked) and needs no `Referer`; tiles honour `Cache-Control` and `ETag`,
+  are never fetched ahead of what is viewed and never used offline on `tile.openstreetmap.org`; the attribution is
+  visible; Nominatim allows one request a second, results cached by the client, its limits per application.
+- **The map libraries a platform could take:** osmdroid is archived; MapLibre Native Android is a GL vector engine
+  (an 18.7 MB AAR and three more artifacts) with its own HTTP stack and an on-disk resources cache; libshumate is not in
+  the GNOME 51 runtime and its downloader always opens a 100 MB file cache; Mapsui.WinUI pulls six native-backed
+  packages and the `WindowsAppSDK` metapackage; WinUI's own `MapControl` takes an Azure Maps token and no tile source.
+  **Apple's MapKit** draws a map, polylines and annotations in SwiftUI; its reverse geocoder
+  (`MKReverseGeocodingRequest`, `CLGeocoder`'s being deprecated from iOS/macOS 26) answers a city, a region and a full
+  address, but no road, suburb, county or state level.
+- **No new permission is needed:** Android declares `INTERNET`, the MSIX `internetClient`, the Flatpak shares the
+  network, and MapKit asks for none where the app never asks where the device is.
+
+[ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) makes an app's logic the
+Kotlin core's; this ADR applies it to the map services, the date, the place and the tracks. The owner chose Apple's own
+map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions 2, 3 and 13).
+
+## Decision
+
+1. **Which map each platform draws.**
+   - **iOS and macOS: MapKit** — SwiftUI's `Map`: a track as a `MapPolyline` with its activity's dash, the photos' dots
+     and Memories' pins as `Annotation`s, the camera read by `onMapCameraChange`. MapKit's attribution and Legal link
+     stay where MapKit puts them. No `showsUserLocation` and no location key: the app never asks where the device is.
+   - **Android, Linux, Windows: the core's raster map.** The core holds the viewport and everything that decides (`map/`,
+     decision 2): which `{z,x,y}` tiles cover a viewport (Web Mercator, 256 px tiles, a fractional zoom drawn from the
+     floor level scaled), every overlay point projected to normalised Mercator coordinates, clustering, framing a set of
+     points, and the gated fetch of each tile. A platform draws what it is handed — tile images at their places,
+     polylines, dots, pins — and reports gestures (drag, pinch, wheel, double-tap, `+`/`−` and the arrow keys): Android a
+     Compose `Canvas` (`drawImage`, `drawPath` with a dash `PathEffect`), Linux a `gtk::Widget` whose `snapshot` appends
+     textures and a dashed `gsk::Path` stroke, Windows a `Canvas` of `Image`s and `Shapes.Polyline`s (a pin is no
+     `Button`). No new dependency on any platform.
+   - **Why the core's own map:** the map is a tile pyramid, an affine transform and a few overlays (ADR 0018: "a readable
+     basemap, not cartographic polish"); each library brings its own fetch, cache and identity, which would be tamed
+     three times, while the core's fetch is the one place the consent, the hosts, the identification and the no-disk rule
+     are enforced and tested.
+2. **The core owns the map services: the consent, the gate, the tiles, the geocoder** — `core/…/map/`, platform-generic,
+   beside `audio/`:
+   - **`MapServices`**, per signed-in tenant: whether the server offers a map (`memories.map` served with a template) and
+     a geocoder (`memories.places`), their hosts and the tile attribution (`TenantSession` keeps `serviceAttribution`);
+     the device's **consent** (`DeviceStore` key `maps-consent`, the `{tiles, places}` hosts as the web records them; per
+     device, never per account); `available` = offered and the consent holds for the served hosts; `renewal` (which new
+     host asks again, ADR 0016's rule); `turnOn()`, `turnOff()`. A withdrawal removes the key, and every map model
+     observing it drops its tiles, cancels what is in flight and clears the geocoder's queue at once.
+   - **On Apple the tiles' recipient is Apple Maps**, recorded as that and named in the consent and in the settings in
+     place of the tile host (owner, 2026-11-16). **Off means off everywhere:** where `memories.map` is off — by the
+     Server Owner or a space's owner, or no address is configured — MapKit draws no map either (owner, 2026-11-16).
+     Where MapKit fetches, the core's `available` is what mounts the `Map`.
+   - **`MapTiles`**: the tile set for a viewport, fetched only while `available`, only from the served template's host,
+     only over `https`, only tiles in view (no ring ahead), through `VeyqAccount.outside` with decision 3's
+     identification. A tile's bytes go to the platform as they came (PNG or JPEG); the core decodes nothing.
+   - **`Geocoder`**: the port of the web's `geocode.ts` and `placeName.ts` — `reverse(lat, lng, lang) → levels`, the cache
+     on the coordinate rounded to three decimals with the language, the queue at least one second apart, no retry, a
+     failure resolving to nothing. **On every platform it calls the operator-configured geocoder**, on Apple too (owner,
+     2026-11-16); `lang` is the app's language, as the web's is the reader's.
+   - **Played in tests:** `PlayedMapServices` counts every request the map path sends (URL, headers) — the instrument
+     every consent test reads.
+3. **A map request names the app and the instance, never the person.** Every tile and geocoder request the core sends
+   carries `User-Agent: veyq/<version> (+https://veyq.app; <instance origin>)` and no `Referer`, cookie or token. The
+   instance's origin is what the web's `Referer` already tells the same providers
+   ([ADR 0016 § Request discipline](0016-geocoding-provider-neutrality.md#request-discipline--the-providers-policy-is-part-of-the-decision-not-an-optimisation)),
+   so a provider's per-application limits and blocks stay per instance, as on the web.
+4. **Tiles are kept in memory only, for the session.** `MapTiles` keeps a bounded LRU of about 300 tiles with each one's
+   `ETag`/`Last-Modified` and expiry, revalidated conditionally once expired, and drops it all at a withdrawal, a lock, a
+   sign-out and a tenant switch (`closeTenant()`, where the player's readers close). Nothing the map path fetches is
+   written to disk.
+5. **The date and the place are the core's port of the web's** — `core/…/memories/place/`: `MemoryDate` (its four
+   modes, `normalize`, `computeAutoRange` over trustworthy capture times) and `MemoryLocation` (`normalize`, the
+   200-code-point name, `WORLD_VIEW` and its "no point" reading, `computeMedoid`, `mediaGpsPoints`,
+   `isLocationPending`), both sealed into the node's `wrappedMeta` through `NodeMetaWrite` with every other field kept
+   verbatim (the cover's path) at `metaRevision`; a `Stale` answer re-applies only its own change
+   ([uc.memory.concurrent-curation](../features/memory/use-cases/uc.memory.concurrent-curation.md)), and a date editor
+   whose date changed underneath re-opens on the current value, as the web's.
+   - **The settle points** (uc.memory.date § How auto is derived, uc.memory.place A2): an upload batch settling, the
+     Memory opening (the self-heal) and a medium's trash each reconcile the `auto` range and the `auto` position,
+     re-sealed only when changed, and resolve a pending geocoded name where the consent holds.
+   - **Shown:** under the Memory's header a facts line — its date range and its place name, each a button to its editor
+     where `MemoryRights.editMeta` holds; a Memories row shows the range as its second line. Every list stays ordered by
+     last use ([ADR 0122](0122-one-app-holds-every-application-the-drawer-chooses-the-bar-belongs-to-it.md) decision 5):
+     the date is shown, not sorted by.
+   - **The editors** are the core's models (`DateEditor`, `PlaceEditor`), drawn by each platform: the four modes with the
+     platform's date picker (a range with its end before its start refused); the place editor's map with the fixed
+     centre pin, a pan flipping `auto` to `fixed`, *Follow the photos*, the level picker from the reverse lookup 700 ms
+     after the map settles, the typed name (`manual`), *Remove place*; without a map or without the consent the name field,
+     with the consent's offer where the map would stand — no dialog between the member and the name.
+   - **Offline** both are shown and neither is edited
+     ([ADR 0140](0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)
+     decision 7).
+6. **The Memories map is the bar's Map tab.** It draws every Memory of the application's list (the All tab's set) whose
+   place has a position, unsealed on the device from the `wrappedMeta` the tree already holds — no media load, no
+   locations endpoint. A pin carries the Memory's cover where its row has one and opens the Memory. The core clusters by
+   a grid in Mercator pixels at the shown zoom (the port of the web's `clusterPins`, which needs only the zoom and the
+   coordinates, so Apple hands it its camera's zoom); a cluster's tap zooms to fit its pins and at the maximum zoom lists
+   them. Linux and Windows gain Memories' bar tabs.
+7. **The photo panel's map and the photo's place name.** A photo with GPS shows in its details a small map at zoom 15
+   centred on it, with the direction needle where the EXIF gives one, and *Turn map services off* beside its
+   attribution; the coordinate row stays. The panel resolves the photo's name once ever and seals it into its listed
+   tier (`placeName`, `placeLevel`) under the web's gates (a coordinate and no name, the consent, a geocoder, not while
+   the slideshow runs, the medium's meta door), through the raw read-modify-write `TrackLabel` already does, every other
+   field verbatim.
+8. **The Map view and its tracks.** The Memory screen's view switch becomes **Photos | Music | Map** (Music where ADR 0142
+   shows it; Map always, as the web's tab is): the map with the photos' dots and the node's own tracks (ADR 0130
+   decisions 3–5), the list under it — the show/hide switch, the colour swatch with the activity's dash, the activity
+   above the name, distance, duration, climb, descent — and per track **Edit**, **Download GPX** (the gallery's save),
+   **Remove** (the gallery's trash with Undo) and **Report** (`MediumReport`'s `ITEM`). **Add GPX track** where `upload`
+   holds, through the platform's document picker filtered to `.gpx`, each accepted file's name and activity asked before
+   anything is uploaded and sealed at birth through `MediaUploads`' facts; *Cancel* uploads nothing.
+   - **`core/…/memories/tracks/`**: the port of the web's `gpx.ts` over a **minimal XML reader of the core's own** — a
+     document type declaration refused before anything is read, so only the five predefined entities and character
+     references exist; elements, attributes, text, CDATA, comments and processing instructions; `trk/trkseg/trkpt`, else
+     `rte/rtept`, with `ele` and `time` — plus the track's numbers, the line's simplification, the name, the colours and
+     ADR 0130's bounds (25 MiB, at least two points, 50 per node, 2,000 drawn per segment), each refusal its own word
+     naming the file. `TrackLabel` gains `trackActivity` (ADR 0130's ten tokens; an unknown one read as none and kept
+     until edited) and the conflict rule of ADR 0130 decision 9.
+   - **The tracks are read only while the Map view shows**, one at a time, kept parsed while the page stays on its node.
+9. **Offline: no map; the tracks' list from kept originals.**
+   - **No map is drawn offline**, on any platform, MapKit included: offline the capabilities are not read, so the app
+     does not know which hosts the server serves now, and a consent holds only for the hosts it names; tiles are never
+     kept (decision 4), and `tile.openstreetmap.org` permits no offline use. The map's place says the map needs a
+     connection.
+   - **A track's original is kept like a video's** (ADR 0140 decision 8: an original is kept where the app reads one to
+     show the item): a pin keeps the node's tracks, and offline the Map view lists them with their numbers, download
+     included.
+10. **What each map service learns** — the rows [security-model](../crosscutting/security-model.md) carries under its
+    third-party boundary:
+
+    | Service | Learns | Never learns |
+    |---|---|---|
+    | The tile host (Android, Linux, Windows; the web) | the tiles in view `{z,x,y}`, the device's IP address, `veyq` and the instance's origin (decision 3) | a track's points, a pin, a photo's coordinate, a name, any veyq id or token |
+    | Apple Maps (iOS, macOS) | the region in view (as tiles), the device's IP address, and what MapKit sends of its own (Apple documents rotating random identifiers, not the Apple Account — remembered, not measurable through TLS) | the same as the tile host's column: the overlays are drawn by MapKit on the device (remembered from Apple's documentation; a residual of a closed library) |
+    | The geocoder (every platform) | a bare coordinate, the language, the device's IP address, `veyq` and the instance's origin | which Memory, whose, or any veyq id |
+    | The veyq operator | nothing more than today: a sealed `wrappedMeta`, a sealed listed tier rewritten, one more medium without tiers | a coordinate, a viewport, a consent, a place name, that a Memory holds a track |
+11. **The bridge (Linux, Windows).** `Watched.Map(map)` → `MapShown`: the tiles in view as `{key, x, y, size}` in
+    normalised Mercator space, the overlays (tracks with colour, dash and selection, dots, pins with cover ids,
+    clusters), the attribution text, and the state `notOffered` | `consent(hosts, renewal)` | `shown` | `offline`.
+    `Map.View(map, centre, zoom, width, height, scale)` comes from the host as it settles and at most every 100 ms during
+    a gesture; `Map.Tile(map, key)` answers `Answer.Bytes`
+    ([ADR 0137](0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)), the
+    host translating its last frame by the drag meanwhile; `Map.TurnOn|TurnOff`; and the editors' and the Map view's
+    calls (`Place.*`, `Date.*`, `Tracks.Add(paths)|Edit|Remove|Download|Report|Show`). Host-side the transform from
+    normalised coordinates to pixels is the viewport's one affine formula; nothing else is computed there. `MapShown` is
+    under `SecretFreeSchemaTest`, its attribution and hosts in named fields; a map closes with its page and its tenant.
+12. **No new permission, no new dependency.** Every platform already reaches the network; MapKit needs no entitlement on
+    iOS or on the unsandboxed macOS app, and nothing asks for the device's location. If a MapKit map on the macOS build
+    turns out to need the Maps entitlement, it goes through the store's validator before it is added.
+13. **The privacy notice names the app and Apple Maps.** The instance notice's `browser-services` passage says "your
+    browser or the veyq app", and gains a line, rendered exactly while `memories.map` is active for the host's space,
+    that the veyq app on iPhone, iPad and Mac shows maps from Apple Maps (Apple Inc., United States) instead, which then
+    sees the area shown and the device's IP address (the owner's text, 2026-11-16, EN and DE). A recipient the notice
+    does not name is the cheap safe side to close now; the rest of the notice's "your browser" wording predates the apps
+    and is inbox #942.
+
+## Consequences
+
+- **The operator's view is unchanged** (decision 10's last row): a date, a place, a coordinate, a place name and a track
+  stay sealed under the node's or the medium's key; nothing map-related reaches the backend, and the contracts gain no
+  operation — the notice's text (decision 13) is the one contract change.
+- **A third-party request from an app identifies itself by `User-Agent`**, where the web's does by `Referer`; both name
+  the instance's origin and neither the person. [ADR 0016](0016-geocoding-provider-neutrality.md)'s consent "per
+  browser" is, in the apps, one per device; its rules (the hosts named, a new host asked again, a withdrawal at once)
+  are the same and held by the core.
+- **Apple is a recipient on iOS and macOS.** The consent there names Apple Maps for the map and the operator's geocoder
+  for place names; the notice names Apple (decision 13). What MapKit keeps on disk is Apple's and is measured and named
+  in [`src/mobile/CLAUDE.md`](../../src/mobile/CLAUDE.md) § Nothing on disk when the Apple map is built.
+- **Residual — no tile survives a launch.** A tile viewed in an earlier launch is fetched again, while the tile policy
+  asks for "a sufficient local cache". Our reading: a photo app's map traffic is a person browsing their own Memories,
+  and honouring the headers in memory is that cache for a session. A sealed cache across launches, in ADR 0140's
+  automatic tier, is inbox #939.
+- **Offline there is no map** (decision 9): a pinned Memory's Map view lists its tracks and nothing is drawn under them.
+  ADR 0140 decision 8's kept originals gain a GPX track's.
+- **A Memory's date and place stay current wherever it is curated:** today an app's upload leaves a web-made `auto` range
+  stale until a browser opens the Memory; with decision 5's settle points it does not.
+- **Not decided here:** a Memory's participants, a medium's capture-time correction and the banner (inbox #890); the
+  date and the place in the apps' creation dialog (#940); a person's profile map, the apps having no profile page
+  (#941); a sealed tile cache across launches (#939); the notice's other "your browser" wording (#942).
+
+## Alternatives considered
+
+- **MapLibre Native on Android** — a GL vector engine of 18.7 MB plus three artifacts for the raster tiles ADR 0018
+  chose over vector, its own HTTP stack and on-disk resources cache, and a consent gate each UI would have to hold around
+  a library that fetches on its own.
+- **osmdroid** — archived, which the dependency rule forbids.
+- **libshumate on Linux** — not in the GNOME 51 runtime, so a bundled module, and its downloader always keeps a 100 MB
+  tile cache on disk, a record of the places a member looked at.
+- **Mapsui on Windows** — a rendering stack of six native-backed packages and the `WindowsAppSDK` metapackage beside the
+  app's split packages.
+- **WinUI's `MapControl`** — Azure Maps by token only, a commercial service with no tile source.
+- **A WebView running the web's Leaflet** — a browser engine inside each app (WebView2 on Windows, WebKitGTK on Linux,
+  neither in the app today) for one view, with its own cache to tame, against
+  [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)'s native UI.
+- **MapKit with the operator's tiles on Apple** (`MKTileOverlay`, `canReplaceMapContent`) — the owner chose Apple's map;
+  it stays the change to make should Apple ever have to stop being a recipient.
+- **Apple's geocoder on Apple** (`MKReverseGeocodingRequest`) — it has no road, suburb, county or state level, so the
+  level picker could not offer what it offers everywhere else; a space would carry names from two gazetteers; the
+  operator's switch for place names would not hold there; and Apple would also learn every coordinate being named.
+- **A consent per account** — ADR 0016 makes it the device's; an account switch must not change what the device sends.
+- **Each platform's own gate** — five places to forget one; the core's fetch is the gate.
+- **`User-Agent: veyq/<version>` alone** — every instance's apps would be one application to Nominatim's per-application
+  limit, and one misbehaving instance would have every veyq app blocked.
+- **A synthetic `Referer`** — the policy asks apps for a `User-Agent`, and a header pretending to be a page is what it
+  calls impersonation.
+- **A plaintext tile cache on disk** — the tiles a member viewed are a map of where their Memories are, which the sealed
+  places exist to hide from whoever holds the device; the app keeps nothing at rest it did not choose.
+- **Sealing tiles into the offline store now** — it would serve them offline, which `tile.openstreetmap.org` forbids, and
+  the store's automatic tier is per account while the consent is per device; inbox #939 decides both.
+- **Sorting the Memories list by start date**, as the web's grid does — ADR 0122 orders every list by use.
+- **The date and the place in the creation dialog now** — editing them right after creating does the same, and the
+  dialog is five platforms' forms (#940).
+- **A map view on Home's levels**, as the web's level toggle — Home is core's and lists every application's folders;
+  Memories' map belongs to its bar (ADR 0122 decision 4).
+- **Spiderfying a cluster** — a Leaflet gesture no platform's map has.
+- **A name per open of a photo** — ADR 0016's discipline: once per place, sealed.
+- **An XML library** (`xmlutil` or a platform's parser) — a dependency on five targets, or a platform deciding a rule
+  (ADR 0136), for three elements; the core already reads XMP itself.
+- **Drawing the tracks over a blank plane offline** — a map without its map, a second look to design on five platforms
+  for a state a connection ends.

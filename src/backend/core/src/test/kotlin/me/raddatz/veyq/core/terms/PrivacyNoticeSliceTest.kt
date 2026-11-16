@@ -85,7 +85,7 @@ class PrivacyNoticeSliceTest {
         val before = rows()
         val logs = capture {
             given().header("X-Forwarded-For", CALLER).`when`().get(PATH).then().statusCode(200)
-                .body("revision", equalTo(3))
+                .body("revision", equalTo(4))
         }
         assertEquals(before, rows(), "reading the notice writes no row")
         assertFalse(logs.contains(CALLER), "the caller's address is in no log line")
@@ -157,8 +157,10 @@ class PrivacyNoticeSliceTest {
         val domain = "privacy-notice-host.example.com"
         val tenantId = seedTenant(domain = domain)
         assertTrue(passage("browser-services", domain)!!.contains("tile.openstreetmap.org"), "control: the map runs on the space's host")
+        assertTrue(passage("browser-services", domain)!!.contains("Apple Maps"), "control: the Apple apps' map is named on the space's host")
         TenantCapabilitySwitchFixtures.with(tenantId, CapabilityIds.MEMORIES_MAP) {
             assertFalse(passage("browser-services", domain)!!.contains("tile.openstreetmap.org"), "the space switched the map off: not named on its host")
+            assertFalse(passage("browser-services", domain)!!.contains("Apple Maps"), "nor the Apple apps' map (ADR 0143 decision 13)")
             assertTrue(passage("browser-services")!!.contains("tile.openstreetmap.org"), "control: the instance level still names it")
         }
     }

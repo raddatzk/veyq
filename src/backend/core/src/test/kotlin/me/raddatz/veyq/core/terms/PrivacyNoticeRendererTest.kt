@@ -74,7 +74,7 @@ class PrivacyNoticeRendererTest {
 
     @Test
     fun anUnknownPlaceholderIsRefusedRatherThanPrinted() {
-        val broken = text.copy(passages = text.passages + NoticePassage("x", false, NoticeConditions(), listOf(SectionLine(SectionTexts("{nobody}", "{nobody}"), false))))
+        val broken = text.copy(passages = text.passages + NoticePassage("x", false, NoticeConditions(), listOf(NoticeLine(SectionLine(SectionTexts("{nobody}", "{nobody}"), false)))))
         assertThrows<IllegalStateException> { PrivacyNoticeRenderer.render(broken, all, everythingOn) }
     }
 
@@ -183,6 +183,31 @@ class PrivacyNoticeRendererTest {
         val on = render().passage("browser-services")!!
         assertTrue(on.text.en.contains("- Maps: tile.example.org") && on.text.de.contains("- Karten: tile.example.org"), on.text.en)
         assertNull(render(values = all.copy(browserServices = emptyList())).passage("browser-services"))
+    }
+
+    /**
+     * ADR 0143 decision 13: the passage names the app beside the browser, and the line naming Apple Maps as the Apple
+     * apps' map is there exactly while `memories.map` is active for the host — off, the Apple apps draw no map either.
+     */
+    @Test
+    fun theAppleMapsLineIsThereExactlyWhileTheMapIsOn() {
+        val on = render().passage("browser-services")!!
+        assertTrue(on.text.en.contains("Some features have your browser or the veyq app contact an outside service directly"), on.text.en)
+        assertTrue(on.text.de.contains("Manche Funktionen lassen deinen Browser oder die veyq-App einen äußeren Dienst direkt anfragen"), on.text.de)
+        assertTrue(on.text.en.contains("The veyq app on iPhone, iPad and Mac shows maps from Apple Maps (Apple Inc., United States) instead;"), on.text.en)
+        assertTrue(on.text.de.contains("Die veyq-App auf iPhone, iPad und Mac zeigt Karten stattdessen von Apple Karten (Apple Inc., USA);"), on.text.de)
+
+        val off = render(active = { it != CapabilityIds.MEMORIES_MAP }).passage("browser-services")!!
+        assertFalse(off.text.en.contains("Apple") || off.text.de.contains("Apple"), "the map off: Apple is named nowhere: ${off.text.en}")
+        assertTrue(off.text.en.contains("- Maps: tile.example.org") && off.text.en.contains("Each sees your IP address"), "control: the rest of the passage stays")
+        for (t in listOf(on.text.en, on.text.de, off.text.en, off.text.de)) assertFalse(t.contains("\n\n\n"), "one blank line between paragraphs: $t")
+    }
+
+    @Test
+    fun everySwitchTheFileNamesIsACapability() {
+        val switches = text.passages.flatMap { p -> listOfNotNull(p.conditions.switch) + p.lines.mapNotNull { it.switch } }
+        assertTrue(CapabilityIds.MEMORIES_MAP in switches, "control: the line switch is read")
+        for (s in switches) assertTrue(s in CapabilityIds.ADVERTISED, "a switch no capability has: $s")
     }
 
     @Test

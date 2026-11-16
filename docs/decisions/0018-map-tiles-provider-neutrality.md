@@ -4,6 +4,7 @@
 - Built: partly (not built: a space owner's enabling notice, ADR 0016's)
 - Date: 2026-07-02
 - Model: [Memories § Places and the map](../apps/memories.md#places-and-the-map)
+- Replaced in part: Leaflet as the renderer and the tile host as the one map recipient, for the apps (MapKit and Apple Maps on iOS and macOS, the core's raster map elsewhere), by ADR 0143 (not built)
 
 ## Context
 
@@ -62,6 +63,9 @@ opt-in.**
   geocoding in the place editor. A member who declines the consent on a server that does serve a map still gets no
   location feature, as above.
 - **Attribution is mandatory** wherever OSM tiles render (© OpenStreetMap contributors).
+- **The apps** ([ADR 0143](0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)) draw the same tiles through the core's own raster map on Android, Linux and
+  Windows; on iOS and macOS they draw **MapKit**, so the map's recipient there is **Apple Maps**, named in the consent
+  in place of the tile host, and `memories.map` off means no MapKit map either.
 
 ## Consequences
 
