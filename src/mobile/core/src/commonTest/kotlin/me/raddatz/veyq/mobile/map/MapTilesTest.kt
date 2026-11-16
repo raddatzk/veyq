@@ -41,7 +41,7 @@ class MapTilesTest {
         assertEquals(listOf("https://tiles.example/12/2200/1343.png"), played.sent.map { it.url })
     }
 
-    // bite (b): the withdrawal not reaching the services (no observer) → the queued tile still leaves, red here
+    // bite (b): the withdrawal not reaching the services (`consentChanged` ignoring all but a consent) → the queued tile still leaves, red here
     @Test
     fun aWithdrawalStopsATileThatWaitsAndCancelsTheOnesInFlight() = runTest {
         val played = PlayedMapServices(this)
