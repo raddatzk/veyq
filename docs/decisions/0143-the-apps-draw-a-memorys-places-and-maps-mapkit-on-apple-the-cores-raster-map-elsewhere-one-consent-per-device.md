@@ -1,6 +1,6 @@
 # ADR 0143 — The apps draw a Memory's places and maps: MapKit on Apple, the core's raster map elsewhere, one consent per device
 - Status: Accepted
-- Built: no
+- Built: partly — decision 13 (the privacy notice's lines); the rest is not built
 - Date: 2026-11-16
 - Model: [native-apps](../crosscutting/native-apps.md) (the services and the consent:
   [Memories § Places and the map](../apps/memories.md#places-and-the-map))

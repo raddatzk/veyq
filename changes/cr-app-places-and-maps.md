@@ -291,7 +291,7 @@ a recipient the notice does not name is the cheap safe side to close now). `revi
   (Memories) points #890's date and place and #907 here; `src/mobile/CLAUDE.md` names `map/`, `memories/place/`,
   `memories/tracks/`. · Done when: every `/usr/bin/python3 scripts/validate_*.py` but `validate_guard_gaps.py` exits 0.
 
-- [ ] **2 the notice (contracts)** — D13 in `contracts/terms/privacy-notice.json` (EN+DE, `revision` + 1) and the
+- [x] **2 the notice (contracts)** — D13 in `contracts/terms/privacy-notice.json` (EN+DE, `revision` + 1) and the
   renderer's switch for the Apple line; `PrivacyNoticeRendererTest` asserts the line shows only while `memories.map` is
   active. · Done when: `./gradlew check` in `src/backend/` green; **bite:** the Apple line rendered regardless of the
   switch → the renderer test red.
