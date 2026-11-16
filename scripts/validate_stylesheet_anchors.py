@@ -72,7 +72,7 @@ lines across both packages), which is what made this guard green on arrival and 
       `p-btn` string in a test — which pulled all 36 overrides of the then component library into scope and made the predicate
       red on arrival with nothing wrong.
 
-Its own source is not in what it scans (the corpus is the two packages' `src/`), so the usual trap — a
+Its own source is not in what it scans (the corpus is the two packages' `src/` and their `index.html`), so the usual trap — a
 guard matching, inside its own documentation, the literal it forbids — does not apply here.
 """
 from __future__ import annotations
@@ -232,10 +232,12 @@ def markup_vocabulary(pkg: pathlib.Path):
     src = pkg / "src"
     names: set[str] = set()
     prefixes: set[str] = set()
-    for path in src.rglob("*"):
-        if path.suffix not in MARKUP_SUFFIXES:
+    # The package's page (`index.html`) is markup too: the web client's start screen (ADR 0136) is drawn there, before
+    # any script, and styled from `src/styles/start.css`.
+    for path in [pkg / "index.html", *src.rglob("*")]:
+        if path.suffix not in MARKUP_SUFFIXES or not path.is_file():
             continue
-        if "styles" in path.relative_to(src).parts or is_test_evidence(path, src):
+        if path.is_relative_to(src) and ("styles" in path.relative_to(src).parts or is_test_evidence(path, src)):
             continue
         text = path.read_text(errors="ignore")
         for match in CLASS_ATTR.finditer(text):
@@ -297,7 +299,7 @@ def main() -> int:
                             f"{rel(css_file)}:{line}: `{selector}` is anchored on "
                             + ", ".join("." + c for c in anchor)
                             + " — no markup in "
-                            + f"{rel(pkg / 'src')} applies any of them, so this rule cannot match"
+                            + f"{rel(pkg / 'src')} or {rel(pkg / 'index.html')} applies any of them, so this rule cannot match"
                         )
 
     if not checked and not errors:
