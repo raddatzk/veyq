@@ -2,7 +2,8 @@
 // player.rs): a MediaPlayerElement with its transport controls over a MediaSource of ReaderStream, whose reads are
 // Reader.Read ranges — Media Foundation and the Store's extensions decode it, nothing decrypted is written (ADR 0047). The
 // player is this class's: handed to the element and taken back from it before it is let go (a player the element made
-// itself and that was disposed under it threw E_ABORT when the element left the tree, src/mobile/CLAUDE.md § Traps).
+// itself and that was disposed under it threw E_ABORT when the element left the tree, src/mobile/CLAUDE.md § Traps). It
+// lends the system no media controls: the music's are the app's only ones (ADR 0142 decision 3).
 using System;
 using System.IO;
 using System.Threading;
@@ -35,6 +36,10 @@ internal sealed class MediumPlayer : IDisposable
         _stream = new ReaderStream(size, (at, length) => Range(reader, at, length), () => _ = Core.CallAsync(new Call.ReaderClose { reader = reader }));
         _source = Windows.Media.Core.MediaSource.CreateFromStream(_stream.AsRandomAccessStream(), type ?? "");
         _mp = new Windows.Media.Playback.MediaPlayer { AutoPlay = autoPlay, Source = _source };
+        // no system media controls of its own: the music's SMTC (MusicHost, one per window) is the app's only session, as
+        // Android's medium asks no audio focus; left on, a lightbox's video listed a second, untitled session that stayed
+        // Paused after its end (ADR 0142 decision 3 and its Consequences). The element's own transport controls still drive it.
+        _mp.CommandManager.IsEnabled = false;
         Element = new MediaPlayerElement { AreTransportControlsEnabled = true, Stretch = Stretch.Uniform };
         Element.SetMediaPlayer(_mp);
         AutomationProperties.SetAutomationId(Element, automationId);

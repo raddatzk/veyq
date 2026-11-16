@@ -217,6 +217,8 @@ internal sealed class QrCamera : IDisposable
             return null;
         }
         var player = new MediaPlayer { RealTimePlayback = true, AutoPlay = true, Source = MediaSource.CreateFromMediaFrameSource(source) };
+        // a camera's preview is no media session: the music's SMTC stays the app's only one (ADR 0142 decision 3)
+        player.CommandManager.IsEnabled = false;
         _player = player;
         _preview.SetMediaPlayer(player);
         return null;
