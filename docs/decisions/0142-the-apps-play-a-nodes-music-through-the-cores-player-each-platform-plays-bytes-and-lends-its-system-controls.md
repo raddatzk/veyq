@@ -220,8 +220,56 @@ is the Kotlin core's and each platform draws only its own UI; this ADR applies i
 - **Not decided here:** a Chapter playing its Memory's music (inbox #847, the web has it neither); a guest's view of a
   received link in the apps (#435), so a guest listens on the web until then; reporting a photo or video from the
   apps' lightbox (#891); GPX tracks in the apps (#907).
-- **The passes** — each platform's background play, system controls, the video's interruption and the offline play —
-  are recorded here once run, with what could not be run named.
+- **The passes, run 2026-11-16** against the dev instance (backend `veyq.localhost:8080`, Vite `:8081`), the seeded
+  principal signed in by the devlogin helpers. The data, made through the web: Memory A with three ffmpeg tones of 75 s
+  (two MP3, one AAC M4A), two photos, an 8 s H.264/AAC video and a Chapter; Memory B with one photo — both trashed after,
+  each test session signed out of the register. The common walk is: the Memory's music played, Memory B and the Chapter
+  opened with it going on, the bar's node link back, the lightbox (its compact controls), a video's play pausing the
+  music, and its end, another item and the lightbox's close each resuming it (decision 13).
+  - *Android* (a throwaway AVD on the API 36 google_apis arm64 image, deleted after; `state` is `dumpsys media_session`'s
+    for the app, the position in ms): the common walk held — the video's play read `PAUSED(2) 14583`, its end `PLAYING(3)`
+    on (resumed after 8 s), a swipe to another item and the close each `PAUSED(2)` → `PLAYING(3)`; while the video played the
+    audio-focus stack held the app's music request alone (the video asks for none). **Screen off 5 min** (`input keyevent
+    KEYCODE_SLEEP`, `dumpsys power` `mWakefulness=Asleep` at each 30 s poll): `PLAYING(3)` throughout, three tracks
+    changing by their end and one by `cmd media_session dispatch next` (a headset's next) at 150 s; `play`, `headsethook`
+    (pause) and `headsethook` (play) acted too. **The notification without `POST_NOTIFICATIONS`** (`granted=false`): the
+    `MediaStyle` record (`category=transport`, `FOREGROUND_SERVICE`) and the quick settings' player with the title and the
+    Memory, whose next, pause and play acted. **Headphones out, simulated:** the emulator has no wired headset to unplug, and
+    the shell may not send the protected `AUDIO_BECOMING_NOISY` (SecurityException); as root (`adb root`, `adb unroot`
+    after) `am broadcast -a android.media.AUDIO_BECOMING_NOISY` paused it (`PLAYING(3)` → `PAUSED(2)`, staying paused) —
+    the receiver's half, not the route change's. **Not run: the lock screen's controls** — the AVD has no keyguard
+    (`locksettings get-disabled` → `true`, `isKeyguardShowing=false` after waking) and setting one changes its security.
+    **Offline**: Memory A made available ("keeps 3.8 MB", its tracks with it; Settings: "Available offline 4.0 MB"),
+    `cmd connectivity airplane-mode enable` (`ping 10.0.2.2`: unreachable), the app force-stopped, started with
+    `devlogin.py --unlock` (unlocked), the Memory's "Offline — content as of …", Play music `PLAYING(3)` and next twice
+    (Eins, Zwei), every track from the store.
+  - *iOS* (b): the owner's — no simulator boots on this Mac and a device pass is a person's (lock screen, Control Center,
+    a call's interruption). *macOS* (c): the owner's — the Mac's screen was locked (`CGSSessionScreenIsLocked` true), so
+    Now Playing and the media keys were not driven.
+  - *Windows* (the test VM; the debug build from this tree, unpackaged, in a directory and scheduled tasks of its own,
+    removed after — the MSIX is the owner's; the SMTC read in the logged-on session with
+    `GlobalSystemMediaTransportControlsSessionManager`, the keys sent there with `keybd_event`): the common walk held
+    (`music-bar-toggle` "Play" while the video played, "Pause" after its end, after `lightbox-previous` and after
+    `lightbox-close`). **Minimised** (`ShowWindow(…, SW_MINIMIZE)`, `IsIconic` true): `Playing 'Passlied Eins'`; the Next
+    key → `Playing 'Passlied Drei'`, Play/Pause → `Paused`, Play/Pause → `Playing`, Stop → no session (the queue
+    stopped). **The flyout** (the quick settings, Win+A, shot while minimised): the track's title with previous,
+    play/pause and next, its play/pause glyph following the state; the source reads "Unbekannte Anwendung" because the
+    unpackaged build has no package identity (the MSIX's name is the owner's pass). Seen beside it: while the lightbox's
+    video plays, its own `MediaPlayer` lists a second, untitled session of the app, which stays `Paused` after the video's
+    end until the lightbox closes; a media key still drove the music (inbox #938).
+  - *Linux* (e): the Flatpak built from this tree (`run.py flatpak`, 1.1030 aarch64), installed in the builder's
+    container and run in its sandbox under a session bus **outside** it (`dbus-run-session` around `flatpak run`, so the
+    app talks through its bus proxy, as on a desktop) and the runtime's Broadway: at its sign-in the bus lists
+    `app.veyq.Veyq` and no MPRIS name (no queue is loaded); from inside the sandbox `RequestName
+    org.mpris.MediaPlayer2.app.veyq.Veyq` → `(uint32 1,)` and, held for 6 s, the name is listed outside; the same for
+    `org.mpris.MediaPlayer2.someone.Else` → `ServiceUnknown` (the proxy refuses it). **Not run: the signed-in Flatpak's own
+    MPRIS with `playerctl`** — a release build has no devlogin and an agent types no password; the app's MPRIS (listed,
+    Pause/Play/Next acting, gone after the close) was seen in the Fedora container in phase 7. A person's step: the
+    Flatpak signed in on a desktop, `playerctl -l`, `playerctl next`, `playerctl pause`.
+  - *The web* (decision 13; headless system Chrome through Playwright against Vite): Memory A's music playing, the
+    lightbox's video played → the compact controls' and the bar's button "Abspielen", the position frozen (64300 ms
+    twice); its end → "Pausieren", the position moving (65200 → 67200); played again and another item → "Pausieren";
+    played a third time and the lightbox closed → "Pausieren".
 
 ## Alternatives considered
 
