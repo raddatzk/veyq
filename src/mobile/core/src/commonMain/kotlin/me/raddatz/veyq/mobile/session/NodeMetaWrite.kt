@@ -56,9 +56,13 @@ object NodeMetaWrite {
         return JsonObject(parsed + ("v" to JsonPrimitive(1)))
     }
 
-    /** [meta] sealed as the node's blob, its `v` set to 1; unknown sibling fields kept verbatim. */
+    /**
+     * [meta] sealed as the node's blob, its `v` set to 1; unknown sibling fields kept verbatim — each number as it was
+     * written too: the tree's own text (`JsonObject.toString`), never re-encoded through the serializer, which re-types a
+     * number (`2.5e-7` became `2.5E-7`, an integer past a `Long` a double; the cross-surface fixture, ADR 0143 D5).
+     */
     fun seal(suite: V1, scopeId: String, nodeId: String, key: ByteArray, meta: JsonObject): String =
-        b64(suite.sealField(context(scopeId, nodeId), key, Json.encodeToString(JsonObject.serializer(), JsonObject(meta + ("v" to JsonPrimitive(1)))).encodeToByteArray()))
+        b64(suite.sealField(context(scopeId, nodeId), key, JsonObject(meta + ("v" to JsonPrimitive(1))).toString().encodeToByteArray()))
 
     /** The current state a `409 stale_revision` body (`StaleSealedMeta`) carries, or null for any other body. */
     fun staleOf(body: String): State? = runCatching {
@@ -77,7 +81,7 @@ object NodeMetaWrite {
         base: State,
         open: (String?) -> JsonObject,
         seal: (JsonObject) -> String,
-        edit: (JsonObject) -> JsonObject?,
+        edit: suspend (JsonObject) -> JsonObject?,
         send: suspend (wrappedMeta: String, metaRevision: Long) -> Answer,
     ): Result {
         var state = base

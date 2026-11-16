@@ -49,6 +49,8 @@ object MemoryMedia {
         val trackName: String? = null,
         /** A music track's facts, where the tier holds all three and they make a span (`AudioFacts.from`). */
         val facts: me.raddatz.veyq.mobile.memories.music.AudioFacts? = null,
+        /** A GPX track's activity as sealed (`trackActivity`), known to this build or not (`TrackLabel.activityOf` reads it). */
+        val trackActivity: String? = null,
     ) {
         /** The user's correction if set, else the derived capture time (`effectiveCapturedAt`). */
         val effectiveCapturedAt: Long? get() = capturedAtOverride ?: capturedAt
@@ -79,6 +81,9 @@ object MemoryMedia {
 
         /** A music track: its original's sealed type is an audio one (ADR 0135 decision 2; `GalleryMedium.isAudio`). */
         val isAudio: Boolean get() = GalleryMedium.isAudio(type)
+
+        /** A GPX track: its original's sealed type is GPX's, or its name ends in `.gpx` (ADR 0130; `GalleryMedium.isTrack`). */
+        val isTrack: Boolean get() = GalleryMedium.isTrack(type, name)
 
         /** The lightbox shows a picture of it: not for a video without a poster, whose original is no picture. */
         val hasPicture: Boolean get() = !(isVideo && preview == null)
@@ -185,18 +190,18 @@ object MemoryMedia {
     }
 
     /**
-     * Whether the offline store keeps what is read of [blob] (ADR 0140 decision 8): a tile and a preview, and a video's or
-     * a music track's original (its frames as played, ADR 0142 decision 12) — never a photo's original, for which the
-     * preview stands in.
+     * Whether the offline store keeps what is read of [blob] (ADR 0140 decision 8): a tile and a preview, and a video's,
+     * a music track's (its frames as played, ADR 0142 decision 12) and a GPX track's original (its Map view lists it offline,
+     * ADR 0143 D9) — never a photo's original, for which the preview stands in.
      */
     internal fun keeps(item: Item, blob: Blob): Boolean = roleOf(item, blob) != ORIGINAL || playsOriginal(item)
 
-    /** Whether [item] is played from its original: a video, a music track. */
-    private fun playsOriginal(item: Item): Boolean = item.isVideo || item.isAudio
+    /** Whether [item] is shown from its original: a video, a music track, a GPX track (ADR 0143 D9). */
+    internal fun playsOriginal(item: Item): Boolean = item.isVideo || item.isAudio || item.isTrack
 
     /**
      * What a pin of Memory or chapter [node] keeps (ADR 0140 decisions 8 and 9): each medium's tiles and preview and a
-     * video's and a music track's original — what [keeps] keeps when it is played —, a medium the operator blocked none;
+     * video's, a music track's and a GPX track's original — what [keeps] keeps when it is played —, a medium the operator blocked none;
      * each blob with its key.
      */
     internal suspend fun pinned(tenant: TenantSession, node: me.raddatz.veyq.mobile.session.OpenNode): List<me.raddatz.veyq.mobile.offline.PinBlob> {
@@ -239,7 +244,7 @@ object MemoryMedia {
             if (geo) w!!.toInt() else null, if (geo) h!!.toInt() else null,
             num("capturedAt")?.toLong(), num("capturedAtOverride")?.toLong(), source,
             num("gpsLat"), num("gpsLng"), str("placeName"), str("placeLevel"),
-            str("trackName"), me.raddatz.veyq.mobile.memories.music.AudioFacts.from(o),
+            str("trackName"), me.raddatz.veyq.mobile.memories.music.AudioFacts.from(o), str("trackActivity"),
         )
     }
 

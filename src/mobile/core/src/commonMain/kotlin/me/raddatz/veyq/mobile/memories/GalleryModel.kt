@@ -133,6 +133,21 @@ class GalleryModel(
 
         /** Whether the account reaches its server: false while it is offline. Absent: always. */
         val online: Flow<Boolean> get() = kotlinx.coroutines.flow.flowOf(true)
+
+        /** The node's date and place as its tree holds them now (`MemoryFacts.of`); null where it does not read. Absent: none. */
+        suspend fun facts(): me.raddatz.veyq.mobile.memories.place.MemoryFacts.Facts? = null
+
+        /**
+         * The settle over the node's [items] (`MemoryFacts.reconcile`: the `auto` range, then the `auto` place and its name);
+         * whether it wrote. Absent: nothing.
+         */
+        suspend fun settle(items: List<MemoryMedia.Item>): Boolean = false
+
+        /**
+         * Photo [item]'s place name resolved once and sealed where [mayWrite] and no [slideshow] (`PhotoPlace.resolve`); the
+         * name sealed, or null. Absent: none.
+         */
+        suspend fun placeName(item: MemoryMedia.Item, mayWrite: Boolean, slideshow: Boolean): String? = null
     }
 
     /** What a trash or a restore of a medium came to (`deleteMedia`, `restoreMedia`). */
@@ -192,7 +207,23 @@ class GalleryModel(
         val music: List<MusicTrack> = emptyList(),
         /** This node's music is the player's queue now (playing or paused): the header offers its stop. */
         val musicHere: Boolean = false,
+        /** The node's GPX tracks (its Map view's, ADR 0143 D8; a blocked one included), as listed. */
+        val tracks: List<MemoryMedia.Item> = emptyList(),
+        /** The node's date and place as sealed (the header's facts line, ADR 0143 D5); null before they read. */
+        val facts: me.raddatz.veyq.mobile.memories.place.MemoryFacts.Facts? = null,
     ) {
+        /** The `auto` range the node's media give now (the date editor's preview, and the header's before one is sealed). */
+        val autoRange: me.raddatz.veyq.mobile.memories.place.MemoryDate
+            get() = me.raddatz.veyq.mobile.memories.place.MemoryDate.autoRange(rows.orEmpty().map { it.item })
+
+        /** The date the header shows: a manual one as sealed, else the sealed `auto` range, else the live one. */
+        val date: me.raddatz.veyq.mobile.memories.place.MemoryDate
+            get() = me.raddatz.veyq.mobile.memories.place.MemoryDate.effective(facts?.date, autoRange)
+
+        /** Every photo's GPS point (the place editor's dots and the Map view's). */
+        val gpsPoints: List<me.raddatz.veyq.mobile.map.LatLng>
+            get() = me.raddatz.veyq.mobile.memories.place.MemoryLocation.gpsPoints(rows.orEmpty().map { it.item })
+
         val count: Int get() = rows?.size ?: 0
 
         /** Whether the node has music that plays: a track the operator did not block. */
@@ -341,6 +372,7 @@ class GalleryModel(
         } else {
             emptyList()
         }
+        val facts = runCatching { door.facts() }.getOrNull()
         if (read != null) {
             listed = read
             if (read.offline == null) listedAt = wallClock()
@@ -349,15 +381,44 @@ class GalleryModel(
         }
         _state.update { prior ->
             val s = if (read != null) prior.offline(read.offline) else prior
-            val withChapters = if (chapters != null) s.copy(chapters = chapters) else s
-            if (read == null) withChapters.copy(failed = true)
+            val withFacts = (if (chapters != null) s.copy(chapters = chapters) else s).let { if (facts != null) it.copy(facts = facts) else it }
+            if (read == null) withFacts.copy(failed = true)
             // a photo view's media only: a track and a music track are another view's (GalleryMedium, ADR 0135 decision 2)
-            else withChapters.copy(
+            else withFacts.copy(
                 rows = read.items.filter { it.mediaId !in pending && GalleryMedium.shows(it.type, it.name) }.map(::Row),
                 music = MusicQueue.tracks(read.items.filter { it.mediaId !in pending }),
+                tracks = read.items.filter { it.mediaId !in pending && it.isTrack },
                 failed = false,
             )
         }
+        // the Memory opening is a settle point (the self-heal): once, on its first listing the server answered
+        if (read != null && read.offline == null && !openedSettle) {
+            openedSettle = true
+            scope.launch { settle() }
+        }
+    }
+
+    // ---- the settle (ADR 0143 D5): the `auto` range and place kept current ----
+
+    private var openedSettle = false
+    private val settling = Mutex()
+
+    /**
+     * The settle at the page's settle points — its opening and a medium's trash (an upload batch settles in [MediaUploads]):
+     * the `auto` range and the `auto` place re-derived from the media listed now and re-sealed only where they changed,
+     * where whoever looks may edit the meta and online; one at a time. The facts line reads anew when it wrote.
+     */
+    private suspend fun settle() = settling.withLock {
+        if (!current.rights.editMeta || current.offline != null) return@withLock
+        val items = listed?.items?.filter { it.mediaId !in pending } ?: return@withLock
+        if (runCatching { door.settle(items) }.getOrDefault(false)) {
+            runCatching { door.facts() }.getOrNull()?.let { f -> _state.update { it.copy(facts = f) } }
+        }
+    }
+
+    /** The node's facts read anew (an editor saved): the header's line follows. */
+    fun factsChanged() {
+        scope.launch { runCatching { door.facts() }.getOrNull()?.let { f -> _state.update { it.copy(facts = f) } } }
     }
 
     // ---- the live poll ----
@@ -392,7 +453,16 @@ class GalleryModel(
     private fun row(mediaId: String): Row? = current.rows?.firstOrNull { it.mediaId == mediaId }
 
     /** Whether [mediaId] is shown here: a row of the grid or a track of the music. */
-    private fun known(mediaId: String): Boolean = row(mediaId) != null || track(mediaId) != null
+    private fun known(mediaId: String): Boolean = row(mediaId) != null || track(mediaId) != null || gpx(mediaId) != null
+
+    /** A GPX track of the node, by its medium id. */
+    private fun gpx(mediaId: String): MemoryMedia.Item? = current.tracks.firstOrNull { it.mediaId == mediaId }
+
+    /** GPX track [mediaId]'s original, whole (the Map view parses it on the device); null where it is none or did not read. */
+    internal suspend fun trackOriginal(mediaId: String): ByteArray? {
+        val item = gpx(mediaId)?.takeIf { !it.blocked } ?: return null
+        return runCatching { door.read(item, item.original) }.getOrNull()
+    }
 
     /** The grid's tier of medium [mediaId], whole, for the platform to decode; null where it has none or it did not read. */
     suspend fun tile(mediaId: String): ByteArray? {
@@ -439,6 +509,7 @@ class GalleryModel(
     /** The name a refusal says a medium by: its original's sealed name, else its place in the grid (`Item {n}`). */
     private fun nameOf(mediaId: String): Any {
         track(mediaId)?.let { t -> return t.title ?: Notice(Msg.MUSIC_UNTITLED, t.number) }
+        gpx(mediaId)?.let { g -> return g.meta?.trackName ?: g.name ?: Notice(Msg.MEMORY_UNNAMED, 1) }
         val rows = current.rows.orEmpty()
         val at = rows.indexOfFirst { it.mediaId == mediaId }
         return rows.getOrNull(at)?.name?.takeIf { it.isNotBlank() } ?: Notice(Msg.MEMORY_UNNAMED, if (at >= 0) at + 1 else 1)
@@ -465,7 +536,7 @@ class GalleryModel(
     private suspend fun trashAny(mediaId: String): Notice {
         val name = nameOf(mediaId) // before the removal: a refused restore names it
         pending += mediaId
-        _state.update { s -> s.copy(rows = s.rows?.filter { it.mediaId != mediaId }, music = s.music.filter { it.mediaId != mediaId }) }
+        _state.update { s -> s.copy(rows = s.rows?.filter { it.mediaId != mediaId }, music = s.music.filter { it.mediaId != mediaId }, tracks = s.tracks.filter { it.mediaId != mediaId }) }
         val said = Notice(Msg.MEMORY_MOVED_TO_TRASH)
         val u = Undoing(mediaId, name)
         offerUndo(u, said)
@@ -475,7 +546,7 @@ class GalleryModel(
             if (undoing?.mediaId == mediaId) endUndo()
             pending -= mediaId
             read()
-        }
+        } else scope.launch { settle() } // a medium's trash is a settle point
         return said
     }
 
@@ -549,7 +620,7 @@ class GalleryModel(
             _state.update { it.copy(said = said) }
             return said
         }
-        _state.update { s -> s.copy(rows = s.rows?.filter { it.mediaId != mediaId }, music = s.music.filter { it.mediaId != mediaId }) }
+        _state.update { s -> s.copy(rows = s.rows?.filter { it.mediaId != mediaId }, music = s.music.filter { it.mediaId != mediaId }, tracks = s.tracks.filter { it.mediaId != mediaId }) }
         return null
     }
 
@@ -583,13 +654,26 @@ class GalleryModel(
             }
         }
         val rows = MediaDetails.rows(item, exif)
-        Lightbox.Details(mediaId, rows, key?.let { uploaders[it] }, MediaDetails.uploaderAt(rows))
+        Lightbox.Details(mediaId, rows, key?.let { uploaders[it] }, MediaDetails.uploaderAt(rows), me.raddatz.veyq.mobile.memories.place.PhotoPlace.mapOf(item, exif))
     }
 
     /** Music track [mediaId]'s original saved through [into] as the lightbox saves a medium's ([Lightbox.save]); null where it is not one or may not be. */
     internal fun saveTrack(mediaId: String, into: suspend (produce: suspend (sink: (ByteArray) -> Unit) -> Boolean) -> Boolean): FileSave? {
+        gpx(mediaId)?.let { g -> return save(Row(g), current.tracks.indexOf(g), into) }
         val t = track(mediaId) ?: return null
         return save(Row(t.item), t.number - 1, into)
+    }
+
+    /**
+     * Photo [mediaId]'s place name resolved once and sealed where it has a coordinate and no name, the meta may be written
+     * here, the device's consent holds and no [slideshow] runs ([me.raddatz.veyq.mobile.memories.place.PhotoPlace]); the
+     * gallery reads anew when it was. The name, or null.
+     */
+    internal suspend fun placeName(mediaId: String, slideshow: Boolean): String? {
+        val item = row(mediaId)?.item ?: return null
+        val name = runCatching { door.placeName(item, current.rights.editMeta && current.offline == null, slideshow) }.getOrNull() ?: return null
+        reload()
+        return name
     }
 
     internal fun reader(row: Row): RangeReader? = if (rights.download && row.isVideo && !row.blocked) door.reader(row.item) else null
@@ -718,7 +802,11 @@ class Lightbox internal constructor(
     private var wanted: String? = null,
 ) {
     /** A medium's details as the lightbox shows them: its rows, who added it, where that row stands ([MediaDetails.uploaderAt]). */
-    class Details(val mediaId: String, val rows: List<MediaDetails.Row>, val uploader: MediaDetails.Uploader?, val uploaderAt: Int)
+    class Details(
+        val mediaId: String, val rows: List<MediaDetails.Row>, val uploader: MediaDetails.Uploader?, val uploaderAt: Int,
+        /** The photo's small map (ADR 0143 D7): its point at zoom 15 and its direction; null without GPS. */
+        val map: me.raddatz.veyq.mobile.memories.place.PhotoPlace.PhotoMap? = null,
+    )
 
     data class State(
         /** The gallery's rows, paged through. */
@@ -905,6 +993,12 @@ class Lightbox internal constructor(
 
     /** Medium [mediaId]'s details ([GalleryModel]'s reads: the EXIF tier once per medium, the uploaders once per gallery). */
     suspend fun details(mediaId: String): Details? = gallery.details(mediaId)
+
+    /**
+     * Medium [mediaId]'s place name resolved once, when its details show (ADR 0143 D7) — never while the slideshow runs;
+     * the name sealed, or null.
+     */
+    suspend fun resolvePlace(mediaId: String): String? = gallery.placeName(mediaId, slideshow = current.slideshow == Slideshow.PLAYING)
 
     /** What the current medium's original is saved as (`MediaDetails.downloadName`), what a save dialog proposes; null for none. */
     fun downloadName(): String? {

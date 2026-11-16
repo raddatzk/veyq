@@ -22,7 +22,8 @@ import me.raddatz.veyq.mobile.words.Notice
  * making their tiers, and each one's **settle**, the core's:
  *
  * - a medium in names its node on [uploaded] (the gallery of that node reads itself anew, [GalleryModel]);
- * - a batch's end reads the lists anew ([Door.changed]: the Memory's date range);
+ * - a batch's end settles its node ([Door.settled]: the `auto` range and place re-derived and re-sealed where they
+ *   changed, ADR 0143 D5), then reads the lists anew ([Door.changed]: the Memory's date range shows);
  * - a picked file the queue is done with is handed back ([Door.left]) once no run reads it again — its item done or
  *   cancelled, or gone from the queue after it failed (abandoned: its batch closed with it failed) —, and every one still
  *   held when the tenant closes ([close], beside the queue's own clear). A platform that copied a pick (Apple's Photos
@@ -45,6 +46,13 @@ class MediaUploads(
 
         /** A checked music track added to node [nodeId] of [scopeId], as a job of the queue ([MusicUpload.Job]). */
         fun musicJob(scopeId: String, nodeId: String, track: MusicUpload.Check.Taken): UploadQueue.Job
+
+        /** A checked GPX track and its label added to node [nodeId] of [scopeId], as a job of the queue ([TrackUpload.Job]). */
+        fun trackJob(scopeId: String, nodeId: String, track: me.raddatz.veyq.mobile.memories.tracks.TrackUpload.Check.Taken, label: me.raddatz.veyq.mobile.memories.music.TrackLabel.Label): UploadQueue.Job =
+            throw UnsupportedOperationException("no tracks here")
+
+        /** A batch into node [nodeId] of [scopeId] ended: its `auto` range and place settled (before [changed]). Absent: nothing. */
+        suspend fun settled(scopeId: String, nodeId: String) {}
 
         /** A batch ended: the lists are read anew. */
         fun changed()
@@ -93,7 +101,7 @@ class MediaUploads(
         val (media, others) = sources.partition { MediaUpload.isMedia(it.type, it.name) }
         others.forEach { door.left(it) }
         if (media.isEmpty()) return 0
-        return enqueue(nodeId, label, media.map { door.job(scopeId, nodeId, it) to it })
+        return enqueue(scopeId, nodeId, label, media.map { door.job(scopeId, nodeId, it) to it })
     }
 
     /**
@@ -102,16 +110,33 @@ class MediaUploads(
      */
     fun uploadMusic(scopeId: String, nodeId: String, label: String, tracks: List<MusicUpload.Check.Taken>): Int {
         if (tracks.isEmpty()) return 0
-        return enqueue(nodeId, label, tracks.map { door.musicJob(scopeId, nodeId, it) to it.source })
+        return enqueue(scopeId, nodeId, label, tracks.map { door.musicJob(scopeId, nodeId, it) to it.source })
     }
 
-    private fun enqueue(nodeId: String, label: String, jobs: List<Pair<UploadQueue.Job, UploadSource>>): Int {
+    /**
+     * GPX tracks checked on the device ([me.raddatz.veyq.mobile.memories.tracks.TrackUpload.check]) queued with the labels
+     * asked for them into Memory or chapter [nodeId] of [scopeId], one batch labelled [label]; the number queued.
+     */
+    fun uploadTracks(
+        scopeId: String, nodeId: String, label: String,
+        tracks: List<Pair<me.raddatz.veyq.mobile.memories.tracks.TrackUpload.Check.Taken, me.raddatz.veyq.mobile.memories.music.TrackLabel.Label>>,
+    ): Int {
+        if (tracks.isEmpty()) return 0
+        return enqueue(scopeId, nodeId, label, tracks.map { (t, l) -> door.trackJob(scopeId, nodeId, t, l) to t.source })
+    }
+
+    private fun enqueue(scopeId: String, nodeId: String, label: String, jobs: List<Pair<UploadQueue.Job, UploadSource>>): Int {
         scope.launch {
             jobs.forEach { (job, source) -> held[job] = source }
             queue.enqueue(
                 jobs.map { it.first }, label, nodeId,
                 onSettled = { item -> if (item.status == UploadQueue.Status.DONE) _uploaded.tryEmit(nodeId) },
-                onFinished = { scope.launch { door.changed() } },
+                onFinished = {
+                    scope.launch {
+                        runCatching { door.settled(scopeId, nodeId) }
+                        door.changed()
+                    }
+                },
             )
         }
         return jobs.size
