@@ -30,7 +30,10 @@ A Gradle build of its own, run through its own wrapper.
   uses core's session and is never used by it; an application's spec is generated into `api.<application>`. **Planned**
   ([ADR 0143](../../docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)): the map services in core's `map/` (the consent per device, the tile
   fetch and its memory-only cache, the geocoder, the viewport, clustering), a Memory's date and place in `memories/place/`
-  and its GPX tracks in `memories/tracks/`.
+  and its GPX tracks in `memories/tracks/`. Apple draws them with MapKit (decision 1): `MapViews.swift` (the gate that
+  mounts a `Map` only while `MapServices.state` is `Shown`, the consent's offer naming Apple Maps, the facts line and the
+  two editors, the bar's Map tab, a photo's map, Settings' Map services) and `MemoryMapView.swift` (the Map view's
+  tracks), over `AppModel`'s map services; `AppleMemories.saveTrack` and `watchPlace` adapt what Swift cannot call.
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
   decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's
   (`session/Account.kt`, `SessionModel.kt`: every sign-in enrols the password trust, `Gate.Signed.offer` offers staying
