@@ -369,9 +369,26 @@ a recipient the notice does not name is the cheap safe side to close now). `revi
   (`ioreg`: `CGSSessionScreenIsLocked=Yes`), so it is the owner's step (or phase 9's pass); iOS on a simulator (none
   boots on this Mac) and iOS's on-disk listing (a device's, phase 9).
 
-- [ ] **8 Windows and Linux** — D1's canvases over the bridge, Memories' bar tabs, the rest as phase 6. First, measured:
+- [x] **8 Windows and Linux** — D1's canvases over the bridge, Memories' bar tabs, the rest as phase 6. First, measured:
   a dashed `gsk::Path` stroke in the container's GTK and a dashed `Polyline` on the VM (the `StrokeDashArray`), else the
   dash drawn as segments. · Done when: `run.py build`/`test` green on both; clicked once as phase 6.
+  *Done 2026-11-16:* measured first: both dashes draw as dashes — a mountain-biking track (10,5,2,5) stroked dash-dot by
+  `gsk::Stroke::set_dash` in the container's GTK 4.22 under Broadway and by `StrokeDashArray` on the Windows VM; no segment
+  fallback. Built: Linux `raster_map` (a `gtk::Widget` of its own, `snapshot` with tile textures and `gsk::Path` tracks),
+  `memory_facts`, `memory_map_view`, `memories_map`, `map_services`, the row's date and a photo's map in `lightbox`;
+  Windows `RasterMap`, `MemoryFacts`, `MemoryMapView`, `RowDates`, `MapServicesSection`, the Map tab in `ShellView`; both
+  pass `Config.language` from their words. A bridge gap closed: `Bridge.memoriesMap` pinned only the All list's rest, not
+  its Favorites and Recent (now all three, unduplicated). A trap found live on Linux: a tile of zoom 2 drawn at zoom 11
+  while the view zoomed ahead of the core's tiles had GSK render a 130,000 px texture and the app SIGKILLed for its memory —
+  a tile is now drawn at most 2048 px wide and held tiles only within two zooms. Checks: Linux `run.py build` (clippy,
+  tests) and `run.py test` green; Windows `run.py build` and `run.py test` (754) green on the VM; `:bridge:jvmTest` green;
+  `validate_mobile_words.py`, `validate_mobile_platform_guidelines.py` and every guard but guard_gaps green. Clicked once on
+  each against the dev instance (Linux under Broadway from headless Chrome, Windows on the VM): consent in context on the
+  Map tab, a place set by panning and picking a level, a date range, the Map tab's pin opening its Memory, a GPX track
+  added with its label, selected (framed) and edited, *Turn map services off* on the Map view's map dropping every tile at
+  once, Settings → Map services toggled; Windows also a photo's map with its name sealed once. **Not clicked:** a cluster
+  of several pins (one located Memory on the instance), a track's Remove/Undo, Download and Report, the offline Map view,
+  and on Linux a photo's map (phase 9's passes).
 
 - [ ] **9 the passes** — per platform against the dev instance with the seeded OSM defaults, a handful of tiles each:
   consent in context naming both hosts (on Apple, Apple Maps and the geocoder), a place set and named, the Map tab's pins
