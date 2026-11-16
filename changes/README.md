@@ -1698,7 +1698,11 @@ the proof so the part that needs no daemon is done by whoever implements.
 `infra:wipe` as the owner's, so it never stood as an agent's open item. It did not mark the two other steps only the
 owner could unblock — recreating the shared dev database its browser upload needed, and a start and stop from
 IntelliJ's Gradle tool window — and both surfaced only at close, as "not proven". A done-when says per live step who
-runs it, and an owner's step is asked for when its phase starts, not discovered when the CR closes.
+runs it, and an owner's step is asked for when its phase starts, not discovered when the CR closes. **A click-through
+on the Mac's own screen is such a step:** the apps' music and maps CRs (ADR 0142, ADR 0143) each gave it to an agent's
+phase, and the screen locked through every attempt of both — an agent builds and probes headless on the Mac (the
+maps' MapKit probe ran with the screen locked), but a window is drawn and clicked only on a screen someone keeps
+unlocked. So a refine names the Mac's and an iPhone's passes as the owner's from the start.
 
 **And a live proof across two releases names, per step, which release's tool runs it.** cr-veyqctl's phase 3 said
 "install the first … `upgrade` to the second"; its harness ran `self-update` with the first release's `veyqctl`, which
@@ -2319,7 +2323,11 @@ and found nothing would open offline, because only an unlock had kept the server
 password-trusted offline unlock needs. The same pass found that an account opened offline read no pins: every pin test
 had started online. A feature that runs from what the device kept is entered in as many ways as the device can have
 been left — signed in and closed, unlocked and closed, killed while fetching, opened offline first — and the CR lists
-them in its tests' done-when, not only the path the refine drew.
+them in its tests' done-when, not only the path the refine drew. **And a device can lose its server while running.** The
+apps' maps (ADR 0143) reasoned "no map offline" from an account opened offline, which reads no capabilities, and every
+offline test started that way; the Android and Linux passes cut the connection mid-session, and the map kept drawing
+from the capabilities read before. A state the app enters from outside — offline, signed out, a switch turned off — is
+listed entered while the feature is open, too.
 
 ### A first measurement is checked for its instrument before the phase is planned on it
 
@@ -2327,7 +2335,11 @@ The same CR planned phase 4 to begin by measuring, on the simulator, whether `BG
 framework's own header says the simulator supports no background processing at all, so the simulator could tell only
 that the symbol compiles; what mattered (a submit accepted, the time granted) moved to a real iPhone, a step the
 owner's. A refine that names a measurement reads what the instrument can observe — the header, the tool's docs, one
-dry run — and names a device that can answer, or says no device here can.
+dry run — and names a device that can answer, or says no device here can. **An instrument named "in a debug build" is
+looked for in a build:** the maps CR (ADR 0143) named its passes' request log "Android's OkHttp event listener, or the
+core's `PlayedMapServices` in a debug build" — `PlayedMapServices` lives in `commonTest` only, so Android grew a
+debug-only interceptor in its pass, Linux printed from a line never committed, and Windows, whose standard output
+goes nowhere, had none.
 
 ### A done-when names the proof; a command is one way to get it
 
@@ -2343,7 +2355,8 @@ The apps' music CR (ADR 0142) measured the format matrix on four platforms in tw
 Linux's into the ADR's Consequences; phase 6 left Android's and the Mac's in its own phase note, so until the harvest
 the ADR said that a platform not listed there was not measured yet — for two that were. A phase whose done-when
 records a measurement writes it where it binds (the ADR's Consequences, the doc of state) in the same phase; the CR's
-note says only that it did.
+note says only that it did. The maps CR (ADR 0143) did it again: its phase 8 measured both desktops' dashed strokes
+into its phase note only, and the harvest moved them.
 
 ### A permission a refine plans is put through the packager's own linter at refine
 
