@@ -8,7 +8,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -44,6 +44,12 @@ data class ResolvedPlace(val name: String, val level: GeoLevel.Key)
  * (≈ 110 m) with the language, so every photo of one spot is one lookup and callers arriving together share it;
  * requests are serialised at least [MIN_INTERVAL_MS] apart; there is no retry, and a failure resolves to null and stays
  * the answer for that spot this session. [clear] empties the cache and the queue at once (a withdrawal, a close).
+ *
+ * A request every caller of which went before it left (a place editor's pan superseded by the next) is dropped from the
+ * queue and the cache: it is never sent, and the request behind it leaves as soon as the window opens. Kept, the queue
+ * sent each superseded pan's lookup a second apart and the last pan's name came only after all of them (seen live on
+ * Linux and Windows 2026-11-16, played by `PlaceEditorTest`), while the coordinates the member only panned past still
+ * left the device.
  */
 class Geocoder internal constructor(
     private val http: MapHttp,
@@ -55,23 +61,43 @@ class Geocoder internal constructor(
     private val scope = CoroutineScope(SupervisorJob() + context)
     private val queue = Mutex()
     private val lock = SpinLock()
-    private val cache = HashMap<String, Deferred<List<GeoLevel>?>>()
+    private val cache = HashMap<String, Pending>()
     private var lastStartedAt: Long? = null
     private var generation = 0L
+
+    /** One spot's lookup: its answer, and how many callers still wait for it while it has not left (under [lock]). */
+    private class Pending {
+        lateinit var answer: Deferred<List<GeoLevel>?>
+        var waiting = 1
+        var started = false
+    }
 
     /** The address hierarchy at a coordinate, finest to coarsest, or null: not allowed, not reached, unresolvable. */
     suspend fun reverse(lat: Double, lng: Double, lang: String): List<GeoLevel>? {
         val key = "${round3(lat)},${round3(lng)},$lang"
         val pending = lock.locked {
-            val gen = generation
-            cache[key] ?: scope.async { queued(gen) { ask(lat, lng, lang) } }.also { cache[key] = it }
+            cache[key]?.also { it.waiting++ } ?: Pending().also { p ->
+                val gen = generation
+                p.answer = scope.async { queued(gen, p) { ask(lat, lng, lang) } }
+                cache[key] = p
+            }
         }
         return try {
-            pending.await()
+            pending.answer.await()
         } catch (e: CancellationException) {
-            currentCoroutineContext().ensureActive()
-            null
+            if (currentCoroutineContext().isActive) return null // the queue was cleared, not this caller cancelled
+            leave(key, pending)
+            throw e
         }
+    }
+
+    /** A caller of [p] went: the last one to go before it left drops it, so it is never sent. */
+    private fun leave(key: String, p: Pending) {
+        val drop = lock.locked {
+            p.waiting--
+            (p.waiting == 0 && !p.started).also { if (it && cache[key] === p) cache.remove(key) }
+        }
+        if (drop) p.answer.cancel()
     }
 
     /** One coordinate's name at its [defaultLevel], to seal once into a medium's listed tier; null as [reverse]. */
@@ -88,9 +114,10 @@ class Geocoder internal constructor(
     }
 
     /** Runs [task] after at least [MIN_INTERVAL_MS] since the previous one started: serialised, first come first served. */
-    private suspend fun <T> queued(gen: Long, task: suspend () -> T?): T? = queue.withLock {
+    private suspend fun <T> queued(gen: Long, p: Pending, task: suspend () -> T?): T? = queue.withLock {
         lastStartedAt?.let { val wait = MIN_INTERVAL_MS - (now() - it); if (wait > 0) delay(wait) }
-        if (lock.locked { gen != generation }) return@withLock null
+        // started under the lock: a caller leaving from here on finds it sent and keeps it (its answer is the cache's)
+        if (lock.locked { if (gen != generation || p.waiting == 0) true else { p.started = true; false } }) return@withLock null
         lastStartedAt = now()
         task()
     }
