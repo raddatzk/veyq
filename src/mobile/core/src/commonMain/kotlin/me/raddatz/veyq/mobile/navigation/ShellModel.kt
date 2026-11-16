@@ -714,7 +714,7 @@ class ShellModel(
      */
     fun dateEditor(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.memories.place.DateEditor? {
         val g = gallery.current
-        if (!g.rights.editMeta || g.offline != null) return null
+        if (!g.editsFacts) return null
         return me.raddatz.veyq.mobile.memories.place.DateEditor(g.facts?.date, g.autoRange) { date ->
             me.raddatz.veyq.mobile.memories.place.MemoryFacts.setDate(tenant, gallery.node.scopeId, gallery.node.nodeId, date).also {
                 gallery.factsChanged()
@@ -730,7 +730,7 @@ class ShellModel(
     fun placeEditor(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.memories.place.PlaceEditor? {
         val names = placeNames
         val g = gallery.current
-        if (!g.rights.editMeta || g.offline != null) return null
+        if (!g.editsFacts) return null
         val points = g.gpsPoints
         return me.raddatz.veyq.mobile.memories.place.PlaceEditor(
             g.facts?.location, me.raddatz.veyq.mobile.memories.place.MemoryLocation.medoid(points), points, names,
