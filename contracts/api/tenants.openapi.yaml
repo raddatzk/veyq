@@ -3461,9 +3461,9 @@ components:
       type: object
       description: >
         A link invite's private label as an owner sets, changes or clears it (ADR 0129 decision 7): sealed under a fresh
-        value key bound to the tenant and the invite, that key wrapped under the tenant key of `epoch`. All three null
-        clears it.
-      required: [sealedLabel, wrappedLabelValueKey]
+        value key bound to the tenant and the invite, that key wrapped under the tenant key of `epoch`. No label (both
+        absent or null) clears it; an `epoch` beside no label is ignored. Nothing is required, because a missing field and
+        a `null` bind alike.
       # Both or neither, as InviteeNameKey's: under `dependentSchemas`, never at the schema's top.
       dependentSchemas:
         sealedLabel:
@@ -3504,7 +3504,7 @@ components:
           type: [integer, "null"]
           description: >
             The tenant scope epoch whose key `wrappedLabelValueKey` is under — its current one, checked under its row
-            lock (`409 stale_epoch`); null with a cleared label, and only then (`400 invalid_request`).
+            lock (`409 stale_epoch`); required with a label (`400 invalid_request` without), ignored without one.
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'

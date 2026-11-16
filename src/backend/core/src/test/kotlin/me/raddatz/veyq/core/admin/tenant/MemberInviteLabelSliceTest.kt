@@ -71,10 +71,17 @@ class MemberInviteLabelSliceTest {
         val (_, invite) = seedLinkInvite(tenantId, owner)
         setLabel(owner, tenantId, invite.inviteId, """{"sealedLabel":"$LABEL","wrappedLabelValueKey":"$LABEL_WRAP"}""").statusCode(400)
         setLabel(owner, tenantId, invite.inviteId, """{"sealedLabel":"$LABEL","wrappedLabelValueKey":null,"epoch":0}""").statusCode(400)
-        setLabel(owner, tenantId, invite.inviteId, """{"sealedLabel":null,"wrappedLabelValueKey":null,"epoch":0}""").statusCode(400)
+        setLabel(owner, tenantId, invite.inviteId, """{"wrappedLabelValueKey":"$LABEL_WRAP","epoch":0}""").statusCode(400)
         assertEquals(null, labelOf(invite.inviteId), "nothing written")
         setLabel(owner, tenantId, invite.inviteId, labelBody(LABEL, LABEL_WRAP, 0)).statusCode(204)
         assertEquals(SealedValue(LABEL, LABEL_WRAP), labelOf(invite.inviteId))
+        // No label clears it, whether its fields are null or absent, and an epoch beside none is ignored (the API
+        // fuzzing's two findings: a missing field and a null bind alike).
+        setLabel(owner, tenantId, invite.inviteId, """{"sealedLabel":null,"wrappedLabelValueKey":null,"epoch":2147483647}""").statusCode(204)
+        assertEquals(null, labelOf(invite.inviteId))
+        setLabel(owner, tenantId, invite.inviteId, labelBody(LABEL, LABEL_WRAP, 0)).statusCode(204)
+        setLabel(owner, tenantId, invite.inviteId, "{}").statusCode(204)
+        assertEquals(null, labelOf(invite.inviteId))
     }
 
     @Test

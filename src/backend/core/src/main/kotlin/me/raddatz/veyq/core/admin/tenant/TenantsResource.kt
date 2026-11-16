@@ -266,15 +266,17 @@ class TenantsResource(
     private fun LinkInviteOutcome.Done.toWire() = MemberInviteLink(UUID.fromString(inviteId), token, expiresAt.utc())
 
     // A link invite's private label (ADR 0129 decision 7): the label and its wrap come together with the epoch the wrap is
-    // under, or all three are null (cleared) — the contract's rule, a 400 before any read.
+    // under, or neither comes (cleared, an epoch beside them ignored) — the contract's rule, a 400 before any read. A
+    // missing field and a null bind alike, so the contract requires none of them (the API fuzzing found both halves).
     @Authenticated
     override fun setMemberInviteLabel(tenantId: UUID, inviteId: UUID, setMemberInviteLabelRequest: SetMemberInviteLabelRequest): Response {
         val r = setMemberInviteLabelRequest
-        if (!SealedValue.pairs(r.sealedLabel, r.wrappedLabelValueKey) || (r.sealedLabel == null) != (r.epoch == null)) {
+        if (!SealedValue.pairs(r.sealedLabel, r.wrappedLabelValueKey) || (r.sealedLabel != null && r.epoch == null)) {
             return httpError(Failures.invalidRequest)
         }
         return when (val o = handler.setMemberInviteLabel(
-            identity.principal.name, tenantId.toString(), inviteId.toString(), SealedValue.of(r.sealedLabel, r.wrappedLabelValueKey), r.epoch,
+            identity.principal.name, tenantId.toString(), inviteId.toString(), SealedValue.of(r.sealedLabel, r.wrappedLabelValueKey),
+            r.epoch.takeIf { r.sealedLabel != null },
         )) {
             SetInviteLabelOutcome.Done -> Response.noContent().build()
             is HttpFailure -> httpError(o)

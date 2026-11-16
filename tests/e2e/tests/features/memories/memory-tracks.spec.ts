@@ -20,6 +20,7 @@ import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../../src/canaries'
 import { newDevice, signInOwner, watchConsole, type ConsoleErrors, type Device } from '../../../src/devices'
 import { headerAction } from '../../../src/header'
+import { toast } from '../../../src/toast'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -135,7 +136,8 @@ test('a file that is no GPX track is refused by name, nothing uploaded', { tag: 
   await page.getByTestId('track-add').click()
   const name = recordTyped(`notes-${stamp}.gpx`)
   await (await chooser).setFiles({ name, mimeType: 'application/gpx+xml', buffer: Buffer.from('<html><body>no track</body></html>') })
-  await expect(page.getByText(`${name} is no GPX track.`)).toBeVisible()
+  // In its viewport: an unscoped getByText also meets Reka's live-region copy while it is there (src/toast.ts).
+  await expect(toast(page, `${name} is no GPX track.`)).toBeVisible()
   await expect(trackRows(page)).toHaveCount(1)
 })
 
