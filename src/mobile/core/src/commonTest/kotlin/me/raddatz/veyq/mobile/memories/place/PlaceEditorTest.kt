@@ -72,6 +72,27 @@ class PlaceEditorTest {
         assertEquals(medoid, e.build()?.derived)
     }
 
+    // bite: the geocoder's queue sent every superseded pan's lookup first, so the last pan's name came seconds late — red
+    @Test
+    fun afterQuickPansTheLastPositionIsNamedOnceTheGeocodersWindowOpens() = runTest {
+        val played = maps(consented = true)
+        played.played.geocode = { s -> 200 to """{"address":{"city":"at ${io.ktor.http.Url(s.url).parameters["lat"]}"}}""" }
+        val e = editor(played, medoid = LatLng(48.0, 11.5))
+        val step = 750L // past the settle delay, inside the geocoder's one second: each pan's lookup is started
+        val pans = (0 until 8).map { LatLng(48.0 + it * 0.01, 11.5) }
+        for ((i, p) in pans.withIndex()) {
+            e.frame(p, user = true)
+            if (i < pans.lastIndex) advanceTimeBy(step)
+        }
+        // the last pan settles, then waits at most one window for the request before it
+        advanceTimeBy(PlaceEditor.RESOLVE_DELAY_MS + me.raddatz.veyq.mobile.map.Geocoder.MIN_INTERVAL_MS)
+        runCurrent()
+        assertEquals("at ${pans.last().lat}", e.current.name, "the last position is named, not left behind a queue")
+        assertTrue(played.geocodes < pans.size, "a lookup no pan waits for any more is dropped, never sent")
+        val sent = played.played.geocodes.map { it.at }
+        assertTrue(sent.zipWithNext().all { (a, b) -> b - a >= me.raddatz.veyq.mobile.map.Geocoder.MIN_INTERVAL_MS }, "still at most one per second: $sent")
+    }
+
     @Test
     fun theOpeningViewOfAMemoryWithoutAPointIsNoPlace() = runTest {
         val played = maps(consented = true)

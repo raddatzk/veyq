@@ -165,6 +165,30 @@ class GeocoderTest {
         assertTrue(played.sent[1].at - played.sent[0].at >= Geocoder.MIN_INTERVAL_MS, "serialised at least 1 s apart")
     }
 
+    // bite: the queue sent a request whose every caller had gone before it, holding the latest back a window each — red
+    @Test
+    fun aRequestNoCallerWaitsForIsDroppedAndTheLatestLeavesWhenTheWindowOpens() = runTest {
+        val played = PlayedMapServices(this)
+        val g = on(played).geocoder!!
+        val start = testScheduler.currentTime
+        g.resolve(52.52, 13.405, "de") // the window opens again at start + 1 s
+        val superseded = (1..3).map { i -> async { g.resolve(52.52 + i * 0.01, 13.405, "de") } }
+        runCurrent() // each reaches the queue's wait
+        superseded.forEach { it.cancel() } // their callers moved on
+        val latest = async { g.resolve(48.137, 11.575, "de") }
+        val shared = async { g.resolve(48.137, 11.575, "de") }
+        runCurrent()
+        shared.cancel() // one caller of the latest gone: the other still waits for it
+        advanceUntilIdle()
+        assertEquals(ResolvedPlace("München", Key.CITY), latest.await())
+        assertEquals(2, played.count, "the superseded requests never left")
+        assertEquals(start + Geocoder.MIN_INTERVAL_MS, played.sent[1].at, "the latest left as the window opened")
+        assertEquals("48.137", Url(played.sent[1].url).parameters["lat"])
+        // a dropped spot is asked afresh when someone wants it again
+        assertEquals(ResolvedPlace("München", Key.CITY), g.resolve(52.53, 13.405, "de"))
+        assertEquals(3, played.count)
+    }
+
     @Test
     fun aWithdrawalClearsTheQueueNothingWaitingLeaves() = runTest {
         val played = PlayedMapServices(this)
