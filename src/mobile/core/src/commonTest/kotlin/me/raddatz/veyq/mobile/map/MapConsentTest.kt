@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.map
 
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -7,6 +8,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import me.raddatz.veyq.mobile.map.PlayedMapServices.Companion.GEOCODER
 import me.raddatz.veyq.mobile.map.PlayedMapServices.Companion.OFFER
 import me.raddatz.veyq.mobile.session.MemoryDeviceStore
+import me.raddatz.veyq.mobile.session.Reach
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -198,5 +200,29 @@ class MapConsentTest {
         assertFalse(s.available)
         assertFalse(s.geocodingAvailable)
         assertTrue(played.services(OFFER).available, "the consent itself stays")
+    }
+
+    @Test
+    fun anAccountThatLosesItsServerMidSessionDrawsNoMapUntilItIsBackAndFetchesNothingMeanwhile() = runTest {
+        // the pass of ADR 0143 phase 9 (Android): signed in online, then the connection gone — the capabilities were read
+        // before, yet the app is offline now and the map must go (D9), on every map of the tenant, and come back with it
+        val played = PlayedMapServices(this)
+        val reach = MutableStateFlow<Reach>(Reach.Online)
+        val s = played.services(reach = reach)
+        s.turnOn()
+        assertEquals(MapState.Shown, s.state.value)
+        reach.value = Reach.Offline(asOf = 1L)
+        played.dispatcher.scheduler.runCurrent()
+        assertEquals(MapState.Offline, s.state.value, "offline mid-session: no map, the map needs a connection")
+        assertFalse(s.available)
+        assertFalse(s.geocodingAvailable)
+        val v = s.tiles!!.view()
+        val shown = v.show(Viewport(PlayedMapServices.BERLIN, 12.0, 800.0, 600.0))
+        assertNull(v.tile(shown.first().key), "no tile offline")
+        assertEquals(0, played.count, "nothing is fetched offline")
+        reach.value = Reach.Online
+        played.dispatcher.scheduler.runCurrent()
+        assertEquals(MapState.Shown, s.state.value, "back online the consent holds again: the map returns")
+        s.close()
     }
 }
