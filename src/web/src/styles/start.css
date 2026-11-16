@@ -1,0 +1,83 @@
+/* The start screen in `index.html` (ADR 0136 decision 1): the wordmark and the layer's spinner, centred over the whole
+   viewport, and the slow panel the start watchdog fills (`src/boot/watchdog.ts`). It paints before any script ran, so the
+   stored theme is not applied yet (`useThemeState` does that from the app): it follows the OS through
+   `prefers-color-scheme` until the app wrote `data-theme` on <html>, and from then on the roles as the app resolved them.
+   The dark values below are base.css's `:root.veyq-dark` ones for the roles this screen and its button paint with;
+   `boot/startScreen.test.ts` holds them equal. */
+.veyq-start {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  padding: 1.5rem 1rem;
+  background: var(--app-bg);
+  color: var(--app-text);
+  text-align: center;
+}
+
+.veyq-start__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 1.6rem;
+  font-weight: 850;
+}
+
+.veyq-start__mark {
+  display: block;
+  width: 2.4rem;
+  height: 2.4rem;
+  object-fit: contain;
+}
+
+.veyq-start__slow {
+  display: grid;
+  justify-items: center;
+  gap: 0.75rem;
+  max-width: 24rem;
+}
+
+.veyq-start__slow[hidden],
+.veyq-start__progress[hidden] {
+  display: none;
+}
+
+.veyq-start__heading {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.veyq-start__step {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .veyq-start .veyq-spinner__spin,
+  .veyq-start .veyq-spinner__circle {
+    animation: none;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .veyq-start {
+    --app-bg: #101418;
+    --app-text: #eef3f8;
+    --app-muted: #9aa7b5;
+    --app-danger: #f87171;
+    --app-info: #67e8f9;
+    --app-success: #2dd4bf;
+    --app-warning: #facc15;
+    --app-focus: #93c5fd;
+    --app-on-fill: #0b0f14;
+    --app-primary: #34d399;
+    --app-primary-hover: #6ee7b7;
+    --app-primary-active: #a7f3d0;
+    color-scheme: dark;
+  }
+}
