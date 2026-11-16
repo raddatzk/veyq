@@ -2616,6 +2616,11 @@
     "en": "The track could not be renamed.",
     "de": "Der Titel konnte nicht umbenannt werden."
   },
+  "music_nothing_plays": {
+    "note": "A queue none of whose tracks this device's player could play ended by itself (the player's notice, ADR 0142 decision 9; owner's copy, 2026-11-15).",
+    "en": "None of these tracks can be played on this device.",
+    "de": "Keiner dieser Titel kann auf diesem Gerät abgespielt werden."
+  },
   "memory_moved_to_trash": {
     "en": "Moved to trash",
     "de": "In den Papierkorb verschoben"
