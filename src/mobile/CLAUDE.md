@@ -27,7 +27,10 @@ A Gradle build of its own, run through its own wrapper.
   slideshow on the model's clock; the web's rights ported fail-closed, `MemoryRights`; New Memory and Add chapter,
   `MemoryCreate`; the uploads' settle and each picked file handed back once the queue is done with it, `MediaUploads`;
   the tier spec, `MediaUpload`'s; ADR 0136's Consequences; its music, `memories/music/` (ADR 0142 decisions 4–12): a node's tracks listed and numbered once and its queue, `MusicQueue`; their facts, `AudioFacts` (a WAV's trim from its PCM, `Wav`; an ADTS file's length counted, `Frames`); a picked file checked and uploaded, `MusicUpload`; a rename of the raw listed tier, `TrackLabel`; the Music view, `MusicModel` over the gallery, whose header plays and stops the music and whose lightbox's video interrupts it; a medium's ITEM report, `MediumReport` — drawn for a track by every app's Music view, a photo's or a video's not yet: inbox #891), which
-  uses core's session and is never used by it; an application's spec is generated into `api.<application>`.
+  uses core's session and is never used by it; an application's spec is generated into `api.<application>`. **Planned**
+  ([ADR 0143](../../docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)): the map services in core's `map/` (the consent per device, the tile
+  fetch and its memory-only cache, the geocoder, the viewport, clustering), a Memory's date and place in `memories/place/`
+  and its GPX tracks in `memories/tracks/`.
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
   decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's
   (`session/Account.kt`, `SessionModel.kt`: every sign-in enrols the password trust, `Gate.Signed.offer` offers staying

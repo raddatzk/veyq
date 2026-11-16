@@ -91,6 +91,9 @@ states as a level's map: no map on the server, the consent prompt, and the map w
 line sends the tile service nothing a photo's dot does not. The tile requests carry the viewport, never a track.
 Without a map or without the consent, the list, the numbers, the download and the removal all still work.
 
+The apps draw the same Map view (Photos | Music | Map) under their one consent per device, MapKit on iOS and macOS
+([ADR 0143](0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md) decision 8).
+
 In a shared space each member's own consent decides, as for every other map. A space owner's enabling notice remains
 inbox #47's residual.
 

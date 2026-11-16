@@ -98,6 +98,13 @@ origin in `Referer`, which is what identifies it to the provider.
 no map, a place is a typed name positioned by the photos' GPS or an earlier pin, and no geocoder is asked, since tiles
 still gate geocoding. With `memories.map` and `memories.places` both off a place still works, named by hand.
 
+**In the apps — planned** ([ADR 0143](../decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)): a Memory's date and place, the
+Memories bar's Map tab, the photo panel's map and a Memory's Map view with its tracks, under one consent per device. On
+Android, Linux and Windows the core draws the configured tile host's raster tiles; on iOS and macOS the map is MapKit, so
+its recipient is Apple Maps, named in the consent, and `memories.map` off means no map there either. Place names come
+from the configured geocoder on every platform. An app's request names the app and the instance in its `User-Agent`
+instead of a `Referer`; no tile is written to disk and no map is drawn offline.
+
 ## What it uses from the platform
 
 | Platform primitive | Where it is described |

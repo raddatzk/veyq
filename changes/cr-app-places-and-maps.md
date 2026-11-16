@@ -283,7 +283,7 @@ a recipient the notice does not name is the cheap safe side to close now). `revi
 
 ## Phases
 
-- [ ] **1 the ADR and the docs it changes** — ADR 0143 (the next free number, `ls docs/decisions | tail -3`) holding
+- [x] **1 the ADR and the docs it changes** — ADR 0143 (the next free number, `ls docs/decisions | tail -3`) holding
   D1–D13, their rejected alternatives, and the Consequences: the security rows of D10, the tile-cache residual (#939), the
   offline map (D9). ADR 0016 and 0018 point at it (the apps' identification; Apple Maps as a recipient on Apple), ADR
   0130 (the apps' Map view), ADR 0140 decision 8 (a GPX track's original kept); `security-model.md`'s third-party
