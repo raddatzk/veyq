@@ -601,6 +601,8 @@ class ShellModel(
         me.raddatz.veyq.mobile.memories.MediaUploads(queue, object : me.raddatz.veyq.mobile.memories.MediaUploads.Door {
             override fun job(scopeId: String, nodeId: String, source: me.raddatz.veyq.mobile.blob.UploadSource) =
                 me.raddatz.veyq.mobile.memories.MediaUpload.Job(tenant, scopeId, nodeId, source, deriver, now)
+            override fun musicJob(scopeId: String, nodeId: String, track: me.raddatz.veyq.mobile.memories.music.MusicUpload.Check.Taken) =
+                me.raddatz.veyq.mobile.memories.music.MusicUpload.Job(tenant, scopeId, nodeId, track)
             override fun changed() = changed()
             override fun left(source: me.raddatz.veyq.mobile.blob.UploadSource) = left(source)
         })
@@ -635,7 +637,9 @@ class ShellModel(
      * its media read anew on every revision of these lists, when a medium [uploads] sent into it is in and when its live
      * poll finds them moved; what it adds goes through [uploads]; a medium trashed and restored, a chapter made.
      */
-    fun galleryModel(ref: NodeAt, uploads: me.raddatz.veyq.mobile.memories.MediaUploads): me.raddatz.veyq.mobile.memories.GalleryModel =
+    fun galleryModel(
+        ref: NodeAt, uploads: me.raddatz.veyq.mobile.memories.MediaUploads, music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null,
+    ): me.raddatz.veyq.mobile.memories.GalleryModel =
         me.raddatz.veyq.mobile.memories.GalleryModel(ref, object : me.raddatz.veyq.mobile.memories.GalleryModel.Door {
             override suspend fun gallery() = me.raddatz.veyq.mobile.memories.MemoryMedia.list(tenant, ref.scopeId, ref.nodeId)
             override suspend fun scopeNodes() = this@ShellModel.scopeNodes(ref.scopeId)
@@ -662,7 +666,43 @@ class ShellModel(
             override val online = tenant.account.reach.map { it == Reach.Online }.distinctUntilChanged()
         }, access = me.raddatz.veyq.mobile.memories.MemoryRights.Access.Member(
             memoriesOn = "memories" !in tenant.applicationsOff(), inIdentityFolder = inIdentityFolder(ref),
-        ), now = now)
+        ), now = now, music = music)
+
+    /**
+     * The account's music player over the platform's two decks ([newDeck], ADR 0142 decision 2) and its system controls
+     * ([controls], decision 3), its order's randomness the suite's (ADR 0142 decision 1). One per signed-in account in the
+     * process, built beside [mediaUploads] and stopped where the tenant closes (a lock, a sign-out, a switch).
+     */
+    fun musicPlayer(
+        newDeck: (me.raddatz.veyq.mobile.audio.Deck.Events) -> me.raddatz.veyq.mobile.audio.Deck,
+        controls: me.raddatz.veyq.mobile.audio.SystemControls?,
+    ): me.raddatz.veyq.mobile.audio.MusicPlayer =
+        me.raddatz.veyq.mobile.audio.MusicPlayer(newDeck, controls, me.raddatz.veyq.mobile.audio.randomIntOf { tenant.account.suite.p.randomBytes(it) })
+
+    /**
+     * Memory or chapter [gallery]'s Music view over this tenant ([me.raddatz.veyq.mobile.memories.music.MusicModel]): a
+     * picked file checked with the platform's [measure] of its length, the tracks queued through [uploads], a picked file
+     * not taken handed to [left]; a track renamed, reported as an ITEM.
+     */
+    fun musicModel(
+        gallery: me.raddatz.veyq.mobile.memories.GalleryModel, uploads: me.raddatz.veyq.mobile.memories.MediaUploads,
+        measure: me.raddatz.veyq.mobile.memories.music.MusicUpload.Measure, left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit,
+    ): me.raddatz.veyq.mobile.memories.music.MusicModel =
+        me.raddatz.veyq.mobile.memories.music.MusicModel(gallery, object : me.raddatz.veyq.mobile.memories.music.MusicModel.Door {
+            override suspend fun check(source: me.raddatz.veyq.mobile.blob.UploadSource) =
+                me.raddatz.veyq.mobile.memories.music.MusicUpload.check(source) { type ->
+                    kotlinx.coroutines.suspendCancellableCoroutine { c -> measure.durationMs(source, type) { ms -> c.resume(ms) { _, _, _ -> } } }
+                }
+            override fun queue(tracks: List<me.raddatz.veyq.mobile.memories.music.MusicUpload.Check.Taken>) =
+                uploads.uploadMusic(gallery.node.scopeId, gallery.node.nodeId, gallery.node.name, tracks)
+            override fun left(source: me.raddatz.veyq.mobile.blob.UploadSource) = left(source)
+            override suspend fun rename(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, name: String?) =
+                me.raddatz.veyq.mobile.memories.music.TrackLabel.rename(tenant, item, name)
+            override suspend fun report(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, category: String, reason: String, contact: String) =
+                me.raddatz.veyq.mobile.memories.MediumReport.report(tenant, item, category, reason, contact)
+            override suspend fun reportOffered() = this@ShellModel.reportOffered()
+            override val origin get() = tenant.origin
+        })
 
     /**
      * Drop box [ref]'s page over this tenant ([me.raddatz.veyq.mobile.depot.DropBoxPage]): its guests' folders, read anew on

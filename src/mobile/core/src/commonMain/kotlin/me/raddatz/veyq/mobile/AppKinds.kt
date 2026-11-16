@@ -136,7 +136,7 @@ object AppKinds {
     fun headerOrder(kind: String): List<String> = when (kind) {
         FOLDER, DROPBOX, PotSession.KIND -> listOf("favorite", "share", "download", "move", "copy")
         FILE -> listOf("favorite", "download", "share", "replace", "move", "copy")
-        MEMORY, CHAPTER -> listOf("favorite", "upload", "share", "download", "banner", "move", "copy")
+        MEMORY, CHAPTER -> listOf("favorite", "upload", "share", "music", "download", "banner", "move", "copy")
         SHARE_BOOKMARK -> listOf("open-own-page", "favorite", "move")
         else -> emptyList()
     }
