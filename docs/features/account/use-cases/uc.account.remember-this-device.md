@@ -96,6 +96,11 @@ sequenceDiagram
   its lifetime is a session matter ([ADR 0004](../../../decisions/0004-session-tokens.md)) that no switch gates, and
   while the wrap is withheld a revived session still meets the password-and-Secret-Key screen. A device without such
   a record still signs in with the session cookie.
+- **E5 — the start hangs** (iOS Safari reloads a long-backgrounded tab and a request or the IndexedDB open never
+  answers): the page is never blank. It shows the start screen; after 15 s without a mounted app it reloads once, and
+  if that start hangs too it says "Taking longer than usual" with a **Reload** button and the step it waits for
+  ([ADR 0136](../../../decisions/0136-the-web-client-never-starts-blank.md)). The tiers are untouched: a hang is no
+  answer about the session (E2).
 
 ## Quality notes
 
@@ -145,4 +150,4 @@ your password.
 - Related use-cases: [unlock](uc.account.unlock.md) (the floor — the first-sign-in path),
   [trust-device](uc.account.trust-device.md) (the DEVICE wrap),
   [sessions](uc.account.sessions.md) (removing this wrap for a device that is not in hand).
-- End-user view (docs site): [Sign in](../../../../site/src/content/docs/getting-started/sign-in.mdx)
+- End-user view (docs site): [Sign in](../../../../site/src/content/docs/getting-started/sign-in.mdx) · [Offline or unreachable](../../../../site/src/content/docs/help/offline.mdx) (E5's "Taking longer than usual")

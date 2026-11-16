@@ -13,6 +13,7 @@ import { maybeDevAutoUnlock } from './devAutoUnlock'
 import { listenForSessionEnd } from './sessionEnd'
 import { isTenantSuspended } from './tenantSuspension'
 import { isModerationPath } from './moderationPath'
+import { markStartStep } from './startSignals'
 
 /**
  * Discover the instance state and prepare the app shell. The result is reflected in the shared server
@@ -26,6 +27,9 @@ export async function boot(): Promise<void> {
   const { incompatibility } = useCapabilities()
   setUnreachable(false)
   setSuspended(false)
+  // Each awaited step is marked on the document for the start watchdog, which names it if the start hangs (ADR 0136
+  // decision 3). No step has a deadline of its own (decision 6): the watchdog's reload answers any hang.
+  markStartStep('status')
   try {
     const status = await getSetupStatus()
     // Record the instance's version + capability manifest first — the shell reads it to soft-gate optional
@@ -48,6 +52,7 @@ export async function boot(): Promise<void> {
   // device's password-less DEVICE_KEY wrap re-opens the Master Key — so a browser restart lands straight in the
   // shell, no prompt. No cookie/wrap (or expired) → stays logged out and the router lands on login.
   // The rejection is kept, not flattened to "not restored": what the server answered decides the tiers.
+  markStartStep('session')
   const failure = await refreshSession().then(
     () => null,
     (e: unknown) => ({ e }),
@@ -59,7 +64,10 @@ export async function boot(): Promise<void> {
     if (failure !== null) await keepOrDropTiers(failure.e)
     return
   }
-  if (failure === null) await restoreVaultFromCache().catch(() => {})
+  if (failure === null) {
+    markStartStep('vault')
+    await restoreVaultFromCache().catch(() => {})
+  }
   else await keepOrDropTiers(failure.e)
   // DEV-ONLY (cr-dev-auto-unlock): if still locked, an opt-in (`?devlogin`) local-dev auto-unlock from seed creds.
   // A no-op — and tree-shaken to nothing — in any prod build (import.meta.env.DEV-gated). Best-effort, never blocks.

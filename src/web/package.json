@@ -23,7 +23,8 @@
     "verify:frame-worker": "node scripts/assert-frame-worker-in-dist.mjs",
     "verify:digest-worker": "node scripts/assert-digest-worker-in-dist.mjs",
     "verify:license-sources": "node scripts/assert-license-sources-in-dist.mjs",
-    "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run verify:no-backdoor && pnpm run verify:csp && pnpm run verify:argon-worker && pnpm run verify:media-worker && pnpm run verify:pdf-worker && pnpm run verify:listing-worker && pnpm run verify:frame-worker && pnpm run verify:digest-worker && pnpm run verify:license-sources"
+    "verify:boot-watchdog": "node scripts/assert-boot-watchdog-in-dist.mjs",
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run verify:no-backdoor && pnpm run verify:csp && pnpm run verify:argon-worker && pnpm run verify:media-worker && pnpm run verify:pdf-worker && pnpm run verify:listing-worker && pnpm run verify:frame-worker && pnpm run verify:digest-worker && pnpm run verify:license-sources && pnpm run verify:boot-watchdog"
   },
   "dependencies": {
     "@internationalized/date": "^3.12.4",

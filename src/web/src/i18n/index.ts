@@ -16,7 +16,7 @@ const en = {
     progress: 'Position in {title}',
     nothingPlays: 'None of these tracks can be played in this browser.',
   },
-  common: { email: 'Email', password: 'Password', cancel: 'Cancel', save: 'Save', create: 'Create', close: 'Close', done: 'Done', show: 'Show', hide: 'Hide', undo: 'Undo', more: 'More', zoom: 'Zoom', unreachable: 'This server can’t be reached right now. Please try again.' },
+  common: { email: 'Email', password: 'Password', cancel: 'Cancel', save: 'Save', create: 'Create', close: 'Close', done: 'Done', show: 'Show', hide: 'Hide', undo: 'Undo', more: 'More', zoom: 'Zoom', unreachable: 'This server can’t be reached right now. Please try again.', reload: 'Reload' },
   export: {
     action: 'Download',
     title: 'Download “{name}”',
@@ -2319,7 +2319,7 @@ const de: typeof en = {
     progress: 'Position in {title}',
     nothingPlays: 'Keiner dieser Titel kann in diesem Browser abgespielt werden.',
   },
-  common: { email: 'E-Mail', password: 'Passwort', cancel: 'Abbrechen', save: 'Speichern', create: 'Erstellen', close: 'Schließen', done: 'Fertig', show: 'Anzeigen', hide: 'Verbergen', undo: 'Rückgängig', more: 'Mehr', zoom: 'Zoom', unreachable: 'Dieser Server ist gerade nicht erreichbar. Bitte erneut versuchen.' },
+  common: { email: 'E-Mail', password: 'Passwort', cancel: 'Abbrechen', save: 'Speichern', create: 'Erstellen', close: 'Schließen', done: 'Fertig', show: 'Anzeigen', hide: 'Verbergen', undo: 'Rückgängig', more: 'Mehr', zoom: 'Zoom', unreachable: 'Dieser Server ist gerade nicht erreichbar. Bitte erneut versuchen.', reload: 'Neu laden' },
   export: {
     action: 'Herunterladen',
     title: '„{name}“ herunterladen',
@@ -4468,7 +4468,7 @@ export const LOCALE_LABELS: Record<SupportedLocale, string> = { en: 'English', d
 export type LocalePreference = 'system' | SupportedLocale
 export const LOCALE_PREFERENCES: LocalePreference[] = ['system', 'en', 'de']
 
-const LOCALE_STORAGE_KEY = 'veyq:locale'
+export const LOCALE_STORAGE_KEY = 'veyq:locale'
 
 function storage(): Storage | null {
   try {

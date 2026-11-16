@@ -20,6 +20,8 @@
 @import './styles/markdown.css';
 @import './styles/settings.css';
 @import './styles/dark.css';
+/* The start screen of index.html (ADR 0136): in the app's own sheet, which the built page links before any script. */
+@import './styles/start.css';
 
 .veyq-banner {
   margin: 0 0 1rem;
@@ -28,6 +30,16 @@
   background: var(--app-danger-soft);
   color: var(--app-danger);
   border: 1px solid var(--app-danger-line);
+}
+
+/* A banner that offers its one way out (the unreachable state's Reload, ADR 0136): text and button on one line, wrapping
+   under each other on a phone. */
+.veyq-banner--with-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
 }
 
 .field-hint {
