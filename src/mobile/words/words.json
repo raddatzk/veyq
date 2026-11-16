@@ -2665,6 +2665,390 @@
     "en": "The track could not be saved.",
     "de": "Der Track konnte nicht gespeichert werden."
   },
+  "memory_date_title": {
+    "note": "A Memory's date: the editor's title (the web's memory.date.title).",
+    "en": "Date",
+    "de": "Datum"
+  },
+  "memory_date_edit": {
+    "note": "The facts line's date, a button to its editor.",
+    "en": "Edit date",
+    "de": "Datum bearbeiten",
+    "apple_en": "Edit Date"
+  },
+  "memory_date_none": {
+    "en": "No date yet",
+    "de": "Noch kein Datum"
+  },
+  "memory_date_since": {
+    "note": "{1} an ongoing Memory's first day, as the device writes a date.",
+    "en": "Since {1}",
+    "de": "Seit {1}"
+  },
+  "memory_date_auto_hint": {
+    "en": "Derived from your photos.",
+    "de": "Aus deinen Fotos ermittelt."
+  },
+  "memory_date_auto_empty": {
+    "en": "Add dated photos, or set a date manually.",
+    "de": "Füge datierte Fotos hinzu oder setze ein Datum manuell."
+  },
+  "memory_date_day": {
+    "en": "Day",
+    "de": "Tag"
+  },
+  "memory_date_from": {
+    "en": "From",
+    "de": "Von"
+  },
+  "memory_date_to": {
+    "en": "To",
+    "de": "Bis"
+  },
+  "memory_date_start": {
+    "en": "Start",
+    "de": "Beginn"
+  },
+  "memory_date_invalid_range": {
+    "en": "The end can't be before the start.",
+    "de": "Das Ende darf nicht vor dem Beginn liegen."
+  },
+  "memory_date_mode_auto": {
+    "en": "Automatic",
+    "de": "Automatisch"
+  },
+  "memory_date_mode_single": {
+    "en": "Single day",
+    "de": "Einzelner Tag"
+  },
+  "memory_date_mode_range": {
+    "en": "Range",
+    "de": "Zeitraum"
+  },
+  "memory_date_mode_ongoing": {
+    "en": "Ongoing",
+    "de": "Fortlaufend"
+  },
+  "memory_place_title": {
+    "note": "A Memory's place: the editor's title (the web's memory.place.title).",
+    "en": "Location",
+    "de": "Ort"
+  },
+  "memory_place_edit": {
+    "en": "Edit location",
+    "de": "Ort bearbeiten",
+    "apple_en": "Edit Location"
+  },
+  "memory_place_set": {
+    "note": "The facts line where the Memory has no place yet.",
+    "en": "Set location",
+    "de": "Ort festlegen",
+    "apple_en": "Set Location"
+  },
+  "memory_place_name": {
+    "en": "Name",
+    "de": "Name"
+  },
+  "memory_place_name_placeholder": {
+    "en": "Name this place",
+    "de": "Diesen Ort benennen"
+  },
+  "memory_place_name_own": {
+    "en": "Enter your own name",
+    "de": "Eigenen Namen eingeben",
+    "apple_en": "Enter Your Own Name"
+  },
+  "memory_place_name_from_map": {
+    "en": "Use the map's name",
+    "de": "Namen aus der Karte",
+    "apple_en": "Use the Map's Name"
+  },
+  "memory_place_pending": {
+    "en": "Location pending…",
+    "de": "Ort wird ermittelt …"
+  },
+  "memory_place_follows_photos": {
+    "en": "Follows your photos",
+    "de": "Folgt deinen Fotos"
+  },
+  "memory_place_custom": {
+    "en": "Your own spot",
+    "de": "Eigener Ort"
+  },
+  "memory_place_follow_again": {
+    "note": "Returns an own spot to the photos' medoid (the web's followAgain).",
+    "en": "Follow the photos",
+    "de": "Wieder den Fotos folgen",
+    "apple_en": "Follow the Photos"
+  },
+  "memory_place_remove": {
+    "en": "Remove location",
+    "de": "Ort entfernen",
+    "apple_en": "Remove Location"
+  },
+  "memory_place_name_only": {
+    "en": "Name only — no position",
+    "de": "Nur ein Name – ohne Position"
+  },
+  "memory_place_move_to_set": {
+    "en": "Move the map to set the position",
+    "de": "Karte verschieben, um die Position zu setzen"
+  },
+  "map_consent_title": {
+    "note": "The offer where a map would stand while this device's consent is not given: worded as a setting, not a banner (ADR 0016).",
+    "en": "Map services are off",
+    "de": "Kartendienste sind aus"
+  },
+  "map_consent_body": {
+    "en": "Turned on, the map loads from a map service and the framed point goes to a service for place names — both outside this server, straight from your device, with its IP address. You can turn them off again at any time, on the map or in Settings.",
+    "de": "Eingeschaltet wird die Karte von einem Kartendienst geladen und der eingerahmte Punkt an einen Dienst für Ortsnamen gesendet – beide außerhalb dieses Servers, direkt von deinem Gerät, mit dessen IP-Adresse. Du kannst sie jederzeit wieder ausschalten, auf der Karte oder in den Einstellungen."
+  },
+  "map_consent_hosts": {
+    "note": "{1} the map's recipient (the tile host; on Apple 'Apple Maps'), {2} the geocoder's host.",
+    "en": "The map from {1}, place names from {2}.",
+    "de": "Die Karte von {1}, Ortsnamen von {2}."
+  },
+  "map_consent_hosts_tiles": {
+    "note": "{1} the map's recipient; no geocoder is served.",
+    "en": "The map from {1}.",
+    "de": "Die Karte von {1}."
+  },
+  "map_consent_enable": {
+    "en": "Turn map services on",
+    "de": "Kartendienste einschalten",
+    "apple_en": "Turn Map Services On"
+  },
+  "map_consent_renew_tiles": {
+    "en": "Agree again for the service this server uses now: the map from {1}.",
+    "de": "Stimme erneut zu, für den Dienst, den dieser Server jetzt nutzt: die Karte von {1}."
+  },
+  "map_consent_renew_both": {
+    "en": "Agree again for the services this server uses now: the map from {1}, place names from {2}.",
+    "de": "Stimme erneut zu, für die Dienste, die dieser Server jetzt nutzt: die Karte von {1}, Ortsnamen von {2}."
+  },
+  "map_off": {
+    "note": "On every map: withdraws this device's consent at once (GDPR Art. 7(3)).",
+    "en": "Turn map services off",
+    "de": "Kartendienste ausschalten",
+    "apple_en": "Turn Map Services Off"
+  },
+  "map_not_offered": {
+    "en": "This server shows no maps.",
+    "de": "Dieser Server zeigt keine Karten."
+  },
+  "map_needs_connection": {
+    "note": "Where a map would stand while offline (ADR 0143 D9; owner copy 2026-11-16).",
+    "en": "The map needs a connection.",
+    "de": "Die Karte braucht eine Verbindung."
+  },
+  "map_cluster_title": {
+    "note": "The list of Memories sharing one spot at the map's highest zoom (ADR 0143 D6; owner copy 2026-11-16).",
+    "en": {
+      "one": "One Memory here",
+      "other": "{1:int} Memories here"
+    },
+    "de": {
+      "one": "Eine Erinnerung hier",
+      "other": "{1:int} Erinnerungen hier"
+    }
+  },
+  "memories_map_empty": {
+    "en": "No places yet",
+    "de": "Noch keine Orte"
+  },
+  "memories_map_empty_hint": {
+    "en": "Set a location on a Memory here and it shows up on the map.",
+    "de": "Lege bei einer Erinnerung hier einen Ort fest, dann erscheint sie auf der Karte."
+  },
+  "memory_view_map": {
+    "note": "The Memory screen's view switch: its map with the photos and the GPX tracks (ADR 0143 D8).",
+    "en": "Map",
+    "de": "Karte"
+  },
+  "track_title": {
+    "en": "Tracks",
+    "de": "Tracks"
+  },
+  "track_add": {
+    "en": "Add GPX track",
+    "de": "GPX-Track hinzufügen",
+    "apple_en": "Add GPX Track"
+  },
+  "track_add_title": {
+    "note": "The labels' sheet's title for one picked track (a catalog plural must name its number).",
+    "en": "Add track",
+    "de": "Track hinzufügen"
+  },
+  "track_add_title_many": {
+    "note": "The labels' sheet's title for several picked tracks.",
+    "en": "Add tracks",
+    "de": "Tracks hinzufügen"
+  },
+  "track_add_hint": {
+    "en": "Give each track a name and an activity. Both are optional: without a name, a track is named by its file.",
+    "de": "Gib jedem Track einen Namen und eine Aktivität. Beides ist freiwillig: Ohne Namen heißt ein Track wie seine Datei."
+  },
+  "track_add_confirm": {
+    "note": "The labels' sheet's confirming button for one picked track (a catalog plural must name its number).",
+    "en": "Add track",
+    "de": "Track hinzufügen"
+  },
+  "track_add_confirm_many": {
+    "note": "The labels' sheet's confirming button for several picked tracks.",
+    "en": "Add tracks",
+    "de": "Tracks hinzufügen"
+  },
+  "track_empty_hint": {
+    "en": "No tracks yet. Add a GPX file from your watch, phone or bike computer, and it shows on the map beside your photos.",
+    "de": "Noch keine Tracks. Füge eine GPX-Datei von deiner Uhr, deinem Smartphone oder Fahrradcomputer hinzu, dann erscheint sie auf der Karte neben deinen Fotos."
+  },
+  "track_empty": {
+    "note": "The Map view without a track, for whoever may not add one.",
+    "en": "No tracks yet.",
+    "de": "Noch keine Tracks."
+  },
+  "track_loading": {
+    "en": "Reading the track…",
+    "de": "Track wird gelesen …"
+  },
+  "track_unreadable": {
+    "en": "This track could not be read.",
+    "de": "Dieser Track konnte nicht gelesen werden."
+  },
+  "track_unnamed": {
+    "note": "A track without a name, by its place in the list.",
+    "en": "Track {1:int}",
+    "de": "Track {1:int}"
+  },
+  "track_show": {
+    "note": "{1} the track's name: its show/hide switch.",
+    "en": "Show {1} on the map",
+    "de": "{1} auf der Karte zeigen"
+  },
+  "track_download": {
+    "en": "Download GPX",
+    "de": "GPX herunterladen",
+    "apple_en": "Download GPX"
+  },
+  "track_download_failed": {
+    "en": "The track could not be downloaded.",
+    "de": "Der Track konnte nicht heruntergeladen werden."
+  },
+  "track_edit": {
+    "en": "Edit",
+    "de": "Bearbeiten"
+  },
+  "track_edit_title": {
+    "en": "Edit track",
+    "de": "Track bearbeiten"
+  },
+  "track_name_label": {
+    "en": "Name",
+    "de": "Name"
+  },
+  "track_name_hint": {
+    "en": "Leave it empty to name the track by its file.",
+    "de": "Leer lassen, um den Track nach seiner Datei zu benennen."
+  },
+  "track_activity_label": {
+    "en": "Activity",
+    "de": "Aktivität"
+  },
+  "track_activity_none": {
+    "en": "No activity",
+    "de": "Keine Aktivität"
+  },
+  "track_activity_hiking": {
+    "en": "Hiking",
+    "de": "Wandern"
+  },
+  "track_activity_walking": {
+    "en": "Walking",
+    "de": "Spazieren"
+  },
+  "track_activity_running": {
+    "en": "Running",
+    "de": "Laufen"
+  },
+  "track_activity_cycling": {
+    "en": "Cycling",
+    "de": "Radfahren"
+  },
+  "track_activity_mountain_biking": {
+    "en": "Mountain biking",
+    "de": "Mountainbike"
+  },
+  "track_activity_road_cycling": {
+    "en": "Road cycling",
+    "de": "Rennrad"
+  },
+  "track_activity_gravel_cycling": {
+    "en": "Gravel cycling",
+    "de": "Gravel"
+  },
+  "track_activity_skiing": {
+    "en": "Skiing",
+    "de": "Ski"
+  },
+  "track_activity_water": {
+    "en": "Water",
+    "de": "Wasser"
+  },
+  "track_activity_other": {
+    "en": "Other",
+    "de": "Sonstiges"
+  },
+  "track_remove": {
+    "en": "Remove",
+    "de": "Entfernen"
+  },
+  "settings_maps": {
+    "note": "Settings' section: this device's consent to the map services (ADR 0143 D2).",
+    "en": "Map services",
+    "de": "Kartendienste"
+  },
+  "settings_maps_sub": {
+    "note": "Owner copy 2026-11-16 (the web says 'browser').",
+    "en": "Whether this device loads maps and looks up the names of places.",
+    "de": "Ob dieses Gerät Karten lädt und die Namen von Orten nachschlägt."
+  },
+  "settings_maps_tiles": {
+    "en": "Map",
+    "de": "Karte"
+  },
+  "settings_maps_places": {
+    "en": "Place names",
+    "de": "Ortsnamen"
+  },
+  "settings_maps_none": {
+    "en": "none configured",
+    "de": "nicht eingerichtet"
+  },
+  "settings_maps_receive": {
+    "en": "The map service receives the part of the map you view, the place-name service the point of a place, and both this device's IP address.",
+    "de": "Der Kartendienst erhält den Kartenausschnitt, den du ansiehst, der Dienst für Ortsnamen den Punkt eines Orts, und beide die IP-Adresse dieses Geräts."
+  },
+  "settings_maps_switch": {
+    "note": "Owner copy 2026-11-16 (the web says 'in this browser').",
+    "en": "Map services on this device",
+    "de": "Kartendienste auf diesem Gerät"
+  },
+  "settings_maps_switch_hint": {
+    "en": "Off stops every map and every lookup at once. Place names already looked up stay with your Memories.",
+    "de": "Aus beendet sofort jede Karte und jedes Nachschlagen. Schon nachgeschlagene Ortsnamen bleiben in deinen Erinnerungen."
+  },
+  "settings_maps_not_offered": {
+    "en": "This server shows no maps, so there is nothing to consent to.",
+    "de": "Dieser Server zeigt keine Karten, also gibt es nichts, dem du zustimmen könntest."
+  },
+  "settings_maps_given_for": {
+    "en": "Your consent was given for other services and holds only for them: the map from {1}, place names from {2}. Switch it on to agree to the ones above.",
+    "de": "Deine Zustimmung galt anderen Diensten und gilt nur für sie: für die Karte {1}, für Ortsnamen {2}. Schalte sie ein, um den Diensten oben zuzustimmen."
+  },
+  "settings_maps_given_for_unrecorded": {
+    "en": "Your earlier consent names no services, so it no longer holds. Switch it on to agree to the ones above.",
+    "de": "Deine frühere Zustimmung nennt keine Dienste und gilt deshalb nicht mehr. Schalte sie ein, um den Diensten oben zuzustimmen."
+  },
   "music_view_photos": {
     "note": "The view switch inside a Memory's screen: its photos and videos (ADR 0142 decision 6; owner copy 2026-11-15).",
     "en": "Photos",
