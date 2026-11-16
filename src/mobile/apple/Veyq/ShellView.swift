@@ -507,6 +507,9 @@ struct Bar: View {
             ObjectPlaceholder(ref: ref, tab: key)
         } else if let app = model.shell.application, app == .expenses {
             ExpensesList(model: model)
+        } else if let app = model.shell.application, app == .memories, key == "memories.map" {
+            // the bar's Map tab: every Memory of the list with a place, on MapKit's map (ADR 0143 D6)
+            MemoriesMapTab(model: model)
         } else if let app = model.shell.application, app == .memories {
             MemoriesList(model: model)
         } else if let app = model.shell.application {

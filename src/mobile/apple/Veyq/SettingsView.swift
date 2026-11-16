@@ -63,6 +63,8 @@ private struct Confirm: Identifiable {
 struct SettingsView: View {
     let state: AccountSettingsState
     let actions: SettingsActions
+    /// The app's model, for this device's map services (ADR 0143 D2); nil where the page is played without one.
+    var maps: AppModel? = nil
     #if os(iOS)
     @Environment(\.openURL) private var openURL
     #endif
@@ -102,6 +104,7 @@ struct SettingsView: View {
                 }
             }
             storage
+            if let maps { MapServicesSection(model: maps) }
             #if os(iOS)
             // D3: the app follows the system's appearance; its language is the system's per-app setting
             Section {
@@ -510,10 +513,10 @@ struct SettingsPage: View {
         Group {
             if let state = model.settings {
                 #if os(macOS)
-                SettingsView(state: state, actions: model)
+                SettingsView(state: state, actions: model, maps: model)
                 #else
                 NavigationStack {
-                    SettingsView(state: state, actions: model)
+                    SettingsView(state: state, actions: model, maps: model)
                         .navigationTitle(say(.drawerSettings))
                         .toolbar {
                             ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { model.closeSettings() } }

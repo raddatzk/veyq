@@ -6,20 +6,22 @@ import VeyqCore
 // queue is loaded, and the lightbox's compact controls. What is shown and offered is core's (`MusicModel`, `NowPlaying`);
 // these views draw it and decide nothing.
 
-/// Which of a Memory's two views shows: its photos and videos, or its music.
+/// Which of a Memory's views shows: its photos and videos, its music, or its map with its tracks (ADR 0143 D8).
 enum MemoryView: Hashable {
-    case photos, music
+    case photos, music, map
 }
 
-/// The view switch inside a Memory's or a chapter's screen (ADR 0142 decision 6): a segmented control, as the system's
-/// own apps switch a page between two views of the same thing.
+/// The view switch inside a Memory's or a chapter's screen (ADR 0142 decision 6, ADR 0143 D8): a segmented control, as
+/// the system's own apps switch a page between views of the same thing — Music where the page offers it, Map always.
 struct MemoryViewSwitch: View {
     @Binding var view: MemoryView
+    var music = true
 
     var body: some View {
-        Picker(say(.musicViewMusic), selection: $view) {
+        Picker(say(.memoryViewMap), selection: $view) {
             Text(say(.musicViewPhotos)).tag(MemoryView.photos)
-            Text(say(.musicViewMusic)).tag(MemoryView.music)
+            if music { Text(say(.musicViewMusic)).tag(MemoryView.music) }
+            Text(say(.memoryViewMap)).tag(MemoryView.map)
         }
         .pickerStyle(.segmented)
         .labelsHidden()
