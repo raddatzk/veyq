@@ -413,10 +413,39 @@ lightbox plays and starts again by itself when the video stops or the lightbox m
   macOS) and `scripts/validate_mobile_words.py` green; each app clicked once: add a track, play, next, seek, rename,
   leave the Memory and keep hearing it, play a video in the lightbox (the music pauses and resumes, D13), close the bar.
 
-- [ ] **7 Windows and Linux** — the same over the bridge, D3's SMTC and MPRIS, the Flatpak's `--own-name`. First,
+- [x] **7 Windows and Linux** — the same over the bridge, D3's SMTC and MPRIS, the Flatpak's `--own-name`. First,
   measured: D9's format matrix on the VM (Web Media extension present and removed) and in the container and the Flatpak;
   whether `Media.Duration`'s `MediaClip` path reads audio (else the host answers it another way). · Done when: `run.py
   build`/`test` green on both; each app clicked once as phase 6's.
+  *Done 2026-11-16:* the matrices are ADR 0142's Consequences (Windows: all ten with Web Media, both Oggs `C00D36C4`
+  without it; Linux: the container all but ALAC, the Flatpak's runtime all ten). `Media.Duration` did not read a track on
+  either: Windows' `MediaClip` refuses Ogg (`80070057`) — `MediaTiers` falls back to `MediaSource.OpenAsync`; Linux's
+  video-only `playbin` says no length for any track — `media_tiers` measures it by its sound (`a_tracks_length_is_read_from_its_sound`,
+  red with the video path alone). Built per platform: Linux `music_host` (the decks over `reader_stream`, answered from
+  GTK's main loop through `bridge::reply`; MPRIS over gio's D-Bus while a queue is loaded; `Words.Say`), `music_bar` (a
+  `GtkActionBar` under the split view, `Shell.root`), `music_view` (clamped boxed list, rows updated in place so an open
+  menu survives the next track), `memory_page`'s `AdwToggleGroup`, the header's `music`, the lightbox's compact controls
+  and `Lightbox.Video`; Windows `MusicHost` (decks, SMTC
+  through `GetForWindow`, decks' `CommandManager` off) routed by `Core.Player` on the core's thread in order, `MusicRamp`,
+  `MusicBar`, `MusicView`, `MemoryPage`'s `SelectorBar`, the header's music, `LightboxView`'s compact controls,
+  `MediumPlayer`'s `Lightbox.Video`. The Flatpak's `--own-name` is **not** added: `flatpak-builder-lint` refused it
+  (`finish-args-unnecessary-appid-mpris-own-name`, "granted by default"), so the manifest names why instead and ADR 0142
+  no longer lists it. One bridge gap closed (minimal, no core change): `ReportShown.offersName`, so a
+  track's report sheet shows no "only its name" (both hosts hide the choice). A refusal at add was said twice (the
+  answer's list and the view's `said` carry the last one): both hosts say the answer's list but its last.
+  Clicked live against the dev backend — Linux under Broadway (headless Chrome, its own home volume, removed after):
+  add five files (the ALAC refused `unplayable`), play, next, a seek by the bar's scale, rename,
+  download (byte-equal), remove and its Undo, a track's report sheet without the scope choice, Home with the music
+  going on, the bar's node link back, the header's Stop and Play, a lightbox video pausing the music and its pause and the
+  lightbox's close resuming it, the bar's close; MPRIS with `playerctl` and `gdbus` in the container (listed as
+  `app.veyq.Veyq`, Pause/Play/Next acting, gone after the close); offline: the Memory made available (4.1 MB, its tracks
+  included), the forwards cut, the Music view read-only and its tracks playing from the store. Windows on the VM (the
+  fork's pass): add four tracks, play, next, seek, rename, download, remove and Undo, Home with the bar on, the node link,
+  a lightbox video pausing and its end and the close resuming, the SMTC session read in the logged-on session
+  (`GlobalSystemMediaTransportControlsSessionManager`: `Playing`, `TrySkipNext`/`TryPause`/`TryPlay` acting, gone after
+  the close). Not run here: a track that does not play on this device during a session (Windows had the extension; the
+  container's only unplayable file was refused at add), Windows minimised and the media keys, the Flatpak's MPRIS from a
+  desktop session (phase 8 (d) and (e)).
 
 - [ ] **8 the passes** — per platform against the dev instance: play a Memory's music, walk to another Memory and a
   Chapter, open the lightbox (the compact controls; a video pauses the music and its end, the next item and closing resume it, D13), (a) **Android**: screen
