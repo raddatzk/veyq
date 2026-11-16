@@ -693,6 +693,15 @@ Per engine:
   live in the session handle's memory, never on disk (remembered from Microsoft's docs). Measured 2026-11-15 (ADR 0140's
   Windows pass, the unpackaged debug build): the data folder held `device-store.json`, the empty `offline\` and
   `log.txt`, and the files the pass wrote under `%TEMP%` and `INetCache` held none of its content's names or bytes.
+- **MapKit (Apple's map, ADR 0143 decision 1) — an Apple residual.** MapKit fetches through Apple's map daemon `geod`,
+  not through the core's clients, so none of the pins above reach it. Measured 2026-11-16 on macOS 26.7 (an
+  unsandboxed, ad-hoc-signed probe without entitlements, `MKMapSnapshotter` over two regions; ADR 0143's Consequences):
+  the app's own places gained only Metal's compiled shaders (`$DARWIN_USER_CACHE_DIR/<bundle id>/com.apple.metal/`), but
+  outside the app `~/Library/Caches/GeoServices/` (manifests, regional icon packs) and `com.apple.geoanalyticsd`'s
+  `APDB.db` were written, and `geod`'s tile cache sits in `~/Library/Containers/com.apple.geod/`, which macOS's privacy
+  protection kept from being listed. So the tiles of a region a member viewed may stay at rest in a system cache the
+  app can neither list nor clear — what decision 4 keeps off disk elsewhere. The app mounts no `Map` without the
+  consent (the core's `MapServices.state`), which is the only lever it has. iOS is unmeasured (no simulator boots here).
 A new engine, or a new client built outside these factories, states its cache and cookie store here and is measured
 as the Darwin one was: the app's container listed after a pass.
 

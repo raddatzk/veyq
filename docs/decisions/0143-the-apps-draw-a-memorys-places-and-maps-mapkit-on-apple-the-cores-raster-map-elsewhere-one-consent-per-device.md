@@ -187,8 +187,27 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
   browser" is, in the apps, one per device; its rules (the hosts named, a new host asked again, a withdrawal at once)
   are the same and held by the core.
 - **Apple is a recipient on iOS and macOS.** The consent there names Apple Maps for the map and the operator's geocoder
-  for place names; the notice names Apple (decision 13). What MapKit keeps on disk is Apple's and is measured and named
-  in [`src/mobile/CLAUDE.md`](../../src/mobile/CLAUDE.md) § Nothing on disk when the Apple map is built.
+  for place names; the notice names Apple (decision 13). What MapKit keeps on disk is Apple's, named in
+  [`src/mobile/CLAUDE.md`](../../src/mobile/CLAUDE.md) § Nothing on disk.
+- **Measured 2026-11-16 on macOS 26.7 (phase 7), before the Apple map was built:** a probe built as the Mac app is —
+  unsandboxed, ad-hoc signed (`codesign -s -`), **no entitlement at all** (`codesign -d --entitlements -` empty) — ran
+  headless from its binary while the screen was locked; `MKMapSnapshotter` answered a drawn map of Munich and one of
+  El Chaltén (a place no earlier map on this Mac had shown) within a second each, so a MapKit map loads without a Maps
+  entitlement (decision 12 holds; nothing is added). Its `MKMapView` in a window reported neither loaded nor failed
+  while the screen was locked: a window's map is drawn only on an unlocked screen. What the run left, listed by
+  `find … -newer <marker>` over `~/Library/{Caches,HTTPStorages,Preferences,Application Support,Saved Application State}`
+  and the user's `DARWIN_USER_CACHE_DIR`/`TEMP_DIR`: **in the app's own places only Metal's compiled shaders**
+  (`$DARWIN_USER_CACHE_DIR/<bundle id>/com.apple.metal/…`: shader functions, no map data) — no `~/Library/Caches/<bundle
+  id>`, no `HTTPStorages`, no preferences. **Outside the app, Apple's map daemons wrote**: `~/Library/Caches/GeoServices/`
+  (`ResourceManifest.pbd`, `DirectReadConfigStore.plist` and regional icon packs — Budapest's and Italy's transit icons,
+  none of the regions shown), `~/Library/Caches/com.apple.geoanalyticsd/APDB.db-wal` (Apple's map analytics database,
+  3 MB, written at the run), and `geod`'s tile cache lives in its own container, `~/Library/Containers/com.apple.geod/`,
+  which macOS's privacy protection kept from being listed (the listing waited on a permission no one could grant).
+  **Residual (Apple's, of a closed system service):** the tiles of the region a member viewed may stay in `geod`'s cache,
+  shared with every app and Apple Maps itself, at rest outside the app, which the app can neither list nor clear — the
+  record of places that decision 4 keeps off disk on the other platforms; and `geoanalyticsd` records map use under
+  Apple's own analytics settings. iOS was not measured (its simulators do not boot on this Mac; a device's container is
+  the owner's pass, phase 9).
 - **Residual — no tile survives a launch.** A tile viewed in an earlier launch is fetched again, while the tile policy
   asks for "a sufficient local cache". Our reading: a photo app's map traffic is a person browsing their own Memories,
   and honouring the headers in memory is that cache for a session. A sealed cache across launches, in ADR 0140's
