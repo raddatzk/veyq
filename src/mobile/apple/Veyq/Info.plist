@@ -16,6 +16,11 @@
 	<array>
 		<string>me.raddatz.veyq.offline.*</string>
 	</array>
+	<!-- A Memory's music plays on in the background and with the screen off (ADR 0142 decision 3); a Mac ignores it. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<!-- App Transport Security stays on everywhere but the developer's own dev instance, a *.localhost tenant. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>

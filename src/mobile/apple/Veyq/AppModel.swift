@@ -1100,7 +1100,7 @@ final class AppModel {
     }
 
     /// Picked audio files (`urls`) added to `music`'s node as tracks: each checked on the device, the refused said.
-    func addMusic(_ music: MusicModel, urls: [URL]) async -> [String] {
+    @discardableResult func addMusic(_ music: MusicModel, urls: [URL]) async -> [String] {
         let sources: [UploadSource] = urls.compactMap { url in
             guard let p = Picked(url) else { return nil }
             return AppleMemories.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })

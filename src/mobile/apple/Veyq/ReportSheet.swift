@@ -8,6 +8,8 @@ import VeyqCore
 struct ReportSheet: View {
     let model: AppModel
     let ref: NodeAt
+    /// Another sheet than the node's own (a music track's, reported as an ITEM: ADR 0142 decision 11); nil: the node's.
+    var make: (@MainActor () -> VeyqCore.ReportSheet?)? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var box = ReportBox()
@@ -31,7 +33,7 @@ struct ReportSheet: View {
         }
         .interactiveDismissDisabled(sending)
         .task {
-            guard box.sheet == nil, let made = model.reportSheet(ref) else { return }
+            guard box.sheet == nil, let made = make.map({ $0() }) ?? model.reportSheet(ref) else { return }
             box.start(made)
         }
         .onDisappear { box.stop() }
@@ -54,7 +56,7 @@ struct ReportSheet: View {
                 Text(say(.reportIntro))
                     .font(.subheadline).foregroundStyle(Role.muted)
             }
-            Section(say(.reportScope)) {
+            if sheet.offersName { Section(say(.reportScope)) {
                 Picker(say(.reportScope), selection: Binding(get: { st.whole }, set: { sheet.whole(on: $0) })) {
                     Text(say(.reportScopeWhole)).tag(true)
                     Text(say(.reportScopeName)).tag(false)
@@ -63,7 +65,7 @@ struct ReportSheet: View {
                 .labelsHidden()
                 Text(say(st.scopeHint))
                     .font(.caption).foregroundStyle(Role.muted)
-            }
+            } }
             Section(say(.reportCategory)) {
                 ForEach(sheet.categories, id: \.token) { c in
                     Button { sheet.category(token: c.token) } label: {
