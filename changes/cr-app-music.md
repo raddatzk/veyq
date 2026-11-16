@@ -302,6 +302,14 @@ lightbox plays and starts again by itself when the video stops or the lightbox m
   A dropped end after a `stop` has nothing left to play, so the stop case asserts the end wakes not even the
   `AudioContext` — the one thing a live end does where no deck holds a source; bite (c) went red there. The add-music Use
   pages (EN, DE) do not speak of the lightbox: unchanged.
+  *As built after phase 4 (2026-11-16):* the web's `interrupt()` paused only a playing queue, so a track still loading
+  when the video started sounded during it; `player.ts` now holds it as the core's `MusicPlayer` does (a `starting`
+  flag; a track that loads while the interruption is live becomes the active deck, paused, and only the end starts it;
+  every listener action frees the hold). New `player.test.ts` cases: the first track loading → silent until the end;
+  the next track loading (a crossfade ahead) → the same; a listener's play while it loads → it starts once loaded and
+  the end does nothing. The first two red before the fix; the third green before it (nothing was held then) and kept
+  as the hold's release. Bites: the hold removed → both loading cases red; `interrupt()` blind to a loading track →
+  the first-track case red.
 
 - [x] **3 the player (core `audio/`)** — `Order`, `Fades`, `MusicPlayer` with `interrupt()` (D13), `NowPlaying`, the
   deck port (D2) and the system controls' port (D3's core half), with a played deck for tests. · Done when: `./gradlew
@@ -322,7 +330,7 @@ lightbox plays and starts again by itself when the video stops or the lightbox m
   the end resuming unconditionally → the listener's-pause/-play cases red; a new queue not counted → its case red.
   A track still loading when `interrupt()` came started during the video (D13 paused only a playing queue) — fixed in
   phase 4 (coordinator 2026-11-15): such a track is held, silent until the interruption's end starts it; ADR 0142
-  decision 13 says so, and that the web's player keeps the gap.
+  decision 13 says so. The web's player held it too from 2026-11-16 (phase 2's as-built note).
 
 - [x] **4 Memories' music (core `memories/music/`)** — `MusicQueue`, `AudioFacts`, `Frames`, `Wav`, `MusicUpload` (D7),
   `TrackLabel` (D10), the ITEM report (D11), `MusicModel` (D8), the header toggle (D6), the lightbox's compact-control

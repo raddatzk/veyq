@@ -63,8 +63,9 @@ holds the keys, exactly as the lightbox does, and core plays the URL it gets. `r
 - **A video interrupts it** (ADR 0142 decision 13): `interrupt()` pauses a playing queue and returns an end, which
   resumes the queue only when it was playing when interrupted and no listener's play or pause, new queue or stop came
   between; the end is good once. A play pressed during the video sounds both, and the end then does nothing; a pause
-  pressed keeps it paused after the video. While interrupted the bar, the compact controls and the lock screen show it
-  paused. Memories' lightbox (`MediaLightbox.vue`) raises it when its `<video>` fires `playing` (a muted video counts)
+  pressed keeps it paused after the video. A track still loading when the video starts (the queue's first, or the next
+  one on its way in) is held: it does not start during the video, and the end starts it. While interrupted the bar, the
+  compact controls and the lock screen show it paused. Memories' lightbox (`MediaLightbox.vue`) raises it when its `<video>` fires `playing` (a muted video counts)
   and ends it on the video's `pause` and `ended`, an item change (by hand or the slideshow) and its unmount.
 
 ## Lifetime
