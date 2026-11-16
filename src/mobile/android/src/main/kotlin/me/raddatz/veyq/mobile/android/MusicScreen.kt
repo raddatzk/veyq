@@ -167,15 +167,25 @@ internal fun MusicCompactControls(now: NowPlaying, commands: PlayerCommands) {
     }
 }
 
-/** Which of a Memory's views shows: its photos and videos, or its music (ADR 0142 decision 6). */
-internal enum class MemoryView { PHOTOS, MUSIC }
+/** Which of a Memory's views shows: its photos and videos, its music (ADR 0142 decision 6), its map (ADR 0143 D8). */
+internal enum class MemoryView { PHOTOS, MUSIC, MAP }
 
-/** The view switch inside a Memory's screen (Material's primary tabs), where the node has music or the viewer may add some. */
+/**
+ * The view switch inside a Memory's screen (Material's primary tabs): Photos | Music | Map — Music where the node has music
+ * or the viewer may add some ([music]), Map always, as the web's tab is.
+ */
 @Composable
-internal fun MemoryViewSwitch(view: MemoryView, onView: (MemoryView) -> Unit) {
-    PrimaryTabRow(selectedTabIndex = view.ordinal, containerColor = MaterialTheme.colorScheme.background) {
-        Tab(selected = view == MemoryView.PHOTOS, onClick = { onView(MemoryView.PHOTOS) }, text = { Text(say(Msg.MUSIC_VIEW_PHOTOS)) })
-        Tab(selected = view == MemoryView.MUSIC, onClick = { onView(MemoryView.MUSIC) }, text = { Text(say(Msg.MUSIC_VIEW_MUSIC)) })
+internal fun MemoryViewSwitch(view: MemoryView, music: Boolean, onView: (MemoryView) -> Unit) {
+    val views = if (music) MemoryView.entries else listOf(MemoryView.PHOTOS, MemoryView.MAP)
+    PrimaryTabRow(selectedTabIndex = views.indexOf(view).coerceAtLeast(0), containerColor = MaterialTheme.colorScheme.background) {
+        for (v in views) {
+            val words = when (v) {
+                MemoryView.PHOTOS -> Msg.MUSIC_VIEW_PHOTOS
+                MemoryView.MUSIC -> Msg.MUSIC_VIEW_MUSIC
+                MemoryView.MAP -> Msg.MEMORY_VIEW_MAP
+            }
+            Tab(selected = view == v, onClick = { onView(v) }, text = { Text(say(words)) })
+        }
     }
 }
 
@@ -217,6 +227,7 @@ internal fun MusicView(gallery: GalleryModel, music: MusicModel, model: AppModel
     CreateAction(say(Msg.MUSIC_ADD), shown = state.rights.add, onClick = { pick.launch(arrayOf("audio/*")) }) { list, bottom ->
         LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = bottom)) {
             item(key = "hero") { hero(16.dp) }
+            item(key = "facts") { MemoryFactsLine(gallery, model) }
             stickyHeader(key = "views") { viewSwitch() }
             if (state.checking) item(key = "checking") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             val tracks = state.tracks
