@@ -228,12 +228,14 @@ internal class Tenant(
         shell?.let { s -> { g -> s.placeEditor(g) } },
     /**
      * The Memories bar's Map tab (`ShellModel.memoriesMap`) over the application's All list as the shell holds it now (ADR
-     * 0143 decision 6: the Map tab's set is the All tab's).
+     * 0143 decision 6: the Map tab's set is the All tab's) — its Favorites, Recent and the rest, each object listed once
+     * there (ADR 0122 decision 5), so `all` alone would leave out every Memory used lately.
      */
     val memoriesMap: (suspend () -> me.raddatz.veyq.mobile.memories.place.MemoriesMap)? = shell?.let { s ->
         {
-            val all = s.state.value?.lists?.applicationList(ApplicationId.MEMORIES)?.all.orEmpty()
-            s.memoriesMap(all.map { NodeRef(it.scopeId, it.nodeId, null, it.kind, it.name) })
+            val list = s.state.value?.lists?.applicationList(ApplicationId.MEMORIES)
+            val listed = list?.let { it.favorites + it.recent + it.all }.orEmpty().distinctBy { it.scopeId to it.nodeId }
+            s.memoriesMap(listed.map { NodeRef(it.scopeId, it.nodeId, null, it.kind, it.name) })
         }
     },
     /** Every Memory's and chapter's date by node (`ShellModel.memoryDates`): a row's second line. */
