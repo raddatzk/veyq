@@ -15,11 +15,18 @@ use adw::prelude::*;
 use gtk::glib;
 
 use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::DateMode, wire::DateShown, wire::FactsSave, wire::GalleryShown,
-    wire::MemoryDateShown, wire::PlaceMode, wire::PlaceNaming, wire::PlaceShown, wire::Update, wire::Watched};
+    wire::LevelShown, wire::MemoryDateShown, wire::PlaceMode, wire::PlaceNaming, wire::PlaceShown, wire::Update, wire::Watched};
 use crate::home::glib_escape;
 use crate::raster_map::RasterMap;
 use crate::typed::Typed;
 use crate::{said, words};
+
+/// Whether the level picker's rows must be drawn anew: a lookup at another spot answers the same levels with other names
+/// (a pan from Munich's Marienplatz to Waldperlach, seen live 2026-11-16), and rows kept by their levels alone showed the
+/// old spot's names while a pick sent the new spot's.
+fn picker_redrawn(drawn: &[LevelShown], shown: &[LevelShown]) -> bool {
+    drawn != shown
+}
 
 /// A Memory's date as the facts line and its row say it: one day, a range, "Since …" for an ongoing one; none without a day.
 pub fn date_text(d: &MemoryDateShown) -> Option<String> {
@@ -365,7 +372,7 @@ struct PlaceEditor {
     name: adw::EntryRow,
     typed: RefCell<Typed>,
     level: adw::ComboRow,
-    levels: RefCell<Vec<String>>,
+    levels: RefCell<Vec<LevelShown>>,
     toggle: gtk::Button,
     remove: gtk::Button,
     failed: gtk::Label,
@@ -506,7 +513,7 @@ impl PlaceEditor {
             if e.drawing.get() {
                 return;
             }
-            let level = e.levels.borrow().get(row.selected() as usize).cloned();
+            let level = e.levels.borrow().get(row.selected() as usize).map(|l| l.level.clone());
             if let (Some(place), Some(level)) = (e.id.get(), level) {
                 eprintln!("veyq: place editor: level {level}");
                 bridge::send(Call::PlaceLevel { place, level });
@@ -554,13 +561,12 @@ impl PlaceEditor {
         if let Some(text) = self.typed.borrow_mut().take(focused, &self.name.text(), &s.name) {
             self.name.set_text(&text);
         }
-        let tokens: Vec<String> = s.levels.iter().map(|l| l.level.clone()).collect();
-        if *self.levels.borrow() != tokens {
+        if picker_redrawn(&self.levels.borrow(), &s.levels) {
             let names: Vec<&str> = s.levels.iter().map(|l| l.name.as_str()).collect();
             self.level.set_model(Some(&gtk::StringList::new(&names)));
-            *self.levels.borrow_mut() = tokens;
+            *self.levels.borrow_mut() = s.levels.clone();
         }
-        if let Some(at) = s.chosen_level.as_ref().and_then(|c| self.levels.borrow().iter().position(|l| l == c))
+        if let Some(at) = s.chosen_level.as_ref().and_then(|c| self.levels.borrow().iter().position(|l| &l.level == c))
             && self.level.selected() != at as u32
         {
             self.level.set_selected(at as u32);
@@ -609,5 +615,19 @@ mod tests {
         assert_eq!(date_text(&d(DateMode::Range, Some("2026-05-01"), Some("2026-05-03"))), Some(format!("{} – {}", said::day("2026-05-01"), said::day("2026-05-03"))));
         assert_eq!(date_text(&d(DateMode::Auto, Some("2026-05-01"), Some("2026-05-01"))), Some(said::day("2026-05-01")));
         assert_eq!(date_text(&d(DateMode::Ongoing, Some("2026-05-01"), None)), Some(words::memory_date_since(&said::day("2026-05-01"))));
+    }
+
+    fn levels(pairs: &[(&str, &str)]) -> Vec<LevelShown> {
+        pairs.iter().map(|(level, name)| LevelShown { level: (*level).to_owned(), name: (*name).to_owned() }).collect()
+    }
+
+    /// A pan's lookup answering the same levels under other names draws the picker anew; the same answer does not.
+    #[test]
+    fn the_level_picker_is_redrawn_when_a_levels_name_changes() {
+        let marienplatz = levels(&[("road", "Marienplatz 26"), ("suburb", "Old Town"), ("city", "Munich")]);
+        let waldperlach = levels(&[("road", "Putzbrunner Straße"), ("suburb", "Waldperlach"), ("city", "Munich")]);
+        assert!(picker_redrawn(&marienplatz, &waldperlach));
+        assert!(picker_redrawn(&[], &marienplatz));
+        assert!(!picker_redrawn(&marienplatz, &marienplatz.clone()));
     }
 }
