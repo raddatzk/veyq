@@ -357,7 +357,8 @@ internal sealed class MusicView : IDisposable
             if (answer is Answer.MusicAdded { said: var said })
             {
                 Log.Write($"music added: {said.Count} refused ({string.Join(", ", said.Select(n => n.msg))})");
-                foreach (var n in said) _say(false, Said.Notice(n));
+                // the last refusal is the view's own said as well (MusicShown.said), which says it once: the rest here
+                foreach (var n in said.Take(said.Count - 1)) _say(false, Said.Notice(n));
             }
             else Log.Write($"Music.Add answered {answer.GetType().Name}");
         }

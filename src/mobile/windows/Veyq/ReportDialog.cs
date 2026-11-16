@@ -193,6 +193,8 @@ internal sealed class ReportDialog
             if (!_drawing && scope.SelectedIndex >= 0) Act.Send(new Call.ReportWhole { report = report, whole = scope.SelectedIndex == 0 });
         };
         panel.Children.Add(scope);
+        // a track's report (an ITEM) has no name to report apart: no choice, sent whole (ADR 0142 decision 11)
+        if (!s.offersName) scope.Visibility = Visibility.Collapsed;
         var scopeHint = Text("", "report-scope-hint", "TextFillColorSecondaryBrush");
         scopeHint.Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"];
         panel.Children.Add(scopeHint);
