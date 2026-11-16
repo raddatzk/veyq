@@ -183,7 +183,8 @@ def in_container(docker_platform: str, mounts: dict[Path, str], env: dict[str, s
     """Runs bash [script] in the image, [mounts] read-only, [writable] read-write, [volumes] the named volumes; with
     VEYQ_LIVE, the dev origin reachable under its own name and the seeded principal's env file at /veyq/env. [secrets]
     reach the container by name only (`-e NAME`, the value in docker's own environment), so the printed command holds
-    none of them. Returns the script's exit code."""
+    none of them — but the container's environment does: a pass never prints it (`env`, `docker inspect`), which once
+    showed the dev principal's password and Secret Key (src/mobile/CLAUDE.md § Traps). Returns the script's exit code."""
     docker = ["docker", "run", "--rm", "--platform", docker_platform] + (docker_args or [])
     for k in secrets or {}:
         docker += ["-e", k]
