@@ -170,7 +170,12 @@ class SecretFreeSchemaTest {
         )
         assertEquals(listOf("Leaky2.refreshToken: named like a secret"), leaks(listOf(Leaky2.serializer()), identifiers))
         assertTrue(leaks(listOf(Leaky3.serializer()), identifiers).single().endsWith("password: named like a secret"))
+        assertEquals(listOf("Leaky4.K_blob: named like a secret", "Leaky4.kShare: named like a secret"), leaks(listOf(Leaky4.serializer()), identifiers))
     }
+
+    @Serializable @kotlinx.serialization.SerialName("Leaky4")
+    @Suppress("PropertyName")
+    class Leaky4(val kind: String, val K_blob: String?, val kShare: String?)
 
     /**
      * Bytes the UI shows ride beside the JSON (`Answer.Bytes`), never in it (ADR 0137 decision 1): a byte array is
@@ -207,7 +212,7 @@ class SecretFreeSchemaTest {
         return schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }.flatMap { f ->
             val at = "${f.owner}.${f.name}"
             listOfNotNull(
-                "$at: named like a secret".takeIf { SECRET.containsMatchIn(f.name) && at !in allowed },
+                "$at: named like a secret".takeIf { (SECRET.containsMatchIn(f.name) || KEY_SYMBOL.containsMatchIn(f.name)) && at !in allowed },
                 "$at: bytes".takeIf { bytes(f.descriptor) },
             )
         }
@@ -222,6 +227,12 @@ class SecretFreeSchemaTest {
 
     companion object {
         private val SECRET = Regex("key|seal|token|secret|passw|private|wrap", RegexOption.IGNORE_CASE)
+
+        /**
+         * A key named as the web and the ADRs name one (`K_blob`, `K_share`, `kNode`): a `K` or `k` followed by an underscore
+         * or a capital, which [SECRET] does not see (a music track's `K_blob` crossed it unseen, cr-app-music phase 5's bite).
+         */
+        private val KEY_SYMBOL = Regex("^[kK](_|[A-Z])")
         private val ADDRESS = Regex("url|address", RegexOption.IGNORE_CASE)
         private val PAIRING = Regex("handle|payload|grant|envelope|channel|transport|marker", RegexOption.IGNORE_CASE)
     }
