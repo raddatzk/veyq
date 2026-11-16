@@ -59,6 +59,15 @@ public static unsafe class Core
     public static Func<HostRequest, Task<(HostReply Reply, byte[]? Payload)>?>? Drawer { get; set; }
 
     /// <summary>
+    /// What plays the music the core asks for (ADR 0142 decisions 2 and 3: the player's two decks, <c>Audio.*</c>, and the
+    /// system's controls, <c>Controls.*</c>): the app's, set before the core starts. Unlike <see cref="Drawer"/> it is called
+    /// on the core's thread itself, in the order the core asks, so it can hand each request on to the one thread its players
+    /// live on in that order (a ramp told before a clear is run before it); its task's reply is sent when it completes.
+    /// Without one, every such request is answered failed.
+    /// </summary>
+    public static Func<HostRequest, Task<HostReply>>? Player { get; set; }
+
+    /// <summary>
     /// Starts the core once per process with <paramref name="store"/> as the device's store, which the core reads from its own
     /// threads until the process ends.
     /// </summary>
@@ -203,9 +212,17 @@ public static unsafe class Core
         {
             var store = (DeviceStore)GCHandle.FromIntPtr((nint)ctx).Target!;
             var request = JsonSerializer.Deserialize(Copy(json), WireContext.Default.HostRequest) ?? throw new JsonException("null");
-            if (request is HostRequest.PdfPages or HostRequest.PdfPage or HostRequest.PictureLuma or HostRequest.MediaDuration or HostRequest.MediaTiers)
+            if (request is HostRequest.PdfPages or HostRequest.PdfPage or HostRequest.PictureLuma or HostRequest.MediaDuration or HostRequest.MediaTiers
+                or HostRequest.WordsSay)
             {
                 Draw(token, request);
+                return;
+            }
+            if (request is HostRequest.AudioLoad or HostRequest.AudioPlay or HostRequest.AudioPause or HostRequest.AudioSeek
+                or HostRequest.AudioPosition or HostRequest.AudioRamp or HostRequest.AudioClear
+                or HostRequest.ControlsBind or HostRequest.ControlsShow or HostRequest.ControlsClear)
+            {
+                Play(token, request);
                 return;
             }
             reply = store.Answer(request);
@@ -244,6 +261,31 @@ public static unsafe class Core
                     if (drawn.Item2 is { } p) Array.Clear(p);
                 }
             }, TaskScheduler.Default);
+    }
+
+    /// <summary>A request of the music handed to <see cref="Player"/> on this (core) thread, in order; one reply when its task ends.</summary>
+    private static void Play(ulong token, HostRequest request)
+    {
+        Task<HostReply> played;
+        try
+        {
+            played = Player?.Invoke(request) ?? Task.FromResult<HostReply>(new HostReply.Failed { error = "this host plays nothing" });
+        }
+        catch (Exception e)
+        {
+            played = Task.FromResult<HostReply>(new HostReply.Failed { error = $"the host failed: {e.GetType().Name}" });
+        }
+        played.ContinueWith(t =>
+        {
+            try
+            {
+                Reply(token, t.IsCompletedSuccessfully ? t.Result : new HostReply.Failed { error = $"the player failed: {t.Exception?.InnerException?.GetType().Name}" }, null);
+            }
+            catch (Exception e)
+            {
+                Fault(e);
+            }
+        }, TaskScheduler.Default);
     }
 
     /// <summary>The reply to <paramref name="token"/>, <paramref name="payload"/> beside it (read before this returns).</summary>

@@ -67,13 +67,38 @@ internal static class MediaTiers
         }
     }
 
-    /// <summary>The length of the video at <paramref name="path"/> in milliseconds; null where it does not open or says none.</summary>
+    /// <summary>The length of the video or audio file at <paramref name="path"/> in milliseconds; null where it does not
+    /// open or says none. A clip's (Windows.Media.Editing) first, as a video's poster reads it; where the clip refuses the
+    /// file, Media Foundation's own source: MediaClip reads MP3, M4A (AAC, ALAC), ADTS, FLAC and WAV but refuses Ogg (Vorbis
+    /// and Opus, 0x80070057, measured on the VM 2026-11-16 with the Web Media extension), which MediaSource.OpenAsync reads —
+    /// a picked track's length (Music.Add, ADR 0142 decision 7).</summary>
     public static async Task<long?> DurationMsAsync(string path)
     {
+        StorageFile file;
         try
         {
-            var clip = await MediaClip.CreateFromFileAsync(await StorageFile.GetFileFromPathAsync(Path.GetFullPath(path)));
+            file = await StorageFile.GetFileFromPathAsync(Path.GetFullPath(path));
+        }
+        catch (Exception e)
+        {
+            Log.Write($"media duration: none ({e.GetType().Name} {e.HResult:X8})");
+            return null;
+        }
+        try
+        {
+            var clip = await MediaClip.CreateFromFileAsync(file);
             var ms = (long)clip.OriginalDuration.TotalMilliseconds;
+            if (ms > 0) return ms;
+        }
+        catch (Exception e)
+        {
+            Log.Write($"media duration: no clip ({e.GetType().Name} {e.HResult:X8}), the source asked");
+        }
+        try
+        {
+            using var source = Windows.Media.Core.MediaSource.CreateFromStorageFile(file);
+            await source.OpenAsync();
+            var ms = (long)(source.Duration?.TotalMilliseconds ?? 0);
             return ms > 0 ? ms : null;
         }
         catch (Exception e)
