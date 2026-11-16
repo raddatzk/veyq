@@ -411,6 +411,105 @@ class MusicPlayerTest {
         assertEquals("a", h.playing().name)
     }
 
+    // --- a listener's pause while a track loads holds it, as an interruption does (ADR 0142 decision 13) ----------------
+
+    @Test
+    fun aListenersPauseWhileTheFirstTrackLoadsKeepsItSilentAndPausedOnceLoadedAndResumePlaysIt() = runTest {
+        val h = harness(mapOf("a" to 62_000))
+        val gate = CompletableDeferred<Unit>()
+        h.player.play(PlayerQueue("n1", listOf(h.audio.Track("a", gate = gate).t)))
+        h.settle()
+        h.player.pause()
+        h.settle()
+        gate.complete(Unit)
+        h.settle()
+        assertEquals(0, h.audio.decks.sumOf { it.plays }, "no sound after the pause")
+        assertEquals(Triple("a", false, false), Triple(h.now!!.trackId, h.now!!.playing, h.audio.controls.shown!!.playing))
+        h.tick()
+        assertEquals(false, h.now!!.playing, "the tick reads it paused too")
+        h.player.resume()
+        h.settle()
+        assertEquals("a", h.playing().name)
+        assertEquals(Triple(true, true, 1000L), Triple(h.now!!.playing, h.audio.controls.shown!!.playing, h.playing().position))
+    }
+
+    @Test
+    fun aListenersPauseDuringTheVideoWhileTheTrackLoadsKeepsItSilentAfterTheVideo() = runTest {
+        val h = harness(mapOf("a" to 62_000))
+        val gate = CompletableDeferred<Unit>()
+        h.player.play(PlayerQueue("n1", listOf(h.audio.Track("a", gate = gate).t)))
+        h.settle()
+        val video = h.player.interrupt()
+        h.settle()
+        h.player.pause()
+        h.settle()
+        gate.complete(Unit)
+        h.settle()
+        video.end()
+        h.settle()
+        assertEquals(0, h.audio.decks.sumOf { it.plays }, "no sound after the video")
+        assertEquals(false, h.now!!.playing)
+    }
+
+    @Test
+    fun aVideoAfterAListenersPauseWhileTheTrackLoadsDoesNotStartItAtItsEnd() = runTest {
+        val h = harness(mapOf("a" to 62_000))
+        val gate = CompletableDeferred<Unit>()
+        h.player.play(PlayerQueue("n1", listOf(h.audio.Track("a", gate = gate).t)))
+        h.settle()
+        h.player.pause()
+        h.settle()
+        val video = h.player.interrupt()
+        h.settle()
+        gate.complete(Unit)
+        h.settle()
+        video.end()
+        h.settle()
+        assertEquals(0, h.audio.decks.sumOf { it.plays }, "the video interrupted nothing that played")
+        assertEquals(false, h.now!!.playing)
+    }
+
+    @Test
+    fun aListenersPauseWhileTheNextTrackOpensAheadKeepsItSilentAndTheOutgoingOnePaused() = runTest {
+        val h = harness(mapOf("a" to 62_000, "b" to 62_000))
+        val gate = CompletableDeferred<Unit>()
+        h.player.play(PlayerQueue("n1", listOf(h.audio.Track("a").t, h.audio.Track("b", gate = gate).t), startId = "a"))
+        h.settle()
+        val first = h.playing()
+        first.position = 41_000 // 15 s before the fade: b is opened ahead
+        h.tick()
+        h.player.pause()
+        h.settle()
+        first.position = 56_000 // where the fade would start, were it playing
+        gate.complete(Unit)
+        h.tick()
+        assertTrue(h.audio.decks.none { it.playing }, "no sound after the pause")
+        assertEquals(Pair("a", false), Pair(h.now!!.trackId, h.now!!.playing))
+        h.player.resume()
+        h.settle()
+        assertEquals("a", h.playing().name, "resume plays the outgoing one, where it was paused")
+    }
+
+    @Test
+    fun aListenersPauseWhileTheNextTrackIsOnItsWayInKeepsItSilentAndPausedAndResumePlaysIt() = runTest {
+        val h = harness(mapOf("a" to 62_000, "b" to 62_000))
+        val gate = CompletableDeferred<Unit>()
+        h.player.play(PlayerQueue("n1", listOf(h.audio.Track("a").t, h.audio.Track("b", gate = gate).t), startId = "a"))
+        h.settle()
+        h.playing().position = 56_000 // the fade's start: b is opened and awaited
+        h.tick()
+        h.player.pause()
+        h.settle()
+        gate.complete(Unit)
+        h.settle()
+        assertTrue(h.audio.decks.none { it.playing }, "no sound after the pause")
+        assertEquals(Pair("b", false), Pair(h.now!!.trackId, h.now!!.playing))
+        h.player.resume()
+        h.settle()
+        assertEquals("b", h.playing().name)
+        assertEquals(true, h.now!!.playing)
+    }
+
     @Test
     fun anInterruptionWithNothingPlayingIsHarmless() = runTest {
         val h = harness()
