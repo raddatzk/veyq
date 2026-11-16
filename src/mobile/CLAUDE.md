@@ -5,7 +5,7 @@ a Kotlin Multiplatform base under each platform's own UI ([ADR 0123](../../docs/
 A Gradle build of its own, run through its own wrapper.
 
 - `core/` — the shared base: the v1 suite (`crypto/`), the generated API client (`build/generated/openapi`, from
-  `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), the music player (`audio/`, ADR 0142 decisions 1–3 and 13: the order, the fades, `MusicPlayer` with its interruption, and the two ports each platform implements — `Deck` and `SystemControls`, not yet implemented by any app), a photo's and a video's metadata read from their bytes (`media/`),
+  `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), the music player (`audio/`, ADR 0142 decisions 1–3 and 13: the order, the fades, `MusicPlayer` with its interruption, and the two ports each platform implements — `Deck` and `SystemControls`, carried over the bridge as host requests, drawn by no app yet), a photo's and a video's metadata read from their bytes (`media/`),
   files on the device by the path a platform's dialog gave (`blob/FileSink`, `blob/FileSource`, `nativeMain`: the
   core opens, writes and reads them, and removes a download that did not finish; the one call that differs is
   `blob/Files.kt`'s, `posixMain` for Apple and Linux, `mingwMain` for Windows; [ADR 0137](../../docs/decisions/0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md) decision 3), when the members'
@@ -95,6 +95,16 @@ A Gradle build of its own, run through its own wrapper.
   payload; `MediaDuration` for a poster's time), never on the deriving or the UI thread; `Shell.CreateMemory` and
   `Gallery.CreateChapter` answer `Created(node, notice)`; a list row's cover is `Shell.RowCover` (ADR 0137's
   Consequences).
+  A node's music (ADR 0142): the account's one player is made when a tenant opens and stopped when it closes (its readers
+  released, its decks cleared); `Watched.Player` → `PlayerShown` (the bar), its commands — the bar's, the lightbox's compact
+  controls' and the system's — `Player.Pause|Resume|Next|Previous|Seek|Stop|OpenNode`; the header's play or stop
+  `Gallery.Music`, a lightbox video's `Lightbox.Video(playing)`; a page's Music view `Music.Open` (`Watched.Music`:
+  `MusicShown`) with `Music.Play|Rename|Remove|Download|Report|Add(paths)|Seen|Close`. The two decks are the host's
+  (`HostDeck`): `Audio.Load` hands a reader by id (read through `Reader.Read`, dropped at `Audio.Clear`), `Audio.Play` and
+  `Audio.Position` are asked without blocking the player's lane (`Host.asking`), `Audio.Pause|Seek|Ramp|Clear` told
+  (`Host.tell`), and the host reports `Audio.Ended|Failed(deck, load)` as calls — one of a load no longer held is dropped.
+  The system's controls are told `Controls.Bind|Show|Clear`; a picked track's length is `Media.Duration`, an untitled
+  track's title the host's `Words.Say`.
   A device link (ADR 0059) is opened by its role's call — the trusted device's `Link.ShowForNewDevice`/`ScanSignInCode`
   over a connection (a tenant open; they close with it), the new device's `Link.ScanFromTrusted`/`ShowForSignIn` over the
   sign-in form's server — answered `LinkOpened(link)` for `Watched.Link` (`LinkShown`: the core's `DeviceLink.Shown`).
