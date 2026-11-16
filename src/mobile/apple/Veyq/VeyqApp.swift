@@ -5,6 +5,13 @@ struct VeyqApp: App {
     @State private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
 
+    init() {
+        #if DEBUG
+        // the music's format matrix, no sign-in and no window needed (DevAudio)
+        if let dir = DevAudio.requested { Task { await DevAudio.run(dir) } }
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             #if DEBUG

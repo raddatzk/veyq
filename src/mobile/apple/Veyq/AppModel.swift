@@ -613,6 +613,7 @@ final class AppModel {
         closeGallery(windows: true)
         galleryShown = nil
         openMedia(model, switched: switched)
+        openMusic(model, switched: switched)
         dropHeaders()
         closeFile()
         try await model.load(openLastUsed: incoming == nil)
@@ -893,7 +894,7 @@ final class AppModel {
         if let held = openGallery, held.model.node == node { return held.model }
         guard let m = shellModel, let uploads = media else { return nil }
         closeGallery()
-        let made = m.galleryModel(ref: node, uploads: uploads)
+        let made = m.galleryModel(ref: node, uploads: uploads, music: galleryMusic)
         let id = ObjectIdentifier(made)
         let watch = made.watch { @Sendable state in
             nonisolated(unsafe) let state = state
@@ -918,6 +919,7 @@ final class AppModel {
     /// The gallery goes (another opened, the tenant closed): its lightbox and a video's reader close with it. The tenant's
     /// close passes `windows`: every lightbox window's gallery goes too.
     private func closeGallery(windows: Bool = false) {
+        closeMusicView()
         openGallery?.watch.stop()
         openGallery?.model.close()
         openGallery = nil
@@ -941,7 +943,7 @@ final class AppModel {
     /// read it waits for it). Nil where the node is no longer a listed Memory or chapter, or no tenant is open.
     func windowLightbox(_ value: LightboxWindowValue) -> WindowLightbox? {
         guard let m = shellModel, let uploads = media, let node = m.galleryAt(scopeId: value.scopeId, nodeId: value.nodeId) else { return nil }
-        let gallery = m.galleryModel(ref: node, uploads: uploads)
+        let gallery = m.galleryModel(ref: node, uploads: uploads, music: galleryMusic)
         windowGalleries[ObjectIdentifier(gallery)] = gallery
         return WindowLightbox(gallery: gallery, box: gallery.lightboxOn(mediaId: value.mediaId))
     }
@@ -992,6 +994,119 @@ final class AppModel {
         galleryShown = nil
         media?.close()
         media = nil
+        closeMusic()
+    }
+
+    // MARK: Music (ADR 0142)
+
+    /// The account's one music player (core's `MusicPlayer` over two `AVDeck`s and the system's controls), built when a
+    /// tenant opens and stopped where its models close: a sign-out, a switch to another tenant. Its queue plays on while the
+    /// person moves between pages and, on iOS, in the background.
+    @ObservationIgnored private var musicPlayer: MusicPlayer?
+    @ObservationIgnored private var musicPlayerWatch: MusicPlayer.Watch?
+    /// What plays now, for the bar and the lightbox's compact controls; nil while no queue is loaded.
+    private(set) var nowPlaying: NowPlaying?
+    /// The tracks that did not play on this device this session (the Music view marks them).
+    private(set) var musicSkipped: Set<String> = []
+    /// "None of these tracks can be played on this device", for 5 s after a queue ended so.
+    private(set) var musicNothingPlays = false
+    @ObservationIgnored private var musicNotice: PlayerNotice?
+
+    /// The player's commands (the bar's previous, play, pause, next, seek), nil while no tenant is open.
+    var musicCommands: (any PlayerCommands)? { musicPlayer }
+
+    /// What a gallery plays its music with: the account's player, an untitled track named by its number.
+    private var galleryMusic: GalleryModel.Music? {
+        musicPlayer.map { GalleryModel.Music(player: $0, untitled: { @Sendable n in say(.musicUntitled, n) }) }
+    }
+
+    private func openMusic(_ m: ShellModel, switched: Bool) {
+        if musicPlayer != nil, !switched { return }
+        closeMusic()
+        let player = m.musicPlayer(newDeck: { AVDeck.make($0) }, controls: SystemMusicControls())
+        musicPlayer = player
+        let id = ObjectIdentifier(player)
+        musicPlayerWatch = player.watch { @Sendable state in
+            nonisolated(unsafe) let state = state
+            Task { @MainActor [weak self] in self?.musicChanged(state, of: id) }
+        }
+    }
+
+    private func musicChanged(_ state: MusicPlayer.State, of player: ObjectIdentifier) {
+        guard let current = musicPlayer, ObjectIdentifier(current) == player else { return }
+        nowPlaying = state.nowPlaying
+        musicSkipped = state.skipped
+        if state.notice != musicNotice {
+            musicNotice = state.notice
+            if state.notice == .unplayable {
+                musicNothingPlays = true
+                Task { @MainActor [weak self] in
+                    try? await Task.sleep(for: .seconds(5))
+                    self?.musicNothingPlays = false
+                }
+            }
+        }
+    }
+
+    /// The bar's close: the queue stops.
+    func stopMusic() { musicPlayer?.stop() }
+
+    private func closeMusic() {
+        musicPlayerWatch?.stop()
+        musicPlayerWatch = nil
+        musicPlayer?.stop()
+        musicPlayer = nil
+        nowPlaying = nil
+        musicSkipped = []
+        musicNothingPlays = false
+        musicNotice = nil
+    }
+
+    /// The bar's node name: the Memory or chapter whose music plays opens.
+    func openMusicNode() {
+        if let route = nowPlaying?.route { open(route) }
+    }
+
+    /// The open page's Music view (core's `MusicModel` over its gallery), while the view shows; its state arrives in
+    /// `musicShown`.
+    @ObservationIgnored private var openMusicView: (model: MusicModel, watch: MusicModel.Watch)?
+    private(set) var musicShown: MusicModel.State?
+
+    /// `gallery`'s Music view model, made on its first ask.
+    func musicModel(_ gallery: GalleryModel) -> MusicModel? {
+        if let held = openMusicView, held.model.gallery === gallery { return held.model }
+        guard let m = shellModel, let uploads = media else { return nil }
+        closeMusicView()
+        let made = m.musicModel(gallery: gallery, uploads: uploads, measure: AssetMeasure(), left: { @Sendable source in
+            if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
+        })
+        let id = ObjectIdentifier(made)
+        let watch = made.watch { @Sendable state in
+            nonisolated(unsafe) let state = state
+            Task { @MainActor [weak self] in
+                guard let self, let open = self.openMusicView?.model, ObjectIdentifier(open) == id else { return }
+                self.musicShown = state
+            }
+        }
+        openMusicView = (made, watch)
+        return made
+    }
+
+    private func closeMusicView() {
+        openMusicView?.watch.stop()
+        openMusicView?.model.close()
+        openMusicView = nil
+        musicShown = nil
+    }
+
+    /// Picked audio files (`urls`) added to `music`'s node as tracks: each checked on the device, the refused said.
+    func addMusic(_ music: MusicModel, urls: [URL]) async -> [String] {
+        let sources: [UploadSource] = urls.compactMap { url in
+            guard let p = Picked(url) else { return nil }
+            return AppleMemories.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
+        }
+        guard !sources.isEmpty, let said = try? await music.add(sources: sources) else { return [] }
+        return said.map { say(notice: $0) }
     }
 
     /// Queues the picked photos and videos (`urls`; `fromPhotos`: copies the Photos picker handed over, whose own dates are

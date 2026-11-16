@@ -32,7 +32,21 @@ final class ReaderLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecked Se
 
     init(reader: RangeReader, mime: String?) {
         self.reader = reader
-        contentType = UTType(mimeType: mime ?? "video/mp4")?.identifier ?? UTType.mpeg4Movie.identifier
+        contentType = Self.contentType(mime)
+    }
+
+    /// The type the player is told for `mime`: a music track's audio types by the identifiers AVFoundation knows them by
+    /// (ADR 0142 decision 2), anything else by the system's mapping, a video's MP4 where it names none.
+    static func contentType(_ mime: String?) -> String {
+        switch mime?.lowercased() {
+        case "audio/mpeg", "audio/mp3": return UTType.mp3.identifier
+        case "audio/mp4", "audio/x-m4a", "audio/m4a": return UTType.mpeg4Audio.identifier
+        case "audio/aac", "audio/aacp": return "public.aac-audio"
+        case "audio/wav", "audio/x-wav", "audio/wave": return UTType.wav.identifier
+        case "audio/flac", "audio/x-flac": return "org.xiph.flac"
+        case "audio/ogg": return "org.xiph.ogg-audio"
+        default: return UTType(mimeType: mime ?? "video/mp4")?.identifier ?? UTType.mpeg4Movie.identifier
+        }
     }
 
     func resourceLoader(_ resourceLoader: AVAssetResourceLoader, shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest) -> Bool {
