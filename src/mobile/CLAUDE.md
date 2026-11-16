@@ -30,7 +30,10 @@ A Gradle build of its own, run through its own wrapper.
   uses core's session and is never used by it; an application's spec is generated into `api.<application>`. **Planned**
   ([ADR 0143](../../docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)): the map services in core's `map/` (the consent per device, the tile
   fetch and its memory-only cache, the geocoder, the viewport, clustering), a Memory's date and place in `memories/place/`
-  and its GPX tracks in `memories/tracks/`.
+  and its GPX tracks in `memories/tracks/`. Apple draws them with MapKit (decision 1): `MapViews.swift` (the gate that
+  mounts a `Map` only while `MapServices.state` is `Shown`, the consent's offer naming Apple Maps, the facts line and the
+  two editors, the bar's Map tab, a photo's map, Settings' Map services) and `MemoryMapView.swift` (the Map view's
+  tracks), over `AppModel`'s map services; `AppleMemories.saveTrack` and `watchPlace` adapt what Swift cannot call.
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
   decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's
   (`session/Account.kt`, `SessionModel.kt`: every sign-in enrols the password trust, `Gate.Signed.offer` offers staying
@@ -693,6 +696,15 @@ Per engine:
   live in the session handle's memory, never on disk (remembered from Microsoft's docs). Measured 2026-11-15 (ADR 0140's
   Windows pass, the unpackaged debug build): the data folder held `device-store.json`, the empty `offline\` and
   `log.txt`, and the files the pass wrote under `%TEMP%` and `INetCache` held none of its content's names or bytes.
+- **MapKit (Apple's map, ADR 0143 decision 1) — an Apple residual.** MapKit fetches through Apple's map daemon `geod`,
+  not through the core's clients, so none of the pins above reach it. Measured 2026-11-16 on macOS 26.7 (an
+  unsandboxed, ad-hoc-signed probe without entitlements, `MKMapSnapshotter` over two regions; ADR 0143's Consequences):
+  the app's own places gained only Metal's compiled shaders (`$DARWIN_USER_CACHE_DIR/<bundle id>/com.apple.metal/`), but
+  outside the app `~/Library/Caches/GeoServices/` (manifests, regional icon packs) and `com.apple.geoanalyticsd`'s
+  `APDB.db` were written, and `geod`'s tile cache sits in `~/Library/Containers/com.apple.geod/`, which macOS's privacy
+  protection kept from being listed. So the tiles of a region a member viewed may stay at rest in a system cache the
+  app can neither list nor clear — what decision 4 keeps off disk elsewhere. The app mounts no `Map` without the
+  consent (the core's `MapServices.state`), which is the only lever it has. iOS is unmeasured (no simulator boots here).
 A new engine, or a new client built outside these factories, states its cache and cookie store here and is measured
 as the Darwin one was: the app's container listed after a pass.
 

@@ -3,7 +3,10 @@ package me.raddatz.veyq.mobile.memories
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import me.raddatz.veyq.mobile.blob.FileSink
@@ -11,6 +14,8 @@ import me.raddatz.veyq.mobile.blob.FileUploadSource
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.depot.FileSave
+import me.raddatz.veyq.mobile.memories.place.PlaceEditor
+import me.raddatz.veyq.mobile.memories.tracks.TrackList
 import platform.Foundation.NSData
 import platform.Foundation.NSURL
 import platform.Foundation.create
@@ -80,4 +85,25 @@ object AppleMemories {
         } ?: return null
         return save.state.first { it.end != null }.end
     }
+
+    /** GPX track [mediaId] of [tracks] saved at [path] as [save] saves an original (ADR 0143 D8's *Download GPX*). */
+    @Throws(Exception::class)
+    suspend fun saveTrack(tracks: TrackList, mediaId: String, path: String): FileSave.End? {
+        val save = tracks.save(mediaId) { produce ->
+            withContext(Dispatchers.Default) { FileSink.write(path, kept = { it }) { sink -> produce(sink) } }
+        } ?: return null
+        return save.state.first { it.end != null }.end
+    }
+
+    /** A watch the app stops when its view goes. */
+    class Watch internal constructor(private val job: Job) {
+        fun stop() = job.cancel()
+    }
+
+    /**
+     * [editor]'s state handed to [listener] at once and on every change — its levels arrive from the geocoder on core's
+     * threads (ADR 0143 D5) — until the watch is stopped; [listener] is called on core's threads.
+     */
+    fun watchPlace(editor: PlaceEditor, listener: (PlaceEditor.State) -> Unit): Watch =
+        Watch(CoroutineScope(Dispatchers.Default).launch { editor.state.collect { listener(it) } })
 }

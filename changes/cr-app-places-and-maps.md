@@ -339,11 +339,24 @@ a recipient the notice does not name is the cheap safe side to close now). `revi
   context, set a place by panning and picking a level, set a range, the Map tab's pins, add a track and edit it, turn map
   services off on a map.
 
-- [ ] **7 Apple (iOS, macOS)** — D1's MapKit views, the rest as phase 6, Settings → Map services naming Apple Maps. First,
+- [x] **7 Apple (iOS, macOS)** — D1's MapKit views, the rest as phase 6, Settings → Map services naming Apple Maps. First,
   measured on the macOS build: a `Map` loads without a Maps entitlement (D12); and **what MapKit keeps on disk** — the
   app's container (and `~/Library/Caches/` for the unsandboxed Mac) listed before and after a map was shown, named in
   `src/mobile/CLAUDE.md` § Nothing on disk and ADR 0143's Consequences as Apple's residual. · Done when: the Apple
   project's builds (iOS simulator SDK, macOS) green; clicked once on the Mac as phase 6.
+  *Done 2026-11-16:* measured first on macOS 26.7 with an unsandboxed, ad-hoc-signed probe without entitlements
+  (headless, `MKMapSnapshotter`): MapKit loads without a Maps entitlement (nothing added); the app's own places gained only
+  Metal's shader cache, Apple's daemons wrote `~/Library/Caches/GeoServices/` and `geoanalyticsd`'s `APDB.db`, and `geod`'s
+  tile cache sits in its privacy-protected container — named as Apple's residual in ADR 0143's Consequences and
+  `src/mobile/CLAUDE.md` § Nothing on disk. Built: `MapViews.swift` (the gate mounting MapKit only on `Shown`, the consent
+  naming Apple Maps, the facts line, the date and place editors, the bar's Map tab with core's clusters, a photo's map with
+  its name resolved once, Settings → Map services), `MemoryMapView.swift` (Photos | Music | Map, the tracks' polylines
+  dashed by activity, the list, add with labels, edit, download, report, remove), the words (EN+DE, 86 keys), and
+  `appleMain`'s `AppleMemories.saveTrack`/`watchPlace` (what Swift cannot call). `xcodebuild` for macOS and the iOS
+  simulator SDK (`CODE_SIGNING_ALLOWED=NO`) green; `validate_mobile_words.py`, `validate_mobile_platform_guidelines.py`
+  and every guard but guard_gaps green. **Not run:** the click-through on the Mac — the screen was locked all session
+  (`ioreg`: `CGSSessionScreenIsLocked=Yes`), so it is the owner's step (or phase 9's pass); iOS on a simulator (none
+  boots on this Mac) and iOS's on-disk listing (a device's, phase 9).
 
 - [ ] **8 Windows and Linux** — D1's canvases over the bridge, Memories' bar tabs, the rest as phase 6. First, measured:
   a dashed `gsk::Path` stroke in the container's GTK and a dashed `Polyline` on the VM (the `StrokeDashArray`), else the

@@ -651,8 +651,10 @@ final class AppModel {
             ServerEntry(account: c, tenants: hidden.visibleTenants(connectionKey: c.key, tenants: c.tenants, current: c == account ? tenant : nil))
         }
         shell = state.shell
+        let wasOffline = offlineBanner != nil
         offlineBanner = state.banner
         goneNotices = state.gone
+        if wasOffline, offlineBanner == nil, maps?.state.value is MapStateOffline, let m = shellModel { openMaps(m) }
         if start { drawerOpen = shell.drawerOpensAtStart }
     }
 
@@ -920,6 +922,7 @@ final class AppModel {
     /// close passes `windows`: every lightbox window's gallery goes too.
     private func closeGallery(windows: Bool = false) {
         closeMusicView()
+        closeTrackList()
         openGallery?.watch.stop()
         openGallery?.model.close()
         openGallery = nil
@@ -987,6 +990,7 @@ final class AppModel {
             if switched { old.close() } else { old.handOver(next: made) }
         }
         media = made
+        openMaps(m)
     }
 
     private func closeMedia() {
@@ -995,6 +999,119 @@ final class AppModel {
         media?.close()
         media = nil
         closeMusic()
+        closeMaps()
+    }
+
+    // MARK: Map services (ADR 0143)
+
+    /// The open tenant's map services on this device (core's `MapServices`, its map's recipient Apple Maps: MapKit draws
+    /// it, the operator's geocoder names places), built beside the uploads and closed with them — a sign-out, a switch.
+    @ObservationIgnored private(set) var maps: MapServices?
+    /// What a map's place shows now (core's `MapState`): MapKit is mounted only on `Shown` — off means off, on Apple too.
+    private(set) var mapState: MapState = MapStateNotOffered.shared
+    /// Moves on every consent change: a view that shows the hosts the consent was given for reads them anew.
+    private(set) var mapsRevision = 0
+
+    private func openMaps(_ m: ShellModel) {
+        maps?.close()
+        // the geocoder's `accept-language` is the app's language, read here: the closure runs on core's threads
+        let lang = Bundle.main.preferredLocalizations.first ?? "en"
+        let made = m.mapServices(recipient: .appleMaps, lang: { @Sendable in lang })
+        maps = made
+        syncMaps()
+    }
+
+    private func closeMaps() {
+        maps?.close()
+        maps = nil
+        syncMaps()
+    }
+
+    /// The consent changes only through this app's calls below, so the state is read after each (and at an open).
+    private func syncMaps() {
+        mapState = (maps?.state.value as? MapState) ?? MapStateNotOffered.shared
+        mapsRevision += 1
+    }
+
+    /// What a map's place shows: offline no map, whatever the services were built under (ADR 0143 D9).
+    var mapShown: MapState { online ? mapState : MapStateOffline.shared }
+
+    /// *Turn map services on* (the prompt in context, the settings' switch): this device's consent for the hosts served now.
+    func mapsOn() {
+        maps?.turnOn()
+        syncMaps()
+    }
+
+    /// *Turn map services off* (on every map, the settings' switch): withdrawn at once, every map unmounted.
+    func mapsOff() {
+        maps?.turnOff()
+        syncMaps()
+    }
+
+    /// The Memories bar's Map tab over the application's list (its All tab's set, core's `MemoriesMap`).
+    func memoriesMap() async -> MemoriesMap? {
+        guard let m = shellModel else { return nil }
+        let refs = memoriesListRefs()
+        return try? await m.memoriesMap(memories: refs)
+    }
+
+    /// The Memories of the application's list as the tree holds them (the Map tab's set is the All tab's, ADR 0143 D6).
+    private func memoriesListRefs() -> [NodeRef] {
+        let ids = Set(applicationList(.memories).all.map(\.nodeId))
+        return nodes.filter { ids.contains($0.nodeId) }
+    }
+
+    /// The pin's Memory opened, as its row opens it.
+    func openPin(_ pin: MemoriesMap.Pin) {
+        if let ref = objects.first(where: { $0.nodeId == pin.nodeId && $0.scopeId == pin.scopeId }) { open(ref) }
+    }
+
+    /// Memory or chapter `gallery`'s date editor (core's), nil where whoever looks may not edit its meta or offline.
+    func dateEditor(_ gallery: GalleryModel) -> DateEditor? { shellModel?.dateEditor(gallery: gallery) }
+
+    /// Memory or chapter `gallery`'s place editor (core's) over this tenant's map services.
+    func placeEditor(_ gallery: GalleryModel) -> PlaceEditor? { shellModel?.placeEditor(gallery: gallery) }
+
+    /// The open page's Map view tracks (core's `TrackList` over its gallery), while the view shows; its state arrives in
+    /// `tracksShown`.
+    @ObservationIgnored private var openTracks: (model: TrackList, watch: TrackList.Watch)?
+    private(set) var tracksShown: TrackList.State?
+
+    /// `gallery`'s tracks, made on the Map view's first ask.
+    func trackList(_ gallery: GalleryModel) -> TrackList? {
+        if let held = openTracks, held.model.gallery === gallery { return held.model }
+        guard let m = shellModel, let uploads = media else { return nil }
+        closeTrackList()
+        let made = m.trackList(gallery: gallery, uploads: uploads, left: { @Sendable source in
+            if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
+        })
+        let id = ObjectIdentifier(made)
+        let watch = made.watch { @Sendable state in
+            nonisolated(unsafe) let state = state
+            Task { @MainActor [weak self] in
+                guard let self, let open = self.openTracks?.model, ObjectIdentifier(open) == id else { return }
+                self.tracksShown = state
+            }
+        }
+        openTracks = (made, watch)
+        return made
+    }
+
+    private func closeTrackList() {
+        openTracks?.watch.stop()
+        openTracks?.model.close()
+        openTracks = nil
+        tracksShown = nil
+    }
+
+    /// Picked GPX files (`urls`) offered to `tracks`' node: each checked on the device; what is refused is said by the view.
+    func addTracks(_ tracks: TrackList, urls: [URL]) async {
+        let sources: [UploadSource] = urls.compactMap { url in
+            guard let p = Picked(url) else { return nil }
+            return AppleMemories.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
+        }
+        guard !sources.isEmpty else { return }
+        _ = try? await tracks.add(sources: sources)
     }
 
     // MARK: Music (ADR 0142)
@@ -1200,7 +1317,14 @@ final class AppModel {
         rows = read
         // the file on screen reads itself anew: a replaced blob is shown
         openFile?.model.reload()
-        rowDetails = read.details.mapValues { $0.map { say(piece: $0) } }
+        var details = read.details.mapValues { $0.map { say(piece: $0) } }
+        // a Memory's row shows its date as its second line (ADR 0143 D5): the facts its sealed meta holds
+        if let dates = try? await shellModel?.memoryDates(), tenantSession === t {
+            for (nodeId, date) in dates where details[nodeId] == nil {
+                if let text = MemoryDateText.row(date) { details[nodeId] = [text] }
+            }
+        }
+        rowDetails = details
         listsRevision += 1
         await readCovers(t, named: read.covers)
     }
