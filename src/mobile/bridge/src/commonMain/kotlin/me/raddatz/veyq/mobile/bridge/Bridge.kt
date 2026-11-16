@@ -1664,6 +1664,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         scopeHint = s.scopeHint, category = s.category, note = s.note, reasonMax = NodeReport.REASON_MAX,
         contactMax = NodeReport.CONTACT_MAX, goodFaith = s.goodFaith, canSend = s.canSend, sending = s.sending, problem = s.problem,
         sent = s.sent != null, reference = s.sent?.reference, receivedAt = s.sent?.receivedAt, privacyUrl = r.privacyUrl,
+        offersName = r.offersName,
     )
 
     /** A move or copy sheet as the host draws it ([MoveShown]), each field the sheet's own answer. */

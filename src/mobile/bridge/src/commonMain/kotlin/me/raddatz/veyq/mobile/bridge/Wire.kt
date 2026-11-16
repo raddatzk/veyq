@@ -1894,6 +1894,8 @@ internal class ReportShown(
     val reference: String?,
     val receivedAt: String?,
     val privacyUrl: String,
+    /** Whether the sheet offers "only its name" beside the whole ([whole]'s switch): a node's does; a track's, an ITEM, does not (`ReportSheet.offersName`, ADR 0142 decision 11). */
+    val offersName: Boolean = true,
 ) {
     /** A category: the contract's name of it (its `category` on [Call.ReportCategory]) and its words. */
     @Serializable class ShownCategory(val id: String, @Serializable(with = MsgKey::class) val word: Msg)
