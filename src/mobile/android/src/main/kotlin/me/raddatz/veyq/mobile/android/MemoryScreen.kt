@@ -565,11 +565,12 @@ private fun MediaVideo(row: GalleryModel.Row, reader: RangeReader, box: MemoryLi
  */
 @Composable
 private fun MediaDetailsSheet(row: GalleryModel.Row, box: MemoryLightbox, model: AppModel) {
-    val details by produceState<me.raddatz.veyq.mobile.memories.Lightbox.Details?>(null, row.mediaId) {
+    // read anew when the gallery re-lists the medium (its place name sealed, below, shows then)
+    val details by produceState<me.raddatz.veyq.mobile.memories.Lightbox.Details?>(null, row.mediaId, row) {
         value = box.details(row.mediaId)
-        // the photo's place name, looked up once ever and sealed where the core's gates allow it (ADR 0143 D7): the rows read anew
-        if (box.resolvePlace(row.mediaId) != null) value = box.details(row.mediaId)
     }
+    // the photo's place name, looked up once ever and sealed where the core's gates allow it (ADR 0143 D7)
+    LaunchedEffect(row.mediaId) { box.resolvePlace(row.mediaId) }
     val d = details
     val rows = d?.rows.orEmpty()
     val uploaderName = d?.uploader?.let { piece(MediaDetails.uploaderWords(it)) }

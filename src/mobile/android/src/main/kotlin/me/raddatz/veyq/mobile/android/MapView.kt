@@ -195,7 +195,9 @@ internal fun RasterMap(
                 scope.launch {
                     val image = tv.tile(p.key)?.let { bytes ->
                         withContext(Dispatchers.Default) {
-                            runCatching { android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }.getOrNull()
+                            // decoded straight into GPU memory: a new tile costs the frame that first draws it no upload
+                            val hardware = android.graphics.BitmapFactory.Options().apply { inPreferredConfig = android.graphics.Bitmap.Config.HARDWARE }
+                            runCatching { android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, hardware)?.asImageBitmap() }.getOrNull()
                         }
                     }
                     asked.remove(p.key)
