@@ -9,7 +9,7 @@
 //!   [RAMP_STEP_MS] at most (a crossfade is two ramps the core asks at once); a deck keeps its last volume across a clear,
 //!   which the core's next load on it starts from.
 //! - **MPRIS** (`Controls.Bind|Show|Clear`): `org.mpris.MediaPlayer2` and its `.Player` on the session bus through gio's
-//!   D-Bus, under [MPRIS_NAME] while a queue is loaded (the Flatpak owns that name, `--own-name`); the desktop's play,
+//!   D-Bus, under [MPRIS_NAME] while a queue is loaded (a Flatpak may own that name without a finish-arg); the desktop's play,
 //!   pause, next, previous and seek come back to the core as `Player.*` calls — its play is `Player.Resume`.
 //! - **`Words.Say`**: a notice in this app's words, for a core function that takes a string (an untitled track's title).
 //!
