@@ -3,6 +3,7 @@ title: "Hintergrundmusik hinzufügen"
 sources:
   - docs/features/memory/use-cases/uc.memory.background-music.md
   - docs/features/platform/enablers/en.platform.audio-player.md
+  - docs/decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md
 ---
 
 Eine Erinnerung kann so klingen, wie es war: Füge die Lieder, die ihr gehört habt, als **Audiodateien** hinzu, und alle,
@@ -17,7 +18,7 @@ verschlüsselt gespeichert wie deine Fotos.
 3. Jede Datei erscheint mit ihrem Namen ohne Endung und mit ihrer Länge.
 
 veyq prüft jede Datei auf deinem Gerät, bevor es sie hochlädt, und sagt dir, welche es nicht hinzugefügt hat und warum:
-eine Datei größer als 200 MB, eine Datei, die keine Audiodatei ist, oder eine, die dieser Browser nicht abspielen kann.
+eine Datei größer als 200 MB, eine Datei, die keine Audiodatei ist, oder eine, die dieser Browser oder dieses Gerät nicht abspielen kann.
 Auf deinem Gerät findet es auch die Stille am Anfang und am Ende jedes Lieds, damit die Musik ohne Lücken weiterläuft; wo
 das bei einer großen Datei zu lange dauern würde, spielt das Lied einfach ganz.
 
@@ -32,6 +33,10 @@ und die Fortschrittsleiste ziehen, um innerhalb eines Lieds zu springen. **Zurü
 schon ein paar Sekunden gespielt hat. Die Tasten und der Sperrbildschirm deines Smartphones oder Computers funktionieren
 auch.
 
+Spielst du in der Erinnerung ein Video ab, pausiert die Musik. Sie spielt von selbst weiter, wenn das Video anhält oder
+endet, wenn du zu einem anderen Foto gehst oder das Video schließt. Pausierst oder startest du die Musik dazwischen
+selbst, bleibt es dabei.
+
 Die Musik spielt weiter, während du weitergehst - zu einer anderen Erinnerung, in deine Einstellungen, in einen anderen
 Bereich. **Musik beenden** oben in der Erinnerung oder **Schließen** in der Leiste beendet sie; startest du die Musik
 einer anderen Erinnerung, ersetzt sie die bisherige. Meldest du dich ab, endet sie auch.
@@ -39,19 +44,49 @@ einer anderen Erinnerung, ersetzt sie die bisherige. Meldest du dich ab, endet s
 Ein Kapitel spielt nur seine eigenen Lieder. Musik, die du in seiner Erinnerung gestartet hast, spielt weiter, während du
 das Kapitel ansiehst.
 
-## Ein Lied herunterladen, entfernen oder melden
+## Ein Lied umbenennen, herunterladen, entfernen oder melden
 
-Das **⋯** neben einem Lied bietet **Herunterladen**, das die Datei so speichert, wie sie hinzugefügt wurde, **Entfernen**
-und **Melden**. Ein entferntes Lied landet im Tab **Papierkorb** der Erinnerung bei den Fotos, die du entfernt hast, und du
+Das **⋯** neben einem Lied bietet **Umbenennen**, **Herunterladen**, das die Datei so speichert, wie sie hinzugefügt
+wurde, **Entfernen** und **Melden**. **Umbenennen** gibt dem Lied einen eigenen Namen, für alle; lässt du den Namen leer,
+heißt es wieder nach seiner Datei. Ein entferntes Lied landet im Tab **Papierkorb** der Erinnerung bei den Fotos, die du entfernt hast, und du
 kannst es dort zurückholen ([Fotos entfernen und zurückholen](/de/memories/photo-trash/)).
 
 Lieder sind keine Fotos: Sie stehen nicht in der Galerie und nicht in ihrer Anzahl, und die Suche findet sie nicht, aber
 ein Download oder eine Kopie der Erinnerung enthält ihre Dateien.
 
+## In der App
+
+Die veyq-[App](/de/getting-started/install-the-app/) spielt die Musik einer Erinnerung wie der Browser, mit diesen
+Unterschieden:
+
+- **Wo du sie findest:** **Fotos** und **Musik** über der Galerie wechseln zwischen den Fotos und den Liedern.
+  **Musik abspielen** steht oben in der Erinnerung, als Notensymbol oder, wo oben kein Platz ist, in ihrem Menü. Die
+  Leiste steht unten im Fenster, auf einem Smartphone direkt über der Leiste mit den Tabs.
+- **Was du mit einem Lied tun kannst:** Das Menü neben einem Lied (auf einem iPhone wischst du über das Lied oder hältst
+  es gedrückt) bietet **Umbenennen**, **Herunterladen**, **Entfernen** und **Melden**. Gleich nachdem du ein Lied
+  entfernt hast, holt **Rückgängig** es zurück.
+- **Sie spielt weiter:** Unter Android spielt die Musik weiter, wenn du die App verlässt oder den Bildschirm
+  ausschaltest. Ihre Benachrichtigung, der Sperrbildschirm und die Tasten deiner Kopfhörer steuern sie, und sie
+  pausiert, wenn du die Kopfhörer absteckst. Unter Windows steuern sie die Medientasten und die Mediensteuerung in den
+  Schnelleinstellungen, auch wenn die App minimiert ist; unter Linux die Mediensteuerung deines Desktops.
+- **Formate:** Welche Lieder spielen, hängt vom Gerät ab. Unter Android spielt eine M4A-Datei in Apple Lossless (ALAC)
+  womöglich nicht. Unter Windows spielen Ogg-Dateien nur mit Microsofts *Web Media Extensions*, die Windows 11
+  mitbringt. Die Linux-App spielt jedes oben genannte Format. Ein Lied, das dieses Gerät nicht abspielen kann, wird von
+  ihm aus nicht hinzugefügt (*… kann auf diesem Gerät nicht abgespielt werden.*); eines, das auf einem anderen Gerät
+  hinzugefügt wurde, wird hier übersprungen und als **Wird auf diesem Gerät nicht abgespielt** markiert. Herunterladen
+  kannst du es trotzdem.
+- **Stille an den Rändern:** Die App findet die Stille am Anfang und am Ende eines Lieds nur in einer WAV-Datei. Ein
+  Lied in jedem anderen Format, das du in der App hinzufügst, behält seinen stillen Anfang und sein stilles Ende, wo
+  immer es spielt. Füge es im Browser hinzu, wenn die Musik ohne Lücken weiterlaufen soll.
+- **Offline:** Eine Erinnerung, die du [offline verfügbar](/de/getting-started/use-content-offline/) gemacht hast,
+  behält ihre Lieder, und ihre Musik spielt ohne Verbindung. Offline lassen sich Lieder nicht hinzufügen, umbenennen,
+  entfernen oder melden.
+
 ## Wer was darf
 
 Alle, die der Erinnerung Fotos hinzufügen dürfen, können Musik hinzufügen, und alle, die Fotos entfernen dürfen, können
-ein Lied entfernen. Personen, mit denen du einen Link teilst, hören die Musik und sehen die Lieder wie du; mit einem Link,
+ein Lied entfernen. Mitglieder, die die Erinnerung ändern dürfen, können ein Lied umbenennen. Personen, mit denen du
+einen Link teilst, hören die Musik und sehen die Lieder wie du; mit einem Link,
 der sie Fotos hinzufügen lässt, können sie Musik hinzufügen und ihre eigene entfernen.
 
 Der Server speichert jedes Lied verschlüsselt wie ein Foto und kann nicht einmal erkennen, dass es Musik ist: Er erfährt
