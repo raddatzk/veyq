@@ -51,7 +51,7 @@ internal static class HomeView
     public static FontIcon Glyph(string glyph) => new() { Glyph = glyph, FontSize = 16 };
 
     /// <summary>A list row: the kind's glyph, the name, a chevron where it enters.</summary>
-    private static ListViewItem Row(string glyph, string name, string automationId, bool enters, Action open, Func<FontIcon, UIElement>? prefix = null)
+    private static ListViewItem Row(string glyph, string name, string automationId, bool enters, Action open, Func<FontIcon, UIElement>? prefix = null, string? subtitle = null)
     {
         var line = new Grid { ColumnSpacing = 12 };
         line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -59,8 +59,23 @@ internal static class HomeView
         line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         line.Children.Add(prefix is null ? Glyph(glyph) : prefix(Glyph(glyph)));
         var title = new TextBlock { Text = name, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
-        Grid.SetColumn(title, 1);
-        line.Children.Add(title);
+        FrameworkElement text = title;
+        if (subtitle is not null)
+        {
+            // a Memory's date under its name (ADR 0143 decision 5), Fluent's two-line list item
+            var lines = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            lines.Children.Add(title);
+            lines.Children.Add(new TextBlock
+            {
+                Text = subtitle,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
+            });
+            text = lines;
+        }
+        Grid.SetColumn(text, 1);
+        line.Children.Add(text);
         if (enters)
         {
             var chevron = Glyph("");
@@ -70,7 +85,7 @@ internal static class HomeView
         }
         var row = new ListViewItem { Content = line, Tag = open, MinHeight = 44 };
         AutomationProperties.SetAutomationId(row, automationId);
-        AutomationProperties.SetName(row, name);
+        AutomationProperties.SetName(row, subtitle is null ? name : $"{name}, {subtitle}");
         return row;
     }
 
@@ -78,7 +93,8 @@ internal static class HomeView
     /// (RowCovers).</summary>
     public static ListViewItem ObjectRow(ObjectRef r) =>
         Row(KindGlyph(r.kind), r.name, $"object:{r.name}", false, () => Act.Send(new Call.ShellOpen { Ref = r }),
-            r.kind == "MEMORY" ? glyph => RowCovers.Prefix(glyph, r.nodeId) : null);
+            r.kind == "MEMORY" ? glyph => RowCovers.Prefix(glyph, r.nodeId) : null,
+            r.kind is "MEMORY" or "CHAPTER" ? RowDates.Line(r.nodeId) : null);
 
     private static ListViewItem FolderRow(NodeRef n) =>
         Row(KindGlyph(n.kind), n.name, $"folder:{n.name}", true,
