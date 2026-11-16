@@ -331,6 +331,16 @@ lightbox plays and starts again by itself when the video stops or the lightbox m
   A track still loading when `interrupt()` came started during the video (D13 paused only a playing queue) — fixed in
   phase 4 (coordinator 2026-11-15): such a track is held, silent until the interruption's end starts it; ADR 0142
   decision 13 says so. The web's player held it too from 2026-11-16 (phase 2's as-built note).
+  *As built 2026-11-16 (both players):* a listener's pause while a track loaded did not stick — the track started once
+  loaded, with or without a video. `MusicPlayer.kt` and `player.ts` now keep a `pausedByListener`/`paused` flag (set by
+  `pause`, cleared by a play, `next`/`previous`, a new queue, `stop`) that holds a load as an interruption does, and
+  `interrupt()` no longer counts a load the listener paused as something to resume. Cases on both surfaces: pause while
+  the first track loads → silent and paused once loaded, resume plays it; pause during a video while it loads → silent
+  after the end; pause before a video while it loads → the end starts nothing; pause while the next track opens ahead →
+  silent, the outgoing one paused (green before the fix: a paused deck's tick never begins the fade); pause while the
+  next track is on its way in (the fade begun) → silent and paused, resume plays it. All but the open-ahead case red
+  before the fix. Bites: the hold's condition without the flag → the four cases red (web and core); `interrupt()`
+  blind to the flag → the pause-before-a-video case red (web).
 
 - [x] **4 Memories' music (core `memories/music/`)** — `MusicQueue`, `AudioFacts`, `Frames`, `Wav`, `MusicUpload` (D7),
   `TrackLabel` (D10), the ITEM report (D11), `MusicModel` (D8), the header toggle (D6), the lightbox's compact-control

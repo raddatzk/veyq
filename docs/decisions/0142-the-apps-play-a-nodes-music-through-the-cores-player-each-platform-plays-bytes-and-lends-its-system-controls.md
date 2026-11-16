@@ -172,6 +172,9 @@ is the Kotlin core's and each platform draws only its own UI; this ADR applies i
       queue paused. **A track still loading** when the video starts — the queue's first, or the next one on its way in —
       is held, by the core's `MusicPlayer` and the web's `player.ts` alike: it does not start during the video, and the
       end starts it (if nothing came between).
+      A listener's pause holds a loading track the same way (as built 2026-11-16, both players): a track — the first, or
+      the next one on its way in — that finishes loading after the pause becomes the active deck, paused and shown
+      paused, and only a play (or a track change) starts it; a video's end after such a pause starts nothing.
     - **Who raises it:** the lightbox, from its video's own playing, pause and ended events, its item change and its
       close — on the web `MediaLightbox.vue` over `core/audio/player.ts`; in the apps the core's lightbox model over
       `MusicPlayer`, each platform's video player reporting playing and paused. A muted video counts as playing: the
