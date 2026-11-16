@@ -337,7 +337,9 @@ class ScopeRekeyCommit(
         const val VERIFS = "verifs"
         const val INVITES = "invites"
         /** The listing's kinds, in the order it serves them — a new kind is appended, so a cursor already answered
-         *  still names its place. */
+         *  still names its place, and the contract's `ScopeRekeySince` pattern names it with its id's shape, or the
+         *  page after one ending on that kind is a 400 (`ScopeRekeySliceTest.theCursorIsTheContractsShapeBothWays`
+         *  needs a row of every kind to see it: the `invites` kind was missing from both until its world had one). */
         val KINDS = listOf(NODES, SHARES, MEMBERS, VERIFS, INVITES)
 
         /** The scope row's two wraps are rows of their own in the stage: a row staged again replaces all its fields,

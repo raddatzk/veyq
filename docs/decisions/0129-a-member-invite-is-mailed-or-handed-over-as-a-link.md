@@ -1,7 +1,7 @@
 # ADR 0129 — A member invite is mailed, or handed over by its owner as a link that opens by itself
 
 - Status: Accepted
-- Built: partly (not built: decision 7)
+- Built: yes
 - Date: 2026-11-12
 - Model: [scopes-and-tenancy](../crosscutting/scopes-and-tenancy.md)
 
