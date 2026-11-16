@@ -108,6 +108,17 @@ function track(id: string, over: Partial<PlayerTrack> & { url?: string } = {}) {
 }
 
 const playing = (h: ReturnType<typeof harness>) => h.elements.find((e) => !e.paused && e.src !== SILENT)
+const sounding = (h: ReturnType<typeof harness>) => h.elements.filter((e) => !e.paused && e.src !== SILENT).map((e) => e.src)
+/** Whether the bar and the lock screen show it playing. */
+const shown = (h: ReturnType<typeof harness>) => [h.player.nowPlaying.value?.playing, h.session.playbackState]
+
+/** A track whose `open()` waits for the test: `resolve()` hands its source over. */
+function slow(id: string) {
+  let resolve!: () => void
+  const release = vi.fn()
+  const t: PlayerTrack = { id, title: `Song ${id}`, startMs: 1000, endMs: 61_000, open: () => new Promise((r) => { resolve = () => r({ url: `blob:${id}`, release }) }) }
+  return { t, resolve: () => resolve(), release }
+}
 
 describe('the player', () => {
   it('wakes the AudioContext and each element in the press\'s own stack, before anything is awaited (iOS)', () => {
@@ -298,7 +309,6 @@ describe('the player', () => {
       await flushPromises()
       return { h, el: playing(h)! }
     }
-    const shown = (h: ReturnType<typeof harness>) => [h.player.nowPlaying.value?.playing, h.session.playbackState]
 
     it('pauses a playing queue, and the lock screen shows it paused', async () => {
       const { h, el } = await started()
@@ -358,15 +368,6 @@ describe('the player', () => {
       expect([el.paused, ...shown(h)]).toEqual([true, false, 'paused'])
     })
 
-    /** A track whose `open()` waits for the test: `resolve()` hands its source over. */
-    function slow(id: string) {
-      let resolve!: () => void
-      const release = vi.fn()
-      const t: PlayerTrack = { id, title: `Song ${id}`, startMs: 1000, endMs: 61_000, open: () => new Promise((r) => { resolve = () => r({ url: `blob:${id}`, release }) }) }
-      return { t, resolve: () => resolve(), release }
-    }
-    const sounding = (h: ReturnType<typeof harness>) => h.elements.filter((e) => !e.paused && e.src !== SILENT).map((e) => e.src)
-
     it("the queue's first track still loading when it comes stays silent until the end starts it", async () => {
       const h = harness({ durations: { 'blob:s': 62 } })
       const s = slow('s')
@@ -416,6 +417,83 @@ describe('the player', () => {
       const end = h.player.interrupt()
       end()
       expect([el.paused, ...shown(h)]).toEqual([true, false, 'paused'])
+    })
+  })
+
+  // ADR 0142 decision 13's hold, for a listener's pause too: a track that finishes loading after the listener paused
+  // becomes the active deck, paused, shown paused; only a play starts it.
+  describe("a listener's pause while a track loads", () => {
+    it('holds the first track: loaded, it is silent and shown paused; resume plays it', async () => {
+      const h = harness({ durations: { 'blob:s': 62 } })
+      const s = slow('s')
+      h.player.play({ key: 'n1', tracks: [s.t] })
+      h.player.pause()
+      s.resolve()
+      await flushPromises()
+      expect([sounding(h), h.player.nowPlaying.value?.trackId, ...shown(h)]).toEqual([[], 's', false, 'paused'])
+      h.tick()
+      expect(h.player.nowPlaying.value?.playing, 'the tick reads it paused too').toBe(false)
+      h.player.resume()
+      expect([sounding(h), ...shown(h)]).toEqual([['blob:s'], true, 'playing'])
+      expect(playing(h)!.currentTime).toBe(1)
+    })
+
+    it("during a video: the track stays silent after the video's end", async () => {
+      const h = harness({ durations: { 'blob:s': 62 } })
+      const s = slow('s')
+      h.player.play({ key: 'n1', tracks: [s.t] })
+      const end = h.player.interrupt()
+      h.player.pause()
+      s.resolve()
+      await flushPromises()
+      end()
+      expect([sounding(h), ...shown(h)]).toEqual([[], false, 'paused'])
+    })
+
+    it("before a video: the video interrupted nothing that played, so its end starts nothing", async () => {
+      const h = harness({ durations: { 'blob:s': 62 } })
+      const s = slow('s')
+      h.player.play({ key: 'n1', tracks: [s.t] })
+      h.player.pause()
+      const end = h.player.interrupt()
+      s.resolve()
+      await flushPromises()
+      end()
+      expect([sounding(h), ...shown(h)]).toEqual([[], false, 'paused'])
+    })
+
+    it('while the next track opens ahead: it stays silent, and the outgoing one paused', async () => {
+      const h = harness({ durations: { 'blob:a': 62, 'blob:s': 62 } })
+      const s = slow('s')
+      h.player.play({ key: 'n1', tracks: [track('a').t, s.t], startId: 'a' })
+      await flushPromises()
+      const first = playing(h)!
+      first.currentTime = 41 // 15 s before the fade: the next one is opened ahead
+      h.tick()
+      h.player.pause()
+      first.currentTime = 56 // where the fade would start, were it playing
+      s.resolve()
+      await flushPromises()
+      h.tick()
+      await flushPromises()
+      expect([sounding(h), h.player.nowPlaying.value?.trackId, ...shown(h)]).toEqual([[], 'a', false, 'paused'])
+      h.player.resume()
+      expect(sounding(h), 'resume plays the outgoing one, where it was paused').toEqual(['blob:a'])
+    })
+
+    it('while the next track is on its way in (the fade begun): it stays silent and paused; resume plays it', async () => {
+      const h = harness({ durations: { 'blob:a': 62, 'blob:s': 62 } })
+      const s = slow('s')
+      h.player.play({ key: 'n1', tracks: [track('a').t, s.t], startId: 'a' })
+      await flushPromises()
+      playing(h)!.currentTime = 56 // the fade's start: the next one is opened and awaited
+      h.tick()
+      h.player.pause()
+      s.resolve()
+      await flushPromises()
+      expect([sounding(h), h.player.nowPlaying.value?.trackId, ...shown(h)]).toEqual([[], 's', false, 'paused'])
+      h.player.resume()
+      expect([sounding(h), ...shown(h)]).toEqual([['blob:s'], true, 'playing'])
     })
   })
 })

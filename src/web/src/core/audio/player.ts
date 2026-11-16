@@ -17,7 +17,8 @@
 // returns its end, which resumes the queue only when it was playing when interrupted and nothing came between - a
 // listener's play or pause, a new queue, a `stop`. While interrupted the queue shows paused (the bar, the lock screen).
 // A track still loading when it comes (the queue's first, or the next one on its way in) is **held**: once loaded it
-// becomes the active deck, paused, and only the end starts it - as the core's `MusicPlayer` does.
+// becomes the active deck, paused, and only the end starts it - as the core's `MusicPlayer` does. A listener's pause holds
+// it the same way, and only a play starts it then.
 import { shallowRef, type ShallowRef } from 'vue'
 import { PlayOrder, cryptoRandomInt, type RandomInt } from './order'
 import { fadeLengthAt, fadeOutAtMs, pressFadeMs, type Span } from './fades'
@@ -155,6 +156,9 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
   let interruptions = 0
   /** A track is being brought in: opened and loaded, not yet playing (`bringIn` between its start and its sound). */
   let starting = false
+  /** The listener paused, and no play, track change, new queue or `stop` came after: it **holds** the music as an
+   *  interruption does - a track that finishes loading becomes the active deck, paused, and only a play starts it. */
+  let paused = false
 
   function deckOf(): Deck {
     return {
@@ -292,8 +296,8 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
       await (prepared || load(incoming, track))
       if (gen !== generation) return
       incoming.preparedId = null
-      if (interruption !== 0) {
-        // an interruption came while it loaded: it waits, at full volume, for the interruption's end
+      if (interruption !== 0 || paused) {
+        // an interruption or the listener's pause came while it loaded: it waits, at full volume, for the end or a play
         setGain(incoming, 1)
         return hold(incoming, outgoing, track)
       }
@@ -322,8 +326,8 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
     startTicker()
   }
 
-  /** `track` loaded on `incoming` while an interruption holds the music: it becomes the active deck, paused; the outgoing
-   *  one (paused by the interruption) is let go at once. The interruption's end plays it (`go`). */
+  /** `track` loaded on `incoming` while an interruption or the listener's pause holds the music: it becomes the active
+   *  deck, paused; the outgoing one (paused) is let go at once. The interruption's end or a play plays it (`go`). */
   function hold(incoming: Deck, outgoing: Deck, track: PlayerTrack): void {
     failures = 0
     active = decks.indexOf(incoming)
@@ -469,6 +473,7 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
       wakeContext()
       unlock()
       interruption = 0
+      paused = false
       notice.value = null
       const ids = next.tracks.map((t) => t.id)
       if (ids.length === 0) return
@@ -485,6 +490,7 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
     },
     stop() {
       interruption = 0
+      paused = false
       starting = false
       generation++
       if (ticker !== null) env.clearInterval(ticker)
@@ -497,15 +503,18 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
     },
     pause() {
       interruption = 0
+      paused = true
       halt()
     },
     resume() {
       interruption = 0
+      paused = false
       go()
     },
     next() {
       wakeContext()
       if (!order) return
+      paused = false // a track change plays, as it did before the pause held loads
       decks[active].leaving = true
       void bringIn(order.next(), pressFadeMs(decks[active].span))
     },
@@ -516,6 +525,7 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
       const into = deck.el.currentTime * 1000 - deck.span.startMs
       const step = order.previous(into)
       if (step.restart) return player.seek(0)
+      paused = false // a track change plays, as it did before the pause held loads
       deck.leaving = true
       void bringIn(step.id, pressFadeMs(deck.span))
     },
@@ -532,7 +542,8 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
     interrupt() {
       const deck = decks[active]
       const sounding = !!deck.source && !deck.el.paused
-      if (!queue || (!sounding && !starting)) return () => undefined // nothing plays or loads: nothing to resume after
+      // nothing plays, or loads to play (a load the listener paused stays paused): nothing to resume after
+      if (!queue || (!sounding && !(starting && !paused))) return () => undefined
       const id = (interruption = ++interruptions)
       halt()
       return () => {
