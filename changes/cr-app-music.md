@@ -483,7 +483,7 @@ lightbox plays and starts again by itself when the video stops or the lightbox m
   container's only unplayable file was refused at add), Windows minimised and the media keys, the Flatpak's MPRIS from a
   desktop session (phase 8 (d) and (e)).
 
-- [ ] **8 the passes** — per platform against the dev instance: play a Memory's music, walk to another Memory and a
+- [x] **8 the passes** — per platform against the dev instance: play a Memory's music, walk to another Memory and a
   Chapter, open the lightbox (the compact controls; a video pauses the music and its end, the next item and closing resume it, D13), (a) **Android**: screen
   off for 5 minutes with the music going on through a track change, the lock screen's and a headset's next, the
   notification without `POST_NOTIFICATIONS` granted (D3), headphones out pauses; (b) **iOS** on a device (the owner's):
