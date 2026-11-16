@@ -320,6 +320,10 @@ a recipient the notice does not name is the cheap safe side to close now). `revi
   DOCTYPE accepted → the entity case red; (d) a 51st track accepted → red; (e) `playsOriginal` without tracks → the
   pinned frames 0, red; (f) the photo's name resolved without `editMeta` → the gate case red; (g) a `Stale` answer
   overwriting a peer's manual date with `auto` → the concurrent case red.
+  *State 2026-11-16:* built; core (`:core:jvmTest` 944, `:core:macosArm64Test` 748) and `:bridge:jvmTest` (94) green;
+  bites (a)–(g) each red then green on their unit cases ((e) on `SettlePointsTest`). Open before the tick:
+  `PlacesLiveTest` (written, compiles) and bite (e)'s live half — the dev backend answered `500` (a quarkusDev hot-reload
+  compile error in `PrivacyNoticeRenderer.kt`), so no live run yet.
 
 - [ ] **5 the bridge** — D11: `Watched.Map` → `MapShown`, the place, date and track calls, `Map.Tile` as bytes, Memories'
   bar tabs and the Map view in the gallery's state; `MapShown` under `SecretFreeSchemaTest`; a map's tiles dropped with
