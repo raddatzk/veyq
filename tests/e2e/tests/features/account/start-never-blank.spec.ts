@@ -4,7 +4,9 @@
 //   1. A start whose setup-status request (`GET /api/setup`, `boot()`'s first step) never answers shows the start screen,
 //      reloads itself once after 15 s, and when the start hangs again shows the slow panel — in German for a German
 //      browser — naming the step, `status`; its Reload, with the server answering again, lands on sign-in.
-//   2. A hang that the one reload clears lands on sign-in with no panel.
+//   2. A hang that the one reload clears lands on sign-in with no panel, and that document signs in: the reloaded start
+//      is a working app, not just a painted one. (Its typed password and Secret Key are this file's canaries, which the
+//      stack lane's sweep requires of every spec file that ran, `scripts/run_stack_e2e.py` `sweep`.)
 //   3. A normal start mounts over the start screen: no panel, the start signalled `mounted`.
 //
 // The cause on iOS Safari (a discarded tab whose start hangs, ADR 0136 § Context) cannot be reproduced here; a request
@@ -12,7 +14,8 @@
 // timestamp lives in that tab's sessionStorage.
 import { expect, type Page } from '@playwright/test'
 import { test } from '../../../src/cspViolations'
-import { newDevice, tenantOrigin, type Device } from '../../../src/devices'
+import { recordTyped } from '../../../src/canaries'
+import { instance, newDevice, passwordField, tenantOrigin, type Device } from '../../../src/devices'
 
 const SETUP_STATUS = '**/api/setup'
 const WATCHDOG_DEADLINE_MS = 15_000
@@ -76,7 +79,7 @@ test(
 )
 
 test(
-  'a hang the one reload clears lands on sign-in, with no panel',
+  'a hang the one reload clears lands on sign-in, with no panel, and that document signs in',
   { tag: ['@uc.account.remember-this-device:a-hung-start-is-never-blank'] },
   async ({ browser }) => {
     test.setTimeout(90_000)
@@ -95,6 +98,15 @@ test(
     await expect(signIn(page)).toBeVisible({ timeout: WATCHDOG_DEADLINE_MS + 30_000 })
     expect(loads.count).toBe(2)
     await expect(page.locator('#veyq-start-slow')).toHaveCount(0)
+
+    // The same document, no navigation of the test's own: it signs in and reaches the space.
+    const { owner } = instance()
+    await page.getByLabel('Email', { exact: true }).fill(owner.email)
+    await passwordField(page).fill(recordTyped(owner.password))
+    await page.locator('#unlock-secret-key').fill(recordTyped(owner.secretKey))
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'New', exact: true })).toBeVisible({ timeout: 60_000 })
+    expect(loads.count).toBe(2)
   },
 )
 
