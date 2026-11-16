@@ -21,6 +21,9 @@ separate-locales: false
 # org.freedesktop.secrets answers: without this name the probe fails (ServiceUnknown) and nothing is offered after a
 # sign-in, measured on the Fedora VM 2026-11-13 (native-apps § Platforms). With it, all five calls answer and the items
 # still land in the app's own keyring.
+# The desktop's media controls (ADR 0142 decision 3) need no finish-arg: Flatpak lets an app own
+# org.mpris.MediaPlayer2.<its id> by default (flatpak-builder-lint refuses the --own-name as
+# finish-args-unnecessary-appid-mpris-own-name, measured 2026-11-16), which `music_host` owns while a Memory's music plays.
 finish-args:
   - --share=network
   - --share=ipc

@@ -27,8 +27,10 @@ internal sealed class MediumPlayer : IDisposable
 
     /// <summary>Reader <paramref name="reader"/> of <paramref name="size"/> bytes of <paramref name="type"/> in a player named
     /// <paramref name="name"/>; <paramref name="failed"/> is told on <paramref name="queue"/> when the system cannot play it.
-    /// <paramref name="autoPlay"/>: it starts once opened.</summary>
-    public MediumPlayer(long reader, long size, string? type, string automationId, string name, bool autoPlay, DispatcherQueue queue, Action failed)
+    /// <paramref name="autoPlay"/>: it starts once opened. <paramref name="playing"/>, where given, is told on
+    /// <paramref name="queue"/> each time it starts playing (true) or stops — paused, ended, failed (false): a lightbox's
+    /// video interrupts the music while it plays (ADR 0142 decision 13).</summary>
+    public MediumPlayer(long reader, long size, string? type, string automationId, string name, bool autoPlay, DispatcherQueue queue, Action failed, Action<bool>? playing = null)
     {
         _stream = new ReaderStream(size, (at, length) => Range(reader, at, length), () => _ = Core.CallAsync(new Call.ReaderClose { reader = reader }));
         _source = Windows.Media.Core.MediaSource.CreateFromStream(_stream.AsRandomAccessStream(), type ?? "");
@@ -46,6 +48,27 @@ internal sealed class MediumPlayer : IDisposable
                 if (!_disposed) failed();
             });
         };
+        if (playing is not null)
+        {
+            var told = (bool?)null;
+            void Tell(bool now) => queue.TryEnqueue(() =>
+            {
+                if (_disposed || told == now) return;
+                told = now;
+                playing(now);
+            });
+            // buffering and opening say nothing: a video that stalls for its bytes still plays
+            _mp.PlaybackSession.PlaybackStateChanged += (session, _) =>
+            {
+                switch (session.PlaybackState)
+                {
+                    case Windows.Media.Playback.MediaPlaybackState.Playing: Tell(true); break;
+                    case Windows.Media.Playback.MediaPlaybackState.Paused or Windows.Media.Playback.MediaPlaybackState.None: Tell(false); break;
+                }
+            };
+            _mp.MediaEnded += (_, _) => Tell(false);
+            _mp.MediaFailed += (_, _) => Tell(false);
+        }
         // the position in the log each fifth second, for a pass to read the play and a seek from
         var logged = -1L;
         _mp.PlaybackSession.PositionChanged += (session, _) =>

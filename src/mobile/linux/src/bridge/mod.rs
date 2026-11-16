@@ -159,7 +159,8 @@ unsafe extern "C" fn updated(ctx: *mut c_void, json: *const c_char, _bytes: *con
     let _ = tx.try_send(serde_json::from_str(&text).map_err(Unreadable));
 }
 
-/// The host function: the core's request, answered at once from this (core) thread — the store answers, an Emergency
+/// The host function: the core's request, answered at once from this (core) thread — a music deck's or the system
+/// controls' request excepted, answered from GTK's main loop ([crate::music_host], [reply]) —; the store answers, an Emergency
 /// Kit's page or picture is drawn ([crate::kit_drawing]) and a picked medium's tiers are made ([crate::media_tiers], on the
 /// upload queue's thread the core asks from), without waiting for the core, as bridge.h asks. A drawing's pixels and the
 /// tiers go beside the reply's JSON and are zeroed once the core copied them.
@@ -169,9 +170,14 @@ unsafe extern "C" fn host(ctx: *mut c_void, token: u64, json: *const c_char, _by
     // SAFETY: a NUL-terminated string valid during this call, copied here.
     let text = unsafe { CStr::from_ptr(json) }.to_string_lossy();
     let (reply, mut payload) = match serde_json::from_str::<HostRequest>(&text) {
-        Ok(request) => crate::kit_drawing::answer(&request)
+        Ok(request) => match crate::music_host::take(token, &request) {
+            // a deck's or the controls' request: answered from GTK's main loop ([reply])
+            Some(None) => return,
+            Some(Some(reply)) => (reply, None),
+            None => crate::kit_drawing::answer(&request)
             .or_else(|| crate::media_tiers::answer(&request))
             .unwrap_or_else(|| (store.answer(request), None)),
+        },
         Err(_) => (HostReply::Failed { error: "the host could not read the request".into() }, None),
     };
     let reply = CString::new(serde_json::to_string(&reply).expect("a HostReply writes")).expect("JSON holds no NUL");
@@ -182,6 +188,14 @@ unsafe extern "C" fn host(ctx: *mut c_void, token: u64, json: *const c_char, _by
     if let Some(p) = payload.as_mut() {
         p.fill(0);
     }
+}
+
+/// Answers the core's request [token] later, from any thread (a music deck's load, once its player is prepared): the core
+/// waits for it without blocking its lane (`Host.asking`), and a reply it no longer waits for is dropped there.
+pub fn reply(token: u64, reply: &HostReply) {
+    let json = CString::new(serde_json::to_string(reply).expect("a HostReply writes")).expect("JSON holds no NUL");
+    // SAFETY: the reply is read before the call returns; no payload.
+    unsafe { wire::veyq_reply(token, json.as_ptr(), ptr::null(), 0) };
 }
 
 /// The device's store (`DeviceStore` of the core: its trust marks, the trusted accounts, this device's id): names and

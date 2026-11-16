@@ -27,6 +27,7 @@ use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::C
 use crate::drop_box::DropBoxPage;
 use crate::file_page::FilePage;
 use crate::memory_page::{self, MemoryPage};
+use crate::music_bar::MusicBar;
 use crate::header::{self, Header};
 use crate::home::{self, app_icon, app_name, kind_icon};
 use crate::pot::PotPage;
@@ -48,7 +49,10 @@ enum Target {
 pub const COLLAPSE_BELOW: &str = "max-width: 600sp";
 
 pub struct Shell {
+    /// What the window shows while signed in: the split view, and under it the account's music bar ([MusicBar]).
+    pub root: adw::ToolbarView,
     pub split: adw::NavigationSplitView,
+    music_bar: Rc<MusicBar>,
     sidebar: adw::Sidebar,
     targets: RefCell<Vec<Option<Target>>>,
     switcher: gtk::MenuButton,
@@ -198,8 +202,15 @@ impl Shell {
         window.add_action(&space_action);
         window.add_action(&tenant_action);
 
+        // the music bar along the window's bottom edge, under the sidebar and the content (GNOME Music's player bar)
+        let music_bar = MusicBar::new(&toasts);
+        let root = adw::ToolbarView::new();
+        root.set_content(Some(&split));
+        root.add_bottom_bar(&music_bar.bar);
         let shell = Rc::new(Self {
+            root,
             split,
+            music_bar,
             sidebar,
             targets: RefCell::new(Vec::new()),
             switcher,
@@ -313,6 +324,16 @@ impl Shell {
             }
         });
         window.add_action(&add_media);
+        // a Memory's or a chapter's music action (the header's own `music`): its page plays or stops the node's music
+        let music = gio::SimpleAction::new("memory-music", None);
+        let weak = Rc::downgrade(self);
+        music.connect_activate(move |_, _| {
+            let Some(s) = weak.upgrade() else { return };
+            if let Some(page) = s.memory.borrow().as_ref() {
+                page.music();
+            }
+        });
+        window.add_action(&music);
         let weak = Rc::downgrade(self);
         self.add_chapter.connect_clicked(move |_| {
             let Some(s) = weak.upgrade() else { return };
@@ -558,6 +579,7 @@ impl Shell {
     pub fn show(self: &Rc<Self>, state: ShellModelState, shown: ShellShown) {
         let first = !self.started.replace(true);
         self._uploads.start();
+        self.music_bar.start();
         avatars::listed(&format!("{}\n{}", shown.connection, shown.tenant.tenant_id), &shown.pictures);
         *self.connection.borrow_mut() = Some(shown.connection.clone());
         self.draw_offline(&state, &shown);

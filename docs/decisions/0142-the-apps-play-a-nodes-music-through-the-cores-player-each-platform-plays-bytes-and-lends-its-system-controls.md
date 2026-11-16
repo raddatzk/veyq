@@ -79,7 +79,7 @@ is the Kotlin core's and each platform draws only its own UI; this ADR applies i
    | iOS | `AVAudioSession` category `.playback`, `UIBackgroundModes` `audio` | `MPNowPlayingInfoCenter` + `MPRemoteCommandCenter` (play, pause, toggle, next, previous, change position) | pause on an interruption, resume when it ends with `.shouldResume`; pause when the route's old device goes away |
    | macOS | the app runs | `MPNowPlayingInfoCenter` + `MPRemoteCommandCenter` (Now Playing, the media keys) | — |
    | Windows | the app runs, minimised included | one SMTC for the window (`SystemMediaTransportControlsInterop.GetForWindow`), both decks' `CommandManager` off, so the flyout and the media keys drive the core's player, not a deck | — |
-   | Linux | the app runs (with its window closed as the app's other background work does) | MPRIS (`org.mpris.MediaPlayer2` and `.Player` on the session bus through gio's D-Bus), bus name `org.mpris.MediaPlayer2.app.veyq.Veyq`; the Flatpak gains `--own-name=` for it | — |
+   | Linux | the app runs (with its window closed as the app's other background work does) | MPRIS (`org.mpris.MediaPlayer2` and `.Player` on the session bus through gio's D-Bus), bus name `org.mpris.MediaPlayer2.app.veyq.Veyq`, which Flatpak lets the app own without a finish-arg (`flatpak-builder-lint` refuses `--own-name=` for it as unnecessary) | — |
 
    - **Frames keep coming in the background** because the process does: the reader fetches as it does in front, and the
      offline store keeps what it keeps (decision 12). The session stays unlocked with the screen off, since nothing
@@ -194,10 +194,27 @@ is the Kotlin core's and each platform draws only its own UI; this ADR applies i
   running.
 - **A decoded format uploaded from an app keeps its silence** (decision 7, inbox #932): a track added from the web is
   trimmed where ADR 0135 decision 4 finds it cheaply, the same file added from an app only where it is a WAV.
-- **Each platform's format gaps** are what its matrix (decision 9) measures; none has been measured for audio yet, and
-  until then no doc says which formats an app plays.
+- **Each platform's format gaps** are what its matrix (decision 9) measures; a platform not listed below is not measured
+  yet, and no doc says which formats its app plays until it is.
+- **Windows and Linux, measured 2026-11-16** — ten files of one 6 s tone made by ffmpeg (MP3; M4A with AAC and with ALAC;
+  raw ADTS; WAV 16-bit, 24-bit and float; FLAC; Ogg Vorbis; Ogg Opus), each opened as a deck opens it:
+  - *Windows* (the test VM, Windows 11 on ARM64, the app's x64 process under emulation): a `MediaPlayer` over
+    `MediaSource.CreateFromStream` with the core's sniffed type, opened and played 1.5 s. **With the Web Media extension
+    all ten play; without it Ogg Vorbis and Ogg Opus do not** (`MediaFailed`, `SourceNotSupported`, `C00D36C4`), the rest
+    unchanged. The extension is a Store package Windows 11 provisions: removed for the user with `Remove-AppxPackage` and
+    registered again from its provisioned manifest (`Add-AppxPackage -Register`, in the logged-on session: from ssh's
+    session 0 it is refused `0x80070005`). A picked track's length: `Windows.Media.Editing`'s `MediaClip` — what
+    `Media.Duration` read a video with — reads every format but Ogg (`80070057`, the extension present or not), so the
+    host falls back to `MediaSource.OpenAsync`, which reads all ten where they play.
+  - *Linux*: `filesrc ! decodebin ! audioconvert ! fakesink` over each file renamed without its extension (typefound by its
+    bytes, as the app's stream is). **The container (Fedora 44 with gst-plugins-good, -bad-free, openh264) decodes all but
+    ALAC** ("missing a plug-in"); **the Flatpak's runtime (org.gnome.Platform//51 with codecs-extra 26.08, aarch64) decodes
+    all ten.** `Media.Duration`'s `playbin` with its video only stands still over a track and says no length (the
+    `media_tiers` test), so the host measures a track by its sound only.
+  - What does not play is refused at upload (`unplayable`, measured live in the container with the ALAC file) and, where
+    another device added it, skipped and marked in the Music view (decision 9).
 - **New platform permissions:** Android `FOREGROUND_SERVICE_MEDIA_PLAYBACK` and a `mediaPlayback` service; iOS
-  `UIBackgroundModes` `audio`; the Flatpak `--own-name=org.mpris.MediaPlayer2.app.veyq.Veyq`. No new dependency.
+  `UIBackgroundModes` `audio`; the Flatpak none (its MPRIS name is granted by default). No new dependency.
 - **A pinned Memory's music plays offline** (decision 12), which [ADR 0140](0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)
   decisions 8 and 9 take as one more kept original.
 - **Not decided here:** a Chapter playing its Memory's music (inbox #847, the web has it neither); a guest's view of a

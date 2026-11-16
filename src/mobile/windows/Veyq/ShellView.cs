@@ -52,6 +52,8 @@ internal sealed class ShellView
     private readonly InfoBar _offer;
     /// <summary>The upload queue: its command in the bar while it lists anything, the pickers that fill it.</summary>
     private readonly Uploads _uploads;
+    private readonly MusicBar _musicBar;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _sayTimer;
     private readonly ListScrolls _scrolls = new();
     private FilePage? _file;
     private DropBoxPage? _dropBox;
@@ -157,6 +159,7 @@ internal sealed class ShellView
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.Children.Add(head);
         Grid.SetRow(_offline, 1);
         content.Children.Add(_offline);
@@ -170,6 +173,10 @@ internal sealed class ShellView
         content.Children.Add(_offer);
         Grid.SetRow(_body, 6);
         content.Children.Add(_body);
+        // the music bar along the window's bottom edge while the account's player holds a queue (ADR 0142 decision 5)
+        _musicBar = new MusicBar(SayForAWhile);
+        Grid.SetRow(_musicBar.View, 7);
+        content.Children.Add(_musicBar.View);
 
         _nav = new NavigationView
         {
@@ -717,7 +724,7 @@ internal sealed class ShellView
         }, () =>
         {
             if (file?.Id is { } id) _uploads.Replace(id, Say);
-        }, () => memory?.Add());
+        }, () => memory?.Add(), () => memory?.Music());
         foreach (var c in primary) _commands.PrimaryCommands.Add(c);
         if (page is not null)
         {
@@ -849,6 +856,21 @@ internal sealed class ShellView
         _said.Severity = done ? InfoBarSeverity.Success : InfoBarSeverity.Error;
         _said.Message = message;
         _said.IsOpen = true;
+    }
+
+    /// <summary>What the music bar says (a queue none of whose tracks played here), under the bar for 5 s (the web's).</summary>
+    private void SayForAWhile(string message)
+    {
+        Say(false, message);
+        _sayTimer?.Stop();
+        var timer = _sayTimer = _nav.DispatcherQueue.CreateTimer();
+        timer.Interval = TimeSpan.FromSeconds(5);
+        timer.IsRepeating = false;
+        timer.Tick += (_, _) =>
+        {
+            if (Equals(_said.Message, message)) _said.IsOpen = false;
+        };
+        timer.Start();
     }
 
     /// <summary>A file's Save a copy under way: the InfoBar says how far it is with a ProgressBar and Cancel

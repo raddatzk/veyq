@@ -48,6 +48,12 @@ impl Playing {
         Self { video, media, stream }
     }
 
+    /// [f] told each time the medium starts playing (true) or stops — paused, ended, failed — (false): a Memory's lightbox
+    /// interrupts the music while its video plays (ADR 0142 decision 13).
+    pub fn on_playing(&self, f: impl Fn(bool) + 'static) {
+        self.media.connect_playing_notify(move |media| f(media.is_playing()));
+    }
+
     /// Stops it: the player let go first (its pipeline stopped), then the stream closed, which lets the core's reader go.
     pub fn stop(self) {
         self.media.pause();

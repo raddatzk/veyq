@@ -7,6 +7,10 @@
 //! details are an `AdwDialog` of rows (`Lightbox.Details`); Save writes the original where GTK's save dialog says
 //! (`Medium.Save`, the file page's progress toast with Cancel). The slideshow's clock is the core's.
 //!
+//! While the account's player holds a queue its compact controls sit in the header bar after Previous and Next — the
+//! track's title, Previous, Play or Pause, Next (`LightboxShown.music`, the `Player.*` calls; ADR 0142 decision 5) — and
+//! a video playing here interrupts the music until it stops (`Lightbox.Video`, decision 13).
+//!
 //! Every state is the core's (`Lightbox.Open`, `Watched.Lightbox`); every action one call. Nothing decrypted is written to
 //! show it (ADR 0047): the picture is decoded in memory, a video read in ranges.
 use std::cell::{Cell, RefCell};
@@ -46,6 +50,10 @@ struct Inner {
     details: gtk::Button,
     save: gtk::Button,
     trash: gtk::Button,
+    /// The music's compact controls: shown while the player holds a queue.
+    music: gtk::Box,
+    music_title: gtk::Label,
+    music_play: gtk::Button,
     /// Where the medium shows: replaced when the medium or what it shows changes.
     stage: gtk::Box,
     shown: RefCell<Option<LightboxShown>>,
@@ -78,10 +86,25 @@ impl Lightbox {
         let details = icon("dialog-information-symbolic", &words::memory_details());
         let save = icon("folder-download-symbolic", &words::memory_download());
         let trash = icon("user-trash-symbolic", &words::memory_trash());
+        let music_previous = icon("media-skip-backward-symbolic", &words::music_previous());
+        let music_play = icon("media-playback-pause-symbolic", &words::music_pause());
+        let music_next = icon("media-skip-forward-symbolic", &words::music_next());
+        music_previous.connect_clicked(|_| bridge::send(Call::PlayerPrevious));
+        music_next.connect_clicked(|_| bridge::send(Call::PlayerNext));
+        let music_title = gtk::Label::builder().ellipsize(gtk::pango::EllipsizeMode::End).max_width_chars(24).build();
+        music_title.add_css_class("dim-label");
+        let music = gtk::Box::builder().spacing(6).visible(false).margin_start(12).build();
+        music.append(&gtk::Image::from_icon_name("audio-x-generic-symbolic"));
+        music.append(&music_title);
+        for b in [&music_previous, &music_play, &music_next] {
+            b.add_css_class("flat");
+            music.append(b);
+        }
         let bar = adw::HeaderBar::new();
         bar.set_title_widget(Some(&title));
         bar.pack_start(&previous);
         bar.pack_start(&next);
+        bar.pack_start(&music);
         for b in [&trash, &save, &details, &slideshow] {
             bar.pack_end(b);
         }
@@ -102,6 +125,9 @@ impl Lightbox {
             details,
             save,
             trash,
+            music,
+            music_title,
+            music_play,
             stage,
             shown: RefCell::new(None),
             drawn: RefCell::new(None),
@@ -194,6 +220,10 @@ impl Inner {
                 bridge::send(Call::LightboxSlideshow { lightbox, on });
             }
         }));
+        this.music_play.connect_clicked(call(this, |i| {
+            let playing = i.shown.borrow().as_ref().and_then(|s| s.music.as_ref()).is_some_and(|m| m.playing);
+            bridge::send(if playing { Call::PlayerPause } else { Call::PlayerResume });
+        }));
         this.details.connect_clicked(call(this, Inner::show_details));
         this.save.connect_clicked(call(this, Inner::save));
         this.trash.connect_clicked(call(this, |i| {
@@ -285,6 +315,15 @@ impl Inner {
         self.slideshow.update_property(&[gtk::accessible::Property::Label(&label)]);
         self.save.set_visible(s.download_name.is_some());
         self.trash.set_visible(s.can_trash);
+        self.music.set_visible(s.music.is_some());
+        if let Some(m) = &s.music {
+            self.music_title.set_label(&m.title);
+            let (icon, label) =
+                if m.playing { ("media-playback-pause-symbolic", words::music_pause()) } else { ("media-playback-start-symbolic", words::music_resume()) };
+            self.music_play.set_icon_name(icon);
+            self.music_play.set_tooltip_text(Some(&label));
+            self.music_play.update_property(&[gtk::accessible::Property::Label(&label)]);
+        }
         // the stage: drawn anew when the medium, its picture or its player changed
         let player_up = self.playing.borrow().is_some();
         if player_up && !s.playing {
@@ -390,6 +429,11 @@ impl Inner {
                     i.stop_player();
                     i.replace(&message(&words::memory_video_failed(), "video-x-generic-symbolic"));
                 }
+            });
+            // the music pauses while the video plays and plays again when it stops (ADR 0142 decision 13)
+            playing.on_playing(move |on| {
+                eprintln!("veyq: lightbox video {}", if on { "playing" } else { "stopped" });
+                bridge::send(Call::LightboxVideo { lightbox, playing: on });
             });
             *i.picture.borrow_mut() = None;
             i.replace(&playing.video.clone());

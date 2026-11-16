@@ -5,6 +5,10 @@
 //!   (`apply_embedded_orientation`; GTK's own `gdk::Texture` loader keeps a JPEG as stored, measured 2026-11-13);
 //! - a video's poster through GStreamer: `filesrc ! decodebin ! videoflip(auto) ! videoconvert ! appsink` (RGB), paused,
 //!   sought to the core's moment, the frame there;
+//! - a picked file's length (`Media.Duration`: a video's for its poster, a music track's for its facts, ADR 0142 decision
+//!   7) from the same `playbin` paused at its start — with its video only, else, where that says no length (a track: the
+//!   video-only pipeline stands still over a WAV and says none, measured 2026-11-16 by this module's test), with its
+//!   sound only into a `fakesink`, nothing heard;
 //! - the preview scaled to fit the core's long edge (never enlarged) over white, the thumbnail made from it, both JPEGs
 //!   encoded by gdk-pixbuf in memory (`save_to_bufferv`) and handed back as the reply's payload, `preview ‖ thumbnail`
 //!   (ADR 0137 decision 3, inward). Nothing is written to disk (ADR 0047).
@@ -161,10 +165,35 @@ fn settle(pipeline: &gst::Pipeline) -> Result<(), String> {
     Ok(())
 }
 
-/// The length of the video at [path] in milliseconds; None where it does not open or says none.
+/// The length of the video or the audio at [path] in milliseconds; None where it does not open or says none.
 pub fn duration_ms(path: &str) -> Option<i64> {
+    video_duration_ms(path).or_else(|| audio_duration_ms(path))
+}
+
+/// The length of the video at [path]; None where it does not open or says none (a file without a picture).
+fn video_duration_ms(path: &str) -> Option<i64> {
     let (pipeline, _sink) = video(path).ok()?;
     let ms = pipeline.query_duration::<gst::ClockTime>().map(|d| d.mseconds() as i64);
+    let _ = pipeline.set_state(gst::State::Null);
+    ms
+}
+
+/// The length of the audio at [path]: `playbin` with its sound only, into a `fakesink`, paused at its start.
+fn audio_duration_ms(path: &str) -> Option<i64> {
+    gst::init().ok()?;
+    let uri = glib::filename_to_uri(path, None).ok()?;
+    let sink = gst::ElementFactory::make("fakesink").build().ok()?;
+    let pipeline = gst::ElementFactory::make("playbin")
+        .property("uri", uri.as_str())
+        .property("audio-sink", &sink)
+        .build()
+        .ok()?
+        .downcast::<gst::Pipeline>()
+        .ok()?;
+    pipeline.set_property_from_str("flags", "audio");
+    let ms = (pipeline.set_state(gst::State::Paused).is_ok() && settle(&pipeline).is_ok())
+        .then(|| pipeline.query_duration::<gst::ClockTime>().map(|d| d.mseconds() as i64))
+        .flatten();
     let _ = pipeline.set_state(gst::State::Null);
     ms
 }
@@ -329,6 +358,31 @@ mod tests {
         assert!(bluish(at(&poster, 160, 120)), "the frame at 1.5 s: {:?}", at(&poster, 160, 120));
         let red = tiers(clip.path(), "video/webm", &SPEC).unwrap();
         assert!(reddish(at(&decoded(&red.thumbnail), 160, 120)), "the frame at 0.1 s");
+    }
+
+    /// A music track's length (ADR 0142 decision 7): a file with sound and no picture is measured by its sound — the
+    /// video-only pipeline says no length for it (what `Media.Duration` answered for a track before).
+    #[test]
+    fn a_tracks_length_is_read_from_its_sound() {
+        // 1.5 s of 16-bit mono PCM at 8 kHz, silent: a WAV's header and its samples
+        let samples = 12_000u32;
+        let mut wav = Vec::new();
+        wav.extend_from_slice(b"RIFF");
+        wav.extend_from_slice(&(36 + samples * 2).to_le_bytes());
+        wav.extend_from_slice(b"WAVEfmt ");
+        wav.extend_from_slice(&16u32.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes());
+        wav.extend_from_slice(&1u16.to_le_bytes());
+        wav.extend_from_slice(&8_000u32.to_le_bytes());
+        wav.extend_from_slice(&16_000u32.to_le_bytes());
+        wav.extend_from_slice(&2u16.to_le_bytes());
+        wav.extend_from_slice(&16u16.to_le_bytes());
+        wav.extend_from_slice(b"data");
+        wav.extend_from_slice(&(samples * 2).to_le_bytes());
+        wav.resize(wav.len() + samples as usize * 2, 0);
+        let track = made("track.wav", &wav);
+        assert_eq!(video_duration_ms(track.path()), None, "no picture, no length from the video's pipeline");
+        assert_eq!(duration_ms(track.path()), Some(1500));
     }
 
     /// What the platform does not decode has no tiers, so the original goes up alone.

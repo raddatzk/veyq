@@ -260,6 +260,7 @@ class WireTest {
                 node = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "folder-1", "FOLDER", "Holidays"), categories = emptyList(), whole = true,
                 scopeHint = Msg.REPORT_SCOPE_WHOLE_HINT, category = null, note = null, reasonMax = 2000, contactMax = 254, goodFaith = false, canSend = false,
                 sending = true, problem = null, sent = false, reference = null, receivedAt = null, privacyUrl = "https://veyq.example/privacy#reporter-contact",
+                offersName = false,
             )),
             Update.Report(11, null),
             Update.Editor(12, EditorShown(

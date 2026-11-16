@@ -5,7 +5,7 @@ a Kotlin Multiplatform base under each platform's own UI ([ADR 0123](../../docs/
 A Gradle build of its own, run through its own wrapper.
 
 - `core/` — the shared base: the v1 suite (`crypto/`), the generated API client (`build/generated/openapi`, from
-  `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), the music player (`audio/`, ADR 0142 decisions 1–3 and 13: the order, the fades, `MusicPlayer` with its interruption, and the two ports each platform implements — `Deck` and `SystemControls`: Android's `MusicPlayback.kt` — `MediaDeck`, `AndroidMusicControls` with its `MusicService` —, Apple's through `appleMain`'s `AppleAudio` — `MusicPlayback.swift`; carried over the bridge as host requests for Linux and Windows), a photo's and a video's metadata read from their bytes (`media/`),
+  `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), the music player (`audio/`, ADR 0142 decisions 1–3 and 13: the order, the fades, `MusicPlayer` with its interruption, and the two ports each platform implements — `Deck` and `SystemControls`: Android's `MusicPlayback.kt` — `MediaDeck`, `AndroidMusicControls` with its `MusicService` —, Apple's through `appleMain`'s `AppleAudio` — `MusicPlayback.swift`; carried over the bridge as host requests for Linux's `music_host` and Windows' decks with SMTC), a photo's and a video's metadata read from their bytes (`media/`),
   files on the device by the path a platform's dialog gave (`blob/FileSink`, `blob/FileSource`, `nativeMain`: the
   core opens, writes and reads them, and removes a download that did not finish; the one call that differs is
   `blob/Files.kt`'s, `posixMain` for Apple and Linux, `mingwMain` for Windows; [ADR 0137](../../docs/decisions/0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md) decision 3), when the members'
@@ -104,7 +104,9 @@ A Gradle build of its own, run through its own wrapper.
   `Audio.Position` are asked without blocking the player's lane (`Host.asking`), `Audio.Pause|Seek|Ramp|Clear` told
   (`Host.tell`), and the host reports `Audio.Ended|Failed(deck, load)` as calls — one of a load no longer held is dropped.
   The system's controls are told `Controls.Bind|Show|Clear`; a picked track's length is `Media.Duration`, an untitled
-  track's title the host's `Words.Say`.
+  track's title the host's `Words.Say`. A host answers the deck and control requests from its UI thread, in the order
+  sent (Linux `music_host` through `bridge::reply`, Windows `MusicHost` through `Core.Player`), never inside the host
+  function; a track's report is `ReportShown.offersName` false (no "only its name").
   A device link (ADR 0059) is opened by its role's call — the trusted device's `Link.ShowForNewDevice`/`ScanSignInCode`
   over a connection (a tenant open; they close with it), the new device's `Link.ScanFromTrusted`/`ShowForSignIn` over the
   sign-in form's server — answered `LinkOpened(link)` for `Watched.Link` (`LinkShown`: the core's `DeviceLink.Shown`).
@@ -123,10 +125,16 @@ A Gradle build of its own, run through its own wrapper.
   and its Save a copy with its toast; a medium played by `player` — `gtk::Video` over a `gtk::MediaFile` reading `reader_stream`, a
   seekable `gio::InputStream` whose reads are `Reader.Read` ranges, `bridge::call_blocking` on GStreamer's thread),
   `memory_page` (a Memory's or a chapter's page: its chapters with their covers, the justified grid the core lays out and
-  windows — `Gallery.Layout`, only the rows near the view mounted —, a drop of photos and videos, the trash's Undo) with
+  windows — `Gallery.Layout`, only the rows near the view mounted —, a drop of photos and videos, the trash's Undo; an
+  `AdwToggleGroup` Photos | Music where the page offers music, its Music view `music_view`: a clamped boxed list, each
+  row's menu Rename, Download, Remove, Report, "Add music" through GTK's `FileDialog`) with
   `lightbox` (an `AdwNavigationPage` pushed over the content: zoom, the slideshow, a video through `player`, the details,
-  Save) and `media_tiers` (the host's answer to `Media.Tiers`/`Media.Duration`: gdk-pixbuf over glycin for a photo, turned by
-  its EXIF; a GStreamer `playbin` frame for a video's poster; both JPEGs encoded in memory), `uploads`
+  Save, the music's compact controls, `Lightbox.Video` from its player) and `media_tiers` (the host's answer to
+  `Media.Tiers`/`Media.Duration`: gdk-pixbuf over glycin for a photo, turned by its EXIF; a GStreamer `playbin` frame for
+  a video's poster; a length from `playbin` with its video only, else its sound only; both JPEGs encoded in memory), the
+  account's music bar `music_bar` (a `GtkActionBar` along the window's bottom under the split view, `Shell.root`) and
+  `music_host` (the two decks, `gtk::MediaFile`s over `reader_stream`, ramps stepped every 40 ms; MPRIS over gio's D-Bus
+  while a queue is loaded; `Words.Say`), `uploads`
   (New's Upload files and Upload folder through GTK's `FileDialog`, a file's Replace, the queue's header bar button and
   popover, what it says as a toast), `drop_box` (a drop box's page: each guest's folder with its menu and files, the delete
   asked), `manage`
@@ -154,10 +162,13 @@ A Gradle build of its own, run through its own wrapper.
   `Reader.Read` ranges, through `AsRandomAccessStream`; `ReaderStreamTest`), `MemoryPage` (a Memory's or a chapter's page:
   its chapters with their covers, the justified grid the core lays out and windows — `Gallery.Layout`, only the rows near
   the view placed on a `Canvas` —, tiles held in `Recent` (`RecentTest`), a drop of photos and videos, the trash's Undo in
-  the shell's `InfoBar`) with `LightboxView` (in the page's place over black: zoom, the slideshow, a video through
-  `MediumPlayer`, the details, Save) and `MediaTiers` (the host's answer to `Media.Tiers`/`Media.Duration`: WIC for a photo,
-  turned by its EXIF; `Windows.Media.Editing` for a video's poster and length; both JPEGs encoded in memory;
-  `MediaTiersTest`), `RowCovers` (a Memory's list row's cover through `Shell.RowCover`), `Uploads` (New's Upload files and Upload folder through `FileOpenPicker`
+  the shell's `InfoBar`; a `SelectorBar` Photos | Music where the page offers music, its `MusicView`) with `LightboxView` (in
+  the page's place over black: zoom, the slideshow, a video through `MediumPlayer`, the details, Save, the music's compact
+  controls, `Lightbox.Video` from its player) and `MediaTiers` (the host's answer to `Media.Tiers`/`Media.Duration`: WIC
+  for a photo, turned by its EXIF; `Windows.Media.Editing` for a video's poster and length, `MediaSource.OpenAsync` where
+  a clip refuses the file (an Ogg track); both JPEGs encoded in memory; `MediaTiersTest`), `MusicBar` (the account's
+  music bar along the shell's bottom), `MusicHost` (the two decks, `MediaPlayer`s over `ReaderStream`, ramps in
+  `MusicRamp`'s steps; one SMTC for the window through `GetForWindow`; `MusicTest`), `RowCovers` (a Memory's list row's cover through `Shell.RowCover`), `Uploads` (New's Upload files and Upload folder through `FileOpenPicker`
   and `FolderPicker`, a file's Replace, the queue's `AppBarButton` with its `Flyout`, what it says in an `InfoBar`),
   `DropBoxPage` (a drop box's page), `ListScrolls` (where each list was
   scrolled to; `ListScrollsTest`), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with

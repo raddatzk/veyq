@@ -10,6 +10,10 @@
 // InfoBar for as long as the core offers it. The page is read anew live while it stands (Watched.GalleryLive, the web's
 // poll).
 //
+// Where the node has music or whoever looks may add some (GalleryShown.musicView), a SelectorBar under its head switches
+// between its photos and its Music view (MusicView; ADR 0142 decision 6: Fluent's SelectorBar, Linux's AdwToggleGroup); the
+// header's own music action plays or stops the node's music (Gallery.Music).
+//
 // Every state is the core's GalleryModel (Gallery.Open, Watched.Gallery): the rows, the chapters, what it offers (rights
 // only remove functions: share view = member view). Nothing decrypted is written to show it (ADR 0047).
 using System;
@@ -81,6 +85,12 @@ internal sealed class MemoryPage : IDisposable
     private bool _purgeAsked;
     private bool _closed;
     private LightboxView? _lightbox;
+    /// <summary>Photos | Music, shown where the node offers its Music view.</summary>
+    private readonly SelectorBar _views = new() { Visibility = Visibility.Collapsed };
+    private readonly SelectorBarItem _photosItem = new() { Text = Words.MusicViewPhotos(), IsSelected = true };
+    private readonly SelectorBarItem _musicItem = new() { Text = Words.MusicViewMusic() };
+    private readonly Border _musicSlot = new() { Visibility = Visibility.Collapsed };
+    private MusicView? _music;
 
     public NodeAt Node { get; }
 
@@ -105,6 +115,14 @@ internal sealed class MemoryPage : IDisposable
         _undoBar = undoBar;
         _saving = saving;
         _column.Children.Add(_heroSlot);
+        AutomationProperties.SetAutomationId(_views, "memory-views");
+        AutomationProperties.SetAutomationId(_photosItem, "memory-view-photos");
+        AutomationProperties.SetAutomationId(_musicItem, "memory-view-music");
+        _views.Items.Add(_photosItem);
+        _views.Items.Add(_musicItem);
+        _views.SelectionChanged += (_, _) => ShowView();
+        _column.Children.Add(_views);
+        _column.Children.Add(_musicSlot);
         AutomationProperties.SetAutomationId(_count, "memory-count");
         _column.Children.Add(_count);
         var heading = new TextBlock { Text = Words.MemoryChapters(), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] };
@@ -263,6 +281,39 @@ internal sealed class MemoryPage : IDisposable
         };
     }
 
+    /// <summary>The header's music action: the node's music started shuffled, or stopped where it plays (Gallery.Music).</summary>
+    public void Music()
+    {
+        if (_id is { } gallery) Act.Send(new Call.GalleryMusic { gallery = gallery });
+    }
+
+    /// <summary>The photos or the Music view, as the SelectorBar stands; the Music view opened when it is first shown and
+    /// closed when the node no longer offers it or the page goes.</summary>
+    private void ShowView()
+    {
+        var music = _views.Visibility == Visibility.Visible && ReferenceEquals(_views.SelectedItem, _musicItem);
+        if (music && _music is null && _id is { } gallery)
+        {
+            _music = new MusicView(_window, gallery, _say, _saving);
+            _musicSlot.Child = _music.View;
+            Log.Write("memory page: the Music view");
+        }
+        else if (!music && _music is not null)
+        {
+            _musicSlot.Child = null;
+            _music.Dispose();
+            _music = null;
+            Log.Write("memory page: the photos");
+        }
+        _musicSlot.Visibility = music ? Visibility.Visible : Visibility.Collapsed;
+        var photos = music ? Visibility.Collapsed : Visibility.Visible;
+        _count.Visibility = photos;
+        _status.Visibility = photos;
+        _grid.Visibility = photos;
+        _chapters.Visibility = music ? Visibility.Collapsed : _shown?.chapters.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        if (!music) Relayout();
+    }
+
     /// <summary>Refresh (F5, Ctrl+R): the gallery read anew (Gallery.Reload).</summary>
     public void Reload()
     {
@@ -313,7 +364,7 @@ internal sealed class MemoryPage : IDisposable
     /// wanted asked once the one in flight answered.</summary>
     private async void Relayout()
     {
-        if (_id is not { } gallery || _closed) return;
+        if (_id is not { } gallery || _closed || _music is not null) return;
         var width = Width;
         if (width <= 0 || _shown?.rows is null) return;
         if (_asking)
@@ -560,7 +611,7 @@ internal sealed class MemoryPage : IDisposable
     {
         _chapterList.Items.Clear();
         var chapters = _shown?.chapters ?? [];
-        _chapters.Visibility = chapters.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        _chapters.Visibility = chapters.Count > 0 && _music is null ? Visibility.Visible : Visibility.Collapsed;
         if (_id is not { } gallery) return;
         foreach (var chapter in chapters)
         {
@@ -621,6 +672,13 @@ internal sealed class MemoryPage : IDisposable
         };
         if (s?.rows is { Count: 0 }) DropRows();
         if (s is null) return;
+        var views = s.musicView ? Visibility.Visible : Visibility.Collapsed;
+        if (_views.Visibility != views)
+        {
+            _views.Visibility = views;
+            if (!s.musicView) _views.SelectedItem = _photosItem;
+            ShowView();
+        }
         // the offer ended (its window, or the undo): the Undo goes with it — once a state showed the offer, so an update
         // from before the trash that arrives after its answer ends nothing (src/mobile/CLAUDE.md § Traps)
         if (s.undo is { } undo)
@@ -707,6 +765,8 @@ internal sealed class MemoryPage : IDisposable
         if (_closed) return;
         _closed = true;
         CloseLightbox();
+        _music?.Dispose();
+        _music = null;
         _watch?.Dispose();
         _live?.Dispose();
         if (_seenUndo)
