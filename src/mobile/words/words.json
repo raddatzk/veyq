@@ -2616,6 +2616,55 @@
     "en": "The track could not be renamed.",
     "de": "Der Titel konnte nicht umbenannt werden."
   },
+  "track_problem_too_large": {
+    "note": "{1} the picked GPX file's name (the web's memory.tracks.problem.tooLarge).",
+    "en": "{1} is larger than 25 MB.",
+    "de": "{1} ist größer als 25 MB."
+  },
+  "track_problem_invalid": {
+    "note": "{1} the picked file's name: it does not read as GPX.",
+    "en": "{1} is no GPX track.",
+    "de": "{1} ist kein GPX-Track."
+  },
+  "track_problem_too_short": {
+    "note": "{1} the picked file's name.",
+    "en": "{1} has fewer than two points.",
+    "de": "{1} hat weniger als zwei Punkte."
+  },
+  "track_problem_too_many": {
+    "note": "{1} the picked file's name: the node holds 50 tracks.",
+    "en": "{1} was not added: a Memory holds at most 50 tracks.",
+    "de": "{1} wurde nicht hinzugefügt: Eine Erinnerung hat höchstens 50 Tracks."
+  },
+  "track_duration_hours": {
+    "note": "A track's duration in the Map view's list: hours, then minutes.",
+    "en": "{1:int} h {2:int} min",
+    "de": "{1:int} Std. {2:int} Min."
+  },
+  "track_duration_minutes": {
+    "note": "A track's duration under an hour.",
+    "en": "{1:int} min",
+    "de": "{1:int} Min."
+  },
+  "track_ascent": {
+    "note": "A track's climb in whole metres.",
+    "en": "{1:int} m up",
+    "de": "{1:int} m bergauf"
+  },
+  "track_descent": {
+    "note": "A track's descent in whole metres.",
+    "en": "{1:int} m down",
+    "de": "{1:int} m bergab"
+  },
+  "track_edit_conflict": {
+    "note": "A label edit lost to another member's (TrackLabel.relabel's conflict).",
+    "en": "Someone else changed this track meanwhile. Their name and activity are shown now.",
+    "de": "Jemand anderes hat diesen Track inzwischen geändert. Jetzt stehen dessen Name und Aktivität hier."
+  },
+  "track_edit_failed": {
+    "en": "The track could not be saved.",
+    "de": "Der Track konnte nicht gespeichert werden."
+  },
   "music_view_photos": {
     "note": "The view switch inside a Memory's screen: its photos and videos (ADR 0142 decision 6; owner copy 2026-11-15).",
     "en": "Photos",

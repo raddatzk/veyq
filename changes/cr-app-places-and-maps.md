@@ -307,7 +307,7 @@ a recipient the notice does not name is the cheap safe side to close now). `revi
   geocode of a point 50 m away inside 1 s → the cache-and-queue case red; (f) the tile cache kept after `closeTenant()`
   → the drop case red; (g) a tile beyond the viewport fetched → the in-view case red.
 
-- [ ] **4 the place, the date and the tracks (core `memories/`)** — D5, D6's pins, D7, D8, D9's `playsOriginal`; the
+- [x] **4 the place, the date and the tracks (core `memories/`)** — D5, D6's pins, D7, D8, D9's `playsOriginal`; the
   models `DateEditor`, `PlaceEditor`, `MemoriesMap`, the photo panel's map state, `TrackList` (the Map view). Tests: R14's
   `memoryLocation`, `memoryDate`, `gpx`, `trackFacts`, `trackLabel`, `useMemoryTracks` cases ported; a **cross-surface
   fixture** — a `wrappedMeta` with date, location and cover as the web seals it, and a track's listed tier with
@@ -320,6 +320,11 @@ a recipient the notice does not name is the cheap safe side to close now). `revi
   DOCTYPE accepted → the entity case red; (d) a 51st track accepted → red; (e) `playsOriginal` without tracks → the
   pinned frames 0, red; (f) the photo's name resolved without `editMeta` → the gate case red; (g) a `Stale` answer
   overwriting a peer's manual date with `auto` → the concurrent case red.
+  *Done 2026-11-16:* core (`:core:jvmTest` 944, `:core:macosArm64Test` 748) and `:bridge:jvmTest` (94) green; bites
+  (a)–(g) each red then green on their unit cases ((e) on `SettlePointsTest`); `PlacesLiveTest` green against the dev
+  instance (date and place kept beside a peer's cover; settled to 2020-01-02..2021-07-15 at the medoid; a track added,
+  relabelled, removed and restored; pinned 1 of 1 frames), and bite (e)'s live half red (`expected:<1> but was:<0>`)
+  then green.
 
 - [ ] **5 the bridge** — D11: `Watched.Map` → `MapShown`, the place, date and track calls, `Map.Tile` as bytes, Memories'
   bar tabs and the Map view in the gallery's state; `MapShown` under `SecretFreeSchemaTest`; a map's tiles dropped with

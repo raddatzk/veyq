@@ -215,7 +215,22 @@ A Gradle build of its own, run through its own wrapper.
   `core/src/commonMain/kotlin/me/raddatz/veyq/mobile/crypto` runs both. The first Apple build compiles libsodium
   (`buildLibsodium`, a few minutes, once). The music player's rules (`audio/`) are held by `OrderTest`, `FadesTest` and `MusicPlayerTest`: the
   web's `order`, `fades` and `player` tests case for case and the interruption's cases (ADR 0142 decision 13), over decks
-  and system controls the test plays (`PlayedAudio`, on virtual time); a rule there changes only with its case. A change to a rule in `session/Grants.kt`, `session/IdentityPins.kt` or `session/Anchoring.kt` needs
+  and system controls the test plays (`PlayedAudio`, on virtual time); a rule there changes only with its case. The map services (`map/`, ADR 0143 D2–D4) are held by `MapConsentTest` (the consent per device and its hosts),
+  `MapTilesTest` (only tiles in view, only while the consent holds, the memory-only cache dropped at a withdrawal and a
+  close), `GeocoderTest` (the web's `geocode` and `placeName` cases: the 3-decimal cache, the ≥ 1 s queue), `ViewportTest`,
+  `ClustersTest` (the web's `spaceMap` cases) and `MapRequestIdentityTest` (D3's `User-Agent`, no `Referer` or token), every
+  request counted by `PlayedMapServices` — no test calls a real tile server or Nominatim. A Memory's date and place
+  (`memories/place/`, D5–D7) by `MemoryDateTest` and `MemoryLocationTest` (the web's `memoryDate` and `memoryLocation`
+  cases over real seals: the `auto` range over trustworthy capture times, the medoid, the editor's write keeping its
+  siblings and re-opening on a peer's same field, the self-heal never overwriting a manual date), `CrossSurfaceFixtureTest`
+  (a meta and a track's tier as the web seals them: after a date write, a place write and a label edit every other field
+  byte for byte), `PlaceEditorTest`, `PhotoPlaceTest` (the photo's name looked up under the web's gates, sealed once),
+  `MemoriesMapTest` and `SettlePointsTest` (the page's opening and a trash settle; a track's original kept like a video's);
+  its GPX tracks (`memories/tracks/`, D8) by `GpxTest` (the web's `gpx` cases over the core's own XML reader: a document
+  type refused before a byte is read, 25 MiB, ≥ 2 points, 50 per node), `TrackFactsTest` (`trackFacts`, `trackLabel`) and
+  `TrackListTest` (`useMemoryTracks`: one read at a time while the Map view shows, the label asked before an upload);
+  live, `PlacesLiveTest` (`VEYQ_LIVE`: a date and a place set over a peer's cover, the settle after two geotagged photos, a
+  track added with its label, edited, removed and restored, its frames kept by a pin). A change to a rule in `session/Grants.kt`, `session/IdentityPins.kt` or `session/Anchoring.kt` needs
   the case that refuses it: remove the rule and `GrantTrustTest` must go red. Expenses' arithmetic and format are held
   by `ExpensesVectorsTest` (`contracts/expenses/v1-vectors.json`, the crypto vectors' `expense-entry`) and
   `LedgerRulesTest`; `BigTest` holds `expenses/Big.kt` to `java.math.BigInteger`. A rule of `expenses/Ledger.kt` or

@@ -603,6 +603,19 @@ class ShellModel(
                 me.raddatz.veyq.mobile.memories.MediaUpload.Job(tenant, scopeId, nodeId, source, deriver, now)
             override fun musicJob(scopeId: String, nodeId: String, track: me.raddatz.veyq.mobile.memories.music.MusicUpload.Check.Taken) =
                 me.raddatz.veyq.mobile.memories.music.MusicUpload.Job(tenant, scopeId, nodeId, track)
+            override fun trackJob(
+                scopeId: String, nodeId: String, track: me.raddatz.veyq.mobile.memories.tracks.TrackUpload.Check.Taken,
+                label: me.raddatz.veyq.mobile.memories.music.TrackLabel.Label,
+            ) = me.raddatz.veyq.mobile.memories.tracks.TrackUpload.Job(tenant, scopeId, nodeId, track, label)
+            // the batch's settle (ADR 0143 D5): where this member may edit the node's meta, online
+            override suspend fun settled(scopeId: String, nodeId: String) {
+                if (!online) return
+                val node = tenant.node(scopeId, nodeId) ?: return
+                val at = NodeAt(scopeId, nodeId, node.kind, node.name)
+                if (!memoryRights(at).editMeta) return
+                val items = me.raddatz.veyq.mobile.memories.MemoryMedia.list(tenant, scopeId, nodeId)?.takeIf { it.offline == null }?.items ?: return
+                me.raddatz.veyq.mobile.memories.place.MemoryFacts.reconcile(tenant, scopeId, nodeId, items, placeNames)
+            }
             override fun changed() = changed()
             override fun left(source: me.raddatz.veyq.mobile.blob.UploadSource) = left(source)
         })
@@ -664,9 +677,102 @@ class ShellModel(
                 createMemoryNode(ref.scopeId, ref.nodeId, me.raddatz.veyq.mobile.memories.MemoryCreate.CHAPTER, name)
             override suspend fun cover(nodeId: String) = NodeCover.openNode(tenant, nodeId)
             override val online = tenant.account.reach.map { it == Reach.Online }.distinctUntilChanged()
-        }, access = me.raddatz.veyq.mobile.memories.MemoryRights.Access.Member(
-            memoriesOn = "memories" !in tenant.applicationsOff(), inIdentityFolder = inIdentityFolder(ref),
-        ), now = now, music = music)
+            override suspend fun facts() = me.raddatz.veyq.mobile.memories.place.MemoryFacts.of(tenant, ref.scopeId, ref.nodeId)
+            override suspend fun settle(items: List<me.raddatz.veyq.mobile.memories.MemoryMedia.Item>) =
+                me.raddatz.veyq.mobile.memories.place.MemoryFacts.reconcile(tenant, ref.scopeId, ref.nodeId, items, placeNames)
+            override suspend fun placeName(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, mayWrite: Boolean, slideshow: Boolean) =
+                me.raddatz.veyq.mobile.memories.place.PhotoPlace.resolve(tenant, item, placeNames, mayWrite, slideshow)
+        }, access = memoryAccess(ref), now = now, music = music)
+
+    /** Who looks at Memory or chapter [ref] from this shell: a member, as the tenant's switches and the folder say. */
+    private fun memoryAccess(ref: NodeAt) = me.raddatz.veyq.mobile.memories.MemoryRights.Access.Member(
+        memoriesOn = "memories" !in tenant.applicationsOff(), inIdentityFolder = inIdentityFolder(ref),
+    )
+
+    /** What a member may do on Memory or chapter [ref] here. */
+    private fun memoryRights(ref: NodeAt) = me.raddatz.veyq.mobile.memories.MemoryRights.of(memoryAccess(ref), ref.kind)
+
+    /**
+     * Where this shell's place names come from ([mapServices] sets it): a settle's `auto` place and a photo's name. Null
+     * before the map services are built: no name is looked up then (a settle still re-medoids).
+     */
+    var placeNames: me.raddatz.veyq.mobile.memories.place.PlaceNames? = null
+        private set
+
+    /**
+     * This tenant's map services on this device ([me.raddatz.veyq.mobile.map.MapServices.of], ADR 0143 D2): one per signed-in
+     * tenant in the process, built beside [mediaUploads] by the platform ([recipient] Apple Maps on Apple; [lang] the app's
+     * language, the geocoder's `accept-language`) and closed where the tenant closes (a lock, a sign-out, a switch) — its
+     * tiles dropped, its geocoder's queue cleared. The shell's place names come from it from then on ([placeNames]).
+     */
+    fun mapServices(recipient: me.raddatz.veyq.mobile.map.TileRecipient, lang: () -> String): me.raddatz.veyq.mobile.map.MapServices =
+        me.raddatz.veyq.mobile.map.MapServices.of(tenant, recipient).also { placeNames = me.raddatz.veyq.mobile.memories.place.PlaceNames(it, lang) }
+
+    /**
+     * Memory or chapter [gallery]'s date editor (ADR 0143 D5), where whoever looks may edit its meta and online; null
+     * otherwise. A save re-reads the page's facts line and the lists (a row shows the range).
+     */
+    fun dateEditor(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.memories.place.DateEditor? {
+        val g = gallery.current
+        if (!g.rights.editMeta || g.offline != null) return null
+        return me.raddatz.veyq.mobile.memories.place.DateEditor(g.facts?.date, g.autoRange) { date ->
+            me.raddatz.veyq.mobile.memories.place.MemoryFacts.setDate(tenant, gallery.node.scopeId, gallery.node.nodeId, date).also {
+                gallery.factsChanged()
+                runCatching { refresh() }
+            }
+        }
+    }
+
+    /**
+     * Memory or chapter [gallery]'s place editor (ADR 0143 D5) over the shell's map services ([placeNames]; none: the name
+     * field alone), where whoever looks may edit its meta and online; null otherwise.
+     */
+    fun placeEditor(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.memories.place.PlaceEditor? {
+        val names = placeNames
+        val g = gallery.current
+        if (!g.rights.editMeta || g.offline != null) return null
+        val points = g.gpsPoints
+        return me.raddatz.veyq.mobile.memories.place.PlaceEditor(
+            g.facts?.location, me.raddatz.veyq.mobile.memories.place.MemoryLocation.medoid(points), points, names,
+            save = { place ->
+                me.raddatz.veyq.mobile.memories.place.MemoryFacts.setLocation(tenant, gallery.node.scopeId, gallery.node.nodeId, place).also {
+                    gallery.factsChanged()
+                    runCatching { refresh() }
+                }
+            },
+        )
+    }
+
+    /** The Memories bar's Map tab over [memories] (its All tab's set, ADR 0143 D6): every located one a pin. */
+    suspend fun memoriesMap(memories: List<NodeRef>): me.raddatz.veyq.mobile.memories.place.MemoriesMap =
+        me.raddatz.veyq.mobile.memories.place.MemoriesMap.of(tenant, memories)
+
+    /** The date of every Memory and chapter this tenant opens, by node id: a Memories row's second line (ADR 0143 D5). */
+    suspend fun memoryDates(): Map<String, me.raddatz.veyq.mobile.memories.place.MemoryDate> =
+        runCatching { me.raddatz.veyq.mobile.memories.place.MemoryFacts.dates(tenant) }.getOrDefault(emptyMap())
+
+    /**
+     * Memory or chapter [gallery]'s Map view's tracks over this tenant ([me.raddatz.veyq.mobile.memories.tracks.TrackList],
+     * ADR 0143 D8): picked GPX files checked, queued through [uploads] with their labels, a file not taken handed to [left];
+     * a track relabelled, reported as an ITEM.
+     */
+    fun trackList(
+        gallery: me.raddatz.veyq.mobile.memories.GalleryModel, uploads: me.raddatz.veyq.mobile.memories.MediaUploads,
+        left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit,
+    ): me.raddatz.veyq.mobile.memories.tracks.TrackList =
+        me.raddatz.veyq.mobile.memories.tracks.TrackList(gallery, object : me.raddatz.veyq.mobile.memories.tracks.TrackList.Door {
+            override suspend fun check(source: me.raddatz.veyq.mobile.blob.UploadSource, held: Int) =
+                me.raddatz.veyq.mobile.memories.tracks.TrackUpload.check(source, held)
+            override fun queue(tracks: List<Pair<me.raddatz.veyq.mobile.memories.tracks.TrackUpload.Check.Taken, me.raddatz.veyq.mobile.memories.music.TrackLabel.Label>>) =
+                uploads.uploadTracks(gallery.node.scopeId, gallery.node.nodeId, gallery.node.name, tracks)
+            override fun left(source: me.raddatz.veyq.mobile.blob.UploadSource) = left(source)
+            override suspend fun relabel(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, label: me.raddatz.veyq.mobile.memories.music.TrackLabel.Label) =
+                me.raddatz.veyq.mobile.memories.music.TrackLabel.relabel(tenant, item, label)
+            override suspend fun report(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, category: String, reason: String, contact: String) =
+                me.raddatz.veyq.mobile.memories.MediumReport.report(tenant, item, category, reason, contact)
+            override suspend fun reportOffered() = this@ShellModel.reportOffered()
+            override val origin get() = tenant.origin
+        })
 
     /**
      * The account's music player over the platform's two decks ([newDeck], ADR 0142 decision 2) and its system controls
