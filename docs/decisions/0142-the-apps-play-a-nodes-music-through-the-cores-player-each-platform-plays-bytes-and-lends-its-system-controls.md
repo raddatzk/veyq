@@ -229,7 +229,8 @@ is the Kotlin core's and each platform draws only its own UI; this ADR applies i
   decisions 8 and 9 take as one more kept original.
 - **Not decided here:** a Chapter playing its Memory's music (inbox #847, the web has it neither); a guest's view of a
   received link in the apps (#435), so a guest listens on the web until then; reporting a photo or video from the
-  apps' lightbox (#891); GPX tracks in the apps (#907).
+  apps' lightbox (#891). GPX tracks in the apps came later, with their map
+  ([ADR 0143](0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md) decision 8).
 - **The passes, run 2026-11-16** against the dev instance (backend `veyq.localhost:8080`, Vite `:8081`), the seeded
   principal signed in by the devlogin helpers. The data, made through the web: Memory A with three ffmpeg tones of 75 s
   (two MP3, one AAC M4A), two photos, an 8 s H.264/AAC video and a Chapter; Memory B with one photo — both trashed after,

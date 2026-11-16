@@ -496,9 +496,10 @@ implementation exists but what holds it to the first.
     launched signed in, never tapped** (native-apps § Open). Found by the passes, not by a test: a chapter that never
     opened from a phone, the Undo's race, and Android's pager crashing when a trash shrank its rows (its key and page now
     guard a gone index).
-  Not built yet: edits (date, place, participants, capture-time correction), item marks, buckets, the map and GPX tracks,
-  the banner, the re-key, export and copy (inbox #890–#893, #907); music since built by
-  [ADR 0142](0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md).
+  Not built yet: edits (participants, capture-time correction), item marks, buckets, the banner, the re-key, export and
+  copy (inbox #890–#893); music since built by
+  [ADR 0142](0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md),
+  a Memory's date, place, maps and GPX tracks by [ADR 0143](0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md).
 - **One upload queue, core's** (owner 2026-11-09: "the same split as the web"). Every upload of every application runs
   through core's `blob/UploadQueue.kt`, the web's `core/blob/queue.ts` rule for rule: one job at a time in enqueue order,
   progress as a fraction, "preparing" until a job's first progress, one automatic retry of a transient failure, none of a

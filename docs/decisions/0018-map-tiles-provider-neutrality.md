@@ -4,7 +4,7 @@
 - Built: partly (not built: a space owner's enabling notice, ADR 0016's)
 - Date: 2026-07-02
 - Model: [Memories § Places and the map](../apps/memories.md#places-and-the-map)
-- Replaced in part: Leaflet as the renderer and the tile host as the one map recipient, for the apps (MapKit and Apple Maps on iOS and macOS, the core's raster map elsewhere), by ADR 0143 (not built)
+- Replaced in part: Leaflet as the renderer and the tile host as the one map recipient, for the apps (MapKit and Apple Maps on iOS and macOS, the core's raster map elsewhere), by ADR 0143 (built)
 
 ## Context
 

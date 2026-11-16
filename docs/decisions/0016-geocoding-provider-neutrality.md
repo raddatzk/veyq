@@ -4,7 +4,7 @@
 - Built: partly (not built: a space owner's enabling notice, the tenant language for shared names)
 - Date: 2026-07-01
 - Model: [Memories § Places and the map](../apps/memories.md#places-and-the-map)
-- Replaced in part: the consent per browser and the `Referer` as the identification, for the apps (one consent per device, a `User-Agent` naming the app and the instance), by ADR 0143 (not built)
+- Replaced in part: the consent per browser and the `Referer` as the identification, for the apps (one consent per device, a `User-Agent` naming the app and the instance), by ADR 0143 (built)
 
 ## Context
 
