@@ -71,7 +71,7 @@ internal sealed class MusicView : IDisposable
         AutomationProperties.SetName(_list, Words.MusicViewMusic());
         _list.ItemClick += (_, e) =>
         {
-            var row = e.ClickedItem as FrameworkElement;
+            var row = e.ClickedItem as ListViewItem ?? (e.ClickedItem as FrameworkElement)?.Parent as ListViewItem;
             if (row?.Tag is MusicTrackShown t && !t.blocked && _id is { } music)
             {
                 Log.Write($"music view: play {t.mediaId}");
@@ -113,6 +113,9 @@ internal sealed class MusicView : IDisposable
     private void Updated(Update update)
     {
         if (_closed || update is not Update.Music m) return;
+        // the model sends its state again as the player's position moves: only a change is drawn (a row redrawn under an
+        // open menu would close it)
+        if (Same(_shown, m.shown)) return;
         _shown = m.shown;
         if (m.shown is { } s)
         {
@@ -120,6 +123,12 @@ internal sealed class MusicView : IDisposable
         }
         Draw();
     }
+
+    /// <summary>Whether two states draw alike: every field, the tracks row by row.</summary>
+    private static bool Same(MusicShown? a, MusicShown? b) =>
+        ReferenceEquals(a, b) || a is not null && b is not null
+        && (a.tracks is null ? b.tracks is null : b.tracks is not null && a.tracks.SequenceEqual(b.tracks))
+        && a with { tracks = null } == b with { tracks = null };
 
     private void Draw()
     {
@@ -152,7 +161,7 @@ internal sealed class MusicView : IDisposable
     private FrameworkElement Row(MusicTrackShown t, MusicShown s)
     {
         var title = Title(t);
-        var row = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 6, 0, 6), Tag = t };
+        var row = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 6, 0, 6) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -214,9 +223,11 @@ internal sealed class MusicView : IDisposable
             row.Children.Add(more);
             row.ContextFlyout = Menu(t, s, title);
         }
-        AutomationProperties.SetAutomationId(row, $"music-track:{t.mediaId}");
-        AutomationProperties.SetName(row, t.blocked ? title : Words.MusicPlayFrom(title));
-        return row;
+        // the row's container carries its name and id: UI Automation invokes a ListViewItem, not what it holds
+        var item = new ListViewItem { Content = row, Tag = t, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        AutomationProperties.SetAutomationId(item, $"music-track:{t.mediaId}");
+        AutomationProperties.SetName(item, t.blocked ? title : Words.MusicPlayFrom(title));
+        return item;
     }
 
     private MenuFlyout Menu(MusicTrackShown t, MusicShown s, string title)

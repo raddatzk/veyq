@@ -73,6 +73,7 @@ internal sealed class LightboxView : IDisposable
     private readonly StackPanel _music = new() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
     private readonly TextBlock _musicTitle = new() { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 220, Margin = new Thickness(0, 0, 4, 0) };
     private readonly AppBarButton _musicToggle;
+    private string? _logged;
 
     public UIElement View => _view;
 
@@ -191,7 +192,9 @@ internal sealed class LightboxView : IDisposable
         if (_closed || update is not Update.Lightbox l) return;
         if (l.shown is { } s)
         {
-            Log.Write($"lightbox shown: {s.index + 1} of {s.count}, {s.row?.mediaId ?? "-"}, playing {s.playing}, slideshow {s.slideshow?.ToString() ?? "-"}, save {s.downloadName is not null}, trash {s.canTrash}");
+            // the state comes again as the music's position moves: said in the log when the rest changed
+            var line = $"lightbox shown: {s.index + 1} of {s.count}, {s.row?.mediaId ?? "-"}, playing {s.playing}, slideshow {s.slideshow?.ToString() ?? "-"}, save {s.downloadName is not null}, trash {s.canTrash}, music {(s.music is { } m ? m.playing ? "playing" : "paused" : "-")}";
+            if (line != _logged) Log.Write(_logged = line);
         }
         _shown = l.shown;
         if (l.shown?.row is null)
