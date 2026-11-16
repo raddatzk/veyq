@@ -83,6 +83,7 @@ class WireTest {
         me = "user-1", pictures = listOf("user-1", "user-2"),
     )
     private val memory = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "m-1", "MEMORY", "Ostsee 2026")
+    private val nowPlaying = NowPlayingShown("t1", "Fado", "Ostsee 2026", ObjectRef("scope-1", "m-1", "MEMORY", ApplicationId.MEMORIES, "Ostsee 2026"), true, 61_500, 187_000)
     private val photo = GalleryRow("m1", "IMG_0001.jpg", "image/jpeg", video = false, blocked = false, tile = "blob-t1", picture = "blob-p1",
         capturedAt = 1_790_000_000_000, width = 4000, height = 3000, said = null, canDelete = true)
     private val record = TrustedDevice("http://veyq.localhost:8080", "p@example.org", "user-1", TrustedDevice.Method.DEVICE, "wrap-1", "veyq.device.ab")
@@ -174,9 +175,15 @@ class WireTest {
             Call.MemoryUpload(60, emptyList()), Call.LightboxOpen(60, 2), Call.LightboxClose(61), Call.LightboxGo(61, 3), Call.LightboxPicture(61, "m1"),
             Call.LightboxSlideshow(61, true), Call.LightboxDetails(61, "m1"), Call.LightboxTrash(61), Call.LightboxStop(61), Call.MediumReader(61),
             Call.MediumSave(61, "/home/p/Downloads/IMG_0001.jpg"), Call.HeaderFacts(7, me.raddatz.veyq.mobile.AppKinds.Facts(), null, 60),
+            Call.GalleryMusic(60), Call.LightboxVideo(61, true), Call.PlayerPause, Call.PlayerResume, Call.PlayerNext, Call.PlayerPrevious,
+            Call.PlayerSeek(61_500), Call.PlayerStop, Call.PlayerOpenNode, Call.MusicOpen(60), Call.MusicClose(80), Call.MusicPlay(80, "t1"),
+            Call.MusicRename(80, "t1", "Fado für Ana"), Call.MusicRename(80, "t1", null), Call.MusicRemove(80, "t1"),
+            Call.MusicDownload(80, "t1", "C:\\Users\\p\\Musik\\Fado.mp3"), Call.MusicReport(80, "t1"),
+            Call.MusicAdd(80, listOf("/home/p/Musik/Fado.mp3", "/home/p/Musik/Alfama 中文.m4a")), Call.MusicSeen(80),
+            Call.AudioEnded(90, 3), Call.AudioFailed(91, 4),
         ),
         Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.DropBox(30), Watched.Scan(40), Watched.Link(70), Watched.Settings(50),
-            Watched.Gallery(60), Watched.GalleryLive(60), Watched.SettingsStorageLive(50), Watched.Lightbox(61)),
+            Watched.Gallery(60), Watched.GalleryLive(60), Watched.SettingsStorageLive(50), Watched.Lightbox(61), Watched.Player, Watched.Music(80)),
         HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full"), HostReply.Pixels(2400, 3394),
             HostReply.Tiers(2048, 1536, 412_000), HostReply.Tiers(null, null, 0)),
         Answer.serializer() to listOf(
@@ -213,6 +220,8 @@ class WireTest {
                 Piece.Said(Notice(Msg.MEMORY_UPLOADER_GUEST)), 1,
             ),
             Answer.MediumDetails(emptyList(), null, 0),
+            Answer.MusicOpened(80), Answer.MusicAdded(listOf(Notice(Msg.MUSIC_NOT_AUDIO, listOf("notes.txt")))), Answer.MusicAdded(emptyList()),
+            Answer.Refused(Answer.Why.NO_PLAYER), Answer.Refused(Answer.Why.NO_SUCH_MUSIC), Answer.Refused(Answer.Why.NO_SUCH_DECK),
         ),
         Update.serializer() to listOf(
             Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080")),
@@ -414,12 +423,28 @@ class WireTest {
             Update.Lightbox(61, LightboxShown(0, 1, null, photo, false, SlideshowState.PAUSED, null, false)),
             Update.Lightbox(61, LightboxShown(0, 1, null, photo, false, SlideshowState.ENDED, null, false)),
             Update.Lightbox(63, null),
+            Update.Gallery(60, GalleryShown(memory, null, false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,
+                musicView = true, musicHere = true)),
+            Update.Lightbox(61, LightboxShown(0, 1, null, photo, true, null, null, false, music = nowPlaying)),
+            Update.Player(PlayerShown(nowPlaying, null)), Update.Player(PlayerShown(null, Notice(Msg.MUSIC_NOTHING_PLAYS))), Update.Player(null),
+            Update.Music(80, MusicShown(
+                memory, listOf(
+                    MusicTrackShown("t1", "Fado", null, "Fado", "Fado.mp3", "3:07", playing = true, unplayable = false, blocked = false, canRemove = true),
+                    MusicTrackShown("t2", null, Notice(Msg.MUSIC_UNTITLED, listOf(2)), null, null, null, playing = false, unplayable = true, blocked = true, canRemove = false),
+                ),
+                canAdd = true, canRename = true, canDownload = true, canReport = false, offline = false, checking = true, said = Notice(Msg.MUSIC_RENAME_CONFLICT),
+            )),
+            Update.Music(80, MusicShown(memory, null, false, false, false, false, true, false, null)), Update.Music(81, null),
         ),
         HostRequest.serializer() to listOf(HostRequest.StoreRead("veyq.recent"), HostRequest.StoreWrite("veyq.recent", "s\tn\t1"), HostRequest.StoreRemove("veyq.recent"),
             HostRequest.PdfPages("/home/p/Notfall-Kit.pdf"), HostRequest.PdfPage("/home/p/Notfall-Kit.pdf", 2, 2400), HostRequest.PictureLuma("/home/p/kit.jpg", 2400),
             HostRequest.MediaDuration("/home/p/Videos/clip.webm"),
             HostRequest.MediaTiers("C:\\Users\\p\\Bilder\\IMG_0001.HEIC", "image/heic", 2048, 0.85, 512, 0.8, 0),
-            HostRequest.MediaTiers("/home/p/Videos/clip.webm", "video/webm", 2048, 0.85, 512, 0.8, 100)),
+            HostRequest.MediaTiers("/home/p/Videos/clip.webm", "video/webm", 2048, 0.85, 512, 0.8, 100),
+            HostRequest.AudioLoad(90, 3, 95, 4_812_331, "audio/mpeg"), HostRequest.AudioPlay(90), HostRequest.AudioPause(90), HostRequest.AudioSeek(90, 12_000),
+            HostRequest.AudioPosition(91), HostRequest.AudioRamp(91, 1.0, 5000), HostRequest.AudioRamp(90, 0.0, 0), HostRequest.AudioClear(90),
+            HostRequest.ControlsBind, HostRequest.ControlsShow(nowPlaying), HostRequest.ControlsShow(NowPlayingShown("t2", "Track 2", null, null, false, 0, 0)),
+            HostRequest.ControlsClear, HostRequest.WordsSay(Notice(Msg.MUSIC_UNTITLED, listOf(3)))),
     )
 
     /**

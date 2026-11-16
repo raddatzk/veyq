@@ -252,7 +252,7 @@ class MemoriesDispatchTest {
                 shell = null, pot = null, me = "u1", pictures = MutableStateFlow(emptyMap()), loadPictures = {},
                 header = { node, facts, _ -> NodeHeaderModel(node, facts, Header) },
                 mediaUploads = { queue, deriver, _ -> played.uploads(queue, deriver) },
-                gallery = { node, uploads ->
+                gallery = { node, uploads, _ ->
                     // a clock whose first reading is the poll's start and every later one long after: the poll ticks at once
                     val reads = AtomicInteger()
                     GalleryModel(node, played.door(node, uploads), now = { if (reads.getAndIncrement() == 0) 0L else 1_000_000L })

@@ -10,6 +10,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import me.raddatz.veyq.mobile.account.KitPictures
+import me.raddatz.veyq.mobile.audio.Deck
+import me.raddatz.veyq.mobile.audio.NowPlaying
+import me.raddatz.veyq.mobile.audio.PlayerCommands
+import me.raddatz.veyq.mobile.audio.SystemControls
+import me.raddatz.veyq.mobile.blob.RangeReader
+import me.raddatz.veyq.mobile.memories.music.MusicUpload
+import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.qr.QrFrame
@@ -20,6 +28,7 @@ import me.raddatz.veyq.mobile.session.StaySignedIn
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.AtomicReference
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.fetchAndIncrement
 import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.time.Duration.Companion.seconds
 
@@ -94,6 +103,34 @@ internal class Host(private val timeout: kotlin.time.Duration = TIMEOUT, private
         } finally {
             waiting.remove(token)
         }
+    }
+
+    /**
+     * [ask] from a coroutine that must not block its thread while the host answers (the music player's own lane, ADR 0142
+     * decision 2: a deck's load and position): it suspends instead; a host silent for [timeout] fails it ([Silent]).
+     */
+    suspend fun asking(request: HostRequest): HostReply {
+        val token = tokens.incrementAndFetch()
+        val answer = CompletableDeferred<Replied>()
+        waiting.put(token, answer)
+        try {
+            send(token, wire.encodeToString(HostRequest.serializer(), request))
+            // withTimeoutOrNull, as [askWithPayload]: a silent host is a failure, never this coroutine's cancellation
+            val r = withTimeoutOrNull(timeout) { answer.await() } ?: throw Silent(timeout)
+            r.payload?.fill(0)
+            return r.reply
+        } finally {
+            waiting.remove(token)
+        }
+    }
+
+    /**
+     * Sends [request] and waits for nothing (a deck's pause, seek, ramp and clear; the system controls' changes): the host's
+     * reply finds no one waiting and is dropped. Sent on the caller's thread before this returns, so what one thread tells
+     * and asks reaches the host in the order made.
+     */
+    fun tell(request: HostRequest) {
+        send(tokens.incrementAndFetch(), wire.encodeToString(HostRequest.serializer(), request))
     }
 
     /** The host did not reply within [timeout]: an ordinary failure of the ask, answered as one ([Answer.Failed]). */
@@ -286,4 +323,130 @@ internal object NoDeviceKeys : DeviceKeys {
     override fun secret(alias: String): String? = null
     override fun deleteSecret(alias: String) {}
     override val staySignedIn = emptySet<StaySignedIn>()
+}
+
+/**
+ * Where a deck's reader is held for the host (ADR 0137 decision 2): [hold] gives it an id the host reads through
+ * `Reader.Read` — null while no tenant is open, so nothing is held past one —, [drop] lets that id go.
+ */
+internal interface HeldReaders {
+    fun hold(reader: RangeReader): Long?
+    fun drop(id: Long)
+}
+
+/**
+ * The host's half of the music (ADR 0142 decisions 2, 3, 4 and 7) over its requests: the player's decks ([deck]), the
+ * system's controls ([controls]), a picked track's length ([measure]) and an untitled track's title ([untitled]). The
+ * platform plays, shows and measures; what plays, when, how loud and what is refused stays the core's.
+ */
+internal class HostAudio(
+    private val host: Host,
+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+) {
+    /** Deck [id], its reader held through [readers], reporting to [events] (the player's). */
+    fun deck(id: Long, readers: HeldReaders, events: Deck.Events): HostDeck = HostDeck(host, id, readers, events)
+
+    val controls: SystemControls = HostControls(host)
+
+    /**
+     * A picked track's length (`MusicUpload.Measure`) asked of the host by its path ([HostRequest.MediaDuration], the same
+     * request a video's poster time uses), off the thread that checks; a source that names no path, a reply that is no
+     * length and a host that fails all answer null — the core then refuses the file as unplayable.
+     */
+    val measure: MusicUpload.Measure = object : MusicUpload.Measure {
+        override fun durationMs(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, done: (Long?) -> Unit) {
+            val path = (source as? PathSource)?.path ?: return done(null)
+            scope.launch {
+                done(runCatching { (host.asking(HostRequest.MediaDuration(path)) as? HostReply.Value)?.value?.toLongOrNull() }.getOrNull())
+            }
+        }
+    }
+
+    /** Untitled track [number]'s title as the host says it ([HostRequest.WordsSay]); its number alone where the host says nothing. */
+    fun untitled(number: Int): String =
+        runCatching { (host.ask(HostRequest.WordsSay(Notice(Msg.MUSIC_UNTITLED, number))) as? HostReply.Value)?.value }.getOrNull()
+            ?.takeIf { it.isNotBlank() } ?: number.toString()
+}
+
+/**
+ * One of the player's decks on the host's side of the bridge (core's `Deck`, ADR 0142 decision 2; `Audio.*` host
+ * requests): a load hands the host a reader by id, never bytes or a key; each load is numbered, and an event the host
+ * reports for another load than the one held ([ended], [failed]: a cleared or reloaded deck's) is dropped. Its pause,
+ * seek, ramp and clear are told, never waited for; its load, play and position are asked without blocking the player's lane.
+ */
+internal class HostDeck(
+    private val host: Host,
+    val id: Long,
+    private val readers: HeldReaders,
+    private val events: Deck.Events,
+) : Deck {
+    private val loads = AtomicLong(0)
+    private val reader = AtomicReference<Long?>(null)
+
+    override suspend fun load(reader: RangeReader, mime: String): Long {
+        letReaderGo()
+        val load = loads.incrementAndFetch()
+        val held = readers.hold(reader) ?: throw IllegalStateException("no tenant holds the reader")
+        this.reader.store(held)
+        return when (val r = host.asking(HostRequest.AudioLoad(id, load, held, reader.size, mime))) {
+            is HostReply.Value -> r.value?.toLongOrNull() ?: 0L
+            else -> {
+                if (this.reader.compareAndSet(held, null)) readers.drop(held)
+                throw IllegalStateException("the host did not load it: ${(r as? HostReply.Failed)?.error ?: r::class.simpleName}")
+            }
+        }
+    }
+
+    override suspend fun play() {
+        val r = host.asking(HostRequest.AudioPlay(id))
+        if (r !is HostReply.Done) throw IllegalStateException("the host did not play it: ${(r as? HostReply.Failed)?.error ?: r::class.simpleName}")
+    }
+
+    override fun pause() = host.tell(HostRequest.AudioPause(id))
+
+    override fun seek(positionMs: Long) = host.tell(HostRequest.AudioSeek(id, positionMs))
+
+    /** 0 where the host does not say (a failed or silent ask): the player then sees the track at its start. */
+    override suspend fun positionMs(): Long = try {
+        (host.asking(HostRequest.AudioPosition(id)) as? HostReply.Value)?.value?.toLongOrNull() ?: 0L
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        0L
+    }
+
+    override fun ramp(to: Double, overMs: Long) = host.tell(HostRequest.AudioRamp(id, to, overMs))
+
+    override fun clear() {
+        // the cleared load's events are no longer this deck's
+        loads.fetchAndIncrement()
+        host.tell(HostRequest.AudioClear(id))
+        letReaderGo()
+    }
+
+    /** The reader held for the host goes: a read of it is refused from now on. */
+    private fun letReaderGo() {
+        reader.exchange(null)?.let(readers::drop)
+    }
+
+    /** The host's [Call.AudioEnded] for [load]: the player hears it only for the load this deck holds. */
+    fun ended(load: Long) {
+        if (load == loads.load()) events.ended()
+    }
+
+    /** The host's [Call.AudioFailed] for [load]: as [ended]. */
+    fun failed(load: Long) {
+        if (load == loads.load()) events.failed()
+    }
+}
+
+/**
+ * The system's media controls on the host's side of the bridge (core's `SystemControls`, ADR 0142 decision 3), told and
+ * never waited for: the commands come back as `Player.*` calls onto the same player, so [bind] hands the host nothing but
+ * the news that they reach one now.
+ */
+internal class HostControls(private val host: Host) : SystemControls {
+    override fun bind(commands: PlayerCommands) = host.tell(HostRequest.ControlsBind)
+    override fun show(now: NowPlaying) = host.tell(HostRequest.ControlsShow(NowPlayingShown.of(now)))
+    override fun clear() = host.tell(HostRequest.ControlsClear)
 }

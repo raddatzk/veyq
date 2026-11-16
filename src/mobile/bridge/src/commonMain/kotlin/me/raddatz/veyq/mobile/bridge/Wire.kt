@@ -891,6 +891,93 @@ internal sealed class Call {
      * blocked medium or where the rights download nothing. A save outlives its lightbox; every save stops with the tenant.
      */
     @Serializable @SerialName("Medium.Save") data class MediumSave(val lightbox: Long, val path: String) : Call()
+
+    // --- a node's music (ADR 0142): the account's one player, a page's Music view, the host's decks -------------------------
+
+    /**
+     * Gallery [gallery]'s header music action (`GalleryModel.toggleMusic`, ADR 0142 decision 6; its words are the header
+     * plan's): its node's music started shuffled, or stopped where it is the player's queue ([GalleryShown.musicHere]).
+     * Refused `NOT_OFFERED` where the page plays no music (the composition has no decks).
+     */
+    @Serializable @SerialName("Gallery.Music") data class GalleryMusic(val gallery: Long) : Call()
+
+    /**
+     * The lightbox's video started ([playing] true) or paused or ended (false), as the host's player reports it
+     * (`Lightbox.videoPlaying`, ADR 0142 decision 13): the music is interrupted while it plays and plays again after.
+     */
+    @Serializable @SerialName("Lightbox.Video") data class LightboxVideo(val lightbox: Long, val playing: Boolean) : Call()
+
+    /**
+     * The account's player (`MusicPlayer`, ADR 0142 decisions 1, 3 and 5): what the bar, the lightbox's compact controls and
+     * the system's controls ask of it — the system's commands come back as these calls, after [HostRequest.ControlsBind].
+     * Each is answered at once (the player acts on its own lane; [Watched.Player] shows what came of it); refused
+     * `NO_PLAYER` while no tenant with a player is open. The system's "play" is [PlayerResume].
+     */
+    @Serializable @SerialName("Player.Pause") data object PlayerPause : Call()
+    @Serializable @SerialName("Player.Resume") data object PlayerResume : Call()
+    @Serializable @SerialName("Player.Next") data object PlayerNext : Call()
+    @Serializable @SerialName("Player.Previous") data object PlayerPrevious : Call()
+
+    /** Within the playing track's span, in ms from its start ([NowPlayingShown.durationMs] long). */
+    @Serializable @SerialName("Player.Seek") data class PlayerSeek(val positionMs: Long) : Call()
+
+    /** The bar closed: the queue stops and the system's controls are cleared ([HostRequest.ControlsClear]). */
+    @Serializable @SerialName("Player.Stop") data object PlayerStop : Call()
+
+    /** The bar's node name: the shell opens the node whose music plays ([NowPlayingShown.route]); refused `NO_PLAYER` where none plays. */
+    @Serializable @SerialName("Player.OpenNode") data object PlayerOpenNode : Call()
+
+    /**
+     * Gallery [gallery]'s Music view (`ShellModel.musicModel`, core's `MusicModel`, ADR 0142 decision 8), answered with its
+     * id ([Answer.MusicOpened]) for [Watched.Music] and the calls below; it closes with [MusicClose], its gallery or the
+     * tenant. Refused `NOT_OFFERED` where the page plays no music.
+     */
+    @Serializable @SerialName("Music.Open") data class MusicOpen(val gallery: Long) : Call()
+    @Serializable @SerialName("Music.Close") data class MusicClose(val music: Long) : Call()
+
+    /** Track [mediaId] played first, then the rest shuffled (`MusicModel.play`). */
+    @Serializable @SerialName("Music.Play") data class MusicPlay(val music: Long, val mediaId: String) : Call()
+
+    /**
+     * Track [mediaId] renamed to [name] (null or blank: named by its file again; `MusicModel.rename`, the web's raw
+     * read-modify-write): [Answer.Said] with why it did not land (a peer's rename won, it failed, offline), or none.
+     */
+    @Serializable @SerialName("Music.Rename") data class MusicRename(val music: Long, val mediaId: String, val name: String?) : Call()
+
+    /** Track [mediaId] deleted the gallery's way (`MusicModel.remove`): [GalleryTrash]'s answers; its Undo is [GalleryUndo]. */
+    @Serializable @SerialName("Music.Remove") data class MusicRemove(val music: Long, val mediaId: String) : Call()
+
+    /**
+     * Track [mediaId]'s file saved into the file at [path] the host's save dialog gave (under [MusicTrackShown.fileName];
+     * `MusicModel.save`): [Answer.Saving], as [MediumSave]; refused `NOTHING_TO_DOWNLOAD` where it may not be downloaded.
+     */
+    @Serializable @SerialName("Music.Download") data class MusicDownload(val music: Long, val mediaId: String, val path: String) : Call()
+
+    /**
+     * Track [mediaId]'s report, an ITEM (`MusicModel.reportSheet`, ADR 0142 decision 11): [Answer.ReportOpened] for the
+     * report sheet's own calls and [Watched.Report]; refused `NOT_OFFERED` where reports are not offered.
+     */
+    @Serializable @SerialName("Music.Report") data class MusicReport(val music: Long, val mediaId: String) : Call()
+
+    /**
+     * The audio files at [paths] (as the host's open dialog gave them) added as tracks (`MusicModel.add`, ADR 0142 decision
+     * 7): the core opens each and checks it on the device — its size, its bytes, its length as the host reads it
+     * ([HostRequest.MediaDuration]) — and queues the rest into the node. [Answer.MusicAdded] with what is said of those
+     * refused, in the order picked; a path that is no file that reads is left out.
+     */
+    @Serializable @SerialName("Music.Add") data class MusicAdd(val music: Long, val paths: List<String>) : Call()
+
+    /** What [MusicShown.said] said was seen (`MusicModel.seen`): it goes. */
+    @Serializable @SerialName("Music.Seen") data class MusicSeen(val music: Long) : Call()
+
+    /**
+     * Deck [deck] played its load [load] to the file's end (`Deck.Events.ended`, ADR 0142 decision 2), reported by the host
+     * on any thread. An event of a load the deck no longer holds (cleared, or loaded anew since) is dropped.
+     */
+    @Serializable @SerialName("Audio.Ended") data class AudioEnded(val deck: Long, val load: Long) : Call()
+
+    /** Deck [deck]'s platform player stopped playing load [load] after it loaded (a stream error: `Deck.Events.failed`). */
+    @Serializable @SerialName("Audio.Failed") data class AudioFailed(val deck: Long, val load: Long) : Call()
 }
 
 /**
@@ -1068,6 +1155,12 @@ internal sealed class Answer {
      */
     @Serializable @SerialName("MediumDetails") data class MediumDetails(val rows: List<DetailRow>, val uploader: Piece?, val uploaderAt: Int) : Answer()
 
+    /** A page's Music view opened ([Call.MusicOpen]): its id, for [Watched.Music] and its calls. */
+    @Serializable @SerialName("MusicOpened") data class MusicOpened(val music: Long) : Answer()
+
+    /** Picked files added as tracks ([Call.MusicAdd]): what is said of each one refused, in the order picked (none: all queued). */
+    @Serializable @SerialName("MusicAdded") data class MusicAdded(val said: List<Notice>) : Answer()
+
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
         NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER, NO_SUCH_ENTRY, NO_SUCH_EDITOR,
@@ -1098,6 +1191,9 @@ internal sealed class Answer {
         /** A device link: none by that id (closed, or its tenant closed); no sign-in shown for a new device's; a
          *  confirmation or a code the link did not take. */
         NO_SUCH_LINK, NO_SIGN_IN, NOT_TAKEN,
+
+        /** The music: no player (no tenant open, or a composition without decks); no Music view by that id; no deck by that id. */
+        NO_PLAYER, NO_SUCH_MUSIC, NO_SUCH_DECK,
     }
 }
 
@@ -1184,6 +1280,12 @@ internal sealed class Watched {
 
     /** A lightbox opened by [Call.LightboxOpen]. */
     @Serializable @SerialName("Lightbox") data class Lightbox(val lightbox: Long) : Watched()
+
+    /** The account's player: what the bar draws ([PlayerShown]), from tenant to tenant. */
+    @Serializable @SerialName("Player") data object Player : Watched()
+
+    /** A Music view opened by [Call.MusicOpen]. */
+    @Serializable @SerialName("Music") data class Music(val music: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -1258,6 +1360,12 @@ internal sealed class Update {
 
     /** A lightbox; null once it was closed (or its gallery was). */
     @Serializable @SerialName("Lightbox") data class Lightbox(val lightbox: Long, val shown: LightboxShown?) : Update()
+
+    /** The account's player; null while no tenant with a player is open. */
+    @Serializable @SerialName("Player") data class Player(val shown: PlayerShown?) : Update()
+
+    /** A Music view; null for an id the bridge does not hold (closed, or its gallery or tenant was). */
+    @Serializable @SerialName("Music") data class Music(val music: Long, val shown: MusicShown?) : Update()
 }
 
 /**
@@ -1292,6 +1400,10 @@ internal class GalleryShown(
     val said: Notice?,
     /** Shown from the offline store, read-only, as of when (ADR 0140 decision 5): a time, nothing else; null online. */
     val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null,
+    /** Whether the page offers its Music view ([Call.MusicOpen]; `MusicModel.shown`: it has music, or whoever looks may add some). */
+    val musicView: Boolean = false,
+    /** This node's music is the player's queue now, playing or paused (the header's action then stops it). */
+    val musicHere: Boolean = false,
 )
 
 /**
@@ -1335,6 +1447,84 @@ internal class LightboxShown(
     val slideshow: SlideshowState?,
     val downloadName: String?,
     val canTrash: Boolean,
+    /** What the player plays while it holds a queue: the compact controls' (`Lightbox.State.music`; their commands are `Player.*`). */
+    val music: NowPlayingShown? = null,
+)
+
+/**
+ * What plays now (core's `NowPlaying`, ADR 0142 decision 5) for the bar, the lightbox's compact controls and the system's
+ * controls ([HostRequest.ControlsShow]): the track's id and [title] (an untitled one already named by its number), the
+ * node's name ([album]) and its page ([route], which [Call.PlayerOpenNode] opens), whether it plays (false while paused, a
+ * video's interruption included), and where it stands in its span ([positionMs] of [durationMs]; 0: not known). The queue's
+ * own key stays in the core.
+ */
+@Serializable
+@SerialName("NowPlayingShown")
+internal class NowPlayingShown(
+    val trackId: String,
+    val title: String,
+    val album: String?,
+    val route: ObjectRef?,
+    val playing: Boolean,
+    val positionMs: Long,
+    val durationMs: Long,
+) {
+    companion object {
+        fun of(now: me.raddatz.veyq.mobile.audio.NowPlaying) =
+            NowPlayingShown(now.trackId, now.title, now.album, now.route, now.playing, now.positionMs, now.durationMs)
+    }
+}
+
+/**
+ * The account's player as the bar draws it (core's `MusicPlayer.State`): what plays ([nowPlaying]; null: the bar hides), and
+ * why the last queue ended by itself ([notice]: none of its tracks played on this device, ADR 0142 decision 9), until the
+ * next play.
+ */
+@Serializable
+@SerialName("PlayerShown")
+internal class PlayerShown(val nowPlaying: NowPlayingShown?, val notice: Notice?)
+
+/**
+ * A page's Music view as the host draws it (core's `MusicModel`, ADR 0142 decisions 6–11), each field the model's own
+ * answer: its [node], its [tracks] as the view lists them (null while the gallery's first read runs), what it offers whoever
+ * looks ([canAdd], [canRename], [canDownload], [canReport]; each track's delete [MusicTrackShown.canRemove]), [offline]
+ * (read-only), whether picked files are being checked ([checking]) and what the last add or rename left to say ([said],
+ * until [Call.MusicSeen]).
+ */
+@Serializable
+@SerialName("MusicShown")
+internal class MusicShown(
+    val node: NodeAt,
+    val tracks: List<MusicTrackShown>?,
+    val canAdd: Boolean,
+    val canRename: Boolean,
+    val canDownload: Boolean,
+    val canReport: Boolean,
+    val offline: Boolean,
+    val checking: Boolean,
+    val said: Notice?,
+)
+
+/**
+ * One track as the Music view lists it (`MusicModel.Shown`): its medium's id, its [title] — null where untitled, said as
+ * [untitled] (`music_untitled` with its number) —, its own name as a member gave it ([ownName], what Rename starts from;
+ * null where named by its file), its file's name ([fileName], what a download is saved as), its whole length as shown
+ * ([length], `m:ss`; null where unknown), whether it is the one playing, whether it did not play on this device in this
+ * session ([unplayable]), whether the operator blocked it, and whether its delete is offered ([canRemove]).
+ */
+@Serializable
+@SerialName("MusicTrackShown")
+internal class MusicTrackShown(
+    val mediaId: String,
+    val title: String?,
+    val untitled: Notice?,
+    val ownName: String?,
+    val fileName: String?,
+    val length: String?,
+    val playing: Boolean,
+    val unplayable: Boolean,
+    val blocked: Boolean,
+    val canRemove: Boolean,
 )
 
 /**
@@ -2100,6 +2290,57 @@ internal sealed class HostRequest {
         val path: String, val mediaType: String, val previewEdge: Int, val previewQuality: Double, val thumbnailEdge: Int,
         val thumbnailQuality: Double, val posterAtMs: Long,
     ) : HostRequest()
+
+    /**
+     * One of the player's two decks (core's `Deck`, ADR 0142 decision 2: the platform plays bytes, the core decides which,
+     * when and how loud), each named by [deck]; the host makes its platform player for a deck at its first load and lets it
+     * go at [AudioClear]. The core asks them in order from one thread; the ones it waits for are answered as said, the
+     * others ([AudioPause], [AudioSeek], [AudioRamp], [AudioClear]) `Done` at once — the core does not wait for those.
+     *
+     * Load [load] (numbered by the core; the host names it in [Call.AudioEnded] and [Call.AudioFailed]) of the track readable
+     * through reader [reader] ([size] bytes, of type [mediaType]; ADR 0137 decision 2: read through `Reader.Read` from the
+     * player's own thread, never decrypted whole or to disk), readied at its start, its volume as last ramped: answered
+     * [HostReply.Value] with the file's length in ms (null where the platform cannot say), or [HostReply.Failed] where the
+     * platform cannot open it — the core then skips the track (ADR 0142 decision 9). The reader is refused once the deck is
+     * cleared or loaded anew.
+     */
+    @Serializable @SerialName("Audio.Load") data class AudioLoad(val deck: Long, val load: Long, val reader: Long, val size: Long, val mediaType: String) : HostRequest()
+
+    /** Starts or continues playing what was loaded: [HostReply.Done], or [HostReply.Failed] where it refuses (the core skips it). */
+    @Serializable @SerialName("Audio.Play") data class AudioPlay(val deck: Long) : HostRequest()
+    @Serializable @SerialName("Audio.Pause") data class AudioPause(val deck: Long) : HostRequest()
+
+    /** Moves to [positionMs] of the file. */
+    @Serializable @SerialName("Audio.Seek") data class AudioSeek(val deck: Long, val positionMs: Long) : HostRequest()
+
+    /** Where in the file it stands: [HostReply.Value], its ms as text. Asked about four times a second while a track plays. */
+    @Serializable @SerialName("Audio.Position") data class AudioPosition(val deck: Long) : HostRequest()
+
+    /**
+     * The volume (0.0 silent, 1.0 full) moved to [to] over [overMs], smoothly — steps of at most 50 ms, run by the host
+     * (a crossfade is two of these, ADR 0142 decision 2) —; `0` sets it at once.
+     */
+    @Serializable @SerialName("Audio.Ramp") data class AudioRamp(val deck: Long, val to: Double, val overMs: Long) : HostRequest()
+
+    /** Stops, lets the platform's player go and closes its stream (its reader is refused from now on). */
+    @Serializable @SerialName("Audio.Clear") data class AudioClear(val deck: Long) : HostRequest()
+
+    /**
+     * The system's media controls (core's `SystemControls`, ADR 0142 decision 3: Windows' SMTC, Linux's MPRIS), each
+     * answered `Done` at once, unwaited: a queue loaded — from now on the system's play, pause, next, previous and seek
+     * reach the player as `Player.*` calls ([Call.PlayerResume] is its play) —; what plays now ([ControlsShow], at each
+     * change and once a second while it plays); the queue stopped ([ControlsClear]: the commands unbound, nothing shown).
+     */
+    @Serializable @SerialName("Controls.Bind") data object ControlsBind : HostRequest()
+    @Serializable @SerialName("Controls.Show") data class ControlsShow(val now: NowPlayingShown) : HostRequest()
+    @Serializable @SerialName("Controls.Clear") data object ControlsClear : HostRequest()
+
+    /**
+     * Words the core needs as text where a core function takes a string, not a notice (the core renders no word, ADR 0136
+     * decision 3): [words] as the host says them, answered [HostReply.Value]. An untitled track's title (`music_untitled`
+     * with its number, ADR 0142 decision 4), which its queue carries to the bar and the system's controls.
+     */
+    @Serializable @SerialName("Words.Say") data class WordsSay(val words: Notice) : HostRequest()
 }
 
 @Serializable

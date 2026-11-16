@@ -107,6 +107,12 @@ internal class Composition<A : Connection, T : Any>(
      * its own, or has none (the trusted `Link.*` calls are then refused for the connection).
      */
     val trustedLink: (account: A, role: DeviceLink.Role, decode: suspend (me.raddatz.veyq.mobile.qr.QrFrame) -> String?) -> DeviceLink? = { _, _, _ -> null },
+    /**
+     * The host's half of the music (ADR 0142 decisions 2, 3, 4 and 7): its decks, its system controls, its measure of a
+     * picked track and its words for an untitled one, over its requests ([HostAudio]) in the library; a test plays the host,
+     * or has none — then no player is made and no page plays music.
+     */
+    val audio: HostAudio? = null,
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
@@ -171,9 +177,31 @@ internal class Tenant(
         queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver, changed: () -> Unit,
     ) -> me.raddatz.veyq.mobile.memories.MediaUploads)? =
         shell?.let { s -> { queue, deriver, changed -> s.mediaUploads(queue, deriver, left = {}, changed = changed) } },
-    /** A Memory's or a chapter's page (`ShellModel.galleryModel`) over the tenant's Memories [uploads]. */
-    val gallery: ((node: NodeAt, uploads: me.raddatz.veyq.mobile.memories.MediaUploads) -> me.raddatz.veyq.mobile.memories.GalleryModel)? =
-        shell?.let { s -> { node, uploads -> s.galleryModel(node, uploads) } },
+    /**
+     * A Memory's or a chapter's page (`ShellModel.galleryModel`) over the tenant's Memories [uploads], playing its music with
+     * [music] (the account's player; null: none).
+     */
+    val gallery: ((
+        node: NodeAt, uploads: me.raddatz.veyq.mobile.memories.MediaUploads, music: me.raddatz.veyq.mobile.memories.GalleryModel.Music?,
+    ) -> me.raddatz.veyq.mobile.memories.GalleryModel)? =
+        shell?.let { s -> { node, uploads, music -> s.galleryModel(node, uploads, music) } },
+    /**
+     * The account's music player (`ShellModel.musicPlayer`, ADR 0142 decision 1) over the host's decks and system controls;
+     * one per tenant opened, stopped when it closes. A test's tenant plays one over its own randomness.
+     */
+    val musicPlayer: ((
+        newDeck: (me.raddatz.veyq.mobile.audio.Deck.Events) -> me.raddatz.veyq.mobile.audio.Deck, controls: me.raddatz.veyq.mobile.audio.SystemControls?,
+    ) -> me.raddatz.veyq.mobile.audio.MusicPlayer)? = shell?.let { s -> { newDeck, controls -> s.musicPlayer(newDeck, controls) } },
+    /**
+     * A page's Music view (`ShellModel.musicModel`, ADR 0142 decision 8) over the tenant's Memories [uploads], a picked
+     * track's length read by the host's [measure]. A desktop reads each picked file in place, so one not taken needs
+     * nothing done. A test's tenant plays one over a door of its own.
+     */
+    val musicModel: ((
+        gallery: me.raddatz.veyq.mobile.memories.GalleryModel, uploads: me.raddatz.veyq.mobile.memories.MediaUploads,
+        measure: me.raddatz.veyq.mobile.memories.music.MusicUpload.Measure,
+    ) -> me.raddatz.veyq.mobile.memories.music.MusicModel)? =
+        shell?.let { s -> { gallery, uploads, measure -> s.musicModel(gallery, uploads, measure, left = {}) } },
     /** A Memory made where New makes it (`ShellModel.createMemory`): the node made, or why not. */
     val createMemory: (suspend (scopeId: String, parentId: String?, name: String) -> me.raddatz.veyq.mobile.memories.MemoryCreate.Made)? =
         shell?.let { s -> { scopeId, parentId, name -> s.createMemory(scopeId, parentId, name) } },
@@ -181,6 +209,9 @@ internal class Tenant(
     val rowCover: (suspend (nodeId: String, held: String?) -> me.raddatz.veyq.mobile.session.NodeCover.Row?)? =
         shell?.let { s -> { nodeId, held -> s.rowCover(nodeId, held) } },
 )
+
+/** A Music view the host opened ([Call.MusicOpen]) over gallery [gallery]. */
+internal class HeldMusic(val gallery: Long, val model: me.raddatz.veyq.mobile.memories.music.MusicModel)
 
 /** A lightbox the host opened ([Call.LightboxOpen]) over gallery [gallery], its [page]. */
 internal class HeldLightbox(val gallery: Long, val page: me.raddatz.veyq.mobile.memories.GalleryModel, val model: me.raddatz.veyq.mobile.memories.Lightbox)
@@ -337,6 +368,23 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * its reader (paged away, stopped, closed): a read of one it no longer holds is refused and the id dropped.
      */
     private val lightboxReaders = Registry<Long>()
+
+    /**
+     * The open tenant's music player (ADR 0142 decision 1; null while none is open, or the composition has no decks), its
+     * decks by id (the host's [Call.AudioEnded] and [Call.AudioFailed] find them) and the pages' Music views: each the
+     * tenant's, gone when it closes.
+     */
+    private val player = MutableStateFlow<me.raddatz.veyq.mobile.audio.MusicPlayer?>(null)
+    private val decks = Registry<HostDeck>()
+    private val musics = Registry<HeldMusic>()
+
+    /** A deck's reader held for the host as any reader is ([openReader]), only while a tenant is open. */
+    private val deckReaders = object : HeldReaders {
+        override fun hold(reader: RangeReader): Long? = (openReader(reader, null) as? Answer.Reader)?.reader
+        override fun drop(id: Long) {
+            readers.remove(id)
+        }
+    }
 
     /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
     private val manage = MutableStateFlow<List<ManagedShown>?>(null)
@@ -879,11 +927,14 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     call.node.kind != me.raddatz.veyq.mobile.memories.GalleryModel.CHAPTER
                 ) return Answer.Refused(Answer.Why.NOT_OFFERED)
                 val id = ids.incrementAndFetch()
-                galleries.put(id, make(call.node, uploads))
+                val audio = parts.audio
+                val music = player.value?.let { p -> audio?.let { a -> me.raddatz.veyq.mobile.memories.GalleryModel.Music(p, a::untitled) } }
+                galleries.put(id, make(call.node, uploads, music))
                 Answer.GalleryOpened(id)
             } ?: noTenant
             is Call.GalleryClose -> galleries.remove(call.gallery)?.let { g ->
                 closeLightboxesOf(call.gallery)
+                musics.removeIf { it.gallery == call.gallery }.forEach { it.model.close() }
                 g.close()
                 Answer.Done
             } ?: noGallery
@@ -954,6 +1005,53 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 saves.put(id, save)
                 Answer.Saving(id)
             } ?: noLightbox
+            is Call.GalleryMusic -> galleries[call.gallery]?.let { g ->
+                if (g.music == null) return Answer.Refused(Answer.Why.NOT_OFFERED)
+                g.toggleMusic()
+                Answer.Done
+            } ?: noGallery
+            is Call.LightboxVideo -> lightboxes[call.lightbox]?.model?.videoPlaying(call.playing).done(Answer.Why.NO_SUCH_LIGHTBOX)
+            Call.PlayerPause -> player.value?.pause().done(Answer.Why.NO_PLAYER)
+            Call.PlayerResume -> player.value?.resume().done(Answer.Why.NO_PLAYER)
+            Call.PlayerNext -> player.value?.next().done(Answer.Why.NO_PLAYER)
+            Call.PlayerPrevious -> player.value?.previous().done(Answer.Why.NO_PLAYER)
+            is Call.PlayerSeek -> player.value?.seek(call.positionMs).done(Answer.Why.NO_PLAYER)
+            Call.PlayerStop -> player.value?.stop().done(Answer.Why.NO_PLAYER)
+            Call.PlayerOpenNode -> player.value?.current?.nowPlaying?.route?.let { route -> shell?.open(route) }.done(Answer.Why.NO_PLAYER)
+            is Call.MusicOpen -> galleries[call.gallery]?.let { g ->
+                val make = tenant.value?.models?.musicModel ?: return noTenant
+                val uploads = mediaUploads.value ?: return noTenant
+                val audio = parts.audio
+                if (g.music == null || audio == null) return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = ids.incrementAndFetch()
+                musics.put(id, HeldMusic(call.gallery, make(g, uploads, audio.measure)))
+                Answer.MusicOpened(id)
+            } ?: noGallery
+            is Call.MusicClose -> musics.remove(call.music)?.model?.close().done(Answer.Why.NO_SUCH_MUSIC)
+            is Call.MusicPlay -> musics[call.music]?.model?.play(call.mediaId).done(Answer.Why.NO_SUCH_MUSIC)
+            is Call.MusicRename -> musics[call.music]?.let { Answer.Said(it.model.rename(call.mediaId, call.name)) } ?: noMusic
+            is Call.MusicRemove -> musics[call.music]?.let { held -> trashed(held.model.gallery, held.model.remove(call.mediaId)) } ?: noMusic
+            is Call.MusicDownload -> musics[call.music]?.let { held ->
+                val save = held.model.save(call.mediaId) { produce -> parts.files.write(call.path, produce) }
+                    ?: return Answer.Refused(Answer.Why.NOTHING_TO_DOWNLOAD)
+                val id = ids.incrementAndFetch()
+                saves.put(id, save)
+                Answer.Saving(id)
+            } ?: noMusic
+            is Call.MusicReport -> musics[call.music]?.let { held ->
+                val sheet = held.model.reportSheet(call.mediaId) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = ids.incrementAndFetch()
+                reports.put(id, sheet)
+                Answer.ReportOpened(id)
+            } ?: noMusic
+            is Call.MusicAdd -> musics[call.music]?.let { held ->
+                // each path opened by the core and read at offsets, named by its path for the host's measure of its length
+                val sources = call.paths.mapNotNull { path -> parts.files.source(path)?.let { PathSource(path, it) } }
+                Answer.MusicAdded(held.model.add(sources))
+            } ?: noMusic
+            is Call.MusicSeen -> musics[call.music]?.model?.seen().done(Answer.Why.NO_SUCH_MUSIC)
+            is Call.AudioEnded -> decks[call.deck]?.ended(call.load).done(Answer.Why.NO_SUCH_DECK)
+            is Call.AudioFailed -> decks[call.deck]?.failed(call.load).done(Answer.Why.NO_SUCH_DECK)
         }
     }
 
@@ -1054,6 +1152,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noFolder = Answer.Refused(Answer.Why.NO_SUCH_FOLDER)
     private val noScan = Answer.Refused(Answer.Why.NO_SUCH_SCAN)
     private val noLink = Answer.Refused(Answer.Why.NO_SUCH_LINK)
+    private val noMusic = Answer.Refused(Answer.Why.NO_SUCH_MUSIC)
 
     private fun taken(taken: Boolean): Answer = if (taken) Answer.Done else Answer.Refused(Answer.Why.NOT_TAKEN)
 
@@ -1178,6 +1277,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         }
         // Memories' batches settle the core's way (`MediaUploads`): a gallery reads when its medium is in, the lists at the end
         mediaUploads.value = t.mediaUploads?.invoke(queue, parts.await().tiers) { scope.launch { runCatching { t.shell?.refresh() } } }
+        // the account's one player over the host's two decks, each held by id for the host's events (ADR 0142 decision 1)
+        player.value = parts.await().audio?.let { audio ->
+            t.musicPlayer?.invoke({ events -> audio.deck(ids.incrementAndFetch(), deckReaders, events).also { decks.put(it.id, it) } }, audio.controls)
+        }
         scope.launch { runCatching { t.loadPictures() } }
         t.shell?.load(openLastUsed = true)
         return Answer.Done
@@ -1191,6 +1294,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         mediaUploads.value?.close()
         mediaUploads.value = null
         queue.clear()
+        // the music is the tenant's: its views close, and the player stops — every track it opened released, its decks
+        // cleared, the system's controls cleared (ADR 0142 decision 1, as the web's shell unmount stops it)
+        musics.removeAll().forEach { it.model.close() }
+        player.value?.stop()
+        player.value = null
+        decks.removeAll()
         // a page closes its lightbox, and the lightbox its reader
         galleries.removeAll().forEach { it.close() }
         lightboxes.removeAll().forEach { it.model.close() }
@@ -1255,6 +1364,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Watched.SettingsStorageLive -> flow { accountPages[w.settings]?.model?.followStorage() }
         is Watched.Lightbox -> lightboxes[w.lightbox]?.let { held -> held.model.state.map { Update.Lightbox(w.lightbox, shownLightbox(held, it)) } }
             ?: flowOf(Update.Lightbox(w.lightbox, null))
+        Watched.Player -> player.flatMapLatest { p ->
+            p?.state?.map { Update.Player(PlayerShown(it.nowPlaying?.let(NowPlayingShown::of), it.notice?.let { n -> playerNotice(n) })) }
+                ?: flowOf(Update.Player(null))
+        }
+        is Watched.Music -> musics[w.music]?.let { held -> held.model.state.map { Update.Music(w.music, shownMusic(held, it)) } }
+            ?: flowOf(Update.Music(w.music, null))
         is Watched.Trash -> trashes[w.trash]?.let { t -> t.state.map { Update.Trash(w.trash, shownTrash(t, it)) } }
             ?: flowOf(Update.Trash(w.trash, null))
         is Watched.Move -> moves[w.move]?.let { m -> m.state.map { Update.Move(w.move, shownMove(m, it)) } }
@@ -1450,6 +1565,32 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         purgeQuestion = g.purgeQuestion.takeIf { s.purging != null },
         said = s.said,
         offline = s.offline,
+        musicView = me.raddatz.veyq.mobile.memories.music.MusicModel.shown(s),
+        musicHere = s.musicHere,
+    )
+
+    /** Why the last queue ended by itself, in words ([PlayerShown.notice]). */
+    private fun playerNotice(n: me.raddatz.veyq.mobile.audio.PlayerNotice): Notice = when (n) {
+        me.raddatz.veyq.mobile.audio.PlayerNotice.UNPLAYABLE -> Notice(Msg.MUSIC_NOTHING_PLAYS)
+    }
+
+    /** A Music view as the host draws it ([MusicShown]), each field the model's own answer. */
+    private fun shownMusic(held: HeldMusic, s: me.raddatz.veyq.mobile.memories.music.MusicModel.State) = MusicShown(
+        node = held.model.gallery.node,
+        tracks = s.tracks?.map { t ->
+            MusicTrackShown(
+                mediaId = t.mediaId, title = t.title, untitled = if (t.title == null) Notice(Msg.MUSIC_UNTITLED, t.number) else null,
+                ownName = t.track.ownName, fileName = t.track.fileName, length = t.length, playing = t.playing,
+                unplayable = t.unplayable, blocked = t.blocked, canRemove = held.model.removes(t.mediaId),
+            )
+        },
+        canAdd = s.rights.add,
+        canRename = s.rights.rename,
+        canDownload = s.rights.download,
+        canReport = s.rights.report,
+        offline = s.offline,
+        checking = s.checking,
+        said = s.said,
     )
 
     /** One medium as a gallery's row and a lightbox's page show it ([GalleryRow]). */
@@ -1470,6 +1611,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             slideshow = s.slideshow?.let { SlideshowState.valueOf(it.name) },
             downloadName = held.model.downloadName()?.takeIf { held.page.rights.download },
             canTrash = row != null && held.page.deletes(row.mediaId),
+            music = s.music?.let(NowPlayingShown::of),
         )
     }
 
@@ -1624,6 +1766,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             pictures: (path: String) -> me.raddatz.veyq.mobile.account.KitPictures = { NoPictures },
             /** A Memories upload's tiers: the host's ([HostTiers]). */
             tiers: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver = NoTiers,
+            /** The music's decks, system controls, measure and words: the host's ([HostAudio]); none: no player. */
+            audio: HostAudio? = null,
             now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
         ): Bridge<VeyqAccount, TenantSession> = Bridge {
             val recent = RecentUses(
@@ -1641,7 +1785,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             )
             Composition(
                 SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files, pictures = pictures,
-                settings = { session, account, separator -> AccountSettings.of(session, account, separator) }, tiers = tiers,
+                settings = { session, account, separator -> AccountSettings.of(session, account, separator) }, tiers = tiers, audio = audio,
                 trustedLink = { account, role, decode ->
                     when (role) {
                         DeviceLink.Role.SHOW_FOR_NEW_DEVICE -> DeviceLink.showForNewDevice(account)
