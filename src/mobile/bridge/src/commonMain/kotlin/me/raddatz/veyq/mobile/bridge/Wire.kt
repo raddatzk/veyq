@@ -1763,12 +1763,12 @@ internal class MusicTrackShown(
  * every point projected by the core: the Map view's [tracks], the photos' [dots], the Memories map's [clusters], a photo's
  * [photo], and the place editor's fixed pin at the centre ([centrePin]). The host's one formula from a normalised point
  * `p` to its pixels is `((p.x − view.x) · 256 · 2^zoom + width/2, (p.y − view.y) · 256 · 2^zoom + height/2)`; nothing else
- * is computed there. No address, key or token rides here: the tile host is named in [MapStateShown.Consent] alone.
+ * is computed there. No address, key or token rides here: the tile host is named in [MapStatus.Consent] alone.
  */
 @Serializable
 @SerialName("MapShown")
 internal class MapShown(
-    val state: MapStateShown,
+    val state: MapStatus,
     val view: MapViewShown?,
     val tiles: List<TileShown>,
     val attribution: String?,
@@ -1781,21 +1781,21 @@ internal class MapShown(
 
 /** What a map's place shows (core's `MapState`). */
 @Serializable
-internal sealed class MapStateShown {
+internal sealed class MapStatus {
     /** No map is served (switched off, or not configured): no map. */
-    @Serializable @SerialName("MapState.NotOffered") data object NotOffered : MapStateShown()
+    @Serializable @SerialName("MapState.NotOffered") data object NotOffered : MapStatus()
 
     /** Offline: the capabilities were not read, so no map; the place says a map needs a connection. */
-    @Serializable @SerialName("MapState.Offline") data object Offline : MapStateShown()
+    @Serializable @SerialName("MapState.Offline") data object Offline : MapStatus()
 
     /**
      * This device's consent is asked for the tile host [tileHost] and the geocoder host [geocoderHost] (host names, as
      * the consent shows them; null where not served), [renewal] where an earlier consent named other hosts.
      */
-    @Serializable @SerialName("MapState.Consent") data class Consent(val tileHost: String?, val geocoderHost: String?, val renewal: Boolean) : MapStateShown()
+    @Serializable @SerialName("MapState.Consent") data class Consent(val tileHost: String?, val geocoderHost: String?, val renewal: Boolean) : MapStatus()
 
     /** The map is shown: the consent holds for the hosts served now. */
-    @Serializable @SerialName("MapState.Shown") data object Shown : MapStateShown()
+    @Serializable @SerialName("MapState.Shown") data object Shown : MapStatus()
 }
 
 /**
@@ -1855,7 +1855,7 @@ internal class PhotoShown(val at: MapPointShown, val direction: Int?)
  */
 @Serializable
 @SerialName("MapServicesShown")
-internal class MapServicesShown(val state: MapStateShown, val consentTileHost: String?, val consentGeocoderHost: String?)
+internal class MapServicesShown(val state: MapStatus, val consentTileHost: String?, val consentGeocoderHost: String?)
 
 /** A Memory's date mode (core's `MemoryDate.Mode`). */
 @Serializable

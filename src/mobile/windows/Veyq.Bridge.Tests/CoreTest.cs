@@ -22,8 +22,8 @@ public sealed class CoreTest
     public async Task TheCoreAnswersThroughTheWrapper()
     {
         var store = DeviceStore.InMemory();
-        Assert.AreEqual(Start.Started, Core.Start(new Config { device = "Veyq.Bridge.Tests", window = 0, prompt = "", offlineRoot = null }, store));
-        Assert.AreEqual(Start.AlreadyStarted, Core.Start(new Config { device = "Veyq.Bridge.Tests", window = 0, prompt = "", offlineRoot = null }, DeviceStore.InMemory()));
+        Assert.AreEqual(Start.Started, Core.Start(new Config { device = "Veyq.Bridge.Tests", window = 0, prompt = "", offlineRoot = null, language = "en" }, store));
+        Assert.AreEqual(Start.AlreadyStarted, Core.Start(new Config { device = "Veyq.Bridge.Tests", window = 0, prompt = "", offlineRoot = null, language = "en" }, DeviceStore.InMemory()));
         try
         {
             var gates = new BlockingCollection<Update>();

@@ -116,11 +116,11 @@ internal class HeldMap(
             return PinShown(node, me.raddatz.veyq.mobile.memories.GalleryModel.page(node), p.nodeId.takeIf { p.hasCover })
         }
 
-        fun mapState(s: MapState): MapStateShown = when (s) {
-            MapState.NotOffered -> MapStateShown.NotOffered
-            MapState.Offline -> MapStateShown.Offline
-            MapState.Shown -> MapStateShown.Shown
-            is MapState.Consent -> MapStateShown.Consent(s.hosts.tiles, s.hosts.places, s.renewal)
+        fun mapState(s: MapState): MapStatus = when (s) {
+            MapState.NotOffered -> MapStatus.NotOffered
+            MapState.Offline -> MapStatus.Offline
+            MapState.Shown -> MapStatus.Shown
+            is MapState.Consent -> MapStatus.Consent(s.hosts.tiles, s.hosts.places, s.renewal)
         }
     }
 }

@@ -68,7 +68,7 @@ public sealed partial class MainWindow : Window
             {
                 Log.Write($"the data folder did not open ({e.GetType().Name}); nothing is kept offline");
             }
-            started = Core.Start(new Config { device = Environment.MachineName, window = hwnd, prompt = Words.DeviceUnlockPrompt(), offlineRoot = offline }, store);
+            started = Core.Start(new Config { device = Environment.MachineName, window = hwnd, prompt = Words.DeviceUnlockPrompt(), offlineRoot = offline, language = "en" }, store);
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {

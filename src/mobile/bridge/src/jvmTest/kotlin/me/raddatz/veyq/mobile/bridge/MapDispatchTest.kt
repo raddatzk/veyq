@@ -244,7 +244,7 @@ class MapDispatchTest {
         assertNull((drawn.next() as Update.Map).shown!!.view, "a map holds no view before the host sized it")
         assertEquals(Answer.Done, b.ask(Call.MapView(map, null, null, null, 800.0, 600.0, 2.0)))
         val asked = drawn.until { u -> (u as Update.Map).shown?.takeIf { it.view != null } }
-        assertEquals(MapStateShown.Consent("tiles.example", "nominatim.example", renewal = false), asked.state, "the consent names the hosts served")
+        assertEquals(MapStatus.Consent("tiles.example", "nominatim.example", renewal = false), asked.state, "the consent names the hosts served")
         assertEquals(emptyList(), asked.tiles, "tiles placed before the consent")
         assertEquals("© OpenStreetMap contributors", asked.attribution)
         assertEquals(1L, asked.view!!.moved, "the core's opening view")
@@ -256,7 +256,7 @@ class MapDispatchTest {
 
         // the consent: the tiles in view, each asked by its id and handed beside the JSON
         assertEquals(Answer.Done, b.ask(Call.MapTurnOn))
-        val shown = drawn.until { u -> (u as Update.Map).shown?.takeIf { it.state == MapStateShown.Shown && it.tiles.isNotEmpty() } }
+        val shown = drawn.until { u -> (u as Update.Map).shown?.takeIf { it.state == MapStatus.Shown && it.tiles.isNotEmpty() } }
         assertEquals("tiles.example", (settings.until { u -> (u as Update.MapServices).shown?.takeIf { it.consentTileHost != null } }).consentTileHost)
         val first = shown.tiles.first()
         val (answer, bytes) = b.askWithPayload(Call.MapTile(map, first.tile))
@@ -281,9 +281,9 @@ class MapDispatchTest {
         // the withdrawal: no tile placed, none answered, none asked
         val before = p.server.sent.size
         assertEquals(Answer.Done, b.ask(Call.MapTurnOff))
-        drawn.until { u -> (u as Update.Map).shown?.takeIf { it.state is MapStateShown.Consent && it.tiles.isEmpty() } }
+        drawn.until { u -> (u as Update.Map).shown?.takeIf { it.state is MapStatus.Consent && it.tiles.isEmpty() } }
         assertEquals(Answer.Refused(Answer.Why.NO_BYTES), b.ask(Call.MapTile(map, first.tile)), "a tile answered after the withdrawal")
-        assertNull(settings.until { u -> (u as Update.MapServices).shown?.takeIf { it.state is MapStateShown.Consent } }.consentTileHost)
+        assertNull(settings.until { u -> (u as Update.MapServices).shown?.takeIf { it.state is MapStatus.Consent } }.consentTileHost)
         delay(200)
         assertEquals(before, p.server.sent.size, "a request left after the withdrawal")
         b.shutdown()
