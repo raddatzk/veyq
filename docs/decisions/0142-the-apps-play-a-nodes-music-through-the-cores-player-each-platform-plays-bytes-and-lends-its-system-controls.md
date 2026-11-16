@@ -1,6 +1,7 @@
 # ADR 0142 — The apps play a node's music through the core's player; each platform plays bytes and lends its system controls
 - Status: Accepted
-- Built: no
+- Built: partly — built on every app and the web, passed on Android, Windows, Linux and the web (§ Consequences); Apple's
+  passes, on a real iPhone and the unlocked Mac, are the owner's ([native-apps](../crosscutting/native-apps.md) § Open)
 - Date: 2026-11-15
 - Model: [native-apps](../crosscutting/native-apps.md) (the player: [en.platform.audio-player](../features/platform/enablers/en.platform.audio-player.md),
   the use case: [uc.memory.background-music](../features/memory/use-cases/uc.memory.background-music.md))
@@ -10,7 +11,7 @@
 [ADR 0135](0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md) built a Memory's and a
 Chapter's background music on the web: the node's own audio media, played by core's player, shuffled, endless,
 crossfading over 5 s, in a bar that stays while the viewer moves on. The apps leave audio out of the gallery and do
-nothing else with it (inbox #906). The owner made music the first web catch-up for the apps (2026-11-15), with one
+nothing else with it. The owner made music the first web catch-up for the apps (2026-11-15), with one
 thing the web cannot give: **on the phones music keeps playing in the background and with the screen off**, with the
 system's controls; on the desktops the system's media controls where the platform has them.
 
@@ -196,6 +197,15 @@ is the Kotlin core's and each platform draws only its own UI; this ADR applies i
   trimmed where ADR 0135 decision 4 finds it cheaply, the same file added from an app only where it is a WAV.
 - **Each platform's format gaps** are what its matrix (decision 9) measures; a platform not listed below is not measured
   yet, and no doc says which formats its app plays until it is.
+- **Android and macOS, measured 2026-11-16** — ffmpeg's 12 s tones in the same ten formats, each typed by `Sniff.stream`,
+  put behind a core `RangeReader`, loaded and played 1.5 s by the platform's deck and its length read as an upload reads
+  it (the debug harnesses: Android's launch extra `veyq.devAudio=matrix`, logcat `veyq-audio`; Apple's
+  `VEYQ_DEV_AUDIO_MATRIX=<dir>`, the unified log):
+  - *Android* (the emulator, API 36 `google_apis` arm64): **all play but ALAC**, which loads and measures (12000 ms) and
+    then fails at play (`NuPlayerDecoder: Failed to create audio/alac decoder`); the deck reports `failed`, the player
+    skips it and the Music view marks it (seen live). A phone's own decoders may differ from the emulator's: not measured.
+  - *macOS* (26): **all ten** load, play and measure, both Ogg files included.
+  - *iOS*: not measured (no simulator boots on this Mac); the owner's device pass.
 - **Windows and Linux, measured 2026-11-16** — ten files of one 6 s tone made by ffmpeg (MP3; M4A with AAC and with ALAC;
   raw ADTS; WAV 16-bit, 24-bit and float; FLAC; Ogg Vorbis; Ogg Opus), each opened as a deck opens it:
   - *Windows* (the test VM, Windows 11 on ARM64, the app's x64 process under emulation): a `MediaPlayer` over
@@ -270,6 +280,9 @@ is the Kotlin core's and each platform draws only its own UI; this ADR applies i
     lightbox's video played → the compact controls' and the bar's button "Abspielen", the position frozen (64300 ms
     twice); its end → "Pausieren", the position moving (65200 → 67200); played again and another item → "Pausieren";
     played a third time and the lightbox closed → "Pausieren".
+
+Explained for users on the docs site: [Add background music](../../site/src/content/docs/memories/add-background-music.mdx)
+(§ In the app).
 
 ## Alternatives considered
 
