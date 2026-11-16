@@ -92,6 +92,22 @@ use-case adds is the **`auto`** behaviour — the other three modes just carry t
 A Memory shows when it happened — worked out from its photos, or set by you as a day, a span or an open-ended start —
 without the server ever learning the date.
 
+## In the apps
+
+[ADR 0143](../../../decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md) decision 5: the apps (Android, iOS, macOS,
+Linux, Windows) follow the flows above, with these differences. Built on every app; passed on Android, Linux and Windows (ADR 0143's Consequences); Apple's passes are the owner's
+([native-apps](../../../crosscutting/native-apps.md) § Open).
+
+- **Where (steps 1–2):** the date stands in the facts line under the Memory's header, a button to its editor where the
+  member may edit the Memory's meta, and as a Memories row's second line. **No list is sorted by it**: every list of the
+  apps is ordered by last use ([ADR 0122](../../../decisions/0122-one-app-holds-every-application-the-drawer-chooses-the-bar-belongs-to-it.md)
+  decision 5).
+- **The editor:** the four modes with the platform's own date picker; a range ending before it starts is refused (E4).
+- **`auto`** is kept current at the same three settle points, so an upload from an app no longer leaves a range stale
+  until a browser opens the Memory.
+- **Offline** the date is shown and not edited.
+- **Not in the apps:** the date in the creation dialog (inbox #940).
+
 ## Related
 
 - Feature: [Memory](../_index.md)
