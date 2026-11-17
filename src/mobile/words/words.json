@@ -4113,5 +4113,232 @@
     "note": "a size unit of the storage limit field",
     "en": "GB",
     "untranslated": true
+  },
+  "memory_participants_title": {
+    "note": "A Memory's people line and its list (the web's memory.participants.title).",
+    "en": "Participants",
+    "de": "Beteiligte"
+  },
+  "memory_participants_edit": {
+    "en": "Edit participants",
+    "de": "Beteiligte bearbeiten"
+  },
+  "memory_participants_add": {
+    "note": "The chip while nobody is listed, for who may edit.",
+    "en": "Add participants",
+    "de": "Beteiligte hinzufügen"
+  },
+  "memory_participants_was_there": {
+    "note": "The New Memory form's checkbox (ADR 0144 decision 2).",
+    "en": "I was there",
+    "de": "Ich war dabei"
+  },
+  "memory_participants_was_there_hint": {
+    "en": "lists you among the participants",
+    "de": "trägt dich bei den Beteiligten ein"
+  },
+  "memory_participants_dialog_title": {
+    "note": "The participants picker's title.",
+    "en": "Who was there?",
+    "de": "Wer war dabei?"
+  },
+  "memory_participants_dialog_hint": {
+    "en": "Choose from the members of this space. Only members see this list.",
+    "de": "Wähle aus den Mitgliedern dieses Bereichs. Nur Mitglieder sehen diese Liste."
+  },
+  "memory_participants_load_error": {
+    "en": "Could not load the members. Please try again.",
+    "de": "Die Mitglieder konnten nicht geladen werden. Bitte versuche es erneut."
+  },
+  "memory_participants_no_members": {
+    "en": "There is nobody to choose from.",
+    "de": "Es gibt niemanden zur Auswahl."
+  },
+  "memory_participants_full": {
+    "note": "{1} the cap (100).",
+    "en": "A Memory can list up to {1:int} people.",
+    "de": "Eine Erinnerung kann bis zu {1:int} Personen nennen."
+  },
+  "memory_participants_former": {
+    "note": "A listed id no current member holds; also the profile's title for one.",
+    "en": "Former member",
+    "de": "Ehemaliges Mitglied"
+  },
+  "memory_participants_search": {
+    "en": "Search members",
+    "de": "Mitglieder suchen"
+  },
+  "memory_participants_no_matches": {
+    "en": "No member matches your search.",
+    "de": "Kein Mitglied passt zu deiner Suche."
+  },
+  "memory_participants_save_failed": {
+    "en": "Could not save the participants. Please try again.",
+    "de": "Die Beteiligten konnten nicht gespeichert werden. Bitte versuche es erneut."
+  },
+  "memory_people_with": {
+    "note": "A person's profile: Memories' section (ADR 0144 decision 13).",
+    "en": "Memories with this person",
+    "de": "Erinnerungen mit dieser Person"
+  },
+  "memory_people_with_name": {
+    "note": "{1} the person's display name.",
+    "en": "Memories with {1}",
+    "de": "Erinnerungen mit {1}"
+  },
+  "memory_people_loading": {
+    "en": "Looking through your Memories…",
+    "de": "Deine Erinnerungen werden durchsucht…"
+  },
+  "memory_people_error": {
+    "en": "Could not look through your Memories. Please try again.",
+    "de": "Deine Erinnerungen konnten nicht durchsucht werden. Bitte versuche es erneut."
+  },
+  "memory_people_retry": {
+    "en": "Try again",
+    "de": "Erneut versuchen"
+  },
+  "memory_people_empty": {
+    "en": "No Memories you can open list this person.",
+    "de": "Keine Erinnerung, die du öffnen darfst, nennt diese Person."
+  },
+  "memory_people_partial": {
+    "en": "This list may be incomplete: some Memories could not be read, or there are more than can be searched at once.",
+    "de": "Diese Liste ist möglicherweise unvollständig: Manche Erinnerungen konnten nicht gelesen werden, oder es sind mehr, als auf einmal durchsucht werden."
+  },
+  "memory_banner_add": {
+    "note": "The banner's dialog (ADR 0144 decision 5).",
+    "en": "Add banner",
+    "de": "Banner hinzufügen"
+  },
+  "memory_banner_change": {
+    "en": "Change banner",
+    "de": "Banner ändern"
+  },
+  "memory_banner_hint": {
+    "en": "A banner is shown above the Memory, independent of its cover - always whole, never cropped. Where it does not fill the frame, a blurred copy of it fills the rest.",
+    "de": "Ein Banner steht über der Erinnerung, unabhängig von ihrem Cover – immer ganz, nie beschnitten. Wo es den Rahmen nicht füllt, füllt eine unscharfe Kopie den Rest."
+  },
+  "memory_banner_choose": {
+    "en": "Choose an image or a video",
+    "de": "Bild oder Video wählen"
+  },
+  "memory_banner_preview_wide": {
+    "en": "Wide screen",
+    "de": "Breiter Bildschirm"
+  },
+  "memory_banner_preview_phone": {
+    "en": "Phone",
+    "de": "Smartphone"
+  },
+  "memory_banner_remove": {
+    "en": "Remove banner",
+    "de": "Banner entfernen"
+  },
+  "memory_banner_save": {
+    "en": "Save banner",
+    "de": "Banner speichern"
+  },
+  "memory_banner_preparing": {
+    "en": "Preparing…",
+    "de": "Wird vorbereitet …"
+  },
+  "memory_banner_uploading": {
+    "note": "{1} the percent of the upload sent.",
+    "en": "Uploading… {1:int} %%",
+    "de": "Wird hochgeladen … {1:int} %%"
+  },
+  "memory_banner_play": {
+    "en": "Play the banner video",
+    "de": "Banner-Video abspielen"
+  },
+  "memory_banner_video": {
+    "en": "Banner video",
+    "de": "Banner-Video"
+  },
+  "memory_banner_play_failed": {
+    "en": "The video could not be played.",
+    "de": "Das Video konnte nicht abgespielt werden."
+  },
+  "memory_banner_too_large": {
+    "note": "{1} the bound, a size the device writes (40 MB).",
+    "en": "This image is larger than {1}.",
+    "de": "Dieses Bild ist größer als {1}."
+  },
+  "memory_banner_unreadable": {
+    "note": "The web's words unchanged (owner 2026-11-17).",
+    "en": "This browser cannot read this file, so it cannot be a banner here.",
+    "de": "Dieser Browser kann diese Datei nicht lesen, deshalb kann sie hier kein Banner sein."
+  },
+  "memory_banner_video_unreadable": {
+    "note": "The web's words unchanged (owner 2026-11-17).",
+    "en": "This browser cannot show a frame of this video, so it cannot be a banner here.",
+    "de": "Dieser Browser kann kein Bild aus diesem Video zeigen, deshalb kann es hier kein Banner sein."
+  },
+  "memory_banner_no_frame": {
+    "en": "This video has no picture to show before it plays, so it cannot be a banner.",
+    "de": "Dieses Video hat kein Bild, das vor dem Abspielen gezeigt werden kann, deshalb kann es kein Banner sein."
+  },
+  "memory_banner_stale": {
+    "en": "Someone else changed the banner meanwhile. Please try again.",
+    "de": "Jemand anderes hat das Banner inzwischen geändert. Bitte versuche es noch einmal."
+  },
+  "memory_banner_failed": {
+    "en": "The banner could not be saved.",
+    "de": "Das Banner konnte nicht gespeichert werden."
+  },
+  "memory_banner_picture_title": {
+    "note": "Trashing the medium the banner shows asks first (A2).",
+    "en": "Delete the banner’s picture?",
+    "de": "Bild des Banners löschen?"
+  },
+  "memory_banner_picture_notice": {
+    "en": "The banner shows this photo or video. It stays when you delete it here.",
+    "de": "Das Banner zeigt dieses Foto oder Video. Es bleibt, wenn du es hier löschst."
+  },
+  "memory_banner_picture_remove": {
+    "en": "Remove the banner too",
+    "de": "Banner auch entfernen"
+  },
+  "media_edit_captured_at": {
+    "note": "A medium's details: its capture-time editor (ADR 0144 decision 3).",
+    "en": "Edit capture time",
+    "de": "Aufnahmezeit bearbeiten"
+  },
+  "media_reset_captured_at": {
+    "en": "Reset to original",
+    "de": "Auf Original zurücksetzen"
+  },
+  "media_captured_at_save_failed": {
+    "en": "Could not save the capture time.",
+    "de": "Aufnahmezeit konnte nicht gespeichert werden."
+  },
+  "media_captured_at_conflict": {
+    "en": "Someone else changed the capture time meanwhile. It now shows theirs — save again to replace it.",
+    "de": "Jemand anderes hat die Aufnahmezeit inzwischen geändert. Jetzt steht dort diese Änderung — speichere erneut, um sie zu ersetzen."
+  },
+  "media_meta_unreadable": {
+    "en": "This photo’s details (its time and place) can’t be opened: they are damaged, or were replaced by something this app didn’t write. They can’t be changed, so nothing was saved, and trying again won’t help. The photo itself is not affected.",
+    "de": "Die Angaben zu diesem Foto (Zeit und Ort) lassen sich nicht öffnen: Sie sind beschädigt oder wurden durch etwas ersetzt, das diese App nicht geschrieben hat. Sie lassen sich nicht ändern, deshalb wurde nichts gespeichert, und ein erneuter Versuch hilft nicht. Das Foto selbst ist davon nicht betroffen."
+  },
+  "people_former_member_hint": {
+    "note": "A person's profile under a former member's title (core's frame, ADR 0144 decision 11).",
+    "en": "No longer in this space.",
+    "de": "Nicht mehr in diesem Bereich."
+  },
+  "people_unknown_member": {
+    "note": "A person's profile while the directory did not read.",
+    "en": "Unknown member",
+    "de": "Unbekanntes Mitglied"
+  },
+  "people_open": {
+    "note": "{1} the person's display name.",
+    "en": "Open the profile of {1}",
+    "de": "Profil von {1} öffnen"
+  },
+  "node_view_list": {
+    "note": "A person's Memories: the List | Map switch's list.",
+    "en": "List view",
+    "de": "Listenansicht"
   }
 }
