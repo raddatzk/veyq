@@ -924,7 +924,7 @@ internal sealed class ShellView
         if (typed is null) return;
         try
         {
-            var (answer, _) = await Core.CallAsync(new Call.ShellCreateMemory { scopeId = space, parentId = parent, name = typed });
+            var (answer, _) = await Core.CallAsync(new Call.ShellCreateMemory { scopeId = space, parentId = parent, name = typed, wasThere = false });
             switch (answer)
             {
                 case Answer.Created { node: { } made }:

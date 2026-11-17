@@ -449,7 +449,7 @@ impl Shell {
             header::ask_name(s.window.upcast_ref(), &words::memory_create_memory_title(), &words::node_name(), "", None, &words::folder_create(), move |name, again| {
                 let (toasts, scope_id, parent_id) = (toasts.clone(), level.scope_id.clone(), level.parent_id.clone());
                 glib::spawn_future_local(async move {
-                    match bridge::call(&Call::ShellCreateMemory { scope_id, parent_id, name: name.clone() }).await.map(|(a, _)| a) {
+                    match bridge::call(&Call::ShellCreateMemory { scope_id, parent_id, name: name.clone(), was_there: false }).await.map(|(a, _)| a) {
                         Ok(Answer::Created { node: Some(node), .. }) => {
                             eprintln!("veyq: new memory: made");
                             memory_page::open_node(&node);

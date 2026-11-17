@@ -546,7 +546,7 @@ impl Inner {
         let window = self.window.clone();
         glib::spawn_future_local(async move {
             let (rows, uploader, at, has_map) = match bridge::call(&Call::LightboxDetails { lightbox, media_id: media_id.clone() }).await.map(|(a, _)| a) {
-                Ok(Answer::MediumDetails { rows, uploader, uploader_at, map }) => (rows, uploader, uploader_at, map),
+                Ok(Answer::MediumDetails { rows, uploader, uploader_at, map, .. }) => (rows, uploader, uploader_at, map),
                 other => return eprintln!("veyq: Lightbox.Details answered {other:?}"),
             };
             let group = adw::PreferencesGroup::new();

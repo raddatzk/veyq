@@ -775,7 +775,11 @@ internal sealed class Call {
      * top; `MemoryCreate` checks the name against the loaded tree before anything is sent): [Answer.Created] — the node made,
      * which the host opens ([ShellOpen]), or why not, as the web's `MemoryNodeDialog` says it.
      */
-    @Serializable @SerialName("Shell.CreateMemory") data class ShellCreateMemory(val scopeId: String, val parentId: String?, val name: String) : Call()
+    @Serializable @SerialName("Shell.CreateMemory") data class ShellCreateMemory(
+        val scopeId: String, val parentId: String?, val name: String,
+        /** *I was there* ticked (ADR 0144 decision 2): the maker sealed as the Memory's participant at its birth, where [ShellOffersWasThere]. */
+        val wasThere: Boolean = false,
+    ) : Call()
 
     /**
      * Node [nodeId]'s cover as a list row draws it (`ShellModel.rowCover`, the phones' `NodeCover.openFramed`): [Answer.RowCover]
@@ -1127,6 +1131,149 @@ internal sealed class Call {
 
     /** What [TracksShown.said] said was seen (`TrackList.seen`). */
     @Serializable @SerialName("Tracks.Seen") data class TracksSeen(val tracks: Long) : Call()
+
+    // --- curating a Memory (ADR 0144 decision 8): its participants, a medium's capture time, its banner; a person's profile ----
+
+    /**
+     * Gallery [gallery]'s participants picker (`GalleryModel.participantsPicker`, ADR 0144 decision 1): the scope's current
+     * members read at once, answered [Answer.ParticipantsOpened] for [Watched.Participants]; refused `NOT_OFFERED` where the
+     * people line is not shown or whoever looks may not edit ([PeopleShown.edits]). It closes with [ParticipantsClose], its
+     * gallery or the tenant. Its search and ticks are applied in the order the host called.
+     */
+    @Serializable @SerialName("Participants.Open") data class ParticipantsOpen(val gallery: Long) : Call()
+
+    /** The members read again (`ParticipantsPicker.load`: *Try again* after [ParticipantsShown.failed]). */
+    @Serializable @SerialName("Participants.Load") data class ParticipantsLoad(val participants: Long) : Call()
+
+    /** The search field's text (`search`): it hides rows only, the pick is untouched. */
+    @Serializable @SerialName("Participants.Search") data class ParticipantsSearch(val participants: Long, val query: String) : Call()
+
+    /**
+     * [userId] ticked or unticked (`toggle`): [Answer.Done], or refused `NOT_TAKEN` for an id the members' list did not
+     * return, or one more past the cap ([ParticipantsShown.full]).
+     */
+    @Serializable @SerialName("Participants.Toggle") data class ParticipantsToggle(val participants: Long, val userId: String) : Call()
+
+    /**
+     * The pick written (`save`: merged with a peer's write meanwhile, never a conflict): [Answer.FactsSaved] — `SAVED` (the
+     * host closes the picker) or `FAILED` ([ParticipantsShown.said] says why); refused `NOT_TAKEN` while nothing may be saved.
+     */
+    @Serializable @SerialName("Participants.Save") data class ParticipantsSave(val participants: Long) : Call()
+    @Serializable @SerialName("Participants.Close") data class ParticipantsClose(val participants: Long) : Call()
+
+    /**
+     * Medium [mediaId]'s capture-time editor in lightbox [lightbox]'s details (`Lightbox.captureTimeEditor`, ADR 0144
+     * decision 3): answered [Answer.CaptureTimeOpened] for [Watched.CaptureTime]; refused `NOT_OFFERED` where whoever looks
+     * may not write its meta, offline, or for a medium not in the gallery. It closes with [CaptureTimeClose], its lightbox,
+     * its gallery or the tenant.
+     */
+    @Serializable @SerialName("CaptureTime.Open") data class CaptureTimeOpen(val lightbox: Long, val mediaId: String) : Call()
+
+    /**
+     * The capture time set to [epochMs] (`CaptureTimeEditor.set`): the local date and time the host's pickers gave,
+     * converted by the host's own calendar (ADR 0144 decision 3; the core holds it to the minute and does no zone
+     * arithmetic). [Answer.FactsSaved]: `SAVED`, `REOPENED` on a peer's correction (the editor shows theirs now), or `FAILED`.
+     */
+    @Serializable @SerialName("CaptureTime.Set") data class CaptureTimeSet(val captureTime: Long, val epochMs: Long) : Call()
+
+    /** *Reset to original* (`reset`): as [CaptureTimeSet]; refused `NOT_TAKEN` where no correction is set. */
+    @Serializable @SerialName("CaptureTime.Reset") data class CaptureTimeReset(val captureTime: Long) : Call()
+    @Serializable @SerialName("CaptureTime.Close") data class CaptureTimeClose(val captureTime: Long) : Call()
+
+    /**
+     * Gallery [gallery]'s banner picture (`GalleryModel.bannerPicture`, ADR 0144 decision 4): an image banner's JPEG or a
+     * video banner's poster, whole ([Answer.Bytes]; the host caches it by [BannerShown.picture]); refused `NO_BYTES` where
+     * there is none or it does not read — the host then draws no frame.
+     */
+    @Serializable @SerialName("Banner.Picture") data class BannerPicture(val gallery: Long) : Call()
+
+    /**
+     * Gallery [gallery]'s video banner opened for the player on a tap (`GalleryModel.bannerReader`; ADR 0137 decision 2):
+     * [Answer.Reader], read through [ReaderRead] from the player's own thread; refused `NO_MEDIUM` for an image banner or
+     * none. It closes with [ReaderClose], its gallery or the tenant.
+     */
+    @Serializable @SerialName("Banner.Play") data class BannerPlay(val gallery: Long) : Call()
+
+    /**
+     * The banner's frame for a column [columnWidth] wide in a viewport [viewportHeight] high, in the host's own unit
+     * (`BannerFrame.of`: 16:9 above 720, 1:1 at or below, never taller than 60 % of the viewport), and the surround's size
+     * for a picture of [pictureWidth] × [pictureHeight] pixels (`BannerFrame.surround`): [Answer.BannerFramed]. No tenant needed.
+     */
+    @Serializable @SerialName("Banner.Frame") data class BannerFrame(val columnWidth: Double, val viewportHeight: Double, val pictureWidth: Int, val pictureHeight: Int) : Call()
+
+    /**
+     * Gallery [gallery]'s banner dialog (`GalleryModel.bannerEditor` over the host's decoding, [HostRequest.MediaTiers] with
+     * the cover's spec), answered [Answer.BannerOpened] for [Watched.Banner]; refused `NOT_OFFERED` where whoever looks may
+     * not set the banner, or offline ([GalleryShown.editsBanner]). It closes with [BannerClose] (a save running cancelled),
+     * its gallery or the tenant.
+     */
+    @Serializable @SerialName("Banner.Open") data class BannerOpen(val gallery: Long) : Call()
+
+    /**
+     * The file at [path], as the host's open dialog gave it (images and videos, one file), picked (`BannerEditor.pick`;
+     * ADR 0137 decision 3: the core opens it and never echoes the path): refused or decoded for the previews —
+     * [BannerEditorShown.said] or [BannerEditorShown.picked]. [Answer.Done] once it is either; refused `NO_SUCH_PATH` where
+     * the path is no file that reads, `NOT_TAKEN` while a save runs.
+     */
+    @Serializable @SerialName("Banner.Pick") data class BannerPick(val banner: Long, val path: String) : Call()
+
+    /** The picked file's decoded picture for the two previews ([Answer.Bytes], a JPEG); refused `NO_BYTES` before a pick. */
+    @Serializable @SerialName("Banner.Preview") data class BannerPreview(val banner: Long) : Call()
+
+    /**
+     * *Save banner* (`BannerEditor.save`): answered when it ended, [Answer.BannerSaved] — its progress meanwhile on
+     * [Watched.Banner]; [BannerCancel] stops it, the old banner as it was. Refused `NOT_TAKEN` where nothing is picked.
+     */
+    @Serializable @SerialName("Banner.Save") data class BannerSave(val banner: Long) : Call()
+
+    /** A running save stopped (its upload cancelled; the old banner stays): [Answer.Done]; refused `NOT_TAKEN` where none runs. */
+    @Serializable @SerialName("Banner.Cancel") data class BannerCancel(val banner: Long) : Call()
+
+    /** *Remove banner* (`BannerEditor.remove`, one write): [Answer.BannerSaved]; refused `NOT_TAKEN` where there is none. */
+    @Serializable @SerialName("Banner.Remove") data class BannerRemove(val banner: Long) : Call()
+    @Serializable @SerialName("Banner.Close") data class BannerClose(val banner: Long) : Call()
+
+    /**
+     * The question a delete of the banner's own picture asked ([GalleryShown.bannerQuestion], ADR 0144 decision 5's A2)
+     * answered (`GalleryModel.trashBannerPicture`): the medium trashed with its Undo, the banner kept — or, [removeBanner],
+     * removed too. [GalleryTrash]'s answers. [GalleryCancelAsk] declines: nothing is deleted.
+     */
+    @Serializable @SerialName("Gallery.TrashBannerPicture") data class GalleryTrashBannerPicture(val gallery: Long, val removeBanner: Boolean) : Call()
+
+    /**
+     * Whether New Memory in [scopeId] offers *I was there*, ticked (`ShellModel.offersWasThere`, ADR 0144 decision 2: a
+     * tenant or group scope, never a personal one): [Answer.WasThere].
+     */
+    @Serializable @SerialName("Shell.OffersWasThere") data class ShellOffersWasThere(val scopeId: String) : Call()
+
+    /**
+     * Person [userId]'s profile opened over what is on screen (`ShellModel.openPerson`, ADR 0144 decision 11): the shell's
+     * state then names them (`Shell.person`), and the host opens its page's model with [PersonOpen]. Offered only from a
+     * way in the core names ([ParticipantShown.opensProfile], [Answer.MediumDetails.profile]).
+     */
+    @Serializable @SerialName("Shell.OpenPerson") data class ShellOpenPerson(val userId: String) : Call()
+
+    /**
+     * Person [userId]'s page (`ShellModel.profile`, core's frame, and each application's section — Memories'
+     * `ShellModel.personMemories`, read at once), answered [Answer.PersonOpened] for [Watched.Person]. A row opens its
+     * Memory with [ShellOpen] ([PersonRowShown.ref]). It stays until [PersonClose] or the tenant closes.
+     */
+    @Serializable @SerialName("Person.Open") data class PersonOpen(val userId: String) : Call()
+
+    /** The Memories section's List | Map (`PersonMemories.view`; not stored), where offered ([PersonMemoriesShown.offersViews]). */
+    @Serializable @SerialName("Person.View") data class PersonView(val person: Long, val view: MemoriesView) : Call()
+
+    /** The Memories section read again (*Try again* after [PersonMemoriesShown.failed]). */
+    @Serializable @SerialName("Person.Retry") data class PersonRetry(val person: Long) : Call()
+
+    /**
+     * The Memories section's map (ADR 0144 decision 13: ADR 0143's Memories map over the person's located Memories), as
+     * [MapOpenMemories]: [Answer.MapOpened] for [Watched.Map] and the `Map.*` calls, a pin opened with [ShellOpen]
+     * ([Answer.MapTapped]); it closes with [MapClose], its person's page or the tenant. Refused `NO_MAP_SERVICES` where the
+     * tenant has none.
+     */
+    @Serializable @SerialName("Person.Map") data class PersonMap(val person: Long) : Call()
+    @Serializable @SerialName("Person.Close") data class PersonClose(val person: Long) : Call()
 }
 
 /**
@@ -1306,6 +1453,11 @@ internal sealed class Answer {
         val rows: List<DetailRow>, val uploader: Piece?, val uploaderAt: Int,
         /** Whether the medium has a small map ([Call.LightboxMap]: its GPS, `Lightbox.Details.map`). */
         val map: Boolean = false,
+        /**
+         * The uploader's user id where their name opens their profile ([Call.ShellOpenPerson]; `MediaDetails.Uploader.profile`:
+         * a current member's only); null for a former member, a guest, or none known.
+         */
+        val profile: String? = null,
     ) : Answer()
 
     /** A page's Music view opened ([Call.MusicOpen]): its id, for [Watched.Music] and its calls. */
@@ -1347,6 +1499,31 @@ internal sealed class Answer {
     /** Picked GPX files offered ([Call.TracksAdd]): what is said of each one refused, in the order picked. */
     @Serializable @SerialName("TracksAdded") data class TracksAdded(val said: List<Notice>) : Answer()
 
+    /** A participants picker opened ([Call.ParticipantsOpen]): its id, for [Watched.Participants] and its calls. */
+    @Serializable @SerialName("ParticipantsOpened") data class ParticipantsOpened(val participants: Long) : Answer()
+
+    /** A capture-time editor opened ([Call.CaptureTimeOpen]): its id, for [Watched.CaptureTime] and its calls. */
+    @Serializable @SerialName("CaptureTimeOpened") data class CaptureTimeOpened(val captureTime: Long) : Answer()
+
+    /** A banner dialog opened ([Call.BannerOpen]): its id, for [Watched.Banner] and its calls. */
+    @Serializable @SerialName("BannerOpened") data class BannerOpened(val banner: Long) : Answer()
+
+    /**
+     * The banner's frame ([Call.BannerFrame]): its [width] and [height] in the host's unit, whether it is the wide (16:9)
+     * one, and the surround's picture size in pixels ([surroundWidth] × [surroundHeight]: the picture scaled down to it,
+     * then stretched back behind the contained picture with smooth filtering — a blur by resampling, ADR 0144 decision 4).
+     */
+    @Serializable @SerialName("BannerFramed") data class BannerFramed(val width: Double, val height: Double, val wide: Boolean, val surroundWidth: Int, val surroundHeight: Int) : Answer()
+
+    /** What a banner's save or removal came to ([Call.BannerSave], [Call.BannerRemove]). */
+    @Serializable @SerialName("BannerSaved") data class BannerSaved(val outcome: BannerSave) : Answer()
+
+    /** Whether New Memory there offers *I was there* ([Call.ShellOffersWasThere]). */
+    @Serializable @SerialName("WasThere") data class WasThere(val offered: Boolean) : Answer()
+
+    /** A person's page opened ([Call.PersonOpen]): its id, for [Watched.Person] and its calls. */
+    @Serializable @SerialName("PersonOpened") data class PersonOpened(val person: Long) : Answer()
+
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
         NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER, NO_SUCH_ENTRY, NO_SUCH_EDITOR,
@@ -1384,6 +1561,9 @@ internal sealed class Answer {
         /** The maps: no map by that id (closed, or its page or tenant was); the tenant has no map services; no date or place
          *  editor, no Map view by that id. */
         NO_SUCH_MAP, NO_MAP_SERVICES, NO_SUCH_DATE, NO_SUCH_PLACE, NO_SUCH_TRACKS,
+
+        /** Curating a Memory and a person's page: no participants picker, capture-time editor, banner dialog or person's page by that id. */
+        NO_SUCH_PARTICIPANTS, NO_SUCH_CAPTURE_TIME, NO_SUCH_BANNER, NO_SUCH_PERSON,
     }
 }
 
@@ -1491,6 +1671,18 @@ internal sealed class Watched {
 
     /** A Map view opened by [Call.TracksOpen]. */
     @Serializable @SerialName("Tracks") data class Tracks(val tracks: Long) : Watched()
+
+    /** A participants picker opened by [Call.ParticipantsOpen]. */
+    @Serializable @SerialName("Participants") data class Participants(val participants: Long) : Watched()
+
+    /** A capture-time editor opened by [Call.CaptureTimeOpen]. */
+    @Serializable @SerialName("CaptureTime") data class CaptureTime(val captureTime: Long) : Watched()
+
+    /** A banner dialog opened by [Call.BannerOpen]. */
+    @Serializable @SerialName("Banner") data class Banner(val banner: Long) : Watched()
+
+    /** A person's page opened by [Call.PersonOpen]. */
+    @Serializable @SerialName("Person") data class Person(val person: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -1586,6 +1778,18 @@ internal sealed class Update {
 
     /** A Map view; null once it closed (or its gallery or tenant did). */
     @Serializable @SerialName("Tracks") data class Tracks(val tracks: Long, val shown: TracksShown?) : Update()
+
+    /** A participants picker; null once it closed (or its gallery or tenant did). */
+    @Serializable @SerialName("Participants") data class Participants(val participants: Long, val shown: ParticipantsShown?) : Update()
+
+    /** A capture-time editor; null once it closed (or its lightbox, gallery or tenant did). */
+    @Serializable @SerialName("CaptureTime") data class CaptureTime(val captureTime: Long, val shown: CaptureTimeShown?) : Update()
+
+    /** A banner dialog; null once it closed (or its gallery or tenant did). */
+    @Serializable @SerialName("Banner") data class Banner(val banner: Long, val shown: BannerEditorShown?) : Update()
+
+    /** A person's page; null once it closed (or its tenant did). */
+    @Serializable @SerialName("Person") data class Person(val person: Long, val shown: PersonShown?) : Update()
 }
 
 /**
@@ -1632,7 +1836,182 @@ internal class GalleryShown(
     val editsFacts: Boolean = false,
     /** How many GPX tracks the node holds (its Map view's, [Call.TracksOpen]; the view itself is offered always). */
     val tracks: Int = 0,
+    /**
+     * The header's people line beside the facts line (`GalleryModel.State.people`, ADR 0144 decision 1): null where it is
+     * not shown — not a member's, not a Memory, a personal scope, offline, or nobody listed and no right to add.
+     */
+    val people: PeopleShown? = null,
+    /** The banner above the header (`State.banner`, ADR 0144 decision 4); null: none, and no frame drawn. */
+    val banner: BannerShown? = null,
+    /** Whether the banner's dialog is offered ([Call.BannerOpen]; `State.editsBanner`: the right, online). */
+    val editsBanner: Boolean = false,
+    /**
+     * The medium whose delete asks about the banner first (`State.bannerPicture`, decision 5's A2: its original is the
+     * banner's file): the host asks, *Remove the banner too* offered — [Call.GalleryTrashBannerPicture] or
+     * [Call.GalleryCancelAsk]. Null: nothing asked.
+     */
+    val bannerQuestion: String? = null,
 )
+
+/**
+ * A Memory's people line as the header draws it (core's `Participants.Line`, ADR 0144 decision 1): everyone listed
+ * ([people], in order), the avatars drawn by user id ([avatars]: all of up to three, else the first two with [more] as
+ * "+N" in the third slot; each picture through [Call.AvatarPicture] where [ShellShown.pictures] holds it, else the letter),
+ * whether the names read ([named]: none is a former member before), whether whoever looks may edit ([edits]:
+ * [Call.ParticipantsOpen]) and the *Add participants* chip of an empty list ([add]). Ids and names only.
+ */
+@Serializable
+@SerialName("PeopleShown")
+internal class PeopleShown(val people: List<ParticipantShown>, val avatars: List<String>, val more: Int, val named: Boolean, val edits: Boolean, val add: Boolean)
+
+/**
+ * One participant: the user id, the display name (null for a former member, said with their words, or while names read),
+ * whether they are a former member (greyed), and whether the name opens their profile ([Call.ShellOpenPerson]: a current
+ * member only, uc.memory.participants A1).
+ */
+@Serializable
+@SerialName("ParticipantShown")
+internal class ParticipantShown(val userId: String, val name: String?, val former: Boolean, val opensProfile: Boolean)
+
+/** A banner's medium (core's `Banner.Medium`). */
+@Serializable
+internal enum class BannerMedium { IMAGE, VIDEO }
+
+/**
+ * A banner as the page draws it (core's `Banner.Shown`): its [medium], the cache key of its picture ([picture]: an image's,
+ * a video's poster; it changes exactly when the picture does — the bytes through [Call.BannerPicture]) and a video's
+ * [mediaType] for its player ([Call.BannerPlay]). No ref, wrap or digest crosses (ADR 0144 decision 8).
+ */
+@Serializable
+@SerialName("BannerShown")
+internal class BannerShown(val medium: BannerMedium, val picture: String, val mediaType: String?)
+
+/**
+ * The participants picker as the host draws it (core's `ParticipantsPicker.State`): the scope's current members the search
+ * shows ([members]; null while they read or where they did not — [failed], *Try again*), above them the ids picked that no
+ * member holds any more ([former], greyed, ticked until unticked), the search's [query], whether the pick is at the cap
+ * ([full]: the web's `full` words), whether the search hides every member ([noMatches]) or there is nobody to choose
+ * ([nobody]), whether Save is offered and runs, what the last save said ([said]) and whether it saved ([saved]: the host
+ * closes the picker).
+ */
+@Serializable
+@SerialName("ParticipantsShown")
+internal class ParticipantsShown(
+    val members: List<MemberShown>?,
+    val former: List<MemberShown>,
+    val failed: Boolean,
+    val query: String,
+    val full: Boolean,
+    val noMatches: Boolean,
+    val nobody: Boolean,
+    val canSave: Boolean,
+    val saving: Boolean,
+    val said: CurationSaid?,
+    val saved: Boolean,
+)
+
+/** One row of the picker: the user id, the display name (null for a former member), whether it is ticked, and whether its tick may change now. */
+@Serializable
+@SerialName("MemberShown")
+internal class MemberShown(val userId: String, val name: String?, val ticked: Boolean, val togglable: Boolean)
+
+/** What an editor of a Memory's curation says after a save that did not land: a peer's correction won, the meta does not open here, or it failed. */
+@Serializable
+internal enum class CurationSaid { CONFLICT, UNREADABLE, FAILED }
+
+/**
+ * A medium's capture-time editor as the host draws it (core's `CaptureTimeEditor.State`): the effective time ([atMs], epoch
+ * ms the host shows in the device's zone with its own pickers; null: none known), whether a correction is set
+ * ([corrected]: *Reset to original* offered), the original time a reset returns to ([originalMs]), whether a save runs,
+ * what the last one said ([said]: [CurationSaid.CONFLICT] reopens on the peer's time) and whether it saved (the host closes it).
+ */
+@Serializable
+@SerialName("CaptureTimeShown")
+internal class CaptureTimeShown(val atMs: Long?, val corrected: Boolean, val originalMs: Long?, val saving: Boolean, val said: CurationSaid?, val saved: Boolean)
+
+/** What the banner dialog says (core's `BannerEditor.Said`): a pick refused, or a save that did not go. */
+@Serializable
+internal enum class BannerSaid { TOO_LARGE, UNREADABLE, VIDEO_UNREADABLE, NOT_MEDIA, STALE, BUSY, FAILED }
+
+/** What a banner's save or removal came to: done (the dialog closes), a peer's change meanwhile, busy, failed, or cancelled. */
+@Serializable
+internal enum class BannerSave { DONE, STALE, BUSY, FAILED, CANCELLED }
+
+/**
+ * The banner dialog as the host draws it (core's `BannerEditor.State`): whether the Memory has a banner now, whether a
+ * picked file is being decoded, the file picked ([picked], its previews' picture through [Call.BannerPreview]), whether a
+ * save or removal runs and how far its upload is ([progress], 0–1; null: a removal, or not started), what it says, whether
+ * it is done (the dialog closes), and whether *Save banner* and *Remove banner* are offered.
+ */
+@Serializable
+@SerialName("BannerEditorShown")
+internal class BannerEditorShown(
+    val hasBanner: Boolean,
+    val picking: Boolean,
+    val picked: BannerPickedShown?,
+    val saving: Boolean,
+    val progress: Double?,
+    val said: BannerSaid?,
+    val done: Boolean,
+    val canSave: Boolean,
+    val canRemove: Boolean,
+)
+
+/** A picked file as the dialog shows it: its medium, a video's type, and which pick it is ([pick]: a new number per pick, so the host asks its preview anew). */
+@Serializable
+@SerialName("BannerPickedShown")
+internal class BannerPickedShown(val medium: BannerMedium, val mediaType: String?, val pick: Long)
+
+/** A person's Memories section's view (core's `PersonMemories.View`). */
+@Serializable
+internal enum class MemoriesView { LIST, MAP }
+
+/**
+ * A person's page as the host draws it (core's `PersonProfile`, ADR 0144 decision 11): who [userId] is — the display name
+ * ([name]; null: the former-member words where [former], else the unknown-member ones), their picture at its largest
+ * where the core holds it ([picture]: [Call.AvatarPicture], else the letter), the `~username` line under a real name
+ * ([username]) — and each application's section in the registry's order ([sections]); Memories' is [memories] (null where
+ * it is not among them).
+ */
+@Serializable
+@SerialName("PersonShown")
+internal class PersonShown(
+    val userId: String,
+    val name: String?,
+    val former: Boolean,
+    val picture: Boolean,
+    val username: String?,
+    val sections: List<ApplicationId>,
+    val memories: PersonMemoriesShown?,
+)
+
+/**
+ * "Memories with {name}" (core's `PersonMemories.State`, ADR 0144 decision 13): loading, failed (*Try again*:
+ * [Call.PersonRetry]), empty, the [rows] newest start day first, undated last, then by name — [partial] where some could not
+ * be read —, whether List | Map is offered ([offersViews]) and which shows ([view]; the map through [Call.PersonMap]), and
+ * how many of the rows have a pin ([located]).
+ */
+@Serializable
+@SerialName("PersonMemoriesShown")
+internal class PersonMemoriesShown(
+    val loading: Boolean,
+    val failed: Boolean,
+    val empty: Boolean,
+    val partial: Boolean,
+    val offersViews: Boolean,
+    val view: MemoriesView,
+    val rows: List<PersonRowShown>,
+    val located: Int,
+)
+
+/**
+ * One of a person's Memories as a row (`PersonMemories.Row`): the Memory ([ref], opened with [Call.ShellOpen]; its cover
+ * through [Call.ShellRowCover]), its date and place as sealed, and the group it lies in ([group], named [groupName]; null in
+ * the tenant's space).
+ */
+@Serializable
+@SerialName("PersonRowShown")
+internal class PersonRowShown(val ref: ObjectRef, val date: MemoryDateShown?, val place: String?, val group: SpaceRef?, val groupName: Piece?)
 
 /**
  * One medium of a gallery (`GalleryModel.Row`): its id, its original's sealed name and type (claims), whether it is a video
