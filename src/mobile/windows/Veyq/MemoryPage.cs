@@ -100,6 +100,12 @@ internal sealed class MemoryPage : IDisposable
     /// <summary>The facts line under the head (its date and place, ADR 0143 decision 5) and what it was drawn from.</summary>
     private readonly Border _factsSlot = new();
     private (MemoryDateShown?, string?, bool)? _factsDrawn;
+    /// <summary>The people line beside the facts line (ADR 0144 decision 1) and the key it was drawn from.</summary>
+    private readonly Border _peopleSlot = new();
+    private string? _peopleDrawn;
+    /// <summary>The banner above the head (ADR 0144 decision 4), and A2's question asked for the medium it names.</summary>
+    private readonly BannerStage _banner;
+    private string? _bannerAsked;
 
     public NodeAt Node { get; }
 
@@ -123,8 +129,14 @@ internal sealed class MemoryPage : IDisposable
         _say = say;
         _undoBar = undoBar;
         _saving = saving;
+        _banner = new BannerStage(window, say);
+        _column.Children.Add(_banner.View);
         _column.Children.Add(_heroSlot);
-        _column.Children.Add(_factsSlot);
+        // the facts line and the people line in one row
+        var factsRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16 };
+        factsRow.Children.Add(_factsSlot);
+        factsRow.Children.Add(_peopleSlot);
+        _column.Children.Add(factsRow);
         AutomationProperties.SetAutomationId(_views, "memory-views");
         AutomationProperties.SetAutomationId(_photosItem, "memory-view-photos");
         AutomationProperties.SetAutomationId(_musicItem, "memory-view-music");
@@ -165,7 +177,11 @@ internal sealed class MemoryPage : IDisposable
         AutomationProperties.SetAutomationId(_scroll, "memory-page");
         // the grid laid out anew when its width changes (a window resized, the pane shown) and the rows near the view
         // follow the scroll
-        _scroll.SizeChanged += (_, _) => Relayout();
+        _scroll.SizeChanged += (_, _) =>
+        {
+            Relayout();
+            _banner.Layout(Width, _scroll.ViewportHeight);
+        };
         _scroll.ViewChanged += (_, _) => Relayout();
         Droppable();
         _root.Children.Add(_scroll);
@@ -702,6 +718,20 @@ internal sealed class MemoryPage : IDisposable
         if (s?.rows is { Count: 0 }) DropRows();
         if (s is null) return;
         DrawFacts(s);
+        DrawPeople(s);
+        if (_id is { } shownAt)
+        {
+            _banner.Show(shownAt, s.banner);
+            _banner.Layout(Width, _scroll.ViewportHeight);
+        }
+        // A2: the banner's own picture asked to be trashed — asked once per medium the state names
+        if (s.bannerQuestion is null) _bannerAsked = null;
+        else if (s.bannerQuestion != _bannerAsked && _id is { } asking)
+        {
+            _bannerAsked = s.bannerQuestion;
+            Log.Write("gallery asks before trashing the banner's picture");
+            BannerStage.Ask(_window, asking, _say);
+        }
         // Photos | Music | Map: the Map view always (the web's tab), Music where the node offers it
         var music = s.musicView ? Visibility.Visible : Visibility.Collapsed;
         if (_views.Visibility != Visibility.Visible || _musicItem.Visibility != music)
@@ -765,6 +795,22 @@ internal sealed class MemoryPage : IDisposable
         _factsSlot.Child = MemoryFacts.Line(_window, gallery, s);
     }
 
+    /// <summary>The people line, drawn anew only when whom it lists or what it offers changed.</summary>
+    private void DrawPeople(GalleryShown s)
+    {
+        var key = s.people is not { } p ? "" : $"{string.Join(",", p.people.Select(x => $"{x.userId}={x.name}/{x.former}/{x.opensProfile}"))}|{string.Join(",", p.avatars)}|{p.more}|{p.edits}|{p.add}";
+        if (_peopleDrawn == key || _id is not { } gallery) return;
+        _peopleDrawn = key;
+        Log.Write($"people line: {s.people?.people.Count.ToString() ?? "none"}{(s.people is { } q ? $", avatars {q.avatars.Count} +{q.more}, edits {q.edits}, add {q.add}" : "")}");
+        _peopleSlot.Child = s.people is { } shown ? PeopleLine.Line(_window, gallery, shown) : null;
+    }
+
+    /// <summary>"Add banner" / "Change banner" (Banner.Open), where the gallery offers it (GalleryShown.editsBanner).</summary>
+    public void EditBanner()
+    {
+        if (_id is { } gallery && _shown is { editsBanner: true } s) BannerDialog.Open(_window, gallery, s.banner is not null);
+    }
+
     private async void AskPurge(long gallery, string question)
     {
         try
@@ -807,6 +853,7 @@ internal sealed class MemoryPage : IDisposable
         if (_closed) return;
         _closed = true;
         CloseLightbox();
+        _banner.Dispose();
         _music?.Dispose();
         _music = null;
         _mapView?.Dispose();

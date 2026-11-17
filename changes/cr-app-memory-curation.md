@@ -565,10 +565,47 @@ reached only when it was open as the device went offline; then it stays, naming 
   (the gallery re-orders); set an image banner and a video banner (play it), resize the Mac's window across 720 pt for 1:1
   and 16:9, trash the banner's medium (asked), remove the banner.
 
-- [ ] **8 Linux and Windows** — as phase 6 over the bridge (a `gtk::Popover` / `Flyout` for the list, the file dialogs
+- [x] **8 Linux and Windows** — as phase 6 over the bridge (a `gtk::Popover` / `Flyout` for the list, the file dialogs
   filtered to images and videos, `player.rs` / `MediumPlayer`, the profile a page of the shell with the core's raster
   map). · Done when: `run.py build`/`test` green on both; clicked once as phase 6, a window resized across 720 for the
   frame.
+  *Done 2026-11-17:* Linux `banner.rs` (the frame by `Banner.Frame`, the picture contained over its surround — the
+  picture drawn into the core's surround size, then stretched back by cairo's bilinear filter —, a video's poster with a
+  play badge and the frame its button, played by `player.rs` over the poster; the dialog: GTK's file dialog for images
+  and videos, the two previews drawn the same way, progress with Cancel, Remove banner), `curation.rs` (the people line
+  with its `gtk::Popover`, *Edit participants* / *Add participants*, the picker `AdwDialog` with search and checks, the
+  capture time's editor on the details' *Taken* row: a `GtkCalendar` and two spin buttons turned into epoch ms by
+  `glib::DateTime`, *Reset to original*), `person_page.rs` (a page of the shell while `Shell.person` stands: the avatar
+  at 128, name, `~username`, "Memories with {name}" with its states and an icon `AdwToggleGroup` List | Map, the map
+  through `Person.Map` into `raster_map`), *I was there* in New Memory (`header::ask_name_with`), A2's `AdwAlertDialog`,
+  the uploader's row opening the profile. Windows `Banner.cs`, `Participants.cs` (`Flyout`), `CaptureTimeEdit.cs`
+  (`CalendarDatePicker` + `TimePicker`, `DateTimeOffset`), `PersonPage.cs` (`SelectorBar`), `CurationText.cs` with
+  `CurationTextTest` (4); `windows/run.py` gains `VEYQ_WINDOWS_TASKS` (a pass's own scheduled tasks beside its own
+  `VEYQ_WINDOWS_DIR`). No permission, capability or dependency added (the four manifests untouched). **Clicked live**
+  against the dev instance (`--devlogin`), each pass's Memory trashed and its sessions signed out after:
+  *Linux* (Broadway from headless system Chrome, its own home volume, removed): New Memory with *I was there* offered
+  and ticked → the maker listed (`people line: 1 listed`); two participants picked through the search and saved
+  (`Participants.Save … Saved`, `3 listed`), the popover listing all three; a participant's profile ("Memories with
+  other", one row), its Map (the consent's offer and "No places yet"), a Memory opened from it and back to the profile and
+  back; the uploader's row → the own profile (picture, `~kevin`, five Memories newest start day first); a photo's time set
+  to 2021 (`CaptureTime.Set … Saved`, the gallery re-ordered 1 of 3 → 3 of 3, the details showing *Corrected*) and reset
+  (back to 1 of 3); an image banner (progress 42 % → 85 % → 100 %, `banner framed 936 × 516 (16:9)`), the window resized
+  to 1000 (`726 × 408`, 16:9) and 980 (`711 × 516`, 1:1 under the 60 % cap); a video banner equal to the gallery's clip
+  (progress 0 → done: shared), played (`medium prepared: 10 s`, `medium at 5 s`); trashing the clip asked first, *Move to
+  trash* kept the banner; *Remove banner* (`banner: none`). *Windows* (the VM, `F:\veyq-curation-p8` and the tasks
+  `veyq-app-cp8`/`veyq-drive-cp8`, both removed with `F:\veyq-curation-p5`): the same walk — I was there, two
+  participants and the flyout, a participant's profile → Memory → back, its map with "No places yet", the uploader's
+  profile (newest first), a time set and reset with the gallery re-ordered, an image banner 16:9 and 1:1 under the cap
+  at 760 px, a video banner equal to the clip saved at once and played, A2's question with the banner kept, Remove banner.
+  Fixed from the passes: Linux's details re-opened on the old time (now on the lightbox's next state) and the banner
+  dialog cut off *Remove banner*; Windows' video banner kept the image's frame, its profile showed "~~kevin", and New
+  showed on the profile. Green: `/usr/bin/python3 src/mobile/linux/run.py build` and `test` (868 + the probes);
+  `windows/run.py build` and `test` (869) with `VEYQ_WINDOWS_DIR`; every `scripts/validate_*.py` but guard_gaps.
+  **Departures:** the people line and the banner ride `GalleryShown` (phase 5); a Linux banner's play is the frame
+  itself with a badge (GNOME floats no button over a view, `validate_mobile_platform_guidelines`), and *Change banner*
+  sits beside the people line, not over the picture; on Windows the player's own black bars cover the poster's surround
+  at the sides while a video plays (D4 holds above and below only); the profile's switch is icons with the words
+  `node_view_list` and `memory_view_map` as tooltips/labels; on the Linux container (UTC) a corrected time is said in UTC.
 
 - [ ] **9 the passes** — per platform against the dev instance: two sessions (an app and the web) editing the same
   Memory's participants at once, then its banner (the web's `banner_stale` word seen in the app), a time corrected in the

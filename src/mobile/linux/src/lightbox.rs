@@ -68,6 +68,8 @@ struct Inner {
     popped: RefCell<Option<glib::SignalHandlerId>>,
     window: gtk::Window,
     toasts: adw::ToastOverlay,
+    /// The details to show again once the gallery read the capture time just saved (its next state; at most 3 s later).
+    details_again: Cell<bool>,
 }
 
 impl Lightbox {
@@ -139,6 +141,7 @@ impl Lightbox {
             popped: RefCell::new(None),
             window: window.clone(),
             toasts: toasts.clone(),
+            details_again: Cell::new(false),
         });
         Inner::connect(&inner);
         nav.push(&inner.page);
@@ -195,6 +198,9 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
                     return;
                 }
                 inner.draw();
+                if inner.details_again.replace(false) {
+                    inner.show_details();
+                }
             }
             Ok(_) => {}
             Err(e) => eprintln!("veyq: a lightbox update did not read: {:?}", e.0),
@@ -544,9 +550,11 @@ impl Inner {
         let Some(lightbox) = self.id.get() else { return };
         let Some(media_id) = self.shown.borrow().as_ref().and_then(|s| s.row.as_ref().map(|r| r.media_id.clone())) else { return };
         let window = self.window.clone();
+        let me = Rc::downgrade(self);
+        let me_profile = me.clone();
         glib::spawn_future_local(async move {
-            let (rows, uploader, at, has_map) = match bridge::call(&Call::LightboxDetails { lightbox, media_id: media_id.clone() }).await.map(|(a, _)| a) {
-                Ok(Answer::MediumDetails { rows, uploader, uploader_at, map, .. }) => (rows, uploader, uploader_at, map),
+            let (rows, uploader, at, has_map, profile) = match bridge::call(&Call::LightboxDetails { lightbox, media_id: media_id.clone() }).await.map(|(a, _)| a) {
+                Ok(Answer::MediumDetails { rows, uploader, uploader_at, map, profile, .. }) => (rows, uploader, uploader_at, map, profile),
                 other => return eprintln!("veyq: Lightbox.Details answered {other:?}"),
             };
             let group = adw::PreferencesGroup::new();
@@ -575,6 +583,8 @@ impl Inner {
             let place_row = adw::ActionRow::builder().title(glib_escape(&place_label)).subtitle_selectable(true).visible(false).build();
             place_row.add_css_class("property");
             let location = words::memory_field_location();
+            let (taken, added_by) = (words::memory_field_captured(), words::memory_field_uploaded_by());
+            let mut taken_row = None;
             let mut placed = !asks_place;
             for (label, value) in lines {
                 if !placed && label == location {
@@ -583,6 +593,31 @@ impl Inner {
                 }
                 let row = adw::ActionRow::builder().title(glib_escape(&label)).subtitle(glib_escape(&value)).subtitle_selectable(true).build();
                 row.add_css_class("property");
+                if label == taken && taken_row.is_none() {
+                    taken_row = Some(row.clone());
+                }
+                // a current member's name opens their profile (ADR 0144 decision 11); a former one's, a guest's nothing
+                if label == added_by
+                    && let Some(user_id) = profile.clone()
+                {
+                    row.set_subtitle_selectable(false);
+                    row.set_activatable(true);
+                    row.set_widget_name("details-uploader");
+                    row.set_tooltip_text(Some(&words::people_open(&value)));
+                    row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+                    let me_profile = me_profile.clone();
+                    row.connect_activated(move |r| {
+                        eprintln!("veyq: uploader's profile opened");
+                        if let Some(d) = r.ancestor(adw::Dialog::static_type()).and_downcast::<adw::Dialog>() {
+                            d.close();
+                        }
+                        // the lightbox leaves for the profile, as its back would
+                        if let Some(i) = me_profile.upgrade() {
+                            i.nav.pop();
+                        }
+                        bridge::send(Call::ShellOpenPerson { user_id: user_id.clone() });
+                    });
+                }
                 group.add(&row);
             }
             if !placed {
@@ -608,9 +643,9 @@ impl Inner {
             };
             page.add(&group);
             if asks_place {
-                let row = place_row.downgrade();
+                let (row, place_media) = (place_row.downgrade(), media_id.clone());
                 glib::spawn_future_local(async move {
-                    match bridge::call(&Call::LightboxPlace { lightbox, media_id }).await.map(|(a, _)| a) {
+                    match bridge::call(&Call::LightboxPlace { lightbox, media_id: place_media }).await.map(|(a, _)| a) {
                         Ok(Answer::PlaceResolved { name: Some(name) }) => {
                             eprintln!("veyq: lightbox details: the place's name resolved");
                             if let Some(row) = row.upgrade() {
@@ -631,6 +666,23 @@ impl Inner {
             dialog.connect_closed(move |_| {
                 held.borrow_mut().take();
             });
+            // the capture time's editor on the *Taken* row, where the core offers it (ADR 0144 decision 3); a save shows
+            // the details anew
+            if let Some(row) = &taken_row {
+                let again = me.clone();
+                crate::curation::on_taken_row(lightbox, media_id.clone(), row, &dialog, &window, move || {
+                    let Some(i) = again.upgrade() else { return };
+                    i.details_again.set(true);
+                    let later = Rc::downgrade(&i);
+                    glib::timeout_add_local_once(std::time::Duration::from_secs(3), move || {
+                        if let Some(i) = later.upgrade()
+                            && i.details_again.replace(false)
+                        {
+                            i.show_details();
+                        }
+                    });
+                });
+            }
             dialog.present(Some(&window));
         });
     }

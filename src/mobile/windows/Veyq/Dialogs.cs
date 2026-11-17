@@ -51,13 +51,15 @@ internal static class Dialogs
     /// <summary>A name asked for (a rename, a new folder): <paramref name="title"/>, a box titled <paramref name="field"/>
     /// holding <paramref name="name"/>, <paramref name="problem"/> under it where the core refused the last one; the name
     /// typed, or null when it was cancelled.</summary>
-    public static async Task<string?> AskName(Window window, string automationId, string title, string field, string name, string? problem, string confirm)
+    public static async Task<string?> AskName(Window window, string automationId, string title, string field, string name, string? problem, string confirm, UIElement? extra = null)
     {
         var box = new TextBox { Header = field, Text = name, MinWidth = 320 };
         AutomationProperties.SetAutomationId(box, "dialog-name");
         box.SelectAll();
         var content = new StackPanel { Spacing = 12 };
         content.Children.Add(box);
+        // a choice beside the name (New Memory's "I was there")
+        if (extra is not null) content.Children.Add(extra);
         if (problem is not null)
         {
             var said = new TextBlock

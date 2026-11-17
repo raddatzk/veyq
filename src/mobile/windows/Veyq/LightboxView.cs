@@ -522,14 +522,48 @@ internal sealed class LightboxView : IDisposable
                 row.Children.Add(text);
                 return row;
             }
+            // a current member's uploader name opens their profile (ADR 0144 decision 11): the dialog closes first
+            StackPanel Uploader(string label, string value, string userId, Action close)
+            {
+                var row = new StackPanel { Spacing = 0 };
+                row.Children.Add(new TextBlock { Text = label, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
+                var link = new HyperlinkButton { Content = value, Padding = new Thickness(0) };
+                AutomationProperties.SetAutomationId(link, "details-uploader");
+                AutomationProperties.SetName(link, Words.PeopleOpen(value));
+                link.Click += (_, _) =>
+                {
+                    close();
+                    Log.Write("lightbox details: the uploader's profile opened");
+                    Act.Send(new Call.ShellOpenPerson { userId = userId });
+                };
+                row.Children.Add(link);
+                return row;
+            }
             var location = Words.MemoryFieldLocation();
+            var captured = Words.MemoryFieldCaptured();
+            var uploadedBy = Words.MemoryFieldUploadedBy();
             StackPanel? locationRow = null;
+            // the capture time's editor under its row where whoever looks may correct it (ADR 0144 decision 3)
+            var saved = false;
+            ContentDialog? shown = null;
+            var editor = await CaptureTimeEdit.Open(lightbox, mediaId, () =>
+            {
+                saved = true;
+                shown?.Hide();
+            });
+            var placedEditor = false;
             foreach (var (label, value) in lines)
             {
-                var row = Line(label, value);
+                var row = label == uploadedBy && d.profile is { } profile ? Uploader(label, value, profile, () => shown?.Hide()) : Line(label, value);
                 if (label == location) locationRow = row;
                 list.Children.Add(row);
+                if (label == captured && editor is not null && !placedEditor)
+                {
+                    list.Children.Add(editor.View);
+                    placedEditor = true;
+                }
             }
+            if (editor is not null && !placedEditor) list.Children.Add(editor.View);
             // the photo's place named once (ADR 0143 decision 7), while the dialog shows: the geocoder's queue may take a
             // while, so its row joins above the coordinate once it arrives
             if (asksPlace) ResolvePlace(lightbox, mediaId, name =>
@@ -545,8 +579,12 @@ internal sealed class LightboxView : IDisposable
                 DefaultButton = ContentDialogButton.Close,
             };
             AutomationProperties.SetAutomationId(dialog, "lightbox-details-dialog");
+            shown = dialog;
             await Dialogs.Show(_window, dialog);
             map?.Dispose();
+            editor?.Dispose();
+            // a correction landed: the details shown anew with the time as it is now
+            if (saved && !_closed) ShowDetails();
         }
         catch (Exception e)
         {

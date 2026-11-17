@@ -93,7 +93,9 @@ The Windows host: `VEYQ_WINDOWS_SSH` (default `kevin@192.168.64.8`, the test VM 
 `local` when this host is the Windows host — CI's `msix` job on a GitHub Windows runner: PowerShell, copies and the
 launch run here, with no ssh and no scheduled task, so this host's own session must be an interactive one),
 its key `VEYQ_WINDOWS_KEY` (default `~/.ssh/veyq_vms_ed25519`), and a directory there `VEYQ_WINDOWS_DIR` (default
-`F:\\veyq`, the VM's Dev Drive) which this script owns. The host is x64 or ARM64: the binary is x64 and runs under
+`F:\\veyq`, the VM's Dev Drive) which this script owns. A pass beside another names its own directory and its own
+scheduled tasks with `VEYQ_WINDOWS_TASKS=<suffix>` (`veyq-app-<suffix>`, `veyq-drive-<suffix>`, which `register` sets up
+against that directory; the pass unregisters them after). The host is x64 or ARM64: the binary is x64 and runs under
 Windows' x64 emulation on ARM64. ssh lands in session 0 there, which is enough for a test binary but shows no window:
 the app and its driver start in the logged-on session through the scheduled tasks `register` sets up. Every PowerShell
 script goes as `-EncodedCommand` (UTF-16LE, base64: no quoting through cmd.exe), and what it prints is read as the
@@ -155,7 +157,13 @@ SHOTS = repo_layout.MOBILE / "build" / "windows" / "shots"
 # The app's build output on the Windows host, below src/mobile/windows (the app is x64, unpackaged, self-contained).
 APP_OUT = PureWindowsPath(APP, "bin", "Debug", "net10.0-windows10.0.26100.0", "win-x64")
 DRIVE_OUT = PureWindowsPath(DRIVE, "bin", "Release", "net10.0-windows")
-TASKS = {"veyq-app": "--launch", "veyq-drive": "--drive"}  # each scheduled task and Veyq.Drive's mode it runs
+# A parallel pass names a directory and tasks of its own (`VEYQ_WINDOWS_TASKS=<suffix>`: `veyq-app-<suffix>` and
+# `veyq-drive-<suffix>`, registered by `register` against that directory's drive and run files), so it never takes the
+# default tasks' F:\veyq from another pass.
+TASK_SUFFIX = os.environ.get("VEYQ_WINDOWS_TASKS", "")
+APP_TASK = "veyq-app" + (f"-{TASK_SUFFIX}" if TASK_SUFFIX else "")
+DRIVE_TASK = "veyq-drive" + (f"-{TASK_SUFFIX}" if TASK_SUFFIX else "")
+TASKS = {APP_TASK: "--launch", DRIVE_TASK: "--drive"}  # each scheduled task and Veyq.Drive's mode it runs
 # What Kotlin/Native exports from a DLL beside the @CName functions: its C API's entry (`<library>_symbols`), read from
 # the export table of `veyq.dll` (2026-11-10, Kotlin 2.4.21). A new one is read and added here, never waved by.
 KOTLIN_NATIVE_EXPORTS = {"veyq_symbols"}
@@ -801,7 +809,7 @@ def in_session(name: str, script: str, seconds: int = 300) -> int:
                                                                  "Bypass", "-Command", command]}))
     copy_to([start], REMOTE_RUN)
     start.unlink()
-    code = run_task("veyq-app", done, seconds)
+    code = run_task(APP_TASK, done, seconds)
     shown = SMOKE_OUT.parent / out.name
     if fetch(str(out), shown):
         raw = shown.read_bytes()
@@ -848,7 +856,7 @@ def smoke_package(signed: PureWindowsPath) -> int:
                f"Remove-Item -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(started))}", quiet=True)
     copy_to([start], REMOTE_RUN)
     start.unlink()
-    code = run_task("veyq-app", started, 60)
+    code = run_task(APP_TASK, started, 60)
     if code == 0:
         code = powershell("\n".join([
             # The packaged app keeps its data, its log too, in its package's own LocalState (AppData.cs, DataFolder),
@@ -941,7 +949,7 @@ def launch(env: dict[str, str]) -> int:
     finally:
         # it may hold the dev principal (--devlogin): never left behind here
         local.unlink(missing_ok=True)
-    code = run_task("veyq-app", started, 30)
+    code = run_task(APP_TASK, started, 30)
     if code == 0:
         print("the app runs in the logged-on session", flush=True)
     else:
@@ -1055,7 +1063,7 @@ def drive(steps: list[str]) -> int:
                f"-ErrorAction SilentlyContinue -Path {ps_quote(str(steps_file) + '.out')}, {ps_quote(str(steps_file) + '.done')}",
                quiet=True)
     copy_to([local], REMOTE_RUN)
-    code = run_task("veyq-drive", PureWindowsPath(str(steps_file) + ".done"), 300)
+    code = run_task(DRIVE_TASK, PureWindowsPath(str(steps_file) + ".done"), 300)
     log = SMOKE_OUT.parent / "log.txt"
     print("--- the app's log", flush=True)
     print(log.read_text(encoding="utf-8-sig") if fetch(REMOTE_LOG, log) else "(none)", flush=True)
@@ -1102,7 +1110,7 @@ def hello_probe(timeout: int, check: bool) -> int:
     copy_to([local], REMOTE_RUN)
     local.unlink(missing_ok=True)
     # a Veyq.Drive just rebuilt took 33 s to start the binary (measured 2026-11-11): the app's 30 s is too short here
-    code = run_task("veyq-app", started, 120)
+    code = run_task(APP_TASK, started, 120)
     if code != 0:
         powershell(f"Remove-Item -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(start))}", quiet=True)
         return code

@@ -58,6 +58,8 @@ internal sealed class ShellView
     private FilePage? _file;
     private DropBoxPage? _dropBox;
     private MemoryPage? _memory;
+    /// <summary>A person's profile while the shell's state names one (Shell.person, ADR 0144 decision 11).</summary>
+    private PersonPage? _person;
     /// <summary>The Memories application's places (its bar's tabs, ADR 0143 decision 6): the SelectorBar over the list or
     /// the Memories map, what the bar was drawn from, and the map while its tab is chosen.</summary>
     private Grid? _places;
@@ -559,6 +561,35 @@ internal sealed class ShellView
         _shown = shown;
         DrawHeader(shown);
         UIElement body;
+        if (shell.person is { } person)
+        {
+            // a person's profile over whatever was on screen: a screen of the core's own, back the shell's
+            _title.Text = Words.PeopleProfile();
+            if (_pot is not null) _said.IsOpen = false;
+            _pot?.Dispose();
+            _pot = null;
+            _file?.Dispose();
+            _file = null;
+            _dropBox?.Dispose();
+            _dropBox = null;
+            DropMemory();
+            if (_person is null || _person.UserId != person)
+            {
+                _person?.Dispose();
+                _person = new PersonPage(_window, person);
+                Log.Write("shell: a person's profile");
+            }
+            body = _person.Page;
+            CloseMemoriesMap();
+            if (!ReferenceEquals(_body.Content, body)) _body.Content = body;
+            DrawCommands();
+            return;
+        }
+        if (_person is not null)
+        {
+            _person.Dispose();
+            _person = null;
+        }
         if (shell.openObject is { kind: "EXPENSES_POT" } pot)
         {
             if (_pot is null || _pot.Ref != pot)
@@ -799,7 +830,8 @@ internal sealed class ShellView
     {
         _commands.PrimaryCommands.Clear();
         _commands.SecondaryCommands.Clear();
-        if (_shown is not { } shown || _account is not null) return;
+        // a person's profile is no level: nothing is created or acted on there
+        if (_shown is not { } shown || _account is not null || _person is not null) return;
         var page = _pot;
         // a Pot's page creates one thing, an entry (as Android's and Apple's Pot screens): the level's New is not offered
         // beside it — two Add commands side by side would ask which one adds what
@@ -874,6 +906,14 @@ internal sealed class ShellView
             _commands.PrimaryCommands.Add(refresh);
         }
         foreach (var c in secondary) _commands.SecondaryCommands.Add(c);
+        // a Memory's banner (ADR 0144 decision 5): "Add banner" or "Change banner", where its gallery offers the dialog
+        if (memory?.Shown is { editsBanner: true } offers)
+        {
+            var banner = new AppBarButton { Icon = new FontIcon { Glyph = "\uE91B" }, Label = offers.banner is null ? Words.MemoryBannerAdd() : Words.MemoryBannerChange() };
+            AutomationProperties.SetAutomationId(banner, "memory-banner-edit");
+            banner.Click += (_, _) => memory.EditBanner();
+            _commands.SecondaryCommands.Add(banner);
+        }
     }
 
     /// <summary>The shell's lists read anew from the server (Shell.Refresh): a drop box's page, Home's level and every list follow.</summary>
@@ -914,17 +954,37 @@ internal sealed class ShellView
 
     /// <summary>New Memory (Shell.CreateMemory) in the level shown, named in a dialog that asks again with the core's
     /// problem; the Memory made opens (the web's MemoryNodeDialog).</summary>
-    private async void NewMemory() => await NewMemory("", null);
+    private async void NewMemory() => await NewMemory("", null, null);
 
-    private async System.Threading.Tasks.Task NewMemory(string name, string? problem)
+    private async System.Threading.Tasks.Task NewMemory(string name, string? problem, bool? wasThereBefore)
     {
         if (_state is not { } state || state.shell.space is not { } space) return;
         var parent = state.shell.path.Count > 0 ? state.shell.path[^1].nodeId : null;
-        var typed = await Dialogs.AskName(_window, "new-memory", Words.MemoryCreateMemoryTitle(), Words.NodeName(), name, problem, Words.FolderCreate());
-        if (typed is null) return;
+        // "I was there", ticked, where the core offers it (a tenant or group scope: ADR 0144 decision 2); not remembered
+        var offered = false;
         try
         {
-            var (answer, _) = await Core.CallAsync(new Call.ShellCreateMemory { scopeId = space, parentId = parent, name = typed, wasThere = false });
+            offered = (await Core.CallAsync(new Call.ShellOffersWasThere { scopeId = space })).Item1 is Answer.WasThere { offered: true };
+        }
+        catch (Exception e)
+        {
+            Log.Write($"Shell.OffersWasThere failed ({e.GetType().Name})");
+        }
+        CheckBox? wasThere = null;
+        if (offered)
+        {
+            wasThere = new CheckBox { Content = Words.MemoryParticipantsWasThere(), IsChecked = wasThereBefore ?? true };
+            AutomationProperties.SetAutomationId(wasThere, "new-memory-was-there");
+            ToolTipService.SetToolTip(wasThere, Words.MemoryParticipantsWasThereHint());
+            AutomationProperties.SetHelpText(wasThere, Words.MemoryParticipantsWasThereHint());
+        }
+        var typed = await Dialogs.AskName(_window, "new-memory", Words.MemoryCreateMemoryTitle(), Words.NodeName(), name, problem, Words.FolderCreate(), wasThere);
+        if (typed is null) return;
+        var there = wasThere?.IsChecked == true;
+        Log.Write($"new memory: I was there offered {offered}, ticked {there}");
+        try
+        {
+            var (answer, _) = await Core.CallAsync(new Call.ShellCreateMemory { scopeId = space, parentId = parent, name = typed, wasThere = there });
             switch (answer)
             {
                 case Answer.Created { node: { } made }:
@@ -933,7 +993,7 @@ internal sealed class ShellView
                     break;
                 case Answer.Created { notice: { } n }:
                     Log.Write($"new memory: {n.msg}");
-                    await NewMemory(typed, Said.Notice(n));
+                    await NewMemory(typed, Said.Notice(n), there);
                     break;
                 default:
                     Log.Write($"Shell.CreateMemory answered {answer.GetType().Name}");

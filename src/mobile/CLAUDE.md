@@ -191,7 +191,10 @@ A Gradle build of its own, run through its own wrapper.
   row's menu Rename, Download, Remove, Report, "Add music" through GTK's `FileDialog`; and Map always, its Map view
   `memory_map_view`: the map, "Add GPX track" with each file's label asked first, the tracks' boxed list with its show
   switch, dashed swatch and menu Edit, Download GPX, Remove, Report), the facts line and the date and place editors under
-  its head (`memory_facts`, `AdwDialog`s), the core's raster map they all draw (`raster_map`, ADR 0143 decision 1: a
+  its head (`memory_facts`, `AdwDialog`s), the banner above the head and its dialog (`banner`: the picture contained over its
+  surround scaled to the core's size and stretched back by cairo's bilinear filter, ADR 0144 decision 4), the people line,
+  the participants picker and the capture time's editor on the details' *Taken* row (`curation`), a person's profile as a
+  page of the shell (`person_page`, List | Map), the core's raster map they all draw (`raster_map`, ADR 0143 decision 1: a
   `gtk::Widget` of its own whose `snapshot` appends the tiles' textures by the viewport's one formula and strokes each
   track as a `gsk::Path` with its activity's dash; the pins hit-tested, no widget; the consent's offer in its place; the
   attribution always at its foot), the Memories bar's Map tab `memories_map` (the bar's places above the list, as a Pot's),
@@ -232,7 +235,9 @@ A Gradle build of its own, run through its own wrapper.
   the view placed on a `Canvas` —, tiles held in `Recent` (`RecentTest`), a drop of photos and videos, the trash's Undo in
   the shell's `InfoBar`; a `SelectorBar` Photos | Music | Map, Music where the page offers it, its `MusicView` and its
   `MemoryMapView` (ADR 0143 decision 8: the map, Add GPX track with each file's label asked first, the tracks with their
-  show switch, dashed swatch and menu); the facts line and the date and place editors `MemoryFacts`; the core's raster map
+  show switch, dashed swatch and menu); the facts line and the date and place editors `MemoryFacts`; the banner and its
+  dialog `Banner`, the people line with its `Flyout`, the picker `Participants`, the capture time's editor
+  `CaptureTimeEdit`, their pure rules `CurationText`, a person's profile `PersonPage` (ADR 0144); the core's raster map
   `RasterMap`, ADR 0143 decision 1: a `Canvas` of tile `Image`s by the viewport's one formula, each track a dashed
   `Polyline`, the pins hit-tested and no `Button`, the consent's offer in its place, the attribution always at its foot;
   the Memories bar's Map tab in `ShellView`, a row's date `RowDates`, Settings → Map services `MapServicesSection`) with `LightboxView` (in
@@ -514,7 +519,10 @@ A Gradle build of its own, run through its own wrapper.
     `package --prebuilt --sign --smoke` with `VEYQ_WINDOWS_SSH=local`, the runner itself as the Windows host (no ssh, no
     scheduled task: the job's own session deploys, and the install says which session that is first).
   - `register` registers the scheduled tasks `veyq-app` and `veyq-drive` once per Windows host. It is the host owner's
-    step: a persistent change on a machine.
+    step: a persistent change on a machine. A pass beside another names its own directory (`VEYQ_WINDOWS_DIR`) and its
+    own tasks (`VEYQ_WINDOWS_TASKS=<suffix>`: `veyq-app-<suffix>`, `veyq-drive-<suffix>`, run against that directory);
+    the default tasks run `F:\veyq`'s drive and files only, so a pass in another directory cannot launch through them. It
+    registers its two with `register` and unregisters them after (`Unregister-ScheduledTask -Confirm:$false`).
 
   With `VEYQ_LIVE=http://veyq.localhost:8080`, `test --tests '*LiveSignInTest*'` and `bridge` sign in over WinHTTP, and
   `run --devlogin` signs the debug build in through its own sign-in; the principal comes from `VEYQ_ENV_FILE` and a
