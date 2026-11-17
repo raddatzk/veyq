@@ -54,23 +54,31 @@ private const val PIN_HIT_DP = 28.0
  * Memory, on a group frames it, and where the group shares one spot at the top zoom lists it in a sheet. The map opens
  * framing every pin; with none it shows the world and says how a Memory gets onto it.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun MemoriesMapTab(s: Screen.Signed, model: AppModel) {
-    val maps by model.maps.collectAsStateWithLifecycle()
     val list = s.applicationList(ApplicationId.MEMORIES)
     val refs = remember(list) { list.favorites + list.recent + list.all }
     val pins by produceState<MemoriesMap?>(null, refs) { value = runCatching { model.memoriesMap(refs) }.getOrNull() }
+    MemoriesPinMap(pins, model, Modifier.fillMaxSize()) { pin ->
+        val ref = refs.firstOrNull { it.nodeId == pin.nodeId && it.scopeId == pin.scopeId } ?: ObjectRef(pin.scopeId, pin.nodeId, "MEMORY", ApplicationId.MEMORIES, pin.name)
+        model.open(ref)
+    }
+}
+
+/**
+ * Memories as pins over the core's raster map (ADR 0143 D6): the Map tab's and a person's profile's (ADR 0144 decision 13),
+ * the same map either way. [pins] null while they read; a tap on a pin [open]s its Memory.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun MemoriesPinMap(pins: MemoriesMap?, model: AppModel, modifier: Modifier, open: (MemoriesMap.Pin) -> Unit) {
+    val maps by model.maps.collectAsStateWithLifecycle()
     val covers = LocalCovers.current
     val camera = remember { MapCamera(::worldView) }
     val scope = rememberCoroutineScope()
     var listed by remember { mutableStateOf<List<MemoriesMap.Pin>?>(null) }
     val accent = role(LocalPalette.current.accent)
-    fun open(pin: MemoriesMap.Pin) {
-        val ref = refs.firstOrNull { it.nodeId == pin.nodeId && it.scopeId == pin.scopeId } ?: ObjectRef(pin.scopeId, pin.nodeId, "MEMORY", ApplicationId.MEMORIES, pin.name)
-        model.open(ref)
-    }
-    MapPlace(maps, Modifier.fillMaxSize()) {
+    MapPlace(maps, modifier) {
         val services = maps ?: return@MapPlace
         val mm = pins
         // the pins read: frame them all, unless the member already moved the map
