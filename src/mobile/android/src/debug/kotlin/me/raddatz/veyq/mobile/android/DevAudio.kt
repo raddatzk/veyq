@@ -13,7 +13,7 @@ import me.raddatz.veyq.mobile.blob.Sniff
 
 /**
  * Debug builds only — the music's format matrix (ADR 0142 decision 9): launched with the extra `veyq.devAudio=matrix`, every
- * file in the app's external `files/audio` (`adb push … /sdcard/Android/data/me.raddatz.veyq/files/audio/`) is typed by its
+ * file in the app's external `files/audio` (`adb push … /sdcard/Android/data/app.veyq/files/audio/`) is typed by its
  * bytes (`Sniff.stream`, as an upload types it), handed to a [MediaDeck] through a core [RangeReader] cut into 256 KiB
  * frames — the path a track plays by —, loaded, played for 1.5 s and cleared; and its length read as an upload reads it
  * (`MediaMetadataRetriever`). One line per file to logcat (`veyq-audio`). A release build has no such door.

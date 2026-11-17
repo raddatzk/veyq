@@ -615,7 +615,7 @@ A Gradle build of its own, run through its own wrapper.
   Apple's `devlogin.py <device>` takes the same flags. Both read the principal from `VEYQ_ENV_FILE` (a worktree:
   `<main checkout>/.run/.env`). The steps go to logcat (`veyq-trust`) and to Apple's unified log (`veyq-trust:`).
   Neither stops a running app (an install does): one still running keeps the tree it read, so what the web changed
-  meanwhile is not there — `adb shell am force-stop me.raddatz.veyq` first.
+  meanwhile is not there — `adb shell am force-stop app.veyq` first.
   A share to veyq (ADR 0138) is tried from a real sender — the Files app (`com.google.android.documentsui`): long-press,
   Share, veyq. On iOS from the Photos app: `xcrun simctl addmedia <udid> <image>`, the photo, Share, veyq; the extension
   resumes only an account the app left staying signed in (`devlogin.py <device> --remember`; answer its Face ID) or
@@ -908,7 +908,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   2026-11-09: the bytes the same size, the position 0/0, which the reader drops). The app therefore asks once for full
   media access (`READ_MEDIA_*` and `ACCESS_MEDIA_LOCATION`, one system dialog) and, where it was given, reads the media
   store's item of the picked one's id with `setRequireOriginal` (`AppModel.pickedMedium`): place and name kept. "Limited
-  access" keeps the picker's copy. `adb shell pm revoke me.raddatz.veyq android.permission.READ_MEDIA_IMAGES` (and the
+  access" keeps the picker's copy. `adb shell pm revoke app.veyq android.permission.READ_MEDIA_IMAGES` (and the
   others) plus clearing the app's data asks again.
 - A value a sheet shows that its presenter loads after the sheet opened did not reach it on iOS (measured 2026-11-09, the
   lightbox's uploader): the sheet loads what it shows itself, in its own `.task`.

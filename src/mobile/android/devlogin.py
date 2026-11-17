@@ -51,7 +51,7 @@ def main() -> None:
             "veyq.devSecretKey": e["VEYQ_SECRET_KEY"],
             "veyq.devRemember": "1" if "--remember" in flags else "0",
         }
-    args = ["am", "start", "-n", "me.raddatz.veyq/me.raddatz.veyq.mobile.android.MainActivity"]
+    args = ["am", "start", "-n", "app.veyq/me.raddatz.veyq.mobile.android.MainActivity"]
     for k, v in extras.items():
         args += ["--es", k, shlex.quote(v)]
     r = subprocess.run([str(ADB), "shell", *args], capture_output=True, text=True)
