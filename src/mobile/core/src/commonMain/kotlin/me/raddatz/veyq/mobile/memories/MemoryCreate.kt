@@ -1,8 +1,11 @@
 package me.raddatz.veyq.mobile.memories
 
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.session.NodeCreate
+import me.raddatz.veyq.mobile.session.NodeMetaWrite
 import me.raddatz.veyq.mobile.session.TenantSession
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
@@ -56,20 +59,40 @@ object MemoryCreate {
         else -> Notice(Msg.NODE_SAVE_FAILED)
     }
 
+    /**
+     * Whether New offers *I was there* for a [kind] in a scope of [scopeKind] (ADR 0144 decision 2, the web's
+     * `showWasThere`): a Memory in a tenant or group scope — never a chapter, never a personal scope, which has no
+     * participants.
+     */
+    fun offersWasThere(kind: String, scopeKind: String?): Boolean = kind == MEMORY && (scopeKind == "TENANT" || scopeKind == "GROUP")
+
+    /**
+     * The first meta a [kind] is born with in a scope of [scopeKind] when its maker ([userId]) ticked [wasThere]: the
+     * maker as its one participant, sealed at birth (no second write); null — no meta at all — where nothing is to be
+     * sealed or *I was there* is not offered there ([offersWasThere]).
+     */
+    fun birthMeta(kind: String, scopeKind: String?, wasThere: Boolean, userId: String): JsonObject? {
+        if (!wasThere || !offersWasThere(kind, scopeKind) || userId.isEmpty()) return null
+        return JsonObject(mapOf("v" to JsonPrimitive(1), Participants.born(userId)))
+    }
+
     /** What a create came to: the node made (to open), or why not. */
     class Made(val node: NodeAt?, val notice: Notice?)
 
     /**
      * Makes a [kind] named [name] in [scopeId] under [parentId] (null: the space's top) over [tenant]: checked against the
-     * loaded tree first, then sent; the tree read before is forgotten after, so the next read lists it.
+     * loaded tree first, then sent; the tree read before is forgotten after, so the next read lists it. [wasThere]: the
+     * maker listed among a Memory's participants from its birth, where it is offered ([birthMeta]).
      */
-    suspend fun create(tenant: TenantSession, scopeId: String, parentId: String?, kind: String, name: String): Made {
+    suspend fun create(tenant: TenantSession, scopeId: String, parentId: String?, kind: String, name: String, wasThere: Boolean = false): Made {
         val n = name.trim()
         val tree = runCatching { tenant.trees()[scopeId].orEmpty() }.getOrNull() ?: return Made(null, refused(null))
         val parentKind = parentId?.let { p -> tree.firstOrNull { it.id == p }?.kind ?: return Made(null, refused(null)) }
         check(kind, parentKind, n, tree.filter { it.parentId == parentId }.map { Sibling(it.kind, it.name) })?.let { return Made(null, it) }
         val input = AppKinds.tokenInput(kind, n) ?: return Made(null, refused(null))
-        val r = runCatching { NodeCreate.create(tenant, scopeId, parentId, kind, n, input) }.getOrNull()
+        val born = birthMeta(kind, tenant.scopeKind(scopeId), wasThere, tenant.account.userId)
+        val sealMeta = born?.let { meta -> { key: ByteArray, nodeId: String -> NodeMetaWrite.seal(tenant.account.suite, scopeId, nodeId, key, meta) } }
+        val r = runCatching { NodeCreate.create(tenant, scopeId, parentId, kind, n, input, sealMeta) }.getOrNull()
         tenant.forgetTree()
         return when (r) {
             is NodeCreate.Result.Done -> Made(NodeAt(scopeId, r.created.nodeId, kind, n), null)

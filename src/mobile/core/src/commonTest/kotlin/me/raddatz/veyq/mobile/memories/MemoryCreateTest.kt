@@ -6,6 +6,9 @@ import me.raddatz.veyq.mobile.words.Notice
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlinx.serialization.json.Json
 
 /**
  * New Memory and New chapter (`MemoryNodeDialog.vue`): offered exactly where the kinds' placement allows them, a name
@@ -49,5 +52,23 @@ class MemoryCreateTest {
         for (r in listOf(NodeCreate.Reason.BUSY, NodeCreate.Reason.BLOCKED, NodeCreate.Reason.REFUSED, null)) {
             assertEquals(Notice(Msg.NODE_SAVE_FAILED), MemoryCreate.refused(r), "$r")
         }
+    }
+
+    /** Bite (f): *I was there* sealed into a chapter, or in a personal scope, gives it participants it cannot have — red here. */
+    @Test
+    fun iWasThereIsOfferedForAMemoryInATenantOrGroupScopeAndSealsTheMakerAtBirth() {
+        assertTrue(MemoryCreate.offersWasThere(MemoryCreate.MEMORY, "TENANT"))
+        assertTrue(MemoryCreate.offersWasThere(MemoryCreate.MEMORY, "GROUP"))
+        assertFalse(MemoryCreate.offersWasThere(MemoryCreate.MEMORY, "PERSONAL"), "a personal scope has no participants")
+        assertFalse(MemoryCreate.offersWasThere(MemoryCreate.MEMORY, null), "a scope not open here")
+        assertFalse(MemoryCreate.offersWasThere(MemoryCreate.CHAPTER, "TENANT"), "a chapter has none")
+        assertEquals(
+            Json.parseToJsonElement("""{"v":1,"participants":{"userIds":["u1"]}}""") as kotlinx.serialization.json.JsonObject,
+            MemoryCreate.birthMeta(MemoryCreate.MEMORY, "GROUP", wasThere = true, userId = "u1"),
+            "the maker, ids only, sealed into the first meta",
+        )
+        assertNull(MemoryCreate.birthMeta(MemoryCreate.MEMORY, "TENANT", wasThere = false, userId = "u1"), "unticked: no meta at all")
+        assertNull(MemoryCreate.birthMeta(MemoryCreate.CHAPTER, "TENANT", wasThere = true, userId = "u1"), "never into a chapter")
+        assertNull(MemoryCreate.birthMeta(MemoryCreate.MEMORY, "PERSONAL", wasThere = true, userId = "u1"), "never in a personal scope")
     }
 }
