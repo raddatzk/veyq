@@ -7,13 +7,19 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
 import me.raddatz.veyq.mobile.blob.FileSink
 import me.raddatz.veyq.mobile.blob.FileUploadSource
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.depot.FileSave
+import me.raddatz.veyq.mobile.memories.banner.BannerEditor
+import me.raddatz.veyq.mobile.memories.banner.BannerWrite
+import me.raddatz.veyq.mobile.memories.people.PersonMemories
 import me.raddatz.veyq.mobile.memories.place.PlaceEditor
 import me.raddatz.veyq.mobile.memories.tracks.TrackList
 import platform.Foundation.NSData
@@ -24,7 +30,10 @@ import platform.posix.memcpy
 /**
  * Memories for the Apple app, what Swift cannot do with core's types itself: a tile's and a lightbox picture's plaintext as
  * `NSData`, read off the main thread (`GalleryModel.tile`, `Lightbox.picture`); a range of an original for the player
- * (`RangeReader`); a picked file as an upload's source; an original saved where the person chose, by core's [FileSink].
+ * (`RangeReader`); a picked file as an upload's source; an original saved where the person chose, by core's [FileSink]; a
+ * Memory's curation (ADR 0144): the banner's pictures as `NSData`, the platform's banner decoder as core's
+ * [BannerWrite.Pictures], the banner dialog's runs and a person's section read off the main thread, and any core state
+ * watched.
  */
 @OptIn(ExperimentalForeignApi::class)
 object AppleMemories {
@@ -95,10 +104,71 @@ object AppleMemories {
         return save.state.first { it.end != null }.end
     }
 
-    /** A watch the app stops when its view goes. */
+    /** A watch the app stops when its view goes; a run (the banner's save) the app cancels by stopping it. */
     class Watch internal constructor(private val job: Job) {
         fun stop() = job.cancel()
     }
+
+    /**
+     * [flow] watched: [listener] is called at once and on every change, on core's threads, until the watch is stopped. A
+     * Swift box reads the model's `current` on the main actor then (ParticipantsPicker, CaptureTimeEditor, BannerEditor,
+     * PersonMemories: their state's types reach Swift typed through `current`, the flow's only untyped).
+     */
+    fun watch(flow: StateFlow<*>, listener: (Any?) -> Unit): Watch =
+        Watch(CoroutineScope(Dispatchers.Default).launch { flow.collect { listener(it) } })
+
+    // ---- a Memory's curation (ADR 0144) ----
+
+    /** The banner's picture (an image, a video's poster) of [gallery] as stored; null for none or one that does not read. */
+    @Throws(Exception::class)
+    suspend fun bannerPicture(gallery: GalleryModel): NSData? = withContext(Dispatchers.Default) { gallery.bannerPicture()?.toNSData() }
+
+    /** The picture the platform decoded for the banner's dialog's previews ([BannerWrite.Picked.picture]). */
+    fun pickedPicture(picked: BannerWrite.Picked): NSData = picked.picture.toNSData()
+
+    /**
+     * The platform's banner decoder as core's [BannerWrite.Pictures] (Swift cannot implement a `suspend fun`): [image] and
+     * [poster] are handed the picked file's URL and answer once — on any thread — with the cover's JPEG (an image upright,
+     * a video's first frame), or null where it does not decode here.
+     */
+    fun bannerPictures(
+        image: (NSURL, (NSData?) -> Unit) -> Unit,
+        poster: (NSURL, (NSData?) -> Unit) -> Unit,
+    ): BannerWrite.Pictures = object : BannerWrite.Pictures {
+        override suspend fun image(source: UploadSource): ByteArray? = decoded(source, image)
+        override suspend fun poster(source: UploadSource): ByteArray? = decoded(source, poster)
+
+        private suspend fun decoded(source: UploadSource, port: (NSURL, (NSData?) -> Unit) -> Unit): ByteArray? {
+            val url = urlOf(source) ?: return null
+            val data = suspendCancellableCoroutine { c ->
+                var answered = false
+                port(url) { d -> if (!answered) { answered = true; c.resume(d) } }
+            }
+            return data?.toByteArray()
+        }
+    }
+
+    /** [source] picked in the banner's [editor]: decoded off the main thread, [done] called on core's threads once it is. */
+    fun bannerPick(editor: BannerEditor, source: UploadSource, done: () -> Unit): Watch =
+        Watch(CoroutineScope(Dispatchers.Default).launch { try { editor.pick(source) } finally { done() } })
+
+    /**
+     * The banner's [editor] saved — or [remove]d — off the main thread (its digest is read frame by frame); [done] called on
+     * core's threads with what it came to (null: nothing to do, or stopped). Stopping the returned run is the dialog's
+     * Cancel: the old banner stays as it was.
+     */
+    fun bannerSave(editor: BannerEditor, remove: Boolean, done: (BannerWrite.Outcome?) -> Unit): Watch =
+        Watch(CoroutineScope(Dispatchers.Default).launch {
+            var out: BannerWrite.Outcome? = null
+            try {
+                out = if (remove) editor.remove() else editor.save()
+            } finally {
+                done(out)
+            }
+        })
+
+    /** A person's Memories section read (it unseals each Memory's meta): off the main thread (src/mobile/CLAUDE.md § Traps). */
+    fun loadPerson(section: PersonMemories): Watch = Watch(CoroutineScope(Dispatchers.Default).launch { section.load() })
 
     /**
      * [editor]'s state handed to [listener] at once and on every change — its levels arrive from the geocoder on core's

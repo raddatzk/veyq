@@ -13,6 +13,8 @@ struct MemoryMapView<Switch: View>: View {
     let model: AppModel
     let tracks: TrackList
     let gallery: GalleryModel.State?
+    /// The banner above the header (ADR 0144 decision 4); nil where the Memory has none.
+    var banner: AnyView?
     let facts: AnyView?
     let viewSwitch: Switch
     @State private var position: MapCameraPosition = .automatic
@@ -28,6 +30,7 @@ struct MemoryMapView<Switch: View>: View {
 
     var body: some View {
         List {
+            if let banner { banner }
             NodeHeroRow()
             if let facts { facts.listRowSeparator(.hidden) }
             viewSwitch

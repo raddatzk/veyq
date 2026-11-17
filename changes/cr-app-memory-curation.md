@@ -527,6 +527,43 @@ reached only when it was open as the device went offline; then it stays, naming 
   and videos, `VideoPlayer`, the profile pushed on the navigation stack, its map MapKit's as ADR 0143's). · Done when: the
   Apple builds (iOS simulator SDK, macOS) green; clicked once on the Mac as phase 6 where the Mac's screen is free — else
   named as the owner's pass (the Mac's screen is the owner's, maps CR).
+  *Built 2026-11-17 — the box stays open until the live click below is run:* `MemoryCuration.swift` — the people line under
+  the facts line on every view (one person's avatar and name, else up to three overlapping avatars with "+N"; a tap lists
+  everyone in a `.popover` — a popover on a Mac and an iPad, a sheet on an iPhone (`presentationCompactAdaptation`) —, a
+  current member's row opening their profile, a former one greyed; *Add participants* where nobody is listed and the
+  member edits), the picker as a sheet (the system's `.searchable`, checkmark rows, a former member above, the cap's words),
+  the banner above the hero on every view (`BannerFrame.of` over the row's width and the page's height, the picture
+  contained over its `BannerFrame.surround` drawn with `.interpolation(.high)`, no blur API; a video's poster with a play
+  button, `VideoPlayer` over `Playback` on `GalleryModel.bannerReader`, the music interrupted meanwhile), the banner's sheet
+  behind the header's `banner` action (`PhotosPicker` images and videos on iOS, the file importer on a Mac; both previews,
+  Save, progress with Cancel, Remove; the decoding ImageIO's and `AVAssetImageGenerator`'s at `NodeCover`'s spec), A2's
+  question as an alert over the lightbox (*Move to Trash*, *Remove the Banner Too*, Cancel — only Cancel cancels), and the
+  details' capture-time sheet (SwiftUI's `DatePicker` with date and hour-and-minute, the device's calendar; *Reset to
+  Original*; a medium with no time gets an *Edit Capture Time* button). `PersonScreen.swift`: the profile in the shell's
+  place (`Shell.person`; a 112 pt `PersonAvatar`, the name, `~username`, a former member's hint), "Memories with {name}"
+  with a segmented List | Map once something is listed, the rows (cover, name, date · place · group) newest first, loading,
+  failed with *Try again*, empty and partial; the map is the Map tab's MapKit map, extracted as `MapViews.swift`'s
+  `MemoriesPinMap`. Ways in: the participants' list and a current member's uploader name in the details (the lightbox
+  closes, the profile opens over the Memory). New Memory is a sheet now (an alert holds no toggle), offering *I was there*,
+  on, where `offersWasThere`. `appleMain`'s `AppleMemories` adapts what Swift cannot call: `watch(flow)` for any core state,
+  `bannerPictures` (the platform's decoder as core's `BannerWrite.Pictures`, by callbacks), `bannerPick`/`bannerSave` off
+  the main thread with a stoppable run (Cancel), `bannerPicture`/`pickedPicture` as `NSData`, `loadPerson` off the main
+  thread. `TenantSession.close()` runs where Apple's tenant closes: a switch (`show`), any gate but Signed (a lock, gone), a
+  sign-out from Manage or Settings. Apple's Title Case forms (`apple_en`) of the curation's buttons were added to
+  `words.json`; no new key. `Info.plist`, `project.yml` and both entitlements are unchanged (`git diff` empty): no
+  permission, no entitlement, no dependency. Green: the macOS build ad hoc (`xcodebuild -scheme Veyq -destination
+  'platform=macOS' CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= CODE_SIGN_ENTITLEMENTS=`), the iOS compile
+  (`-destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO`, the share extension included), `ANDROID_HOME=…
+  ./gradlew :core:macosArm64Test --no-daemon`, `scripts/validate_mobile_words.py` and every `scripts/validate_*.py` but
+  guard_gaps. **Departures:** the profile is drawn in the shell's place with core's back, not pushed on a SwiftUI
+  `NavigationStack` (the app's navigation is core's `Shell`, ADR 0122: a push beside it would be a second navigation
+  state); a profile opened from the lightbox's uploader returns to the Memory's gallery, not to the lightbox (iOS's
+  full-screen cover is the page's view state); A2's checkbox is a second alert button (an alert holds no toggle). **Not
+  run: the live click** — the Mac's screen is the owner's and no iOS simulator boots here: on the Mac (and an iPhone where
+  one is free) add two participants and open the list, open one's profile and a Memory from it and come back, open a
+  profile from a photo's uploader, switch its map; create a Memory with *I was there*; correct a photo's time and reset it
+  (the gallery re-orders); set an image banner and a video banner (play it), resize the Mac's window across 720 pt for 1:1
+  and 16:9, trash the banner's medium (asked), remove the banner.
 
 - [ ] **8 Linux and Windows** — as phase 6 over the bridge (a `gtk::Popover` / `Flyout` for the list, the file dialogs
   filtered to images and videos, `player.rs` / `MediumPlayer`, the profile a page of the shell with the core's raster

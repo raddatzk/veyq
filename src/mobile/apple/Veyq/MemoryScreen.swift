@@ -30,6 +30,8 @@ struct MemoryScreen: View {
     @State private var pickingMusic = false
     @State private var tracks: TrackList?
     @State private var pickingTracks = false
+    /// The page's size as last measured: the banner's frame is never taller than 60 % of its height (ADR 0144 decision 4).
+    @State private var page: CGSize = .zero
     @Environment(\.scenePhase) private var phase
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
@@ -59,16 +61,43 @@ struct MemoryScreen: View {
         }
     }
 
+    /// The banner above the header, on every view (ADR 0144 decision 4): nothing where the Memory has none.
+    @ViewBuilder private var bannerRow: some View {
+        if let shown = state?.banner, let gallery = model.galleryModel(node) {
+            MemoryBanner(model: model, gallery: gallery, shown: shown, viewport: page.height)
+        }
+    }
+
+    /// Who was there, under the facts line (ADR 0144 decision 1): where core's line is shown.
+    @ViewBuilder private var peopleLine: some View {
+        if let line = state?.people, let gallery = model.galleryModel(node) {
+            MemoryPeopleLine(model: model, gallery: gallery, line: line)
+        }
+    }
+
+    /// The list views' rows above their switch: the banner (none where the Memory has none) and the facts and people lines.
+    private var listBanner: AnyView? {
+        state?.banner == nil ? nil : AnyView(bannerRow.listRowInsets(EdgeInsets()).listRowBackground(Color.clear).listRowSeparator(.hidden))
+    }
+
+    private var listFacts: AnyView {
+        AnyView(VStack(alignment: .leading, spacing: 8) {
+            factsLine
+            peopleLine
+        })
+    }
+
     var body: some View {
         photoChrome(Group {
             if showsMusic, let music {
-                MusicList(model: model, music: music, viewSwitch: viewSwitch)
+                MusicList(model: model, music: music, banner: listBanner, facts: listFacts, viewSwitch: viewSwitch)
             } else if showsMap, let tracks {
-                MemoryMapView(model: model, tracks: tracks, gallery: state, facts: AnyView(factsLine), viewSwitch: viewSwitch)
+                MemoryMapView(model: model, tracks: tracks, gallery: state, banner: listBanner, facts: listFacts, viewSwitch: viewSwitch)
             } else {
                 photoGrid
             }
         }
+        .onGeometryChange(for: CGSize.self, of: { $0.size }) { page = $0 }
         .navigationTitle(ref.name))
         .task(id: showsMusic) {
             guard showsMusic, let gallery = model.galleryModel(node) else { return }
@@ -98,8 +127,10 @@ struct MemoryScreen: View {
         ScrollView {
             // lazy: only the rows near the viewport are built (ADR 0105), the grid's rows among the page's own
             LazyVStack(alignment: .leading, spacing: Self.margin) {
+                bannerRow
                 NodeHeroRow()
                 factsLine.padding(.horizontal)
+                peopleLine.padding(.horizontal)
                 viewSwitch.padding(.horizontal)
                 if let chapters = state?.chapters, !chapters.isEmpty {
                     Text(say(.memoryChapters)).font(.headline).padding(.horizontal)
@@ -220,6 +251,13 @@ struct MemoryScreen: View {
         })
         // the model is the shell's while the page is shown; asking for it here opens it
         .task(id: ref) { _ = model.galleryModel(node) }
+        // a Memory's curation (ADR 0144): the participants picker and the banner's dialog, the app model's while they show
+        .sheet(item: Binding(get: { model.participantsEdit }, set: { if $0 == nil { model.closeParticipants() } })) { edit in
+            ParticipantsPickerSheet(model: model, edit: edit)
+        }
+        .sheet(item: Binding(get: { model.bannerEdit }, set: { if $0 == nil { model.closeBanner() } })) { edit in
+            BannerSheet(model: model, edit: edit)
+        }
         #if os(iOS)
         .fullScreenCover(item: $open, onDismiss: { open = nil }) { start in
             Lightbox(model: model, gallery: start.gallery, box: start.box, mode: .cover) { open = nil }
@@ -262,8 +300,9 @@ struct MemoryScreen: View {
 
 /// A photo or video the Photos picker handed over, copied to a directory of its own under `AppModel.pickedDir` (the picker's
 /// own file is gone once the transfer returns): the person's own original, never a decrypted veyq copy. The core hands it
-/// back once the queue is done with it (`MediaUploads`), which removes it; what is left is swept at start.
-private struct PickedMedia: Transferable {
+/// back once the queue is done with it (`MediaUploads`), which removes it — a banner's once its dialog closes (`BannerEdit`);
+/// what is left is swept at start.
+struct PickedMedia: Transferable {
     let url: URL
 
     static var transferRepresentation: some TransferRepresentation {
@@ -553,9 +592,16 @@ private struct Lightbox: View {
                 ToolbarItemGroup(placement: .primaryAction) { actions }
             }
             #endif
+            // trashing the banner's picture asks first (ADR 0144 A2), over the lightbox it was asked from
+            .modifier(BannerPictureQuestion(gallery: gallery.gallery, asked: gallery.state.bannerPicture != nil) { failed = $0 })
             .sheet(isPresented: $details) {
                 if let row = current {
-                    MediaDetailsView(model: model, box: held.box, row: row)
+                    MediaDetailsView(model: model, box: held.box, row: row) { userId in
+                        // the profile opens over the Memory (ADR 0144 decision 11); back returns to its gallery
+                        details = false
+                        if mode != .window { onClose() }
+                        model.openPerson(userId)
+                    }
                         .presentationDetents([.medium, .large])
                         #if os(macOS)
                         // a Mac's sheet takes its content's ideal size, which a List has none of: it drew one row's height
@@ -786,7 +832,12 @@ private struct MediaDetailsView: View {
     let model: AppModel
     let box: VeyqCore.Lightbox
     let row: GalleryModel.Row
+    /// A current member's uploader name opens their profile (ADR 0144 decision 11).
+    let onProfile: (String) -> Void
     @State private var details: VeyqCore.Lightbox.Details?
+    /// Whether whoever looks may correct the capture time here (core's `captureTimeEditor`: the right, online).
+    @State private var editsTime = false
+    @State private var timeEditor: CaptureTimeEditorItem?
     @Environment(\.dismiss) private var dismiss
 
     private var uploader: String? {
@@ -828,10 +879,27 @@ private struct MediaDetailsView: View {
                 Text(say(.memoryNoDetail)).foregroundStyle(Role.muted)
             }
             ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
-                if i == placeAt, let uploader { LabeledContent(say(.memoryFieldUploadedBy), value: uploader) }
-                LabeledContent(Self.label(row.field), value: Self.value(row))
+                if i == placeAt, let uploader { uploaderRow(uploader) }
+                if row.field == .captured, editsTime {
+                    // the capture time corrected where whoever looks may write the medium's meta (ADR 0144 decision 3)
+                    LabeledContent(Self.label(row.field)) {
+                        HStack(spacing: 8) {
+                            Text(Self.value(row))
+                            Button { editTime() } label: { Image(systemName: "pencil") }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel(say(.mediaEditCapturedAt))
+                                .help(say(.mediaEditCapturedAt))
+                        }
+                    }
+                } else {
+                    LabeledContent(Self.label(row.field), value: Self.value(row))
+                }
             }
-            if placeAt == rows.count, let uploader { LabeledContent(say(.memoryFieldUploadedBy), value: uploader) }
+            if placeAt == rows.count, let uploader { uploaderRow(uploader) }
+            // a medium without a capture time can be given one
+            if editsTime, !rows.contains(where: { $0.field == .captured }) {
+                Button(say(.mediaEditCapturedAt)) { editTime() }
+            }
             // the photo's position on a small map (ADR 0143 D7)
             if let map = details?.map {
                 PhotoMapRow(model: model, map: map)
@@ -839,8 +907,11 @@ private struct MediaDetailsView: View {
             }
         }
         .navigationTitle(say(.memoryDetails))
-        // read anew when the map services are turned on here: the name may be looked up now
-        .task(id: "\(row.mediaId) \(model.mapsRevision)") {
+        .sheet(item: $timeEditor) { CaptureTimeSheet(editor: $0.editor) }
+        // read anew when the map services are turned on here (the name may be looked up now) and when a corrected time
+        // re-listed the medium
+        .task(id: "\(row.mediaId) \(model.mapsRevision) \(row.capturedAt.map { "\($0)" } ?? "")") {
+            editsTime = box.captureTimeEditor(mediaId: row.mediaId) != nil
             details = try? await box.details(mediaId: row.mediaId)
             // its place's name resolved once ever, as the details show (core's gates: consent, rights, no slideshow);
             // when it was, the details read anew name it
@@ -848,6 +919,24 @@ private struct MediaDetailsView: View {
                 details = try? await box.details(mediaId: row.mediaId)
             }
         }
+    }
+
+    /// Who added it: a current member's name opens their profile; a former member's and a guest's open nothing.
+    @ViewBuilder private func uploaderRow(_ uploader: String) -> some View {
+        if let userId = details?.uploader?.profile {
+            Button { onProfile(userId) } label: {
+                LabeledContent(say(.memoryFieldUploadedBy)) { Text(uploader).foregroundStyle(Role.accent) }
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(say(.peopleOpen, uploader))
+        } else {
+            LabeledContent(say(.memoryFieldUploadedBy), value: uploader)
+        }
+    }
+
+    private func editTime() {
+        timeEditor = box.captureTimeEditor(mediaId: row.mediaId).map(CaptureTimeEditorItem.init)
     }
 
     private static func label(_ field: MediaDetails.Field) -> String { say(MediaDetails.shared.label(field: field)) }
@@ -859,6 +948,12 @@ private struct MediaDetailsView: View {
         if let moment = shown as? MediaDetails.ShownMoment { return Date(timeIntervalSince1970: Double(moment.epochMs) / 1000).formatted(date: .abbreviated, time: .shortened) }
         return (shown as? MediaDetails.ShownPlain)?.text ?? row.value
     }
+}
+
+/// A capture-time editor shown as a sheet, by its identity.
+private struct CaptureTimeEditorItem: Identifiable {
+    let editor: CaptureTimeEditor
+    var id: ObjectIdentifier { ObjectIdentifier(editor) }
 }
 
 /// A Mac's lightbox window's value: the ids alone (opaque; a window's value is what the system may keep), never a name or a

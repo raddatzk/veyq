@@ -435,11 +435,25 @@ struct PlaceEditorSheet: View {
 // MARK: The Memories bar's Map tab (ADR 0143 D6)
 
 /// Every Memory of the application's list with a place, as a pin (core's `MemoriesMap`, unsealed on the device from the
-/// meta the tree holds): grouped as core groups them at MapKit's zoom; a group's tap frames its pins, at the top zoom lists
-/// them; a pin opens its Memory. Pins carry the Memory's cover where its row has one.
+/// meta the tree holds), on `MemoriesPinMap`; a pin opens its Memory.
 struct MemoriesMapTab: View {
     @Bindable var model: AppModel
     @State private var pins: MemoriesMap?
+
+    var body: some View {
+        MemoriesPinMap(model: model, pins: pins) { model.openPin($0) }
+            .navigationTitle(Names.application(.memories))
+            .task(id: model.listsRevision) { pins = await model.memoriesMap() }
+    }
+}
+
+/// Memories as pins on MapKit's map behind the consent's gate: the Map tab's and a person's profile's (ADR 0144 decision
+/// 13), the same map either way. Grouped as core groups them at MapKit's zoom; a group's tap frames its pins, at the top
+/// zoom lists them; a pin `open`s its Memory. Pins carry the Memory's cover where its row has one; `pins` nil while they read.
+struct MemoriesPinMap: View {
+    let model: AppModel
+    let pins: MemoriesMap?
+    let open: (MemoriesMap.Pin) -> Void
     @State private var position: MapCameraPosition = .automatic
     @State private var region: MKCoordinateRegion?
     @State private var size: CGSize = .zero
@@ -448,12 +462,10 @@ struct MemoriesMapTab: View {
 
     var body: some View {
         MapGate(model: model) { map }
-            .navigationTitle(Names.application(.memories))
-            .task(id: model.listsRevision) { pins = await model.memoriesMap() }
             .sheet(item: Binding(get: { listed.map(PinList.init) }, set: { if $0 == nil { listed = nil } })) { list in
                 NavigationStack {
                     List(list.pins, id: \.nodeId) { pin in
-                        Button(pin.name) { listed = nil; model.openPin(pin) }
+                        Button(pin.name) { listed = nil; open(pin) }
                     }
                     .navigationTitle(say(.mapClusterTitle, list.pins.count))
                     .toolbar { ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { listed = nil } } }
@@ -527,7 +539,7 @@ struct MemoriesMapTab: View {
         let view = region.map { MapMath.viewport($0, size: size) }
             ?? Viewport(center: group.cluster.center, zoom: MemoryLocation.companion.WORLD_ZOOM, width: size.width, height: size.height)
         switch pins.tap(cluster: group.cluster, view: view, maxZoom: Double(Mercator.shared.MAX_ZOOM)) {
-        case let open as MemoriesMapTapOpen: model.openPin(open.pin)
+        case let tapped as MemoriesMapTapOpen: open(tapped.pin)
         case let frame as MemoriesMapTapFrame: withAnimation { position = .region(MapMath.region(frame.view)) }
         case let list as MemoriesMapTapList: listed = list.pins
         default: break
