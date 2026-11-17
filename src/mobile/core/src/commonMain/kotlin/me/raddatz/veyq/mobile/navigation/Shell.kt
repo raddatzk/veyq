@@ -30,10 +30,16 @@ data class Shell(
      * back does not leave — the sidebar is the way elsewhere (owner 2026-11-10).
      */
     val top: Boolean = false,
+    /**
+     * A person's profile is on screen (ADR 0144 decision 11): their user id. A screen of the core's own, opened over
+     * whatever was on screen ([openPerson]) — [back] leads there —, never a top-level destination; no bar is shown on it,
+     * and each application that claims a section ([ApplicationShape.personSection]) adds what it knows of the person.
+     */
+    val person: String? = null,
 ) {
     val shape: ApplicationShape? get() = application?.let { a -> APPLICATION_SHAPES.first { it.id == a } }
 
-    val isHome: Boolean get() = application == null && openObject == null
+    val isHome: Boolean get() = application == null && openObject == null && person == null
 
     /**
      * The bar's places before Search. Home has none (its filters sit at the top, owner 2026-11-08); an application
@@ -42,6 +48,7 @@ data class Shell(
     val barTabs: List<BarTab>
         get() {
             val s = shape ?: return emptyList()
+            if (person != null) return emptyList()
             return if (s.barLevel == BarLevel.OBJECT && openObject == null) emptyList() else s.tabs
         }
 
@@ -51,7 +58,7 @@ data class Shell(
     val folder: FolderRef? get() = path.lastOrNull()
 
     /** Whether back has somewhere to go inside the app: an open object not chosen at the top, or a folder below the root. */
-    val canGoBack: Boolean get() = (openObject != null && !top) || (isHome && path.isNotEmpty())
+    val canGoBack: Boolean get() = person != null || (openObject != null && !top) || (isHome && path.isNotEmpty())
 
     /** The drawer chose an application (null: Home): its list, nothing open, the same space kept for Home. */
     fun choose(app: ApplicationId?): Shell = Shell(application = app, space = space)
@@ -110,11 +117,22 @@ data class Shell(
 
     fun select(tab: BarTab): Shell = copy(tab = tab, searching = false)
 
-    /** Back from an open object: to where it was opened from, or — opened on start — to its application's list. */
-    fun close(): Shell = back ?: copy(openObject = null, tab = null)
+    /**
+     * Back from an open object or a person's profile: to where it was opened from, or — opened on start — to its
+     * application's list.
+     */
+    fun close(): Shell = back ?: copy(openObject = null, tab = null, person = null)
+
+    /**
+     * Person [userId]'s profile opened over what is on screen (ADR 0144 decision 11): from a Memory's participants or a
+     * photo's uploader, back returns there; a Memory opened from the profile ([open]) has the profile behind it. The
+     * application chosen stays chosen, nothing is open in it while the profile shows.
+     */
+    fun openPerson(userId: String): Shell = Shell(application = application, space = space, back = this, person = userId)
 
     /** Back, whatever is shown: an object closes, a folder goes up to its parent. */
     fun goBack(): Shell = when {
+        person != null -> close()
         openObject != null && !top -> close()
         isHome && path.isNotEmpty() -> copy(path = path.dropLast(1))
         else -> this

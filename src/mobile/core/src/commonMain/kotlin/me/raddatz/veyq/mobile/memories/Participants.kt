@@ -113,7 +113,13 @@ object Participants {
     // ---- the header's people line ----
 
     /** One participant as the header names them: [name] null for a former member (their words), or while names read. */
-    data class Entry(val userId: String, val name: String?, val former: Boolean, val avatarRevision: Int = 0)
+    data class Entry(val userId: String, val name: String?, val former: Boolean, val avatarRevision: Int = 0) {
+        /**
+         * Whether the name opens the person's profile (ADR 0144 decision 11): a current member, named; a former member is
+         * greyed and opens nothing (A1), and nobody opens while the members did not read.
+         */
+        val opensProfile: Boolean get() = name != null && !former
+    }
 
     /**
      * The header's people line (ADR 0144 decision 1): everyone listed ([people], in order), the avatars drawn ([avatars]:

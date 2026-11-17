@@ -106,4 +106,59 @@ class ShellTest {
         assertNull(s.openObject)
         assertEquals(false, s.searching)
     }
+
+    // ---- a person's profile (ADR 0144 decision 11) ----
+
+    @Test
+    fun aProfileOpenedFromAMemorysParticipantsReturnsToTheMemory() {
+        val onMemory = Shell(ApplicationId.MEMORIES, space = "s").open(memory)
+        val profile = onMemory.openPerson("u-ada")
+        assertEquals("u-ada", profile.person)
+        assertNull(profile.openObject, "the profile is a screen of its own")
+        assertTrue(profile.barTabs.isEmpty(), "no application's bar on a profile")
+        assertFalse(profile.isHome)
+        assertTrue(profile.canGoBack)
+        assertEquals(onMemory, profile.goBack(), "back returns to the Memory it was opened from")
+        assertEquals(onMemory, profile.close())
+    }
+
+    /** The lightbox is the open Memory's: a photo's uploader opens the profile over the Memory, back returns to it. */
+    @Test
+    fun aProfileOpenedFromAPhotosUploaderReturnsThere() {
+        val fromHome = Shell(null, space = "s").enter(FolderRef("a", "Reisen")).open(memory)
+        val profile = fromHome.openPerson("u-ben")
+        assertEquals(fromHome, profile.goBack())
+        assertEquals(Shell(null, space = "s").enter(FolderRef("a", "Reisen")), profile.goBack().goBack(), "and the Memory's own back is kept")
+        // a Memory chosen at the top of a wide window keeps the profile's back there too
+        val top = Shell(ApplicationId.MEMORIES, space = "s").openAtTop(memory)
+        assertEquals(top, top.openPerson("u-ben").goBack())
+    }
+
+    @Test
+    fun aMemoryOpenedFromAProfileReturnsToTheProfileAndTheProfileToWhereItWasOpened() {
+        val onMemory = Shell(ApplicationId.MEMORIES, space = "s").open(memory)
+        val profile = onMemory.openPerson("u-ada")
+        val other = ObjectRef("g", "m2", "MEMORY", ApplicationId.MEMORIES, "Harz")
+        val opened = profile.open(other)
+        assertEquals(other, opened.openObject)
+        assertNull(opened.person, "the Memory takes the profile's place")
+        assertEquals(profile, opened.goBack(), "back from the Memory is the profile")
+        assertEquals(onMemory, opened.goBack().goBack(), "and back from the profile the Memory it was opened from")
+        // the list beside a profile on a wide window opens over it the same way
+        assertEquals(profile, profile.openBeside(other).goBack())
+    }
+
+    @Test
+    fun theDrawerAndASpaceSwitchLeaveAProfile() {
+        val profile = Shell(ApplicationId.MEMORIES, space = "s").open(memory).openPerson("u-ada")
+        assertNull(profile.choose(ApplicationId.EXPENSES).person)
+        assertNull(profile.switchSpace("t").person)
+        assertEquals("u-ada", profile.search(true).person, "Search over a profile keeps it beneath")
+    }
+
+    @Test
+    fun onlyMemoriesClaimsASectionOnAProfile() {
+        assertEquals(listOf(ApplicationId.MEMORIES), personSections(emptySet()))
+        assertEquals(emptyList(), personSections(setOf("memories")), "an application switched off adds no section")
+    }
 }

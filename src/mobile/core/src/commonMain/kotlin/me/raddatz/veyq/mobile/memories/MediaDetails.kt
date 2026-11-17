@@ -199,8 +199,15 @@ object MediaDetails {
 
     enum class UploaderKind { MEMBER, FORMER, GUEST }
 
-    /** Who added a medium: a member by name, one who left, or a link's guest (its name is the buckets', not read here yet). */
-    class Uploader(val kind: UploaderKind, val name: String? = null)
+    /**
+     * Who added a medium: a member by name, one who left, or a link's guest (its name is the buckets', not read here yet).
+     * [userId] is a member's or a former member's; only a current member's opens their profile ([profile], ADR 0144
+     * decision 11) — a former member and a guest open nothing.
+     */
+    class Uploader(val kind: UploaderKind, val name: String? = null, val userId: String? = null) {
+        /** The profile the uploader's name opens: a current member's, else none (uc.memory.participants § Uploader attribution). */
+        val profile: String? get() = userId?.takeIf { kind == UploaderKind.MEMBER }
+    }
 
     /** Who added a medium, as its details say it: a member by name, one who left, a guest. */
     fun uploaderWords(u: Uploader): me.raddatz.veyq.mobile.words.Piece = when (u.kind) {
@@ -225,14 +232,22 @@ object MediaDetails {
         val members = runCatching {
             tenant.account.call { ScopesApi(tenant.base, tenant.account.http).listScopeMembers(scopeId) }
         }.getOrNull()
+        return uploaders(keys, members?.map { it.userId to it.username }, tenant.people)
+    }
+
+    /**
+     * Who each owner key of [keys] is, the space's [members] (user id and username; null: not read) and the tenant's
+     * directory [people] at hand: a member named, one the members do not list a former member — each with its user id —, a link's guest a guest; a member key while the members did not read is left out.
+     */
+    internal fun uploaders(keys: Set<String>, members: List<Pair<String, String>>?, people: Map<String, me.raddatz.veyq.mobile.session.Person>): Map<String, Uploader> {
         val out = HashMap<String, Uploader>()
         for (key in keys) {
             when {
                 key.startsWith("share:") -> out[key] = Uploader(UploaderKind.GUEST)
                 key.startsWith("user:") && members != null -> {
                     val userId = key.removePrefix("user:")
-                    val member = members.firstOrNull { it.userId == userId }
-                    out[key] = if (member == null) Uploader(UploaderKind.FORMER) else Uploader(UploaderKind.MEMBER, tenant.people[userId]?.displayName ?: member.username)
+                    val member = members.firstOrNull { it.first == userId }
+                    out[key] = if (member == null) Uploader(UploaderKind.FORMER, userId = userId) else Uploader(UploaderKind.MEMBER, people[userId]?.displayName ?: member.second, userId)
                 }
             }
         }

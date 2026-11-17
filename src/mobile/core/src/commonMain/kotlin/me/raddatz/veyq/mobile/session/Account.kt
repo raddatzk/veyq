@@ -438,7 +438,7 @@ class VeyqAccount private constructor(
         else People.of(JoinRecords(suite), tenant.tenantId, tenantScope.key, tenantScope.summary.grantedEpoch.toLong(), members)
         return TenantSession(
             this, tenant, base, open, off, closed, people, services, ShareLinks.Rules.of(capabilities),
-            attributions = attributions, servicesRead = capabilities != null,
+            attributions = attributions, servicesRead = capabilities != null, closedKinds = kindsOf(summaries, closed),
         )
     }
 
@@ -450,8 +450,11 @@ class VeyqAccount private constructor(
             is GrantOutcome.Opened -> open += TenantSession.OpenScope(s, o.key, scopeName(s, tenant))
             is GrantOutcome.Refused -> closed[s.id] = o.reason
         }
-        return TenantSession(this, tenant, base, open, emptySet(), closed)
+        return TenantSession(this, tenant, base, open, emptySet(), closed, closedKinds = kindsOf(summaries, closed))
     }
+
+    private fun kindsOf(summaries: List<ScopeSummary>, closed: Map<String, GrantOutcome.Reason>): Map<String, String> =
+        summaries.filter { it.id in closed }.associate { it.id to it.kind.value }
 
     /** A grant of a scope key to this account itself, as a scope's birth posts it (ADR 0028 decision 6), all base64. */
     class SelfGrant(val wrappedGrant: String, val grantSignature: String, val recipientIdentityDigest: String)
@@ -1399,6 +1402,9 @@ class TenantSession internal constructor(
      * failed, so which services and hosts are served now is unknown (the map's "needs a connection", ADR 0143 D9).
      */
     val servicesRead: Boolean = false,
+    /** The kind of each scope of [closed] (`TENANT`, `GROUP`, `PERSONAL`), by id: what a walk over the tenant's and the groups'
+     *  scopes counts as not read (a person's index, ADR 0144 decision 12). */
+    internal val closedKinds: Map<String, String> = emptyMap(),
 ) : Library {
     /** The address the tenant configured for external service [capabilityId], or null: off, or not read. */
     fun serviceUrl(capabilityId: String): String? = services[capabilityId]
@@ -1442,7 +1448,42 @@ class TenantSession internal constructor(
     /** Drops the read tree: the next read of it (a list, [trees]) reads every scope again — after a node was created, or a write met a re-keyed node. */
     fun forgetTree() {
         tree = null
+        unreadTrees = emptySet()
+        derived.clear()
     }
+
+    /**
+     * The tenant closes — a switch, a lock, a sign-out: the tree read and everything derived from it ([fromTree]) are
+     * dropped now, not whenever this session is collected. A read after it reads anew.
+     */
+    fun close() = forgetTree()
+
+    /**
+     * What is derived from the tree as last read ([trees]) and held in memory only — never on disk (a person's index,
+     * ADR 0144 decision 12): [derive] runs once per tree read and its value is handed out until the tree is read anew
+     * ([forgetTree]) or the tenant closes ([close]), which drop it. Keyed by [key], the deriving code's own name; core's
+     * session names no application.
+     */
+    internal suspend fun <V : Any> fromTree(key: String, derive: suspend (Map<String, List<OpenNode>>) -> V): V {
+        val read = trees()
+        derived[key]?.let { (from, value) ->
+            @Suppress("UNCHECKED_CAST")
+            if (from === read) return value as V
+        }
+        val value = derive(read)
+        // a tree forgotten while [derive] ran is not held against: the next call derives from the new read
+        if (tree === read) derived[key] = read to value
+        return value
+    }
+
+    /** Whether a value derived under [key] is held now ([fromTree]): what a test of its lifetime reads. */
+    internal fun holdsDerived(key: String): Boolean = key in derived
+
+    private val derived = HashMap<String, Pair<Map<String, List<OpenNode>>, Any>>()
+
+    /** The open scopes whose tree did not read in [trees]' last read (offline with nothing of it kept): listed there as empty. */
+    internal var unreadTrees: Set<String> = emptySet()
+        private set
 
     /**
      * The scope epoch this device holds [scopeId] at — its floor for writes (ADR 0109 point 6, layer 2): a node whose key
@@ -1506,6 +1547,7 @@ class TenantSession internal constructor(
     internal suspend fun trees(): Map<String, List<OpenNode>> = tree ?: run {
         var asOf: OfflineAsOf? = null
         var unkept: Unreachable? = null
+        val unread = HashSet<String>()
         val read = try {
             scopes.associate { s ->
                 val rows = try {
@@ -1520,6 +1562,7 @@ class TenantSession internal constructor(
                 } catch (e: Unreachable) {
                     // offline, a scope nothing of which was kept lists nothing; the others show what was
                     unkept = e
+                    unread += s.summary.id
                     emptyList()
                 }
                 s.summary.id to Tree.open(account.suite, s.summary.id, s.key, rows)
@@ -1531,6 +1574,7 @@ class TenantSession internal constructor(
         if (unkept != null && asOf == null) throw unkept!!
         if (unkept != null && account.reach.value == Reach.Online) throw unkept!!
         offline = asOf
+        unreadTrees = unread
         read
     }.also { tree = it }
 

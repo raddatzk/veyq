@@ -37,6 +37,12 @@ data class ApplicationShape(
      * own flat list would be Home without the folders; its bar still serves a file that is open.
      */
     val inDrawer: Boolean = true,
+    /**
+     * Whether it adds a section to a person's profile (ADR 0144 decision 11, the web's `app.personSection`): what it knows
+     * of the person, below core's frame. Memories claims one ("Memories with {name}"); the section's model is the
+     * application's own.
+     */
+    val personSection: Boolean = false,
 )
 
 /**
@@ -45,7 +51,7 @@ data class ApplicationShape(
  * application's own.
  */
 val APPLICATION_SHAPES: List<ApplicationShape> = listOf(
-    ApplicationShape(ApplicationId.MEMORIES, BarLevel.APPLICATION, listOf(BarTab("memories.all"), BarTab("memories.map"))),
+    ApplicationShape(ApplicationId.MEMORIES, BarLevel.APPLICATION, listOf(BarTab("memories.all"), BarTab("memories.map")), personSection = true),
     ApplicationShape(ApplicationId.DEPOT, BarLevel.OBJECT, listOf(BarTab("depot.file")), inDrawer = false),
     ApplicationShape(
         ApplicationId.EXPENSES,
@@ -63,3 +69,7 @@ fun availableApplications(applicationsOff: Set<String>): List<ApplicationShape> 
 
 /** The applications the drawer lists: the available ones it shows (ADR 0122 decision 2). */
 fun drawerApplications(applicationsOff: Set<String>): List<ApplicationShape> = availableApplications(applicationsOff).filter { it.inDrawer }
+
+/** The applications whose sections a person's profile shows, in the registry's order: the available ones that claim one. */
+fun personSections(applicationsOff: Set<String>): List<ApplicationId> =
+    availableApplications(applicationsOff).filter { it.personSection }.map { it.id }

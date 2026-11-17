@@ -390,7 +390,7 @@ reached only when it was open as the device went offline; then it stays, naming 
   instance (its run reads the owner's `.run/.env`); the owner runs `VEYQ_LIVE=http://veyq.localhost:8080
   VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :core:jvmTest --tests '*BannerLiveTest*'` from `src/mobile/`.
 
-- [ ] **4 the person profile (core)** — D11–D14: `Shell.person` with its `back`, the registry's `personSection` and
+- [x] **4 the person profile (core)** — D11–D14: `Shell.person` with its `back`, the registry's `personSection` and
   Memories' claim, `ParticipantIndex` over `trees()`, the section's model (rows, order, List | Map, the states),
   `MediaDetails.Uploader`'s user id, the participants' list opening a current member. Tests: R18's `participantIndex`
   cases and R17's `PersonMemories` order, empty, partial and map cases ported; `ShellTest`: a profile opened from a
@@ -403,6 +403,45 @@ reached only when it was open as the device went offline; then it stays, naming 
   indexed → the live case lists three, red; (b) a chapter indexed → red; (c) the cap of 500 not marking partial → red;
   (d) the index kept after `closeTenant()` → red; (e) a former member's uploader name opening a profile → red; (f) the
   section ordered by last use → the order case red.
+  *Done 2026-11-17 (core; the live run is the owner's, below):* built `Shell.person` with `openPerson` (a screen over what
+  was on screen, `back` chained; no bar on it; `isHome`, `canGoBack`, `goBack`/`close` know it; the drawer and a space
+  switch leave it), `ApplicationShape.personSection` (Memories claims it) and `personSections(off)`,
+  `navigation/PersonProfile.kt` (core's frame: the directory's display name, `~username` under a real name, `former` only
+  where the directory was read, the sections — names no application), `memories/people/ParticipantIndex.kt` (the web's
+  walk as a pure `build` over `trees()`: TENANT and GROUP scopes only, MEMORY nodes only, 500 per scope, a capped scope, a
+  tree that did not read (`TenantSession.unreadTrees`) and a closed grant of either kind (`TenantSession.closedKinds`)
+  partial; each entry its node, space, date, place and map pin — no key held), held through a new generic
+  `TenantSession.fromTree(key)` dropped by `forgetTree()` and a new `TenantSession.close()` (wired in the bridge's
+  `closeTenant`), `memories/people/PersonMemories.kt` (the section's model: the web's order, the group on a row, loading,
+  failed with *Try again*, empty, partial, List | Map once something is listed, not stored, the map's pins the person's
+  located Memories, a row and a pin opening through `ShellModel.open`), `ShellModel.openPerson`/`profile`/`personMemories`,
+  `MediaDetails.Uploader.userId` and `.profile` (a current member's only; the members' rule extracted as a pure
+  `uploaders(keys, members, people)`), `Participants.Entry.opensProfile`. Tests: `ShellTest` +5 (from a participant, from
+  an uploader, profile → Memory → back → profile, the drawer leaving it, the sections), `PersonProfileTest` (4),
+  `ParticipantIndexTest` (8: R18's cases over a pure build and over `PlayedTenant` — now with TENANT and GROUP scopes and
+  sealed participants — the lifetime, offline cut mid-session and opened offline, a group nothing of which was kept →
+  partial), `PersonMemoriesTest` (8: R17's order, empty, partial, retry, views, map cases), and
+  `jvmTest/…/PersonProfileLiveTest` (skipped without `VEYQ_LIVE`; skipped, said so, where the dev principal is in no group).
+  Bites, each one edit restored from a byte snapshot by a scripted run (`git status --porcelain` equal before and after),
+  each red at its named case: (a) the scope-kind filter dropped → `indexesTheMemories…neverThePersonalScope` "the personal
+  scope's Memory is never indexed" expected `[a, b]` but was `[a, b, c]` (and the played-tenant cases likewise); (b) a
+  CHAPTER let through → `aChapterIsNeverIndexed…` expected `[m]` but was `[ch, m]`; (c) the cap not marking partial →
+  `stopsAtThePerScopeCap…` "a scope over the cap makes the list partial"; (d) `close()` dropping only the tree →
+  `theIndexIsHeldWithTheTree…` "the index outlived the tenant's close"; (e) `Uploader.profile` = any user id →
+  `aCurrentMembersUploaderNameOpensTheProfile…` "a former member's uploader name opens nothing" expected null but was
+  `u-gone`; (f) the section ordered as `arrange` orders an unused list (by name) → `listsThePersonsMemoriesNewestStartDayFirst…`
+  expected `[Harz, Amrum, Zingst, Ostsee, Alpen, beach]` but was `[Alpen, Amrum, beach, Harz, Ostsee, Zingst]`. The live
+  case (a) is the same rule against the dev instance, not run here. Green: `ANDROID_HOME=$HOME/Library/Android/sdk
+  ./gradlew :core:jvmTest :bridge:jvmTest :core:macosArm64Test :android:assembleDebug --no-daemon` (BUILD SUCCESSFUL);
+  every `scripts/validate_*.py` but guard_gaps. **Departures:** the index is rebuilt per tree read, not revalidated per
+  scope as the web's is — `trees()` already revalidates every scope by `ETag` and re-opens its kept listing, so a second
+  per-scope cache would hold a second copy of what the session holds. A group's row names it by the apps' group word
+  (`ShellWords.space`): the apps read no group names. "Gone after a lock" is `TenantSession.close()`; the phones call it
+  where their tenant closes when phases 6–7 build the profile screens (no way in exists before them). A former uploader
+  now carries its user id (opening nothing), so the profile rule is `Uploader.profile`'s alone. **Not run:**
+  `PersonProfileLiveTest` against the dev instance (its run reads the owner's `.run/.env`); the owner runs
+  `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :core:jvmTest --tests '*PersonProfileLiveTest*'`
+  from `src/mobile/`.
 
 - [ ] **5 the bridge** — D8; `HeaderShown`'s people line and banner, the dialogs' calls, the creation form's
   `wasThere`; `Watched.Person` → `PersonShown` (name, avatar key, `~username`, the section's rows, state and `partial`),

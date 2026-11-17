@@ -1549,6 +1549,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     private fun closeTenant() {
+        // the tree and what was derived from it (a person's index, ADR 0144 decision 12) dropped now, not when collected
+        tenant.value?.models?.shell?.tenant?.close()
         tenant.value = null
         // the uploads are the tenant's: what still waits or runs is cancelled (the phones' `uploads.clear()` on a switch)
         uploads.value?.close()
