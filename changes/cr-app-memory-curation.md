@@ -483,7 +483,7 @@ reached only when it was open as the device went offline; then it stays, naming 
   The profile's words (Memories with, former, its states) come with the platforms (phases 6–8); the wire says them as
   states and enums.
 
-- [ ] **6 Android** — the people line and its sheet, the picker, *I was there*, the details' time editor, the banner with
+- [x] **6 Android** — the people line and its sheet, the picker, *I was there*, the details' time editor, the banner with
   its surround and player, its dialog and A2's question, the profile screen (a large `PersonAvatar`, the section's list
   and its List | Map segmented button); every word from `words.json` (EN+DE). · Done when: `./gradlew
   :android:assembleDebug` and `scripts/validate_mobile_words.py` green; clicked once on the emulator: add two
@@ -522,6 +522,20 @@ reached only when it was open as the device went offline; then it stays, naming 
   its sign-in with no crash (`logcat -b crash` empty; the curation's state is declared above `AppModel`'s `init`, whose
   first gate closes it). **Not run: the live click** — `devlogin.py` reads the owner's `.run/.env`, which this session's
   classifier refused; the click list above is the owner's or a session allowed to sign the emulator in.
+  *Done 2026-11-17:* the live click on a throwaway emulator (`curation_p6live`, API 36, Pixel 7, deleted after), signed in
+  with `devlogin.py` over `VEYQ_ENV_FILE`, in Familie Raddatz (uiautomator dumps, logcat, a few screenshots): a New Memory
+  with *I was there* ticked opened with the principal on its people line; four media added (GPS and names kept); two
+  participants picked in the bottom sheet (the line then three avatars and "Participants"), the list opened, `other`'s
+  profile ("Memories with other", List | Map), the Memory opened from it and back to the profile; a photo's "Added by"
+  opened the uploader's profile (`~kevin`, newest start day first) and its Map segment (the map's consent card — map
+  services left off); photo1's time corrected to Mar 1, 2026 (the gallery re-ordered it from last to second) and reset
+  (back to Jul 15, 2021, last again); an image banner saved, then the gallery's clip as banner — saved at once with no
+  upload progress — and played (`MediaPlayer` video/avc rendering); turned: portrait 1:1 with the blurred surround,
+  landscape at a medium width (`wm density 468`, 820 dp, the rail) the wide frame capped at 60 % of the screen; the clip
+  trashed from the lightbox asked A2's question (*Remove the banner too* unticked), the banner stayed and still played;
+  Remove banner in the dialog (the menu back to *Add banner*). `logcat -b crash` empty. The Memory moved to the trash, the
+  session signed out with *Sign out here*. Seen, not this CR's: a phone turned to landscape at its own density (914 dp)
+  takes the expanded shell, where drawer, rail and the 360 dp list leave the open Memory a pane about 120 dp wide.
 
 - [ ] **7 Apple (iOS, macOS)** — as phase 6 in SwiftUI (a popover on the Mac, a sheet on iOS, `PhotosPicker` with images
   and videos, `VideoPlayer`, the profile pushed on the navigation stack, its map MapKit's as ADR 0143's). · Done when: the
