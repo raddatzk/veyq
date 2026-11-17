@@ -68,6 +68,8 @@ struct Inner {
     popped: RefCell<Option<glib::SignalHandlerId>>,
     window: gtk::Window,
     toasts: adw::ToastOverlay,
+    /// The details to show again once the gallery read the capture time just saved (its next state; at most 3 s later).
+    details_again: Cell<bool>,
 }
 
 impl Lightbox {
@@ -139,6 +141,7 @@ impl Lightbox {
             popped: RefCell::new(None),
             window: window.clone(),
             toasts: toasts.clone(),
+            details_again: Cell::new(false),
         });
         Inner::connect(&inner);
         nav.push(&inner.page);
@@ -195,6 +198,9 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
                     return;
                 }
                 inner.draw();
+                if inner.details_again.replace(false) {
+                    inner.show_details();
+                }
             }
             Ok(_) => {}
             Err(e) => eprintln!("veyq: a lightbox update did not read: {:?}", e.0),
@@ -665,9 +671,16 @@ impl Inner {
             if let Some(row) = &taken_row {
                 let again = me.clone();
                 crate::curation::on_taken_row(lightbox, media_id.clone(), row, &dialog, &window, move || {
-                    if let Some(i) = again.upgrade() {
-                        i.show_details();
-                    }
+                    let Some(i) = again.upgrade() else { return };
+                    i.details_again.set(true);
+                    let later = Rc::downgrade(&i);
+                    glib::timeout_add_local_once(std::time::Duration::from_secs(3), move || {
+                        if let Some(i) = later.upgrade()
+                            && i.details_again.replace(false)
+                        {
+                            i.show_details();
+                        }
+                    });
                 });
             }
             dialog.present(Some(&window));

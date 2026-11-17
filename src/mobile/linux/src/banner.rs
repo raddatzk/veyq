@@ -366,7 +366,8 @@ impl BannerDialog {
         let has = current.is_some();
         let title = adw::WindowTitle::new(&if has { words::memory_banner_change() } else { words::memory_banner_add() }, "");
         let bar = adw::HeaderBar::builder().title_widget(&title).show_end_title_buttons(false).show_start_title_buttons(false).build();
-        let dialog = adw::Dialog::builder().content_width(460).build();
+        // tall enough for the previews, the progress and *Remove banner* at once (a dialog does not grow when a state shows more)
+        let dialog = adw::Dialog::builder().content_width(460).content_height(660).build();
         let cancel = gtk::Button::builder().label(words::entry_cancel()).build();
         let d = dialog.downgrade();
         cancel.connect_clicked(move |_| {
@@ -418,7 +419,7 @@ impl BannerDialog {
         column.append(&remove);
         let view = adw::ToolbarView::new();
         view.add_top_bar(&bar);
-        view.set_content(Some(&gtk::ScrolledWindow::builder().child(&column).propagate_natural_height(true).hscrollbar_policy(gtk::PolicyType::Never).build()));
+        view.set_content(Some(&gtk::ScrolledWindow::builder().child(&column).vexpand(true).hscrollbar_policy(gtk::PolicyType::Never).build()));
         dialog.set_child(Some(&view));
         let this = Rc::new(Self {
             id: Cell::new(None),
