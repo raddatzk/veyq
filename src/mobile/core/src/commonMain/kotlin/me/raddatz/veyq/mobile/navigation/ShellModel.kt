@@ -701,6 +701,17 @@ class ShellModel(
             override suspend fun captureTime(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, overrideMs: Long?) =
                 if (overrideMs == null) me.raddatz.veyq.mobile.memories.CaptureTime.reset(tenant, item)
                 else me.raddatz.veyq.mobile.memories.CaptureTime.set(tenant, item, overrideMs)
+            override suspend fun bannerPicture() =
+                tenant.node(ref.scopeId, ref.nodeId)?.let { me.raddatz.veyq.mobile.memories.banner.Banner.picture(tenant, it) }
+            override suspend fun bannerReader() =
+                tenant.node(ref.scopeId, ref.nodeId)?.let { me.raddatz.veyq.mobile.memories.banner.Banner.reader(tenant, it) }
+            override suspend fun setBanner(
+                openedWith: me.raddatz.veyq.mobile.memories.banner.Banner.Slots, picked: me.raddatz.veyq.mobile.memories.banner.BannerWrite.Picked,
+                items: List<me.raddatz.veyq.mobile.memories.MemoryMedia.Item>, progress: (Double) -> Unit,
+            ) = me.raddatz.veyq.mobile.memories.banner.BannerWrite.set(tenant, ref.scopeId, ref.nodeId, openedWith, picked, items, progress)
+                .also { runCatching { refresh() } }
+            override suspend fun removeBanner(openedWith: me.raddatz.veyq.mobile.memories.banner.Banner.Slots) =
+                me.raddatz.veyq.mobile.memories.banner.BannerWrite.remove(tenant, ref.scopeId, ref.nodeId, openedWith).also { runCatching { refresh() } }
         }, access = memoryAccess(ref), now = now, music = music)
 
     /** Who looks at Memory or chapter [ref] from this shell: a member, as the tenant's switches and the folder say. */

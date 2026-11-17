@@ -195,4 +195,36 @@ class CrossSurfaceFixtureTest {
         assertEquals(before.keys.toList() - "capturedAtOverride", back.keys.toList())
         for (k in back.keys) assertEquals(before.getValue(k).toString(), back.getValue(k).toString(), k)
     }
+
+    /**
+     * A banner set over the web's meta (ADR 0144 decision 5): the `banner` field replaced by the web's shape — the whole
+     * picture, `frame: 'fit'` around the centre, so an older client draws it whole — and every other field byte for byte,
+     * in its place; the web's video banner (its `frame`/`focal` beside its refs) read and compared by its slots. Bite (a):
+     * `frame`/`focal` dropped from the re-seal (`Banner.sealed`) — red here.
+     */
+    @Test
+    fun aBannerWriteSealsTheWebsShapeAndKeepsEveryOtherFieldByteForByte() = runTest {
+        val base = NodeMetaWrite.State(m.seal(webMeta), 3)
+        val read = me.raddatz.veyq.mobile.memories.banner.Banner.of(m.open(base.wrappedMeta))!!
+        assertEquals(me.raddatz.veyq.mobile.memories.banner.Banner.Frame.FIT, read.frame)
+        assertEquals(me.raddatz.veyq.mobile.memories.banner.Banner.Focal(0.5, 0.4375), read.focal, "the web's focal read, never drawn")
+        val slots = me.raddatz.veyq.mobile.memories.banner.Banner.slots(fieldsOf(webMeta)["banner"])
+        val ref = me.raddatz.veyq.mobile.memories.banner.Banner.Ref("2d3e4f50-6172-4839-9aab-bccddeeff001", 1, 48231, "AwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISI=")
+        val up = me.raddatz.veyq.mobile.memories.banner.BannerWrite.Uploaded(
+            me.raddatz.veyq.mobile.memories.banner.Banner.Medium.IMAGE, "u", null, null, null, ref, null, null, "ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0",
+        )
+        val sent = mutableListOf<me.raddatz.veyq.mobile.memories.banner.BannerWrite.Send>()
+        val out = me.raddatz.veyq.mobile.memories.banner.BannerWrite.write(base, m.open, m.sealMeta, slots, { up }) { s -> sent += s; NodeMetaWrite.Answer.Taken }
+        assertEquals(me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome.Done, out)
+        val s = sent.single() as me.raddatz.veyq.mobile.memories.banner.BannerWrite.Send.Set
+        assertEquals("0b1c2d3e-4f50-4617-8899-aabbccddeeff" to "1c2d3e4f-5061-4728-899a-abbccddeeff0", s.expectedBlobId to s.expectedPosterBlobId, "both slots it replaces")
+        val after = m.opened(s.wrappedMeta)
+        assertKept(fieldsOf(webMeta), after, "banner")
+        assertEquals(
+            """{"medium":"image","blob":{"blobId":"2d3e4f50-6172-4839-9aab-bccddeeff001","chunkCount":1,"byteSize":48231,""" +
+                """"wrappedBlobKey":"AwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISI="},"sha256":"ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0",""" +
+                """"frame":"fit","focal":{"x":0.5,"y":0.5}}""",
+            after.getValue("banner").toString(),
+        )
+    }
 }

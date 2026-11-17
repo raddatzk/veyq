@@ -340,7 +340,7 @@ reached only when it was open as the device went offline; then it stays, naming 
   session's classifier refused the run that reads the owner's `.run/.env`; the owner runs
   `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :core:jvmTest --tests '*CurationLiveTest*'`.
 
-- [ ] **3 the banner (core)** — D4, D5, D7's pin: the generated `MemoryBannerApi`, `Banner`, `BannerFrame`,
+- [x] **3 the banner (core)** — D4, D5, D7's pin: the generated `MemoryBannerApi`, `Banner`, `BannerFrame`,
   `BannerWrite` with the digest, the match, `SharedBlob`, A1 in `MediaUpload`, A2 in the gallery's trash, the pin's
   banner blobs. First: the four manifests diffed unchanged (D9). Tests: R3's `bannerModel`, `bannerWrite`,
   `useBannerEditor`, `storedMatch` cases ported; the shared wrap against a vector the web's `sharedBlob` produces; the
@@ -352,6 +352,43 @@ reached only when it was open as the device went offline; then it stays, naming 
   ORIGINAL → the tier case red; (c) a 41 MB image read before refusing → the bound case red; (d) a `stale_revision`
   answered with fresh uploads → the upload count red; (e) A2's delete without asking → red; (f) the pin without the
   banner's ids → the offline read red.
+  *Done 2026-11-17 (core; the live run is the owner's, below):* first, the four manifests diffed against the refine's base
+  (`git diff 6db8f04c7 HEAD -- <AndroidManifest, project.yml, Info.plist, the Flatpak manifest, the appxmanifest>`): only
+  the `app.veyq` id move, no permission or capability; this phase touches none. Built: `memories/memory-banner` in the
+  generator's `applicationSpecs` (the generated `MemoryBannerApi`, `SetMemoryBannerRequest`, `RemoveMemoryBannerRequest`;
+  the contracts unchanged); `blob/SharedBlob.kt` (the sealed size, the size-first match, the shared row — core's first);
+  `memories/banner/Banner.kt` (the web's shape read and sealed, the slots, `Shown`, the picture and the video's reader from
+  the node's own attachments, `BannerFrame.of` and the 32 px `surround`), `StoredMatch.kt`, `BannerWrite.kt` (the pick —
+  an image above 40 MB refused before a byte is read, a picture or first frame that does not decode refused —, the parts,
+  one start poster first, the write through `NodeMetaWrite` with the upload run once, a peer's banner `Stale`, `set` /
+  `remove` over the tenant), `BannerEditor.kt` (the dialog's model: pick, previews' picture, progress, cancel, stale);
+  `BlobMeta.Opened.sha256` and `MemoryMedia.Item.sha256` (the original's digest); `MemoryFacts.Facts.banner`/`bannerSlots`;
+  A1 in `MediaUpload` (`sharedOriginal`: `originalShared` on the video banner's object); A2 in `GalleryModel`'s trash
+  (`State.bannerPicture`, `trashBannerPicture(removeBanner)`, `cancelAsk`) with `State.banner`, `bannerPicture()`,
+  `bannerReader()`, `bannerEditor(pictures)`, wired in `ShellModel`; the pin's banner through a new `PinKinds.named`
+  (Memories names its banner, `Banner.pinned`; core's walk stays application-blind) recorded as `Pin.named` and read by
+  `AccountOffline.reach`. Tests: `BannerTest` (12: R3's `bannerModel` cases, the frame at 720/721 and a short viewport,
+  the surround, the 8192 worst case), `SharedBlobTest` (6, the vector below), `StoredMatchTest` (4, A1 included),
+  `BannerWriteTest` (15: `bannerWrite` and `useBannerEditor` cases), `BannerEditorTest` (6: the dialog, A2),
+  `CrossSurfaceFixtureTest` +1, `OfflinePinsTest` +1, and `jvmTest/…/BannerLiveTest` (skipped without `VEYQ_LIVE`). **The
+  shared-wrap vector** is a row the web's own `shareBlob` produced over fixed inputs (a throwaway vitest file in this
+  worktree, deleted; its blob id and nonces its own): the core opens the web's wrap and `blob-meta`, and its own row over
+  the same inputs opens to the same key under the same binding. Bites, each one edit restored from a byte snapshot by a
+  scripted run (`git status --porcelain` equal before and after), each red at its named case, green restored: (a)
+  `frame`/`focal` dropped from `Banner.sealed` → `aBannerWriteSealsTheWebsShape…` expected `…"frame":"fit","focal":…` but
+  was without; (b) an image sharing the ORIGINAL → `aPickedImageEqualToAGalleryOriginalShares…` expected `p-eq` but was
+  `o-eq`; (c) the head read before the bound → `anImageAbove40Megabytes…` "a byte of it was read" expected 0 but was 1;
+  (d) an upload per send → `aStaleRevisionReApplies…` "uploaded again on a stale revision" expected 1 but was 2; (e) A2's
+  question skipped → `trashingTheBannersPictureAsksFirst…` the trash's notice where null was expected; (f) `Pin.named` left
+  out of `reach` → `a_pin_keeps_its_memorys_banner…` kept only `photo-t`. Green: `ANDROID_HOME=$HOME/Library/Android/sdk
+  ./gradlew :core:jvmTest :bridge:jvmTest :core:macosArm64Test :android:assembleDebug --no-daemon` (BUILD SUCCESSFUL);
+  every `scripts/validate_*.py` but guard_gaps. **Departures:** a banner write's peer check compares the two slots' blob
+  ids (`Banner.Slots`), not the raw `banner` value as the web's `editField` does — a peer's banner change always moves a
+  slot; no client re-frames any more. A pin's banner goes through `PinKinds.named`/`Pin.named` (generic) rather than a
+  banner field in core's pin record, so core names no application. The words of the dialog and of A2's question come with
+  the platforms (phase 6); the core says them as `BannerEditor.Said`. **Not run:** `BannerLiveTest` against the dev
+  instance (its run reads the owner's `.run/.env`); the owner runs `VEYQ_LIVE=http://veyq.localhost:8080
+  VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :core:jvmTest --tests '*BannerLiveTest*'` from `src/mobile/`.
 
 - [ ] **4 the person profile (core)** — D11–D14: `Shell.person` with its `back`, the registry's `personSection` and
   Memories' claim, `ParticipantIndex` over `trees()`, the section's model (rows, order, List | Map, the states),

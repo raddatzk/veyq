@@ -76,6 +76,12 @@ object MemoryMedia {
         val metaRevision: Long = 0,
         /** Its listed tier as listed (sealed): what a write re-opens raw (`TrackLabel`), never the parsed [meta]. */
         internal val wrappedMeta: String? = null,
+        /**
+         * The SHA-256 of its original's plaintext as its `blob-meta` carries it (base64url); null for a medium uploaded
+         * before the digest existed. What an equal-file match compares (`StoredMatch`, ADR 0013 § 5) and what tells the
+         * banner's picture (ADR 0144 decision 5) — sealed under the blob's own key, so only a holder of it reads it.
+         */
+        internal val sha256: String? = null,
     ) {
         val isVideo: Boolean get() = type?.startsWith("video/") == true
 
@@ -160,7 +166,7 @@ object MemoryMedia {
             Item(
                 scopeId, nodeId, row.mediaId, original, tier(MediaDerivativeKind.THUMBNAIL), tier(MediaDerivativeKind.PREVIEW),
                 openMeta(suite, scopeId, row.mediaId, key, row.wrappedMeta), opened?.type?.takeIf { it.isNotBlank() }, opened?.name,
-                row.ownerKey, row.blockedByOperator, key, row.metaRevision ?: 0, row.wrappedMeta,
+                row.ownerKey, row.blockedByOperator, key, row.metaRevision ?: 0, row.wrappedMeta, opened?.sha256,
             )
         }
         return Gallery(order(items), mediaRevision, deleteRevision, read.offline)

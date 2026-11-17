@@ -22,8 +22,12 @@ object BlobMeta {
     private const val MAX_SAFE = 9_007_199_254_740_991L
     private val SHA256_B64URL = Regex("^[A-Za-z0-9_-]{43}$")
 
-    /** What a reader gets back: the type ('' when unknown), and the name and modification time when present. */
-    data class Opened(val v: Long, val type: String, val name: String?, val modifiedAt: Long?)
+    /**
+     * What a reader gets back: the type ('' when unknown), and the name and modification time when present; [sha256] the
+     * file's digest where the blob carries a well-formed one (a medium's original, a video banner: the equal-file match,
+     * ADR 0013 § 5).
+     */
+    data class Opened(val v: Long, val type: String, val name: String?, val modifiedAt: Long?, val sha256: String? = null)
 
     private fun isControl(c: Int) = c in 0x00..0x1f || c in 0x7f..0x9f
 
@@ -78,7 +82,7 @@ object BlobMeta {
         val v = (o["v"] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull?.takeIf { it in 1..MAX_SAFE } ?: return null
         fun str(k: String) = (o[k] as? JsonPrimitive)?.takeIf { it.isString }?.content
         val modified = (o["modifiedAt"] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull?.takeIf { it in 0..MAX_SAFE }
-        Opened(v, str("type").orEmpty(), str("name")?.takeIf { it.isNotEmpty() }, modified)
+        Opened(v, str("type").orEmpty(), str("name")?.takeIf { it.isNotEmpty() }, modified, str("sha256")?.takeIf { SHA256_B64URL.matches(it) })
     }.getOrNull()
 
     fun seal(suite: V1, blobKey: ByteArray, type: String, name: String?, modifiedAt: Long?, sha256: String? = null): ByteArray =
