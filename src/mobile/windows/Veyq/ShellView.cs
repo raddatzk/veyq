@@ -830,7 +830,8 @@ internal sealed class ShellView
     {
         _commands.PrimaryCommands.Clear();
         _commands.SecondaryCommands.Clear();
-        if (_shown is not { } shown || _account is not null) return;
+        // a person's profile is no level: nothing is created or acted on there
+        if (_shown is not { } shown || _account is not null || _person is not null) return;
         var page = _pot;
         // a Pot's page creates one thing, an entry (as Android's and Apple's Pot screens): the level's New is not offered
         // beside it — two Add commands side by side would ask which one adds what

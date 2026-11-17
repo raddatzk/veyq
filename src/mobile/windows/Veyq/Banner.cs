@@ -127,6 +127,9 @@ internal sealed class BannerStage : IDisposable
             var picture = await BannerPicture.Of(bytes);
             if (n != _asked || _closed) return;
             StopPlayer();
+            // a new picture is a new frame: the last one's picture and play button go with it
+            _drawn = null;
+            _root.Child = null;
             _picture = picture;
             _surround = null;
             _frame = null;
@@ -187,9 +190,9 @@ internal sealed class BannerStage : IDisposable
             return;
         }
         var drawn = BannerPicture.Drawn(frame.width, frame.height, picture.Whole, _surround);
-        AutomationProperties.SetName(drawn, _banner?.medium == BannerMedium.Video ? Words.MemoryBannerVideo() : Words.MemoryBannerHint());
         if (_banner?.medium == BannerMedium.Video)
         {
+            AutomationProperties.SetName(drawn, Words.MemoryBannerVideo());
             var play = new Button
             {
                 HorizontalAlignment = HorizontalAlignment.Center,

@@ -148,7 +148,8 @@ internal sealed class PersonPage : IDisposable
             _name.Text = title;
             _picture.DisplayName = title;
             Avatars.Show(_picture, s.picture ? s.userId : null);
-            _username.Text = s.username is { } u ? $"~{u}" : "";
+            // the core's line already reads "~username"
+            _username.Text = s.username ?? "";
             _username.Visibility = s.username is null ? Visibility.Collapsed : Visibility.Visible;
             _hint.Text = s.former ? Words.PeopleFormerMemberHint() : "";
             _hint.Visibility = s.former ? Visibility.Visible : Visibility.Collapsed;
