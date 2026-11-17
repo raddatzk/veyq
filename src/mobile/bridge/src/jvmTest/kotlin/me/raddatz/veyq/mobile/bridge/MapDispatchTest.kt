@@ -208,6 +208,13 @@ class MapDispatchTest {
                 memoriesMap = { MemoriesMap(listOf(MemoriesMap.Pin("s", "m", "Berlin 2026", BERLIN, hasCover = true), MemoriesMap.Pin("s", "a", "Alps", ALPS, hasCover = false))) },
                 memoryDates = { mapOf("m" to MemoryDate(MemoryDate.Mode.RANGE, "2026-07-01", "2026-07-14")) },
                 trackList = { g, uploads -> TrackList(g, p.memory.trackDoor(uploads, g.node)) },
+                profile = { userId -> me.raddatz.veyq.mobile.navigation.PersonProfile.of(userId, emptyMap(), emptySet()) },
+                personMemories = { userId ->
+                    me.raddatz.veyq.mobile.memories.people.PersonMemories(userId, object : me.raddatz.veyq.mobile.memories.people.PersonMemories.Door {
+                        override suspend fun index() = personIndex
+                        override fun open(ref: me.raddatz.veyq.mobile.navigation.ObjectRef) {}
+                    })
+                },
             )
         }
     }
@@ -294,6 +301,43 @@ class MapDispatchTest {
      * their gallery, a photo's with its lightbox, and every map — the Memories tab's too — with the tenant, its services
      * closed: no tile of a map left open is answered after a sign-out, and no request leaves.
      */
+    /** Person u2 is on Berlin (located) and on Harz (no place): their map holds Berlin's pin alone. */
+    private val personIndex = run {
+        val berlin = NodeRef("s", "m", null, "MEMORY", "Berlin 2026")
+        val harz = NodeRef("g", "harz", null, "MEMORY", "Harz")
+        me.raddatz.veyq.mobile.memories.people.ParticipantIndex.Index(
+            mapOf("u2" to setOf(berlin, harz)),
+            mapOf(
+                berlin to me.raddatz.veyq.mobile.memories.people.ParticipantIndex.Memory(
+                    berlin, SpaceRef("s", "TENANT", "s"), MemoryDate(MemoryDate.Mode.SINGLE, "2026-07-01", null), null,
+                    MemoriesMap.Pin("s", "m", "Berlin 2026", BERLIN, hasCover = true), listOf("u2"),
+                ),
+                harz to me.raddatz.veyq.mobile.memories.people.ParticipantIndex.Memory(harz, SpaceRef("g", "GROUP", "g"), null, null, null, listOf("u2")),
+            ),
+            partial = false,
+        )
+    }
+
+    @Test
+    fun aPersonsMapShowsTheirLocatedMemoriesAndGoesWithTheirPage() = runBlocking {
+        val p = Played()
+        val b = bridge(p)
+        b.signedIn()
+        assertEquals(Answer.Done, b.ask(Call.MapTurnOn))
+        val person = (b.ask(Call.PersonOpen("u2")) as Answer.PersonOpened).person
+        val section = b.watching(Watched.Person(person)).until { u -> (u as Update.Person).shown?.memories?.takeIf { !it.loading } }
+        assertEquals(2 to 1, section.rows.size to section.located)
+        val map = (b.ask(Call.PersonMap(person)) as Answer.MapOpened).map
+        val shown = b.shownMap(map)
+        assertEquals(listOf("m"), shown.clusters.map { it.pin.node.nodeId }, "the person's map is not their located Memories")
+        val tapped = b.ask(Call.MapTap(map, "m")) as Answer.MapTapped
+        assertEquals("m", tapped.open?.page?.nodeId, "a pin opens its Memory through Shell.Open")
+        // the map goes with the person's page
+        assertEquals(Answer.Done, b.ask(Call.PersonClose(person)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_MAP), b.ask(Call.MapTile(map, shown.tiles.first().tile)), "a person's map outlived their page")
+        b.shutdown()
+    }
+
     @Test
     fun aMapItsTilesAndItsServicesGoWithItsPageAndItsTenant() = runBlocking {
         val p = Played()
