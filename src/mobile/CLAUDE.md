@@ -153,6 +153,21 @@ A Gradle build of its own, run through its own wrapper.
   is the member's pan); a photo's name `Lightbox.Place`; the Map view `Tracks.Open|Show|Select|Add(paths)|Confirm|Cancel|
   Edit|Remove|Download|Report|Seen|Close` (`Watched.Tracks`). No address crosses: a tile is asked by its id, the hosts are
   names in their own fields (`SecretFreeSchemaTest.aMapCrossesAsItsPictureAlone`).
+  A Memory's curation and a person's page (ADR 0144 decision 8): the people line and the banner ride `GalleryShown` beside
+  the facts line (`people`: `PeopleShown` of ids, names, `former`, `opensProfile`; `banner`: medium, the picture's cache key,
+  a video's type; `editsBanner`; `bannerQuestion`, A2's medium, answered by `Gallery.TrashBannerPicture` or
+  `Gallery.CancelAsk`); the picker `Participants.Open|Load|Search|Toggle|Save|Close` (`Watched.Participants`; search and
+  ticks applied in the host's order); a medium's time `CaptureTime.Open(lightbox, mediaId)|Set(epochMs)|Reset|Close`
+  (`Watched.CaptureTime`; the host converts its pickers' local time); the banner's picture `Banner.Picture`
+  (`Answer.Bytes`), its video `Banner.Play` (`Answer.Reader`, closed with its page), its frame and 32 px surround
+  `Banner.Frame` (no tenant); its dialog `Banner.Open|Pick(path)|Preview|Save|Cancel|Remove|Close` (`Watched.Banner`; a pick
+  decoded by the host's `Media.Tiers` with the cover's spec, `HostBannerPictures`; a save is the dialog's one job, which
+  `Banner.Cancel` stops — answered `BannerSaved(CANCELLED)`); New Memory's `Shell.OffersWasThere` and
+  `Shell.CreateMemory`'s `wasThere`. A person's page is opened on the shell with `Shell.OpenPerson` (from
+  `ParticipantShown.opensProfile` or `MediumDetails.profile`) and drawn from `Person.Open` (`Watched.Person`: the frame and
+  Memories' section, a row opened with `Shell.Open`), `Person.View|Retry|Map|Close` — its map the Memories map over the
+  person's located Memories, closed with the page. Every dialog and page closes with its page and its tenant; no ref, wrap,
+  digest or picked path crosses (`SecretFreeSchemaTest.aMemorysCurationAndAPersonsPageCrossAsIdsNamesAndStatesAlone`).
   A device link (ADR 0059) is opened by its role's call — the trusted device's `Link.ShowForNewDevice`/`ScanSignInCode`
   over a connection (a tenant open; they close with it), the new device's `Link.ScanFromTrusted`/`ShowForSignIn` over the
   sign-in form's server — answered `LinkOpened(link)` for `Watched.Link` (`LinkShown`: the core's `DeviceLink.Shown`).

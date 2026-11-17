@@ -131,13 +131,17 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
      decision 8: an original is kept where the app reads one to show the item).
    - **A corrected time shows offline** (it is in the kept listed tier). **Nothing is edited offline** (ADR 0140
      decision 7).
-8. **The bridge (Linux, Windows).** `HeaderShown` gains the people line (ids out, display names, avatar keys, `former`,
-   `more`) and the banner's state (`none` | `image` | `video`, the frame, `Answer.Bytes` keys for the picture and the
-   poster); the calls `Participants.Open|Toggle|Search|Save|Close`, `CaptureTime.Open(item)|Set(epochMs)|Reset|Close`
-   (the host converts its picker's local time; `Open` hands the effective time as epoch ms for the host to show in its
-   zone), `Banner.Pick(path)|Save|Cancel|Remove|Play`, and the creation form's `wasThere`. No blob ref, wrap or digest
-   crosses; a picked path is read by the core and never echoed. The new states are under `SecretFreeSchemaTest`; a dialog
-   closes with its page and its tenant.
+8. **The bridge (Linux, Windows).** The page's state (`GalleryShown`, where ADR 0143's facts line rides — the node's
+   header, `HeaderShown`, is core's and names no application) gains the people line (ids out, display names, avatar keys,
+   `former`, `more`) and the banner's state (none | `image` | `video`, the picture's cache key; the frame and its surround
+   asked by size, `Banner.Frame`; the picture and the poster as `Answer.Bytes`); the calls
+   `Participants.Open|Load|Toggle|Search|Save|Close`, `CaptureTime.Open(lightbox, mediaId)|Set(epochMs)|Reset|Close` (the
+   host converts its picker's local time; the editor's state hands the effective time as epoch ms for the host to show in
+   its zone), `Banner.Open|Pick(path)|Preview|Save|Cancel|Remove|Close` and `Banner.Picture|Play`, A2's answer, and the
+   creation form's `wasThere`; a person's page `Shell.OpenPerson`, `Person.Open|View|Retry|Map|Close`. A picked banner is
+   decoded by the host's upload-tiers request with the cover's spec, so no desktop decodes a banner a way of its own. No
+   blob ref, wrap or digest crosses; a picked path is read by the core and never echoed. The new states are under
+   `SecretFreeSchemaTest`; a dialog closes with its page and its tenant, a person's page with its tenant.
 9. **No new permission, no new dependency.** Every picker the dialogs use is already in use for uploads, the players for
    the gallery's videos, the encoders for the cover; no blur API (decision 4). The four platform manifests are diffed
    unchanged before the banner is built; a changed one goes through its platform's checker before it is committed.
