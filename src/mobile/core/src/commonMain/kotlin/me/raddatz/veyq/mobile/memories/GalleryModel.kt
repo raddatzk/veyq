@@ -163,6 +163,25 @@ class GalleryModel(
 
         /** Medium [item]'s capture time corrected to [overrideMs], or reset for null (`CaptureTime`). Absent: refused. */
         suspend fun captureTime(item: MemoryMedia.Item, overrideMs: Long?): CaptureTime.Outcome = CaptureTime.Outcome.Failed("refused")
+
+        /** The picture the node's banner draws — an image, a video's poster — as stored (`Banner.picture`); null for none. Absent: none. */
+        suspend fun bannerPicture(): ByteArray? = null
+
+        /** The node's video banner read at any offset (`Banner.reader`); null for none. Absent: none. */
+        suspend fun bannerReader(): me.raddatz.veyq.mobile.blob.RangeReader? = null
+
+        /**
+         * [picked] made the node's banner, the dialog having opened on [openedWith], an equal medium of [items] shared
+         * (`BannerWrite.set`). Absent: refused.
+         */
+        suspend fun setBanner(
+            openedWith: me.raddatz.veyq.mobile.memories.banner.Banner.Slots, picked: me.raddatz.veyq.mobile.memories.banner.BannerWrite.Picked,
+            items: List<MemoryMedia.Item>, progress: (Double) -> Unit,
+        ): me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome = me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome.Refused("refused")
+
+        /** The node's banner removed, the dialog having opened on [openedWith] (`BannerWrite.remove`). Absent: refused. */
+        suspend fun removeBanner(openedWith: me.raddatz.veyq.mobile.memories.banner.Banner.Slots): me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome =
+            me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome.Refused("refused")
     }
 
     /** What a trash or a restore of a medium came to (`deleteMedia`, `restoreMedia`). */
@@ -231,7 +250,18 @@ class GalleryModel(
          * in a personal scope, online (decision 7) — and somebody is listed or whoever looks may add someone; null otherwise.
          */
         val people: Participants.Line? = null,
+        /**
+         * A member's delete of the banner's picture asked first (ADR 0144 decision 5, A2): the medium whose original's
+         * digest is the banner's; [trashBannerPicture] answers, [cancelAsk] declines.
+         */
+        val bannerPicture: String? = null,
     ) {
+        /** The banner above the header (ADR 0144 decision 4) as sealed: what it shows; null for none (no frame drawn). */
+        val banner: me.raddatz.veyq.mobile.memories.banner.Banner.Shown? get() = me.raddatz.veyq.mobile.memories.banner.Banner.shown(facts?.banner)
+
+        /** Whether the banner's dialog is offered: the right, online (nothing is edited offline, ADR 0140 decision 7). */
+        val editsBanner: Boolean get() = rights.setBanner && offline == null
+
         /** The `auto` range the node's media give now (the date editor's preview, and the header's before one is sealed). */
         val autoRange: me.raddatz.veyq.mobile.memories.place.MemoryDate
             get() = me.raddatz.veyq.mobile.memories.place.MemoryDate.autoRange(rows.orEmpty().map { it.item })
@@ -471,6 +501,30 @@ class GalleryModel(
         ) { wanted, openedWith -> door.setParticipants(wanted, openedWith).also { factsChanged() } }
     }
 
+    // ---- the banner (ADR 0144 decisions 4 and 5) ----
+
+    /** The banner's picture (an image, a video's poster) as stored; null for none or one that does not read. */
+    suspend fun bannerPicture(): ByteArray? = if (current.banner == null) null else runCatching { door.bannerPicture() }.getOrNull()
+
+    /** The video banner's bytes for its player (a tap plays it); null for an image or none. */
+    suspend fun bannerReader(): me.raddatz.veyq.mobile.blob.RangeReader? =
+        if (current.banner?.medium != me.raddatz.veyq.mobile.memories.banner.Banner.Medium.VIDEO) null else runCatching { door.bannerReader() }.getOrNull()
+
+    /**
+     * The banner's dialog over the platform's [pictures], where whoever looks may set the banner and online; null otherwise.
+     * It opens on the banner as the page holds it (a peer's change meanwhile is its stale), shares an equal gallery medium's
+     * object, and its save or removal has the page's banner follow.
+     */
+    fun bannerEditor(pictures: me.raddatz.veyq.mobile.memories.banner.BannerWrite.Pictures): me.raddatz.veyq.mobile.memories.banner.BannerEditor? {
+        if (!current.editsBanner) return null
+        val openedWith = current.facts?.bannerSlots ?: me.raddatz.veyq.mobile.memories.banner.Banner.Slots.NONE
+        return me.raddatz.veyq.mobile.memories.banner.BannerEditor(
+            openedWith.blobId != null, pictures,
+            write = { picked, progress -> door.setBanner(openedWith, picked, listed?.items.orEmpty(), progress).also { factsChanged() } },
+            removeBanner = { door.removeBanner(openedWith).also { factsChanged() } },
+        )
+    }
+
     // ---- a medium's capture time (ADR 0144 decision 3) ----
 
     /**
@@ -593,13 +647,41 @@ class GalleryModel(
         if (!known(mediaId)) return null
         if (current.offline != null) return readOnlyNotice
         return when (rights.deleteMedia) {
-            MemoryRights.DeleteMedia.ANY -> trashAny(mediaId)
+            MemoryRights.DeleteMedia.ANY -> if (asksBanner(mediaId)) {
+                _state.update { it.copy(bannerPicture = mediaId) }
+                null
+            } else trashAny(mediaId)
             MemoryRights.DeleteMedia.OWN -> {
                 askPurge(mediaId)
                 null
             }
             MemoryRights.DeleteMedia.NONE -> null
         }
+    }
+
+    /** Whether trashing [mediaId] asks about the banner first: whoever looks may set it, and its original is the banner's file. */
+    private fun asksBanner(mediaId: String): Boolean {
+        if (!rights.setBanner) return false
+        val item = row(mediaId)?.item ?: track(mediaId)?.let { t -> listed?.items?.firstOrNull { it.mediaId == t.mediaId } } ?: gpx(mediaId)
+        return item != null && me.raddatz.veyq.mobile.memories.banner.StoredMatch.isBannerPicture(current.facts?.banner, item)
+    }
+
+    /**
+     * The banner-picture question answered (A2): the medium trashed as any member's is (with its Undo), the banner kept —
+     * or, with [removeBanner], removed too (one `removeMemoryBanner`). Nothing where no question is asked.
+     */
+    suspend fun trashBannerPicture(removeBanner: Boolean): Notice? {
+        val mediaId = current.bannerPicture ?: return null
+        _state.update { it.copy(bannerPicture = null) }
+        if (current.offline != null) return readOnlyNotice
+        val said = trashAny(mediaId)
+        if (removeBanner) {
+            val out = runCatching { door.removeBanner(current.facts?.bannerSlots ?: me.raddatz.veyq.mobile.memories.banner.Banner.Slots.NONE) }
+                .getOrElse { me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome.Refused(null) }
+            factsChanged()
+            if (out != me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome.Done) return Notice(Msg.MEMORY_REFUSED_FAILED)
+        }
+        return said
     }
 
     private suspend fun trashAny(mediaId: String): Notice {
@@ -672,7 +754,7 @@ class GalleryModel(
     val purgeQuestion: Notice get() = Notice(Msg.MEMORY_DELETE_OWN_CONFIRM)
 
     /** The question declined: nothing is purged. */
-    fun cancelAsk() = _state.update { it.copy(purging = null) }
+    fun cancelAsk() = _state.update { it.copy(purging = null, bannerPicture = null) }
 
     /**
      * The purge asked, answered: the guest's own medium purged for good, out of the rows; why not ([State.said]: the tile

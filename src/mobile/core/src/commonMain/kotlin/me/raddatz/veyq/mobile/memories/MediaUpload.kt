@@ -218,8 +218,10 @@ object MediaUpload {
         val mediaId = NodeCreate.uuid(tenant.account)
         val wrappedMeta = metaTier?.let { MediaMetadata.sealMeta(suite, node.key, scopeId, mediaId, it) }
         val wrappedExif = exif?.let { MediaMetadata.sealExif(suite, node.key, scopeId, mediaId, it) }
+        // A1 of ADR 0144 decision 5: the node's video banner is this very file — the original is a new row on its object
+        val shared = sharedOriginal(suite, scopeId, node, mediaId, NodeCreate.uuid(tenant.account), original, type, sha256)
         val blobs = ArrayList<ApplicationBlobs.Outgoing>()
-        blobs += ApplicationBlobs.Outgoing(MemoryMedia.ORIGINAL, original.source.size, type, original.name, original.modifiedAt, sha256, original.source.read)
+        if (shared == null) blobs += ApplicationBlobs.Outgoing(MemoryMedia.ORIGINAL, original.source.size, type, original.name, original.modifiedAt, sha256, original.source.read)
         val tiers = listOfNotNull(
             derived.thumbnail?.let { MemoryMedia.THUMBNAIL to it },
             derived.preview?.let { MemoryMedia.PREVIEW to it },
@@ -231,11 +233,13 @@ object MediaUpload {
         }
         val total = blobs.sumOf { it.size }.coerceAtLeast(1).toDouble()
         progress(0.0)
-        val sent = ApplicationBlobs(tenant).reserveAndPumpAll(scopeId, mediaId, node.key, blobs) { progress(it / total) }
+        val sent = if (blobs.isEmpty()) emptyList() else ApplicationBlobs(tenant).reserveAndPumpAll(scopeId, mediaId, node.key, blobs) { progress(it / total) }
+        val first = if (shared == null) 1 else 0 // where the tiers' uploads start
         val item = MediaRequestItem(
-            mediaId = mediaId, nodeId = node.id, nodeEpoch = node.epoch, originalUploadId = sent[0].first,
+            mediaId = mediaId, nodeId = node.id, nodeEpoch = node.epoch, originalUploadId = if (shared == null) sent[0].first else null,
+            originalShared = shared?.request?.let { me.raddatz.veyq.mobile.api.memories.models.SharedBlob(it.sourceBlobId, it.blobId, it.wrappedBlobKey, it.wrappedBlobMeta) },
             derivatives = tiers.mapIndexed { i, (role, _) ->
-                MediaDerivativeUpload(if (role == MemoryMedia.THUMBNAIL) MediaDerivativeKind.THUMBNAIL else MediaDerivativeKind.PREVIEW, sent[i + 1].first)
+                MediaDerivativeUpload(if (role == MemoryMedia.THUMBNAIL) MediaDerivativeKind.THUMBNAIL else MediaDerivativeKind.PREVIEW, sent[i + first].first)
             },
             wrappedMeta = wrappedMeta, wrappedExif = wrappedExif,
         )
@@ -244,8 +248,29 @@ object MediaUpload {
         val res = r.body().results.singleOrNull() ?: throw ApplicationBlobs.UploadRefused("complete_mismatch")
         res.error?.let { throw ApplicationBlobs.UploadRefused(it) }
         // the server echoes the ids it stored: anything else is an id substituted under the seals
-        if (res.mediaId != mediaId || res.blobId != sent[0].second.blobId) throw ApplicationBlobs.UploadRefused("id_substituted")
+        if (res.mediaId != mediaId || res.blobId != (shared?.blobId ?: sent[0].second.blobId)) throw ApplicationBlobs.UploadRefused("id_substituted")
         return Result(Outcome.DONE, mediaId)
+    }
+
+    /**
+     * Where [node]'s video banner is [original]'s very file — its sealed `sha256` and its size (`StoredMatch.bannerOriginal`,
+     * ADR 0144 decision 5's A1) — the new medium [mediaId]'s original as a new row [blobId] on the banner's stored object,
+     * its `blob-meta` what an upload of the file would seal; null otherwise (the original is uploaded). A member's upload
+     * only: a guest never reaches here (`MediaUpload` is the member's door).
+     */
+    internal fun sharedOriginal(
+        suite: V1, scopeId: String, node: OpenNode, mediaId: String, blobId: String, original: Original, type: String, sha256: String,
+    ): me.raddatz.veyq.mobile.blob.SharedBlob.Shared? {
+        val meta = runCatching { me.raddatz.veyq.mobile.session.NodeMetaWrite.openForWrite(suite, scopeId, node.id, node.key, node.wrappedMeta) }.getOrNull()
+        val stored = me.raddatz.veyq.mobile.memories.banner.StoredMatch.bannerOriginal(
+            meta, node.id, node.key, sha256, me.raddatz.veyq.mobile.blob.SharedBlob.sealedByteSize(original.source.size),
+        ) ?: return null
+        return runCatching {
+            me.raddatz.veyq.mobile.blob.SharedBlob.share(
+                suite, scopeId, stored, node.key, mediaId, MemoryMedia.ORIGINAL, blobId,
+                me.raddatz.veyq.mobile.blob.SharedBlob.Meta(type, original.name, original.modifiedAt, sha256),
+            )
+        }.getOrNull()
     }
 
     /** The original's SHA-256 over its plaintext, read a frame at a time, base64url without padding (`digest.ts`). */
