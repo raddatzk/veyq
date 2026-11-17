@@ -1085,8 +1085,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     // ---- a person's profile (ADR 0144 decisions 11–13) ----
 
-    /** Person [userId]'s profile opened over what is on screen (core's `Shell.openPerson`). */
+    /**
+     * Person [userId]'s profile opened over what is on screen (core's `Shell.openPerson`). A profile opened anew reads its
+     * section anew and starts on the list (ADR 0144 decision 13: the choice is not stored), as Apple's and the bridge's
+     * do; only a rotation, or the way back from a Memory opened from it, keeps the section held below. Measured
+     * 2026-11-18 (phase 9's pass): held across opens, the same person's profile reopened on the Map, its rows as first read.
+     */
     fun openPerson(userId: String) {
+        personSection = null
         shellModel?.openPerson(userId)
     }
 
