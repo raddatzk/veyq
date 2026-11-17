@@ -3,7 +3,7 @@
 # never committed.
 name: Veyq
 options:
-  bundleIdPrefix: me.raddatz
+  bundleIdPrefix: app
   deploymentTarget:
     iOS: "26.0"
     macOS: "26.0"
@@ -58,7 +58,7 @@ targets:
           python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/app/Words.xcstrings"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: me.raddatz.veyq
+        PRODUCT_BUNDLE_IDENTIFIER: app.veyq
         # iOS shares the app group and a keychain access group with the share extension (ADR 0138); macOS has none yet.
         "CODE_SIGN_ENTITLEMENTS[sdk=iphone*]": Veyq/Veyq-iOS.entitlements
         PRODUCT_NAME: veyq
@@ -114,7 +114,7 @@ targets:
           python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/share/Words.xcstrings"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: me.raddatz.veyq.share
+        PRODUCT_BUNDLE_IDENTIFIER: app.veyq.share
         CODE_SIGN_ENTITLEMENTS: VeyqShare/VeyqShare.entitlements
         PRODUCT_NAME: VeyqShare
         GENERATE_INFOPLIST_FILE: YES

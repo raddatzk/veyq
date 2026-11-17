@@ -24,7 +24,7 @@ final class OfflineBackground {
     #if os(iOS)
     /// The continued-processing tasks' identifiers: the bundle id, a context, a unique suffix (`BGTaskRequest.h`); the
     /// Info.plist permits the wildcard.
-    nonisolated static let prefix = "me.raddatz.veyq.offline"
+    nonisolated static let prefix = "app.veyq.offline"
     private var registered: Bool?
     private var continued: BGContinuedProcessingTask?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid

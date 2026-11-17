@@ -13,7 +13,7 @@ import VeyqCore
 /// on the deck's own queue; the core calls from its player's lane.
 final class AVDeck: NSObject, AppleDeck, @unchecked Sendable {
     private let events: any DeckEvents
-    private let queue = DispatchQueue(label: "me.raddatz.veyq.music-deck")
+    private let queue = DispatchQueue(label: "app.veyq.music-deck")
     private var player: AVPlayer?
     private var loader: ReaderLoader?
     private var status: NSKeyValueObservation?

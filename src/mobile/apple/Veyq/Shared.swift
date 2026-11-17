@@ -4,7 +4,7 @@ import Foundation
 /// and trust marks, its recent and hidden lists — and, through the entitlements' first keychain access group, its
 /// Keychain items (`KeychainStore`). macOS has no extension yet and keeps the app's own.
 enum Shared {
-    static let appGroup = "group.me.raddatz.veyq"
+    static let appGroup = "group.app.veyq"
 
     /// The defaults both read: the app group's suite on iOS, the app's own on macOS. (`UserDefaults` is documented
     /// thread-safe; Swift does not know it as `Sendable`.)

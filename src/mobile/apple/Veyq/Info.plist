@@ -14,7 +14,7 @@
 	     a context and a unique suffix per request, permitted by the wildcard. -->
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
-		<string>me.raddatz.veyq.offline.*</string>
+		<string>app.veyq.offline.*</string>
 	</array>
 	<!-- A Memory's music plays on in the background and with the screen off (ADR 0142 decision 3); a Mac ignores it. -->
 	<key>UIBackgroundModes</key>

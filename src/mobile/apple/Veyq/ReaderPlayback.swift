@@ -23,7 +23,7 @@ final class Playback {
 
 /// Answers the player's requests for the original: its size and type, then each byte range, read a piece at a time.
 final class ReaderLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecked Sendable {
-    let queue = DispatchQueue(label: "me.raddatz.veyq.media-loader")
+    let queue = DispatchQueue(label: "app.veyq.media-loader")
     private let reader: RangeReader
     private let contentType: String
     /// The reads in flight by request, cancelled with it (touched on [queue] only).

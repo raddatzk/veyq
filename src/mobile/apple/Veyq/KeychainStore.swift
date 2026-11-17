@@ -19,9 +19,9 @@ import VeyqCore
 /// a shared one, where every new item goes. An item an installation from before it kept in the app's own group is moved
 /// there when the app reads it ([movesLegacy]; the extension cannot see it until then).
 final class KeychainStore: NSObject, KeychainBridge {
-    private let service = "me.raddatz.veyq"
+    private let service = "app.veyq"
     /// The shared group's name without the team prefix the entitlements put before it.
-    static let sharedGroupSuffix = "me.raddatz.veyq.shared"
+    static let sharedGroupSuffix = "app.veyq.shared"
     private let movesLegacy: Bool
 
     /// [movesLegacy]: the app moves an item it finds outside the shared group; the extension only reads.

@@ -30,10 +30,10 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
 3. **Nothing is stored until the target's own save.** Choosing a node opens its flow; the editor's save uploads the
    receipts and writes the entry as it does in the app; cancelling leaves nothing behind.
 
-4. **iOS shares what the app keeps with its share extension, and nothing more.** The app group `group.me.raddatz.veyq`
+4. **iOS shares what the app keeps with its share extension, and nothing more.** The app group `group.app.veyq`
    holds the device's defaults (its trusted-device records and trust marks, the recent and hidden lists): on iOS the app
    reads them from the group's suite, and an earlier installation's own defaults are moved there once. The Keychain items
-   live in a shared access group (`<team>.me.raddatz.veyq.shared`), the entitlements' first, so every new item goes there;
+   live in a shared access group (`<team>.app.veyq.shared`), the entitlements' first, so every new item goes there;
    an item an earlier installation kept in the app's own group is moved there when the app reads it. Both are bound to
    the developer team: no other vendor's app reaches them. macOS keeps the app's own until it has an extension.
 

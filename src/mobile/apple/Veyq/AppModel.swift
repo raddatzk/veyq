@@ -127,7 +127,7 @@ final class AppModel {
         let fm = FileManager.default
         guard var dir = try? fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return nil }
         #if os(macOS)
-        dir.appendPathComponent(Bundle.main.bundleIdentifier ?? "me.raddatz.veyq", isDirectory: true)
+        dir.appendPathComponent(Bundle.main.bundleIdentifier ?? "app.veyq", isDirectory: true)
         #endif
         dir.appendPathComponent("offline", isDirectory: true)
         do {

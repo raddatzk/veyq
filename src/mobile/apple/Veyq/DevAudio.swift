@@ -19,7 +19,7 @@ enum DevAudio {
     }
 
     #if DEBUG
-    private static let log = Logger(subsystem: "me.raddatz.veyq", category: "audio")
+    private static let log = Logger(subsystem: "app.veyq", category: "audio")
 
     private final class Events: NSObject, DeckEvents, @unchecked Sendable {
         var didEnd = false
