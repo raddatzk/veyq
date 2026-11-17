@@ -27,6 +27,8 @@ use crate::bridge::{self, Watch, wire::Answer, wire::ApplicationId, wire::Call, 
     wire::GridRow, wire::NodeAt, wire::ObjectRef, wire::Update, wire::Watched};
 use crate::drop::Sorted;
 use crate::home::{glib_escape, kind_icon};
+use crate::banner::BannerView;
+use crate::curation::PeopleLine;
 use crate::lightbox::Lightbox;
 use crate::memory_facts::FactsLine;
 use crate::memory_map_view::MemoryMapView;
@@ -59,6 +61,14 @@ struct Inner {
     hero: RefCell<Option<gtk::Widget>>,
     /// The facts line under the head: its date and its place.
     facts: FactsLine,
+    /// The banner above the head (ADR 0144 decision 4), and under the facts line the people line with *Add banner*.
+    banner: BannerView,
+    curation: gtk::Box,
+    people: PeopleLine,
+    add_banner: gtk::Button,
+    add_banner_content: adw::ButtonContent,
+    /// A delete of the banner's own picture asked (until the core drops its question).
+    banner_asked: Cell<bool>,
     /// Photos | Music | Map (Music where the gallery offers its Music view, and whether it is listed now); the photos'
     /// part (the chapters and the grid), the Music view's place and the Map view's, one of them shown.
     switch: adw::ToggleGroup,
@@ -134,10 +144,21 @@ impl MemoryPage {
         column.set_margin_bottom(MARGIN * 2);
         column.set_margin_start(MARGIN);
         column.set_margin_end(MARGIN);
+        let banner = BannerView::new(toasts);
+        column.append(banner.widget());
         let hero_slot = gtk::Box::new(gtk::Orientation::Vertical, 0);
         column.append(&hero_slot);
         let facts = FactsLine::new(window);
         column.append(facts.widget());
+        let curation = gtk::Box::builder().spacing(6).visible(false).build();
+        let people = PeopleLine::new(window);
+        curation.append(people.widget());
+        let add_content = adw::ButtonContent::builder().icon_name("image-x-generic-symbolic").label(words::memory_banner_add()).build();
+        let add_banner = gtk::Button::builder().child(&add_content).visible(false).build();
+        add_banner.add_css_class("flat");
+        add_banner.set_widget_name("memory-banner-add");
+        curation.append(&add_banner);
+        column.append(&curation);
         // the view switch (GNOME: a toggle group for a few views of one content, AdwToggleGroup); its toggles once the
         // gallery says whether it offers music
         let switch = adw::ToggleGroup::builder().halign(gtk::Align::Center).visible(false).build();
@@ -166,6 +187,12 @@ impl MemoryPage {
             hero_slot,
             hero: RefCell::new(None),
             facts,
+            banner,
+            curation,
+            people,
+            add_banner,
+            add_banner_content: add_content,
+            banner_asked: Cell::new(false),
             switch,
             music_listed: Cell::new(None),
             photos,
@@ -446,6 +473,13 @@ impl Inner {
             took
         });
         this.root.add_controller(target);
+        // *Add banner*: the banner's dialog
+        let weak = Rc::downgrade(this);
+        this.add_banner.connect_clicked(move |_| {
+            if let Some(inner) = weak.upgrade() {
+                inner.banner.edit(&inner.window);
+            }
+        });
         // the view switch: the Music view opened while it shows, closed when the photos show again
         let weak = Rc::downgrade(this);
         this.switch.connect_active_name_notify(move |_| {
@@ -761,6 +795,42 @@ impl Inner {
         let Some(s) = shown.as_ref() else { return };
         if let Some(gallery) = self.id.get() {
             self.facts.draw(s, gallery);
+            self.banner.draw(s.banner.as_ref(), gallery);
+            self.people.draw(s.people.as_ref(), gallery);
+        }
+        // *Add banner* where there is none, *Change banner* where there is one
+        self.add_banner.set_visible(s.edits_banner);
+        self.add_banner_content.set_label(&if s.banner.is_some() { words::memory_banner_change() } else { words::memory_banner_add() });
+        // set from what it shows, never read back (a hidden box's children read as hidden too)
+        self.curation.set_visible(s.people.is_some() || s.edits_banner);
+        // A2: a delete of the banner's own picture asks first; the banner stays unless *Remove the banner too*
+        if s.banner_question.is_none() {
+            self.banner_asked.set(false);
+        }
+        if let (Some(_), Some(gallery), false) = (&s.banner_question, self.id.get(), self.banner_asked.replace(s.banner_question.is_some())) {
+            eprintln!("veyq: the banner's picture asked about");
+            let ask = adw::AlertDialog::builder().heading(words::memory_banner_picture_title()).body(words::memory_banner_picture_notice()).build();
+            ask.add_responses(&[("cancel", &words::entry_cancel()), ("remove", &words::memory_banner_picture_remove()), ("trash", &words::memory_trash())]);
+            ask.set_response_appearance("remove", adw::ResponseAppearance::Destructive);
+            ask.set_response_appearance("trash", adw::ResponseAppearance::Destructive);
+            ask.set_close_response("cancel");
+            let toasts = self.toasts.clone();
+            ask.connect_response(None, move |_, response| {
+                if response == "cancel" {
+                    bridge::send(Call::GalleryCancelAsk { gallery });
+                    return;
+                }
+                let remove_banner = response == "remove";
+                let toasts = toasts.clone();
+                glib::spawn_future_local(async move {
+                    let answered = bridge::call(&Call::GalleryTrashBannerPicture { gallery, remove_banner }).await.map(|(a, _)| a);
+                    eprintln!("veyq: Gallery.TrashBannerPicture (remove the banner {remove_banner}) answered {answered:?}");
+                    if !matches!(answered, Ok(Answer::Trashed { .. }) | Ok(Answer::Done)) {
+                        header::say(&toasts, answered, "Gallery.TrashBannerPicture");
+                    }
+                });
+            });
+            ask.present(Some(&self.window));
         }
         self.list_views(s.music_view);
         // the offer ended (its window, or the undo): the toast goes with it — once a state showed the offer, so an update

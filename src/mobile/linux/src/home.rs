@@ -125,7 +125,7 @@ thread_local! {
 
 /// [icon] in a row's prefix, replaced by node [node_id]'s cover once the core names one (`Shell.RowCover`): the
 /// framed part of the stored picture, cut where the core says (`Cover.Cut`), as the chapters' rows and the phones'.
-fn cover_prefix(icon: gtk::Image, node_id: &str) -> gtk::Stack {
+pub fn cover_prefix(icon: gtk::Image, node_id: &str) -> gtk::Stack {
     let cover = gtk::Picture::builder().content_fit(gtk::ContentFit::Cover).can_shrink(true).width_request(64).height_request(36).valign(gtk::Align::Center).build();
     cover.set_overflow(gtk::Overflow::Hidden);
     cover.add_css_class("card");

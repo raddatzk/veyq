@@ -600,10 +600,32 @@ pub fn ask_name(
     confirm: &str,
     send: impl Fn(String, Box<dyn Fn(String, String)>) + Clone + 'static,
 ) {
+    ask_name_with(parent, heading, field, name, problem, confirm, None, send);
+}
+
+/// [ask_name] with [extra] (a row of the same boxed list, e.g. New Memory's *I was there*) under the name's field, kept
+/// with what it holds when the name is asked again.
+#[allow(clippy::too_many_arguments)]
+pub fn ask_name_with(
+    parent: &gtk::Widget,
+    heading: &str,
+    field: &str,
+    name: &str,
+    problem: Option<&str>,
+    confirm: &str,
+    extra: Option<gtk::ListBoxRow>,
+    send: impl Fn(String, Box<dyn Fn(String, String)>) + Clone + 'static,
+) {
     let entry = adw::EntryRow::builder().title(field).text(name).build();
     let rows = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
     rows.add_css_class("boxed-list");
     rows.append(&entry);
+    if let Some(row) = &extra {
+        if let Some(old) = row.parent().and_downcast::<gtk::ListBox>() {
+            old.remove(row);
+        }
+        rows.append(row);
+    }
     let ask = adw::AlertDialog::builder().heading(heading).extra_child(&rows).build();
     if let Some(p) = problem {
         ask.set_body(p);
@@ -623,9 +645,9 @@ pub fn ask_name(
         if response != "confirm" {
             return;
         }
-        let (at, heading, field, confirm, again_send) = (at.clone(), heading.clone(), field.clone(), confirm.clone(), send.clone());
+        let (at, heading, field, confirm, again_send, extra) = (at.clone(), heading.clone(), field.clone(), confirm.clone(), send.clone(), extra.clone());
         let again: Box<dyn Fn(String, String)> = Box::new(move |name, problem| {
-            ask_name(&at, &heading, &field, &name, Some(&problem), &confirm, again_send.clone());
+            ask_name_with(&at, &heading, &field, &name, Some(&problem), &confirm, extra.clone(), again_send.clone());
         });
         send(entry.text().to_string(), again);
     });

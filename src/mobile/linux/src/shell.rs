@@ -27,6 +27,7 @@ use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::C
 use crate::drop_box::DropBoxPage;
 use crate::file_page::FilePage;
 use crate::memories_map::MemoriesMap;
+use crate::person_page::PersonPage;
 use crate::memory_page::{self, MemoryPage};
 use crate::music_bar::MusicBar;
 use crate::header::{self, Header};
@@ -93,6 +94,8 @@ pub struct Shell {
     memory: RefCell<Option<MemoryPage>>,
     /// The Memories bar's Map tab while it is chosen ([MemoriesMap]); its map closes when it goes.
     memories_map: RefCell<Option<MemoriesMap>>,
+    /// A person's profile while the shell's state names one (`Shell.person`, ADR 0144 decision 11).
+    person: RefCell<Option<PersonPage>>,
     /// The content's navigation, where a Memory's lightbox is pushed over the page ([crate::lightbox]).
     nav: adw::NavigationView,
     /// "Offline — content as of …", revealed while the core shows the lists from the offline store.
@@ -246,6 +249,7 @@ impl Shell {
             drop_box: RefCell::new(None),
             memory: RefCell::new(None),
             memories_map: RefCell::new(None),
+            person: RefCell::new(None),
             nav,
             banner,
             gone_said: RefCell::new(Vec::new()),
@@ -445,11 +449,25 @@ impl Shell {
         create_memory.connect_activate(move |_, _| {
             let Some(s) = weak.upgrade() else { return };
             let Some(level) = s.level() else { return };
-            let toasts = s.toasts.clone();
-            header::ask_name(s.window.upcast_ref(), &words::memory_create_memory_title(), &words::node_name(), "", None, &words::folder_create(), move |name, again| {
+            let (toasts, window) = (s.toasts.clone(), s.window.clone());
+            glib::spawn_future_local(async move {
+                // *I was there* (ADR 0144 decision 2): offered ticked where the core says so, not remembered
+                let offered = matches!(bridge::call(&Call::ShellOffersWasThere { scope_id: level.scope_id.clone() }).await.map(|(a, _)| a),
+                    Ok(Answer::WasThere { offered: true }));
+                let check = gtk::CheckButton::builder().active(true).valign(gtk::Align::Center).build();
+                check.set_widget_name("was-there");
+                let row = offered.then(|| {
+                    let row = adw::ActionRow::builder().title(words::memory_participants_was_there()).subtitle(words::memory_participants_was_there_hint()).build();
+                    row.add_prefix(&check);
+                    row.set_activatable_widget(Some(&check));
+                    row.upcast::<gtk::ListBoxRow>()
+                });
+                eprintln!("veyq: new memory: I was there offered {offered}");
+                header::ask_name_with(window.upcast_ref(), &words::memory_create_memory_title(), &words::node_name(), "", None, &words::folder_create(), row, move |name, again| {
                 let (toasts, scope_id, parent_id) = (toasts.clone(), level.scope_id.clone(), level.parent_id.clone());
+                let was_there = offered && check.is_active();
                 glib::spawn_future_local(async move {
-                    match bridge::call(&Call::ShellCreateMemory { scope_id, parent_id, name: name.clone(), was_there: false }).await.map(|(a, _)| a) {
+                    match bridge::call(&Call::ShellCreateMemory { scope_id, parent_id, name: name.clone(), was_there }).await.map(|(a, _)| a) {
                         Ok(Answer::Created { node: Some(node), .. }) => {
                             eprintln!("veyq: new memory: made");
                             memory_page::open_node(&node);
@@ -460,6 +478,7 @@ impl Shell {
                         }
                         other => header::say(&toasts, other, "Shell.CreateMemory"),
                     }
+                });
                 });
             });
         });
@@ -669,7 +688,7 @@ impl Shell {
     /// uploaded; elsewhere a folder and a Pot) where it may create (`canCreateHere`).
     fn draw_new(&self) {
         let now = self.now.borrow();
-        let Some((_, shown)) = now.as_ref() else { return };
+        let Some((state, shown)) = now.as_ref() else { return };
         let menu = gio::Menu::new();
         for c in &shown.creates {
             let action = match c.create {
@@ -684,7 +703,8 @@ impl Shell {
             menu.append(Some(&said::key(&c.word)), Some(action));
         }
         self.new.set_menu_model(Some(&menu));
-        self.new.set_visible(shown.can_create_here);
+        // a person's profile creates nothing
+        self.new.set_visible(shown.can_create_here && state.shell.person.is_none());
     }
 
     fn draw_sidebar(&self) {
@@ -771,7 +791,9 @@ impl Shell {
         let Some((state, shown)) = now.as_ref() else { return };
         let shell = &state.shell;
         // the title as both apps head the screen: the open object, the chosen application, the folder, the space
-        let title = if let Some(o) = &shell.open_object {
+        let title = if shell.person.is_some() {
+            words::people_profile()
+        } else if let Some(o) = &shell.open_object {
             o.name.clone()
         } else if let Some(app) = shell.application {
             app_name(shown, app)
@@ -786,7 +808,15 @@ impl Shell {
         self.back.set_visible(shown.can_go_back);
         self.content_header.set_show_back_button(!shown.can_go_back);
 
-        self.draw_header(shown);
+        if shell.person.is_none() {
+            self.draw_header(shown);
+        } else {
+            // the profile is no node: no node's actions on it
+            self.header.borrow_mut().take();
+            while let Some(child) = self.header_bar.first_child() {
+                self.header_bar.remove(&child);
+            }
+        }
         // the Memories bar's Map tab stands while it is chosen and nothing is open; a page closing back onto the list asks
         // the rows' dates again (its own may have been edited)
         let memories = shell.application == Some(ApplicationId::Memories) && shell.open_object.is_none();
@@ -795,7 +825,22 @@ impl Shell {
             self.memories_map.borrow_mut().take();
         }
         let back_from_page = self.memory.borrow().is_some();
-        let body: gtk::Widget = match &shell.open_object {
+        if shell.person.is_none() {
+            self.person.borrow_mut().take();
+        }
+        let body: gtk::Widget = if let Some(user) = &shell.person {
+            self.pot.borrow_mut().take();
+            self.file.borrow_mut().take();
+            self.drop_box.borrow_mut().take();
+            self.memory.borrow_mut().take();
+            self.memories_map.borrow_mut().take();
+            let mut page = self.person.borrow_mut();
+            if page.as_ref().is_none_or(|p| p.user_id != *user) {
+                *page = None;
+                *page = Some(PersonPage::open(user, self.window.upcast_ref()));
+            }
+            page.as_ref().expect("set above").widget().clone().upcast()
+        } else { match &shell.open_object {
             Some(o) if o.kind == "EXPENSES_POT" => {
                 self.file.borrow_mut().take();
                 self.drop_box.borrow_mut().take();
@@ -926,7 +971,7 @@ impl Shell {
                     }
                 }
             }
-        };
+        } };
         let pot_open = self.pot.borrow().is_some();
         if !pot_open {
             self.add_entry.set_visible(false);
