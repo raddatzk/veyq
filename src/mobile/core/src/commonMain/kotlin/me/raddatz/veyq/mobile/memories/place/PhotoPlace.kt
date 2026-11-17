@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import me.raddatz.veyq.mobile.map.LatLng
 import me.raddatz.veyq.mobile.map.ResolvedPlace
+import me.raddatz.veyq.mobile.memories.ListedTierWrite
 import me.raddatz.veyq.mobile.memories.MediaDetails
 import me.raddatz.veyq.mobile.memories.MediaMetadata
 import me.raddatz.veyq.mobile.memories.MemoryMedia
@@ -60,9 +61,9 @@ object PhotoPlace {
     }
 
     /**
-     * The backfill's read-modify-write over [send] (the seam a test plays a server through): [place] sealed into the tier
-     * as listed; on a `409 stale_revision` once more on the server's tier — where that one already carries a name, nothing
-     * is written. Whether the tier holds a name now.
+     * The backfill's read-modify-write over [send] (the seam a test plays a server through, [ListedTierWrite.write]):
+     * [place] sealed into the tier as listed; on a `409 stale_revision` once more on the server's tier — where that one
+     * already carries a name, nothing is written. Whether the tier holds a name now.
      */
     suspend fun backfill(
         listed: NodeMetaWrite.State,
@@ -70,22 +71,13 @@ object PhotoPlace {
         seal: (JsonObject) -> String?,
         place: ResolvedPlace,
         send: suspend (wrappedMeta: String?, metaRevision: Long) -> NodeMetaWrite.Answer,
-    ): TrackLabel.Outcome {
-        var state = listed
-        repeat(TrackLabel.MAX_ATTEMPTS) {
-            val raw = try {
-                open(state.wrappedMeta)
-            } catch (_: NodeMetaWrite.Unreadable) {
-                return TrackLabel.Outcome.Failed("meta_unreadable")
-            }
-            val next = backfilled(raw, place) ?: return TrackLabel.Outcome.Done(null)
-            when (val a = send(seal(next), state.metaRevision)) {
-                NodeMetaWrite.Answer.Taken -> return TrackLabel.Outcome.Done(place.name)
-                is NodeMetaWrite.Answer.Stale -> state = a.current
-                is NodeMetaWrite.Answer.Refused -> return TrackLabel.Outcome.Failed(a.code ?: "status_${a.status}")
-            }
-        }
-        return TrackLabel.Outcome.Failed("stale_revision")
+    ): TrackLabel.Outcome = when (
+        val r = ListedTierWrite.write(listed, open, seal, own = { null }, edit = { backfilled(it, place) }, send = send)
+    ) {
+        ListedTierWrite.Result.Done -> TrackLabel.Outcome.Done(place.name)
+        // a name is there already (this tier's or a peer's): nothing written; no field of its own conflicts
+        ListedTierWrite.Result.Unchanged, is ListedTierWrite.Result.Conflict -> TrackLabel.Outcome.Done(null)
+        is ListedTierWrite.Result.Failed -> TrackLabel.Outcome.Failed(r.code)
     }
 
     /**

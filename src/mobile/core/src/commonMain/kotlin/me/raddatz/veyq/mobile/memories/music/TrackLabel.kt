@@ -1,17 +1,10 @@
 package me.raddatz.veyq.mobile.memories.music
 
-import io.ktor.client.statement.bodyAsText
-import kotlinx.coroutines.CancellationException
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import me.raddatz.veyq.mobile.api.memories.apis.MediaApi
-import me.raddatz.veyq.mobile.api.memories.models.MediaMetaUpdate
-import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.V1
-import me.raddatz.veyq.mobile.crypto.b64
-import me.raddatz.veyq.mobile.crypto.unb64
+import me.raddatz.veyq.mobile.memories.ListedTierWrite
 import me.raddatz.veyq.mobile.memories.MediaMetadata
 import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.session.NodeMetaWrite
@@ -34,8 +27,8 @@ object TrackLabel {
     /** A track's own name's cap in UTF-8 bytes (the web's `TRACK_NAME_MAX_BYTES`). */
     const val NAME_MAX_BYTES = 120
 
-    /** How often the write is sent at most: once, and once more on the tier a `409 stale_revision` handed back. */
-    const val MAX_ATTEMPTS = 2
+    /** How often the write is sent at most ([ListedTierWrite.MAX_ATTEMPTS]). */
+    const val MAX_ATTEMPTS = ListedTierWrite.MAX_ATTEMPTS
 
     /** The activities a track may be given — the web's `TRACK_ACTIVITIES`, as sealed tokens (each said by its own words). */
     val ACTIVITIES: List<String> = listOf(
@@ -114,23 +107,13 @@ object TrackLabel {
         return JsonObject(fields)
     }
 
-    /** A listed tier opened raw for a write: an absent one is a fresh `{v:1}`; one that does not open or parse throws. */
-    fun openRaw(suite: V1, scopeId: String, mediaId: String, key: ByteArray, wrapped: String?): JsonObject {
-        if (wrapped == null) return JsonObject(mapOf("v" to JsonPrimitive(1)))
-        val parsed = runCatching {
-            Json.parseToJsonElement(suite.openField(context(scopeId, mediaId), key, unb64(wrapped)).decodeToString()) as? JsonObject
-        }.getOrNull() ?: throw NodeMetaWrite.Unreadable()
-        val v = parsed["v"] as? JsonPrimitive
-        return if (v != null && !v.isString) parsed else JsonObject(LinkedHashMap<String, JsonElement>(parsed).also { it["v"] = JsonPrimitive(1) })
-    }
+    /** A listed tier opened raw for a write ([ListedTierWrite.openRaw]). */
+    fun openRaw(suite: V1, scopeId: String, mediaId: String, key: ByteArray, wrapped: String?): JsonObject =
+        ListedTierWrite.openRaw(suite, scopeId, mediaId, key, wrapped)
 
-    /** [raw] sealed as the medium's listed tier; null (no tier) where nothing but its version is in it (the web's). */
-    fun seal(suite: V1, scopeId: String, mediaId: String, key: ByteArray, raw: JsonObject): String? {
-        if (raw.keys.none { it != "v" }) return null
-        return b64(suite.sealField(context(scopeId, mediaId), key, raw.toString().encodeToByteArray()))
-    }
-
-    private fun context(scopeId: String, mediaId: String) = Context("media-meta", "scopeId" to scopeId, "mediaId" to mediaId)
+    /** [raw] sealed as the medium's listed tier ([ListedTierWrite.seal]); null where nothing but its version is in it. */
+    fun seal(suite: V1, scopeId: String, mediaId: String, key: ByteArray, raw: JsonObject): String? =
+        ListedTierWrite.seal(suite, scopeId, mediaId, key, raw)
 
     /**
      * The rename's read-modify-write over [send]: [listed] the tier as listed, [open] and [seal] the medium's (raw), the
@@ -173,7 +156,7 @@ object TrackLabel {
         )
     }
 
-    /** The read-modify-write both share: [edit] on the tier, re-run once on a stale one unless a peer changed [own]. */
+    /** The read-modify-write both share ([ListedTierWrite.write]): [edit] on the tier, a peer's change to [own] a conflict. */
     private suspend fun loop(
         listed: NodeMetaWrite.State,
         open: (String?) -> JsonObject,
@@ -183,28 +166,10 @@ object TrackLabel {
         edit: (JsonObject) -> JsonObject,
         done: Outcome,
         send: suspend (wrappedMeta: String?, metaRevision: Long) -> NodeMetaWrite.Answer,
-    ): Outcome {
-        val listedOwn = try {
-            own(open(listed.wrappedMeta))
-        } catch (_: NodeMetaWrite.Unreadable) {
-            return Outcome.Failed("meta_unreadable")
-        }
-        var state = listed
-        for (attempt in 0 until MAX_ATTEMPTS) {
-            val raw = try {
-                open(state.wrappedMeta)
-            } catch (_: NodeMetaWrite.Unreadable) {
-                return Outcome.Failed("meta_unreadable")
-            }
-            // a peer changed what this edit changes meanwhile: theirs stays, and this one is said to have lost
-            if (attempt > 0 && own(raw) != listedOwn) return conflict(raw)
-            when (val a = send(seal(edit(raw)), state.metaRevision)) {
-                NodeMetaWrite.Answer.Taken -> return done
-                is NodeMetaWrite.Answer.Stale -> state = a.current
-                is NodeMetaWrite.Answer.Refused -> return Outcome.Failed(a.code ?: "status_${a.status}")
-            }
-        }
-        return Outcome.Failed("stale_revision")
+    ): Outcome = when (val r = ListedTierWrite.write(listed, open, seal, own, edit, send)) {
+        ListedTierWrite.Result.Done, ListedTierWrite.Result.Unchanged -> done
+        is ListedTierWrite.Result.Conflict -> conflict(r.raw)
+        is ListedTierWrite.Result.Failed -> Outcome.Failed(r.code)
     }
 
     /** Music track [item] renamed to [name] (null or blank: named by its file again) on the tenant's server. */
@@ -215,10 +180,7 @@ object TrackLabel {
     suspend fun relabel(tenant: TenantSession, item: MemoryMedia.Item, label: Label): Outcome =
         onServer(tenant, item) { listed, open, seal, send -> relabel(listed, open, seal, label, send) }
 
-    /**
-     * [run] over [item]'s listed tier on the tenant's server: opened and sealed raw under the medium's key, sent with
-     * `updateMediaMeta` at its node's epoch — the door [MemoryMedia]'s place-name backfill uses too.
-     */
+    /** [run] over [item]'s listed tier on the tenant's server ([ListedTierWrite.onServer]). */
     internal suspend fun onServer(
         tenant: TenantSession,
         item: MemoryMedia.Item,
@@ -226,27 +188,5 @@ object TrackLabel {
             NodeMetaWrite.State, (String?) -> JsonObject, (JsonObject) -> String?,
             suspend (wrappedMeta: String?, metaRevision: Long) -> NodeMetaWrite.Answer,
         ) -> Outcome,
-    ): Outcome {
-        val suite = tenant.account.suite
-        val node = tenant.node(item.scopeId, item.nodeId) ?: return Outcome.Failed("node_unreadable")
-        val api = MediaApi(tenant.base, tenant.account.http)
-        return run(
-            NodeMetaWrite.State(item.wrappedMeta, item.metaRevision),
-            { openRaw(suite, item.scopeId, item.mediaId, item.key, it) },
-            { seal(suite, item.scopeId, item.mediaId, item.key, it) },
-        ) { wrapped, revision ->
-            try {
-                val r = tenant.account.respond { api.updateMediaMeta(item.scopeId, item.mediaId, MediaMetaUpdate(node.epoch, revision, wrapped)) }
-                if (r.success) return@run NodeMetaWrite.Answer.Taken
-                val body = runCatching { r.response.bodyAsText() }.getOrDefault("")
-                if (r.status == 409) NodeMetaWrite.staleOf(body)?.let { return@run NodeMetaWrite.Answer.Stale(it) }
-                val code = runCatching { ((Json.parseToJsonElement(body) as JsonObject)["code"] as? JsonPrimitive)?.content }.getOrNull()
-                NodeMetaWrite.Answer.Refused(r.status, code)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                NodeMetaWrite.Answer.Refused(-1, null)
-            }
-        }
-    }
+    ): Outcome = ListedTierWrite.onServer(tenant, item, Outcome.Failed("node_unreadable"), run)
 }
