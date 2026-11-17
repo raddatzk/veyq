@@ -622,18 +622,30 @@ class ShellModel(
 
     /**
      * A Memory or a chapter ([kind], `MemoryCreate.offered` where the shell is) named [name] made in [scopeId] under
-     * [parentId] (null: the space's top): the node made, to open, or why not; the lists are read anew.
+     * [parentId] (null: the space's top): the node made, to open, or why not; the lists are read anew. [wasThere]: the
+     * maker listed as a Memory's participant from its birth, where [offersWasThere] (ADR 0144 decision 2).
      */
-    suspend fun createMemoryNode(scopeId: String, parentId: String?, kind: String, name: String): me.raddatz.veyq.mobile.memories.MemoryCreate.Made {
+    suspend fun createMemoryNode(scopeId: String, parentId: String?, kind: String, name: String, wasThere: Boolean = false): me.raddatz.veyq.mobile.memories.MemoryCreate.Made {
         if (!online) return me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, readOnly)
-        val made = me.raddatz.veyq.mobile.memories.MemoryCreate.create(tenant, scopeId, parentId, kind, name)
+        val made = me.raddatz.veyq.mobile.memories.MemoryCreate.create(tenant, scopeId, parentId, kind, name, wasThere)
         refresh()
         return made
     }
 
     /** A Memory [name] made in [scopeId] under [parentId] (null: the space's top); the node made, to open, or why not. */
     suspend fun createMemory(scopeId: String, parentId: String?, name: String): me.raddatz.veyq.mobile.memories.MemoryCreate.Made =
-        createMemoryNode(scopeId, parentId, me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, name)
+        createMemory(scopeId, parentId, name, wasThere = false)
+
+    /**
+     * [createMemory] with *I was there* ticked or not ([wasThere], ADR 0144 decision 2). An overload, not a default: Swift
+     * sees no Kotlin default, and the Apple app calls the three-argument form.
+     */
+    suspend fun createMemory(scopeId: String, parentId: String?, name: String, wasThere: Boolean): me.raddatz.veyq.mobile.memories.MemoryCreate.Made =
+        createMemoryNode(scopeId, parentId, me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, name, wasThere)
+
+    /** Whether New Memory in [scopeId] offers *I was there*, ticked (ADR 0144 decision 2: a tenant or group scope). */
+    fun offersWasThere(scopeId: String): Boolean =
+        me.raddatz.veyq.mobile.memories.MemoryCreate.offersWasThere(me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, tenant.scopeKind(scopeId))
 
     /** Node [nodeId]'s cover as a list row draws it, the host holding the frame [held] (`NodeCover.row`); null: none. */
     suspend fun rowCover(nodeId: String, held: String?): NodeCover.Row? = runCatching { NodeCover.row(tenant, nodeId, held) }.getOrNull()
@@ -682,6 +694,13 @@ class ShellModel(
                 me.raddatz.veyq.mobile.memories.place.MemoryFacts.reconcile(tenant, ref.scopeId, ref.nodeId, items, placeNames)
             override suspend fun placeName(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, mayWrite: Boolean, slideshow: Boolean) =
                 me.raddatz.veyq.mobile.memories.place.PhotoPlace.resolve(tenant, item, placeNames, mayWrite, slideshow)
+            override val personal = tenant.scopeKind(ref.scopeId) == "PERSONAL"
+            override suspend fun members() = tenant.scopeMembers(ref.scopeId)
+            override suspend fun setParticipants(wanted: List<String>, openedWith: List<String>) =
+                me.raddatz.veyq.mobile.memories.Participants.set(tenant, ref.scopeId, ref.nodeId, wanted, openedWith).also { runCatching { refresh() } }
+            override suspend fun captureTime(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, overrideMs: Long?) =
+                if (overrideMs == null) me.raddatz.veyq.mobile.memories.CaptureTime.reset(tenant, item)
+                else me.raddatz.veyq.mobile.memories.CaptureTime.set(tenant, item, overrideMs)
         }, access = memoryAccess(ref), now = now, music = music)
 
     /** Who looks at Memory or chapter [ref] from this shell: a member, as the tenant's switches and the folder say. */

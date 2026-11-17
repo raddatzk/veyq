@@ -39,15 +39,18 @@ class PlaceNames(val maps: MapServices, val lang: () -> String) {
  * date or a fixed place a peer set is never overwritten.
  */
 object MemoryFacts {
-    /** A node's date and place as shown: each null where none is set or the blob does not open. */
-    data class Facts(val date: MemoryDate?, val location: MemoryLocation?) {
+    /**
+     * A node's date and place as shown: each null where none is set or the blob does not open; and its [participants]
+     * (ADR 0144 decision 1: user ids, none where absent or the blob does not open), read from the same blob.
+     */
+    data class Facts(val date: MemoryDate?, val location: MemoryLocation?, val participants: List<String> = emptyList()) {
         /** The place's name where it is materialized (not pending): the facts line's place. */
         val placeName: String? get() = location?.name?.takeIf { it.isNotEmpty() }
 
         companion object {
             val NONE = Facts(null, null)
 
-            fun of(meta: JsonObject) = Facts(MemoryDate.of(meta), MemoryLocation.of(meta))
+            fun of(meta: JsonObject) = Facts(MemoryDate.of(meta), MemoryLocation.of(meta), me.raddatz.veyq.mobile.memories.Participants.read(meta))
         }
     }
 
@@ -169,8 +172,11 @@ object MemoryFacts {
 
     // ---- on the tenant's server ----
 
-    /** [edit] written to node [nodeId]'s blob on the tenant's server: a stale epoch reads the node anew and tries again. */
-    private suspend fun onServer(
+    /**
+     * [edit] written to node [nodeId]'s blob on the tenant's server: a stale epoch reads the node anew and tries again (the
+     * participants' write too, `Participants.set`, with its merge as the edit).
+     */
+    internal suspend fun onServer(
         tenant: TenantSession, scopeId: String, nodeId: String,
         edit: (open: (String?) -> JsonObject, base: NodeMetaWrite.State) -> suspend (JsonObject) -> JsonObject?,
     ): Outcome {

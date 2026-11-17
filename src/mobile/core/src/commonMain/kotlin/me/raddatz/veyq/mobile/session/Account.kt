@@ -1423,6 +1423,9 @@ class TenantSession internal constructor(
 
     override suspend fun spaces(): List<SpaceRef> = scopes.map { SpaceRef(it.summary.id, it.summary.kind.value, it.name) }
 
+    /** The kind of open scope [scopeId] (`TENANT`, `GROUP`, `PERSONAL`), or null where it is not open here. */
+    internal fun scopeKind(scopeId: String): String? = scopes.firstOrNull { it.summary.id == scopeId }?.summary?.kind?.value
+
     private var tree: Map<String, List<OpenNode>>? = null
 
     /**

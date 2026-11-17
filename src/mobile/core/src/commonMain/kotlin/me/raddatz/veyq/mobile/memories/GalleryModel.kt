@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -148,6 +150,19 @@ class GalleryModel(
          * name sealed, or null. Absent: none.
          */
         suspend fun placeName(item: MemoryMedia.Item, mayWrite: Boolean, slideshow: Boolean): String? = null
+
+        /** The node is in a personal scope, which has no participants (ADR 0144 decision 1). Absent: not. */
+        val personal: Boolean get() = false
+
+        /** The scope's current members (`TenantSession.scopeMembers`); null where they did not read. Absent: none read. */
+        suspend fun members(): List<me.raddatz.veyq.mobile.session.Person>? = null
+
+        /** The node's participants set to [wanted], the editor having opened with [openedWith] (`Participants.set`). Absent: refused. */
+        suspend fun setParticipants(wanted: List<String>, openedWith: List<String>): me.raddatz.veyq.mobile.memories.place.MemoryFacts.Outcome =
+            me.raddatz.veyq.mobile.memories.place.MemoryFacts.Outcome.Refused(-1, null)
+
+        /** Medium [item]'s capture time corrected to [overrideMs], or reset for null (`CaptureTime`). Absent: refused. */
+        suspend fun captureTime(item: MemoryMedia.Item, overrideMs: Long?): CaptureTime.Outcome = CaptureTime.Outcome.Failed("refused")
     }
 
     /** What a trash or a restore of a medium came to (`deleteMedia`, `restoreMedia`). */
@@ -211,6 +226,11 @@ class GalleryModel(
         val tracks: List<MemoryMedia.Item> = emptyList(),
         /** The node's date and place as sealed (the header's facts line, ADR 0143 D5); null before they read. */
         val facts: me.raddatz.veyq.mobile.memories.place.MemoryFacts.Facts? = null,
+        /**
+         * The header's people line (ADR 0144 decision 1): where the participants are shown — a member's, on a Memory, not
+         * in a personal scope, online (decision 7) — and somebody is listed or whoever looks may add someone; null otherwise.
+         */
+        val people: Participants.Line? = null,
     ) {
         /** The `auto` range the node's media give now (the date editor's preview, and the header's before one is sealed). */
         val autoRange: me.raddatz.veyq.mobile.memories.place.MemoryDate
@@ -326,6 +346,9 @@ class GalleryModel(
 
     private val reading = Mutex()
 
+    /** The scope's current members as last read (the people line's names, the picker's candidates); null: not read. */
+    private var members: List<me.raddatz.veyq.mobile.session.Person>? = null
+
     init {
         scope.launch { door.revisions.collect { read() } }
         music?.let { m ->
@@ -334,6 +357,10 @@ class GalleryModel(
             }
         }
         scope.launch { door.uploaded.collect { if (it == node.nodeId) read() } }
+        // the people line follows the participants sealed, the rights and going offline or online
+        scope.launch {
+            state.map { Triple(it.facts?.participants, it.rights, it.offline) }.distinctUntilChanged().collect { people() }
+        }
         scope.launch {
             door.online.collect { on ->
                 if (!on) _state.update { it.offline(it.offline ?: me.raddatz.veyq.mobile.session.OfflineAsOf(listedAt)) }
@@ -416,6 +443,45 @@ class GalleryModel(
         val items = listed?.items?.filter { it.mediaId !in pending } ?: return@withLock
         if (runCatching { door.settle(items) }.getOrDefault(false)) {
             runCatching { door.facts() }.getOrNull()?.let { f -> _state.update { it.copy(facts = f) } }
+        }
+    }
+
+    // ---- the participants (ADR 0144 decision 1) ----
+
+    /** Whether the participants are shown here: a member's right on a Memory, not a personal scope, online (decision 7). */
+    private val showsParticipants: Boolean get() = current.rights.participants && !door.personal && current.offline == null
+
+    /** The people line drawn anew: the members read once where somebody is to be named. */
+    private suspend fun people() {
+        if (!showsParticipants) return _state.update { it.copy(people = null) }
+        val ids = current.facts?.participants.orEmpty()
+        if (members == null && ids.isNotEmpty()) members = runCatching { door.members() }.getOrNull()
+        _state.update { it.copy(people = Participants.line(ids, members, it.rights.editMeta)) }
+    }
+
+    /**
+     * The participants picker over the scope's current members, where they are shown and whoever looks may edit the
+     * node's meta (online); null otherwise. Its save has the header's line follow.
+     */
+    fun participantsPicker(): ParticipantsPicker? {
+        if (!showsParticipants || !current.rights.editMeta) return null
+        return ParticipantsPicker(
+            current.facts?.participants.orEmpty(),
+            members = { door.members()?.also { members = it } },
+        ) { wanted, openedWith -> door.setParticipants(wanted, openedWith).also { factsChanged() } }
+    }
+
+    // ---- a medium's capture time (ADR 0144 decision 3) ----
+
+    /**
+     * Medium [mediaId]'s capture-time editor, where whoever looks may write its meta and online; null otherwise (or where
+     * the medium is not in the gallery). Each save has the gallery read anew, so it re-orders by the effective time.
+     */
+    fun captureTimeEditor(mediaId: String): CaptureTimeEditor? {
+        if (!current.rights.editMeta || current.offline != null) return null
+        val item = row(mediaId)?.item ?: return null
+        return CaptureTimeEditor(item.meta?.capturedAt, item.meta?.capturedAtOverride) { overrideMs ->
+            runCatching { door.captureTime(item, overrideMs) }.getOrElse { CaptureTime.Outcome.Failed("failed") }.also { reload() }
         }
     }
 
@@ -996,6 +1062,9 @@ class Lightbox internal constructor(
 
     /** Medium [mediaId]'s details ([GalleryModel]'s reads: the EXIF tier once per medium, the uploaders once per gallery). */
     suspend fun details(mediaId: String): Details? = gallery.details(mediaId)
+
+    /** Medium [mediaId]'s capture-time editor in its details ([GalleryModel.captureTimeEditor]); null where not offered. */
+    fun captureTimeEditor(mediaId: String): CaptureTimeEditor? = gallery.captureTimeEditor(mediaId)
 
     /**
      * Medium [mediaId]'s place name resolved once, when its details show (ADR 0143 D7) — never while the slideshow runs;

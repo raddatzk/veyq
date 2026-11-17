@@ -17,11 +17,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
 /**
- * The cross-surface fixture (ADR 0143 D5, D8): a node's sealed meta as the web seals it — its date, its place and its
- * cover, beside a participants list and a field no surface here knows — and a GPX track's listed tier as the web seals it
- * (`trackName`, `trackActivity`, a newer client's field). The core reads each as the web wrote it, and after a date write,
- * a place write and a label edit **every other field is byte for byte as it was, in its place**: the write re-seals the
- * blob it opened raw, never one rebuilt from what it parsed.
+ * The cross-surface fixture (ADR 0143 D5, D8; ADR 0144): a node's sealed meta as the web seals it — its date, its place,
+ * its cover, its participants and its banner, beside a field no surface here knows — and a medium's listed tier as the
+ * web seals it (a GPX track's `trackName`, `trackActivity`; a photo's `capturedAtOverride` and `placeName`; a newer
+ * client's field). The core reads each as the web wrote it, and after a date write, a place write, a participants write,
+ * a label edit and a capture-time write **every other field is byte for byte as it was, in its place**: the write
+ * re-seals the blob it opened raw, never one rebuilt from what it parsed.
  */
 class CrossSurfaceFixtureTest {
     private val m = PlayedMeta()
@@ -33,7 +34,12 @@ class CrossSurfaceFixtureTest {
         """"cover":{"source":{"kind":"upload","ref":{"blobId":"7f3a9c1e-0b2d-4c5e-8f60-112233445566","chunkCount":1,"byteSize":48231,""" +
         """"wrappedBlobKey":"AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=","ownerId":"5c09e000-0000-4000-8000-0000000000d1","role":"COVER"}},""" +
         """"crop":{"x":0,"y":0.125,"width":1,"height":0.75}},""" +
-        """"participants":{"userIds":["u1","u2"]},"futureField":{"a":[1,"x",null],"b":{"c":true},"n":2.5e-7}}"""
+        """"participants":{"userIds":["u1","u2"],"futureSub":1},""" +
+        """"banner":{"medium":"video","blob":{"blobId":"0b1c2d3e-4f50-4617-8899-aabbccddeeff","chunkCount":3,"byteSize":9437184,""" +
+        """"wrappedBlobKey":"AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA="},"poster":{"blobId":"1c2d3e4f-5061-4728-899a-abbccddeeff0",""" +
+        """"chunkCount":1,"byteSize":81234,"wrappedBlobKey":"AgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICE="},"type":"video/mp4",""" +
+        """"sha256":"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08","frame":"fit","focal":{"x":0.5,"y":0.4375}},""" +
+        """"futureField":{"a":[1,"x",null],"b":{"c":true},"n":2.5e-7}}"""
 
     private fun fieldsOf(json: String) = Json.parseToJsonElement(json) as JsonObject
 
@@ -148,5 +154,45 @@ class CrossSurfaceFixtureTest {
         }
         assertEquals(TrackLabel.Outcome.Conflict("Alps day 2", "cycling") to 1, relabel(webTrackTier.replace("hiking", "cycling")), "a peer's activity")
         assertEquals(TrackLabel.Outcome.Done("Mine") to 2, relabel(webTrackTier.replace("1731000000000", "1731000000001")), "a peer's capture time merges")
+    }
+
+    @Test
+    fun theCoreReadsTheWebsParticipants() = assertEquals(listOf("u1", "u2"), MemoryFacts.Facts.of(m.open(m.seal(webMeta))).participants)
+
+    /** A participants write keeps the date, the place, the cover, the banner and the unknown field byte for byte. */
+    @Test
+    fun aParticipantsWriteKeepsEveryOtherFieldByteForByte() = runTest {
+        val base = NodeMetaWrite.State(m.seal(webMeta), 3)
+        val server = PlayedMeta.Server()
+        me.raddatz.veyq.mobile.memories.Participants.write(base, m.open, m.sealMeta, listOf("u1", "u2", "u3"), listOf("u1", "u2"), server::send)
+        val after = m.opened(server.sent.single().first)
+        assertKept(fieldsOf(webMeta), after, me.raddatz.veyq.mobile.memories.Participants.FIELD)
+        assertEquals("""{"userIds":["u1","u2","u3"],"futureSub":1}""", after.getValue("participants").toString(), "the sub-object's own unknown field kept")
+    }
+
+    /** A photo's listed tier as the web seals it: a correction, a resolved place name, a track name and a newer client's field. */
+    private val webPhotoTier = """{"v":1,"w":4032,"h":3024,"capturedAt":1626372245000,"capturedAtSource":"exif",""" +
+        """"capturedAtOverride":1626372240000,"gpsLat":48.1371,"gpsLng":11.5754,"placeName":"München","placeLevel":"city",""" +
+        """"trackName":"Isar","futurePhotoField":{"x":[1,2.5e-7],"y":null}}"""
+
+    /** Bite (d): a time write re-sealed from the parsed tier (`MemoryMedia.Meta`) loses the unknown field — red here. */
+    @Test
+    fun aCaptureTimeWriteAndItsResetKeepEveryOtherFieldOfTheTierByteForByte() = runTest {
+        val listed = NodeMetaWrite.State(sealTier(webPhotoTier), 6)
+        val open: (String?) -> JsonObject = { TrackLabel.openRaw(m.suite, m.scopeId, mediaId, m.key, it) }
+        val seal: (JsonObject) -> String? = { TrackLabel.seal(m.suite, m.scopeId, mediaId, m.key, it) }
+        assertEquals(1626372240000L, MemoryMedia.openMeta(m.suite, m.scopeId, mediaId, m.key, listed.wrappedMeta)?.capturedAtOverride)
+        val before = fieldsOf(webPhotoTier)
+        val set = mutableListOf<String?>()
+        me.raddatz.veyq.mobile.memories.CaptureTime.write(listed, open, seal, 1700000040000L) { w, _ -> set += w; NodeMetaWrite.Answer.Taken }
+        val corrected = openTier(set.single()!!)
+        assertEquals(before.keys.toList(), corrected.keys.toList(), "every field kept, in its place")
+        for (k in before.keys - "capturedAtOverride") assertEquals(before.getValue(k).toString(), corrected.getValue(k).toString(), k)
+        assertEquals("1700000040000", corrected.getValue("capturedAtOverride").toString())
+        val reset = mutableListOf<String?>()
+        me.raddatz.veyq.mobile.memories.CaptureTime.write(listed, open, seal, null) { w, _ -> reset += w; NodeMetaWrite.Answer.Taken }
+        val back = openTier(reset.single()!!)
+        assertEquals(before.keys.toList() - "capturedAtOverride", back.keys.toList())
+        for (k in back.keys) assertEquals(before.getValue(k).toString(), back.getValue(k).toString(), k)
     }
 }

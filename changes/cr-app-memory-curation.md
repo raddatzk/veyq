@@ -302,7 +302,7 @@ reached only when it was open as the device went offline; then it stays, naming 
   files; the decisions index lists 0144. Measured: all 72 `scripts/validate_*.py` but guard_gaps exit 0
   (`for g in scripts/validate_*.py; do /usr/bin/python3 $g; done`, guard_gaps skipped).
 
-- [ ] **2 participants and capture time (core)** — D1, D2, D3: `Participants`, `MemoryCreate`'s `wasThere`,
+- [x] **2 participants and capture time (core)** — D1, D2, D3: `Participants`, `MemoryCreate`'s `wasThere`,
   `ListedTierWrite` extracted from `TrackLabel` (its and `PhotoPlace`'s tests unchanged and green — the refactor's
   proof), `CaptureTime`; the header's people model; the details' editor model. Tests: R1's `memoryParticipants` and the
   merge cases ported; R2's lightbox cases (set, reset, peer's backfill rebased, peer's override conflicted); the
@@ -316,6 +316,29 @@ reached only when it was open as the device went offline; then it stays, naming 
   red; (b) the merge dropping `openedWith` → a removed id comes back, red; (c) an id outside `scopeMembers` accepted →
   red; (d) a time write re-sealed from the parsed tier → the unknown field gone, red; (e) a peer's different override
   overwritten on 409 → the conflict case red; (f) `wasThere` sealed into a chapter → red.
+  *Done 2026-11-17 (core; the live run is the owner's, below):* built `memories/Participants.kt` (normalize, cap, merge,
+  the sub-object's edit, the write through `NodeMetaWrite` with the merge as its edit — `MemoryFacts.onServer` made internal
+  for it —, the header's `Line` and the `ParticipantsPicker` over `scopeMembers`), `MemoryCreate.offersWasThere`/`birthMeta`
+  and `create(…, wasThere)` (sealed through `NodeCreate`'s `sealMeta`; `ShellModel.createMemory` gains an overload, not a
+  default, since Swift sees no default; `TenantSession.scopeKind`), `memories/ListedTierWrite.kt` extracted from
+  `TrackLabel` (whose `openRaw`/`seal`/`onServer` and `PhotoPlace.backfill` now delegate; `TrackLabelTest` and
+  `PhotoPlaceTest` untouched and green), `memories/CaptureTime.kt` with `CaptureTimeEditor`, `MemoryFacts.Facts.participants`,
+  and in `GalleryModel` the people line (`State.people`: a member's, on a Memory, not in a personal scope, online),
+  `participantsPicker()` and `captureTimeEditor(mediaId)` (also on `Lightbox`), wired in `ShellModel`. Tests:
+  `ParticipantsTest` (28), `CaptureTimeTest` (10), `MemoryCreateTest` +1, `CrossSurfaceFixtureTest` +3 (the fixture now
+  carries a banner and a sub-object field; a photo tier with `capturedAtOverride`, `placeName`, `trackName` and an unknown
+  field), and `jvmTest/…/CurationLiveTest` (skipped without `VEYQ_LIVE`). Bites, each one edit restored from a byte
+  snapshot by a scripted run (`git status --porcelain` equal before and after), each red at its named case:
+  (a) `on409APeersAddedParticipantSurvivesAndTheEditorsAdditionLands` — `expected:<Written> but was:<Conflict(…)>`;
+  (b) `anIdTheEditorRemovedStaysRemovedThoughAPeersListStillHoldsIt` — `expected:<[A]> but was:<[A, B]>`, and the 409
+  case `expected:<2> but was:<0>` sends; (c) `onlyAnIdTheMembersListReturnedCanBeTicked` — "an id outside the scope's
+  members is refused"; (d) `aCaptureTimeWriteAndItsResetKeepEveryOtherFieldOfTheTierByteForByte` — the keys without
+  `futurePhotoField`; (e) `aPeersDifferentCorrectionMeanwhileIsAConflictAndNothingIsWritten` — `expected:<Conflict(1500000000000)>
+  but was:<Done(1700000040000)>`; (f) `iWasThereIsOfferedForAMemoryInATenantOrGroupScopeAndSealsTheMakerAtBirth` —
+  "never into a chapter". Green: `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :core:jvmTest :bridge:jvmTest
+  :core:macosArm64Test --no-daemon` (BUILD SUCCESSFUL). **Not run:** `CurationLiveTest` against the dev instance — this
+  session's classifier refused the run that reads the owner's `.run/.env`; the owner runs
+  `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :core:jvmTest --tests '*CurationLiveTest*'`.
 
 - [ ] **3 the banner (core)** — D4, D5, D7's pin: the generated `MemoryBannerApi`, `Banner`, `BannerFrame`,
   `BannerWrite` with the digest, the match, `SharedBlob`, A1 in `MediaUpload`, A2 in the gallery's trash, the pin's
