@@ -43,14 +43,24 @@ object MemoryFacts {
      * A node's date and place as shown: each null where none is set or the blob does not open; and its [participants]
      * (ADR 0144 decision 1: user ids, none where absent or the blob does not open), read from the same blob.
      */
-    data class Facts(val date: MemoryDate?, val location: MemoryLocation?, val participants: List<String> = emptyList()) {
+    data class Facts(
+        val date: MemoryDate?, val location: MemoryLocation?, val participants: List<String> = emptyList(),
+        /** The banner as sealed (ADR 0144 decision 4); null for none or a shape this client does not know. */
+        val banner: me.raddatz.veyq.mobile.memories.banner.Banner.Read? = null,
+        /** The blobs the banner's slots hold as the meta names them: what a banner write opened on (decision 5). */
+        val bannerSlots: me.raddatz.veyq.mobile.memories.banner.Banner.Slots = me.raddatz.veyq.mobile.memories.banner.Banner.Slots.NONE,
+    ) {
         /** The place's name where it is materialized (not pending): the facts line's place. */
         val placeName: String? get() = location?.name?.takeIf { it.isNotEmpty() }
 
         companion object {
             val NONE = Facts(null, null)
 
-            fun of(meta: JsonObject) = Facts(MemoryDate.of(meta), MemoryLocation.of(meta), me.raddatz.veyq.mobile.memories.Participants.read(meta))
+            fun of(meta: JsonObject) = Facts(
+                MemoryDate.of(meta), MemoryLocation.of(meta), me.raddatz.veyq.mobile.memories.Participants.read(meta),
+                me.raddatz.veyq.mobile.memories.banner.Banner.of(meta),
+                me.raddatz.veyq.mobile.memories.banner.Banner.slots(meta[me.raddatz.veyq.mobile.memories.banner.Banner.FIELD]),
+            )
         }
     }
 
