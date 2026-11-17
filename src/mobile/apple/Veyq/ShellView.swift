@@ -478,7 +478,10 @@ struct Bar: View {
         // An open object's header: core's actions for every kind (the web's `NodePage` + `NodeHeader`), with what its kind's
         // page contributes.
         ToolbarItem(placement: Self.actions) {
-            if let ref = model.shell.openObject, let contribution = KindPage.of(ref.kind)?.header(ref.at, model) {
+            if model.shell.person != nil {
+                // a person's profile carries no node's header (ADR 0144 decision 11)
+                EmptyView()
+            } else if let ref = model.shell.openObject, let contribution = KindPage.of(ref.kind)?.header(ref.at, model) {
                 NodeHeaderActions(model: model, node: ref.at, contribution: contribution).id(ref.nodeId)
             } else if model.shell.openObject == nil, model.shell.application == nil, !model.shell.searching, let space = model.shell.space {
                 HStack {
@@ -501,7 +504,10 @@ struct Bar: View {
     }
 
     @ViewBuilder private func content(_ key: String) -> some View {
-        if let ref = model.shell.openObject, let body = KindPage.of(ref.kind)?.body {
+        if let person = model.shell.person {
+            // a person's profile over what was on screen (ADR 0144 decision 11): back returns there
+            PersonScreen(model: model, userId: person)
+        } else if let ref = model.shell.openObject, let body = KindPage.of(ref.kind)?.body {
             body(ref, key, model).environment(\.nodeHero, hero(ref.at))
         } else if let ref = model.shell.openObject {
             ObjectPlaceholder(ref: ref, tab: key)
@@ -648,26 +654,15 @@ struct HomeView: View {
             if let nameProblem { Text(nameProblem) }
         }
         // New Memory: made at this level and opened (the web's `MemoryNodeDialog`)
-        .alert(say(.memoryCreateMemoryTitle), isPresented: $namingMemory) {
-            TextField(say(.nodeName), text: $newName)
-            Button(say(.folderCreate)) {
-                let name = newName
-                guard let space = model.shell.space else { return }
-                let parent = model.shell.folder?.nodeId
-                Task {
-                    if let problem = await model.createMemory(scopeId: space, parentId: parent, name: name) { nameProblem = problem; namingMemory = true }
-                }
-            }
-            Button(say(.signinCancel), role: .cancel) {}
-        } message: {
-            if let nameProblem { Text(nameProblem) }
+        .sheet(isPresented: $namingMemory) {
+            if let space = model.shell.space { NewMemorySheet(model: model, scopeId: space, parentId: model.shell.folder?.nodeId) }
         }
         .sheet(isPresented: $creatingPot) { NewPotSheet(model: model) }
         // what the drawer's "New" asked for
         .onChange(of: model.newRequest, initial: true) { _, asked in
             switch asked {
             case .folder: newName = ""; nameProblem = nil; naming = true
-            case .memory: newName = ""; nameProblem = nil; namingMemory = true
+            case .memory: namingMemory = true
             case .pot: creatingPot = true
             case nil: return
             }
@@ -994,28 +989,78 @@ struct ExpensesList: View {
 struct MemoriesList: View {
     @Bindable var model: AppModel
     @State private var naming = false
-    @State private var newName = ""
-    @State private var problem: String?
 
     private var space: String? { model.shell.space ?? model.spaces.first?.scopeId }
 
     var body: some View {
         ArrangedListView(list: model.applicationList(.memories), onOpen: model.open, key: "app:\(ApplicationId.memories)")
             .navigationTitle(Names.application(.memories))
-            .createAction(say(.memoryNew), shown: space != nil && model.online) { newName = ""; problem = nil; naming = true }
-            .alert(say(.memoryCreateMemoryTitle), isPresented: $naming) {
-                TextField(say(.nodeName), text: $newName)
-                Button(say(.folderCreate)) {
-                    let name = newName
-                    guard let space else { return }
-                    Task {
-                        if let p = await model.createMemory(scopeId: space, parentId: nil, name: name) { problem = p; naming = true }
+            .createAction(say(.memoryNew), shown: space != nil && model.online) { naming = true }
+            .sheet(isPresented: $naming) {
+                if let space { NewMemorySheet(model: model, scopeId: space, parentId: nil) }
+            }
+    }
+}
+
+/// New Memory (the web's `MemoryNodeDialog`) as a sheet: its name and, in a tenant or group space, **I was there** — on
+/// each time it opens, never remembered (ADR 0144 decision 2); on, the Memory is born listing its maker among its
+/// participants. Made in space `scopeId` under `parentId` and opened; a refusal says why and stays.
+struct NewMemorySheet: View {
+    let model: AppModel
+    let scopeId: String
+    let parentId: String?
+    @State private var name = ""
+    @State private var wasThere = true
+    @State private var problem: String?
+    @State private var saving = false
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        let offers = model.offersWasThere(scopeId)
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(say(.nodeName), text: $name)
+                        .onSubmit { create(offers) }
+                } footer: {
+                    if let problem { Text(problem).foregroundStyle(Role.danger) }
+                }
+                if offers {
+                    Toggle(isOn: $wasThere) {
+                        Text(say(.memoryParticipantsWasThere))
+                        Text(say(.memoryParticipantsWasThereHint))
                     }
                 }
-                Button(say(.signinCancel), role: .cancel) {}
-            } message: {
-                if let problem { Text(problem) }
             }
+            .formStyle(.grouped)
+            .navigationTitle(say(.memoryCreateMemoryTitle))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { dismiss() }.disabled(saving) }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(say(.folderCreate)) { create(offers) }
+                        .disabled(saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+        .interactiveDismissDisabled(saving)
+        #if os(macOS)
+        .frame(minWidth: 380, minHeight: 220)
+        #endif
+    }
+
+    private func create(_ offers: Bool) {
+        guard !saving, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        saving = true
+        problem = nil
+        let typed = name
+        Task {
+            let refused = await model.createMemory(scopeId: scopeId, parentId: parentId, name: typed, wasThere: offers && wasThere)
+            saving = false
+            if let refused { problem = refused } else { dismiss() }
+        }
     }
 }
 

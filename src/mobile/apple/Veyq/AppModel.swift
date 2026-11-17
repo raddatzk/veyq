@@ -196,7 +196,12 @@ final class AppModel {
 
     /// What the way in shows, as core's model has it; signed in, the shell shows once it read the tenant opened.
     private func gateChanged() {
-        if !(session.current is SessionModelGate.Signed) { offer = nil }
+        if !(session.current is SessionModelGate.Signed) {
+            offer = nil
+            // locked or gone: the open dialogs and the tenant's tree go — a person's index with it (ADR 0144 decision 12)
+            closeCuration()
+            tenantSession?.close()
+        }
         switch session.current {
         case let g as SessionModelGate.Signed: trustLog("gate Signed, offer: \(g.offer.map { "\($0.levels)" } ?? "none")")
         case let g as SessionModelGate.Unlock: trustLog("gate Unlock, \(g.record.method), level: \(g.record.unlockLevel.map { "\($0)" } ?? "none")")
@@ -497,6 +502,7 @@ final class AppModel {
                 managing = nil
                 shellWatch?.stop()
                 shellModel = nil
+                tenantSession?.close()
                 closeDepot()
                 closeMedia()
                 dropHeaders()
@@ -568,6 +574,7 @@ final class AppModel {
                 managing = nil
                 shellWatch?.stop()
                 shellModel = nil
+                tenantSession?.close()
                 closeDepot()
                 closeMedia()
                 dropHeaders()
@@ -598,6 +605,8 @@ final class AppModel {
         // the re-key's rules and its background resume are the core's (`AccountDoor.open`/`opened`)
         let switched = tenantSession.map { was in was.account !== account || was.tenant.tenantId != tenant.tenantId } ?? true
         if switched { uploads.clear() }
+        // the tenant shown before closes: its tree and what was derived from it (a person's index) dropped now (ADR 0144 decision 12)
+        if let was = tenantSession, was !== t { was.close() }
         tenantSession = t
         let pots = PotModel(tenant: t, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
         potWatch?.stop()
@@ -921,6 +930,7 @@ final class AppModel {
     /// The gallery goes (another opened, the tenant closed): its lightbox and a video's reader close with it. The tenant's
     /// close passes `windows`: every lightbox window's gallery goes too.
     private func closeGallery(windows: Bool = false) {
+        closeCuration()
         closeMusicView()
         closeTrackList()
         openGallery?.watch.stop()
@@ -1000,6 +1010,71 @@ final class AppModel {
         media = nil
         closeMusic()
         closeMaps()
+    }
+
+    // MARK: A Memory's curation (ADR 0144)
+
+    /// The open gallery's participants picker while its sheet shows (core's `ParticipantsPicker`).
+    var participantsEdit: ParticipantsEdit?
+    /// The open gallery's banner dialog while its sheet shows (core's `BannerEditor`).
+    var bannerEdit: BannerEdit?
+
+    /// `gallery`'s participants picker opened over the space's current members, where its rights offer it.
+    func openParticipants(_ gallery: GalleryModel) {
+        guard let picker = gallery.participantsPicker() else { return }
+        participantsEdit?.close()
+        participantsEdit = ParticipantsEdit(picker: picker, gallery: gallery)
+    }
+
+    func closeParticipants() {
+        participantsEdit?.close()
+        participantsEdit = nil
+    }
+
+    /// `gallery`'s banner dialog opened, where whoever looks may set its banner, online.
+    func openBanner(_ gallery: GalleryModel) {
+        guard openGallery?.model === gallery, let editor = gallery.bannerEditor(pictures: BannerImages.pictures()) else { return }
+        bannerEdit?.close()
+        bannerEdit = BannerEdit(editor: editor, gallery: gallery)
+    }
+
+    /// The banner's dialog closed: a running save stopped (the old banner stays), a Photos copy removed.
+    func closeBanner() {
+        bannerEdit?.close()
+        bannerEdit = nil
+    }
+
+    /// The open gallery's dialogs closed with it (another gallery, a switch, a lock, a sign-out).
+    private func closeCuration() {
+        closeParticipants()
+        closeBanner()
+    }
+
+    /// The picked file at `url` as an upload's source (`fromPhotos`: a copy the Photos picker made, whose date is no capture
+    /// time); nil where it does not read.
+    func pickedSource(_ url: URL, fromPhotos: Bool) -> UploadSource? {
+        guard let p = Picked(url) else { return nil }
+        return AppleMemories.shared.source(url: url, name: p.name, size: p.size, type: p.type,
+                                           modifiedAt: fromPhotos ? nil : p.modifiedAt.map { KotlinLong(value: $0) })
+    }
+
+    /// The Memory's music interrupted while a banner's video plays (ADR 0142 decision 13); nil where no player is open.
+    func interruptMusic() -> MusicPlayer.Interruption? { musicPlayer?.interrupt() }
+
+    // MARK: A person's profile (ADR 0144 decisions 11–13)
+
+    /// Person `userId`'s profile opened over what is on screen (core's `Shell.openPerson`; back returns there).
+    func openPerson(_ userId: String) {
+        shellModel?.openPerson(userId: userId)
+        applyShell(start: false)
+    }
+
+    /// Person `userId`'s frame as the tenant's directory names them; nil while no tenant is open.
+    func profile(_ userId: String) -> PersonProfile? { shellModel?.profile(userId: userId) }
+
+    /// Memories' section of person `userId`'s profile (core's `PersonMemories`), read on its open.
+    func personMemories(_ userId: String) -> PersonSection? {
+        shellModel.map { PersonSection($0.personMemories(userId: userId)) }
     }
 
     // MARK: Map services (ADR 0143)
@@ -1657,14 +1732,18 @@ final class AppModel {
 
     /// A Memory `name` made in space `scopeId` under `parentId` (nil: the space's top) — New Memory, core's
     /// `ShellModel.createMemory` (the web's `MemoryNodeDialog`: checked against the loaded tree, then sent) —, opened once
-    /// made (the web's). Why not, in the dialog's words, or nil.
-    func createMemory(scopeId: String, parentId: String?, name: String) async -> String? {
+    /// made (the web's), its maker listed among its participants where `wasThere` (ADR 0144 decision 2). Why not, in the
+    /// dialog's words, or nil.
+    func createMemory(scopeId: String, parentId: String?, name: String, wasThere: Bool = false) async -> String? {
         guard let m = shellModel else { return say(notice: MemoryCreate.shared.refused(reason: nil)) }
-        let made = try? await m.createMemory(scopeId: scopeId, parentId: parentId, name: name)
+        let made = try? await m.createMemory(scopeId: scopeId, parentId: parentId, name: name, wasThere: wasThere)
         applyShell(start: false)
         await readDetails(m.tenant)
         return opened(made)
     }
+
+    /// Whether New Memory in space `scopeId` offers *I was there* (a tenant or group space, ADR 0144 decision 2).
+    func offersWasThere(_ scopeId: String) -> Bool { shellModel?.offersWasThere(scopeId: scopeId) ?? false }
 
     /// A chapter `name` made in `gallery`'s Memory (core's `GalleryModel.createChapter`, which reads the lists anew), opened
     /// once made; why not, or nil.

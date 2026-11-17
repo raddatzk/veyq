@@ -35,6 +35,9 @@ struct MemoryViewSwitch: View {
 struct MusicList<Switch: View>: View {
     let model: AppModel
     let music: MusicModel
+    /// The banner above the header and the facts and people lines under it (ADR 0143 D5, ADR 0144 decisions 1 and 4).
+    var banner: AnyView?
+    var facts: AnyView?
     let viewSwitch: Switch
     @State private var renaming: MusicModel.Shown?
     @State private var newName = ""
@@ -46,7 +49,9 @@ struct MusicList<Switch: View>: View {
 
     var body: some View {
         List {
+            if let banner { banner }
             NodeHeroRow()
+            if let facts { facts.listRowSeparator(.hidden) }
             viewSwitch
                 .listRowSeparator(.hidden)
                 .listRowBackground(Color.clear)
