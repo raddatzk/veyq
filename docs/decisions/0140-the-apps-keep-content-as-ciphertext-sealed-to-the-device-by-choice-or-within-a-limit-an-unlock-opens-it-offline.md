@@ -4,7 +4,7 @@
   real iPhone and a signed macOS build, are the owner's ([native-apps](../crosscutting/native-apps.md) § Open)
 - Date: 2026-11-15
 - Model: [native-apps](../crosscutting/native-apps.md)
-- Replaced in part: decision 8's and decision 9's kept originals (a music track's too) by ADR 0142 (built); decision 8's kept originals (a GPX track's too) by ADR 0143 (not built)
+- Replaced in part: decision 8's and decision 9's kept originals (a music track's too) by ADR 0142 (built); decision 8's kept originals (a GPX track's too) by ADR 0143 (built)
 
 ## Context
 
@@ -170,8 +170,8 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
      automatic tier — it would evict everything else; its frames still stream.
    - **Originals** (owner 2026-11-15): an original is kept only where the app reads one to show the item — today a
      video's frames, a music track's ([ADR 0142](0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md)
-     decision 12) and a Depot file, which has no other tier — and a GPX track's once [ADR 0143](0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)
-     decision 9 is built. **A photo's original is never kept by either tier;** its
+     decision 12) and a Depot file, which has no other tier — and a GPX track's ([ADR 0143](0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)
+     decision 9). **A photo's original is never kept by either tier;** its
      preview stands in, as it does online. Where a later tier replaces a video's original for playback, that tier is
      kept instead.
    - **Pins count** in what is used and are shown apart; they may exceed the limit, and then the automatic tier keeps

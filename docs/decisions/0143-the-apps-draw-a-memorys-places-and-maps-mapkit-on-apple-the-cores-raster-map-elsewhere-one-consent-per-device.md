@@ -1,6 +1,8 @@
 # ADR 0143 — The apps draw a Memory's places and maps: MapKit on Apple, the core's raster map elsewhere, one consent per device
 - Status: Accepted
-- Built: partly — decision 13 (the privacy notice's lines); the rest is not built
+- Built: yes — on every app (Android, iOS, macOS, Linux, Windows) and in the privacy notice; passed on Android, Linux and
+  Windows (§ Consequences); Apple's passes, on the unlocked Mac and an iPhone, are the owner's
+  ([native-apps](../crosscutting/native-apps.md) § Open)
 - Date: 2026-11-16
 - Model: [native-apps](../crosscutting/native-apps.md) (the services and the consent:
   [Memories § Places and the map](../apps/memories.md#places-and-the-map))
@@ -144,7 +146,9 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
    - **No map is drawn offline**, on any platform, MapKit included: offline the capabilities are not read, so the app
      does not know which hosts the server serves now, and a consent holds only for the hosts it names; tiles are never
      kept (decision 4), and `tile.openstreetmap.org` permits no offline use. The map's place says the map needs a
-     connection.
+     connection. **An account that loses its server mid-session loses its map too**, though the capabilities were read
+     before: `MapServices` follows the account's reach, offline from the moment the server is lost (its tiles dropped as
+     at a withdrawal) and shown again, unasked, once it is back (`MapConsentTest`; found by the Android pass, below).
    - **A track's original is kept like a video's** (ADR 0140 decision 8: an original is kept where the app reads one to
      show the item): a pin keeps the node's tracks, and offline the Map view lists them with their numbers, download
      included.
@@ -157,11 +161,11 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
     | Apple Maps (iOS, macOS) | the region in view (as tiles), the device's IP address, and what MapKit sends of its own (Apple documents rotating random identifiers, not the Apple Account — remembered, not measurable through TLS) | the same as the tile host's column: the overlays are drawn by MapKit on the device (remembered from Apple's documentation; a residual of a closed library) |
     | The geocoder (every platform) | a bare coordinate, the language, the device's IP address, `veyq` and the instance's origin | which Memory, whose, or any veyq id |
     | The veyq operator | nothing more than today: a sealed `wrappedMeta`, a sealed listed tier rewritten, one more medium without tiers | a coordinate, a viewport, a consent, a place name, that a Memory holds a track |
-11. **The bridge (Linux, Windows).** `Watched.Map(map)` → `MapShown`: the tiles in view as `{key, x, y, size}` in
-    normalised Mercator space, the overlays (tracks with colour, dash and selection, dots, pins with cover ids,
+11. **The bridge (Linux, Windows).** `Watched.Map(map)` → `MapShown`: the tiles in view as `{tile, x, y, size}` (`tile`
+    its `z/x/y`) in normalised Mercator space, the overlays (tracks with colour, dash and selection, dots, pins with cover ids,
     clusters), the attribution text, and the state `notOffered` | `consent(hosts, renewal)` | `shown` | `offline`.
     `Map.View(map, centre, zoom, width, height, scale)` comes from the host as it settles and at most every 100 ms during
-    a gesture; `Map.Tile(map, key)` answers `Answer.Bytes`
+    a gesture; `Map.Tile(map, tile)` answers `Answer.Bytes`
     ([ADR 0137](0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)), the
     host translating its last frame by the drag meanwhile; `Map.TurnOn|TurnOff`; and the editors' and the Map view's
     calls (`Place.*`, `Date.*`, `Tracks.Add(paths)|Edit|Remove|Download|Report|Show`). Host-side the transform from
@@ -189,7 +193,7 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
 - **Apple is a recipient on iOS and macOS.** The consent there names Apple Maps for the map and the operator's geocoder
   for place names; the notice names Apple (decision 13). What MapKit keeps on disk is Apple's, named in
   [`src/mobile/CLAUDE.md`](../../src/mobile/CLAUDE.md) § Nothing on disk.
-- **Measured 2026-11-16 on Android (phase 6): the Compose map's pan and pinch, frame time recorded.** A throwaway API 36
+- **Measured 2026-11-16 on Android, as its map was built: the Compose map's pan and pinch, frame time recorded.** A throwaway API 36
   emulator (Pixel 8 profile, `-gpu host`, 60 Hz panel; `dumpsys display`: `renderFrameRate 60.0`) on the developer's Mac,
   the Memories bar's Map tab over Lisbon at zoom 16 with real tiles from `tile.openstreetmap.org` after the consent was
   given in the app: a scripted gesture injected as raw multi-touch events at 60 Hz (`adb exec-in` into the emulator's
@@ -204,8 +208,8 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
   read only in the draw phase (a moving view redraws the canvas, nothing recomposes), and a level's stand-in tiles are
   drawn only where a tile is still missing (no overdraw once settled). Under a host load of 20+ the same gesture fell to
   34–69 frames, so a number from a busy machine says nothing; a phone's GPU profile bars remain the owner's device pass
-  (phase 9). D1's Compose `Canvas` stands: no library would change the emulator's budget, and the median matches a list.
-- **Measured 2026-11-16 on macOS 26.7 (phase 7), before the Apple map was built:** a probe built as the Mac app is —
+  (below). Decision 1's Compose `Canvas` stands: no library would change the emulator's budget, and the median matches a list.
+- **Measured 2026-11-16 on macOS 26.7, before the Apple map was built:** a probe built as the Mac app is —
   unsandboxed, ad-hoc signed (`codesign -s -`), **no entitlement at all** (`codesign -d --entitlements -` empty) — ran
   headless from its binary while the screen was locked; `MKMapSnapshotter` answered a drawn map of Munich and one of
   El Chaltén (a place no earlier map on this Mac had shown) within a second each, so a MapKit map loads without a Maps
@@ -223,7 +227,70 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
   shared with every app and Apple Maps itself, at rest outside the app, which the app can neither list nor clear — the
   record of places that decision 4 keeps off disk on the other platforms; and `geoanalyticsd` records map use under
   Apple's own analytics settings. iOS was not measured (its simulators do not boot on this Mac; a device's container is
-  the owner's pass, phase 9).
+  the owner's pass, below).
+- **Measured 2026-11-16 on Linux and Windows, before their maps were drawn: a dash draws as a dash.** A mountain-biking
+  track's pattern (10, 5, 2, 5) was stroked dash-dot by `gsk::Stroke::set_dash` in the Linux container's GTK 4.22 (under
+  Broadway) and by a `Polyline`'s `StrokeDashArray` on the Windows VM, so neither draws the dash as segments.
+- **The passes, run 2026-11-16** against the dev instance (`veyq.localhost:8080`) with the seeded OSM services
+  (`tile.openstreetmap.org`, `nominatim.openstreetmap.org`), the seeded principal signed in by each platform's devlogin
+  helper, over Memories of three geotagged photos in Munich made for the pass (moved to the trash after it; every
+  session a pass signed in was signed out, `DevSecondSessionTest.aLeftOverSessionIsSignedOut`).
+  - **Android** — a throwaway API 36 emulator (deleted after), the debug build, driven over `uiautomator dump`. The request
+    log is the debug build's `DevNetLog`: an OkHttp network interceptor that writes every request to a host outside the
+    developer's instance to logcat `veyq-net` as it leaves — its URL, the `User-Agent` sent, and whether a `Referer`, a
+    `Cookie` or an `Authorization` went with it (presence only), read with `adb logcat -v time -s veyq-net:I`. **The whole
+    pass: 89 requests, 87 tiles from `tile.openstreetmap.org` and 2 reverse geocodes from `nominatim.openstreetmap.org`,
+    every one `ua=[veyq/1 (+https://veyq.app; http://veyq.localhost:8080)] referer=no cookie=no authorization=no -> 200`;
+    no other host; no line before the consent was given.** A geocode left as
+    `GET https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=48.139&lon=11.58&accept-language=en`
+    — the three-decimal coordinate and the language alone. Clicked: each Memory's date following its upload; the consent
+    in context naming both hosts; a place set and a level picked (*Old Town*), and a second Memory's lookup answered from
+    the cache (the same three-decimal spot); the Map tab's pin and a cluster of two Memories 7 m apart, zoomed by its tap
+    to the maximum and there listed ("2 Memories here"); a photo's map at zoom 15 with its direction and its name, and
+    after the app was reinstalled and signed in again the same photo's `Place: Munich` at once with **0 geocodes** (the
+    sealed listed tier); a GPX track added as *Mountain biking*, drawn dash-dot, selected (framed), hidden and shown,
+    removed and restored by Undo; *Turn map services off* on the Map view — the offer in the map's place within a second,
+    the log unchanged over the next 10 s, `maps-consent` gone from `shared_prefs/veyq.trust.xml`; Settings → Map services
+    naming both hosts and turned on without sending anything; offline (`adb shell cmd connectivity airplane-mode enable`)
+    a pinned Memory's Map view saying "The map needs a connection." above its listed track, and the Memories map the
+    same, back unasked once online; the app's files afterwards (`run-as me.raddatz.veyq find . -type f`) holding no tile,
+    no geocoder answer and no viewport.
+  - **Linux** — the container, under Broadway, driven from headless Chrome. A build has no request log, so a line in
+    `MapHttp.get` for the pass only (never committed) printed each request as Ktor sent it: **148 requests, all `200` —
+    140 tiles and 8 geocodes, each with `User-Agent: veyq/1 (+https://veyq.app; http://veyq.localhost:8080)`;
+    `grep -ciE 'referer|cookie|authoriz|bearer'` over them 0; 0 before the consent.** Clicked: the consent in context;
+    a place set by two bursts of arrow-key pans, which sent **two geocodes, each at its burst's final position**, none
+    for the twelve positions panned past; *Waldperlach* picked and saved; the Map tab's clusters ("3" and "2"), one framed
+    by a tap and listed at the maximum zoom, a Memory opened from the list; a photo's map and its name, and after a
+    restart **0 geocodes** for it; a photo never opened before asking once, and nothing on its second open; a GPX track
+    through GTK's file dialog, edited to dash-dot, hidden, selected (framed), downloaded (`sha256sum` equal to the file
+    added), removed and restored by Undo; *Turn map services off* on the Map view dropping every tile in the same update,
+    nothing sent after it; a pinned Memory started cold offline, and one whose server went away mid-session (after the fix
+    below), each saying "The map needs a connection." above its listed track with 0 map requests.
+  - **Windows** — the ARM VM, the debug build, driven over UI Automation. Clicked: *Turn map services off* on the Map tab
+    (the offer naming both hosts in the map's place 22 ms later) and on again from it; the Map tab's three pins
+    clustering to one "3" at zoom 7, framed by its click; a place set by arrow-key pans, the picker listing the final
+    spot's five levels, *Alexisquartier* picked and saved; a photo's map at zoom 15 and its name resolved once, read
+    after a restart from the sealed listed tier with no lookup; a GPX track through the open picker, drawn dotted
+    (*Running*), selected (framed), hidden and shown, downloaded (`Get-FileHash` equal), removed and restored by Undo;
+    *Turn map services off* on the Map view (42 ms) and on again; a Memory made available offline.
+  - **Found and fixed by the passes.** An app that lost its server mid-session went on drawing the map (Android and
+    Linux): decision 9 now says why it must not, and `MapConsentTest` was red before the fix. Linux's level picker kept the
+    first spot's names after a pan to a spot with the same levels (its test in `memory_facts.rs` red before). The
+    geocoder sent each superseded pan's lookup a second apart before the last one (Linux and Windows): a lookup no caller
+    waits for any more is now dropped unsent (`GeocoderTest`, `PlaceEditorTest`). A zoom without a pan asks nothing new,
+    on purpose: the lookup is always made at `zoom=18`, and its one answer holds every level the picker offers.
+  - **Not run.** **Apple's passes**: the Mac's screen locked during both attempts, so nothing was clicked on the Mac,
+    and no iOS simulator boots on this Mac (CoreSimulator out of date), so iOS was neither clicked nor its on-disk listing
+    taken — the owner's, on the unlocked Mac and an iPhone ([native-apps](../crosscutting/native-apps.md) § Open).
+    **Windows offline**: the VM reaches the backend through a standing ssh tunnel a pass may not stop, and cutting the VM
+    off is a firewall change, the owner's; offline is the core's `MapServices`, the code Linux ran. **A request log on
+    Windows and Linux builds**: Windows' standard output goes nowhere, and Linux's line was the pass's own (inbox #947).
+    Android's *Download GPX* and *Report* of a track (seen in its menu; Linux and Windows downloaded); a phone's 60 Hz
+    frame budget (the owner's device pass).
+  - **Seen, not fixed** (inbox): Android's add buttons are nameless in the accessibility tree (#943); Android's *Map
+    services on this device* toggles only from its switch (#944); the raster map first fetches zoom 2's four world tiles
+    before the framed view (#945); Windows names a cluster marker for one of its Memories (#946).
 - **Residual — no tile survives a launch.** A tile viewed in an earlier launch is fetched again, while the tile policy
   asks for "a sufficient local cache". Our reading: a photo app's map traffic is a person browsing their own Memories,
   and honouring the headers in memory is that cache for a session. A sealed cache across launches, in ADR 0140's
@@ -276,3 +343,9 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
   (ADR 0136), for three elements; the core already reads XMP itself.
 - **Drawing the tracks over a blank plane offline** — a map without its map, a second look to design on five platforms
   for a state a connection ends.
+
+Explained for users on the docs site: [Set the location](../../site/src/content/docs/memories/set-the-location.mdx) and
+[Add GPX tracks](../../site/src/content/docs/memories/add-gpx-tracks.mdx) (§ In the app),
+[Is my data safe?](../../site/src/content/docs/privacy/is-my-data-safe.md) (§ Maps, only when you turn them on); for
+Server Owners [Capabilities](../../site/src/content/docs/run/capabilities.mdx) (§ External services); for researchers
+the [threat model](../../site/src/content/docs/security/threat-model.md) (the third-party row).

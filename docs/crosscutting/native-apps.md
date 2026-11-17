@@ -235,6 +235,25 @@ Windows (the VM: the SMTC minimised and the media keys), Linux (the container's 
 MPRIS name) and the web's video interruption, measured 2026-11-16; Apple's are open (below). The Use page:
 [Add background music](../../site/src/content/docs/memories/add-background-music.mdx).
 
+**A Memory's date, place and maps, on all four apps** ([ADR 0143](../decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)).
+The web's map services ported into the core's `map/` (the consent per device and its hosts, the tile fetch with its
+memory-only cache, the geocoder with its cache and queue, the viewport, clustering), a Memory's date and place into
+`memories/place/` (the four date modes, the place editor, the `auto` range and position kept current at the settle
+points, the Memories map, a photo's place) and its GPX tracks into `memories/tracks/` (the core's own XML reader, the
+bounds, the Map view's list), each web test with a Kotlin twin. Every app draws the facts line under a Memory's header
+and the date as a row's second line, the date and place editors, the Memories bar's **Map** tab with its clusters (Linux
+and Windows gained Memories' bar tabs for it), a photo's map in its details with its name looked up once and sealed, the
+Photos | Music | Map view switch with the tracks (add with a name and an activity, edit, download, remove with Undo, an
+`ITEM` report), *Turn map services off* on every map and Settings → Map services. Android, Linux and Windows draw the
+core's raster map over the operator's tile host (a Compose `Canvas`, a `gtk::Widget`, a XAML `Canvas`); iOS and macOS
+draw MapKit, Apple Maps named in the consent. Every map request carries `User-Agent: veyq/<version> (+https://veyq.app;
+<instance origin>)` and no `Referer` or token; no tile is written to disk; offline, and from the moment an account loses
+its server, no map is drawn and a pinned Memory's Map view lists its kept tracks. Passed on Android (a throwaway
+emulator, with the debug build's request log `DevNetLog`), Linux (the container) and Windows (the VM) against the dev
+instance with real OSM tiles, measured 2026-11-16 (ADR 0143's Consequences); Apple's are open (below). The Use pages:
+[Set the location](../../site/src/content/docs/memories/set-the-location.mdx),
+[Add GPX tracks](../../site/src/content/docs/memories/add-gpx-tracks.mdx).
+
 ## Open
 
 **Platforms and form factors**
@@ -435,10 +454,8 @@ share is offered** in their shells (`folder == null && rules.on && rules.dropBox
 refresh**: nothing polls a drop box; `ShellModel.refresh` reads the tree anew (the desktops' F5, the uploads' settle,
 each app's lists read after a write). A guest's deleted folder is restorable only by Undo (inbox #904).
 
-**Memories**: a Memory's date and place, its maps and its GPX tracks — decided in
-[ADR 0143](../decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md) (MapKit on Apple, the core's raster map elsewhere, one consent per device),
-not built (#890's date and place, #907); curating a Memory's participants, a medium's capture time, the banner (inbox
-#890); item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
+**Memories**: curating a Memory's participants, a medium's capture time, the banner (inbox #890); the date and the
+place in the creation dialog (#940); a person's profile map (#941); item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
 re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a
 received link (#435, a source for the same model).
 
@@ -449,6 +466,14 @@ elsewhere: Android's lock-screen controls (the AVD has no keyguard) and a real p
 emulator's); the signed-in Flatpak's own MPRIS on a desktop (`playerctl`; a release build has no devlogin); the MSIX's
 SMTC source name (the unpackaged build has no package identity, so the flyout names no app). A decoded format added from an app keeps its silent edges
 (#932).
+
+**Maps** ([ADR 0143](../decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md), built above): **Apple's passes are the owner's** — on the
+unlocked Mac and a real iPhone, the pass the other three ran: the consent naming Apple Maps, a place set and named, the
+Map tab's pins and a cluster, a photo's map and its name sealed once, a track added, dashed, hidden and selected, *Turn
+map services off*, offline, and what MapKit keeps on an iPhone (the Mac's screen locked during both attempts; no iOS
+simulator boots on this Mac). Not run elsewhere: Windows offline (the VM's backend is reached through a standing tunnel),
+Android's *Download GPX* and *Report* of a track, a phone's 60 Hz frame budget. Not built: a tile cache across launches
+(#939); a request log in the Linux and Windows builds (#947). Seen in the passes, open: #943–#946.
 
 **Uploads**: an upload that goes on while the app is in the background (Android a foreground service, iOS a
 background task); placeholder tiles in the gallery for what is under way; the list behind Apple's button seen open.

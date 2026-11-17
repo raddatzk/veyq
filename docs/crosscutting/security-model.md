@@ -67,7 +67,7 @@ operator's view:
   a field key derived from `K_node` like any other field — so it is shareable to other members **without their device making a request**, and the veyq
   operator still sees only ciphertext.
 
-**In the apps** ([ADR 0143](../decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md), not built) the same consent is one per device, and on iOS
+**In the apps** ([ADR 0143](../decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)) the same consent is one per device, and on iOS
 and macOS the map is Apple's MapKit, so **Apple Maps** is the map's recipient there, named in the consent; place names
 come from the operator's geocoder on every platform. A request of the apps names the app and the instance in its
 `User-Agent` and carries no `Referer`. What each service learns:
@@ -78,6 +78,10 @@ come from the operator's geocoder on every platform. A request of the apps names
 | Apple Maps (iOS, macOS) | the region in view (as tiles), the device's IP address, and what MapKit sends of its own (Apple documents rotating random identifiers, not the Apple Account — remembered, not measurable through TLS) | the same as the tile host's column: the overlays are drawn by MapKit on the device (remembered from Apple's documentation; a residual of a closed library) |
 | The geocoder (every platform) | a bare coordinate, the language, the device's IP address, `veyq` and the instance's origin | which Memory, whose, or any veyq id |
 | The veyq operator | nothing more than today: a sealed `wrappedMeta`, a sealed listed tier rewritten, one more medium without tiers | a coordinate, a viewport, a consent, a place name, that a Memory holds a track |
+
+Measured on the apps' passes (2026-11-16, ADR 0143's Consequences): on Android and Linux every tile and geocode left
+with that `User-Agent` and no `Referer`, cookie or `Authorization` (89 and 148 requests), and none before the consent.
+Apple's map was not passed (the owner's).
 
 **The breached-password check is the second instance, and the first exception to opt-in.** The four dialogs that
 choose a password (set up the server, join a tenant, change a password, recover access) ask the Have I Been Pwned

@@ -1,7 +1,8 @@
 # UC: Memory tracks — GPX tracks on a Memory's map, beside its photos
 
 - **ID:** uc.memory.tracks
-- **Status:** **built (web)** ([ADR 0130](../../../decisions/0130-a-gpx-track-is-a-medium-of-its-memory-drawn-on-its-map.md)).
+- **Status:** **built** ([ADR 0130](../../../decisions/0130-a-gpx-track-is-a-medium-of-its-memory-drawn-on-its-map.md));
+  the apps' by [ADR 0143](../../../decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md) ([§ In the apps](#in-the-apps)).
   The backend has nothing of its own here: a track is a medium, stored, listed, trashed, re-keyed, exported and erased as
   every medium is ([en.memory.media](../enablers/en.memory.media.md)). Its browser pass is lane L1's
   `tests/e2e/tests/features/memories/memory-tracks.spec.ts`.
@@ -82,6 +83,21 @@
 
 Your hike or ride shows on the Memory's map beside the photos you took along the way, and the server never sees where
 you went.
+
+## In the apps
+
+[ADR 0143](../../../decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md) decision 8: the apps (Android, iOS, macOS,
+Linux, Windows) follow the flows above, with these differences. Built on every app; passed on Android, Linux and Windows (ADR 0143's Consequences); Apple's passes are the owner's
+([native-apps](../../../crosscutting/native-apps.md) § Open).
+
+- **Where (step 1):** the Map tab is a view switch inside the Memory's page (**Photos** | **Music** | **Map**); *Add GPX
+  track* is the Map view's own creating action and opens the platform's document picker filtered to `.gpx`. A track's
+  menu offers Edit, Download GPX, Remove and Report; a remove offers **Undo** like any medium's.
+- **The map** is the same as a place's ([uc.memory.place](uc.memory.place.md) § In the apps): the core's raster map on
+  Android, Linux and Windows, MapKit on iPhone, iPad and Mac; the lines and the dots are drawn on the device either way.
+- **Offline:** a Memory made available offline keeps its tracks' files, and its Map view lists them with their numbers
+  and the download, read-only and with no map.
+- **Not in the apps:** a link guest's view (the apps open a gallery as a member only, inbox #435).
 
 ## Related
 

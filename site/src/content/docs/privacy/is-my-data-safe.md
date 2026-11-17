@@ -11,6 +11,8 @@ sources:
   - docs/features/sharing/use-cases/uc.sharing.share-uploader.md
   - docs/features/admin/use-cases/uc.admin.privacy-notice.md
   - docs/features/expenses/use-cases/uc.expenses.exchange-rates.md
+  - docs/features/memory/use-cases/uc.memory.place.md
+  - docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md
 ---
 
 **In one sentence:** veyq is **end-to-end encrypted** — your photos, videos, journal text and the
@@ -98,6 +100,20 @@ someone there is recording an expense in another currency today.
 
 The owner of your space can switch it off too. Then, or if the rates can't be fetched, you type the rate yourself; a
 rate you saved never changes.
+
+## Maps, only when you turn them on
+
+A map and a place's name need help from outside too, but nothing is sent until you turn on **Map services**
+([Set the location](/memories/set-the-location/#map-services)). Then your device loads the map pictures for the part of
+the map you look at, and sends the point of a place to a service that names it — **straight from your device**, never
+through the server. Those services learn that part of the map or that point, your internet address and which veyq
+server you use; never which Memory it is, whose, or where a track of yours leads: photos and tracks are drawn onto the
+map on your device.
+
+**On an iPhone, iPad or Mac, the veyq app shows maps from Apple Maps** (Apple Inc., United States) instead of your
+server's map provider. Apple then sees the part of the map you look at and your device's IP address. The app names
+Apple Maps when it asks you to turn map services on, and your server's privacy notice names it too. Place names still
+come from your server's naming service.
 
 ## When you share
 

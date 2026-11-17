@@ -3,6 +3,7 @@ title: "Set the location"
 sources:
   - docs/features/memory/use-cases/uc.memory.place.md
   - docs/features/admin/use-cases/uc.admin.configure-external-services.md
+  - docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -60,3 +61,25 @@ Memories with a place are pins on the **Map view** of a folder. A Memory without
 The place is locked together with the Memory on your device; veyq's server learns neither the place nor the
 coordinates. The only thing that ever leaves your device is the point sent to the map provider, and only if you have
 turned map services on.
+
+## In the app
+
+The veyq [app](/getting-started/install-the-app/) sets a place as the browser does, with these differences:
+
+- **Where to find it:** the date and the place stand under the Memory's name; choose the place, or **Set location**
+  while there is none. The pin stays in the middle of the map: move the map to move the spot. Once the map stops, the
+  names found there are offered, from the street to the country; pick one, or type your own.
+- **Map services are set for the device:** turn them on or off under **Settings** → **Map services** with **Map services
+  on this device**, or with **Turn map services off** on any map. What you choose holds for every account on this
+  device, and for no other device.
+- **On an iPhone, iPad or Mac the map comes from Apple Maps:** the app shows Apple's map there instead of your server's
+  map provider, so it names **Apple Maps** when it offers to turn map services on, and Apple sees the part of the map you
+  look at and your device's IP address. Place names still come from your server's naming service. If your server shows
+  no maps, the app shows none there either.
+- **The map of your Memories** is the **Map** tab of Memories, beside its list: every Memory with a place is a pin. Pins
+  close together are joined into one with a number; choosing it zooms in, and where they all stand on one spot it lists them
+  (*3 Memories here*).
+- **A photo's place:** a photo's details show a small map of where it was taken, and the place's name, looked up once.
+- **Offline** the place is shown but cannot be changed, and no map is shown: *The map needs a connection.*
+- **Nothing kept:** on Android, Windows and Linux the app keeps map pictures only while it runs. On an iPhone, iPad or
+  Mac, Apple's own map service keeps a cache of the map pictures it loaded, which the app cannot clear.

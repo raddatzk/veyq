@@ -48,7 +48,9 @@ const PHOTO_RADIUS: f64 = 7.0;
 const TELL_EVERY: Duration = Duration::from_millis(100);
 /// How many zooms away a held tile may still be drawn under the view's own while they arrive.
 const UNDER_ZOOMS: i32 = 2;
-/// The widest a tile is drawn (eight times its own edge); a wider one waits for the view's own tiles.
+/// The widest a tile is drawn (eight times its own edge); a wider one waits for the view's own tiles. Uncapped, a
+/// zoom-2 tile held under a view at zoom 11 was a 130,000 px texture, and GSK's memory for it got the app SIGKILLed
+/// (seen live 2026-11-16); `UNDER_ZOOMS` bounds the same from the other side.
 const MAX_TILE_PX: f32 = 2048.0;
 
 /// Where a normalised point ([x], [y]) is drawn in a [width] × [height] widget whose view is centred on ([cx], [cy]) at

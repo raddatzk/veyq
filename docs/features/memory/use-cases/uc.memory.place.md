@@ -142,6 +142,29 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
 A Memory shows where it happened and appears as a pin on your map, while veyq's server never learns the place or its
 coordinates.
 
+## In the apps
+
+[ADR 0143](../../../decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md): the apps (Android, iOS, macOS, Linux,
+Windows) follow the flows above, with these differences. Built on every app; passed on Android, Linux and Windows (ADR 0143's Consequences); Apple's passes are the owner's
+([native-apps](../../../crosscutting/native-apps.md) § Open).
+
+- **The map:** Android, Linux and Windows draw the configured tile host's map (the core fetches the tiles); iPhone, iPad
+  and Mac draw Apple's MapKit, so the consent and the settings name **Apple Maps** for the map, and `memories.map` off
+  means no map there either (A4). Place names come from the configured geocoder on every platform.
+- **The consent (A5) is one per device**, not per browser: *Map services* in the app's Settings (its switch *Map services
+  on this device*) and *Turn map services off* on every map, acting at once as A5 says. An app's map request names the
+  app and the instance in its `User-Agent` and sends no `Referer`, cookie or token.
+- **The editor (step 3):** the map pans under a fixed centre pin; the level picker offers the names of one lookup made
+  700 ms after the map settles, and a zoom alone asks nothing new (one answer holds every level).
+- **The map of Memories (A3)** is the Memories bar's **Map** tab, not a toggle in the tenant root: its pins are
+  clustered, a cluster's tap zooms to fit them and, at the highest zoom, lists them.
+- **A photo's name** is looked up once, when its details first show, and sealed into its listed tier as on the web.
+- **Offline** the place is shown and not edited, and no map is drawn — nor from the moment an app loses its server; the
+  map's place says the map needs a connection.
+- **Nothing at rest:** tiles are kept in memory for the session only (a cache across launches is inbox #939); on Apple,
+  MapKit's system service may keep a viewed region's tiles in its own cache (ADR 0143's Consequences).
+- **Not in the apps:** A1, the place in the creation dialog (inbox #940); a person's map (#941).
+
 ## Related
 
 - Feature: [Memory](../_index.md)
@@ -158,4 +181,5 @@ coordinates.
   third-party services are a separate consented boundary)
 - Future: **on-device coarse names** (a bundled gazetteer, ADR 0016); **derived** place from GPS clusters
   aggregated across a Memory *plus its chapters*
-- End-user view (docs site): [Set the location](../../../../site/src/content/docs/memories/set-the-location.mdx)
+- End-user view (docs site): [Set the location](../../../../site/src/content/docs/memories/set-the-location.mdx);
+  what a map sends, in the app on Apple too: [Is my data safe?](../../../../site/src/content/docs/privacy/is-my-data-safe.md)
