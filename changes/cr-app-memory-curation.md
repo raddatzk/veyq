@@ -336,9 +336,8 @@ reached only when it was open as the device went offline; then it stays, naming 
   `futurePhotoField`; (e) `aPeersDifferentCorrectionMeanwhileIsAConflictAndNothingIsWritten` — `expected:<Conflict(1500000000000)>
   but was:<Done(1700000040000)>`; (f) `iWasThereIsOfferedForAMemoryInATenantOrGroupScopeAndSealsTheMakerAtBirth` —
   "never into a chapter". Green: `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :core:jvmTest :bridge:jvmTest
-  :core:macosArm64Test --no-daemon` (BUILD SUCCESSFUL). **Not run:** `CurationLiveTest` against the dev instance — this
-  session's classifier refused the run that reads the owner's `.run/.env`; the owner runs
-  `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :core:jvmTest --tests '*CurationLiveTest*'`.
+  :core:macosArm64Test --no-daemon` (BUILD SUCCESSFUL). **Run live 2026-11-17** (the owner allowed the `.run/.env` read in the coordinating session): `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :core:jvmTest --tests '*CurationLiveTest*' --tests '*BannerLiveTest*' --tests '*PersonProfileLiveTest*'` from
+  `src/mobile/` — `CurationLiveTest` 1 test, 0 skipped, 0 failures (`build/test-results/jvmTest`).
 
 - [x] **3 the banner (core)** — D4, D5, D7's pin: the generated `MemoryBannerApi`, `Banner`, `BannerFrame`,
   `BannerWrite` with the digest, the match, `SharedBlob`, A1 in `MediaUpload`, A2 in the gallery's trash, the pin's
@@ -386,9 +385,8 @@ reached only when it was open as the device went offline; then it stays, naming 
   ids (`Banner.Slots`), not the raw `banner` value as the web's `editField` does — a peer's banner change always moves a
   slot; no client re-frames any more. A pin's banner goes through `PinKinds.named`/`Pin.named` (generic) rather than a
   banner field in core's pin record, so core names no application. The words of the dialog and of A2's question come with
-  the platforms (phase 6); the core says them as `BannerEditor.Said`. **Not run:** `BannerLiveTest` against the dev
-  instance (its run reads the owner's `.run/.env`); the owner runs `VEYQ_LIVE=http://veyq.localhost:8080
-  VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :core:jvmTest --tests '*BannerLiveTest*'` from `src/mobile/`.
+  the platforms (phase 6); the core says them as `BannerEditor.Said`. **Run live 2026-11-17** with phase 2's command: `BannerLiveTest`
+  1 test, 0 skipped, 0 failures.
 
 - [x] **4 the person profile (core)** — D11–D14: `Shell.person` with its `back`, the registry's `personSection` and
   Memories' claim, `ParticipantIndex` over `trees()`, the section's model (rows, order, List | Map, the states),
@@ -439,9 +437,8 @@ reached only when it was open as the device went offline; then it stays, naming 
   (`ShellWords.space`): the apps read no group names. "Gone after a lock" is `TenantSession.close()`; the phones call it
   where their tenant closes when phases 6–7 build the profile screens (no way in exists before them). A former uploader
   now carries its user id (opening nothing), so the profile rule is `Uploader.profile`'s alone. **Not run:**
-  `PersonProfileLiveTest` against the dev instance (its run reads the owner's `.run/.env`); the owner runs
-  `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :core:jvmTest --tests '*PersonProfileLiveTest*'`
-  from `src/mobile/`.
+  `PersonProfileLiveTest` with a group: run 2026-11-17 with phase 2's command it SKIPPED, said so — the dev principal is
+  in no group ("the group's Memory cannot be made"); it runs once the dev principal joins a group.
 
 - [x] **5 the bridge** — D8; `HeaderShown`'s people line and banner, the dialogs' calls, the creation form's
   `wasThere`; `Watched.Person` → `PersonShown` (name, avatar key, `~username`, the section's rows, state and `partial`),
