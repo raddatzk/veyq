@@ -454,8 +454,8 @@ share is offered** in their shells (`folder == null && rules.on && rules.dropBox
 refresh**: nothing polls a drop box; `ShellModel.refresh` reads the tree anew (the desktops' F5, the uploads' settle,
 each app's lists read after a write). A guest's deleted folder is restorable only by Undo (inbox #904).
 
-**Memories**: curating a Memory's participants, a medium's capture time, the banner (inbox #890); the date and the
-place in the creation dialog (#940); a person's profile map (#941); item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
+**Memories**: curating a Memory's participants, a person's profile with its map, a medium's capture time, the banner (inbox #890,
+planned in [cr-app-memory-curation](../../changes/cr-app-memory-curation.md)); the date and the place in the creation dialog (#940); item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
 re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a
 received link (#435, a source for the same model).
 
