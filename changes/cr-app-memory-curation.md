@@ -406,12 +406,15 @@ Open:
    does — **newest first by the Memory's date, undated last** — not by last use like the apps' other lists, because a
    person's Memories are read as a timeline of what they were part of. Tiles would be a new look on every level of the
    apps and belong to their own change.
+   **Answer (owner 2026-11-17):** List | Map as recommended; tiles go to the inbox (#950) — whether they look right on
+   a phone is to be looked at there.
 5. **The safety number and editing one's own profile stay out of the apps' profile for now.** The web's profile page
    also shows a member's **safety number** (to check it is really them) and, on one's own page, **Edit profile** (real
    name, picture). The apps have neither anywhere today. *Recommendation:* the apps' profile shows the person's name,
    picture and Memories now; the safety number and editing one's own profile come together in a change of their own
    (#949), since the safety number is a security check that deserves its own design and passes, not a part of curating
    Memories. Until then the web is where a member checks a safety number or changes their name and picture.
+   **Answer (owner 2026-11-17):** later, as recommended — #949.
 
 ## Inbox rows
 
