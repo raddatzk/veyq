@@ -494,6 +494,37 @@ reached only when it was open as the device went offline; then it stays, naming 
   uploader, switch to its map; create a Memory with *I was there*; correct a photo's time and reset it (the gallery
   re-orders); set an image banner and a video banner (play it), turn the device to see 1:1 and 16:9, trash the banner's
   medium (asked), remove the banner.
+  *Built 2026-11-17 — the box stays open until the live click below is run:* the words first, in a commit of their own:
+  the web's EN and DE unchanged (owner answer 3) as `words.json` keys named by the web key's segments in snake_case
+  (`memory_participants_*`, `memory_people_*`, `memory_banner_*`, `media_edit_captured_at`, `media_reset_captured_at`,
+  `media_captured_at_save_failed`, `media_captured_at_conflict`, `media_meta_unreadable`, `people_former_member_hint`,
+  `people_unknown_member`, `people_open`, `node_view_list`) — all the CR's, for phases 7–8 too. `people.formerMember` is
+  not added (`people_former_member` is Expenses' lowercase word): the profile says `memory_participants_former`;
+  `memory.viewMap` is the apps' `memory_view_map` ("Map"). Android: `MemoryCuration.kt` — the people line under the facts
+  line on every view (one person's avatar and name, else up to three overlapping avatars with "+N"; a tap lists everyone, a
+  current member opening their profile, a former one greyed; *Add participants* where nobody is listed and the member
+  edits), the picker as a bottom sheet (search, toggleable rows, a former member above, the cap's words), the banner above
+  the hero on every view (`BannerFrame.of` over the column's dp and the screen's height, the picture contained over its
+  `BannerFrame.surround` scaled with filtering and stretched back; a video's poster with a play button, `ReaderPlayer` over
+  `Banner.reader` interrupting the music as a lightbox video does), the banner dialog as Material's full-screen dialog
+  behind the header's `banner` action (the system photo picker `ImageAndVideo` read through `pickedMedium` as uploads are,
+  the two previews, Save, progress with Cancel, Remove; the decoding in `MediaDerive.bannerImage`/`bannerPoster`), A2's
+  question with *Remove the banner too*, and the details' capture-time editor (Material `DatePicker` + `TimePicker`,
+  `java.time` in the device's zone, *Reset to original*; a medium with no time gets an *Edit capture time* button). The
+  picker and the banner dialog are `AppModel`'s (a rotation keeps them, a save runs in its scope); the gallery, a tenant
+  switch, a lock and a sign-out close them. `PersonScreen.kt`: the profile over the shell (`Shell.person`; a 112 dp
+  `PersonAvatar`, the name, `~username`, a former member's hint), "Memories with {name}" with a `SingleChoiceSegmentedButtonRow`
+  List | Map once something is listed, the rows (cover, name, date · place · group) newest first, loading, failed with *Try
+  again*, empty and partial; the map is the Map tab's, extracted as `MemoriesPinMap`. Ways in: the participants' list and a
+  current member's uploader name in the details. New Memory offers *I was there*, ticked, where `offersWasThere`.
+  `TenantSession.close()` runs where Android's tenant closes: a switch (`show`), a lock or gone gate (`gateChanged`), a
+  sign-out. The manifest, `build.gradle.kts` and the version catalog are unchanged (`git diff` empty): no permission, no
+  dependency. Green: `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :core:jvmTest :bridge:jvmTest :android:assembleDebug
+  :android:testDebugUnitTest --no-daemon` (BUILD SUCCESSFUL), `scripts/validate_mobile_words.py` and every
+  `scripts/validate_*.py` but guard_gaps. On a throwaway emulator (`curation_p6`, API 36) the build installs and starts to
+  its sign-in with no crash (`logcat -b crash` empty; the curation's state is declared above `AppModel`'s `init`, whose
+  first gate closes it). **Not run: the live click** — `devlogin.py` reads the owner's `.run/.env`, which this session's
+  classifier refused; the click list above is the owner's or a session allowed to sign the emulator in.
 
 - [ ] **7 Apple (iOS, macOS)** — as phase 6 in SwiftUI (a popover on the Mac, a sheet on iOS, `PhotosPicker` with images
   and videos, `VideoPlayer`, the profile pushed on the navigation stack, its map MapKit's as ADR 0143's). · Done when: the
