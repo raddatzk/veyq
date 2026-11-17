@@ -105,6 +105,12 @@ internal class Composition<A : Connection, T : Any>(
      */
     val tiers: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver = NoTiers,
     /**
+     * How a picked banner is decoded for its previews and its upload (`BannerWrite.Pictures`): asked of the host in the
+     * library ([HostBannerPictures], its upload tiers' request with the cover's spec); a test plays the host, or has none
+     * (every pick refused as unreadable).
+     */
+    val bannerPictures: me.raddatz.veyq.mobile.memories.banner.BannerWrite.Pictures = NoBannerPictures,
+    /**
      * The trusted device's link over a signed-in account (core's `DeviceLink.showForNewDevice`, `scanSignInCode` with
      * [decode]): [role] is one of those two. The real account's in the library; a test plays a granter over a relay of
      * its own, or has none (the trusted `Link.*` calls are then refused for the connection).
@@ -207,9 +213,16 @@ internal class Tenant(
         measure: me.raddatz.veyq.mobile.memories.music.MusicUpload.Measure,
     ) -> me.raddatz.veyq.mobile.memories.music.MusicModel)? =
         shell?.let { s -> { gallery, uploads, measure -> s.musicModel(gallery, uploads, measure, left = {}) } },
-    /** A Memory made where New makes it (`ShellModel.createMemory`): the node made, or why not. */
-    val createMemory: (suspend (scopeId: String, parentId: String?, name: String) -> me.raddatz.veyq.mobile.memories.MemoryCreate.Made)? =
-        shell?.let { s -> { scopeId, parentId, name -> s.createMemory(scopeId, parentId, name) } },
+    /** A Memory made where New makes it (`ShellModel.createMemory`), *I was there* ticked or not: the node made, or why not. */
+    val createMemory: (suspend (scopeId: String, parentId: String?, name: String, wasThere: Boolean) -> me.raddatz.veyq.mobile.memories.MemoryCreate.Made)? =
+        shell?.let { s -> { scopeId, parentId, name, wasThere -> s.createMemory(scopeId, parentId, name, wasThere) } },
+    /** Whether New Memory in a scope offers *I was there* (`ShellModel.offersWasThere`). */
+    val offersWasThere: ((scopeId: String) -> Boolean)? = shell?.let { s -> { scopeId -> s.offersWasThere(scopeId) } },
+    /** A person's frame (`ShellModel.profile`): named by the tenant's directory as read, with the sections of the applications on. */
+    val profile: ((userId: String) -> me.raddatz.veyq.mobile.navigation.PersonProfile)? = shell?.let { s -> { userId -> s.profile(userId) } },
+    /** Memories' section of a person's page (`ShellModel.personMemories`) over the tenant's participants index. */
+    val personMemories: ((userId: String) -> me.raddatz.veyq.mobile.memories.people.PersonMemories)? =
+        shell?.let { s -> { userId -> s.personMemories(userId) } },
     /** A list row's cover (`ShellModel.rowCover`): its frame and crop, its picture only where the host holds another frame. */
     val rowCover: (suspend (nodeId: String, held: String?) -> me.raddatz.veyq.mobile.session.NodeCover.Row?)? =
         shell?.let { s -> { nodeId, held -> s.rowCover(nodeId, held) } },
@@ -248,6 +261,49 @@ internal class Tenant(
         gallery: me.raddatz.veyq.mobile.memories.GalleryModel, uploads: me.raddatz.veyq.mobile.memories.MediaUploads,
     ) -> me.raddatz.veyq.mobile.memories.tracks.TrackList)? = shell?.let { s -> { g, uploads -> s.trackList(g, uploads, left = {}) } },
 )
+
+/**
+ * A participants picker the host opened ([Call.ParticipantsOpen]) on gallery [gallery]; [open] turns false as it closes, so a
+ * watch standing on it delivers null once.
+ */
+internal class HeldParticipants(val gallery: Long, val model: me.raddatz.veyq.mobile.memories.ParticipantsPicker) {
+    val open = MutableStateFlow(true)
+}
+
+/** A capture-time editor the host opened ([Call.CaptureTimeOpen]) in lightbox [lightbox] of gallery [gallery]. */
+internal class HeldCaptureTime(val gallery: Long, val lightbox: Long, val model: me.raddatz.veyq.mobile.memories.CaptureTimeEditor) {
+    val open = MutableStateFlow(true)
+}
+
+/**
+ * A banner dialog the host opened ([Call.BannerOpen]) on gallery [gallery]: the file it read last ([source], closed when
+ * another is picked or the dialog goes), the pick's number ([pick]) and the save running ([job], which [Call.BannerCancel]
+ * cancels — the old banner then stays, `BannerEditor`'s rule).
+ */
+internal class HeldBanner(val gallery: Long, val model: me.raddatz.veyq.mobile.memories.banner.BannerEditor) {
+    val open = MutableStateFlow(true)
+    val pick = MutableStateFlow(0L)
+    val source = AtomicReference<me.raddatz.veyq.mobile.blob.UploadSource?>(null)
+    val job = AtomicReference<Job?>(null)
+
+    /** The dialog goes: its save stopped, its file let go. */
+    fun close() {
+        open.value = false
+        job.exchange(null)?.cancel()
+        source.exchange(null)?.close()
+    }
+}
+
+/**
+ * A person's page the host opened ([Call.PersonOpen]): core's frame and Memories' section where it is among the
+ * application's sections; [open] turns false as it closes.
+ */
+internal class HeldPerson(
+    val profile: me.raddatz.veyq.mobile.navigation.PersonProfile,
+    val memories: me.raddatz.veyq.mobile.memories.people.PersonMemories?,
+) {
+    val open = MutableStateFlow(true)
+}
 
 /** A date editor the host opened ([Call.DateOpen]) on gallery [gallery]. */
 internal class HeldDate(val gallery: Long, val model: me.raddatz.veyq.mobile.memories.place.DateEditor)
@@ -447,6 +503,17 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val places = Registry<HeldPlace>()
     private val trackLists = Registry<HeldTracks>()
 
+    /**
+     * The pages' curation dialogs (ADR 0144 decision 8) — participants pickers, capture-time editors, banner dialogs — and
+     * the readers a video banner opened ([Call.BannerPlay], by the reader's id: its gallery's), each closed with its page and
+     * its tenant; and the person's pages, closed with the tenant (the participants index with it, `TenantSession.close`).
+     */
+    private val participantPickers = Registry<HeldParticipants>()
+    private val captureTimes = Registry<HeldCaptureTime>()
+    private val banners = Registry<HeldBanner>()
+    private val bannerReaders = Registry<Long>()
+    private val persons = Registry<HeldPerson>()
+
     /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
     private val manage = MutableStateFlow<List<ManagedShown>?>(null)
     private val managing = AtomicReference<Job?>(null)
@@ -472,7 +539,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShareLabel -> shares[call.share]?.label(call.label).done(Answer.Why.NO_SUCH_SHARE)
             is Call.SharePassword -> shares[call.share]?.password(call.password).done(Answer.Why.NO_SUCH_SHARE)
             // a map's views come at gesture pace, a place's name and a date's fields as typed and picked: in the host's order
-            is Call.MapView, is Call.PlaceTyped, is Call.DateChoose, is Call.DateFrom, is Call.DateTo -> ordered(call)
+            is Call.MapView, is Call.PlaceTyped, is Call.DateChoose, is Call.DateFrom, is Call.DateTo,
+            is Call.ParticipantsSearch, is Call.ParticipantsToggle -> ordered(call)
             else -> null
         }
         scope.launch {
@@ -504,6 +572,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Call.DateChoose -> dates[call.date]?.model?.mode(me.raddatz.veyq.mobile.memories.place.MemoryDate.Mode.valueOf(call.mode.name)).done(Answer.Why.NO_SUCH_DATE)
         is Call.DateFrom -> dates[call.date]?.model?.from(call.day).done(Answer.Why.NO_SUCH_DATE)
         is Call.DateTo -> dates[call.date]?.model?.to(call.day).done(Answer.Why.NO_SUCH_DATE)
+        is Call.ParticipantsSearch -> participantPickers[call.participants]?.model?.search(call.query).done(Answer.Why.NO_SUCH_PARTICIPANTS)
+        is Call.ParticipantsToggle -> participantPickers[call.participants]?.let { taken(it.model.toggle(call.userId)) } ?: noParticipants
         else -> Answer.Refused(Answer.Why.NOT_A_CALL)
     }
 
@@ -631,6 +701,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShellSelect -> shell?.select(call.tab).done()
             is Call.ShellOpen -> shell?.open(call.ref).done()
             is Call.ShellOpenAtTop -> shell?.openAtTop(call.ref).done()
+            is Call.ShellOpenPerson -> shell?.openPerson(call.userId).done()
             is Call.ShellSearch -> shell?.search(call.on).done()
             Call.ShellRefresh -> shell?.refresh().done()
             Call.ShellOfflineGoneSeen -> shell?.goneSeen().done()
@@ -744,6 +815,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ReaderClose -> readers.remove(call.reader)?.let {
                 pageReaders.remove(call.reader)
                 lightboxReaders.remove(call.reader)
+                bannerReaders.remove(call.reader)
                 Answer.Done
             } ?: Answer.Refused(Answer.Why.NO_SUCH_READER)
             is Call.FileOpen -> tenant.value?.models?.file?.let { make ->
@@ -986,7 +1058,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.LinkEnterCode -> links[call.link]?.let { taken(it.model.enterCode(call.code)) } ?: noLink
             is Call.LinkClose -> links.remove(call.link)?.let { closeLink(it); Answer.Done } ?: noLink
             is Call.ShellCreateMemory -> tenant.value?.models?.createMemory?.let { make ->
-                make(call.scopeId, call.parentId, call.name).let { Answer.Created(it.node, it.notice) }
+                make(call.scopeId, call.parentId, call.name, call.wasThere).let { Answer.Created(it.node, it.notice) }
             } ?: noTenant
             is Call.ShellRowCover -> tenant.value?.models?.rowCover?.let { read ->
                 val row = read(call.nodeId, call.held) ?: return Answer.Refused(Answer.Why.NO_COVER)
@@ -1008,6 +1080,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.GalleryClose -> galleries.remove(call.gallery)?.let { g ->
                 closeLightboxesOf(call.gallery)
                 closeFactsOf(call.gallery)
+                closeCurationOf(call.gallery)
                 musics.removeIf { it.gallery == call.gallery }.forEach { it.model.close() }
                 g.close()
                 Answer.Done
@@ -1052,6 +1125,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noGallery
             is Call.LightboxClose -> lightboxes.remove(call.lightbox)?.let { held ->
                 dropReadersOf(call.lightbox)
+                captureTimes.removeIf { it.lightbox == call.lightbox }.forEach { it.open.value = false }
                 maps.removeIf { it.lightbox == call.lightbox }.forEach { it.close() }
                 held.model.close()
                 Answer.Done
@@ -1065,7 +1139,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.LightboxSlideshow -> lightboxes[call.lightbox]?.model?.slideshow(call.on).done(Answer.Why.NO_SUCH_LIGHTBOX)
             is Call.LightboxDetails -> lightboxes[call.lightbox]?.let { held ->
                 val d = held.model.details(call.mediaId) ?: return Answer.Refused(Answer.Why.NO_MEDIUM)
-                Answer.MediumDetails(d.rows.map(::detailRow), d.uploader?.let(me.raddatz.veyq.mobile.memories.MediaDetails::uploaderWords), d.uploaderAt, map = d.map != null)
+                Answer.MediumDetails(
+                    d.rows.map(::detailRow), d.uploader?.let(me.raddatz.veyq.mobile.memories.MediaDetails::uploaderWords), d.uploaderAt, map = d.map != null,
+                    profile = d.uploader?.profile,
+                )
             } ?: noLightbox
             is Call.LightboxTrash -> lightboxes[call.lightbox]?.let { held -> trashed(held.page, held.model.trash()) } ?: noLightbox
             is Call.LightboxStop -> lightboxes[call.lightbox]?.model?.stop().done(Answer.Why.NO_SUCH_LIGHTBOX)
@@ -1128,7 +1205,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.AudioEnded -> decks[call.deck]?.ended(call.load).done(Answer.Why.NO_SUCH_DECK)
             is Call.AudioFailed -> decks[call.deck]?.failed(call.load).done(Answer.Why.NO_SUCH_DECK)
             // these are applied on the host's thread, in its order ([call])
-            is Call.MapView, is Call.PlaceTyped, is Call.DateChoose, is Call.DateFrom, is Call.DateTo -> ordered(call)
+            is Call.MapView, is Call.PlaceTyped, is Call.DateChoose, is Call.DateFrom, is Call.DateTo,
+            is Call.ParticipantsSearch, is Call.ParticipantsToggle -> ordered(call)
             Call.MapOpenMemories -> tenant.value?.models?.let { t ->
                 val services = mapServices.value ?: return noMapServices
                 val pins = t.memoriesMap?.invoke() ?: return noMapServices
@@ -1260,7 +1338,148 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.ReportOpened(id)
             } ?: noTracks
             is Call.TracksSeen -> trackLists[call.tracks]?.model?.seen().done(Answer.Why.NO_SUCH_TRACKS)
+            // --- curating a Memory and a person's page (ADR 0144 decision 8) ---
+            is Call.ParticipantsOpen -> galleries[call.gallery]?.let { g ->
+                val picker = g.participantsPicker() ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = ids.incrementAndFetch()
+                participantPickers.put(id, HeldParticipants(call.gallery, picker))
+                scope.launch { picker.load() }
+                Answer.ParticipantsOpened(id)
+            } ?: noGallery
+            is Call.ParticipantsLoad -> participantPickers[call.participants]?.let { it.model.load(); Answer.Done } ?: noParticipants
+            is Call.ParticipantsSave -> participantPickers[call.participants]?.let { held ->
+                when (held.model.save()) {
+                    null -> Answer.Refused(Answer.Why.NOT_TAKEN)
+                    me.raddatz.veyq.mobile.memories.place.MemoryFacts.Outcome.Written, me.raddatz.veyq.mobile.memories.place.MemoryFacts.Outcome.Unchanged ->
+                        Answer.FactsSaved(FactsSave.SAVED)
+                    else -> Answer.FactsSaved(FactsSave.FAILED)
+                }
+            } ?: noParticipants
+            is Call.ParticipantsClose -> participantPickers.remove(call.participants)?.let { it.open.value = false; Answer.Done } ?: noParticipants
+            is Call.CaptureTimeOpen -> lightboxes[call.lightbox]?.let { held ->
+                val editor = held.model.captureTimeEditor(call.mediaId) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = ids.incrementAndFetch()
+                captureTimes.put(id, HeldCaptureTime(held.gallery, call.lightbox, editor))
+                Answer.CaptureTimeOpened(id)
+            } ?: noLightbox
+            is Call.CaptureTimeSet -> captureTimes[call.captureTime]?.let { held -> captureSaved(held.model.set(call.epochMs)) } ?: noCaptureTime
+            is Call.CaptureTimeReset -> captureTimes[call.captureTime]?.let { held ->
+                held.model.reset()?.let(::captureSaved) ?: Answer.Refused(Answer.Why.NOT_TAKEN)
+            } ?: noCaptureTime
+            is Call.CaptureTimeClose -> captureTimes.remove(call.captureTime)?.let { it.open.value = false; Answer.Done } ?: noCaptureTime
+            is Call.BannerPicture -> galleries[call.gallery]?.let { g ->
+                val bytes = g.bannerPicture() ?: return Answer.Refused(Answer.Why.NO_BYTES)
+                payload(bytes)
+                Answer.Bytes(Sniff.image(bytes)?.mime)
+            } ?: noGallery
+            is Call.BannerPlay -> galleries[call.gallery]?.let { g ->
+                val reader = g.bannerReader() ?: return Answer.Refused(Answer.Why.NO_MEDIUM)
+                openReader(reader, g.current.banner?.type).also { if (it is Answer.Reader) bannerReaders.put(it.reader, call.gallery) }
+            } ?: noGallery
+            is Call.BannerFrame -> {
+                val f = me.raddatz.veyq.mobile.memories.banner.BannerFrame.of(call.columnWidth, call.viewportHeight)
+                val surround = me.raddatz.veyq.mobile.memories.banner.BannerFrame.surround(call.pictureWidth, call.pictureHeight)
+                Answer.BannerFramed(f.width, f.height, f.wide, surround[0], surround[1])
+            }
+            is Call.BannerOpen -> galleries[call.gallery]?.let { g ->
+                val editor = g.bannerEditor(parts.bannerPictures) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = ids.incrementAndFetch()
+                banners.put(id, HeldBanner(call.gallery, editor))
+                Answer.BannerOpened(id)
+            } ?: noGallery
+            is Call.BannerPick -> banners[call.banner]?.let { held ->
+                if (held.model.current.saving || held.job.load() != null) return Answer.Refused(Answer.Why.NOT_TAKEN)
+                // the core opens the path and reads it where it lies (ADR 0137 decision 3); the path is never echoed
+                val source = parts.files.source(call.path)?.let { PathSource(call.path, it) } ?: return Answer.Refused(Answer.Why.NO_SUCH_PATH)
+                held.source.exchange(source)?.close()
+                held.model.pick(source)
+                held.pick.value += 1
+                Answer.Done
+            } ?: noBanner
+            is Call.BannerPreview -> banners[call.banner]?.let { held ->
+                val bytes = held.model.current.picked?.picture ?: return Answer.Refused(Answer.Why.NO_BYTES)
+                payload(bytes.copyOf())
+                Answer.Bytes(Sniff.image(bytes)?.mime)
+            } ?: noBanner
+            is Call.BannerSave -> banners[call.banner]?.let { held ->
+                if (!held.model.current.canSave) return Answer.Refused(Answer.Why.NOT_TAKEN)
+                bannerRun(held) { held.model.save() }
+            } ?: noBanner
+            is Call.BannerCancel -> banners[call.banner]?.let { held -> held.job.load()?.cancel().done(Answer.Why.NOT_TAKEN) } ?: noBanner
+            is Call.BannerRemove -> banners[call.banner]?.let { held ->
+                if (!held.model.current.canRemove) return Answer.Refused(Answer.Why.NOT_TAKEN)
+                bannerRun(held) { held.model.remove() }
+            } ?: noBanner
+            is Call.BannerClose -> banners.remove(call.banner)?.let { it.close(); Answer.Done } ?: noBanner
+            is Call.GalleryTrashBannerPicture -> galleries[call.gallery]?.let { g -> trashed(g, g.trashBannerPicture(call.removeBanner)) } ?: noGallery
+            is Call.ShellOffersWasThere -> tenant.value?.models?.offersWasThere?.let { Answer.WasThere(it(call.scopeId)) } ?: noTenant
+            is Call.PersonOpen -> tenant.value?.models?.let { t ->
+                val profile = t.profile?.invoke(call.userId) ?: return noTenant
+                val memories = if (ApplicationId.MEMORIES in profile.sections) t.personMemories?.invoke(call.userId) else null
+                val id = ids.incrementAndFetch()
+                persons.put(id, HeldPerson(profile, memories))
+                memories?.let { m -> scope.launch { m.load() } }
+                Answer.PersonOpened(id)
+            } ?: noTenant
+            is Call.PersonView -> persons[call.person]?.let { held ->
+                held.memories?.view(me.raddatz.veyq.mobile.memories.people.PersonMemories.View.valueOf(call.view.name)).done(Answer.Why.NOT_OFFERED)
+            } ?: noPerson
+            is Call.PersonRetry -> persons[call.person]?.let { held -> held.memories?.load().done(Answer.Why.NOT_OFFERED) } ?: noPerson
+            is Call.PersonMap -> persons[call.person]?.let { held ->
+                val services = mapServices.value ?: return noMapServices
+                val section = held.memories ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val pins = section.current.map
+                val opening = { w: Double, h: Double -> pins.framing(w, h) ?: world(w, h) }
+                Answer.MapOpened(held(HeldMap(services, opening, flowOf(MapOverlays()), pins = pins, person = call.person)))
+            } ?: noPerson
+            is Call.PersonClose -> persons.remove(call.person)?.let { closePerson(call.person, it); Answer.Done } ?: noPerson
         }
+    }
+
+    /** What a capture-time editor's save came to, as the host is told it. */
+    private fun captureSaved(out: me.raddatz.veyq.mobile.memories.CaptureTime.Outcome): Answer = Answer.FactsSaved(
+        when (out) {
+            is me.raddatz.veyq.mobile.memories.CaptureTime.Outcome.Done -> FactsSave.SAVED
+            is me.raddatz.veyq.mobile.memories.CaptureTime.Outcome.Conflict -> FactsSave.REOPENED
+            else -> FactsSave.FAILED
+        },
+    )
+
+    /**
+     * A banner's save or removal run as the dialog's one job ([HeldBanner.job], so [Call.BannerCancel] stops it) and
+     * answered when it ended: what it came to, or cancelled — the old banner as it was.
+     */
+    private suspend fun bannerRun(held: HeldBanner, op: suspend () -> me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome?): Answer {
+        val job = scope.async { op() }
+        if (!held.job.compareAndSet(null, job)) {
+            job.cancel()
+            return Answer.Refused(Answer.Why.NOT_TAKEN)
+        }
+        job.join()
+        held.job.compareAndSet(job, null)
+        if (job.isCancelled) return Answer.BannerSaved(BannerSave.CANCELLED)
+        return Answer.BannerSaved(
+            when (job.getCompleted()) {
+                me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome.Done -> BannerSave.DONE
+                me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome.Stale -> BannerSave.STALE
+                me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome.Busy -> BannerSave.BUSY
+                else -> BannerSave.FAILED
+            },
+        )
+    }
+
+    /** Gallery [gallery]'s curation dialogs and its banner's readers go with it. */
+    private fun closeCurationOf(gallery: Long) {
+        participantPickers.removeIf { it.gallery == gallery }.forEach { it.open.value = false }
+        captureTimes.removeIf { it.gallery == gallery }.forEach { it.open.value = false }
+        banners.removeIf { it.gallery == gallery }.forEach { it.close() }
+        bannerReaders.keys().forEach { reader -> if (bannerReaders[reader] == gallery) { bannerReaders.remove(reader); readers.remove(reader) } }
+    }
+
+    /** A person's page goes, its section's map closed. */
+    private fun closePerson(id: Long, held: HeldPerson) {
+        held.open.value = false
+        maps.removeIf { it.person == id }.forEach { it.close() }
     }
 
     /** [map] held under a new id, for [Watched.Map] and the `Map.*` calls. */
@@ -1412,6 +1631,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noDate = Answer.Refused(Answer.Why.NO_SUCH_DATE)
     private val noPlace = Answer.Refused(Answer.Why.NO_SUCH_PLACE)
     private val noTracks = Answer.Refused(Answer.Why.NO_SUCH_TRACKS)
+    private val noParticipants = Answer.Refused(Answer.Why.NO_SUCH_PARTICIPANTS)
+    private val noCaptureTime = Answer.Refused(Answer.Why.NO_SUCH_CAPTURE_TIME)
+    private val noBanner = Answer.Refused(Answer.Why.NO_SUCH_BANNER)
+    private val noPerson = Answer.Refused(Answer.Why.NO_SUCH_PERSON)
 
     private fun taken(taken: Boolean): Answer = if (taken) Answer.Done else Answer.Refused(Answer.Why.NOT_TAKEN)
 
@@ -1572,6 +1795,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         trackLists.removeAll().forEach(::closeTracks)
         mapServices.value?.close()
         mapServices.value = null
+        // the curation's dialogs are their pages' (a banner's save running cancelled, its file let go), the person's pages
+        // the tenant's (ADR 0144 decision 8): each watch standing on one delivers null
+        participantPickers.removeAll().forEach { it.open.value = false }
+        captureTimes.removeAll().forEach { it.open.value = false }
+        banners.removeAll().forEach { it.close() }
+        bannerReaders.removeAll()
+        persons.removeAll().forEach { it.open.value = false }
         // a page closes its lightbox, and the lightbox its reader
         galleries.removeAll().forEach { it.close() }
         lightboxes.removeAll().forEach { it.model.close() }
@@ -1659,6 +1889,22 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         } ?: flowOf(Update.Place(w.place, null))
         is Watched.Tracks -> trackLists[w.tracks]?.let { held -> held.model.state.map { Update.Tracks(w.tracks, shownTracks(held, it)) } }
             ?: flowOf(Update.Tracks(w.tracks, null))
+        is Watched.Participants -> participantPickers[w.participants]?.let { held ->
+            combine(held.model.state, held.open) { s, open -> Update.Participants(w.participants, if (open) shownParticipants(s) else null) }
+        } ?: flowOf(Update.Participants(w.participants, null))
+        is Watched.CaptureTime -> captureTimes[w.captureTime]?.let { held ->
+            combine(held.model.state, held.open) { s, open ->
+                Update.CaptureTime(w.captureTime, if (open) CaptureTimeShown(s.atMs, s.corrected, s.originalMs, s.saving, s.said?.let { CurationSaid.valueOf(it.name) }, s.saved) else null)
+            }
+        } ?: flowOf(Update.CaptureTime(w.captureTime, null))
+        is Watched.Banner -> banners[w.banner]?.let { held ->
+            combine(held.model.state, held.pick, held.open) { s, pick, open -> Update.Banner(w.banner, if (open) shownBanner(s, pick) else null) }
+        } ?: flowOf(Update.Banner(w.banner, null))
+        is Watched.Person -> persons[w.person]?.let { held ->
+            val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
+            val section = held.memories?.state ?: flowOf(null)
+            combine(section, pictures, held.open) { m, p, open -> Update.Person(w.person, if (open) shownPerson(held, m, held.profile.userId in p) else null) }
+        } ?: flowOf(Update.Person(w.person, null))
         is Watched.Trash -> trashes[w.trash]?.let { t -> t.state.map { Update.Trash(w.trash, shownTrash(t, it)) } }
             ?: flowOf(Update.Trash(w.trash, null))
         is Watched.Move -> moves[w.move]?.let { m -> m.state.map { Update.Move(w.move, shownMove(m, it)) } }
@@ -1860,7 +2106,70 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         place = s.facts?.placeName,
         editsFacts = s.editsFacts,
         tracks = s.tracks.size,
+        people = s.people?.let { line ->
+            PeopleShown(line.people.map(::participant), line.avatars.map { it.userId }, line.more, line.named, line.edits, line.add)
+        },
+        banner = s.banner?.let { b -> BannerShown(BannerMedium.valueOf(b.medium.name), b.key, b.type) },
+        editsBanner = s.editsBanner,
+        bannerQuestion = s.bannerPicture,
     )
+
+    /** One participant of the people line, as `Participants.Entry` says it. */
+    private fun participant(e: me.raddatz.veyq.mobile.memories.Participants.Entry) = ParticipantShown(e.userId, e.name, e.former, e.opensProfile)
+
+    /** The participants picker as the host draws it ([ParticipantsShown]), each field the picker's own answer. */
+    private fun shownParticipants(s: me.raddatz.veyq.mobile.memories.ParticipantsPicker.State) = ParticipantsShown(
+        members = s.members?.let { s.visible.map { p -> MemberShown(p.userId, p.displayName, s.ticked(p.userId), s.togglable(p.userId)) } },
+        former = s.former.map { id -> MemberShown(id, null, s.ticked(id), s.togglable(id)) },
+        failed = s.failed,
+        query = s.query,
+        full = s.full,
+        noMatches = s.noMatches,
+        nobody = s.nobody,
+        canSave = s.canSave,
+        saving = s.saving,
+        said = when (s.said) {
+            null, me.raddatz.veyq.mobile.memories.place.MemoryFacts.Outcome.Written, me.raddatz.veyq.mobile.memories.place.MemoryFacts.Outcome.Unchanged -> null
+            is me.raddatz.veyq.mobile.memories.place.MemoryFacts.Outcome.Conflict -> CurationSaid.CONFLICT
+            me.raddatz.veyq.mobile.memories.place.MemoryFacts.Outcome.Unreadable -> CurationSaid.UNREADABLE
+            is me.raddatz.veyq.mobile.memories.place.MemoryFacts.Outcome.Refused -> CurationSaid.FAILED
+        },
+        saved = s.saved,
+    )
+
+    /** The banner dialog as the host draws it ([BannerEditorShown]), each field the dialog's own answer; [pick] the pick's number. */
+    private fun shownBanner(s: me.raddatz.veyq.mobile.memories.banner.BannerEditor.State, pick: Long) = BannerEditorShown(
+        hasBanner = s.hasBanner,
+        picking = s.picking,
+        picked = s.picked?.let { BannerPickedShown(BannerMedium.valueOf(it.medium.name), it.type, pick) },
+        saving = s.saving,
+        progress = s.progress,
+        said = s.said?.let { BannerSaid.valueOf(it.name) },
+        done = s.done,
+        canSave = s.canSave,
+        canRemove = s.canRemove,
+    )
+
+    /** A person's page as the host draws it ([PersonShown]): core's frame, and Memories' section as its state says it. */
+    private fun shownPerson(held: HeldPerson, m: me.raddatz.veyq.mobile.memories.people.PersonMemories.State?, picture: Boolean): PersonShown {
+        val p = held.profile
+        return PersonShown(
+            userId = p.userId,
+            name = p.name,
+            former = p.former,
+            picture = picture,
+            username = p.handle,
+            sections = p.sections,
+            memories = m?.let { s ->
+                PersonMemoriesShown(
+                    loading = s.loading, failed = s.failed, empty = s.empty, partial = s.partial, offersViews = s.offersViews,
+                    view = MemoriesView.valueOf(s.view.name),
+                    rows = s.rows.map { r -> PersonRowShown(r.ref, r.date?.let(::dateShown), r.placeName, r.group, r.group?.let(ShellWords::space)) },
+                    located = s.map.pins.size,
+                )
+            },
+        )
+    }
 
     /** A place editor as the host draws it ([PlaceShown]), each field the editor's own answer. */
     private fun shownPlace(
@@ -2105,6 +2414,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             tiers: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver = NoTiers,
             /** The music's decks, system controls, measure and words: the host's ([HostAudio]); none: no player. */
             audio: HostAudio? = null,
+            /** A picked banner's decoding: the host's ([HostBannerPictures]). */
+            bannerPictures: me.raddatz.veyq.mobile.memories.banner.BannerWrite.Pictures = NoBannerPictures,
             now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
         ): Bridge<VeyqAccount, TenantSession> = Bridge {
             val recent = RecentUses(
@@ -2123,7 +2434,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             Composition(
                 SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files, pictures = pictures,
                 settings = { session, account, separator -> AccountSettings.of(session, account, separator) }, tiers = tiers, audio = audio,
-                language = config.language,
+                bannerPictures = bannerPictures, language = config.language,
                 trustedLink = { account, role, decode ->
                     when (role) {
                         DeviceLink.Role.SHOW_FOR_NEW_DEVICE -> DeviceLink.showForNewDevice(account)

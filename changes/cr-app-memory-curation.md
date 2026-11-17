@@ -443,13 +443,48 @@ reached only when it was open as the device went offline; then it stays, naming 
   `VEYQ_LIVE=http://veyq.localhost:8080 VEYQ_ENV_FILE=<main>/.run/.env ./gradlew :core:jvmTest --tests '*PersonProfileLiveTest*'`
   from `src/mobile/`.
 
-- [ ] **5 the bridge** — D8; `HeaderShown`'s people line and banner, the dialogs' calls, the creation form's
+- [x] **5 the bridge** — D8; `HeaderShown`'s people line and banner, the dialogs' calls, the creation form's
   `wasThere`; `Watched.Person` → `PersonShown` (name, avatar key, `~username`, the section's rows, state and `partial`),
   `Call.PersonOpen(userId)`, `Person.View(list|map)` with the map over `Call.MapOpenMemories`' path fed the person's
   Memories; schema under `SecretFreeSchemaTest`; dialogs and the profile closed with page and tenant. · Done when:
   `:bridge:jvmTest` green; **bites:** (a) a blob ref or the digest in `HeaderShown` → `SecretFreeSchemaTest` red; (b) a
   banner dialog left open after `closeTenant()` still answering `Banner.Save` → red; (c) `PersonShown` still answered
   after `closeTenant()` → red.
+  *Done 2026-11-17:* built in `Wire.kt`/`Bridge.kt`: `GalleryShown` gains `people` (`PeopleShown`/`ParticipantShown`:
+  ids, names, `former`, `opensProfile`, the avatars by id and `more`), `banner` (`BannerShown`: medium, the picture's cache
+  key, a video's type), `editsBanner` and `bannerQuestion` (A2); the calls `Participants.Open|Load|Search|Toggle|Save|Close`
+  (`Watched.Participants` → `ParticipantsShown`; search and ticks in the host's order), `CaptureTime.Open(lightbox,
+  mediaId)|Set(epochMs)|Reset|Close` (`Watched.CaptureTime` → `CaptureTimeShown`), `Banner.Picture` (`Answer.Bytes`),
+  `Banner.Play` (`Answer.Reader`, closed with its page), `Banner.Frame` (the frame and the 32 px surround by size, no
+  tenant), `Banner.Open|Pick(path)|Preview|Save|Cancel|Remove|Close` (`Watched.Banner` → `BannerEditorShown`; a save the
+  dialog's one job, `Banner.Cancel` → `BannerSaved(CANCELLED)`), `Gallery.TrashBannerPicture` (A2's answer),
+  `Shell.OffersWasThere` and `Shell.CreateMemory`'s `wasThere`, `Shell.OpenPerson`, `Person.Open|View|Retry|Map|Close`
+  (`Watched.Person` → `PersonShown`/`PersonMemoriesShown`/`PersonRowShown`; a row and a pin open through `Shell.Open`; the
+  map closes with the page); `MediumDetails.profile` (the uploader's way in). A picked banner is decoded by
+  `HostBannerPictures` over the host's existing `Media.Tiers` with the cover's spec (2048, 0.85, poster at 0 ms), asked
+  suspending (`Host.askingWithPayload`); every dialog and page closes with its page (a picker, a banner dialog and the
+  banner's reader with the gallery, a capture-time editor with its lightbox) and with the tenant. Tests:
+  `CurationDispatchTest` (5), `MapDispatchTest` +1 (a person's map: located Memories only, a pin opening, closed with
+  the page), `SecretFreeSchemaTest` +1 (`aMemorysCurationAndAPersonsPageCrossAsIdsNamesAndStatesAlone`: the new shapes'
+  fields pinned, no field anywhere named like a digest), `WireTest` samples for every new variant, `DispatchTest`'s
+  no-tenant list +3. Bites, each one edit restored from a byte snapshot by a scripted run (`git status --porcelain` equal
+  before and after), each red at its named assertion: (a1) `sha256` on `BannerShown` →
+  `aMemorysCurationAndAPersonsPageCrossAsIdsNamesAndStatesAlone` expected `[]` but was `[BannerShown.sha256]`; (a2)
+  `wrappedBlobKey` on `BannerShown` → `nothingTheCoreSendsCarriesAKeyASealATokenASecretOrBytes` "named like a secret" and
+  the pinned list; (b) `banners.removeAll()` dropped from `closeTenant` → `aBannerDialogAndItsSaveGoWithTheTenant`
+  expected `Refused(NO_SUCH_BANNER)` but was `BannerSaved(DONE)`; (c) `persons.removeAll()` dropped →
+  `aPersonsPageShowsTheirFrameAndTheirMemoriesAndGoesWithTheTenant` expected `Refused(NO_SUCH_PERSON)` but was `Done`.
+  Green: `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :core:jvmTest :bridge:jvmTest :core:macosArm64Test
+  :android:assembleDebug --no-daemon` (BUILD SUCCESSFUL); `linux/run.py build` and `windows/run.py build` (the generated
+  bindings changed: `ShellCreateMemory.wasThere` is required in both, so `shell.rs`, `lightbox.rs` and `ShellView.cs` got
+  the minimal compile fix — `was_there: false`, `..`, `wasThere = false`; the UIs are phase 8); every
+  `scripts/validate_*.py` but guard_gaps. **Departures:** the people line and the banner ride `GalleryShown`, not
+  `HeaderShown` as D8 said — where ADR 0143's facts line rides and the core put them (`GalleryModel.State`); the node's
+  header is core's and names no application (ADR 0144 decision 8 now says so). `CaptureTime.Open` takes the lightbox
+  and the medium (the core's editor is the lightbox's). No new host request: a banner's pictures reuse `Media.Tiers`, so
+  no desktop decodes a banner a way of its own. Avatar keys are the user ids (`Avatar.Picture`, `ShellShown.pictures`).
+  The profile's words (Memories with, former, its states) come with the platforms (phases 6–8); the wire says them as
+  states and enums.
 
 - [ ] **6 Android** — the people line and its sheet, the picker, *I was there*, the details' time editor, the banner with
   its surround and player, its dialog and A2's question, the profile screen (a large `PersonAvatar`, the section's list

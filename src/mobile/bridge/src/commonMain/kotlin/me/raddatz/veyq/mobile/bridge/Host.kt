@@ -109,16 +109,17 @@ internal class Host(private val timeout: kotlin.time.Duration = TIMEOUT, private
      * [ask] from a coroutine that must not block its thread while the host answers (the music player's own lane, ADR 0142
      * decision 2: a deck's load and position): it suspends instead; a host silent for [timeout] fails it ([Silent]).
      */
-    suspend fun asking(request: HostRequest): HostReply {
+    suspend fun asking(request: HostRequest): HostReply = askingWithPayload(request).also { it.payload?.fill(0) }.reply
+
+    /** [asking], with the payload the host handed beside its reply, which the caller owns. */
+    suspend fun askingWithPayload(request: HostRequest): Replied {
         val token = tokens.incrementAndFetch()
         val answer = CompletableDeferred<Replied>()
         waiting.put(token, answer)
         try {
             send(token, wire.encodeToString(HostRequest.serializer(), request))
             // withTimeoutOrNull, as [askWithPayload]: a silent host is a failure, never this coroutine's cancellation
-            val r = withTimeoutOrNull(timeout) { answer.await() } ?: throw Silent(timeout)
-            r.payload?.fill(0)
-            return r.reply
+            return withTimeoutOrNull(timeout) { answer.await() } ?: throw Silent(timeout)
         } finally {
             waiting.remove(token)
         }
@@ -290,6 +291,46 @@ internal class HostTiers(
         /** No tiers: the original goes up alone. */
         val NONE = MediaUpload.Derived(null, null, null, null)
     }
+}
+
+/**
+ * A banner's pictures asked of the host (ADR 0144 decision 5; ADR 0136 decision 1: the platform decodes and encodes, the
+ * core holds the spec and decides): the picked file's [HostRequest.MediaTiers] with the cover's spec as its preview
+ * (`NodeCover.LONG_EDGE`, `NodeCover.QUALITY`: upright, never enlarged) — the request every desktop already answers for an
+ * upload, so no host decodes a banner in a way of its own —, a video's poster its first frame (at 0 ms). The preview is
+ * the picture; the thumbnail the host makes beside it is dropped. Asked suspending, never on a thread the host waits on.
+ * A source that names no path, a reply that is no set of tiers, and a picture the host does not decode are none (the
+ * core then refuses the pick as unreadable).
+ */
+internal class HostBannerPictures(private val host: Host) : me.raddatz.veyq.mobile.memories.banner.BannerWrite.Pictures {
+    override suspend fun image(source: UploadSource): ByteArray? = picture(source, video = false)
+
+    override suspend fun poster(source: UploadSource): ByteArray? = picture(source, video = true)
+
+    private suspend fun picture(source: UploadSource, video: Boolean): ByteArray? {
+        val path = (source as? PathSource)?.path ?: return null
+        val type = MediaUpload.typeOf(source.type, source.name, ByteArray(0)).takeIf { it.startsWith(if (video) "video/" else "image/") }
+            ?: if (video) "video/mp4" else "image/jpeg"
+        val r = host.askingWithPayload(
+            HostRequest.MediaTiers(
+                path, type, me.raddatz.veyq.mobile.session.NodeCover.LONG_EDGE, me.raddatz.veyq.mobile.session.NodeCover.QUALITY,
+                MediaUpload.THUMBNAIL_EDGE, MediaUpload.THUMBNAIL_QUALITY, 0,
+            ),
+        )
+        val t = r.reply as? HostReply.Tiers
+        val packed = r.payload
+        if (t == null || packed == null || t.previewSize <= 0 || t.previewSize > packed.size) {
+            packed?.fill(0)
+            return null
+        }
+        return packed.copyOfRange(0, t.previewSize).also { packed.fill(0) }
+    }
+}
+
+/** A composition that decodes no banner (a test's that plays none): every pick is refused as unreadable. */
+internal object NoBannerPictures : me.raddatz.veyq.mobile.memories.banner.BannerWrite.Pictures {
+    override suspend fun image(source: UploadSource): ByteArray? = null
+    override suspend fun poster(source: UploadSource): ByteArray? = null
 }
 
 /** A composition that derives no tiers (a test's that plays none): every original goes up alone. */

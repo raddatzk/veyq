@@ -168,6 +168,47 @@ class SecretFreeSchemaTest {
         assertEquals(listOf("Mapped.bearer: named like a secret", "Mapped.cookie: named like a secret"), leaks(listOf(Mapped.serializer()), identifiers))
     }
 
+    /**
+     * A Memory's curation and a person's page cross as ids, names and states alone (ADR 0144 decision 8, the CR's phase 5):
+     * the participants as user ids and display names, a banner as its medium, its picture's cache key and a video's type
+     * (its bytes asked by call, beside the JSON), the dialogs' states, a person's frame and their Memories as rows — never a
+     * blob's ref or wrap, a slot's key or the file's digest (the banner's sealed `sha256`, which tells an equal gallery file),
+     * and never the path a host picked a file from. No field anywhere on the wire is named like a digest; and these shapes
+     * carry exactly these fields — one added is red here until it is named below, with why.
+     */
+    @Test
+    fun aMemorysCurationAndAPersonsPageCrossAsIdsNamesAndStatesAlone() {
+        assertEquals(emptyList(), digests(Roots.all))
+        val schema = Schema(Roots.all)
+        val fields = schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }.groupBy({ it.owner }, { it.name })
+        fun of(name: String) = fields[name] ?: fields.entries.single { (owner, _) -> owner.endsWith(".$name") }.value
+        assertEquals(listOf("medium", "picture", "mediaType"), of("BannerShown"), "a banner says more than its medium, its picture's key and a video's type")
+        assertEquals(listOf("people", "avatars", "more", "named", "edits", "add"), of("PeopleShown"))
+        assertEquals(listOf("userId", "name", "former", "opensProfile"), of("ParticipantShown"))
+        assertEquals(
+            listOf("members", "former", "failed", "query", "full", "noMatches", "nobody", "canSave", "saving", "said", "saved"), of("ParticipantsShown"),
+        )
+        assertEquals(listOf("userId", "name", "ticked", "togglable"), of("MemberShown"))
+        assertEquals(listOf("atMs", "corrected", "originalMs", "saving", "said", "saved"), of("CaptureTimeShown"))
+        assertEquals(listOf("hasBanner", "picking", "picked", "saving", "progress", "said", "done", "canSave", "canRemove"), of("BannerEditorShown"))
+        assertEquals(listOf("medium", "mediaType", "pick"), of("BannerPickedShown"), "a picked file says more than its medium and type: its path echoed?")
+        assertEquals(listOf("width", "height", "wide", "surroundWidth", "surroundHeight"), of("BannerFramed"))
+        assertEquals(listOf("userId", "name", "former", "picture", "username", "sections", "memories"), of("PersonShown"))
+        assertEquals(listOf("loading", "failed", "empty", "partial", "offersViews", "view", "rows", "located"), of("PersonMemoriesShown"))
+        assertEquals(listOf("ref", "date", "place", "group", "groupName"), of("PersonRowShown"))
+        // the check against what it must refuse: a banner's digest, by any of its names
+        assertEquals(listOf("Digested.sha256", "Digested.originalDigest", "Digested.contentHash"), digests(listOf(Digested.serializer())))
+    }
+
+    @Serializable @kotlinx.serialization.SerialName("Digested")
+    class Digested(val medium: String, val sha256: String?, val originalDigest: String, val contentHash: String)
+
+    private fun digests(roots: List<KSerializer<*>>): List<String> {
+        val schema = Schema(roots)
+        return schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }
+            .filter { DIGEST.containsMatchIn(it.name) }.map { "${it.owner}.${it.name}" }
+    }
+
     @Serializable @kotlinx.serialization.SerialName("Mapped")
     class Mapped(val tile: String, val tileUrl: String, val bearer: String?, val cookie: String?)
 
@@ -264,6 +305,8 @@ class SecretFreeSchemaTest {
          */
         private val KEY_SYMBOL = Regex("^[kK](_|[A-Z])")
         private val ADDRESS = Regex("url|address", RegexOption.IGNORE_CASE)
+        /** A file's digest (a banner's sealed `sha256`, `blob-meta`'s): it tells which stored file is equal to which. */
+        private val DIGEST = Regex("sha\\d|digest|hash|checksum", RegexOption.IGNORE_CASE)
         private val PAIRING = Regex("handle|payload|grant|envelope|channel|transport|marker", RegexOption.IGNORE_CASE)
     }
 }

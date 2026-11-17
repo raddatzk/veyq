@@ -44,6 +44,8 @@ internal class HeldMap(
     val pins: MemoriesMap? = null,
     /** The place editor whose place a member's pan frames (`PlaceEditor.frame`), or none. */
     val place: PlaceEditor? = null,
+    /** The person's page whose Memories it shows ([Call.PersonMap]): it closes with that page. */
+    val person: Long? = null,
 ) {
     /** The view shown, the tiles that cover it, and how often the core moved it itself. */
     class Frame(val view: Viewport, val tiles: List<PlacedTile>, val moved: Long)

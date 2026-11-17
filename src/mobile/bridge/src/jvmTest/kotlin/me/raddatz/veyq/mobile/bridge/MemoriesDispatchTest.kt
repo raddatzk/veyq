@@ -263,7 +263,7 @@ class MemoriesDispatchTest {
                         me.raddatz.veyq.mobile.session.NodeCover.uploaded(me.raddatz.veyq.mobile.blob.ApplicationBlobs.Plan("b-m", 1, 5, "d3JhcA==", "m"), me.raddatz.veyq.mobile.session.NodeCover.Crop(0.25, 0.0, 0.5, 1.0)))))
                     me.raddatz.veyq.mobile.session.NodeCover.row(cover, held) { played.rowCoverOpens++; "row-m".encodeToByteArray() }
                 },
-                createMemory = { scopeId, parentId, name ->
+                createMemory = { scopeId, parentId, name, _ ->
                     MemoryCreate.check(MemoryCreate.MEMORY, parentId?.let { "FOLDER" }, name, emptyList())?.let { MemoryCreate.Made(null, it) }
                         ?: MemoryCreate.Made(NodeAt(scopeId, "m-new", MemoryCreate.MEMORY, name.trim()), null)
                 },
