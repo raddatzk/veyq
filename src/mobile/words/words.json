@@ -4350,5 +4350,13 @@
     "note": "A person's Memories: the List | Map switch's list (owner 2026-11-17: a short word, not the web's \"List view\").",
     "en": "List",
     "de": "Liste"
+  },
+  "memory_meta_unreadable": {
+    "en": "This Memory’s details (date, place, cover) can’t be opened: they are damaged, or were replaced by something this app didn’t write. They can’t be changed, so nothing was saved, and trying again won’t help. Its photos are not affected.",
+    "de": "Die Angaben dieser Erinnerung (Datum, Ort, Titelbild) lassen sich nicht öffnen: Sie sind beschädigt oder wurden durch etwas ersetzt, das diese App nicht geschrieben hat. Sie lassen sich nicht ändern, deshalb wurde nichts gespeichert, und ein erneuter Versuch hilft nicht. Ihre Fotos sind davon nicht betroffen."
+  },
+  "people_profile": {
+    "en": "Profile",
+    "de": "Profil"
   }
 }
