@@ -204,6 +204,44 @@ class OfflinePinsTest {
         off.retire()
     }
 
+    /**
+     * ADR 0144 decision 7: a pin keeps its Memory's banner — the video's slot and its poster, named only by the sealed meta,
+     * so the pin's record names them — and a banner outside the pin is not kept; offline the poster draws and the video
+     * plays from the store. Bite (f): the pin's record without the banner's ids (`AccountOffline.reach` without `Pin.named`)
+     * — red here.
+     */
+    @Test
+    fun a_pin_keeps_its_memorys_banner_and_it_draws_and_plays_offline() = runTest {
+        val t = play()
+        val s = t.scope("s1")
+        val m = t.node(s, "memory")
+        t.medium(m, "photo")
+        t.banner(m, "banner", video = true, frames = 3)
+        val other = t.node(s, "other")
+        t.banner(other, "other-banner", video = false)
+        t.remember()
+        val a = t.resume()
+        val o = assertNotNull(a.offline)
+        o.setLimit(0)
+        val tenant = tenantOf(a)
+        val pins = pinsOf(a)
+        assertEquals(3, assertNotNull(pins.plan(tenant, s.id, m.id)).blobs, "the pin's size leaves out the banner")
+        pins.pin(tenant, s.id, m.id)
+        pins.sync()
+        assertEquals(mapOf("photo-t" to setOf(0), "banner" to setOf(0, 1, 2), "banner-poster" to setOf(0)), o.frames(t), "the pin did not keep the banner whole (or kept one outside it)")
+        assertEquals(mapOf(m.id to listOf(t.id("banner"), t.id("banner-poster"))), pins.pins.value.single().named)
+        a.retire()
+
+        t.reachable = false
+        val off = t.resume()
+        val offTenant = tenantOf(off)
+        val node = assertNotNull(offTenant.node(s.id, m.id))
+        assertEquals("poster banner", me.raddatz.veyq.mobile.memories.banner.Banner.picture(offTenant, node)?.decodeToString(), "the banner's poster does not draw offline")
+        val reader = assertNotNull(me.raddatz.veyq.mobile.memories.banner.Banner.reader(offTenant, node))
+        assertEquals("banner banner frame 0", reader.read(0, 21).decodeToString(), "the banner's video does not play offline")
+        off.retire()
+    }
+
     @Test
     fun an_interrupted_fetch_continues_where_it_stopped() = runTest {
         val t = play()

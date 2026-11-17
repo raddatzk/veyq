@@ -258,7 +258,8 @@ object AppKinds {
     /**
      * What a pin keeps of each kind (ADR 0140 decision 9, `OfflinePins`): a Memory and a chapter their media's tiles and
      * previews and a video's original (`MemoryMedia.pinned`, never a photo's original), a Depot file its content
-     * (`DepotFiles.pinned`), a folder nothing of its own — the walk below it reaches what it holds. A Pot is not kept
+     * (`DepotFiles.pinned`), a folder nothing of its own — the walk below it reaches what it holds; a Memory's and a
+     * chapter's banner by the ids their meta names (`Banner.pinned`, ADR 0144 decision 7). A Pot is not kept
      * offline (Expenses offline is #898), nor is a kind this build does not know.
      */
     val pins: me.raddatz.veyq.mobile.offline.PinKinds = object : me.raddatz.veyq.mobile.offline.PinKinds {
@@ -270,6 +271,10 @@ object AppKinds {
                 FILE -> me.raddatz.veyq.mobile.depot.DepotFiles.pinned(tenant, node)
                 else -> emptyList()
             }
+
+        // a Memory's and a chapter's banner: only their sealed meta names it (ADR 0144 decision 7)
+        override fun named(tenant: me.raddatz.veyq.mobile.session.TenantSession, node: me.raddatz.veyq.mobile.session.OpenNode) =
+            if (node.kind == MEMORY || node.kind == CHAPTER) me.raddatz.veyq.mobile.memories.banner.Banner.pinned(tenant, node) else emptyList()
     }
 
     /** Whether an object of [kind] can be chosen as the place for files shared to veyq (ADR 0138 decision 1): a Pot. */

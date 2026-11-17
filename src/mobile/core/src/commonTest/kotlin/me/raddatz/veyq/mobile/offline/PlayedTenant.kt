@@ -99,6 +99,8 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
         var blocked = false
         /** The node's cover ([cover]): its meta names it, sealed under the node's key as `NodeCover` writes it. */
         var cover: Blob? = null
+        /** The node's banner ([banner]): its slot's blob and a video's poster, named by its meta as `BannerWrite` seals it. */
+        var banner: Pair<Blob, Blob?>? = null
         var mediaRevision = 1
         val media = mutableListOf<Medium>()
         private val binding = arrayOf("scopeId" to scope.id, "nodeId" to id, "epoch" to 0L, "placementRevision" to 0L)
@@ -155,8 +157,30 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
             n.scope.revision++
         }
 
+    /**
+     * Node [n]'s banner set: a video of [frames] frames with a one-frame poster, or (not [video]) a one-frame image, each
+     * with a marker; its meta names them, the tree's revision moves.
+     */
+    fun banner(n: Node, label: String, video: Boolean = true, frames: Int = 2): Pair<Blob, Blob?> {
+        val main = Blob(label, (0 until (if (video) frames else 1)).map { "banner $label frame $it".encodeToByteArray() }, "BANNER", n.id, { n.key }, n.scope.id, null)
+        val poster = if (video) Blob("$label-poster", listOf("poster $label".encodeToByteArray()), "BANNER_POSTER", n.id, { n.key }, n.scope.id, null) else null
+        blobs[main.id] = main
+        poster?.let { blobs[it.id] = it }
+        n.banner = main to poster
+        n.scope.revision++
+        return main to poster
+    }
+
     private fun metaOf(n: Node): String? {
-        val c = n.cover ?: return null
+        if (n.cover == null && n.banner == null) return null
+        fun ref(b: Blob) = me.raddatz.veyq.mobile.memories.banner.Banner.Ref(b.id, b.frames.size, b.byteSize, b64(b.wrapped))
+        val banner = n.banner?.let { (main, poster) ->
+            me.raddatz.veyq.mobile.memories.banner.Banner.sealed(
+                if (poster != null) me.raddatz.veyq.mobile.memories.banner.Banner.Medium.VIDEO else me.raddatz.veyq.mobile.memories.banner.Banner.Medium.IMAGE,
+                ref(main), poster?.let(::ref), "video/mp4", null,
+            )
+        }
+        val c = n.cover ?: return me.raddatz.veyq.mobile.session.NodeMetaWrite.seal(suite, n.scope.id, n.id, n.key, kotlinx.serialization.json.JsonObject(mapOf("banner" to banner!!)))
         val ref = kotlinx.serialization.json.buildJsonObject {
             put("blobId", kotlinx.serialization.json.JsonPrimitive(c.id))
             put("chunkCount", kotlinx.serialization.json.JsonPrimitive(c.frames.size))
@@ -172,6 +196,7 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
                     put("ref", ref)
                 })
             })
+            banner?.let { put("banner", it) }
         }
         return me.raddatz.veyq.mobile.session.NodeMetaWrite.seal(suite, n.scope.id, n.id, n.key, meta)
     }

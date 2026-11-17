@@ -38,6 +38,12 @@ interface PinKinds {
      * read. Its children are the walk's. None for a kind with no content of its own (a folder) or one this build does not keep.
      */
     suspend fun blobs(tenant: TenantSession, node: OpenNode): List<PinBlob>
+
+    /**
+     * The blobs a pin keeps of [node] that only its sealed meta names — a Memory's banner, its slot and a video's poster
+     * (ADR 0144 decision 7): no kept listing reaches them, so the pin's record names them by id. None by default.
+     */
+    fun named(tenant: TenantSession, node: OpenNode): List<PinBlob> = emptyList()
 }
 
 /** One blob a pin keeps: its id, its frames and stored size, and its key (in memory only), to check each frame fetched. */
@@ -260,8 +266,8 @@ class OfflinePins internal constructor(
         val below = blobsBelow(tenant, kinds, node)
         val blobs = below.blobs
         account.settle()
-        // the covers the pin keeps are named by the nodes' sealed meta, which the store cannot read: the pin records them
-        offline.setPinCovers(pin.node, below.covers)
+        // the covers and banners the pin keeps are named by the nodes' sealed meta, which the store cannot read: the pin records them
+        offline.setPinCovers(pin.node, below.covers, below.named)
         offline.applyPins()
         val todo = blobs.map { it to offline.missing(keyOf(tenant, it), it.chunkCount, it.byteSize) }.filter { it.second > 0 }
         if (todo.isEmpty()) {
@@ -301,8 +307,8 @@ class OfflinePins internal constructor(
         }
     }
 
-    /** What a pin keeps below a node: the blobs, and each node's cover blob by its node (what [AccountOffline.reach] reads). */
-    private class Below(val blobs: List<PinBlob>, val covers: Map<String, String>)
+    /** What a pin keeps below a node: the blobs, and the blobs only a node's meta names by its node — its cover, its kind's ([PinKinds.named]) — which [AccountOffline.reach] reads. */
+    private class Below(val blobs: List<PinBlob>, val covers: Map<String, String>, val named: Map<String, List<String>>)
 
     /**
      * The blobs of [root] and of every node below it in the open tree, by the kinds' rule — and each node's cover (core's,
@@ -314,6 +320,7 @@ class OfflinePins internal constructor(
         val children = nodes.groupBy { it.parentId }
         val out = ArrayList<PinBlob>()
         val covers = LinkedHashMap<String, String>()
+        val named = LinkedHashMap<String, List<String>>()
         val seen = HashSet<String>()
         suspend fun down(n: OpenNode) {
             if (!seen.add(n.id)) return
@@ -327,10 +334,12 @@ class OfflinePins internal constructor(
                 // a refused listing keeps nothing of this node; the others still are
             }
             coverOf(tenant, n)?.let { out += it; covers[n.id] = it.blobId }
+            // what only the node's meta names, by its kind (a Memory's banner: it opens with it offline, ADR 0144 decision 7)
+            runCatching { kinds.named(tenant, n) }.getOrDefault(emptyList()).takeIf { it.isNotEmpty() }?.let { b -> out += b; named[n.id] = b.map { it.blobId } }
             for (c in children[n.id].orEmpty()) down(c)
         }
         down(root)
-        return Below(out.distinctBy { it.blobId }, covers)
+        return Below(out.distinctBy { it.blobId }, covers, named)
     }
 
     /** Node [n]'s cover, where its sealed meta names one whose key opens (`NodeCover.read`); null otherwise. */
