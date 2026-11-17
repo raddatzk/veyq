@@ -85,6 +85,44 @@ internal object MediaDerive {
         }
     }
 
+    /**
+     * A banner's image (ADR 0144 decision 5): the picture at [uri] upright, made the cover's JPEG (core's
+     * `NodeCover.encodedSize` and `QUALITY_PERCENT`, the web's `COVER_SPEC`); null where it does not decode here.
+     */
+    fun bannerImage(context: Context, uri: Uri): ByteArray? = runCatching {
+        val b = ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, info, _ ->
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            val size = me.raddatz.veyq.mobile.session.NodeCover.encodedSize(info.size.width, info.size.height)
+            if (size[0] != info.size.width || size[1] != info.size.height) decoder.setTargetSize(size[0], size[1])
+        }
+        jpeg(b, me.raddatz.veyq.mobile.session.NodeCover.QUALITY_PERCENT).also { b.recycle() }
+    }.getOrNull()
+
+    /**
+     * A banner video's poster (ADR 0144 decision 5): its first frame, turned as it is shown, as the cover's JPEG; null where
+     * no frame decodes here (the dialog says so).
+     */
+    fun bannerPoster(context: Context, uri: Uri): ByteArray? = runCatching {
+        val r = MediaMetadataRetriever()
+        try {
+            r.setDataSource(context, uri)
+            val w = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: return@runCatching null
+            val h = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: return@runCatching null
+            val rotation = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            val (dw, dh) = if (rotation == 90 || rotation == 270) h to w else w to h
+            val size = me.raddatz.veyq.mobile.session.NodeCover.encodedSize(dw, dh)
+            var frame = r.getScaledFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, size[0], size[1]) ?: return@runCatching null
+            if (rotation != 0 && (frame.width > frame.height) != (dw > dh) && dw != dh) {
+                val turned = Bitmap.createBitmap(frame, 0, 0, frame.width, frame.height, Matrix().apply { postRotate(rotation.toFloat()) }, true)
+                frame.recycle()
+                frame = turned
+            }
+            jpeg(frame, me.raddatz.veyq.mobile.session.NodeCover.QUALITY_PERCENT).also { frame.recycle() }
+        } finally {
+            r.release()
+        }
+    }.getOrNull()
+
     private fun jpeg(bitmap: Bitmap, quality: Int): ByteArray =
         ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.JPEG, quality, it) }.toByteArray()
 }
