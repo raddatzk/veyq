@@ -80,7 +80,7 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
     fun nameOf(id: String): String = names[id] ?: id
 
     class Tenant(val id: String, val domain: String)
-    inner class Scope(val name: String, val tenant: Tenant) {
+    inner class Scope(val name: String, val tenant: Tenant, val kind: String = "PERSONAL") {
         val id = id(name)
         val key: ByteArray = p.randomBytes(32)
         /** Whether the account is a member: not, and the scope is gone from its scopes and its tree answers `403`. */
@@ -90,7 +90,7 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
         var revision = 1
         val nodes = mutableListOf<Node>()
         val wrappedGrant: ByteArray = suite.sealTo(Context("scope-grant", "scopeId" to id, "epoch" to 0L), kem.publicKey, key)
-        val signature: ByteArray = p.ed25519Sign(identity.signSeed, suite.grantStatement(id, "PERSONAL", 0, userId, myPublic, wrappedGrant))
+        val signature: ByteArray = p.ed25519Sign(identity.signSeed, suite.grantStatement(id, kind, 0, userId, myPublic, wrappedGrant))
     }
     inner class Node(val scope: Scope, val label: String, val parent: Node?, val kind: String, val name: String) {
         val id = id(label)
@@ -101,6 +101,8 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
         var cover: Blob? = null
         /** The node's banner ([banner]): its slot's blob and a video's poster, named by its meta as `BannerWrite` seals it. */
         var banner: Pair<Blob, Blob?>? = null
+        /** Further fields of its sealed meta ([participants]: who was there, ADR 0144 decision 1). */
+        var meta: Map<String, kotlinx.serialization.json.JsonElement> = emptyMap()
         var mediaRevision = 1
         val media = mutableListOf<Medium>()
         private val binding = arrayOf("scopeId" to scope.id, "nodeId" to id, "epoch" to 0L, "placementRevision" to 0L)
@@ -129,7 +131,13 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
     /** The stored size of blob [id] (its sealed frames'). */
     fun byteSizeOf(id: String): Long = blobs.getValue(id).byteSize
 
-    fun scope(name: String, tenant: Tenant = tenants.first()): Scope = Scope(name, tenant).also { scopes += it }
+    fun scope(name: String, tenant: Tenant = tenants.first(), kind: String = "PERSONAL"): Scope = Scope(name, tenant, kind).also { scopes += it }
+
+    /** Node [n]'s participants sealed into its meta as the web writes them (`{userIds}`), the tree's revision moved. */
+    fun participants(n: Node, vararg userIds: String) {
+        n.meta = n.meta + ("participants" to kotlinx.serialization.json.JsonObject(mapOf("userIds" to kotlinx.serialization.json.JsonArray(userIds.map { kotlinx.serialization.json.JsonPrimitive(it) }))))
+        n.scope.revision++
+    }
 
     fun node(scope: Scope, label: String, kind: String = "MEMORY", parent: Node? = null, name: String = "Node $label"): Node =
         Node(scope, label, parent, kind, name).also { scope.nodes += it; scope.revision++ }
@@ -172,7 +180,7 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
     }
 
     private fun metaOf(n: Node): String? {
-        if (n.cover == null && n.banner == null) return null
+        if (n.cover == null && n.banner == null && n.meta.isEmpty()) return null
         fun ref(b: Blob) = me.raddatz.veyq.mobile.memories.banner.Banner.Ref(b.id, b.frames.size, b.byteSize, b64(b.wrapped))
         val banner = n.banner?.let { (main, poster) ->
             me.raddatz.veyq.mobile.memories.banner.Banner.sealed(
@@ -180,7 +188,7 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
                 ref(main), poster?.let(::ref), "video/mp4", null,
             )
         }
-        val c = n.cover ?: return me.raddatz.veyq.mobile.session.NodeMetaWrite.seal(suite, n.scope.id, n.id, n.key, kotlinx.serialization.json.JsonObject(mapOf("banner" to banner!!)))
+        val c = n.cover ?: return me.raddatz.veyq.mobile.session.NodeMetaWrite.seal(suite, n.scope.id, n.id, n.key, kotlinx.serialization.json.JsonObject(n.meta + listOfNotNull(banner?.let { "banner" to it })))
         val ref = kotlinx.serialization.json.buildJsonObject {
             put("blobId", kotlinx.serialization.json.JsonPrimitive(c.id))
             put("chunkCount", kotlinx.serialization.json.JsonPrimitive(c.frames.size))
@@ -190,6 +198,7 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
             put("role", kotlinx.serialization.json.JsonPrimitive("COVER"))
         }
         val meta = kotlinx.serialization.json.buildJsonObject {
+            n.meta.forEach { (k, v) -> put(k, v) }
             put("cover", kotlinx.serialization.json.buildJsonObject {
                 put("source", kotlinx.serialization.json.buildJsonObject {
                     put("kind", kotlinx.serialization.json.JsonPrimitive("upload"))
@@ -243,7 +252,7 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
 
     private fun tenantOf(r: HttpRequestData) = tenants.firstOrNull { it.domain == r.url.host }
 
-    private fun scopeJson(s: Scope) = """{"id":"${s.id}","kind":"PERSONAL","role":"OWNER","tenantId":"${s.tenant.id}","nameEpoch":0,"iconEpoch":0,"currentEpoch":0,"grantedEpoch":0,"wrappedGrant":"${b64(s.wrappedGrant)}","granterUserId":"$userId","grantSignature":"${b64(s.signature)}"}"""
+    private fun scopeJson(s: Scope) = """{"id":"${s.id}","kind":"${s.kind}","role":"OWNER","tenantId":"${s.tenant.id}","nameEpoch":0,"iconEpoch":0,"currentEpoch":0,"grantedEpoch":0,"wrappedGrant":"${b64(s.wrappedGrant)}","granterUserId":"$userId","grantSignature":"${b64(s.signature)}"}"""
 
     private fun nodeJson(n: Node) = """{"blockedByOperator":${n.blocked},"createdAt":"2026-01-01T00:00:00.000Z","placementRevision":0,"id":"${n.id}","epoch":0,"scopeEpoch":0,"kind":"${n.kind}","encryptedName":"${b64(n.encryptedName)}","slugToken":"c2x1Zw==","orderIndex":0,"wrappedContentKey":"${b64(n.wrappedKey)}","metaRevision":0,"wrappedMeta":${metaOf(n)?.let { "\"$it\"" } ?: "null"},"parentId":${n.parent?.let { "\"${it.id}\"" } ?: "null"}}"""
 

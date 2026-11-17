@@ -246,6 +246,26 @@ class ShellModel(
     /** [ref] chosen from the list beside the open object ([Shell.openBeside]); recent as any open. */
     fun openBeside(ref: ObjectRef) = opened(ref) { it.openBeside(ref) }
 
+    /**
+     * Person [userId]'s profile opened over what is on screen ([Shell.openPerson], ADR 0144 decision 11): from a current
+     * member in a Memory's participants (`Participants.Entry.opensProfile`) or a photo's uploader
+     * (`MediaDetails.Uploader.profile`). The shell is a member's; a share's view offers no way in.
+     */
+    fun openPerson(userId: String) = update { it.openPerson(userId) }
+
+    /** Person [userId]'s frame: named by the tenant's directory as read, with the sections of the applications on. */
+    fun profile(userId: String): PersonProfile = PersonProfile.of(userId, tenant.people, tenant.applicationsOff())
+
+    /**
+     * Memories' section of person [userId]'s profile (ADR 0144 decisions 12–13): over the tenant's participants index, a
+     * row or a pin opening its Memory with its use recorded ([open]).
+     */
+    fun personMemories(userId: String): me.raddatz.veyq.mobile.memories.people.PersonMemories =
+        me.raddatz.veyq.mobile.memories.people.PersonMemories(userId, object : me.raddatz.veyq.mobile.memories.people.PersonMemories.Door {
+            override suspend fun index() = me.raddatz.veyq.mobile.memories.people.ParticipantIndex.of(tenant)
+            override fun open(ref: ObjectRef) = this@ShellModel.open(ref)
+        })
+
     private fun opened(ref: ObjectRef, move: (Shell) -> Shell) {
         recent.record(ref, now())
         _state.update { s -> s?.let { it.moved(move(it.shell), Lists(it.lists.spaces, it.lists.nodes, it.lists.objects, it.lists.favorites, it.lists.applications, it.lists.filters, drawer(it.lists.objects, it.lists.favorites), recent.resolve(it.lists.objects))) } }
