@@ -514,7 +514,10 @@ A Gradle build of its own, run through its own wrapper.
     `package --prebuilt --sign --smoke` with `VEYQ_WINDOWS_SSH=local`, the runner itself as the Windows host (no ssh, no
     scheduled task: the job's own session deploys, and the install says which session that is first).
   - `register` registers the scheduled tasks `veyq-app` and `veyq-drive` once per Windows host. It is the host owner's
-    step: a persistent change on a machine.
+    step: a persistent change on a machine. A pass beside another names its own directory (`VEYQ_WINDOWS_DIR`) and its
+    own tasks (`VEYQ_WINDOWS_TASKS=<suffix>`: `veyq-app-<suffix>`, `veyq-drive-<suffix>`, run against that directory);
+    the default tasks run `F:\veyq`'s drive and files only, so a pass in another directory cannot launch through them. It
+    registers its two with `register` and unregisters them after (`Unregister-ScheduledTask -Confirm:$false`).
 
   With `VEYQ_LIVE=http://veyq.localhost:8080`, `test --tests '*LiveSignInTest*'` and `bridge` sign in over WinHTTP, and
   `run --devlogin` signs the debug build in through its own sign-in; the principal comes from `VEYQ_ENV_FILE` and a
