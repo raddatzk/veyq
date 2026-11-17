@@ -52,9 +52,13 @@ A Gradle build of its own, run through its own wrapper.
   re-sent with the same uploads), `StoredMatch.kt` (the equal-file match: an image banner shares a medium's PREVIEW, a
   video banner its ORIGINAL and PREVIEW, a gallery upload the video banner's object) over core's first shared row
   `blob/SharedBlob.kt`, `BannerEditor.kt` (the dialog's model); a pin keeps a banner's blobs through `PinKinds.named`
-  (the pin's record names them, `Pin.named`) — and a person's index and section in `memories/people/` (over
-  `TenantSession.trees()`, never the personal scope, held in memory only). The participants, the capture time and the
-  banner are the core's now (cr-app-memory-curation phases 2–3), drawn on no platform yet.
+  (the pin's record names them, `Pin.named`) — and a person's profile: core's frame `navigation/PersonProfile.kt` on
+  `Shell.person` (opened over what was on screen, back returning there; `personSections` from the registry's
+  `personSection`), Memories' section in `memories/people/` — `ParticipantIndex.kt` (over `TenantSession.trees()`, never
+  the personal scope, held in memory only through `TenantSession.fromTree`, dropped by `forgetTree()` and `close()`) and
+  `PersonMemories.kt` (the rows newest first, List | Map). The participants, the capture time, the banner and the profile
+  are the core's now (cr-app-memory-curation phases 2–4), drawn on no platform yet; a host calls `TenantSession.close()`
+  where the tenant closes (the bridge's `closeTenant`; the phones' with their profile screens).
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
   decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's
   (`session/Account.kt`, `SessionModel.kt`: every sign-in enrols the password trust, `Gate.Signed.offer` offers staying
