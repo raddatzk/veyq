@@ -3,7 +3,7 @@ id: cr-app-memory-curation
 title: Curating a Memory in the apps — its participants and a person's profile, a medium's corrected capture time, its banner; the core's ports of the web's rules, each platform's own pickers and players
 status: planned
 satisfies: []
-adrs: ["0083", "0102", "0077", "0081", "0110", "0136", "0137", "0140", "0143", "0122", "0123", "0013"]
+adrs: ["0144", "0083", "0102", "0077", "0081", "0110", "0136", "0137", "0140", "0143", "0122", "0123", "0013"]
 invariants:
   - "a person's profile is built on the device from trees the member can already list: the server answers no query about who was on which Memory, and the personal scope is never read for it (ADR 0083)"
   - "operator-blind E2EE: the participants stay user ids sealed in the node's wrappedMeta, a corrected capture time stays in the medium's sealed listed tier, a banner's bytes are sealed under fresh blob keys wrapped under K_node and its description of itself lives in the sealed wrappedMeta; the server learns nothing it does not learn from the web today (ADR 0083, ADR 0102 § What the server sees)"
@@ -287,7 +287,7 @@ reached only when it was open as the device went offline; then it stays, naming 
 
 ## Phases
 
-- [ ] **1 the ADR and the docs it changes** — ADR 0144 (`ls docs/decisions | tail -3` for the number) holding D1–D14,
+- [x] **1 the ADR and the docs it changes** — ADR 0144 (`ls docs/decisions | tail -3` for the number) holding D1–D14,
   their rejected alternatives, and the Consequences: D4's poster-only surround while a video plays, D7's offline
   participants (#948), D5's first shared row in the core, D13's views (no tiles, no stored choice). ADR 0083 and ADR 0102
   point at it; ADR 0140 decision 9 (a pin keeps the banner's blobs); ADR 0122 decision 5 names the person's list as
@@ -295,6 +295,12 @@ reached only when it was open as the device went offline; then it stays, naming 
   (Memories) already points here (refine); uc.memory.participants § Open a person names the apps' ways in (D11);
   `src/mobile/CLAUDE.md` names `memories/banner/`, `memories/people/`, `Participants`, `CaptureTime` and
   `ListedTierWrite`. · Done when: every `/usr/bin/python3 scripts/validate_*.py` but `validate_guard_gaps.py` exits 0.
+  *Done 2026-11-17:* ADR 0144 written (decisions 1–14 = D1–D14, their rejections as its Alternatives, the four named
+  Consequences); ADR 0083 and 0102 gain an *In the apps* consequence, ADR 0140's header and decision 9 name the banner's
+  kept blobs, ADR 0122 decision 5 the person's list by date, ADR 0143's *Not decided here* points on; `docs/apps/memories.md`
+  names the four as planned, uc.memory.participants § Open a person the apps' ways in, `src/mobile/CLAUDE.md` the planned
+  files; the decisions index lists 0144. Measured: all 72 `scripts/validate_*.py` but guard_gaps exit 0
+  (`for g in scripts/validate_*.py; do /usr/bin/python3 $g; done`, guard_gaps skipped).
 
 - [ ] **2 participants and capture time (core)** — D1, D2, D3: `Participants`, `MemoryCreate`'s `wasThere`,
   `ListedTierWrite` extracted from `TrackLabel` (its and `PhotoPlace`'s tests unchanged and green — the refactor's

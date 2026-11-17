@@ -140,6 +140,9 @@ What is decided here:
 - **The operator learns which member uploaded which file's current bytes** (decision 8), which it otherwise saw only
   during the upload. The same class Memories discloses through `owner_key`; never a name.
 - **A file's uploader shows on its page only.** A listing's row names no uploader.
+- **In the apps** ([ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decisions 1, 2 and 11–14, not built): the same sealed list, merged on a `409`
+  by the core's port; *I was there* in the apps' creation dialog; a person's profile built on the device from the trees
+  the member already lists, never the personal scope's; participants not shown offline (no member list is kept).
 - **Rejected:** a `veyq_node_participant` table (the leak above); a name snapshot on shares (stale names, and it hands
   a link holder people's names); a `~people` or history-mode route (collides with the personal-scope token, or reaches
   the access log); a file's uploader sealed inside its blob meta (an uploader could claim anyone, decision 8).

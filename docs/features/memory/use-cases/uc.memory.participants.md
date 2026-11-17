@@ -69,6 +69,14 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 4. A Memory the viewer cannot list is never read, so it never shows — access holds without a further check. A size cap
    ends the walk early and the page says the list is **partial**.
 
+**In the apps — planned** ([ADR 0144](../../../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decisions 11–14): a person is a screen of
+the app's own (no `#people` route: the app has no address bar), opened over what was on screen and left by back. Its ways
+in are a **current member in a Memory's participants list** and a **photo's uploader** in its details where that uploader
+is a current member; a former member and a guest open nothing, and the apps have no people search or people overview to
+link from. The frame shows the name, the picture and `~username`, but no safety number and no profile editing (inbox
+#949); Memories' section lists the person's Memories as rows, newest first, or on the Memories map — no tiles (#950) and
+no stored choice. The index is the same walk on the device, over the trees the app already reads.
+
 ## Alternate / exception flows
 
 - **A1 — a participant left the scope:** the id stays and renders greyed as "former member", no link, no auto-prune. A

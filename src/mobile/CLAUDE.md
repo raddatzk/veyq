@@ -42,6 +42,13 @@ A Gradle build of its own, run through its own wrapper.
   A tile is decoded in memory only (at most 96 kept for drawing) and the core's tile view decides which may be asked. A
   debug build logs every request to an outside host to logcat `veyq-net` (`src/debug/…/DevNetLog.kt`: the `User-Agent` sent,
   and whether a `Referer`, a cookie or an `Authorization` went), the request log of a map pass; a release build has none.
+  **Planned** ([ADR 0144](../../docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md)): a Memory's participants in
+  `memories/Participants.kt` (the web's normalizing, cap and merge, written through `NodeMetaWrite` with the merge as its
+  edit; *I was there* sealed at birth by `MemoryCreate`), a medium's corrected capture time in `memories/CaptureTime.kt`
+  over `memories/ListedTierWrite.kt` (the raw listed-tier read-modify-write `TrackLabel`, `PhotoPlace` and `CaptureTime`
+  share), the banner in `memories/banner/` (its shape and frame, its write through the generated `MemoryBannerApi`, an
+  equal file's shared row) and a person's index and section in `memories/people/` (over `TenantSession.trees()`, never
+  the personal scope, held in memory only).
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
   decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's
   (`session/Account.kt`, `SessionModel.kt`: every sign-in enrols the password trust, `Gate.Signed.offer` offers staying
