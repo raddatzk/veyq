@@ -141,8 +141,11 @@ internal fun MemoryMapView(gallery: GalleryModel, tracks: TrackList, model: AppM
     val accent = role(palette.accent)
     CreateAction(say(Msg.TRACK_ADD), shown = state.rights.add, onClick = { pick.launch(GPX_TYPES) }) { list, bottom ->
         LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = bottom)) {
+            // the banner above the header, on every view (ADR 0144 decision 4)
+            item(key = "banner") { MemoryBannerFrame(gallery, model) }
             item(key = "hero") { hero(16.dp) }
             item(key = "facts") { MemoryFactsLine(gallery, model) }
+            item(key = "people") { MemoryPeopleLine(gallery, model) }
             stickyHeader(key = "views") { viewSwitch() }
             if (state.checking) item(key = "checking") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
             item(key = "map") {

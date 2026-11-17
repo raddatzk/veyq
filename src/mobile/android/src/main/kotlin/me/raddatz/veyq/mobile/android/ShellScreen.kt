@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -206,12 +207,14 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                     // The node on screen — an open object, or the folder Home shows — headed by core for every kind (the
                     // web's `NodePage` + `NodeHeader`): its name, what its kind's page contributes, core's actions.
                     val space = shell.space
-                    val headed = shell.openObject?.at
+                    val headed = if (shell.person != null) null else shell.openObject?.at
                         ?: if (shell.application == null && space != null) shell.folderAt(space) else null
                     val contribution = headed?.let { KindPages.of(it.kind)?.header?.invoke(it, model) }
                     TopAppBar(
                         title = {
                             when {
+                                // a person's profile (ADR 0144 decision 11): their name, as core's frame names them
+                                shell.person != null -> Text(personTitle(model, shell.person!!), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                                 shell.openObject != null -> Column {
                                     Text(shell.openObject!!.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                                     contribution?.subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted)) }
@@ -229,7 +232,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                             }
                             // The space's trash, from its Home (the web's level toolbar): every application's nodes.
                             val open = shell.openObject
-                            if (open == null && shell.application == null && !shell.searching && space != null) {
+                            if (open == null && shell.person == null && shell.application == null && !shell.searching && space != null) {
                                 // the top level is no link's root: its share offers "Add files only" alone (the web's level share)
                                 val rules = model.linkRules()
                                 if (shell.folder == null && rules.on && rules.dropBox) {
@@ -297,8 +300,9 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
               androidx.compose.runtime.CompositionLocalProvider(LocalNodeHero provides hero, LocalListStates provides listStates) {
                 when {
                     // a wide window: the application's list and its open object side by side (Material 3's list-detail)
-                    wide && shell.showsListBeside -> ListBeside(s, model)
                     shell.searching -> SearchScreen(s.objects, onOpen = model::open, onClose = { model.search(false) })
+                    shell.person != null -> PersonScreen(shell.person!!, model)
+                    wide && shell.showsListBeside -> ListBeside(s, model)
                     shell.openObject != null -> KindPages.of(shell.openObject!!.kind)?.body?.invoke(shell.openObject!!, shell.selectedTab, model)
                         ?: ObjectScreen(shell.openObject!!, shell.selectedTab)
                     shell.application == null -> HomeScreen(s, model, onEnter = model::enter, onOpen = model::open, onFilter = model::filter)
@@ -443,8 +447,8 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
     if (naming) NameDialog(stringResource(R.string.folder_new), onClose = { naming = false }) { name -> model.createFolder(name) }
     if (creatingPot) PotCreateSheet(s, model) { creatingPot = false }
     val space = s.shell.space
-    if (namingMemory && space != null) NameDialog(stringResource(R.string.memory_create_memory_title), onClose = { namingMemory = false }) { name ->
-        model.createMemory(space, s.shell.folder?.nodeId, name)
+    if (namingMemory && space != null) MemoryNameDialog(space, model, onClose = { namingMemory = false }) { name, wasThere ->
+        model.createMemory(space, s.shell.folder?.nodeId, name, wasThere)
     }
 }
 
@@ -453,7 +457,7 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
  * `MemoryNodeDialog`): the name, trimmed on save; a refusal says why and stays.
  */
 @Composable
-internal fun NameDialog(title: String, onClose: () -> Unit, onCreate: suspend (String) -> String?) {
+internal fun NameDialog(title: String, onClose: () -> Unit, extra: (@Composable () -> Unit)? = null, onCreate: suspend (String) -> String?) {
     var name by remember { mutableStateOf("") }
     var problem by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
@@ -462,10 +466,13 @@ internal fun NameDialog(title: String, onClose: () -> Unit, onCreate: suspend (S
         onDismissRequest = { if (!saving) onClose() },
         title = { Text(title) },
         text = {
-            androidx.compose.material3.OutlinedTextField(
-                name, { name = it; problem = null }, singleLine = true, label = { Text(stringResource(R.string.folder_name)) },
-                isError = problem != null, supportingText = problem?.let { { Text(it) } },
-            )
+            Column {
+                androidx.compose.material3.OutlinedTextField(
+                    name, { name = it; problem = null }, singleLine = true, label = { Text(stringResource(R.string.folder_name)) },
+                    isError = problem != null, supportingText = problem?.let { { Text(it) } },
+                )
+                extra?.invoke()
+            }
         },
         confirmButton = {
             androidx.compose.material3.TextButton(enabled = name.isNotBlank() && !saving, onClick = {
@@ -479,6 +486,32 @@ internal fun NameDialog(title: String, onClose: () -> Unit, onCreate: suspend (S
         },
         dismissButton = { androidx.compose.material3.TextButton(onClick = onClose, enabled = !saving) { Text(stringResource(R.string.trash_cancel)) } },
     )
+}
+
+/**
+ * New Memory (the web's `MemoryNodeDialog`): its name and, in a tenant or group space, **I was there** — ticked each time it
+ * opens, never remembered (ADR 0144 decision 2); ticked, the Memory is born listing its maker among its participants.
+ */
+@Composable
+private fun MemoryNameDialog(space: String, model: AppModel, onClose: () -> Unit, onCreate: suspend (String, Boolean) -> String?) {
+    val offers = remember(space) { model.offersWasThere(space) }
+    var wasThere by remember { mutableStateOf(true) }
+    NameDialog(
+        stringResource(R.string.memory_create_memory_title), onClose,
+        extra = if (!offers) null else { {
+            androidx.compose.foundation.layout.Row(
+                Modifier.fillMaxWidth().padding(top = 8.dp)
+                    .toggleable(wasThere, role = androidx.compose.ui.semantics.Role.Checkbox) { wasThere = it },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                androidx.compose.material3.Checkbox(checked = wasThere, onCheckedChange = null)
+                Column(Modifier.padding(start = 12.dp)) {
+                    Text(stringResource(R.string.memory_participants_was_there))
+                    Text(stringResource(R.string.memory_participants_was_there_hint), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
+                }
+            }
+        } },
+    ) { name -> onCreate(name, offers && wasThere) }
 }
 
 /** The web's folder tile: the info role's soft fill and text (`ui.css` § folder). */
@@ -721,8 +754,8 @@ private fun MemoriesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) 
     CreateAction(stringResource(R.string.memory_new), shown = space != null && s.online, onClick = { creating = true }, state = LocalListStates.current.of("app:MEMORIES")) { list, bottom ->
         ArrangedListScreen(s.applicationList(ApplicationId.MEMORIES), onOpen = onOpen, state = list, bottom = bottom)
     }
-    if (creating && space != null) NameDialog(stringResource(R.string.memory_create_memory_title), onClose = { creating = false }) { name ->
-        model.createMemory(space, null, name)
+    if (creating && space != null) MemoryNameDialog(space, model, onClose = { creating = false }) { name, wasThere ->
+        model.createMemory(space, null, name, wasThere)
     }
 }
 

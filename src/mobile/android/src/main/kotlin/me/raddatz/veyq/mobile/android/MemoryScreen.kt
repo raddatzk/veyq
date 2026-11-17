@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.PlayCircle
@@ -187,9 +188,12 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     val layout = remember(rows, gridWidth) { rows?.let { GalleryModel.layout(it, gridWidth) } }
     val byId = remember(rows) { rows.orEmpty().withIndex().associateBy({ it.value.mediaId }, { it }) }
     LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = bottom)) {
+        // the banner above the header, on every view (ADR 0144 decision 4)
+        item(key = "banner") { MemoryBannerFrame(gallery, model) }
         item(key = "hero") { hero(16.dp) }
-        // the date and the place under the header (ADR 0143 D5)
+        // the date and the place under the header (ADR 0143 D5), and who was there (ADR 0144 decision 1)
         item(key = "facts") { MemoryFactsLine(gallery, model) }
+        item(key = "people") { MemoryPeopleLine(gallery, model) }
         stickyHeader(key = "views") { viewSwitch() }
         if (state.chapters.isNotEmpty()) {
             item(key = "chapters") {
@@ -258,6 +262,13 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
         model.createChapter(gallery, name)
     }
     state.purging?.let { PurgeQuestion(gallery, model) }
+    // a Memory's curation (ADR 0144): the picker and the banner's dialog are the app model's (a rotation keeps them)
+    val picker by model.participants.collectAsStateWithLifecycle()
+    picker?.let { ParticipantsPickerSheet(it, model) }
+    val bannerEditor by model.banner.collectAsStateWithLifecycle()
+    bannerEditor?.let { BannerDialog(it, gallery, model) }
+    // trashing the banner's picture asks first (A2), over the lightbox where it was asked from
+    state.bannerPicture?.let { BannerPictureQuestion(gallery, model) }
 }
 
 /**
@@ -459,7 +470,13 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
             }
         }
         if (details) {
-            ModalBottomSheet(onDismissRequest = { details = false }) { MediaDetailsSheet(row, box, model) }
+            ModalBottomSheet(onDismissRequest = { details = false }) {
+                MediaDetailsSheet(row, box, model, onProfile = { id ->
+                    // the profile opens over the Memory; back returns to it and its lightbox (the gallery's)
+                    details = false
+                    model.openPerson(id)
+                })
+            }
         }
     }
 }
@@ -564,7 +581,7 @@ private fun MediaVideo(row: GalleryModel.Row, reader: RangeReader, box: MemoryLi
  * only where nothing is known.
  */
 @Composable
-private fun MediaDetailsSheet(row: GalleryModel.Row, box: MemoryLightbox, model: AppModel) {
+private fun MediaDetailsSheet(row: GalleryModel.Row, box: MemoryLightbox, model: AppModel, onProfile: (String) -> Unit) {
     // read anew when the gallery re-lists the medium (its place name sealed, below, shows then)
     val details by produceState<me.raddatz.veyq.mobile.memories.Lightbox.Details?>(null, row.mediaId, row) {
         value = box.details(row.mediaId)
@@ -576,6 +593,17 @@ private fun MediaDetailsSheet(row: GalleryModel.Row, box: MemoryLightbox, model:
     val uploaderName = d?.uploader?.let { piece(MediaDetails.uploaderWords(it)) }
     // who added it stands before the place, as on the web
     val placeAt = d?.uploaderAt ?: 0
+    // a current member's name opens their profile (ADR 0144 decision 11); a former member's and a guest's open nothing
+    val profile = d?.uploader?.profile
+    val uploaded: @Composable () -> Unit = {
+        DetailRow(stringResource(R.string.memory_field_uploaded_by), uploaderName.orEmpty(), onClick = profile?.let { id -> { onProfile(id) } },
+            onClickLabel = stringResource(R.string.people_open, uploaderName.orEmpty()))
+    }
+    // the capture time corrected where whoever looks may write the medium's meta, online (ADR 0144 decision 3)
+    val timeEditor = remember(row.mediaId, row) { box.captureTimeEditor(row.mediaId) }
+    var editingTime by remember(row.mediaId) { mutableStateOf<me.raddatz.veyq.mobile.memories.CaptureTimeEditor?>(null) }
+    val editTime: (() -> Unit)? = timeEditor?.let { { editingTime = box.captureTimeEditor(row.mediaId) } }
+    editingTime?.let { e -> CaptureTimeDialog(e) { editingTime = null } }
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
         Text(stringResource(R.string.memory_details), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         // the photo's small map at its point, with its direction where the camera recorded one (ADR 0143 D7)
@@ -584,19 +612,29 @@ private fun MediaDetailsSheet(row: GalleryModel.Row, box: MemoryLightbox, model:
             Text(stringResource(R.string.memory_no_detail), color = role(LocalPalette.current.muted), modifier = Modifier.padding(16.dp))
         }
         rows.forEachIndexed { i, r ->
-            if (i == placeAt && uploaderName != null) DetailRow(stringResource(R.string.memory_field_uploaded_by), uploaderName)
-            DetailRow(detailLabel(r.field), detailValue(r))
+            if (i == placeAt && uploaderName != null) uploaded()
+            if (r.field == MediaDetails.Field.CAPTURED && editTime != null) {
+                DetailRow(detailLabel(r.field), detailValue(r), trailing = {
+                    IconButton(onClick = editTime) { Icon(Icons.Outlined.Edit, stringResource(R.string.media_edit_captured_at)) }
+                })
+            } else DetailRow(detailLabel(r.field), detailValue(r))
         }
-        if (placeAt == rows.size && uploaderName != null) DetailRow(stringResource(R.string.memory_field_uploaded_by), uploaderName)
+        if (placeAt == rows.size && uploaderName != null) uploaded()
+        // a medium without a capture time can be given one
+        if (editTime != null && rows.none { it.field == MediaDetails.Field.CAPTURED }) {
+            TextButton(onClick = editTime, modifier = Modifier.padding(horizontal = 8.dp)) { Text(stringResource(R.string.media_edit_captured_at)) }
+        }
     }
 }
 
 @Composable
-private fun DetailRow(label: String, value: String) {
+private fun DetailRow(label: String, value: String, onClick: (() -> Unit)? = null, onClickLabel: String? = null, trailing: (@Composable () -> Unit)? = null) {
     ListItem(
         overlineContent = { Text(label) },
-        headlineContent = { Text(value) },
+        headlineContent = { Text(value, color = if (onClick != null) MaterialTheme.colorScheme.primary else Color.Unspecified) },
+        trailingContent = trailing,
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick) else Modifier,
     )
 }
 

@@ -184,6 +184,27 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         _maps.value = null
     }
 
+    // ---- a Memory's curation (ADR 0144), declared above `init`: its collector closes them at the first gate ----
+
+    private val _participants = MutableStateFlow<me.raddatz.veyq.mobile.memories.ParticipantsPicker?>(null)
+
+    /** The open gallery's participants picker (core's `ParticipantsPicker`); null while closed. */
+    val participants: StateFlow<me.raddatz.veyq.mobile.memories.ParticipantsPicker?> = _participants.asStateFlow()
+
+    private val _banner = MutableStateFlow<me.raddatz.veyq.mobile.memories.banner.BannerEditor?>(null)
+
+    /** The open gallery's banner dialog (core's `BannerEditor`); null while closed. */
+    val banner: StateFlow<me.raddatz.veyq.mobile.memories.banner.BannerEditor?> = _banner.asStateFlow()
+
+    /** The dialog's running save or removal: Cancel cancels it, the old banner staying as it was. */
+    private var bannerJob: kotlinx.coroutines.Job? = null
+
+    /** The file picked last in the banner's dialog, read where it lies (closed with the dialog). */
+    private var bannerSource: me.raddatz.veyq.mobile.blob.UploadSource? = null
+
+    /** The profile on screen's Memories section, kept here so a rotation keeps its List | Map choice. */
+    private var personSection: me.raddatz.veyq.mobile.memories.people.PersonMemories? = null
+
     init {
         viewModelScope.launch { session.gate.collect(::gateChanged) }
         // a pin's fetch keeps the process once the app is left: WorkManager's worker, a dataSync foreground service
@@ -195,6 +216,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) {
             stopMusic()
             closeMaps()
+            // locked or gone: the open dialogs, the profile's section and the tenant's tree go (ADR 0144 decision 12)
+            closeCuration()
+            personSection = null
+            tenantSession?.close()
         }
         _offer.value = (g as? me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed)?.offer
         trustLog("gate ${g::class.simpleName}" + when (g) {
@@ -497,10 +522,13 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 stopMusic()
                 _depot.value?.close()
                 _depot.value = null
+                closeCuration()
                 openGallery?.close()
                 openGallery = null
                 media?.close()
                 media = null
+                personSection = null
+                tenantSession?.close()
             }
             else -> refreshManaged()
         }
@@ -611,7 +639,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         // the re-key's rules and its background resume are the core's (`AccountDoor.open`/`opened`)
         val switched = tenantSession?.let { was -> was.account !== account || was.tenant.tenantId != tenant.tenantId } ?: true
         if (switched) uploads.clear()
+        // the tenant shown before closes: its tree and what was derived from it (a person's index) dropped now (ADR 0144 decision 12)
+        tenantSession?.takeIf { it !== t }?.close()
         tenantSession = t
+        personSection = null
+        closeCuration()
         rows = me.raddatz.veyq.mobile.RowDetails.Read.EMPTY
         openFile?.close()
         openFile = null
@@ -953,6 +985,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         openMusic = null
         openTracks?.close()
         openTracks = null
+        closeCuration()
         openGallery?.close()
         val app = getApplication<Application>()
         val music = _music.value?.let { p -> me.raddatz.veyq.mobile.memories.GalleryModel.Music(p) { n -> app.words(me.raddatz.veyq.mobile.words.Msg.MUSIC_UNTITLED, n) } }
@@ -966,8 +999,115 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         openMusic = null
         openTracks?.close()
         openTracks = null
+        closeCuration()
         gallery.close()
         openGallery = null
+    }
+
+    // ---- a Memory's curation (ADR 0144): its participants picker and its banner's dialog, held here so a rotation keeps them ----
+
+
+    /** [gallery]'s participants picker opened over the scope's current members, where its rights offer it. */
+    fun openParticipants(gallery: me.raddatz.veyq.mobile.memories.GalleryModel) {
+        val picker = gallery.participantsPicker() ?: return
+        _participants.value = picker
+        viewModelScope.launch { picker.load() }
+    }
+
+    /** The members read again (*Try again*). */
+    fun reloadParticipants() {
+        val picker = _participants.value ?: return
+        viewModelScope.launch { picker.load() }
+    }
+
+    /** The pick saved (core's merge); the picker closes once it landed. */
+    fun saveParticipants() {
+        val picker = _participants.value ?: return
+        viewModelScope.launch { if (picker.save().let { it == me.raddatz.veyq.mobile.memories.place.MemoryFacts.Outcome.Written || it == me.raddatz.veyq.mobile.memories.place.MemoryFacts.Outcome.Unchanged }) closeParticipants(picker) }
+    }
+
+    fun closeParticipants(picker: me.raddatz.veyq.mobile.memories.ParticipantsPicker? = _participants.value) {
+        if (_participants.value === picker) _participants.value = null
+    }
+
+
+    /** A banner's pictures decoded on this device: an image as the cover's JPEG, a video's first frame ([MediaDerive]). */
+    private val bannerPictures = object : me.raddatz.veyq.mobile.memories.banner.BannerWrite.Pictures {
+        override suspend fun image(source: me.raddatz.veyq.mobile.blob.UploadSource): ByteArray? =
+            (source as? ContentSource)?.uri?.let { u -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { MediaDerive.bannerImage(getApplication(), u) } }
+
+        override suspend fun poster(source: me.raddatz.veyq.mobile.blob.UploadSource): ByteArray? =
+            (source as? ContentSource)?.uri?.let { u -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { MediaDerive.bannerPoster(getApplication(), u) } }
+    }
+
+    /** [gallery]'s banner dialog opened, where whoever looks may set its banner online. */
+    fun openBanner(gallery: me.raddatz.veyq.mobile.memories.GalleryModel) {
+        if (openGallery !== gallery) return
+        _banner.value = gallery.bannerEditor(bannerPictures)
+    }
+
+    /** The file the photo picker handed over ([uri]) taken as the banner: refused or decoded for the previews (core's). */
+    fun pickBanner(uri: android.net.Uri) {
+        val editor = _banner.value ?: return
+        viewModelScope.launch {
+            // the media store's original where full media access was given, as an upload reads it: the equal-file match needs its bytes
+            val source = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { pickedMedium(uri)?.let(::source) } ?: return@launch
+            bannerSource?.close()
+            bannerSource = source
+            editor.pick(source)
+        }
+    }
+
+    /** The picked file made the banner, or [remove]d: one run at a time, cancelled by [cancelBanner]. */
+    fun saveBanner(remove: Boolean = false) {
+        val editor = _banner.value ?: return
+        if (bannerJob?.isActive == true) return
+        bannerJob = viewModelScope.launch { if (remove) editor.remove() else editor.save() }
+    }
+
+    fun cancelBanner() {
+        bannerJob?.cancel()
+        bannerJob = null
+    }
+
+    fun closeBanner() {
+        cancelBanner()
+        _banner.value = null
+        bannerSource?.close()
+        bannerSource = null
+    }
+
+    /** The open gallery's dialogs closed with it (a switch, a lock, a sign-out, another gallery). */
+    private fun closeCuration() {
+        closeParticipants()
+        closeBanner()
+    }
+
+    // ---- a person's profile (ADR 0144 decisions 11–13) ----
+
+    /** Person [userId]'s profile opened over what is on screen (core's `Shell.openPerson`). */
+    fun openPerson(userId: String) {
+        shellModel?.openPerson(userId)
+    }
+
+    /** Person [userId]'s frame as the tenant's directory names them; null while no tenant is open. */
+    fun profile(userId: String): me.raddatz.veyq.mobile.navigation.PersonProfile? = shellModel?.profile(userId)
+
+
+    /** Memories' section of person [userId]'s profile (core's `PersonMemories`), read on its first ask. */
+    fun personMemories(userId: String): me.raddatz.veyq.mobile.memories.people.PersonMemories? {
+        personSection?.takeIf { it.userId == userId }?.let { return it }
+        val m = shellModel ?: return null
+        return m.personMemories(userId).also { section ->
+            personSection = section
+            // the index unseals each Memory's meta: off the main thread (src/mobile/CLAUDE.md § Traps)
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) { section.load() }
+        }
+    }
+
+    /** *Try again* on the section. */
+    fun retryPerson(section: me.raddatz.veyq.mobile.memories.people.PersonMemories) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) { section.load() }
     }
 
     // ---- a Memory's date, place and Map view (ADR 0143 D5, D8) ----
@@ -1388,13 +1528,17 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /**
      * A Memory [name] made in space [scopeId] under [parentId] (null: the space's top) — New Memory, core's
      * `ShellModel.createMemory` (the web's `MemoryNodeDialog`: checked against the loaded tree, then sent) —, opened once
-     * made (the web's). Why not, in the dialog's words, or null.
+     * made (the web's), its maker listed among its participants where [wasThere] (ADR 0144 decision 2). Why not, in the
+     * dialog's words, or null.
      */
-    suspend fun createMemory(scopeId: String, parentId: String?, name: String): String? {
+    suspend fun createMemory(scopeId: String, parentId: String?, name: String, wasThere: Boolean = false): String? {
         val app = getApplication<Application>()
         val m = shellModel ?: return app.text(me.raddatz.veyq.mobile.memories.MemoryCreate.refused(null))
-        return opened(m.createMemory(scopeId, parentId, name)).also { readRowDetails(m.tenant) }
+        return opened(m.createMemory(scopeId, parentId, name, wasThere)).also { readRowDetails(m.tenant) }
     }
+
+    /** Whether New Memory in space [scopeId] offers *I was there* (a tenant or group space, ADR 0144 decision 2). */
+    fun offersWasThere(scopeId: String): Boolean = shellModel?.offersWasThere(scopeId) == true
 
     /** A chapter [name] made in [gallery]'s Memory (core's `GalleryModel.createChapter`), opened once made; why not, or null. */
     suspend fun createChapter(gallery: me.raddatz.veyq.mobile.memories.GalleryModel, name: String): String? {

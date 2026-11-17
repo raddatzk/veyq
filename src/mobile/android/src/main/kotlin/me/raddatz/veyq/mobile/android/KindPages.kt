@@ -2,6 +2,7 @@ package me.raddatz.veyq.mobile.android
 
 import androidx.compose.runtime.Composable
 import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.Panorama
 import androidx.compose.material.icons.outlined.MusicOff
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.automirrored.outlined.Send
@@ -65,6 +66,9 @@ internal object KindPages {
     }
 }
 
+/** The header's banner action: its id in the kind's order (`AppKinds.headerOrder`). */
+private const val BANNER_ACTION = "banner"
+
 /**
  * A Memory's or a chapter's own header action: its music played or stopped (core's `GalleryModel.headerActions`' MUSIC,
  * ADR 0142 decision 6). Adding photos is the page's creating action (`CreateAction`), not the header's.
@@ -73,7 +77,14 @@ internal object KindPages {
 private fun memoryHeader(node: NodeAt, model: AppModel): HeaderContribution {
     val gallery = androidx.compose.runtime.remember(node) { model.galleryModel(node) } ?: return HeaderContribution()
     // read here, whatever is offered: the action appears once the gallery's first read finds music
-    val musicHere = gallery.state.collectAsStateWithLifecycle().value.musicHere
+    val state = gallery.state.collectAsStateWithLifecycle().value
+    val musicHere = state.musicHere
+    // the banner's dialog where whoever looks may set it, online (ADR 0144 decision 5; the web's header `banner`)
+    val banner = if (!state.editsBanner) null else OwnAction(
+        BANNER_ACTION,
+        androidx.compose.ui.res.stringResource(if (state.banner != null) R.string.memory_banner_change else R.string.memory_banner_add),
+        androidx.compose.material.icons.Icons.Outlined.Panorama,
+    ) { model.openBanner(gallery) }
     return HeaderContribution(
         actions = gallery.headerActions.filter { it.id == me.raddatz.veyq.mobile.memories.GalleryModel.MUSIC }.map { a ->
             OwnAction(
@@ -81,7 +92,7 @@ private fun memoryHeader(node: NodeAt, model: AppModel): HeaderContribution {
                 if (musicHere) androidx.compose.material.icons.Icons.Outlined.MusicOff else androidx.compose.material.icons.Icons.Outlined.MusicNote,
                 a.slot,
             ) { gallery.toggleMusic() }
-        },
+        } + listOfNotNull(banner),
     )
 }
 
