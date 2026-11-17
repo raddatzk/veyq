@@ -4266,14 +4266,14 @@
     "de": "Dieses Bild ist größer als {1}."
   },
   "memory_banner_unreadable": {
-    "note": "The web's words unchanged (owner 2026-11-17).",
-    "en": "This browser cannot read this file, so it cannot be a banner here.",
-    "de": "Dieser Browser kann diese Datei nicht lesen, deshalb kann sie hier kein Banner sein."
+    "note": "The web's words with \"device\" for \"browser\" (owner 2026-11-17).",
+    "en": "This device cannot read this file, so it cannot be a banner here.",
+    "de": "Dieses Gerät kann diese Datei nicht lesen, deshalb kann sie hier kein Banner sein."
   },
   "memory_banner_video_unreadable": {
-    "note": "The web's words unchanged (owner 2026-11-17).",
-    "en": "This browser cannot show a frame of this video, so it cannot be a banner here.",
-    "de": "Dieser Browser kann kein Bild aus diesem Video zeigen, deshalb kann es hier kein Banner sein."
+    "note": "The web's words with \"device\" for \"browser\" (owner 2026-11-17).",
+    "en": "This device cannot show a frame of this video, so it cannot be a banner here.",
+    "de": "Dieses Gerät kann kein Bild aus diesem Video zeigen, deshalb kann es hier kein Banner sein."
   },
   "memory_banner_no_frame": {
     "en": "This video has no picture to show before it plays, so it cannot be a banner.",
@@ -4337,8 +4337,8 @@
     "de": "Profil von {1} öffnen"
   },
   "node_view_list": {
-    "note": "A person's Memories: the List | Map switch's list.",
-    "en": "List view",
-    "de": "Listenansicht"
+    "note": "A person's Memories: the List | Map switch's list (owner 2026-11-17: a short word, not the web's \"List view\").",
+    "en": "List",
+    "de": "Liste"
   }
 }
