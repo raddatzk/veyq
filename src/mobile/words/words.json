@@ -4121,12 +4121,14 @@
   },
   "memory_participants_edit": {
     "en": "Edit participants",
-    "de": "Beteiligte bearbeiten"
+    "de": "Beteiligte bearbeiten",
+    "apple_en": "Edit Participants"
   },
   "memory_participants_add": {
     "note": "The chip while nobody is listed, for who may edit.",
     "en": "Add participants",
-    "de": "Beteiligte hinzufügen"
+    "de": "Beteiligte hinzufügen",
+    "apple_en": "Add Participants"
   },
   "memory_participants_was_there": {
     "note": "The New Memory form's checkbox (ADR 0144 decision 2).",
@@ -4209,11 +4211,13 @@
   "memory_banner_add": {
     "note": "The banner's dialog (ADR 0144 decision 5).",
     "en": "Add banner",
-    "de": "Banner hinzufügen"
+    "de": "Banner hinzufügen",
+    "apple_en": "Add Banner"
   },
   "memory_banner_change": {
     "en": "Change banner",
-    "de": "Banner ändern"
+    "de": "Banner ändern",
+    "apple_en": "Change Banner"
   },
   "memory_banner_hint": {
     "en": "A banner is shown above the Memory, independent of its cover - always whole, never cropped. Where it does not fill the frame, a blurred copy of it fills the rest.",
@@ -4221,7 +4225,8 @@
   },
   "memory_banner_choose": {
     "en": "Choose an image or a video",
-    "de": "Bild oder Video wählen"
+    "de": "Bild oder Video wählen",
+    "apple_en": "Choose an Image or a Video"
   },
   "memory_banner_preview_wide": {
     "en": "Wide screen",
@@ -4233,11 +4238,13 @@
   },
   "memory_banner_remove": {
     "en": "Remove banner",
-    "de": "Banner entfernen"
+    "de": "Banner entfernen",
+    "apple_en": "Remove Banner"
   },
   "memory_banner_save": {
     "en": "Save banner",
-    "de": "Banner speichern"
+    "de": "Banner speichern",
+    "apple_en": "Save Banner"
   },
   "memory_banner_preparing": {
     "en": "Preparing…",
@@ -4298,16 +4305,19 @@
   },
   "memory_banner_picture_remove": {
     "en": "Remove the banner too",
-    "de": "Banner auch entfernen"
+    "de": "Banner auch entfernen",
+    "apple_en": "Remove the Banner Too"
   },
   "media_edit_captured_at": {
     "note": "A medium's details: its capture-time editor (ADR 0144 decision 3).",
     "en": "Edit capture time",
-    "de": "Aufnahmezeit bearbeiten"
+    "de": "Aufnahmezeit bearbeiten",
+    "apple_en": "Edit Capture Time"
   },
   "media_reset_captured_at": {
     "en": "Reset to original",
-    "de": "Auf Original zurücksetzen"
+    "de": "Auf Original zurücksetzen",
+    "apple_en": "Reset to Original"
   },
   "media_captured_at_save_failed": {
     "en": "Could not save the capture time.",
