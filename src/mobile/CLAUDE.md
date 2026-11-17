@@ -46,9 +46,15 @@ A Gradle build of its own, run through its own wrapper.
   `memories/Participants.kt` (the web's normalizing, cap and merge, written through `NodeMetaWrite` with the merge as its
   edit; *I was there* sealed at birth by `MemoryCreate`), a medium's corrected capture time in `memories/CaptureTime.kt`
   over `memories/ListedTierWrite.kt` (the raw listed-tier read-modify-write `TrackLabel`, `PhotoPlace` and `CaptureTime`
-  share), the banner in `memories/banner/` (its shape and frame, its write through the generated `MemoryBannerApi`, an
-  equal file's shared row) and a person's index and section in `memories/people/` (over `TenantSession.trees()`, never
-  the personal scope, held in memory only).
+  share), the banner in `memories/banner/` — `Banner.kt` (its shape, read and sealed as the web's; `BannerFrame`: 16:9
+  above a 720-unit column, 1:1 at or below, at most 60 % of the viewport, the 32 px surround), `BannerWrite.kt` (the pick
+  refused before a byte is read where it must be, the write through the generated `MemoryBannerApi`, a stale revision
+  re-sent with the same uploads), `StoredMatch.kt` (the equal-file match: an image banner shares a medium's PREVIEW, a
+  video banner its ORIGINAL and PREVIEW, a gallery upload the video banner's object) over core's first shared row
+  `blob/SharedBlob.kt`, `BannerEditor.kt` (the dialog's model); a pin keeps a banner's blobs through `PinKinds.named`
+  (the pin's record names them, `Pin.named`) — and a person's index and section in `memories/people/` (over
+  `TenantSession.trees()`, never the personal scope, held in memory only). The participants, the capture time and the
+  banner are the core's now (cr-app-memory-curation phases 2–3), drawn on no platform yet.
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
   decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's
   (`session/Account.kt`, `SessionModel.kt`: every sign-in enrols the password trust, `Gate.Signed.offer` offers staying
