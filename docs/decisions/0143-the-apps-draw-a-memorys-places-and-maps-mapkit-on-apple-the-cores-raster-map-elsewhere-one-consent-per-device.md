@@ -299,7 +299,7 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
   ADR 0140 decision 8's kept originals gain a GPX track's.
 - **A Memory's date and place stay current wherever it is curated:** today an app's upload leaves a web-made `auto` range
   stale until a browser opens the Memory; with decision 5's settle points it does not.
-- **Not decided here:** a Memory's participants, a medium's capture-time correction and the banner (inbox #890); the
+- **Not decided here:** a Memory's participants, a medium's capture-time correction and the banner (since built by ADR 0144); the
   date and the place in the apps' creation dialog (#940); a person's profile map, the apps having no profile page
   (then #941; both since decided in [ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md)); a sealed tile cache across launches (#939); the notice's other "your browser" wording (#942).
 

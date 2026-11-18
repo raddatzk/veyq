@@ -60,7 +60,7 @@ two apps, and a store listing, review and signing setup per app for one maintain
    An application's list holds its objects **across every space of the tenant as one flat list**, never the tree; the
    tree is Home's. The app opens on the object last used; with none yet, on Home with the drawer open. A person's
    Memories on their profile are no application's list and are ordered by date, newest first, as the web orders them
-   ([ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decision 13, not built).
+   ([ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decision 13, built).
 
 6. **Recent stays on the device.** It is per install, never synced and never sent: which object was opened when is
    behaviour, and a synced list would be a new sealed datum with no use the device's own list does not serve. The
