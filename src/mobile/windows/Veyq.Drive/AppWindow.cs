@@ -193,6 +193,15 @@ internal sealed partial class AppWindow(string process)
             case "click":
                 Mouse.Click(int.Parse(parts[1], CultureInfo.InvariantCulture), int.Parse(parts[2], CultureInfo.InvariantCulture));
                 return "";
+            case "sweep":
+            {
+                // a press at one point of the screen, moved to another and released (SendInput): a text selected by hand
+                var at = string.Join(" ", parts.Skip(1)).Split(" ", StringSplitOptions.RemoveEmptyEntries).Select(v => int.Parse(v, CultureInfo.InvariantCulture)).ToArray();
+                if (at.Length != 4) throw new ArgumentException("sweep <x1> <y1> <x2> <y2>");
+                var held = _hoverShot;
+                _hoverShot = null;
+                return Mouse.Drag(at[0], at[1], at[2], at[3], held is null ? null : () => Capture(0, 0, GetSystemMetrics(0), GetSystemMetrics(1), held));
+            }
             case "screen":
                 Capture(0, 0, GetSystemMetrics(0), GetSystemMetrics(1), string.Join(' ', parts.Skip(1)));
                 return "";

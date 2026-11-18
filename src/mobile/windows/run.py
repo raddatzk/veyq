@@ -26,7 +26,10 @@ Verbs:
                              unpackaged, self-contained, x64) and Veyq.Drive, then `dotnet test` of Veyq.Bridge.Tests beside
                              the DLL and of Veyq.Tests against the app's .pri — the words in English and German, money and
                              days in two cultures, sizes in the host's — each an x64 process (`--arch x64`; an ARM64 host
-                             runs it under emulation with the x64 .NET runtime).
+                             runs it under emulation with the x64 .NET runtime). Last, PdfWebTest in the logged-on
+                             session through the scheduled task `veyq-app` (WebView2 takes no window of ssh's session
+                             0): WebView2's PDF viewer keeps no canary on disk and asks no other host (inbox #955);
+                             VEYQ_PDF_NETLOG=<path there> keeps each browser's net log beside it.
   run [--width W --height H] [--devlogin [--fill|--unlock]]
                              builds the app as `build` does (without its tests), stops a running one, puts it in
                              `<dir>\app` and starts it in the logged-on session through the scheduled task `veyq-app`
@@ -539,9 +542,29 @@ def build() -> int:
             f"$env:VEYQ_PRI = {ps_quote(str(windows / APP_OUT / f'{APP_NAME}.pri'))}",
             f"$env:VEYQ_WORDS_JSON = {ps_quote(str(REMOTE_MOBILE / 'words' / 'words.json'))}",
             f"$env:VEYQ_KIT_FIXTURES = {ps_quote(str(REMOTE_DIR / PureWindowsPath(KIT_FIXTURES)))}",
-            f"dotnet test --project {APP_TESTS} --no-restore --arch x64",
+            f"dotnet test --project {APP_TESTS} --no-restore --arch x64 -- --filter {ps_quote(NOT_IN_SESSION)}",
         ]),
-    ))
+    )) or web_pdf_test()
+
+
+# Veyq.Tests' tests that need the logged-on session: WebView2 takes no window of ssh's session 0 ("Invalid window
+# handle", 0x80070578, measured 2026-11-18), so PdfWebTest runs through the scheduled task there (in_session).
+IN_SESSION = "FullyQualifiedName~PdfWebTest"
+NOT_IN_SESSION = "FullyQualifiedName!~PdfWebTest"
+
+
+def web_pdf_test() -> int:
+    """PdfWebTest in the logged-on session (inbox #955): WebView2's PDF viewer served a PDF of canaries from memory, its
+    text copied, then no canary on disk and no request to another host. VEYQ_PDF_NETLOG=<path on the host> has each
+    browser write Chromium's net log beside it (<path>.1.json, <path>.2.json), the measurement's witness."""
+    windows = REMOTE_MOBILE / "windows"
+    passed = {k: os.environ[k] for k in ("VEYQ_PDF_NETLOG", "VEYQ_PDF_BARE") if os.environ.get(k)}
+    return in_session("pdf-web-test", "\n".join([
+        *(f"$env:{k} = {ps_quote(v)}" for k, v in (DOTNET_ENV | passed).items()),
+        f"Set-Location {ps_quote(str(windows))}",
+        f"dotnet test --project {APP_TESTS} --no-restore --no-build --arch x64 -- --filter {ps_quote(IN_SESSION)} --output Detailed",
+        "exit $LASTEXITCODE",
+    ]), 600)
 
 
 IDENTITY = json.loads((repo_layout.MOBILE / "desktop-identity.json").read_text())  # ADR 0139 decision 12
@@ -673,7 +696,8 @@ def package(sign: str | None, smoke: bool, prebuilt: bool = False) -> int:
             "if (-not (Test-Path $env:VEYQ_PRI)) { Write-Output \"veyq: no $env:VEYQ_PRI\"; exit 1 }",
             f"$env:VEYQ_WORDS_JSON = {ps_quote(str(REMOTE_MOBILE / 'words' / 'words.json'))}",
             f"$env:VEYQ_KIT_FIXTURES = {ps_quote(str(REMOTE_DIR / PureWindowsPath(KIT_FIXTURES)))}",
-            f"dotnet test --project {APP_TESTS} -c Release --no-restore --arch x64",
+            # PdfWebTest needs the logged-on session: `build` runs it (web_pdf_test)
+            f"dotnet test --project {APP_TESTS} -c Release --no-restore --arch x64 -- --filter {ps_quote(NOT_IN_SESSION)}",
         ]),
         "\n".join([
             f"$built = @(Get-ChildItem -Recurse -File -Filter *.msix -Path {ps_quote(str(appx_dir))})",

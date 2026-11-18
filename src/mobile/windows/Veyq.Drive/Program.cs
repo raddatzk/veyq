@@ -39,8 +39,10 @@
 //   drag <id> <name>|<name>…  the named items of that Explorer window selected and dragged with the mouse (SendInput)
 //                             onto the app's element <id>: a level (`level`), a folder's row (`folder:<name>`)
 //   click <x> <y>             a left click at a point of the screen (SendInput), where no element is reachable by UIA
+//   sweep <x1> <y1> <x2> <y2> the mouse pressed at one point of the screen, moved to the other and released (SendInput):
+//                             a text selected by hand (WebView2's PDF viewer, whose content UIA does not reach)
 //   screen <file>             a PNG of the whole screen (a drag's source and target together)
-//   hovershot <file>          the next drag takes a PNG of the whole screen while it is held over its target
+//   hovershot <file>          the next drag or sweep takes a PNG of the whole screen while it is held over its target
 //   shot <file>               a PNG of the window as it shows on the screen (the proof, not a probe)
 // An <id> is an AutomationId, found in any top-level window of the app; a step's words are never typed from anything
 // but the steps file.

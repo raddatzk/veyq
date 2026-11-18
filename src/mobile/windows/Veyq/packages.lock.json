@@ -30,11 +30,6 @@
           "Microsoft.WindowsAppSDK.InteractiveExperiences": "2.6.5"
         }
       },
-      "Microsoft.Web.WebView2": {
-        "type": "Transitive",
-        "resolved": "1.0.3719.77",
-        "contentHash": "t+ucyKw5NTwMjsUrDF6R9Lk40lpcKQD1/HgyGFxl49tdA4h9dKlsj6FYGEmDRpFNfnTpENuTypMcdbrlkqBdDA=="
-      },
       "Microsoft.Windows.SDK.BuildTools.MSIX": {
         "type": "Transitive",
         "resolved": "1.7.251221100",
@@ -59,6 +54,12 @@
       },
       "veyq.bridge": {
         "type": "Project"
+      },
+      "Microsoft.Web.WebView2": {
+        "type": "CentralTransitive",
+        "requested": "[1.0.3719.77, 1.0.3719.77]",
+        "resolved": "1.0.3719.77",
+        "contentHash": "t+ucyKw5NTwMjsUrDF6R9Lk40lpcKQD1/HgyGFxl49tdA4h9dKlsj6FYGEmDRpFNfnTpENuTypMcdbrlkqBdDA=="
       }
     },
     "net10.0-windows10.0.26100/win-x64": {
@@ -73,7 +74,8 @@
         }
       },
       "Microsoft.Web.WebView2": {
-        "type": "Transitive",
+        "type": "CentralTransitive",
+        "requested": "[1.0.3719.77, 1.0.3719.77]",
         "resolved": "1.0.3719.77",
         "contentHash": "t+ucyKw5NTwMjsUrDF6R9Lk40lpcKQD1/HgyGFxl49tdA4h9dKlsj6FYGEmDRpFNfnTpENuTypMcdbrlkqBdDA=="
       }
