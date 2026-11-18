@@ -2,6 +2,7 @@
 title: "Alle deine Bereiche durchsuchen"
 sources:
   - docs/features/platform/use-cases/uc.platform.search.md
+  - docs/decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md
 ---
 
 Das Suchfeld oben auf der Seite durchsucht jeden Bereich, zu dem du hier gehörst: deinen persönlichen Bereich, den
@@ -81,3 +82,27 @@ Mit einem Screenreader ist das Feld eine Combobox: Die Zahl der Treffer wird vor
 ein hinzugefügter oder entfernter Filter; Filter und Ergebnisse tragen jeweils ihre Überschrift als Namen.
 
 Ein geteilter Link hat keine Suche.
+
+## In der App
+
+Die veyq-[App](/de/getting-started/install-the-app/) sucht wie der Browser, mit diesen Unterschieden:
+
+- **Wo du sie findest:** Unter Android und auf dem iPhone ist **Suche** der letzte Platz in der Leiste unten. Auf dem
+  iPad und dem Mac ist es das Suchfeld oben rechts im Fenster; auf dem Mac drückst du <kbd>⌘</kbd>+<kbd>F</kbd>. Unter
+  Linux ist es das Suchfeld unter dem Titel der Seitenleiste (<kbd>Strg</kbd>+<kbd>F</kbd>), und die Ergebnisse stehen
+  während der Suche an der Stelle der Seitenleiste. Unter Windows ist es das Suchfeld oben im Seitenbereich
+  (<kbd>Strg</kbd>+<kbd>E</kbd> oder <kbd>Strg</kbd>+<kbd>F</kbd>).
+- **Filter:** Auf dem iPhone, dem iPad und dem Mac wird ein gewählter Filter zu einem Token im Feld; unter Android, Linux
+  und Windows zu einer Schaltfläche mit einem × unter dem Feld oder über der Seite. Die <kbd>Rücktaste</kbd> in einem
+  leeren Feld nimmt den letzten wieder weg.
+- **Die Tasten:** Die Hervorhebung bleibt beim Weitertippen nicht auf einem Eintrag. <kbd>Eingabe</kbd> nimmt den ersten
+  Eintrag der Liste (unter Windows den hervorgehobenen, wenn du auf ihn gegangen bist); unter Android blendet sie nur die
+  Tastatur aus, tippe also an, was du willst. <kbd>Esc</kbd> schließt die Suche (unter Android: Zurück); unter Linux leert das erste
+  <kbd>Esc</kbd> das Getippte, das zweite schließt sie.
+- **Was durchsucht wird:** der Server, in dem du gerade bist, nicht deine anderen Server. Einen Bereich, den du auf
+  diesem Gerät ausgeblendet hast (unter **Server verwalten**), durchsucht die App nicht. Ein Ergebnis aus den
+  Einstellungen öffnet die Einstellungen der App an dieser Stelle; die App hat weniger Teile in ihren Einstellungen als
+  der Browser und findet nur diese.
+- **Offline** durchsucht die App, was sie auf dem Gerät behält: die Namen, Datum, Ort und Personen einer Erinnerung und
+  die Mitglieder. Die Fotos und Videos aller Bereiche werden durchsucht, sobald du wieder online bist – bis dahin nur
+  die, die sie schon online gelesen hat, und die der Erinnerung, die du geöffnet hast.

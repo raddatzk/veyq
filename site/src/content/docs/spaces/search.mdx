@@ -2,6 +2,7 @@
 title: "Search all your spaces"
 sources:
   - docs/features/platform/use-cases/uc.platform.search.md
+  - docs/decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md
 ---
 
 The search field at the top of the page searches every space you belong to here: your personal space, the shared
@@ -73,3 +74,26 @@ With a screen reader, the field is a combobox: the number of results is read out
 added or taken away; the filters and the results are each named by their heading.
 
 A shared link has no search.
+
+## In the app
+
+The veyq [app](/getting-started/install-the-app/) searches as the browser does, with these differences:
+
+- **Where to find it:** on Android and an iPhone, **Search** is the last place in the bar at the bottom. On an iPad and a
+  Mac it is the search field at the top right of the window; press <kbd>⌘</kbd>+<kbd>F</kbd> on a Mac. On Linux it is
+  the search field under the sidebar's title (<kbd>Ctrl</kbd>+<kbd>F</kbd>), and the results take the sidebar's place
+  while you search. On Windows it is the search box at the top of the side pane (<kbd>Ctrl</kbd>+<kbd>E</kbd> or
+  <kbd>Ctrl</kbd>+<kbd>F</kbd>).
+- **Filters:** on an iPhone, an iPad and a Mac a chosen filter becomes a token in the field; on Android, Linux and
+  Windows it is a button with an × under the field or above the page. <kbd>Backspace</kbd> in an empty field takes the
+  last one away.
+- **The keys:** the highlight does not stay on an entry while you type. <kbd>Enter</kbd> takes the first entry of the
+  list (on Windows the highlighted one, if you moved onto it); on Android it only hides the keyboard, so tap what you
+  want. <kbd>Esc</kbd> closes the search (on Android, Back); on Linux the first <kbd>Esc</kbd> clears what you typed and the second closes
+  it.
+- **What is searched:** the server you are in now, not your other servers. A space you hid on this device (under
+  **Manage servers**) is not searched. A settings result opens the app's settings at that part; the app's settings have
+  fewer parts than the browser's, so it finds only those.
+- **Offline** the app searches what it keeps on the device: the names, a Memory's dates, place and people, and the
+  members. The photos and videos of every space are searched once you are online again — until then, only those it
+  already read while online, and those of the Memory you have open.
