@@ -359,7 +359,9 @@ tasks.withType<Test>().configureEach {
     System.getenv("VEYQ_ADMIN_BASE")?.let { environment("VEYQ_ADMIN_BASE", it) }
     // `.run/.env` of another checkout (a worktree has none): read by DeviceTrustLiveTest.
     System.getenv("VEYQ_ENV_FILE")?.let { environment("VEYQ_ENV_FILE", it) }
-    testLogging { showStandardStreams = System.getenv("VEYQ_LIVE") != null }
+    // the search's volume measurement (ADR 0146 § Consequences), opt-in: a timing is no check of every run
+    System.getenv("VEYQ_MEASURE")?.let { environment("VEYQ_MEASURE", it) }
+    testLogging { showStandardStreams = System.getenv("VEYQ_LIVE") != null || System.getenv("VEYQ_MEASURE") != null }
     inputs.file(vectors).withPropertyName("vectors")
     inputs.dir(kitFixtures).withPropertyName("kitFixtures")
 }
@@ -370,7 +372,8 @@ tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
     environment("VEYQ_REPO_ROOT", rootDir.resolve("../..").canonicalPath)
     environment("VEYQ_NORMALIZATION_TEST", utf8proc.resolve("NormalizationTest.txt").absolutePath)
     System.getenv("VEYQ_LIVE")?.let { environment("VEYQ_LIVE", it) }
-    testLogging { showStandardStreams = System.getenv("VEYQ_LIVE") != null }
+    System.getenv("VEYQ_MEASURE")?.let { environment("VEYQ_MEASURE", it) }
+    testLogging { showStandardStreams = System.getenv("VEYQ_LIVE") != null || System.getenv("VEYQ_MEASURE") != null }
     inputs.file(vectors).withPropertyName("vectors")
     inputs.dir(kitFixtures).withPropertyName("kitFixtures")
 }

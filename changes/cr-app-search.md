@@ -121,7 +121,9 @@ names and constants (R3) so a reader moves between the two.
   `decomposedStringWithCanonicalMapping`, Linux/Windows utf8proc's NFD — `NormalizationTest` gains its cases).
   `Participants.fold` (R7) becomes `Fold.fold`, so the participants picker and the search read one rule, as on the web.
 - **The name order is the core's own comparator**, `NameOrder`: the folded names compared with runs of ASCII digits as
-  numbers ("Trip 2" before "Trip 10"), then the names' code points, then the id. It stands where the web's
+  numbers ("Trip 2" before "Trip 10", leading zeros aside), every other character by its UTF-16 unit, then the id
+  (implemented without the "then the names' code points" step first planned: names equal folded are equal, as the web's
+  `sensitivity: 'base'` makes them, so the id decides on both). It stands where the web's
   `Intl.Collator(numeric, base)` stands — the third key after the rank and the place, so it only orders equal matches in
   one place. The vectors' order cases use names on which both agree (letters, accents, digits). **Residual:** at an
   equal rank and place, names led by punctuation or a letter a language collates apart (Swedish å) may order differently
@@ -130,12 +132,15 @@ names and constants (R3) so a reader moves between the two.
 
 ### D4 — What each application contributes: `AppKinds.search`, as the web's registry
 
-- **Per kind** (`KindSearch`): the kind chip's word (a `Msg`), optional `facets(ctx)` — handed the node, its key and its
-  parent's for the call only — and the document kinds its page or its application's space search makes (word, icon).
+- **Per kind** (`KindSearch`): the kind chip's word (a `Msg`), its icon, optional `facets(meta, nowMs)` — handed the
+  node's meta as core's own node-meta opener opened it, never a key (implemented so: tighter than the planned door, which
+  handed the node's key and its parent's) — and the document kinds its page or its application's space search makes
+  (word, icon).
   The words are the web's labels (R4): folder, bookmark, file, drop box, Pot, Memory, Chapter, photo, video; core adds
   *Person* and *Setting*.
-- **Per application** (`ApplicationSearch.scopeDocuments(ctx)`): ctx holds the space, the last tag, the previous
-  documents by id, `keys()` (the node keys, opened only when asked) and cancellation. Memories ports
+- **Per application** (`ApplicationSearch.scopeDocuments(ctx)`): ctx holds the tenant, the space, the last tag, the
+  previous documents by id, the shell's opened nodes of the space by id (their keys read in place: no `keys()` door is
+  needed, since the apps hold every tree open) and the unnamed medium's words; cancellation is the coroutine's. Memories ports
   `scopeMediaDocuments` (R4): `listScopeMedia` by `If-None-Match`, 1000 per page, a medium kept unopened at an unchanged
   `metaRevision:blobId`, a blocked one and a non-gallery one (GPX, music: `GalleryMedium.shows`) no document; its rows
   opened with `MemoryMedia`'s own openers, never a second copy of them.
@@ -250,9 +255,13 @@ start offline has none but the open Memory's (its gallery reads the kept `listNo
 
 ### D13 — The bridge (Linux, Windows)
 
-`Call.SearchOpen` → `Answer.SearchOpened(id)`; `Watched.Search(id)` → `Update.Search(id, SearchShown?)`; calls
-`Search.Focus|Text(text)|Choose(index)|RemoveChip(index)|RemoveLastChip|More|Open(index)|Close`. `SearchShown` is D7's
-state as wire types (names, parts, words as `Piece`s, ids — no key, no seal); the model is dropped by `closeTenant()`
+`Call.SearchOpen` (`Search.Open`) → `Answer.SearchOpened(id)`; `Watched.Search(id)` → `Update.Search(id, SearchShown?)`;
+calls `Search.Focus|Text(text)|Choose(index)|RemoveChip(index)|RemoveLastChip|More|OpenResult(index)|Close`, each with
+the search's id (built: a result's open is `Search.OpenResult`, since `Search.Open` names the model's opening).
+`SearchShown` is core's own `@Serializable` state (names, parts, words as `Piece`s, ids — no key, no seal; its rows' and
+chips' identity field is `id`, since `SecretFreeSchemaTest` reads a field named `key` as a secret); the words the model
+matches are the host's (`HostWords`, `Words.Say` once per word); a settings result names its section in
+`SearchShown.openSettings` (cleared by the next call), which the host opens. The model is disposed by `closeTenant()`
 with the other registries. **`Call.SearchQuery`, `Answer.Hits` and `ShellWords.search` (R1) are removed once their last
 caller has moved** — they stay through phases 3–7 so every phase ends with every platform building, and phase 8 (the last
 caller, Windows) deletes them with `LiveBridgeTest`'s, `WireTest`'s and `DispatchTest`'s uses.
@@ -296,19 +305,19 @@ refine: `:core:macosArm64Test`, `:android:assembleDebug`, the Apple builds, `run
 
 ## Phases
 
-- [ ] **1 the ADR and the docs it changes** — the new ADR (the next free number, `ls docs/decisions | tail -3`; 0146 at
+- [x] **1 the ADR and the docs it changes** — the new ADR (the next free number, `ls docs/decisions | tail -3`; 0146 at
   refine) with D1–D13, the bounds of § Performance as planned, and its Alternatives; ADR 0125's header and Consequences
   point at it (the apps' key lifetime, D5; the apps' collation residual, D3); uc.platform.search names the apps as
   planned; `native-apps.md` § Open's search line points at this CR; `src/mobile/CLAUDE.md` names the package `search/`.
   · Done when: every `/usr/bin/python3 scripts/validate_*.py` but `validate_guard_gaps.py` exits 0.
 
-- [ ] **2 the vectors (contracts) and the web's test of them** — `contracts/platform/search/v1-vectors.json` (D1's
+- [x] **2 the vectors (contracts) and the web's test of them** — `contracts/platform/search/v1-vectors.json` (D1's
   sections) and `src/web/src/core/search/vectors.test.ts`, which reads it (and in write mode records it); the web's
   coverage file for uc.platform.search gains the test as a ref on the criteria its sections pin. No web behaviour
   changes. · Done when: `pnpm run check` in `src/web/` green; **bite**: one recorded order in a scratch copy of the
   vectors swapped (snapshot and restore, never `git checkout`) → `vectors.test.ts` red at that case.
 
-- [ ] **3 the core** — (a) `Fold`/`nfd`/`NameOrder` and the pure port (`Query`, `Results`, `Documents`' pure part) with
+- [x] **3 the core** — (a) `Fold`/`nfd`/`NameOrder` and the pure port (`Query`, `Results`, `Documents`' pure part) with
   `SearchVectorsTest` over the vectors on the JVM and `macosArm64`; (b) `KindSearch`/`ApplicationSearch` in `AppKinds`,
   Memories' facets and scope media, `SearchIndex`, `PeopleAndSettings`, `SettingsSection`, `OpenRequest`,
   `SearchContribution` from `GalleryModel`, `SearchModel` in `ShellModel` (`ShellWords.search` stays until phase 8, D13);
@@ -324,12 +333,15 @@ refine: `:core:macosArm64Test`, `:android:assembleDebug`, the Apple builds, `run
   space's node in the documents → D10's case red; (h) the gallery's own document not winning over the listing's → its
   case red.
 
-- [ ] **4 the bridge** — D13's calls, `Watched.Search`, `SearchShown`; `closeTenant()` drops the model; `WireTest`
+- [x] **4 the bridge** — D13's calls, `Watched.Search`, `SearchShown`; `closeTenant()` drops the model; `WireTest`
   samples, `DispatchTest` and `LiveBridgeTest` moved from `SearchQuery`. · Done when: `./gradlew :bridge:jvmTest` green;
   **bites**: (a) a `K_blob` field added to `SearchShown` → `SecretFreeSchemaTest` red; (b) the model left out of
   `closeTenant()` → a watch delivering after the sign-out, red.
 
-- [ ] **5 Android** — D12's row; the words (`scripts/validate_mobile_words.py` names a hand-written one). · Done when:
+- [ ] **5 Android** — D12's row; the words (`scripts/validate_mobile_words.py` names a hand-written one; the search's
+  words are in `words.json` since phase 3 — `search_*`, the kinds', the months', the settings sections' — but `search_hint`
+  still says "Search names" for the name-only field: the first phase that draws the full search sets it to the owner's
+  "Search all spaces" / "Alle Bereiche durchsuchen"). · Done when:
   `./gradlew :android:assembleDebug` and the words guard green; the emulator pass (agent): type a Memory's name in
   another space, a year chip, a person chip and the person result, *In:*, *Kind: Photo*, open a photo of another Memory
   (the lightbox on it), a settings section (the page scrolled to it), *Show more*, airplane mode (D11's line), TalkBack
@@ -370,16 +382,18 @@ refine: `:core:macosArm64Test`, `:android:assembleDebug`, the Apple builds, `run
 | iPhone and iPad on a device | **owner** | the search tab and the split view's field with tokens, VoiceOver's count (the simulators do not boot, #928) |
 | A screen reader on Linux | **owner** | Orca reads the count and a chip added (a real GNOME session, the Fedora VM) |
 
-## Owner questions
+## Owner questions (answered)
 
 1. **One tenant or every signed-in tenant?** ADR 0125 decision 3 limits the search to the current tenant because the web
    would need a cross-origin read; the apps hold every signed-in tenant at once, so that reason does not hold here.
    *Recommendation:* the current tenant only, as the web — a member's tenants are separate places, and a second tenant's
    results would need their own row line ("on {tenant}") and a switch on opening; revisit when a member asks.
+   **Answered (owner 2026-11-18): the current tenant only, as the web does.**
 2. **Copy for the apps' new words** (EN / DE; the web's `shell.search.*` and `memory.search.*` are reused as they are).
    *Recommendation:* `search_offline_photos`: "Photos are searched once you are online." / "Fotos werden durchsucht,
    sobald du online bist."; `search_hint` (today "Search names") becomes the web's placeholder "Search all spaces" /
    "Alle Bereiche durchsuchen"; the settings results' second line `search_settings`: "Settings" / "Einstellungen".
+   **Answered (owner 2026-11-18): the three words as proposed.**
 
 ## Inbox rows
 

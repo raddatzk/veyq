@@ -106,6 +106,34 @@ class GalleryModelTest {
     private fun TestScope.open(door: Door, at: NodeAt = memory): GalleryModel =
         GalleryModel(at, door, backgroundScope, backgroundScope).also { runCurrent() }
 
+    // ADR 0146 decision 8: the page contributes its photos to the search and takes the request the search left
+    @Test
+    fun theSearchGetsThePagesPhotosAndItsRequestOpensTheLightbox() = runTest {
+        val requests = me.raddatz.veyq.mobile.search.OpenRequests()
+        val contributions = me.raddatz.veyq.mobile.search.SearchContributions()
+        // a request left before the page read: taken once its listing holds the medium
+        requests.request(me.raddatz.veyq.mobile.search.OpenRequests.Request("s", "m", "b"))
+        val door = Door(listOf(item("a", at = 10), item("b", at = 30), item("x", blocked = true), item("song", type = "audio/mpeg")))
+        val g = GalleryModel(memory, door, backgroundScope, backgroundScope, search = GalleryModel.Search(requests, contributions)).also { runCurrent() }
+        val c = contributions.current.value!!
+        assertEquals("m", c.nodeId)
+        assertEquals(listOf("b", "a"), c.documents.map { it.id }, "the photos, no blocked medium, no music track")
+        assertEquals("b", g.current.searchOpened)
+        assertEquals("b", g.openLightbox?.current?.let { g.current.rows!![it.index].mediaId })
+        assertEquals(null, requests.request.value)
+        g.searchOpenedSeen()
+        // the page's own photo chosen while it shows: taken at once
+        requests.request(me.raddatz.veyq.mobile.search.OpenRequests.Request("s", "m", "a"))
+        runCurrent()
+        assertEquals("a", g.current.searchOpened)
+        // another Memory's request is not this page's
+        requests.request(me.raddatz.veyq.mobile.search.OpenRequests.Request("s", "other", "a"))
+        runCurrent()
+        assertEquals(me.raddatz.veyq.mobile.search.OpenRequests.Request("s", "other", "a"), requests.request.value)
+        g.close()
+        assertEquals(null, contributions.current.value, "a page that went withdraws its contribution")
+    }
+
     @Test
     fun theRowsAreTheGridsOrderEachReadingItsOwnTier() = runTest {
         val door = Door(

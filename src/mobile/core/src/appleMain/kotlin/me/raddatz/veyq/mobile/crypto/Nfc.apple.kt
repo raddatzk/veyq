@@ -1,6 +1,7 @@
 package me.raddatz.veyq.mobile.crypto
 
 import platform.Foundation.NSString
+import platform.Foundation.decomposedStringWithCanonicalMapping
 import platform.Foundation.decomposedStringWithCompatibilityMapping
 import platform.Foundation.precomposedStringWithCanonicalMapping
 
@@ -9,3 +10,6 @@ actual fun nfc(s: String): String = (s as NSString).precomposedStringWithCanonic
 
 @Suppress("CAST_NEVER_SUCCEEDS")
 actual fun nfkd(s: String): String = (s as NSString).decomposedStringWithCompatibilityMapping
+
+@Suppress("CAST_NEVER_SUCCEEDS")
+actual fun nfd(s: String): String = (s as NSString).decomposedStringWithCanonicalMapping

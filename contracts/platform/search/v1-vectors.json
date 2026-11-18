@@ -1,0 +1,2465 @@
+{
+  "format": "veyq-search-v1-vectors",
+  "note": "Conformance vectors for the search (ADR 0125; ADR 0146 decision 1): the web (src/web/src/core/search, Memories' search.ts) and the apps' core (src/mobile/core/.../search) both answer to them. Each case names the rule it pins (`rule`). Inputs chosen by hand; every `expected` recorded by running the web's functions (vectors.test.ts with VEYQ_WRITE_VECTORS=1) and read against its rule before commit. Strings are JavaScript's (UTF-16): a fold map's indices count UTF-16 units. `corpus` is the documents a `match` or `matcher` case names as \"corpus\"; a document with `opensItself` opens itself (a contribution, a person, a settings section). `match` orders with `collator` (the web's Intl.Collator; the core's NameOrder), its names chosen where both agree. `matcher` records fresh scans; a field's matcher must give each step. `facets` reads a Memory's plaintext meta at `now`; `medium` a listed medium's plaintext tier (`meta`, null: did not open) and blob meta, named by `unnamed` without a name. Every capturedAt is 12:00 UTC on a 15th.",
+  "unnamed": {
+    "photo": "Photo",
+    "video": "Video"
+  },
+  "collator": {
+    "locale": "en",
+    "numeric": true,
+    "sensitivity": "base"
+  },
+  "corpus": [
+    {
+      "scopeId": "active",
+      "kind": "MEMORY",
+      "id": "trips",
+      "name": "Trips"
+    },
+    {
+      "scopeId": "active",
+      "kind": "MEMORY",
+      "id": "rome",
+      "name": "Rome",
+      "path": [
+        "Trips"
+      ],
+      "pathIds": [
+        "trips"
+      ],
+      "facets": {
+        "years": {
+          "from": 2024,
+          "to": 2024
+        },
+        "months": {
+          "from": "2024-04",
+          "to": "2024-05"
+        },
+        "places": [
+          "Roma"
+        ],
+        "people": [
+          "aaaaaaaa-0000-4000-8000-000000000001"
+        ]
+      }
+    },
+    {
+      "scopeId": "active",
+      "kind": "CHAPTER",
+      "id": "day1",
+      "name": "Rome day 1",
+      "path": [
+        "Trips",
+        "Rome"
+      ],
+      "pathIds": [
+        "trips",
+        "rome"
+      ]
+    },
+    {
+      "scopeId": "active",
+      "kind": "MEMORY",
+      "id": "paris",
+      "name": "Paris from Rome",
+      "path": [
+        "Trips"
+      ],
+      "pathIds": [
+        "trips"
+      ],
+      "facets": {
+        "years": {
+          "from": 2023,
+          "to": 2024
+        },
+        "months": {
+          "from": "2023-12",
+          "to": "2024-01"
+        },
+        "places": [
+          "Paris"
+        ],
+        "people": [
+          "bbbbbbbb-0000-4000-8000-000000000002"
+        ]
+      }
+    },
+    {
+      "scopeId": "other",
+      "kind": "MEMORY",
+      "id": "o1",
+      "name": "Rome again",
+      "facets": {
+        "places": [
+          "Zürich"
+        ]
+      }
+    },
+    {
+      "scopeId": "active",
+      "kind": "memories.photo",
+      "id": "m1",
+      "name": "Rome beach.jpg",
+      "nodeId": "rome",
+      "path": [
+        "Trips",
+        "Rome"
+      ],
+      "pathIds": [
+        "trips",
+        "rome"
+      ],
+      "facets": {
+        "capturedAt": 1715774400000
+      },
+      "opensItself": true
+    },
+    {
+      "scopeId": "active",
+      "kind": "memories.photo",
+      "id": "m2",
+      "name": "Rome old.jpg",
+      "nodeId": "paris",
+      "path": [
+        "Trips",
+        "Paris from Rome"
+      ],
+      "pathIds": [
+        "trips",
+        "paris"
+      ],
+      "opensItself": true
+    },
+    {
+      "scopeId": "other",
+      "kind": "memories.photo",
+      "id": "m3",
+      "name": "IMG_0042.jpg",
+      "nodeId": "o1",
+      "path": [
+        "Rome again"
+      ],
+      "pathIds": [
+        "o1"
+      ],
+      "facets": {
+        "capturedAt": 1626350400000,
+        "places": [
+          "Roma"
+        ]
+      }
+    },
+    {
+      "scopeId": "active",
+      "kind": "MEMORY",
+      "id": "aroma",
+      "name": "Aroma"
+    },
+    {
+      "scopeId": "other",
+      "kind": "MEMORY",
+      "id": "trip2",
+      "name": "Trip 2"
+    },
+    {
+      "scopeId": "other",
+      "kind": "MEMORY",
+      "id": "trip10",
+      "name": "Trip 10"
+    },
+    {
+      "scopeId": "other",
+      "kind": "MEMORY",
+      "id": "trip1",
+      "name": "trip 1"
+    },
+    {
+      "scopeId": "other",
+      "kind": "FOLDER",
+      "id": "cafe",
+      "name": "Café Müller"
+    },
+    {
+      "scopeId": "other",
+      "kind": "FOLDER",
+      "id": "strasse",
+      "name": "Hauptstraße"
+    },
+    {
+      "scopeId": "active",
+      "kind": "SHARE_BOOKMARK",
+      "id": "reiselink",
+      "name": "Reiselink"
+    },
+    {
+      "scopeId": "active",
+      "kind": "FILE",
+      "id": "paket",
+      "name": "Paket"
+    },
+    {
+      "scopeId": "active",
+      "kind": "MEMORY",
+      "id": "party",
+      "name": "Party 🎉🎉"
+    },
+    {
+      "scopeId": "",
+      "kind": "person",
+      "id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "name": "Anna Schmidt",
+      "aliases": [
+        "~anna"
+      ],
+      "subtitle": "~anna",
+      "opensItself": true
+    },
+    {
+      "scopeId": "",
+      "kind": "person",
+      "id": "u-kev",
+      "name": "Kevin Raddatz",
+      "aliases": [
+        "~kraddatz"
+      ],
+      "subtitle": "~kraddatz",
+      "opensItself": true
+    },
+    {
+      "scopeId": "",
+      "kind": "settings",
+      "id": "sessions",
+      "name": "Sessions",
+      "keywords": [
+        "Kennwort",
+        "Anmeldung",
+        "Geräte"
+      ],
+      "subtitle": "Settings",
+      "opensItself": true
+    },
+    {
+      "scopeId": "",
+      "kind": "settings",
+      "id": "storage",
+      "name": "Storage",
+      "keywords": [
+        "S3",
+        "Speicher"
+      ],
+      "subtitle": "Settings",
+      "opensItself": true
+    },
+    {
+      "scopeId": "",
+      "kind": "settings",
+      "id": "maps",
+      "name": "Rome maps",
+      "keywords": [
+        "Karte"
+      ],
+      "subtitle": "Settings",
+      "opensItself": true
+    }
+  ],
+  "suggestSources": {
+    "documents": [
+      {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "r",
+        "name": "Rome",
+        "facets": {
+          "places": [
+            "Roma"
+          ]
+        }
+      },
+      {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "l",
+        "name": "Lake",
+        "facets": {
+          "places": [
+            "Zürich"
+          ]
+        }
+      },
+      {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "reisen",
+        "name": "Reisen"
+      },
+      {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "rom24",
+        "name": "Rom 2024",
+        "path": [
+          "Reisen"
+        ],
+        "pathIds": [
+          "reisen"
+        ]
+      },
+      {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "arbeit",
+        "name": "Arbeit"
+      },
+      {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "reisen2",
+        "name": "Reisen",
+        "path": [
+          "Arbeit"
+        ],
+        "pathIds": [
+          "arbeit"
+        ]
+      },
+      {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "memo",
+        "name": "Notiz",
+        "path": [
+          "Arbeit",
+          "Reisen"
+        ],
+        "pathIds": [
+          "arbeit",
+          "reisen2"
+        ]
+      },
+      {
+        "scopeId": "g1",
+        "kind": "MEMORY",
+        "id": "g-reisen",
+        "name": "Reisen"
+      },
+      {
+        "scopeId": "g1",
+        "kind": "MEMORY",
+        "id": "paris",
+        "name": "Paris",
+        "path": [
+          "Reisen"
+        ],
+        "pathIds": [
+          "g-reisen"
+        ]
+      },
+      {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "empty",
+        "name": "Reiseziele"
+      }
+    ],
+    "spaces": [
+      {
+        "scopeId": "g1",
+        "label": "Family group"
+      }
+    ],
+    "people": [
+      {
+        "userId": "aaaaaaaa-0000-4000-8000-000000000001",
+        "name": "Anna Schmidt"
+      },
+      {
+        "userId": "bbbbbbbb-0000-4000-8000-000000000002",
+        "name": "Ben Müller"
+      },
+      {
+        "userId": "cccccccc-0000-4000-8000-000000000003",
+        "name": "Anja Kurz"
+      },
+      {
+        "userId": "dddddddd-0000-4000-8000-000000000004",
+        "name": "Antje Lang"
+      },
+      {
+        "userId": "eeeeeeee-0000-4000-8000-000000000005",
+        "name": "Andreas Wolf"
+      }
+    ],
+    "kinds": [
+      {
+        "label": "Memory",
+        "kinds": [
+          "MEMORY"
+        ]
+      },
+      {
+        "label": "Photo",
+        "kinds": [
+          "memories.photo"
+        ]
+      },
+      {
+        "label": "Person",
+        "kinds": [
+          "person"
+        ]
+      }
+    ],
+    "months": [
+      [
+        "Januar",
+        "January"
+      ],
+      [
+        "Februar",
+        "February"
+      ],
+      [
+        "März",
+        "March"
+      ],
+      [
+        "April"
+      ],
+      [
+        "Mai",
+        "May"
+      ],
+      [
+        "Juni",
+        "June"
+      ],
+      [
+        "Juli",
+        "July"
+      ],
+      [
+        "August"
+      ],
+      [
+        "September"
+      ],
+      [
+        "Oktober",
+        "October"
+      ],
+      [
+        "November"
+      ],
+      [
+        "Dezember",
+        "December"
+      ]
+    ]
+  },
+  "fold": [
+    {
+      "rule": "fold.ts: case and a precomposed accent",
+      "input": "Zoë",
+      "expected": {
+        "fold": "zoe",
+        "map": {
+          "folded": "zoe",
+          "start": [
+            0,
+            1,
+            2
+          ],
+          "end": [
+            1,
+            2,
+            3
+          ]
+        }
+      }
+    },
+    {
+      "rule": "fold.ts: ß as ss",
+      "input": "Straße",
+      "expected": {
+        "fold": "strasse",
+        "map": {
+          "folded": "strasse",
+          "start": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            4,
+            5
+          ],
+          "end": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            5,
+            6
+          ]
+        }
+      }
+    },
+    {
+      "rule": "fold.ts: upper case already ss",
+      "input": "STRASSE",
+      "expected": {
+        "fold": "strasse",
+        "map": {
+          "folded": "strasse",
+          "start": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
+          "end": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ]
+        }
+      }
+    },
+    {
+      "rule": "fold.ts: a decomposed accent folds and maps to the letter before it",
+      "input": "Café Müller",
+      "expected": {
+        "fold": "cafe muller",
+        "map": {
+          "folded": "cafe muller",
+          "start": [
+            0,
+            1,
+            2,
+            3,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12
+          ],
+          "end": [
+            1,
+            2,
+            3,
+            5,
+            6,
+            7,
+            9,
+            10,
+            11,
+            12,
+            13
+          ]
+        }
+      }
+    },
+    {
+      "rule": "fold.ts: İ decomposes to I and a dot above, which is dropped",
+      "input": "İstanbul",
+      "expected": {
+        "fold": "istanbul",
+        "map": {
+          "folded": "istanbul",
+          "start": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ],
+          "end": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8
+          ]
+        }
+      }
+    },
+    {
+      "rule": "fold.ts NFD, never NFKD: a ligature stays",
+      "input": "ﬁsh",
+      "expected": {
+        "fold": "ﬁsh",
+        "map": {
+          "folded": "ﬁsh",
+          "start": [
+            0,
+            1,
+            2
+          ],
+          "end": [
+            1,
+            2,
+            3
+          ]
+        }
+      }
+    },
+    {
+      "rule": "fold.ts: a supplementary-plane letter lowers (Deseret)",
+      "input": "𐐀𐐁 x",
+      "expected": {
+        "fold": "𐐨𐐩 x",
+        "map": {
+          "folded": "𐐨𐐩 x",
+          "start": [
+            0,
+            0,
+            2,
+            2,
+            4,
+            5
+          ],
+          "end": [
+            2,
+            2,
+            4,
+            4,
+            5,
+            6
+          ]
+        }
+      }
+    },
+    {
+      "rule": "fold.ts \\p{M}: a spacing mark (Mc) is dropped too",
+      "input": "कि",
+      "expected": {
+        "fold": "क",
+        "map": {
+          "folded": "क",
+          "start": [
+            0
+          ],
+          "end": [
+            2
+          ]
+        }
+      }
+    },
+    {
+      "rule": "fold.ts foldMap: a final sigma lowers by its neighbours, so no map",
+      "input": "ΟΔΟΣ",
+      "expected": {
+        "fold": "οδος",
+        "map": null
+      }
+    },
+    {
+      "rule": "fold.ts: emoji stay",
+      "input": "Party 🎉",
+      "expected": {
+        "fold": "party 🎉",
+        "map": {
+          "folded": "party 🎉",
+          "start": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            6
+          ],
+          "end": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            8,
+            8
+          ]
+        }
+      }
+    }
+  ],
+  "tails": [
+    {
+      "rule": "query.ts tailsOf: words, longest first, each with what stays before it",
+      "text": "rom anna sch",
+      "expected": [
+        {
+          "tail": "rom anna sch",
+          "rest": ""
+        },
+        {
+          "tail": "anna sch",
+          "rest": "rom"
+        },
+        {
+          "tail": "sch",
+          "rest": "rom anna"
+        }
+      ]
+    },
+    {
+      "rule": "JavaScript \\s: a no-break space separates",
+      "text": "rom anna",
+      "expected": [
+        {
+          "tail": "rom anna",
+          "rest": ""
+        },
+        {
+          "tail": "anna",
+          "rest": "rom"
+        }
+      ]
+    },
+    {
+      "rule": "JavaScript \\s: U+FEFF separates and is trimmed",
+      "text": "﻿kev",
+      "expected": [
+        {
+          "tail": "kev",
+          "rest": ""
+        }
+      ]
+    },
+    {
+      "rule": "JavaScript \\s: an em space and a line separator",
+      "text": "a b c",
+      "expected": [
+        {
+          "tail": "a b c",
+          "rest": ""
+        },
+        {
+          "tail": "b c",
+          "rest": "a"
+        },
+        {
+          "tail": "c",
+          "rest": "a b"
+        }
+      ]
+    },
+    {
+      "rule": "JavaScript \\s: U+0085 (NEL) is no space",
+      "text": "xy",
+      "expected": [
+        {
+          "tail": "xy",
+          "rest": ""
+        }
+      ]
+    },
+    {
+      "rule": "query.ts tailsOf: surrounding spaces",
+      "text": "  rom  ",
+      "expected": [
+        {
+          "tail": "rom",
+          "rest": ""
+        }
+      ]
+    },
+    {
+      "rule": "query.ts tailsOf: none for no word",
+      "text": " \t ",
+      "expected": []
+    }
+  ],
+  "wordPrefix": [
+    {
+      "rule": "query.ts wordPrefix: the whole name's start",
+      "name": "rome",
+      "prefix": "ro",
+      "expected": true
+    },
+    {
+      "rule": "query.ts isBoundary: after a space",
+      "name": "trip to rome",
+      "prefix": "rom",
+      "expected": true
+    },
+    {
+      "rule": "query.ts isBoundary: inside a word no",
+      "name": "aroma",
+      "prefix": "rom",
+      "expected": false
+    },
+    {
+      "rule": "query.ts isBoundary: after ² (No) no",
+      "name": "m²abc",
+      "prefix": "abc",
+      "expected": false
+    },
+    {
+      "rule": "query.ts isBoundary: after a hyphen yes",
+      "name": "e-mail",
+      "prefix": "mail",
+      "expected": true
+    },
+    {
+      "rule": "query.ts isBoundary: after an underscore (Pc) yes",
+      "name": "img_beach",
+      "prefix": "beach",
+      "expected": true
+    },
+    {
+      "rule": "query.ts isBoundary: after Ⅻ (Nl) no",
+      "name": "Ⅻabc",
+      "prefix": "abc",
+      "expected": false
+    },
+    {
+      "rule": "query.ts isBoundary: after a digit no",
+      "name": "2024rom",
+      "prefix": "rom",
+      "expected": false
+    },
+    {
+      "rule": "query.ts wordPrefix: a later occurrence at a boundary",
+      "name": "aroma rom",
+      "prefix": "rom",
+      "expected": true
+    }
+  ],
+  "suggest": [
+    {
+      "rule": "query.ts suggestChips: four digits are a year, the rest stays text",
+      "text": "rome 2024",
+      "chips": [],
+      "expected": [
+        {
+          "key": "year:2024",
+          "chip": {
+            "type": "year",
+            "year": 2024
+          },
+          "text": "rome"
+        }
+      ]
+    },
+    {
+      "rule": "query.ts: three digits are no year",
+      "text": "202",
+      "chips": [],
+      "expected": []
+    },
+    {
+      "rule": "query.ts: a prefix of a word of a member's name, case and accents aside",
+      "text": "MULL",
+      "chips": [],
+      "expected": [
+        {
+          "key": "person:bbbbbbbb-0000-4000-8000-000000000002",
+          "chip": {
+            "type": "person",
+            "userId": "bbbbbbbb-0000-4000-8000-000000000002",
+            "label": "Ben Müller"
+          },
+          "text": ""
+        }
+      ]
+    },
+    {
+      "rule": "query.ts tailsOf: a tail of several words, the text before it kept",
+      "text": "beach anna sch",
+      "chips": [],
+      "expected": [
+        {
+          "key": "person:aaaaaaaa-0000-4000-8000-000000000001",
+          "chip": {
+            "type": "person",
+            "userId": "aaaaaaaa-0000-4000-8000-000000000001",
+            "label": "Anna Schmidt"
+          },
+          "text": "beach"
+        }
+      ]
+    },
+    {
+      "rule": "query.ts: a place a document carries",
+      "text": "zur",
+      "chips": [],
+      "expected": [
+        {
+          "key": "place:zurich",
+          "chip": {
+            "type": "place",
+            "place": "zurich",
+            "label": "Zürich"
+          },
+          "text": ""
+        }
+      ]
+    },
+    {
+      "rule": "query.ts: a space's name",
+      "text": "fami",
+      "chips": [],
+      "expected": [
+        {
+          "key": "space:g1",
+          "chip": {
+            "type": "space",
+            "scopeId": "g1",
+            "label": "Family group"
+          },
+          "text": ""
+        }
+      ]
+    },
+    {
+      "rule": "query.ts tailsOf: a kind's word as the last tail, the word before it kept as text",
+      "text": "fami pho",
+      "chips": [],
+      "expected": [
+        {
+          "key": "kind:memories.photo",
+          "chip": {
+            "type": "kind",
+            "kinds": [
+              "memories.photo"
+            ],
+            "label": "Photo"
+          },
+          "text": "fami"
+        }
+      ]
+    },
+    {
+      "rule": "query.ts MIN_TAIL 2: one letter offers nothing",
+      "text": "a",
+      "chips": [],
+      "expected": []
+    },
+    {
+      "rule": "query.ts: a chip already chosen is not offered",
+      "text": "anna",
+      "chips": [
+        {
+          "type": "person",
+          "userId": "aaaaaaaa-0000-4000-8000-000000000001",
+          "label": "Anna Schmidt"
+        }
+      ],
+      "expected": []
+    },
+    {
+      "rule": "query.ts: no match inside a word",
+      "text": "chmidt",
+      "chips": [],
+      "expected": []
+    },
+    {
+      "rule": "ADR 0125 decision 4: In: a node something lies below, two of one name apart, not an empty one",
+      "text": "reis",
+      "chips": [],
+      "expected": [
+        {
+          "key": "in:s1:reisen",
+          "chip": {
+            "type": "in",
+            "scopeId": "s1",
+            "nodeId": "reisen",
+            "label": "Reisen",
+            "path": []
+          },
+          "text": ""
+        },
+        {
+          "key": "in:s1:reisen2",
+          "chip": {
+            "type": "in",
+            "scopeId": "s1",
+            "nodeId": "reisen2",
+            "label": "Reisen",
+            "path": [
+              "Arbeit"
+            ]
+          },
+          "text": ""
+        },
+        {
+          "key": "in:g1:g-reisen",
+          "chip": {
+            "type": "in",
+            "scopeId": "g1",
+            "nodeId": "g-reisen",
+            "label": "Reisen",
+            "path": []
+          },
+          "text": ""
+        }
+      ]
+    },
+    {
+      "rule": "query.ts MIN_MONTH 3: a month's name in either language before a year, first",
+      "text": "mai 2024",
+      "chips": [],
+      "expected": [
+        {
+          "key": "month:2024-05",
+          "chip": {
+            "type": "month",
+            "year": 2024,
+            "month": 5
+          },
+          "text": ""
+        },
+        {
+          "key": "year:2024",
+          "chip": {
+            "type": "year",
+            "year": 2024
+          },
+          "text": "mai"
+        }
+      ]
+    },
+    {
+      "rule": "query.ts: a month read folded from its first three letters, the words before kept",
+      "text": "rom MÄR 2024",
+      "chips": [],
+      "expected": [
+        {
+          "key": "month:2024-03",
+          "chip": {
+            "type": "month",
+            "year": 2024,
+            "month": 3
+          },
+          "text": "rom"
+        },
+        {
+          "key": "year:2024",
+          "chip": {
+            "type": "year",
+            "year": 2024
+          },
+          "text": "rom MÄR"
+        }
+      ]
+    },
+    {
+      "rule": "query.ts: two letters of a month are no month",
+      "text": "ma 2024",
+      "chips": [],
+      "expected": [
+        {
+          "key": "year:2024",
+          "chip": {
+            "type": "year",
+            "year": 2024
+          },
+          "text": "ma"
+        }
+      ]
+    },
+    {
+      "rule": "query.ts: a month alone offers nothing",
+      "text": "May",
+      "chips": [],
+      "expected": []
+    },
+    {
+      "rule": "query.ts: without month names no month",
+      "text": "mai 2024",
+      "chips": [],
+      "months": false,
+      "expected": [
+        {
+          "key": "year:2024",
+          "chip": {
+            "type": "year",
+            "year": 2024
+          },
+          "text": "mai"
+        }
+      ]
+    },
+    {
+      "rule": "query.ts tailsOf: a no-break space separates words as JavaScript's \\s reads it",
+      "text": "beach ben",
+      "chips": [],
+      "expected": [
+        {
+          "key": "person:bbbbbbbb-0000-4000-8000-000000000002",
+          "chip": {
+            "type": "person",
+            "userId": "bbbbbbbb-0000-4000-8000-000000000002",
+            "label": "Ben Müller"
+          },
+          "text": "beach"
+        }
+      ]
+    },
+    {
+      "rule": "query.ts PER_TYPE 3: at most three of a type, in the sources' order",
+      "text": "an",
+      "chips": [],
+      "expected": [
+        {
+          "key": "person:aaaaaaaa-0000-4000-8000-000000000001",
+          "chip": {
+            "type": "person",
+            "userId": "aaaaaaaa-0000-4000-8000-000000000001",
+            "label": "Anna Schmidt"
+          },
+          "text": ""
+        },
+        {
+          "key": "person:cccccccc-0000-4000-8000-000000000003",
+          "chip": {
+            "type": "person",
+            "userId": "cccccccc-0000-4000-8000-000000000003",
+            "label": "Anja Kurz"
+          },
+          "text": ""
+        },
+        {
+          "key": "person:dddddddd-0000-4000-8000-000000000004",
+          "chip": {
+            "type": "person",
+            "userId": "dddddddd-0000-4000-8000-000000000004",
+            "label": "Antje Lang"
+          },
+          "text": ""
+        }
+      ]
+    }
+  ],
+  "match": [
+    {
+      "rule": "ADR 0125 decision 5: the rank, then the place (the open node, this space, other spaces, nowhere), then the name",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "rome"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": "rome"
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "rome"
+          },
+          {
+            "id": "m1"
+          },
+          {
+            "id": "day1"
+          },
+          {
+            "id": "o1"
+          },
+          {
+            "id": "maps"
+          },
+          {
+            "id": "paris"
+          }
+        ],
+        "total": 6
+      }
+    },
+    {
+      "rule": "results.ts placeOf: a contribution counts only for the node open in the active space",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "rome"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "rome"
+          },
+          {
+            "id": "day1"
+          },
+          {
+            "id": "o1"
+          },
+          {
+            "id": "maps"
+          },
+          {
+            "id": "paris"
+          }
+        ],
+        "total": 5
+      }
+    },
+    {
+      "rule": "results.ts placeOf: another active space puts the open node's space with the others",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "rome"
+      },
+      "context": {
+        "activeScopeId": "other",
+        "openNodeId": "o1"
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "rome"
+          },
+          {
+            "id": "o1"
+          },
+          {
+            "id": "day1"
+          },
+          {
+            "id": "maps"
+          },
+          {
+            "id": "paris"
+          }
+        ],
+        "total": 5
+      }
+    },
+    {
+      "rule": "ADR 0125 decision 5: an exact match elsewhere before an inside-word match here",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "rom"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "rome"
+          },
+          {
+            "id": "day1"
+          },
+          {
+            "id": "o1"
+          },
+          {
+            "id": "maps"
+          },
+          {
+            "id": "paris"
+          },
+          {
+            "id": "aroma"
+          },
+          {
+            "id": "m3"
+          }
+        ],
+        "total": 7
+      }
+    },
+    {
+      "rule": "query.ts textRank: one character matches word starts only (\"K\" lists no Reiselink, no Paket)",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "k"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "u-kev"
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "rule": "query.ts textRank: two characters match inside a word (MIN_INSIDE 2)",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "ke"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "u-kev"
+          },
+          {
+            "id": "paket"
+          }
+        ],
+        "total": 2
+      }
+    },
+    {
+      "rule": "query.ts keywordAt: a settings word counts from MIN_KEYWORD 3, and is the reason drawn",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "ken"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "sessions",
+            "reason": "Kennwort"
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "rule": "query.ts keywordAt: a settings word shorter than three matches typed whole",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "s3"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "storage",
+            "reason": "S3"
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "rule": "query.ts textRank: a place ranks after every name match",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "roma"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "aroma"
+          },
+          {
+            "id": "rome"
+          },
+          {
+            "id": "m3"
+          }
+        ],
+        "total": 3
+      }
+    },
+    {
+      "rule": "fold.ts: case, accents and ß aside",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "CAFE mul"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "cafe"
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "rule": "fold.ts: ß as ss, inside a word",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "strasse"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "strasse"
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "rule": "query.ts nameRank: several words anywhere in the name",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "beach rome"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": "rome"
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "m1"
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "rule": "query.ts: an alias (~username) is a name at its best rank",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "~kradd"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "u-kev"
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "rule": "query.ts lengthOf: a character outside the basic plane is one",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "🎉"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "party"
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "rule": "core NameOrder = the web's Intl.Collator(numeric, base): digit runs as numbers, case aside, then the id",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "trip"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "trips"
+          },
+          {
+            "id": "trip1"
+          },
+          {
+            "id": "trip2"
+          },
+          {
+            "id": "trip10"
+          }
+        ],
+        "total": 4
+      }
+    },
+    {
+      "rule": "ADR 0125 decision 4: a year chip holds a Memory overlapping it and a photo captured in it; no person, no setting",
+      "documents": "corpus",
+      "query": {
+        "chips": [
+          {
+            "type": "year",
+            "year": 2024
+          }
+        ],
+        "text": ""
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "paris"
+          },
+          {
+            "id": "rome"
+          }
+        ],
+        "total": 2
+      }
+    },
+    {
+      "rule": "ADR 0125 decision 4: a year chip over a photo, local time",
+      "documents": "corpus",
+      "query": {
+        "chips": [
+          {
+            "type": "year",
+            "year": 2021
+          }
+        ],
+        "text": ""
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "m3"
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "rule": "ADR 0125 decision 4: a month chip holds a Memory whose months overlap it",
+      "documents": "corpus",
+      "query": {
+        "chips": [
+          {
+            "type": "month",
+            "year": 2024,
+            "month": 1
+          }
+        ],
+        "text": ""
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "paris"
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "rule": "ADR 0125 decision 4: a person chip asks the participants, not the profile",
+      "documents": "corpus",
+      "query": {
+        "chips": [
+          {
+            "type": "person",
+            "userId": "aaaaaaaa-0000-4000-8000-000000000001",
+            "label": "Anna Schmidt"
+          }
+        ],
+        "text": ""
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "rome"
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "rule": "ADR 0125 decision 4: a place chip, folded",
+      "documents": "corpus",
+      "query": {
+        "chips": [
+          {
+            "type": "place",
+            "place": "roma",
+            "label": "Roma"
+          }
+        ],
+        "text": ""
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "rome"
+          },
+          {
+            "id": "m3"
+          }
+        ],
+        "total": 2
+      }
+    },
+    {
+      "rule": "ADR 0125 decision 4: a kind chip; Kind: Person lists only people",
+      "documents": "corpus",
+      "query": {
+        "chips": [
+          {
+            "type": "kind",
+            "kinds": [
+              "person"
+            ],
+            "label": "Person"
+          }
+        ],
+        "text": "a"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "aaaaaaaa-0000-4000-8000-000000000001"
+          }
+        ],
+        "total": 1
+      }
+    },
+    {
+      "rule": "ADR 0125 decision 4: In: a node, by id, a photo by its Memory, the node itself not",
+      "documents": "corpus",
+      "query": {
+        "chips": [
+          {
+            "type": "in",
+            "scopeId": "active",
+            "nodeId": "trips",
+            "label": "Trips",
+            "path": []
+          }
+        ],
+        "text": ""
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": "rome"
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "m1"
+          },
+          {
+            "id": "day1"
+          },
+          {
+            "id": "paris"
+          },
+          {
+            "id": "rome"
+          }
+        ],
+        "total": 4
+      }
+    },
+    {
+      "rule": "ADR 0125 decision 4: a space chip",
+      "documents": "corpus",
+      "query": {
+        "chips": [
+          {
+            "type": "space",
+            "scopeId": "other",
+            "label": "Other"
+          }
+        ],
+        "text": "rom"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [
+          {
+            "id": "o1"
+          },
+          {
+            "id": "m3"
+          }
+        ],
+        "total": 2
+      }
+    },
+    {
+      "rule": "ADR 0125 decision 5: the first `limit` and the exact total",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "r"
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "limit": 3,
+      "expected": {
+        "results": [
+          {
+            "id": "reiselink"
+          },
+          {
+            "id": "rome"
+          },
+          {
+            "id": "day1"
+          }
+        ],
+        "total": 8
+      }
+    },
+    {
+      "rule": "query.ts matchAll: neither text nor a chip finds nothing",
+      "documents": "corpus",
+      "query": {
+        "chips": [],
+        "text": "   "
+      },
+      "context": {
+        "activeScopeId": "active",
+        "openNodeId": null
+      },
+      "expected": {
+        "results": [],
+        "total": 0
+      }
+    }
+  ],
+  "matcher": [
+    {
+      "rule": "query.ts createMatcher: narrows only from EVERY_RULE (3) characters; \"K\", \"Ke\", \"Ken\" and back answer as fresh scans",
+      "documents": "corpus",
+      "steps": [
+        {
+          "chips": [],
+          "text": "k"
+        },
+        {
+          "chips": [],
+          "text": "ke"
+        },
+        {
+          "chips": [],
+          "text": "ken"
+        },
+        {
+          "chips": [],
+          "text": "kenn"
+        },
+        {
+          "chips": [],
+          "text": "ken"
+        },
+        {
+          "chips": [],
+          "text": "ke"
+        },
+        {
+          "chips": [],
+          "text": "k"
+        },
+        {
+          "chips": [],
+          "text": "ke"
+        },
+        {
+          "chips": [],
+          "text": "ken"
+        },
+        {
+          "chips": [],
+          "text": "r"
+        },
+        {
+          "chips": [],
+          "text": "ro"
+        },
+        {
+          "chips": [],
+          "text": "rom"
+        },
+        {
+          "chips": [],
+          "text": "ro"
+        }
+      ],
+      "expected": [
+        [
+          "u-kev:1"
+        ],
+        [
+          "paket:3",
+          "u-kev:1"
+        ],
+        [
+          "sessions:4"
+        ],
+        [
+          "sessions:4"
+        ],
+        [
+          "sessions:4"
+        ],
+        [
+          "paket:3",
+          "u-kev:1"
+        ],
+        [
+          "u-kev:1"
+        ],
+        [
+          "paket:3",
+          "u-kev:1"
+        ],
+        [
+          "sessions:4"
+        ],
+        [
+          "day1:1",
+          "m1:1",
+          "m2:1",
+          "m3:4",
+          "maps:1",
+          "o1:1",
+          "paris:2",
+          "reiselink:1",
+          "rome:1",
+          "u-kev:2"
+        ],
+        [
+          "aroma:3",
+          "day1:1",
+          "m1:1",
+          "m2:1",
+          "m3:4",
+          "maps:1",
+          "o1:1",
+          "paris:2",
+          "rome:1"
+        ],
+        [
+          "aroma:3",
+          "day1:1",
+          "m1:1",
+          "m2:1",
+          "m3:4",
+          "maps:1",
+          "o1:1",
+          "paris:2",
+          "rome:1"
+        ],
+        [
+          "aroma:3",
+          "day1:1",
+          "m1:1",
+          "m2:1",
+          "m3:4",
+          "maps:1",
+          "o1:1",
+          "paris:2",
+          "rome:1"
+        ]
+      ]
+    },
+    {
+      "rule": "query.ts createMatcher: chips moved, text taken back, an empty text with a chip",
+      "documents": "corpus",
+      "steps": [
+        {
+          "chips": [],
+          "text": "rom"
+        },
+        {
+          "chips": [
+            {
+              "type": "year",
+              "year": 2024
+            }
+          ],
+          "text": "rom"
+        },
+        {
+          "chips": [
+            {
+              "type": "year",
+              "year": 2024
+            }
+          ],
+          "text": ""
+        },
+        {
+          "chips": [
+            {
+              "type": "year",
+              "year": 2024
+            }
+          ],
+          "text": "r"
+        },
+        {
+          "chips": [],
+          "text": "rome "
+        },
+        {
+          "chips": [],
+          "text": "rome b"
+        },
+        {
+          "chips": [],
+          "text": ""
+        }
+      ],
+      "expected": [
+        [
+          "aroma:3",
+          "day1:1",
+          "m1:1",
+          "m2:1",
+          "m3:4",
+          "maps:1",
+          "o1:1",
+          "paris:2",
+          "rome:1"
+        ],
+        [
+          "m1:1",
+          "paris:2",
+          "rome:1"
+        ],
+        [
+          "m1:0",
+          "paris:0",
+          "rome:0"
+        ],
+        [
+          "m1:1",
+          "paris:2",
+          "rome:1"
+        ],
+        [
+          "day1:1",
+          "m1:1",
+          "m2:1",
+          "maps:1",
+          "o1:1",
+          "paris:2",
+          "rome:0"
+        ],
+        [
+          "m1:1"
+        ],
+        []
+      ]
+    }
+  ],
+  "nameParts": [
+    {
+      "rule": "query.ts nameParts: a plain prefix",
+      "name": "Kevins Geburtstag",
+      "text": "kev",
+      "expected": [
+        {
+          "text": "Kev",
+          "strong": true
+        },
+        {
+          "text": "ins Geburtstag",
+          "strong": false
+        }
+      ]
+    },
+    {
+      "rule": "query.ts nameParts: the folded match mapped back over ß",
+      "name": "Große Straße",
+      "text": "strasse",
+      "expected": [
+        {
+          "text": "Große ",
+          "strong": false
+        },
+        {
+          "text": "Straße",
+          "strong": true
+        }
+      ]
+    },
+    {
+      "rule": "query.ts nameParts: part of a ß",
+      "name": "Straßenfest",
+      "text": "stras",
+      "expected": [
+        {
+          "text": "Straß",
+          "strong": true
+        },
+        {
+          "text": "enfest",
+          "strong": false
+        }
+      ]
+    },
+    {
+      "rule": "query.ts nameParts: a composed accent",
+      "name": "Café Müller",
+      "text": "cafe mu",
+      "expected": [
+        {
+          "text": "Café Mü",
+          "strong": true
+        },
+        {
+          "text": "ller",
+          "strong": false
+        }
+      ]
+    },
+    {
+      "rule": "query.ts nameParts: a decomposed accent",
+      "name": "Café Müller",
+      "text": "cafe",
+      "expected": [
+        {
+          "text": "Café",
+          "strong": true
+        },
+        {
+          "text": " Müller",
+          "strong": false
+        }
+      ]
+    },
+    {
+      "rule": "query.ts matchedRanges: a word start before an earlier inside match",
+      "name": "Aroma Rom",
+      "text": "rom",
+      "expected": [
+        {
+          "text": "Aroma ",
+          "strong": false
+        },
+        {
+          "text": "Rom",
+          "strong": true
+        }
+      ]
+    },
+    {
+      "rule": "query.ts matchedRanges: each word of several",
+      "name": "Summer in Rome",
+      "text": "rome summer",
+      "expected": [
+        {
+          "text": "Summer",
+          "strong": true
+        },
+        {
+          "text": " in ",
+          "strong": false
+        },
+        {
+          "text": "Rome",
+          "strong": true
+        }
+      ]
+    },
+    {
+      "rule": "query.ts nameParts: nothing bold where the name did not match",
+      "name": "Kevin Raddatz",
+      "text": "~kradd",
+      "expected": [
+        {
+          "text": "Kevin Raddatz",
+          "strong": false
+        }
+      ]
+    },
+    {
+      "rule": "query.ts nameParts: no text",
+      "name": "Rome",
+      "text": "",
+      "expected": [
+        {
+          "text": "Rome",
+          "strong": false
+        }
+      ]
+    },
+    {
+      "rule": "query.ts nameParts: a name that does not fold character by character draws plain",
+      "name": "ΟΔΟΣ",
+      "text": "οδο",
+      "expected": [
+        {
+          "text": "ΟΔΟΣ",
+          "strong": false
+        }
+      ]
+    },
+    {
+      "rule": "query.ts matchedText: the text trimmed and folded first",
+      "name": "Unser Café",
+      "text": "  CAFÉ ",
+      "expected": [
+        {
+          "text": "Unser ",
+          "strong": false
+        },
+        {
+          "text": "Café",
+          "strong": true
+        }
+      ]
+    }
+  ],
+  "facets": [
+    {
+      "rule": "memories/search.ts memorySearchFacets: a range as years and months, the place trimmed, the participants",
+      "now": "2026-11-15T12:00:00Z",
+      "meta": {
+        "date": {
+          "mode": "range",
+          "from": "2023-12-30",
+          "to": "2024-01-02"
+        },
+        "location": {
+          "name": " Rom ",
+          "nameSource": "manual",
+          "derivedMode": "fixed"
+        },
+        "participants": {
+          "userIds": [
+            "aaaaaaaa-0000-4000-8000-000000000001"
+          ]
+        }
+      },
+      "expected": {
+        "years": {
+          "from": 2023,
+          "to": 2024
+        },
+        "months": {
+          "from": "2023-12",
+          "to": "2024-01"
+        },
+        "places": [
+          "Rom"
+        ],
+        "people": [
+          "aaaaaaaa-0000-4000-8000-000000000001"
+        ]
+      }
+    },
+    {
+      "rule": "memories/search.ts yearsOfDate: an ongoing Memory reaches this year and month",
+      "now": "2026-11-15T12:00:00Z",
+      "meta": {
+        "date": {
+          "mode": "ongoing",
+          "from": "2022-03-01"
+        }
+      },
+      "expected": {
+        "years": {
+          "from": 2022,
+          "to": 2026
+        },
+        "months": {
+          "from": "2022-03",
+          "to": "2026-11"
+        }
+      }
+    },
+    {
+      "rule": "memories/search.ts: a single day",
+      "now": "2026-11-15T12:00:00Z",
+      "meta": {
+        "date": {
+          "mode": "single",
+          "from": "2024-05-31",
+          "to": "2024-05-31"
+        }
+      },
+      "expected": {
+        "years": {
+          "from": 2024,
+          "to": 2024
+        },
+        "months": {
+          "from": "2024-05",
+          "to": "2024-05"
+        }
+      }
+    },
+    {
+      "rule": "memories/search.ts: none without a start day",
+      "now": "2026-11-15T12:00:00Z",
+      "meta": {
+        "date": {
+          "mode": "auto"
+        }
+      },
+      "expected": {}
+    },
+    {
+      "rule": "memories/search.ts: nothing it does not have",
+      "now": "2026-11-15T12:00:00Z",
+      "meta": {},
+      "expected": {}
+    },
+    {
+      "rule": "memories/search.ts: a blank place is none",
+      "now": "2026-11-15T12:00:00Z",
+      "meta": {
+        "location": {
+          "name": "   ",
+          "nameSource": "manual",
+          "derivedMode": "fixed"
+        }
+      },
+      "expected": {}
+    }
+  ],
+  "medium": [
+    {
+      "rule": "memories/search.ts mediumDocument: the name, the override first, the place",
+      "item": {
+        "mediaId": "p1",
+        "metaRevision": 2,
+        "blobId": "b1"
+      },
+      "meta": {
+        "v": 1,
+        "capturedAt": 1626350400000,
+        "capturedAtOverride": 1629028800000,
+        "placeName": " Roma "
+      },
+      "blobMeta": {
+        "v": 1,
+        "type": "image/jpeg",
+        "name": "IMG_1.jpg"
+      },
+      "expected": {
+        "kind": "memories.photo",
+        "id": "p1",
+        "revision": "2:b1",
+        "name": "IMG_1.jpg",
+        "facets": {
+          "capturedAt": 1629028800000,
+          "places": [
+            "Roma"
+          ]
+        },
+        "icon": "image"
+      }
+    },
+    {
+      "rule": "memories/search.ts: a video without a name is named by its word",
+      "item": {
+        "mediaId": "v1",
+        "metaRevision": 0,
+        "blobId": "b2"
+      },
+      "meta": {
+        "v": 1
+      },
+      "blobMeta": {
+        "v": 1,
+        "type": "video/mp4"
+      },
+      "expected": {
+        "kind": "memories.video",
+        "id": "v1",
+        "revision": "0:b2",
+        "name": "Video",
+        "facets": {},
+        "icon": "play"
+      }
+    },
+    {
+      "rule": "galleryMedium.ts: a music track is no document",
+      "item": {
+        "mediaId": "s1",
+        "metaRevision": 0,
+        "blobId": "b3"
+      },
+      "meta": {
+        "v": 1
+      },
+      "blobMeta": {
+        "v": 1,
+        "type": "audio/mpeg",
+        "name": "song.mp3"
+      },
+      "expected": null
+    },
+    {
+      "rule": "galleryMedium.ts: a GPX track is no document",
+      "item": {
+        "mediaId": "t1",
+        "metaRevision": 0,
+        "blobId": "b4"
+      },
+      "meta": {
+        "v": 1
+      },
+      "blobMeta": {
+        "v": 1,
+        "type": "application/gpx+xml",
+        "name": "walk.gpx"
+      },
+      "expected": null
+    },
+    {
+      "rule": "galleryMedium.ts: a GPX file typed as XML is no document",
+      "item": {
+        "mediaId": "t2",
+        "metaRevision": 0,
+        "blobId": "b5"
+      },
+      "meta": {
+        "v": 1
+      },
+      "blobMeta": {
+        "v": 1,
+        "type": "text/xml",
+        "name": "Walk.GPX"
+      },
+      "expected": null
+    },
+    {
+      "rule": "galleryMedium.ts: an unknown type is a photo",
+      "item": {
+        "mediaId": "u1",
+        "metaRevision": 1,
+        "blobId": "b6"
+      },
+      "meta": null,
+      "blobMeta": {
+        "v": 1,
+        "type": "application/x-unknown",
+        "name": " u1.bin "
+      },
+      "expected": {
+        "kind": "memories.photo",
+        "id": "u1",
+        "revision": "1:b6",
+        "name": "u1.bin",
+        "facets": {},
+        "icon": "image"
+      }
+    },
+    {
+      "rule": "memories/search.ts: a blocked medium is no document",
+      "item": {
+        "mediaId": "x1",
+        "metaRevision": 0,
+        "blobId": "b7",
+        "blocked": true
+      },
+      "meta": {
+        "v": 1
+      },
+      "blobMeta": {
+        "v": 1,
+        "type": "image/jpeg",
+        "name": "x.jpg"
+      },
+      "expected": null
+    },
+    {
+      "rule": "memories/search.ts: a meta that did not open",
+      "item": {
+        "mediaId": "n1",
+        "metaRevision": 3,
+        "blobId": "b8"
+      },
+      "meta": null,
+      "blobMeta": null,
+      "expected": {
+        "kind": "memories.photo",
+        "id": "n1",
+        "revision": "3:b8",
+        "name": "Photo",
+        "facets": {},
+        "icon": "image"
+      }
+    }
+  ]
+}

@@ -235,8 +235,42 @@ internal sealed class Call {
     /** Home's level where the shell is, in its groups (`ShellModel.Lists.groups`). */
     @Serializable @SerialName("Home.Groups") data object HomeGroups : Call()
 
-    /** Search's hits over what the shell lists (`ShellWords.search`). */
+    /** Search's hits over what the shell lists (`ShellWords.search`): the name-only search, until its last caller moved (ADR 0146 decision 13). */
     @Serializable @SerialName("Search.Query") data class SearchQuery(val query: String) : Call()
+
+    /**
+     * The search over the open tenant (ADR 0146 decision 13; core's `SearchModel`): answered [Answer.SearchOpened] with its id
+     * for [Watched.Search] and its calls; one per field, dropped with the tenant. Refused `NO_TENANT_OPEN` without one.
+     */
+    @Serializable @SerialName("Search.Open") data object SearchOpen : Call()
+
+    /** The field gained focus: the first builds the index, every later one revalidates it (`SearchModel.focus`). */
+    @Serializable @SerialName("Search.Focus") data class SearchFocus(val search: Long) : Call()
+
+    /** The text as typed now, applied in the host's order (`SearchModel.text`). */
+    @Serializable @SerialName("Search.Text") data class SearchText(val search: Long, val text: String) : Call()
+
+    /** Suggestion [index] of `SearchShown.suggestions` chosen: its chip set (`SearchModel.choose`). */
+    @Serializable @SerialName("Search.Choose") data class SearchChoose(val search: Long, val index: Int) : Call()
+
+    /** Chip [index] of `SearchShown.chips` removed. */
+    @Serializable @SerialName("Search.RemoveChip") data class SearchRemoveChip(val search: Long, val index: Int) : Call()
+
+    /** Backspace in an empty field: the last chip removed. */
+    @Serializable @SerialName("Search.RemoveLastChip") data class SearchRemoveLastChip(val search: Long) : Call()
+
+    /** *Show more*. */
+    @Serializable @SerialName("Search.More") data class SearchMore(val search: Long) : Call()
+
+    /**
+     * Result [index] of `SearchShown.results` opened where it lives: a node through the shell (the shell's watch moves), a
+     * person on their page, a photo of another Memory by its Memory's page with the request its gallery takes
+     * (`GalleryShown`'s lightbox), a settings section by `SearchShown.openSettings`.
+     */
+    @Serializable @SerialName("Search.OpenResult") data class SearchOpenResult(val search: Long, val index: Int) : Call()
+
+    /** The field was left: the text and the chips go, nothing is revalidated any more (`SearchModel.close`). */
+    @Serializable @SerialName("Search.Close") data class SearchClose(val search: Long) : Call()
 
     /** Opens Pot [ref] as a model of its own, answered with its id ([Answer.PotOpened]) for [Watched.Pot]. */
     @Serializable @SerialName("Pot.Open") data class PotOpen(val ref: ObjectRef) : Call()
@@ -1542,6 +1576,9 @@ internal sealed class Answer {
     /** A person's page opened ([Call.PersonOpen]): its id, for [Watched.Person] and its calls. */
     @Serializable @SerialName("PersonOpened") data class PersonOpened(val person: Long) : Answer()
 
+    /** A search opened ([Call.SearchOpen]): its id, for [Watched.Search] and its calls. */
+    @Serializable @SerialName("SearchOpened") data class SearchOpened(val search: Long) : Answer()
+
     enum class Why {
         NOT_A_CALL, NO_TENANT_OPEN, NO_SUCH_CONNECTION, NO_SUCH_TENANT, NO_SUCH_POT, NO_SUCH_READER, NO_PICTURE, NOTHING_TO_DOWNLOAD,
         NO_SUCH_HEADER, NO_SUCH_TRASH, NO_SUCH_ROW, NO_SUCH_MOVE, NO_SUCH_SHARE, NO_SUCH_REPORT, NO_COVER, NO_SUCH_ENTRY, NO_SUCH_EDITOR,
@@ -1585,6 +1622,9 @@ internal sealed class Answer {
 
         /** Curating a Memory and a person's page: no participants picker, capture-time editor, banner dialog or person's page by that id. */
         NO_SUCH_PARTICIPANTS, NO_SUCH_CAPTURE_TIME, NO_SUCH_BANNER, NO_SUCH_PERSON,
+
+        /** A search: none by that id (never opened, or its tenant closed). */
+        NO_SUCH_SEARCH,
     }
 }
 
@@ -1711,6 +1751,9 @@ internal sealed class Watched {
 
     /** A person's page opened by [Call.PersonOpen]. */
     @Serializable @SerialName("Person") data class Person(val person: Long) : Watched()
+
+    /** A search opened by [Call.SearchOpen]. */
+    @Serializable @SerialName("Search") data class Search(val search: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -1818,6 +1861,12 @@ internal sealed class Update {
 
     /** A person's page; null once it closed (or its tenant did). */
     @Serializable @SerialName("Person") data class Person(val person: Long, val shown: PersonShown?) : Update()
+
+    /**
+     * A search (ADR 0146 decision 7): core's `SearchShown` as it is — names, parts, words and ids, never a key, a seal or a
+     * token (`SecretFreeSchemaTest`); null once its tenant closed.
+     */
+    @Serializable @SerialName("Search") data class Search(val search: Long, val shown: me.raddatz.veyq.mobile.search.SearchShown?) : Update()
 }
 
 /**

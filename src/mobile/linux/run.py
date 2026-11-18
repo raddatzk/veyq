@@ -150,8 +150,10 @@ def test(pattern: str | None) -> int:
 
     # the QR reader's fixtures (QrFixtures, read through VEYQ_REPO_ROOT at their repository path)
     qr_fixtures = "src/mobile/core/src/commonTest/resources/qr"
+    # and the search's vectors (SearchVectorsTest, ADR 0146 decision 1), read the same way
+    search_vectors = "contracts/platform/search/v1-vectors.json"
     mounts = {kexe_dir: "/veyq/bin", VECTORS: "/veyq/vectors.json", NORMALIZATION_TEST: "/veyq/NormalizationTest.txt",
-              ROOT / qr_fixtures: f"/veyq/repo/{qr_fixtures}"}
+              ROOT / qr_fixtures: f"/veyq/repo/{qr_fixtures}", ROOT / search_vectors: f"/veyq/repo/{search_vectors}"}
     env = {"VEYQ_VECTORS": "/veyq/vectors.json", "VEYQ_NORMALIZATION_TEST": "/veyq/NormalizationTest.txt",
            "VEYQ_REPO_ROOT": "/veyq/repo", "TZ": ZONE}
     # WallClockTest's values are Berlin's. kotlinx-datetime reads the zone from /etc/localtime, glibc from TZ: both set.

@@ -1,6 +1,6 @@
 # ADR 0125 — Search runs in the client over what it can open, across every space
 - Status: Accepted
-- Built: partly (decision 8a built; 8b and 8c not built)
+- Built: partly (not built: 8b, 8c; the apps: [ADR 0146](0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md))
 - Date: 2026-11-08
 - Model: [uc.platform.search](../features/platform/use-cases/uc.platform.search.md)
 
@@ -41,7 +41,8 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
    - **Freshness:** comes from the revisions the server already serves. A renamed Memory reaches the index through the
      tree poll the client already runs; nothing is synced back.
    - **Lifetime:** the cache lives in memory only, and never holds a key. Each space's tree is opened, turned into
-     documents, and its keys are zeroed at once. It revalidates by its ETag, and a `304` keeps the documents. A tree
+     documents, and its keys are zeroed at once. That is the web's lifetime, which holds only the active space's tree; the apps read every
+     space's tree the shell already holds and zero only what the search unwraps itself ([ADR 0146](0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md) decision 5). It revalidates by its ETag, and a `304` keeps the documents. A tree
      that moved is opened again. A space whose tree can no longer be fetched or opened loses its documents. Sign-out
      drops everything.
    - **No persistence**, neither on the device nor as a sealed per-user blob on the server, until a rebuild is
@@ -193,6 +194,9 @@ The load model is a household. The volume pre-check's largest tree is 5,000 node
     failure got one re-run and would have failed on a second ([`changes/README.md`](../../changes/README.md), *machine load
     is part of a timing's substrate*). The individual readings were not kept. The harness is temporary,
     `cr-volume-measurement-cax` deletes it.
+- **The apps run the same search**, ported into their Kotlin core and held to the web by one set of vectors both run
+  ([ADR 0146](0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md)). There, at an equal rank and place, the name order is the core's own comparator instead of
+  `Intl.Collator`: names led by punctuation or a letter a language collates apart may order differently from the web.
 - **A removed member's search loses that space** when its keys go, and keeps nothing they could not read before.
 - **Rejected alternatives:**
   - A persistent on-device index (decision 2).

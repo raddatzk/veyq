@@ -73,9 +73,18 @@ class GalleryModel(
     access: MemoryRights.Access = MemoryRights.Access.Member(),
     /** The account's music player and how an untitled track is named; null: the page plays no music. */
     val music: Music? = null,
+    /** The tenant's search (ADR 0146 decision 8): what the page contributes and the request it takes; null: none. */
+    private val search: Search? = null,
     /** A clock in milliseconds for the live poll's catch-up gap (only its differences count). */
     private val now: () -> Long = monotonicMs(),
 ) {
+    /**
+     * The tenant's search as a page meets it (ADR 0146 decision 8; the web's `contribution.ts` and `openRequest.ts`): the
+     * page contributes its media as documents at no fetch of their own ([contributions]), and takes a request the search
+     * left to open one of them in the lightbox ([requests]).
+     */
+    class Search(val requests: me.raddatz.veyq.mobile.search.OpenRequests, val contributions: me.raddatz.veyq.mobile.search.SearchContributions)
+
     /** What the page plays its music with (ADR 0142 decision 1): the account's one [player]; [untitled] names a track by its number. */
     class Music(val player: MusicPlayer, val untitled: (Int) -> String)
 
@@ -276,6 +285,11 @@ class GalleryModel(
          * decision 3): one whose medium [rows] lists gave way to it.
          */
         val uploading: List<UploadTile> = emptyList(),
+        /**
+         * A medium the search asked this page to open (ADR 0146 decision 8): its lightbox is open on it ([openLightbox]); the
+         * platform shows it and says [searchOpenedSeen].
+         */
+        val searchOpened: String? = null,
     ) {
         /** The banner above the header (ADR 0144 decision 4) as sealed: what it shows; null for none (no frame drawn). */
         val banner: me.raddatz.veyq.mobile.memories.banner.Banner.Shown? get() = me.raddatz.veyq.mobile.memories.banner.Banner.shown(facts?.banner)
@@ -459,12 +473,45 @@ class GalleryModel(
                 failed = false,
             ).let { it.copy(uploading = UploadTile.shown(queued, it.listedIds)) }
         }
+        if (read != null) searched(settled = true)
         // the Memory opening is a settle point (the self-heal): once, on its first listing the server answered
         if (read != null && read.offline == null && !openedSettle) {
             openedSettle = true
             scope.launch { settle() }
         }
     }
+
+    // ---- the search (ADR 0146 decision 8) ----
+
+    /**
+     * After a read: the page's media contributed to the search (its photos and videos, a blocked one left out), and a request
+     * the search left for one of them taken — the lightbox opened on it; one this page cannot answer once [settled] dropped.
+     */
+    private fun searched(settled: Boolean) {
+        val s = search ?: return
+        val rows = current.rows ?: return
+        s.contributions.contribute(
+            me.raddatz.veyq.mobile.search.SearchContributions.Contribution(node.scopeId, node.nodeId, rows.filter { !it.blocked }.mapNotNull { row ->
+                val i = row.item
+                MemoriesSearch.mediumDocument(i.mediaId, node.nodeId, i.metaRevision, i.original.blobId, i.meta, i.type, i.name) { "" }?.let {
+                    // unnamed: the search names it by its word
+                    me.raddatz.veyq.mobile.search.ContributedDocument(it.kind, it.id, it.revision, it.name, it.facets, it.icon)
+                }
+            }),
+        )
+        takeRequest(settled)
+    }
+
+    private fun takeRequest(settled: Boolean) {
+        val s = search ?: return
+        val rows = current.rows ?: return
+        val id = s.requests.take(node.scopeId, node.nodeId, { want -> rows.any { it.mediaId == want && !it.blocked } }, settled) ?: return
+        lightboxOn(id)
+        _state.update { it.copy(searchOpened = id) }
+    }
+
+    /** The platform showed the lightbox [State.searchOpened] asked for. */
+    fun searchOpenedSeen() = _state.update { it.copy(searchOpened = null) }
 
     // ---- the settle (ADR 0143 D5): the `auto` range and place kept current ----
 
@@ -894,6 +941,7 @@ class GalleryModel(
 
     /** The page went: nothing more is read or watched; its lightbox closes (its reader with it). */
     fun close() {
+        search?.contributions?.withdraw(node.scopeId, node.nodeId)
         open?.close()
         open = null
         closed.value = true
@@ -924,6 +972,8 @@ class GalleryModel(
         scope.launch {
             state.map { Triple(it.facts?.participants, it.rights, it.offline) }.distinctUntilChanged().collect { people() }
         }
+        // a request the search leaves while this page shows (its own photo chosen) is taken at once
+        search?.let { s -> scope.launch { s.requests.request.collect { if (it != null) reading.withLock { takeRequest(settled = false) } } } }
         scope.launch {
             door.online.collect { on ->
                 if (!on) _state.update { it.offline(it.offline ?: me.raddatz.veyq.mobile.session.OfflineAsOf(listedAt)) }

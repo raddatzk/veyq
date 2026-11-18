@@ -29,6 +29,8 @@ actual fun nfc(s: String): String = normalize(s, UTF8PROC_STABLE or UTF8PROC_COM
 
 actual fun nfkd(s: String): String = normalize(s, UTF8PROC_STABLE or UTF8PROC_DECOMPOSE or UTF8PROC_COMPAT)
 
+actual fun nfd(s: String): String = normalize(s, UTF8PROC_STABLE or UTF8PROC_DECOMPOSE)
+
 private fun normalize(s: String, options: UInt): String {
     if (s.isEmpty()) return s
     val bytes = s.encodeToByteArray()

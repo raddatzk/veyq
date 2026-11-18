@@ -122,6 +122,18 @@ class LiveBridgeTest {
         val first = pots.first()
         val hits = b.ask(Call.SearchQuery(first.name.take(4).uppercase())) as Answer.Hits
         assertTrue(first in hits.hits, "search for ${first.name.take(4)} did not find ${first.name}")
+        // the search over the real core (ADR 0146): its index built on the focus, the Pot found by its name, case aside
+        // (the seeded Pots share their first letters: a prefix alone ranks two dozen equal, and a page shows ten)
+        val search = (b.ask(Call.SearchOpen) as Answer.SearchOpened).search
+        val field = b.watching(Watched.Search(search))
+        assertEquals(Answer.Done, b.ask(Call.SearchFocus(search)))
+        assertEquals(Answer.Done, b.ask(Call.SearchText(search, first.name.uppercase())))
+        val found = field.until(60.seconds) { u ->
+            (u as Update.Search).shown?.takeIf { s -> s.results.any { r -> r.name.joinToString("") { it.text } == first.name } }
+        }
+        assertTrue(found.total >= 1)
+        assertEquals(Answer.Done, b.ask(Call.SearchClose(search)))
+        b.unwatch(field.id)
         assertEquals(Answer.Done, b.ask(Call.ShellOpen(first)))
         assertEquals(first, shell.until { (it as Update.Shell).state?.shell?.openObject })
 

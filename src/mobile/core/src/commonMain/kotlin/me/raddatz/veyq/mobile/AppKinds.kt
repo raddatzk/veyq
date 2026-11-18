@@ -277,6 +277,45 @@ object AppKinds {
             if (node.kind == MEMORY || node.kind == CHAPTER) me.raddatz.veyq.mobile.memories.banner.Banner.pinned(tenant, node) else emptyList()
     }
 
+    /**
+     * What each kind and application adds to the search (ADR 0146 decision 4; the web's `KindDescriptor.search` and
+     * `ApplicationRegistrar.search`): every kind its word and its icon — a folder and a kept link core's, a file and a drop
+     * box Depot's, a Pot Expenses', a Memory and a chapter Memories' with their facets (a date range, a place, the
+     * participants, from the meta core opens) and the photo and video documents of Memories' search over a whole space.
+     * The one place an application's part reaches core's `search/`.
+     */
+    val search: me.raddatz.veyq.mobile.search.SearchKinds = object : me.raddatz.veyq.mobile.search.SearchKinds {
+        private val memoryDocuments = listOf(
+            me.raddatz.veyq.mobile.search.DocumentKind(
+                me.raddatz.veyq.mobile.memories.MemoriesSearch.PHOTO, me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_PHOTO,
+                me.raddatz.veyq.mobile.memories.MemoriesSearch.PHOTO_ICON,
+            ),
+            me.raddatz.veyq.mobile.search.DocumentKind(
+                me.raddatz.veyq.mobile.memories.MemoriesSearch.VIDEO, me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_VIDEO,
+                me.raddatz.veyq.mobile.memories.MemoriesSearch.VIDEO_ICON,
+            ),
+        )
+        private val byKind = linkedMapOf(
+            FOLDER to me.raddatz.veyq.mobile.search.KindSearch(me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_FOLDER, "folder"),
+            SHARE_BOOKMARK to me.raddatz.veyq.mobile.search.KindSearch(me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_BOOKMARK, "bookmark"),
+            FILE to me.raddatz.veyq.mobile.search.KindSearch(me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_FILE, "file"),
+            DROPBOX to me.raddatz.veyq.mobile.search.KindSearch(me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_DROPBOX, "inbox"),
+            PotSession.KIND to me.raddatz.veyq.mobile.search.KindSearch(me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_POT, "wallet"),
+            MEMORY to me.raddatz.veyq.mobile.search.KindSearch(
+                me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_MEMORY, "images", me.raddatz.veyq.mobile.memories.MemoriesSearch::facets, memoryDocuments,
+            ),
+            CHAPTER to me.raddatz.veyq.mobile.search.KindSearch(
+                me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_CHAPTER, "images", me.raddatz.veyq.mobile.memories.MemoriesSearch::facets, memoryDocuments,
+            ),
+        )
+
+        override fun kind(kind: String) = byKind[kind]
+        override val kinds: List<String> = byKind.keys.toList()
+        override val applications = listOf(
+            me.raddatz.veyq.mobile.navigation.ApplicationId.MEMORIES.id to me.raddatz.veyq.mobile.memories.MemoriesSearch.search,
+        )
+    }
+
     /** Whether an object of [kind] can be chosen as the place for files shared to veyq (ADR 0138 decision 1): a Pot. */
     fun takesShared(kind: String): Boolean = kind == PotSession.KIND
 

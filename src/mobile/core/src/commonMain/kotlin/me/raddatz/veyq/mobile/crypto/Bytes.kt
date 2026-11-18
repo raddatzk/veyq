@@ -11,6 +11,9 @@ expect fun nfc(s: String): String
 /** Unicode NFKD normalisation (`slugify`'s accent strip), supplied by each platform's own text library. */
 expect fun nfkd(s: String): String
 
+/** Unicode NFD normalisation (the search's fold, `search/Fold.kt`: the web's `fold`), supplied by each platform's own text library. */
+expect fun nfd(s: String): String
+
 fun concat(vararg parts: ByteArray): ByteArray {
     val out = ByteArray(parts.sumOf { it.size })
     var o = 0

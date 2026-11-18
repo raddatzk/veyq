@@ -5,7 +5,7 @@ a Kotlin Multiplatform base under each platform's own UI ([ADR 0123](../../docs/
 A Gradle build of its own, run through its own wrapper.
 
 - `core/` — the shared base: the v1 suite (`crypto/`), the generated API client (`build/generated/openapi`, from
-  `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), the music player (`audio/`, ADR 0142 decisions 1–3 and 13: the order, the fades, `MusicPlayer` with its interruption, and the two ports each platform implements — `Deck` and `SystemControls`: Android's `MusicPlayback.kt` — `MediaDeck`, `AndroidMusicControls` with its `MusicService` —, Apple's through `appleMain`'s `AppleAudio` — `MusicPlayback.swift`; carried over the bridge as host requests for Linux's `music_host` and Windows' decks with SMTC), a photo's and a video's metadata read from their bytes (`media/`),
+  `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), the search (`search/`: the web's `core/search` ported rule by rule and held to `contracts/platform/search/v1-vectors.json`, [ADR 0146](../../docs/decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md); it names no application — `scripts/validate_mobile_search_names_no_application.py` —, each application's part reaches it through `AppKinds.search`), the music player (`audio/`, ADR 0142 decisions 1–3 and 13: the order, the fades, `MusicPlayer` with its interruption, and the two ports each platform implements — `Deck` and `SystemControls`: Android's `MusicPlayback.kt` — `MediaDeck`, `AndroidMusicControls` with its `MusicService` —, Apple's through `appleMain`'s `AppleAudio` — `MusicPlayback.swift`; carried over the bridge as host requests for Linux's `music_host` and Windows' decks with SMTC), a photo's and a video's metadata read from their bytes (`media/`),
   the uploads under way that a phone holds its process for, `blob/UploadsUnderway` (Android's `UploadWork.kt`, Apple's
   `ContinuedWork.swift` beside the pins' `OfflineFetching`; ADR 0145 decision 1),
   files on the device by the path a platform's dialog gave (`blob/FileSink`, `blob/FileSource`, `nativeMain`: the
@@ -371,6 +371,17 @@ A Gradle build of its own, run through its own wrapper.
   the held key's lifetime (one rule: the key lives exactly as long as the gate shows a kit) and the scan's `accepts` by
   `SessionModelTest`. The account's Settings page by `AccountSettingsTest` (the web's `SessionsPanel` orderings,
   `uc.account.sessions` E1–E5, over a played door).
+  The search (`search/`, ADR 0146) changes only with the vectors that pin it: a rule of the fold, the query or the order
+  by `SearchVectorsTest` (`contracts/platform/search/v1-vectors.json`, the web's `vectors.test.ts` recorded it; a rule
+  changed in both changes the file, written by the web's test with `VEYQ_WRITE_VECTORS=1`), the field's model by
+  `SearchModelTest` (the visible spaces only, the open Memory's own photo winning, a result opened where it lives, chips,
+  people and settings, a failing listing named), Memories' space walk by `MemoriesSearchWalkTest` (every `K_blob`, drop
+  seed and `K_up` it unwraps zeroed, a thrown walk too) and the gallery's request and contribution by `GalleryModelTest`;
+  `scripts/validate_mobile_search_names_no_application.py` keeps the package free of an application. Live,
+  `SearchLiveTest` (`VEYQ_LIVE`: a Memory with a date, a place, a participant and a photo searched from another space,
+  the photo opened through its gallery's request, a rename seen after a focus, an idle focus one `304` per tree and
+  listing; the Memory purged). Its bounds are `SearchVolumeMeasure`'s, opt-in: `VEYQ_MEASURE=1 ./gradlew :core:jvmTest
+  --tests '*SearchVolumeMeasure*' --rerun` (and `:core:macosArm64Test`), printed as `veyq-measure:`.
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
   - `DispatchTest` covers the way in, over a door the test plays: the host reached by a reply that arrives before the
     start returned (`Started`, `veyq_init`'s order) and a silent host's ask failed (`Host.Silent`, a call answered
@@ -406,6 +417,9 @@ A Gradle build of its own, run through its own wrapper.
     `signOutOnASettingsPage…` drive the Settings page's calls.
   - `WireTest` writes and reads back a sample of every variant of every sealed type the wire reaches. The samples go
     to `build/generated/bridge/samples`, which the Rust test reads.
+  - `SearchDispatchTest` drives the search (`Search.*`, `Watched.Search`) over a played tenant under the real
+    `SearchModel`: the text in the host's order, a chip chosen and taken back, a photo opened with its gallery's request,
+    a settings result naming its section, and the search disposed with its tenant (its watch delivering null).
   - `SecretFreeSchemaTest` checks that nothing the core sends has a field named like a key, seal, token, secret or
     password, and that no byte array travels in JSON (a field, a list's element, a map's value). An address crosses
     outward only in a field it names: a share link's, a key by its `#k=` (`linkAddresses`), and a public page's
@@ -449,7 +463,7 @@ A Gradle build of its own, run through its own wrapper.
   `./gradlew linux:coreTest`, `linux:bridge`, `linux:build` and `linux:run`. The Kotlin is cross-compiled here by this
   build's Gradle, and the rest runs in the Fedora 44 image or, for `build` and `flatpak`, the GNOME SDK (Docker). Each verb is in `run.py`'s docstring:
   - `test [--tests <pattern>]` runs the core's Linux test binary. That is the whole common suite, the conformance over
-    libsodium, `NormalizationTest` and `WallClockTest`; any change to the suite, to `nfc`/`nfkd` or to the wall clock
+    libsodium, `NormalizationTest` and `WallClockTest`; any change to the suite, to `nfc`/`nfd`/`nfkd` or to the wall clock
     runs it. It runs inside a session bus of its own with gnome-keyring-daemon, whose login collection a password drawn
     in the container unlocks, so `LinuxDeviceKeys`' contract runs over a real Secret Service; without `--tests` the
     Secret Service probe runs twice more, without a session bus and with `libsecret-1.so.0` moved away.
