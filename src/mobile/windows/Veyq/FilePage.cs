@@ -1,7 +1,8 @@
 // A file's page (Depot's file viewer; ADR 0123's Consequences, the Windows app's Depot whole; Linux's file_page.rs), Fluent's way: the file's
 // content in place — a picture (Image, decoded by WIC at the core's edge at most), a text (a read-only monospace TextBox,
-// the cut said in an InfoBar above it), a PDF (Windows.Data.Pdf, PdfPages.cs: its pages rendered as they come into view
-// and let go when far from it), an audio or video played by the system's own player (MediaPlayerElement with its
+// the cut said in an InfoBar above it), a PDF (WebView2's own PDF viewer fed from memory, PdfWeb.cs, where its text is
+// selected and copied; a password-protected one, or one on a device without WebView2's runtime, through Windows.Data.Pdf,
+// PdfPages.cs: its pages rendered as they come into view and let go when far from it), an audio or video played by the system's own player (MediaPlayerElement with its
 // transport controls, over a MediaSource of ReaderStream: the core's reader read in ranges; Media Foundation and the
 // Store's extensions decode it, and what they cannot is said as not shown here), or what the core says where it shows
 // none — and its facts beneath. Everything is the core's FileModel (File.Open, Watched.File): what shows is decided by the
@@ -25,6 +26,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.Web.WebView2.Core;
 using Veyq.Bridge;
 using Veyq.Bridge.Wire;
 using Windows.Storage.Pickers;
@@ -49,6 +51,8 @@ internal sealed class FilePage : IDisposable
     private (FileViewKind, int)? _drawn;
     private bool _closed;
     private PdfView? _pdf;
+    /// <summary>The PDF in WebView2's viewer, closed (its browser ended, its folder deleted) when the content changes.</summary>
+    private PdfWebView? _web;
     /// <summary>The medium playing over the core's reader.</summary>
     private MediumPlayer? _media;
 
@@ -119,6 +123,7 @@ internal sealed class FilePage : IDisposable
         _watch?.Dispose();
         _watch = null;
         _pdf = null;
+        StopWeb();
         StopMedia();
         if (_id is { } file) Act.Send(new Call.FileClose { file = file });
         _id = null;
@@ -136,6 +141,7 @@ internal sealed class FilePage : IDisposable
         if (_drawn == now) return;
         _drawn = now;
         _pdf = null;
+        StopWeb();
         StopMedia();
         switch (s.view)
         {
@@ -248,6 +254,21 @@ internal sealed class FilePage : IDisposable
         {
             _content.Content = Message(Words.FileUnsupported());
             return;
+        }
+        // its text selectable in WebView2's viewer; a protected one stays with the pages drawn here, as the password was
+        // typed here and the viewer would ask for it once more
+        if (password is null && PdfWeb.Available())
+        {
+            var web = new PdfWebView(bytes);
+            _web = web;
+            _content.Content = web.Element;
+            if (await web.Start())
+            {
+                Log.Write("file PDF: in WebView2's viewer");
+                return;
+            }
+            if (_closed || _drawn != asked) return;
+            StopWeb();
         }
         _pdf = pdf;
         _content.Content = pdf.Scroll;
@@ -463,6 +484,87 @@ internal sealed class FilePage : IDisposable
         {
             Log.Write($"the copy failed: {e.GetType().Name}: {e.Message}");
             say(false, Words.DownloadFailed(name));
+        }
+    }
+
+    private void StopWeb()
+    {
+        _web?.Close();
+        _web = null;
+    }
+
+    /// <summary>A PDF in WebView2's own viewer (PdfWeb): a browser of its own, InPrivate, in a user-data folder made for this
+    /// PDF and deleted once the browser has exited, the bytes served from memory. Its text is selected and copied as in
+    /// any viewer; nothing reaches the clipboard but on the person's Ctrl+C or Copy.</summary>
+    private sealed class PdfWebView
+    {
+        private readonly byte[] _bytes;
+        private readonly WebView2 _control = new() { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
+        private string? _folder;
+        private CoreWebView2Environment? _environment;
+        private bool _closed;
+
+        public PdfWebView(byte[] bytes)
+        {
+            _bytes = bytes;
+            AutomationProperties.SetAutomationId(_control, "file-pdf-web");
+        }
+
+        public UIElement Element => _control;
+
+        /// <summary>The viewer started on the PDF; false where WebView2 did not start (the pages are drawn instead).</summary>
+        public async Task<bool> Start()
+        {
+            try
+            {
+                _folder = PdfWeb.NewFolder();
+                _environment = await PdfWeb.EnvironmentAsync(_folder);
+                if (_closed)
+                {
+                    Close();
+                    return true;
+                }
+                await _control.EnsureCoreWebView2Async(_environment, PdfWeb.ControllerOptions(_environment));
+                if (_closed)
+                {
+                    Close();
+                    return true;
+                }
+                PdfWeb.Show(_environment, _control.CoreWebView2, _bytes);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Log.Write($"WebView2's PDF viewer did not start ({e.GetType().Name}: {e.Message})");
+                Close();
+                return false;
+            }
+        }
+
+        /// <summary>The viewer closed; its folder deleted once its browser has exited.</summary>
+        public void Close()
+        {
+            _closed = true;
+            var folder = _folder;
+            var environment = _environment;
+            _folder = null;
+            _environment = null;
+            if (folder is null) return;
+            if (environment is null)
+            {
+                _ = PdfWeb.DeleteAsync(folder);
+                return;
+            }
+            var queue = _control.DispatcherQueue;
+            environment.BrowserProcessExited += (_, _) => queue.TryEnqueue(() => _ = PdfWeb.DeleteAsync(folder));
+            try
+            {
+                _control.Close();
+            }
+            catch (Exception e)
+            {
+                Log.Write($"WebView2's PDF viewer did not close ({e.GetType().Name})");
+            }
         }
     }
 

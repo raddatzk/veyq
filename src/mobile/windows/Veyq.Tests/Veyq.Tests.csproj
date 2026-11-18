@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- The app's words, formats and pictures on Windows (ADR 0123's Consequences, the Windows app): the app's own Words,
-       MrtWords, Said, AvatarsHeld, PictureDecode, TypedText, PdfPages, KitDrawing (with Log), ReaderStream, DropSort, Recent, MediaTiers, MusicRamp, MapPins and TrustWords sources (the last with the wire's generated types) against the .pri its build compiled (VEYQ_PRI), the system's formatters and
+       MrtWords, Said, AvatarsHeld, PictureDecode, TypedText, PdfPages, PdfWeb, KitDrawing (with Log), ReaderStream, DropSort, Recent, MediaTiers, MusicRamp, MapPins and TrustWords sources (the last with the wire's generated types) against the .pri its build compiled (VEYQ_PRI), the system's formatters and
        its image codecs. Windows only, an x64 process like the app (run.py runs it on the Windows host with arch x64,
        after the app's build). -->
   <PropertyGroup>
@@ -15,12 +15,15 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RootNamespace>Veyq.Tests</RootNamespace>
+    <WebView2EnableCsWinRTProjection>true</WebView2EnableCsWinRTProjection>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="MSTest.TestFramework" />
     <PackageReference Include="MSTest.TestAdapter" />
     <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+    <!-- WebView2's WinRT projection, the app's (PdfWeb, PdfWebTest): the package WinUI brings the app, here direct -->
+    <PackageReference Include="Microsoft.Web.WebView2" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../Veyq/Words.cs" Link="App/Words.cs" />
@@ -33,6 +36,7 @@
     <Compile Include="../Veyq/ShareDays.cs" Link="App/ShareDays.cs" />
     <Compile Include="../Veyq/TypedText.cs" Link="App/TypedText.cs" />
     <Compile Include="../Veyq/PdfPages.cs" Link="App/PdfPages.cs" />
+    <Compile Include="../Veyq/PdfWeb.cs" Link="App/PdfWeb.cs" />
     <Compile Include="../Veyq/KitDrawing.cs" Link="App/KitDrawing.cs" />
     <Compile Include="../Veyq/Log.cs" Link="App/Log.cs" />
     <Compile Include="../Veyq/ListScrolls.cs" Link="App/ListScrolls.cs" />
