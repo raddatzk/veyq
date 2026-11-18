@@ -218,6 +218,10 @@ impl PdfText {
         copy.set_enabled(false);
         let this = Rc::new(Self { pdf: pdf.clone(), column: column.clone(), frames, selection: Cell::new(None), copy, menu: RefCell::new(None) });
         column.set_focusable(true);
+        // the column takes the focus at a press; its viewport would scroll the whole column to it, mid-drag
+        if let Some(viewport) = column.ancestor(gtk::Viewport::static_type()).and_downcast::<gtk::Viewport>() {
+            viewport.set_scroll_to_focus(false);
+        }
         column.update_property(&[gtk::accessible::Property::Label(&words::tab_depot_file())]);
         for (i, frame) in this.frames.iter().enumerate() {
             let weak = Rc::downgrade(&this);
@@ -380,7 +384,7 @@ impl PdfText {
         clipboard.set_text(&selected);
         let count = selected.chars().count();
         eprintln!("veyq: file PDF text copied: {count} characters");
-        self.column.announce(&words::file_text_copied(), gtk::AccessibleAnnouncementPriority::Medium);
+        // no `announce` of the copy: GTK 4.22's ended the app with SIGSEGV in the container (src/mobile/CLAUDE.md)
         if cfg!(debug_assertions) {
             // a debug build reads the clipboard back, for a pass to prove what it holds: whether it is the selection,
             // never what it says
