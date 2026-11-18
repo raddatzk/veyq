@@ -415,6 +415,9 @@ internal class HostAudio(
  * reports for another load than the one held ([ended], [failed]: a cleared or reloaded deck's) is dropped. Its pause,
  * seek, ramp and clear are told, never waited for; its load, play and position are asked without blocking the player's lane.
  */
+/** No reader held: reader ids are a counter's, never negative. */
+private const val NO_READER = Long.MIN_VALUE
+
 internal class HostDeck(
     private val host: Host,
     val id: Long,
@@ -422,7 +425,9 @@ internal class HostDeck(
     private val events: Deck.Events,
 ) : Deck {
     private val loads = AtomicLong(0)
-    private val reader = AtomicReference<Long?>(null)
+    // The held reader's id, NO_READER when none. An AtomicLong, not an AtomicReference<Long?>: a reference compares a
+    // boxed Long by identity, so its compareAndSet missed and a refused load never let its reader go (HostDeckReaderTest).
+    private val reader = AtomicLong(NO_READER)
 
     override suspend fun load(reader: RangeReader, mime: String): Long {
         letReaderGo()
@@ -432,7 +437,7 @@ internal class HostDeck(
         return when (val r = host.asking(HostRequest.AudioLoad(id, load, held, reader.size, mime))) {
             is HostReply.Value -> r.value?.toLongOrNull() ?: 0L
             else -> {
-                if (this.reader.compareAndSet(held, null)) readers.drop(held)
+                if (this.reader.compareAndSet(held, NO_READER)) readers.drop(held)
                 throw IllegalStateException("the host did not load it: ${(r as? HostReply.Failed)?.error ?: r::class.simpleName}")
             }
         }
@@ -467,7 +472,7 @@ internal class HostDeck(
 
     /** The reader held for the host goes: a read of it is refused from now on. */
     private fun letReaderGo() {
-        reader.exchange(null)?.let(readers::drop)
+        reader.exchange(NO_READER).takeIf { it != NO_READER }?.let(readers::drop)
     }
 
     /** The host's [Call.AudioEnded] for [load]: the player hears it only for the load this deck holds. */
