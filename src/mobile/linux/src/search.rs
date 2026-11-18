@@ -352,6 +352,8 @@ impl Inner {
         for (index, chip) in s.chips.iter().enumerate() {
             let label = said::piece(&chip.label);
             let named = format!("{}: {label}", said::key(&chip.word));
+            // the button removes it: its name says so, its tooltip names the chip (the web's ui.removeTag)
+            let removes = words::search_remove_chip(&named);
             let content = gtk::Box::new(gtk::Orientation::Horizontal, 6);
             content.append(&gtk::Image::from_icon_name(icon(&chip.icon)));
             content.append(&gtk::Label::new(Some(&label)));
@@ -359,7 +361,7 @@ impl Inner {
             let button = gtk::Button::builder().child(&content).tooltip_text(named.as_str()).build();
             button.add_css_class("small");
             button.set_widget_name("search-chip");
-            button.update_property(&[gtk::accessible::Property::Label(&named)]);
+            button.update_property(&[gtk::accessible::Property::Label(&removes)]);
             let (search, index) = (self.id.get(), index as i32);
             button.connect_clicked(move |_| {
                 if let Some(search) = search {
