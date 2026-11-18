@@ -12,7 +12,7 @@
   later; the header shows them; a profile page lists the Memories its person is on. The server stored one opaque blob and
   nothing else ([ADR 0083](../../../decisions/0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md)).
 
-**Status: built (web only, no backend or contract change).** The avatar is the member's profile picture when they have one, else the letter ([uc.spaces.set-profile-picture](../../spaces/use-cases/uc.spaces.set-profile-picture.md), [inbox #414](../../../inbox.md)). The uploader on
+**Status: built (no backend or contract change)** — on the web, and in the apps (Android, iOS, macOS, Linux, Windows) by [ADR 0144](../../../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) (§ In the apps below). The avatar is the member's profile picture when they have one, else the letter ([uc.spaces.set-profile-picture](../../spaces/use-cases/uc.spaces.set-profile-picture.md), [inbox #414](../../../inbox.md)). The uploader on
 **Depot** is built too ([inbox #415](../../../inbox.md), cr-file-uploader). Not built: a per-share opt-in for guests. The profile's cover tiles load for the
 Memories of the scopes read in that visit only (no cover cache across scope switches); the index is bounded at
 500 Memories per scope and says so when it is partial.
@@ -69,13 +69,21 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 4. A Memory the viewer cannot list is never read, so it never shows — access holds without a further check. A size cap
    ends the walk early and the page says the list is **partial**.
 
-**In the apps — planned** ([ADR 0144](../../../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decisions 11–14): a person is a screen of
+**In the apps** ([ADR 0144](../../../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decisions 11–14; built on every app, passed on Android, Linux and Windows against the web, Apple's pass the owner's, [native-apps](../../../crosscutting/native-apps.md) § Open): a person is a screen of
 the app's own (no `#people` route: the app has no address bar), opened over what was on screen and left by back. Its ways
 in are a **current member in a Memory's participants list** and a **photo's uploader** in its details where that uploader
 is a current member; a former member and a guest open nothing, and the apps have no people search or people overview to
 link from. The frame shows the name, the picture and `~username`, but no safety number and no profile editing (inbox
 #949); Memories' section lists the person's Memories as rows, newest first, or on the Memories map — no tiles (#950) and
 no stored choice. The index is the same walk on the device, over the trees the app already reads.
+
+**Naming the participants in the apps** ([ADR 0144](../../../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decisions 1, 2 and 7): the people line stands under the facts line
+of a Memory's header, as on the web — one person with avatar and name, else up to three avatars with "+N" — and a tap
+lists everyone (a popover on a computer and an iPad, a sheet on a phone); the picker lists the scope's members with a
+search field, and its save merges as A2 does. *I was there* is in the apps' New Memory dialog, ticked, where the web
+offers it. **Offline the line is not shown** — the member list is not kept on the device, so every id would read as a
+former member (inbox #948) — and nothing is edited. An open Memory shows a peer's change of its participants only once
+its tree is read anew (inbox #953).
 
 ## Alternate / exception flows
 

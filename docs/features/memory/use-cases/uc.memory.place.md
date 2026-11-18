@@ -163,7 +163,7 @@ Windows) follow the flows above, with these differences. Built on every app; pas
   map's place says the map needs a connection.
 - **Nothing at rest:** tiles are kept in memory for the session only (a cache across launches is inbox #939); on Apple,
   MapKit's system service may keep a viewed region's tiles in its own cache (ADR 0143's Consequences).
-- **Not in the apps:** A1, the place in the creation dialog (inbox #940); a person's map (planned with the apps' person profile, [cr-app-memory-curation](../../../../changes/cr-app-memory-curation.md)).
+- **Not in the apps:** A1, the place in the creation dialog (inbox #940). A person's map is in the apps' person profile ([ADR 0144](../../../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decision 13).
 
 ## Related
 

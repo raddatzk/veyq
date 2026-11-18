@@ -7,7 +7,7 @@
   inbox #23). It is set only by an upload in its dialog, an upload equal to a gallery file shares its stored object, and
   it has no description. Since 2026-11-01 (owner) it is always shown whole in a frame of the screen's, with nothing to
   frame in the dialog: no focal point, no fit / fill, no re-frame. Its browser pass is lane L1's
-  `tests/e2e/tests/features/memories/memory-banner.spec.ts`.
+  `tests/e2e/tests/features/memories/memory-banner.spec.ts`. Built in the apps too (§ In the apps).
 - **Primary actor:** A member with an **unlocked vault** who may write the Memory's scope (the cover's right,
   `memoryRights.setBanner`, granted to who may choose the cover - core's `coverRights`) and has a Memory or a Chapter open. **Secondary:** anyone who opens it — a member,
   or a guest of a `READ` or `READ_WRITE` link, who sees the banner exactly as a member does.
@@ -133,6 +133,24 @@ on a phone, the top of the page on a share).
 - **An equal file is stored once.** A video that is both the banner and a gallery medium costs its size once; a banner
   file the gallery does not hold costs its own size.
 
+## In the apps
+
+[ADR 0144](../../../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decisions 4–7: the apps (Android, iOS, macOS, Linux, Windows) show, set and remove a banner as the web does,
+the rules being the core's ports of the web's — built on every app; passed on Android, Linux and Windows against the
+web (a banner set on either side shown whole on the other, a peer's banner said as `banner_stale`, an equal gallery file
+stored once — 0 store PUTs); Apple's pass is the owner's ([native-apps](../../../crosscutting/native-apps.md) § Open).
+
+- **Where:** above the Memory's header on every view (Photos, Music, Map), scrolling away with it; set, changed and
+  removed from its own dialog behind the header's banner action, with the platform's own picker.
+- **The frame and the surround:** 16:9 above a 720-unit column, 1:1 at or below, at most 60 % of the window; the
+  surround is the picture resampled to 32 px and stretched back, with no blur API.
+- **A video** plays on a tap through the platform's player; **while it plays the surround stays the poster's** (the
+  web's follows the frames). On Windows the player's own bars cover the surround at the sides while it plays.
+- **An equal file:** Android asks once for full access to photos and videos before the first pick, as an upload does —
+  the system picker's own copy has its location zeroed, so its digest would never equal the gallery's original.
+- **Offline** a pinned Memory shows its banner and plays its video (the pin keeps both blobs); nothing is edited.
+- **A guest** reaches no link in the apps yet (inbox #435); the core shows a guest the banner as a member sees it.
+
 ## User impact
 
 A Memory can open with a picture or a film of the moment — always whole, on a wide screen and on a phone, nothing to
@@ -142,7 +160,8 @@ frame — without the server learning what it shows.
 
 - Feature: [Memory](../_index.md)
 - End-user view (docs site): [Add a banner](../../../../site/src/content/docs/memories/add-a-banner.mdx)
-- Decision: [ADR 0102](../../../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md)
+- Decision: [ADR 0102](../../../decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md); in the apps
+  [ADR 0144](../../../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md)
 - Enablers: [en.memory.playback-derivative](../enablers/en.memory.playback-derivative.md) (the small video, planned),
   [en.memory.node-meta](../enablers/en.memory.node-meta.md) (the sealed `wrappedMeta` the `banner` field lives in)
 - Use-cases: [uc.memory.cover](uc.memory.cover.md) (the sibling it is independent of, and whose pattern — one write for the

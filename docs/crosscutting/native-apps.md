@@ -254,6 +254,25 @@ instance with real OSM tiles, measured 2026-11-16 (ADR 0143's Consequences); App
 [Set the location](../../site/src/content/docs/memories/set-the-location.mdx),
 [Add GPX tracks](../../site/src/content/docs/memories/add-gpx-tracks.mdx).
 
+**Curating a Memory, and a person's profile, on all four apps** ([ADR 0144](../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md)).
+The web's rules ported into the core: a Memory's participants (`memories/Participants.kt`: normalized, at most 100,
+merged on a `409` so a peer's addition survives; *I was there* sealed at birth by `MemoryCreate`), a medium's corrected
+capture time (`memories/CaptureTime.kt` over `ListedTierWrite`, the one listed-tier loop a track's rename and a photo's
+place name share), the banner (`memories/banner/`: its shape, `BannerFrame`, the write through the generated
+`MemoryBannerApi`, the equal-file match over core's first shared row `blob/SharedBlob.kt`, held to a vector the web's
+wrap produced) and a person's profile (core's frame on `Shell.person`, Memories' section over the device-side
+`ParticipantIndex`, never the personal scope), each web test with a Kotlin twin; the bridge carries it on `GalleryShown`
+and a person's page. Every app draws the people line under the facts line with its list and picker, *I was there* in New
+Memory, the capture-time editor in a medium's details, the banner above the header on every view (contained over its
+32 px surround, no blur API; a video's poster played on a tap) with its dialog and the trash's question, and the profile
+("Memories with {name}", List | Map, newest first, no tiles). A pin keeps the banner's blobs; the participants are not
+shown offline (#948). No permission, entitlement, capability or dependency was added. Passed on Android (throwaway
+emulators), Linux (the container, under Broadway) and Windows (the VM) against the web in headless system Chrome, the
+equal file's count read from the store's own request log, measured 2026-11-17/18 (ADR 0144's Consequences); Apple's is
+open (below). The Use pages: [People in your Memories](../../site/src/content/docs/memories/people-in-your-memories.md),
+[Add a banner](../../site/src/content/docs/memories/add-a-banner.mdx),
+[Look through the gallery](../../site/src/content/docs/memories/the-gallery.mdx).
+
 ## Open
 
 **Platforms and form factors**
@@ -454,8 +473,7 @@ share is offered** in their shells (`folder == null && rules.on && rules.dropBox
 refresh**: nothing polls a drop box; `ShellModel.refresh` reads the tree anew (the desktops' F5, the uploads' settle,
 each app's lists read after a write). A guest's deleted folder is restorable only by Undo (inbox #904).
 
-**Memories**: curating a Memory's participants, a person's profile with its map, a medium's capture time, the banner (inbox #890,
-planned in [cr-app-memory-curation](../../changes/cr-app-memory-curation.md)); the date and the place in the creation dialog (#940); item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
+**Memories**: the date and the place in the creation dialog (#940); item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
 re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a
 received link (#435, a source for the same model).
 
@@ -474,6 +492,16 @@ map services off*, offline, and what MapKit keeps on an iPhone (the Mac's screen
 simulator boots on this Mac). Not run elsewhere: Windows offline (the VM's backend is reached through a standing tunnel),
 Android's *Download GPX* and *Report* of a track, a phone's 60 Hz frame budget. Not built: a tile cache across launches
 (#939); a request log in the Linux and Windows builds (#947). Seen in the passes, open: #943–#946.
+
+**Curation** ([ADR 0144](../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md), built above): **Apple's pass is the owner's** (inbox #925) — built and compiled for macOS and
+iOS, never clicked (the Mac's screen is the owner's; no iOS simulator boots on this Mac): the people line, its popover and
+picker, a profile from a participant and from an uploader and its map, *I was there*, a capture time set and reset, an
+image and a video banner across a 720 pt window, the trash's question, Remove banner, and on an iPhone whether
+`PhotosPicker`'s copy of a gallery photo is still shared. Not run elsewhere: Windows offline (the standing tunnel);
+`PersonProfileLiveTest`'s group case (the dev principal is in no group). Not built: the participants offline (#948), one's
+own profile and the safety numbers (#949), tiles (#950), a people search or overview, a guest's view (#435). Seen in the
+passes, open: the web's picker dropping a polled peer's addition (#952), an open Memory not following a peer's meta
+change (#953), a landscape phone's list-beside layout (#951).
 
 **Uploads**: an upload that goes on while the app is in the background (Android a foreground service, iOS a
 background task); placeholder tiles in the gallery for what is under way; the list behind Apple's button seen open.
