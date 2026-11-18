@@ -139,6 +139,28 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private var shellModel: me.raddatz.veyq.mobile.navigation.ShellModel? = null
     private var shellWatch: kotlinx.coroutines.Job? = null
 
+    private val _searchModel = MutableStateFlow<me.raddatz.veyq.mobile.search.SearchModel?>(null)
+
+    /**
+     * The search over the current tenant (core's `SearchModel`, ADR 0146 decision 7): built with the shell, its words
+     * Android's catalog, disposed where the tenant closes — a switch, a lock, a sign-out. Null while no tenant is open.
+     */
+    val searchModel: StateFlow<me.raddatz.veyq.mobile.search.SearchModel?> = _searchModel.asStateFlow()
+
+    private val _settingsAt = MutableStateFlow<String?>(null)
+
+    /** The section the Settings page scrolls to once (a settings result's, `SettingsSection.id`); null: its top. */
+    val settingsAt: StateFlow<String?> = _settingsAt.asStateFlow()
+
+    /** The last settings result the page was opened for (core's `SearchShown.openSettingsCount`, counted per model). */
+    private var settingsOpenedCount = 0
+
+    private fun closeSearch() {
+        _searchModel.value?.dispose()
+        _searchModel.value = null
+        settingsOpenedCount = 0
+    }
+
     private val _screen = MutableStateFlow<Screen>(Screen.Starting)
     val screen: StateFlow<Screen> = _screen.asStateFlow()
 
@@ -221,6 +243,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             // locked or gone: the open dialogs, the profile's section and the tenant's tree go (ADR 0144 decision 12)
             closeCuration()
             personSection = null
+            closeSearch()
             tenantSession?.close()
         }
         _offer.value = (g as? me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed)?.offer
@@ -551,6 +574,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 media?.close()
                 media = null
                 personSection = null
+                closeSearch()
                 tenantSession?.close()
             }
             else -> refreshManaged()
@@ -591,6 +615,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun closeSettings() {
+        _settingsAt.value = null
         settingsWatch?.cancel()
         settingsWatch = null
         settingsModel = null
@@ -683,6 +708,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val model = me.raddatz.veyq.mobile.navigation.ShellModel(t, hidden, recent, System::currentTimeMillis)
         shellWatch?.cancel()
         shellModel = model
+        closeSearch()
+        val app = getApplication<Application>()
+        _searchModel.value = model.searchModel({ msg -> app.words(msg) }, appearance = true) { android.util.Log.i("veyq-search", it) }
         // another tenant's music stops; the same tenant opened again plays on
         if (switched || _music.value == null) {
             stopMusic()
@@ -1028,7 +1056,31 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         openGallery?.close()
         val app = getApplication<Application>()
         val music = _music.value?.let { p -> me.raddatz.veyq.mobile.memories.GalleryModel.Music(p) { n -> app.words(me.raddatz.veyq.mobile.words.Msg.MUSIC_UNTITLED, n) } }
-        return m.galleryModel(node, uploads, music).also { openGallery = it }
+        return m.galleryModel(node, uploads, music).also {
+            openGallery = it
+            followSearchOpened(it)
+        }
+    }
+
+    private var searchOpenedWatch: kotlinx.coroutines.Job? = null
+
+    /**
+     * A photo of this gallery chosen in Search (ADR 0146 decision 8: the gallery's own documents open in place) opened its
+     * lightbox on a page the full-screen Search covers: Search is left for the page — the page itself where Search stands
+     * on it, else the page opened where it lives (back returns to Search) —, which then shows the lightbox.
+     */
+    private fun followSearchOpened(gallery: me.raddatz.veyq.mobile.memories.GalleryModel) {
+        searchOpenedWatch?.cancel()
+        searchOpenedWatch = viewModelScope.launch {
+            gallery.state.collect { st ->
+                val m = shellModel ?: return@collect
+                val shell = m.shell ?: return@collect
+                if (st.searchOpened == null || !shell.searching || openGallery !== gallery) return@collect
+                val open = shell.openObject
+                if (open != null && open.scopeId == gallery.node.scopeId && open.nodeId == gallery.node.nodeId) search(false)
+                else m.openFound(gallery.node.scopeId, gallery.node.nodeId)
+            }
+        }
     }
 
     /** The gallery page went: its lightbox and any video's reader close with it, and its Music view (the music plays on). */
@@ -1801,7 +1853,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         shellModel?.openBeside(ref)
     }
 
-    fun select(tab: BarTab) = updateShell { it.select(tab) }
+    fun select(tab: BarTab) {
+        // leaving Search for a place of the bar leaves the field: its text and chips go, nothing is revalidated
+        if (shellModel?.shell?.searching == true) _searchModel.value?.close()
+        updateShell { it.select(tab) }
+    }
 
     /** Whether "New" is offered where the shell is (core's `ShellModel.canCreateHere`). */
     val canCreateHere: Boolean get() = shellModel?.canCreateHere == true
@@ -1811,7 +1867,28 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val m = shellModel ?: return
         viewModelScope.launch { m.goneSeen() }
     }
-    fun search(on: Boolean) = updateShell { it.search(on) }
+    /** Search opened from the bar (a fresh field) or left (its text and chips go); back from a result returns to it as it was. */
+    fun search(on: Boolean) {
+        _searchModel.value?.close()
+        updateShell { it.search(on) }
+    }
+
+    /**
+     * Core's state after a settings result was chosen (`SearchShown.openSettings`, `openSettingsCount`): the Settings page
+     * opens scrolled to its section once per choice — the same result chosen twice opens it twice, and Search drawn again
+     * after the page (the same state) opens nothing.
+     */
+    fun openSettingsFromSearch(section: String?, count: Int) {
+        if (section == null || count <= settingsOpenedCount) return
+        settingsOpenedCount = count
+        _settingsAt.value = section
+        openSettings()
+    }
+
+    /** The page scrolled to [settingsAt]. */
+    fun settingsAtSeen() {
+        _settingsAt.value = null
+    }
 
     private fun updateShell(f: (Shell) -> Shell) {
         shellModel?.update(f)

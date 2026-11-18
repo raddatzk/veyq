@@ -121,6 +121,11 @@ class SearchModel(
     private val contributions: SearchContributions,
     private val now: () -> Long,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    /**
+     * Where the model says how long a walk of the index took (a platform's log: Android's logcat, ADR 0146's first focus
+     * timed live): counts and milliseconds only, never a name. Null: nothing said.
+     */
+    private val trace: ((String) -> Unit)? = null,
 ) {
     /** What the model reads and opens (the shell over a tenant: [me.raddatz.veyq.mobile.navigation.ShellModel.searchModel]). */
     interface Door {
@@ -319,6 +324,7 @@ class SearchModel(
 
     /** One walk over every searched space (see the class): the nodes first, then each application's objects by space. */
     private suspend fun build(revalidate: Boolean) {
+        val started = kotlin.time.TimeSource.Monotonic.markNow()
         val online = door.online()
         val listed = runCatching { door.spaces() }.getOrDefault(spaces)
         val notRead = door.notRead()
@@ -347,6 +353,7 @@ class SearchModel(
             revision++
         }
         answerOnLane()
+        val nodesAfter = started.elapsedNow().inWholeMilliseconds
         val notSearched = HashSet<String>()
         var unreadOffline = false
         val off = door.applicationsOff()
@@ -398,6 +405,13 @@ class SearchModel(
             revision++
         }
         answerOnLane()
+        trace?.let { t ->
+            val counts = withContext(lane) { nodeDocs.values.sumOf { it.size } to objects.values.sumOf { a -> a.values.sumOf { it.documents.size } } }
+            t(
+                "index ${if (revalidate) "revalidated" else "built"}: ${listed.size} spaces, ${counts.first} node and ${counts.second} " +
+                    "listed documents, ${notSearched.size} not searched, online $online; nodes ${nodesAfter} ms, all ${started.elapsedNow().inWholeMilliseconds} ms",
+            )
+        }
     }
 
     private suspend fun place(

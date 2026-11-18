@@ -65,8 +65,6 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SearchBar
-import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.ui.draw.alpha
@@ -313,7 +311,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
               androidx.compose.runtime.CompositionLocalProvider(LocalNodeHero provides hero, LocalListStates provides listStates) {
                 when {
                     // a wide window: the application's list and its open object side by side (Material 3's list-detail)
-                    shell.searching -> SearchScreen(s.objects, onOpen = model::open, onClose = { model.search(false) })
+                    shell.searching -> SearchScreen(model, onClose = { model.search(false) })
                     shell.person != null -> PersonScreen(shell.person!!, model)
                     wide && shell.showsListBeside -> ListBeside(s, model)
                     shell.openObject != null -> KindPages.of(shell.openObject!!.kind)?.body?.invoke(shell.openObject!!, shell.selectedTab, model)
@@ -857,29 +855,6 @@ private fun LazyListScope.group(title: Int?, refs: List<ObjectRef>, onOpen: (Obj
     if (refs.isEmpty()) return
     if (title != null) item { Section(stringResource(title)) }
     items(refs, key = { "${title}-${it.scopeId}-${it.nodeId}" }) { ref -> ObjectRow(ref, onOpen) }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SearchScreen(objects: List<ObjectRef>, onOpen: (ObjectRef) -> Unit, onClose: () -> Unit) {
-    var query by remember { mutableStateOf("") }
-    var expanded by remember { mutableStateOf(true) }
-    LaunchedEffect(expanded) { if (!expanded) onClose() }
-    val hits = remember(query, objects) { me.raddatz.veyq.mobile.navigation.ShellWords.search(objects, query) }
-    SearchBar(
-        inputField = {
-            SearchBarDefaults.InputField(
-                query = query, onQueryChange = { query = it }, onSearch = {}, expanded = expanded, onExpandedChange = { expanded = it },
-                placeholder = { Text(stringResource(R.string.search_hint)) },
-                leadingIcon = { IconButton(onClick = onClose) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.search_close)) } },
-            )
-        },
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        LazyColumn { items(hits, key = { it.scopeId + it.nodeId }) { ref -> ObjectRow(ref, onOpen) } }
-    }
 }
 
 @Composable
