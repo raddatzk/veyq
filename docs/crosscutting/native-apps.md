@@ -473,7 +473,7 @@ open (below). The Use pages: [People in your Memories](../../site/src/content/do
 - Several instances gated on their major (inbox #436): the apps speak only their own major today.
 
 **Navigation and sharing**
-- Search beyond names: the web's search in the client over what it can open, across every space ([ADR 0125](../decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md)), taken over once the apps reach the web's features (owner 2026-11-09); listing a kind across scopes.
+- Search beyond names: the web's search ([ADR 0125](../decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md)) ported into the core and held to the web by shared vectors ([ADR 0146](../decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md), [changes/cr-app-search.md](../../changes/cr-app-search.md)); listing a kind across scopes.
 - Opening a received link in the app, as its guest, and the handover from the browser that must not carry a link's
   `#k=` key unguarded (#435); a kept link (`SHARE_BOOKMARK`) has no page yet.
 - Dropping files onto the app (Android; Apple's drop is built, not measured).

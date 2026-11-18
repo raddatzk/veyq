@@ -370,16 +370,18 @@ refine: `:core:macosArm64Test`, `:android:assembleDebug`, the Apple builds, `run
 | iPhone and iPad on a device | **owner** | the search tab and the split view's field with tokens, VoiceOver's count (the simulators do not boot, #928) |
 | A screen reader on Linux | **owner** | Orca reads the count and a chip added (a real GNOME session, the Fedora VM) |
 
-## Owner questions
+## Owner questions (answered)
 
 1. **One tenant or every signed-in tenant?** ADR 0125 decision 3 limits the search to the current tenant because the web
    would need a cross-origin read; the apps hold every signed-in tenant at once, so that reason does not hold here.
    *Recommendation:* the current tenant only, as the web — a member's tenants are separate places, and a second tenant's
    results would need their own row line ("on {tenant}") and a switch on opening; revisit when a member asks.
+   **Answered (owner 2026-11-18): the current tenant only, as the web does.**
 2. **Copy for the apps' new words** (EN / DE; the web's `shell.search.*` and `memory.search.*` are reused as they are).
    *Recommendation:* `search_offline_photos`: "Photos are searched once you are online." / "Fotos werden durchsucht,
    sobald du online bist."; `search_hint` (today "Search names") becomes the web's placeholder "Search all spaces" /
    "Alle Bereiche durchsuchen"; the settings results' second line `search_settings`: "Settings" / "Einstellungen".
+   **Answered (owner 2026-11-18): the three words as proposed.**
 
 ## Inbox rows
 
