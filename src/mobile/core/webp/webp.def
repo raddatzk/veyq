@@ -1,8 +1,9 @@
-# libwebp's decoder for the members' pictures where the platform cannot decode a WebP (media/WebpPicture.kt): headers
-# and the static library come from build_libwebp.py's output, one slice per target, handed in by core/build.gradle.kts
-# (includeDirs, -libraryPath).
+# libwebp for the members' pictures (build_libwebp.py, ADR 0148 decision 2): its decoder where the platform cannot decode
+# a WebP (media/WebpPicture.kt, Linux and Windows) and its encoder for one's own picture on every native target
+# (media/LibwebpEncoder.kt). Headers and the static library come from build_libwebp.py's output, one slice per target,
+# handed in by core/build.gradle.kts (includeDirs, -libraryPath).
 package = me.raddatz.veyq.mobile.webp
-headers = webp/decode.h
-headerFilter = webp/decode.h webp/types.h
+headers = webp/decode.h webp/encode.h
+headerFilter = webp/decode.h webp/encode.h webp/types.h
 compilerOpts = -DWEBP_EXTERN=extern
-staticLibraries = libwebpdecoder.a
+staticLibraries = libwebp.a

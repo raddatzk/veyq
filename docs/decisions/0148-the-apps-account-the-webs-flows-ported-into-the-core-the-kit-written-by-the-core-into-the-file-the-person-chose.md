@@ -47,8 +47,9 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
    frame (`CoverFrame` with an equal width and height, zoom 1–3); the host renders the crop to 256 × 256 RGBA as it
    renders a cover's tiers; the **core** encodes WebP, steps the quality down to the web's budget, pads to 16 384 bytes
    and seals (`member-avatar`). The encoder sits behind one seam, `WebpEncoder`: libwebp's encoder from the web's pin
-   (`core/webp/`) where the core already builds libwebp (Apple, Linux, Windows), the host's
-   `Bitmap.compress(WEBP_LOSSY, q)` on Android, whose core target is the JVM. No vector pins an encode — two encoders
+   (`core/webp/build_libwebp.py`: `makefile.unix`'s `LIBWEBP_OBJS` with `LIBSHARPYUV_OBJS`, one `libwebp.a` per slice)
+   on every native target — Apple, Linux, Windows (`media/LibwebpEncoder.kt`) —, the host's
+   `Bitmap.compress(WEBP_LOSSY, q)` on Android, whose core target is the JVM (`AndroidWebpEncoder`). No vector pins an encode — two encoders
    never agree byte for byte; what is pinned is the seal (`field_seal.member-avatar`) and the padded length.
 
 3. **Safety numbers: the core's port, the state the web shows, the compare by scan or by digits.** Core
@@ -147,6 +148,11 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
   zeroed after it; none crosses the bridge outward.
 - **The apps write one plaintext secret,** the Emergency Kit, and only into the file the person chose.
 - **A rotation wipes every device's offline store**, the rotating device's included, and refills it.
+- **libwebp's encoder builds for every native slice** (measured 2026-11-18, `/usr/bin/python3 core/webp/build_libwebp.py
+  build/libwebp` from `src/mobile/`, libwebp v1.6.0 at the web encoder's pin): `linux_arm64`, `linux_x64` and `mingw_x64`
+  with Kotlin/Native's clang, `macos_arm64`, `ios_arm64` and `ios_simulator_arm64` with Xcode's, in 50 s; each
+  `libwebp.a` 0.79–1.10 MB, each defining `WebPEncodeRGBA`. So no Apple, Linux or Windows host encoder stands behind the
+  seam.
 - **A moderator replaces their keys and erases their account on the web** until the apps hold the moderation key
   (inbox #965).
 

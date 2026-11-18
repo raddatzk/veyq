@@ -146,13 +146,14 @@ val buildUtf8proc = tasks.register<Exec>("buildUtf8proc") {
     commandLine("python3", file("utf8proc/build_utf8proc.py").absolutePath, utf8proc.absolutePath)
 }
 
-// libwebp's decoder for Linux and Windows (core/webp/build_libwebp.py), a member's picture decoded where the platform
-// cannot (`media/WebpPicture.kt`), from the web encoder's pin (src/web/webp-encoder/libwebp.pin): one libwebp in the repository.
+// libwebp for every native target (core/webp/build_libwebp.py): a member's picture decoded where the platform cannot
+// (`media/WebpPicture.kt`, Linux and Windows) and one's own encoded (`media/LibwebpEncoder.kt`, ADR 0148 decision 2), from
+// the web encoder's pin (src/web/webp-encoder/libwebp.pin): one libwebp in the repository.
 val libwebp = rootDir.resolve("build/libwebp")
 val webpPin = rootDir.resolve("../web/webp-encoder/libwebp.pin").canonicalFile
 val buildLibwebp = tasks.register<Exec>("buildLibwebp") {
     group = "veyq"
-    description = "Builds libwebp's decoder for Linux (arm64, x86-64) and Windows (x86-64) into src/mobile/build/libwebp."
+    description = "Builds libwebp for Linux (arm64, x86-64), Windows (x86-64) and Apple (macOS, iOS, the simulator) into src/mobile/build/libwebp."
     inputs.file("webp/build_libwebp.py").withPropertyName("script")
     inputs.file("konan_toolchain.py").withPropertyName("toolchain")
     inputs.file(webpPin).withPropertyName("pin")
@@ -202,6 +203,13 @@ kotlin {
             extraOpts("-libraryPath", slice.resolve("lib").absolutePath)
             libraryInput(interopProcessingTaskName, slice.resolve("lib/libsodium.a"))
         }
+        // libwebp's encoder for one's own picture (ADR 0148 decision 2): ImageIO decodes WebP but writes none
+        target.compilations.getByName("main").cinterops.create("webp") {
+            definitionFile.set(file("webp/webp.def"))
+            includeDirs(libwebp.resolve("${sodiumSlices.getValue(target.name)}/include"))
+            extraOpts("-libraryPath", libwebp.resolve("${sodiumSlices.getValue(target.name)}/lib").absolutePath)
+            libraryInput(interopProcessingTaskName, libwebp.resolve("${sodiumSlices.getValue(target.name)}/lib/libwebp.a"))
+        }
         target.binaries.framework {
             baseName = "VeyqCore"
             isStatic = true
@@ -210,8 +218,8 @@ kotlin {
     }
 
     // Linux (ADR 0136 decision 4) and Windows (decision 5): libsodium as on Apple — the `sodium` interop commonizes into
-    // `nativeMain` — and utf8proc for the normalization forms, which neither libc has, and libwebp's decoder for a member's
-    // picture where the platform has no WebP codec; both commonize into `bridgedMain`.
+    // `nativeMain` — and utf8proc for the normalization forms, which neither libc has, commonized into `bridgedMain`; and
+    // libwebp, on Apple too, so it commonizes into `nativeMain` (its decoder used by `bridgedMain`'s `WebpPicture`).
     val bridgedSlices = mapOf("linuxArm64" to "linux_arm64", "linuxX64" to "linux_x64", "mingwX64" to "mingw_x64")
     listOf(linuxArm64(), linuxX64(), mingwX64()).forEach { target ->
         val slice = bridgedSlices.getValue(target.name)
@@ -231,7 +239,7 @@ kotlin {
             definitionFile.set(file("webp/webp.def"))
             includeDirs(libwebp.resolve("$slice/include"))
             extraOpts("-libraryPath", libwebp.resolve("$slice/lib").absolutePath)
-            libraryInput(interopProcessingTaskName, libwebp.resolve("$slice/lib/libwebpdecoder.a"))
+            libraryInput(interopProcessingTaskName, libwebp.resolve("$slice/lib/libwebp.a"))
         }
     }
 
@@ -359,6 +367,8 @@ tasks.withType<Test>().configureEach {
     System.getenv("VEYQ_ADMIN_BASE")?.let { environment("VEYQ_ADMIN_BASE", it) }
     // `.run/.env` of another checkout (a worktree has none): read by DeviceTrustLiveTest.
     System.getenv("VEYQ_ENV_FILE")?.let { environment("VEYQ_ENV_FILE", it) }
+    // the throwaway a destructive live case runs as (ADR 0148 decision 12; `src/web`'s `throwaway:account`)
+    System.getenv("VEYQ_LIVE_THROWAWAY_ENV")?.let { environment("VEYQ_LIVE_THROWAWAY_ENV", it) }
     // the search's volume measurement (ADR 0146 § Consequences), opt-in: a timing is no check of every run
     System.getenv("VEYQ_MEASURE")?.let { environment("VEYQ_MEASURE", it) }
     testLogging { showStandardStreams = System.getenv("VEYQ_LIVE") != null || System.getenv("VEYQ_MEASURE") != null }

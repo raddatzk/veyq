@@ -329,6 +329,13 @@ key-touching flows after the vectors that hold them, erasure last.
   other throwaway's `People`;
   (e) **picture**: the encoder measurement, `WebpEncoder` per target, the budget stepping and the padding; live: set,
   read back by `MemberAvatars`, cleared;
+  *3a–3e built 2026-11-18* (the next phases build on them): `crypto/AccountProofs` (the proof key, the four statements,
+  the attestations, the stage digest), `crypto/Verifications`, `trust/SafetyNumbers` (digits, chain code, `veyqid:2`),
+  `JoinRecords.sealValueField` (a value-key field written), `session/PersonTrust` (in `session/`, beside the anchoring it
+  reads, not `trust/`) with `VerificationCount`, `session/ProfileModel` with `TenantProfileDoor`, `media/WebpEncoder`
+  (`LibwebpEncoder` on every native target, `AndroidWebpEncoder` in the Android host), `VeyqAccount.reopenScope` (a scope
+  opened anew after a `409 stale_epoch`); live as a throwaway: `LiveAccountFlowsTest` (`VEYQ_LIVE_THROWAWAY_ENV`,
+  `Throwaway`). 3e's measurement: libwebp's encoder builds for all six native slices (ADR 0148 § Consequences).
   (f) **cold proof and password** (D6); live: the throwaway's password changed, the old one refused at sign-in, the new
   one signs in, the Master Key the same (a node of its personal scope still opens);
   (g) **kit writer** (D5) with `kit-app.pdf` and its three readers;

@@ -1073,7 +1073,8 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - On iOS what the share extension needs is shared (ADR 0138): defaults go through `Shared.defaults` (the app group's
   suite), never `UserDefaults.standard`, and a Keychain item through `KeychainStore` (the entitlements' first group is the
   shared one). A value only the app reads may stay its own, but nothing the session or the device trust reads.
-- Linux's and Windows' C libraries (libsodium, utf8proc, libwebp's decoder) are compiled by Kotlin/Native's own toolchain. It is downloaded by
+- Linux's and Windows' C libraries (libsodium, utf8proc, libwebp — its decoder and, for one's own picture, its encoder, ADR
+  0148 decision 2; libwebp's Apple slices are built by Xcode's clang, `xcrun`, as libsodium's) are compiled by Kotlin/Native's own toolchain. It is downloaded by
   `:core:downloadKotlinNativeDistribution`, which `buildLibsodium`, `buildUtf8proc` and `buildLibwebp` depend on, and found by
   `core/konan_toolchain.py` through `konan.properties`. It is never a container's compiler, since a library built
   against a newer glibc carries versioned symbols the link against Kotlin/Native's old sysroot cannot satisfy.

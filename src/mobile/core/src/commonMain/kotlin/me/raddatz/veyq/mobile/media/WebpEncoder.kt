@@ -9,3 +9,5 @@ fun interface WebpEncoder {
     suspend fun encode(rgba: ByteArray, width: Int, height: Int, quality: Double): ByteArray?
 }
 
+/** The encoder the core holds on this target: libwebp's on every native one, none on the JVM (the Android host's). */
+expect val coreWebpEncoder: WebpEncoder?
