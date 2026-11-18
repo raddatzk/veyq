@@ -1,10 +1,11 @@
-// A Memory's banner on Windows (ADR 0144 decisions 4 and 5; Linux's banner in curation.rs, the web's MemoryBanner.vue):
+// A Memory's banner on Windows (ADR 0144 decisions 4 and 5; Linux's banner in banner.rs, the web's MemoryBanner.vue):
 // above the Memory's head, scrolling away with it, in the core's frame (Banner.Frame: 16:9 above a 720 column, 1:1 at or
 // below, never taller than 60 % of the viewport) — the picture whole (Stretch.Uniform) over the same picture decoded down
 // to the core's surround size (at most 32 px on its long edge) and stretched back by XAML's smooth scaling: a blur by
 // resampling, no blur API (Win2D would be a new dependency). A video banner shows its poster with a play button; a press
-// plays Banner.Play's reader in MediumPlayer with its controls, the surround staying the poster's. Nothing is drawn where
-// the picture does not read or decode.
+// plays Banner.Play's reader in MediumPlayer with its controls, the surround staying the poster's — above and below
+// only: the player letterboxes in black, so its own bars cover the surround at the sides while it plays (seen in the
+// Windows pass, ADR 0144's Consequences). Nothing is drawn where the picture does not read or decode.
 //
 // The banner's dialog is a ContentDialog: the open picker for one image or video (Banner.Pick by path, the core opens it),
 // the two previews (wide 16:9, phone 1:1) drawn the same way, Save banner with its progress and Cancel, Remove banner. A2's

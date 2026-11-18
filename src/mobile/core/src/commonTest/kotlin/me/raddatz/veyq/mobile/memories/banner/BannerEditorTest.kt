@@ -158,8 +158,8 @@ class BannerEditorTest {
 
     /**
      * After a peer's change is said, the dialog stands on the peer's banner: Save again writes over it, as the web's dialog
-     * does (its save takes the page's node, which the conflict updated). Measured 2026-11-18 in phase 9's Linux pass: every
-     * Save of the same dialog answered Stale, opened on a banner that was gone.
+     * does (its save takes the page's node, which the conflict updated). Measured 2026-11-18 in ADR 0144's Linux pass:
+     * every Save of the same dialog answered Stale, opened on a banner that was gone.
      */
     @Test
     fun afterAPeersChangeIsSaidSaveAgainWritesOverThePeersBanner() = runTest {
