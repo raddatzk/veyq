@@ -106,6 +106,28 @@ other, so when scope shrinks the copy is corrected in the same pass, not filed.
   cannot remember a device at all, and unlocking there needs the Secret Key every time.
 - `memory.detailComing` — deleted; it was dead copy for a shipped feature, referenced nowhere.
 
+## V2 — the apps' order
+
+**Owner's call 2026-11-18:** the apps first make what they already have sound and alike, then take the web's remaining
+features over. Each block is one or more CRs; a row keeps its own status, this list only orders them. Items without a
+row are named in [native-apps.md](crosscutting/native-apps.md) § Open.
+
+| Block | What | Rows |
+|---|---|---|
+| **A** | The passes' bugs | **#952**, **#953** (with a pull-to-refresh on the phones), **#951**, **#937**, **#904**; **#943**, **#944**, **#946** |
+| **B** | The apps alike | the desktops' folder hero and row thumbnails; the phones' top-level share asked of the core; a picture replaced under the same id and a guest's new folder signalled; Linux's foreign currency and its upload toasts behind a save, **#901**; **#885** |
+| **C** | Polish | uploads that go on in the background with placeholder tiles; **#940**; **#945**, **#939**, **#947**; **#948**; Depot's PDF text layer and password, a text's copy and wrap; **#932** |
+| **D** | Passes no person is needed for | **#928** (app ↔ app through the test cameras); the desktops' kit scan through a test camera |
+| **E** | Search in the core | **#21** ([ADR 0125](decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md)) |
+| **F** | Account | **#863**, **#949**; the device register's screen |
+| **G** | Memories' rest | **#891**, **#892**, **#893**, **#950** |
+| **H** | A received link opened in the app | **#435** |
+| **I** | The journal | **#855** |
+| **J** | Offline beyond reading (an ADR first) | **#897**, **#896**, **#898** |
+
+The owner's own passes run beside any block: **#925**, **#926**, **#916**, **#917** and Apple's music and maps passes on
+a real iPhone and the unlocked Mac; **#912**; **#913**–**#915**, **#881**–**#884**.
+
 ## Crosscutting concerns
 
 | id | topic | tags | status |
