@@ -367,6 +367,12 @@ internal fun BannerDialog(editor: BannerEditor, gallery: GalleryModel, model: Ap
     val palette = LocalPalette.current
     LaunchedEffect(s.done) { if (s.done) model.closeBanner() }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(model::pickBanner) }
+    fun pickMedium() = pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+    // full media access asked once before the first pick, as an upload's is (the same flag): the picker's own copy of a
+    // photo has its location zeroed, so its digest never equals the gallery's original and an equal file is uploaded
+    // anew instead of shared (ADR 0144 decision 5; measured 2026-11-18 in phase 9's pass: 1 store PUT without, 0 with)
+    val askAccess = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { pickMedium() }
+    fun choose() = if (model.mediaAccessAsked()) pickMedium() else askAccess.launch(mediaAccessPermissions())
     // the previews show the picked file, else the banner as it is
     val now by produceState<BannerPicture?>(null) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { BannerPicture.of(gallery.bannerPicture()) } }
     val picked = s.picked
@@ -387,7 +393,7 @@ internal fun BannerDialog(editor: BannerEditor, gallery: GalleryModel, model: Ap
             Column(Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
                 Text(stringResource(R.string.memory_banner_hint), style = MaterialTheme.typography.bodyMedium, color = role(palette.muted))
                 OutlinedButton(
-                    onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
+                    onClick = { choose() },
                     enabled = !s.saving && !s.picking, modifier = Modifier.padding(top = 12.dp),
                 ) { Text(stringResource(R.string.memory_banner_choose)) }
                 if (s.picking) {

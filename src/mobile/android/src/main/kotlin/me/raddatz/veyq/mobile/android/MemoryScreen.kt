@@ -103,7 +103,7 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 private typealias MemoryLightbox = me.raddatz.veyq.mobile.memories.Lightbox
 
 /** What full media access is on this Android: the photos and videos themselves, and their locations. */
-private fun mediaAccessPermissions(): Array<String> =
+internal fun mediaAccessPermissions(): Array<String> =
     if (android.os.Build.VERSION.SDK_INT >= 33) {
         arrayOf(android.Manifest.permission.READ_MEDIA_IMAGES, android.Manifest.permission.READ_MEDIA_VIDEO, android.Manifest.permission.ACCESS_MEDIA_LOCATION)
     } else {

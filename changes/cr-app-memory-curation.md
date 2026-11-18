@@ -621,7 +621,7 @@ reached only when it was open as the device went offline; then it stays, naming 
   at the sides while a video plays (D4 holds above and below only); the profile's switch is icons with the words
   `node_view_list` and `memory_view_map` as tooltips/labels; on the Linux container (UTC) a corrected time is said in UTC.
 
-- [ ] **9 the passes** — per platform against the dev instance: two sessions (an app and the web) editing the same
+- [x] **9 the passes** — per platform against the dev instance: two sessions (an app and the web) editing the same
   Memory's participants at once, then its banner (the web's `banner_stale` word seen in the app), a time corrected in the
   app read as "Corrected" on the web and back; a banner set in the app shown whole on the web and the reverse; a person's
   profile in the app listing what the web's lists for the same member (count and order), its map's pins; offline: a
@@ -630,6 +630,17 @@ reached only when it was open as the device went offline; then it stays, naming 
   Windows have none, #947), so the count is read from the server's side for every platform. · Done when: each pass's
   outputs are in ADR 0144's Consequences in this phase, with what could not be run named (Apple on a device is the
   owner's).
+  *Done 2026-11-18:* Android (throwaway API 36 emulators, deleted), Linux (Broadway, its own homes, removed) and Windows
+  (the VM, `F:\veyq-curation-p9` with the tasks `veyq-app-cp9`/`veyq-drive-cp9`, removed) each against the web in headless
+  system Chrome on one Memory of their own: participants saved at once (a peer's addition kept), the banner's stale said,
+  a banner each way shown whole, a capture time each way read as Corrected and reset, the profile's rows and located
+  Memories equal to the web's, offline on Android and Linux (the banner drawn, no participants line, the open profile kept);
+  the equal file's count from Garage's request log (`docker logs veyq-garage`, PUTs per save window: 1 for a new image, 0
+  for the gallery's clip and photo). The commands and outputs are ADR 0144's Consequences. Fixed: the banner dialog's
+  second Save after a stale (core, `BannerEditorTest` red first), Android's profile reopening on the Map with its first
+  read, Android's banner pick sharing no equal photo (full media access now asked once). Filed: #952 (the web's picker
+  drops a peer's addition it polled), #953 (an open Memory does not follow a peer's meta change). Not run: Apple (the
+  owner's), Windows offline (the standing tunnel).
 
 - [ ] **10 harvest** — the site (R15): `install-the-app.mdx` (EN+DE) no longer sends a Memory's people and banner to the
   browser; `people-in-your-memories.md`, `add-a-banner.mdx` and `the-gallery.mdx` (EN+DE) say what the apps do and do not

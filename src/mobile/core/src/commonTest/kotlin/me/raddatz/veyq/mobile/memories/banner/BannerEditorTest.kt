@@ -156,6 +156,29 @@ class BannerEditorTest {
         assertEquals(BannerEditor.Said.FAILED, e.current.said)
     }
 
+    /**
+     * After a peer's change is said, the dialog stands on the peer's banner: Save again writes over it, as the web's dialog
+     * does (its save takes the page's node, which the conflict updated). Measured 2026-11-18 in phase 9's Linux pass: every
+     * Save of the same dialog answered Stale, opened on a banner that was gone.
+     */
+    @Test
+    fun afterAPeersChangeIsSaidSaveAgainWritesOverThePeersBanner() = runTest {
+        val door = Door(emptyList(), banner(null))
+        val g = open(door)
+        val e = assertNotNull(g.bannerEditor(Pictures))
+        e.pick(file("a.jpg", "image/jpeg"))
+        door.banner = Banner.Read(Banner.Medium.IMAGE, Banner.Ref("peer", 1, 100, "w"), null, null, null, Banner.Frame.FIT, Banner.CENTRE)
+        door.setAnswer = BannerWrite.Outcome.Stale
+        assertEquals(BannerWrite.Outcome.Stale, e.save())
+        assertEquals(BannerEditor.Said.STALE, e.current.said)
+        runCurrent()
+        assertEquals("peer", g.current.facts?.bannerSlots?.blobId, "the page shows the peer's banner")
+        door.setAnswer = BannerWrite.Outcome.Done
+        assertEquals(BannerWrite.Outcome.Done, e.save())
+        assertEquals(listOf("set:bb:IMAGE:0", "set:peer:IMAGE:0"), door.sent, "the second save stands on the peer's banner")
+        assertTrue(e.current.done)
+    }
+
     /** A2: the banner's picture is asked about first; declined, nothing is deleted. Bite (e): the delete without asking. */
     @Test
     fun trashingTheBannersPictureAsksFirstAndDeclinedNothingIsDeleted() = runTest {
