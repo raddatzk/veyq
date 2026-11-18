@@ -184,7 +184,7 @@ int main(void) {
     expect(wait_for(&last_update, "\"SignIn\"", 10), "the gate shows the sign-in");
     expect(asked > 0, "the core asked the host's store");
 
-    call("{\"type\":\"Search.Query\",\"query\":\"x\"}");
+    call("{\"type\":\"Search.Open\"}");
     expect(wait_for(&last_answer, "NO_TENANT_OPEN", 10), "Search before a tenant is open is refused");
     call("not json");
     expect(wait_for(&last_answer, "NOT_A_CALL", 10), "a request that is no call is refused");
