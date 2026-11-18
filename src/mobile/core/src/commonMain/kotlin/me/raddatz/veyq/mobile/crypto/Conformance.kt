@@ -47,6 +47,7 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         scopeSuccession()
         joinRecords()
         valueKeys()
+        itemMarks()
         slugs()
         shareWrite()
         reportBundle()
@@ -233,6 +234,40 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         }
         check("value_key covers exactly the value purposes") { eq(vk.obj("addresses").keys, JoinRecords.VALUE_PURPOSES) }
         check("value_key opens a field top-down") { eqHex(sym.obj("value-key").hex("plaintext"), fields.obj("member-name").str("parent_key")) }
+    }
+
+    /** `#item_mark_self`: the self-tag key, each case's set digest, statement, tag and plaintext (encoded, and decoded back
+     *  to the set), and case one's plaintext as `#seal.sym.item-favorites` seals it (ADR 0068 §9, inbox #500). */
+    private fun itemMarks() {
+        val im = v.obj("item_mark_self")
+        val marks = ItemMarks(suite)
+        check("item_mark_self k_self") { eqHex(marks.selfKey(im.hex("master_key")), im.str("k_self")) }
+        for (name in listOf("one", "several_unsorted_with_duplicate")) {
+            val c = im.obj(name)
+            val ctx = c.obj("context")
+            val ids = ctx["ids"]!!.jsonArray.map { (it as JsonPrimitive).content }
+            check("item_mark_self.$name marks, statement and tag") {
+                eqHex(marks.marksDigest(ids), c.str("marks"))
+                eqHex(marks.statement(ctx.str("scopeId"), ctx.str("nodeId"), ids), c.str("statement"))
+                eqHex(marks.selfTag(im.hex("k_self"), ctx.str("scopeId"), ctx.str("nodeId"), ids), c.str("tag"))
+                if (!marks.selfTagVerifies(im.hex("k_self"), ctx.str("scopeId"), ctx.str("nodeId"), ids, c.hex("tag"))) fail("the tag did not verify")
+                if (marks.selfTagVerifies(im.hex("k_self"), ctx.str("scopeId"), ctx.str("scopeId"), ids, c.hex("tag"))) fail("another node verified")
+            }
+            check("item_mark_self.$name plaintext") {
+                eqHex(marks.encode(c.hex("tag"), ids), c.str("plaintext"))
+                val (tag, decoded) = marks.decode(c.hex("plaintext")) ?: fail("did not decode")
+                eqHex(tag, c.str("tag"))
+                eq(decoded, ids.toSortedSet().toList())
+            }
+        }
+        check("item_mark_self refuses a plaintext no encoder writes") {
+            val one = im.obj("one").hex("plaintext")
+            if (marks.decode(one.copyOf(one.size - 1)) != null) fail("a cut id decoded")
+            if (marks.decode(one + one.copyOfRange(32, 48)) != null) fail("a repeated id decoded")
+        }
+        check("item_mark_self case one is seal.sym.item-favorites's plaintext") {
+            eqHex(im.obj("one").hex("plaintext"), v.obj("seal").obj("sym").obj("item-favorites").str("plaintext"))
+        }
     }
 
     private val trust = Trust(suite)

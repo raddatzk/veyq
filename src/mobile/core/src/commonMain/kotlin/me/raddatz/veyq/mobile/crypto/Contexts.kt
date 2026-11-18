@@ -91,6 +91,7 @@ object Purposes {
             "previousProofKeyDigest" to FieldKind.DIGEST, "identityPublicKey" to FieldKind.BYTES, "secretKeyProofPublicKey" to FieldKind.BYTES,
         ),
         "scope-succession" to s("scopeId" to ID, "epoch" to UINT, "successionPublicKey" to FieldKind.BYTES),
+        "item-mark-self" to s("scopeId" to ID, "nodeId" to ID, "marks" to FieldKind.DIGEST),
         "verification" to s(
             "tenantId" to ID, "verifierUserId" to ID, "subjectUserId" to ID, "subjectHead" to FieldKind.DIGEST, "verifierHead" to FieldKind.DIGEST,
         ),
