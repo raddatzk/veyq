@@ -37,7 +37,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * The apps' search against a running dev instance (ADR 0146; cr-app-search phase 3c; `VEYQ_LIVE`, skipped without one).
+ * The apps' search against a running dev instance (ADR 0146; `VEYQ_LIVE`, skipped without one).
  * The dev principal makes a Memory in its tenant's space — itself a participant (*I was there*), a date and a place set,
  * a photo uploaded into it — and searches standing in its personal space: the Memory found by its name from the other
  * space, a year chip, a person chip, *In:* the Memory listing its photo, the photo found by the space's listing and

@@ -534,7 +534,7 @@ A Gradle build of its own, run through its own wrapper.
     `slide <id> <from> <to>` (a mouse drag across an element, percents of its width: the device link's slide), `explorer <x> <y> <w> <h> <path>` and `drag <id|@x,y>
     <name>|<name>…` (an Explorer window placed beside the app, its items dragged with SendInput's mouse onto an element),
     `hovershot <file>` (the screen while the next drag is held), `click <x> <y>`, `screen <file>`, `droptargets`, `size`,
-    `maximize`, `wait`, `sleep`, `shot <name>.png`) and prints what each saw. Read the log and the tree first; a `shot`
+    `maximize`, `wait`, `sleep`, `shot <name>.png`, `listen` and `heard` (UIA's notification events, what Narrator reads)) and prints what each saw. Read the log and the tree first; a `shot`
     (to `build/windows/shots/`, as `screen` and `hovershot` land) is the proof, not the probe. `droptargets` proves
     nothing for WinUI: it listed no OLE drop target while Explorer's drops landed (2026-11-13).
   - `package [--sign [PFX]] [--smoke]` builds the MSIX (ADR 0139 decisions 6 and 7): the release DLL, the manifest
@@ -938,6 +938,8 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   nothing of the model in it. A persist closure is one too (`AppModel.init`'s, which say so):
   `RecentUses`' and `Hidden`'s crashed the sign-out of the last server (`RecentUses.clear` runs on a core thread,
   measured 2026-11-11), which only a pass that signs out of its last account reaches — so an Apple pass ends that way.
+  A watch closure a main-actor class or a view hands core is one too: a profile (`PersonSection`) and the curation
+  dialogs (`ParticipantsEdit`, `BannerEdit`, `CaptureTimeSheet`) trapped as they opened (2026-11-18); `CoreState` says why.
 - Swift cannot implement a Kotlin `suspend fun`: an interface the Apple app implements (a port such as the music's
   `Deck`) is exported with its suspending members as completion handlers Swift may call but not provide. The port Swift
   implements takes callbacks instead, and `appleMain` adapts it into the core's interface with
@@ -1492,3 +1494,18 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - **A field a constructor's `init` collector writes is declared before that `init`** (`GalleryModel.queuedNow`): a
   model's scope runs on `Dispatchers.Default`, so the collector can run before a field declared below the block is set —
   the bridge's tests caught it as an NPE in a background thread and a gallery that never showed.
+- **A fresh worktree has no `Veyq.xcodeproj`**: it is generated and ignored (`src/mobile/.gitignore`), so `xcodebuild`
+  there finds no project. Run `xcodegen` in `apple/` first.
+- **Driving the search on Android** (2026-11-18): `uiautomator events` holds the accessibility service, so a `uiautomator
+  dump` beside it fails — end it first. What TalkBack speaks is read from its verbose log (its developer settings' log
+  output level at verbose): `adb logcat -s talkback`, the lines `Speaking fragment text="…"` — not from the tree. An `adb shell input swipe` while the keyboard
+  is up types by gesture into the field instead of scrolling: hide the keyboard first (Back).
+- **`gtk_accessible_announce` crashes under Broadway**: the container's test accessibility context (`GtkTestATContext`)
+  jumped to NULL once realized (SIGSEGV, 2026-11-18), so the Linux app announces only through a screen reader's context
+  (AT-SPI, AccessKit). An announcement is proven on X11 with `dbus-monitor` watching for `Object.Announcement`.
+- **Driving the search on Windows** (2026-11-18): `Veyq.Drive` registers for notification events per process, so `listen`
+  and `heard` go in the same `drive` call, the steps that raise the event between them. UIA's `select` on an
+  `AutoSuggestBox` item only highlights it — the box takes no chosen suggestion from it; choose with the keys (Down,
+  Enter). Escape while a lightbox is open closes the lightbox, not the search. `run.py run`'s `ssh -R` outlives the run:
+  end it by its PID (`ps`), never `pkill -f`. The unpackaged app's `%LOCALAPPDATA%\veyq` is shared with every earlier pass
+  (an app ↔ app pass above): back it up, empty it for a clean start, and restore it after.
