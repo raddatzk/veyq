@@ -209,6 +209,70 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
   says so.
 - **Three callers share one listed-tier loop** (decision 3): a rename, a place backfill and a capture-time correction
   conflict only on their own field, by one rule.
+- **The passes, run 2026-11-17/18** against the dev instance (`veyq.localhost:8080`, the store through Vite's
+  `veyq.localhost:8081`), each app and the web editing the same Memory at once. The web: headless system Chrome through the
+  workspace's Playwright, signed in by `?devlogin` (German words), one session kept open for the whole run. The fixture: per
+  platform a Memory made on the web with *I was there* ticked (`P9 Kuration Android`, `… Linux`, `… Windows`), holding two
+  geotagged photos (`photo2.jpg`, `photo3.jpg`) and a clip; banner files `wide.jpg` (1280 × 480) and `square.jpg` (800 ×
+  800). **The instrument for an equal file is the store's own request log** — Garage's, read on the server's side for every
+  platform: `docker logs --since <t0> --until <t1> veyq-garage`, its `PUT /blobs/…` lines counted over each save's window
+  (the method and the path only; a presigned query is never printed). All three Memories were moved to the trash after,
+  and every session a pass opened was signed out (the apps from their Settings, the web from its account menu).
+  - **Participants, both at once (all three platforms):** the app's picker opened on {the maker}; the web added *other*
+    and saved; the app, its picker still open, ticked *link-a69657* and saved → the web, reloaded, lists all three
+    (Android: the people line's dump; Linux `Participants.Save answered Ok(FactsSaved { outcome: Saved })`, `people line:
+    3 listed`; Windows `Participants.Save: Saved`, `people line: 3`) — a peer's addition survives the app's merge
+    (decision 1). **The reverse lost one** (Android, found here, the web's): the web's picker open, the app added
+    *link-de7ab7* and saved; the web then removed *other* and saved → *link-de7ab7* was gone. The web takes `openedWith`
+    from the page's node at the save (`useMemoryParticipants.onPickerSave`: `nodeMetaState(ctx.node())`), which its poll
+    had moved past the peer's write, so the peer's addition counted as the editor's removal. Inbox #952.
+  - **The banner, both at once:** the app's dialog holding a picked `wide.jpg`, the web saved `square.jpg` (1 store PUT),
+    the app's **Save banner** said "Someone else changed the banner meanwhile. Please try again." on every platform
+    (Android's dump, Linux `Banner.Save answered Ok(BannerSaved { outcome: Stale })`, Windows `Banner.Save: Stale` with
+    `#banner-problem`), and the page behind showed the web's banner whole (Linux `banner framed 936 × 516 (16:9)`, Windows
+    `banner framed 16:9: 1375×559 … surround 32×32`, Android 1:1 on the phone). **Found and fixed:** a second **Save**
+    in the same dialog answered Stale again, forever — the dialog stood on the banner it had opened on, where the web's
+    save takes the page's node, which the conflict updated. `GalleryModel.bannerEditor` now follows the peer's banner
+    after a Stale (`BannerEditorTest.afterAPeersChangeIsSaidSaveAgainWritesOverThePeersBanner`, red before: `expected
+    [set:bb…, set:peer…] but was [set:bb…, set:bb…]`); live on Linux and Windows after the fix: Stale, then Save → Done.
+  - **A banner set in the app, shown whole on the web:** the web's `.banner-frame-media` after a reload — `wide.jpg` from
+    each app `1280 × 480` drawn `object-fit: contain` in a 956 × 538 frame (16:9, the blurred surround above and below);
+    the reverse, the web's `square.jpg`, drawn whole by each app as above.
+  - **The equal file's upload count** (store PUTs in the save's window): `wide.jpg` (no gallery twin) **1** on Android,
+    Linux and Windows; the gallery's `clip.mp4` as the banner **0** on all three (its ORIGINAL and PREVIEW shared; the web
+    then draws its 640 × 360 poster); the gallery's `photo2.jpg` **0** on Linux and Windows. On Android **1** at first: the
+    system photo picker hands over its own copy with the location zeroed, whose digest is not the gallery original's, and
+    the banner dialog had never asked for full media access (only the upload does). **Fixed:** the dialog asks once before
+    its first pick, as the upload does; on a fresh install, Allow all, then `photo2.jpg` → **0** PUTs (and 0 with the
+    permissions granted by `pm grant` before the fix, the same cause).
+  - **A capture time, both ways:** corrected in each app (photo3 to 20 June 2025) → the web's lightbox details read
+    "Aufgenommen 20.06.2025, 11:00 · Status Korrigiert"; corrected on the web (photo2 to 24.12.2024 18:30) → Android
+    "Taken Dec 24, 2024 6:30 PM · Status Corrected", Linux "12/24/2024 17:30 · Corrected" (the container's UTC), Windows
+    "Taken: 24.12.2024 18:30 · Status: Corrected"; reset in each app → the web reads 02.06.2025, 10:00 with no status row.
+  - **A person's profile against the web's:** Kevin's — Android 5 rows (before the Linux and Windows Memories existed),
+    Linux 7 (`person's memories: … 7 rows, 1 located`) — in the web's order on `#people/kevin` row for row (Musik-Test,
+    P9 Kuration Android, P9 Kuration Linux, P9 Kuration Windows, Ostsee 2026, Leftovers 926, Rom 2025: newest start day
+    first, undated last by name); *other*'s on Linux and *link-a69657*'s on Windows the web's 1 and 3 rows in the same
+    order. The map: with a place set on the Android Memory on the web (München), the web's profile map 1 marker and each
+    app 1 located Memory (Android's map one pin at München; Linux and Windows `1 located`); *other*'s 0 and "No places yet"
+    on both.
+  - **Offline:** Android (airplane mode) and Linux (the container's forwards to the server killed): the Memory made
+    available offline, a profile open, the server cut — the profile stayed with its rows; the pinned Memory opened from
+    it with "Offline — content as of …", **its banner drawn** (Android's photo at 1:1; Linux's video poster at 16:9,
+    played from the kept original, `medium at 5 s of 8 s`) and **no participants line** (decision 7); an unpinned Memory
+    "Not available offline", no line either.
+  - **Found and fixed besides:** Android held a person's profile section across opens, so the same person's profile
+    reopened on the Map with its first read's rows (decision 13: the choice is not stored); `AppModel.openPerson` now drops
+    it, as Apple's and the bridge's never held one — reopened, it starts on the list (Android has no unit-test harness
+    for `AppModel`; the live repro before and after is the proof).
+  - **Seen, not fixed:** an app's open Memory does not follow a peer's change of its meta — participants, date, place,
+    banner — until its tree is read anew (the desktops' Refresh, a tenant switch, a new start); on a phone there is no
+    refresh at all. The profile's rows carry the same staleness (the date range the web reconciled showed in the apps only
+    after a re-read). The media list does follow (the poll), so a corrected time arrived on its own. Inbox #953.
+  - **Not run.** **Apple** (iOS, macOS): the Mac's screen is the owner's and no iOS simulator boots here — the owner's
+    pass, with phase 7's click list. **Windows offline**: the VM reaches the backend through a standing ssh tunnel a pass
+    may not stop; offline is the core's code Linux ran. Android's participants list re-read after the reverse write was
+    done by a tenant switch, the phone having no refresh (#953).
 - **Not decided here:** the date and place of the creation dialog (inbox #940); the participants offline (#948); one's
   own profile editing and the safety numbers in the apps (#949); tiles (#950); a guest's view of a received link (#435);
   a capture-time shift over several media (not built on the web either,
