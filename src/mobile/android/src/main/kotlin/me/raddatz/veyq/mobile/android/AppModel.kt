@@ -152,9 +152,13 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** The section the Settings page scrolls to once (a settings result's, `SettingsSection.id`); null: its top. */
     val settingsAt: StateFlow<String?> = _settingsAt.asStateFlow()
 
+    /** The last settings result the page was opened for (core's `SearchShown.openSettingsCount`, counted per model). */
+    private var settingsOpenedCount = 0
+
     private fun closeSearch() {
         _searchModel.value?.dispose()
         _searchModel.value = null
+        settingsOpenedCount = 0
     }
 
     private val _screen = MutableStateFlow<Screen>(Screen.Starting)
@@ -1870,13 +1874,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * A settings result was opened (core's `SearchShown.openSettings`): the Settings page opens scrolled to [section]; the
-     * search is told it was seen (its next action clears it), so the same result opens it again.
+     * Core's state after a settings result was chosen (`SearchShown.openSettings`, `openSettingsCount`): the Settings page
+     * opens scrolled to its section once per choice — the same result chosen twice opens it twice, and Search drawn again
+     * after the page (the same state) opens nothing.
      */
-    fun openSettingsFromSearch(section: String) {
+    fun openSettingsFromSearch(section: String?, count: Int) {
+        if (section == null || count <= settingsOpenedCount) return
+        settingsOpenedCount = count
         _settingsAt.value = section
         openSettings()
-        _searchModel.value?.let { it.text(it.current.text) }
     }
 
     /** The page scrolled to [settingsAt]. */

@@ -96,7 +96,7 @@ internal fun SearchScreen(model: AppModel, onClose: () -> Unit) {
     // a chip chosen keeps only the rest of the text (core's): the field follows the model there, never while typing
     LaunchedEffect(shown.chips) { if (query != shown.text) query = shown.text }
     // a settings result: the Settings page, at its section
-    LaunchedEffect(shown.openSettings) { shown.openSettings?.let(model::openSettingsFromSearch) }
+    LaunchedEffect(shown.openSettingsCount) { model.openSettingsFromSearch(shown.openSettings, shown.openSettingsCount) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(search) { runCatching { focus.requestFocus() } }
     val keyboard = LocalSoftwareKeyboardController.current
