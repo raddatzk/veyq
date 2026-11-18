@@ -35,7 +35,7 @@ class MusicUploadTest {
         val d = Durations()
         val types = listOf(
             picked(m4a(), "a.m4a", "video/mp4"), picked(id3Mp3(), "b.mp3"), picked(frameMp3(), "c.mp3", "audio/mp3"), picked(wav(), "d.wav", "audio/x-wav"),
-        ).map { (MusicUpload.check(it, d::of) as MusicUpload.Check.Taken).type }
+        ).map { (MusicUpload.check(it, durationOf = d::of) as MusicUpload.Check.Taken).type }
         assertEquals(listOf("audio/mp4", "audio/mpeg", "audio/mpeg", "audio/wav"), types, "an M4A is sealed audio/mp4, never the video/mp4 claimed")
         assertEquals(types, d.asked, "the platform is asked for the length of the type the bytes name")
     }
@@ -54,19 +54,19 @@ class MusicUploadTest {
         var reads = 0
         val big = UploadSource.of("big.wav", MusicUpload.MAX_BYTES + 1, null, null) { _, _ -> reads++; wav() }
         val d = Durations()
-        val refused = assertIs<MusicUpload.Check.Refused>(MusicUpload.check(big, d::of))
+        val refused = assertIs<MusicUpload.Check.Refused>(MusicUpload.check(big, durationOf = d::of))
         assertEquals(MusicUpload.Problem.TOO_LARGE, refused.problem)
         assertEquals(Notice(Msg.MUSIC_TOO_LARGE, "big.wav"), refused.notice)
         assertEquals(0 to 0, reads to d.asked.size)
         val atCap = UploadSource.of("cap.wav", MusicUpload.MAX_BYTES, null, null) { _, n -> wav().copyOf(minOf(n, 64)) }
-        assertEquals("audio/wav", (MusicUpload.check(atCap, d::of) as MusicUpload.Check.Taken).type, "200 MiB itself is taken")
+        assertEquals("audio/wav", (MusicUpload.check(atCap, durationOf = d::of) as MusicUpload.Check.Taken).type, "200 MiB itself is taken")
     }
 
     @Test
     fun refusesWhatIsNoAudioByItsBytesWithoutMeasuringIt() = runTest {
         val d = Durations()
         for (f in listOf(picked(jpeg(), "p.jpg"), picked(mp4Video(), "v.mp4"), picked(jpeg(), "fake.mp3", "audio/mpeg"), picked(ByteArray(0), "empty.mp3"))) {
-            assertEquals(MusicUpload.Problem.NOT_AUDIO, (MusicUpload.check(f, d::of) as MusicUpload.Check.Refused).problem, f.name)
+            assertEquals(MusicUpload.Problem.NOT_AUDIO, (MusicUpload.check(f, durationOf = d::of) as MusicUpload.Check.Refused).problem, f.name)
         }
         assertTrue(d.asked.isEmpty())
     }
@@ -74,7 +74,7 @@ class MusicUploadTest {
     @Test
     fun refusesAFileWhoseLengthThePlatformCannotRead() = runTest {
         for (d in listOf(Durations(null), Durations(0))) {
-            assertEquals(MusicUpload.Problem.UNPLAYABLE, (MusicUpload.check(picked(id3Mp3(), "b.mp3"), d::of) as MusicUpload.Check.Refused).problem)
+            assertEquals(MusicUpload.Problem.UNPLAYABLE, (MusicUpload.check(picked(id3Mp3(), "b.mp3"), durationOf = d::of) as MusicUpload.Check.Refused).problem)
         }
         val threw = MusicUpload.check(picked(id3Mp3(), "b.mp3")) { throw IllegalStateException("no player") }
         assertEquals(Notice(Msg.MUSIC_UNPLAYABLE, "b.mp3"), (threw as MusicUpload.Check.Refused).notice)

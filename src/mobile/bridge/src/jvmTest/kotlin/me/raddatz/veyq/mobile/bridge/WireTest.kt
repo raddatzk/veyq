@@ -91,7 +91,7 @@ class WireTest {
 
     /** Each root's values: every variant of a sealed root once. */
     private val samples: Map<KSerializer<*>, List<Any>> = mapOf(
-        Config.serializer() to listOf(Config("Fedora 44", 0, ""), Config("WIN-VM", 0x2051C, "veyq wants to open your account", "C:\\Users\\p\\AppData\\Local\\veyq\\offline"), Config("Fedora 44", 0, "", "/home/p/.local/share/veyq/offline"), Config("Fedora 44", 0, "", null, "de")),
+        Config.serializer() to listOf(Config("Fedora 44", 0, ""), Config("WIN-VM", 0x2051C, "veyq wants to open your account", "C:\\Users\\p\\AppData\\Local\\veyq\\offline"), Config("Fedora 44", 0, "", "/home/p/.local/share/veyq/offline"), Config("Fedora 44", 0, "", null, "de"), Config("Fedora 44", 0, "", null, "en", netLog = true)),
         Call.serializer() to listOf(
             Call.SessionStart, Call.SessionSignIn("veyq.localhost:8080", "p@example.org", "typed", "A3-TYPED"),
             Call.SessionStaySignedIn(StaySignedIn.PRESENCE), Call.SessionStaySignedIn(StaySignedIn.LOGIN), Call.SessionNotNow,
@@ -207,7 +207,7 @@ class WireTest {
             Watched.Map(100), Watched.MapServices, Watched.Date(101), Watched.Place(102), Watched.Tracks(103),
             Watched.Participants(110), Watched.CaptureTime(111), Watched.Banner(112), Watched.Person(113)),
         HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full"), HostReply.Pixels(2400, 3394),
-            HostReply.Tiers(2048, 1536, 412_000), HostReply.Tiers(null, null, 0)),
+            HostReply.Tiers(2048, 1536, 412_000), HostReply.Tiers(null, null, 0), HostReply.Wav),
         Answer.serializer() to listOf(
             Answer.Done, Answer.Refused(Answer.Why.NO_TENANT_OPEN), Answer.Refused(Answer.Why.TRUST_CANCELLED), Answer.Failed("IllegalStateException"),
             Answer.Groups(listOf(Home.Group(true, lists.nodes.take(1), Msg.HOME_GROUP_FOLDERS), Home.Group(false, lists.nodes.drop(1), null))),
@@ -532,13 +532,14 @@ class WireTest {
         ),
         HostRequest.serializer() to listOf(HostRequest.StoreRead("veyq.recent"), HostRequest.StoreWrite("veyq.recent", "s\tn\t1"), HostRequest.StoreRemove("veyq.recent"),
             HostRequest.PdfPages("/home/p/Notfall-Kit.pdf"), HostRequest.PdfPage("/home/p/Notfall-Kit.pdf", 2, 2400), HostRequest.PictureLuma("/home/p/kit.jpg", 2400),
-            HostRequest.MediaDuration("/home/p/Videos/clip.webm"),
+            HostRequest.MediaDuration("/home/p/Videos/clip.webm"), HostRequest.MediaSlice("/home/p/Music/a.mp3", 0, 30_000), HostRequest.MediaSlice("/home/p/Music/a.mp3", 150_000, null),
             HostRequest.MediaTiers("C:\\Users\\p\\Bilder\\IMG_0001.HEIC", "image/heic", 2048, 0.85, 512, 0.8, 0),
             HostRequest.MediaTiers("/home/p/Videos/clip.webm", "video/webm", 2048, 0.85, 512, 0.8, 100),
             HostRequest.AudioLoad(90, 3, 95, 4_812_331, "audio/mpeg"), HostRequest.AudioPlay(90), HostRequest.AudioPause(90), HostRequest.AudioSeek(90, 12_000),
             HostRequest.AudioPosition(91), HostRequest.AudioRamp(91, 1.0, 5000), HostRequest.AudioRamp(90, 0.0, 0), HostRequest.AudioClear(90),
             HostRequest.ControlsBind, HostRequest.ControlsShow(nowPlaying), HostRequest.ControlsShow(NowPlayingShown("t2", "Track 2", null, null, false, 0, 0)),
-            HostRequest.ControlsClear, HostRequest.WordsSay(Notice(Msg.MUSIC_UNTITLED, listOf(3)))),
+            HostRequest.ControlsClear, HostRequest.WordsSay(Notice(Msg.MUSIC_UNTITLED, listOf(3))),
+            HostRequest.NetLogLine("GET https://tile.openstreetmap.org/12/2200/1343.png ua=[veyq/1] referer=no cookie=no authorization=no -> 200")),
     )
 
     /**

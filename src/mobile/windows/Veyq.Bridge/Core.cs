@@ -68,6 +68,12 @@ public static unsafe class Core
     public static Func<HostRequest, Task<HostReply>>? Player { get; set; }
 
     /// <summary>
+    /// Where a debug build's request log goes (<c>Net.Log</c>, inbox #947): the core sends a line only where the host's
+    /// <see cref="Config"/> asked for it, and none reaches a release build.
+    /// </summary>
+    public static Action<string>? NetLogged { get; set; }
+
+    /// <summary>
     /// Starts the core once per process with <paramref name="store"/> as the device's store, which the core reads from its own
     /// threads until the process ends.
     /// </summary>
@@ -212,7 +218,13 @@ public static unsafe class Core
         {
             var store = (DeviceStore)GCHandle.FromIntPtr((nint)ctx).Target!;
             var request = JsonSerializer.Deserialize(Copy(json), WireContext.Default.HostRequest) ?? throw new JsonException("null");
-            if (request is HostRequest.PdfPages or HostRequest.PdfPage or HostRequest.PictureLuma or HostRequest.MediaDuration or HostRequest.MediaTiers
+            if (request is HostRequest.NetLog logged)
+            {
+                NetLogged?.Invoke(logged.line);
+                Reply(token, new HostReply.Done(), null);
+                return;
+            }
+            if (request is HostRequest.PdfPages or HostRequest.PdfPage or HostRequest.PictureLuma or HostRequest.MediaDuration or HostRequest.MediaSlice or HostRequest.MediaTiers
                 or HostRequest.WordsSay)
             {
                 Draw(token, request);

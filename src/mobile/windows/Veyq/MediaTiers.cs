@@ -19,6 +19,8 @@ using System.Threading.Tasks;
 using Veyq.Bridge.Wire;
 using Windows.Graphics.Imaging;
 using Windows.Media.Editing;
+using Windows.Media.MediaProperties;
+using Windows.Media.Transcoding;
 using Windows.Storage;
 using Windows.Storage.Streams;
 
@@ -32,14 +34,62 @@ internal static class MediaTiers
     /// <summary>A medium's tiers: its upright size, and the two JPEGs.</summary>
     public sealed record Tiers(int Width, int Height, byte[] Preview, byte[] Thumbnail);
 
-    /// <summary>The reply to the core's Media.Duration and Media.Tiers with the tiers as its payload; null for every other
-    /// request.</summary>
+    /// <summary>The reply to the core's Media.Duration, Media.Slice and Media.Tiers with a slice's WAV or the tiers as its
+    /// payload; null for every other request.</summary>
     public static Task<(HostReply Reply, byte[]? Payload)>? Answer(HostRequest request) => request switch
     {
         HostRequest.MediaDuration r => Duration(r.path),
+        HostRequest.MediaSlice r => Slice(r),
         HostRequest.MediaTiers r => Answered(r),
         _ => null,
     };
+
+    private static async Task<(HostReply, byte[]?)> Slice(HostRequest.MediaSlice r)
+    {
+        try
+        {
+            var wav = await SliceAsync(r.path, r.fromMs, r.toMs);
+            Log.Write($"media slice: {wav.Length} B");
+            return (new HostReply.Wav(), wav);
+        }
+        catch (Exception e)
+        {
+            // never the path or anything of the file: the kind of failure alone
+            Log.Write($"media slice: none ({e.GetType().Name} {e.HResult:X8})");
+            return (new HostReply.Failed { error = "not decoded" }, null);
+        }
+    }
+
+    /// <summary>
+    /// The audio of the file at <paramref name="path"/> from <paramref name="fromMs"/> up to <paramref name="toMs"/> (null:
+    /// its end), decoded by Media Foundation through Windows.Media.Transcoding into a 16-bit PCM WAV in memory, at the
+    /// source's own rate and channels, for the core's silence scan (inbox #932, Media.Slice): the transcoder trims to the
+    /// slice, so only it is decoded, never the whole file, and nothing is written to disk.
+    /// </summary>
+    public static async Task<byte[]> SliceAsync(string path, long fromMs, long? toMs)
+    {
+        var file = await StorageFile.GetFileFromPathAsync(Path.GetFullPath(path));
+        var lengthMs = await DurationMsAsync(path) ?? throw new InvalidDataException("no length");
+        var source = (await MediaEncodingProfile.CreateFromFileAsync(file)).Audio;
+        var profile = MediaEncodingProfile.CreateWav(AudioEncodingQuality.High);
+        profile.Audio = AudioEncodingProperties.CreatePcm(
+            source?.SampleRate is > 0 and var rate ? rate : 44100, source?.ChannelCount is > 0 and var channels ? channels : 2, 16);
+        var transcoder = new MediaTranscoder
+        {
+            // TrimStopTime is what is cut from the end, not where the slice stops
+            TrimStartTime = TimeSpan.FromMilliseconds(Math.Max(0, fromMs)),
+            TrimStopTime = TimeSpan.FromMilliseconds(toMs is { } to ? Math.Max(0, lengthMs - to) : 0),
+        };
+        using var input = await file.OpenReadAsync();
+        using var output = new InMemoryRandomAccessStream();
+        var prepared = await transcoder.PrepareStreamTranscodeAsync(input, output, profile);
+        if (!prepared.CanTranscode) throw new InvalidDataException($"not transcoded: {prepared.FailureReason}");
+        await prepared.TranscodeAsync();
+        var bytes = new byte[output.Size];
+        output.Seek(0);
+        await output.ReadAsync(bytes.AsBuffer(), (uint)bytes.Length, InputStreamOptions.None);
+        return bytes;
+    }
 
     private static async Task<(HostReply, byte[]?)> Duration(string path)
     {

@@ -68,7 +68,14 @@ public sealed partial class MainWindow : Window
             {
                 Log.Write($"the data folder did not open ({e.GetType().Name}); nothing is kept offline");
             }
-            started = Core.Start(new Config { device = Environment.MachineName, window = hwnd, prompt = Words.DeviceUnlockPrompt(), offlineRoot = offline, language = Words.Language() }, store);
+            // a debug build logs every request to an outside host into log.txt (inbox #947, Android's `veyq-net`); a release
+            // build asks the core for none
+            var netLog = false;
+#if DEBUG
+            netLog = true;
+            Core.NetLogged = line => Log.Write($"veyq-net {line}");
+#endif
+            started = Core.Start(new Config { device = Environment.MachineName, window = hwnd, prompt = Words.DeviceUnlockPrompt(), offlineRoot = offline, language = Words.Language(), netLog = netLog }, store);
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {

@@ -47,7 +47,8 @@ pub struct Tiers {
     pub thumbnail: Vec<u8>,
 }
 
-/// The reply to the core's `Media.Duration` and `Media.Tiers`, with the tiers as its payload; None for every other request.
+/// The reply to the core's `Media.Duration`, `Media.Slice` and `Media.Tiers`, with a slice's WAV or the tiers as its
+/// payload; None for every other request.
 pub fn answer(request: &HostRequest) -> Option<(HostReply, Option<Vec<u8>>)> {
     match request {
         HostRequest::MediaDuration { path } => {
@@ -55,6 +56,16 @@ pub fn answer(request: &HostRequest) -> Option<(HostReply, Option<Vec<u8>>)> {
             eprintln!("veyq: media duration: {}", ms.map_or_else(|| "unknown".to_owned(), |ms| format!("{ms} ms")));
             Some((HostReply::Value { value: ms.map(|ms| ms.to_string()) }, None))
         }
+        HostRequest::MediaSlice { path, from_ms, to_ms } => Some(match audio_slice(path, *from_ms, *to_ms) {
+            Ok(wav) => {
+                eprintln!("veyq: media slice: {} B", wav.len());
+                (HostReply::Wav, Some(wav))
+            }
+            Err(e) => {
+                eprintln!("veyq: media slice: none ({e})");
+                (HostReply::Failed { error: "not decoded".into() }, None)
+            }
+        }),
         HostRequest::MediaTiers { path, media_type, preview_edge, preview_quality, thumbnail_edge, thumbnail_quality, poster_at_ms } => {
             let spec = Spec {
                 preview_edge: *preview_edge,
@@ -219,6 +230,87 @@ fn poster(path: &str, at_ms: i64) -> Result<Pixbuf, String> {
     })();
     let _ = pipeline.set_state(gst::State::Null);
     frame
+}
+
+/// No slice is read past this many PCM bytes: 30 s of 8 channels at 192 kHz in 16 bit is 88 MiB; a cap, not a size.
+const SLICE_CAP: usize = 96 * 1024 * 1024;
+
+/// The audio of the file at [path] from [from_ms] up to [to_ms] (None: its end), decoded by GStreamer to 16-bit PCM and
+/// wrapped as a WAV for the core's silence scan (inbox #932): `playbin` with its sound only into an `appsink` that does not
+/// wait for the clock, seeked to the slice — only the slice is decoded, never the whole file.
+pub fn audio_slice(path: &str, from_ms: i64, to_ms: Option<i64>) -> Result<Vec<u8>, String> {
+    gst::init().map_err(|e| format!("GStreamer did not start: {e}"))?;
+    let uri = glib::filename_to_uri(path, None).map_err(|e| format!("no URI for the file: {e}"))?;
+    let pcm = gst::parse::bin_from_description(
+        "audioconvert ! audio/x-raw,format=S16LE,layout=interleaved ! appsink name=pcm sync=false",
+        true,
+    )
+    .map_err(|e| format!("no sink: {e}"))?;
+    let sink = pcm.by_name("pcm").and_then(|e| e.downcast::<gst_app::AppSink>().ok()).ok_or("no sink")?;
+    let pipeline = gst::ElementFactory::make("playbin")
+        .property("uri", uri.as_str())
+        .property("audio-sink", &pcm)
+        .build()
+        .map_err(|e| format!("no playbin: {e}"))?
+        .downcast::<gst::Pipeline>()
+        .map_err(|_| "no pipeline")?;
+    pipeline.set_property_from_str("flags", "audio");
+    let result = (|| {
+        pipeline.set_state(gst::State::Paused).map_err(|_| "the audio did not open")?;
+        settle(&pipeline)?;
+        let from = gst::ClockTime::from_mseconds(from_ms.max(0) as u64);
+        let (stop_type, stop) = match to_ms {
+            Some(ms) => (gst::SeekType::Set, gst::ClockTime::from_mseconds(ms.max(0) as u64)),
+            None => (gst::SeekType::None, gst::ClockTime::ZERO),
+        };
+        pipeline
+            .seek(1.0, gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE, gst::SeekType::Set, from, stop_type, stop)
+            .map_err(|_| "the slice did not seek")?;
+        settle(&pipeline)?;
+        pipeline.set_state(gst::State::Playing).map_err(|_| "the audio did not play")?;
+        let (mut rate, mut channels) = (0i32, 0i32);
+        let mut bytes: Vec<u8> = Vec::new();
+        while let Some(sample) = sink.try_pull_sample(gst::ClockTime::from_seconds(SETTLE.as_secs())) {
+            if rate == 0 {
+                let s = sample.caps().and_then(|c| c.structure(0)).ok_or("no caps")?;
+                rate = s.get::<i32>("rate").map_err(|_| "no rate")?;
+                channels = s.get::<i32>("channels").map_err(|_| "no channels")?;
+            }
+            let buffer = sample.buffer().ok_or("no buffer")?;
+            let map = buffer.map_readable().map_err(|_| "an unreadable buffer")?;
+            bytes.extend_from_slice(map.as_slice());
+            if bytes.len() > SLICE_CAP {
+                return Err("the slice is too large".to_owned());
+            }
+        }
+        if rate <= 0 || channels <= 0 {
+            return Err("no audio decoded".to_owned());
+        }
+        Ok(wav(&bytes, channels as u16, rate as u32))
+    })();
+    let _ = pipeline.set_state(gst::State::Null);
+    result
+}
+
+/// Interleaved 16-bit PCM wrapped as a WAV file (the core's `PcmWav`, for a decoded slice).
+pub fn wav(pcm: &[u8], channels: u16, rate: u32) -> Vec<u8> {
+    let block = u32::from(channels) * 2;
+    let data = (pcm.len() as u32) - (pcm.len() as u32) % block;
+    let mut out = Vec::with_capacity(44 + data as usize);
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&(36 + data).to_le_bytes());
+    out.extend_from_slice(b"WAVEfmt ");
+    out.extend_from_slice(&16u32.to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes());
+    out.extend_from_slice(&channels.to_le_bytes());
+    out.extend_from_slice(&rate.to_le_bytes());
+    out.extend_from_slice(&(rate * block).to_le_bytes());
+    out.extend_from_slice(&(block as u16).to_le_bytes());
+    out.extend_from_slice(&16u16.to_le_bytes());
+    out.extend_from_slice(b"data");
+    out.extend_from_slice(&data.to_le_bytes());
+    out.extend_from_slice(&pcm[..data as usize]);
+    out
 }
 
 #[cfg(test)]
@@ -424,5 +516,31 @@ mod tests {
         let payload = payload.unwrap();
         let (preview, thumbnail) = payload.split_at(preview_size as usize);
         assert_eq!((decoded(preview).width(), decoded(thumbnail).width()), (1200, 512));
+    }
+
+    /// A slice is decoded to its own span only (inbox #932): 3 s of a WAV (silence, a tone, silence), its head and its tail.
+    #[test]
+    fn a_slice_of_audio_is_decoded_to_its_span_as_a_wav() {
+        let rate = 8000u32;
+        let samples: Vec<u8> = (0..3 * rate)
+            .flat_map(|i| {
+                let v: i16 = if (rate..2 * rate).contains(&i) { 16000 } else { 0 };
+                v.to_le_bytes()
+            })
+            .collect();
+        let file = made("slice.wav", &wav(&samples, 1, rate));
+        let head = audio_slice(file.path(), 0, Some(1500)).expect("the head decodes");
+        let tail = audio_slice(file.path(), 2000, None).expect("the tail decodes");
+        let seconds = |w: &[u8]| {
+            let rate = u32::from_le_bytes(w[24..28].try_into().unwrap());
+            let block = u16::from_le_bytes(w[32..34].try_into().unwrap());
+            (w.len() - 44) as f64 / f64::from(block) / f64::from(rate)
+        };
+        assert!((seconds(&head) - 1.5).abs() < 0.1, "the head is {} s", seconds(&head));
+        assert!((seconds(&tail) - 1.0).abs() < 0.1, "the tail is {} s", seconds(&tail));
+        let junk = made("junk.mp3", b"not audio at all");
+        assert!(audio_slice(junk.path(), 0, Some(1000)).is_err());
+        let (reply, payload) = answer(&HostRequest::MediaSlice { path: junk.path().into(), from_ms: 0, to_ms: None }).unwrap();
+        assert_eq!((reply, payload), (HostReply::Failed { error: "not decoded".into() }, None));
     }
 }

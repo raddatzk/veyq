@@ -20,8 +20,10 @@ class Decoded(val channels: List<FloatArray>, val sampleRate: Int) {
  * its file's length and the span between the silence at its start and at its end — what plays, what the progress spans and
  * where the crossfades sit —, integers of milliseconds, sealed into its listed tier at its upload and never written after.
  *
- * The apps find the trim of a WAV only ([measure]: its PCM read at both ends); every decoded format is sealed untrimmed
- * ([untrimmed]) — inbox #932. A raw ADTS file's length is counted from its frames ([Frames.adtsDurationMs]), as on the web.
+ * The apps find the trim of a WAV from its PCM read at both ends ([measure]), and of a decoded format from its two ends as
+ * the platform decodes them (inbox #932: MediaCodec, AVAudioFile, Media Foundation, GStreamer) — never the whole file; where
+ * the platform decodes nothing, the track is sealed untrimmed ([untrimmed]). A raw ADTS file's length is counted from its
+ * frames ([Frames.adtsDurationMs]), as on the web.
  */
 data class AudioFacts(val durationMs: Long, val trimStartMs: Long, val trimEndMs: Long) {
     companion object {
@@ -83,14 +85,32 @@ data class AudioFacts(val durationMs: Long, val trimStartMs: Long, val trimEndMs
         /**
          * A picked file's facts, its container [type] named by its bytes and its length [durationMs] read by the platform's
          * player (ADR 0142 decision 7): a raw ADTS file's length counted from its frames instead (where they count), a
-         * WAV's trim from its PCM; every other container untrimmed. A failed read of the trim is no trim, never a refusal.
+         * WAV's trim from its PCM, every other container's from its first and last [SCAN_LIMIT_MS] as the platform
+         * [decodeEnds] them (each a WAV file's bytes; null: it decodes nothing, and the file is sealed untrimmed). A failed
+         * read of the trim is no trim, never a refusal.
          */
-        suspend fun measure(file: ByteSource, type: String, durationMs: Long): AudioFacts {
+        suspend fun measure(
+            file: ByteSource, type: String, durationMs: Long,
+            decodeEnds: (suspend (limitMs: Long) -> Pair<ByteArray, ByteArray>?)? = null,
+        ): AudioFacts {
             val length = if (type == "audio/aac") runCatching { Frames.adtsDurationMs(file) }.getOrNull() ?: durationMs else durationMs
-            if (type != "audio/wav") return untrimmed(length)
-            val ends = runCatching { Wav.readEnds(file, SCAN_LIMIT_MS) }.getOrNull() ?: return untrimmed(length)
+            val ends: Pair<Decoded, Decoded> = (if (type == "audio/wav") runCatching { Wav.readEnds(file, SCAN_LIMIT_MS) }.getOrNull() else decodedEnds(decodeEnds))
+                ?: return untrimmed(length)
             return fromSilence(length, leadingSilenceMs(ends.first), trailingSilenceMs(ends.second))
         }
+
+        /** The ends [decodeEnds] hands (head, tail), each read as [Wav] reads a file; null where it hands none or they do not read. */
+        private suspend fun decodedEnds(decodeEnds: (suspend (limitMs: Long) -> Pair<ByteArray, ByteArray>?)?): Pair<Decoded, Decoded>? = try {
+            decodeEnds?.invoke(SCAN_LIMIT_MS)?.let { (head, tail) -> decoded(head).first to decoded(tail).second }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+
+        /** A decoded end the platform handed as a WAV file's bytes, read as [Wav] reads a file (the whole of a short one). */
+        private suspend fun decoded(wav: ByteArray): Pair<Decoded, Decoded> =
+            Wav.readEnds(ByteSource(wav.size.toLong()) { from, length -> wav.copyOfRange(from.toInt(), minOf(wav.size, from.toInt() + length)) }, SCAN_LIMIT_MS)
 
         /**
          * A sealed tier's facts (the web's `audioFactsFrom`): all three non-negative integers, start < end ≤ duration; else

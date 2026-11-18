@@ -104,6 +104,27 @@ class AudioFactsTest {
         }
     }
 
+    // #932, bite: `measure` ignoring the platform's decoded ends → every decoded format untrimmed, red here
+    @Test
+    fun aDecodedFormatIsTrimmedFromTheTwoEndsThePlatformDecodedNeverFromTheWholeFile() = runTest {
+        val long = 10 * 60_000L
+        val asked = mutableListOf<Long>()
+        for (type in listOf("audio/mpeg", "audio/mp4", "audio/flac", "audio/ogg")) {
+            val file = AudioFiles.Counted(AudioFiles.mp3Stream(10 * AudioFiles.MP3_FRAME))
+            // the head: 2 s of silence before the tone; the tail: the tone, then 3 s of silence (each end 30 s, 16-bit, stereo)
+            val head = AudioFiles.wavBytes(Spec(16, 2, 8000, listOf(2.0 to 0.0, 28.0 to 0.5)))
+            val tail = AudioFiles.wavBytes(Spec(32, 2, 8000, listOf(27.0 to 0.5, 3.0 to 0.0), float = true))
+            val facts = AudioFacts.measure(file.source, type, long) { limit -> asked += limit; head to tail }
+            assertEquals(AudioFacts(long, 2000, long - 3000), facts, type)
+            assertTrue(file.reads.isEmpty(), "$type: the file itself was read")
+        }
+        assertEquals(List(4) { AudioFacts.SCAN_LIMIT_MS }, asked, "each end is the scan's limit")
+        // a platform that decodes nothing, or hands what is no WAV: untrimmed, never a refusal
+        val file = AudioFiles.source(AudioFiles.mp3Stream(10 * AudioFiles.MP3_FRAME))
+        assertEquals(AudioFacts.untrimmed(long), AudioFacts.measure(file, "audio/mpeg", long) { null })
+        assertEquals(AudioFacts.untrimmed(long), AudioFacts.measure(file, "audio/mpeg", long) { ByteArray(3) to ByteArray(3) })
+    }
+
     @Test
     fun anAdtsFilesLengthIsCountedFromItsFramesNotTakenFromThePlatformsEstimate() = runTest {
         val adts = AudioFiles.adtsStream(1000)

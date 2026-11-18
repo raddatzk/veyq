@@ -141,6 +141,7 @@ class MusicDispatchTest {
                 override val sizeBytes get() = track.source.size
                 override suspend fun run(progress: (Double) -> Unit) {
                     sent += "upload:${track.source.name}:${track.type}:${track.facts.durationMs}"
+                    sent += "trim:${track.source.name}:${track.facts.trimStartMs}-${track.facts.trimEndMs}"
                 }
             }
             override fun changed() {}
@@ -149,7 +150,10 @@ class MusicDispatchTest {
 
         /** The Music view's door as the shell's, its length measured by the host's measure. */
         fun musicDoor(measure: MusicUpload.Measure, uploads: MediaUploads, node: NodeAt) = object : MusicModel.Door {
-            override suspend fun check(source: UploadSource) = MusicUpload.check(source) { type ->
+            override suspend fun check(source: UploadSource) = MusicUpload.check(
+                source,
+                endsOf = { type, durationMs, limitMs -> suspendCancellableCoroutine { c -> measure.ends(source, type, durationMs, limitMs) { e -> c.resume(e) } } },
+            ) { type ->
                 suspendCancellableCoroutine { c -> measure.durationMs(source, type) { ms -> c.resume(ms) } }
             }
             override fun queue(tracks: List<MusicUpload.Check.Taken>) = uploads.uploadMusic(node.scopeId, node.nodeId, node.name, tracks)
@@ -185,10 +189,22 @@ class MusicDispatchTest {
                     is HostRequest.AudioPosition -> HostReply.Value("0")
                     is HostRequest.WordsSay -> HostReply.Value("Track ${request.words.args.single()}")
                     is HostRequest.MediaDuration -> if (request.path.endsWith(".mp3")) HostReply.Value("7000") else HostReply.Failed("not read")
+                    // a picked `.mp3` decodes to 1 s of silence, 5 s of tone, 1 s of silence (#932): each slice asked, a WAV
+                    is HostRequest.MediaSlice -> if (request.path.endsWith(".mp3")) HostReply.Wav else HostReply.Failed("not decoded")
                     else -> HostReply.Done
                 }
-                host.reply(token, wire.encodeToString(HostReply.serializer(), reply))
+                val payload = (request as? HostRequest.MediaSlice)?.takeIf { reply == HostReply.Wav }?.let { slice(it.fromMs, it.toMs) }
+                host.reply(token, wire.encodeToString(HostReply.serializer(), reply), payload)
             }
+        }
+
+        /** The played track's audio from [fromMs] to [toMs] (null: its end) as 8 kHz mono 16-bit WAV: 1 s silent, 5 s loud, 1 s silent. */
+        fun slice(fromMs: Long, toMs: Long?): ByteArray {
+            val rate = 8
+            val samples = (fromMs * rate until (toMs ?: 7000L) * rate).map { i -> if (i in 1000 * rate until 6000 * rate) 16000 else 0 }
+            val pcm = ByteArray(samples.size * 2)
+            samples.forEachIndexed { i, v -> pcm[2 * i] = v.toByte(); pcm[2 * i + 1] = (v shr 8).toByte() }
+            return me.raddatz.veyq.mobile.memories.music.PcmWav.of(pcm, 1, rate * 1000, 16)
         }
 
         inline fun <reified R : HostRequest> all(): List<R> = synchronized(asked) { asked.filterIsInstance<R>() }
@@ -356,6 +372,9 @@ class MusicDispatchTest {
         assertEquals(listOf(Notice(Msg.MUSIC_NOT_AUDIO, "notes.mp3")), added.said)
         assertEquals(listOf(song.path), host.all<HostRequest.MediaDuration>().map { it.path }, "the host measured what the core asked")
         withTimeout(10.seconds) { while ("upload:Song.mp3:audio/mpeg:7000" !in played.sent) delay(10) }
+        // #932: its silent edges found from the two slices the host decoded, never the whole file
+        assertTrue("trim:Song.mp3:1000-6000" in played.sent, "the decoded ends were not scanned: ${played.sent}")
+        assertEquals(listOf(0L to 7000L, 0L to null), host.all<HostRequest.MediaSlice>().map { it.fromMs to it.toMs }, "the slices asked")
 
         // rename, report, download, remove
         assertEquals(Answer.Said(null), b.ask(Call.MusicRename(m, "a", "Lisboa")))

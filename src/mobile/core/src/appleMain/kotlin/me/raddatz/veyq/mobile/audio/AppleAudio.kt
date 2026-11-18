@@ -75,6 +75,13 @@ object AppleAudio {
      * A reader over [data] held in memory, cut into the frames a sealed blob has (debug only: the format matrix runs the
      * deck over the same reader a track is played through, without a server).
      */
+    /**
+     * A decoded end of a picked track ([pcm]: interleaved 32-bit float, as `AVAudioFile` reads it) as the WAV the core's
+     * silence scan reads (inbox #932, `MusicUpload.Measure.ends`), copied once.
+     */
+    fun floatWav(pcm: NSData, channels: Int, sampleRate: Int): ByteArray =
+        me.raddatz.veyq.mobile.memories.music.PcmWav.of(me.raddatz.veyq.mobile.account.AppleKit.bytes(pcm), channels, sampleRate, 32, float = true)
+
     fun reader(data: NSData): RangeReader {
         val bytes = ByteArray(data.length.toInt())
         if (bytes.isNotEmpty()) bytes.usePinned { memcpy(it.addressOf(0), data.bytes, data.length) }
