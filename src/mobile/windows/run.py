@@ -987,7 +987,12 @@ def run_app(width: int | None, height: int | None, devlogin: bool = False, unloc
         BUILD_APP,
         BUILD_DRIVE,
         "\n".join([
-            f"Get-Process -Name {APP_NAME} -ErrorAction SilentlyContinue | Stop-Process -Force",
+            # Only this directory's app: a parallel pass under another VEYQ_WINDOWS_DIR keeps its own (seen 2026-11-18,
+            # a stop by name ended a neighbour's app mid-pass).
+            # Win32_Process, not Get-Process: its ExecutablePath reads across sessions (the app runs in the owner's).
+            f"Get-CimInstance Win32_Process -Filter \"Name='{APP_NAME}.exe'\" | Where-Object {{ $_.ExecutablePath -and "
+            f"$_.ExecutablePath.StartsWith({ps_quote(str(REMOTE_DIR) + chr(92))}, [StringComparison]::OrdinalIgnoreCase) }} "
+            "| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }",
             "Start-Sleep -Milliseconds 500",
             # A file still held open (an app the stop had not ended yet) survived the remove once, and Copy-Item into the
             # folder left behind then nested the build one level down (`app\win-x64\`): no Veyq.App.exe where the launch
