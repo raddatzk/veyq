@@ -4,7 +4,7 @@
   real iPhone and a signed macOS build, are the owner's ([native-apps](../crosscutting/native-apps.md) § Open)
 - Date: 2026-11-15
 - Model: [native-apps](../crosscutting/native-apps.md)
-- Replaced in part: decision 8's and decision 9's kept originals (a music track's too) by ADR 0142 (built); decision 8's kept originals (a GPX track's too) by ADR 0143 (built); decision 9's kept blobs (a banner's too) by ADR 0144 (not built)
+- Replaced in part: decision 8's and decision 9's kept originals (a music track's too) by ADR 0142 (built); decision 8's kept originals (a GPX track's too) by ADR 0143 (built); decision 9's kept blobs (a banner's too) by ADR 0144 (built)
 
 ## Context
 
@@ -184,7 +184,7 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
      (`AppKinds`) — never by core calling an application.
    - **A pin fetches whole:** the listings below the node, every tile and preview, every node's cover below it (named by
      the node's sealed meta, which the store cannot read, so the pin's own sealed record keeps the covers' blob ids) — and,
-     once [ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decision 7 is built, each Memory's `BANNER` and
+     since [ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decision 7, each Memory's `BANNER` and
      `BANNER_POSTER` blobs, kept by the same record —, and
      the originals decision 8 keeps (a video's, a music track's, a Depot file's, never a photo's), with progress and resumable (a blob file appends; a restart
      continues); the size is shown and confirmed before the first byte.

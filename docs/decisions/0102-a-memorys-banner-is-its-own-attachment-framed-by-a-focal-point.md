@@ -212,7 +212,7 @@ Published for readers outside the project in [What the server sees](../../site/s
 - **No new dependency**: nothing transcodes; the poster of a picked video is the gallery's existing first-frame derive.
 - **The page scrolls the window**, the banner with it, and the Memory's tab row sticks below the shell's own sticky top
   bar, as the gallery's windowing (ADR 0105) expects.
-- **In the apps** ([ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decisions 4, 5 and 7, not built): the banner is read, framed and
+- **In the apps** ([ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decisions 4, 5 and 7, built on every app; Apple's pass is the owner's): the banner is read, framed and
   written by the core, sharing an equal gallery file's object as the web does; each platform draws the surround by
   resampling the picture to 32 px (no blur API), and keeps the poster's surround while a video plays; a pin keeps the
   banner's blobs.

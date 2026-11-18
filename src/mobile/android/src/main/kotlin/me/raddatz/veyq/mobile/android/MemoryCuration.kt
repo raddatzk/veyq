@@ -370,7 +370,7 @@ internal fun BannerDialog(editor: BannerEditor, gallery: GalleryModel, model: Ap
     fun pickMedium() = pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
     // full media access asked once before the first pick, as an upload's is (the same flag): the picker's own copy of a
     // photo has its location zeroed, so its digest never equals the gallery's original and an equal file is uploaded
-    // anew instead of shared (ADR 0144 decision 5; measured 2026-11-18 in phase 9's pass: 1 store PUT without, 0 with)
+    // anew instead of shared (ADR 0144 decision 5; measured 2026-11-18, its Android pass: 1 store PUT without, 0 with)
     val askAccess = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { pickMedium() }
     fun choose() = if (model.mediaAccessAsked()) pickMedium() else askAccess.launch(mediaAccessPermissions())
     // the previews show the picked file, else the banner as it is

@@ -52,7 +52,7 @@ Gradle module of its own; the web half is separated by import direction only (se
   place curation, the map, a Memory's GPX tracks on its Map tab, live updates. Their state is the use-cases and enablers under
   [`docs/features/memory/`](../features/memory/_index.md); this page points at them and does not restate them.
 
-**Curating a Memory in the apps — planned** ([ADR 0144](../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md)): a Memory's
+**Curating a Memory in the apps** ([ADR 0144](../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md), built on every app; Apple's pass is the owner's): a Memory's
 **participants** (shown in its header, picked from the scope's members, *I was there* in the creation dialog; not
 shown offline), a **person's profile** opened from a participant or a photo's uploader (their Memories as a list,
 newest first, or on the Memories map — no tiles), a medium's **corrected capture time** (set and reset in its details)

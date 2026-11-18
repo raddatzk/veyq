@@ -3,6 +3,7 @@ title: "Look through the gallery"
 sources:
   - docs/features/memory/use-cases/uc.memory.gallery.md
   - docs/features/memory/use-cases/uc.memory.live-updates.md
+  - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -43,6 +44,10 @@ first; the rest appear as you scroll to them.
 Photos are ordered by when they were taken. The button above the grid switches between **Newest first** and **Oldest
 first**. If the camera's time is wrong, open the photo's **Details** and choose **Edit capture time**; **Reset to
 original** brings the camera's time back.
+
+In the veyq [app](/getting-started/install-the-app/) **Edit capture time** is in a photo's details too, beside
+**Taken**. It uses your device's own date and time pickers, in your device's time zone. The gallery re-orders at once;
+the Memory's date follows the next time the Memory is opened. Offline a corrected time is shown but cannot be changed.
 
 ## Narrow the grid
 

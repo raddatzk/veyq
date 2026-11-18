@@ -2,6 +2,7 @@
 title: "Add a banner"
 sources:
   - docs/features/memory/use-cases/uc.memory.banner.md
+  - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
 ---
 
 A banner is a wide picture or a video at the top of a Memory, above its title. It is separate from the cover: the cover is
@@ -44,3 +45,18 @@ Click the banner (**Change banner**) to pick another file. **Remove banner** tak
 Only people who may change the space can set a banner. People you share a link with see the banner but cannot change
 it. The server stores the banner encrypted: it never sees the picture. Where the banner uses the stored copy
 of a photo or video from the gallery, the server can tell which one it is.
+
+## In the app
+
+The veyq [app](/getting-started/install-the-app/) shows and sets a banner as the browser does, with these differences:
+
+- **Where to find it:** choose **Add banner** among the Memory's actions at its top, and **Change banner** once there is
+  one. The banner stands above the Memory on every view — photos, music and map — and scrolls away with it.
+- **The frame** is wide (16:9) in a wide window and square on a phone or in a narrow window.
+- **A video** plays when you press its play button. While it plays, the blurred copy around it keeps showing the video's
+  first picture instead of following the video. On Windows the player's own black bars fill the sides while it plays.
+- **On Android** the app asks once, before you first choose a file, for access to all your photos and videos — the same
+  question as when you add photos. Without it, Android hands the app a copy of a photo without its location, so veyq
+  cannot tell that it is the photo the gallery already holds, and stores it a second time.
+- **Offline** a Memory you made [available offline](/getting-started/use-content-offline/) shows its banner and plays its
+  video. The banner cannot be changed offline.

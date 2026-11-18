@@ -63,6 +63,22 @@
   name and key wrap they seal are bound to it, so one sealed for the old parent must never land after a move
   ([ADR 0080](../../../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 3).
 
+## In the apps
+
+[ADR 0144](../../../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decision 3: the apps (Android, iOS, macOS, Linux, Windows) correct a photo's capture time as the lightbox does,
+with the same conflict rule — built on every app; passed on Android, Linux and Windows against the web, a time corrected
+on either side read as *Corrected* on the other; Apple's pass is the owner's ([native-apps](../../../crosscutting/native-apps.md) § Open).
+
+- **Where:** a medium's details, on its capture-time row: *Edit capture time*, and *Reset to original* where a
+  correction is set; a medium with no time gets an *Edit capture time* button. The platform's own date and time pickers,
+  minute precision, in the device's time zone (the device in the browser's place).
+- **One write for three writers:** the core's `ListedTierWrite` re-applies a `409` on the server's tier unless the peer
+  changed this edit's own field — the rule a track's rename and a photo's place name share. A peer's different
+  correction is said, and the editor reopens on it.
+- **Effect:** the gallery re-orders at once; the Memory's `auto` date range follows at its next settle point (the
+  Memory opening), as on the web.
+- **Offline** a corrected time is shown (it is in the kept listed tier) and not edited.
+
 ## User impact
 
 Several members can curate the same Memory at once without silently erasing or overwriting each other's date, place,
@@ -76,5 +92,5 @@ cover or corrected photo times.
   [en.memory.favorites](../enablers/en.memory.favorites.md) (the toggles of E7)
 - Use-cases: [uc.memory.date](uc.memory.date.md), [uc.memory.place](uc.memory.place.md),
   [uc.memory.cover](uc.memory.cover.md), [uc.memory.gallery](uc.memory.gallery.md) (the lightbox writers)
-- Decisions: [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)
+- Decisions: [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md), [ADR 0144](../../../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) (the apps)
 - End-user view (docs site): [Memories](../../../../site/src/content/docs/memories/index.mdx)

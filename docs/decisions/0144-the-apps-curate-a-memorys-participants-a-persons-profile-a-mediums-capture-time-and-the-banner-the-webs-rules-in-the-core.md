@@ -1,6 +1,8 @@
 # ADR 0144 — The apps curate a Memory's participants, a person's profile, a medium's capture time and the banner: the web's rules in the core, the platform's pickers and players
 - Status: Accepted
-- Built: no
+- Built: yes — on every app (Android, iOS, macOS, Linux, Windows); passed on Android, Linux and Windows, each against
+  the web (§ Consequences); on Apple built and compiled for macOS and iOS but never clicked on a device — that pass is
+  the owner's (inbox #925, [native-apps](../crosscutting/native-apps.md) § Open)
 - Date: 2026-11-17
 - Model: [native-apps](../crosscutting/native-apps.md) (the rights: [Memories](../apps/memories.md))
 
@@ -269,10 +271,35 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
     banner — until its tree is read anew (the desktops' Refresh, a tenant switch, a new start); on a phone there is no
     refresh at all. The profile's rows carry the same staleness (the date range the web reconciled showed in the apps only
     after a re-read). The media list does follow (the poll), so a corrected time arrived on its own. Inbox #953.
-  - **Not run.** **Apple** (iOS, macOS): the Mac's screen is the owner's and no iOS simulator boots here — the owner's
-    pass, with phase 7's click list. **Windows offline**: the VM reaches the backend through a standing ssh tunnel a pass
-    may not stop; offline is the core's code Linux ran. Android's participants list re-read after the reverse write was
-    done by a tenant switch, the phone having no refresh (#953).
+  - **Not run.** **Apple** (iOS, macOS): built, and compiled for macOS (ad hoc signed) and iOS, but never clicked — the
+    Mac's screen is the owner's and no iOS simulator boots here. The owner's pass is inbox #925: the click list the
+    Android pass ran, a window resized across 720 pt, and on an iPhone whether `PhotosPicker`'s copy of a gallery photo
+    still shares (0 store PUTs) or, as Android's photo picker did, hands a copy whose digest differs. **Windows offline**:
+    the VM reaches the backend through a standing ssh tunnel a pass may not stop; offline is the core's code Linux ran.
+    Android's participants list re-read after the reverse write was done by a tenant switch, the phone having no refresh
+    (#953). **`PersonProfileLiveTest`'s group case** (a group's and the tenant's Memory listed, the personal scope's not)
+    skips on the dev instance, said so: the dev principal is in no group. The same rule holds in the core's tests
+    (`ParticipantIndexTest`, a played tenant with a tenant and a group scope).
+- **As built, where the apps depart from the decisions above or from the web** (each named by its phase's build):
+  - **The core.** A banner write's check for a peer's banner compares the two slots' blob ids, not the raw `banner`
+    value as the web's field edit does — a peer's banner change always moves a slot, and no client re-frames any more. A
+    pin keeps the banner's blobs through a generic `PinKinds.named` / `Pin.named` that Memories fills, not a banner field
+    in core's pin record, so core names no application. The person index is rebuilt per tree read, not revalidated per
+    scope as the web's is: `trees()` already revalidates every scope by `ETag`, and a second cache would hold a second
+    copy of what the session holds. A row names its group by the apps' group word — the apps read no group names. A
+    former member's uploader carries their user id and opens nothing; only `Uploader.profile` decides.
+  - **Apple.** The profile is drawn in the shell's place with core's back, not pushed on a SwiftUI `NavigationStack`
+    (the app's navigation is core's `Shell`, ADR 0122; a push beside it would be a second navigation state). A profile
+    opened from the lightbox's uploader returns to the Memory's gallery, not to the lightbox. Trashing the banner's
+    medium asks in an alert, *Remove the Banner Too* a second button (an alert holds no toggle). The banner is picked
+    with `PhotosPicker` on iOS and the file importer on a Mac. New Memory is a sheet, an alert holding no toggle for *I
+    was there*.
+  - **Linux.** A video banner plays from the frame itself with a play badge, and *Change banner* stands beside the
+    people line, not over the picture: GNOME floats no button over a view (`validate_mobile_platform_guidelines.py`).
+  - **Windows.** While a banner's video plays, the player's own black bars cover the poster's surround at the sides; the
+    surround holds above and below only.
+  - **Linux and Windows.** The profile's List | Map switch is icons, `node_view_list` and `memory_view_map` their
+    tooltips and labels.
 - **Not decided here:** the date and place of the creation dialog (inbox #940); the participants offline (#948); one's
   own profile editing and the safety numbers in the apps (#949); tiles (#950); a guest's view of a received link (#435);
   a capture-time shift over several media (not built on the web either,
@@ -303,3 +330,8 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
   person.
 - **Tiles and a stored view in the profile now** — a new look on every level of the apps, and a choice the apps have no
   folder view to share.
+
+Explained for users on the docs site (§ In the app on each): [People in your Memories](../../site/src/content/docs/memories/people-in-your-memories.md),
+[Add a banner](../../site/src/content/docs/memories/add-a-banner.mdx) and
+[Look through the gallery](../../site/src/content/docs/memories/the-gallery.mdx) (the capture time); what a pin keeps,
+[Use content offline](../../site/src/content/docs/getting-started/use-content-offline.mdx).

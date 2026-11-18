@@ -2,6 +2,7 @@
 title: "Ein Banner hinzufügen"
 sources:
   - docs/features/memory/use-cases/uc.memory.banner.md
+  - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
 ---
 
 Ein Banner ist ein breites Bild oder ein Video ganz oben in einer Erinnerung, über ihrem Titel. Es ist unabhängig vom
@@ -45,3 +46,22 @@ Klicke auf das Banner (**Banner ändern**), um eine andere Datei zu wählen. **B
 Nur wer den Bereich ändern darf, kann ein Banner festlegen. Wer über einen geteilten Link schaut, sieht das Banner, kann
 es aber nicht ändern. Der Server speichert das Banner verschlüsselt: Er sieht das Bild nie. Nutzt
 das Banner die gespeicherte Kopie eines Fotos oder Videos aus der Galerie, kann der Server erkennen, welches es ist.
+
+## In der App
+
+Die veyq-[App](/de/getting-started/install-the-app/) zeigt und setzt ein Banner wie der Browser, mit diesen
+Unterschieden:
+
+- **Wo du es findest:** Wähle oben bei den Aktionen der Erinnerung **Banner hinzufügen** und, sobald es eins gibt,
+  **Banner ändern**. Das Banner steht in jeder Ansicht über der Erinnerung – Fotos, Musik und Karte – und scrollt mit
+  ihr weg.
+- **Der Rahmen** ist in einem breiten Fenster breit (16:9) und auf einem Smartphone oder in einem schmalen Fenster
+  quadratisch.
+- **Ein Video** spielt, wenn du auf seinen Abspielknopf drückst. Während es spielt, zeigt die unscharfe Kopie darum
+  weiter das erste Bild des Videos, statt dem Video zu folgen. Unter Windows füllen währenddessen die schwarzen Balken des
+  Players die Seiten.
+- **Unter Android** fragt die App einmal, bevor du zum ersten Mal eine Datei wählst, nach Zugriff auf alle deine Fotos und
+  Videos – dieselbe Frage wie beim Hinzufügen von Fotos. Ohne ihn gibt Android der App eine Kopie eines Fotos ohne seinen
+  Ort, sodass veyq nicht erkennt, dass es das Foto ist, das schon in der Galerie liegt, und es ein zweites Mal speichert.
+- **Offline** zeigt eine Erinnerung, die du [offline verfügbar](/de/getting-started/use-content-offline/) gemacht hast,
+  ihr Banner und spielt ihr Video. Ändern lässt sich das Banner offline nicht.

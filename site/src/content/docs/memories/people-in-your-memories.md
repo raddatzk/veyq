@@ -3,6 +3,7 @@ title: "People in your Memories"
 sources:
   - docs/features/memory/use-cases/uc.memory.participants.md
   - docs/features/spaces/use-cases/uc.spaces.set-profile-picture.md
+  - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
 ---
 
 In a Memory you can
@@ -62,3 +63,21 @@ Names follow one rule everywhere: the **real name** if the person gave one, othe
   the letter. The operator can tell only that you have a picture and how often you changed it. A picture belongs to one
   space — another space you belong to shows its own (or the letter). If you are removed from a space, your picture there
   is cleared.
+
+## In the app
+
+The veyq [app](/getting-started/install-the-app/) names the people of a Memory as the browser does, with these
+differences:
+
+- **Where to find them:** the people stand under the Memory's name, below its date and place. Tap them to see everyone;
+  a person who is still a member opens their profile. **Add participants**, or **Edit participants** once people are
+  listed, opens the space's members with a search field.
+- **I was there** is in the app's dialog for a new Memory too, ticked, wherever the browser offers it.
+- **A person's profile** shows their name and picture and, under **Memories with …**, the Memories with them that you may
+  open: as a **List**, newest first, or on a **Map**. There are no tiles, and the app does not remember your choice: a
+  profile always opens on the list. You reach a profile from a Memory's people, or from **Added by** in a photo's details,
+  while that person is still a member. The app has no search for people and no list of everyone.
+- **Not in the app yet:** your own name and picture, and a member's [safety number](/account/verify-a-person/). Change or check those in the browser.
+- **Offline** no people are shown, because the app does not keep the space's member list on your device, and nobody can
+  be added. A profile that was open when the connection went stays open.
+- **Someone else's change** to the people of a Memory you have open shows once you open the Memory again.

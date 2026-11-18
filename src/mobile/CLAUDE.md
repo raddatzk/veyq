@@ -42,7 +42,7 @@ A Gradle build of its own, run through its own wrapper.
   A tile is decoded in memory only (at most 96 kept for drawing) and the core's tile view decides which may be asked. A
   debug build logs every request to an outside host to logcat `veyq-net` (`src/debug/…/DevNetLog.kt`: the `User-Agent` sent,
   and whether a `Referer`, a cookie or an `Authorization` went), the request log of a map pass; a release build has none.
-  **Planned** ([ADR 0144](../../docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md)): a Memory's participants in
+  **Built** ([ADR 0144](../../docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md)): a Memory's participants in
   `memories/Participants.kt` (the web's normalizing, cap and merge, written through `NodeMetaWrite` with the merge as its
   edit; *I was there* sealed at birth by `MemoryCreate`), a medium's corrected capture time in `memories/CaptureTime.kt`
   over `memories/ListedTierWrite.kt` (the raw listed-tier read-modify-write `TrackLabel`, `PhotoPlace` and `CaptureTime`
@@ -56,9 +56,12 @@ A Gradle build of its own, run through its own wrapper.
   `Shell.person` (opened over what was on screen, back returning there; `personSections` from the registry's
   `personSection`), Memories' section in `memories/people/` — `ParticipantIndex.kt` (over `TenantSession.trees()`, never
   the personal scope, held in memory only through `TenantSession.fromTree`, dropped by `forgetTree()` and `close()`) and
-  `PersonMemories.kt` (the rows newest first, List | Map). The participants, the capture time, the banner and the profile
-  are the core's now (cr-app-memory-curation phases 2–4), drawn on no platform yet; a host calls `TenantSession.close()`
-  where the tenant closes (the bridge's `closeTenant`; the phones' with their profile screens).
+  `PersonMemories.kt` (the rows newest first, List | Map). Android draws them in `MemoryCuration.kt` (the people line, its
+  list and bottom-sheet picker, the banner with its surround and `ReaderPlayer`, its full-screen dialog, the trash's
+  question, the capture-time editor; a banner's decoding `MediaDerive.bannerImage`/`bannerPoster`) and `PersonScreen.kt`;
+  Apple in `MemoryCuration.swift` and `PersonScreen.swift`, `appleMain`'s `AppleMemories` adapting what Swift cannot call
+  (`watch`, `bannerPictures`, `bannerPick`/`bannerSave`, `loadPerson`). A host calls `TenantSession.close()` where its
+  tenant closes: the bridge's `closeTenant`, the phones' tenant switch, any gate but Signed, and a sign-out.
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
   decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's
   (`session/Account.kt`, `SessionModel.kt`: every sign-in enrols the password trust, `Gate.Signed.offer` offers staying
