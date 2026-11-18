@@ -11,6 +11,7 @@ struct DropBoxScreen: View {
     let ref: ObjectRef
     @State private var box = DropBoxBox()
     @State private var movingOut: DropBoxes.GuestFolder?
+    @Environment(\.scenePhase) private var phase
 
     var body: some View {
         List {
@@ -62,6 +63,10 @@ struct DropBoxScreen: View {
             box.start(page)
         }
         .onDisappear { box.stop() }
+        // live while the page is on screen and the app active: a guest's new folder shows up (core's poll)
+        .task(id: DropBoxLiveKey(started: box.page != nil, active: phase == .active)) {
+            if phase == .active { await box.live() }
+        }
         .sheet(item: Binding(get: { movingOut.map { MovingOut(folder: $0) } }, set: { if $0 == nil { movingOut = nil } })) { m in
             if let page = box.page { NodeMoveSheet(model: model, ref: page.at(folder: m.folder)) }
         }
@@ -102,6 +107,20 @@ final class DropBoxBox {
         page?.close()
         page = nil
     }
+
+    /// The page's live poll (core's `DropBoxPage.live`, run by core) for as long as the calling task runs; its
+    /// cancellation stops the poll.
+    func live() async {
+        guard let live = page?.startLive() else { return }
+        while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
+        live.stop()
+    }
+}
+
+/// When a drop box's poll runs: once its page started, while the app is active.
+private struct DropBoxLiveKey: Hashable {
+    let started: Bool
+    let active: Bool
 }
 
 /// A guest's folder the move browser is open for (a sheet's item).

@@ -237,9 +237,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                             // The space's trash, from its Home (the web's level toolbar): every application's nodes.
                             val open = shell.openObject
                             if (open == null && shell.person == null && shell.application == null && !shell.searching && space != null) {
-                                // the top level is no link's root: its share offers "Add files only" alone (the web's level share)
-                                val rules = model.linkRules()
-                                if (shell.folder == null && rules.on && rules.dropBox) {
+                                // the top level is no link's root: its share offers "Add files only" alone (the web's level share), where core says
+                                if (model.offersTopLevelShare(shell)) {
                                     IconButton(onClick = { uploadShareAt = space }) { Icon(Icons.Outlined.Share, stringResource(R.string.share_role_uploader)) }
                                 }
                                 IconButton(onClick = { trashOf = space }) { Icon(Icons.Outlined.Delete, stringResource(R.string.trash_title)) }

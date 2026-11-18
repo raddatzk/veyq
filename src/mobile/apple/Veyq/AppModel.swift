@@ -775,14 +775,15 @@ final class AppModel {
         return made
     }
 
-    /// A pull to refresh on a list or a page (#953): the lists read anew with each row's facts.
+    /// A pull to refresh on a list or a page (#953): the lists read anew with each row's facts, and the members (a picture
+    /// replaced since among them, core's).
     func refreshPulled() async {
         guard let t = tenantSession else { return }
-        await refreshLists(t)
+        await refreshLists(t, people: true)
     }
 
-    private func refreshLists(_ t: TenantSession) async {
-        try? await shellModel?.refresh()
+    private func refreshLists(_ t: TenantSession, people: Bool = false) async {
+        try? await shellModel?.refresh(people: people)
         applyShell(start: false)
         await readDetails(t)
     }
@@ -863,6 +864,9 @@ final class AppModel {
     // MARK: Guest links (core's ShareLinks)
 
     /// The tenant's link rules (its capability set): what the share dialog offers and requires.
+    /// Whether the shell stands where the space's top level offers its share, "Add files only" (core's `offersTopLevelShare`).
+    func offersTopLevelShare() -> Bool { shellModel?.offersTopLevelShare(shell: shell) ?? false }
+
     func linkRules() -> ShareLinks.Rules { tenantSession?.linkRules ?? ShareLinks.RulesCompanion.shared.UNKNOWN }
 
     /// The share sheet of `node` (core's `ShareSheet` over the shell: its links, the form, mint, edit, renew, switch off and
