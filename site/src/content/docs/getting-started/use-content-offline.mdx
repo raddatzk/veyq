@@ -4,6 +4,7 @@ description: In the veyq app, what you viewed stays on your device within a limi
 sources:
   - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
   - docs/crosscutting/native-apps.md
+  - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
 ---
 
 The veyq [app](/getting-started/install-the-app/) can keep content on your device, so you can open it without a
@@ -33,7 +34,7 @@ While it downloads, the header says how far it is (**Downloading … of …**), 
 app asks the first time whether it may show notifications: the download's progress shows there. If your device runs out of space, it says **Paused: not enough space on this device**.
 
 A photo is kept as its preview, the way the app shows it; its original is not. A video, a Memory's song, a GPX track and a file are kept whole, and
-so are the covers inside. What others add or change while you are online is downloaded too.
+so are the covers and a Memory's banner inside. What others add or change while you are online is downloaded too.
 
 To undo it, choose **Available offline** again. It is turned off at once, without a question.
 
@@ -59,7 +60,7 @@ keeps nothing new.
 
 The app shows **Offline — content as of** and the time your server last confirmed what it shows. You can look at
 everything that is kept and play its videos and music; anything else says **Not available offline**. No map is shown
-offline (*The map needs a connection.*); a Memory's map view still lists its tracks. Nothing can be changed
+offline (*The map needs a connection.*); a Memory's map view still lists its tracks. A Memory's people are not shown offline. Nothing can be changed
 offline: *You're offline. Changes are possible again once you're back online.*
 
 You can also start the app without a connection: unlock it as you always do. Once the server can be reached again,

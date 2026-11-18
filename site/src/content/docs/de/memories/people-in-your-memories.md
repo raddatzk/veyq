@@ -3,6 +3,7 @@ title: "Personen in deinen Erinnerungen"
 sources:
   - docs/features/memory/use-cases/uc.memory.participants.md
   - docs/features/spaces/use-cases/uc.spaces.set-profile-picture.md
+  - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
 ---
 
 In einer
@@ -72,3 +73,24 @@ Für Namen gilt überall dieselbe Regel: der **echte Name**, wenn die Person ihn
   Server betreibt, erfährt nur, dass du ein Bild hast und wie oft du es geändert hast. Ein Bild gehört zu einem Bereich – ein anderer
   Bereich, in dem du bist, zeigt sein eigenes (oder den Buchstaben). Wirst du aus einem Bereich entfernt, wird dein Bild
   dort gelöscht.
+
+## In der App
+
+Die veyq-[App](/de/getting-started/install-the-app/) nennt die Personen einer Erinnerung wie der Browser, mit diesen
+Unterschieden:
+
+- **Wo du sie findest:** Die Personen stehen unter dem Namen der Erinnerung, unter Datum und Ort. Tippe darauf, um alle
+  zu sehen; wer noch Mitglied ist, öffnet sein Profil. **Beteiligte hinzufügen** oder, sobald Personen genannt sind,
+  **Beteiligte bearbeiten** öffnet die Mitglieder des Bereichs mit einem Suchfeld.
+- **Ich war dabei** steht auch im Dialog der App für eine neue Erinnerung, angehakt, überall dort, wo der Browser es
+  anbietet.
+- **Das Profil einer Person** zeigt Namen und Bild und unter **Erinnerungen mit …** die Erinnerungen mit ihr, die du
+  öffnen darfst: als **Liste**, die neueste zuerst, oder auf einer **Karte**. Kacheln gibt es nicht, und die App merkt
+  sich deine Wahl nicht: Ein Profil öffnet immer mit der Liste. Du erreichst ein Profil über die Personen einer
+  Erinnerung oder über **Hinzugefügt von** in den Details eines Fotos, solange die Person noch Mitglied ist. Eine Suche
+  nach Personen und eine Liste aller gibt es in der App nicht.
+- **Noch nicht in der App:** dein eigener Name und dein Bild und die [Sicherheitsnummer](/de/account/verify-a-person/) eines Mitglieds. Ändern oder
+  prüfen kannst du sie im Browser.
+- **Offline** werden keine Personen angezeigt, weil die App die Mitgliederliste des Bereichs nicht auf deinem Gerät
+  behält, und niemand lässt sich hinzufügen. Ein Profil, das offen war, als die Verbindung wegfiel, bleibt offen.
+- **Was jemand anderes** an den Personen einer offenen Erinnerung ändert, siehst du, sobald du die Erinnerung neu öffnest.

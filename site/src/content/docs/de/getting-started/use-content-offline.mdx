@@ -4,6 +4,7 @@ description: In der veyq-App bleibt, was du angesehen hast, bis zu einem Limit a
 sources:
   - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
   - docs/crosscutting/native-apps.md
+  - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
 ---
 
 Die veyq-[App](/de/getting-started/install-the-app/) kann Inhalte auf deinem Gerät behalten, damit du sie ohne
@@ -36,7 +37,7 @@ Unter Android fragt die App beim ersten Mal, ob sie Mitteilungen zeigen darf: Do
 ist. Wird der Platz auf deinem Gerät knapp, steht dort **Pausiert: nicht genug Platz auf diesem Gerät**.
 
 Ein Foto wird als seine Vorschau behalten, so wie die App es zeigt, nicht als Original. Ein Video, ein Lied einer Erinnerung, ein GPX-Track und eine Datei werden
-ganz behalten, ebenso die Cover darin. Was andere hinzufügen oder ändern, während du online bist, wird ebenfalls
+ganz behalten, ebenso die Cover und das Banner einer Erinnerung darin. Was andere hinzufügen oder ändern, während du online bist, wird ebenfalls
 geladen.
 
 Zum Zurücknehmen wählst du noch einmal **Offline verfügbar**. Es ist sofort aus, ohne Nachfrage.
@@ -65,7 +66,7 @@ Gerät weniger als 5 % Platz frei, behält die App nichts Neues.
 Die App zeigt **Offline — Stand** und die Zeit, zu der dein Server zuletzt bestätigt hat, was sie zeigt. Du kannst dir
 alles ansehen, was behalten ist, und seine Videos und seine Musik abspielen; alles andere sagt **Nicht offline verfügbar**.
 Offline erscheint keine Karte (*Die Karte braucht eine Verbindung.*); die Kartenansicht einer Erinnerung listet ihre
-Tracks trotzdem. Offline
+Tracks trotzdem. Die Personen einer Erinnerung werden offline nicht angezeigt. Offline
 lässt sich nichts ändern: *Du bist offline. Ändern geht wieder, sobald du online bist.*
 
 Du kannst die App auch ohne Verbindung starten: Entsperre sie wie immer. Ist der Server wieder erreichbar, merkt die

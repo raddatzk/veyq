@@ -3,6 +3,7 @@ title: "Die Galerie durchsehen"
 sources:
   - docs/features/memory/use-cases/uc.memory.gallery.md
   - docs/features/memory/use-cases/uc.memory.live-updates.md
+  - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -45,6 +46,11 @@ lädt deren kompakte Kopien zuerst; die übrigen erscheinen, wenn du zu ihnen sc
 Die Fotos sind nach Aufnahmezeit sortiert. Die Schaltfläche über dem Raster wechselt zwischen **Neueste zuerst** und
 **Älteste zuerst**. Stimmt die Zeit der Kamera nicht, öffne die **Details** des Fotos und wähle **Aufnahmezeit
 bearbeiten**; **Auf Original zurücksetzen** bringt die Zeit der Kamera zurück.
+
+In der veyq-[App](/de/getting-started/install-the-app/) steht **Aufnahmezeit bearbeiten** ebenfalls in den Details
+eines Fotos, neben **Aufgenommen**. Sie nutzt die Datums- und Zeitauswahl deines Geräts, in der Zeitzone deines Geräts.
+Die Galerie ordnet sich sofort neu; das Datum der Erinnerung folgt, wenn die Erinnerung das nächste Mal geöffnet wird.
+Offline wird eine korrigierte Zeit angezeigt, lässt sich aber nicht ändern.
 
 ## Das Raster eingrenzen
 
