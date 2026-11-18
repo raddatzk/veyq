@@ -91,6 +91,7 @@ Unterschieden:
   nach Personen und eine Liste aller gibt es in der App nicht.
 - **Noch nicht in der App:** dein eigener Name und dein Bild und die [Sicherheitsnummer](/de/account/verify-a-person/) eines Mitglieds. Ändern oder
   prüfen kannst du sie im Browser.
-- **Offline** werden keine Personen angezeigt, weil die App die Mitgliederliste des Bereichs nicht auf deinem Gerät
-  behält, und niemand lässt sich hinzufügen. Ein Profil, das offen war, als die Verbindung wegfiel, bleibt offen.
+- **Offline** werden die Personen so angezeigt, wie die App sie zuletzt mit Verbindung kannte – sie behält die
+  Mitgliederliste des Bereichs auf deinem Gerät, verschlossen wie alles, was sie offline behält –, jede mit ihrem
+  Buchstaben statt ihres Bildes, und niemand lässt sich hinzufügen.
 - **Was jemand anderes** an den Personen einer offenen Erinnerung ändert, siehst du, sobald du die Erinnerung neu öffnest.

@@ -78,6 +78,7 @@ differences:
   profile always opens on the list. You reach a profile from a Memory's people, or from **Added by** in a photo's details,
   while that person is still a member. The app has no search for people and no list of everyone.
 - **Not in the app yet:** your own name and picture, and a member's [safety number](/account/verify-a-person/). Change or check those in the browser.
-- **Offline** no people are shown, because the app does not keep the space's member list on your device, and nobody can
-  be added. A profile that was open when the connection went stays open.
+- **Offline** the people are shown as they were when the app last had a connection — the app keeps the space's member
+  list on your device, locked like everything it keeps offline —, each with their letter instead of their picture, and
+  nobody can be added.
 - **Someone else's change** to the people of a Memory you have open shows once you open the Memory again.

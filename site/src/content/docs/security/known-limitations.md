@@ -555,7 +555,9 @@ account keys after a compromise.
 The apps, never the browser, keep content on the device for offline use: what a person viewed, within a limit they set,
 and what they made available offline ([ADR 0140](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)). It is kept as the ciphertext the server sent, each entry
 sealed again under a random key of the account on this device, itself wrapped under a key derived from the Master
-Key, and the files are named by a MAC of what they hold. To open it offline, the device keeps a copy of its own wrap of
+Key, and the files are named by a MAC of what they hold. Beside the content it keeps each space's member list as the
+server answered it (usernames, sealed real names, public keys and picture revisions, never a picture), so a Memory's
+people are named offline; it is sealed like every entry. To open it offline, the device keeps a copy of its own wrap of
 the Master Key, so an offline unlock asks exactly what an online one asks at that device's trust level, and a device
 that keeps no trust keeps no store. What remains:
 

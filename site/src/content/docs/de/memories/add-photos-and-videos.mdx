@@ -2,6 +2,7 @@
 title: "Fotos und Videos hinzufügen"
 sources:
   - docs/features/memory/use-cases/uc.memory.upload.md
+  - docs/decisions/0145-the-apps-uploads-go-on-with-the-app-left-and-show-in-the-gallery-a-desktop-asks-before-a-quit-drops-them.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -28,3 +29,20 @@ richtigen Stelle.
 
 Videos laufen genauso. Ist in deinem Bereich kein Platz mehr, sagt veyq es dir; Fotos im Papierkorb belegen weiter
 Platz, bis sie endgültig entfernt sind.
+
+## In der App
+
+Die veyq-[App](/de/getting-started/install-the-app/) fügt Fotos und Videos wie der Browser hinzu, mit diesen
+Unterschieden:
+
+- **Was unterwegs ist, steht zuerst in der Galerie,** jedes als Kachel mit einem Foto- oder Videosymbol und einem
+  Balken, wie weit es ist. Es hat keine Vorschau und rückt erst an seine Stelle nach Datum, wenn es angekommen ist; dann
+  übernimmt das Foto selbst. Eine Kachel mit Warnzeichen wurde nicht hochgeladen: Versuche es unter **Uploads** erneut.
+- **Auf dem Handy laufen Uploads weiter, wenn du die App verlässt.** Unter Android sagt eine Mitteilung, wie viele
+  Dateien noch unterwegs sind, solange sie hochladen. Auf dem iPhone bittet die App das System um Zeit zum Fertigwerden
+  und zeigt den Fortschritt, wo das System es anbietet; beendet das System die App vorher, schlagen die Dateien fehl, die
+  noch nicht angekommen waren, und du fügst sie neu hinzu.
+- **Am Computer laufen Uploads weiter, während das Fenster minimiert ist.** Wer das Fenster schließt, während noch
+  Dateien hochladen – auf dem Mac die App beendet –, wird zuerst gefragt: **Weiter hochladen** oder **Trotzdem beenden**,
+  dann wird der Rest nicht hochgeladen.
+

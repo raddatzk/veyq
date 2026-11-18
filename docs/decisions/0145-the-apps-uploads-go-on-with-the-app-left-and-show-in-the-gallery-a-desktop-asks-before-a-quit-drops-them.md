@@ -1,6 +1,6 @@
 # ADR 0145 — The apps' uploads go on with the app left and show in the gallery; a desktop asks before a quit drops them
 - Status: Accepted
-- Built: partly (not built: nothing; decision 1 on iOS and decision 2 on macOS are built and compiled, never run on a device — § Consequences)
+- Built: yes
 - Date: 2026-11-18
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -16,7 +16,7 @@ decision (read 2026-11-18, the block's refine):
   foreground service with its notification while a fetch runs ([ADR 0140](0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)
   decision 9, `android/…/OfflineWork.kt`).
 - **iOS** suspends the process within seconds of leaving the app. The pin's fetch asks for a `BGContinuedProcessingTask`
-  (iOS 26) when it begins and for `beginBackgroundTask`'s time on leaving (`apple/Veyq/OfflineBackground.swift`); an
+  (iOS 26) when it begins and for `beginBackgroundTask`'s time on leaving (then `OfflineBackground.swift`, now `apple/Veyq/ContinuedWork.swift`); an
   upload asked for neither.
 - **The desktops** keep running while their window is minimized or hidden. **Closing the window** ended the Linux and
   Windows apps (GTK's application quits with its last window; `App.xaml.cs` shuts the core down on `Closed`), and with
@@ -82,6 +82,18 @@ decision (read 2026-11-18, the block's refine):
   `beginBackgroundTask` lasts, what an upload cut off looks like. The Simulator has no background processing
   (`BGTaskScheduler.h`), and no simulator boots on the build Mac. The macOS quit question is built and compiled; its
   click is the owner's (inbox #925).
+- **The passes (2026-11-18).** **Android** (a throwaway API 36 emulator, deleted after): a 99.6 MB video and a photo
+  picked into a new Memory, both drawn as placeholders (*Preparing c1-big.mp4*), the app left with Home — WorkManager's
+  `SystemForegroundService` foreground (`isForeground=true`, `types=0x1`, oom adj 50), the notification on *Uploads*
+  saying *Uploading 2 files*, *2 % done* — and both in after 379 s with the app still in the background, the service
+  gone, the placeholders given way to the two media. **Linux** (the container under Broadway, driven from headless
+  Chrome): the placeholders; closing the window while the video prepared asked (*1 file will not be uploaded*), *Keep
+  uploading* kept the upload going, and a close once it was in quit without asking. **Windows** (the VM, German): two
+  files picked through the open dialog, two placeholders (*c1-big.mp4 wird vorbereitet*), closing the window asked
+  (*Uploads laufen noch*, *2 Dateien*), *Weiter hochladen* kept them going to *2 Objekte*, and a close with nothing under
+  way closed. **Apple:** built for macOS and the iOS Simulator SDK, never run — its passes are the owner's (above).
+- **What the docs site says:** [Add photos and videos](../../site/src/content/docs/memories/add-photos-and-videos.mdx)
+  (EN and DE) § In the app — the placeholders, a phone's uploads with the app left, a desktop's question.
 - **Rejected:** a foreground service started by the app itself rather than WorkManager — WorkManager's typed
   `SystemForegroundService` is already declared for the pin, and the same worker shape keeps both paths alike; a single
   combined notification for pins and uploads — two kinds of work with two progress lines read better as two, and each

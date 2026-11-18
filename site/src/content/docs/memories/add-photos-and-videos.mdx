@@ -2,6 +2,7 @@
 title: "Add photos and videos"
 sources:
   - docs/features/memory/use-cases/uc.memory.upload.md
+  - docs/decisions/0145-the-apps-uploads-go-on-with-the-app-left-and-show-in-the-gallery-a-desktop-asks-before-a-quit-drops-them.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -25,3 +26,17 @@ Photos are placed by when they were taken, so one that is still uploading alread
 
 Videos work the same way. If your space has no room left, veyq says so; photos in a trash still take up room until
 they are removed for good.
+
+## In the app
+
+The veyq [app](/getting-started/install-the-app/) adds photos and videos as the browser does, with these differences:
+
+- **What is on its way stands first in the gallery,** each as a tile with a photo or video symbol and a bar of how far
+  it is. It has no preview and does not move to its place by date until it has arrived; then the photo itself takes over.
+  A tile with a warning sign did not upload: retry it in **Uploads**.
+- **On a phone, uploads go on when you leave the app.** On Android a notification says how many files are still on
+  their way while they upload. On an iPhone the app asks the system for time to finish and shows the progress where the
+  system offers it; if the system stops the app first, the files that had not arrived fail, and you add them again.
+- **On a computer, uploads go on while the window is minimized.** Closing the window while files still upload — on a
+  Mac, quitting the app — asks first: **Keep uploading**, or **Quit anyway**, which leaves the rest not uploaded.
+

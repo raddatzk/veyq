@@ -81,8 +81,10 @@ no stored choice. The index is the same walk on the device, over the trees the a
 of a Memory's header, as on the web — one person with avatar and name, else up to three avatars with "+N" — and a tap
 lists everyone (a popover on a computer and an iPad, a sheet on a phone); the picker lists the scope's members with a
 search field, and its save merges as A2 does. *I was there* is in the apps' New Memory dialog, ticked, where the web
-offers it. **Offline the line is not shown** — the member list is not kept on the device, so every id would read as a
-former member (inbox #948) — and nothing is edited. An open Memory follows a peer's change of its participants as the
+offers it. **Offline the line is shown, read-only:** each scope's member list is kept on the device, sealed with the
+rest of what the app keeps offline ([ADR 0140](../../../decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)
+decision 5), so it names who was there as last read online (a picture is not kept: a letter stands in), and nothing is
+edited. An open Memory follows a peer's change of its participants as the
 web's does: its live poll asks whether the scope's tree moved (`listNodes` against the revision last read, ADR 0081) and
 reads the lists anew where it did; a phone's pull to refresh reads them at once.
 

@@ -198,7 +198,20 @@ asked (ADR 0123's Consequences).
 Apple's toolbar button and list — measured 2026-11-09 (the list behind Apple's button not seen open); Linux's header bar
 button with its popover and Windows' `AppBarButton` with its flyout, each with Cancel, Retry and Cancel all, measured
 2026-11-12. What the tray shows and when it clears is the core's (`DepotUploads`, Memories' batches among them); what a
-medium's upload settles and when a picked file is let go, `MediaUploads`'.
+medium's upload settles and when a picked file is let go, `MediaUploads`'. **In the background and in the grid**
+([ADR 0145](../decisions/0145-the-apps-uploads-go-on-with-the-app-left-and-show-in-the-gallery-a-desktop-asks-before-a-quit-drops-them.md)):
+the core names what is under way (`UploadsUnderway`); Android holds the process with `UploadWorker`, a `dataSync`
+foreground service on its own *Uploads* channel ("Uploading 2 files", "2 % done"), and iOS with `ContinuedWork.uploads`
+(a continued-processing task, `beginBackgroundTask`'s time); a Memory's grid leads with a placeholder tile per photo or
+video under way (`GalleryModel.State.uploading`, `UploadTile`), its glyph and progress, or that it failed; Linux and
+Windows ask before closing the window drops what still uploads, the Mac before ⌘Q. Measured 2026-11-18: on Android (a
+throwaway emulator) a 99.6 MB video and a photo picked, both placeholders drawn (*Preparing c1-big.mp4*), the app left
+with Home — the service foreground (`isForeground=true`, oom adj 50) and its notification counting — and both in after
+379 s with the app still in the background, the service gone, the placeholders given way to the two media; on Linux
+(the container, under Broadway in headless Chrome) the placeholders, and closing the window mid-upload asked (*Uploads
+are still running*, *1 file*), *Keep uploading* kept it uploading and a close after it quit; on Windows (the VM, German)
+two placeholders, closing asked (*Uploads laufen noch*, *2 Dateien*) and *Weiter hochladen* kept them going; Apple's built
+for macOS and the iOS Simulator SDK, never run (§ Open).
 
 **Out and in.** The ZIP of a Pot, a folder, a file or a drop box, as the web writes it — measured 2026-11-09.
 
@@ -270,8 +283,13 @@ wrap produced) and a person's profile (core's frame on `Shell.person`, Memories'
 and a person's page. Every app draws the people line under the facts line with its list and picker, *I was there* in New
 Memory, the capture-time editor in a medium's details, the banner above the header on every view (contained over its
 32 px surround, no blur API; a video's poster played on a tap) with its dialog and the trash's question, and the profile
-("Memories with {name}", List | Map, newest first, no tiles). A pin keeps the banner's blobs; the participants are not
-shown offline (#948). No permission, entitlement, capability or dependency was added. Passed on Android (throwaway
+("Memories with {name}", List | Map, newest first, no tiles). A pin keeps the banner's blobs; offline the participants
+are named from each scope's kept member list (`KeptRead.MEMBERS`, ADR 0140 decision 5), read-only — measured on Android
+2026-11-18: the app stopped, the emulator's network off, unlocked from the store, the line named *Kevin Raddatz* with
+the letter and no edit. New Memory offers *Determine location automatically* where the map services are shown (uc.memory.place
+A1, the web's opt-in): the Memory is born with a pending `auto` place (*Location pending…*, on the desktops through
+`GalleryShown.placePending`) that its first geotagged photo names — measured 2026-11-18 on Android and Linux, each
+*Westerland* from a photo tagged on Sylt. No permission, entitlement, capability or dependency was added. Passed on Android (throwaway
 emulators), Linux (the container, under Broadway) and Windows (the VM) against the web in headless system Chrome, the
 equal file's count read from the store's own request log, measured 2026-11-17/18 (ADR 0144's Consequences); Apple's is
 open (below). The Use pages: [People in your Memories](../../site/src/content/docs/memories/people-in-your-memories.md),
@@ -464,7 +482,7 @@ or picked veyq download is uploaded as the file it is until then); multi-select 
 it (inbox #421); a PDF's text layer and password prompt, a text's copy and wrap toggle (the web's pdf.js extras); Send a
 copy and "Open with" on the desktops (not offered, see Built).
 
-**Memories**: the date and the place in the creation dialog (#940); item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
+**Memories**: item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
 re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a
 received link (#435, a source for the same model).
 
@@ -489,11 +507,16 @@ iOS, never clicked (the Mac's screen is the owner's; no iOS simulator boots on t
 picker, a profile from a participant and from an uploader and its map, *I was there*, a capture time set and reset, an
 image and a video banner across a 720 pt window, the trash's question, Remove banner, and on an iPhone whether
 `PhotosPicker`'s copy of a gallery photo is still shared. Not run elsewhere: Windows offline (the standing tunnel).
-Not built: the participants offline (#948), one's
+Not built: one's
 own profile and the safety numbers (#949), tiles (#950), a people search or overview, a guest's view (#435).
 
-**Uploads**: an upload that goes on while the app is in the background (Android a foreground service, iOS a
-background task); placeholder tiles in the gallery for what is under way; the list behind Apple's button seen open.
+**Uploads** ([ADR 0145](../decisions/0145-the-apps-uploads-go-on-with-the-app-left-and-show-in-the-gallery-a-desktop-asks-before-a-quit-drops-them.md), built above): **iOS is the owner's** — on a real iPhone whether the
+continued-processing task is granted for an upload (`app.veyq.uploads.*`), how long `beginBackgroundTask` lasts and what
+an upload cut off by the system looks like (the Simulator has no background processing; no simulator boots on this
+Mac); the Mac's quit question and the placeholders on both Apple platforms are built, never clicked (#925). An upload
+the system stops anyway fails, and its files are picked again: the queue is in memory, not persisted across a process
+end. Not measured: Android 15's six-hour bound on a `dataSync` service. The list behind Apple's button was never seen
+open.
 
 **Offline content** ([ADR 0140](../decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)): **Apple's passes are the owner's** — on a real iPhone and a signed macOS
 build, the pass the other three ran, and whether `BGContinuedProcessingTask`'s submit is accepted with the wildcard

@@ -6,6 +6,8 @@ A Gradle build of its own, run through its own wrapper.
 
 - `core/` — the shared base: the v1 suite (`crypto/`), the generated API client (`build/generated/openapi`, from
   `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), the music player (`audio/`, ADR 0142 decisions 1–3 and 13: the order, the fades, `MusicPlayer` with its interruption, and the two ports each platform implements — `Deck` and `SystemControls`: Android's `MusicPlayback.kt` — `MediaDeck`, `AndroidMusicControls` with its `MusicService` —, Apple's through `appleMain`'s `AppleAudio` — `MusicPlayback.swift`; carried over the bridge as host requests for Linux's `music_host` and Windows' decks with SMTC), a photo's and a video's metadata read from their bytes (`media/`),
+  the uploads under way that a phone holds its process for, `blob/UploadsUnderway` (Android's `UploadWork.kt`, Apple's
+  `ContinuedWork.swift` beside the pins' `OfflineFetching`; ADR 0145 decision 1),
   files on the device by the path a platform's dialog gave (`blob/FileSink`, `blob/FileSource`, `nativeMain`: the
   core opens, writes and reads them, and removes a download that did not finish; the one call that differs is
   `blob/Files.kt`'s, `posixMain` for Apple and Linux, `mingwMain` for Windows; [ADR 0137](../../docs/decisions/0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md) decision 3), when the members'
@@ -26,7 +28,10 @@ A Gradle build of its own, run through its own wrapper.
   (which waits for its trash) and a guest's purge, and the justified grid's frames, `MediaGridLayout`; its `Lightbox`: the
   page by medium id, a video's `RangeReader` closed by the model when the page goes, the details, the save, the
   slideshow on the model's clock; the web's rights ported fail-closed, `MemoryRights`; New Memory and Add chapter,
-  `MemoryCreate`; the uploads' settle and each picked file handed back once the queue is done with it, `MediaUploads`;
+  `MemoryCreate` (*Determine location automatically* arming a pending `auto` place at birth, uc.memory.place A1); the uploads' settle and
+  each picked file handed back once the queue is done with it, `MediaUploads`, and what it sends into a node as the grid's
+  placeholder tiles, `MediaUploads.tiles` → `UploadTile` → `GalleryModel.State.uploading`, laid out first by
+  `GalleryModel.layout(rows, uploading, width)` (ADR 0145 decision 3);
   the tier spec, `MediaUpload`'s; ADR 0136's Consequences; its music, `memories/music/` (ADR 0142 decisions 4–12): a node's tracks listed and numbered once and its queue, `MusicQueue`; their facts, `AudioFacts` (a WAV's trim from its PCM, `Wav`; an ADTS file's length counted, `Frames`); a picked file checked and uploaded, `MusicUpload`; a rename of the raw listed tier, `TrackLabel`; the Music view, `MusicModel` over the gallery, whose header plays and stops the music and whose lightbox's video interrupts it; a medium's ITEM report, `MediumReport` — drawn for a track by every app's Music view, a photo's or a video's not yet: inbox #891), which
   uses core's session and is never used by it; an application's spec is generated into `api.<application>`. **Built**
   ([ADR 0143](../../docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)): the map services in core's `map/` (the consent per device, the tile
@@ -758,7 +763,8 @@ Per engine:
 - **OkHttp (Android, `Network.kt`):** no cache and `CookieJar.NO_COOKIES` are OkHttp's defaults, pinned explicitly.
   Measured 2026-11-13 on a throwaway API 36 emulator after the same pass: `run-as me.raddatz.veyq find . -type f`
   listed only `shared_prefs/veyq.trust.xml`, `shared_prefs/veyq-recent.xml` and `files/profileInstalled` — no `cache/`.
-  Since the pins' worker (ADR 0140 decision 9, `OfflineWork.kt`), WorkManager keeps its own records under
+  Since the pins' worker (ADR 0140 decision 9, `OfflineWork.kt`; the uploads' since ADR 0145, `UploadWork.kt`, the same
+  shape under the unique name `veyq-uploads`), WorkManager keeps its own records under
   `no_backup/`, not `databases/`: `no_backup/androidx.work.workdb` (with its `-wal`/`-shm`) and Room's lock file
   `cache/data/user/0/me.raddatz.veyq/no_backup/androidx.work.workdb.lck` (empty) — so `cache/` is no longer empty; its
   preferences (`last_force_stop_ms`, `next_job_scheduler_id`) are a table of that database, no
@@ -1438,3 +1444,16 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   preview never binding after "Allow", Apple's camera restarting when its caller drew nothing) hid behind the debug
   harnesses. A visual pass on Apple needs the owner's grant for the Simulator panel or the Mac app's window — asked at
   the start, not after the build.
+- **A Broadway pass from a hidden browser pane loses clicks** (2026-11-18): the pane, hidden, delivered some clicks late
+  and others not at all, and the Linux app opened what an earlier click had aimed at. Driving `http://127.0.0.1:<port>`
+  from headless system Chrome instead (the workspace's Playwright, `chromium.launch({ channel: 'chrome' })`, a fresh page
+  per batch of mouse moves, clicks, keys and a screenshot) was reliable: the app's state is Broadway's, not the page's.
+  An upload from the container needs `VEYQ_LIVE_STORE=http://veyq.localhost:8081` beside `VEYQ_LIVE`, or every item
+  fails on the store and the queue empties before a pass can look at it.
+- **A Windows drag from Explorer did not reach the gallery** in the same pass (`drag memory-page …`: the release landed,
+  no drop came), while the open dialog took both files typed by name: `type 1148 <folder>`, `press 1148 enter`, `type
+  1148 "a.mp4" "b.jpg"`, `press 1 enter`. Whether the drop needs UAC on (the unpackaged app takes one there) was not
+  checked.
+- **A field a constructor's `init` collector writes is declared before that `init`** (`GalleryModel.queuedNow`): a
+  model's scope runs on `Dispatchers.Default`, so the collector can run before a field declared below the block is set —
+  the bridge's tests caught it as an NPE in a background thread and a gallery that never showed.
