@@ -525,9 +525,9 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
     }
 
     /**
-     * `#emergency_kit_token`, its **reader half** only: each case's token read back to its email, Secret Key and server
-     * (none where the case has none), and each refused token refused. The apps write no kit; a writer added to the core
-     * adds the other half here (each case's token written from its three values).
+     * `#emergency_kit_token` in both directions: each case's token read back to its email, Secret Key and server (none
+     * where the case has none) and written from those three byte for byte ([EmergencyKit.write]), and each refused token
+     * refused — a refused server refused by the writer too.
      */
     private fun emergencyKitToken() {
         val section = v.obj("emergency_kit_token")
@@ -538,6 +538,22 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
                 eq(kit.email, c.str("email"))
                 eq(SecretKeyText.format(p, kit.secretKey), c.str("secret_key"))
                 eq(kit.server, (c["server"] as? JsonPrimitive)?.content)
+            }
+            check("emergency_kit_token[$i] written") {
+                val key = SecretKeyText.read(p, c.str("secret_key")) ?: fail("the case's Secret Key does not read")
+                try {
+                    eq(EmergencyKit.write(p, c.str("email"), key, (c["server"] as? JsonPrimitive)?.content), c.str("token"))
+                } finally {
+                    key.fill(0)
+                }
+            }
+        }
+        // Not a vector: the writer refuses each server the refused cases name by their `why` — a kit no reader accepts.
+        check("emergency_kit_token's writer refuses a server that is no origin") {
+            val key = ByteArray(32)
+            for (bad in listOf("https://veyq.example.com/login", "https://veyq.example.com/", "https://veyq.example.com:443",
+                "https://Veyq.example.com", "veyq.example.com", "javascript:alert(1)", "")) {
+                if (runCatching { EmergencyKit.write(p, "a@example.org", key, bad) }.isSuccess) fail("wrote a kit for the server '$bad'")
             }
         }
         for (e in section["refused"]!!.jsonArray) {

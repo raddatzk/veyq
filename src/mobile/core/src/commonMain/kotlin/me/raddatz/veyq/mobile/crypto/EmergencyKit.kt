@@ -17,15 +17,89 @@ class Kit(val email: String, val secretKey: ByteArray, val server: String?) {
 }
 
 /**
- * The reader half of the Emergency Kit codec (a port of `src/packages/crypto/src/emergencyKit.ts` `parseKit` and
- * `isKitServer`), held to `contracts/crypto/vectors/v1.json` § `emergency_kit_token` by [Conformance]. The apps write no
- * kit, so the writer half (`kitPayload`) is not here.
+ * The Emergency Kit codec (a port of `src/packages/crypto/src/emergencyKit.ts` `parseKit`, `kitPayload` and
+ * `isKitServer`), held to `contracts/crypto/vectors/v1.json` § `emergency_kit_token` in both directions by
+ * [Conformance]: [read] each case's token, [write] each case's token from its three values. `account/KitWriter` puts
+ * [write]'s token into the kit's PDF.
  */
 object EmergencyKit {
     /** 3: `srv` carries the server's origin. Every earlier version is refused, as the web's reader refuses it. */
     private const val VERSION = 3.0
 
     private val token = Regex("veyqkit:([A-Za-z0-9_-]+)")
+
+    /**
+     * The kit token (`kitPayload`): `veyqkit:` and the unpadded base64url of the UTF-8 bytes of the compact JSON
+     * `{"v":3,"email":…,"sk":…,"srv":…}` in that key order, `sk` the key's printed form ([SecretKeyText.format]), `srv`
+     * left out where [server] is null. Written as `JSON.stringify` writes it: no ASCII escapes, a non-ASCII character as
+     * its UTF-8, only what JSON requires escaped (`"`, `\`, a control character, a lone surrogate). An
+     * IllegalArgumentException for a [server] that is no origin ([isServer]) or a [secretKey] that is not 32 bytes —
+     * a kit no reader accepts fails exactly when it is needed.
+     *
+     * The JSON's bytes are zeroed once encoded; the returned token and the key's printed text are Strings, which cannot
+     * be zeroed — they are let go.
+     */
+    fun write(p: Primitives, email: String, secretKey: ByteArray, server: String?): String {
+        require(server == null || isServer(server)) { "the kit's server is not an origin" }
+        val json = buildString {
+            append("{\"v\":3,\"email\":")
+            jsonString(email)
+            append(",\"sk\":")
+            jsonString(SecretKeyText.format(p, secretKey))
+            if (server != null) {
+                append(",\"srv\":")
+                jsonString(server)
+            }
+            append('}')
+        }
+        val bytes = json.encodeToByteArray()
+        try {
+            return "veyqkit:" + b64url(bytes)
+        } finally {
+            bytes.fill(0)
+        }
+    }
+
+    /** [s] as `JSON.stringify` quotes it (well-formed: a lone surrogate as a lower-case `\u` escape). */
+    private fun StringBuilder.jsonString(s: String) {
+        append('"')
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            when {
+                c == '"' -> append("\\\"")
+                c == '\\' -> append("\\\\")
+                c == '\b' -> append("\\b")
+                c == '\u000C' -> append("\\f")
+                c == '\n' -> append("\\n")
+                c == '\r' -> append("\\r")
+                c == '\t' -> append("\\t")
+                c < ' ' -> append("\\u").append(c.code.toString(16).padStart(4, '0'))
+                c.isHighSurrogate() && i + 1 < s.length && s[i + 1].isLowSurrogate() -> {
+                    append(c).append(s[i + 1])
+                    i++
+                }
+                c.isSurrogate() -> append("\\u").append(c.code.toString(16).padStart(4, '0'))
+                else -> append(c)
+            }
+            i++
+        }
+        append('"')
+    }
+
+    /** Unpadded base64url, as the web's `b64url` writes it. */
+    private fun b64url(b: ByteArray): String = buildString {
+        var i = 0
+        while (i < b.size) {
+            val n = minOf(3, b.size - i)
+            var acc = 0
+            for (k in 0 until 3) acc = (acc shl 8) or (if (k < n) b[i + k].toInt() and 0xff else 0)
+            for (k in 0..n) append(B64URL[(acc shr (18 - 6 * k)) and 63])
+            i += 3
+        }
+    }
+
+    private const val B64URL = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 
     /**
      * The kit of the **first** `veyqkit:` token in [text] (a scanned QR's text, a PDF's bytes read as Latin-1, a pasted
