@@ -227,7 +227,8 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
     (decision 1). **The reverse lost one** (Android, found here, the web's): the web's picker open, the app added
     *link-de7ab7* and saved; the web then removed *other* and saved → *link-de7ab7* was gone. The web takes `openedWith`
     from the page's node at the save (`useMemoryParticipants.onPickerSave`: `nodeMetaState(ctx.node())`), which its poll
-    had moved past the peer's write, so the peer's addition counted as the editor's removal. Inbox #952.
+    had moved past the peer's write, so the peer's addition counted as the editor's removal. Fixed since: the web's picker
+    keeps the list it opened with (`useMemoryParticipants.openPicker`), as the apps' does.
   - **The banner, both at once:** the app's dialog holding a picked `wide.jpg`, the web saved `square.jpg` (1 store PUT),
     the app's **Save banner** said "Someone else changed the banner meanwhile. Please try again." on every platform
     (Android's dump, Linux `Banner.Save answered Ok(BannerSaved { outcome: Stale })`, Windows `Banner.Save: Stale` with
@@ -267,17 +268,17 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
     reopened on the Map with its first read's rows (decision 13: the choice is not stored); `AppModel.openPerson` now drops
     it, as Apple's and the bridge's never held one — reopened, it starts on the list (Android has no unit-test harness
     for `AppModel`; the live repro before and after is the proof).
-  - **Seen, not fixed:** an app's open Memory does not follow a peer's change of its meta — participants, date, place,
-    banner — until its tree is read anew (the desktops' Refresh, a tenant switch, a new start); on a phone there is no
-    refresh at all. The profile's rows carry the same staleness (the date range the web reconciled showed in the apps only
-    after a re-read). The media list does follow (the poll), so a corrected time arrived on its own. Inbox #953.
+  - **Seen, fixed since:** an app's open Memory did not follow a peer's change of its meta — participants, date, place,
+    banner — until its tree was read anew, and a phone had no refresh. Now the gallery's live poll also asks whether the
+    scope's tree moved and reads the lists anew where it did (`GalleryModel.Door.treeMoved`), and the phones have a pull to
+    refresh; the profile's rows follow the same read.
   - **Not run.** **Apple** (iOS, macOS): built, and compiled for macOS (ad hoc signed) and iOS, but never clicked — the
     Mac's screen is the owner's and no iOS simulator boots here. The owner's pass is inbox #925: the click list the
     Android pass ran, a window resized across 720 pt, and on an iPhone whether `PhotosPicker`'s copy of a gallery photo
     still shares (0 store PUTs) or, as Android's photo picker did, hands a copy whose digest differs. **Windows offline**:
     the VM reaches the backend through a standing ssh tunnel a pass may not stop; offline is the core's code Linux ran.
-    Android's participants list re-read after the reverse write was done by a tenant switch, the phone having no refresh
-    (#953). **`PersonProfileLiveTest`'s group case** (a group's and the tenant's Memory listed, the personal scope's not)
+    Android's participants list re-read after the reverse write was done by a tenant switch, the phone having had no
+    refresh then. **`PersonProfileLiveTest`'s group case** (a group's and the tenant's Memory listed, the personal scope's not)
     skipped at first, the dev principal being in no group; with a group made on the web it ran green on 2026-11-18
     (`VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest --tests '*PersonProfileLiveTest*'` in `src/mobile/`:
     1 test, 0 skipped, 0 failures).

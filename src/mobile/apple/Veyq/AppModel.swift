@@ -775,6 +775,12 @@ final class AppModel {
         return made
     }
 
+    /// A pull to refresh on a list or a page (#953): the lists read anew with each row's facts.
+    func refreshPulled() async {
+        guard let t = tenantSession else { return }
+        await refreshLists(t)
+    }
+
     private func refreshLists(_ t: TenantSession) async {
         try? await shellModel?.refresh()
         applyShell(start: false)

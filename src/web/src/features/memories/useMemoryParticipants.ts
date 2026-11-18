@@ -83,8 +83,11 @@ export function useMemoryParticipants(ctx: MemoryParticipantsContext) {
   const namesPending = computed(() => ids.value.length > 0 && !people.value && !loadFailed.value)
 
   const pickerOpen = ref(false)
+  /** The list the picker showed when it opened: what the save's merge counts a removal against (inbox #952). */
+  let openedWith: string[] = []
   async function openPicker(): Promise<void> {
     if (!canEdit.value) return
+    openedWith = [...ids.value]
     pickerOpen.value = true
     await ensurePeople(loadFailed.value)
   }
@@ -96,7 +99,7 @@ export function useMemoryParticipants(ctx: MemoryParticipantsContext) {
     if (!key || !write || !canEdit.value) return
     const node = ctx.node()
     try {
-      const state = await write.setParticipants(node.id, key, chosen, nodeMetaState(node))
+      const state = await write.setParticipants(node.id, key, chosen, openedWith, nodeMetaState(node))
       ctx.onMetaUpdated({ nodeId: node.id, ...state })
     } catch (e) {
       await editorFailed(node.id, e, () => (pickerOpen.value = true))

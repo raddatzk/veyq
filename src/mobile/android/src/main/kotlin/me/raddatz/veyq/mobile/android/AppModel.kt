@@ -318,13 +318,34 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** The Secret Key row's way back to typing: the kit's held key ends. */
     fun clearKit() = session.clearKit()
 
+    private val _kitScan = MutableStateFlow<me.raddatz.veyq.mobile.qr.QrScan<*>?>(null)
+
     /**
-     * The sign-in's kit scan for [KitScanner]'s camera: core's scan with the kit's parser as its `accepts`, the found kit
-     * taken by core (the gate fills the form); [typedServer] is the form's server as typed now. Each decode's time is
+     * The sign-in's kit scan on screen ([KitScanner]), or null. This model's, as the device link is: a rotation recreates
+     * the activity and drops what a composable remembers, and closed the scanner with it (#937).
+     */
+    val kitScan: StateFlow<me.raddatz.veyq.mobile.qr.QrScan<*>?> = _kitScan.asStateFlow()
+
+    /**
+     * Opens the sign-in's kit scan for [KitScanner]'s camera: core's scan with the kit's parser as its `accepts`, the found
+     * kit taken by core (the gate fills the form); [typedServer] is the form's server as typed now. Each decode's time is
      * logged, never a code's text.
      */
-    fun scanKit(typedServer: String): me.raddatz.veyq.mobile.qr.QrScan<*> =
-        session.scanKit(typedServer, me.raddatz.veyq.mobile.qr.QrFrames.timedDecode(::qrDecodeTiming))
+    fun scanKit(typedServer: String) {
+        closeKitScan()
+        _kitScan.value = session.scanKit(typedServer, me.raddatz.veyq.mobile.qr.QrFrames.timedDecode(::qrDecodeTiming))
+    }
+
+    /** The kit scan ends (its scanner closed, a kit found, no camera): nothing is decoded after it. */
+    fun closeKitScan() {
+        _kitScan.value?.close()
+        _kitScan.value = null
+    }
+
+    override fun onCleared() {
+        closeKitScan()
+        super.onCleared()
+    }
 
     // ---- device linking (ADR 0059) ----
 
@@ -725,6 +746,18 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             closeOpen = { ref -> _pot.value?.ref?.takeIf { it.nodeId == ref.nodeId }?.let { potModel?.close(it) } },
             changed = { viewModelScope.launch { readRowDetails(m.tenant) } },
         )
+    }
+
+    /**
+     * A pull to refresh on a list or a Memory's page (#953): the lists read anew with each row's facts, which an open
+     * Memory's page follows (its revisions); [done] when it ended, read or not.
+     */
+    fun refreshLists(done: () -> Unit) {
+        val t = tenantSession ?: return done()
+        viewModelScope.launch {
+            runCatching { refreshLists(t) }
+            done()
+        }
     }
 
     /** The lists read anew (core's shell), with each row's facts. */

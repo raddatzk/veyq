@@ -40,11 +40,17 @@ object NodeTrash {
         val deletedAt: String,
         val purgeAfter: String,
         val attached: Boolean,
+        /** A guest's identity folder in a drop box (ADR 0080 decision 11): its identity and that identity's wrapped `K_up`,
+         *  under which its entry — the name, a restore's token — lives. */
+        val shareIdentityId: String? = null,
+        internal val wrappedIdentityKey: String? = null,
     )
 
     /**
-     * The trash of [scopeId], in the server's order; null when it could not be read. A guest-sealed entry under an identity
-     * folder is left out, as the web's `listTrash` does. So is a member's entry whose name does not open (a parent this device
+     * The trash of [scopeId], in the server's order; null when it could not be read. A guest's identity folder is listed by
+     * its guest's name, opened through its live drop box's drop key and the guest's `K_up` ([Tree.childEntryKey]), as the
+     * web's `listTrash` does (ADR 0080 decision 11: a member restores it); one whose chain does not open is left out. So is a
+     * member's entry whose name does not open (a parent this device
      * does not hold, a name sealed to another placement) — there the web differs: one such entry fails its whole trash
      * ("could not be opened"), which a dev instance showed 2026-11-09 with a Pot an interrupted rename left; here the rest
      * stays restorable.
@@ -56,11 +62,18 @@ object NodeTrash {
         val (scopeKey, _) = tenant.scopeKey(scopeId) ?: return null
         val r = runCatching { account.respond { ContentApi(tenant.base, account.http).listTrashedNodes(scopeId) } }.getOrNull() ?: return null
         if (!r.success) return null
-        val live = tenant.trees()[scopeId].orEmpty().associateBy { it.id }
-        return r.body().mapNotNull { row ->
-            if (row.shareIdentityId != null) return@mapNotNull null
-            val entryKey = row.parentId?.let { live[it]?.key ?: return@mapNotNull null } ?: scopeKey
+        val rows = r.body()
+        var live = tenant.trees()[scopeId].orEmpty().associateBy { it.id }
+        // a trashed root's parent is always live: one this device's tree does not hold was made elsewhere since it was read
+        // (a drop box another device made, whose guest's folder was deleted): the tree is read anew once
+        if (rows.any { it.parentId != null && it.parentId !in live }) {
+            tenant.forgetTree()
+            live = tenant.trees()[scopeId].orEmpty().associateBy { it.id }
+        }
+        return rows.mapNotNull { row ->
             val name = try {
+                val parent = row.parentId?.let { live[it] ?: return@mapNotNull null }
+                val entryKey = Tree.childEntryKey(account.suite, scopeId, parent, parent?.key ?: scopeKey, row.shareIdentityId, row.wrappedIdentityKey)
                 account.suite.openField(nameContext(scopeId, row.id, row.scopeEpoch, row.placementRevision), entryKey, unb64(row.encryptedName)).decodeToString()
             } catch (e: OpenRefused) {
                 return@mapNotNull null
@@ -69,7 +82,7 @@ object NodeTrash {
             }
             Trashed(
                 scopeId, row.id, row.parentId, row.kind, name, row.epoch, row.scopeEpoch, row.placementRevision,
-                row.deletedAt, row.purgeAfter, row.attached,
+                row.deletedAt, row.purgeAfter, row.attached, row.shareIdentityId, row.wrappedIdentityKey,
             )
         }
     }
@@ -135,7 +148,10 @@ object NodeTrash {
      */
     @Throws(Exception::class)
     suspend fun restore(tenant: TenantSession, node: OpenNode, tokenInput: String, waitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS): Restored =
-        restoreEntry(tenant, Entry(node.scopeId, node.id, node.parentId, node.epoch, node.scopeEpoch, node.placementRevision), tokenInput, null, waitsMs, null)
+        restoreEntry(
+            tenant, Entry(node.scopeId, node.id, node.parentId, node.epoch, node.scopeEpoch, node.placementRevision, node.shareIdentityId, node.wrappedIdentityKey),
+            tokenInput, null, waitsMs, null,
+        )
 
     /**
      * Brings [node] back from the space's trash. [newName] is the retry after a [Restored.NAME_TAKEN]: the name sealed anew
@@ -150,12 +166,18 @@ object NodeTrash {
         newName: String? = null,
         waitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS,
     ): Restored = restoreEntry(
-        tenant, Entry(node.scopeId, node.id, node.parentId, node.epoch, node.scopeEpoch, node.placementRevision), tokenInput,
-        newName?.trim()?.takeIf { it.isNotEmpty() }, waitsMs,
-    ) { list(tenant, node.scopeId)?.firstOrNull { it.id == node.id }?.let { Entry(it.scopeId, it.id, it.parentId, it.epoch, it.scopeEpoch, it.placementRevision) } }
+        tenant, Entry(node.scopeId, node.id, node.parentId, node.epoch, node.scopeEpoch, node.placementRevision, node.shareIdentityId, node.wrappedIdentityKey),
+        tokenInput, newName?.trim()?.takeIf { it.isNotEmpty() }, waitsMs,
+    ) {
+        list(tenant, node.scopeId)?.firstOrNull { it.id == node.id }
+            ?.let { Entry(it.scopeId, it.id, it.parentId, it.epoch, it.scopeEpoch, it.placementRevision, it.shareIdentityId, it.wrappedIdentityKey) }
+    }
 
-    /** What a restore reads of the node: where its entry lives and what its name is bound to. */
-    private class Entry(val scopeId: String, val id: String, val parentId: String?, val epoch: Int, val scopeEpoch: Int, val placementRevision: Long)
+    /** What a restore reads of the node: where its entry lives (a guest's identity folder: under its `K_up`) and what its name is bound to. */
+    private class Entry(
+        val scopeId: String, val id: String, val parentId: String?, val epoch: Int, val scopeEpoch: Int, val placementRevision: Long,
+        val shareIdentityId: String?, val wrappedIdentityKey: String?,
+    )
 
     private fun nameContext(scopeId: String, nodeId: String, scopeEpoch: Int, placementRevision: Long) = Context(
         "node-name", "scopeId" to scopeId, "nodeId" to nodeId, "epoch" to scopeEpoch.toLong(), "placementRevision" to placementRevision,
@@ -191,7 +213,12 @@ object NodeTrash {
             },
             attempt = {
                 val p = parent
-                val entryKey = p?.key ?: scopeKey
+                // the key the entry lives under: the live parent's, a guest's K_up below a drop box (the web's restoreOnce)
+                val entryKey = try {
+                    Tree.childEntryKey(account.suite, scopeId, p, p?.key ?: scopeKey, node.shareIdentityId, node.wrappedIdentityKey)
+                } catch (e: OpenRefused) {
+                    return@run NodeEpochWrite.Answer.OTHER to (0 to null)
+                }
                 // A restore is no placement: a name sealed anew binds the revision the node already has (ADR 0080 decision 3).
                 val request = RestoreNodeRequest(
                     slugToken = b64(account.suite.slugToken(entryKey, p?.id ?: scopeId, tokenInput)),

@@ -470,8 +470,8 @@ it (inbox #421); a PDF's text layer and password prompt, a text's copy and wrap 
 copy and "Open with" on the desktops (not offered, see Built). **Android and Apple still decide where the top level's
 share is offered** in their shells (`folder == null && rules.on && rules.dropBox`), where the desktops ask the core
 (`ShellModel.offersTopLevelShare`): the phones' next slice moves them onto it. **A guest's new folder shows only after a
-refresh**: nothing polls a drop box; `ShellModel.refresh` reads the tree anew (the desktops' F5, the uploads' settle,
-each app's lists read after a write). A guest's deleted folder is restorable only by Undo (inbox #904).
+refresh**: nothing polls a drop box; `ShellModel.refresh` reads the tree anew (the desktops' F5, the phones' pull to
+refresh, the uploads' settle, each app's lists read after a write).
 
 **Memories**: the date and the place in the creation dialog (#940); item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
 re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a
@@ -499,9 +499,7 @@ picker, a profile from a participant and from an uploader and its map, *I was th
 image and a video banner across a 720 pt window, the trash's question, Remove banner, and on an iPhone whether
 `PhotosPicker`'s copy of a gallery photo is still shared. Not run elsewhere: Windows offline (the standing tunnel).
 Not built: the participants offline (#948), one's
-own profile and the safety numbers (#949), tiles (#950), a people search or overview, a guest's view (#435). Seen in the
-passes, open: the web's picker dropping a polled peer's addition (#952), an open Memory not following a peer's meta
-change (#953), a landscape phone's list-beside layout (#951).
+own profile and the safety numbers (#949), tiles (#950), a people search or overview, a guest's view (#435).
 
 **Uploads**: an upload that goes on while the app is in the background (Android a foreground service, iOS a
 background task); placeholder tiles in the gallery for what is under way; the list behind Apple's button seen open.

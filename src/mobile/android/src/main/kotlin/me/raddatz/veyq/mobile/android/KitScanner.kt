@@ -38,18 +38,17 @@ import me.raddatz.veyq.mobile.qr.QrScan
  * skipped by the core and the camera goes on; a kit is taken by the core (the form fills from the gate) and the dialog
  * closes ([onClose]). Where the device turns out to have no camera, [onNoCamera] lets the sign-in drop its entry and the
  * dialog closes; a refused camera is said here, the kit's file and the typed key still offered on the form beneath. The
- * scan closes with the dialog. Its states go to logcat (`veyq-scan`): where the found kit's server came from, never a
- * code's text.
+ * scan ends with [onClose] (the model's `closeKitScan`), never with this view: a rotation draws it anew over the same
+ * scan. Its states go to logcat (`veyq-scan`): where the found kit's server came from, never a code's text.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun KitScanner(scan: QrScan<*>, onClose: () -> Unit, onNoCamera: () -> Unit) {
+    // the scan is the model's (AppModel.kitScan): a rotation disposes this view and draws it anew over the same scan, so the
+    // dispose only stops watching, and [onClose] ends the scan (#937)
     DisposableEffect(scan) {
         val watch = scan.watch { Log.i("veyq-scan", "kit scan: state $it") }
-        onDispose {
-            watch.stop()
-            scan.close()
-        }
+        onDispose { watch.stop() }
     }
     LaunchedEffect(scan) {
         scan.state.collect {

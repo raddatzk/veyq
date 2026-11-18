@@ -503,7 +503,17 @@ struct Bar: View {
         NodeHero(model: model, node: node, canSet: AppKinds.shared.coverSettable(kind: node.kind, facts: KindPage.of(node.kind)?.header(node, model)?.facts))
     }
 
+    /// The page on screen; on a phone or tablet a pull to refresh reads the lists anew (#953), which an open Memory's page
+    /// follows (its revisions). A page with a refresh of its own (a Pot's) keeps it: the nearest `refreshable` answers.
     @ViewBuilder private func content(_ key: String) -> some View {
+        #if os(iOS)
+        page(key).refreshable { await model.refreshPulled() }
+        #else
+        page(key)
+        #endif
+    }
+
+    @ViewBuilder private func page(_ key: String) -> some View {
         if let person = model.shell.person {
             // a person's profile over what was on screen (ADR 0144 decision 11): back returns there
             PersonScreen(model: model, userId: person)

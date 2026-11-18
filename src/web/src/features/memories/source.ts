@@ -167,7 +167,7 @@ export interface NodeMetaDoor {
   reconcileDate(nodeId: string, key: Uint8Array, items: MediaItem[], current: NodeMetaState): Promise<{ state: SealedMetaState; wrote: boolean }>
   setLocation(nodeId: string, key: Uint8Array, location: MemoryLocation | null, current: NodeMetaState): Promise<SealedMetaState>
   /** The Memory's participants (opaque user ids, ADR 0083): a merging read-modify-write, see `memoryParticipants.ts`. */
-  setParticipants(nodeId: string, key: Uint8Array, userIds: readonly string[], current: NodeMetaState): Promise<SealedMetaState>
+  setParticipants(nodeId: string, key: Uint8Array, userIds: readonly string[], openedWith: readonly string[], current: NodeMetaState): Promise<SealedMetaState>
   /** The read-modify-write the location's self-heal runs its own edit through. */
   write: (
     nodeId: string,
@@ -360,8 +360,8 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
         reconcileMemoryDate(scope(), nodeId, key, items, current, memberNodeMetaOptions(scope(), nodeId)),
       setLocation: (nodeId, key, location, current) =>
         setMemoryLocation(scope(), nodeId, key, location, current, memberNodeMetaOptions(scope(), nodeId)),
-      setParticipants: (nodeId, key, userIds, current) =>
-        setMemoryParticipants(scope(), nodeId, key, userIds, current, memberNodeMetaOptions(scope(), nodeId)),
+      setParticipants: (nodeId, key, userIds, openedWith, current) =>
+        setMemoryParticipants(scope(), nodeId, key, userIds, openedWith, current, memberNodeMetaOptions(scope(), nodeId)),
       write: (nodeId, key, current, edit) => writeNodeMeta(scope(), nodeId, key, current, edit, undefined, memberNodeMetaOptions(scope(), nodeId)),
     },
     banner: {

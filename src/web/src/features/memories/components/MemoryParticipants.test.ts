@@ -140,6 +140,25 @@ describe('MemoryParticipants: the people fact core\'s header draws', () => {
 })
 
 describe('MemoryParticipants: the picker', () => {
+  // inbox #952: the page's poll brings a peer's addition in while the picker is open; the save takes out only what the
+  // editor unticked of the list it was SHOWN, so the peer's id stays (ADR 0144 decision 1, the apps' picker does the same)
+  it('keeps a peer\'s addition the page polled while the picker was open: only what the editor unticked is removed', async () => {
+    const updateNode = vi.fn<ContentApi['updateNode']>().mockResolvedValue(undefined)
+    fakeApi(contentApi, { updateNode })
+    const w = await mountRow({ ids: [A, B] })
+    await openPicker(w)
+    await w.setProps({ node: nodeWith([A, B, C], 4) }) // the poll: a peer added Carl
+    await flushPromises()
+    boxes()[1].click() // Ben off
+    await flushPromises()
+    saveButton().click()
+    await flushPromises()
+    expect(updateNode).toHaveBeenCalledTimes(1)
+    const sent = updateNode.mock.calls[0][0].updateNodeRequest
+    expect(sent.metaRevision).toBe(4) // written against the node the page holds now
+    expect(unsealNodeMeta(key, { scopeId: SCOPE, nodeId: NODE }, sent.wrappedMeta).participants).toEqual({ userIds: [A, C] })
+  })
+
   it('lists the scope\'s current members as the layer\'s checkboxes, writes the choice with the version it read, and stores ids only', async () => {
     const updateNode = vi.fn<ContentApi['updateNode']>().mockResolvedValue(undefined)
     fakeApi(contentApi, { updateNode })

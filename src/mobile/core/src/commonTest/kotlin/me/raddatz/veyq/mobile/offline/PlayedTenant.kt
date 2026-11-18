@@ -89,6 +89,8 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
         var stillListed = false
         var revision = 1
         val nodes = mutableListOf<Node>()
+        /** Its trash: the roots of trashed subtrees, as `listTrashedNodes` lists them ([trashNode] puts one there). */
+        val trashed = mutableListOf<Node>()
         val wrappedGrant: ByteArray = suite.sealTo(Context("scope-grant", "scopeId" to id, "epoch" to 0L), kem.publicKey, key)
         val signature: ByteArray = p.ed25519Sign(identity.signSeed, suite.grantStatement(id, kind, 0, userId, myPublic, wrappedGrant))
     }
@@ -106,8 +108,20 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
         var mediaRevision = 1
         val media = mutableListOf<Medium>()
         private val binding = arrayOf("scopeId" to scope.id, "nodeId" to id, "epoch" to 0L, "placementRevision" to 0L)
-        val encryptedName: ByteArray get() = suite.sealField(Context("node-name", *binding), parent?.key ?: scope.key, name.encodeToByteArray())
-        val wrappedKey: ByteArray get() = suite.seal(Context("content-key", *binding), parent?.key ?: scope.key, key)
+        /** A drop box's drop key seed ([dropBox]): its private half sealed under the box's key is served as `sealedDropPrivateKey`. */
+        var dropSeed: ByteArray? = null
+        /** A guest's identity folder ([identityFolder]): its identity and that identity's `K_up`, under which its entry lives. */
+        var identity: Pair<String, ByteArray>? = null
+        /** Another drop key seed the guest's `K_up` is wrapped to (a wrap that does not open under the box's key); null: the box's. */
+        var wrapSeed: ByteArray? = null
+        /** The key this node's directory entry lives under: a guest's `K_up`, else its parent's key, else the scope key. */
+        val entryKey: ByteArray get() = identity?.second ?: parent?.key ?: scope.key
+        val encryptedName: ByteArray get() = suite.sealField(Context("node-name", *binding), entryKey, name.encodeToByteArray())
+        val wrappedKey: ByteArray get() = suite.seal(Context("content-key", *binding), entryKey, key)
+        /** `K_up` sealed to the drop box's public drop key (`upload-identity-key`), as a guest's browser sealed it. */
+        val wrappedIdentityKey: ByteArray? get() = identity?.let { (identityId, kUp) ->
+            suite.sealTo(Context("upload-identity-key", "scopeId" to scope.id, "nodeId" to parent!!.id, "identityId" to identityId), suite.dropKeyPublic(wrapSeed ?: parent.dropSeed!!), kUp)
+        }
     }
     inner class Blob(val label: String, val plain: List<ByteArray>, private val role: String, private val ownerId: String, private val nodeKey: () -> ByteArray, private val scopeId: String, type: String?) {
         val id = id(label)
@@ -216,8 +230,23 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
 
     fun unblock(n: Node) { n.blocked = false; n.scope.revision++ }
 
-    /** Node [n] trashed: gone from its scope's tree (a trashed node is `listTrashedNodes`', never `listNodes`'). */
-    fun trashNode(n: Node) { n.scope.nodes.remove(n); n.scope.revision++ }
+    /** Node [n] trashed: gone from its scope's tree (a trashed node is `listTrashedNodes`', never `listNodes`'), in its trash. */
+    fun trashNode(n: Node) { n.scope.nodes.remove(n); n.scope.trashed += n; n.scope.revision++ }
+
+    /** A Depot drop box at [parent] (ADR 0080 decision 11): a node with a drop key, its private half sealed under its key. */
+    fun dropBox(scope: Scope, label: String, parent: Node? = null, name: String = "Box $label"): Node =
+        node(scope, label, "DEPOT_DROPBOX", parent, name).also { it.dropSeed = p.randomBytes(32) }
+
+    /** A guest's identity folder in drop box [box]: its entry sealed under the guest's own `K_up`, wrapped to the box's drop key. */
+    fun identityFolder(box: Node, label: String, name: String): Node =
+        Node(box.scope, label, box, "FOLDER", name).also {
+            it.identity = id("$label-identity") to p.randomBytes(32)
+            box.scope.nodes += it
+            box.scope.revision++
+        }
+
+    /** Every `restoreNode` request's body, as sent. */
+    val restores = mutableListOf<String>()
 
     /**
      * Node [n] re-keyed as `NodeRekey` does it: a fresh key, its entry and every wrap under it sealed anew — each blob's
@@ -254,7 +283,15 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
 
     private fun scopeJson(s: Scope) = """{"id":"${s.id}","kind":"${s.kind}","role":"OWNER","tenantId":"${s.tenant.id}","nameEpoch":0,"iconEpoch":0,"currentEpoch":0,"grantedEpoch":0,"wrappedGrant":"${b64(s.wrappedGrant)}","granterUserId":"$userId","grantSignature":"${b64(s.signature)}"}"""
 
-    private fun nodeJson(n: Node) = """{"blockedByOperator":${n.blocked},"createdAt":"2026-01-01T00:00:00.000Z","placementRevision":0,"id":"${n.id}","epoch":0,"scopeEpoch":0,"kind":"${n.kind}","encryptedName":"${b64(n.encryptedName)}","slugToken":"c2x1Zw==","orderIndex":0,"wrappedContentKey":"${b64(n.wrappedKey)}","metaRevision":0,"wrappedMeta":${metaOf(n)?.let { "\"$it\"" } ?: "null"},"parentId":${n.parent?.let { "\"${it.id}\"" } ?: "null"}}"""
+    private fun nodeJson(n: Node) = """{"blockedByOperator":${n.blocked},"createdAt":"2026-01-01T00:00:00.000Z","placementRevision":0,"id":"${n.id}","epoch":0,"scopeEpoch":0,"kind":"${n.kind}","encryptedName":"${b64(n.encryptedName)}","slugToken":"c2x1Zw==","orderIndex":0,"wrappedContentKey":"${b64(n.wrappedKey)}","metaRevision":0,"wrappedMeta":${metaOf(n)?.let { "\"$it\"" } ?: "null"},"parentId":${n.parent?.let { "\"${it.id}\"" } ?: "null"}${extrasOf(n)}}"""
+
+    /** A drop box's sealed private drop key, a guest's identity folder's identity and its wrapped `K_up`. */
+    private fun extrasOf(n: Node): String = buildString {
+        n.dropSeed?.let { append(""","sealedDropPrivateKey":"${b64(suite.seal(Context("drop-private-key", "scopeId" to n.scope.id, "nodeId" to n.id), n.key, suite.serializeDropKey(it)))}"""") }
+        n.identity?.let { (identityId, _) -> append(""","shareIdentityId":"$identityId","wrappedIdentityKey":"${b64(n.wrappedIdentityKey!!)}"""") }
+    }
+
+    private fun trashedJson(n: Node) = """{"blockedByOperator":false,"id":"${n.id}","parentId":${n.parent?.let { "\"${it.id}\"" } ?: "null"},"kind":"${n.kind}","encryptedName":"${b64(n.encryptedName)}","epoch":0,"scopeEpoch":0,"placementRevision":0,"deletedAt":"2026-01-01T00:00:00Z","purgeAfter":"2026-02-01T00:00:00Z","attached":false${extrasOf(n).replace(Regex(",\"sealedDropPrivateKey\":\"[^\"]*\""), "")}}"""
 
     private fun blobRef(b: Blob) = """"blobId":"${b.id}","chunkCount":${b.frames.size},"byteSize":${b.byteSize},"wrappedBlobKey":"${b64(b.wrapped)}"${b.meta?.let { ",\"wrappedBlobMeta\":\"${b64(it)}\"" } ?: ""}"""
 
@@ -306,6 +343,20 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
                 val tag = "\"rev-${s.revision}\""
                 if (r.headers[HttpHeaders.IfNoneMatch] == tag) return respond("", HttpStatusCode.NotModified)
                 json(s.nodes.joinToString(",", "[", "]") { nodeJson(it) }, etag = tag)
+            }
+            path.matches(Regex("/api/scopes/[^/]+/trash/nodes")) -> {
+                val s = scopes.firstOrNull { it.id == path.split('/')[3] && it.tenant == tenant } ?: return json("{}", HttpStatusCode.NotFound)
+                json(s.trashed.joinToString(",", "[", "]") { trashedJson(it) })
+            }
+            path.matches(Regex("/api/scopes/[^/]+/nodes/[^/]+/restore")) -> {
+                val parts = path.split('/')
+                val s = scopes.firstOrNull { it.id == parts[3] && it.tenant == tenant } ?: return json("{}", HttpStatusCode.NotFound)
+                val n = s.trashed.firstOrNull { it.id == parts[5] } ?: return json("""{"code":"node_not_found"}""", HttpStatusCode.NotFound)
+                restores += (r.body as OutgoingContent.ByteArrayContent).bytes().decodeToString()
+                s.trashed.remove(n)
+                s.nodes += n
+                s.revision++
+                respond("", HttpStatusCode.NoContent)
             }
             path.matches(Regex("/api/scopes/[^/]+/nodes/[^/]+/media")) -> {
                 val parts = path.split('/')
