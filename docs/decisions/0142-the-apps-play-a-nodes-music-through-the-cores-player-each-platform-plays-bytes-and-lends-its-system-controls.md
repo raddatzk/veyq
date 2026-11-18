@@ -125,10 +125,14 @@ is the Kotlin core's and each platform draws only its own UI; this ADR applies i
    - **The duration** comes from the platform's reader of the picked file (Android `MediaMetadataRetriever`, Apple
      `AVURLAsset`, Windows and Linux the `Media.Duration` host request, extended to audio where it refuses it), except a
      raw ADTS file, whose frames the core counts (`adtsDurationMs`, the web's rule).
-   - **The trim is found only where it is cheap without a platform decoder: WAV.** The core reads the PCM at both ends
-     and runs ADR 0135 decision 4's scan. **Every decoded format is sealed untrimmed** (`trimStartMs = 0`,
-     `trimEndMs = durationMs`), and since the facts are never rewritten, such a track keeps its edges' silence wherever
-     it plays (inbox #932).
+   - **The trim of a WAV from its PCM, of every decoded format from its two ends as the platform decodes them**
+     (amended 2026-11-18, inbox #932). The core reads a WAV's PCM at both ends; for any other container it asks the
+     platform for the first and the last 30 s of audio (`MusicUpload.Measure.ends`, each end a WAV the core's `Wav`
+     reads) — Android `MediaExtractor` + `MediaCodec`, Apple `AVAudioFile` at a frame position, Windows Media Foundation's
+     `MediaTranscoder` trimmed to the slice, Linux GStreamer seeked to it (the `Media.Slice` host request) — and runs ADR
+     0135 decision 4's scan over them. Never the whole file, so a long M4A, FLAC or Ogg is trimmed too, which the web
+     leaves untrimmed past 7 minutes. A platform that decodes nothing of it seals it untrimmed (`trimStartMs = 0`,
+     `trimEndMs = durationMs`), as before.
    - **The listed tier** gains `durationMs`, `trimStartMs`, `trimEndMs` beside what `metaTier` writes, field for field
      the web's; no derived tiers; the blob-meta name is the file's.
 8. **The Music view's model is the core's.** `MusicModel` (per node, from `ShellModel` as `galleryModel` is): the
@@ -193,8 +197,11 @@ is the Kotlin core's and each platform draws only its own UI; this ADR applies i
 - **ADR 0135's background residual does not hold for the apps.** A phone may suspend a hidden tab, and so the web's
   music with it; the apps play on with the screen off (decision 3), because the process that reads the frames keeps
   running.
-- **A decoded format uploaded from an app keeps its silence** (decision 7, inbox #932): a track added from the web is
-  trimmed where ADR 0135 decision 4 finds it cheaply, the same file added from an app only where it is a WAV.
+- **A decoded format uploaded from an app is trimmed from its decoded ends** (decision 7 as amended, inbox #932): held by
+  `AudioFactsTest` (the ends the platform hands scanned, the file itself never read) and `MusicDispatchTest` (the host's
+  two `Media.Slice` answers, a track's trim from them); each platform's decoder by its own test where it has a harness
+  (Linux `media_tiers.rs`, Windows `MediaTiersTest`: a slice decoded to its span). A file the web trimmed and an app trimmed
+  may differ by a window: the web decodes MP3 slices in the browser, the app on the platform.
 - **Each platform's format gaps** are what its matrix (decision 9) measures; a platform not listed below is not measured
   yet, and no doc says which formats its app plays until it is.
 - **Android and macOS, measured 2026-11-16** — ffmpeg's 12 s tones in the same ten formats, each typed by `Sniff.stream`,
@@ -308,9 +315,8 @@ Explained for users on the docs site: [Add background music](../../site/src/cont
 - **A bar tab for music** — Memories' bar is application-level ([ADR 0122](0122-one-app-holds-every-application-the-drawer-chooses-the-bar-belongs-to-it.md)),
   so a Music tab there would be every Memory's at once. **A sheet from the header** — the view is a list people return
   to and act on, as the web's tab is.
-- **Four platform decoders now** (MediaCodec, AVAudioFile, Media Foundation, GStreamer) behind a `decodeSlice` host
-  request, to trim the decoded formats — four native paths for a nicety ADR 0135 already leaves out for a long M4A,
-  FLAC or Ogg; inbox #932 keeps it, with `AVAudioFile` as the cheap first one.
+- **Decoding the whole file for its ends** — what the web does for a short M4A, FLAC or Ogg; a platform decoder reads a
+  slice at a position, so the apps never need to (decision 7 as amended).
 - **Sealing no facts for a decoded format** — the web would then play it whole too, but an export would carry no `audio`
   field and an import would detect anew; sealing the duration keeps the length in the Music view.
 - **Re-sealing a rename from the parsed `MemoryMedia.Meta`** — it parses the photo fields only and would drop the rest.

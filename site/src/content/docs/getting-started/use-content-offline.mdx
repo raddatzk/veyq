@@ -4,6 +4,7 @@ description: In the veyq app, what you viewed stays on your device within a limi
 sources:
   - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
   - docs/crosscutting/native-apps.md
+  - docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md
   - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
 ---
 
@@ -11,7 +12,9 @@ The veyq [app](/getting-started/install-the-app/) can keep content on your devic
 connection. It keeps two kinds:
 
 - **What you viewed recently:** pictures, previews, the part of a video you played and the files you opened, up to a
-  storage limit you set. When the limit is reached, what you have not looked at for the longest goes first.
+  storage limit you set — on Android, Windows and Linux also the map pictures you looked at, which are never shown
+  offline ([Is my data safe?](/privacy/is-my-data-safe/#maps-only-when-you-turn-them-on)). When the limit is reached,
+  what you have not looked at for the longest goes first.
 - **What you make available offline:** a Memory, a Chapter, a folder or a file, downloaded whole and kept until you
   turn it off.
 

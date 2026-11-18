@@ -4,7 +4,7 @@
   real iPhone and a signed macOS build, are the owner's ([native-apps](../crosscutting/native-apps.md) § Open)
 - Date: 2026-11-15
 - Model: [native-apps](../crosscutting/native-apps.md)
-- Replaced in part: decision 8's and decision 9's kept originals (a music track's too) by ADR 0142 (built); decision 8's kept originals (a GPX track's too) by ADR 0143 (built); decision 9's kept blobs (a banner's too) by ADR 0144 (built)
+- Replaced in part: decision 8's and decision 9's kept originals (a music track's too) by ADR 0142 (built); decision 8's kept originals (a GPX track's too) by ADR 0143 (built); decision 9's kept blobs (a banner's too) by ADR 0144 (built); decision 5's kept reads (a map tile's in the automatic tier too) by ADR 0143 decision 4 as amended (built)
 
 ## Context
 
@@ -212,6 +212,11 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
 
 ## Consequences
 
+- **A map tile is kept in the automatic tier too** (ADR 0143 decision 4 as amended 2026-11-18, inbox #939): not a server's
+  answer but a tile host's, kept as served under `KeptRead.TILE`, per tenant; reached by no listing, so the sweep keeps it
+  while its tenant is listed; never pinned, never read offline (it is read only behind the map's gate). Its plaintext is
+  public map imagery, but which tiles were viewed maps where the Memories are — so it is sealed and named opaquely like
+  every entry, and dropped with the consent.
 - **The apps now keep ciphertext on disk, and the docs say so.** ADR 0047's Consequences and `src/mobile/CLAUDE.md`
   § Nothing on disk the app did not choose name the store as the one thing the app chooses to keep; the HTTP stack's
   rule is unchanged. The web is unchanged.

@@ -3218,7 +3218,8 @@ internal sealed class HostRequest {
      * outside the developer's `*.localhost` instance as it was answered — method, address, the `User-Agent` sent, whether a
      * `Referer`, cookie or `Authorization` went (never a value) and the status ([NetLog]). Sent only where the host's
      * [Config.netLog] asked for it, which a release build never does; Linux writes it to stderr, Windows to its `log.txt`.
-     * Told, never waited for.
+     * Told, never waited for. The hosts' generated types are named by the `@SerialName` (`HostRequest::NetLog` in Rust,
+     * `HostRequest.NetLog` in C#), never by this class's name.
      */
     @Serializable @SerialName("Net.Log") data class NetLogLine(val line: String) : HostRequest()
 }

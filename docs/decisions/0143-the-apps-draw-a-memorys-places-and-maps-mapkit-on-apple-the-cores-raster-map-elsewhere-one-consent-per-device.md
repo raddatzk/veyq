@@ -89,10 +89,22 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
    instance's origin is what the web's `Referer` already tells the same providers
    ([ADR 0016 § Request discipline](0016-geocoding-provider-neutrality.md#request-discipline--the-providers-policy-is-part-of-the-decision-not-an-optimisation)),
    so a provider's per-application limits and blocks stay per instance, as on the web.
-4. **Tiles are kept in memory only, for the session.** `MapTiles` keeps a bounded LRU of about 300 tiles with each one's
-   `ETag`/`Last-Modified` and expiry, revalidated conditionally once expired, and drops it all at a withdrawal, a lock, a
-   sign-out and a tenant switch (`closeTenant()`, where the player's readers close). Nothing the map path fetches is
-   written to disk.
+4. **Tiles are kept in memory for the session, and sealed in the offline store across launches** (amended 2026-11-18,
+   inbox #939). `MapTiles` keeps a bounded LRU of about 300 tiles with each one's `ETag`/`Last-Modified` and expiry,
+   revalidated conditionally once expired, and drops it all at a withdrawal, a lock, a sign-out and a tenant switch
+   (`closeTenant()`, where the player's readers close). Where the account keeps an offline store
+   ([ADR 0140](0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)),
+   each tile served (never a `no-store` one) is also kept there sealed, in its **automatic tier**, per tenant and named by
+   the served template and its `z/x/y` (`TileShelf`, `KeptRead.TILE`); a tile not in memory is looked for there first,
+   served without a request while fresh, else revalidated with its validators. It counts against the person's limit, is
+   evicted least recently viewed first, goes with "Clear cache" and a wipe, is never kept at the limit `0` or where the
+   device keeps no trust, and stays through the sweep while its tenant is listed. **The consent is per device, the store
+   per account**: a tenant's kept tiles are dropped whenever its map services are not shown for want of the consent or the
+   service — this account's at once at a withdrawal, another account's at its next open — and another template's when the
+   served one changed. **No kept tile is shown offline, from any host**: the store is read only behind the same gate as a
+   request (offered, consented for the hosts served now, online), as `tile.openstreetmap.org` forbids offline use and
+   decision 9 draws no map offline; nothing is fetched ahead of what is viewed. Nothing else the map path fetches is
+   written to disk (a geocode stays the memory cache's and the sealed name's).
 5. **The date and the place are the core's port of the web's** — `core/…/memories/place/`: `MemoryDate` (its four
    modes, `normalize`, `computeAutoRange` over trustworthy capture times) and `MemoryLocation` (`normalize`, the
    200-code-point name, `WORLD_VIEW` and its "no point" reading, `computeMedoid`, `mediaGpsPoints`,
@@ -285,24 +297,41 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
     taken — the owner's, on the unlocked Mac and an iPhone ([native-apps](../crosscutting/native-apps.md) § Open).
     **Windows offline**: the VM reaches the backend through a standing ssh tunnel a pass may not stop, and cutting the VM
     off is a firewall change, the owner's; offline is the core's `MapServices`, the code Linux ran. **A request log on
-    Windows and Linux builds**: Windows' standard output goes nowhere, and Linux's line was the pass's own (inbox #947).
+    Windows and Linux builds**: Windows' standard output goes nowhere, and Linux's line was the pass's own (built since,
+    inbox #947, below).
     Android's *Download GPX* and *Report* of a track (seen in its menu; Linux and Windows downloaded); a phone's 60 Hz
     frame budget (the owner's device pass).
-  - **Seen, not fixed** (inbox): the raster map first fetches zoom 2's four world tiles before the framed view (#945).
-    Seen and fixed since (2026-11-18): Android's add buttons were nameless in the accessibility tree, Android's *Map
+  - **Seen, fixed since**: the raster map first fetched zoom 2's four world tiles before the framed view (#945, 2026-11-18,
+    below). Seen and fixed since (2026-11-18): Android's add buttons were nameless in the accessibility tree, Android's *Map
     services on this device* toggled only from its switch, and Windows named a cluster marker for one of its Memories
     (now "3 Memories here", `map_cluster_title`).
-- **Residual — no tile survives a launch.** A tile viewed in an earlier launch is fetched again, while the tile policy
-  asks for "a sufficient local cache". Our reading: a photo app's map traffic is a person browsing their own Memories,
-  and honouring the headers in memory is that cache for a session. A sealed cache across launches, in ADR 0140's
-  automatic tier, is inbox #939.
+- **A tile survives a launch, sealed** (decision 4 as amended 2026-11-18, inbox #939): the tile policy's "sufficient local
+  cache" is the store's automatic tier, under the person's limit; what it costs is ADR 0140's own residual — a thief who
+  opens the store reads which tiles were viewed, as they read the places they are tiles of. Measured by `MapTileShelfTest`
+  (a tile viewed in one launch served in the next without a request; counted, kept by the sweep, dropped by Clear cache,
+  not kept at the limit `0`; a withdrawal dropping it) and `MapTilesTest` (the store read only behind the gate, a
+  `no-store` tile never kept). **Apple**: MapKit's tiles are `geod`'s cache, not the app's (above); nothing changes there.
+- **A map opens on its framing, never on the world first** (inbox #945, seen in the Android pass): the Map view and the
+  Memories map show no view and ask for no tile while what they frame is read (`MemoryLocation.opening`,
+  `TrackList.State.framed`; the bridge's `HeldMap` and Android's `MapCamera.opened`), then open framed; the world view is
+  only where there is nothing to frame. `MapDispatchTest`'s `theMapViewOpensOnItsFramingNeverOnTheWorldFirst` was red
+  before (a view and zoom 2's tiles placed while the tracks read). Measured 2026-11-18 on a throwaway API 36 emulator (its `veyq-net` log): a
+  Memory's Map view with one GPX track asked its nine framed tiles at zoom 16 and none at zoom 2; the Memories map of a
+  list with no located Memory framed the world, its eight zoom-2 tiles being its framing. That a tile survives a launch was
+  not run live: it needs a device that keeps a trust, and the dev principal is at the server's device limit (`add wrap
+  409`, on Linux the same day), so the tests above hold it.
+- **A request log in the desktops' debug builds** (inbox #947): Android's `DevNetLog` has its Linux and Windows twin — the
+  host's `Config.netLog`, set by a debug build alone, installs a Ktor plugin on every client the core makes, and each
+  request to a host outside `*.localhost` is one `Net.Log` line (the address, the `User-Agent` sent, whether a `Referer`,
+  cookie or `Authorization` went, the status; a presigned query said as `<presigned>`) on Linux's stderr and in Windows'
+  `log.txt`, as `veyq-net …` (`NetLogTest`).
 - **Offline there is no map** (decision 9): a pinned Memory's Map view lists its tracks and nothing is drawn under them.
   ADR 0140 decision 8's kept originals gain a GPX track's.
 - **A Memory's date and place stay current wherever it is curated:** today an app's upload leaves a web-made `auto` range
   stale until a browser opens the Memory; with decision 5's settle points it does not.
 - **Not decided here:** a Memory's participants, a medium's capture-time correction and the banner (since built by ADR 0144); the
   date and the place in the apps' creation dialog (#940); a person's profile map, the apps having no profile page
-  (then #941; both since decided in [ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md)); a sealed tile cache across launches (#939); the notice's other "your browser" wording (#942).
+  (then #941; both since decided in [ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md)); the notice's other "your browser" wording (#942).
 
 ## Alternatives considered
 
@@ -331,8 +360,10 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
   calls impersonation.
 - **A plaintext tile cache on disk** — the tiles a member viewed are a map of where their Memories are, which the sealed
   places exist to hide from whoever holds the device; the app keeps nothing at rest it did not choose.
-- **Sealing tiles into the offline store now** — it would serve them offline, which `tile.openstreetmap.org` forbids, and
-  the store's automatic tier is per account while the consent is per device; inbox #939 decides both.
+- **Tiles in the offline store served offline** — `tile.openstreetmap.org` forbids offline use (decision 4: read only
+  behind the gate). **A device-wide tile cache beside the accounts' stores** — a key no account holds, so either plaintext
+  or a second sealed store with its own key; the per-account store is what exists, and the consent's per-device reach is
+  kept by dropping a tenant's tiles where the consent does not hold (decision 4).
 - **Sorting the Memories list by start date**, as the web's grid does — ADR 0122 orders every list by use.
 - **The date and the place in the creation dialog now** — editing them right after creating does the same, and the
   dialog is five platforms' forms (#940).
@@ -347,6 +378,6 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
 
 Explained for users on the docs site: [Set the location](../../site/src/content/docs/memories/set-the-location.mdx) and
 [Add GPX tracks](../../site/src/content/docs/memories/add-gpx-tracks.mdx) (§ In the app),
-[Is my data safe?](../../site/src/content/docs/privacy/is-my-data-safe.md) (§ Maps, only when you turn them on); for
+[Is my data safe?](../../site/src/content/docs/privacy/is-my-data-safe.md) (§ Maps, only when you turn them on) and [Use content offline](../../site/src/content/docs/getting-started/use-content-offline.mdx) (a viewed tile kept); for
 Server Owners [Capabilities](../../site/src/content/docs/run/capabilities.mdx) (§ External services); for researchers
 the [threat model](../../site/src/content/docs/security/threat-model.md) (the third-party row).

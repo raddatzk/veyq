@@ -3,6 +3,7 @@ title: "Open and look at a file"
 sources:
   - docs/features/depot/use-cases/uc.depot.view-file.md
   - docs/features/depot/use-cases/uc.depot.member-files.md
+  - docs/crosscutting/native-apps.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -31,6 +32,16 @@ Some things cannot be shown on the page: a format your browser cannot display, a
 
 The file is unlocked on your device while you look and nothing extra is stored. Someone you shared the file with sees
 exactly the same.
+
+## In the app
+
+The veyq [app](/getting-started/install-the-app/) shows a file as the browser does, with these differences:
+
+- A **text** has **Copy** and **Wrap lines** too.
+- A **PDF protected by a password** asks for it on the page, as in the browser. On Android this needs Android 15 or
+  later; on an older Android the app says the PDF is protected and offers the download.
+- You can **select and copy a PDF's text** on an iPhone, iPad or Mac, and on Android 15 or later (touch and hold, then
+  drag, and choose **Copy**). On Windows and Linux the app shows a PDF's pages without selectable text.
 
 ## Who uploaded it
 

@@ -3,6 +3,7 @@ title: "Eine Datei öffnen und ansehen"
 sources:
   - docs/features/depot/use-cases/uc.depot.view-file.md
   - docs/features/depot/use-cases/uc.depot.member-files.md
+  - docs/crosscutting/native-apps.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -36,6 +37,17 @@ gleich daneben.
 
 Die Datei wird auf deinem Gerät entschlüsselt, während du sie ansiehst, und es wird nichts Zusätzliches gespeichert. Wem
 du die Datei geteilt hast, der sieht genau dasselbe.
+
+## In der App
+
+Die veyq-[App](/de/getting-started/install-the-app/) zeigt eine Datei wie der Browser, mit diesen Unterschieden:
+
+- Ein **Text** hat auch **Kopieren** und **Zeilen umbrechen**.
+- Eine **PDF, die mit einem Passwort geschützt ist**, fragt auf der Seite danach, wie im Browser. Unter Android braucht
+  das Android 15 oder neuer; auf einem älteren Android sagt die App, dass die PDF geschützt ist, und bietet den Download an.
+- Du kannst **den Text einer PDF markieren und kopieren** auf einem iPhone, iPad oder Mac und unter Android 15 oder neuer
+  (gedrückt halten, dann ziehen und **Kopieren** wählen). Unter Windows und Linux zeigt die App die Seiten einer PDF ohne
+  markierbaren Text.
 
 ## Wer sie hochgeladen hat
 

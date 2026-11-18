@@ -461,8 +461,18 @@ first cut.
 
 **Depot**: a READ_WRITE guest's own name as uploader; importing a download (a ZIP, or one unpacked as a folder; a dropped
 or picked veyq download is uploaded as the file it is until then); multi-select and dragging a node onto a folder to move
-it (inbox #421); a PDF's text layer and password prompt, a text's copy and wrap toggle (the web's pdf.js extras); Send a
-copy and "Open with" on the desktops (not offered, see Built).
+it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built). A PDF's text selected and copied on
+Linux (poppler reads it — `selected_text`, `selected_region` — but GTK has no view that selects it, so an overlay of its own
+is the work) and on Windows (`Windows.Data.Pdf` has no text API: not offered there). Built 2026-11-18 (V2 block C): a
+text's *Copy* and *Wrap lines* on every app; a PDF's password asked in the page on every app (Android from Android 15,
+`LoadParams`; below it said with the download); its text selectable and copied on Apple (PDFKit's `PDFView`) and Android 15
+(`PdfRenderer.Page.selectContent`, a long press and a drag). Passed on a throwaway API 36 emulator the same day: a text's
+wrap toggled (its lines unwrapped, then wrapped again) and Copy pressed (what reached the clipboard not read back: the
+emulator's shell has no clipboard command); a protected PDF asking for its password, a wrong one said,
+the right one showing its page, and its line selected by a long press and a drag with Copy offered. The desktops' and
+Apple's were built and their tests run, not clicked (a Linux pass under a load average of 25 lost its clicks and its
+server; Apple's is the owner's, #925). The Use page that says this to a person: [Open and look at a
+file](../../site/src/content/docs/depot/view-a-file.mdx) (§ In the app).
 
 **Memories**: the date and the place in the creation dialog (#940); item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
 re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a
@@ -473,16 +483,19 @@ the lock screen, Control Center and a call's interruption, and iOS's format matr
 the unlocked Mac the click-through, Now Playing and the media keys (the screen was locked through every pass). Not run
 elsewhere: Android's lock-screen controls (the AVD has no keyguard) and a real phone's decoders (the matrix is the
 emulator's); the signed-in Flatpak's own MPRIS on a desktop (`playerctl`; a release build has no devlogin); the MSIX's
-SMTC source name (the unpackaged build has no package identity, so the flyout names no app). A decoded format added from an app keeps its silent edges
-(#932).
+SMTC source name (the unpackaged build has no package identity, so the flyout names no app). A decoded format added from
+an app is trimmed from its two ends as the platform decodes them since 2026-11-18 (#932, ADR 0142 decision 7 as amended);
+Apple's `AVAudioFile` path was built, not run (the owner's pass).
 
 **Maps** ([ADR 0143](../decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md), built above): **Apple's passes are the owner's** — on the
 unlocked Mac and a real iPhone, the pass the other three ran: the consent naming Apple Maps, a place set and named, the
 Map tab's pins and a cluster, a photo's map and its name sealed once, a track added, dashed, hidden and selected, *Turn
 map services off*, offline, and what MapKit keeps on an iPhone (the Mac's screen locked during both attempts; no iOS
 simulator boots on this Mac). Not run elsewhere: Windows offline (the VM's backend is reached through a standing tunnel),
-Android's *Download GPX* and *Report* of a track, a phone's 60 Hz frame budget. Not built: a tile cache across launches
-(#939); a request log in the Linux and Windows builds (#947). Seen in the passes, open: #945.
+Android's *Download GPX* and *Report* of a track, a phone's 60 Hz frame budget. Built 2026-11-18 (V2 block C): a viewed
+tile kept sealed across launches in the store's automatic tier, never shown offline (#939, ADR 0143 decision 4 as
+amended); the maps open on their framing, never on the world first (#945); a request log in the Linux and Windows debug
+builds (#947).
 
 **Curation** ([ADR 0144](../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md), built above): **Apple's pass is the owner's** (inbox #925) — built and compiled for macOS and
 iOS, never clicked (the Mac's screen is the owner's; no iOS simulator boots on this Mac): the people line, its popover and

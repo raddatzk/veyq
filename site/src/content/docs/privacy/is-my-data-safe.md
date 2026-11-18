@@ -115,6 +115,11 @@ server's map provider. Apple then sees the part of the map you look at and your 
 Apple Maps when it asks you to turn map services on, and your server's privacy notice names it too. Place names still
 come from your server's naming service.
 
+**In the veyq app on Android, Windows and Linux, the map pictures you looked at are kept on your device**, sealed like
+everything the app keeps offline, so they are not loaded again the next time. They count toward the app's storage limit,
+go with **Clear cache**, and go when you turn map services off. Without a connection the app shows no map at all, so a
+kept map picture is never shown offline.
+
 ## When you share
 
 Sharing is the one moment you **choose** to lower the wall — always by your explicit action:
