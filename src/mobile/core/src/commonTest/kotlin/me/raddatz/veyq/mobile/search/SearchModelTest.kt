@@ -176,13 +176,13 @@ class SearchModelTest {
     fun aYearChipFromTheTextNarrowsToWhatSpansItAndBackspaceTakesItBack() {
         started()
         val offered = ask("2024")
-        assertEquals("year:2024", offered.suggestions.first().key.removePrefix("chip:"))
+        assertEquals("year:2024", offered.suggestions.first().id.removePrefix("chip:"))
         runBlocking {
             model.choose(0)
             model.settled()
         }
         val chosen = model.current
-        assertEquals(listOf("year:2024"), chosen.chips.map { it.key })
+        assertEquals(listOf("year:2024"), chosen.chips.map { it.id })
         assertEquals("", chosen.text)
         assertEquals(listOf("Rome 2024", "Rome beach.jpg"), names(chosen).sorted())
         assertEquals(Notice(Msg.SEARCH_ANNOUNCE_CHIP_ADDED, "2024"), chosen.announcement.first())
@@ -199,7 +199,7 @@ class SearchModelTest {
         started()
         val shown = ask("anna")
         assertEquals(listOf("Anna Schmidt"), names(shown))
-        assertTrue(shown.suggestions.any { it.key == "chip:person:u-anna" })
+        assertTrue(shown.suggestions.any { it.id == "chip:person:u-anna" })
         runBlocking {
             model.open(0)
             model.settled()
@@ -208,7 +208,7 @@ class SearchModelTest {
         runBlocking {
             model.text("anna")
             model.settled()
-            model.choose(model.current.suggestions.indexOfFirst { it.key == "chip:person:u-anna" })
+            model.choose(model.current.suggestions.indexOfFirst { it.id == "chip:person:u-anna" })
             model.settled()
         }
         assertEquals(listOf("Rome 2024"), names(model.current), "Person: Anna means what she takes part in, not her profile")

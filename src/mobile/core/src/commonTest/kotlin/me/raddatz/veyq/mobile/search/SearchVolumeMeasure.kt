@@ -143,7 +143,7 @@ class SearchVolumeMeasure {
                 timed("\"Ke\"") { model.text("Ke") },
                 timed("\"Kev\"") { model.text("Kev") },
                 timed("\"2017\" typed") { model.text("2017") },
-                timed("year chip chosen") { model.choose(model.current.suggestions.indexOfFirst { it.key == "chip:year:2017" }) },
+                timed("year chip chosen") { model.choose(model.current.suggestions.indexOfFirst { it.id == "chip:year:2017" }) },
                 timed("Backspace (the chip removed)") { model.removeLastChip() },
             )
             println("veyq-measure: B2 build ${build.inWholeMilliseconds} ms (7,000 nodes over 3 spaces, 10,000 photos, 445 members)")

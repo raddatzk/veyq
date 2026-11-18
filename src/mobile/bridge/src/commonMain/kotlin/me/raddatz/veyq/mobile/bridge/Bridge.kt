@@ -125,6 +125,11 @@ internal class Composition<A : Connection, T : Any>(
     /** The app's words' language (`Config.language`): the geocoder's `accept-language` (ADR 0143 decision 2). */
     val language: String = "en",
     /**
+     * The words the search matches and names in the host's language (ADR 0146 decision 7: a kind's word, a month's name, a
+     * settings section's title and words), asked of the host ([HostWords]); a test plays its own.
+     */
+    val words: me.raddatz.veyq.mobile.search.SearchWords = me.raddatz.veyq.mobile.search.SearchWords { it.key },
+    /**
      * A WebP the host's platform cannot decode, as a PNG ([Call.PictureDecode]): libwebp's decoder in the library
      * (`WebpPicture.png`); none on the JVM, where every such call is refused.
      */
@@ -227,6 +232,12 @@ internal class Tenant(
     val offersWasThere: ((scopeId: String) -> Boolean)? = shell?.let { s -> { scopeId -> s.offersWasThere(scopeId) } },
     /** Whether New Memory offers *Determine location automatically* (`ShellModel.offersAutoPlace`, uc.memory.place A1). */
     val offersAutoPlace: (() -> Boolean)? = shell?.let { s -> { s.offersAutoPlace() } },
+    /**
+     * The search over this tenant (`ShellModel.searchModel`, ADR 0146): one per field, over the host's [words]; a desktop's
+     * settings page offers no appearance section (the phones' alone does).
+     */
+    val search: ((words: me.raddatz.veyq.mobile.search.SearchWords) -> me.raddatz.veyq.mobile.search.SearchModel)? =
+        shell?.let { s -> { words -> s.searchModel(words, appearance = false) } },
     /** A person's frame (`ShellModel.profile`): named by the tenant's directory as read, with the sections of the applications on. */
     val profile: ((userId: String) -> me.raddatz.veyq.mobile.navigation.PersonProfile)? = shell?.let { s -> { userId -> s.profile(userId) } },
     /** Memories' section of a person's page (`ShellModel.personMemories`) over the tenant's participants index. */
@@ -307,6 +318,11 @@ internal class HeldBanner(val gallery: Long, val model: me.raddatz.veyq.mobile.m
  * A person's page the host opened ([Call.PersonOpen]): core's frame and Memories' section where it is among the
  * application's sections; [open] turns false as it closes.
  */
+/** A search the host opened ([Call.SearchOpen]); [open] turns false as its tenant closes, so its watch delivers null. */
+internal class HeldSearch(val model: me.raddatz.veyq.mobile.search.SearchModel) {
+    val open = MutableStateFlow(true)
+}
+
 internal class HeldPerson(
     val profile: me.raddatz.veyq.mobile.navigation.PersonProfile,
     val memories: me.raddatz.veyq.mobile.memories.people.PersonMemories?,
@@ -523,6 +539,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val bannerReaders = Registry<Long>()
     private val persons = Registry<HeldPerson>()
 
+    /** The searches the host opened (ADR 0146 decision 13), the tenant's: each disposed when it closes. */
+    private val searches = Registry<HeldSearch>()
+
     /** "Manage servers" while it is open, null while closed; its spaces read by [managing]'s job. */
     private val manage = MutableStateFlow<List<ManagedShown>?>(null)
     private val managing = AtomicReference<Job?>(null)
@@ -549,7 +568,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.SharePassword -> shares[call.share]?.password(call.password).done(Answer.Why.NO_SUCH_SHARE)
             // a map's views come at gesture pace, a place's name and a date's fields as typed and picked: in the host's order
             is Call.MapView, is Call.PlaceTyped, is Call.DateChoose, is Call.DateFrom, is Call.DateTo,
-            is Call.ParticipantsSearch, is Call.ParticipantsToggle -> ordered(call)
+            is Call.ParticipantsSearch, is Call.ParticipantsToggle,
+            // the search's text as typed: the latest keystroke is the one the field ends on
+            is Call.SearchText -> ordered(call)
             else -> null
         }
         scope.launch {
@@ -583,6 +604,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Call.DateTo -> dates[call.date]?.model?.to(call.day).done(Answer.Why.NO_SUCH_DATE)
         is Call.ParticipantsSearch -> participantPickers[call.participants]?.model?.search(call.query).done(Answer.Why.NO_SUCH_PARTICIPANTS)
         is Call.ParticipantsToggle -> participantPickers[call.participants]?.let { taken(it.model.toggle(call.userId)) } ?: noParticipants
+        is Call.SearchText -> searches[call.search]?.model?.text(call.text).done(Answer.Why.NO_SUCH_SEARCH)
         else -> Answer.Refused(Answer.Why.NOT_A_CALL)
     }
 
@@ -717,6 +739,18 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             Call.ShellOfflineGoneSeen -> shell?.goneSeen().done()
             Call.HomeGroups -> shell?.current?.let { Answer.Groups(it.lists.groups(it.shell)) } ?: noTenant
             is Call.SearchQuery -> shell?.current?.let { Answer.Hits(ShellWords.search(it.lists.objects, call.query)) } ?: noTenant
+            Call.SearchOpen -> tenant.value?.models?.search?.let { make ->
+                val id = ids.incrementAndFetch()
+                searches.put(id, HeldSearch(make(parts.words)))
+                Answer.SearchOpened(id)
+            } ?: noTenant
+            is Call.SearchFocus -> searches[call.search]?.model?.focus().done(Answer.Why.NO_SUCH_SEARCH)
+            is Call.SearchChoose -> searches[call.search]?.model?.choose(call.index).done(Answer.Why.NO_SUCH_SEARCH)
+            is Call.SearchRemoveChip -> searches[call.search]?.model?.removeChip(call.index).done(Answer.Why.NO_SUCH_SEARCH)
+            is Call.SearchRemoveLastChip -> searches[call.search]?.model?.removeLastChip().done(Answer.Why.NO_SUCH_SEARCH)
+            is Call.SearchMore -> searches[call.search]?.model?.more().done(Answer.Why.NO_SUCH_SEARCH)
+            is Call.SearchOpenResult -> searches[call.search]?.model?.open(call.index).done(Answer.Why.NO_SUCH_SEARCH)
+            is Call.SearchClose -> searches[call.search]?.model?.close().done(Answer.Why.NO_SUCH_SEARCH)
             is Call.PotOpen -> tenant.value?.models?.pot?.let { make ->
                 val id = ids.incrementAndFetch()
                 val pot = make()
@@ -1222,7 +1256,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.AudioFailed -> decks[call.deck]?.failed(call.load).done(Answer.Why.NO_SUCH_DECK)
             // these are applied on the host's thread, in its order ([call])
             is Call.MapView, is Call.PlaceTyped, is Call.DateChoose, is Call.DateFrom, is Call.DateTo,
-            is Call.ParticipantsSearch, is Call.ParticipantsToggle -> ordered(call)
+            is Call.ParticipantsSearch, is Call.ParticipantsToggle, is Call.SearchText -> ordered(call)
             Call.MapOpenMemories -> tenant.value?.models?.let { t ->
                 val services = mapServices.value ?: return noMapServices
                 val pins = t.memoriesMap?.invoke() ?: return noMapServices
@@ -1821,6 +1855,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         banners.removeAll().forEach { it.close() }
         bannerReaders.removeAll()
         persons.removeAll().forEach { it.open.value = false }
+        // the searches are the tenant's (ADR 0146 decision 5): their media documents dropped, nothing revalidated any more
+        searches.removeAll().forEach {
+            it.open.value = false
+            it.model.dispose()
+        }
         // a page closes its lightbox, and the lightbox its reader
         galleries.removeAll().forEach { it.close() }
         lightboxes.removeAll().forEach { it.model.close() }
@@ -1924,6 +1963,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             val section = held.memories?.state ?: flowOf(null)
             combine(section, pictures, held.open) { m, p, open -> Update.Person(w.person, if (open) shownPerson(held, m, held.profile.userId in p) else null) }
         } ?: flowOf(Update.Person(w.person, null))
+        is Watched.Search -> searches[w.search]?.let { held ->
+            combine(held.model.state, held.open) { s, open -> Update.Search(w.search, if (open) s else null) }
+        } ?: flowOf(Update.Search(w.search, null))
         is Watched.Trash -> trashes[w.trash]?.let { t -> t.state.map { Update.Trash(w.trash, shownTrash(t, it)) } }
             ?: flowOf(Update.Trash(w.trash, null))
         is Watched.Move -> moves[w.move]?.let { m -> m.state.map { Update.Move(w.move, shownMove(m, it)) } }
@@ -2447,6 +2489,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             bannerPictures: me.raddatz.veyq.mobile.memories.banner.BannerWrite.Pictures = NoBannerPictures,
             /** A WebP as a PNG ([Call.PictureDecode]): the core's libwebp (`WebpPicture.png`). */
             webp: (ByteArray) -> ByteArray? = { null },
+            /** The search's words in the host's language: the host's ([HostWords]). */
+            words: me.raddatz.veyq.mobile.search.SearchWords = me.raddatz.veyq.mobile.search.SearchWords { it.key },
             now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
         ): Bridge<VeyqAccount, TenantSession> = Bridge {
             val recent = RecentUses(
@@ -2465,7 +2509,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             Composition(
                 SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files, pictures = pictures,
                 settings = { session, account, separator -> AccountSettings.of(session, account, separator) }, tiers = tiers, audio = audio,
-                bannerPictures = bannerPictures, language = config.language, webp = webp,
+                bannerPictures = bannerPictures, language = config.language, webp = webp, words = words,
                 trustedLink = { account, role, decode ->
                     when (role) {
                         DeviceLink.Role.SHOW_FOR_NEW_DEVICE -> DeviceLink.showForNewDevice(account)

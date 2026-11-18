@@ -94,8 +94,8 @@ class SearchLiveTest {
     }
 
     private suspend fun SearchModel.chose(key: String): SearchShown {
-        val at = current.suggestions.indexOfFirst { it.key == key }
-        assertTrue(at >= 0, "no suggestion $key among ${current.suggestions.map { it.key }}")
+        val at = current.suggestions.indexOfFirst { it.id == key }
+        assertTrue(at >= 0, "no suggestion $key among ${current.suggestions.map { it.id }}")
         choose(at)
         settled()
         return current
@@ -140,7 +140,7 @@ class SearchLiveTest {
             val byName = model.typed(name)
             assertEquals(name, byName.names().first(), "the Memory found by its name from another space")
             val year = model.typed("2019")
-            assertTrue(year.suggestions.any { it.key == "chip:year:2019" })
+            assertTrue(year.suggestions.any { it.id == "chip:year:2019" })
             assertTrue(name in model.chose("chip:year:2019").names(), "a year chip lists the Memory dated in it")
             model.removeLastChip()
             model.settled()

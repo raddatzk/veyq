@@ -57,10 +57,10 @@ data class SearchShown(
     val openSettings: String? = null,
 )
 
-/** A chip set: its type's [word] (*Year*, *Place*, …), its value as [label], and the icon kind it draws. */
+/** A chip set: its [id] (`Query.chipKey`), its type's [word] (*Year*, *Place*, …), its value as [label], and the icon kind it draws. */
 @Serializable
 data class ChipShown(
-    val key: String,
+    val id: String,
     @Serializable(with = MsgKey::class) val word: Msg,
     val label: Piece,
     val icon: String,
@@ -69,7 +69,7 @@ data class ChipShown(
 /** A chip offered: as [ChipShown], with [where] its second line (an *In:* node's space and path; empty otherwise). */
 @Serializable
 data class SuggestionShown(
-    val key: String,
+    val id: String,
     @Serializable(with = MsgKey::class) val word: Msg,
     val label: Piece,
     val icon: String,
@@ -86,7 +86,7 @@ data class PartShown(val text: String, val strong: Boolean)
  */
 @Serializable
 data class ResultShown(
-    val key: String,
+    val id: String,
     val icon: String,
     val name: List<PartShown>,
     val line: List<Piece>,
@@ -522,7 +522,7 @@ class SearchModel(
         val rows = found?.results.orEmpty().map { d ->
             val reason = Query.reasonKeyword(d, t)
             ResultShown(
-                key = "${d.scopeId}:${d.kind}:${d.id}", icon = iconOf(d), name = parts(Query.nameParts(d.name, t)), line = line(d),
+                id = "${d.scopeId}:${d.kind}:${d.id}", icon = iconOf(d), name = parts(Query.nameParts(d.name, t)), line = line(d),
                 reason = reason?.let { parts(Query.nameParts(it, t)) },
             )
         }
@@ -544,7 +544,7 @@ class SearchModel(
             text = text, chips = chips.map(::chipShown), asked = asked,
             suggestions = offered.map { s ->
                 val c = chipShown(s.chip)
-                SuggestionShown("chip:${c.key}", c.word, c.label, c.icon, where(s.chip))
+                SuggestionShown("chip:${c.id}", c.word, c.label, c.icon, where(s.chip))
             },
             results = rows, more = minOf(total - rows.size, PAGE).coerceAtLeast(0), total = total, status = status,
             announcement = announcement, openSettings = settings,

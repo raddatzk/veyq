@@ -2,6 +2,7 @@
 
 package me.raddatz.veyq.mobile.bridge
 
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -511,4 +512,19 @@ internal class HostControls(private val host: Host) : SystemControls {
     override fun bind(commands: PlayerCommands) = host.tell(HostRequest.ControlsBind)
     override fun show(now: NowPlaying) = host.tell(HostRequest.ControlsShow(NowPlayingShown.of(now)))
     override fun clear() = host.tell(HostRequest.ControlsClear)
+}
+
+/**
+ * The search's words as the host says them (ADR 0146 decision 7; [HostRequest.WordsSay], the request an untitled track's
+ * title uses): a kind's word, a month's name, a settings section's title and words — each asked once and kept, since the
+ * search matches what the member typed against them on every keystroke; a word the host does not say is its key.
+ */
+internal class HostWords(private val host: Host) : me.raddatz.veyq.mobile.search.SearchWords {
+    private val said = HashMap<Msg, String>()
+    private val lock = kotlinx.coroutines.sync.Mutex()
+
+    override suspend fun say(msg: Msg): String = lock.withLock {
+        said[msg] ?: (runCatching { (host.asking(HostRequest.WordsSay(Notice(msg))) as? HostReply.Value)?.value }.getOrNull()
+            ?.takeIf { it.isNotBlank() } ?: msg.key).also { said[msg] = it }
+    }
 }

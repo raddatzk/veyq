@@ -1,6 +1,6 @@
 # ADR 0146 — The apps search with the core's port of the web's search; both answer to one set of vectors
 - Status: Accepted
-- Built: no
+- Built: partly (not built: decision 12, each platform's field; decision 13's removal of the name-only search)
 - Date: 2026-11-18
 - Model: [uc.platform.search](../features/platform/use-cases/uc.platform.search.md)
 
@@ -36,7 +36,7 @@ search is a measured module of about 1,600 lines (`src/web/src/core/search/`, Me
      checked against its `rule` before it is committed. Every `capturedAt` is 12:00 UTC on a month's 15th, so every time
      zone reads the same day, month and year.
    - **Kept in step:** a change to a rule changes the vectors, and the web's and the core's tests go red together until
-     both follow.
+     both follow (`src/web/src/core/search/vectors.test.ts`, core's `SearchVectorsTest` on the JVM and `macosArm64`).
 2. **What the port owns.** `core/…/search/`, platform-generic as the web's `core/search/`: the fold and the name order
    (decision 3), the documents, the query (chips, suggestions, predicates, ranks, the matcher with its narrowing and
    history, the bold part), the results (places, the order, the first ranked), the node documents, the index (decision
@@ -56,15 +56,17 @@ search is a measured module of about 1,600 lines (`src/web/src/core/search/`, Me
      to the name's own characters for the bold part. Core gains `nfd` beside `nfc` and `nfkd`. The participants
      picker's fold becomes this one, so the picker and the search read one rule, as on the web.
    - **The name order is the core's own comparator:** the folded names compared with runs of ASCII digits as numbers
-     ("Trip 2" before "Trip 10"), then the names' code points, then the id. It stands where the web's
+     ("Trip 2" before "Trip 10", leading zeros aside), every other character by its UTF-16 unit, then the id — names
+     equal folded are equal, as `sensitivity: 'base'` makes them on the web, so the id decides there too. It stands where the web's
      `Intl.Collator(locale, {numeric: true, sensitivity: 'base'})` stands: the third key after the rank and the place,
      so it orders only equal matches in one place. The vectors' order cases use names on which both agree.
 4. **What each application contributes: `AppKinds.search`, as the web's registry.**
-   - **Per kind** (`KindSearch`): the kind chip's word, optional facets (handed the node, its key and its parent's key
-     for the call only), and the document kinds its application's space search makes (word, icon). The words are the
-     web's labels: folder, bookmark, file, drop box, Pot, Memory, Chapter, photo, video; core adds *Person* and *Setting*.
-   - **Per application** (`ApplicationSearch.scopeDocuments`): handed the space, the last tag, the previous documents
-     by id and the space's node keys. Memories ports `scopeMediaDocuments`: `listScopeMedia` by `If-None-Match`, 1000 per
+   - **Per kind** (`KindSearch`): the kind chip's word, its icon, optional facets — handed the node's meta as core's own
+     node-meta opener opened it, never the key (a tighter door than the web's hook, which is handed the node's key and
+     its parent's) — and the document kinds its application's space search makes (word, icon). The words are the web's
+     labels: folder, bookmark, file, drop box, Pot, Memory, Chapter, photo, video; core adds *Person* and *Setting*.
+   - **Per application** (`ApplicationSearch.scopeDocuments`): handed the tenant, the space, the last tag, the previous
+     documents by id and the shell's opened nodes of the space, whose keys it reads in place. Memories ports `scopeMediaDocuments`: `listScopeMedia` by `If-None-Match`, 1000 per
      page, a medium kept unopened at an unchanged `metaRevision:blobId`, a blocked one and one that is no gallery
      medium (a GPX track, a music track) no document, its rows opened with `MemoryMedia`'s own openers.
    - **Memories' facets** port the web's `memorySearchFacets`, `yearsOfDate` and `monthsOfDate` over the core's
@@ -151,10 +153,12 @@ search is a measured module of about 1,600 lines (`src/web/src/core/search/`, Me
       announcement, GTK's `gtk_accessible_announce`, UI Automation's notification event.
     - **A calm focus** holds: focusing builds the index and shows no list; the list opens with the first character or a
       chip.
-13. **The bridge (Linux, Windows)** carries the model as calls: `Call.SearchOpen` → `Answer.SearchOpened(id)`;
-    `Watched.Search(id)` → `Update.Search(id, SearchShown?)`; `Search.Focus|Text|Choose|RemoveChip|RemoveLastChip|More|
-    Open|Close`. `SearchShown` crosses as names, parts, words and ids — no key, no seal. The model is dropped with the
-    tenant. The name-only search (`Call.SearchQuery`, `Answer.Hits`, `ShellWords.search`) is removed once its last
+13. **The bridge (Linux, Windows)** carries the model as calls: `Call.SearchOpen` (`Search.Open`) →
+    `Answer.SearchOpened(id)`; `Watched.Search(id)` → `Update.Search(id, SearchShown?)`; `Search.Focus|Text|Choose|
+    RemoveChip|RemoveLastChip|More|OpenResult|Close`, each with the search's id (a result's open is `Search.OpenResult`:
+    `Search.Open` opens the model). `SearchShown` is the core's own serializable state and crosses as names, parts, words
+    and ids — no key, no seal. The words the search matches are the host's (`Words.Say`, asked once per word). The model
+    is disposed with the tenant. The name-only search (`Call.SearchQuery`, `Answer.Hits`, `ShellWords.search`) is removed once its last
     caller has moved.
 
 ## Consequences
@@ -172,7 +176,14 @@ search is a measured module of about 1,600 lines (`src/web/src/core/search/`, Me
   - **The build** (the documents of every space from opened trees and listing pages, the network stubbed): bound 2.6 s,
     the ADR 0125 unthrottled reading that included the network.
   - **The index's memory:** recorded, not gated (ADR 0125's 9.6 MB is JS heap; the JVM's is no like-for-like number).
-  - The readings: not yet measured.
+  - **Measured** (2026-11-18, `VEYQ_MEASURE=1 ./gradlew :core:jvmTest --tests '*SearchVolumeMeasure*' --rerun`, and
+    `:core:macosArm64Test` the same, from `src/mobile/`; this Mac, a 1-minute load of 3.8–15.7, not a quiet machine; real
+    seals: 700 Memories' metas and 10,000 media's listed tiers, blob keys and blob metas opened by the core's own openers):
+    - **B2:** JVM 371 and 525 ms; `macosArm64` 1,414 and 1,419 ms — within 2.6 s.
+    - **B1:** JVM "K" 18 and 87 ms (the first keystroke, the JIT cold), "Ke" 12 and 34, "Kev" 3, a year typed 1–2, the year
+      chip chosen 19 and 28, Backspace 6 and 13; `macosArm64` 0–31 ms — within 100 ms.
+    - **B3:** 10 MB of used JVM heap for the index, recorded.
+  - Not yet measured: the first focus on the Android emulator against a live instance, timed from the model's trace.
 - **Rejected alternatives:**
   - **The core's own tests mirroring the web's by hand:** two suites drift silently, as the participants picker's NFKD
     fold had already drifted from the web's NFD one.

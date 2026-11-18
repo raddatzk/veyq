@@ -122,7 +122,7 @@ fun veyqInit(config: CPointer<ByteVar>?, host: VeyqHost?, hostCtx: COpaquePointe
             }
         }
         Bridge.live(LibsodiumPrimitives, client, c, HostStore(it), { platformDeviceKeys(c, it) }, Files, { path -> HostPictures(h, path) }, HostTiers(h), HostAudio(h), HostBannerPictures(h),
-            webp = me.raddatz.veyq.mobile.media.WebpPicture::png)
+            webp = me.raddatz.veyq.mobile.media.WebpPicture::png, words = HostWords(h))
     }
     return if (composed) STARTED else ALREADY_STARTED
 }
