@@ -63,16 +63,20 @@ export function unsealMemoryParticipants(
  * The participants EDITOR's save: set `wanted` as the Memory's list, read-modify-write, version-checked, MERGING on a
  * conflict (see the header). Empty drops the sub-object. Unknown fields inside the sub-object and every sibling (date,
  * place, cover) are kept. Returns the state the server confirmed (or the one it handed back when nothing needed writing).
+ *
+ * `openedWith` is the list the picker SHOWED when it opened, never one read from `current`: the page's poll may have
+ * brought a peer's addition into the node meanwhile, and that id is no removal of the editor's (inbox #952). `current` is
+ * the node as the page holds it at the save — the revision the write states.
  */
 export async function setMemoryParticipants(
   scopeId: string,
   nodeId: string,
   nodeKey: Uint8Array,
   wanted: readonly string[],
+  openedWith: readonly string[],
   current: NodeMetaState,
   opts: WriteNodeMetaOptions = {},
 ): Promise<SealedMetaState> {
-  const openedWith = unsealMemoryParticipants(scopeId, nodeKey, { id: nodeId, wrappedMeta: current.wrappedMeta })
   const { state } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, editParticipantsOf((stored) => mergeParticipants(stored, wanted, openedWith)), undefined, opts)
   return state
 }
