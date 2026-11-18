@@ -1028,7 +1028,7 @@ struct NewMemorySheet: View {
 
     var body: some View {
         let offers = model.offersWasThere(scopeId)
-        // the place armed to come from the photos (#940, the web's opt-in): where the map services are shown, off
+        // the place armed to come from the photos (uc.memory.place A1, the web's opt-in): where the map services are shown, off
         let offersPlace = model.offersAutoPlace()
         NavigationStack {
             Form {

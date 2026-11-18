@@ -963,7 +963,7 @@ internal sealed class ShellView
         if (_state is not { } state || state.shell.space is not { } space) return;
         var parent = state.shell.path.Count > 0 ? state.shell.path[^1].nodeId : null;
         // "I was there", ticked, where the core offers it (a tenant or group scope: ADR 0144 decision 2); "Determine location
-        // automatically", unticked, where the map services are shown (#940); neither remembered
+        // automatically", unticked, where the map services are shown (uc.memory.place A1); neither remembered
         var offered = false;
         var offersPlace = false;
         try

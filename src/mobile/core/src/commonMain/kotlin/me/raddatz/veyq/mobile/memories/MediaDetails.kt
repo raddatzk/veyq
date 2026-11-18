@@ -228,7 +228,7 @@ object MediaDetails {
     suspend fun uploaders(tenant: TenantSession, scopeId: String, items: List<MemoryMedia.Item>): Map<String, Uploader> {
         val keys = items.mapNotNull { it.ownerKey }.toSet()
         if (keys.isEmpty()) return emptyMap()
-        // a kept read (#948): offline the list as last read online names them
+        // a kept read (ADR 0144 decision 7): offline the list as last read online names them
         val members = tenant.account.members(tenant.base, tenant.tenant.tenantId, scopeId)
         return uploaders(keys, members?.map { it.userId to it.username }, tenant.people)
     }

@@ -288,7 +288,7 @@ class OfflineReadPathTest {
     }
 
     /**
-     * #948: a scope's member list is a kept read — read online, it names a Memory's participants offline (the line, never
+     * ADR 0144 decision 7: a scope's member list is a kept read — read online, it names a Memory's participants offline (the line, never
      * the picker); a scope the account left takes its list with it at the sweep.
      */
     @Test

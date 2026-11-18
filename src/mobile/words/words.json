@@ -4187,7 +4187,7 @@
     "de": "trägt dich bei den Beteiligten ein"
   },
   "memory_place_auto": {
-    "note": "The New Memory form's checkbox (#940, the web's `memory.place.autoOptIn`): the place is armed and named from the photos' location later",
+    "note": "The New Memory form's checkbox (uc.memory.place A1, the web's `memory.place.autoOptIn`): the place is armed and named from the photos' location later",
     "en": "Determine location automatically",
     "de": "Ort automatisch ermitteln"
   },

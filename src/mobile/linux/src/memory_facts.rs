@@ -91,7 +91,7 @@ impl FactsLine {
         self.gallery.set(Some(gallery));
         let date = s.date.as_ref().and_then(date_text);
         let edits = s.edits_facts;
-        // a place armed at birth whose name the photos have yet to give says so (#940), as the phones' line does
+        // a place armed at birth whose name the photos have yet to give says so (uc.memory.place A1), as the phones' line does
         let place = s.place.clone().or_else(|| s.place_pending.then(words::memory_place_pending));
         let (shows_date, shows_place) = (date.is_some() || edits, place.is_some() || edits);
         self.date.set_visible(shows_date);

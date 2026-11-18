@@ -220,7 +220,7 @@ internal class Tenant(
         shell?.let { s -> { scopeId, parentId, name, wasThere, autoPlace -> s.createMemory(scopeId, parentId, name, wasThere, autoPlace) } },
     /** Whether New Memory in a scope offers *I was there* (`ShellModel.offersWasThere`). */
     val offersWasThere: ((scopeId: String) -> Boolean)? = shell?.let { s -> { scopeId -> s.offersWasThere(scopeId) } },
-    /** Whether New Memory offers *Determine location automatically* (`ShellModel.offersAutoPlace`, #940). */
+    /** Whether New Memory offers *Determine location automatically* (`ShellModel.offersAutoPlace`, uc.memory.place A1). */
     val offersAutoPlace: (() -> Boolean)? = shell?.let { s -> { s.offersAutoPlace() } },
     /** A person's frame (`ShellModel.profile`): named by the tenant's directory as read, with the sections of the applications on. */
     val profile: ((userId: String) -> me.raddatz.veyq.mobile.navigation.PersonProfile)? = shell?.let { s -> { userId -> s.profile(userId) } },

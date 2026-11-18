@@ -272,7 +272,7 @@ class CurationDispatchTest {
         assertEquals(Answer.WasThere(false, autoPlace = true), b.ask(Call.ShellOffersWasThere("personal")))
         assertEquals(Answer.Created(NodeAt("s", "m-new", "MEMORY", "Harz"), null), b.ask(Call.ShellCreateMemory("s", null, "Harz", wasThere = true)))
         b.ask(Call.ShellCreateMemory("s", null, "Amrum"))
-        // *Determine location automatically* (#940) carried to the core beside the name
+        // *Determine location automatically* (uc.memory.place A1) carried to the core beside the name
         b.ask(Call.ShellCreateMemory("s", null, "Sylt", autoPlace = true))
         assertEquals(listOf("create:Harz:true", "create:Amrum:false", "create:Sylt:false:place"), played.sent.filter { it.startsWith("create:") }, "I was there or the place did not reach the core")
 

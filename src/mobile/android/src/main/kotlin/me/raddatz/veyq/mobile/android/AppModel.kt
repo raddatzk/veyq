@@ -1586,7 +1586,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** Whether New Memory in space [scopeId] offers *I was there* (a tenant or group space, ADR 0144 decision 2). */
     fun offersWasThere(scopeId: String): Boolean = shellModel?.offersWasThere(scopeId) == true
 
-    /** Whether New Memory offers *Determine location automatically* (#940: this tenant's map services shown on this device). */
+    /** Whether New Memory offers *Determine location automatically* (uc.memory.place A1: this tenant's map services shown on this device). */
     fun offersAutoPlace(): Boolean = shellModel?.offersAutoPlace() == true
 
     /** A chapter [name] made in [gallery]'s Memory (core's `GalleryModel.createChapter`), opened once made; why not, or null. */

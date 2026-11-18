@@ -263,7 +263,7 @@ class GalleryModel(
         val facts: me.raddatz.veyq.mobile.memories.place.MemoryFacts.Facts? = null,
         /**
          * The header's people line (ADR 0144 decision 1): where the participants are shown — a member's, on a Memory, not
-         * in a personal scope, offline too (#948) — and somebody is listed or whoever looks may add someone; null otherwise.
+         * in a personal scope, offline too (ADR 0144 decision 7) — and somebody is listed or whoever looks may add someone; null otherwise.
          */
         val people: Participants.Line? = null,
         /**
@@ -517,7 +517,7 @@ class GalleryModel(
 
     /**
      * Whether the participants are shown here: a member's right on a Memory, not a personal scope — offline too, named from
-     * the kept member list (inbox #948, amending decision 7); offline the rights edit nothing, so the line offers no edit.
+     * the kept member list (ADR 0144 decision 7); offline the rights edit nothing, so the line offers no edit.
      */
     private val showsParticipants: Boolean get() = current.rights.participants && !door.personal
 

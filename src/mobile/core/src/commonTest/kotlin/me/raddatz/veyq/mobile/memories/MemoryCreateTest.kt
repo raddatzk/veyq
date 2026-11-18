@@ -74,7 +74,7 @@ class MemoryCreateTest {
     }
 
     /**
-     * #940 (uc.memory.place A1 as the web's `MemoryNodeDialog` builds it): *Determine location automatically* seals a pending
+     * uc.memory.place A1, as the web's `MemoryNodeDialog` builds it: *Determine location automatically* seals a pending
      * `auto` place at birth — `{name: '', nameSource: 'geocoded', derivedMode: 'auto'}`, before the participants, as the
      * web's `{v, ...{location, participants}}` — in a Memory only, in any scope; unticked, or for a chapter, nothing.
      */

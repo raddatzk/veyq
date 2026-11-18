@@ -40,7 +40,7 @@ object Uploaders {
         }
         if (!key.startsWith(USER)) return null
         val userId = key.removePrefix(USER)
-        // a kept read (#948): offline the list as last read online names them
+        // a kept read (ADR 0144 decision 7): offline the list as last read online names them
         val members = tenant.account.members(tenant.base, tenant.tenant.tenantId, file.scopeId) ?: return null
         val member = members.firstOrNull { it.userId == userId } ?: return Uploader(Kind.FORMER)
         return Uploader(Kind.MEMBER, userId, tenant.people[userId]?.displayName ?: member.username)

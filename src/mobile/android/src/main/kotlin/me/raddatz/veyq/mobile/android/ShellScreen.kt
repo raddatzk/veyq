@@ -515,7 +515,7 @@ internal fun NameDialog(title: String, onClose: () -> Unit, extra: (@Composable 
 @Composable
 private fun MemoryNameDialog(space: String, model: AppModel, onClose: () -> Unit, onCreate: suspend (String, Boolean, Boolean) -> String?) {
     val offers = remember(space) { model.offersWasThere(space) }
-    // the place armed to come from the photos (#940, the web's opt-in): offered where the map services are shown, unticked
+    // the place armed to come from the photos (uc.memory.place A1, the web's opt-in): offered where the map services are shown, unticked
     val offersPlace = remember(space) { model.offersAutoPlace() }
     var wasThere by remember { mutableStateOf(true) }
     var autoPlace by remember { mutableStateOf(false) }

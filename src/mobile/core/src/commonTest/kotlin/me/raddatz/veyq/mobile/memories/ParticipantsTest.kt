@@ -358,7 +358,7 @@ class ParticipantsTest {
 
     @Test
     fun offlineThePeopleLineIsNamedFromTheKeptMembersAndOffersNoEdit() = runTest {
-        // #948: the member list is a kept read, so offline the line names who was there; nothing is edited offline
+        // ADR 0144 decision 7: the member list is a kept read, so offline the line names who was there; nothing is edited offline
         val offlineDoor = Door(listOf("a")).also { it.reach.value = false; it.offline = OfflineAsOf(1L) }
         val offline = open(offlineDoor)
         val line = assertNotNull(offline.current.people, "offline the participants are shown from the kept member list")

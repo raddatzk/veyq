@@ -68,7 +68,7 @@ object MemoryCreate {
     fun offersWasThere(kind: String, scopeKind: String?): Boolean = kind == MEMORY && (scopeKind == "TENANT" || scopeKind == "GROUP")
 
     /**
-     * Whether New offers *Determine location automatically* for a [kind] (inbox #940, uc.memory.place A1 as the web's
+     * Whether New offers *Determine location automatically* for a [kind] (uc.memory.place A1, uc.memory.place A1 as the web's
      * `MemoryNodeDialog` offers it): a Memory — never a chapter — where this device's map services are shown
      * ([mapsAvailable]: offered by the tenant and consented here, the web's `mapsAvailable`). Unticked by default.
      */

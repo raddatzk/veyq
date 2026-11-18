@@ -460,7 +460,7 @@ impl Shell {
             let (toasts, window) = (s.toasts.clone(), s.window.clone());
             glib::spawn_future_local(async move {
                 // *I was there* (ADR 0144 decision 2): offered ticked where the core says so, not remembered; *Determine location
-                // automatically* (#940): offered unticked where the map services are shown
+                // automatically* (uc.memory.place A1): offered unticked where the map services are shown
                 let (offered, offers_place) = match bridge::call(&Call::ShellOffersWasThere { scope_id: level.scope_id.clone() }).await.map(|(a, _)| a) {
                     Ok(Answer::WasThere { offered, auto_place }) => (offered, auto_place),
                     _ => (false, false),

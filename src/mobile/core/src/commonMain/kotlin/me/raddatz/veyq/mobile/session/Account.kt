@@ -448,7 +448,7 @@ class VeyqAccount private constructor(
             is GrantOutcome.Opened -> open += TenantSession.OpenScope(s, o.key, scopeName(s, tenant))
             is GrantOutcome.Refused -> closed[s.id] = o.reason
         }
-        // the tenant's directory as kept (#948): offline a participant and an uploader are named as online, never judged
+        // the tenant's directory as kept (ADR 0144 decision 7): offline a participant and an uploader are named as online, never judged
         val tenantScope = open.firstOrNull { it.summary.kind.value == "TENANT" && it.summary.id == tenant.tenantId }
         val members = tenantScope?.let { members(base, tenant.tenantId, tenant.tenantId) }
         val people = if (tenantScope == null || members == null) emptyMap()
@@ -457,7 +457,7 @@ class VeyqAccount private constructor(
     }
 
     /**
-     * Scope [scopeId]'s member list (`listScopeMembers`) of tenant [tenantId], a kept read (inbox #948): the server's answer
+     * Scope [scopeId]'s member list (`listScopeMembers`) of tenant [tenantId], a kept read (ADR 0144 decision 7): the server's answer
      * while it is reached, the store's while not; null where it did not read (refused, or offline and not kept).
      */
     internal suspend fun members(base: String, tenantId: String, scopeId: String): List<ScopeMember>? {
@@ -1438,7 +1438,7 @@ class TenantSession internal constructor(
     /**
      * Reads the tenant's members anew (a person's refresh, `ShellModel.refresh(people = true)`), as the open read them, and
      * keeps them as [people]: a member's new name or picture revision shows from then on. Null, and [people] as it was,
-     * where this account holds no tenant grant or the list did not read (offline: the list as last kept, #948).
+     * where this account holds no tenant grant or the list did not read (offline: the list as last kept, ADR 0144 decision 7).
      */
     @Throws(Exception::class)
     suspend fun readPeople(): Map<String, Person>? {
@@ -1494,7 +1494,7 @@ class TenantSession internal constructor(
 
     /**
      * The CURRENT members of [scopeId] (a proposed member who has not accepted is none yet), named by the tenant's
-     * directory; null when the list does not read. A kept read (inbox #948): offline the list as last read online.
+     * directory; null when the list does not read. A kept read (ADR 0144 decision 7): offline the list as last read online.
      */
     @Throws(Exception::class)
     suspend fun scopeMembers(scopeId: String): List<Person>? {

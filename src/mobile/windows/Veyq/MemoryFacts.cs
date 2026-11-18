@@ -36,7 +36,7 @@ internal static class MemoryFacts
     public static UIElement? Line(Window window, long gallery, GalleryShown s)
     {
         var date = DateText(s.date);
-        // a place armed at birth whose name the photos have yet to give says so (#940), as the phones' line does
+        // a place armed at birth whose name the photos have yet to give says so (uc.memory.place A1), as the phones' line does
         var place = s.place ?? (s.placePending ? Words.MemoryPlacePending() : null);
         if (date is null && place is null && !s.editsFacts) return null;
         var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16 };

@@ -780,7 +780,7 @@ internal sealed class Call {
         val scopeId: String, val parentId: String?, val name: String,
         /** *I was there* ticked (ADR 0144 decision 2): the maker sealed as the Memory's participant at its birth, where [ShellOffersWasThere]. */
         val wasThere: Boolean = false,
-        /** *Determine location automatically* ticked (#940): a pending `auto` place sealed at its birth, where [Answer.WasThere.autoPlace]. */
+        /** *Determine location automatically* ticked (uc.memory.place A1): a pending `auto` place sealed at its birth, where [Answer.WasThere.autoPlace]. */
         val autoPlace: Boolean = false,
     ) : Call()
 
@@ -1523,7 +1523,7 @@ internal sealed class Answer {
 
     /**
      * What New Memory there offers ([Call.ShellOffersWasThere]): *I was there*, ticked ([offered]); *Determine location
-     * automatically*, unticked ([autoPlace], #940: where this device's map services are shown).
+     * automatically*, unticked ([autoPlace], uc.memory.place A1: where this device's map services are shown).
      */
     @Serializable @SerialName("WasThere") data class WasThere(val offered: Boolean, val autoPlace: Boolean = false) : Answer()
 
@@ -1847,7 +1847,7 @@ internal class GalleryShown(
     val place: String? = null,
     /**
      * The place is armed and its name still to come from the photos (`MemoryLocation.pending`: one made with *Determine
-     * location automatically*, #940): the facts line says *Location pending…* where [place] is null.
+     * location automatically*, uc.memory.place A1): the facts line says *Location pending…* where [place] is null.
      */
     val placePending: Boolean = false,
     /** Whether the facts line's date and place open their editors ([Call.DateOpen], [Call.PlaceOpen]; `GalleryModel.State.editsFacts`). */
