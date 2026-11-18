@@ -74,7 +74,7 @@ You can move your sign-in to a new email address without losing your account, yo
 
 ## Related
 
-- **The apps** (planned, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 6): `emailChange` ported into the core; confirmed by the mailed link on the web or by the link pasted into the app, for this account's server only.
+- **The apps** (planned, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 6): `emailChange`'s request ported into the core; the confirm stays the web's (the mailed link opens the web page as today), and the app takes the new address from its next account read.
 - Feature: [Account](../_index.md)
 - **End-user view (docs site):** [Your email address](../../../../site/src/content/docs/account/change-email.mdx)
 - Use-cases: [uc.account.confirm-email-address](uc.account.confirm-email-address.md) (the confirmation record this sets),

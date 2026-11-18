@@ -88,10 +88,11 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
    existing control (typed, pasted, a kit file, a scan) and is kept no longer than the call. `PasswordChange` ports
    `changePassword` step for step; after it this device's saved key is gone on the server, so the core forgets its local
    wrap as *Stop trusting* does and the trust row offers *Trust with password*; the offline store survives (the same
-   Master Key). `AddressChange` ports `emailChange`; the confirm is the mailed link opened on the web as today, **or** the
-   link pasted into the app — the core takes the token from the fragment only for this account's server origin and calls
-   `confirmEmailChange`, then re-addresses the account it keeps and offers a new kit with the new address. Opening such
-   a link in the app by itself is block H's.
+   Master Key). `AddressChange` ports `emailChange`'s request; the confirm is the web's alone (owner 2026-11-18): the
+   mail keeps its ordinary web link and the web's page confirms as today, and the app takes the new address from its next
+   account read — the next sign-in where the confirm ended its session (a confirm revokes the account's other families) —
+   and then offers a new kit with the new address. A web page's *Open in the app* (a deep link that carries no token and
+   only opens the app) is block H's (inbox #435).
 
 7. **Replace the keys: the core ports the whole rotation and finishes rotations at every unlock.** `KeyRotation` (core,
    `account/rotation/`) ports `rotateKeys` — the cold gate, the new identity, Master Key and Secret Key, the key-chain
@@ -159,8 +160,9 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
 - **A print action** — the web has none; the saved PDF prints from any viewer, and a print path is one more place (a
   spooler keeps files) the Secret Key passes.
 - **The kit shown on screen** — a screen is photographed, recorded and looked over; a file the person chose is not.
-- **Only the web's confirm of an address change** — an app-only member would have to sign in on the web with the kit to
-  finish.
+- **Confirming an address change in the app by pasting the mailed link** — too cumbersome for a person (owner
+  2026-11-18). **A custom-scheme link in the mail** — often not clickable in mail clients, and its token can be taken by
+  another app that claims the scheme; universal and app links cannot be had for a self-hosted domain.
 - **Re-wrapping the offline store's key under the new Master Key on the rotating device** — content kept from before
   the rotation would stay readable to whoever held the old Master Key and this disk, against ADR 0060's forward secrecy.
 - **A rotation without the moderation grants** — the server refuses it, and rightly.

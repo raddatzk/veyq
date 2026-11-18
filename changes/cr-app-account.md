@@ -29,8 +29,7 @@ web's flows ported once into the Kotlin core, held to the shared vectors, drawn 
   ADR 0028 decision 3 + 0104 (safety numbers, pins), [en.account.device-register](../docs/features/account/enablers/en.account.device-register.md),
   ADR 0058, ADR 0140 decision 2 (the store's header under the Master Key), ADR 0136, ADR 0137 (files by path);
   `src/mobile/CLAUDE.md` § Secrets on screen and § Nothing on disk; the web's flows named in R2–R8.
-- **The web is the reference implementation.** Where this CR differs it says so and why (D6's confirm by a pasted link,
-  D9's moderators, D7's store).
+- **The web is the reference implementation.** Where this CR differs it says so and why (D9's moderators, D7's store).
 - **Where what runs** (from `src/mobile/`): `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :core:jvmTest
   :core:macosArm64Test :bridge:jvmTest :android:assembleDebug`; the Apple builds `xcodebuild -project
   apple/Veyq.xcodeproj -target Veyq -sdk macosx build CODE_SIGNING_ALLOWED=NO` (and `-sdk iphonesimulator`) after
@@ -173,13 +172,16 @@ so neither implementation is the other's test. The kit's PDF is no vector (D5's 
   `trustWithPassword`) — the web's "remember this device" offer. The offline store survives (same Master Key).
   The new password passes the web's length policy and the breached-password check the apps' sign-in path already
   makes, if it makes one (measure in 3f; if the apps have none, the length policy alone and a row).
-- `AddressChange` ports `emailChange.ts`; the confirm: **(a)** the mailed link opens the web as today (it needs the
-  account's web session); **(b)** in the app, *Paste the link from the email* — the core takes the token from the
-  link's fragment, only for this account's server origin, and calls `confirmEmailChange`; on 204 the core re-addresses
-  the account it keeps (the remembered sign-in, the account list's address — measured in 3g against the web's
-  `ConfirmEmailChangeView` :87-93) and offers *Save a new Emergency Kit* (password + Secret Key → `checkColdCredential`
-  → D5 with the new address and the same Secret Key). Opening the link in the app by itself is block H (#435).
-  Rejected: **only the web's confirm** — an app-only member would have to sign in on the web with the kit to finish.
+- `AddressChange` ports `emailChange.ts`'s request. **The confirm is the web's alone** (owner 2026-11-18, question 3): the
+  mail keeps its ordinary web link and the web's page (`ConfirmEmailChangeView`) confirms as today; there is no app-side
+  confirm step. The app takes the new address from its next account read — where the confirm revoked its session (a
+  confirm revokes every other family, R6), that is the next sign-in with the new address — and re-addresses the account it
+  keeps (the remembered sign-in, the account list's address: measured in 3h), then offers *Save a new Emergency Kit*
+  (password + Secret Key → `checkColdCredential` → D5 with the new address and the same Secret Key). A web banner *Open
+  in the app* carrying a token-free deep link that only opens the app is block H's (#435), not this CR's.
+  Rejected: **pasting the mailed link into the app** — too cumbersome (owner); **a custom-scheme link in the mail** — often
+  not clickable in mail clients, and its token can be intercepted by another app claiming the scheme; universal/app links
+  are impossible for a self-hosted domain.
 
 ### D7 — Replace the keys: the core ports the whole rotation, and finishes rotations at every unlock
 
@@ -330,8 +332,10 @@ key-touching flows after the vectors that hold them, erasure last.
   (f) **cold proof and password** (D6); live: the throwaway's password changed, the old one refused at sign-in, the new
   one signs in, the Master Key the same (a node of its personal scope still opens);
   (g) **kit writer** (D5) with `kit-app.pdf` and its three readers;
-  (h) **address change** (D6); live: request, the link read from Mailpit, confirmed by the pasted-link path, the old
-  address refused at sign-in, the new one signs in, the re-addressed remembered sign-in;
+  (h) **address change** (D6); live: request, the link read from Mailpit, confirmed as the web's page confirms it (the
+  test calls `confirmEmailChange` with the link's token in a web-like session), the old address refused at sign-in, the
+  new one signs in, the re-addressed remembered sign-in — *machine hint (2026-11-18): this Mac's dev backend sends no
+  mail (JavaMail's EHLO stalls on a hostname `/etc/hosts` lacks, the owner's fix), so the mailed link may not arrive*;
   (i) **rotation** (D7) with `finishRotation` at unlock, `AppKinds.masterKeyRotated`, the store's wipe; live: the
   throwaway with a personal-scope node, a Memory with an item mark and a verification of its member rotates, signs in
   with the new kit's key, the node opens, every scope reaches *secured*, the old Secret Key refused; a rotation begun
@@ -344,7 +348,7 @@ key-touching flows after the vectors that hold them, erasure last.
   writing `door.deviceId` instead of the family's device → its unit case red; (d) the stale-epoch retry removed → the
   played `409 stale_epoch` case red; (e) the padding to 16 383 → the seal-length case red; (f) the Secret Key not
   zeroed after `PasswordChange` → the recording-suite test red; (g) a creation date written into the kit → the
-  byte-for-byte fixture test red; (h) a confirm token accepted from another origin's link → its case red; (i) the kit
+  byte-for-byte fixture test red; (h) the re-address skipped after the new address's sign-in → its case red; (i) the kit
   step's "saved" gate skipped → the model's publish-before-saved case red; (j) the store kept across a rotation → its
   case red; (k) the throwaway env file named the principal → the live tests fail, not skip.
 
@@ -375,7 +379,7 @@ key-touching flows after the vectors that hold them, erasure last.
 
 - [ ] **9 harvest** — the site's `account/` pages (EN+DE: `your-profile`, `verify-a-person`, `devices-and-sessions`,
   `change-password`, `change-email`, `replace-your-keys`, `erase-your-account`) tell the apps (where each is, the kit
-  saved through the system's dialog, the pasted link); ADR 0148 built with its passes; the use cases and their
+  saved through the system's dialog, the address confirmed on the web); ADR 0148 built with its passes; the use cases and their
   coverage files gain the apps' tests; `native-apps.md` § Built and § Open; `src/mobile/CLAUDE.md` (the new models, the
   throwaway rule beside § live tests, the kit in § Nothing on disk); #863, #949 deleted as done; the lessons to
   `changes/README.md` or the lines they bite; this CR deleted. · Done when: `pnpm run check` in `site/` green and every
@@ -405,10 +409,9 @@ Every pass signs in as a throwaway (D12), made before and erased after.
    shoulder-surfed, a file the person chose is not, and one rule on every client is simpler to explain.
 2. **A print button?** *Recommendation:* no, as the web — the saved PDF prints from the system's viewer; a print path
    is a fifth place the Secret Key's text is handled (a spooler on Linux and Windows keeps files).
-3. **Confirm an address change by pasting the link in the app** (D6b) as well as on the web? *Recommendation:* yes, until
-   block H opens such links in the app by themselves.
-4. **Copy for the apps' own words** (EN / DE; everything else is the web's): `email_change_paste_link`: "Paste the link
-   from the email" / "Füge den Link aus der E-Mail ein"; `account_on_the_web`: "Do this on the web: {server}" /
+3. ~~Confirm an address change by pasting the link in the app?~~ **Answered (owner 2026-11-18): no** — the web's page
+   confirms; the app takes the new address at its next account read (D6). An *Open in the app* banner is block H's (#435).
+4. **Copy for the apps' own words** (EN / DE; everything else is the web's): `account_on_the_web`: "Do this on the web: {server}" /
    "Erledige das im Web: {server}" (D9); `kit_save_title`: "Save your Emergency Kit" / "Speichere dein Notfall-Kit" (if
    the web's `kit.*` has no title of that shape); `rotation_store_wiped`: "What this device keeps offline is fetched
    again." / "Was dieses Gerät offline hält, wird neu geladen." *Recommendation:* these.
