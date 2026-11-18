@@ -415,6 +415,216 @@
     "de": "Aus deinem Notfall-Kit",
     "note": "the Secret Key row once a kit was read: the key is held, never shown"
   },
+  "kit_pdf_title": {
+    "en": "veyq Emergency Kit",
+    "de": "veyq-Notfall-Kit",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfTitle verbatim",
+    "core_text": true
+  },
+  "kit_pdf_heading": {
+    "en": "Emergency Kit",
+    "de": "Notfall-Kit",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfHeading verbatim",
+    "core_text": true
+  },
+  "kit_pdf_created": {
+    "en": "Created on {1}",
+    "de": "Erstellt am {1}",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfCreated verbatim; {1} is the date, kit_pdf_date",
+    "core_text": true
+  },
+  "kit_pdf_page": {
+    "en": "Page 1 of 1",
+    "de": "Seite 1 von 1",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfPage verbatim",
+    "core_text": true
+  },
+  "kit_pdf_intro": {
+    "en": "With it you sign in on a new device when all your devices are gone. Together with your password, it is the only way back into your account.",
+    "de": "Damit meldest du dich auf einem neuen Gerät an, wenn alle deine Geräte weg sind. Zusammen mit deinem Passwort ist es der einzige Weg zurück in dein Konto.",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfIntro verbatim",
+    "core_text": true
+  },
+  "kit_pdf_confidential": {
+    "en": "Confidential",
+    "de": "Vertraulich",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfConfidential verbatim",
+    "core_text": true
+  },
+  "kit_pdf_confidential_body": {
+    "en": "This sheet holds your Secret Key. Don’t give it to anyone, and don’t upload it anywhere.",
+    "de": "Dieses Blatt enthält deinen Secret Key. Gib es niemandem und lade es nirgends hoch.",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfConfidentialBody verbatim",
+    "core_text": true
+  },
+  "kit_pdf_account": {
+    "en": "Your account",
+    "de": "Dein Konto",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfAccount verbatim",
+    "core_text": true
+  },
+  "kit_pdf_email": {
+    "en": "Email",
+    "de": "E-Mail",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfEmail verbatim",
+    "core_text": true
+  },
+  "kit_pdf_secret_key": {
+    "en": "Secret Key",
+    "de": "Secret Key",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfSecretKey verbatim",
+    "core_text": true
+  },
+  "kit_pdf_where": {
+    "en": "Where you sign in",
+    "de": "Wo du dich anmeldest",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfWhere verbatim",
+    "core_text": true
+  },
+  "kit_pdf_addresses": {
+    "en": "Addresses where you sign in – type them here, or write them in after printing:",
+    "de": "Adressen, unter denen du dich anmeldest – hier eintippen oder nach dem Ausdrucken eintragen:",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfAddresses verbatim",
+    "core_text": true
+  },
+  "kit_pdf_restore": {
+    "en": "Quick restore",
+    "de": "Schnell wiederherstellen",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfRestore verbatim",
+    "core_text": true
+  },
+  "kit_pdf_step1": {
+    "en": "Open veyq on the new device and choose “Sign in”.",
+    "de": "Öffne veyq auf dem neuen Gerät und wähle „Anmelden“.",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfStep1 verbatim",
+    "core_text": true
+  },
+  "kit_pdf_step2": {
+    "en": "Scan this code or upload this PDF – a photo or scan of this sheet works too. Your email and Secret Key are filled in.",
+    "de": "Scanne diesen Code oder lade diese PDF-Datei hoch – ein Foto oder Scan dieses Blatts geht auch. E-Mail und Secret Key werden eingetragen.",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfStep2 verbatim",
+    "core_text": true
+  },
+  "kit_pdf_step3": {
+    "en": "Enter your password. It is deliberately not on this sheet.",
+    "de": "Gib dein Passwort ein. Es steht absichtlich nicht auf diesem Blatt.",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfStep3 verbatim",
+    "core_text": true
+  },
+  "kit_pdf_keep": {
+    "en": "How to keep it",
+    "de": "So bewahrst du es auf",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfKeep verbatim",
+    "core_text": true
+  },
+  "kit_pdf_keep1": {
+    "en": "Print it and keep it somewhere safe, for example with your important papers.",
+    "de": "Ausdrucken und an einem sicheren Ort ablegen, etwa bei deinen wichtigen Unterlagen.",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfKeep1 verbatim",
+    "core_text": true
+  },
+  "kit_pdf_keep2": {
+    "en": "Don’t keep it in emails, chats or cloud storage.",
+    "de": "Nicht in E-Mails, Chats oder einem Cloud-Speicher ablegen.",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfKeep2 verbatim",
+    "core_text": true
+  },
+  "kit_pdf_keep3": {
+    "en": "Could someone else have it? Secure your account in veyq – you get a new kit.",
+    "de": "Könnte es jemand anderes haben? Sichere dein Konto in veyq ab – dann bekommst du ein neues Kit.",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfKeep3 verbatim",
+    "core_text": true
+  },
+  "kit_pdf_help": {
+    "en": "Help: {1}",
+    "de": "Hilfe: {1}",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfHelp verbatim; {1} is kit_pdf_help_url without its https://",
+    "core_text": true
+  },
+  "kit_pdf_help_url": {
+    "en": "https://veyq.app/account/forgot-password/",
+    "de": "https://veyq.app/de/account/forgot-password/",
+    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfHelpUrl verbatim (the site's forgot-password page in this language, linked from the footer)",
+    "core_text": true
+  },
+  "kit_pdf_date": {
+    "en": "{1} {2}, {3}",
+    "de": "{2}. {1} {3}",
+    "note": "the printed Emergency Kit's date as the web's Intl dateStyle long writes it: {1} the month's name (kit_pdf_month_*), {2} the day, {3} the year",
+    "core_text": true
+  },
+  "kit_pdf_month_1": {
+    "en": "January",
+    "de": "Januar",
+    "note": "a month's name in the printed Emergency Kit's date (kit_pdf_date)",
+    "core_text": true
+  },
+  "kit_pdf_month_2": {
+    "en": "February",
+    "de": "Februar",
+    "note": "a month's name in the printed Emergency Kit's date (kit_pdf_date)",
+    "core_text": true
+  },
+  "kit_pdf_month_3": {
+    "en": "March",
+    "de": "März",
+    "note": "a month's name in the printed Emergency Kit's date (kit_pdf_date)",
+    "core_text": true
+  },
+  "kit_pdf_month_4": {
+    "en": "April",
+    "de": "April",
+    "note": "a month's name in the printed Emergency Kit's date (kit_pdf_date)",
+    "core_text": true
+  },
+  "kit_pdf_month_5": {
+    "en": "May",
+    "de": "Mai",
+    "note": "a month's name in the printed Emergency Kit's date (kit_pdf_date)",
+    "core_text": true
+  },
+  "kit_pdf_month_6": {
+    "en": "June",
+    "de": "Juni",
+    "note": "a month's name in the printed Emergency Kit's date (kit_pdf_date)",
+    "core_text": true
+  },
+  "kit_pdf_month_7": {
+    "en": "July",
+    "de": "Juli",
+    "note": "a month's name in the printed Emergency Kit's date (kit_pdf_date)",
+    "core_text": true
+  },
+  "kit_pdf_month_8": {
+    "en": "August",
+    "de": "August",
+    "note": "a month's name in the printed Emergency Kit's date (kit_pdf_date)",
+    "core_text": true
+  },
+  "kit_pdf_month_9": {
+    "en": "September",
+    "de": "September",
+    "note": "a month's name in the printed Emergency Kit's date (kit_pdf_date)",
+    "core_text": true
+  },
+  "kit_pdf_month_10": {
+    "en": "October",
+    "de": "Oktober",
+    "note": "a month's name in the printed Emergency Kit's date (kit_pdf_date)",
+    "core_text": true
+  },
+  "kit_pdf_month_11": {
+    "en": "November",
+    "de": "November",
+    "note": "a month's name in the printed Emergency Kit's date (kit_pdf_date)",
+    "core_text": true
+  },
+  "kit_pdf_month_12": {
+    "en": "December",
+    "de": "Dezember",
+    "note": "a month's name in the printed Emergency Kit's date (kit_pdf_date)",
+    "core_text": true
+  },
   "signin_kit_clear": {
     "en": "Enter it instead",
     "de": "Stattdessen eingeben",

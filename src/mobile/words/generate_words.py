@@ -6,12 +6,17 @@ object of CLDR categories (`one`, `other`) — and an optional `note` for transl
 or `{n:int}` (an integer), numbered from 1 in the order the English text gives them; every language uses the same set.
 A key without `de` is red unless it says `"untranslated": true` (a name such as `veyq`). `apple_en` / `apple_de` is a
 key's form on Apple where its guidelines word it otherwise (Title Case on buttons and menu entries); the same placeholders.
+`"core_text": true` marks a key whose words the core itself renders, not a platform: a text the core writes into a file
+(the Emergency Kit's PDF, ADR 0148 decision 5), never one shown on a screen. Such a key is no plural.
 
 The apps never write a word of their own: this script writes what each platform reads, and the builds run it.
 
 Outputs (each optional; each a directory or file this script owns and rewrites whole):
   --kotlin DIR          `me/raddatz/veyq/mobile/words/Msg.kt`: every key as an entry of the core's `Msg`, with its
-                        placeholder count and whether it is a plural — what the core's screen models raise.
+                        placeholder count and whether it is a plural — what the core's screen models raise; and
+                        `me/raddatz/veyq/mobile/words/CoreText.kt`: the English and German text of every `core_text`
+                        key, `CoreText.of(msg, language, args)` filling its placeholders by number — what the core
+                        writes itself.
   --android-res DIR     `values/veyq_words.xml`, `values-de/veyq_words.xml`: `<string>` and `<plurals>` under the key's
                         own name, so `R.string.<key>` is the key.
   --android-kotlin DIR  `me/raddatz/veyq/mobile/android/Words.kt`: `Context.words(msg, args)`, a `Msg` to its resource.
@@ -71,6 +76,10 @@ def load() -> dict:
             shapes[lang] = (isinstance(v, dict), placeholders_of(texts, f"{key}.{lang}"))
         if len(set(shapes.values())) > 1:
             raise CatalogError(f"{key}: its languages differ in plural shape or placeholders: {shapes}")
+        if "core_text" in entry and entry["core_text"] is not True:
+            raise CatalogError(f"{key}: `core_text` is `true` or absent")
+        if entry.get("core_text") and isinstance(entry["en"], dict):
+            raise CatalogError(f"{key}: a `core_text` key is no plural (the core picks no plural form)")
     return words
 
 
@@ -113,6 +122,50 @@ def kotlin(words: dict, out: Path) -> None:
         lines.append(f'    {key.upper()}("{key}", {arity(entry)}, {"true" if is_plural(entry) else "false"}),')
     lines += ["}", ""]
     write(out / "me/raddatz/veyq/mobile/words/Msg.kt", "\n".join(lines))
+    core_text(words, out)
+
+
+def kotlin_str(t: str) -> str:
+    t = desktop_text(t)
+    return '"' + t.replace("\\", "\\\\").replace('"', '\\"').replace("$", "\\$").replace("\n", "\\n").replace("\t", "\\t") + '"'
+
+
+def core_text(words: dict, out: Path) -> None:
+    lines = [
+        "package me.raddatz.veyq.mobile.words",
+        "",
+        "/**",
+        " * The words the core writes itself, not a platform (`\"core_text\": true` in `src/mobile/words/words.json`; generated",
+        " * by `generate_words.py`, never edited): the Emergency Kit's PDF is written in the person's language by the core.",
+        " */",
+        "object CoreText {",
+        "    /**",
+        "     * [msg]'s text in [language] (a language tag: `de` and `de-*` German, anything else English), its placeholders",
+        "     * `{n}` filled by number from [args]; an IllegalArgumentException for a key that is no `core_text` one or for",
+        "     * another count of [args] than its placeholders.",
+        "     */",
+        "    fun of(msg: Msg, language: String, vararg args: String): String {",
+        "        val german = language.lowercase().substringBefore('-').substringBefore('_') == \"de\"",
+        "        require(args.size == msg.args) { \"${msg.key} takes ${msg.args} arguments, not ${args.size}\" }",
+        "        val text = when (msg) {",
+    ]
+    for key, entry in words.items():
+        if not entry.get("core_text"):
+            continue
+        en = entry["en"]
+        de = entry.get("de", en)
+        lines.append(f"            Msg.{key.upper()} -> if (german) {kotlin_str(de)} else {kotlin_str(en)}")
+    lines += [
+        "            else -> throw IllegalArgumentException(\"${msg.key} is no core_text key\")",
+        "        }",
+        "        return PLACEHOLDER.replace(text) { m -> args[m.groupValues[1].toInt() - 1] }",
+        "    }",
+        "",
+        "    private val PLACEHOLDER = Regex(\"\"\"\\{(\\d+)(?::int)?\\}\"\"\")",
+        "}",
+        "",
+    ]
+    write(out / "me/raddatz/veyq/mobile/words/CoreText.kt", "\n".join(lines))
 
 
 # ---- Android ----

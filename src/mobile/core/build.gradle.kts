@@ -114,7 +114,7 @@ val generateTheme = tasks.register<Exec>("generateTheme") {
 val generatedWords = layout.buildDirectory.dir("generated/words")
 val generateWords = tasks.register<Exec>("generateWords") {
     group = "veyq"
-    description = "Generates the catalog's keys as Kotlin (src/mobile/words/generate_words.py)."
+    description = "Generates the catalog's keys and the core's own texts as Kotlin (src/mobile/words/generate_words.py)."
     inputs.file(rootDir.resolve("words/generate_words.py")).withPropertyName("script")
     inputs.file(rootDir.resolve("words/words.json")).withPropertyName("catalog")
     outputs.dir(generatedWords)
