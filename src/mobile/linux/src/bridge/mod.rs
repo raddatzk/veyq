@@ -116,7 +116,7 @@ pub fn send(call: Call) {
     let answer = self::call(&call);
     gtk::glib::spawn_future_local(async move {
         match answer.await.map(|(answer, _)| answer) {
-            Ok(Answer::Done | Answer::PotOpened { .. } | Answer::Groups { .. } | Answer::Hits { .. }) => {}
+            Ok(Answer::Done | Answer::PotOpened { .. } | Answer::Groups { .. }) => {}
             other => {
                 let kind = serde_json::to_value(&call).ok().and_then(|v| v["type"].as_str().map(str::to_owned)).unwrap_or_default();
                 eprintln!("veyq: {kind} answered {other:?}");

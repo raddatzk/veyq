@@ -20,6 +20,9 @@
 //!   the group says why (`storageUnavailable`);
 //! - **Sign out** of this account here.
 //!
+//! Opened from a search's settings result (ADR 0146 decision 9), the page scrolls to that section: each group is named by
+//! its `SettingsSection.id` (`settings-<id>`).
+//!
 //! Theme and language follow the system (D3): no row for them. Every state is the core's (`Settings.Open`, `Watched.Settings`: `SettingsShown`), every action one call;
 //! why one did not come through is the state's `refusal`, said as a toast.
 use std::cell::{Cell, RefCell};
@@ -67,11 +70,15 @@ struct Page {
     remove_all_ask: RefCell<Option<adw::AlertDialog>>,
     /// Map services (ADR 0143 decision 2): this device's consent, followed while the dialog shows; built once.
     maps: MapServices,
+    /// The section a search's result asked for (`SettingsSection.id`), scrolled to once the page first drew.
+    at: RefCell<Option<String>>,
 }
 
-/// Opens [connection]'s Settings over [window]; the core reads and delivers what it shows.
-pub fn open(window: &adw::ApplicationWindow, connection: String) {
+/// Opens [connection]'s Settings over [window]; the core reads and delivers what it shows. [at]: the section it scrolls to
+/// (a search's settings result, `SettingsSection.id`).
+pub fn open(window: &adw::ApplicationWindow, connection: String, at: Option<String>) {
     let page = Page::new();
+    page.at.replace(at);
     page.connection.replace(Some(connection.clone()));
     let weak = Rc::downgrade(&page);
     glib::spawn_future_local(async move {
@@ -191,6 +198,7 @@ impl Page {
             storage_watch: RefCell::new(None),
             remove_all_ask: RefCell::new(None),
             maps: MapServices::new(),
+            at: RefCell::new(None),
         });
         // the limit typed, set in the unit chosen (the core parses it and says why where it is no size)
         let weak = Rc::downgrade(&p);
@@ -305,6 +313,9 @@ impl Page {
         let scroll = self.page.first_child().and_downcast::<gtk::ScrolledWindow>().map(|w| w.vadjustment());
         let at = scroll.as_ref().map(|a| a.value());
         self.draw_groups(s);
+        if let Some(section) = self.at.borrow_mut().take() {
+            self.scroll_to(section);
+        }
         if let (Some(a), Some(at)) = (scroll, at.filter(|v| *v > 0.0)) {
             a.set_value(at);
             // the groups' new heights arrive with the next allocation, and a closing dialog hands the focus back to a row
@@ -313,6 +324,25 @@ impl Page {
             glib::idle_add_local_once(move || again.set_value(at));
             glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || a.set_value(at));
         }
+    }
+
+    /// Scrolls the page to [section]'s group once it is laid out (its place arrives with the next allocation, as [draw]'s
+    /// own scroll does); a section this page does not show leaves it at its top.
+    fn scroll_to(self: &Rc<Self>, section: String) {
+        let name = format!("settings-{section}");
+        let Some(group) = self.groups.borrow().iter().find(|g| g.widget_name() == name.as_str()).cloned() else {
+            eprintln!("veyq: settings shows no section {section}");
+            return;
+        };
+        let Some(scroll) = self.page.first_child().and_downcast::<gtk::ScrolledWindow>() else { return };
+        let place = move || {
+            let content = scroll.child().and_then(|viewport| viewport.first_child());
+            if let Some(at) = content.and_then(|c| group.compute_point(&c, &gtk::graphene::Point::new(0.0, 0.0))) {
+                scroll.vadjustment().set_value(f64::from(at.y()));
+                eprintln!("veyq: settings scrolled to {section} at {:.0}", at.y());
+            }
+        };
+        glib::timeout_add_local_once(std::time::Duration::from_millis(300), place);
     }
 
     fn draw_groups(self: &Rc<Self>, s: &SettingsShown) {
@@ -328,6 +358,13 @@ impl Page {
         let add_device = s.add_device.then(|| self.add_device.clone());
         let maps = Some(self.maps.group().clone());
         let groups = vec![self.account(s), self.device(s), add_device, self.sessions(s), self.saved_keys(s), self.storage(s), self.offline_items(s), maps, self.sign_out()];
+        // each section named by its `SettingsSection.id`, where a search's result scrolls to it
+        let sections = ["account", "device", "add-device", "sessions", "saved-keys", "storage", "", "maps", ""];
+        for (g, section) in groups.iter().zip(sections) {
+            if let (Some(g), false) = (g, section.is_empty()) {
+                g.set_widget_name(&format!("settings-{section}"));
+            }
+        }
         for g in groups.iter().flatten() {
             self.page.add(g);
         }

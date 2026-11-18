@@ -1,7 +1,7 @@
 //! The shell (ADR 0122; ADR 0123's Consequences, the Linux app), GNOME's way: an `AdwNavigationSplitView` whose sidebar is an
 //! `AdwSidebar` — Home, Favorites, Recent, the applications — under a header bar whose title is the one switcher (the
-//! space shown, its tenant and server; spaces and tenants in its menu), with New beside it and Search under it (Ctrl+F),
-//! and Settings pinned at its foot; the switcher shows the signed-in member's picture beside the tenant. The content
+//! space shown, its tenant and server; spaces and tenants in its menu), with New beside it and Search under it (Ctrl+F,
+//! [crate::search]: while something is asked, its list is the sidebar's place), and Settings pinned at its foot; the switcher shows the signed-in member's picture beside the tenant. The content
 //! side shows what the core's shell says is open: Home, an application's list, a Pot (its menu at the header's end:
 //! Download), a file ([crate::file_page]), a drop box ([crate::drop_box]), a Memory or a chapter ([crate::memory_page], its
 //! lightbox pushed over the content, [crate::lightbox]), or an object this app does not draw yet. Refresh
@@ -33,6 +33,7 @@ use crate::music_bar::MusicBar;
 use crate::header::{self, Header};
 use crate::home::{self, app_icon, app_name, kind_icon};
 use crate::pot::PotPage;
+use crate::search::Search;
 use crate::drop::Drops;
 use crate::uploads::{self, Uploads};
 use crate::{avatars, create_action, said, trash, words};
@@ -64,9 +65,10 @@ pub struct Shell {
     new: gtk::MenuButton,
     space_action: gio::SimpleAction,
     tenant_action: gio::SimpleAction,
-    search_bar: gtk::SearchBar,
-    search: gtk::SearchEntry,
-    hits: RefCell<Option<Vec<ObjectRef>>>,
+    /// The search over every space ([Search]): its bar under the sidebar's title, its list in [sidebar_place].
+    search: Search,
+    /// The sidebar's place: the sidebar, or the search's list while something is asked.
+    sidebar_place: gtk::Stack,
     content: adw::NavigationPage,
     content_view: adw::ToolbarView,
     content_header: adw::HeaderBar,
@@ -131,10 +133,8 @@ impl Shell {
         sidebar_header.set_title_widget(Some(&switcher));
         sidebar_header.pack_start(&new);
         sidebar_header.pack_end(&search_toggle);
-        let search = gtk::SearchEntry::builder().placeholder_text(words::search_hint()).hexpand(true).build();
-        let search_bar = gtk::SearchBar::builder().child(&search).build();
-        search_bar.connect_entry(&search);
-        search_toggle.bind_property("active", &search_bar, "search-mode-enabled").bidirectional().build();
+        let search = Search::new();
+        search_toggle.bind_property("active", &search.bar, "search-mode-enabled").bidirectional().build();
 
         let sidebar = adw::Sidebar::new();
         let scroll = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).vexpand(true).child(&sidebar).build();
@@ -152,10 +152,13 @@ impl Shell {
                 let _ = WidgetExt::activate_action(&opens, "win.account-settings", Some(&c.to_variant()));
             }
         });
+        let sidebar_place = gtk::Stack::new();
+        sidebar_place.add_named(&scroll, Some("sidebar"));
+        sidebar_place.add_named(&search.list, Some("search"));
         let sidebar_view = adw::ToolbarView::new();
         sidebar_view.add_top_bar(&sidebar_header);
-        sidebar_view.add_top_bar(&search_bar);
-        sidebar_view.set_content(Some(&scroll));
+        sidebar_view.add_top_bar(&search.bar);
+        sidebar_view.set_content(Some(&sidebar_place));
         sidebar_view.add_bottom_bar(&foot);
         let sidebar_page = adw::NavigationPage::new(&sidebar_view, &words::app_name());
 
@@ -234,9 +237,8 @@ impl Shell {
             new,
             space_action,
             tenant_action,
-            search_bar,
             search,
-            hits: RefCell::new(None),
+            sidebar_place,
             content,
             content_view,
             content_header,
@@ -529,24 +531,27 @@ impl Shell {
             }
         });
 
-        // Search over every object's name (`ShellWords.search`), its hits in the sidebar while a query stands
+        // Search (`search`): opened, the sidebar shows (collapsed, it is where Search is); something asked, its list is the
+        // sidebar's place; a result opened shows the content; a settings result opens the account's page at its section
         let weak = Rc::downgrade(self);
-        self.search.connect_search_changed(move |entry| {
-            let Some(s) = weak.upgrade() else { return };
-            s.query(entry.text().to_string());
-        });
-        let weak = Rc::downgrade(self);
-        self.search_bar.connect_search_mode_enabled_notify(move |bar| {
+        self.search.bar.connect_search_mode_enabled_notify(move |bar| {
             let Some(s) = weak.upgrade() else { return };
             if bar.is_search_mode() {
-                // collapsed, the sidebar is where Search is
                 s.split.set_show_content(false);
-                s.search.grab_focus();
-            } else {
-                s.search.set_text("");
+                s.search.entry.grab_focus();
             }
         });
-        let bar = self.search_bar.clone();
+        let place = self.sidebar_place.clone();
+        self.search.on_asked(move |asked| place.set_visible_child_name(if asked { "search" } else { "sidebar" }));
+        let split = self.split.clone();
+        self.search.on_opened(move || split.set_show_content(true));
+        let (opens, connection) = (self.window.downgrade(), self.connection.clone());
+        self.search.on_settings(move |section| {
+            if let (Some(c), Some(window)) = (connection.borrow().clone(), opens.upgrade()) {
+                crate::account_settings::open(&window, c, Some(section));
+            }
+        });
+        let bar = self.search.bar.clone();
         let toggle = gtk::CallbackAction::new(move |_, _| {
             bar.set_search_mode(!bar.is_search_mode());
             glib::Propagation::Stop
@@ -559,28 +564,6 @@ impl Shell {
             shortcuts.add_shortcut(gtk::Shortcut::new(gtk::ShortcutTrigger::parse_string(trigger), Some(gtk::NamedAction::new("win.pot-refresh"))));
         }
         window.add_controller(shortcuts);
-    }
-
-    fn query(self: &Rc<Self>, query: String) {
-        if query.trim().is_empty() {
-            *self.hits.borrow_mut() = None;
-            self.draw_sidebar();
-            return;
-        }
-        let weak = Rc::downgrade(self);
-        glib::spawn_future_local(async move {
-            let answer = bridge::call(&Call::SearchQuery { query: query.clone() }).await.map(|(answer, _)| answer);
-            let Some(s) = weak.upgrade() else { return };
-            // only the answer to the query still standing
-            if s.search.text() != query.as_str() {
-                return;
-            }
-            match answer {
-                Ok(bridge::wire::Answer::Hits { hits }) => *s.hits.borrow_mut() = Some(hits),
-                other => eprintln!("veyq: Search answered {other:?}"),
-            }
-            s.draw_sidebar();
-        });
     }
 
     /// The level shown, where New's uploads go: its space, the folder there (none: its top), the name the queue labels it by.
@@ -624,13 +607,7 @@ impl Shell {
         *self.now.borrow_mut() = Some((state, shown));
         self.draw_switcher();
         self.draw_new();
-        let standing = self.search.text();
-        if self.hits.borrow().is_some() && !standing.is_empty() {
-            // the lists changed under a standing query: its hits anew
-            self.query(standing.to_string());
-        } else {
-            self.draw_sidebar();
-        }
+        self.draw_sidebar();
         self.draw_content();
         if first {
             let opens_drawer = self.now.borrow().as_ref().is_some_and(|(_, s)| s.drawer_opens_at_start);
@@ -741,39 +718,27 @@ impl Shell {
         };
         let opened = |r: &ObjectRef| shell.open_object.as_ref().is_some_and(|o| o.scope_id == r.scope_id && o.node_id == r.node_id);
 
-        if let Some(hits) = self.hits.borrow().as_ref() {
+        let top = adw::SidebarSection::new();
+        add(&top, &words::drawer_home(), "user-home-symbolic", Some(Target::Home), shown.is_home);
+        self.sidebar.append(top);
+        for (title, refs) in [(words::drawer_favorites(), &state.lists.drawer.favorites), (words::drawer_recent(), &state.lists.drawer.recent)] {
             let section = adw::SidebarSection::new();
-            section.set_title(Some(&words::tab_search()));
-            if hits.is_empty() {
-                add(&section, &words::list_empty(), "system-search-symbolic", None, false);
+            section.set_title(Some(&title));
+            if refs.is_empty() {
+                add(&section, &words::drawer_nothing_yet(), "view-list-symbolic", None, false);
             }
-            for h in hits {
-                add(&section, &h.name, kind_icon(&h.kind), Some(Target::Object(h.clone())), opened(h));
+            for r in refs {
+                add(&section, &r.name, kind_icon(&r.kind), Some(Target::Object(r.clone())), opened(r));
             }
             self.sidebar.append(section);
-        } else {
-            let top = adw::SidebarSection::new();
-            add(&top, &words::drawer_home(), "user-home-symbolic", Some(Target::Home), shown.is_home);
-            self.sidebar.append(top);
-            for (title, refs) in [(words::drawer_favorites(), &state.lists.drawer.favorites), (words::drawer_recent(), &state.lists.drawer.recent)] {
-                let section = adw::SidebarSection::new();
-                section.set_title(Some(&title));
-                if refs.is_empty() {
-                    add(&section, &words::drawer_nothing_yet(), "view-list-symbolic", None, false);
-                }
-                for r in refs {
-                    add(&section, &r.name, kind_icon(&r.kind), Some(Target::Object(r.clone())), opened(r));
-                }
-                self.sidebar.append(section);
-            }
-            let apps = adw::SidebarSection::new();
-            apps.set_title(Some(&words::drawer_applications()));
-            for app in &state.lists.applications {
-                let chosen = shell.application == Some(*app) && shell.open_object.is_none();
-                add(&apps, &app_name(shown, *app), app_icon(*app), Some(Target::Application(*app)), chosen);
-            }
-            self.sidebar.append(apps);
         }
+        let apps = adw::SidebarSection::new();
+        apps.set_title(Some(&words::drawer_applications()));
+        for app in &state.lists.applications {
+            let chosen = shell.application == Some(*app) && shell.open_object.is_none();
+            add(&apps, &app_name(shown, *app), app_icon(*app), Some(Target::Application(*app)), chosen);
+        }
+        self.sidebar.append(apps);
         *self.targets.borrow_mut() = targets;
         self.sidebar.set_selected(selected);
     }

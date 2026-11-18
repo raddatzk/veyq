@@ -6,7 +6,8 @@
 //! lightbox ([crate::lightbox]); the page's "Add photos" (the header's own `upload`) opens GTK's file dialog for photos and
 //! videos, and a drop of files onto the page adds them (`Memory.Upload`) — a dropped folder is said and not taken (the owner,
 //! 2026-11-13). A medium trashed (from the lightbox) is out at once with Undo in a toast for as long as the core
-//! offers it; what the page says otherwise is a toast too. The page is read anew live while it stands
+//! offers it; what the page says otherwise is a toast too. A medium the search asked for (`GalleryShown.searchOpened`, ADR
+//! 0146 decision 8) opens its lightbox once the rows hold it. The page is read anew live while it stands
 //! (`Watched.GalleryLive`, the web's poll). Where the node has music or whoever looks may add some (`musicView`), a
 //! toggle group under the head switches between its photos and its Music view ([crate::music_view], ADR 0142 decision
 //! 6); the header's music action plays or stops the node's music (`Gallery.Music`). The toggle group's Map always stands
@@ -104,6 +105,8 @@ struct Inner {
     seen_undo: Cell<bool>,
     /// What the core said was shown (until its next state without it), and a purge asked (until it is answered).
     said_shown: Cell<bool>,
+    /// The medium the search asked for that this page opened last (`GalleryShown.searchOpened`), until the core drops it.
+    search_opened: RefCell<Option<String>>,
     purge_asked: Cell<bool>,
     lightbox: RefCell<Option<Lightbox>>,
     ticking: RefCell<Option<gtk::TickCallbackId>>,
@@ -223,6 +226,7 @@ impl MemoryPage {
             undo_toast: RefCell::new(None),
             seen_undo: Cell::new(false),
             said_shown: Cell::new(false),
+            search_opened: RefCell::new(None),
             purge_asked: Cell::new(false),
             lightbox: RefCell::new(None),
             ticking: RefCell::new(None),
@@ -429,6 +433,7 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
                 inner.draw();
                 inner.relayout();
                 inner.step_uploads();
+                inner.open_searched();
                 if let (Some(s), Some(id), Some(f)) = (inner.shown.borrow().as_ref(), inner.id.get(), inner.on_shown.borrow().as_ref()) {
                     f(s, id);
                 }
@@ -772,6 +777,25 @@ impl Inner {
                 p.set_paintable(Some(&texture));
             }
         });
+    }
+
+    /// The search asked for a medium of this page (another Memory's photo opened from its results): its lightbox, once.
+    fn open_searched(self: &Rc<Self>) {
+        let (asked, at) = {
+            let shown = self.shown.borrow();
+            let asked = shown.as_ref().and_then(|s| s.search_opened.clone());
+            let at = asked.as_ref().and_then(|id| shown.as_ref()?.rows.as_ref()?.iter().position(|r| r.media_id == *id));
+            (asked, at)
+        };
+        if asked.is_none() || *self.search_opened.borrow() == asked {
+            *self.search_opened.borrow_mut() = asked;
+            return;
+        }
+        let (Some(at), Some(gallery)) = (at, self.id.get()) else { return };
+        *self.search_opened.borrow_mut() = asked;
+        eprintln!("veyq: the search's medium opens at {at}");
+        self.open_lightbox(at);
+        bridge::send(Call::GallerySearchOpenedSeen { gallery });
     }
 
     fn open_lightbox(self: &Rc<Self>, index: usize) {
