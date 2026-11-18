@@ -1,7 +1,7 @@
 //! A file's page (Depot's file viewer; ADR 0123's Consequences, the Linux app's Depot whole), GNOME's way: the file's content in place — a picture
 //! (`gtk::Picture`, decoded by GTK and held at the core's edge at most), a text (a read-only monospace `gtk::TextView`, the
 //! cut said in an `AdwBanner`), a PDF (its pages rendered by poppler as they come into view, [crate::receipt_viewer]'s
-//! renderer), an audio or video played by GTK's own player (`gtk::Video` over a `gtk::MediaFile` reading the core's reader
+//! renderer, its text selected and copied through [crate::pdf_text]), an audio or video played by GTK's own player (`gtk::Video` over a `gtk::MediaFile` reading the core's reader
 //! through [crate::reader_stream], the system's GStreamer decoding it; what it cannot decode is said as not shown here), or
 //! what the core says where it shows none (`AdwStatusPage`) — and its facts beneath, one row with the uploader.
 //! Everything is the core's `FileModel` (`File.Open`, `Watched.File`): what shows is decided by the bytes, and an image's
@@ -20,6 +20,7 @@ use gtk::{gdk, glib};
 use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::Facts, wire::FileShown, wire::FileViewKind, wire::NodeAt,
     wire::SaveEnd, wire::Update, wire::Watched};
 use crate::home::glib_escape;
+use crate::pdf_text::{PageFrame, PdfText};
 use crate::player::Playing;
 use crate::{said, words};
 
@@ -585,6 +586,8 @@ struct PdfPages {
     /// Which pages hold their pixels now.
     rendered: RefCell<Vec<bool>>,
     scale: i32,
+    /// The selection of the pages' text, once they are laid out.
+    text: RefCell<Option<Rc<PdfText>>>,
 }
 
 /// What opening a PDF came to: its pages, its password still asked (none, or a wrong one), or no PDF poppler reads.
@@ -613,7 +616,7 @@ impl PdfPages {
         column.set_margin_bottom(12);
         let clamp = adw::Clamp::builder().maximum_size(PDF_WIDTH).child(&column).build();
         let scroll = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).vexpand(true).child(&clamp).build();
-        Opened::Pages(Self { pdf, scroll, column, rendered: RefCell::new(Vec::new()), scale })
+        Opened::Pages(Self { pdf, scroll, column, rendered: RefCell::new(Vec::new()), scale, text: RefCell::new(None) })
     }
 
     fn widget(&self) -> gtk::Widget {
@@ -633,18 +636,19 @@ impl PdfPages {
                 }
             };
             let Some(this) = weak.upgrade() else { return };
-            let mut pictures = Vec::new();
+            let (mut pictures, mut frames) = (Vec::new(), Vec::new());
             for i in 0..shown {
                 let Some(page) = this.pdf.page(i) else { break };
                 let (w, h) = page.size();
                 let height = if w > 0.0 { (h * f64::from(PDF_WIDTH) / w).round() as i32 } else { PDF_WIDTH };
-                let frame = gtk::Picture::builder().can_shrink(true).content_fit(gtk::ContentFit::Contain).build();
-                frame.set_size_request(PDF_WIDTH, height.max(1));
-                frame.add_css_class("card");
-                frame.update_property(&[gtk::accessible::Property::Label(&format!("{} / {}", i + 1, total))]);
-                this.column.append(&frame);
-                pictures.push(frame);
+                let frame = PageFrame::new(PDF_WIDTH, height.max(1));
+                frame.picture.update_property(&[gtk::accessible::Property::Label(&format!("{} / {}", i + 1, total))]);
+                this.column.append(&frame.overlay);
+                pictures.push(frame.picture.clone());
+                frames.push(frame);
             }
+            // the text selected and copied over the pages (inbox #955)
+            *this.text.borrow_mut() = Some(PdfText::attach(&this.pdf, &this.column, frames));
             if let Some(cut) = cut {
                 let note = gtk::Label::builder().label(said::notice(&cut)).wrap(true).xalign(0.0).build();
                 note.add_css_class("dim-label");
