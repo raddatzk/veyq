@@ -125,6 +125,9 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
      the account's and kept by a pin of a node in it), `listNodeMedia` per Memory, `listFiles` per folder,
      `listApplicationBlobs` per node, and blob frames. A test derives the allowlisted answers' models from the generated client and fails on any
      field whose name or contract description marks a token or a URL — the set is derived, not listed by hand.
+     **What may be kept (owner 2026-11-18):** any answer the app can read may be kept sealed on the device, the
+     directory of a scope's members included; the allowlist is a gate against tokens and URLs and a list of what is
+     built, not a privacy boundary — a read missing from it is missing because nobody needed it offline yet.
    - **Online, the server's answer replaces the kept one — never merged.** Where a read has a revision, the core sends
      the kept one as `If-None-Match`, and a `304` marks the kept body current. Nothing kept is ever shown beside a newer
      answer, and after each replace a sweep drops what the current answers no longer reach (decision 6) — so a trashed or
