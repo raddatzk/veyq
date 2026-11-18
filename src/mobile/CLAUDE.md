@@ -1125,6 +1125,15 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   slide, whose dialog content now takes the release too). A gesture whose end matters listens for the release above the
   widget, not on it.
 - Broadway in the browser pane takes a click only after the pointer has moved there: hover first, then click.
+- `gtk::Accessible::announce` (GTK 4.22) ended the Linux app with SIGSEGV in the `run.py run` container (Broadway, a
+  session bus without an accessibility bus; measured twice 2026-11-18, the PDF copy's announcement): no app code
+  announces.
+- A focusable widget that is a `ScrolledWindow`'s whole content and takes the focus at a press makes the `GtkViewport`
+  scroll to it (`scroll-to-focus`): mid-drag the view ran to the column's end and a drag over one line selected 24 pages
+  (the PDF selection, 2026-11-18). Such a widget turns its viewport's `scroll_to_focus` off.
+- A Linux pass proves what a PDF copy put on the clipboard through the debug build's own read-back
+  (`file PDF clipboard read back: N characters, the selection: true`), never the text itself; Broadway's clipboard
+  reaches no browser.
   `computer type` reaches no GTK entry, but `computer key` with space-separated letters does; a password is never
   typed, `run --devlogin` signs in. A hidden pane lags Broadway's frames, so a screenshot can show the state before the
   last action: hover before each one, and read the state from the app's stderr first. A Broadway window keeps its own

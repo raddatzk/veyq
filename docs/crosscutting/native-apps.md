@@ -496,10 +496,15 @@ first cut.
 
 **Depot**: a READ_WRITE guest's own name as uploader; importing a download (a ZIP, or one unpacked as a folder; a dropped
 or picked veyq download is uploaded as the file it is until then); multi-select and dragging a node onto a folder to move
-it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built). A PDF's text selected and copied on
-Linux (poppler reads it — `selected_text`, `selected_region` — but GTK has no view that selects it, so an overlay of its own
-is the work), and on Windows a password-protected PDF's (drawn by `Windows.Data.Pdf`, which has no text API). Built
-2026-11-18 (inbox #955): on Windows a PDF opens in WebView2's own PDF viewer, served from memory, InPrivate, in a
+it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built). A password-protected PDF's text
+selected and copied on Windows (drawn by `Windows.Data.Pdf`, which has no text API). Built 2026-11-18 (inbox #955): on
+Linux an overlay of its own over poppler's rendered pages (`src/mobile/linux/src/pdf_text.rs`; GTK has no view that
+selects a PDF's text) — poppler's `selected_region` for the highlight and `selected_text` for the copy, a drag across
+pages, a double click a word and a triple a line, Ctrl+A every page shown, Ctrl+C and the context menu's *Copy*; nothing
+of the text logged (a count of characters) or written. Passed in Broadway against the dev instance the same day: a
+heading of the 25-page report highlighted by a drag (25 characters), Ctrl+C, a word by a double click and the menu's
+*Copy* (10), Ctrl+A over the 25 pages (43,115), each read back from the clipboard in the app's debug build as the
+selection; `jpx.pdf` (a picture, no text layer) highlighted nothing and offered no Copy. On Windows a PDF opens in WebView2's own PDF viewer, served from memory, InPrivate, in a
 user-data folder deleted after it, offline by its arguments — taken after a measurement found no byte of the PDF or its
 text on disk and nothing off the device, and held to it by `PdfWebTest` ([ADR 0123](../decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)'s
 Windows Depot; [src/mobile/CLAUDE.md](../../src/mobile/CLAUDE.md) § Nothing on disk the app did not choose). Passed on the
