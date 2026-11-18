@@ -371,6 +371,37 @@ class VeyqAccount private constructor(
     @OptIn(kotlin.time.ExperimentalTime::class)
     private val anchoring = Anchoring(suite, trust, trustApi, pins) { kotlin.time.Clock.System.now().toEpochMilliseconds() }
 
+    // ---- what the account's trust flows read (ADR 0148: `PersonTrust`, `ProfileModel`) ----
+
+    internal val anchoringOfAccount: Anchoring get() = anchoring
+    internal val trustOfAccount: Trust get() = trust
+
+    /** A person's key chain as the server serves it; null where it serves none. */
+    internal suspend fun keyChainOf(userId: String): KeyChain? = trustApi.keyChain(userId)
+
+    /** This account's pin of [userId], as the sealed pin store holds it. */
+    internal suspend fun pinOf(userId: String): Trust.Pin? = pins.load().pins[userId]
+
+    /** A signature by this account's identity — the verification statement's (ADR 0111 decision 12). The private key
+     *  stays in this account; only the signature leaves. */
+    internal fun identitySign(message: ByteArray): ByteArray = primitives.ed25519Sign(identity.signSeed, message)
+
+    /**
+     * Scope [scopeId] of [tenant] opened anew — its current grant read and verified as at the tenant's opening — for a
+     * write the server answered `409 stale_epoch` (a rotation replaced the key in between): its key and epoch, or null
+     * where it does not open. The caller zeroes the key.
+     */
+    internal suspend fun reopenScope(tenant: TenantRef, scopeId: String): Pair<ByteArray, Long>? {
+        val base = originOf(tenant)
+        val r = respond { ScopesApi(base, http).listMyScopes() }
+        if (!r.success) return null
+        val s = r.body().firstOrNull { it.id == scopeId && it.deletedAt == null } ?: return null
+        return when (val o = grants(base).open(s, null)) {
+            is GrantOutcome.Opened -> o.key to s.grantedEpoch.toLong()
+            is GrantOutcome.Refused -> null
+        }
+    }
+
     private fun grants(base: String) = GrantOpener(suite, trust, primitives, userId, myPublic, mySignPublic, kem, marks, anchoring) { scopeId ->
         val r = respond { ScopesApi(base, http).listScopeEpochs(scopeId) }
         when {
@@ -1454,6 +1485,9 @@ class TenantSession internal constructor(
 
     /** The tenant's origin: where its pages live (a link's address, the privacy notice). */
     val origin: String get() = base
+
+    /** A person's safety number and the compare that verifies them in this tenant (ADR 0148 decision 3). */
+    val personTrust: PersonTrust by lazy { PersonTrust(this) }
 
     /** The members' profile pictures, synced from [people]'s revisions (`MemberAvatars`). */
     val avatars: MemberAvatars by lazy { MemberAvatars(this) }

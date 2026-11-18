@@ -118,7 +118,7 @@ internal class Anchoring(
      *  from a join record — the index of the step the person joined with (no key before it counts in that tenant). */
     class Reading(val anchor: Anchor, val head: String, val index: Int, val fingerprints: List<String>, val joinedAt: Int = 0)
 
-    private fun links(chain: KeyChain): List<Trust.KeyChainLink>? = runCatching {
+    internal fun links(chain: KeyChain): List<Trust.KeyChainLink>? = runCatching {
         chain.steps.map {
             Trust.KeyChainLink(
                 it.index.toLong(), it.previousHead?.let(::unb64), unb64(it.identityPublicKey), unb64(it.secretKeyProofPublicKey),
