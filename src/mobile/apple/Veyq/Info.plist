@@ -10,11 +10,12 @@
 		<key>UIImageName</key>
 		<string>VeyqMark</string>
 	</dict>
-	<!-- A pin's fetch as a continued-processing task (ADR 0140 decision 9, iOS 26's BGContinuedProcessingTask): the bundle id,
-	     a context and a unique suffix per request, permitted by the wildcard. -->
+	<!-- A pin's fetch and an upload as continued-processing tasks (ADR 0140 decision 9, ADR 0145 decision 1; iOS 26's
+	     BGContinuedProcessingTask): the bundle id, a context and a unique suffix per request, permitted by each wildcard. -->
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>app.veyq.offline.*</string>
+		<string>app.veyq.uploads.*</string>
 	</array>
 	<!-- A Memory's music plays on in the background and with the screen off (ADR 0142 decision 3); a Mac ignores it. -->
 	<key>UIBackgroundModes</key>
