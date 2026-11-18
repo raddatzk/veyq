@@ -942,8 +942,8 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - A rotation recreates the activity, and whatever a composable holds in `remember` goes with it: the lightbox closed on
   a rotation while the Memory under it stayed (#934, measured 2026-11-15 — the shell's place is the core's, held by
   `AppModel`, a `ViewModel`). What a rotation must keep is a model's: the page draws anew from it (`GalleryModel.openLightbox`).
-  A playing video goes back to its poster, the player being the view's. The kit scanner's `scan` is still held in
-  `remember` (`SignInScreen`): a rotation closes it, the sign-in form staying (measured the same day).
+  A playing video goes back to its poster, the player being the view's. The sign-in's kit scan is `AppModel.kitScan` for
+  the same reason (it was the view's and a rotation closed it), and `KitScanner`'s dispose only stops watching it.
 - ffmpeg's `testsrc` at a 16:9 size draws its pattern off centre and cut at the right (the circle, the counter): a
   frame of it looks shifted wherever it is drawn. Before calling a drawn video shifted, compare the screen against
   ffmpeg's own frame of that time (#931 was that, 2026-11-15: the player had drawn it exactly).
@@ -973,11 +973,12 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   node it made, and the next run fills it (`into`, the web's `fileUploadJob`); before, the retry collided with its own empty
   file and offered its replace (measured on the emulator in airplane mode).
 - A guest's new folder in a drop box shows only once the tenant's tree is read anew: the session caches it, and nothing polls.
-  `ShellModel.refresh()` forgets it first (the desktops' F5 / Refresh; ADR 0136's Consequences); a phone pass force-stops and relaunches
-  the app (`devlogin.py`) after a guest dropped through the web.
+  `ShellModel.refresh()` forgets it first (the desktops' F5 / Refresh, the phones' pull to refresh; ADR 0136's Consequences).
 - Driving the web from a mobile pass (headless system Chrome, `?devlogin`): a level row's `locator.click()` waits forever
   for a stable element; click the row's bounding box with `page.mouse`, or open by hash (`#app-depot-2/alpha-txt`). A file
-  page's Replace is its hidden `input.files-picker` (`setInputFiles`), then "Ersetzen".
+  page's Replace is its hidden `input.files-picker` (`setInputFiles`), then "Ersetzen". A pass of a web change runs on a Vite
+  serving the worktree (`VITE_PORT=<own port> pnpm exec vite`, `src/web`): the one on 8081 serves another tree, and its
+  `?devlogin` reads that tree's `.run/.env`. A guest needs no devlogin, so its page may stay on 8081 where the web is unchanged.
 - A device-linking pass against the web (2026-11-13/15): the web's camera is headless Chrome's fake one
   (`--use-fake-device-for-media-stream --use-file-for-fake-video-capture=<the app's code as .y4m>`), opened only after
   the file is written — rewritten under an open camera it says "Camera unavailable". `?devlogin` reads the `.run/.env`
@@ -1304,9 +1305,10 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - One WinUI `TextBox` holding a megabyte drew only its first line, even 15 s later (measured 2026-11-12, a file's cut text):
   a long text is a virtualized `ListView` a line a row (`FilePage.Text`), as on iOS. The Linux container has no monospace
   font, so a `TextView`'s `monospace` falls back to the proportional one there (a desktop has one).
-- A session's tree is cached (`TenantSession.trees`); only a refresh forgets it (`ShellModel.refresh`, since 2026-11-12:
-  before it a desktop saw another device's upload or a guest's folder only after a new sign-in). A refresh is the one way a write
-  of someone else shows: a live case that writes through a second session calls `Shell.Refresh` before it looks.
+- A session's tree is cached (`TenantSession.trees`); a refresh forgets it (`ShellModel.refresh`: the desktops' Refresh, the
+  phones' pull to refresh), and so does an open Memory's live poll where the scope's tree moved (`TenantSession.treeMoved`,
+  a conditional `listNodes`; at the gallery's 20 s cadence). Elsewhere a refresh is the one way a write of someone else
+  shows: a live case that writes through a second session calls `Shell.Refresh` before it looks.
 - Driving a file's save on the desktops: GTK's save dialog takes a whole path in its name field (`key Control+a`, `type
   /tmp/big.bin`, `key Enter`); a 300 MiB save in the container ends in about 3 s, so a Cancel is clicked in the same
   Playwright run. On Windows the save picker's name is typed into `FileNameControlHost` and saved by `press
@@ -1347,9 +1349,9 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   openh264, measured): the image carries openh264 as a desktop does.
 - Driving a medium on Linux (Broadway): GTK's controls show at the video's bottom; play and seek by clicking them (the
   scale's x is the position) and read `medium at <s> s of <s> s` on stderr, each fifth second — the frames drawn lag.
-- A guest's folder a member trashed is in no member's trash list (`NodeTrash.list` leaves guest-sealed entries out, as the web's
-  `listTrash`), so a live case cannot purge it from there: purging its drop box erases it with the subtree (`NodeSubtreePurge`
-  takes trashed descendants too). The delete's words still say it can be restored from the trash (inbox #904).
+- A guest's folder a member trashed is in the space's trash, its name opened through the drop box's drop key and the guest's
+  `K_up`, and its restore's token is derived under that `K_up` (`NodeTrash`, as the web's `listTrash`/`restoreOnce`); a row
+  whose parent this device's tree does not hold yet (a drop box made elsewhere) reads the tree anew once.
 - WinUI's `MediaPlayerElement`: the page makes its own `MediaPlayer`, hands it over with `SetMediaPlayer` and takes it back
   (`SetMediaPlayer(null)`) before disposing it. A player the element made itself and that the page disposed threw `E_ABORT`
   out of the shell's next `Content` set, a dispatcher callback, and ended the app in combase (`0xc000027b`, measured
