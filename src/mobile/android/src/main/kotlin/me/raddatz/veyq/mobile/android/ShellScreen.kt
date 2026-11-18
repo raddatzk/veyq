@@ -50,6 +50,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.pullToRefresh
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -105,10 +106,13 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 @Composable
 fun ShellScreen(s: Screen.Signed, model: AppModel) {
     // Material 3's window classes (ADR 0122 decision 2): from a medium window on, a rail at the side takes the bar's place;
-    // on an expanded one the drawer stays open as the sidebar.
-    val widthDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+    // on an expanded one the drawer stays open as the sidebar and the list sits beside the open object — unless the window's
+    // height is compact: a phone in landscape (about 914 × 411 dp) left the open Memory a strip of 120 dp beside the drawer,
+    // the rail and the list (#951), so it keeps the rail and one pane
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val widthDp = configuration.screenWidthDp
     val rail = widthDp >= MEDIUM_WIDTH_DP
-    val wide = widthDp >= EXPANDED_WIDTH_DP
+    val wide = widthDp >= EXPANDED_WIDTH_DP && configuration.screenHeightDp >= COMPACT_HEIGHT_BELOW_DP
     val drawer = rememberDrawerState(if (s.shell.drawerOpensAtStart && !wide) DrawerValue.Open else DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val snackbar = androidx.compose.runtime.remember { androidx.compose.material3.SnackbarHostState() }
@@ -296,7 +300,17 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                     }
                 }
             }
-            Box(Modifier.weight(1f).fillMaxSize()) {
+            // a pull to refresh reads the lists anew (#953): on a list, and on a page drawn from the tree — a Memory's, a
+            // chapter's, a drop box's (a guest's new folder) —; a Pot has its own, a file's page none
+            val refreshable = !shell.searching && shell.person == null && shell.openObject?.kind.let { it == null || it in TREE_PAGES }
+            var refreshing by remember { mutableStateOf(false) }
+            val pull = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
+            Box(
+                Modifier.weight(1f).fillMaxSize().pullToRefresh(refreshing, pull, enabled = refreshable) {
+                    refreshing = true
+                    model.refreshLists { refreshing = false }
+                },
+            ) {
               androidx.compose.runtime.CompositionLocalProvider(LocalNodeHero provides hero, LocalListStates provides listStates) {
                 when {
                     // a wide window: the application's list and its open object side by side (Material 3's list-detail)
@@ -312,6 +326,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 }
               }
                 if (s.switching) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
+                if (refreshable) androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator(pull, refreshing, Modifier.align(Alignment.TopCenter))
                 UploadTray(model)
             }
             }
@@ -327,6 +342,12 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
 /** Material 3's window width classes (dp): a medium window from 600, an expanded one from 840. */
 private const val MEDIUM_WIDTH_DP = 600
 private const val EXPANDED_WIDTH_DP = 840
+
+/** The kinds whose page is drawn from the tree, which a pull to refresh reads anew (#953). */
+private val TREE_PAGES = setOf("MEMORY", "CHAPTER", "DEPOT_DROPBOX")
+
+/** Material 3's window height classes (dp): a compact height below 480 (a phone in landscape). */
+private const val COMPACT_HEIGHT_BELOW_DP = 480
 
 /** One place of the bar: a tab of the chosen application, or Search. */
 private class Place(val selected: Boolean, val onClick: () -> Unit, val icon: ImageVector, val label: String)

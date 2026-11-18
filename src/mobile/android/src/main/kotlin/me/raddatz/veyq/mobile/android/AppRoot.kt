@@ -50,13 +50,14 @@ fun AppRoot(model: AppModel) {
     val trustWorking by model.trustWorking.collectAsStateWithLifecycle()
     val settings by model.settings.collectAsStateWithLifecycle()
     val link by model.link.collectAsStateWithLifecycle()
+    val kitScan by model.kitScan.collectAsStateWithLifecycle()
     val maps by model.maps.collectAsStateWithLifecycle()
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (val s = screen) {
             Screen.Starting -> StartingScreen()
             is Screen.SignIn -> SignInScreen(
                 s, { server, email, password, secretKey -> model.signIn(server, email, password, secretKey) }, model::cancelAdd,
-                onKit = model::readKit, onClearKit = model::clearKit, onScanKit = model::scanKit,
+                onKit = model::readKit, onClearKit = model::clearKit, onScanKit = model::scanKit, kitScan = kitScan, onCloseKitScan = model::closeKitScan,
                 onScanFromTrusted = model::scanFromTrusted, onShowForSignIn = model::showForSignIn,
             )
             is Screen.Unlock -> UnlockScreen(s, model::unlock, model::otherAccount)
@@ -76,7 +77,10 @@ fun SignInScreen(
     onCancel: () -> Unit = {},
     onKit: (android.net.Uri, String) -> Unit = { _, _ -> },
     onClearKit: () -> Unit = {},
-    onScanKit: ((String) -> me.raddatz.veyq.mobile.qr.QrScan<*>)? = null,
+    onScanKit: ((String) -> Unit)? = null,
+    /** The kit scan on screen: the model's, so a rotation keeps it (#937). */
+    kitScan: me.raddatz.veyq.mobile.qr.QrScan<*>? = null,
+    onCloseKitScan: () -> Unit = {},
     onScanFromTrusted: ((String) -> Unit)? = null,
     onShowForSignIn: ((String) -> Unit)? = null,
 ) {
@@ -102,8 +106,7 @@ fun SignInScreen(
     var noCamera by rememberSaveable {
         mutableStateOf(!context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY))
     }
-    var scan by androidx.compose.runtime.remember { mutableStateOf<me.raddatz.veyq.mobile.qr.QrScan<*>?>(null) }
-    scan?.let { KitScanner(it, onClose = { scan = null }, onNoCamera = { noCamera = true }) }
+    kitScan?.let { KitScanner(it, onClose = onCloseKitScan, onNoCamera = { noCamera = true }) }
     Column(
         modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).formColumn(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -139,7 +142,7 @@ fun SignInScreen(
         }
         if (onScanKit != null && !noCamera) {
             androidx.compose.material3.OutlinedButton(
-                onClick = { scan = onScanKit(server) },
+                onClick = { onScanKit(server) },
                 enabled = !state.working,
                 modifier = Modifier.fillMaxWidth(),
             ) {
