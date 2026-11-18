@@ -473,7 +473,7 @@ Map tab's pins and a cluster, a photo's map and its name sealed once, a track ad
 map services off*, offline, and what MapKit keeps on an iPhone (the Mac's screen locked during both attempts; no iOS
 simulator boots on this Mac). Not run elsewhere: Windows offline (the VM's backend is reached through a standing tunnel),
 Android's *Download GPX* and *Report* of a track, a phone's 60 Hz frame budget. Not built: a tile cache across launches
-(#939); a request log in the Linux and Windows builds (#947). Seen in the passes, open: #943–#946.
+(#939); a request log in the Linux and Windows builds (#947). Seen in the passes, open: #945.
 
 **Uploads**: an upload that goes on while the app is in the background (Android a foreground service, iOS a
 background task); placeholder tiles in the gallery for what is under way; the list behind Apple's button seen open.
