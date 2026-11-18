@@ -61,8 +61,9 @@ struct Inner {
     adopt: Cell<Option<usize>>,
     /// The announcement said last, so a state that repeats it says nothing.
     announced: RefCell<String>,
-    /// The settings section a state named last (`SearchShown.openSettings`), so a repeat of it opens nothing.
-    settings_named: RefCell<Option<String>>,
+    /// How many settings results the last state counted (`SearchShown.openSettingsCount`): each new one opens the page,
+    /// the same section chosen twice included; a state that repeats the count opens nothing.
+    settings_opened: Cell<i32>,
     asked: Cell<bool>,
     on_asked: Listener<bool>,
     on_settings: Listener<String>,
@@ -100,7 +101,7 @@ impl Search {
             sent: RefCell::new(String::new()),
             adopt: Cell::new(None),
             announced: RefCell::new(String::new()),
-            settings_named: RefCell::new(None),
+            settings_opened: Cell::new(0),
             asked: Cell::new(false),
             on_asked: RefCell::new(None),
             on_settings: RefCell::new(None),
@@ -247,6 +248,8 @@ impl Inner {
                         eprintln!("veyq: search closed with its tenant");
                         i.id.set(None);
                         i.watch.borrow_mut().take();
+                        // the next search is a new model, counting from nothing
+                        i.settings_opened.set(0);
                         i.bar.set_search_mode(false);
                         i.clear();
                         return;
@@ -296,7 +299,6 @@ impl Inner {
                 bridge::send(Call::SearchChoose { search, index });
             }
             Entry::Open(index) => {
-                *self.settings_named.borrow_mut() = None;
                 bridge::send(Call::SearchOpenResult { search, index });
                 if let Some(f) = self.on_opened.borrow().as_ref() {
                     f(());
@@ -334,14 +336,12 @@ impl Inner {
         self.draw_rows(s);
         self.set_asked(s.asked);
         self.announce(s);
-        // a settings result: the page opens at its section, once
-        let named = s.open_settings.clone();
-        if *self.settings_named.borrow() != named {
-            *self.settings_named.borrow_mut() = named.clone();
-            if let (Some(section), Some(f)) = (named, self.on_settings.borrow().as_ref()) {
-                eprintln!("veyq: search opens settings at {section}");
-                f(section);
-            }
+        // a settings result: the page opens at its section, once per result chosen (the count moves with each)
+        if self.settings_opened.replace(s.open_settings_count) != s.open_settings_count
+            && let (Some(section), Some(f)) = (s.open_settings.clone(), self.on_settings.borrow().as_ref())
+        {
+            eprintln!("veyq: search opens settings at {section} ({})", s.open_settings_count);
+            f(section);
         }
     }
 
@@ -397,14 +397,15 @@ impl Inner {
                 self.rows.append(&row);
                 entries.push(Some(Entry::Choose(i as i32)));
             }
-            if !s.results.is_empty() {
-                let separator = gtk::ListBoxRow::builder().child(&gtk::Separator::new(gtk::Orientation::Horizontal)).activatable(false).selectable(false).build();
-                self.rows.append(&separator);
-                entries.push(None);
-            }
         }
         if !s.results.is_empty() {
-            self.rows.append(&still(&heading(&words::search_results())));
+            let results = still(&heading(&words::search_results()));
+            // the separator between the chips offered and the results: the heading row's header, as a list box separates
+            // (a row of its own drew as a filled block in `.navigation-sidebar`)
+            if !s.suggestions.is_empty() {
+                results.set_header(Some(&gtk::Separator::builder().margin_top(6).margin_start(6).margin_end(6).build()));
+            }
+            self.rows.append(&results);
             entries.push(None);
             for (i, r) in s.results.iter().enumerate() {
                 let line = said::line(&r.line);
@@ -443,9 +444,20 @@ impl Inner {
             return;
         }
         *self.announced.borrow_mut() = text.clone();
-        eprintln!("veyq: search announces {:?}", s.announcement.iter().map(|n| n.msg.as_str()).collect::<Vec<_>>());
-        self.entry.announce(&text, gtk::AccessibleAnnouncementPriority::Medium);
+        let context = self.entry.at_context().type_().name();
+        eprintln!("veyq: search announces {:?} through {context}", s.announcement.iter().map(|n| n.msg.as_str()).collect::<Vec<_>>());
+        if speaks(context) {
+            self.entry.announce(&text, gtk::AccessibleAnnouncementPriority::Medium);
+        }
     }
+}
+
+/// Whether an accessibility context of type [name] reaches a screen reader. Only those are asked to announce: GTK's test
+/// context, which a display without an accessibility bus gets (Broadway's), implements no announcement, and
+/// `gtk_accessible_announce` called through it once realized jumped to NULL (measured 2026-11-18, GTK 4.22 under Broadway:
+/// SIGSEGV after a list row had held the focus).
+fn speaks(name: &str) -> bool {
+    matches!(name, "GtkAtSpiContext" | "GtkAccessKitContext")
 }
 
 /// A name in its parts as markup: each escaped, the matched ones bold.
@@ -523,6 +535,13 @@ mod tests {
         ];
         assert_eq!(markup(&parts), "<b>Ost</b>see &lt;2026&gt; &amp; mehr");
         assert_eq!(markup(&[PartShown { text: "<b>".into(), strong: true }]), "<b>&lt;b&gt;</b>", "a name's own markup is text");
+    }
+
+    #[test]
+    fn only_a_context_that_reaches_a_screen_reader_is_asked_to_announce() {
+        assert!(speaks("GtkAtSpiContext"));
+        assert!(speaks("GtkAccessKitContext"));
+        assert!(!speaks("GtkTestATContext"), "Broadway's: no announcement there, and asking it crashed");
     }
 
     #[test]

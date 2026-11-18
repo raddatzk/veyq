@@ -326,23 +326,44 @@ impl Page {
         }
     }
 
-    /// Scrolls the page to [section]'s group once it is laid out (its place arrives with the next allocation, as [draw]'s
-    /// own scroll does); a section this page does not show leaves it at its top.
+    /// Scrolls the page to [section]'s group once it is laid out; a section this page does not show leaves it at its top.
+    /// The group is looked up at each try, not now: every draw builds the groups anew (the storage section's updates follow
+    /// the page's at once), and a group just built has no place until the next allocation — so it is tried every 100 ms
+    /// until the group's top is reached — a page still growing (the sessions arrive after it opened) clamps it short, and
+    /// the next try goes on — for at most two seconds.
     fn scroll_to(self: &Rc<Self>, section: String) {
-        let name = format!("settings-{section}");
-        let Some(group) = self.groups.borrow().iter().find(|g| g.widget_name() == name.as_str()).cloned() else {
-            eprintln!("veyq: settings shows no section {section}");
-            return;
-        };
-        let Some(scroll) = self.page.first_child().and_downcast::<gtk::ScrolledWindow>() else { return };
-        let place = move || {
-            let content = scroll.child().and_then(|viewport| viewport.first_child());
-            if let Some(at) = content.and_then(|c| group.compute_point(&c, &gtk::graphene::Point::new(0.0, 0.0))) {
-                scroll.vadjustment().set_value(f64::from(at.y()));
-                eprintln!("veyq: settings scrolled to {section} at {:.0}", at.y());
+        let weak = Rc::downgrade(self);
+        let tries = Cell::new(0);
+        glib::timeout_add_local(std::time::Duration::from_millis(100), move || {
+            let Some(page) = weak.upgrade() else { return glib::ControlFlow::Break };
+            tries.set(tries.get() + 1);
+            let name = format!("settings-{section}");
+            let Some(group) = page.groups.borrow().iter().find(|g| g.widget_name() == name.as_str()).cloned() else {
+                eprintln!("veyq: settings shows no section {section}");
+                return glib::ControlFlow::Break;
+            };
+            let scroll = group.ancestor(gtk::ScrolledWindow::static_type()).and_downcast::<gtk::ScrolledWindow>();
+            let a = scroll.as_ref().map(gtk::ScrolledWindow::vadjustment);
+            // the group's top in the view, plus where the view stands: its place in what scrolls
+            let at = scroll.as_ref().and_then(|s| s.child()).and_then(|view| group.compute_point(&view, &gtk::graphene::Point::new(0.0, 0.0)));
+            match (a, at) {
+                (Some(a), Some(at)) if group.height() > 0 && a.upper() > a.page_size() => {
+                    let wanted = a.value() + f64::from(at.y());
+                    let to = wanted.min(a.upper() - a.page_size()).max(0.0);
+                    a.set_value(to);
+                    if to < wanted && tries.get() < 20 {
+                        return glib::ControlFlow::Continue;
+                    }
+                    eprintln!("veyq: settings scrolled to {section} at {to:.0} of {:.0} (its top at {wanted:.0})", a.upper() - a.page_size());
+                    glib::ControlFlow::Break
+                }
+                _ if tries.get() >= 20 => {
+                    eprintln!("veyq: settings' {section} was not laid out in time");
+                    glib::ControlFlow::Break
+                }
+                _ => glib::ControlFlow::Continue,
             }
-        };
-        glib::timeout_add_local_once(std::time::Duration::from_millis(300), place);
+        });
     }
 
     fn draw_groups(self: &Rc<Self>, s: &SettingsShown) {
