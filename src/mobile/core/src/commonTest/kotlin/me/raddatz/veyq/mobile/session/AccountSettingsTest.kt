@@ -172,6 +172,48 @@ class AccountSettingsTest {
         assertEquals(revision, s.register.revision, "a blank name was written")
     }
 
+    // ADR 0148 decision 1: the web's renameDeviceOfFamily — the family's device, whichever it is, every session of it.
+    @Test
+    fun aFamilysRenameNamesThatFamilysDeviceAndNoOther() = runTest {
+        val (s, _, m) = setUp()
+        m.refresh()
+        m.renameFamily("f-laptop", "  Office laptop ")
+        val plain = s.register().read()
+        assertEquals("Office laptop", plain.devices["dev-laptop"]?.label)
+        assertEquals("Pixel", plain.devices[s.deviceId]?.label, "this device was renamed instead")
+        assertEquals("Office laptop", m.current.families!!.first { it.id == "f-laptop" }.label)
+        assertEquals("Pixel", m.current.device.label)
+        // this device's own family renames this device, as the web's panel does for its own row
+        m.renameFamily("f-here", "Kevin's phone")
+        assertEquals("Kevin's phone", s.register().read().devices[s.deviceId]?.label)
+        assertEquals("Office laptop", s.register().read().devices["dev-laptop"]?.label)
+    }
+
+    @Test
+    fun aFamilyTheRegisterCannotNameAndABlankNameWriteNothing() = runTest {
+        val (s, _, m) = setUp()
+        m.refresh()
+        val revision = s.register.revision
+        m.renameFamily("f-unknown", "Mystery")
+        m.renameFamily("f-laptop", "   ")
+        assertEquals(revision, s.register.revision, "a write went out")
+        assertNull(m.current.families!!.first { it.id == "f-unknown" }.label)
+        // the store's own no-op: a family it cannot name (as the web's, which answers no error)
+        s.register().renameOfFamily("f-nobody", "Ghost")
+        assertEquals(revision, s.register.revision)
+    }
+
+    @Test
+    fun aFamilysRenameRetriedAfterAConflictKeepsTheOtherDevicesWrite() = runTest {
+        val (s, _, m) = setUp()
+        m.refresh()
+        s.register.before = { s.another("dev-new", "Tablet", "f-new", "w-new") }
+        m.renameFamily("f-laptop", "Office laptop")
+        val plain = s.register().read()
+        assertEquals("Office laptop", plain.devices["dev-laptop"]?.label)
+        assertEquals("Tablet", plain.devices["dev-new"]?.label)
+    }
+
     @Test
     fun anotherFamilyIsRevokedAndAGoneOneDropsOutWithoutAWord() = runTest {
         val (s, h, m) = setUp()

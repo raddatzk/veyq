@@ -214,6 +214,19 @@ class AccountSettings<A : Connection, T : Any>(
     }
 
     /**
+     * Renames the device of family [familyId] — any device the register names, every session of it at once (the web's
+     * `renameDeviceOfFamily`, ADR 0148 decision 1). A blank name, or a family the register cannot name, writes nothing.
+     */
+    suspend fun renameFamily(familyId: String, label: String) {
+        val name = label.trim()
+        if (name.isEmpty() || current.families?.firstOrNull { it.id == familyId }?.label == null) return
+        act {
+            attempt { door.register().renameOfFamily(familyId, name) }.onFailure { refuse(registerWords(it) ?: Msg.ACCOUNT_SETTINGS_RENAME_FAILED) }
+            load(keepRefusal = true)
+        }
+    }
+
+    /**
      * Ends session family [familyId]. This device's own is a sign-out here (E2), answered with what it left; any other
      * is revoked and the list read anew — one already gone simply drops out (E1).
      */

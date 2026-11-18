@@ -330,6 +330,21 @@ internal class DeviceRegisterStore(
     }
 
     /**
+     * Renames the device family [familyId] belongs to — the web's `renameDeviceOfFamily` (ADR 0148 decision 1): every
+     * session of that device at once, any device of the account, last write wins. The family is resolved on each read
+     * the write retries over; a family the register cannot name, or whose device has no entry, is a no-op.
+     */
+    suspend fun renameOfFamily(familyId: String, label: String) {
+        val base = load()
+        if (base.plain.families[familyId]?.let { base.plain.devices[it] } == null) return
+        write(base) { p ->
+            val device = p.families[familyId]
+            val prior = device?.let { p.devices[it] }
+            if (device == null || prior == null) p else p.copy(devices = p.devices + (device to prior.copy(label = label)))
+        }
+    }
+
+    /**
      * Takes [deviceId] out of the register with every family and wrap row naming it — called by that device itself, as
      * [rename], so each entry keeps its one writer. A port's addition: the web's register has no such write (what
      * [VeyqAccount.removeThisDevice] leaves).
