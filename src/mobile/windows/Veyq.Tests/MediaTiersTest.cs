@@ -201,8 +201,28 @@ public sealed class MediaTiersTest
         await File.WriteAllTextAsync(junk, "not audio at all");
         try
         {
-            static double Seconds(byte[] w) =>
-                (w.Length - 44) / (double)BitConverter.ToUInt16(w, 32) / BitConverter.ToUInt32(w, 24);
+            // the WAV as Media Foundation writes it: its chunks walked (a `fmt ` of 16, 18 or 40 bytes, a LIST before `data`)
+            static double Seconds(byte[] w)
+            {
+                uint rate = 0, align = 0;
+                for (var at = 12; at + 8 <= w.Length;)
+                {
+                    var id = System.Text.Encoding.ASCII.GetString(w, at, 4);
+                    var size = BitConverter.ToUInt32(w, at + 4);
+                    if (id == "fmt ")
+                    {
+                        rate = BitConverter.ToUInt32(w, at + 12);
+                        align = BitConverter.ToUInt16(w, at + 20);
+                    }
+                    if (id == "data")
+                    {
+                        var bytes = size == 0 || at + 8 + size > w.Length ? (uint)(w.Length - at - 8) : size;
+                        return bytes / (double)align / rate;
+                    }
+                    at += 8 + (int)size + (int)(size % 2);
+                }
+                return double.NaN;
+            }
             var head = await MediaTiers.SliceAsync(path, 0, 1500);
             var tail = await MediaTiers.SliceAsync(path, 2000, null);
             Assert.AreEqual(1.5, Seconds(head), 0.1, "the head");
