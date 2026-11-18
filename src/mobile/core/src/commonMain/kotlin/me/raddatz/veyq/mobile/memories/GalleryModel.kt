@@ -517,11 +517,19 @@ class GalleryModel(
      */
     fun bannerEditor(pictures: me.raddatz.veyq.mobile.memories.banner.BannerWrite.Pictures): me.raddatz.veyq.mobile.memories.banner.BannerEditor? {
         if (!current.editsBanner) return null
-        val openedWith = current.facts?.bannerSlots ?: me.raddatz.veyq.mobile.memories.banner.Banner.Slots.NONE
+        var openedWith = current.facts?.bannerSlots ?: me.raddatz.veyq.mobile.memories.banner.Banner.Slots.NONE
+        // a peer's change said (stale): the page and the dialog follow the peer's banner, so Save again writes over it, as
+        // the web's dialog does (its save takes the page's node, which the conflict updated)
+        suspend fun follow(out: me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome) {
+            if (out != me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome.Stale) return factsChanged()
+            val f = runCatching { door.facts() }.getOrNull() ?: return
+            _state.update { it.copy(facts = f) }
+            openedWith = f.bannerSlots ?: me.raddatz.veyq.mobile.memories.banner.Banner.Slots.NONE
+        }
         return me.raddatz.veyq.mobile.memories.banner.BannerEditor(
             openedWith.blobId != null, pictures,
-            write = { picked, progress -> door.setBanner(openedWith, picked, listed?.items.orEmpty(), progress).also { factsChanged() } },
-            removeBanner = { door.removeBanner(openedWith).also { factsChanged() } },
+            write = { picked, progress -> door.setBanner(openedWith, picked, listed?.items.orEmpty(), progress).also { follow(it) } },
+            removeBanner = { door.removeBanner(openedWith).also { follow(it) } },
         )
     }
 
