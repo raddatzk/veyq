@@ -1103,8 +1103,8 @@ implementation exists but what holds it to the first.
     most its own width, a PDF through **`Windows.Data.Pdf`** (`PdfPages`: `PdfDocument.LoadFromStreamAsync` over an
     `InMemoryRandomAccessStream`, a page to a PNG stream in memory — part of the Windows SDK, no NuGet package, and
     reached by the unpackaged app: no MSIX identity needed, measured first and kept as `PdfPagesTest`, so an SDK or
-    packaging change that loses it goes red); WebView2's PDF viewer was not the fallback (it needs the bytes at a URL or
-    a file). `PotSettingsView` (in place; the base currency's `ComboBox` kept across updates, writing on commit) and
+    packaging change that loses it goes red); a receipt's PDF is drawn, its text not selected — WebView2's PDF viewer,
+    served from memory, is the Depot file page's (below). `PotSettingsView` (in place; the base currency's `ComboBox` kept across updates, writing on commit) and
     `PotCreateDialog`. Money in another currency than the region's is written by ICU's symbol (`Said.Money`, CLDR's, as
     Android, Apple and the web write it; V2 block B): `icu.dll`'s `ucurr_getName` names it, swapped into
     `CurrencyFormatter`'s layout of the region's own currency, whose own symbol for another currency is never used — it
@@ -1129,9 +1129,29 @@ implementation exists but what holds it to the first.
   - **Depot whole** (built 2026-11-12; Linux's set, the models ADR 0136's Consequences).
     - `FilePage.cs`: the content in the content frame — an `Image` decoded at the core's edge (`BitmapDecoder`'s size
       first, `DecodePixelWidth`), a long text a virtualized `ListView` a line a row under an `InfoBar` (one `TextBox` of a
-      megabyte drew only its first line), the PDF's pages lazily through `PdfPages`, the core's words; Save a copy the
+      megabyte drew only its first line), a PDF in WebView2's own PDF viewer (below), a protected one and one on a device
+      without WebView2's runtime as pages drawn lazily through `PdfPages`, the core's words; Save a copy the
       header's download of a file (`HeaderPlan.ByPage`) through the save picker, its progress an `InfoBar` with a
       `ProgressBar` and Cancel (`ShellView.Saving`); `ListScrolls.cs` (the rule, tested) with `ShellView.Keep`.
+    - **A PDF's text is selected and copied in WebView2's own PDF viewer** (inbox #955, the owner's choice
+      2026-11-18; `PdfWeb.cs`, `FilePage.PdfWebView`): `Windows.Data.Pdf` renders pages as pictures and has no text
+      API. WebView2's runtime ships with Windows 11 and its package is already WinUI's, so nothing is added; the
+      alternative, PDFium with a selection overlay of its own (Linux's shape), is a new dependency. The bytes never touch
+      a file: the viewer navigates to `https://pdf.veyq.invalid/document.pdf` and `WebResourceRequested` answers it from
+      memory, every other request refused. **Taken only because a measurement allowed it, and held to it**: the
+      browser runs InPrivate in a user-data folder made for one PDF under `%TEMP%\veyq-pdf\` and deleted once it has
+      exited, with no host name resolved (`--host-resolver-rules="MAP * ~NOTFOUND"`), no proxy looked for and none of
+      its background networking; its crash reports stay in that folder (`IsCustomCrashReportingEnabled`). Measured
+      2026-11-18 (`src/mobile/CLAUDE.md` § Nothing on disk the app did not choose, WebView2): no canary of the PDF's
+      text, title or bytes on disk, also after the browser's restart, and nothing off the device; without InPrivate the
+      title landed in `History`, and without the arguments Edge's configuration service was asked at each start.
+      `PdfWebTest` is the measurement kept: a runtime update that writes the plaintext or reaches the network turns
+      `run.py build` red, and then the viewer is out and PDFium is the decision to take. The toolbar hides Save, Save
+      as, Print, Full screen and its More menu (Print spools the plaintext; Save a copy is the header's, ADR 0047), the
+      browser's own keys are off (Ctrl+P, Ctrl+S), a download or Save as dialog is cancelled, a link navigates nowhere,
+      and the context menu holds Copy and Select all alone; what reaches the clipboard is the person's Ctrl+C or Copy.
+      A password-protected PDF keeps the page's own password ask and `PdfPages`' drawing (the viewer would ask for the
+      password once more): its text is not selected on Windows.
     - **A medium plays in a `MediaPlayerElement`** (transport controls, no autoplay) over
       `MediaSource.CreateFromStream(stream.AsRandomAccessStream(), type)`: `ReaderStream.cs` is a plain seekable .NET
       `Stream` doing `reader_stream.rs`' work (testable on any host through the same adapter, no hand-written WinRT

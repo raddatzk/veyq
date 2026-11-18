@@ -240,7 +240,8 @@ A Gradle build of its own, run through its own wrapper.
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
   each picture through `BitmapImage` by `PictureDecode`, a WebP WIC refuses by the core; sets it on every `PersonPicture` of that id), `Act` (sends a
   call, logs its answer), `ScreenSecrets` (the window out of capture while a secret shows, § Secrets on screen), `PotSettingsView` (a Pot's Settings place, editable in place), `PotCreateDialog` (New pot),
-  `FilePage` (a Depot file's page; its Save a copy's `InfoBar` is `ShellView.Saving`; a medium in `MediumPlayer`: a
+  `FilePage` (a Depot file's page; a PDF in WebView2's own viewer through `PdfWeb` — its text selected and copied —, a
+  protected one or one without WebView2's runtime through `PdfPages`; `PdfWebTest`; its Save a copy's `InfoBar` is `ShellView.Saving`; a medium in `MediumPlayer`: a
   `MediaPlayerElement` over `MediaSource.CreateFromStream` of `ReaderStream`, a seekable .NET `Stream` whose reads are
   `Reader.Read` ranges, through `AsRandomAccessStream`; `ReaderStreamTest`), `MemoryPage` (a Memory's or a chapter's page:
   its chapters with their covers, the justified grid the core lays out and windows — `Gallery.Layout`, only the rows near
@@ -534,7 +535,7 @@ A Gradle build of its own, run through its own wrapper.
     `slide <id> <from> <to>` (a mouse drag across an element, percents of its width: the device link's slide), `explorer <x> <y> <w> <h> <path>` and `drag <id|@x,y>
     <name>|<name>…` (an Explorer window placed beside the app, its items dragged with SendInput's mouse onto an element),
     `hovershot <file>` (the screen while the next drag is held), `click <x> <y>`, `screen <file>`, `droptargets`, `size`,
-    `maximize`, `wait`, `sleep`, `shot <name>.png`, `listen` and `heard` (UIA's notification events, what Narrator reads)) and prints what each saw. Read the log and the tree first; a `shot`
+    `maximize`, `wait`, `sleep`, `shot <name>.png`, `sweep <x1> <y1> <x2> <y2>` (a press moved and released on the screen: a text selected by hand), `listen` and `heard` (UIA's notification events, what Narrator reads)) and prints what each saw. Read the log and the tree first; a `shot`
     (to `build/windows/shots/`, as `screen` and `hovershot` land) is the proof, not the probe. `droptargets` proves
     nothing for WinUI: it listed no OLE drop target while Explorer's drops landed (2026-11-13).
   - `package [--sign [PFX]] [--smoke]` builds the MSIX (ADR 0139 decisions 6 and 7): the release DLL, the manifest
@@ -815,6 +816,22 @@ Per engine:
   protection kept from being listed. So the tiles of a region a member viewed may stay at rest in a system cache the
   app can neither list nor clear — what decision 4 keeps off disk elsewhere. The app mounts no `Map` without the
   consent (the core's `MapServices.state`), which is the only lever it has. iOS is unmeasured (no simulator boots here).
+- **WebView2 (Windows' PDF viewer, `PdfWeb.cs`, inbox #955).** A Chromium of its own writes ~150 files into its user-data
+  folder at every start (`Local State`, `History`, `Favicons`, `Login Data`, shader caches, `BrowserMetrics`, …). So the
+  folder is one per PDF, `%TEMP%\veyq-pdf\<random>`, deleted once its browser has exited (a left one by the next
+  viewer), the profile runs **InPrivate**, the bytes are served from memory by `WebResourceRequested` (`Cache-Control:
+  no-store`) at `https://pdf.veyq.invalid/document.pdf`, and the browser starts with `--host-resolver-rules="MAP *
+  ~NOTFOUND" --no-proxy-server --disable-background-networking` and the rest of `PdfWeb.Arguments`. Measured 2026-11-18
+  on the Windows VM (WebView2 runtime 157.0.4341.60, `run.py build`'s `PdfWebTest` with `VEYQ_PDF_NETLOG`; the PDF's
+  text, its title and a marker in its bytes each a random canary, its text selected and copied, the browser started once
+  more on the folder): no canary (ASCII, UTF-16LE/BE) and no slice of the PDF in the folder's 145 files nor in any file
+  written meanwhile under `%TEMP%`, `%LOCALAPPDATA%` and `%APPDATA%`; the net log showed no DNS query, no TCP connection
+  and no UDP byte, and the host's `Get-NetTCPConnection`/`Get-NetUDPEndpoint` polled every 100 ms showed no endpoint of
+  the viewer's processes. Without InPrivate and the arguments (`VEYQ_PDF_BARE=1`, the bite) the PDF's **title was in
+  `Default\History`**, and the browser fetched Edge's configuration (`config.edge.skype.com`, a client id in the URL),
+  asked the LAN for `wpad` and resolved the document's host through the network's DNS. Left: Chromium's IPv6 probe
+  `connect()`s a UDP socket to a Microsoft address (no byte sent; a route lookup), and what the person copies is
+  Windows' clipboard's, whose history and cloud sync are the device's settings.
 A new engine, or a new client built outside these factories, states its cache and cookie store here and is measured
 as the Darwin one was: the app's container listed after a pass.
 
@@ -1153,6 +1170,15 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   (`0xC000027B`, WER `80070005`). The app and `Veyq.Drive` start in the logged-on session through the scheduled tasks
   `register` sets up. Over ssh `$env:USERDOMAIN` reads `WORKGROUP`, which maps to no SID (`0x80070534`), so `register`
   names the account by `[Security.Principal.WindowsIdentity]::GetCurrent().Name`.
+  A WebView2 controller cannot be made there either: `CreateCoreWebView2ControllerAsync` on a window of session 0
+  throws "Invalid window handle" (`0x80070578`, 2026-11-18), so `PdfWebTest` runs in the logged-on session
+  (`run.py build`'s last step, through `in_session`) and the other `Veyq.Tests` by ssh.
+- Driving WebView2's PDF viewer: its content is Chromium's own accessibility tree under the `WebView2` control
+  (`file-pdf-web`); a test without a person selects and copies through DevTools' `Input.dispatchKeyEvent` with the
+  editing command (`selectAll`, `copy`) beside Ctrl+A / Ctrl+C (`PdfWebTest.Keys`), after a click into the page.
+  A pass selects by hand: `sweep` across a line (screen coordinates, read off a `screen` shot; the window sits a few
+  pixels in from the screen's edge), then `key ctrl+c`, and reads the clipboard back in the
+  logged-on session (`Get-Clipboard` through `in_session`). Ctrl+A sent by `key` selected nothing there (2026-11-18).
 - The MSIX (2026-11-13, `run.py package`): `Add-AppxPackage` from ssh's session 0 fails `0x80070005` (the AppX log:
   the PLM does not initialize), so install and uninstall run in the logged-on session (`in_session`). An encoded
   command is held to cmd.exe's 8191 characters (`Die Befehlszeile ist zu lang`, about 3000 of script): `powershell()`
