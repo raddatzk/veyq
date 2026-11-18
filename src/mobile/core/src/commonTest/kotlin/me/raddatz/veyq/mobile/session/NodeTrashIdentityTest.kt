@@ -65,6 +65,20 @@ class NodeTrashIdentityTest {
     }
 
     @Test
+    fun aGuestFolderOfADropBoxMadeSinceTheTreeWasReadIsListedToo() = runTest {
+        val t = PlayedTenant().also { played += it }
+        val s = t.scope("s1")
+        t.remember()
+        val account = t.resume()
+        val tenant = account.open(account.tenants.first())
+        tenant.trees() // read before the drop box exists (another device made it)
+        val box = t.dropBox(s, "box")
+        val guest = t.identityFolder(box, "guest", "Adelgunde")
+        t.trashNode(guest)
+        assertEquals(listOf("Adelgunde"), assertNotNull(NodeTrash.list(tenant, s.id)).map { it.name })
+    }
+
+    @Test
     fun aGuestEntryThatDoesNotOpenIsLeftOutAndTheRestStaysListed() = runTest {
         val t = PlayedTenant().also { played += it }
         val s = t.scope("s1")

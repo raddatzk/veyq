@@ -62,8 +62,15 @@ object NodeTrash {
         val (scopeKey, _) = tenant.scopeKey(scopeId) ?: return null
         val r = runCatching { account.respond { ContentApi(tenant.base, account.http).listTrashedNodes(scopeId) } }.getOrNull() ?: return null
         if (!r.success) return null
-        val live = tenant.trees()[scopeId].orEmpty().associateBy { it.id }
-        return r.body().mapNotNull { row ->
+        val rows = r.body()
+        var live = tenant.trees()[scopeId].orEmpty().associateBy { it.id }
+        // a trashed root's parent is always live: one this device's tree does not hold was made elsewhere since it was read
+        // (a drop box another device made, whose guest's folder was deleted): the tree is read anew once
+        if (rows.any { it.parentId != null && it.parentId !in live }) {
+            tenant.forgetTree()
+            live = tenant.trees()[scopeId].orEmpty().associateBy { it.id }
+        }
+        return rows.mapNotNull { row ->
             val name = try {
                 val parent = row.parentId?.let { live[it] ?: return@mapNotNull null }
                 val entryKey = Tree.childEntryKey(account.suite, scopeId, parent, parent?.key ?: scopeKey, row.shareIdentityId, row.wrappedIdentityKey)
