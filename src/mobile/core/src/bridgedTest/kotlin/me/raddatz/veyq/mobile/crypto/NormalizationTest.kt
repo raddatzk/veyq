@@ -13,7 +13,8 @@ import kotlin.test.assertTrue
  * fetched and pinned by `core/utf8proc/build_utf8proc.py` (ADR 0123's Consequences, the core on Linux). Every line's five columns
  * c1..c5 must satisfy the file's invariants for the two forms the suite uses:
  * NFC: c2 == toNFC(c1) == toNFC(c2) == toNFC(c3), c4 == toNFC(c4) == toNFC(c5);
- * NFKD: c5 == toNFKD(c1..c5) — and, as the file's Part 1 requires, every other code point is its own NFC and NFKD.
+ * NFD: c3 == toNFD(c1..c3), c5 == toNFD(c4..c5) (the search's fold, ADR 0146 decision 3);
+ * NFKD: c5 == toNFKD(c1..c5) — and, as the file's Part 1 requires, every other code point is its own NFC, NFD and NFKD.
  */
 class NormalizationTest {
     @Test
@@ -34,8 +35,10 @@ class NormalizationTest {
             val c = cols.map { col -> col.joinToString("") { cp(it) } }
             lines++
             val nfcWant = listOf(c[1], c[1], c[1], c[3], c[3])
+            val nfdWant = listOf(c[2], c[2], c[2], c[4], c[4])
             for (i in 0..4) {
                 if (nfc(c[i]) != nfcWant[i]) failures += "NFC(c${i + 1}) of `$data`"
+                if (nfd(c[i]) != nfdWant[i]) failures += "NFD(c${i + 1}) of `$data`"
                 if (nfkd(c[i]) != c[4]) failures += "NFKD(c${i + 1}) of `$data`"
             }
         }
@@ -43,7 +46,7 @@ class NormalizationTest {
         for (code in 0..0x10FFFF) {
             if (code in 0xD800..0xDFFF || code in partOne) continue
             val x = cp(code)
-            if (nfc(x) != x || nfkd(x) != x) failures += "U+${code.toString(16).uppercase()} is not its own NFC and NFKD"
+            if (nfc(x) != x || nfd(x) != x || nfkd(x) != x) failures += "U+${code.toString(16).uppercase()} is not its own NFC, NFD and NFKD"
             others++
         }
         println("NormalizationTest: $lines lines, $others other code points, ${failures.size} failures")

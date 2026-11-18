@@ -8,7 +8,6 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import me.raddatz.veyq.mobile.crypto.nfkd
 import me.raddatz.veyq.mobile.memories.place.MemoryFacts
 import me.raddatz.veyq.mobile.session.NodeMetaWrite
 import me.raddatz.veyq.mobile.session.Person
@@ -155,8 +154,8 @@ object Participants {
         return Line(people, avatars, people.size - avatars.size, members != null, edits)
     }
 
-    /** A name as the picker's search compares it (the web's `fold`): decomposed, its marks dropped, lower-cased, `ß` as `ss`. */
-    fun fold(s: String): String = nfkd(s).filterNot { it in '̀'..'ͯ' }.lowercase().replace("ß", "ss")
+    /** A name as the picker's search compares it: the search's one fold (`search/Fold.kt`, the web's `fold`; ADR 0146 decision 3). */
+    fun fold(s: String): String = me.raddatz.veyq.mobile.search.Fold.fold(s)
 }
 
 /**
