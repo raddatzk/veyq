@@ -10,6 +10,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.longOrNull
+import me.raddatz.veyq.mobile.trust.SafetyNumbers
 
 /**
  * The suite's conformance against `contracts/crypto/vectors/v1.json`, runnable over any platform's [Primitives]: the
@@ -50,6 +51,11 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         shareWrite()
         reportBundle()
         blobs()
+        secretKeyProof()
+        authAttestation()
+        rotationStage()
+        verification()
+        safetyCode()
         return failures.toList()
     }
 
@@ -276,6 +282,14 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         check("fingerprint hash") {
             val fp = v.obj("fingerprint")
             eqHex(trust.fingerprintHash(IdentityPublic(fp.hex("kem"), fp.hex("sign")).serialize()), fp.str("hash"))
+        }
+        check("fingerprint digits") {
+            val fp = v.obj("fingerprint")
+            eq(SafetyNumbers.fingerprintDigits(fp.hex("hash")), fp.str("digits"))
+        }
+        v.obj("fingerprint")["chain_code"]!!.jsonArray.forEachIndexed { i, e ->
+            val c = e.jsonObject
+            check("fingerprint chain_code[$i]") { eq(SafetyNumbers.chainCodeDigits(c.hex("head")), c.str("digits")) }
         }
     }
 
@@ -621,6 +635,137 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
             val c = e.jsonObject
             check("pairing_channel.grant refuses ${c.str("name")}") {
                 if (PairingGrant.read(c.str("json")) != null) fail("read as a grant")
+            }
+        }
+    }
+
+    private val proofs = AccountProofs(p)
+
+    private fun JsonObject.wrap(k: String) = obj(k).let { AccountProofs.ProofWrap(it.hex("wrapped_key"), it.hex("kdf_params")) }
+
+    /** `#secret_key_proof`: the proof key from the Secret Key, and all four statements with their signatures. */
+    private fun secretKeyProof() {
+        val s = v.obj("secret_key_proof")
+        val key = s.obj("key")
+        val secretKey = key.hex("secret_key")
+        check("secret_key_proof key") {
+            eqHex(proofs.secretKeyProofSeed(secretKey), key.str("private_key"))
+            eqHex(proofs.secretKeyProofPublic(secretKey), key.str("public_key"))
+        }
+        val r = s.obj("rotation")
+        val cp = s.obj("change_password")
+        val rc = s.obj("recovery")
+        val ce = s.obj("change_email")
+        val cases = listOf(
+            "rotation" to { proofs.rotationProofStatement(
+                r.hex("current_identity_public_key"), r.hex("identity_public_key"), r.hex("wrapped_identity_private_key"),
+                r.wrap("password_wrap"), r.wrap("recovery_wrap"), r.hex("key_chain_step_statement"),
+                r.hex("current_auth_public_key"), r.hex("auth_public_key"), r.hex("secret_key_proof_public_key"),
+                r.str("stage_id"), r.hex("staged_grants_digest"),
+            ) } to r,
+            "change_password" to { proofs.passwordChangeProofStatement(cp.hex("current_auth_public_key"), cp.hex("auth_public_key"), cp.wrap("password_wrap")) } to cp,
+            "recovery" to { proofs.recoveryProofStatement(rc.str("token_utf8"), rc.hex("auth_public_key"), rc.wrap("password_wrap")) } to rc,
+            "change_email" to { proofs.emailChangeProofStatement(ce.hex("current_auth_public_key"), ce.hex("auth_public_key"), ce.str("email_utf8")) } to ce,
+        )
+        for ((named, o) in cases) {
+            val (name, build) = named
+            check("secret_key_proof.$name") {
+                eq(o.str("domain"), "veyq/v1/secret-key-proof/${name.replace('_', '-')}")
+                val stmt = build()
+                eqHex(stmt, o.str("statement"))
+                eqHex(proofs.secretKeyProofSign(secretKey, stmt), o.str("signature"))
+                if (!p.ed25519Verify(key.hex("public_key"), stmt, o.hex("signature"))) fail("the vector's signature did not verify")
+            }
+        }
+        check("secret_key_proof.rotation possession") {
+            eqHex(proofs.secretKeyProofPublic(r.hex("new_secret_key")), r.str("secret_key_proof_public_key"))
+            eqHex(proofs.secretKeyProofSign(r.hex("new_secret_key"), cases[0].first.second()), r.str("possession_signature"))
+        }
+        check("secret_key_proof domains answer for no other flow") {
+            if (cases.map { it.second.str("domain") }.toSet().size != 4) fail("two flows share a domain")
+        }
+    }
+
+    /** `#auth_attestation`: the change-email and erase-account statements and the password change's raw-key signature. */
+    private fun authAttestation() {
+        val a = v.obj("auth_attestation")
+        val ce = a.obj("change_email")
+        check("auth_attestation.change_email") {
+            val stmt = proofs.emailChangeAttestationStatement(ce.str("user_id"), ce.str("email_utf8"), ce.hex("auth_public_key"))
+            eqHex(stmt, ce.str("statement"))
+            eqHex(p.ed25519Public(ce.hex("current_auth_private_key")), ce.str("current_auth_public_key"))
+            eqHex(p.ed25519Sign(ce.hex("current_auth_private_key"), stmt), ce.str("signature"))
+        }
+        val ea = a.obj("erase_account")
+        check("auth_attestation.erase_account") {
+            val stmt = proofs.eraseAccountAttestationStatement(ea.str("user_id"), unb64(ea.str("nonce_b64")))
+            eqHex(stmt, ea.str("statement"))
+            eqHex(p.ed25519Sign(ea.hex("auth_private_key"), stmt), ea.str("signature"))
+        }
+        val cp = a.obj("change_password")
+        check("auth_attestation.change_password") {
+            eq(cp.str("statement"), cp.str("auth_public_key"))
+            eqHex(p.ed25519Public(cp.hex("current_auth_private_key")), cp.str("current_auth_public_key"))
+            eqHex(proofs.passwordChangeAttestation(cp.hex("current_auth_private_key"), cp.hex("auth_public_key")), cp.str("signature"))
+        }
+        check("auth_attestation.change_password is no change-email attestation") {
+            val asEmail = proofs.emailChangeAttestationStatement(ce.str("user_id"), ce.str("email_utf8"), cp.hex("auth_public_key"))
+            if (p.ed25519Verify(cp.hex("current_auth_public_key"), asEmail, cp.hex("signature"))) fail("verified as a change-email statement")
+        }
+    }
+
+    /** `#rotation_stage`: the digest over the entries in canonical order, and over none. */
+    private fun rotationStage() {
+        val s = v.obj("rotation_stage")
+        check("rotation_stage digest") {
+            val entries = s["entries"]!!.jsonArray.map { it.jsonObject }.map { AccountProofs.StageEntry(it.str("scopeId"), it.long("epoch"), it.hex("wrapped_grant")) }
+            eqHex(proofs.rotationStageDigest(entries), s.str("digest"))
+            eqHex(proofs.rotationStageDigest(entries.reversed()), s.str("digest"))
+            eqHex(proofs.rotationStageDigest(emptyList()), s.str("empty"))
+        }
+    }
+
+    /** `#verification`: the statement, the verifier's signature and the record. */
+    private fun verification() {
+        val o = v.obj("verification")
+        val c = o.obj("context")
+        val verifications = Verifications(suite)
+        val a = Verifications.Address(c.str("tenantId"), c.str("verifierUserId"), c.str("subjectUserId"))
+        check("verification statement and signature") {
+            eqHex(p.ed25519Public(o.hex("sign_seed")), o.str("sign_public"))
+            eqHex(verifications.statement(a, o.hex("subject_head"), o.hex("verifier_head")), o.str("statement"))
+            val signed = verifications.sign(a, o.hex("subject_head"), o.hex("verifier_head"), o.hex("sign_seed"))
+            eqHex(signed.signature, o.str("signature"))
+            eqHex(verifications.encode(signed), o.str("record"))
+            if (!verifications.verifies(a, signed, o.hex("sign_public"))) fail("refused its own signature")
+        }
+        check("verification answers for no other subject") {
+            val back = verifications.decode(o.hex("record")) ?: fail("record not decoded")
+            if (verifications.verifies(a.copy(subjectUserId = "c0ffee00-0000-4000-8000-0000000000aa"), back, o.hex("sign_public"))) fail("verified for another subject")
+            if (verifications.decode(o.hex("record") + byteArrayOf(0)) != null) fail("a trailing byte decoded")
+        }
+    }
+
+    /** `#safety_code`: the `veyqid:2` payload of a hash and a head, and every parse and verdict. */
+    private fun safetyCode() {
+        val s = v.obj("safety_code")
+        check("safety_code payload") {
+            eq(SafetyNumbers.payload(s.hex("fingerprint_hash"), s.hex("head")), s.str("payload"))
+            eq(SafetyNumbers.fingerprintDigits(s.hex("fingerprint_hash")), v.obj("fingerprint").str("digits"))
+        }
+        val expected = s.obj("expected")
+        for (e in s["cases"]!!.jsonArray) {
+            val c = e.jsonObject
+            check("safety_code ${c.str("name")}") {
+                val parsed = (c["parsed"] as? JsonObject)?.let { o ->
+                    when (o.int("version")) {
+                        2 -> SafetyNumbers.Parsed.Current(o.str("fingerprint"), o.str("head"))
+                        1 -> SafetyNumbers.Parsed.Outdated(o.str("fingerprint"))
+                        else -> fail("version ${o.int("version")}")
+                    }
+                }
+                eq(SafetyNumbers.parse(c.str("text")), parsed)
+                eq(SafetyNumbers.compareScan(c.str("text"), expected.str("fingerprint"), expected.str("head")).name.lowercase(), c.str("verdict"))
             }
         }
     }

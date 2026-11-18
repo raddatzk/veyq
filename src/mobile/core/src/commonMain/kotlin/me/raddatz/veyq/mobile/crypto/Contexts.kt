@@ -91,6 +91,9 @@ object Purposes {
             "previousProofKeyDigest" to FieldKind.DIGEST, "identityPublicKey" to FieldKind.BYTES, "secretKeyProofPublicKey" to FieldKind.BYTES,
         ),
         "scope-succession" to s("scopeId" to ID, "epoch" to UINT, "successionPublicKey" to FieldKind.BYTES),
+        "verification" to s(
+            "tenantId" to ID, "verifierUserId" to ID, "subjectUserId" to ID, "subjectHead" to FieldKind.DIGEST, "verifierHead" to FieldKind.DIGEST,
+        ),
         "pairing-answer" to s("transportKey" to FieldKind.BYTES),
         "pairing-sign-in-answer" to s("transportKey" to FieldKind.BYTES, "code" to FieldKind.PAIRING_CODE),
         "pairing-envelope" to s("envelope" to FieldKind.BYTES),

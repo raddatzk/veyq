@@ -99,6 +99,22 @@ class JoinRecords(private val suite: V1) {
         }
     }.getOrNull()
 
+    /** A field's seal under a FRESH value key (ADR 0115: minted anew at every write) and that key's wrap under the scope
+     *  key of [epoch], bound to the field's address — what a writer of a value-key field sends. The value key is zeroed
+     *  before this returns. */
+    class SealedValue(val sealed: ByteArray, val wrappedValueKey: ByteArray)
+
+    fun sealValueField(scopeId: String, epoch: Long, scopeKey: ByteArray, ctx: Context, plaintext: ByteArray): SealedValue {
+        val valueKey = p.randomBytes(32)
+        try {
+            val sealed = suite.sealField(ctx, valueKey, plaintext)
+            val wrapped = suite.seal(valueKeyContext(scopeId, epoch, valueAddress(Purposes.FIELD, ctx)), scopeKey, valueKey)
+            return SealedValue(sealed, wrapped)
+        } finally {
+            valueKey.fill(0)
+        }
+    }
+
     /** A value's address: SHA-256 of its own context in its own schema (`encodeValueContext`). */
     fun valueAddress(schema: Schema, context: Context): ByteArray {
         if (context.purpose !in VALUE_PURPOSES) throw SealContextInvalid("${context.purpose} is not sealed under a value key")
