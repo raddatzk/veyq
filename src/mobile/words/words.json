@@ -3805,6 +3805,36 @@
     "en": "The device could not be renamed. Please try again.",
     "de": "Das Gerät konnte nicht umbenannt werden. Bitte versuche es erneut."
   },
+  "profile_load_failed": {
+    "en": "Could not load your profile.",
+    "de": "Dein Profil konnte nicht geladen werden.",
+    "note": "the web's profile.loadFailed"
+  },
+  "profile_username_taken": {
+    "en": "That username is already taken in this space.",
+    "de": "Dieser Benutzername ist in diesem Bereich bereits vergeben.",
+    "note": "the web's profile.usernameTaken"
+  },
+  "profile_save_failed": {
+    "en": "Could not save your profile. Please try again.",
+    "de": "Profil konnte nicht gespeichert werden. Bitte erneut versuchen.",
+    "note": "the web's profile.saveFailed"
+  },
+  "profile_no_name_yet": {
+    "en": "Your name can be added once your access to the shared space is ready.",
+    "de": "Deinen Namen kannst du hinterlegen, sobald dein Zugang zum geteilten Bereich bereit ist.",
+    "note": "the web's profile.noNameYet"
+  },
+  "profile_picture_failed": {
+    "en": "Could not prepare the picture. Please try another one.",
+    "de": "Das Bild konnte nicht aufbereitet werden. Bitte wähle ein anderes.",
+    "note": "the web's profilePicture.failed"
+  },
+  "profile_picture_save_failed": {
+    "en": "Your profile was saved, but the picture could not be. Please try again.",
+    "de": "Dein Profil wurde gespeichert, das Bild aber nicht. Bitte versuche es erneut.",
+    "note": "the web's profilePicture.saveFailed"
+  },
   "account_settings_escalate_half_failed": {
     "note": "Sign out and remove saved key: the session ended, the saved key did not go; the device is listed again under Devices with a saved key",
     "en": "That device was signed out, but its saved key could NOT be removed — it can still open your data with your password. Try the removal again under “Devices with a saved key”.",
