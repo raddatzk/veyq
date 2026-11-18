@@ -2,6 +2,8 @@
 // the payload is drawn by the real `qrcode` encoder and read back by the real `jsqr` decoder, so the round trip is
 // the libraries', not a stub's - and the size bound is measured on the QR version `qrcode` actually picks.
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import QRCode from 'qrcode'
 import jsQR from 'jsqr'
 import * as v1 from '@veyq/crypto/v1'
@@ -127,4 +129,41 @@ describe('the safety-number QR payload', () => {
     expect(parseSafetyCode(`veyqid:2:${fingerprintDigestB64(key)}:${head}`)).toEqual(parsed)
     expect(parseSafetyCode(`  veyqid:2:${fingerprintDigestB64(key)}:${head}\n`)).toEqual(parsed)
   })
+})
+
+// The shared vectors (v1.json#safety_code), written by an independent Python implementation: the payload from a
+// fingerprint and a head, and every parse and verdict - so this module and the core's port answer to the same cases and
+// neither is the other's test (ADR 0148 decision 4).
+describe('the safety code answers to the vectors (v1.json#safety_code)', () => {
+  const vectors = JSON.parse(
+    readFileSync(resolve(__dirname, '../../../../../contracts/crypto/vectors/v1.json'), 'utf8'),
+  )
+  const s = vectors.safety_code
+  const fp = vectors.fingerprint
+  const unhex = (h: string) => Uint8Array.from(Buffer.from(h, 'hex'))
+  const lp = (b: Uint8Array) => {
+    const out = new Uint8Array(4 + b.length)
+    new DataView(out.buffer).setUint32(0, b.length)
+    out.set(b, 4)
+    return out
+  }
+
+  it('the payload of the fingerprint vector\'s bundle at its first chain head', () => {
+    const kem = lp(unhex(fp.kem))
+    const sign = lp(unhex(fp.sign))
+    const bundle = new Uint8Array(kem.length + sign.length)
+    bundle.set(kem)
+    bundle.set(sign, kem.length)
+    expect(s.fingerprint_hash).toBe(fp.hash)
+    expect(s.head).toBe(fp.chain_code[0].head)
+    expect(safetyCodePayload(b64std(bundle), b64std(unhex(s.head)))).toBe(s.payload)
+    expect(chainCode(b64std(unhex(s.head)))).toBe(fp.chain_code[0].digits)
+  })
+
+  for (const c of s.cases as { name: string; text: string; parsed: unknown; verdict: string }[]) {
+    it(`${c.name}: ${c.verdict}`, () => {
+      expect(parseSafetyCode(c.text)).toEqual(c.parsed)
+      expect(compareScan(c.text, s.expected)).toBe(c.verdict)
+    })
+  }
 })

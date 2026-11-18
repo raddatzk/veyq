@@ -875,6 +875,31 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     })
   })
 
+  describe('change-password attestation (uc.account.change-password)', () => {
+    const a = vectors.auth_attestation.change_password
+
+    // The statement is the new auth public key's raw bytes - what changePassword.ts signs with the old auth key.
+    it('the current auth key\'s signature over the new key\'s raw bytes', () => {
+      expect(a.statement).toBe(a.auth_public_key)
+      expect(hex(ed25519.getPublicKey(unhex(a.current_auth_private_key)))).toBe(a.current_auth_public_key)
+      expect(hex(v1.authSign(unhex(a.current_auth_private_key), unhex(a.auth_public_key)))).toBe(a.signature)
+      expect(v1.authVerify(unhex(a.current_auth_public_key), unhex(a.auth_public_key), unhex(a.signature))).toBe(true)
+    })
+
+    it('installs no other key, and is no change-email attestation', () => {
+      const sig = unhex(a.signature)
+      const pub = unhex(a.current_auth_public_key)
+      expect(v1.authVerify(pub, unhex('41'.repeat(32)), sig)).toBe(false)
+      const email = vectors.auth_attestation.change_email
+      const asEmail = v1.emailChangeAttestationStatement({
+        userId: email.user_id,
+        email: email.email_utf8,
+        authPublicKey: unhex(a.auth_public_key),
+      })
+      expect(v1.authVerify(pub, asEmail, sig)).toBe(false)
+    })
+  })
+
   describe('item-mark self-tag (ADR 0068 §9)', () => {
     const s = vectors.item_mark_self
     type Case = { context: { scopeId: string; nodeId: string; ids: string[] }; marks: string; statement: string; tag: string }
