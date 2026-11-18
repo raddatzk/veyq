@@ -344,7 +344,7 @@ class ParticipantsTest {
     }
 
     @Test
-    fun noPeopleOnAChapterInAPersonalScopeForAGuestOrOffline() = runTest {
+    fun noPeopleOnAChapterInAPersonalScopeOrForAGuest() = runTest {
         assertNull(open(Door(listOf("a")), kind = "CHAPTER").current.people, "a chapter has no participants")
         val personal = open(Door(listOf("a"), personal = true))
         assertNull(personal.current.people, "a personal scope has none")
@@ -354,10 +354,16 @@ class ParticipantsTest {
         val readonly = open(Door(listOf("a")), access = MemoryRights.Access.Member(readonly = true))
         assertNotNull(readonly.current.people, "a read-only member sees them")
         assertNull(readonly.participantsPicker(), "and edits none")
+    }
+
+    @Test
+    fun offlineThePeopleLineIsNamedFromTheKeptMembersAndOffersNoEdit() = runTest {
+        // #948: the member list is a kept read, so offline the line names who was there; nothing is edited offline
         val offlineDoor = Door(listOf("a")).also { it.reach.value = false; it.offline = OfflineAsOf(1L) }
         val offline = open(offlineDoor)
-        assertNull(offline.current.people, "offline the participants are not shown (no member list is kept)")
-        assertNull(offline.participantsPicker())
-        assertEquals(0, offlineDoor.membersRead, "and no member list is asked for")
+        val line = assertNotNull(offline.current.people, "offline the participants are shown from the kept member list")
+        assertEquals(listOf("Anna"), line.people.map { it.name })
+        assertFalse(line.edits, "offline the line offers no edit")
+        assertNull(offline.participantsPicker(), "nor a picker")
     }
 }

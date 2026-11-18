@@ -89,6 +89,8 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
         var stillListed = false
         var revision = 1
         val nodes = mutableListOf<Node>()
+        /** Its members as `listScopeMembers` lists them: user id to username (no sealed name, so the username names them). */
+        val members = linkedMapOf(userId to "me")
         /** Its trash: the roots of trashed subtrees, as `listTrashedNodes` lists them ([trashNode] puts one there). */
         val trashed = mutableListOf<Node>()
         val wrappedGrant: ByteArray = suite.sealTo(Context("scope-grant", "scopeId" to id, "epoch" to 0L), kem.publicKey, key)
@@ -336,6 +338,11 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
                 val blobId = Regex("\"blobId\"\\s*:\\s*\"([^\"]+)\"").find(body)!!.groupValues[1]
                 val b = blobs.getValue(blobId)
                 json("""{"results":[{"presignedGets":[${b.frames.indices.joinToString(",") { """{"index":$it,"url":"http://store.example/$blobId/$it"}""" }}]}]}""")
+            }
+            path.matches(Regex("/api/scopes/[^/]+/members")) -> {
+                val s = scopes.firstOrNull { it.id == path.split('/')[3] && it.tenant == tenant } ?: return json("{}", HttpStatusCode.NotFound)
+                if (!s.member) return json("""{"code":"scope_not_found"}""", HttpStatusCode.NotFound)
+                json(s.members.entries.joinToString(",", "[", "]") { (id, name) -> """{"userId":"$id","username":"$name","avatarRevision":0,"role":"MEMBER","identityPublicKey":"AAAA","keyChainHead":"AAAA","pending":false}""" })
             }
             path.matches(Regex("/api/scopes/[^/]+/nodes")) -> {
                 val s = scopes.firstOrNull { it.id == path.split('/')[3] && it.tenant == tenant } ?: return json("{}", HttpStatusCode.NotFound)

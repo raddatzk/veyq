@@ -47,6 +47,7 @@ class GalleryModelTest {
         val lists = MutableStateFlow<Any?>(Any())
         override val revisions = lists
         override val uploaded = MutableSharedFlow<String>(extraBufferCapacity = 8)
+        override val uploading = MutableStateFlow<List<UploadTile>>(emptyList())
         var listings = 0
         var nodeReads = 0
         val reads = mutableListOf<String>()
@@ -420,5 +421,38 @@ class GalleryModelTest {
         val g = open(door)
         assertEquals(2, g.upload(listOf(UploadSource.of("a.jpg", 1, "image/jpeg", null) { _, n -> ByteArray(n) }, UploadSource.of("b.mp4", 1, "video/mp4", null) { _, n -> ByteArray(n) })))
         assertEquals(2, door.uploads)
+    }
+
+    /**
+     * ADR 0145 decision 3: what this device sends into the page shows in its grid as placeholder tiles, first, in the order
+     * queued — waiting, running and failed ones, and one in whose medium the listing does not name yet (no gap, no
+     * duplicate: it gives way once its medium lists) —; a cancelled one is none.
+     */
+    @Test
+    fun aMediumOnItsWayShowsAsAPlaceholderTileFirstUntilItsMediumLists() = runTest {
+        val door = Door(MemoryMedia.order(listOf(item("a", at = 10))))
+        val g = open(door)
+        fun tile(id: String, status: me.raddatz.veyq.mobile.blob.UploadQueue.Status, mediaId: String? = null, video: Boolean = false) =
+            UploadTile(id, "$id.jpg", video, status, 0.4, mediaId)
+        door.uploading.value = listOf(
+            tile("u1", me.raddatz.veyq.mobile.blob.UploadQueue.Status.UPLOADING),
+            tile("u2", me.raddatz.veyq.mobile.blob.UploadQueue.Status.FAILED, video = true),
+            tile("u3", me.raddatz.veyq.mobile.blob.UploadQueue.Status.DONE, mediaId = "a"),
+            tile("u4", me.raddatz.veyq.mobile.blob.UploadQueue.Status.DONE, mediaId = "fresh"),
+            tile("u5", me.raddatz.veyq.mobile.blob.UploadQueue.Status.CANCELLED),
+        )
+        runCurrent()
+        assertEquals(listOf("u1", "u2", "u4"), g.current.uploading.map { it.id }, "a listed medium's tile gave way, a cancelled one is none")
+        assertTrue(g.current.uploading[1].failed)
+        assertTrue(g.current.uploading[1].isVideo)
+        val layout = GalleryModel.layout(assertNotNull(g.current.rows), g.current.uploading, 360.0)
+        assertEquals(listOf("upload:u1", "upload:u2", "upload:u4", "a"), layout.tiles.map { it.id }, "the placeholders first, then the grid")
+        assertEquals("u2", UploadTile.idOf("upload:u2"))
+        assertNull(UploadTile.idOf("a"), "a medium's id is no placeholder's")
+        // the medium lists: its placeholder gives way to its tile
+        door.items = MemoryMedia.order(listOf(item("a", at = 10), item("fresh", at = 20)))
+        door.lists.value = Any()
+        runCurrent()
+        assertEquals(listOf("u1", "u2"), g.current.uploading.map { it.id })
     }
 }

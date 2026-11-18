@@ -194,7 +194,7 @@ class WireTest {
             Call.TracksEdit(103, "t1", TrackLabelShown("Spree", "running")), Call.TracksRemove(103, "t1"),
             Call.TracksDownload(103, "t1", "/home/p/Downloads/Spree.gpx"), Call.TracksReport(103, "t1"), Call.TracksSeen(103),
             // curating a Memory, a person's page (ADR 0144 decision 8)
-            Call.ShellCreateMemory("scope-1", null, "Ostsee 2026", wasThere = true), Call.ShellOffersWasThere("scope-1"), Call.ShellOpenPerson("user-2"),
+            Call.ShellCreateMemory("scope-1", null, "Ostsee 2026", wasThere = true), Call.ShellCreateMemory("scope-1", null, "Sylt", autoPlace = true), Call.ShellOffersWasThere("scope-1"), Call.ShellOpenPerson("user-2"),
             Call.ParticipantsOpen(60), Call.ParticipantsLoad(110), Call.ParticipantsSearch(110, "Zoë"), Call.ParticipantsToggle(110, "user-2"),
             Call.ParticipantsSave(110), Call.ParticipantsClose(110), Call.CaptureTimeOpen(61, "m1"), Call.CaptureTimeSet(111, 1_790_000_040_000),
             Call.CaptureTimeReset(111), Call.CaptureTimeClose(111), Call.BannerPicture(60), Call.BannerPlay(60), Call.BannerFrame(1024.5, 768.0, 4000, 3000),
@@ -253,7 +253,7 @@ class WireTest {
             Answer.Refused(Answer.Why.NO_SUCH_PLACE), Answer.Refused(Answer.Why.NO_SUCH_TRACKS),
             Answer.MediumDetails(emptyList(), Piece.Plain("Ada"), 0, profile = "user-2"), Answer.ParticipantsOpened(110), Answer.CaptureTimeOpened(111),
             Answer.BannerOpened(112), Answer.BannerFramed(1024.5, 576.28125, true, 32, 24), Answer.BannerSaved(BannerSave.DONE),
-            Answer.BannerSaved(BannerSave.CANCELLED), Answer.WasThere(true), Answer.PersonOpened(113),
+            Answer.BannerSaved(BannerSave.CANCELLED), Answer.WasThere(true), Answer.WasThere(false, autoPlace = true), Answer.PersonOpened(113),
             Answer.Refused(Answer.Why.NO_SUCH_PARTICIPANTS), Answer.Refused(Answer.Why.NO_SUCH_CAPTURE_TIME), Answer.Refused(Answer.Why.NO_SUCH_BANNER),
             Answer.Refused(Answer.Why.NO_SUCH_PERSON),
         ),
@@ -472,6 +472,11 @@ class WireTest {
             Update.Music(80, MusicShown(memory, null, false, false, false, false, true, false, null)), Update.Music(81, null),
             Update.Gallery(60, GalleryShown(memory, null, false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,
                 date = MemoryDateShown(DateMode.RANGE, "2026-07-01", "2026-07-14"), place = "Berlin", editsFacts = true, tracks = 2)),
+            Update.Gallery(60, GalleryShown(memory, null, false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,
+                uploading = listOf(
+                    UploadTileShown("upload:a1", video = false, progress = 0.25, preparing = false, failed = false, label = Notice(Msg.MEMORY_UPLOAD_TILE, listOf("IMG_0002.jpg"))),
+                    UploadTileShown("upload:a2", video = true, progress = 0.0, preparing = false, failed = true, label = Notice(Msg.MEMORY_UPLOAD_TILE_FAILED, listOf("clip.mp4"))),
+                ))),
             Update.Map(100, MapShown(
                 MapStatus.Shown, MapViewShown(52.52, 13.405, 0.537236, 0.327917, 12.5, 800.0, 600.0, 1),
                 listOf(TileShown("12/2200/1343", 2200.0 / 4096, 1343.0 / 4096, 1.0 / 4096)), "© OpenStreetMap contributors",

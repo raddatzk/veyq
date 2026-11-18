@@ -6,6 +6,7 @@ import me.raddatz.veyq.mobile.words.Notice
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertNotNull
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.serialization.json.Json
@@ -70,5 +71,31 @@ class MemoryCreateTest {
         assertNull(MemoryCreate.birthMeta(MemoryCreate.MEMORY, "TENANT", wasThere = false, userId = "u1"), "unticked: no meta at all")
         assertNull(MemoryCreate.birthMeta(MemoryCreate.CHAPTER, "TENANT", wasThere = true, userId = "u1"), "never into a chapter")
         assertNull(MemoryCreate.birthMeta(MemoryCreate.MEMORY, "PERSONAL", wasThere = true, userId = "u1"), "never in a personal scope")
+    }
+
+    /**
+     * #940 (uc.memory.place A1 as the web's `MemoryNodeDialog` builds it): *Determine location automatically* seals a pending
+     * `auto` place at birth — `{name: '', nameSource: 'geocoded', derivedMode: 'auto'}`, before the participants, as the
+     * web's `{v, ...{location, participants}}` — in a Memory only, in any scope; unticked, or for a chapter, nothing.
+     */
+    @Test
+    fun theAutoPlaceIsArmedAtBirthAsTheWebArmsIt() {
+        assertTrue(MemoryCreate.offersAutoPlace(MemoryCreate.MEMORY, mapsAvailable = true))
+        assertFalse(MemoryCreate.offersAutoPlace(MemoryCreate.MEMORY, mapsAvailable = false), "no map services, no step")
+        assertFalse(MemoryCreate.offersAutoPlace(MemoryCreate.CHAPTER, mapsAvailable = true), "a chapter has no place step")
+        assertEquals(
+            Json.parseToJsonElement("""{"v":1,"location":{"name":"","nameSource":"geocoded","derivedMode":"auto"},"participants":{"userIds":["u1"]}}""") as kotlinx.serialization.json.JsonObject,
+            MemoryCreate.birthMeta(MemoryCreate.MEMORY, "GROUP", wasThere = true, userId = "u1", autoPlace = true),
+        )
+        assertEquals(
+            Json.parseToJsonElement("""{"v":1,"location":{"name":"","nameSource":"geocoded","derivedMode":"auto"}}""") as kotlinx.serialization.json.JsonObject,
+            MemoryCreate.birthMeta(MemoryCreate.MEMORY, "PERSONAL", wasThere = true, userId = "u1", autoPlace = true),
+            "in a personal scope the place alone",
+        )
+        assertNull(MemoryCreate.birthMeta(MemoryCreate.CHAPTER, "TENANT", wasThere = false, userId = "u1", autoPlace = true), "never into a chapter")
+        val armed = me.raddatz.veyq.mobile.memories.place.MemoryFacts.Facts.of(
+            MemoryCreate.birthMeta(MemoryCreate.MEMORY, "PERSONAL", wasThere = false, userId = "u1", autoPlace = true)!!,
+        ).location
+        assertTrue(assertNotNull(armed).pending, "read back it is the pending auto place the settle materializes")
     }
 }

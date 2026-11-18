@@ -255,6 +255,8 @@ class AccountOffline internal constructor(
             reached += scopesKey
             val scopes = json(scopesKey).flatMap { it.array() }.filter { it.text("deletedAt") == null }.mapNotNull { it.text("id") }
             for (scope in scopes) {
+                // a scope's member list (#948) is reached while the scope is the account's; a list refused drops itself
+                reached += key(KeptRead.MEMBERS, tenant, scope, scope)
                 val nodesKey = key(KeptRead.NODES, tenant, scope, scope)
                 reached += nodesKey
                 val rows = json(nodesKey).flatMap { it.array() }
@@ -428,6 +430,9 @@ class AccountOffline internal constructor(
         for (pin in loaded().pins) {
             val nodesKey = key(KeptRead.NODES, pin.tenant, pin.scope, pin.scope)
             out.getOrPut(nodesKey) { HashSet() } += pin.node
+            // who the pinned node names (#948): its scope's members, and the tenant's directory that names them
+            out.getOrPut(key(KeptRead.MEMBERS, pin.tenant, pin.scope, pin.scope)) { HashSet() } += pin.node
+            out.getOrPut(key(KeptRead.MEMBERS, pin.tenant, pin.tenant, pin.tenant)) { HashSet() } += pin.node
             val rows = json(nodesKey).flatMap { it.array() }
             val open = walk(rows)
             if (pin.node !in open) continue

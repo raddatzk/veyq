@@ -161,6 +161,12 @@ class GalleryModel(
          */
         suspend fun placeName(item: MemoryMedia.Item, mayWrite: Boolean, slideshow: Boolean): String? = null
 
+        /**
+         * What this device is sending into the node now, in the order queued (`MediaUploads.tiles`): the grid's placeholder
+         * tiles (ADR 0145 decision 3). Absent: none.
+         */
+        val uploading: Flow<List<UploadTile>> get() = kotlinx.coroutines.flow.flowOf(emptyList())
+
         /** The node is in a personal scope, which has no participants (ADR 0144 decision 1). Absent: not. */
         val personal: Boolean get() = false
 
@@ -257,7 +263,7 @@ class GalleryModel(
         val facts: me.raddatz.veyq.mobile.memories.place.MemoryFacts.Facts? = null,
         /**
          * The header's people line (ADR 0144 decision 1): where the participants are shown — a member's, on a Memory, not
-         * in a personal scope, online (decision 7) — and somebody is listed or whoever looks may add someone; null otherwise.
+         * in a personal scope, offline too (#948) — and somebody is listed or whoever looks may add someone; null otherwise.
          */
         val people: Participants.Line? = null,
         /**
@@ -265,6 +271,11 @@ class GalleryModel(
          * digest is the banner's; [trashBannerPicture] answers, [cancelAsk] declines.
          */
         val bannerPicture: String? = null,
+        /**
+         * The photos and videos this device is sending into the node, as placeholder tiles before [rows] (ADR 0145
+         * decision 3): one whose medium [rows] lists gave way to it.
+         */
+        val uploading: List<UploadTile> = emptyList(),
     ) {
         /** The banner above the header (ADR 0144 decision 4) as sealed: what it shows; null for none (no frame drawn). */
         val banner: me.raddatz.veyq.mobile.memories.banner.Banner.Shown? get() = me.raddatz.veyq.mobile.memories.banner.Banner.shown(facts?.banner)
@@ -389,6 +400,13 @@ class GalleryModel(
     /** The scope's current members as last read (the people line's names, the picker's candidates); null: not read. */
     private var members: List<me.raddatz.veyq.mobile.session.Person>? = null
 
+    /**
+     * What the door last said is on its way here (the placeholders before the listing drops those in). Declared before
+     * `init`: its collector may run on another thread before a later field is set.
+     */
+    private val queuedNow = MutableStateFlow<List<UploadTile>>(emptyList())
+    private val queued: List<UploadTile> get() = queuedNow.value
+
     init {
         scope.launch { door.revisions.collect { read() } }
         music?.let { m ->
@@ -397,6 +415,12 @@ class GalleryModel(
             }
         }
         scope.launch { door.uploaded.collect { if (it == node.nodeId) read() } }
+        scope.launch {
+            door.uploading.collect { tiles ->
+                queuedNow.value = tiles
+                _state.update { it.copy(uploading = UploadTile.shown(tiles, it.listedIds)) }
+            }
+        }
         // the people line follows the participants sealed, the rights and going offline or online
         scope.launch {
             state.map { Triple(it.facts?.participants, it.rights, it.offline) }.distinctUntilChanged().collect { people() }
@@ -429,6 +453,9 @@ class GalleryModel(
         scope.launch { read() }
     }
 
+    /** Every medium id the rows list (a placeholder whose medium is among them gives way). */
+    private val State.listedIds: Set<String> get() = rows.orEmpty().mapTo(HashSet()) { it.mediaId }
+
     /** The last listing that read: what the live poll asks whether the media moved since. */
     private var listed: MemoryMedia.Gallery? = null
 
@@ -459,7 +486,7 @@ class GalleryModel(
                 music = MusicQueue.tracks(read.items.filter { it.mediaId !in pending }),
                 tracks = read.items.filter { it.mediaId !in pending && it.isTrack },
                 failed = false,
-            )
+            ).let { it.copy(uploading = UploadTile.shown(queued, it.listedIds)) }
         }
         // the Memory opening is a settle point (the self-heal): once, on its first listing the server answered
         if (read != null && read.offline == null && !openedSettle) {
@@ -488,8 +515,11 @@ class GalleryModel(
 
     // ---- the participants (ADR 0144 decision 1) ----
 
-    /** Whether the participants are shown here: a member's right on a Memory, not a personal scope, online (decision 7). */
-    private val showsParticipants: Boolean get() = current.rights.participants && !door.personal && current.offline == null
+    /**
+     * Whether the participants are shown here: a member's right on a Memory, not a personal scope — offline too, named from
+     * the kept member list (inbox #948, amending decision 7); offline the rights edit nothing, so the line offers no edit.
+     */
+    private val showsParticipants: Boolean get() = current.rights.participants && !door.personal
 
     /** The people line drawn anew: the members read once where somebody is to be named. */
     private suspend fun people() {
@@ -932,8 +962,20 @@ class GalleryModel(
          * [MediaGridLayout.targetHeight] of the width (a phone two to four tiles a row). A platform lays [State.rows] out
          * with it whenever the rows or its width change, and draws only the rows near its viewport.
          */
-        fun layout(rows: List<Row>, width: Double): MediaGridLayout.Layout =
-            MediaGridLayout.justify(rows.map { MediaGridLayout.Source(it.mediaId, it.aspect) }, width, MediaGridLayout.targetHeight(width))
+        fun layout(rows: List<Row>, width: Double): MediaGridLayout.Layout = layout(rows, emptyList(), width)
+
+        /**
+         * [layout] with [uploading]'s placeholders first (ADR 0145 decision 3), each square, under its [UploadTile.tileId]: a
+         * platform draws a tile whose id [UploadTile.idOf] names as the placeholder of that upload.
+         */
+        fun layout(rows: List<Row>, uploading: List<UploadTile>, width: Double): MediaGridLayout.Layout =
+            MediaGridLayout.justify(
+                uploading.map { MediaGridLayout.Source(it.tileId, PLACEHOLDER_ASPECT) } + rows.map { MediaGridLayout.Source(it.mediaId, it.aspect) },
+                width, MediaGridLayout.targetHeight(width),
+            )
+
+        /** A placeholder's aspect: square, its picture's size unknown until its medium lists. */
+        private const val PLACEHOLDER_ASPECT = 1.0
 
         /** The wall clock (epoch ms): what an offline page says its content is as of. */
         @OptIn(kotlin.time.ExperimentalTime::class)

@@ -216,10 +216,12 @@ internal class Tenant(
     ) -> me.raddatz.veyq.mobile.memories.music.MusicModel)? =
         shell?.let { s -> { gallery, uploads, measure -> s.musicModel(gallery, uploads, measure, left = {}) } },
     /** A Memory made where New makes it (`ShellModel.createMemory`), *I was there* ticked or not: the node made, or why not. */
-    val createMemory: (suspend (scopeId: String, parentId: String?, name: String, wasThere: Boolean) -> me.raddatz.veyq.mobile.memories.MemoryCreate.Made)? =
-        shell?.let { s -> { scopeId, parentId, name, wasThere -> s.createMemory(scopeId, parentId, name, wasThere) } },
+    val createMemory: (suspend (scopeId: String, parentId: String?, name: String, wasThere: Boolean, autoPlace: Boolean) -> me.raddatz.veyq.mobile.memories.MemoryCreate.Made)? =
+        shell?.let { s -> { scopeId, parentId, name, wasThere, autoPlace -> s.createMemory(scopeId, parentId, name, wasThere, autoPlace) } },
     /** Whether New Memory in a scope offers *I was there* (`ShellModel.offersWasThere`). */
     val offersWasThere: ((scopeId: String) -> Boolean)? = shell?.let { s -> { scopeId -> s.offersWasThere(scopeId) } },
+    /** Whether New Memory offers *Determine location automatically* (`ShellModel.offersAutoPlace`, #940). */
+    val offersAutoPlace: (() -> Boolean)? = shell?.let { s -> { s.offersAutoPlace() } },
     /** A person's frame (`ShellModel.profile`): named by the tenant's directory as read, with the sections of the applications on. */
     val profile: ((userId: String) -> me.raddatz.veyq.mobile.navigation.PersonProfile)? = shell?.let { s -> { userId -> s.profile(userId) } },
     /** Memories' section of a person's page (`ShellModel.personMemories`) over the tenant's participants index. */
@@ -1061,7 +1063,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.LinkEnterCode -> links[call.link]?.let { taken(it.model.enterCode(call.code)) } ?: noLink
             is Call.LinkClose -> links.remove(call.link)?.let { closeLink(it); Answer.Done } ?: noLink
             is Call.ShellCreateMemory -> tenant.value?.models?.createMemory?.let { make ->
-                make(call.scopeId, call.parentId, call.name, call.wasThere).let { Answer.Created(it.node, it.notice) }
+                make(call.scopeId, call.parentId, call.name, call.wasThere, call.autoPlace).let { Answer.Created(it.node, it.notice) }
             } ?: noTenant
             is Call.ShellRowCover -> tenant.value?.models?.rowCover?.let { read ->
                 val row = read(call.nodeId, call.held) ?: return Answer.Refused(Answer.Why.NO_COVER)
@@ -1100,7 +1102,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.Bytes(Sniff.image(bytes)?.mime)
             } ?: noGallery
             is Call.GalleryLayout -> galleries[call.gallery]?.let { g ->
-                val laid = me.raddatz.veyq.mobile.memories.GalleryModel.layout(g.state.value.rows.orEmpty(), call.width)
+                val now = g.state.value
+                val laid = me.raddatz.veyq.mobile.memories.GalleryModel.layout(now.rows.orEmpty(), now.uploading, call.width)
                 val shown = laid.window(call.top, call.viewHeight).map { laid.rows[it] }
                 Answer.GridLayout(shown.map { r -> GridRow(r.index, r.top, r.height, r.tiles.map { GridTile(it.id, it.left, it.width) }) }, laid.height, laid.rows.size)
             } ?: noGallery
@@ -1415,7 +1418,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noBanner
             is Call.BannerClose -> banners.remove(call.banner)?.let { it.close(); Answer.Done } ?: noBanner
             is Call.GalleryTrashBannerPicture -> galleries[call.gallery]?.let { g -> trashed(g, g.trashBannerPicture(call.removeBanner)) } ?: noGallery
-            is Call.ShellOffersWasThere -> tenant.value?.models?.offersWasThere?.let { Answer.WasThere(it(call.scopeId)) } ?: noTenant
+            is Call.ShellOffersWasThere -> tenant.value?.models?.let { m ->
+                val wasThere = m.offersWasThere ?: return noTenant
+                Answer.WasThere(wasThere(call.scopeId), m.offersAutoPlace?.invoke() == true)
+            } ?: noTenant
             is Call.PersonOpen -> tenant.value?.models?.let { t ->
                 val profile = t.profile?.invoke(call.userId) ?: return noTenant
                 val memories = if (ApplicationId.MEMORIES in profile.sections) t.personMemories?.invoke(call.userId) else null
@@ -2118,6 +2124,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         banner = s.banner?.let { b -> BannerShown(BannerMedium.valueOf(b.medium.name), b.key, b.type) },
         editsBanner = s.editsBanner,
         bannerQuestion = s.bannerPicture,
+        uploading = s.uploading.map { t ->
+            UploadTileShown(
+                t.tileId, t.isVideo, t.progress, t.preparing, t.failed,
+                Notice(if (t.failed) Msg.MEMORY_UPLOAD_TILE_FAILED else if (t.preparing) Msg.MEMORY_UPLOAD_TILE_PREPARING else Msg.MEMORY_UPLOAD_TILE, t.name),
+            )
+        },
     )
 
     /** One participant of the people line, as `Participants.Entry` says it. */

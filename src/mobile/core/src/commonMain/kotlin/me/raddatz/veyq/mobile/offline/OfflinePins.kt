@@ -263,6 +263,8 @@ class OfflinePins internal constructor(
     private suspend fun fetch(tenant: TenantSession, kinds: PinKinds, pin: Pin) {
         // a node no longer in the tree: the reads' sweep says so (its pin dropped with a notice)
         val node = tenant.node(pin.scope, pin.node) ?: return
+        // its scope's member list kept with it, so offline its participants are named (#948); a refusal keeps none
+        tenant.scopeMembers(pin.scope)
         val below = blobsBelow(tenant, kinds, node)
         val blobs = below.blobs
         account.settle()

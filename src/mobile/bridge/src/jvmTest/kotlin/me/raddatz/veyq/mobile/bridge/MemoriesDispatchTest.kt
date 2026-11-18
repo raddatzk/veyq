@@ -122,6 +122,8 @@ class MemoriesDispatchTest {
         val moved = AtomicInteger()
         val derived = ConcurrentHashMap<String, MediaUpload.Derived>()
         val revisions = MutableStateFlow<Any?>(Any())
+        /** What the page is told is on its way into it (its placeholder tiles, ADR 0145 decision 3). */
+        val tiles = MutableStateFlow<List<me.raddatz.veyq.mobile.memories.UploadTile>>(emptyList())
 
         private fun blob(id: String, size: Int = 29, chunks: Int = 1) = MemoryMedia.Blob(id, chunks, size.toLong() + chunks * V1.FRAME_OVERHEAD, "", null)
 
@@ -160,6 +162,7 @@ class MemoriesDispatchTest {
             override fun upload(sources: List<UploadSource>) = uploads.upload(node.scopeId, node.nodeId, node.name, sources)
             override val revisions = this@PlayedMemory.revisions
             override val uploaded = uploads.uploaded
+            override val uploading = tiles
             override suspend fun moved(since: MemoryMedia.Gallery) = moved.incrementAndGet() == 1
             override suspend fun trash(mediaId: String): GalleryModel.Removal {
                 sent += "trash:$mediaId"
@@ -263,7 +266,7 @@ class MemoriesDispatchTest {
                         me.raddatz.veyq.mobile.session.NodeCover.uploaded(me.raddatz.veyq.mobile.blob.ApplicationBlobs.Plan("b-m", 1, 5, "d3JhcA==", "m"), me.raddatz.veyq.mobile.session.NodeCover.Crop(0.25, 0.0, 0.5, 1.0)))))
                     me.raddatz.veyq.mobile.session.NodeCover.row(cover, held) { played.rowCoverOpens++; "row-m".encodeToByteArray() }
                 },
-                createMemory = { scopeId, parentId, name, _ ->
+                createMemory = { scopeId, parentId, name, _, _ ->
                     MemoryCreate.check(MemoryCreate.MEMORY, parentId?.let { "FOLDER" }, name, emptyList())?.let { MemoryCreate.Made(null, it) }
                         ?: MemoryCreate.Made(NodeAt(scopeId, "m-new", MemoryCreate.MEMORY, name.trim()), null)
                 },
@@ -347,6 +350,21 @@ class MemoriesDispatchTest {
         assertEquals(emptyList(), past.rows.map { it.index })
         assertEquals(2, past.count)
         assertEquals(Answer.Refused(Answer.Why.NO_SUCH_GALLERY), b.ask(Call.GalleryLayout(-1, 500.0, 0.0, 600.0)))
+
+        // what this device sends into the page: placeholder tiles first, each named for a screen reader (ADR 0145 decision 3)
+        played.tiles.value = listOf(
+            me.raddatz.veyq.mobile.memories.UploadTile("u1", "beach.jpg", false, me.raddatz.veyq.mobile.blob.UploadQueue.Status.UPLOADING, 0.5, null),
+            me.raddatz.veyq.mobile.memories.UploadTile("u2", "clip.mp4", true, me.raddatz.veyq.mobile.blob.UploadQueue.Status.FAILED, 0.0, null),
+        )
+        val sending = page.until { u -> (u as Update.Gallery).shown?.takeIf { it.uploading.size == 2 } }
+        assertEquals(listOf("upload:u1", "upload:u2"), sending.uploading.map { it.id })
+        assertEquals(listOf(Notice(Msg.MEMORY_UPLOAD_TILE, "beach.jpg"), Notice(Msg.MEMORY_UPLOAD_TILE_FAILED, "clip.mp4")), sending.uploading.map { it.label })
+        assertEquals(listOf(false to 0.5, true to 0.0), sending.uploading.map { it.failed to it.progress })
+        assertTrue(sending.uploading[1].video)
+        val placed = b.ask(Call.GalleryLayout(g, 1000.0, 0.0, 600.0)) as Answer.GridLayout
+        assertEquals(listOf("upload:u1", "upload:u2", "a", "clip", "raw", "bad"), placed.rows.flatMap { r -> r.tiles.map { it.mediaId } }, "the placeholders lead the grid")
+        played.tiles.value = emptyList()
+        page.until { u -> (u as Update.Gallery).shown?.takeIf { it.uploading.isEmpty() } }
 
         // the header's plan holds the page's own "Add photos" once the page is named
         val header = (b.ask(Call.HeaderOpen(memory, AppKinds.Facts(), 3)) as Answer.HeaderOpened).header

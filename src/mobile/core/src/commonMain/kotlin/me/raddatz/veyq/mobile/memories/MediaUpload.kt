@@ -303,6 +303,10 @@ object MediaUpload {
     fun isMedia(type: String?, name: String?): Boolean =
         type?.startsWith("image/") == true || type?.startsWith("video/") == true || name?.substringAfterLast('.', "")?.lowercase() in EXTENSIONS
 
+    /** Whether a picked file claims to be a video: by its type, else by its extension (a placeholder's glyph, nothing more). */
+    fun claimsVideo(type: String?, name: String?): Boolean =
+        type?.startsWith("video/") ?: (EXTENSIONS[name?.substringAfterLast('.', "")?.lowercase()]?.startsWith("video/") == true)
+
     private const val UNKNOWN = "application/octet-stream"
 
     private val EXTENSIONS = mapOf(

@@ -780,6 +780,8 @@ internal sealed class Call {
         val scopeId: String, val parentId: String?, val name: String,
         /** *I was there* ticked (ADR 0144 decision 2): the maker sealed as the Memory's participant at its birth, where [ShellOffersWasThere]. */
         val wasThere: Boolean = false,
+        /** *Determine location automatically* ticked (#940): a pending `auto` place sealed at its birth, where [Answer.WasThere.autoPlace]. */
+        val autoPlace: Boolean = false,
     ) : Call()
 
     /**
@@ -1519,8 +1521,11 @@ internal sealed class Answer {
     /** What a banner's save or removal came to ([Call.BannerSave], [Call.BannerRemove]). */
     @Serializable @SerialName("BannerSaved") data class BannerSaved(val outcome: BannerSave) : Answer()
 
-    /** Whether New Memory there offers *I was there* ([Call.ShellOffersWasThere]). */
-    @Serializable @SerialName("WasThere") data class WasThere(val offered: Boolean) : Answer()
+    /**
+     * What New Memory there offers ([Call.ShellOffersWasThere]): *I was there*, ticked ([offered]); *Determine location
+     * automatically*, unticked ([autoPlace], #940: where this device's map services are shown).
+     */
+    @Serializable @SerialName("WasThere") data class WasThere(val offered: Boolean, val autoPlace: Boolean = false) : Answer()
 
     /** A person's page opened ([Call.PersonOpen]): its id, for [Watched.Person] and its calls. */
     @Serializable @SerialName("PersonOpened") data class PersonOpened(val person: Long) : Answer()
@@ -1859,7 +1864,22 @@ internal class GalleryShown(
      * [Call.GalleryCancelAsk]. Null: nothing asked.
      */
     val bannerQuestion: String? = null,
+    /**
+     * The photos and videos this device is sending into the node (`State.uploading`, ADR 0145 decision 3): placeholder
+     * tiles before [rows], laid out by [Call.GalleryLayout] under their [UploadTileShown.id].
+     */
+    val uploading: List<UploadTileShown> = emptyList(),
 )
+
+/**
+ * A placeholder tile of a [GalleryShown] (core's `UploadTile`): its layout id ([id], never a medium's: a [GridTile.mediaId]
+ * equal to it is this tile), the kind's glyph ([video]), how far it is ([progress] 0..1; [preparing] while nothing was
+ * sent yet), whether it failed ([failed]: the uploads list retries it) and what a screen reader says of it ([label]). No
+ * picture: the host draws the glyph and the progress.
+ */
+@Serializable
+@SerialName("UploadTileShown")
+internal class UploadTileShown(val id: String, val video: Boolean, val progress: Double, val preparing: Boolean, val failed: Boolean, val label: Notice)
 
 /**
  * A Memory's people line as the header draws it (core's `Participants.Line`, ADR 0144 decision 1): everyone listed
