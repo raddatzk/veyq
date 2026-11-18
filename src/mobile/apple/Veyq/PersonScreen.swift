@@ -78,7 +78,9 @@ final class PersonSection {
 
     init(_ memories: PersonMemories) {
         self.memories = memories
-        state = CoreState({ memories.current }) { changed in AppleMemories.shared.watch(flow: memories.state) { _ in changed() } }
+        // core calls the watch on its threads: @Sendable, never this main-actor class's isolation (src/mobile/CLAUDE.md
+        // § Traps; a profile opened crashed on libdispatch's main-queue assertion, 2026-11-18)
+        state = CoreState({ memories.current }) { changed in AppleMemories.shared.watch(flow: memories.state) { @Sendable _ in changed() } }
         reload()
     }
 
