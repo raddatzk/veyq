@@ -258,6 +258,12 @@ struct MemoryScreen: View {
         })
         // the model is the shell's while the page is shown; asking for it here opens it
         .task(id: ref) { _ = model.galleryModel(node) }
+        // a photo the search chose (ADR 0146 decision 8): core opened the gallery's lightbox on it, the page shows it
+        .onChange(of: state?.searchOpened, initial: true) { _, asked in
+            guard asked != nil, let gallery = model.galleryModel(node), let box = gallery.openLightbox else { return }
+            open = LightboxStart(gallery: gallery, box: box)
+            gallery.searchOpenedSeen()
+        }
         // a Memory's curation (ADR 0144): the participants picker and the banner's dialog, the app model's while they show
         .sheet(item: Binding(get: { model.participantsEdit }, set: { if $0 == nil { model.closeParticipants() } })) { edit in
             ParticipantsPickerSheet(model: model, edit: edit)

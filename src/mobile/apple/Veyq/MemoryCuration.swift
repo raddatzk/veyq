@@ -21,7 +21,8 @@ final class CoreState<Value> {
     @ObservationIgnored private var watch: AppleMemories.Watch?
 
     /// `read` the model's `current`; `watch` starts core's watch of its state (`AppleMemories.watch(flow:)`), calling what
-    /// it is handed on core's threads.
+    /// it is handed on core's threads — so the closure handed to core is `@Sendable`: written in a main-actor class or a
+    /// view it would inherit that isolation and trap on libdispatch's main-queue assertion (2026-11-18).
     init(_ read: @escaping () -> Value, watch: (@escaping @Sendable () -> Void) -> AppleMemories.Watch) {
         self.read = read
         value = read()
@@ -181,7 +182,7 @@ final class ParticipantsEdit: Identifiable {
     init(picker: ParticipantsPicker, gallery: GalleryModel) {
         self.picker = picker
         self.gallery = gallery
-        state = CoreState({ picker.current }) { changed in AppleMemories.shared.watch(flow: picker.state) { _ in changed() } }
+        state = CoreState({ picker.current }) { changed in AppleMemories.shared.watch(flow: picker.state) { @Sendable _ in changed() } }
         load()
     }
 
@@ -506,7 +507,7 @@ final class BannerEdit: Identifiable {
     init(editor: BannerEditor, gallery: GalleryModel) {
         self.editor = editor
         self.gallery = gallery
-        state = CoreState({ editor.current }) { changed in AppleMemories.shared.watch(flow: editor.state) { _ in changed() } }
+        state = CoreState({ editor.current }) { changed in AppleMemories.shared.watch(flow: editor.state) { @Sendable _ in changed() } }
         Task { [weak self] in
             let data = (try? await AppleMemories.shared.bannerPicture(gallery: gallery)).map { $0 as Data }
             self?.now = BannerPicture.of(data)
@@ -705,7 +706,7 @@ struct CaptureTimeSheet: View {
 
     init(editor: CaptureTimeEditor) {
         self.editor = editor
-        let held = CoreState({ editor.current }) { changed in AppleMemories.shared.watch(flow: editor.state) { _ in changed() } }
+        let held = CoreState({ editor.current }) { changed in AppleMemories.shared.watch(flow: editor.state) { @Sendable _ in changed() } }
         _held = State(initialValue: held)
         _at = State(initialValue: Self.date(held.value.atMs))
     }

@@ -55,6 +55,12 @@ data class SearchShown(
     val announcement: List<Notice> = emptyList(),
     /** A settings section a result chose (`SettingsSection.id`): the platform opens its settings page there; cleared by the next action. */
     val openSettings: String? = null,
+    /**
+     * How many times a settings result was opened in this field: a platform opens the page at [openSettings] whenever this
+     * moves. The same section chosen twice in a row leaves [openSettings] as it was, and a state equal to the last one is
+     * never delivered again (a flow keeps distinct states only); the count tells the second choice apart.
+     */
+    val openSettingsCount: Int = 0,
 )
 
 /** A chip set: its [id] (`Query.chipKey`), its type's [word] (*Year*, *Place*, …), its value as [label], and the icon kind it draws. */
@@ -190,6 +196,7 @@ class SearchModel(
     private var shown = PAGE
     private var chipNote: Pair<Notice, String>? = null
     private var openSettings: String? = null
+    private var openSettingsCount = 0
     @kotlin.concurrent.Volatile private var closed = false
     private val matcher = Query.Matcher()
     private var results: List<SearchDocument> = emptyList()
@@ -252,7 +259,10 @@ class SearchModel(
         val doc = results.getOrNull(index) ?: return@act
         when {
             doc.kind == SearchDocument.PERSON -> door.openPerson(doc.id)
-            doc.kind == SearchDocument.SETTINGS -> openSettings = doc.id
+            doc.kind == SearchDocument.SETTINGS -> {
+                openSettings = doc.id
+                openSettingsCount++
+            }
             doc.opensItself -> requests.request(OpenRequests.Request(doc.scopeId, doc.nodeId, doc.id))
             doc.id == doc.nodeId -> door.openNode(doc.scopeId, doc.nodeId)
             else -> {
@@ -485,6 +495,7 @@ class SearchModel(
         val shown = shown
         val note = chipNote
         val settings = openSettings
+        val settingsCount = openSettingsCount
         answering = scope.launch(lane) {
             val all = documents()
             val asked = JsText.trim(text).isNotEmpty() || chips.isNotEmpty()
@@ -497,7 +508,7 @@ class SearchModel(
             results = found?.results.orEmpty()
             suggestions = offered
             revalidate(asked)
-            _state.value = shown(text, chips, asked, found, offered, note, settings)
+            _state.value = shown(text, chips, asked, found, offered, note, settings, settingsCount)
             scheduleLoading(asked)
         }
     }
@@ -530,7 +541,7 @@ class SearchModel(
 
     private fun shown(
         text: String, chips: List<SearchChip>, asked: Boolean, found: Results.SearchResults?, offered: List<Query.ChipSuggestion>,
-        note: Pair<Notice, String>?, settings: String?,
+        note: Pair<Notice, String>?, settings: String?, settingsCount: Int,
     ): SearchShown {
         val t = Query.matchedText(text)
         val rows = found?.results.orEmpty().map { d ->
@@ -561,7 +572,7 @@ class SearchModel(
                 SuggestionShown("chip:${c.id}", c.word, c.label, c.icon, where(s.chip))
             },
             results = rows, more = minOf(total - rows.size, PAGE).coerceAtLeast(0), total = total, status = status,
-            announcement = announcement, openSettings = settings,
+            announcement = announcement, openSettings = settings, openSettingsCount = settingsCount,
         )
     }
 
