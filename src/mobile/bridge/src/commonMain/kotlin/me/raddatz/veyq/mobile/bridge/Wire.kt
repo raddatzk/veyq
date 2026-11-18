@@ -388,6 +388,14 @@ internal sealed class Call {
     /** Member [userId]'s picture ([Answer.Bytes], the image beside the JSON); refused where the letter shows. */
     @Serializable @SerialName("Avatar.Picture") data class AvatarPicture(val userId: String) : Call()
 
+    /**
+     * The WebP beside the call decoded by the core, for a host whose platform cannot decode it (Windows without its WebP
+     * Image Extension): [Answer.Bytes] `image/png`, the picture as a PNG beside the JSON, which every platform decodes.
+     * Refused `NOT_A_PICTURE` for no payload, what is no still WebP, a side past 4096 px, and where the core has no decoder
+     * (the JVM). No tenant needed.
+     */
+    @Serializable @SerialName("Picture.Decode") data object PictureDecode : Call()
+
     /** [length] bytes of reader [reader] from [position] ([Answer.Bytes]): fewer only at the end, none past it. */
     @Serializable @SerialName("Reader.Read") data class ReaderRead(val reader: Long, val position: Long, val length: Int) : Call()
     @Serializable @SerialName("Reader.Close") data class ReaderClose(val reader: Long) : Call()
@@ -1538,6 +1546,9 @@ internal sealed class Answer {
 
         /** A scan: none by that id; a frame without its plane beside the JSON, or one shorter than its size says. */
         NO_SUCH_SCAN, NOT_A_FRAME,
+
+        /** [Call.PictureDecode]: nothing the core decodes. */
+        NOT_A_PICTURE,
 
         /** An account's Settings: none by that id (closed, or its tenant closed). */
         NO_SUCH_ACCOUNT_PAGE,

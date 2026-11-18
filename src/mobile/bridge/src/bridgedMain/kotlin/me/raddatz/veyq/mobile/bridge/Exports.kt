@@ -114,7 +114,8 @@ fun veyqInit(config: CPointer<ByteVar>?, host: VeyqHost?, hostCtx: COpaquePointe
         memScoped { host.invoke(hostCtx, token.toULong(), json.cstr.ptr, null, 0u) }
     }
     val composed = started.start(h) {
-        Bridge.live(LibsodiumPrimitives, { block -> platformHttpClient(block) }, c, HostStore(it), { platformDeviceKeys(c, it) }, Files, { path -> HostPictures(h, path) }, HostTiers(h), HostAudio(h), HostBannerPictures(h))
+        Bridge.live(LibsodiumPrimitives, { block -> platformHttpClient(block) }, c, HostStore(it), { platformDeviceKeys(c, it) }, Files, { path -> HostPictures(h, path) }, HostTiers(h), HostAudio(h), HostBannerPictures(h),
+            webp = me.raddatz.veyq.mobile.media.WebpPicture::png)
     }
     return if (composed) STARTED else ALREADY_STARTED
 }
