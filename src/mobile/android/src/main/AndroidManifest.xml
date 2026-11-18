@@ -18,9 +18,9 @@
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <!-- the CAMERA permission implies the back camera as required unless it is said otherwise -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <!-- A pin's fetch (ADR 0140 decision 9): WorkManager's worker, promoted to a dataSync foreground service with its
-         notification while it fetches, so leaving the app does not stop it. The notification is shown where the person
-         allowed notifications (asked where a pin is made); the service runs either way. -->
+    <!-- A pin's fetch (ADR 0140 decision 9) and an upload (ADR 0145 decision 1): WorkManager's worker, promoted to a dataSync
+         foreground service with its notification while it fetches or uploads, so leaving the app does not stop it. The
+         notification is shown where the person allowed notifications (asked where a pin is made); the service runs either way. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -47,7 +47,7 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/shared_files" />
         </provider>
-        <!-- WorkManager's own foreground service, typed for a pin's fetch (Android 14 asks each one its type). -->
+        <!-- WorkManager's own foreground service, typed for a pin's fetch and an upload (Android 14 asks each one its type). -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
