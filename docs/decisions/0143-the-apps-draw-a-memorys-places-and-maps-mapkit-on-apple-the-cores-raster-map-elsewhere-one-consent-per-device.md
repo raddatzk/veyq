@@ -288,9 +288,10 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
     Windows and Linux builds**: Windows' standard output goes nowhere, and Linux's line was the pass's own (inbox #947).
     Android's *Download GPX* and *Report* of a track (seen in its menu; Linux and Windows downloaded); a phone's 60 Hz
     frame budget (the owner's device pass).
-  - **Seen, not fixed** (inbox): Android's add buttons are nameless in the accessibility tree (#943); Android's *Map
-    services on this device* toggles only from its switch (#944); the raster map first fetches zoom 2's four world tiles
-    before the framed view (#945); Windows names a cluster marker for one of its Memories (#946).
+  - **Seen, not fixed** (inbox): the raster map first fetches zoom 2's four world tiles before the framed view (#945).
+    Seen and fixed since (2026-11-18): Android's add buttons were nameless in the accessibility tree, Android's *Map
+    services on this device* toggled only from its switch, and Windows named a cluster marker for one of its Memories
+    (now "3 Memories here", `map_cluster_title`).
 - **Residual — no tile survives a launch.** A tile viewed in an earlier launch is fetched again, while the tile policy
   asks for "a sufficient local cache". Our reading: a photo app's map traffic is a person browsing their own Memories,
   and honouring the headers in memory is that cache for a session. A sealed cache across launches, in ADR 0140's

@@ -491,7 +491,7 @@ Map tab's pins and a cluster, a photo's map and its name sealed once, a track ad
 map services off*, offline, and what MapKit keeps on an iPhone (the Mac's screen locked during both attempts; no iOS
 simulator boots on this Mac). Not run elsewhere: Windows offline (the VM's backend is reached through a standing tunnel),
 Android's *Download GPX* and *Report* of a track, a phone's 60 Hz frame budget. Not built: a tile cache across launches
-(#939); a request log in the Linux and Windows builds (#947). Seen in the passes, open: #943–#946.
+(#939); a request log in the Linux and Windows builds (#947). Seen in the passes, open: #945.
 
 **Curation** ([ADR 0144](../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md), built above): **Apple's pass is the owner's** (inbox #925) — built and compiled for macOS and
 iOS, never clicked (the Mac's screen is the owner's; no iOS simulator boots on this Mac): the people line, its popover and

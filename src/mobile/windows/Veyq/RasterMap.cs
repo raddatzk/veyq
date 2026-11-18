@@ -444,7 +444,7 @@ internal sealed class RasterMap : IDisposable
             };
             pin.Children.Add(badge);
         }
-        AutomationProperties.SetName(pin, c.pin.node.name);
+        AutomationProperties.SetName(pin, MapPins.Name(c.count, c.pin.node.name));
         AutomationProperties.SetAutomationId(pin, $"map-pin:{c.pin.node.name}");
         return pin;
     }

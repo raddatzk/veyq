@@ -51,6 +51,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -701,12 +702,16 @@ private fun MapServicesRows(maps: me.raddatz.veyq.mobile.map.MapServices) {
 
 @Composable
 private fun MapsSwitch(checked: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    // The whole row is the one toggle, as Material 3's switch list item is (#944): the label toggles too, and a screen
+    // reader meets one switch named by its headline. The switch only draws the state (`onCheckedChange` null).
     ListItem(
         headlineContent = { Text(say(me.raddatz.veyq.mobile.words.Msg.SETTINGS_MAPS_SWITCH)) },
         supportingContent = { Text(say(me.raddatz.veyq.mobile.words.Msg.SETTINGS_MAPS_SWITCH_HINT)) },
         leadingContent = { Icon(Icons.Outlined.Map, null) },
-        trailingContent = { Switch(checked, onChange, enabled = enabled, modifier = Modifier.testTag("settings-maps-switch")) },
+        trailingContent = { Switch(checked, null, enabled = enabled) },
         colors = listColors(),
+        modifier = Modifier.testTag("settings-maps-switch")
+            .toggleable(value = checked, enabled = enabled, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = onChange),
     )
 }
 

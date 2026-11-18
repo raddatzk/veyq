@@ -28,7 +28,9 @@ import androidx.compose.ui.unit.dp
  *
  * The block owns the list's state and that room and hands both to [content], so a list under the button cannot leave
  * either out. Its label shows only while the list is at its very top (`!canScrollBackward`), not the Compose samples'
- * first-item test, which a short list never leaves. Collapsed, the icon alone names the button for a screen reader.
+ * first-item test, which a short list never leaves. The icon names the button for a screen reader in both states:
+ * Material 3 (1.4.0) clears the semantics of the extended button's text, so an icon without a description while the
+ * label shows left the button nameless in the accessibility tree (#943).
  * Creating is the web's green role (`--app-primary`).
  *
  * @param shown whether the action is offered at all (a reader of a Pot adds nothing); without it the list keeps no room.
@@ -55,7 +57,7 @@ fun CreateAction(
         if (shown) Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
             ExtendedFloatingActionButton(
                 onClick = { if (menu != null) open = true else onClick() },
-                icon = { Icon(Icons.Outlined.Add, if (expanded) null else label) },
+                icon = { Icon(Icons.Outlined.Add, label) },
                 text = { Text(label) },
                 expanded = expanded,
                 containerColor = role(palette.primary),
