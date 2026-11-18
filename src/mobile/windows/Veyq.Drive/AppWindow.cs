@@ -169,6 +169,10 @@ internal sealed partial class AppWindow(string process)
                 var y = (int)(r.Top + r.Height / 2);
                 return Mouse.Drag(At(span[0]), y, At(span[1]), y);
             }
+            case "listen":
+                return Notifications.Listen(Handle(Window()));
+            case "heard":
+                return Notifications.Take();
             case "size":
                 Size(Window(), int.Parse(parts[1], CultureInfo.InvariantCulture), int.Parse(parts[2], CultureInfo.InvariantCulture));
                 return "";
