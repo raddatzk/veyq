@@ -1156,6 +1156,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.GalleryPurge -> galleries[call.gallery]?.let { Answer.Said(it.purge()) } ?: noGallery
             is Call.GalleryCancelAsk -> galleries[call.gallery]?.cancelAsk().done(Answer.Why.NO_SUCH_GALLERY)
             is Call.GallerySeen -> galleries[call.gallery]?.seen().done(Answer.Why.NO_SUCH_GALLERY)
+            is Call.GallerySearchOpenedSeen -> galleries[call.gallery]?.searchOpenedSeen().done(Answer.Why.NO_SUCH_GALLERY)
             is Call.GalleryCreateChapter -> galleries[call.gallery]?.let { g -> g.createChapter(call.name).let { Answer.Created(it.node, it.notice) } }
                 ?: noGallery
             is Call.MemoryUpload -> galleries[call.gallery]?.let { g ->
@@ -2183,6 +2184,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Notice(if (t.failed) Msg.MEMORY_UPLOAD_TILE_FAILED else if (t.preparing) Msg.MEMORY_UPLOAD_TILE_PREPARING else Msg.MEMORY_UPLOAD_TILE, t.name),
             )
         },
+        searchOpened = s.searchOpened,
     )
 
     /** One participant of the people line, as `Participants.Entry` says it. */

@@ -887,6 +887,12 @@ internal sealed class Call {
     @Serializable @SerialName("Gallery.Seen") data class GallerySeen(val gallery: Long) : Call()
 
     /**
+     * The host showed the lightbox [GalleryShown.searchOpened] asked for (its own [LightboxOpen] on that medium): the request
+     * goes (`GalleryModel.searchOpenedSeen`, ADR 0146 decision 8).
+     */
+    @Serializable @SerialName("Gallery.SearchOpenedSeen") data class GallerySearchOpenedSeen(val gallery: Long) : Call()
+
+    /**
      * A chapter [name] made in the gallery's Memory (`GalleryModel.createChapter`, offered where [GalleryShown.creates] holds
      * it): [Answer.Created], the chapter to open or why not.
      */
@@ -1938,6 +1944,11 @@ internal class GalleryShown(
      * tiles before [rows], laid out by [Call.GalleryLayout] under their [UploadTileShown.id].
      */
     val uploading: List<UploadTileShown> = emptyList(),
+    /**
+     * A medium the search asked this page to open (`GalleryModel.State.searchOpened`, ADR 0146 decision 8): the host opens its
+     * lightbox on it ([Call.LightboxOpen] at its row) and says so ([Call.GallerySearchOpenedSeen]). Null: nothing asked.
+     */
+    val searchOpened: String? = null,
 )
 
 /**

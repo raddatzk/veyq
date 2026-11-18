@@ -171,7 +171,7 @@ class WireTest {
             // Memories
             Call.ShellCreateMemory("scope-1", null, "Ostsee 2026"), Call.ShellCreateMemory("scope-1", "folder-1", "Tag eins"), Call.ShellRowCover("memory-1", null), Call.ShellRowCover("memory-1", "b-1@0.25,0.0,0.5,1.0"),
             Call.GalleryOpen(memory), Call.GalleryClose(60), Call.GalleryReload(60), Call.GalleryTile(60, "m1"), Call.GalleryChapterCover(60, "c1"), Call.GalleryLayout(60, 1024.5, 3200.25, 768.0), Call.GalleryLayout(60, 0.0, 0.0, 0.0),
-            Call.GalleryTrash(60, "m1"), Call.GalleryUndo(60), Call.GalleryPurge(60), Call.GalleryCancelAsk(60), Call.GallerySeen(60),
+            Call.GalleryTrash(60, "m1"), Call.GalleryUndo(60), Call.GalleryPurge(60), Call.GalleryCancelAsk(60), Call.GallerySeen(60), Call.GallerySearchOpenedSeen(60),
             Call.GalleryCreateChapter(60, "Tag zwei"), Call.MemoryUpload(60, listOf("/home/p/Bilder/Strand 中文.jpg", "C:\\Users\\p\\clip.webm")),
             Call.MemoryUpload(60, emptyList()), Call.LightboxOpen(60, 2), Call.LightboxClose(61), Call.LightboxGo(61, 3), Call.LightboxPicture(61, "m1"),
             Call.LightboxSlideshow(61, true), Call.LightboxDetails(61, "m1"), Call.LightboxTrash(61), Call.LightboxStop(61), Call.MediumReader(61),
@@ -512,7 +512,7 @@ class WireTest {
                     listOf(ParticipantShown("user-1", "Anna", false, true), ParticipantShown("user-2", null, true, false), ParticipantShown("user-3", "Ben 中文", false, true)),
                     listOf("user-1", "user-2", "user-3"), 0, named = true, edits = true, add = false,
                 ),
-                banner = BannerShown(BannerMedium.VIDEO, "blob-b1", "video/webm"), editsBanner = true, bannerQuestion = "m1")),
+                banner = BannerShown(BannerMedium.VIDEO, "blob-b1", "video/webm"), editsBanner = true, bannerQuestion = "m1", searchOpened = "m2")),
             Update.Gallery(60, GalleryShown(memory, null, false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,
                 people = PeopleShown(emptyList(), emptyList(), 0, named = false, edits = true, add = true), banner = BannerShown(BannerMedium.IMAGE, "blob-b2", null))),
             Update.Participants(110, ParticipantsShown(

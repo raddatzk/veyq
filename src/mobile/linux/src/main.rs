@@ -117,7 +117,7 @@ fn activate(app: &adw::Application) {
     let w = window.clone();
     open_settings.connect_activate(move |_, connection| {
         if let Some(connection) = connection.and_then(|c| c.get::<String>()) {
-            veyq::account_settings::open(&w, connection);
+            veyq::account_settings::open(&w, connection, None);
         }
     });
     window.add_action(&open_settings);
