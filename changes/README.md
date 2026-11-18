@@ -1702,7 +1702,10 @@ runs it, and an owner's step is asked for when its phase starts, not discovered 
 on the Mac's own screen is such a step:** the apps' music and maps CRs (ADR 0142, ADR 0143) each gave it to an agent's
 phase, and the screen locked through every attempt of both — an agent builds and probes headless on the Mac (the
 maps' MapKit probe ran with the screen locked), but a window is drawn and clicked only on a screen someone keeps
-unlocked. So a refine names the Mac's and an iPhone's passes as the owner's from the start.
+unlocked. So a refine names the Mac's and an iPhone's passes as the owner's from the start. **A sign-in through
+`devlogin.py` is such a step too:** it reads the owner's `.run/.env`, which an implementing session's classifier
+refuses; the apps' curation CR (ADR 0144) had its Android click wait for it until the owner allowed the read in the
+coordinating session. A phase whose live step signs in names that read as the owner's grant when the phase starts.
 
 **And a live proof across two releases names, per step, which release's tool runs it.** cr-veyqctl's phase 3 said
 "install the first … `upgrade` to the second"; its harness ran `self-update` with the first release's `veyqctl`, which
@@ -2339,7 +2342,10 @@ dry run — and names a device that can answer, or says no device here can. **An
 looked for in a build:** the maps CR (ADR 0143) named its passes' request log "Android's OkHttp event listener, or the
 core's `PlayedMapServices` in a debug build" — `PlayedMapServices` lives in `commonTest` only, so Android grew a
 debug-only interceptor in its pass, Linux printed from a line never committed, and Windows, whose standard output
-goes nowhere, had none.
+goes nowhere, had none. **An instrument on the server's side measures every client alike:** the apps' curation CR
+(ADR 0144), with no request log in the desktop builds (#947), counted an equal file's uploads from the store's own
+request log (`docker logs veyq-garage`, the `PUT`s in each save's window) for Android, Linux and Windows — one
+instrument, nothing built into a client.
 
 ### A done-when names the proof; a command is one way to get it
 
@@ -2365,6 +2371,38 @@ refused it at build (`finish-args-unnecessary-appid-mpris-own-name`: Flatpak gra
 the ADR, the CR and the Consequences' permission list had to be corrected after the fact. A refine that adds a
 permission, a capability or a manifest entry runs the platform's own checker over it once (the linter, the store's
 validator, a build of the manifest alone), as a first measurement is checked for its instrument.
+
+### A picker a refine reuses is read for what it hands, not only for what it asks
+
+The apps' curation CR (ADR 0144) reused the upload's photo picker for a banner and recorded "no new permission:
+Android's photo picker asks nothing". True of opening it — but the system picker hands its own copy of a photo with
+the location zeroed, so the copy's digest never equalled the gallery's original, and the equal-file match the ADR
+decided uploaded the photo anew: the pass counted 1 store `PUT` where 0 was decided. The upload had met that copy long
+before and asks once for full media access for it. A refine that reuses a platform's picker for a feature that reads
+the picked bytes (a digest, metadata) reads what that picker hands over, and takes over the question its first user
+asks.
+
+### A conflict's test goes on to the user's next step
+
+The same CR's banner dialog said a peer's change (`banner_stale`) as decided, and its tests stopped at the message. The
+pass against the web pressed **Save** again, as a user does after "please try again", and the dialog answered Stale
+forever: it still stood on the banner it had opened on, where the web's save takes the page's node, which the conflict
+updated. A test of a conflict answer goes one step further — the retry its message asks for — and asserts that it
+lands (`BannerEditorTest.afterAPeersChangeIsSaidSaveAgainWritesOverThePeersBanner`).
+
+### A live case names what the dev instance must hold for it
+
+The same CR's phase 4 planned a live case over a group's and the tenant's Memory; the dev instance's principal is in
+no group, so `PersonProfileLiveTest` skipped (it says so) and the rule rests on the core's played tenant alone. A refine
+that plans a live case checks that the dev instance holds what it needs — a group membership, a second member, a
+capability switched on — and names the step that makes it, or plans the case without it.
+
+### A refine that puts an application's state on a type reads whose type it is
+
+The same CR's refine put the participants and the banner on the bridge's `HeaderShown`. That is the node's header,
+core's, which names no application (ADR 0079's direction), so phase 5 put them on Memories' `GalleryShown` beside ADR
+0143's facts line and the ADR was corrected after the fact. A refine that adds a field to an existing type checks which
+side of the core/application line the type lives on before it names it.
 
 ### Every CR closes with a short, honest retrospective
 
