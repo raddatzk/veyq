@@ -401,7 +401,7 @@ internal sealed class ShellView
         var first = !_started;
         _started = true;
         _state = state;
-        Avatars.Listed($"{shown.connection}\n{shown.tenant.tenantId}", shown.pictures);
+        Avatars.Listed($"{shown.connection}\n{shown.tenant.tenantId}", shown.pictures, shown.picturesRound);
         DrawOffline(state, shown);
         DrawSwitcher(state, shown);
         DrawPane(state, shown);
@@ -641,6 +641,7 @@ internal sealed class ShellView
                 _dropBox?.Dispose();
                 _dropBox = new DropBoxPage(_window, node, _said);
             }
+            _dropBox.Hero(_header?.Hero);
             body = _dropBox.Page;
         }
         else if (shell.openObject is { kind: "MEMORY" or "CHAPTER" } memory)
@@ -688,7 +689,8 @@ internal sealed class ShellView
             else if (shell.application is ApplicationId.Memories && shown.tabs.Count > 1) body = MemoriesPlaces(state, shown);
             else
             {
-                body = shell.application is not null ? HomeView.List(shown.list) : HomeView.Home(state, shown, LevelDrops());
+                // a folder's level starts with its head, as the Pot's and the Memory's pages (none on a space's root)
+                body = shell.application is not null ? HomeView.List(shown.list) : HomeView.Home(state, shown, LevelDrops(), _header?.Hero);
                 if (body is ScrollViewer list) Keep(list, ListScrolls.Place(shell.application, shell.space, shell.path.Count > 0 ? shell.path[^1].nodeId : null, shell.filter));
             }
         }

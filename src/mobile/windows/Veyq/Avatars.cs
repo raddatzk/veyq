@@ -35,11 +35,11 @@ internal static class Avatars
         public string? Id;
     }
 
-    /// <summary>The shell's list of ids with a picture in <paramref name="tenant"/> (ShellShown.pictures): asks for each
-    /// when the set changed.</summary>
-    public static void Listed(string tenant, IReadOnlyList<string> ids)
+    /// <summary>The shell's list of ids with a picture in <paramref name="tenant"/> (ShellShown.pictures) in the pictures'
+    /// <paramref name="round"/> (ShellShown.picturesRound): asks for each when the set or the round changed.</summary>
+    public static void Listed(string tenant, IReadOnlyList<string> ids, int round)
     {
-        var asked = HeldPictures.Listed(tenant, ids);
+        var asked = HeldPictures.Listed(tenant, ids, round);
         foreach (var id in asked.Gone) Refresh(id);
         foreach (var id in asked.Ask) Ask(asked.Round, id);
     }

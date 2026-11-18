@@ -89,16 +89,17 @@ internal static class HomeView
         return row;
     }
 
-    /// <summary>A row that opens <paramref name="r"/> in its application; a Memory's shows its cover where it has one
-    /// (RowCovers).</summary>
+    /// <summary>A row that opens <paramref name="r"/> in its application: its kind's glyph, replaced by its cover where it
+    /// has one (RowCovers), as every row on the phones.</summary>
     public static ListViewItem ObjectRow(ObjectRef r) =>
         Row(KindGlyph(r.kind), r.name, $"object:{r.name}", false, () => Act.Send(new Call.ShellOpen { Ref = r }),
-            r.kind == "MEMORY" ? glyph => RowCovers.Prefix(glyph, r.nodeId) : null,
+            glyph => RowCovers.Prefix(glyph, r.nodeId),
             r.kind is "MEMORY" or "CHAPTER" ? RowDates.Line(r.nodeId) : null);
 
     private static ListViewItem FolderRow(NodeRef n) =>
         Row(KindGlyph(n.kind), n.name, $"folder:{n.name}", true,
-            () => Act.Send(new Call.ShellEnter { folder = new FolderRef { nodeId = n.nodeId, name = n.name } }));
+            () => Act.Send(new Call.ShellEnter { folder = new FolderRef { nodeId = n.nodeId, name = n.name } }),
+            glyph => RowCovers.Prefix(glyph, n.nodeId));
 
     /// <summary>A section: its heading (if any), then its rows as one list whose item click opens the row.</summary>
     private static void Section(StackPanel content, string? heading, IEnumerable<ListViewItem> rows, bool apart = false)
@@ -146,12 +147,21 @@ internal static class HomeView
         return empty;
     }
 
-    /// <summary>Home: the filters (where the core offers more than "all"), then the level's groups (Home.groups): a
-    /// folder enters, an object opens in its application. With <paramref name="drops"/>, files and folders dropped onto the
-    /// level upload there, and onto a folder's row into that folder (ADR 0123's Consequences, the Windows app's Depot whole).</summary>
-    public static UIElement Home(ShellModelState state, ShellShown shown, Drops? drops = null)
+    /// <summary>Home: a folder's head (<paramref name="hero"/>, its cover: the folder's header's, as the Pot's and the
+    /// Memory's pages place it), the filters (where the core offers more than "all"), then the level's groups
+    /// (Home.groups): a folder enters, an object opens in its application. With <paramref name="drops"/>, files and folders
+    /// dropped onto the level upload there, and onto a folder's row into that folder (ADR 0123's Consequences, the Windows
+    /// app's Depot whole).</summary>
+    public static UIElement Home(ShellModelState state, ShellShown shown, Drops? drops = null, UIElement? hero = null)
     {
         var (scroll, content) = Column();
+        if (hero is not null)
+        {
+            // the head is the header's one element: taken from the level drawn before
+            if (hero is FrameworkElement { Parent: Panel panel }) panel.Children.Remove(hero);
+            if (hero is FrameworkElement { Parent: Border border }) border.Child = null;
+            content.Children.Add(hero);
+        }
         // the scroller holds only the column's height: the level takes a drop under its last row too
         scroll.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
         AutomationProperties.SetAutomationId(scroll, "level");

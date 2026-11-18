@@ -17,30 +17,48 @@ public sealed class AvatarsTest
     public void ASetIsAskedForOnceAndAgainOnlyWhenItChanges()
     {
         var held = new Held<string>();
-        var first = held.Listed("t1", ["b", "a"]);
+        var first = held.Listed("t1", ["b", "a"], 0);
         CollectionAssert.AreEqual(new[] { "a", "b" }, first.Ask.ToArray());
         Assert.IsTrue(held.Arrived(first.Round, "a", "A"));
         Assert.IsTrue(held.Arrived(first.Round, "b", "B"));
         // the same set again, in another order: nothing asked
-        Assert.AreEqual(0, held.Listed("t1", ["a", "b"]).Ask.Count);
+        Assert.AreEqual(0, held.Listed("t1", ["a", "b"], 0).Ask.Count);
         // a member's picture set: the whole set asked again, the others kept meanwhile
-        var second = held.Listed("t1", ["a", "b", "c"]);
+        var second = held.Listed("t1", ["a", "b", "c"], 0);
         CollectionAssert.AreEqual(new[] { "a", "b", "c" }, second.Ask.ToArray());
         Assert.AreEqual(0, second.Gone.Count);
         Assert.AreEqual("A", held.Get("a"));
         // a picture removed: gone at once, its person shows the initials
-        var third = held.Listed("t1", ["a", "c"]);
+        var third = held.Listed("t1", ["a", "c"], 0);
         CollectionAssert.AreEqual(new[] { "b" }, third.Gone.ToArray());
         Assert.IsNull(held.Get("b"));
+    }
+
+    /// <summary>A picture replaced under the same id (the core read the people anew): the ids stay, the round moves, and
+    /// the whole set is asked again while what is held stays shown; the same round again asks nothing. Bitten by a Listed
+    /// that ignores the round: red.</summary>
+    [TestMethod]
+    public void APictureReplacedUnderItsIdIsAskedForAgainWhenTheRoundMoves()
+    {
+        var held = new Held<string>();
+        var first = held.Listed("t1", ["a", "b"], 3);
+        Assert.IsTrue(held.Arrived(first.Round, "a", "A"));
+        var again = held.Listed("t1", ["a", "b"], 4);
+        CollectionAssert.AreEqual(new[] { "a", "b" }, again.Ask.ToArray());
+        Assert.AreEqual(0, again.Gone.Count);
+        Assert.AreEqual("A", held.Get("a"), "shown until the new one arrives");
+        Assert.IsTrue(held.Arrived(again.Round, "a", "A2"));
+        Assert.AreEqual("A2", held.Get("a"));
+        Assert.AreEqual(0, held.Listed("t1", ["b", "a"], 4).Ask.Count);
     }
 
     [TestMethod]
     public void AnotherTenantDropsWhatWasHeldAndALateAnswerIsNotKept()
     {
         var held = new Held<string>();
-        var first = held.Listed("t1", ["a"]);
+        var first = held.Listed("t1", ["a"], 0);
         Assert.IsTrue(held.Arrived(first.Round, "a", "A"));
-        var other = held.Listed("t2", ["a", "x"]);
+        var other = held.Listed("t2", ["a", "x"], 0);
         CollectionAssert.AreEqual(new[] { "a", "x" }, other.Ask.ToArray());
         CollectionAssert.AreEqual(new[] { "a" }, other.Gone.ToArray());
         Assert.IsNull(held.Get("a"), "t1's picture of a is not t2's");
@@ -52,7 +70,7 @@ public sealed class AvatarsTest
         Assert.IsFalse(held.Arrived(other.Round, "x", null));
         Assert.IsTrue(held.Arrived(other.Round, "x", "X"));
         // and back to t1: asked anew, though its set is the one it had
-        CollectionAssert.AreEqual(new[] { "a" }, held.Listed("t1", ["a"]).Ask.ToArray());
+        CollectionAssert.AreEqual(new[] { "a" }, held.Listed("t1", ["a"], 0).Ask.ToArray());
     }
 
     /// <summary>
