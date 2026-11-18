@@ -112,6 +112,12 @@ impl Combo {
         Self { row, ids }
     }
 
+    /// The label of the choice shown now (the model's string at the selection).
+    fn chosen(&self) -> Option<String> {
+        let list = self.row.model().and_downcast::<gtk::StringList>()?;
+        list.string(self.row.selected()).map(String::from)
+    }
+
     fn select(&self, id: &str) {
         if let Some(at) = self.ids.iter().position(|i| i == id)
             && self.row.selected() != at as u32
@@ -908,6 +914,9 @@ fn update(f: &Form, s: &EditorShown) {
     }
     for ((person, paid, remove), p) in f.payers.iter().zip(&s.payers) {
         person.select(&p.person);
+        // the person under the title (#901): told here as well, since a row whose selection did not change since
+        // use-subtitle was set showed no subtitle (measured in the Linux pass)
+        person.row.set_subtitle(&glib_escape(&person.chosen().unwrap_or_default()));
         paid.set(&p.amount);
         remove.set_visible(s.can_remove_payer && s.editable);
     }
