@@ -17,10 +17,15 @@
 // and 7.5° rotation, and stops at blur sigma 3.6 px (2.4 px reads) and noise attenuate 0.75 (0.5 reads); all four
 // together read at twice this fixture's levels and fail at three times. pdf.js draws in node through its own
 // `@napi-rs/canvas`, so step (c) runs here as in a browser.
+//
+// `kit-app.pdf` is the kit the native apps write (ADR 0148 decision 5): the Kotlin core's `KitWriter`, for the same fake
+// data, in English, dated 2026-11-18 — standard fonts, the QR drawn as rectangles, the token in `Keywords`. The core's
+// `KitWriterTest` holds it byte for byte (`VEYQ_WRITE_FIXTURES=1` in `src/mobile` re-records it); here it is read by
+// each of the three paths, the third with the token blanked out of the bytes so only the drawn page carries the kit.
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { kitPayload } from '@veyq/crypto/emergencyKit'
+import { kitPayload, parseKit } from '@veyq/crypto/emergencyKit'
 import { formatSecretKey } from '@veyq/crypto/secretKey'
 import { readPdf } from '../../../shared/pdf/pdfEngine'
 import { importKitFromFile } from './emergencyKit'
@@ -71,6 +76,33 @@ function pdfWithKeywords(keywords: string): Uint8Array {
 /** `text` as a PDF hex string in UTF-16BE with its byte-order mark — how some writers re-encode the Info strings. */
 const utf16Hex = (text: string) =>
   '<FEFF' + Array.from(text, (c) => c.charCodeAt(0).toString(16).padStart(4, '0')).join('').toUpperCase() + '>'
+
+/** [bytes] with every `veyqkit:` token's letters overwritten by `x`: the same length, so every offset the file names holds. */
+function withoutToken(bytes: Uint8Array): Uint8Array {
+  const out = bytes.slice()
+  for (const m of latin1(bytes).matchAll(/veyqkit:[A-Za-z0-9_-]*/g)) out.fill(0x78, m.index, m.index + m[0].length)
+  return out
+}
+
+describe('importing a kit the native apps wrote (kit-app.pdf, the core\'s KitWriter)', () => {
+  it('(a) the token is in the bytes', async () => {
+    const bytes = fixture('kit-app.pdf')
+    expect(latin1(bytes)).toContain(`/Keywords (${kitPayload(KIT)})`)
+    expect(await importKitFromFile(asFile(bytes))).toEqual(KIT)
+  })
+
+  it('(b) the Keywords as pdf.js reads them', async () => {
+    expect(parseKit(await keywordsOf(fixture('kit-app.pdf')))).toEqual(KIT)
+  })
+
+  it('(c) the QR it drew, with the token blanked out of the bytes and the Keywords', { timeout: 30_000 }, async () => {
+    const bytes = withoutToken(fixture('kit-app.pdf'))
+    // The premise, asserted: (a) and (b) have nothing to find, so the kit below can only have come from the page.
+    expect(latin1(bytes)).not.toContain('veyqkit:')
+    expect(await keywordsOf(bytes)).not.toContain('veyqkit:')
+    expect(await importKitFromFile(asFile(bytes))).toEqual(KIT)
+  })
+})
 
 describe('importing a kit that is no longer the file the renderer wrote', () => {
   it('(a) a kit re-saved by PDFKit, with its address fields filled: the token is still in the bytes', async () => {
