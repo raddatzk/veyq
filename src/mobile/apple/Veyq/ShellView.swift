@@ -323,8 +323,6 @@ struct Bar: View {
         )
     }
 
-    /// What the split view's toolbar search field holds; searching while it is not empty.
-    @State private var query = ""
     /// The space whose trash is open.
     @State private var trashOf: TrashOf?
     /// The space whose top level's "Add files only" share is open.
@@ -347,14 +345,13 @@ struct Bar: View {
         } else {
             NavigationStack {
                 Group {
-                    if model.shell.searching { SearchHits(model: model, query: query) } else { content(selection.wrappedValue) }
+                    if model.shell.searching { SearchResults(model: model) } else { content(selection.wrappedValue) }
                 }
                 .modifier(Picking(model: model))
                 // Search in one place on every page: the toolbar's field at its trailing end, as the system's own apps
-                // on an iPad and a Mac (owner 2026-11-10: a segment here, a button there was two places)
-                .searchable(text: $query, placement: .toolbar, prompt: say(.searchHint))
-                .onChange(of: query) { _, typed in if typed.isEmpty == model.shell.searching { model.search(!typed.isEmpty) } }
-                .onChange(of: model.shell.searching) { _, on in if !on { query = "" } }
+                // on an iPad and a Mac (owner 2026-11-10: a segment here, a button there was two places); the page shows
+                // the results while something is asked (ADR 0146 decision 12)
+                .modifier(SearchField(model: model, placement: .toolbar, drivesShell: true))
                 .toolbar {
                     toolbar
                     // the bar's places: a segmented control, as the system's own apps on an iPad and a Mac
@@ -944,27 +941,12 @@ final class ScrollKeeperView: UIView {
 }
 #endif
 
-/// The iPhone's Search tab: its own field over the hits.
+/// The iPhone's Search tab: its own field over what the search found (`SearchField`, `SearchResults`).
 struct SearchList: View {
     @Bindable var model: AppModel
-    @State private var query = ""
 
     var body: some View {
-        SearchHits(model: model, query: query).searchable(text: $query, prompt: say(.searchHint))
-    }
-}
-
-/// What a query finds among the tenant's objects; opening one ends the search.
-struct SearchHits: View {
-    @Bindable var model: AppModel
-    let query: String
-
-    var body: some View {
-        let hits = ShellWords.shared.search(objects: model.objects, query: query)
-        List(hits, id: \.nodeId) { ref in
-            ObjectRow(ref: ref) { r in model.search(false); model.open(r) }
-        }
-        .navigationTitle(say(.tabSearch))
+        SearchResults(model: model).modifier(SearchField(model: model))
     }
 }
 

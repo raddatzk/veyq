@@ -228,6 +228,26 @@ class SearchModelTest {
     }
 
     @Test
+    fun theSameSettingsResultChosenTwiceOpensThePageTwice() {
+        started()
+        ask("locat")
+        runBlocking {
+            model.open(0)
+            model.settled()
+        }
+        val first = model.current
+        runBlocking {
+            model.open(0)
+            model.settled()
+        }
+        val second = model.current
+        assertEquals("maps", second.openSettings)
+        assertEquals(1, first.openSettingsCount)
+        assertEquals(2, second.openSettingsCount, "the second choice of the same section is a state of its own")
+        assertTrue(first != second, "a flow delivers distinct states only: an equal one would never reach the platform")
+    }
+
+    @Test
     fun aListingIsAskedByItsTagAndOneThatFailsNamesItsSpace() {
         started()
         started()

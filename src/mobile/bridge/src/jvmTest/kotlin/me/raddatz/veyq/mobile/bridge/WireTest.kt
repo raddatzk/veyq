@@ -556,7 +556,7 @@ class WireTest {
                 ),
                 more = 3, total = 13,
                 status = listOf(Notice(Msg.SEARCH_LOADING, 2), Notice(Msg.SEARCH_NOT_SEARCHED, me.raddatz.veyq.mobile.words.Joined(listOf("Club"), ", "))),
-                announcement = listOf(Notice(Msg.SEARCH_ANNOUNCE_RESULTS, 13)), openSettings = "maps",
+                announcement = listOf(Notice(Msg.SEARCH_ANNOUNCE_RESULTS, 13)), openSettings = "maps", openSettingsCount = 1,
             )),
             Update.Search(114, me.raddatz.veyq.mobile.search.SearchShown()), Update.Search(114, null),
         ),

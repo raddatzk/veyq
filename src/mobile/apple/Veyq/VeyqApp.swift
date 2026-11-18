@@ -34,7 +34,10 @@ struct VeyqApp: App {
         // decision 9, ADR 0145 decision 1)
         .onChange(of: scenePhase) { _, phase in ContinuedWork.phase(phase) }
         #if os(macOS)
-        .commands { LightboxCommands() }
+        .commands {
+            LightboxCommands()
+            SearchCommands()
+        }
         #endif
         #if os(macOS)
         // the account's Settings as a Mac app keeps them: its Settings window, on ⌘, and from the sidebar's Settings
