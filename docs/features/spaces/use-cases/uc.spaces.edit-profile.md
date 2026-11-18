@@ -63,6 +63,7 @@ they can read and the server cannot.
 
 ## Related
 
+- **The apps** (planned, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 2): one core model behind Settings' *Your profile* and *Edit profile* on one's own person page.
 - Feature: [Spaces (scopes)](../_index.md)
 - Enabler: [en.spaces.member-identity](../enablers/en.spaces.member-identity.md) (the per-tenant username and
   sealed name this edits)

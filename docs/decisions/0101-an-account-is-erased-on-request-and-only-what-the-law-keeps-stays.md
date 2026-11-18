@@ -4,6 +4,7 @@
 - Built: yes
 - Date: 2026-10-18
 - Model: [cc.privacy.retention](../crosscutting/cc.privacy.retention.md)
+- Extended: the erasure in the apps, the web's flow ported into the core, by ADR 0148 (not built)
 
 That an account and an active tenant can be erased is not a choice: GDPR Art. 17(1) and 12(2) ask for it, and where a
 legal duty and what veyq decided or built disagree, the duty decides (`CLAUDE.md`). The shape is this ADR's; the legal

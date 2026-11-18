@@ -90,6 +90,7 @@ stay and why.
 
 ## Related
 
+- **The apps** (planned, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 8): the preview, the last-owner choices and `eraseOwnAccount` ported into the core, then the device forgets the account; the last moderation-key holder is sent to the web.
 [ADR 0101](../../../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md),
 [ADR 0056](../../../decisions/0056-instance-durable-state-and-cold-logical-backup.md) decision 8 (the ledger),
 [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)

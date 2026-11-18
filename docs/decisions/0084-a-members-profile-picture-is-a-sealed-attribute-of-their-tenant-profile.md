@@ -4,13 +4,14 @@
 - Built: yes
 - Date: 2026-10-13
 - Model: [en.spaces.member-identity](../features/spaces/enablers/en.spaces.member-identity.md)
+- Extended: the picture in the apps, the web's flow ported into the core, by ADR 0148 (not built)
 
 ## Context
 
 [ADR 0083](0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) decision 6 and the participant chips
 show a **letter** for a person, and left a picture open. The server is **operator-blind**, a member's identity is
 **per tenant** ([ADR 0023](0023-per-tenant-member-identity.md): a plaintext `username`, the real name sealed under a
-field key derived from `K_tenant`), and a share is the member view with rights removed. The question is where a picture
+field key derived from its own value key, whose wrap `K_tenant` holds — [ADR 0115](0115-a-scope-key-is-replaced-never-chained.md)), and a share is the member view with rights removed. The question is where a picture
 lives and what the operator learns from it. The nearest precedent is the space icon
 ([uc.spaces.set-space-icon](../features/spaces/use-cases/uc.spaces.set-space-icon.md)): one sealed, constant-length
 field on a row rather than a blob.
@@ -30,8 +31,8 @@ is non-zero and caches by revision, and the read answers a matching revision wit
 moves up, so overlapping writes cannot lose a bump or reuse a revision. The sealed picture has one exact length, and
 the contract's bound is that length.
 
-**3. Sealing.** Under a field key derived from `K_tenant`
-([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 9) with a **new AEAD
+**3. Sealing.** Under a field key derived from the value's own key `K_v`, whose wrap `K_tenant` holds ([ADR 0115](0115-a-scope-key-is-replaced-never-chained.md); the
+derivation [ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 9) with a **new AEAD
 purpose `member-avatar`** bound to `[scopeId, userId]`, pinned by a conformance vector
 ([ADR 0072](0072-a-seal-binds-its-object.md)). `member-name` is **not reused**, so a blob sealed for one purpose can
 never be interpreted as the other. The plaintext is a **256 px WebP padded to a constant length** with the tenant

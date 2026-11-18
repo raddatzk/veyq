@@ -213,6 +213,7 @@ except through a link made before until you renew it.
 
 ## Related
 
+- **The apps** (planned, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 7): `rotateKeys`, `afterCommit` and `finishRotation` ported into the core, the new kit saved through the system's dialog and never shown; a moderator is sent to the web.
 - Model: [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (securing the account)
 - Feature: [Account & auth](../_index.md)
 - Decisions: [ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) (the decision this realizes),

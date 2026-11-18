@@ -128,6 +128,7 @@ device cannot change it without your Secret Key.
 
 ## Related
 
+- **The apps** (planned, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 6): the cold proof and `changePassword` ported into the core; afterwards the device offers *Trust with password* again.
 - [en.account.key-model](../enablers/en.account.key-model.md) — the wrap inventory this flow reads and rewrites
 - [uc.account.recover-access](uc.account.recover-access.md) — the unauthenticated sibling this mirrors (mailed
   token instead of a live session; revokes every session instead of sparing the caller's own)

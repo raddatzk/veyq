@@ -4,6 +4,7 @@
 - Built: yes
 - Date: 2026-08-15
 - Model: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md)
+- Extended: replacing the keys in the apps, the web's flow ported into the core, by ADR 0148 (not built)
 - Replaced in part: Decision 1, Decision 2, Decision 4, Decision 5, Decision 6, Decision 7 by ADR 0111 (built)
 
 ## Context

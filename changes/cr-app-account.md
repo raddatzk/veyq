@@ -3,7 +3,7 @@ id: cr-app-account
 title: The web's account features in the apps — devices renamed, one's profile, safety numbers, the password, the address, the keys replaced with a saved Emergency Kit, the account erased — the core's ports held to the vectors the web answers to
 status: planned
 satisfies: []
-adrs: ["0003", "0023", "0028", "0058", "0060", "0074", "0084", "0101", "0111", "0115", "0127", "0136", "0137", "0140", "0123"]
+adrs: ["0148", "0003", "0023", "0028", "0058", "0060", "0074", "0084", "0101", "0111", "0115", "0127", "0136", "0137", "0140", "0123"]
 invariants:
   - "operator-blind E2EE: the apps send the server exactly what the web sends for each operation (the same operationIds, the same sealed fields, the same proofs); no new endpoint, no new field, the backend unchanged"
   - "every key-touching rule is the core's, a port of the web's flow, and every byte it signs, seals or derives is held to contracts/crypto/vectors/v1.json by crypto/Conformance.kt on the JVM and on libsodium (Apple, Linux, Windows) — the sections the core does not read today (secret_key_proof, auth_attestation, rotation_stage, verification, fingerprint's digits and chain_code) are read before any flow uses them"
@@ -72,7 +72,7 @@ commands from the repo root.
 
 ## Decisions
 
-Phase 1 writes D1–D12 as a new ADR ("The apps' account: the web's flows ported into the core, the kit written by the
+Phase 1 writes D1–D12 as a new ADR, [0148](../docs/decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) ("The apps' account: the web's flows ported into the core, the kit written by the
 core into the file the person chose"); each "rejected" is its Alternatives.
 
 ### D1 — The device register's screen is the sessions section the apps have; it gains the web's rename of any device
@@ -295,7 +295,8 @@ before their first edit.
 Each phase ends with every platform building. The core phase is ordered by soundness: what touches no key first, the
 key-touching flows after the vectors that hold them, erasure last.
 
-- [ ] **1 the ADR and the docs it changes** — ADR 0147 (`ls docs/decisions | tail -3`; 0147 at refine) with D1–D12
+- [x] **1 the ADR and the docs it changes** — ADR 0148 (0147 at refine; 0147 is cr-inventory-space-items' on another
+  branch, `git log --all --oneline -- 'docs/decisions/0147*'`, so the next free number across all branches) with D1–D12
   and the Alternatives; ADR 0060, 0074, 0084, 0101's headers name the apps as planned; the use cases
   (`uc.account.change-password`, `.change-email`, `.rotate-keys`, `.erase-account`, `.sessions`,
   `uc.spaces.edit-profile`, `.set-profile-picture`, `.enforce-verified-identities`) name the apps as planned;
@@ -369,7 +370,7 @@ key-touching flows after the vectors that hold them, erasure last.
 
 - [ ] **9 harvest** — the site's `account/` pages (EN+DE: `your-profile`, `verify-a-person`, `devices-and-sessions`,
   `change-password`, `change-email`, `replace-your-keys`, `erase-your-account`) tell the apps (where each is, the kit
-  saved through the system's dialog, the pasted link); ADR 0147 built with its passes; the use cases and their
+  saved through the system's dialog, the pasted link); ADR 0148 built with its passes; the use cases and their
   coverage files gain the apps' tests; `native-apps.md` § Built and § Open; `src/mobile/CLAUDE.md` (the new models, the
   throwaway rule beside § live tests, the kit in § Nothing on disk); #863, #949 deleted as done; the lessons to
   `changes/README.md` or the lines they bite; this CR deleted. · Done when: `pnpm run check` in `site/` green and every

@@ -19,7 +19,8 @@
 2. They pick an image file and frame it 1:1 in the cropper.
 3. The client re-encodes it to a 256 px WebP (libwebp's own build, in every browser alike,
    [ADR 0127](../../../decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md)), pads the bytes to the
-   constant length and seals them under a field key derived from `K_tenant` with the `member-avatar` purpose at (tenant
+   constant length and seals them under a field key derived from its own value key, whose wrap `K_tenant` holds
+   ([ADR 0115](../../../decisions/0115-a-scope-key-is-replaced-never-chained.md)), with the `member-avatar` purpose at (tenant
    scope, own user id).
 4. `PUT /api/account/profile/avatar { sealedAvatar }` — the server stores the blob verbatim, bumps `avatar_revision`
    and answers `204`. In *Your profile* the picture rides with the profile's Save (the profile first, then the picture); on
@@ -67,6 +68,7 @@ You can show a picture of yourself instead of a letter in each space, seen by it
 
 ## Related
 
+- **The apps** (planned, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 2): the crop drawn by the platform, the WebP encoded, padded and sealed by the core.
 - Feature: [Spaces (scopes)](../_index.md)
 - End-user view (docs site): [People in your Memories](../../../../site/src/content/docs/memories/people-in-your-memories.md)
 - Enabler: [en.spaces.member-identity](../enablers/en.spaces.member-identity.md) (the per-tenant profile row)

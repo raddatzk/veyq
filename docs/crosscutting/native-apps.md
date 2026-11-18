@@ -470,11 +470,11 @@ open (below). The Use pages: [People in your Memories](../../site/src/content/do
   - On GTK and WinUI a screen reader confirms the slide by the keys, with no named action of its own (ADR 0136's
     Consequences); no screen reader has driven the slide on any platform.
   - Every pass leaves a device-register entry per device it linked (no screen removes one): an orphan once a reconcile drops its rows, and orphans are what eviction takes first ([en.account.device-register](../features/account/enablers/en.account.device-register.md) § Growth).
-- The device register's own screen (the devices an account trusts, ADR 0058): every app writes it at each unlock and
-  enrolment, only the web shows it.
-- Invites and members; the rest of the web's settings — password, email, replacing the keys, recovery, erasure, terms,
-  profile (inbox #863), and an in-app choice of appearance and language (the apps follow the system's; the desktops have
-  no per-app language of their own).
+- The device register's own screen is the sessions section every app draws (the register written at each unlock and
+  enrolment); renaming any device a row names, as the web does, is planned ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 1, cr-app-account).
+- The rest of the web's account settings — one's profile, password, email, replacing the keys, erasure — planned
+  ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md), cr-app-account, inbox #863); invites and members, recovery, terms, and an in-app choice of appearance and
+  language (the apps follow the system's; the desktops have no per-app language of their own).
 - **On macOS a session's menu in Settings was never driven** ("Weitere" → "Dieses Gerät abmelden" on another session:
   the background tools open no menu) — the owner's click (inbox #916); **and its rename alert shows the current name
   only the first time** — later openings were empty (the binding set before presenting; AppKit's alert keeps its field);
@@ -552,7 +552,7 @@ picker, a profile from a participant and from an uploader and its map, *I was th
 image and a video banner across a 720 pt window, the trash's question, Remove banner, and on an iPhone whether
 `PhotosPicker`'s copy of a gallery photo is still shared. Not run elsewhere: Windows offline (the standing tunnel).
 Not built: one's
-own profile and the safety numbers (#949), tiles (#950), a people search or overview, a guest's view (#435).
+own profile and the safety numbers (#949, planned: [ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decisions 2 and 3), tiles (#950), a people search or overview, a guest's view (#435).
 
 **Uploads** ([ADR 0145](../decisions/0145-the-apps-uploads-go-on-with-the-app-left-and-show-in-the-gallery-a-desktop-asks-before-a-quit-drops-them.md), built above): **iOS is the owner's** — on a real iPhone whether the
 continued-processing task is granted for an upload (`app.veyq.uploads.*`), how long `beginBackgroundTask` lasts and what
