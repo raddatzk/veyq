@@ -149,8 +149,17 @@ final class AppModel {
 
     /// The current tenant as read, before what this device hides is taken out.
     /// The shell over the current tenant (core's `ShellModel`): its lists, where the person is, the actions on a node.
-    @ObservationIgnored private var shellModel: ShellModel?
+    @ObservationIgnored private(set) var shellModel: ShellModel?
     @ObservationIgnored private var shellWatch: ShellModel.Watch?
+    /// The search over the current tenant (core's `SearchModel`, ADR 0146 decision 7): made as the field is first used and
+    /// disposed where the tenant closes (`closeSearch`); `found` is its state on the main actor, which the field draws.
+    @ObservationIgnored var searchModel: SearchModel?
+    @ObservationIgnored var searchWatch: SearchModel.Watch?
+    var found: SearchShown?
+    /// The settings section a search result chose (`SettingsSection.id`): the Settings page scrolls there, then clears it.
+    var settingsAnchor: String?
+    /// Moved when the search was closed from outside the field (the shell left it): the field empties its own text.
+    var searchFieldReset = 0
     /// The way in (core's `SessionModel`): the start, the sign-in, the unlock, the switcher, the sign-out.
     @ObservationIgnored private let session: SessionModel<VeyqAccount, TenantSession>
     @ObservationIgnored private var gateWatch: SessionModelWatch?
@@ -200,6 +209,7 @@ final class AppModel {
             offer = nil
             // locked or gone: the open dialogs and the tenant's tree go — a person's index with it (ADR 0144 decision 12)
             closeCuration()
+            closeSearch()
             tenantSession?.close()
         }
         switch session.current {
@@ -502,6 +512,7 @@ final class AppModel {
                 managing = nil
                 shellWatch?.stop()
                 shellModel = nil
+                closeSearch()
                 tenantSession?.close()
                 closeDepot()
                 closeMedia()
@@ -574,6 +585,7 @@ final class AppModel {
                 managing = nil
                 shellWatch?.stop()
                 shellModel = nil
+                closeSearch()
                 tenantSession?.close()
                 closeDepot()
                 closeMedia()
@@ -616,6 +628,7 @@ final class AppModel {
         }
         pot = nil
         let model = ShellModel(tenant: t, hidden: hidden, recent: recent, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
+        closeSearch()
         shellWatch?.stop()
         shellModel = model
         openDepot(model, t)
@@ -659,7 +672,10 @@ final class AppModel {
         servers = session.accounts.map { c in
             ServerEntry(account: c, tenants: hidden.visibleTenants(connectionKey: c.key, tenants: c.tenants, current: c == account ? tenant : nil))
         }
+        let wasSearching = shell.searching
         shell = state.shell
+        // the search left for anything but what it opened (whose back returns to it): the field empties (core's `close`)
+        if wasSearching, !shell.searching, shell.back?.searching != true { searchModel?.close(); searchFieldReset += 1 }
         let wasOffline = offlineBanner != nil
         offlineBanner = state.banner
         goneNotices = state.gone
@@ -923,6 +939,8 @@ final class AppModel {
                 // a state of a page closed meanwhile is dropped
                 guard let self, let open = self.openGallery?.model, ObjectIdentifier(open) == id else { return }
                 self.galleryShown = (open.node, state)
+                // the search opened one of this page's photos (ADR 0146 decision 8): the page shows again, its lightbox on it
+                if state.searchOpened != nil, self.shell.searching { self.search(false) }
             }
         }
         openGallery = (made, watch)

@@ -65,6 +65,10 @@ struct SettingsView: View {
     let actions: SettingsActions
     /// The app's model, for this device's map services (ADR 0143 D2); nil where the page is played without one.
     var maps: AppModel? = nil
+    /// The section a search result chose (`SettingsSection.id`, ADR 0146 decision 9): the page scrolls to it, then says
+    /// `scrolled`.
+    var scrollTo: String? = nil
+    var scrolled: () -> Void = {}
     #if os(iOS)
     @Environment(\.openURL) private var openURL
     #endif
@@ -79,14 +83,45 @@ struct SettingsView: View {
     @State private var limitUnit: LimitUnit = .gb
 
     var body: some View {
+        ScrollViewReader { proxy in
+            form
+                .onChange(of: scrollTo, initial: true) { _, section in
+                    guard let section else { return }
+                    scrolled()
+                    anchored = section
+                    DispatchQueue.main.async { proxy.scrollTo(section, anchor: .top) }
+                    // the sessions and the saved keys read after the page opened move what is below them: the section is
+                    // scrolled to again as they arrive, for a moment
+                    Task {
+                        try? await Task.sleep(for: .seconds(3))
+                        if anchored == section { anchored = nil }
+                    }
+                }
+                .onChange(of: layoutKey) {
+                    guard let anchored else { return }
+                    DispatchQueue.main.async { proxy.scrollTo(anchored, anchor: .top) }
+                }
+        }
+    }
+
+    /// The section a search result chose, while what reads after the page opened may still move it.
+    @State private var anchored: String?
+
+    /// What the page reads after it opened, which changes its sections' heights.
+    private var layoutKey: String {
+        "\(state.families?.count ?? -1)|\(state.savedKeyDevices.count)|\(state.otherSavedKeys)|\(state.addDevice)|\(state.storage?.items.count ?? -1)"
+    }
+
+    /// The page's sections, each anchored by its `SettingsSection.id` (the search opens the page there).
+    private var form: some View {
         Form {
             if let refusal = state.refusal {
                 Section { Text(say(refusal)).foregroundStyle(Role.danger) }
             }
-            account
-            device
-            sessions
-            savedKeys
+            account.id("account")
+            device.id("device")
+            sessions.id("sessions")
+            savedKeys.id("saved-keys")
             if state.addDevice {
                 // ADR 0059 §1, offered while the instance links devices: both halves, so whichever device has a camera
                 // scans — "Show a Code" (the new device scans) and, where this one has a camera, "Scan a Code"
@@ -102,9 +137,10 @@ struct SettingsView: View {
                 } footer: {
                     Text(say(.accountSettingsAddDeviceSub) + " " + say(.linkIntro))
                 }
+                .id("add-device")
             }
-            storage
-            if let maps { MapServicesSection(model: maps) }
+            storage.id("storage")
+            if let maps { MapServicesSection(model: maps).id("maps") }
             #if os(iOS)
             // D3: the app follows the system's appearance; its language is the system's per-app setting
             Section {
@@ -114,6 +150,7 @@ struct SettingsView: View {
             } footer: {
                 Text(say(.accountSettingsAppearanceSub))
             }
+            .id("appearance")
             #endif
             Section {
                 Button(role: .destructive) { actions.signOutHere() } label: {
@@ -513,10 +550,10 @@ struct SettingsPage: View {
         Group {
             if let state = model.settings {
                 #if os(macOS)
-                SettingsView(state: state, actions: model, maps: model)
+                SettingsView(state: state, actions: model, maps: model, scrollTo: model.settingsAnchor) { model.settingsAnchor = nil }
                 #else
                 NavigationStack {
-                    SettingsView(state: state, actions: model, maps: model)
+                    SettingsView(state: state, actions: model, maps: model, scrollTo: model.settingsAnchor) { model.settingsAnchor = nil }
                         .navigationTitle(say(.drawerSettings))
                         .toolbar {
                             ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { model.closeSettings() } }
