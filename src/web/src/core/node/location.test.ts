@@ -16,6 +16,7 @@ import {
   isUserIdToken,
   PEOPLE_SEGMENT,
   TENANT_SCOPE,
+  PERSONAL_SCOPE,
 } from './location'
 import { breadcrumbOf } from './browse'
 import { registry } from '../applications/registry'
@@ -25,9 +26,6 @@ import { DROPBOX_KIND } from '../../features/depot/kinds'
 import type { TreeNode } from './tree'
 import { treeNode } from '../../test/models'
 import { testApp } from '../../test/testApplication'
-
-// A concrete personal token — any `~<username>` parses as personal (ADR 0023); `~me` is the fallback.
-const PERSONAL_SCOPE = '~me'
 
 const node = (id: string, name: string, parentId: string | null, kind: NodeKind = FOLDER_KIND, createdAt = 0): TreeNode => treeNode({
   id, name, parentId, kind, orderIndex: 0, epoch: 0, wrappedContentKey: 'eA==', wrappedMeta: null, metaRevision: 0, placementRevision: 0, createdAt,
@@ -62,7 +60,7 @@ describe('parseHash', () => {
   it('keeps the trailing slash — it marks the target as a folder — in every scope, and never on the scope root', () => {
     expect(parseHash('#urlaube/')).toEqual({ scope: TENANT_SCOPE, segments: ['urlaube'], folder: true })
     expect(parseHash('#reisen-2026/sommer/')).toEqual({ scope: TENANT_SCOPE, segments: ['reisen-2026', 'sommer'], folder: true })
-    expect(parseHash('#~kevin/reisen-2026/')).toEqual({ scope: '~kevin', segments: ['reisen-2026'], folder: true })
+    expect(parseHash('#~me/reisen-2026/')).toEqual({ scope: PERSONAL_SCOPE, segments: ['reisen-2026'], folder: true })
     expect(parseHash('#%40familie/sommer/')).toEqual({ scope: '@familie', segments: ['sommer'], folder: true })
     // the written-out leading slash of the grammar (`#/foo/memory/`) reads as `#foo/memory/`
     expect(parseHash('#/foo/memory/')).toEqual({ scope: TENANT_SCOPE, segments: ['foo', 'memory'], folder: true })
@@ -89,7 +87,6 @@ describe('buildHash', () => {
   it('keeps the leading token for personal / group fragments, unencoded', () => {
     expect(buildHash(PERSONAL_SCOPE, [])).toBe('#~me')
     expect(buildHash(PERSONAL_SCOPE, ['reisen-2026', 'rom'])).toBe('#~me/reisen-2026/rom')
-    expect(buildHash('~kevin', ['reisen-2026'])).toBe('#~kevin/reisen-2026')
     expect(buildHash('@familie', [])).toBe('#@familie')
     expect(buildHash('@familie', ['sommer'])).toBe('#@familie/sommer')
     expect(parseHash(buildHash('@familie', ['sommer']))).toEqual({ scope: '@familie', segments: ['sommer'], folder: false })
@@ -109,12 +106,22 @@ describe('buildHash', () => {
   })
 
   it('round-trips with parseHash, the slash included', () => {
-    for (const scope of [TENANT_SCOPE, PERSONAL_SCOPE, '~kevin', '@familie']) {
+    for (const scope of [TENANT_SCOPE, PERSONAL_SCOPE, '@familie']) {
       for (const folder of [false, true]) {
         const segments = ['reisen-2026', 'memories', 'rom']
         expect(parseHash(buildHash(scope, segments, folder))).toEqual({ scope, segments, folder })
       }
     }
+  })
+})
+
+// The personal space's address names nobody (ADR 0015, amended 2026-11-18): `~me` is its one token, and a `~` with
+// anything else (a username, as links carried before) is no scope token - a segment of the tenant that resolves nothing.
+describe('the personal scope token', () => {
+  it('is `~me` alone', () => {
+    expect(parseHash('#~me/steuern/')).toEqual({ scope: PERSONAL_SCOPE, segments: ['steuern'], folder: true })
+    expect(parseHash('#~kevin/steuern/')).toEqual({ scope: TENANT_SCOPE, segments: ['~kevin', 'steuern'], folder: true })
+    expect(parseHash('#~')).toEqual({ scope: TENANT_SCOPE, segments: ['~'], folder: false })
   })
 })
 
@@ -129,7 +136,7 @@ describe('a fragment through the router', () => {
     ['a group root', '@familie-sued', [], false, '#@familie-sued'],
     ['a folder in a group', '@familie-sued', ['grillfest'], true, '#@familie-sued/grillfest/'],
     ['a group addressed by its id', '@0f8fad5b-d9cb-469f-a165-70867728950e', ['grillfest'], true, '#@0f8fad5b-d9cb-469f-a165-70867728950e/grillfest/'],
-    ['a folder in the personal space', '~kevin.r_2', ['steuern'], true, '#~kevin.r_2/steuern/'],
+    ['a folder in the personal space', PERSONAL_SCOPE, ['steuern'], true, '#~me/steuern/'],
     ['a chapter of a Memory in the tenant', TENANT_SCOPE, ['reisen-2026', 'memories', 'rom', 'erster-tag'], false, '#reisen-2026/memories/rom/erster-tag'],
     ['a chapter of a Memory in a group', '@familie-sued', ['memories', 'rom', 'erster-tag'], false, '#@familie-sued/memories/rom/erster-tag'],
   ]
@@ -386,7 +393,7 @@ describe('the route grammar', () => {
   it('extends a Memory\'s path with its chapters and states the application segment once', () => {
     expect(hashOf(mixed, 'c-1')).toBe('#foo/memories/memory/tag-1')
     expect(slugPathOf(mixed, 'c-1')).toEqual(['foo', 'memories', 'memory', 'tag-1'])
-    expect(hashOf(mixed, 'c-1', '~kevin')).toBe('#~kevin/foo/memories/memory/tag-1')
+    expect(hashOf(mixed, 'c-1', PERSONAL_SCOPE)).toBe('#~me/foo/memories/memory/tag-1')
     expect(resolveHash(mixed, '#foo/memories/memory/tag-1')).toBe('c-1')
     expect(resolveHash(mixed, '#foo/memories/memory/memories/tag-1')).toBe(false) // the segment is not repeated below
   })
@@ -413,7 +420,7 @@ describe('the route grammar', () => {
   })
 
   it('round-trips every node of the mixed parent, in every kind of scope and either list order', () => {
-    for (const scope of [TENANT_SCOPE, PERSONAL_SCOPE, '~kevin', '@familie']) {
+    for (const scope of [TENANT_SCOPE, PERSONAL_SCOPE, '@familie']) {
       for (const list of [mixed, [...mixed].reverse()]) {
         const seen = new Set<string>()
         for (const n of list) {
@@ -485,8 +492,8 @@ describe('the route grammar', () => {
       node('tag', 'Tag', 'rom', CHAPTER_KIND, 5),
     ]
     expect(hashOf(t, 'deep', '@familie')).toBe('#@familie/a/b/box/anna/deep/')
-    expect(hashOf(t, 'tag', '~kevin')).toBe('#~kevin/a/b/memories/rom/tag')
-    for (const scope of [TENANT_SCOPE, '~kevin', '@familie']) {
+    expect(hashOf(t, 'tag', PERSONAL_SCOPE)).toBe('#~me/a/b/memories/rom/tag')
+    for (const scope of [TENANT_SCOPE, PERSONAL_SCOPE, '@familie']) {
       for (const n of t) expect(resolveHash(t, hashOf(t, n.id, scope)), `${n.id} in ${scope}`).toBe(n.id)
     }
     // a drop box has children although it is no folder: its path continues
@@ -558,11 +565,11 @@ describe('a person\'s profile: #people/<username>', () => {
     expect(isUserIdToken(UID.replace(/-/g, ''))).toBe(false)
   })
 
-  it('is no path of the tree: other shapes stay plain segments, and a foreign ~username stays a personal-scope token', () => {
+  it('is no path of the tree: other shapes stay plain segments, and a `~username` is never a profile', () => {
     expect(parseHash('#people').person).toBeUndefined()
     expect(parseHash(`#people/${UID}/more`).person).toBeUndefined()
-    expect(parseHash(`#~kevin/people/${UID}`)).toEqual({ scope: '~kevin', segments: ['people', UID], folder: false })
-    expect(parseHash('#~anna')).toEqual({ scope: '~anna', segments: [], folder: false })
+    expect(parseHash(`#~me/people/${UID}`)).toEqual({ scope: PERSONAL_SCOPE, segments: ['people', UID], folder: false })
+    expect(parseHash('#~anna').person).toBeUndefined()
   })
 
   it('reserves the word at a scope root: a folder, file or drop box called "People" is numbered, never "people"', () => {

@@ -89,7 +89,7 @@ gaps:
     Lane L1's browser suite (`tests/e2e/tests/features/platform/node-urls.spec.ts`) drives `switch-space-by-fragment` in Chromium
     against the release candidate's two images, installed through `veyqctl` (ADR 0090): the address grammar of ADR 0015
     (a folder's slash, a Memory's `memories/`, a reserved name numbered, a file and a folder of one slug apart, two
-    files of one slug numbered by creation, a folder's address without its slash, the personal space's `~<username>`
+    files of one slug numbered by creation, a folder's address without its slash, the personal space's `~me`
     and a group's `@<slug>` with a folder in each, a chapter below its Memory), each address written by a click and
     opened cold in a new document. The group step caught what no unit test had: `buildHash` wrote the `@` as `%40` and
     vue-router encoded the `%` again (`#%2540…`); `src/core/node/location.test.ts` now runs each fragment through the

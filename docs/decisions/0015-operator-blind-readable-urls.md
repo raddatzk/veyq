@@ -33,21 +33,24 @@ Considered and rejected during refinement:
 **The in-shell content path lives in the URL `#fragment`, resolved entirely client-side; top-level (auth)
 routes stay history-mode.**
 
-- The current tree position is encoded in `location.hash`: `#~kevin/reisen-2026/memories/rom` (a **`~username`**
-  personal scope), `#@familie/sommer` (a group scope). The browser **never transmits the fragment** in
+- The current tree position is encoded in `location.hash`: `#~me/reisen-2026/memories/rom` (the **personal**
+  scope), `#@familie/sommer` (a group scope). The browser **never transmits the fragment** in
   an HTTP request — so the readable, name-derived slugs, and which scope and node a load opens, never reach the
-  operator's request line or access log, while the path stays bookmarkable. (The username itself is not hidden: it
-  is plaintext on the server, [ADR 0023](0023-per-tenant-member-identity.md).) On operator-served web this holds
+  operator's request line or access log, while the path stays bookmarkable. (The username a profile's
+  address carries is not hidden: it is plaintext on the server, [ADR 0023](0023-per-tenant-member-identity.md).) On operator-served web this holds
   against a passive operator only: an active one serves the code that reads the fragment
-  ([ADR 0026](0026-client-trust-tiers.md)). `~<username>` + `@<group>` + the folder/Memory slugs live only in the
+  ([ADR 0026](0026-client-trust-tiers.md)). `~me` + `@<group>` + the folder/Memory slugs live only in the
   fragment. **The token-less fragment** (a bare `#urlaube`, and `/` at the root) selects the shared **`TENANT`**
   space — the default home, [ADR 0019](0019-token-less-tenant-home.md).
-- **`~<username>` is the personal scope's token, never a profile.** The personal scope is addressed by the
-  caller's own per-tenant `username` ([ADR 0023](0023-per-tenant-member-identity.md)) — the sidebar builds
-  `#~<own-username>`; `~me` stays a valid fallback where the handle is unknown. Another member's `~username`
-  resolves to nothing openable: a person's profile is its own fragment
-  ([ADR 0083](0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) decision 5). A `username`
-  change re-slugs your personal path (old bookmarks may miss) — acceptable for a client-side convenience path.
+- **`~me` is the personal scope's token, the same for every member (amended 2026-11-18, owner).** The personal
+  space's address names nobody: the sidebar builds `#~me`, and every link into the space is `#~me/…`. It was
+  `#~<own-username>` ([ADR 0023](0023-per-tenant-member-identity.md)) until 2026-11-18, which was never the plan the
+  owner had made ([ADR 0019](0019-token-less-tenant-home.md) already wrote `~me`) and bought nothing: the space is
+  nobody else's to open, so a username in its address only put the member's handle into every screenshot and copied
+  link, and a `username` change broke every bookmark into it. `~me` is the only personal token: an address an older
+  link wrote (`#~kevin/…`) is no longer read, and opens the shared space's root, as any path that resolves nothing
+  does (no compatibility kept, owner 2026-11-18). A `~` token is never a profile: a person's profile is its own
+  fragment ([ADR 0083](0083-memory-participants-are-a-sealed-list-in-the-memorys-metadata.md) decision 5).
 - **Resolution is local.** The client walks its **decrypted** tree, re-slugifying each child's name to match a
   segment — exactly the navigation the operator-blind server can't do. The server is never consulted to resolve
   a path; it only serves the per-scope opaque node rows ([ADR 0012](0012-content-key-hierarchy.md)).
@@ -77,7 +80,7 @@ routes stay history-mode.**
   [en.platform.node-tree § Addressing](../features/platform/enablers/en.platform.node-tree.md#addressing-urls).
 - **The grammar of a node's path: a folder ends in a slash, an application puts its slug before its nodes,
   Depot has none.** The path stays in the fragment, readable and resolved client-side exactly as above, after the
-  scope token (token-less tenant, `~username`, `@group`). What follows the token is:
+  scope token (token-less tenant, `~me`, `@group`). What follows the token is:
   - **A folder** is its slug path with a **trailing slash**: folder `memory` in `foo` is `#foo/memory/`.
   - **A Depot node** (a file, a drop box) is its plain slug, no segment and no slash: `#foo/memory`. Depot is an
     explicit, documented exception — it **declares** that it has no segment, so that absence is a choice the
@@ -105,7 +108,7 @@ routes stay history-mode.**
     node unless a file shares the slug.
   - **Rejected: history-mode node URLs** (`/<app-slug>/:nodeId`, with no name, title or place in a URL). They
     would put the node id into the operator's access logs on every hard load, need a scope lookup (an endpoint, a
-    probe or a scope in the path) and a replacement for `~username`, and contradict this ADR's reason for the
+    probe or a scope in the path) and a replacement for `~me`, and contradict this ADR's reason for the
     fragment. A segment-less Memory bookmark (`#foo/rom`) does not resolve and falls back to the scope root.
 - **History-mode for the top level.** `/`, `/login`, `/setup`, … stay real paths; only the content position
   rides the fragment. The shell renders **browse or detail by the resolved node's `kind`** — no per-node route.
@@ -122,8 +125,8 @@ routes stay history-mode.**
 - **No server navigation, no server slug for the path.** The server keeps serving opaque per-scope node rows;
   all path semantics are client-side. (The blinded `slug_token` it *does* store is for per-parent uniqueness,
   not navigation.)
-- **`@group` is the routing seam for groups** ([ADR 0014](0014-group-scopes-and-governance.md)), **`~username`**
-  for the caller's personal scope ([ADR 0023](0023-per-tenant-member-identity.md)) and **`#people/<username>`** for
+- **`@group` is the routing seam for groups** ([ADR 0014](0014-group-scopes-and-governance.md)), **`~me`**
+  for the caller's personal scope and **`#people/<username>`** for
   a person's profile (ADR 0083; a user id where no username can stand).
 - **Limitation:** slugs are lossy + name-derived; the displayed label always comes from the decrypted name, not
   the slug. A name change changes the slug (old bookmarks to a renamed node may miss) — acceptable for a

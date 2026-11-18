@@ -16,7 +16,7 @@
 // folder; `…/a-b/x` always reads `a-b` as a folder (a file has no children) — see {@link resolveSlugPath}.
 //
 // The leading token selects the scope (ADR 0015 + ADR 0019): its **absence** is the shared **tenant** scope
-// (the token-less default home — `/`, `#urlaube`), `~<username>` (or `~me`) is the personal scope, and `@<group>` a
+// (the token-less default home — `/`, `#urlaube`), `~me` is the personal scope, and `@<group>` a
 // group: its name's slug when no other of the member's groups shares it, else its scope id (`openGroupByToken`,
 // `features/spaces/scopes.ts`). `slugify` emits only `[a-z0-9-]`, so a folder slug can never start with `~`/`@` and
 // thus never collides with a scope token.
@@ -35,17 +35,15 @@ import { slugify } from '../../shared/naming'
 import { registry } from '../applications/registry'
 import { FOLDER_KIND } from './kind'
 
-/** A personal scope token is `~<username>` (ADR 0023) — your own opens your personal scope; a foreign one is still a
- *  personal-scope token, never a profile (a person's profile is `#people/<username>`, ADR 0083). `~me` remains a valid
- *  fallback token (it also starts with `~`). */
+/** The personal scope's one token (ADR 0015, amended 2026-11-18): `#~me`, the same for every member, never a username -
+ *  the space is nobody else's to open, so its address names nobody, and a renamed member keeps their bookmarks. */
+export const PERSONAL_SCOPE = '~me'
+/** The token selects the personal scope. Only `~me` does: an address with any other `~…` token (a username, as links
+ *  carried before 2026-11-18) is no scope token and opens nothing. Never a profile: that is `#people/<username>` (ADR 0083). */
 export function isPersonalScope(token: string): boolean {
-  return token.startsWith('~')
+  return token === PERSONAL_SCOPE
 }
-/** Build the personal-scope token for a username (`~kevin`); falls back to `~me` when the handle is unknown. */
-export function personalScope(username?: string): string {
-  return `~${username || 'me'}`
-}
-/** The token-less scope marker (ADR 0019): the absence of a leading `~<username>`/`@` token *is* the tenant selector. */
+/** The token-less scope marker (ADR 0019): the absence of a leading `~me`/`@` token *is* the tenant selector. */
 export const TENANT_SCOPE = ''
 
 export type ContentLocation = {
@@ -89,14 +87,14 @@ export function parseHash(hash: string): ContentLocation {
   const slash = raw.endsWith('/')
   if (parts.length === 0) return { scope: TENANT_SCOPE, segments: [], folder: false }
   const [head, ...rest] = parts
-  // A leading scope token (`~<username>` / `@group`) selects the scope; no token → the token-less tenant scope,
+  // A leading scope token (`~me` / `@group`) selects the scope; no token → the token-less tenant scope,
   // and every part is a slug under the tenant root.
   if (isPersonalScope(head) || head.startsWith('@')) return { scope: head, segments: rest, folder: slash && rest.length > 0 }
   if (parts.length === 2 && head === PEOPLE_SEGMENT) return { scope: TENANT_SCOPE, segments: [], folder: false, person: parts[1] }
   return { scope: TENANT_SCOPE, segments: parts, folder: slash }
 }
 
-/** Build the fragment for a scope + path. Tenant is token-less (`#urlaube`, `''` at the root); `~<username>`/`@<group>`
+/** Build the fragment for a scope + path. Tenant is token-less (`#urlaube`, `''` at the root); `~me`/`@<group>`
  *  carry their leading token (`#~me/reisen-2026/memories/rom`, `#@familie/sommer`). `folder`: the target is a folder,
  *  marked by a trailing slash (`#reisen-2026/`) — meaningless at the scope root, which has no segment to end.
  *

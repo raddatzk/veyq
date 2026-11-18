@@ -14,9 +14,9 @@
 //   - **older address forms**: a folder's address without its slash still opens it when no file has that slug (the form
 //     every folder address had before the slash); a Memory's old address without `memories/` is not kept — it opens the
 //     space's root, the consequence the inbox row and ADR 0015 state;
-//   - **the scope prefixes**: the personal space is `#~<username>` (the owner's own handle, read from Your profile, never
-//     `~me` once it is known) and a folder in it `#~<username>/…/`; a group is `#@<its name's slug>` (unique among the
-//     member's groups) and a folder in it `#@…/…/`;
+//   - **the scope prefixes**: the personal space is `#~me` for every member, no username in it (ADR 0015, amended
+//     2026-11-18), and a folder in it `#~me/…/`; a group is `#@<its name's slug>` (unique among the member's groups)
+//     and a folder in it `#@…/…/`;
 //   - **a chapter** extends its Memory's address without repeating the route slug: `#adressbuch-…/memories/rom-im-mai-…/
 //     erster-tag-…`.
 //
@@ -27,7 +27,7 @@ import { test } from '../../../src/cspViolations'
 import { randomBytes } from 'node:crypto'
 import { recordTyped } from '../../../src/canaries'
 import { createFolder, downloadButton, pickFiles } from '../../../src/depot'
-import { newDevice, openSettings, signInOwner, tenantOrigin, type Device } from '../../../src/devices'
+import { newDevice, signInOwner, tenantOrigin, type Device } from '../../../src/devices'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -165,22 +165,16 @@ test(
 )
 
 test(
-  'the personal space is ~username: its root and a folder in it, written by a click and opened cold',
+  'the personal space is ~me: its root and a folder in it, written by a click and opened cold',
   { tag: '@uc.spaces.switch-spaces:switch-space-by-fragment' },
   async () => {
     const { page } = member
-    // The owner's handle, as Your profile shows it: the token the grammar promises, not the one the sidebar happens to build.
-    await openSettings(page, 'Your profile')
-    const handle = page.locator('input[name="username"]')
-    await expect(handle).not.toHaveValue('', { timeout: 60_000 })
-    const username = await handle.inputValue()
-    const personal = `#~${username}`
+    const personal = '#~me'
     const folder = `${personal}/steuern-${stamp}/`
 
     await page.goto(tenantOrigin())
     const link = page.locator('a.sidebar-personal-link')
-    // Until the profile is read the link falls back to `~me`; the click is made once it names the owner.
-    await expect(link).toHaveAttribute('href', new RegExp(`#~${username}$`), { timeout: 60_000 })
+    await expect(link).toHaveAttribute('href', /#~me$/, { timeout: 60_000 })
     await link.click()
     await expectAddress(page, personal)
     await createFolder(page, personalFolder)

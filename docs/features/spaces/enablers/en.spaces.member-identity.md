@@ -14,7 +14,7 @@
 - **Serves (use-cases/enablers):** the member directory of [uc.spaces.add-member](../use-cases/uc.spaces.add-member.md),
   editing your own handle and name in [uc.spaces.edit-profile](../use-cases/uc.spaces.edit-profile.md),
   the **group member-add username search** ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §5),
-  and the person/profile view (built at `#people/<username>`, ADR 0083, not the `~username` of
+  and the person/profile view (built at `#people/<username>`, ADR 0083, never a `~` token of
   [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md)).
 - **Depends on:** [uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md) +
   [uc.spaces.add-member](../use-cases/uc.spaces.add-member.md) (the tenant-join flows where a username is chosen),
