@@ -100,10 +100,14 @@ pub fn hit(frames: &[Frame], x: f64, y: f64) -> Option<Anchor> {
     Some(Anchor { page, x: px, y: py })
 }
 
-/// The page a drag over the column's point (x, y) reaches: the one it is over, or above the first or below the last
-/// the nearest, its point held within that page — a drag past the pages selects to their edge.
+/// The page a drag over the column's point (x, y) reaches: the one it is over, in the gap below a page that page, above
+/// the first the first and below the last the last, its point held within that page — a drag past the pages selects to their edge.
 pub fn reach(frames: &[Frame], x: f64, y: f64) -> Option<Anchor> {
-    let page = frames.iter().position(|f| y < f.y + f.height).unwrap_or(frames.len().checked_sub(1)?);
+    if frames.is_empty() {
+        return None;
+    }
+    // the last page whose top is above the point: in a gap the page before it, above the first page the first
+    let page = frames.iter().rposition(|f| y >= f.y).unwrap_or(0);
     let (px, py) = frames[page].point(x, y);
     Some(Anchor { page, x: px, y: py })
 }
@@ -409,9 +413,12 @@ impl PdfText {
 mod tests {
     use super::*;
 
+    /// A Letter page's height laid out 720 wide.
+    const LETTER_HEIGHT: f64 = 720.0 * 792.0 / 612.0;
+
     /// A US Letter page (612 × 792 points) laid out 720 wide at the column's top, as the file page lays it out.
     fn letter(y: f64) -> Frame {
-        Frame { x: 0.0, y, width: 720.0, height: 931.76, page_width: 612.0, page_height: 792.0 }
+        Frame { x: 0.0, y, width: 720.0, height: LETTER_HEIGHT, page_width: 612.0, page_height: 792.0 }
     }
 
     #[test]
@@ -436,16 +443,16 @@ mod tests {
 
     #[test]
     fn a_press_finds_its_page_and_point() {
-        let frames = [letter(12.0), letter(12.0 + 931.76 + 12.0)];
+        let frames = [letter(12.0), letter(12.0 + LETTER_HEIGHT + 12.0)];
         let scale = 720.0 / 612.0;
         let at = hit(&frames, 72.0 * scale, 12.0 + 100.0 * scale).unwrap();
         assert_eq!(at.page, 0);
         assert!((at.x - 72.0).abs() < 1e-9 && (at.y - 100.0).abs() < 1e-9, "{at:?}");
-        let at = hit(&frames, 300.0 * scale, 12.0 + 931.76 + 12.0 + 50.0 * scale).unwrap();
+        let at = hit(&frames, 300.0 * scale, 12.0 + LETTER_HEIGHT + 12.0 + 50.0 * scale).unwrap();
         assert_eq!(at.page, 1);
         assert!((at.x - 300.0).abs() < 1e-9 && (at.y - 50.0).abs() < 1e-9, "{at:?}");
         // the gap between two pages and the margin above the first start nothing
-        assert_eq!(hit(&frames, 100.0, 12.0 + 931.76 + 6.0), None);
+        assert_eq!(hit(&frames, 100.0, 12.0 + LETTER_HEIGHT + 6.0), None);
         assert_eq!(hit(&frames, 100.0, 4.0), None);
     }
 
@@ -459,9 +466,9 @@ mod tests {
 
     #[test]
     fn a_drag_past_the_pages_reaches_their_edge() {
-        let frames = [letter(12.0), letter(12.0 + 931.76 + 12.0)];
+        let frames = [letter(12.0), letter(12.0 + LETTER_HEIGHT + 12.0)];
         // in the gap below page one: still page one, at its foot
-        let at = reach(&frames, 100.0, 12.0 + 931.76 + 6.0).unwrap();
+        let at = reach(&frames, 100.0, 12.0 + LETTER_HEIGHT + 6.0).unwrap();
         assert_eq!((at.page, at.y), (0, 792.0));
         // above the first page: its top
         let at = reach(&frames, 100.0, -50.0).unwrap();
