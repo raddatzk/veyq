@@ -3,6 +3,8 @@ package me.raddatz.veyq.mobile.account
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertNotNull
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.hex
@@ -17,8 +19,37 @@ class KitFixtureTest : KitFixtureCases() {
     override fun fixture(name: String): ByteArray =
         File(System.getProperty("veyq.repoRoot") ?: error("veyq.repoRoot is not set"), "src/web/src/features/account/emergencyKit/__fixtures__/$name").readBytes()
 
+    override val recording: Boolean = System.getenv("VEYQ_WRITE_FIXTURES") == "1"
+
     @Test
     fun aPrintedKitIsReadThroughTheQrOnItsDrawnPage() = readThroughItsQr("kit-printed.pdf")
+
+    /**
+     * The kit the core wrote, its token blanked out of the bytes (same length, so every offset holds): neither the raw
+     * bytes nor the `Keywords` carry it, so the kit can only come from the QR the writer drew, on the page PDFBox draws.
+     */
+    @Test
+    fun theKitTheCoreWroteIsReadThroughTheQrItDrew() = runTest {
+        val bytes = withoutToken(fixture("kit-app.pdf"))
+        assertFalse("veyqkit:" in String(bytes, Charsets.ISO_8859_1))
+        assertNull(KitPdf.parse(bytes).keywords()?.takeIf { "veyqkit:" in it })
+        val drawing = PdfBoxPictures(bytes)
+        val found = assertNotNull(KitImport.read(testPrimitives, bytes, drawing), "kit-app.pdf: no kit read from its page")
+        assertEquals("alex.beispiel@example.org", found.kit.email)
+        assertEquals(KitImportTest.KEY_HEX, hex(found.kit.secretKey))
+        assertEquals("https://familie.example.org", found.kit.server)
+        assertEquals(KitImport.ServerFrom.TOKEN, found.serverFrom)
+        assertEquals(listOf(KitImport.PICTURE_PIXELS), drawing.widths.distinct())
+        found.kit.wipe()
+    }
+
+    /** [bytes] with every `veyqkit:` token's letters overwritten by `x` — the file's length and offsets unchanged. */
+    private fun withoutToken(bytes: ByteArray): ByteArray {
+        val out = bytes.copyOf()
+        val text = String(bytes, Charsets.ISO_8859_1)
+        for (m in Regex("veyqkit:[A-Za-z0-9_-]*").findAll(text)) for (i in m.range) out[i] = 'x'.code.toByte()
+        return out
+    }
 
     @Test
     fun aPhotographedKitIsReadThroughTheQrOnItsDrawnPage() = readThroughItsQr("kit-photo.pdf")
