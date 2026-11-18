@@ -20,10 +20,4 @@ object ShellWords {
      */
     fun switcherSubtitle(space: SpaceRef?, tenant: String, server: String): String =
         if (space?.kind == "TENANT") server else "$tenant · $server"
-
-    /** Search's hits: the objects whose name holds the query, any case; none for a blank query. */
-    fun search(objects: List<ObjectRef>, query: String): List<ObjectRef> {
-        val q = query.trim()
-        return if (q.isEmpty()) emptyList() else objects.filter { it.name.contains(q, ignoreCase = true) }
-    }
 }

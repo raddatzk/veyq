@@ -738,7 +738,6 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             Call.ShellRefresh -> shell?.refresh(people = true).done()
             Call.ShellOfflineGoneSeen -> shell?.goneSeen().done()
             Call.HomeGroups -> shell?.current?.let { Answer.Groups(it.lists.groups(it.shell)) } ?: noTenant
-            is Call.SearchQuery -> shell?.current?.let { Answer.Hits(ShellWords.search(it.lists.objects, call.query)) } ?: noTenant
             Call.SearchOpen -> tenant.value?.models?.search?.let { make ->
                 val id = ids.incrementAndFetch()
                 searches.put(id, HeldSearch(make(parts.words)))

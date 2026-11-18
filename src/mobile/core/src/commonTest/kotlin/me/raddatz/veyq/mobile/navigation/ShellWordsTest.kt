@@ -27,13 +27,6 @@ class ShellWordsTest {
     }
 
     @Test
-    fun search_finds_a_name_in_any_case_after_trimming_and_nothing_for_blank() {
-        val objects = listOf(ObjectRef("s", "1", "EXPENSES_POT", ApplicationId.EXPENSES, "Amsterdam"), ObjectRef("s", "2", "FILE", ApplicationId.DEPOT, "notes.txt"))
-        assertEquals(listOf("1"), ShellWords.search(objects, "  amSTER ").map { it.nodeId })
-        assertEquals(emptyList(), ShellWords.search(objects, "   "))
-    }
-
-    @Test
     fun tabs_and_applications_have_their_words_and_new_offers_what_a_level_creates() {
         assertEquals(Msg.TAB_MEMORIES_ALL, AppKinds.tabWord(BarTab("memories.all"), null))
         assertEquals(Msg.TAB_EXPENSES_SETTINGS, AppKinds.tabWord(BarTab("expenses.settings"), null))

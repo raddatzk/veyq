@@ -1,7 +1,7 @@
 // The shell (ADR 0122; ADR 0123's Consequences, the Windows app), Fluent's way, as Windows' own Settings and Explorer
 // draw theirs: a NavigationView whose pane is Left, LeftCompact or LeftMinimal by the window's width (its own
 // thresholds), holding the one switcher (spaces and tenants; the signed-in member's picture beside them) as its header,
-// Search as its AutoSuggestBox (Ctrl+E, Ctrl+F), Home, Favorites, Recent and the applications as its items, and Settings
+// Search as its AutoSuggestBox (Ctrl+E, Ctrl+F; SearchBox, its chips a row at the top of the content), Home, Favorites, Recent and the applications as its items, and Settings
 // at its foot, which opens the account's Settings (AccountSettingsPage) in the content. The content shows what the core's
 // shell says is open — Home, an application's list, a Pot, a file
 // (FilePage), a drop box (DropBoxPage), a Memory or a chapter (MemoryPage, its lightbox LightboxView), or an object this app does not draw yet — under its title and a CommandBar whose first command is New; an
@@ -37,6 +37,8 @@ internal sealed class ShellView
     private readonly TextBlock _switcherSubtitle;
     private readonly ProgressRing _switching;
     private readonly AutoSuggestBox _search;
+    /// <summary>The search over every space (ADR 0146): the box's list, the chips' row, the model in the core.</summary>
+    private readonly SearchBox _searchBox;
     private readonly TextBlock _title;
     private readonly CommandBar _commands;
     private readonly PersonPicture _me;
@@ -82,7 +84,6 @@ internal sealed class ShellView
     private NodeHeader? _undoing;
     private ShellShown? _shown;
     private ShellModelState? _state;
-    private IReadOnlyList<ObjectRef>? _hits;
     private bool _started;
     private bool _drawing;
 
@@ -127,12 +128,16 @@ internal sealed class ShellView
         _search = new AutoSuggestBox { PlaceholderText = Words.SearchHint(), QueryIcon = new SymbolIcon(Symbol.Find), UpdateTextOnSelect = false };
         AutomationProperties.SetAutomationId(_search, "search");
         AutomationProperties.SetName(_search, Words.TabSearch());
-        _search.TextChanged += (_, _) => Query(_search.Text);
-        _search.QuerySubmitted += (_, e) =>
+        // a result opened shows the content; a settings result opens the account's Settings at its section
+        _searchBox = new SearchBox(_search)
         {
-            // the box hands over the item or, chosen by a click, its content: both carry the hit
-            if (e.ChosenSuggestion is FrameworkElement { Tag: ObjectRef hit }) OpenHit(hit);
-            else if (e.ChosenSuggestion is not null) Log.Write($"a chosen hit reached no hit ({e.ChosenSuggestion.GetType().Name})");
+            Opened = inContent =>
+            {
+                // a node or a person shows in the content: Settings, where it showed, gives way
+                if (inContent) CloseSettings();
+                ClosePaneIfOverlay();
+            },
+            Settings = OpenSettingsAt,
         };
 
         // Settings at the foot, in the app's own words (the pane's built-in item says WinUI's): the account's page, in the
@@ -170,24 +175,29 @@ internal sealed class ShellView
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        // the search's chips at the top of the content frame while one is set (ADR 0146 decision 12)
+        var chips = (FrameworkElement)_searchBox.Chips;
+        content.Children.Add(chips);
+        Grid.SetRow(head, 1);
         content.Children.Add(head);
-        Grid.SetRow(_offline, 1);
+        Grid.SetRow(_offline, 2);
         content.Children.Add(_offline);
-        Grid.SetRow(_gone, 2);
+        Grid.SetRow(_gone, 3);
         content.Children.Add(_gone);
-        Grid.SetRow(_said, 3);
+        Grid.SetRow(_said, 4);
         content.Children.Add(_said);
-        Grid.SetRow(_saving, 4);
+        Grid.SetRow(_saving, 5);
         content.Children.Add(_saving);
-        Grid.SetRow(_offer, 5);
+        Grid.SetRow(_offer, 6);
         content.Children.Add(_offer);
-        Grid.SetRow(_body, 6);
+        Grid.SetRow(_body, 7);
         content.Children.Add(_body);
         // the music bar along the window's bottom edge while the account's player holds a queue (ADR 0142 decision 5)
         _musicBar = new MusicBar(SayForAWhile);
-        Grid.SetRow(_musicBar.View, 7);
+        Grid.SetRow(_musicBar.View, 8);
         content.Children.Add(_musicBar.View);
 
         _nav = new NavigationView
@@ -205,7 +215,13 @@ internal sealed class ShellView
         AutomationProperties.SetAutomationId(_nav, "shell");
         _nav.FooterMenuItems.Add(_settings);
         // LeftMinimal lays back and the pane's button over the content's top left: the title moves beside them
-        _nav.DisplayModeChanged += (_, e) => head.Padding = e.DisplayMode == NavigationViewDisplayMode.Minimal ? MinimalHead : Head;
+        _nav.DisplayModeChanged += (_, e) =>
+        {
+            var minimal = e.DisplayMode == NavigationViewDisplayMode.Minimal;
+            head.Padding = minimal ? MinimalHead : Head;
+            // the chips' row is the content's top: it moves beside them too
+            chips.Margin = new Thickness(minimal ? MinimalHead.Left - Head.Left : 0, 0, 0, 0);
+        };
         // A choice is a selection: a click, the keyboard or UI Automation's SelectionItem (a pane item has no Invoke)
         // all select. ItemInvoked comes first, before the selection moves, so it acts only for the item already
         // selected (Home again, out of a folder), which selects nothing new; a selection the state draws sends nothing.
@@ -290,10 +306,19 @@ internal sealed class ShellView
     }
 
     /// <summary>Opens the account's Settings for the connection the shell shows, in the content.</summary>
-    private void OpenSettings()
+    private void OpenSettings() => OpenSettingsAt(null);
+
+    /// <summary>Opens the account's Settings scrolled to <paramref name="section"/> (SettingsSection.id, a search's
+    /// settings result); a page already open scrolls there.</summary>
+    private void OpenSettingsAt(string? section)
     {
-        if (_account is not null || _shown is not { } shown) return;
-        _account = AccountSettingsPage.Open(_window, shown.connection, () => CloseSettings());
+        if (_account is { } open)
+        {
+            if (section is not null) open.ScrollTo(section);
+            return;
+        }
+        if (_shown is not { } shown) return;
+        _account = AccountSettingsPage.Open(_window, shown.connection, () => CloseSettings(), section);
         Redraw();
     }
 
@@ -324,69 +349,6 @@ internal sealed class ShellView
         _search.Focus(FocusState.Keyboard);
     }
 
-    private void OpenHit(ObjectRef hit)
-    {
-        Act.Send(new Call.ShellOpenAtTop { Ref = hit });
-        // the query is done once its hit opened, as Explorer's box is
-        _search.Text = "";
-        _search.IsSuggestionListOpen = false;
-        ClosePaneIfOverlay();
-    }
-
-    /// <summary>Search over every object's name (ShellWords.search): its hits as the box's suggestions while a query stands.</summary>
-    private async void Query(string query)
-    {
-        if (string.IsNullOrWhiteSpace(query))
-        {
-            _hits = null;
-            _search.ItemsSource = null;
-            return;
-        }
-        Answer answer;
-        try
-        {
-            (answer, _) = await Core.CallAsync(new Call.SearchQuery { query = query });
-        }
-        catch (Exception e)
-        {
-            Log.Write($"Search failed ({e.GetType().Name})");
-            return;
-        }
-        // only the answer to the query still standing
-        if (_search.Text != query) return;
-        if (answer is not Answer.Hits { hits: var hits })
-        {
-            Log.Write($"Search answered {answer.GetType().Name}");
-            return;
-        }
-        _hits = hits;
-        DrawHits();
-    }
-
-    private void DrawHits()
-    {
-        var items = new List<ListViewItem>();
-        if (_hits is { Count: 0 })
-        {
-            var none = new ListViewItem { Content = Words.ListEmpty(), IsEnabled = false };
-            AutomationProperties.SetAutomationId(none, "hits-empty");
-            items.Add(none);
-        }
-        foreach (var h in _hits ?? [])
-        {
-            var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Tag = h };
-            line.Children.Add(HomeView.Glyph(HomeView.KindGlyph(h.kind)));
-            line.Children.Add(new TextBlock { Text = h.name });
-            var item = new ListViewItem { Content = line, Tag = h };
-            AutomationProperties.SetAutomationId(item, $"hit:{h.name}");
-            AutomationProperties.SetName(item, h.name);
-            items.Add(item);
-        }
-        _search.ItemsSource = items;
-        // hits anew under the lists' change open no list the person is not in
-        _search.IsSuggestionListOpen = items.Count > 0 && _search.FocusState != FocusState.Unfocused;
-    }
-
     /// <summary>A switch to another tenant is under way (Gate.Signed.switching).</summary>
     public void Switching(bool on)
     {
@@ -410,8 +372,6 @@ internal sealed class ShellView
         var back = _openBefore && state.shell.openObject is null;
         _openBefore = state.shell.openObject is not null;
         RowDates.Ask($"{shown.connection}\n{shown.tenant.tenantId}\n{string.Join(",", state.lists.objects.Select(o => o.nodeId))}", back, Redraw);
-        // the lists changed under a standing query: its hits anew
-        if (_hits is not null && _search.Text.Length > 0) Query(_search.Text);
         if (first && shown.drawerOpensAtStart && _nav.DisplayMode != NavigationViewDisplayMode.Expanded) _nav.IsPaneOpen = true;
     }
 

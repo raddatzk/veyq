@@ -7,7 +7,8 @@
 // opens the lightbox (LightboxView) in the page's place. The page's "Add photos" (the header's own upload) opens the open
 // picker for photos and videos, and a drop of files onto the page adds them (Memory.Upload) — a dropped folder is said and
 // not taken (the owner, 2026-11-13). A medium trashed (from the lightbox) is out at once with Undo in the shell's
-// InfoBar for as long as the core offers it. The page is read anew live while it stands (Watched.GalleryLive, the web's
+// InfoBar for as long as the core offers it. A medium the search asked for (GalleryShown.searchOpened, ADR 0146 decision
+// 8) opens its lightbox once the rows hold it. The page is read anew live while it stands (Watched.GalleryLive, the web's
 // poll).
 //
 // Under its head the facts line (its date and place, each opening its editor where whoever looks may edit its meta:
@@ -88,6 +89,8 @@ internal sealed class MemoryPage : IDisposable
     private bool _saidShown;
     private bool _purgeAsked;
     private bool _closed;
+    /// <summary>The medium the search asked for that this page opened last (GalleryShown.searchOpened), until the core drops it.</summary>
+    private string? _searchOpened;
     private LightboxView? _lightbox;
     /// <summary>Photos | Music, shown where the node offers its Music view.</summary>
     private readonly SelectorBar _views = new() { Visibility = Visibility.Collapsed };
@@ -231,6 +234,7 @@ internal sealed class MemoryPage : IDisposable
         Draw();
         Relayout();
         StepUploads();
+        OpenSearched();
         if (_shown is { } now && _id is { } id) Changed?.Invoke(now, id);
     }
 
@@ -678,6 +682,25 @@ internal sealed class MemoryPage : IDisposable
         stream.Seek(0);
         await image.SetSourceAsync(stream);
         return image;
+    }
+
+    /// <summary>The search asked for a medium of this page (another Memory's photo opened from its results): its lightbox,
+    /// once, then told seen (Gallery.SearchOpenedSeen).</summary>
+    private void OpenSearched()
+    {
+        var asked = _shown?.searchOpened;
+        if (asked is null || asked == _searchOpened)
+        {
+            _searchOpened = asked;
+            return;
+        }
+        var index = -1;
+        if (_shown?.rows is { } rows) for (var i = 0; i < rows.Count && index < 0; i++) if (rows[i].mediaId == asked) index = i;
+        if (index < 0 || _id is not { } gallery) return;
+        _searchOpened = asked;
+        Log.Write($"the search's medium opens at {index}");
+        OpenLightbox(index);
+        Act.Send(new Call.GallerySearchOpenedSeen { gallery = gallery });
     }
 
     private void OpenLightbox(int index)

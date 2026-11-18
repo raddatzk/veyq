@@ -19,6 +19,9 @@
 //   the account, the section says why (storageUnavailable);
 // - Sign out of this account here.
 //
+// Opened from a search's settings result (ADR 0146 decision 9), the page scrolls to that section: each section's
+// heading is kept by its SettingsSection.id (`account device add-device sessions saved-keys storage maps`).
+//
 // Theme and language follow the system (D3): no card for them. Every state is the core's (Settings.Open,
 // Watched.Settings: SettingsShown), every action one call; why one did not come through is the state's refusal, said in an
 // InfoBar. Linux's account_settings.rs draws the same.
@@ -75,6 +78,13 @@ internal sealed class AccountSettingsPage : IDisposable
 
     public UIElement Page { get; }
 
+    private readonly ScrollViewer _scroll;
+    /// <summary>Each section's heading by its SettingsSection.id, as the last draw built them.</summary>
+    private readonly Dictionary<string, FrameworkElement> _anchors = [];
+    /// <summary>The section a search's result asked for, scrolled to once the page drew; and the tries that wait for it.</summary>
+    private string? _at;
+    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _scrolling;
+
     /// <summary>Settings → Map services, followed while the page shows.</summary>
     private readonly MapServicesSection _maps = new();
 
@@ -116,14 +126,16 @@ internal sealed class AccountSettingsPage : IDisposable
         column.Children.Add(_sections);
         var scroll = new ScrollViewer { Content = column, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         AutomationProperties.SetAutomationId(scroll, "settings-page");
+        _scroll = scroll;
         Page = scroll;
     }
 
     /// <summary>Opens <paramref name="connection"/>'s Settings in the core; <paramref name="closedByCore"/> runs once the
-    /// core closed it (its tenant closed, its account signed out here).</summary>
-    public static AccountSettingsPage Open(Window window, string connection, Action closedByCore)
+    /// core closed it (its tenant closed, its account signed out here). <paramref name="at"/>: the section it scrolls to
+    /// once drawn (a search's settings result, SettingsSection.id).</summary>
+    public static AccountSettingsPage Open(Window window, string connection, Action closedByCore, string? at = null)
     {
-        var page = new AccountSettingsPage(window, closedByCore) { _connection = connection };
+        var page = new AccountSettingsPage(window, closedByCore) { _connection = connection, _at = at };
         page.OfferScan();
         page.OpenIn(connection);
         return page;
@@ -215,9 +227,57 @@ internal sealed class AccountSettingsPage : IDisposable
         }
     }
 
+    /// <summary>Scrolls to <paramref name="section"/>'s heading (SettingsSection.id) once it is laid out; a section this page
+    /// does not show leaves it where it stands. The heading is looked up at each try, not now: every draw builds the
+    /// sections anew, and one just built has no place until the next layout — so it is tried every 100 ms until the
+    /// heading's top is reached (a page still growing, the sessions arriving after it opened, clamps it short and the next
+    /// try goes on), for at most two seconds.</summary>
+    public void ScrollTo(string section)
+    {
+        _scrolling?.Stop();
+        var tries = 0;
+        var timer = _scrolling = _window.DispatcherQueue.CreateTimer();
+        timer.Interval = TimeSpan.FromMilliseconds(100);
+        timer.IsRepeating = true;
+        timer.Tick += (_, _) =>
+        {
+            if (_disposed)
+            {
+                timer.Stop();
+                return;
+            }
+            tries++;
+            if (_last is null && tries < 20) return;
+            if (!_anchors.TryGetValue(section, out var heading))
+            {
+                Log.Write($"settings shows no section {section}");
+                timer.Stop();
+                return;
+            }
+            if (!heading.IsLoaded || heading.ActualHeight <= 0 || _scroll.ScrollableHeight <= 0)
+            {
+                if (tries >= 20)
+                {
+                    Log.Write($"settings' {section} was not laid out in time");
+                    timer.Stop();
+                }
+                return;
+            }
+            // the heading's top in what scrolls: where it shows now plus where the view stands
+            var wanted = heading.TransformToVisual(_scroll).TransformPoint(new Windows.Foundation.Point(0, 0)).Y + _scroll.VerticalOffset;
+            var to = Math.Max(0, Math.Min(wanted, _scroll.ScrollableHeight));
+            _scroll.ChangeView(null, to, null, disableAnimation: true);
+            if (to < wanted - 1 && tries < 20) return;
+            Log.Write($"settings scrolled to {section} at {to:0} of {_scroll.ScrollableHeight:0} (its top at {wanted:0})");
+            timer.Stop();
+        };
+        timer.Start();
+    }
+
     public void Dispose()
     {
         _disposed = true;
+        _scrolling?.Stop();
         _maps.Dispose();
         _storageWatch?.Dispose();
         _storageWatch = null;
@@ -376,6 +436,7 @@ internal sealed class AccountSettingsPage : IDisposable
         _limitHolder?.Children.Remove(_setLimit);
         _limitHolder = null;
         _sections.Children.Clear();
+        _anchors.Clear();
         if (_refusal != s.refusal)
         {
             _refusal = s.refusal;
@@ -385,7 +446,7 @@ internal sealed class AccountSettingsPage : IDisposable
         _sections.Children.Add(_refused);
 
         // Account
-        _sections.Children.Add(Heading(Words.AccountSettingsAccount()));
+        _sections.Children.Add(Anchor("account", Heading(Words.AccountSettingsAccount())));
         var confirmed = s.emailConfirmed switch
         {
             true => Words.AccountSettingsEmailConfirmed(),
@@ -395,7 +456,7 @@ internal sealed class AccountSettingsPage : IDisposable
         _sections.Children.Add(Card("", Words.AccountSettingsEmail(), new[] { s.email, confirmed }.OfType<string>(), "settings-email"));
 
         // This device
-        _sections.Children.Add(Heading(Words.AccountSettingsThisDevice()));
+        _sections.Children.Add(Anchor("device", Heading(Words.AccountSettingsThisDevice())));
         if (_label != s.device)
         {
             // the name is set from the state when it changed, never over what is being typed
@@ -408,7 +469,7 @@ internal sealed class AccountSettingsPage : IDisposable
         // Add a device
         if (s.addDevice)
         {
-            _sections.Children.Add(Heading(Words.AccountSettingsAddDevice()));
+            _sections.Children.Add(Anchor("add-device", Heading(Words.AccountSettingsAddDevice())));
             _sections.Children.Add(Caption(Words.AccountSettingsAddDeviceSub()));
             var show = TextButton(Words.LinkShow(), "settings-link-show");
             show.Click += (_, _) => Link(connection => new Call.LinkShowForNewDevice { connection = connection });
@@ -422,7 +483,7 @@ internal sealed class AccountSettingsPage : IDisposable
         }
 
         // Devices and sessions
-        _sections.Children.Add(Heading(Words.AccountSettingsSessions()));
+        _sections.Children.Add(Anchor("sessions", Heading(Words.AccountSettingsSessions())));
         _sections.Children.Add(Caption(Words.AccountSettingsSessionsSub()));
         if (s.registerRefusal is { } names)
         {
@@ -453,7 +514,7 @@ internal sealed class AccountSettingsPage : IDisposable
         // Devices with a saved key
         if (s.keptDevices.Count > 0 || s.otherSavedKeys)
         {
-            _sections.Children.Add(Heading(Words.AccountSettingsSavedKeys()));
+            _sections.Children.Add(Anchor("saved-keys", Heading(Words.AccountSettingsSavedKeys())));
             _sections.Children.Add(Caption(Words.AccountSettingsSavedKeysSub()));
             foreach (var d in s.keptDevices)
             {
@@ -477,13 +538,27 @@ internal sealed class AccountSettingsPage : IDisposable
 
         // Map services (ADR 0143 decision 2): this device's consent, its own watch
         if (_maps.Panel is FrameworkElement { Parent: Panel holder }) holder.Children.Remove(_maps.Panel);
-        _sections.Children.Add(_maps.Panel);
+        _sections.Children.Add(Anchor("maps", (FrameworkElement)_maps.Panel));
 
         // Sign out
         _sections.Children.Add(Heading(Words.DrawerSignOut()));
         var signOut = TextButton(Words.DrawerSignOut(), "settings-sign-out");
         signOut.Click += (_, _) => Do("sign out here", id => new Call.SettingsSignOutHere { settings = id });
         _sections.Children.Add(signOut);
+
+        // a search's settings result asked for a section: scrolled to once this first draw is laid out
+        if (_at is { } at)
+        {
+            _at = null;
+            ScrollTo(at);
+        }
+    }
+
+    /// <summary>A section's heading kept by its SettingsSection.id, where a search's result scrolls to it.</summary>
+    private FrameworkElement Anchor(string section, FrameworkElement heading)
+    {
+        _anchors[section] = heading;
+        return heading;
     }
 
     /// <summary>"Storage on this device": the limit, the sizes, "Clear cache" and "Remove all offline content", then the
@@ -494,11 +569,11 @@ internal sealed class AccountSettingsPage : IDisposable
         if (s.storage is not { } st)
         {
             if (s.storageUnavailable is not { } why) return;
-            _sections.Children.Add(Heading(Words.AccountSettingsStorage()));
+            _sections.Children.Add(Anchor("storage", Heading(Words.AccountSettingsStorage())));
             _sections.Children.Add(Caption(Said.Key(why)));
             return;
         }
-        _sections.Children.Add(Heading(Words.AccountSettingsStorage()));
+        _sections.Children.Add(Anchor("storage", Heading(Words.AccountSettingsStorage())));
         DrawLimit(s, st);
         _sections.Children.Add(Card("\uE713", Words.AccountSettingsStorageLimit(), [Words.AccountSettingsStorageLimitHint()], "settings-storage-limit-card", out _limitHolder, _limit, _unit, _setLimit));
         foreach (var (glyph, title, bytes, id) in new[]

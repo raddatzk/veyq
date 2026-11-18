@@ -120,8 +120,6 @@ class LiveBridgeTest {
 
         val pots = state.lists.objects.filter { it.application == ApplicationId.EXPENSES }
         val first = pots.first()
-        val hits = b.ask(Call.SearchQuery(first.name.take(4).uppercase())) as Answer.Hits
-        assertTrue(first in hits.hits, "search for ${first.name.take(4)} did not find ${first.name}")
         // the search over the real core (ADR 0146): its index built on the focus, the Pot found by its name, case aside
         // (the seeded Pots share their first letters: a prefix alone ranks two dozen equal, and a page shows ten)
         val search = (b.ask(Call.SearchOpen) as Answer.SearchOpened).search
