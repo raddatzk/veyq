@@ -1274,7 +1274,10 @@ class DispatchTest {
         assertEquals(Answer.Done, b.ask(Call.ShareAskRenew(id, "a")))
         w.until { u -> (u as Update.Share).shown?.takeIf { it.renewing == "a" } }
         assertEquals(Answer.Said(null), b.ask(Call.ShareRenew(id)))
-        val renewed = w.until { u -> (u as Update.Share).shown?.takeIf { it.freshAddress != null && it.renewing == null } }
+        // the new address is set before the links are read again (`ShareSheet.write`): wait for the read too, as the mint does
+        val renewed = w.until { u ->
+            (u as Update.Share).shown?.takeIf { s -> s.freshAddress != null && s.renewing == null && s.links?.any { it.shareId.startsWith("renewed") } == true }
+        }
         assertTrue(renewed.freshAddress!!.startsWith("http://t/s/renewed"))
         assertEquals(1, played.rekeys)
         val fresh = renewed.links!!.first { it.shareId.startsWith("renewed") }.shareId

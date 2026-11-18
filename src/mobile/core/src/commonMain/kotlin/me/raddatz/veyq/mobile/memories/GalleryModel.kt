@@ -400,38 +400,9 @@ class GalleryModel(
     /** The scope's current members as last read (the people line's names, the picker's candidates); null: not read. */
     private var members: List<me.raddatz.veyq.mobile.session.Person>? = null
 
-    /**
-     * What the door last said is on its way here (the placeholders before the listing drops those in). Declared before
-     * `init`: its collector may run on another thread before a later field is set.
-     */
+    /** What the door last said is on its way here (the placeholders before the listing drops those in). */
     private val queuedNow = MutableStateFlow<List<UploadTile>>(emptyList())
     private val queued: List<UploadTile> get() = queuedNow.value
-
-    init {
-        scope.launch { door.revisions.collect { read() } }
-        music?.let { m ->
-            scope.launch {
-                m.player.state.collect { p -> _state.update { it.copy(musicHere = p.nowPlaying?.key == musicKey) } }
-            }
-        }
-        scope.launch { door.uploaded.collect { if (it == node.nodeId) read() } }
-        scope.launch {
-            door.uploading.collect { tiles ->
-                queuedNow.value = tiles
-                _state.update { it.copy(uploading = UploadTile.shown(tiles, it.listedIds)) }
-            }
-        }
-        // the people line follows the participants sealed, the rights and going offline or online
-        scope.launch {
-            state.map { Triple(it.facts?.participants, it.rights, it.offline) }.distinctUntilChanged().collect { people() }
-        }
-        scope.launch {
-            door.online.collect { on ->
-                if (!on) _state.update { it.offline(it.offline ?: me.raddatz.veyq.mobile.session.OfflineAsOf(listedAt)) }
-                else if (current.offline != null) read()
-            }
-        }
-    }
 
     /** When the last listing the server answered was read (epoch ms, [now]'s own clock is no wall clock). */
     private var listedAt: Long? = null
@@ -928,6 +899,37 @@ class GalleryModel(
         closed.value = true
         undoWindow?.cancel()
         scope.cancel()
+    }
+
+    /*
+     * The collectors start last: they run on other threads at once, and Kotlin sets the fields in declaration order — one
+     * declared below an `init` that a collector reaches is still null then (`pending`, `settling`: a read NPE'd), or reset
+     * after the collector set it (`openedSettle`). A field the collectors use may sit anywhere above this block.
+     */
+    init {
+        scope.launch { door.revisions.collect { read() } }
+        music?.let { m ->
+            scope.launch {
+                m.player.state.collect { p -> _state.update { it.copy(musicHere = p.nowPlaying?.key == musicKey) } }
+            }
+        }
+        scope.launch { door.uploaded.collect { if (it == node.nodeId) read() } }
+        scope.launch {
+            door.uploading.collect { tiles ->
+                queuedNow.value = tiles
+                _state.update { it.copy(uploading = UploadTile.shown(tiles, it.listedIds)) }
+            }
+        }
+        // the people line follows the participants sealed, the rights and going offline or online
+        scope.launch {
+            state.map { Triple(it.facts?.participants, it.rights, it.offline) }.distinctUntilChanged().collect { people() }
+        }
+        scope.launch {
+            door.online.collect { on ->
+                if (!on) _state.update { it.offline(it.offline ?: me.raddatz.veyq.mobile.session.OfflineAsOf(listedAt)) }
+                else if (current.offline != null) read()
+            }
+        }
     }
 
     companion object {

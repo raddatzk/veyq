@@ -371,7 +371,9 @@ class MusicDispatchTest {
         val added = b.ask(Call.MusicAdd(m, listOf(song.path, text.path, File(dir, "missing.mp3").path))) as Answer.MusicAdded
         assertEquals(listOf(Notice(Msg.MUSIC_NOT_AUDIO, "notes.mp3")), added.said)
         assertEquals(listOf(song.path), host.all<HostRequest.MediaDuration>().map { it.path }, "the host measured what the core asked")
-        withTimeout(10.seconds) { while ("upload:Song.mp3:audio/mpeg:7000" !in played.sent) delay(10) }
+        // the job records its upload and its trim one after the other: wait for both, never the first alone
+        withTimeout(10.seconds) { while (played.sent.none { it.startsWith("trim:Song.mp3:") }) delay(10) }
+        assertTrue("upload:Song.mp3:audio/mpeg:7000" in played.sent, "${played.sent}")
         // #932: its silent edges found from the two slices the host decoded, never the whole file
         assertTrue("trim:Song.mp3:1000-6000" in played.sent, "the decoded ends were not scanned: ${played.sent}")
         assertEquals(listOf(0L to 7000L, 0L to null), host.all<HostRequest.MediaSlice>().map { it.fromMs to it.toMs }, "the slices asked")
