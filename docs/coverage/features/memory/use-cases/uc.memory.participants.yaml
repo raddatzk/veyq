@@ -58,7 +58,7 @@ acceptanceCriteria:
           - src/features/memories/components/MemoryParticipants.test.ts
           - src/core/people/PersonGroup.test.ts
   - id: profile-route
-    text: A member opens `#people/<username>` (a user id for a former member or a username shaped like one; an id-shaped token is always the id, an id link to a current member is replaced by the username link; the reader also takes `#/people/<token>`), token-less, in the tenant scope's shell; `people` is a reserved route segment (no application can claim it, a folder, file or drop box called "People" at a scope root is numbered `people-2`) and a foreign `~username` stays a personal-scope token.
+    text: A member opens `#people/<username>` (a user id for a former member or a username shaped like one; an id-shaped token is always the id, an id link to a current member is replaced by the username link; the reader also takes `#/people/<token>`), token-less, in the tenant scope's shell; `people` is a reserved route segment (no application can claim it, a folder, file or drop box called "People" at a scope root is numbered `people-2`) and a `~` token is the personal scope (`~me`), never a profile.
     coverage:
       web:
         unit:
