@@ -285,8 +285,11 @@ open (below). The Use pages: [People in your Memories](../../site/src/content/do
   - **Packaging — built** ([ADR 0139](../decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)): an MSIX, x64, self-contained, built `-c Release` through the
     Windows App SDK's own MSBuild tooling, unsigned in Checks and signed at promotion with its block map unchanged; no
     package dependency on the WebP or media extensions (a sideloaded MSIX can depend only on framework packages, and
-    Windows 11 provisions them), so where a person removed one the members' pictures fall back to initials (measured
-    2026-11-11, the decode test's bite) and a format Media Foundation does not decode is said and offered for saving (the
+    Windows 11 provisions them). Where a person removed the WebP one, the core decodes the members' pictures (libwebp's
+    decoder from ADR 0127's pin, `Picture.Decode`; built 2026-11-18, the owner's "decode it ourselves" — before, every member
+    showed initials, measured 2026-11-11); the same gap is still open for a WebP a person uploaded as content (a photo's
+    original, a receipt, a Depot file, a picture picked for tiers, a cover or a banner), which the same call could close.
+    A format Media Foundation does not decode is said and offered for saving (the
     VM decoded VP9/Opus and H.264/AAC and refused ProRes, `C00D5212`, said `file_unsupported`; the app ships no codec:
     patents, the owner's answer of the Depot slice, 2026-11-12). A HEIC photo's tiers need the HEIF and HEVC extensions likewise:
     with both on the VM a HEIC decoded to its tiers, and one WIC does not decode went up alone and shows its kind's glyph

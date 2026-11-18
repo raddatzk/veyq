@@ -146,6 +146,20 @@ val buildUtf8proc = tasks.register<Exec>("buildUtf8proc") {
     commandLine("python3", file("utf8proc/build_utf8proc.py").absolutePath, utf8proc.absolutePath)
 }
 
+// libwebp's decoder for Linux and Windows (core/webp/build_libwebp.py), a member's picture decoded where the platform
+// cannot (`media/WebpPicture.kt`), from the web encoder's pin (src/web/webp-encoder/libwebp.pin): one libwebp in the repository.
+val libwebp = rootDir.resolve("build/libwebp")
+val webpPin = rootDir.resolve("../web/webp-encoder/libwebp.pin").canonicalFile
+val buildLibwebp = tasks.register<Exec>("buildLibwebp") {
+    group = "veyq"
+    description = "Builds libwebp's decoder for Linux (arm64, x86-64) and Windows (x86-64) into src/mobile/build/libwebp."
+    inputs.file("webp/build_libwebp.py").withPropertyName("script")
+    inputs.file("konan_toolchain.py").withPropertyName("toolchain")
+    inputs.file(webpPin).withPropertyName("pin")
+    outputs.dir(libwebp)
+    commandLine("python3", file("webp/build_libwebp.py").absolutePath, libwebp.absolutePath)
+}
+
 /**
  * A cinterop task packs the static library its `-libraryPath` names into the klib but does not take it as an input: a
  * rebuilt library left the old one inside the klib, and the test binary red, until `--rerun` (measured 2026-11-10, the
@@ -196,7 +210,8 @@ kotlin {
     }
 
     // Linux (ADR 0136 decision 4) and Windows (decision 5): libsodium as on Apple — the `sodium` interop commonizes into
-    // `nativeMain` — and utf8proc for the normalization forms, which neither libc has; it commonizes into `bridgedMain`.
+    // `nativeMain` — and utf8proc for the normalization forms, which neither libc has, and libwebp's decoder for a member's
+    // picture where the platform has no WebP codec; both commonize into `bridgedMain`.
     val bridgedSlices = mapOf("linuxArm64" to "linux_arm64", "linuxX64" to "linux_x64", "mingwX64" to "mingw_x64")
     listOf(linuxArm64(), linuxX64(), mingwX64()).forEach { target ->
         val slice = bridgedSlices.getValue(target.name)
@@ -211,6 +226,12 @@ kotlin {
             includeDirs(utf8proc.resolve("$slice/include"))
             extraOpts("-libraryPath", utf8proc.resolve("$slice/lib").absolutePath)
             libraryInput(interopProcessingTaskName, utf8proc.resolve("$slice/lib/libutf8proc.a"))
+        }
+        target.compilations.getByName("main").cinterops.create("webp") {
+            definitionFile.set(file("webp/webp.def"))
+            includeDirs(libwebp.resolve("$slice/include"))
+            extraOpts("-libraryPath", libwebp.resolve("$slice/lib").absolutePath)
+            libraryInput(interopProcessingTaskName, libwebp.resolve("$slice/lib/libwebpdecoder.a"))
         }
     }
 
@@ -357,5 +378,6 @@ tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
 tasks.matching { it.name.startsWith("compile") || it.name.endsWith("SourcesJar") }.configureEach { dependsOn(generateApi, generateMajor, generateTheme, generateWords) }
 tasks.matching { it.name.startsWith("cinteropSodium") }.configureEach { dependsOn(buildLibsodium) }
 // The Linux slices are compiled by Kotlin/Native's own toolchain, which this task downloads (core/konan_toolchain.py).
-listOf(buildLibsodium, buildUtf8proc).forEach { it.configure { dependsOn("downloadKotlinNativeDistribution") } }
+listOf(buildLibsodium, buildUtf8proc, buildLibwebp).forEach { it.configure { dependsOn("downloadKotlinNativeDistribution") } }
 tasks.matching { it.name.startsWith("cinteropUtf8proc") }.configureEach { dependsOn(buildUtf8proc) }
+tasks.matching { it.name.startsWith("cinteropWebp") }.configureEach { dependsOn(buildLibwebp) }

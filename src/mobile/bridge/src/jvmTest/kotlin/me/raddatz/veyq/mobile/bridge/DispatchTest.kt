@@ -107,6 +107,34 @@ class DispatchTest {
 
     private val png = byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 7)
 
+    /**
+     * A WebP the host cannot decode goes in beside the call and comes back as the core's PNG, no tenant needed; no payload,
+     * what the decoder refuses, and a core without one (the JVM's default) are refused. Bitten by a dispatch that ignores
+     * the payload (red: the decoder saw nothing).
+     */
+    @Test
+    fun aPictureTheHostCannotDecodeIsAnsweredAsThePngTheCoreDecoded() = runBlocking {
+        val webp = "RIFF".encodeToByteArray() + ByteArray(4) + "WEBPVP8L".encodeToByteArray()
+        val seen = mutableListOf<List<Byte>>()
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, webp = { bytes ->
+                seen += bytes.toList()
+                if (bytes.contentEquals(webp)) png else null
+            }) { null }
+        }
+        val (answer, bytes) = b.askWithPayload(wire.encodeToString(Call.serializer(), Call.PictureDecode), inbound = webp)
+        assertEquals(Answer.Bytes("image/png"), answer)
+        assertEquals(png.toList(), bytes!!.toList())
+        assertEquals(listOf(webp.toList()), seen, "the decoder got the payload")
+        assertEquals(Answer.Refused(Answer.Why.NOT_A_PICTURE), b.askWith(Call.PictureDecode, "GIF89a".encodeToByteArray()))
+        assertEquals(Answer.Refused(Answer.Why.NOT_A_PICTURE), b.askWith(Call.PictureDecode, null), "no payload")
+        b.shutdown()
+        val none = bridge()
+        assertEquals(Answer.Refused(Answer.Why.NOT_A_PICTURE), none.askWith(Call.PictureDecode, webp), "a core without a decoder")
+        none.shutdown()
+    }
+
     @Test
     fun aMembersPictureIsAnsweredAsBytesBesideTheJsonAndTheLetterIsRefused() = runBlocking {
         val b = bridgeWithTenant()

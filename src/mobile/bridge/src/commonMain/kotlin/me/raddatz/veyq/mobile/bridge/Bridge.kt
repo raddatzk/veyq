@@ -124,6 +124,11 @@ internal class Composition<A : Connection, T : Any>(
     val audio: HostAudio? = null,
     /** The app's words' language (`Config.language`): the geocoder's `accept-language` (ADR 0143 decision 2). */
     val language: String = "en",
+    /**
+     * A WebP the host's platform cannot decode, as a PNG ([Call.PictureDecode]): libwebp's decoder in the library
+     * (`WebpPicture.png`); none on the JVM, where every such call is refused.
+     */
+    val webp: (ByteArray) -> ByteArray? = { null },
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
@@ -526,7 +531,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /**
      * One call, answered once through [answer] on a core thread — a request that is no [Call] too. The payload beside
      * the JSON is the bytes of an [Answer.Bytes] (never null for one, empty included) and null for every other answer.
-     * [inbound] is what the host handed beside the call's JSON (a [Call.ScanFrame]'s plane), already the core's own copy;
+     * [inbound] is what the host handed beside the call's JSON (a [Call.ScanFrame]'s plane, a [Call.PictureDecode]'s WebP), already the core's own copy;
      * every other call ignores it.
      */
     fun call(request: String, inbound: ByteArray? = null, answer: (json: String, payload: ByteArray?) -> Unit) {
@@ -810,6 +815,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 payload(picture)
                 Answer.Bytes(Sniff.image(picture)?.mime)
             } ?: noTenant
+            Call.PictureDecode -> {
+                val png = inbound?.let(parts.webp) ?: return Answer.Refused(Answer.Why.NOT_A_PICTURE)
+                payload(png)
+                Answer.Bytes("image/png")
+            }
             is Call.ReaderRead -> readers[call.reader]?.let { r ->
                 if (!stillHeld(call.reader, r)) return Answer.Refused(Answer.Why.NO_SUCH_READER)
                 payload(r.read(call.position, call.length))
@@ -2422,6 +2432,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             audio: HostAudio? = null,
             /** A picked banner's decoding: the host's ([HostBannerPictures]). */
             bannerPictures: me.raddatz.veyq.mobile.memories.banner.BannerWrite.Pictures = NoBannerPictures,
+            /** A WebP as a PNG ([Call.PictureDecode]): the core's libwebp (`WebpPicture.png`). */
+            webp: (ByteArray) -> ByteArray? = { null },
             now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
         ): Bridge<VeyqAccount, TenantSession> = Bridge {
             val recent = RecentUses(
@@ -2440,7 +2452,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             Composition(
                 SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files, pictures = pictures,
                 settings = { session, account, separator -> AccountSettings.of(session, account, separator) }, tiers = tiers, audio = audio,
-                bannerPictures = bannerPictures, language = config.language,
+                bannerPictures = bannerPictures, language = config.language, webp = webp,
                 trustedLink = { account, role, decode ->
                     when (role) {
                         DeviceLink.Role.SHOW_FOR_NEW_DEVICE -> DeviceLink.showForNewDevice(account)
