@@ -20,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -74,7 +75,9 @@ internal fun MemoriesMapTab(s: Screen.Signed, model: AppModel) {
 internal fun MemoriesPinMap(pins: MemoriesMap?, model: AppModel, modifier: Modifier, open: (MemoriesMap.Pin) -> Unit) {
     val maps by model.maps.collectAsStateWithLifecycle()
     val covers = LocalCovers.current
-    val camera = remember { MapCamera(::worldView) }
+    // no view while the pins read: the map opens on their framing, never on the world first (#945)
+    val pinsNow by rememberUpdatedState(pins)
+    val camera = remember { MapCamera { w, h -> pinsNow?.let { it.framing(w, h) ?: worldView(w, h) } } }
     val scope = rememberCoroutineScope()
     var listed by remember { mutableStateOf<List<MemoriesMap.Pin>?>(null) }
     val accent = role(LocalPalette.current.accent)
@@ -85,6 +88,7 @@ internal fun MemoriesPinMap(pins: MemoriesMap?, model: AppModel, modifier: Modif
         // (derived: the view moving every frame must not recompose the tab)
         val ready by remember { androidx.compose.runtime.derivedStateOf { camera.view != null } }
         LaunchedEffect(mm, ready) {
+            if (mm != null) camera.opened()
             val v = camera.view ?: return@LaunchedEffect
             if (mm == null || camera.userMoved) return@LaunchedEffect
             camera.frame(mm.framing(v.width, v.height) ?: worldView(v.width, v.height), animated = false)

@@ -166,4 +166,14 @@ class MemoryLocationTest {
         assertEquals(MemoryFacts.Outcome.Unchanged, run(sent.toString()), "already there: no write")
         assertNotEquals(MemoryFacts.Outcome.Written, run("""{"v":1,"location":{"name":"Rom","nameSource":"manual","derived":{"lat":28.48,"lng":-16.31},"derivedMode":"auto"}}"""))
     }
+
+    /** #945: a map opens on what it frames, the world where there is nothing — and on no view while that is still read. */
+    @Test
+    fun aMapOpensOnItsFramingAndOnNoViewWhileItIsRead() {
+        assertNull(MemoryLocation.opening(null, 800.0, 600.0), "a view before the points were read")
+        val world = MemoryLocation.opening(emptyList(), 800.0, 600.0)!!
+        assertEquals(MemoryLocation.WORLD_CENTER to MemoryLocation.WORLD_ZOOM, world.center to world.zoom)
+        val framed = MemoryLocation.opening(listOf(LatLng(52.52, 13.40), LatLng(52.50, 13.45)), 800.0, 600.0)!!
+        assertTrue(framed.zoom > 10, "framed at ${framed.zoom}")
+    }
 }

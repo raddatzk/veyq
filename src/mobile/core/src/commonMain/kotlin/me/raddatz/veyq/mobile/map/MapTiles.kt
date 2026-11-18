@@ -21,10 +21,14 @@ import kotlin.coroutines.CoroutineContext
  * a shown map has in view ([TileView]; no ring ahead — the tile policy forbids pre-emptive fetching), at most [parallel]
  * at once. A tile's bytes go to the platform as they came (PNG/JPEG); the core decodes nothing.
  *
- * **Kept in memory only, for the session** (D4): a bounded LRU of [capacity] tiles, each with its `ETag`/`Last-Modified`
- * and expiry, revalidated conditionally after it expires and never asked with `no-cache` (the policy's headers honoured).
- * [drop] empties it and cancels what is in flight — at a withdrawal, a lock, a sign-out and a tenant switch. Nothing the
- * map path fetches is written to disk.
+ * **Kept in memory for the session** (D4): a bounded LRU of [capacity] tiles, each with its `ETag`/`Last-Modified` and
+ * expiry, revalidated conditionally after it expires and never asked with `no-cache` (the policy's headers honoured).
+ * [drop] empties it and cancels what is in flight — at a withdrawal, a lock, a sign-out and a tenant switch.
+ *
+ * **And across launches on the [shelf]** (D4 as amended for inbox #939): where the account keeps an offline store, each
+ * tile served (but a `no-store` one) is also kept there sealed, in its automatic tier, and a tile not in memory is looked
+ * for there first — served without a request while fresh, else revalidated with its validators. The shelf is read only
+ * behind the [gate] (consent, the hosts served now, online), so a kept tile is never shown offline.
  */
 class MapTiles internal constructor(
     private val http: MapHttp,
@@ -35,6 +39,8 @@ class MapTiles internal constructor(
     private val maxZoom: Int = Mercator.MAX_ZOOM,
     private val capacity: Int = CAPACITY,
     parallel: Int = PARALLEL,
+    /** Where tiles outlive the session (the account's offline store), or none: memory only. */
+    private val shelf: TileShelf? = null,
 ) {
     private class Kept(val bytes: ByteArray, val etag: String?, val lastModified: String?, val expires: Long)
 
@@ -95,22 +101,31 @@ class MapTiles internal constructor(
 
     private suspend fun load(key: TileKey, url: String, kept: Kept?, gen: Long): ByteArray? = try {
         permits.withPermit {
-            // the gate, where the request is about to leave: a consent withdrawn while this tile waited sends nothing
+            // the gate, where the request is about to leave: a consent withdrawn while this tile waited sends nothing — and
+            // the shelf is read behind it too, so a kept tile is never shown offline or without the consent (#939)
+            if (!gate()) return@withPermit null
+            val id = TileShelf.id(template, key)
+            val known = kept ?: shelf?.get(id)?.let { Kept(it.bytes, it.etag, it.lastModified, it.expires) }
+            if (known != null && known !== kept && known.expires > now()) {
+                if (!gate()) return@withPermit null
+                remember(key, known, gen)
+                return@withPermit known.bytes
+            }
             if (!gate()) return@withPermit null
             val conditional = buildList {
-                kept?.etag?.let { add("If-None-Match" to it) }
-                kept?.lastModified?.let { add("If-Modified-Since" to it) }
+                known?.etag?.let { add("If-None-Match" to it) }
+                known?.lastModified?.let { add("If-Modified-Since" to it) }
             }
             val a = http.get(url, conditional) ?: return@withPermit null
             val at = now()
             when {
-                a.status == 304 && kept != null -> {
-                    val fresh = Kept(kept.bytes, a.header("ETag") ?: kept.etag, a.header("Last-Modified") ?: kept.lastModified, at + lifetimeMs(a))
-                    keep(key, fresh, gen, a)
-                    kept.bytes
+                a.status == 304 && known != null -> {
+                    val fresh = Kept(known.bytes, a.header("ETag") ?: known.etag, a.header("Last-Modified") ?: known.lastModified, at + lifetimeMs(a))
+                    keep(key, id, fresh, gen, a)
+                    known.bytes
                 }
                 a.status in 200..299 -> {
-                    keep(key, Kept(a.body, a.header("ETag"), a.header("Last-Modified"), at + lifetimeMs(a)), gen, a)
+                    keep(key, id, Kept(a.body, a.header("ETag"), a.header("Last-Modified"), at + lifetimeMs(a)), gen, a)
                     a.body
                 }
                 else -> null
@@ -120,14 +135,20 @@ class MapTiles internal constructor(
         lock.locked { if (gen == generation) inFlight.remove(key) }
     }
 
-    private fun keep(key: TileKey, kept: Kept, gen: Long, a: MapAnswer) {
+    /** [kept] in memory and on the [shelf] — neither for a `no-store` answer, nor once [drop] or [close] ran since. */
+    private suspend fun keep(key: TileKey, id: String, kept: Kept, gen: Long, a: MapAnswer) {
         if (noStore(a)) return
-        lock.locked {
-            if (gen != generation || closed) return
-            cache.remove(key)
-            cache[key] = kept
-            while (cache.size > capacity) cache.remove(cache.keys.first())
-        }
+        if (!remember(key, kept, gen)) return
+        shelf?.put(id, ShelvedTile(kept.bytes, kept.etag, kept.lastModified, kept.expires))
+    }
+
+    /** [kept] in memory, where no [drop] or [close] ran since generation [gen]; whether it was. */
+    private fun remember(key: TileKey, kept: Kept, gen: Long): Boolean = lock.locked {
+        if (gen != generation || closed) return false
+        cache.remove(key)
+        cache[key] = kept
+        while (cache.size > capacity) cache.remove(cache.keys.first())
+        true
     }
 
     /** Empties the cache and cancels every request in flight: a withdrawal, a lock, a sign-out, a tenant switch (D4). */

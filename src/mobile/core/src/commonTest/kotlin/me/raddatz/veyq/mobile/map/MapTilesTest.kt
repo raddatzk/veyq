@@ -193,4 +193,65 @@ class MapTilesTest {
         assertEquals(0, life())
         assertFalse(life("Cache-Control" to "max-age=-5") < 0)
     }
+
+    /** A shelf the test plays: what is kept by id, and how often it was read. */
+    private class PlayedShelf : TileShelf {
+        val kept = HashMap<String, ShelvedTile>()
+        var gets = 0
+        override suspend fun get(id: String): ShelvedTile? = kept[id].also { gets++ }
+        override suspend fun put(id: String, tile: ShelvedTile) { kept[id] = tile }
+        override suspend fun drop(template: String?) { kept.keys.removeAll { template == null || !it.startsWith("$template\n") } }
+    }
+
+    // #939, bite: the shelf not read on a memory miss (`known = kept`) → the second session asks again, red here
+    @Test
+    fun aShelvedTileIsServedInALaterSessionWhileFreshThenRevalidatedWithItsValidators() = runTest {
+        val played = PlayedMapServices(this)
+        played.tile = { r ->
+            if (r.header("If-None-Match") == "\"t1\"") Triple(304, mapOf("Cache-Control" to "max-age=600"), ByteArray(0))
+            else Triple(200, mapOf("Cache-Control" to "max-age=600", "ETag" to "\"t1\""), TILE)
+        }
+        val shelf = PlayedShelf()
+        played.consent.give(ConsentHosts("tiles.example", "nominatim.example"))
+        fun session() = MapTiles(played.http(), PlayedMapServices.TEMPLATE, { true }, { testScheduler.currentTime }, played.dispatcher, shelf = shelf)
+        val first = session().view()
+        first.show(view)
+        assertContentEquals(TILE, first.tile(berlin))
+        assertEquals(listOf(TileShelf.id(PlayedMapServices.TEMPLATE, berlin)), shelf.kept.keys.toList())
+
+        // a later launch: nothing in memory, the shelf answers while the tile is fresh
+        val second = session().view()
+        second.show(view)
+        assertContentEquals(TILE, second.tile(berlin))
+        assertEquals(1, played.count, "a fresh shelved tile was asked again")
+
+        // expired: asked with its validators, the 304 keeps the shelved bytes and moves its expiry on the shelf
+        advanceTimeBy(601_000)
+        val third = session().view()
+        third.show(view)
+        assertContentEquals(TILE, third.tile(berlin))
+        assertEquals(2, played.count)
+        assertEquals("\"t1\"", played.sent[1].header("If-None-Match"))
+        assertTrue(shelf.kept.values.single().expires > testScheduler.currentTime, "the 304's freshness not shelved")
+    }
+
+    // #939, bite: the gate checked after the shelf read instead of before → the shelf is read with the gate shut, red here
+    @Test
+    fun theShelfIsNotReadBehindAShutGateNorFilledWithANoStoreAnswer() = runTest {
+        val played = PlayedMapServices(this)
+        val shelf = PlayedShelf()
+        var open = false
+        val tiles = MapTiles(played.http(), PlayedMapServices.TEMPLATE, { open }, { testScheduler.currentTime }, played.dispatcher, shelf = shelf)
+        shelf.kept[TileShelf.id(PlayedMapServices.TEMPLATE, berlin)] = ShelvedTile(TILE, null, null, Long.MAX_VALUE)
+        val v = tiles.view()
+        v.show(view)
+        assertNull(v.tile(berlin), "a shelved tile shown behind a shut gate (offline, no consent)")
+        assertEquals(0, shelf.gets, "the shelf was read behind a shut gate")
+
+        open = true
+        played.tile = { Triple(200, mapOf("Cache-Control" to "no-store"), TILE) }
+        val other = v.show(view).map { it.key }.first { it != berlin }
+        assertContentEquals(TILE, v.tile(other))
+        assertFalse(TileShelf.id(PlayedMapServices.TEMPLATE, other) in shelf.kept, "a no-store answer was shelved")
+    }
 }

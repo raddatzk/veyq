@@ -123,6 +123,14 @@ class TrackList(
     ) {
         /** The tracks drawn now: shown and read. */
         val drawn: List<Entry> get() = entries.orEmpty().filter { it.mediaId !in hidden && it.status == Status.READY }
+
+        /**
+         * What the Map view frames as it opens ([me.raddatz.veyq.mobile.memories.place.MemoryLocation.opening]): the photos'
+         * [gps] points and every drawn track's — null while the gallery's first read or a track's read runs, so the map
+         * waits for its framing instead of opening on the world first (inbox #945).
+         */
+        fun framed(gps: List<LatLng>): List<LatLng>? =
+            if (entries == null || entries.any { it.status == Status.LOADING }) null else gps + drawn.flatMap { it.lines.flatten() }
     }
 
     private class Read(val status: Status, val name: String? = null, val stats: Gpx.Stats? = null, val lines: List<List<LatLng>> = emptyList())

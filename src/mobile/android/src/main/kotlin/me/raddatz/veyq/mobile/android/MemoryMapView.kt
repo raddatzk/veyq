@@ -46,6 +46,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -121,12 +122,15 @@ internal fun MemoryMapView(gallery: GalleryModel, tracks: TrackList, model: AppM
     }
     val points = g.gpsPoints
     val entries = state.entries
-    val camera = remember(gallery) { MapCamera(::worldView) }
+    // no view while a track is still read: the map opens on its framing, never on the world first (#945)
+    val framedNow by rememberUpdatedState(state.framed(points))
+    val camera = remember(gallery) { MapCamera { w, h -> me.raddatz.veyq.mobile.memories.place.MemoryLocation.opening(framedNow, w, h) } }
     val dots = remember(points) { projected(points) }
     // every drawn track's segments, projected once
     val lines = remember(state.drawn) { state.drawn.associate { e -> e.mediaId to e.lines.map(::projected) } }
     // frame the photos and the tracks once they are read, unless the member moved the map
     val everything = remember(points, state.drawn) { points + state.drawn.flatMap { e -> e.lines.flatten() } }
+    LaunchedEffect(framedNow != null) { if (framedNow != null) camera.opened() }
     LaunchedEffect(everything) {
         if (camera.userMoved || everything.isEmpty()) return@LaunchedEffect
         val v = kotlinx.coroutines.flow.flow { while (true) { camera.view?.let { emit(it) }; kotlinx.coroutines.delay(50) } }.first()

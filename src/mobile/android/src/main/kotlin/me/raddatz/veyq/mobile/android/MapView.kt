@@ -79,17 +79,31 @@ import kotlin.math.roundToInt
  * `fixed`, a Map view keeping the member's view when its tracks arrive).
  */
 @Stable
-internal class MapCamera(private val initial: (width: Double, height: Double) -> Viewport) {
+internal class MapCamera(private val initial: (width: Double, height: Double) -> Viewport?) {
     var view by mutableStateOf<Viewport?>(null)
         private set
 
     var userMoved by mutableStateOf(false)
         private set
 
-    /** The map's size is known (or changed): the first one frames it by [initial]. */
+    /** The map's size, once known: where a map still waiting for its framing opens ([opened]). */
+    private var size: Pair<Double, Double>? = null
+
+    /**
+     * The map's size is known (or changed): the first one frames it by [initial] — or by nothing yet, where [initial] says
+     * its framing is still read (null): no view, no tile asked, until [opened] (inbox #945).
+     */
     fun sized(width: Double, height: Double) {
+        size = width to height
         val v = view
         view = if (v == null) initial(width, height) else if (v.width != width || v.height != height) v.copy(width = width, height = height) else v
+    }
+
+    /** What the map frames was read: a map still waiting for its framing opens on it now; one that shows a view is left. */
+    fun opened() {
+        if (view != null) return
+        val (w, h) = size ?: return
+        view = initial(w, h)
     }
 
     /** The member's gesture moved the view. */
