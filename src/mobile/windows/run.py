@@ -295,6 +295,9 @@ def test(pattern: str | None) -> int:
     # the QR reader's fixtures (QrFixtures, read through VEYQ_REPO_ROOT at their repository path)
     qr_fixtures = "src/mobile/core/src/commonTest/resources/qr"
     copy_to(sorted((ROOT / qr_fixtures).glob("*.pgm")), remote / "repo" / PureWindowsPath(qr_fixtures))
+    # and the search's vectors (SearchVectorsTest, ADR 0146 decision 1), read the same way
+    search_vectors = Path("contracts/platform/search/v1-vectors.json")
+    copy_to([ROOT / search_vectors], remote / "repo" / PureWindowsPath(search_vectors.parent))
     env = {"VEYQ_VECTORS": str(remote / VECTORS.name), "VEYQ_NORMALIZATION_TEST": str(remote / NORMALIZATION_TEST.name),
            "VEYQ_REPO_ROOT": str(remote / "repo")}
     forward: list[str] | None = None
