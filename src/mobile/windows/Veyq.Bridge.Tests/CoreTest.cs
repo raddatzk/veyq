@@ -45,7 +45,7 @@ public sealed class CoreTest
             Assert.AreEqual(new Answer.Refused { why = Why.NotAPicture }, notOne);
             Assert.IsNull(none);
 
-            var (refused, _) = await Core.CallAsync(new Call.SearchQuery { query = "x" }).WaitAsync(Wait);
+            var (refused, _) = await Core.CallAsync(new Call.SearchOpen()).WaitAsync(Wait);
             Assert.AreEqual(new Answer.Refused { why = Why.NoTenantOpen }, refused);
 
             watch.Dispose();

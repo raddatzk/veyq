@@ -101,7 +101,7 @@ class WireTest {
             Call.ManageHideSpace("scope-1", hidden = false), Call.SessionSwitchTo("veyq.localhost#user-1", "t"),
             Call.SessionSignOut("veyq.localhost#user-1"), Call.ShellChoose(null), Call.ShellSwitchSpace("scope-1"), Call.ShellEnter(folder),
             Call.ShellFilter(ApplicationId.DEPOT), Call.ShellBack, Call.ShellSelect(BarTab("expenses.overview")), Call.ShellOpen(ref), Call.ShellOpenAtTop(ref), Call.ShellSearch(true), Call.ShellRefresh, Call.ShellOfflineGoneSeen,
-            Call.HomeGroups, Call.SearchQuery("lyon"), Call.PotOpen(ref), Call.PotRefresh(3), Call.PotClose(3),
+            Call.HomeGroups, Call.PotOpen(ref), Call.PotRefresh(3), Call.PotClose(3),
             Call.PotDownload(3, "/home/p/Downloads/Trip to Lyon.zip", "deleted person"), Call.PotArchiveName(3), Call.AvatarPicture("user-1"), Call.PictureDecode,
             Call.PotRecord(3, listOf(PotView.SettleRow("Ben", "Anna", 2100, "p2", "p1"))), Call.PotRestore(3, "e2"), Call.PotHistory(3, "e2"),
             Call.ReaderRead(5, 262_144, 65_536), Call.ReaderClose(5),
@@ -213,7 +213,7 @@ class WireTest {
         Answer.serializer() to listOf(
             Answer.Done, Answer.Refused(Answer.Why.NO_TENANT_OPEN), Answer.Refused(Answer.Why.TRUST_CANCELLED), Answer.Failed("IllegalStateException"),
             Answer.Groups(listOf(Home.Group(true, lists.nodes.take(1), Msg.HOME_GROUP_FOLDERS), Home.Group(false, lists.nodes.drop(1), null))),
-            Answer.Hits(listOf(ref)), Answer.PotOpened(3), Answer.Name("Trip to Lyon.zip"), Answer.Bytes("image/png"), Answer.Bytes(null),
+            Answer.PotOpened(3), Answer.Name("Trip to Lyon.zip"), Answer.Bytes("image/png"), Answer.Bytes(null),
             Answer.Reader(5, 9_000_000_000, "video/mp4"), Answer.Reader(6, 0, null),
             Answer.HeaderOpened(7), Answer.FileOpened(20), Answer.Saving(21), Answer.Queued(3), Answer.TrashOpened(8), Answer.Said(Notice(Msg.TRASH_MOVED, listOf("Trip"))), Answer.Said(null), Answer.Trashed(Notice(Msg.TRASH_MOVED, listOf("Trip")), undoable = true),
             Answer.Renamed(Notice(Msg.NODE_SLUG_TAKEN), null), Answer.Renamed(null, Notice(Msg.SHARE_NAME_RESEAL_FAILED)), Answer.Refused(Answer.Why.NO_SUCH_ROW),

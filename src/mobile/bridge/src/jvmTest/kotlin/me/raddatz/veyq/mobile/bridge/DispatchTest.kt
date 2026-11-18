@@ -2389,7 +2389,7 @@ class DispatchTest {
         listOf(
             Call.ShellChoose(ApplicationId.EXPENSES), Call.ShellSwitchSpace("s"), Call.ShellEnter(FolderRef("f", "F")), Call.ShellFilter(null),
             Call.ShellBack, Call.ShellSelect(BarTab("expenses.entries")), Call.ShellOpen(ref), Call.ShellOpenAtTop(ref), Call.ShellSearch(true), Call.ShellRefresh, Call.HomeGroups,
-            Call.SearchQuery("Tr"), Call.PotOpen(ref), Call.AvatarPicture("u1"), Call.ShellOpenPerson("u2"), Call.ShellOffersWasThere("s"), Call.PersonOpen("u2"),
+            Call.SearchOpen, Call.PotOpen(ref), Call.AvatarPicture("u1"), Call.ShellOpenPerson("u2"), Call.ShellOffersWasThere("s"), Call.PersonOpen("u2"),
         ).forEach { assertEquals(refused, b.ask(it), "$it") }
         listOf(
             Call.PotRefresh(9), Call.PotClose(9), Call.PotDownload(9, "/tmp/never.zip", "deleted person"), Call.PotArchiveName(9),

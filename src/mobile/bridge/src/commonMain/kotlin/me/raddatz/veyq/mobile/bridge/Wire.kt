@@ -235,9 +235,6 @@ internal sealed class Call {
     /** Home's level where the shell is, in its groups (`ShellModel.Lists.groups`). */
     @Serializable @SerialName("Home.Groups") data object HomeGroups : Call()
 
-    /** Search's hits over what the shell lists (`ShellWords.search`): the name-only search, until its last caller moved (ADR 0146 decision 13). */
-    @Serializable @SerialName("Search.Query") data class SearchQuery(val query: String) : Call()
-
     /**
      * The search over the open tenant (ADR 0146 decision 13; core's `SearchModel`): answered [Answer.SearchOpened] with its id
      * for [Watched.Search] and its calls; one per field, dropped with the tenant. Refused `NO_TENANT_OPEN` without one.
@@ -1364,7 +1361,6 @@ internal sealed class Answer {
     /** The call threw: the exception's class, never its message (which may hold what it was about). */
     @Serializable @SerialName("Failed") data class Failed(val error: String) : Answer()
     @Serializable @SerialName("Groups") data class Groups(val groups: List<Home.Group>) : Answer()
-    @Serializable @SerialName("Hits") data class Hits(val hits: List<ObjectRef>) : Answer()
     @Serializable @SerialName("PotOpened") data class PotOpened(val pot: Long) : Answer()
     @Serializable @SerialName("Name") data class Name(val name: String) : Answer()
 
