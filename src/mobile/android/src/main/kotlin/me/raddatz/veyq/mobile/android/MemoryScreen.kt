@@ -139,6 +139,12 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     val state by gallery.state.collectAsStateWithLifecycle()
     // the lightbox is the gallery's (core's, held by the app model): an activity a rotation recreated shows it again (#934)
     var open by remember(gallery) { mutableStateOf(gallery.openLightbox) }
+    // a photo the search opened (ADR 0146 decision 8): the gallery opened its lightbox on it; shown, then said seen
+    LaunchedEffect(state.searchOpened) {
+        if (state.searchOpened == null) return@LaunchedEffect
+        open = gallery.openLightbox
+        gallery.searchOpenedSeen()
+    }
     val hero = LocalNodeHero.current
     val rows = state.rows
     // the system's photo picker: photos and videos, several at once

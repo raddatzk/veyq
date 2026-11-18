@@ -769,10 +769,12 @@ class ShellModel(
      * platform's catalog in the UI's language, [appearance] whether its settings page offers the appearance section (the
      * phones) — and [me.raddatz.veyq.mobile.search.SearchModel.dispose]d where the tenant closes (the bridge's
      * `closeTenant`, the phones' switch, a lock, a sign-out). It reads the shell's trees, never a tree of its own; a result
-     * opens through this shell.
+     * opens through this shell. [trace] hears how long each walk of the index took (counts and milliseconds, no name).
      */
-    fun searchModel(words: me.raddatz.veyq.mobile.search.SearchWords, appearance: Boolean): me.raddatz.veyq.mobile.search.SearchModel =
-        me.raddatz.veyq.mobile.search.SearchModel(searchDoor(appearance), AppKinds.search, words, openRequests, searchContributions, now)
+    fun searchModel(
+        words: me.raddatz.veyq.mobile.search.SearchWords, appearance: Boolean, trace: ((String) -> Unit)? = null,
+    ): me.raddatz.veyq.mobile.search.SearchModel =
+        me.raddatz.veyq.mobile.search.SearchModel(searchDoor(appearance), AppKinds.search, words, openRequests, searchContributions, now, trace = trace)
 
     private fun searchDoor(appearance: Boolean) = object : me.raddatz.veyq.mobile.search.SearchModel.Door {
         override suspend fun spaces() = current?.lists?.spaces ?: hidden.visibleSpaces(tenant.spaces())
