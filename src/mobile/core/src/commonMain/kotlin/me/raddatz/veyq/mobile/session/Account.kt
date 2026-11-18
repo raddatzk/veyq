@@ -1435,6 +1435,30 @@ class TenantSession internal constructor(
     private var tree: Map<String, List<OpenNode>>? = null
 
     /**
+     * Each scope's tree revision as the server last answered it ([trees]: the `ETag` of a `200`, the one sent on a `304`):
+     * what [treeMoved] asks against. Absent for a scope whose tree came from the store or was never read.
+     */
+    private val treeRevisions = HashMap<String, String>()
+
+    /**
+     * Whether scope [scopeId]'s tree moved since this session read it (ADR 0081: its revision moves with every node created,
+     * moved, renamed, trashed, restored or whose meta was written): `listNodes` with the revision [trees] was answered with as
+     * `If-None-Match`, a `304` being no. False where no revision is known (the tree came from the store, or was not read):
+     * nothing to ask against. The answer's body is not kept: whoever asks reads the tree anew where it moved
+     * ([forgetTree]). Throws where the server did not answer, as a live poll's failed tick.
+     */
+    @Throws(Exception::class)
+    suspend fun treeMoved(scopeId: String): Boolean {
+        val revision = treeRevisions[scopeId] ?: return false
+        val r = account.respond { api(::ContentApi).listNodes(scopeId, revision) }
+        return when {
+            r.status == 304 -> false
+            r.success -> true
+            else -> throw IllegalStateException("tree ${r.status}")
+        }
+    }
+
+    /**
      * The CURRENT members of [scopeId] (a proposed member who has not accepted is none yet), named by the tenant's
      * directory; null when the list does not read.
      */
@@ -1552,7 +1576,15 @@ class TenantSession internal constructor(
             scopes.associate { s ->
                 val rows = try {
                     val r = account.kept(KeptRead.NODES, tenant.tenantId, s.summary.id, s.summary.id, conditional = true, settle = false) { tag ->
-                        account.fetched(account.respond { api(::ContentApi).listNodes(s.summary.id, tag) })
+                        account.fetched(account.respond { api(::ContentApi).listNodes(s.summary.id, tag) }).also { f ->
+                            // the revision a live poll asks against ([treeMoved])
+                            val now = when (f) {
+                                is VeyqAccount.Fetched.Pages -> f.revision
+                                is VeyqAccount.Fetched.NotModified -> tag
+                                else -> null
+                            }
+                            if (now != null) treeRevisions[s.summary.id] = now else treeRevisions.remove(s.summary.id)
+                        }
                     }
                     if (r.offline != null) asOf = OfflineAsOf(minOfNotNull(asOf?.asOf, r.offline.asOf))
                     VeyqAccount.KEPT_JSON.decodeFromString(ListSerializer(NodeSummary.serializer()), r.pages.single().decodeToString())

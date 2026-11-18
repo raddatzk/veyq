@@ -42,7 +42,9 @@ import me.raddatz.veyq.mobile.words.Notice
  * device uploaded into this node is in ([Door.uploaded], [MediaUploads]); nothing else re-reads it. A lightbox opened on it
  * ([lightbox]) follows each read. The details' uploaders are read once per gallery for every owner key it shows. While a
  * screen shows the page it runs [live] (the web's poll, `mediaRevisionPolling.ts`: core's [LivePoll] at the item lists'
- * cadence, a conditional read that reads the gallery anew only when the node's media moved), ended when the page closes.
+ * cadence, a conditional read that reads the gallery anew only when the node's media moved, and one of the scope's tree
+ * that reads the shell's lists — and so this page — anew only when the tree moved: a peer's change of the node's meta,
+ * [Door.treeMoved]), ended when the page closes.
  *
  * **One page for a member and a link's guest** (share view = member view, inbox #401): what it offers is
  * [MemoryRights.of] who looks ([State.rights]) — an upload, a delete, a chapter made —, never a view of its own. A medium
@@ -114,6 +116,14 @@ class GalleryModel(
          * as `If-None-Match`: a `304` is no); a throw where the read failed. Absent: never (no live poll).
          */
         suspend fun moved(since: MemoryMedia.Gallery): Boolean = false
+
+        /**
+         * Whether the node's scope tree moved since it was read (a conditional `listNodes`, ADR 0081: a `304` is no) — the
+         * node's meta among it: participants, date, place, banner —, the shell's lists read anew where it did, which this page
+         * follows through [revisions] (inbox #953; the web's open node follows the same signal, `useLevelLive.ts`). A throw
+         * where the read failed. Absent: never.
+         */
+        suspend fun treeMoved(): Boolean = false
 
         /** Medium [mediaId] to the node's trash (a member's delete). Absent: refused. */
         suspend fun trash(mediaId: String): Removal = Removal.FAILED
@@ -570,6 +580,8 @@ class GalleryModel(
                 poll.run {
                     val since = listed ?: return@run LivePoll.Tick.SKIP
                     if (door.moved(since)) read()
+                    // a peer's change of the node's meta: the lists' new revision reads this page anew (inbox #953)
+                    door.treeMoved()
                     LivePoll.Tick.DONE
                 }
             }

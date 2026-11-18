@@ -703,6 +703,7 @@ class ShellModel(
             override val uploaded = uploads.uploaded
             override suspend fun moved(since: me.raddatz.veyq.mobile.memories.MemoryMedia.Gallery) =
                 me.raddatz.veyq.mobile.memories.MemoryMedia.moved(tenant, ref.scopeId, ref.nodeId, since)
+            override suspend fun treeMoved() = tenant.treeMoved(ref.scopeId).also { if (it) refresh() }
             override suspend fun trash(mediaId: String) = me.raddatz.veyq.mobile.memories.MemoryMedia.trash(tenant, ref.scopeId, mediaId)
             override suspend fun restore(mediaId: String) = me.raddatz.veyq.mobile.memories.MemoryMedia.restore(tenant, ref.scopeId, mediaId)
             override suspend fun createChapter(name: String) =
