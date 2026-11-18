@@ -24,6 +24,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +58,18 @@ internal fun DropBoxScreen(ref: ObjectRef, model: AppModel) {
     // the page is core's `DropBoxPage`: its folders read anew with the shell's lists, a folder's delete asked first
     val page = remember(ref.nodeId) { model.dropBoxPage(me.raddatz.veyq.mobile.navigation.NodeAt(ref.scopeId, ref.nodeId, ref.kind, ref.name)) } ?: return
     DisposableEffect(page) { onDispose { page.close() } }
+    // live while the page is on screen and the app started: a guest's new folder shows up (core's poll)
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(page) {
+        owner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            val live = page.startLive()
+            try {
+                kotlinx.coroutines.awaitCancellation()
+            } finally {
+                live.stop()
+            }
+        }
+    }
     val shown by page.state.collectAsStateWithLifecycle()
     val deleting = shown.deleting
     var movingOut by remember { mutableStateOf<DropBoxes.GuestFolder?>(null) }

@@ -53,6 +53,29 @@ class AvatarsModelTest {
         assertEquals(setOf("u-ben", "u-cleo"), model.state.value.keys)
     }
 
+    /**
+     * A picture replaced under the same user id (native-apps § Open, the bridge): the ids held stay the same, so a host that
+     * keeps pictures by id learns of it only through [AvatarsModel.held]'s round, which moves with every sync that changed
+     * what is held — and not for a set read anew unchanged. Bitten by a round that does not move: red.
+     */
+    @Test
+    fun aPictureReplacedUnderTheSameIdMovesTheRound() = runTest {
+        val played = Played()
+        val model = AvatarsModel(played) { listOf(ana, ben) }
+        model.load()
+        val first = model.held.value
+        assertEquals(setOf("u-ana"), first.pictures.keys)
+        // Ana replaced her picture: her revision moved, her id did not
+        model.peopleRead(listOf(ana.copy(avatarRevision = 2), ben))
+        val second = model.held.value
+        assertEquals(first.pictures.keys, second.pictures.keys, "the same ids")
+        assertTrue(second.round != first.round, "a replaced picture moves the round")
+        assertContentEquals(byteArrayOf(2), second.pictures["u-ana"])
+        // the same people read anew: nothing synced, the round stays
+        model.peopleRead(listOf(ben, ana.copy(avatarRevision = 2)))
+        assertEquals(second.round, model.held.value.round)
+    }
+
     @Test
     fun anUnchangedSetIsNotSyncedTwice() = runTest {
         val played = Played()

@@ -5,7 +5,9 @@
 // InfoBar; Move out opens the move dialog on the folder (MoveDialog, which asks before it leaves the drop box).
 //
 // Everything is the core's DropBoxPage (DropBox.Open, Watched.DropBox): the folders are read anew on each revision of the
-// shell's lists, so a Refresh (F5, Shell.Refresh) shows a guest's new folder; a delete is done only where it was asked.
+// shell's lists, and while the page stands its live poll (Watched.DropBoxLive) reads them anew when the scope's tree moved,
+// so a guest's new folder shows without a Refresh; a delete is done only where it was asked. The page starts with the drop
+// box's head, its cover (NodeHeader.Hero), as the Pot's and the Memory's pages.
 using System;
 using System.Linq;
 using Microsoft.UI.Xaml;
@@ -22,9 +24,13 @@ internal sealed class DropBoxPage : IDisposable
     private readonly Window _window;
     private readonly InfoBar _bar;
     private readonly StackPanel _content = new() { Spacing = 4, Padding = new Thickness(12, 0, 12, 24) };
+    /// <summary>Where the head stands, above the folders (drawn anew on each state).</summary>
+    private readonly Border _heroSlot = new() { Padding = new Thickness(12, 0, 12, 0) };
+    private UIElement? _hero;
     private readonly ScrollViewer _root;
     private long? _id;
     private Watch? _watch;
+    private Watch? _live;
     private DropBoxShown? _shown;
     private bool _closed;
     /// <summary>The folder whose delete is asked on screen: a later state with the same question shows no second dialog.</summary>
@@ -39,7 +45,10 @@ internal sealed class DropBoxPage : IDisposable
         _window = window;
         _bar = bar;
         Node = node;
-        _root = new ScrollViewer { Content = _content, HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
+        var column = new StackPanel();
+        column.Children.Add(_heroSlot);
+        column.Children.Add(_content);
+        _root = new ScrollViewer { Content = column, HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         AutomationProperties.SetAutomationId(_root, "dropbox");
         Draw();
         Open();
@@ -68,6 +77,7 @@ internal sealed class DropBoxPage : IDisposable
             return;
         }
         _id = box;
+        _live = Core.Watch(new Watched.DropBoxLive { box = box }, _ => { }, e => Log.Write($"a drop box's poll: {e.Message}"));
         _watch = Core.Watch(new Watched.DropBox { box = box }, update =>
         {
             if (_closed || update is not Update.DropBox u) return;
@@ -81,9 +91,22 @@ internal sealed class DropBoxPage : IDisposable
         }, e => Log.Write($"a drop box update: {e.Message}"));
     }
 
+    /// <summary>The node's head (NodeHeader.Hero) placed first in the page's scroll, as the Pot page places it.</summary>
+    public void Hero(UIElement? hero)
+    {
+        if (ReferenceEquals(hero, _hero)) return;
+        _heroSlot.Child = null;
+        _hero = hero;
+        if (hero is FrameworkElement { Parent: Border other }) other.Child = null;
+        if (hero is FrameworkElement { Parent: Panel panel }) panel.Children.Remove(hero);
+        _heroSlot.Child = hero;
+    }
+
     public void Dispose()
     {
         _closed = true;
+        _live?.Dispose();
+        _live = null;
         _watch?.Dispose();
         _watch = null;
         if (_id is { } box) Act.Send(new Call.DropBoxClose { box = box });

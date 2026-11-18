@@ -205,9 +205,42 @@ pub fn decimal_separator() -> String {
     if d.chars().count() == 1 { d } else { ".".into() }
 }
 
+include!(concat!(env!("OUT_DIR"), "/icu.rs"));
+
+unsafe extern "C" {
+    fn setlocale(category: std::ffi::c_int, locale: *const c_char) -> *mut c_char;
+}
+const LC_MONETARY: std::ffi::c_int = 4; // glibc's
+
+/// [code]'s symbol as ICU writes it for the locale money is written in (CLDR's: `€` for EUR under en_US, `CA$` for CAD
+/// under de_DE, as Android, Apple and the web's `Intl` write it); None where ICU knows none but the code itself, or the
+/// locale is C or POSIX (no language to ask for).
+fn icu_symbol(code: &str) -> Option<String> {
+    // SAFETY: a query (NULL), on GTK's main thread, which is the only one that changes the locale.
+    let name = text(unsafe { setlocale(LC_MONETARY, std::ptr::null()) });
+    let locale = name.split(['.', '@']).next().unwrap_or("");
+    if locale.is_empty() || locale == "C" || locale == "POSIX" || code.len() != 3 {
+        return None;
+    }
+    let locale = std::ffi::CString::new(locale).ok()?;
+    let mut currency: Vec<u16> = code.encode_utf16().collect();
+    currency.push(0);
+    let (mut choice, mut len): (i8, i32) = (0, 0);
+    let mut status: std::ffi::c_int = 0;
+    // SAFETY: the code is a NUL-terminated UTF-16 string and the locale a C string, both alive across the call; ICU
+    // returns a pointer into its own data (never freed by the caller) of `len` UTF-16 units.
+    let name = unsafe { ucurr_get_name(currency.as_ptr(), locale.as_ptr(), 0 /* UCURR_SYMBOL_NAME */, &mut choice, &mut len, &mut status) };
+    if status > 0 || name.is_null() || len <= 0 {
+        return None;
+    }
+    // SAFETY: as above, `len` units at `name`.
+    let symbol = String::from_utf16(unsafe { std::slice::from_raw_parts(name, len as usize) }).ok()?;
+    (symbol != code && !symbol.is_empty()).then_some(symbol)
+}
+
 /// [minor] units of [currency] (with [minor_units] digits after the point) as the locale writes money: its separators
-/// and grouping, its own currency by its symbol where it is the locale's, any other by its code. No currency: the
-/// number alone.
+/// and grouping, its own currency by its symbol where it is the locale's, any other by the symbol ICU knows for it in
+/// the locale (CLDR's, as the phones and the web write it), else by its code. No currency: the number alone.
 pub fn money(minor: i64, currency: Option<&str>, minor_units: i32) -> String {
     let m = monetary();
     let digits = usize::try_from(minor_units).unwrap_or(0);
@@ -224,9 +257,11 @@ pub fn money(minor: i64, currency: Option<&str>, minor_units: i32) -> String {
     let number = if digits > 0 { format!("{grouped}{}{frac}", m.decimal) } else { grouped };
     let sign = if minor < 0 { m.minus.as_str() } else { "" };
     let Some(code) = currency else { return format!("{sign}{number}") };
-    if code == m.own_code && !m.own_symbol.is_empty() {
+    let symbol = if code == m.own_code && !m.own_symbol.is_empty() { Some(m.own_symbol.clone()) } else { icu_symbol(code) };
+    if let Some(symbol) = symbol {
+        // placed as the locale places its own
         let gap = if m.space { " " } else { "" };
-        return if m.precedes { format!("{sign}{}{gap}{number}", m.own_symbol) } else { format!("{sign}{number}{gap}{}", m.own_symbol) };
+        return if m.precedes { format!("{sign}{symbol}{gap}{number}") } else { format!("{sign}{number}{gap}{symbol}") };
     }
     if m.precedes { format!("{sign}{code} {number}") } else { format!("{sign}{number} {code}") }
 }
@@ -234,12 +269,7 @@ pub fn money(minor: i64, currency: Option<&str>, minor_units: i32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ffi::{CString, c_int};
-
-    unsafe extern "C" {
-        fn setlocale(category: c_int, locale: *const c_char) -> *mut c_char;
-    }
-    const LC_MONETARY: c_int = 4; // glibc's
+    use std::ffi::CString;
 
     fn with_monetary(locale: &str, f: impl FnOnce()) {
         let _locale = crate::LOCALE.lock().unwrap_or_else(|p| p.into_inner());
@@ -249,19 +279,24 @@ mod tests {
         f();
     }
 
-    /// Money as each locale of the image writes it — the locale's own currency by its symbol, another by its code —
-    /// read from glibc's locale data, not from a table here; and nothing lost in the digits.
+    /// Money as each locale of the image writes it — the locale's own currency by its symbol (glibc's locale data),
+    /// another by the symbol ICU knows for it there (CLDR's, as Android and Apple write `€1,234.56` under en_US), one ICU
+    /// knows only by its code by that code —, never from a table here; and nothing lost in the digits. Bitten by a
+    /// `money` that writes every foreign currency by its code: red.
     #[test]
     fn money_is_written_in_the_locales_own_way() {
         with_monetary("de_DE.UTF-8", || {
             assert_eq!(money(123456, Some("EUR"), 2), "1.234,56 €");
             assert_eq!(money(-5, Some("EUR"), 2), "-0,05 €");
-            assert_eq!(money(1234567, Some("JPY"), 0), "1.234.567 JPY");
+            assert_eq!(money(1234567, Some("JPY"), 0), "1.234.567 ¥");
+            assert_eq!(money(123456, Some("CAD"), 2), "1.234,56 CA$");
             assert_eq!(money(4500, Some("CHF"), 2), "45,00 CHF");
         });
         with_monetary("en_US.UTF-8", || {
             assert_eq!(money(123456, Some("USD"), 2), "$1,234.56");
-            assert_eq!(money(123456, Some("EUR"), 2), "EUR 1,234.56");
+            assert_eq!(money(123456, Some("EUR"), 2), "€1,234.56");
+            assert_eq!(money(-123456, Some("GBP"), 2), "-£1,234.56");
+            assert_eq!(money(4500, Some("CHF"), 2), "CHF 45.00");
             assert_eq!(money(7, None, 3), "0.007");
         });
     }

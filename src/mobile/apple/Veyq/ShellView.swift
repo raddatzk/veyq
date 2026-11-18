@@ -486,7 +486,7 @@ struct Bar: View {
             } else if model.shell.openObject == nil, model.shell.application == nil, !model.shell.searching, let space = model.shell.space {
                 HStack {
                     // the top level is no link's root: its share offers "Add files only" alone (the web's level share)
-                    if model.shell.folderAt(scopeId: space) == nil, model.linkRules().on, model.linkRules().dropBox {
+                    if model.offersTopLevelShare() {
                         Button { uploadShareOf = TrashOf(scopeId: space) } label: { Image(systemName: "square.and.arrow.up") }
                             .accessibilityLabel(say(.shareRoleUploader))
                     }

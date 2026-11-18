@@ -139,6 +139,8 @@ internal class Tenant(
     val me: String?,
     val pictures: StateFlow<Map<String, ByteArray>>,
     val loadPictures: suspend () -> Unit,
+    /** The pictures' round (`AvatarsModel.held`): moves with each sync that changed them, a picture replaced under its id among it. */
+    val picturesRound: Flow<Int> = flowOf(0),
     /**
      * A node's header over this tenant (`ShellModel.header`), whose `closeOpen` the bridge hands in (it closes the open
      * Pots of a node gone to the trash); a test's tenant plays one over a door of its own.
@@ -703,7 +705,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShellOpenAtTop -> shell?.openAtTop(call.ref).done()
             is Call.ShellOpenPerson -> shell?.openPerson(call.userId).done()
             is Call.ShellSearch -> shell?.search(call.on).done()
-            Call.ShellRefresh -> shell?.refresh().done()
+            // a person's refresh (F5): the members too, a picture replaced since among them
+            Call.ShellRefresh -> shell?.refresh(people = true).done()
             Call.ShellOfflineGoneSeen -> shell?.goneSeen().done()
             Call.HomeGroups -> shell?.current?.let { Answer.Groups(it.lists.groups(it.shell)) } ?: noTenant
             is Call.SearchQuery -> shell?.current?.let { Answer.Hits(ShellWords.search(it.lists.objects, call.query)) } ?: noTenant
@@ -1848,7 +1851,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             tenant.flatMapLatest { open ->
                 val m = open?.models
                 m?.shell?.state?.let { state ->
-                    combine(state, m.pictures, hiddenTurned) { s, pictures, _ -> Update.Shell(s, s?.let { shown(parts, open, it, pictures.keys) }) }
+                    combine(state, m.pictures, m.picturesRound, hiddenTurned) { s, pictures, round, _ -> Update.Shell(s, s?.let { shown(parts, open, it, pictures.keys, round) }) }
                 } ?: flowOf(Update.Shell(null))
             }
         }
@@ -1930,6 +1933,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.Save(w.save, null))
         is Watched.DropBox -> dropBoxes[w.box]?.let { h -> h.page.state.map { Update.DropBox(w.box, shownDropBox(h.page, it)) } }
             ?: flowOf(Update.DropBox(w.box, null))
+        // the page's poll runs inside this watch's own job, as a gallery's: it ends with the watch or the page
+        is Watched.DropBoxLive -> flow { dropBoxes[w.box]?.page?.live() }
         is Watched.Scan -> scans[w.scan]?.let { s -> s.state.map { Update.Scan(w.scan, shownScan(it, linkScans[w.scan])) } }
             ?: flowOf(Update.Scan(w.scan, null))
         is Watched.Link -> links[w.link]?.let { held ->
@@ -1949,7 +1954,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * What the shell shows beside [s] ([ShellShown]; ADR 0123's Consequences, the bridge): each field one core
      * function's answer.
      */
-    private fun shown(parts: Composition<A, T>, open: Open<A>, s: ShellModel.State, pictures: Set<String>): ShellShown {
+    private fun shown(parts: Composition<A, T>, open: Open<A>, s: ShellModel.State, pictures: Set<String>, round: Int): ShellShown {
         val shell = s.shell
         val lists = s.lists
         val space = lists.space(shell)
@@ -1978,6 +1983,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             headed = shell.openObject?.at ?: shell.space?.let(shell::folderAt),
             me = open.models.me,
             pictures = pictures.sorted(),
+            picturesRound = round,
             offlineBanner = s.banner,
         )
     }
@@ -2443,7 +2449,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     }
                 },
             ) { t ->
-                Tenant(ShellModel(t, hidden, recent, now), { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load)
+                Tenant(ShellModel(t, hidden, recent, now), { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load, t.pictures.held.map { it.round })
             }
         }
 

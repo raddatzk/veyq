@@ -12,8 +12,8 @@ import kotlinx.coroutines.sync.withLock
 /**
  * The members' pictures a UI shows, by user id (ADR 0136 decision 2), and when they are read — the core's rule, not an
  * app's: [MemberAvatars] is synced when the tenant opens ([load], over the people read then) and again whenever the
- * people are read anew with another picture to show ([peopleRead]: a member, or a member's revision, changed); a set
- * read anew unchanged asks nothing. The letter shows for everyone not in [state] — meanwhile, and wherever a picture
+ * people are read anew with another picture to show ([peopleRead]: a member, or a member's revision, changed — the
+ * people are read anew by a person's refresh, `ShellModel.refresh(people = true)`); a set read anew unchanged asks nothing. The letter shows for everyone not in [state] — meanwhile, and wherever a picture
  * does not come.
  *
  * One per tenant session ([TenantSession.pictures]). A UI observes [state] (or [watch]) and starts [load] in the
@@ -33,6 +33,18 @@ class AvatarsModel internal constructor(
 
     /** Every picture this device opened, by user id: the letter for everyone else. */
     val state: StateFlow<Map<String, ByteArray>> = _state.asStateFlow()
+
+    /**
+     * The pictures held and their [round]: a number that moves with every sync that changed what is held — a picture
+     * replaced under the same user id among it — for a host that keeps pictures by id and asks again only when told (the
+     * bridge's `ShellShown.picturesRound`).
+     */
+    class Held(val pictures: Map<String, ByteArray>, val round: Int)
+
+    private val _held = MutableStateFlow(Held(emptyMap(), 0))
+
+    /** [state] with its round ([Held]). */
+    val held: StateFlow<Held> = _held.asStateFlow()
 
     /** A watch of [state] for a platform without flows: stopped with [stop]. */
     class Watch internal constructor(private val job: kotlinx.coroutines.Job) {
@@ -61,7 +73,10 @@ class AvatarsModel internal constructor(
         if (set == synced) return@withLock
         synced = set
         runCatching { avatars.sync(people) }
-        _state.value = avatars.pictures()
+        val pictures = avatars.pictures()
+        // the pictures first: a host told of the new round asks for them at once
+        _state.value = pictures
+        _held.value = Held(pictures, _held.value.round + 1)
     }
 
     internal companion object {

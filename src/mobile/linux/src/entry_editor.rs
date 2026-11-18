@@ -112,6 +112,12 @@ impl Combo {
         Self { row, ids }
     }
 
+    /// The label of the choice shown now (the model's string at the selection).
+    fn chosen(&self) -> Option<String> {
+        let list = self.row.model().and_downcast::<gtk::StringList>()?;
+        list.string(self.row.selected()).map(String::from)
+    }
+
     fn select(&self, id: &str) {
         if let Some(at) = self.ids.iter().position(|i| i == id)
             && self.row.selected() != at as u32
@@ -459,6 +465,8 @@ impl Inner {
             for (i, _) in s.payers.iter().enumerate() {
                 let index = i as i32;
                 let person = Combo::new(self, &words::ed_person(), &people, false, move |person| EditorChange::EditPayer { index, person });
+                // the chosen person under the title, so the row's end holds only the amount and the remove (#901)
+                person.row.set_use_subtitle(true);
                 let entry = gtk::Entry::builder().placeholder_text(words::entry_amount()).width_chars(9).valign(gtk::Align::Center).input_purpose(gtk::InputPurpose::Number).build();
                 gtk::prelude::EditableExt::set_alignment(&entry, 1.0);
                 let paid = Field::new(self, &entry, move |text| EditorChange::EditPaid { index, text });
@@ -906,6 +914,9 @@ fn update(f: &Form, s: &EditorShown) {
     }
     for ((person, paid, remove), p) in f.payers.iter().zip(&s.payers) {
         person.select(&p.person);
+        // the person under the title (#901): told here as well, since a row whose selection did not change since
+        // use-subtitle was set showed no subtitle (measured in the Linux pass)
+        person.row.set_subtitle(&glib_escape(&person.chosen().unwrap_or_default()));
         paid.set(&p.amount);
         remove.set_visible(s.can_remove_payer && s.editable);
     }

@@ -202,7 +202,7 @@ class WireTest {
             Call.BannerCancel(112), Call.BannerRemove(112), Call.BannerClose(112), Call.GalleryTrashBannerPicture(60, true),
             Call.PersonOpen("user-2"), Call.PersonView(113, MemoriesView.MAP), Call.PersonRetry(113), Call.PersonMap(113), Call.PersonClose(113),
         ),
-        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.DropBox(30), Watched.Scan(40), Watched.Link(70), Watched.Settings(50),
+        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.DropBox(30), Watched.DropBoxLive(30), Watched.Scan(40), Watched.Link(70), Watched.Settings(50),
             Watched.Gallery(60), Watched.GalleryLive(60), Watched.SettingsStorageLive(50), Watched.Lightbox(61), Watched.Player, Watched.Music(80),
             Watched.Map(100), Watched.MapServices, Watched.Date(101), Watched.Place(102), Watched.Tracks(103),
             Watched.Participants(110), Watched.CaptureTime(111), Watched.Banner(112), Watched.Person(113)),

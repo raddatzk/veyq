@@ -194,7 +194,15 @@ impl Shell {
         // the content is the root of a navigation of its own: a Memory's lightbox is pushed over it, back pops it
         let nav = adw::NavigationView::new();
         nav.add(&adw::NavigationPage::new(&content_view, &words::app_name()));
-        toasts.set_child(Some(&nav));
+        // a running save's banner along the pane's foot, outside the navigation, so a lightbox over the content keeps it in
+        // view; the toasts stay for what is said (`file_page::saving`)
+        nav.set_vexpand(true);
+        let saves = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        crate::file_page::show_saves_in(&saves);
+        let pane = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        pane.append(&nav);
+        pane.append(&saves);
+        toasts.set_child(Some(&pane));
         let content = adw::NavigationPage::new(&toasts, &words::app_name());
 
         let split = adw::NavigationSplitView::builder().sidebar(&sidebar_page).content(&content).min_sidebar_width(240.0).max_sidebar_width(360.0).build();
@@ -603,7 +611,7 @@ impl Shell {
         let first = !self.started.replace(true);
         self._uploads.start();
         self.music_bar.start();
-        avatars::listed(&format!("{}\n{}", shown.connection, shown.tenant.tenant_id), &shown.pictures);
+        avatars::listed(&format!("{}\n{}", shown.connection, shown.tenant.tenant_id), &shown.pictures, shown.pictures_round);
         *self.connection.borrow_mut() = Some(shown.connection.clone());
         self.draw_offline(&state, &shown);
         *self.now.borrow_mut() = Some((state, shown));
@@ -898,7 +906,9 @@ impl Shell {
                 if page.as_ref().is_none_or(|p| p.node != node) {
                     *page = Some(DropBoxPage::open(&node, &self.toasts));
                 }
-                page.as_ref().expect("set above").widget().clone().upcast()
+                let page = page.as_ref().expect("set above");
+                page.hero(self.header.borrow().as_ref().map(Header::hero));
+                page.widget().clone().upcast()
             }
             Some(o) if o.kind == "MEMORY" || o.kind == "CHAPTER" => {
                 self.pot.borrow_mut().take();
@@ -952,7 +962,12 @@ impl Shell {
                     page.places(&shown.tabs, shown.selected_tab.as_ref());
                     page.widget().clone().upcast()
                 } else {
-                    let list = if shell.application.is_some() { home::list(shown.list.as_ref()) } else { home::home(state, shown, self.drops().as_ref()) };
+                    let list = if shell.application.is_some() {
+                        home::list(shown.list.as_ref())
+                    } else {
+                        // a folder's level starts with its head, as the Pot's and the Memory's pages (none on a space's root)
+                        home::home(state, shown, self.drops().as_ref(), self.header.borrow().as_ref().map(Header::hero))
+                    };
                     if let Some(scroll) = list.downcast_ref::<gtk::ScrolledWindow>() {
                         self.scrolls.keep(scroll, ListScrolls::place(state));
                     }

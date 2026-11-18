@@ -1,8 +1,8 @@
 // What the host holds of the members' pictures and what it asks for (ADR 0137 decision 1) — no control, so
 // Veyq.Tests reads it; Avatars.cs draws it. Linux's avatars::Held, rule for rule: when the pictures are read is the
 // core's (AvatarsModel), and the shell's state names the user ids whose picture the core holds (ShellShown.pictures).
-// The host asks for each with Avatar.Picture whenever that set changes, keeps them per tenant open, and drops an answer
-// that arrives for an earlier set.
+// The host asks for each with Avatar.Picture whenever that set or the pictures' round (ShellShown.picturesRound: a picture
+// replaced under its id) changes, keeps them per tenant open, and drops an answer that arrives for an earlier set.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -17,17 +17,19 @@ internal sealed class Held<T> where T : class
 {
     private string? _tenant;
     private SortedSet<string>? _listed;
+    private int _listedRound;
     private readonly Dictionary<string, T> _pictures = [];
 
     /// <summary>Bumped on every ask, so an answer to an earlier one is told apart.</summary>
     private ulong _round;
 
     /// <summary>
-    /// The core says <paramref name="ids"/> have a picture in <paramref name="tenant"/>. Another tenant drops everything
-    /// held; a set that differs from the last one is asked for whole (a picture may have changed with it), the same set
-    /// again asks nothing.
+    /// The core says <paramref name="ids"/> have a picture in <paramref name="tenant"/>, in the pictures'
+    /// <paramref name="picturesRound"/>. Another tenant drops everything held; a set or a round that differs from the last
+    /// one is asked for whole (a picture may have changed with it, or under its id), the same set in the same round asks
+    /// nothing. What is held stays shown until its new picture arrives.
     /// </summary>
-    public Asked Listed(string tenant, IEnumerable<string> ids)
+    public Asked Listed(string tenant, IEnumerable<string> ids, int picturesRound)
     {
         var set = new SortedSet<string>(ids, StringComparer.Ordinal);
         var gone = new List<string>();
@@ -38,13 +40,14 @@ internal sealed class Held<T> where T : class
             _tenant = tenant;
             _listed = null;
         }
-        if (_listed is not null && _listed.SetEquals(set)) return new Asked([], gone, _round);
+        if (_listed is not null && _listed.SetEquals(set) && _listedRound == picturesRound) return new Asked([], gone, _round);
         var dropped = _pictures.Keys.Where(id => !set.Contains(id)).ToList();
         foreach (var id in dropped) _pictures.Remove(id);
         gone.AddRange(dropped);
         gone.Sort(StringComparer.Ordinal);
         _round++;
         _listed = set;
+        _listedRound = picturesRound;
         return new Asked([.. set], gone, _round);
     }
 

@@ -64,6 +64,29 @@ fn main() {
 
     println!("cargo:rustc-link-search=native={lib_dir}");
     println!("cargo:rustc-link-lib=dylib=veyq");
+
+    icu(&out);
+}
+
+/// ICU's currency names (a foreign currency's symbol, CLDR's as Android, Apple and the web's `Intl` write it): linked from
+/// the system's `libicuuc` — the Fedora image's, the GNOME runtime's in the Flatpak —, whose C functions carry the
+/// library's major version in their names (`ucurr_getName_78`), read here from its pkg-config file.
+fn icu(out: &Path) {
+    let version = Command::new("pkg-config").args(["--modversion", "icu-uc"]).output().expect("pkg-config runs");
+    if !version.status.success() {
+        panic!("pkg-config finds no icu-uc: the build image lacks ICU's development files");
+    }
+    let version = String::from_utf8(version.stdout).expect("a version in UTF-8");
+    let major = version.trim().split('.').next().filter(|m| !m.is_empty() && m.chars().all(|c| c.is_ascii_digit()));
+    let major = major.unwrap_or_else(|| panic!("icu-uc's version {version:?} has no major"));
+    fs::write(
+        out.join("icu.rs"),
+        format!(
+            "unsafe extern \"C\" {{\n    #[link_name = \"ucurr_getName_{major}\"]\n    fn ucurr_get_name(currency: *const u16, locale: *const std::ffi::c_char, name_style: std::ffi::c_int, is_choice_format: *mut i8, len: *mut i32, status: *mut std::ffi::c_int) -> *const u16;\n}}\n"
+        ),
+    )
+    .expect("icu.rs");
+    println!("cargo:rustc-link-lib=dylib=icuuc");
 }
 
 fn need(name: &str) -> String {

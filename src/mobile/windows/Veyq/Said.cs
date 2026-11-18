@@ -4,6 +4,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Runtime.InteropServices;
 using Windows.Globalization;
 using Windows.Globalization.NumberFormatting;
@@ -16,15 +17,17 @@ public static partial class Said
     /// <paramref name="minor"/> minor units of <paramref name="currency"/> (an ISO 4217 code; null: a number alone) with
     /// <paramref name="minorUnits"/> digits after the point, as Windows writes money (<see cref="CurrencyFormatter"/>) in the
     /// person's locale, or in <paramref name="languages"/> and <paramref name="region"/>: the region's own currency by its
-    /// symbol, any other by its code (Linux's rule). Windows' symbol alone wrote Canadian dollars "12,50 $" in de-DE, the
-    /// US dollar's sign; Android and Apple write "CA$" there, a code is as unambiguous. A code Windows does not know is
-    /// written after the number.
+    /// symbol; any other by the symbol ICU knows for it in that locale (CLDR's, as Android, Apple and the web write it:
+    /// "€1,234.56" in en-US, "12,50 CA$" in de-DE), laid out as the culture lays out money; one ICU knows only by its code,
+    /// or none, by its code (Linux's rule). Windows' own symbol for another currency is not used: CurrencyFormatter wrote
+    /// Canadian dollars "12,50 $" in de-DE, the US dollar's sign. A code Windows does not know is written after the number.
     /// </summary>
     public static string Money(long minor, string? currency, int minorUnits, IEnumerable<string>? languages = null, string? region = null)
     {
         var value = minor / Math.Pow(10, minorUnits);
         if (currency is not null)
         {
+            if (currency != OwnCurrency(region) && Foreign(minor, currency, minorUnits, languages, region) is { } foreign) return foreign;
             try
             {
                 var money = languages is null ? new CurrencyFormatter(currency) : new CurrencyFormatter(currency, languages, region);
@@ -44,6 +47,60 @@ public static partial class Said
         var said = number.Format(value);
         return currency is null ? said : $"{said} {currency}";
     }
+
+    /// <summary>Another currency than the region's by ICU's symbol, laid out as Windows lays out the region's own (its
+    /// own written by CurrencyFormatter, its symbol swapped for the other's); null where ICU knows no symbol for either but
+    /// the code, or is not there.</summary>
+    private static string? Foreign(long minor, string currency, int minorUnits, IEnumerable<string>? languages, string? region)
+    {
+        if (OwnCurrency(region) is not { } own) return null;
+        var language = languages?.FirstOrDefault() ?? Windows.System.UserProfile.GlobalizationPreferences.Languages.FirstOrDefault();
+        var home = region ?? Windows.System.UserProfile.GlobalizationPreferences.HomeGeographicRegion;
+        if (language is null) return null;
+        var locale = $"{language.Split('-')[0]}_{home}";
+        if (IcuSymbol(currency, locale) is not { } symbol || IcuSymbol(own, locale) is not { } ownSymbol) return null;
+        try
+        {
+            var money = languages is null ? new CurrencyFormatter(own) : new CurrencyFormatter(own, languages, region);
+            money.FractionDigits = minorUnits;
+            money.IsGrouped = true;
+            var said = money.Format(minor / Math.Pow(10, minorUnits));
+            return said.Contains(ownSymbol, StringComparison.Ordinal) ? said.Replace(ownSymbol, symbol, StringComparison.Ordinal) : null;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="code"/>'s symbol as ICU names it for <paramref name="locale"/> (<c>ucurr_getName</c>,
+    /// <c>UCURR_SYMBOL_NAME</c>, through Windows' own <c>icu.dll</c>, whose C functions carry no version in their names);
+    /// null where it names only the code, or ICU is not there.
+    /// </summary>
+    internal static unsafe string? IcuSymbol(string code, string locale)
+    {
+        if (code.Length != 3) return null;
+        try
+        {
+            sbyte choice = 0;
+            int length = 0, status = 0;
+            fixed (char* c = code + "\0")
+            {
+                var name = ucurr_getName(c, locale, 0, &choice, &length, &status);
+                if (status > 0 || name is null || length <= 0) return null;
+                var symbol = new string(name, 0, length);
+                return symbol == code ? null : symbol;
+            }
+        }
+        catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException)
+        {
+            return null;
+        }
+    }
+
+    [LibraryImport("icu.dll", EntryPoint = "ucurr_getName", StringMarshalling = StringMarshalling.Utf8)]
+    private static unsafe partial char* ucurr_getName(char* currency, string locale, int nameStyle, sbyte* isChoiceFormat, int* length, int* status);
 
     /// <summary>The currency the region uses (the person's home region where none is given); null where it names none.</summary>
     private static string? OwnCurrency(string? region)

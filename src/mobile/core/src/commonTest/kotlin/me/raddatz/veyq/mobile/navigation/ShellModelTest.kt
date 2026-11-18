@@ -54,6 +54,7 @@ class ShellModelTest {
         assertEquals(false, ShellModel.topLevelShared(top.open(pot), "t"), "an object open")
         assertEquals(false, ShellModel.topLevelShared(top.choose(ApplicationId.EXPENSES), "t"), "an application's list")
         assertEquals(false, ShellModel.topLevelShared(top.search(true), "t"), "Search")
+        assertEquals(false, ShellModel.topLevelShared(top.openPerson("u-ana"), "t"), "a person's page opened from the top level")
     }
 
     @Test

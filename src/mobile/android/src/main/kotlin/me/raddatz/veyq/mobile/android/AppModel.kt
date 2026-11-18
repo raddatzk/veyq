@@ -755,15 +755,16 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun refreshLists(done: () -> Unit) {
         val t = tenantSession ?: return done()
         viewModelScope.launch {
-            runCatching { refreshLists(t) }
+            // a person's pull: the members too, a picture replaced since among them (core's)
+            runCatching { refreshLists(t, people = true) }
             done()
         }
     }
 
-    /** The lists read anew (core's shell), with each row's facts. */
-    private suspend fun refreshLists(t: me.raddatz.veyq.mobile.session.TenantSession) {
+    /** The lists read anew (core's shell), with each row's facts; with [people] the members too (a person's refresh). */
+    private suspend fun refreshLists(t: me.raddatz.veyq.mobile.session.TenantSession, people: Boolean = false) {
         readRowDetails(t)
-        shellModel?.refresh()
+        shellModel?.refresh(people)
     }
 
     // ---- a report (core's ReportSheet) ----
@@ -772,6 +773,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun reportSheet(node: me.raddatz.veyq.mobile.navigation.NodeAt): me.raddatz.veyq.mobile.navigation.ReportSheet? = shellModel?.reportSheet(node)
 
     // ---- guest links (core's ShareLinks) ----
+
+    /** Whether the shell stands where the space's top level offers its share, "Add files only" (core's `offersTopLevelShare`). */
+    fun offersTopLevelShare(shell: me.raddatz.veyq.mobile.navigation.Shell): Boolean = shellModel?.offersTopLevelShare(shell) == true
 
     /** The tenant's link rules (its capability set): what the share dialog offers and requires. */
     fun linkRules(): me.raddatz.veyq.mobile.session.ShareLinks.Rules =

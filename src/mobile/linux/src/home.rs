@@ -39,15 +39,13 @@ pub fn app_name(shown: &ShellShown, app: ApplicationId) -> String {
     shown.application_words.iter().find(|w| w.application == app).map(|w| said::key(&w.word)).unwrap_or_default()
 }
 
-/// A row that opens [r] in its application when activated; a Memory's shows its cover where it has one ([cover_prefix]).
+/// A row that opens [r] in its application when activated; its kind's icon, replaced by its cover where it has one
+/// ([cover_prefix]), as every row on the phones.
 pub fn object_row(r: &ObjectRef) -> adw::ActionRow {
     let row = adw::ActionRow::builder().title(glib_escape(&r.name)).activatable(true).build();
-    let icon = gtk::Image::from_icon_name(kind_icon(&r.kind));
+    row.add_prefix(&cover_prefix(gtk::Image::from_icon_name(kind_icon(&r.kind)), &r.node_id));
     if r.kind == "MEMORY" {
-        row.add_prefix(&cover_prefix(icon, &r.node_id));
         dated(&row, &r.node_id);
-    } else {
-        row.add_prefix(&icon);
     }
     let open = r.clone();
     row.connect_activated(move |_| bridge::send(Call::ShellOpen { r#ref: open.clone() }));
@@ -129,7 +127,8 @@ pub fn cover_prefix(icon: gtk::Image, node_id: &str) -> gtk::Stack {
     let cover = gtk::Picture::builder().content_fit(gtk::ContentFit::Cover).can_shrink(true).width_request(64).height_request(36).valign(gtk::Align::Center).build();
     cover.set_overflow(gtk::Overflow::Hidden);
     cover.add_css_class("card");
-    let prefix = gtk::Stack::new();
+    // sized by what it shows: a row whose cover went is an icon's width again, not the picture's
+    let prefix = gtk::Stack::builder().hhomogeneous(false).vhomogeneous(false).build();
     prefix.add_child(&icon);
     prefix.add_child(&cover);
     if let Some((_, t)) = ROW_COVERS.with(|c| c.borrow().get(node_id).cloned()) {
@@ -145,7 +144,10 @@ pub fn cover_prefix(icon: gtk::Image, node_id: &str) -> gtk::Stack {
                 cover.set_paintable(Some(&t));
                 prefix.set_visible_child(&cover);
             }
-            None => prefix.set_visible_child(&icon),
+            None => {
+                cover.set_paintable(None::<&gdk::Paintable>);
+                prefix.set_visible_child(&icon);
+            }
         }
     });
     prefix
@@ -251,16 +253,24 @@ fn filter_name(f: Option<ApplicationId>) -> String {
     }
 }
 
-/// Home: the filters (where the core offers more than "all"), then the level's groups (`Home.groups`): a folder
-/// enters, an object opens in its application. With [drops], files and folders dropped onto the level upload there, and
-/// onto a folder's row into that folder (ADR 0123's Consequences, the Linux app's Depot whole).
-pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>) -> gtk::Widget {
+/// Home: the filters (where the core offers more than "all"), a folder's head ([hero], its cover: the folder's header's,
+/// as the Pot's and the Memory's pages place it), then the level's groups (`Home.groups`): a folder enters, an object
+/// opens in its application. With [drops], files and folders dropped onto the level upload there, and onto a folder's row
+/// into that folder (ADR 0123's Consequences, the Linux app's Depot whole).
+pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, hero: Option<gtk::Widget>) -> gtk::Widget {
     let (scroll, content) = column();
     if let Some(d) = drops {
         scroll.add_controller(d.onto_level());
     }
     if state.lists.filters.len() > 1 {
         content.append(&filter_group(state, shown));
+    }
+    if let Some(h) = hero {
+        // the head is the header's one widget: taken from the level drawn before; under the filters, as the phones place it
+        if let Some(parent) = h.parent().and_downcast::<gtk::Box>() {
+            parent.remove(&h);
+        }
+        content.append(&h);
     }
     if shown.groups.is_empty() {
         content.append(&empty());
@@ -288,7 +298,7 @@ pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>) 
 
 fn folder_row(n: &NodeRef) -> adw::ActionRow {
     let row = adw::ActionRow::builder().title(glib_escape(&n.name)).activatable(true).build();
-    row.add_prefix(&gtk::Image::from_icon_name(kind_icon(&n.kind)));
+    row.add_prefix(&cover_prefix(gtk::Image::from_icon_name(kind_icon(&n.kind)), &n.node_id));
     row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
     let folder = FolderRef { node_id: n.node_id.clone(), name: n.name.clone() };
     row.connect_activated(move |_| bridge::send(Call::ShellEnter { folder: folder.clone() }));

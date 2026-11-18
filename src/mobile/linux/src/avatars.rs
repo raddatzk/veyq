@@ -1,7 +1,8 @@
 //! The members' pictures (ADR 0137 decision 1): when they are read is the core's (`AvatarsModel`); the shell's state
 //! names the user ids whose picture the core holds (`ShellShown.pictures`), and each is asked for once with
 //! `Avatar.Picture`, its bytes beside the answer. The host keeps them per tenant open and asks again whenever that
-//! set of ids changes, as the bridge's protocol says; the Pot's update carries the same set, so the shell's alone feeds
+//! set of ids or the pictures' round (`ShellShown.picturesRound`: a picture replaced under its id) changes, as the
+//! bridge's protocol says; the Pot's update carries the same set, so the shell's alone feeds
 //! it. A person is drawn as libadwaita draws one (`AdwAvatar`): their picture where it is held, their initials
 //! otherwise — GTK decodes the picture (`gdk::Texture::from_bytes`).
 use std::cell::RefCell;
@@ -16,7 +17,8 @@ use crate::bridge::{self, wire::Answer, wire::Call};
 #[derive(Debug)]
 pub struct Held<T> {
     tenant: Option<String>,
-    listed: Option<BTreeSet<String>>,
+    /// The ids last listed and the pictures' round they came with.
+    listed: Option<(BTreeSet<String>, i32)>,
     pictures: HashMap<String, T>,
     /// Bumped on every ask, so an answer to an earlier one is told apart.
     round: u64,
@@ -39,9 +41,10 @@ pub struct Asked {
 }
 
 impl<T> Held<T> {
-    /// The core says [ids] have a picture in [tenant]. Another tenant drops everything held; a set that differs from
-    /// the last one is asked for whole (a picture may have changed with it), the same set again asks nothing.
-    pub fn listed(&mut self, tenant: &str, ids: &[String]) -> Asked {
+    /// The core says [ids] have a picture in [tenant], in the pictures' [round]. Another tenant drops everything held; a
+    /// set or a round that differs from the last one is asked for whole (a picture may have changed with it, or under its
+    /// id), the same set in the same round asks nothing. What is held stays shown until its new picture arrives.
+    pub fn listed(&mut self, tenant: &str, ids: &[String], round: i32) -> Asked {
         let ids: BTreeSet<String> = ids.iter().cloned().collect();
         let mut gone = Vec::new();
         if self.tenant.as_deref() != Some(tenant) {
@@ -49,7 +52,7 @@ impl<T> Held<T> {
             self.tenant = Some(tenant.to_owned());
             self.listed = None;
         }
-        if self.listed.as_ref() == Some(&ids) {
+        if self.listed.as_ref().is_some_and(|(l, r)| *l == ids && *r == round) {
             return Asked { ask: Vec::new(), gone, round: self.round };
         }
         let dropped: Vec<String> = self.pictures.keys().filter(|id| !ids.contains(*id)).cloned().collect();
@@ -60,14 +63,14 @@ impl<T> Held<T> {
         gone.sort();
         self.round += 1;
         let ask = ids.iter().cloned().collect();
-        self.listed = Some(ids);
+        self.listed = Some((ids, round));
         Asked { ask, gone, round: self.round }
     }
 
     /// The core's answer for [id], asked in [round]: kept unless the tenant or the set changed since, or it did not
     /// decode (None) — then what was held stays. True when it is the one shown now.
     pub fn arrived(&mut self, round: u64, id: &str, picture: Option<T>) -> bool {
-        let current = round == self.round && self.listed.as_ref().is_some_and(|l| l.contains(id));
+        let current = round == self.round && self.listed.as_ref().is_some_and(|(l, _)| l.contains(id));
         match picture {
             Some(p) if current => {
                 self.pictures.insert(id.to_owned(), p);
@@ -94,9 +97,10 @@ thread_local! {
     static PICTURES: RefCell<Pictures> = RefCell::default();
 }
 
-/// The shell's list of ids with a picture in [tenant] (`ShellShown.pictures`): asks for each when the set changed.
-pub fn listed(tenant: &str, ids: &[String]) {
-    let asked = PICTURES.with_borrow_mut(|p| p.held.listed(tenant, ids));
+/// The shell's list of ids with a picture in [tenant] (`ShellShown.pictures`) in the pictures' [round]
+/// (`ShellShown.picturesRound`): asks for each when the set or the round changed.
+pub fn listed(tenant: &str, ids: &[String], round: i32) {
+    let asked = PICTURES.with_borrow_mut(|p| p.held.listed(tenant, ids, round));
     for id in &asked.gone {
         refresh(id);
     }
@@ -165,28 +169,44 @@ mod tests {
     #[test]
     fn a_set_is_asked_for_once_and_again_only_when_it_changes() {
         let mut held = Held::<&str>::default();
-        let first = held.listed("t1", &ids(&["b", "a"]));
+        let first = held.listed("t1", &ids(&["b", "a"]), 0);
         assert_eq!(first.ask, ids(&["a", "b"]));
         assert!(held.arrived(first.round, "a", Some("A")));
         assert!(held.arrived(first.round, "b", Some("B")));
         // the same set again, in another order: nothing asked
-        assert_eq!(held.listed("t1", &ids(&["a", "b"])).ask, Vec::<String>::new());
+        assert_eq!(held.listed("t1", &ids(&["a", "b"]), 0).ask, Vec::<String>::new());
         // a member's picture set: the whole set asked again, the others kept meanwhile
-        let second = held.listed("t1", &ids(&["a", "b", "c"]));
+        let second = held.listed("t1", &ids(&["a", "b", "c"]), 0);
         assert_eq!((second.ask, second.gone), (ids(&["a", "b", "c"]), vec![]));
         assert_eq!(held.get("a"), Some(&"A"));
         // a picture removed: gone at once, its person shows the initials
-        let third = held.listed("t1", &ids(&["a", "c"]));
+        let third = held.listed("t1", &ids(&["a", "c"]), 0);
         assert_eq!(third.gone, ids(&["b"]));
         assert_eq!(held.get("b"), None);
+    }
+
+    /// A picture replaced under the same id (the core read the people anew): the ids stay, the round moves, and the whole
+    /// set is asked again while what is held stays shown; the same round again asks nothing. Bitten by a `listed` that
+    /// ignores the round: red.
+    #[test]
+    fn a_picture_replaced_under_its_id_is_asked_for_again_when_the_round_moves() {
+        let mut held = Held::<&str>::default();
+        let first = held.listed("t1", &ids(&["a", "b"]), 3);
+        assert!(held.arrived(first.round, "a", Some("A")));
+        let again = held.listed("t1", &ids(&["a", "b"]), 4);
+        assert_eq!((again.ask, again.gone), (ids(&["a", "b"]), vec![]));
+        assert_eq!(held.get("a"), Some(&"A"), "shown until the new one arrives");
+        assert!(held.arrived(again.round, "a", Some("A2")));
+        assert_eq!(held.get("a"), Some(&"A2"));
+        assert_eq!(held.listed("t1", &ids(&["b", "a"]), 4).ask, Vec::<String>::new());
     }
 
     #[test]
     fn another_tenant_drops_what_was_held_and_a_late_answer_is_not_kept() {
         let mut held = Held::<&str>::default();
-        let first = held.listed("t1", &ids(&["a"]));
+        let first = held.listed("t1", &ids(&["a"]), 0);
         assert!(held.arrived(first.round, "a", Some("A")));
-        let other = held.listed("t2", &ids(&["a", "x"]));
+        let other = held.listed("t2", &ids(&["a", "x"]), 0);
         assert_eq!((other.ask, other.gone), (ids(&["a", "x"]), ids(&["a"])));
         assert_eq!(held.get("a"), None, "t1's picture of a is not t2's");
         // an answer to t1's round arriving now is t1's: dropped
@@ -197,7 +217,7 @@ mod tests {
         assert!(!held.arrived(other.round, "x", None));
         assert!(held.arrived(other.round, "x", Some("X")));
         // and back to t1: asked anew, though its set is the one it had
-        assert_eq!(held.listed("t1", &ids(&["a"])).ask, ids(&["a"]));
+        assert_eq!(held.listed("t1", &ids(&["a"]), 0).ask, ids(&["a"]));
     }
 
     /// The web writes a member's picture as WebP, which GTK decodes only through glycin's loaders (`glycin-loaders`,
