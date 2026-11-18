@@ -71,6 +71,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -84,6 +85,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.session.AccountSettings
 import me.raddatz.veyq.mobile.session.StaySignedIn
@@ -140,8 +142,37 @@ private class Confirm(val title: String, val text: String, val action: String, v
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(state: AccountSettings.State, actions: SettingsActions, maps: me.raddatz.veyq.mobile.map.MapServices? = null) {
+fun SettingsScreen(
+    state: AccountSettings.State, actions: SettingsActions, maps: me.raddatz.veyq.mobile.map.MapServices? = null,
+    at: String? = null, onAt: () -> Unit = {},
+) {
     val context = LocalContext.current
+    val list = androidx.compose.foundation.lazy.rememberLazyListState()
+    // a settings result of the search opens the page at its section (ADR 0146 decision 9) once its first read is in (the
+    // sessions above would push the section down after): the anchor is looked for page by page, since a lazy list knows an
+    // item's place only once it was laid out; a section the page does not show leaves it where it is
+    val read by androidx.compose.runtime.rememberUpdatedState(state.families != null && !state.working)
+    LaunchedEffect(at) {
+        val id = at ?: return@LaunchedEffect
+        val key = sectionKey(id)
+        kotlinx.coroutines.withTimeoutOrNull(5_000) { androidx.compose.runtime.snapshotFlow { read }.first { it } }
+        var tries = 0
+        while (tries++ < 64) {
+            val info = list.layoutInfo
+            info.visibleItemsInfo.firstOrNull { it.key == key }?.let {
+                list.animateScrollToItem(it.index)
+                break
+            }
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            if (info.totalItemsCount == 0) {
+                kotlinx.coroutines.delay(50)
+                continue
+            }
+            // at the end without it: a section the page's first read adds (add a device) may still come
+            if (last >= info.totalItemsCount - 1) kotlinx.coroutines.delay(100) else list.scrollToItem(last.coerceAtLeast(0))
+        }
+        onAt()
+    }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var confirm by remember { mutableStateOf<Confirm?>(null) }
@@ -195,7 +226,7 @@ fun SettingsScreen(state: AccountSettings.State, actions: SettingsActions, maps:
             }
         },
     ) { padding ->
-        LazyColumn(Modifier.padding(padding).fillMaxSize().testTag("settings")) {
+        LazyColumn(Modifier.padding(padding).fillMaxSize().testTag("settings"), state = list) {
             state.refusal?.let { why ->
                 item(key = "refusal") {
                     Text(
@@ -242,6 +273,12 @@ fun SettingsScreen(state: AccountSettings.State, actions: SettingsActions, maps:
         }
     }
 }
+
+/**
+ * The list key a section starts at, by its id (core's `SettingsSection.id`, ADR 0146 decision 9): its header's; the
+ * appearance section is its one row.
+ */
+private fun sectionKey(id: String): String = if (id == "appearance") "appearance" else "header-$id"
 
 /** A section's title, as Android's Settings sets one: small, in the accent, above its rows. */
 private fun LazyListScope.header(key: String, title: @Composable () -> String, sub: (@Composable () -> String)? = null) {
@@ -485,7 +522,7 @@ private fun LazyListScope.savedKeys(state: AccountSettings.State, context: Conte
  */
 private fun LazyListScope.addDevice(camera: Boolean, enabled: Boolean, actions: SettingsActions) {
     item(key = "add-device-divider") { HorizontalDivider(Modifier.padding(top = 16.dp)) }
-    header("add-device-header", { stringResource(R.string.account_settings_add_device) }, { stringResource(R.string.account_settings_add_device_sub) })
+    header("add-device", { stringResource(R.string.account_settings_add_device) }, { stringResource(R.string.account_settings_add_device_sub) })
     item(key = "add-device") {
         ListItem(
             headlineContent = { Text(stringResource(R.string.link_show)) },

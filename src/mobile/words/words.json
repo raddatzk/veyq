@@ -88,12 +88,18 @@
     "de": "Suche"
   },
   "search_hint": {
-    "en": "Search names",
-    "de": "Namen suchen"
+    "note": "the search field's placeholder (the web's shell.search.placeholder; owner's copy 2026-11-18)",
+    "en": "Search all spaces",
+    "de": "Alle Bereiche durchsuchen"
   },
   "search_close": {
     "en": "Close search",
     "de": "Suche schließen"
+  },
+  "search_remove_chip": {
+    "note": "a search chip's remove button, read by a screen reader with the chip's value (the web's ui.removeTag)",
+    "en": "Remove {1}",
+    "de": "{1} entfernen"
   },
   "search_kind_folder": {
     "note": "a kind's word in the search (ADR 0146 decision 4, the web's): a kind chip's label and what typing it finds",

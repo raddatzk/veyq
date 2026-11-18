@@ -52,6 +52,7 @@ fun AppRoot(model: AppModel) {
     val link by model.link.collectAsStateWithLifecycle()
     val kitScan by model.kitScan.collectAsStateWithLifecycle()
     val maps by model.maps.collectAsStateWithLifecycle()
+    val settingsAt by model.settingsAt.collectAsStateWithLifecycle()
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (val s = screen) {
             Screen.Starting -> StartingScreen()
@@ -62,7 +63,7 @@ fun AppRoot(model: AppModel) {
             )
             is Screen.Unlock -> UnlockScreen(s, model::unlock, model::otherAccount)
             is Screen.Signed -> offer?.let { OfferScreen(it, trustWorking, model::answerOffer) }
-                ?: settings?.let { SettingsScreen(it, model.settingsActions, maps) }
+                ?: settings?.let { SettingsScreen(it, model.settingsActions, maps, at = settingsAt, onAt = model::settingsAtSeen) }
                 ?: s.managing?.let { ManageScreen(it, model) } ?: ShellScreen(s, model)
         }
         // a device-linking ceremony, over the sign-in or Settings (ADR 0059): a secure dialog of its own
