@@ -4,9 +4,10 @@
 - **Status:** built (web and backend; browser passes 2026-11-09), [ADR 0125](../../../decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md)'s first
   stage and decision 8a: names and Memory meta across every space, every photo and video of every space, and (decision
   9) the tenant's members and the settings sections as results of their own. Decisions 8b and 8c (journal full text,
-  semantic search) are not built. **The apps: planned** - [ADR 0146](../../../decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md) ports this search into the
-  apps' Kotlin core, held to the web by one set of vectors ([changes/cr-app-search.md](../../../../changes/cr-app-search.md));
-  until it lands the apps search names only.
+  semantic search) are not built. **The apps: built** (Android, iOS, macOS, Linux, Windows; passes on Android, macOS, Linux
+  and Windows 2026-11-18) - [ADR 0146](../../../decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md) ports this search into the
+  apps' Kotlin core, held to the web by one set of vectors; there each platform keeps its own field and find keys, a space
+  hidden on the device is not searched, and offline every space's photos wait for the network (its decisions 10-12).
 - **Primary actor:** A member whose keys are unlocked.
 - **Goal:** Find a folder, a Memory, a Chapter, a file, a drop box, a Pot or a photo by its name, date, place, people or
   kind, in any space the member belongs to in the tenant they are in - and a member of the tenant or a settings section -

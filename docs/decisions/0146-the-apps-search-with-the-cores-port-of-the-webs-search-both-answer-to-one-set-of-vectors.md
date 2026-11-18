@@ -1,6 +1,8 @@
 # ADR 0146 — The apps search with the core's port of the web's search; both answer to one set of vectors
 - Status: Accepted
-- Built: partly (not built: decision 12, each platform's field; decision 13's removal of the name-only search)
+- Built: yes — on every app (Android, iOS, macOS, Linux, Windows), the name-only search removed; passed on Android,
+  macOS, Linux and Windows (§ Consequences, the passes); the iPhone's and the iPad's passes, Orca's and the Mac's keys
+  frontmost are the owner's ([native-apps](../crosscutting/native-apps.md) § Open)
 - Date: 2026-11-18
 - Model: [uc.platform.search](../features/platform/use-cases/uc.platform.search.md)
 
@@ -141,7 +143,7 @@ search is a measured module of about 1,600 lines (`src/web/src/core/search/`, Me
     | Platform | The field | Chips | Lists | Keyboard |
     |---|---|---|---|---|
     | Android | the full-screen M3 `SearchBar` (Search the bar's last place) | `InputChip`s in a row under the input field | *Filter by* as `ListItem`s, a divider, *Results* as a header, results as `ListItem`s with the bold part, *Show more* a `TextButton` | — |
-    | iOS, iPadOS | `.searchable`: the iPhone's search tab, the split view's toolbar field | the field's tokens | *Filter by* through `.searchSuggestions`; the results a `List` with a *Results* section | iPad with a keyboard: as macOS |
+    | iOS, iPadOS | `.searchable`: the iPhone's search tab, the split view's toolbar field | the field's tokens (a chosen `.searchCompletion(token)` keeps the rest of the typed text, measured on the macOS build 2026-11-18, so no row-list fallback) | *Filter by* through `.searchSuggestions`; the results a `List` with a *Results* section | iPad with a keyboard: as macOS |
     | macOS | the toolbar's `.searchable` | tokens | as iOS | ⌘F focuses the field; Esc closes; Return takes the first entry |
     | Linux | the `gtk::SearchBar` + `SearchEntry` under the sidebar's title | a wrap box of chip buttons under the entry | while a query stands, the sidebar's place is a `gtk::ListBox`: *Filter by*, the suggestions, a separator, *Results*, rows of a title with the bold part and a dim subtitle, *Show more* | Ctrl+F, Esc closes, Enter takes the first entry, Backspace on an empty entry removes the last chip |
     | Windows | the `AutoSuggestBox` of the `NavigationView` | a row of chip buttons at the top of the content frame while a chip is set | the box's suggestion list: *Filter by*, the suggestions, a separator, *Results*, the rows with the bold part, *Show more* | Ctrl+E and Ctrl+F, Esc closes, Enter takes the first entry, Backspace on an empty box removes the last chip |
@@ -153,13 +155,28 @@ search is a measured module of about 1,600 lines (`src/web/src/core/search/`, Me
       announcement, GTK's `gtk_accessible_announce`, UI Automation's notification event.
     - **A calm focus** holds: focusing builds the index and shows no list; the list opens with the first character or a
       chip.
+    - **As built, each platform's keys** (2026-11-18): **Android** — Enter hides the keyboard (the list is touched, not
+      entered), a hardware keyboard's Backspace in an empty field removes the last chip, and the status lines (offline's
+      among them) stand above the lists. **Linux** — Esc first clears the text, a second Esc closes; Down moves from the
+      entry into the list. **Windows** — Enter takes the highlighted entry, else the first chip offered, else the first
+      result; the settings sections have no appearance section, since the Windows app has no appearance setting. **Linux's**
+      `AdwWrapBox` exists from libadwaita 1.7 (the run image carries 1.9.4, the crate built with `v1_9`), and
+      `AdwSidebarItem` takes no markup, so the results are a `gtk::ListBox` whose rows carry the bold part; GTK's
+      `gtk_accessible_announce` exists from 4.14 (each read from the SDK's `.gir`, 2026-11-18).
 13. **The bridge (Linux, Windows)** carries the model as calls: `Call.SearchOpen` (`Search.Open`) →
     `Answer.SearchOpened(id)`; `Watched.Search(id)` → `Update.Search(id, SearchShown?)`; `Search.Focus|Text|Choose|
     RemoveChip|RemoveLastChip|More|OpenResult|Close`, each with the search's id (a result's open is `Search.OpenResult`:
     `Search.Open` opens the model). `SearchShown` is the core's own serializable state and crosses as names, parts, words
     and ids — no key, no seal. The words the search matches are the host's (`Words.Say`, asked once per word). The model
     is disposed with the tenant. The name-only search (`Call.SearchQuery`, `Answer.Hits`, `ShellWords.search`) is removed once its last
-    caller has moved.
+    caller has moved (removed 2026-11-18 with Windows, its last caller).
+    - **Added while building** (2026-11-18): `SearchShown.openSettingsCount`, the number of settings results opened — the
+      same section chosen twice in a row left the state equal to the last one, which a state flow never delivers again,
+      so a platform opens the page whenever the count moves and `openSettings` keeps its meaning; a photo of another
+      Memory reaches a bridged host as `GalleryShown.searchOpened`, answered `Gallery.SearchOpenedSeen` once its lightbox
+      shows; a chip's remove button is named by the word `search_remove_chip` (the web's `ui.removeTag`); and
+      `ShellModel.searchModel` takes an optional `trace` (counts and milliseconds, never a name) through which a platform
+      times the index's walks (Android logs it as `veyq-search`).
 
 ## Consequences
 
@@ -183,7 +200,23 @@ search is a measured module of about 1,600 lines (`src/web/src/core/search/`, Me
     - **B1:** JVM "K" 18 and 87 ms (the first keystroke, the JIT cold), "Ke" 12 and 34, "Kev" 3, a year typed 1–2, the year
       chip chosen 19 and 28, Backspace 6 and 13; `macosArm64` 0–31 ms — within 100 ms.
     - **B3:** 10 MB of used JVM heap for the index, recorded.
-  - Not yet measured: the first focus on the Android emulator against a live instance, timed from the model's trace.
+  - **The first focus live** (2026-11-18, the Android emulator `veyq_pixel` against the dev instance, timed from the
+    model's `trace` in logcat; a host load of 6–19, not a quiet machine): the process's first focus 1,453 ms in all, its
+    node documents 880 ms; a later process's first focus 388 and 325 ms; a revalidation 133–634 ms; offline 24 ms.
+- **The passes** (2026-11-18, each by an agent against the dev instance; what each could not prove is the owner's,
+  [native-apps](../crosscutting/native-apps.md) § Open):
+  - **Android** (the emulator, read through `uiautomator` and TalkBack's verbose log): a Memory's name typed from another
+    space, a year chip, a person chip and the person's result, *In:*, *Kind: Photo*, a photo of another Memory opened in
+    its lightbox, a settings section opened scrolled to it, *Show more*, airplane mode's line, TalkBack speaking the count.
+  - **macOS** (the build, read through its accessibility tree): the same steps, the chips as the field's tokens. Not
+    proven: ⌘F, Return and Esc with the app frontmost; a settings result chosen twice is proven by the core's test only.
+  - **Linux** (Broadway in the Fedora container): the same steps with Ctrl+F, Enter, Esc and Backspace in an empty entry;
+    the announcement, which Broadway's test accessibility context cannot carry, proven on X11 through `dbus-monitor`
+    (an `Object.Announcement` signal).
+  - **Windows** (the ARM64 VM through UI Automation): the same steps with Ctrl+E; the announcement read as UIA's
+    notification event (`ActionCompleted`, `MostRecent`, activity `veyq-search`).
+  - **The owner's:** the iPhone and the iPad on a device (VoiceOver's count, the tokens), Orca in a real GNOME session,
+    and ⌘F, Return and Esc on the Mac frontmost.
 - **Rejected alternatives:**
   - **The core's own tests mirroring the web's by hand:** two suites drift silently, as the participants picker's NFKD
     fold had already drifted from the web's NFD one.
@@ -201,3 +234,5 @@ search is a measured module of about 1,600 lines (`src/web/src/core/search/`, Me
     `NavigationView`'s box slot.
   - **Results in the Linux content pane:** GNOME's own apps (Settings) list a sidebar search's results in the sidebar,
     where the apps' search already shows them.
+
+Explained for users on the docs site (§ In the app): [Search all your spaces](../../site/src/content/docs/spaces/search.mdx).

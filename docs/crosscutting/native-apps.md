@@ -153,9 +153,18 @@ Neither level is offered on Android or Apple without a screen lock or passcode, 
 (where no bind key can be kept either, so every start asks for the Secret Key).
 
 **Spaces and navigation.** The drawer (switcher, New, Home, Favorites, Recent, the applications), the bar per
-application ending in Search (names only), Home's tree with its filters; favorites, the trash (delete with undo,
+application ending in Search, Home's tree with its filters; favorites, the trash (delete with undo,
 restore, purge), move, copy (Pot, folder, file, drop box, with the storage check), rename (its links' names re-sealed),
 a node's cover with its crop, core's header for every kind, a report to the moderators — each measured 2026-11-08/09.
+
+**Search** ([ADR 0146](../decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md)): the web's search ported into the core (`search/`) and held to the web by
+`contracts/platform/search/v1-vectors.json` — every visible space of the current tenant, chips, one ordered list, every
+space's photos through `listScopeMedia`, people and the app's own settings sections; each platform in its own field
+(Android's `SearchBar`, Apple's `.searchable` with tokens, Linux's sidebar `SearchBar`, Windows' `AutoSuggestBox`), the
+Linux and Windows apps over the bridge's `Search.*`. Measured 2026-11-18 on the Android emulator (`uiautomator`,
+TalkBack's verbose log), the macOS build (its accessibility tree), Linux under Broadway (the announcement on X11
+through `dbus-monitor`) and the Windows VM (UI Automation and its notification events); the first focus's timing and
+each platform's keys are ADR 0146's Consequences and decision 12.
 
 **Sharing.** Links on a Pot, a folder, a file, a Memory or a chapter (READ, READ_WRITE, "Add files only" drop boxes,
 at a space's top level too; a Memory's or chapter's upload-only link sealing to the node's own drop key, neither edited
@@ -473,7 +482,10 @@ open (below). The Use pages: [People in your Memories](../../site/src/content/do
 - Several instances gated on their major (inbox #436): the apps speak only their own major today.
 
 **Navigation and sharing**
-- Search beyond names: the web's search ([ADR 0125](../decisions/0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md)) ported into the core and held to the web by shared vectors ([ADR 0146](../decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md), [changes/cr-app-search.md](../../changes/cr-app-search.md)); listing a kind across scopes.
+- Search ([ADR 0146](../decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md), built above): **the owner's passes** — the iPhone's search tab and
+  the iPad's field with tokens and VoiceOver's count on a device (no simulator boots here, #928), Orca reading the count
+  and a chip in a real GNOME session, and ⌘F, Return and Esc with the Mac app frontmost. Open findings: #957–#962;
+  offline over every space's photos (#956). Not built: listing a kind across scopes.
 - Opening a received link in the app, as its guest, and the handover from the browser that must not carry a link's
   `#k=` key unguarded (#435); a kept link (`SHARE_BOOKMARK`) has no page yet.
 - Dropping files onto the app (Android; Apple's drop is built, not measured).

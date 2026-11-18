@@ -1,6 +1,6 @@
 # ADR 0125 — Search runs in the client over what it can open, across every space
 - Status: Accepted
-- Built: partly (not built: 8b, 8c; the apps: [ADR 0146](0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md))
+- Built: partly (not built: 8b, 8c); the apps built too, 2026-11-18 ([ADR 0146](0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md))
 - Date: 2026-11-08
 - Model: [uc.platform.search](../features/platform/use-cases/uc.platform.search.md)
 
