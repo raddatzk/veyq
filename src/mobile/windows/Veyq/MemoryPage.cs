@@ -69,6 +69,8 @@ internal sealed class MemoryPage : IDisposable
     private readonly Canvas _grid = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
     /// <summary>The rows placed: by row index, its Canvas, what it was built from and its top.</summary>
     private readonly Dictionary<int, (Canvas Row, string Key, double Top)> _mounted = [];
+    /// <summary>The placeholder tiles' progress bars, by layout id: moved from each update, never rebuilt for a step (ADR 0145 decision 3).</summary>
+    private readonly Dictionary<string, WeakReference<ProgressBar>> _bars = [];
     private readonly Recent<ImageSource> _tiles = new(TilesHeld);
     private readonly HashSet<string> _reading = [];
     private readonly Dictionary<string, List<(Image Image, Grid Face)>> _waiting = [];
@@ -228,6 +230,7 @@ internal sealed class MemoryPage : IDisposable
         if (chaptersChanged) DrawChapters();
         Draw();
         Relayout();
+        StepUploads();
         if (_shown is { } now && _id is { } id) Changed?.Invoke(now, id);
     }
 
@@ -459,6 +462,8 @@ internal sealed class MemoryPage : IDisposable
         _grid.Height = Math.Ceiling(height);
         var byId = new Dictionary<string, (int Index, GalleryRow Row)>();
         if (_shown?.rows is { } all) for (var i = 0; i < all.Count; i++) byId[all[i].mediaId] = (i, all[i]);
+        // what this device sends here leads the grid as placeholder tiles (ADR 0145 decision 3)
+        var uploading = (_shown?.uploading ?? []).ToDictionary(u => u.id);
         var wanted = rows.Select(r => r.index).ToHashSet();
         foreach (var index in _mounted.Keys.Where(k => !wanted.Contains(k)).ToList())
         {
@@ -468,7 +473,8 @@ internal sealed class MemoryPage : IDisposable
         foreach (var r in rows)
         {
             // a row is built from its frames and its media's tiles: the same row moves, another is made
-            var key = string.Join(" ", r.tiles.Select(t => $"{t.mediaId}:{(byId.TryGetValue(t.mediaId, out var m) ? m.Row.tile ?? "-" : "-")}:{t.left:0.0}:{t.width:0.0}")) + $" h{r.height:0.0}";
+            // a placeholder is built anew when it starts sending or fails, never for a step of its progress
+            var key = string.Join(" ", r.tiles.Select(t => $"{t.mediaId}:{(uploading.TryGetValue(t.mediaId, out var u) ? Stage(u) : byId.TryGetValue(t.mediaId, out var m) ? m.Row.tile ?? "-" : "-")}:{t.left:0.0}:{t.width:0.0}")) + $" h{r.height:0.0}";
             if (_mounted.TryGetValue(r.index, out var placed))
             {
                 if (placed.Key == key)
@@ -482,7 +488,7 @@ internal sealed class MemoryPage : IDisposable
                 }
                 _grid.Children.Remove(placed.Row);
             }
-            var row = Row(r, byId);
+            var row = Row(r, byId, uploading);
             Canvas.SetTop(row, r.top);
             _grid.Children.Add(row);
             _mounted[r.index] = (row, key, r.top);
@@ -490,11 +496,18 @@ internal sealed class MemoryPage : IDisposable
     }
 
     /// <summary>One row of the grid: its tiles at their frames.</summary>
-    private Canvas Row(GridRow r, Dictionary<string, (int Index, GalleryRow Row)> byId)
+    private Canvas Row(GridRow r, Dictionary<string, (int Index, GalleryRow Row)> byId, Dictionary<string, UploadTileShown> uploading)
     {
         var line = new Canvas { Height = r.height };
         foreach (var t in r.tiles)
         {
+            if (uploading.TryGetValue(t.mediaId, out var upload))
+            {
+                var held = new Border { Width = t.width, Height = r.height, CornerRadius = new CornerRadius(4), Child = Placeholder(upload, t.width, r.height) };
+                Canvas.SetLeft(held, t.left);
+                line.Children.Add(held);
+                continue;
+            }
             if (!byId.TryGetValue(t.mediaId, out var m)) continue;
             // the tile's frame at the core's place in the row: a grid's cell, nothing laid over a view
             var frame = new Border { Width = t.width, Height = r.height, CornerRadius = new CornerRadius(4), Child = Tile(m.Row, m.Index, t.width, r.height) };
@@ -548,6 +561,43 @@ internal sealed class MemoryPage : IDisposable
         ToolTipService.SetToolTip(tile, name);
         tile.Click += (_, _) => OpenLightbox(index);
         return tile;
+    }
+
+    /// <summary>A placeholder's stage, what its tile is built from: preparing, sending, failed.</summary>
+    private static string Stage(UploadTileShown u) => u.failed ? "failed" : u.preparing ? "preparing" : "sending";
+
+    /// <summary>A photo or video on its way into this page (ADR 0145 decision 3): its kind's glyph on the card, a running
+    /// bar while its tiers are made on the device, then how far it is (<see cref="StepUploads"/> moves it), or that it
+    /// failed — the uploads flyout retries it. Narrator reads its name and what is happening to it.</summary>
+    private Grid Placeholder(UploadTileShown upload, double width, double height)
+    {
+        var label = Said.Notice(upload.label);
+        var face = new Grid { Width = width, Height = height, Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"] };
+        var glyph = HomeView.Glyph(upload.failed ? "\uE7BA" : upload.video ? "\uE714" : "\uE91B");
+        glyph.FontSize = 32;
+        glyph.Foreground = (Brush)Application.Current.Resources[upload.failed ? "SystemFillColorCriticalBrush" : "TextFillColorSecondaryBrush"];
+        glyph.HorizontalAlignment = HorizontalAlignment.Center;
+        glyph.VerticalAlignment = VerticalAlignment.Center;
+        face.Children.Add(glyph);
+        if (!upload.failed)
+        {
+            var bar = new ProgressBar { IsIndeterminate = upload.preparing, Maximum = 1, Value = upload.progress, Margin = new Thickness(8), VerticalAlignment = VerticalAlignment.Bottom };
+            if (!upload.preparing) _bars[upload.id] = new WeakReference<ProgressBar>(bar);
+            face.Children.Add(bar);
+        }
+        AutomationProperties.SetName(face, label);
+        ToolTipService.SetToolTip(face, label);
+        return face;
+    }
+
+    /// <summary>Each placeholder's bar moved to its upload's progress as the update says it; a bar no longer shown is forgotten.</summary>
+    private void StepUploads()
+    {
+        foreach (var id in _bars.Where(b => !b.Value.TryGetTarget(out _)).Select(b => b.Key).ToList()) _bars.Remove(id);
+        foreach (var u in _shown?.uploading ?? [])
+        {
+            if (_bars.TryGetValue(u.id, out var weak) && weak.TryGetTarget(out var bar)) bar.Value = u.progress;
+        }
     }
 
     /// <summary>The kind's glyph a tile shows where it has no picture: none listed, or one WIC does not decode (a HEIC
@@ -712,10 +762,10 @@ internal sealed class MemoryPage : IDisposable
             null or { rows: null, failure: null } => new ProgressRing { IsActive = true, Margin = new Thickness(24), HorizontalAlignment = HorizontalAlignment.Center },
             // offline, what the store does not hold says so, else the load failed (the core's words)
             { rows: null, failure: { } failure } => Status(Said.Key(failure), ""),
-            { rows.Count: 0 } => Status(Words.MemoryGalleryEmpty(), HomeView.KindGlyph(Node.kind)),
+            { rows.Count: 0, uploading.Count: 0 } => Status(Words.MemoryGalleryEmpty(), HomeView.KindGlyph(Node.kind)),
             _ => null,
         };
-        if (s?.rows is { Count: 0 }) DropRows();
+        if (s is { rows.Count: 0, uploading.Count: 0 }) DropRows();
         if (s is null) return;
         DrawFacts(s);
         DrawPeople(s);
