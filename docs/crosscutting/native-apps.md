@@ -172,7 +172,12 @@ folder's row (Linux; Windows from Explorer with UAC on, measured 2026-11-13: a f
 folder's row, read back at their SHA-256); the drop box page (a guest's folder moved out or deleted
 after asking, with Undo); "Add files only" at a space's top level; Refresh (F5) reading what another device or a guest
 wrote. Not Send a copy (GNOME has no share target, Windows' share needs a decrypted file another app reads: Save a copy is
-the desktops' way out).
+the desktops' way out). Since V2 block B (2026-11-18) every app asks the core where the top level's share stands
+(`ShellModel.offersTopLevelShare`, never on a person's page), and an open drop box follows the scope's tree while it shows
+(`DropBoxPage.live`, the gallery's follow): a guest's new folder showed without a refresh on Linux (4 s after the web
+guest's drop) and Android (under 7 s). Every row on the desktops draws its node's cover, and a folder's level and a drop
+box's page start with its head (Linux, measured: a Pot's row and a folder's hero). A person's refresh (F5, the phones'
+pull) reads the members anew, and a picture replaced under its id reaches the desktops through `picturesRound`.
 
 **Memories.** The gallery with chapters, the lightbox with details, video and saving the original; adding photos and
 videos, their metadata read on the device as the web reads it (EXIF, the container's time, position), Android asking
@@ -361,12 +366,10 @@ open (below). The Use pages: [People in your Memories](../../site/src/content/do
     Flatpak decodes one is its next pass's question.
   - **A Memory's WebM sought far** took about a minute to land under Broadway (16 Mb/s read a range at a time through
     the reader; Windows' took 2 s): a larger read-ahead for a seek is untried.
-  - **What the uploads say waits for a save** (2026-11-12): an `AdwToastOverlay` shows one toast at a time and a save's
-    progress toast never times out, so an upload's offer or outcome shows only after the save ends. Unexplained, seen
-    once each: the first 2 GiB upload failed at 30 % and its automatic retry failed at once (no code was logged; three
-    later ones went through), and a Retry of a 5-byte file stood at 0 % for 10 s until Cancel all took it.
-  - **A foreign currency's spelling.** A currency other than the locale's own is written by its code (`EUR 1,234.56`
-    under en_US) where Android and Apple write `€1,234.56`. glibc's locale data has only the locale's own symbol.
+  - **Uploads, unexplained, seen once each** (2026-11-12): the first 2 GiB upload failed at 30 % and its automatic retry
+    failed at once (no code was logged; three later ones went through), and a Retry of a 5-byte file stood at 0 % for
+    10 s until Cancel all took it. (A save's progress is an `AdwBanner` of its own since V2 block B, so no toast waits
+    behind it any more; a long save beside an upload was not driven in a pass.)
   - **A release build warns** of `dev_login.rs`' `AtomicBool`/`Ordering` imports, used only under `debug_assertions`
     (cosmetic, seen in the Flatpak's build 2026-11-13).
   - **x86-64.** The app has not been built and run on x86-64; only arm64 was. CI's `flatpak` job on an x86-64 runner is
@@ -376,10 +379,7 @@ open (below). The Use pages: [People in your Memories](../../site/src/content/do
   x86-64 Linux PC without AVX, and a Windows-on-ARM PC whose x64 emulation hides AVX (it shows it by default). A
   software AES-GCM, or a second source such as CNG, would be a second implementation of a primitive on one platform;
   it is revisited if someone asks.
-- **A cover on the desktops is shown on a Pot's and a Memory's page** (its head, cut by `Cover.Cut`), in its dialog and
-  on a Memory's row in Memories' list (`Shell.RowCover`), but no folder's page draws a hero and no other row a thumbnail,
-  where Android and Apple draw both. The core has what they need (`NodeCover.row`, `HeaderShown.cover`,
-  `Header.CoverPicture`, `Cover.Cut`); the other kinds bring it in their slices. A cover set from another device shows on the page's next open, as on every platform.
+- **A cover set from another device** shows on the page's next open, as on every platform.
 - **An image past `FileView.IMAGE_EDGE` (4096) on the desktops** was not on a device (the passes' JPEG is 3000 × 2000):
   the scale-down (`file_page::within_edge`, Windows' `DecodePixelWidth`) is built, not seen.
 - **Apple's Depot passes left gaps** (2026-11-12): the macOS build was compiled, not run, so its download through the
@@ -420,11 +420,6 @@ open (below). The Use pages: [People in your Memories](../../site/src/content/do
   `VEYQ_DEV_CAMERA=<a frame of a kit's code>` on Linux (container or VM) and Windows (the VM), a non-veyq code skipped,
   the dialog closing with the form filled — the bridge's `KIT` scan is held by `KitDispatchTest` only.
 - The Android camera's frames on the emulator are 640×480 at most; 720p is measured on Apple's test camera only.
-
-**The bridge** ([ADR 0137](../decisions/0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md))
-- **A picture replaced under the same user id sends no signal.** The id set stays the same, so no update tells Linux
-  or Windows to ask again. Nothing reads the people anew yet; the first caller of `AvatarsModel.peopleRead` owes the
-  hosts that signal (a revision per id, say).
 
 **Account**
 - **Device linking's passes left gaps** ([ADR 0059](../decisions/0059-device-linking.md); § Built, by area):
@@ -467,11 +462,7 @@ first cut.
 **Depot**: a READ_WRITE guest's own name as uploader; importing a download (a ZIP, or one unpacked as a folder; a dropped
 or picked veyq download is uploaded as the file it is until then); multi-select and dragging a node onto a folder to move
 it (inbox #421); a PDF's text layer and password prompt, a text's copy and wrap toggle (the web's pdf.js extras); Send a
-copy and "Open with" on the desktops (not offered, see Built). **Android and Apple still decide where the top level's
-share is offered** in their shells (`folder == null && rules.on && rules.dropBox`), where the desktops ask the core
-(`ShellModel.offersTopLevelShare`): the phones' next slice moves them onto it. **A guest's new folder shows only after a
-refresh**: nothing polls a drop box; `ShellModel.refresh` reads the tree anew (the desktops' F5, the phones' pull to
-refresh, the uploads' settle, each app's lists read after a write).
+copy and "Open with" on the desktops (not offered, see Built).
 
 **Memories**: the date and the place in the creation dialog (#940); item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
 re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a

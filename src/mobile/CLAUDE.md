@@ -10,7 +10,8 @@ A Gradle build of its own, run through its own wrapper.
   core opens, writes and reads them, and removes a download that did not finish; the one call that differs is
   `blob/Files.kt`'s, `posixMain` for Apple and Linux, `mingwMain` for Windows; [ADR 0137](../../docs/decisions/0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md) decision 3), when the members'
   pictures are read (`session/AvatarsModel`, held as `TenantSession.pictures`: synced when the tenant opens and when
-  `peopleRead` gets a different set; every app watches it), and each
+  `peopleRead` gets a different set — a person's refresh, `ShellModel.refresh(people = true)`, reads the members anew —, its
+  `held` round moving with each sync that changed them; every app watches it), and each
   application's own package (`expenses/`: the web's Expenses domain, a Pot's session and what its views show; `depot/`: Depot's files, each one
   core attachment, and a file's page as a screen model, `FileModel`: what it shows decided by the bytes, an image, a text
   and a PDF held in memory, a medium read through a `RangeReader`, never a decrypted file written to show one; its "Save a
@@ -115,7 +116,8 @@ A Gradle build of its own, run through its own wrapper.
   item with its line, Cancel and Retry, what is said once with its action) and `Upload.Cancel/Retry/CancelAll/Acknowledge/
   TakeOffer/Seen`. A file page's own header actions join its header through `Header.Facts`' `file`. A drop box's page is
   `DropBox.Open` (`Watched.DropBox`: `DropBoxShown`, its guests' folders read anew on each revision of the shell's lists — a
-  `Shell.Refresh` reads a guest's new folder), a folder moved out by `DropBox.MoveOut` (answered with the move sheet it opened) and
+  `Shell.Refresh` reads a guest's new folder; `Watched.DropBoxLive`, the page's poll while it shows, reads it when the scope's
+  tree moved), a folder moved out by `DropBox.MoveOut` (answered with the move sheet it opened) and
   deleted only after `DropBox.AskDelete` (`DropBox.Delete`: trashed through a header with a guest folder's facts, `DropBox.Undo`);
   a space's top level's "Add files only" is `Share.OpenTopLevel(scopeId)` onto the `Share.*` calls, offered where
   `ShellShown.topLevelShare` says.
@@ -182,7 +184,7 @@ A Gradle build of its own, run through its own wrapper.
 - `linux/` — the Linux app (ADR 0136 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
   functions, the host function), `words`, `said` (money, days and sizes the desktop's way), `theme`, `create_action`
-  and one module per screen (`sign_in` with the unlock, `shell` with Search, `home` (a Memory's row with its cover, `Shell.RowCover`), `pot` with its download,
+  and one module per screen (`sign_in` with the unlock, `shell` with Search, `home` (every row with its cover, `Shell.RowCover`, a folder's level with its head), `pot` with its download,
   `pot_settings` (a Pot's Settings place, editable in place) and `pot_create` (New pot),
   `entry_editor` (an entry's editor; `typed`: when a text field is set from the state), `receipt_viewer` (a receipt
   shown from memory: a picture through GTK, a PDF through poppler-rs) and `entry_history`, `file_page` (a Depot file's page
@@ -214,7 +216,7 @@ A Gradle build of its own, run through its own wrapper.
   asked), `manage`
   for "Manage servers"; `header` with `trash`, `move_sheet`, `share_sheet`, `report` and `cover` for a node's header and
   its sheets; `dev_login` in a debug build only), and `avatars` (`Held`, no widget and tested: the open
-  tenant's pictures, asked for again only when the shell's id set changes; drawn as `adw::Avatar`).
+  tenant's pictures, asked for again only when the shell's id set or `picturesRound` changes; drawn as `adw::Avatar`).
   `src/main.rs` is the app. `build.rs` reads the generated bridge, words and theme from `VEYQ_GENERATED` and the
   library from `VEYQ_LIB_DIR`, both set by `run.py`. `Containerfile` (Fedora 44 by digest) is its build and run
   environment. `run.py` is its one entry point (§ Prove your work); `run.py lock` is the one writer of `Cargo.lock`.
@@ -249,7 +251,7 @@ A Gradle build of its own, run through its own wrapper.
   for a photo, turned by its EXIF; `Windows.Media.Editing` for a video's poster and length, `MediaSource.OpenAsync` where
   a clip refuses the file (an Ogg track); both JPEGs encoded in memory; `MediaTiersTest`), `MusicBar` (the account's
   music bar along the shell's bottom), `MusicHost` (the two decks, `MediaPlayer`s over `ReaderStream`, ramps in
-  `MusicRamp`'s steps; one SMTC for the window through `GetForWindow`; `MusicTest`), `RowCovers` (a Memory's list row's cover through `Shell.RowCover`), `Uploads` (New's Upload files and Upload folder through `FileOpenPicker`
+  `MusicRamp`'s steps; one SMTC for the window through `GetForWindow`; `MusicTest`), `RowCovers` (every list row's cover through `Shell.RowCover`), `Uploads` (New's Upload files and Upload folder through `FileOpenPicker`
   and `FolderPicker`, a file's Replace, the queue's `AppBarButton` with its `Flyout`, what it says in an `InfoBar`),
   `DropBoxPage` (a drop box's page), `ListScrolls` (where each list was
   scrolled to; `ListScrollsTest`), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with
@@ -1047,8 +1049,12 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   (measured 2026-11-10). `run.py test` links the container's `/etc/localtime` to Europe/Berlin and sets `TZ` for glibc.
 - The process's locale is one for every test thread: a Rust test that sets `LC_ALL` or `LC_MONETARY` holds
   `crate::LOCALE` while it does.
-- Money in the Linux app is glibc's locale data, which knows only the locale's own currency symbol. Any other currency
-  is written by its code (`EUR 1,234.56` under en_US), where Android and Apple write `€1,234.56` (native-apps § Open).
+- Money in the Linux app is glibc's locale data, which knows only the locale's own currency symbol; another currency's
+  symbol is ICU's (`said::icu_symbol`, `libicuuc` linked by `build.rs`), whose C functions carry ICU's major version in
+  their names (`ucurr_getName_78`) — read from pkg-config at build, never spelled, since the Fedora image (77) and the
+  GNOME runtime (78) differ. Windows' `icu.dll` names them without a version.
+- AdwComboRow's `use-subtitle` set after its model showed no subtitle until the selection changed (the payer rows, #901):
+  the editor's draw sets the subtitle itself.
 - A GTK dialog's state that only weak handlers reach is dropped at once: Linux's first cover dialog did nothing on
   "Choose a picture", every `Weak` upgrading to nothing. A dialog module holds its state until the dialog's `closed`
   (`cover.rs`, `share_sheet.rs`).

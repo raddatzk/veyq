@@ -1089,8 +1089,14 @@ implementation exists but what holds it to the first.
     reached by the unpackaged app: no MSIX identity needed, measured first and kept as `PdfPagesTest`, so an SDK or
     packaging change that loses it goes red); WebView2's PDF viewer was not the fallback (it needs the bytes at a URL or
     a file). `PotSettingsView` (in place; the base currency's `ComboBox` kept across updates, writing on commit) and
-    `PotCreateDialog`. Money in another currency than the region's is written by its code (`Said.Money`):
-    `CurrencyFormatter` wrote Canadian dollars "12,50 $" in de-DE, the US dollar's sign.
+    `PotCreateDialog`. Money in another currency than the region's is written by ICU's symbol (`Said.Money`, CLDR's, as
+    Android, Apple and the web write it; V2 block B): `icu.dll`'s `ucurr_getName` names it, swapped into
+    `CurrencyFormatter`'s layout of the region's own currency, whose own symbol for another currency is never used — it
+    wrote Canadian dollars "12,50 $" in de-DE, the US dollar's sign. Measured on the VM (2026-11-18, `SaidTest`): "12,50 CA$"
+    and "1.234 ¥" in de-DE, "€1,234.56" and "CA$1,234.56" in en-US, a negative in en-US in brackets as Windows writes its
+    own, CHF (no symbol but its code in ICU) by its code. Linux does the same through `libicuuc` (its versioned names read
+    from pkg-config by `build.rs`: 77 in the Fedora 44 image, 78 in the GNOME 51 runtime), placed as `lconv` places the
+    locale's own symbol.
 
   Measured 2026-11-12 (`run.py build`: `Veyq.Tests` 25 with `PdfPagesTest` — a one-page PDF at 400 × 200 with its left
   half black, 25 pages counted, bytes that are no PDF refused —, `TypedTextTest` and `SaidTest`'s code mode bitten; a
