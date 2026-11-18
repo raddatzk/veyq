@@ -187,12 +187,14 @@ class ShellModel(
      * keeps what was listed. The session's tree is forgotten first: a session caches it ([TenantSession.trees]), and a
      * refresh that read the cache showed a guest's new folder only after a sign-in (found 2026-11-12; ADR 0136's Consequences).
      */
-    suspend fun refresh() {
+    suspend fun refresh(people: Boolean = false) {
         reading.withLock {
             tenant.forgetTree()
             runCatching { read() }.getOrNull()?.let { raw = it }
         }
         rebuild(start = false, openLastUsed = false)
+        // a person's refresh (the desktops' Refresh, the phones' pull): the members too, and a picture replaced since
+        if (people) runCatching { tenant.readPeople() }.getOrNull()?.let { tenant.pictures.peopleRead(it.values) }
     }
 
     private suspend fun read() = Raw(tenant.spaces(), tenant.nodes(), tenant.favorites(), tenant.applicationsOff())
@@ -292,7 +294,8 @@ class ShellModel(
 
     /**
      * Whether [shell] shows a space's top level on Home, where its share offers "Add files only" ([topLevelShareSheet], the
-     * web's level share): no folder, object, application or Search open, and the tenant's links and drop boxes on.
+     * web's level share): no folder, object, application, person's page or Search open, and the tenant's links and drop
+     * boxes on. Every platform asks this (the phones through their `AppModel`, the desktops through `ShellShown.topLevelShare`).
      */
     fun offersTopLevelShare(shell: Shell): Boolean {
         val space = shell.space ?: return false
@@ -870,6 +873,8 @@ class ShellModel(
             override suspend fun folders() = me.raddatz.veyq.mobile.depot.DropBoxes.folders(tenant, ref.scopeId, ref.nodeId)
             // each read of the lists is a new one (a rebuild after a refresh); a move of the shell alone keeps them
             override val revisions = state.map { it?.lists }.distinctUntilChanged { a, b -> a === b }
+            // a guest's new folder: the scope's tree moved, the lists are read anew and the page with them
+            override suspend fun treeMoved() = tenant.treeMoved(ref.scopeId).also { if (it) refresh() }
         })
 
     companion object {
@@ -902,9 +907,9 @@ class ShellModel(
             }
         }
 
-        /** Whether [shell] stands on [space]'s top level on Home: no folder, object, application or Search open. */
+        /** Whether [shell] stands on [space]'s top level on Home: no folder, object, application, person's page or Search open. */
         fun topLevelShared(shell: Shell, space: String): Boolean =
-            shell.openObject == null && shell.application == null && !shell.searching && shell.folderAt(space) == null
+            shell.openObject == null && shell.application == null && shell.person == null && !shell.searching && shell.folderAt(space) == null
 
         /**
          * The shell where folder [nodeId] on Home's path changed: still in [tree] (its space's nodes), the path read anew to

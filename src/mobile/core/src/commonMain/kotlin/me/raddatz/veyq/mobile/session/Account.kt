@@ -1387,9 +1387,8 @@ class TenantSession internal constructor(
     private val applicationsOff: Set<String>,
     /** The scopes this tenant serves the account that stay closed, by id, and why (a grant refused or awaiting a key). */
     val closed: Map<String, GrantOutcome.Reason> = emptyMap(),
-    /** The tenant's members by user id, named by the display rule, as read when the tenant was opened; empty when this
-     *  account holds no tenant grant or the list did not read. A user it does not list is a former member. */
-    val people: Map<String, Person> = emptyMap(),
+    /** The tenant's members as read when the tenant was opened ([people]). */
+    people: Map<String, Person> = emptyMap(),
     /** The tenant's external services by capability id, each its configured address (`serviceUrl`): only while the
      *  tenant's set has the capability on; empty when the set did not read, so nothing is fetched then. */
     private val services: Map<String, String> = emptyMap(),
@@ -1413,6 +1412,28 @@ class TenantSession internal constructor(
     fun serviceAttribution(capabilityId: String): String? = attributions[capabilityId]
 
     internal class OpenScope(val summary: ScopeSummary, val key: ByteArray, val name: String)
+
+    /**
+     * The tenant's members by user id, named by the display rule, as read when the tenant was opened or last by
+     * [readPeople]; empty when this account holds no tenant grant or the list did not read. A user it does not list is a
+     * former member.
+     */
+    var people: Map<String, Person> = people
+        private set
+
+    /**
+     * Reads the tenant's members anew (a person's refresh, `ShellModel.refresh(people = true)`), as the open read them, and
+     * keeps them as [people]: a member's new name or picture revision shows from then on. Null, and [people] as it was,
+     * where this account holds no tenant grant or the list did not read. Throws where the server did not answer.
+     */
+    @Throws(Exception::class)
+    suspend fun readPeople(): Map<String, Person>? {
+        val own = scopes.firstOrNull { it.summary.kind.value == "TENANT" && it.summary.id == tenant.tenantId } ?: return null
+        val r = account.respond { api(::ScopesApi).listScopeMembers(tenant.tenantId) }
+        if (!r.success) return null
+        return People.of(JoinRecords(account.suite), tenant.tenantId, own.key, own.summary.grantedEpoch.toLong(), r.body())
+            .also { people = it }
+    }
 
     private fun <T : ApiClient> api(make: (String, HttpClient) -> T): T = make(base, account.http)
 

@@ -1067,6 +1067,14 @@ class DispatchTest {
         val turned = kotlinx.coroutines.flow.MutableStateFlow(0)
         override suspend fun folders() = listed.toList()
         override val revisions: kotlinx.coroutines.flow.Flow<Any?> = turned
+        /** The live poll's asks; with [moves] a tree that moved reads the lists anew, as the shell's refresh does. */
+        val asked = java.util.concurrent.atomic.AtomicInteger()
+        @Volatile var moves = false
+        override suspend fun treeMoved(): Boolean {
+            asked.incrementAndGet()
+            if (moves) turned.value++
+            return moves
+        }
         fun guest(id: String, label: String, files: Int) = me.raddatz.veyq.mobile.depot.DropBoxes.GuestFolder(
             me.raddatz.veyq.mobile.session.OpenNode("s", id, "box", "FOLDER", label, ByteArray(32)), label,
             (1..files).map { me.raddatz.veyq.mobile.session.OpenNode("s", "$id-f$it", id, "FILE", "f$it.txt", ByteArray(32)) },
@@ -1088,7 +1096,8 @@ class DispatchTest {
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     header = { node, facts, _ -> headerFacts += facts; me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, played) },
                     move = { node, copying, _, _ -> me.raddatz.veyq.mobile.navigation.MoveSheet(node, copying, move) },
-                    dropBox = { node -> me.raddatz.veyq.mobile.depot.DropBoxPage(node, box) },
+                    // a clock that has always moved on: the live poll's first tick asks at once
+                    dropBox = { node -> var t = 0L; me.raddatz.veyq.mobile.depot.DropBoxPage(node, box, now = { t += 60_000; t }) },
                     topLevelShare = { scopeId -> me.raddatz.veyq.mobile.navigation.ShareSheet.topLevel(scopeId, share) { 1_700_000_000_000L } },
                 )
             }
@@ -1111,6 +1120,20 @@ class DispatchTest {
         box.turned.value++
         val two = w.until { u -> (u as Update.DropBox).shown?.folders?.takeIf { it.size == 2 } }
         assertEquals(listOf("Anna", "Ben"), two.map { it.label })
+
+        // a guest's new folder while the page stands: its live poll asks whether the tree moved, and a move reads it anew
+        // (Watched.DropBoxLive delivers nothing of its own and stops with its watch)
+        box.listed += box.guest("cleo", "Cleo", 1)
+        box.moves = true
+        val live = b.watching(Watched.DropBoxLive(id))
+        val three = w.until { u -> (u as Update.DropBox).shown?.folders?.takeIf { it.size == 3 } }
+        assertEquals(listOf("Anna", "Ben", "Cleo"), three.map { it.label })
+        assertNull(live.pending(), "the poll's watch delivered an update of its own")
+        b.unwatch(live.id)
+        box.moves = false
+        val polls = box.asked.get()
+        kotlinx.coroutines.delay(200)
+        assertEquals(polls, box.asked.get(), "the poll outlived its watch")
 
         // a delete not asked trashes nothing; asked, declined, asked again, then trashed through a header with a guest folder's facts
         assertEquals(Answer.Refused(Answer.Why.NOT_ASKED), b.ask(Call.DropBoxDelete(id, "ben")))

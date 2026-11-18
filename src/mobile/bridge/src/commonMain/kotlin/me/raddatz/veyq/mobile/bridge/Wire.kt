@@ -225,6 +225,7 @@ internal sealed class Call {
     @Serializable @SerialName("Shell.Open") data class ShellOpen(val ref: ObjectRef) : Call()
     @Serializable @SerialName("Shell.OpenAtTop") data class ShellOpenAtTop(val ref: ObjectRef) : Call()
     @Serializable @SerialName("Shell.Search") data class ShellSearch(val on: Boolean) : Call()
+    /** A person's refresh (F5): the lists and the members read anew (`ShellModel.refresh(people = true)`). */
     @Serializable @SerialName("Shell.Refresh") data object ShellRefresh : Call()
 
     /** Home's level where the shell is, in its groups (`ShellModel.Lists.groups`). */
@@ -1621,6 +1622,13 @@ internal sealed class Watched {
 
     /** A drop box's page opened by [Call.DropBoxOpen]. */
     @Serializable @SerialName("DropBox") data class DropBox(val box: Long) : Watched()
+
+    /**
+     * Drop box [box]'s live poll (`DropBoxPage.live`: whether the scope's tree moved, a guest's new folder among it), for as
+     * long as this watch stands: a host watches it while the page shows. It delivers no update of its own — a new folder
+     * arrives on [DropBox]'s — and ends with the watch or the page.
+     */
+    @Serializable @SerialName("DropBoxLive") data class DropBoxLive(val box: Long) : Watched()
 
     /** A QR scan opened by [Call.ScanOpen]. */
     @Serializable @SerialName("Scan") data class Scan(val scan: Long) : Watched()
@@ -3053,6 +3061,12 @@ internal class ShellShown(
      * for everyone else. A change of the set is a new update; the bytes never ride one (ADR 0137 decision 1).
      */
     val pictures: List<String>,
+    /**
+     * The pictures' round (`AvatarsModel.held`): moves with every sync that changed the pictures held, a picture replaced
+     * under the same id among it (the people read anew by [Call.ShellRefresh]). A host asks every id of [pictures] again
+     * when the set or this moved.
+     */
+    val picturesRound: Int = 0,
     /**
      * The banner offline (`ShellModel.State.banner`: "Offline — content as of {time}"); null online. Offline every write
      * is refused and New is not offered ([canCreateHere]).
