@@ -753,7 +753,82 @@ class ShellModel(
                 .also { runCatching { refresh() } }
             override suspend fun removeBanner(openedWith: me.raddatz.veyq.mobile.memories.banner.Banner.Slots) =
                 me.raddatz.veyq.mobile.memories.banner.BannerWrite.remove(tenant, ref.scopeId, ref.nodeId, openedWith).also { runCatching { refresh() } }
-        }, access = memoryAccess(ref), now = now, music = music)
+        }, access = memoryAccess(ref), now = now, music = music,
+            search = me.raddatz.veyq.mobile.memories.GalleryModel.Search(openRequests, searchContributions))
+
+    // ---- the search (ADR 0146) ----
+
+    /** The search's one-shot requests to a node's page (a photo of another Memory opened in its lightbox). */
+    val openRequests = me.raddatz.veyq.mobile.search.OpenRequests()
+
+    /** What the page of the node on screen adds to the search (the open Memory's photos). */
+    val searchContributions = me.raddatz.veyq.mobile.search.SearchContributions()
+
+    /**
+     * The search over this tenant (ADR 0146 decision 7): one per field, built by a platform beside its shell — [words] the
+     * platform's catalog in the UI's language, [appearance] whether its settings page offers the appearance section (the
+     * phones) — and [me.raddatz.veyq.mobile.search.SearchModel.dispose]d where the tenant closes (the bridge's
+     * `closeTenant`, the phones' switch, a lock, a sign-out). It reads the shell's trees, never a tree of its own; a result
+     * opens through this shell.
+     */
+    fun searchModel(words: me.raddatz.veyq.mobile.search.SearchWords, appearance: Boolean): me.raddatz.veyq.mobile.search.SearchModel =
+        me.raddatz.veyq.mobile.search.SearchModel(searchDoor(appearance), AppKinds.search, words, openRequests, searchContributions, now)
+
+    private fun searchDoor(appearance: Boolean) = object : me.raddatz.veyq.mobile.search.SearchModel.Door {
+        override suspend fun spaces() = current?.lists?.spaces ?: hidden.visibleSpaces(tenant.spaces())
+        override suspend fun <V : Any> fromTree(key: String, derive: suspend (Map<String, List<OpenNode>>) -> V): V = tenant.fromTree(key, derive)
+        override suspend fun treeMoved(scopeId: String) = tenant.treeMoved(scopeId).also { if (it) refresh() }
+        override fun notRead() = tenant.unreadTrees + tenant.closed.keys
+        override fun openMeta(node: OpenNode) =
+            runCatching { NodeMetaWrite.openForWrite(tenant.account.suite, node.scopeId, node.id, node.key, node.wrappedMeta) }.getOrNull()
+        override fun online() = online
+        override fun people() = tenant.people.values
+        override suspend fun settings(): List<me.raddatz.veyq.mobile.search.SettingsSection> {
+            val account = tenant.account
+            val linking = online && runCatching {
+                account.call { me.raddatz.veyq.mobile.api.apis.SetupApi(account.server, account.http).getSetupStatus() }
+                    .capabilities.any { it.id == me.raddatz.veyq.mobile.session.AccountSettings.DEVICE_LINKING }
+            }.getOrDefault(false)
+            // the page's own gates: the storage section where a store is kept or why none is said (AccountSettings.Over)
+            val storage = account.offline != null || (account.thisDevice.offlineRoot != null && account.trusted == null)
+            return me.raddatz.veyq.mobile.search.SettingsSection.offered(
+                me.raddatz.veyq.mobile.search.SettingsSection.Gates(addDevice = linking, storage = storage, maps = placeNames != null, appearance = appearance),
+            )
+        }
+        override fun where(): me.raddatz.veyq.mobile.search.Results.SearchContext {
+            val s = shell
+            return me.raddatz.veyq.mobile.search.Results.SearchContext(s?.openObject?.scopeId ?: s?.space, s?.openObject?.nodeId)
+        }
+        override fun applicationsOff() = tenant.applicationsOff()
+        override suspend fun scopeDocuments(
+            app: me.raddatz.veyq.mobile.search.ApplicationSearch, scopeId: String, tag: String?,
+            previous: Map<String, me.raddatz.veyq.mobile.search.ScopeDocument>, nodes: Map<String, OpenNode>, unnamed: (Boolean) -> String,
+        ) = app.scopeDocuments(me.raddatz.veyq.mobile.search.ScopeDocumentsContext(tenant, scopeId, tag, previous, nodes, unnamed))
+        override fun openNode(scopeId: String, nodeId: String) = openFound(scopeId, nodeId)
+        override fun openPerson(userId: String) = this@ShellModel.openPerson(userId)
+    }
+
+    /**
+     * Node [nodeId] of [scopeId] a search found, opened where it lives (ADR 0146 decision 8): an object in its application in
+     * its space (back returns to the search), a folder on Home at that folder; a node that is neither (a chapter, a kept
+     * link) by the nearest object or folder above it.
+     */
+    fun openFound(scopeId: String, nodeId: String) {
+        val nodes = current?.lists?.nodes.orEmpty().filter { it.scopeId == scopeId }
+        val byId = nodes.associateBy { it.nodeId }
+        val seen = HashSet<String>()
+        var n = byId[nodeId]
+        while (n != null && seen.add(n.nodeId)) {
+            val obj = n.asObject() ?: if (n.nodeId == nodeId) me.raddatz.veyq.mobile.memories.GalleryModel.rowPage(n) else null
+            if (obj != null) return opened(obj) { it.open(obj).copy(space = scopeId) }
+            if (n.isFolder) {
+                val folder = n.nodeId
+                return update { it.switchSpace(scopeId).at(nodes, folder) }
+            }
+            n = n.parentId?.let { byId[it] }
+        }
+        update { it.switchSpace(scopeId) }
+    }
 
     /** Who looks at Memory or chapter [ref] from this shell: a member, as the tenant's switches and the folder say. */
     private fun memoryAccess(ref: NodeAt) = me.raddatz.veyq.mobile.memories.MemoryRights.Access.Member(

@@ -1,14 +1,27 @@
 package me.raddatz.veyq.mobile.memories
 
+import io.ktor.http.HttpHeaders
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.json.JsonObject
+import me.raddatz.veyq.mobile.api.memories.apis.MediaApi
+import me.raddatz.veyq.mobile.api.memories.models.ScopeMediaPage
+import me.raddatz.veyq.mobile.crypto.BlobMeta
+import me.raddatz.veyq.mobile.crypto.Context
+import me.raddatz.veyq.mobile.crypto.V1
+import me.raddatz.veyq.mobile.crypto.unb64
 import me.raddatz.veyq.mobile.memories.place.MemoryDate
 import me.raddatz.veyq.mobile.memories.place.MemoryLocation
 import me.raddatz.veyq.mobile.search.MonthSpan
+import me.raddatz.veyq.mobile.search.ApplicationSearch
 import me.raddatz.veyq.mobile.search.Query
+import me.raddatz.veyq.mobile.search.ScopeDocumentsAnswer
+import me.raddatz.veyq.mobile.search.ScopeDocumentsContext
 import me.raddatz.veyq.mobile.search.ScopeDocument
 import me.raddatz.veyq.mobile.search.SearchFacets
 import me.raddatz.veyq.mobile.search.YearSpan
 import me.raddatz.veyq.mobile.search.localDate
+import me.raddatz.veyq.mobile.session.OpenNode
 
 /**
  * What Memories adds to core's search (ADR 0125 decisions 6 and 8a; the web's `features/memories/search.ts`, ported for
@@ -93,5 +106,107 @@ object MemoriesSearch {
             facets = SearchFacets(capturedAt = meta?.effectiveCapturedAt, places = place?.let { listOf(it) }),
             icon = if (video) VIDEO_ICON else PHOTO_ICON,
         )
+    }
+
+    /** Memories' part in the search of every space (`AppKinds.search`): [scopeMediaDocuments]. */
+    val search = ApplicationSearch { scopeMediaDocuments(it) }
+
+    /**
+     * Every photo and video of one space (the web's `scopeMediaDocuments`; ADR 0125 decision 8a): `listScopeMedia` read by the
+     * last answer's tag (a `304`: null, nothing opened), else page by page, [SCOPE_MEDIA_PAGE] at a time, each page opened by
+     * [pageDocuments] under the shell's node keys. Not a kept read (ADR 0146 decision 11): offline it is not asked.
+     */
+    @Throws(Exception::class)
+    suspend fun scopeMediaDocuments(ctx: ScopeDocumentsContext): ScopeDocumentsAnswer? {
+        val tenant = ctx.tenant
+        val api = MediaApi(tenant.base, tenant.account.http)
+        val first = tenant.account.respond { api.listScopeMedia(ctx.scopeId, limit = SCOPE_MEDIA_PAGE, ifNoneMatch = ctx.tag) }
+        if (first.status == 304 && ctx.tag != null) return null
+        if (!first.success) throw IllegalStateException("scope media ${first.status}")
+        val tag = first.response.headers[HttpHeaders.ETag]
+        var page = first.body()
+        val out = ArrayList<ScopeDocument>()
+        while (true) {
+            out += pageDocuments(tenant.account.suite, ctx.scopeId, page, ctx.nodes, ctx.previous, ctx.unnamed)
+            val last = page.media.lastOrNull()?.mediaId
+            if (!page.more || last == null) break
+            page = tenant.account.call { api.listScopeMedia(ctx.scopeId, after = last, limit = SCOPE_MEDIA_PAGE) }
+        }
+        return ScopeDocumentsAnswer(tag, out)
+    }
+
+    /**
+     * One page of a space's listing as documents, one medium at a time (cancellable between two): a blocked medium left
+     * before anything of it is opened; one at an unchanged revision of the same node kept as [previous] holds it; every
+     * other opened under its node's key — the shell's ([nodes], read in place, never copied or zeroed here) or, for a
+     * drop box's guest, the guest's `K_up` — with `MemoryMedia`'s own openers. **What this walk unwraps it zeroes before
+     * it returns, a thrown walk included** (ADR 0146 decision 5): each original's `K_blob`, each drop box's private seed and
+     * each guest's `K_up`.
+     */
+    internal suspend fun pageDocuments(
+        suite: V1, scopeId: String, page: ScopeMediaPage, nodes: Map<String, OpenNode>, previous: Map<String, ScopeDocument>,
+        unnamed: (Boolean) -> String,
+    ): List<ScopeDocument> {
+        val out = ArrayList<ScopeDocument>()
+        val upKeys = HashMap<String, ByteArray?>()
+        val pageNodes = page.nodes.associateBy { it.nodeId }
+        fun keyOf(ownerKey: String?, node: OpenNode): ByteArray? {
+            val drop = pageNodes[node.id]
+            if (ownerKey == null || !ownerKey.startsWith("share:") || drop == null) return node.key
+            val identity = ownerKey.removePrefix("share:")
+            val wrapped = drop.uploaderKeys.firstOrNull { it.identityId == identity }?.wrappedIdentityKey ?: return node.key
+            return upKeys.getOrPut("${node.id}:$identity") {
+                runCatching {
+                    val serialized = suite.open(Context("drop-private-key", "scopeId" to scopeId, "nodeId" to node.id), node.key, unb64(drop.sealedDropPrivateKey))
+                    val seed = suite.deserializeDropKey(serialized)
+                    val dropKey = suite.xwingKey(seed)
+                    try {
+                        suite.openAs(
+                            Context("upload-identity-key", "scopeId" to scopeId, "nodeId" to node.id, "identityId" to identity),
+                            dropKey, unb64(wrapped),
+                        )
+                    } finally {
+                        serialized.fill(0)
+                        seed.fill(0)
+                        dropKey.mlKemDk.fill(0)
+                        dropKey.x25519Sk.fill(0)
+                    }
+                }.getOrNull()
+            }
+        }
+        try {
+            for (row in page.media) {
+                currentCoroutineContext().ensureActive()
+                if (row.blockedByOperator) continue
+                val before = previous[row.mediaId]
+                if (before != null && before.revision == revisionOf(row.metaRevision, row.blobId) && before.nodeId == row.nodeId) {
+                    out += before
+                    continue
+                }
+                val node = nodes[row.nodeId] ?: continue
+                val key = keyOf(row.ownerKey, node) ?: continue // a chain that does not open: its media are not searched
+                val meta = MemoryMedia.openMeta(suite, scopeId, row.mediaId, key, row.wrappedMeta)
+                var type: String? = null
+                var name: String? = null
+                row.wrappedBlobMeta?.let { sealed ->
+                    val blob = MemoryMedia.Blob(row.blobId, row.chunkCount, row.byteSize, row.wrappedBlobKey, sealed)
+                    val kBlob = MemoryMedia.openBlobKey(suite, scopeId, row.mediaId, key, blob, MemoryMedia.ORIGINAL)
+                    if (kBlob != null) {
+                        try {
+                            BlobMeta.open(suite, kBlob, unb64(sealed))?.let {
+                                type = it.type.takeIf { t -> t.isNotBlank() }
+                                name = it.name
+                            }
+                        } finally {
+                            kBlob.fill(0)
+                        }
+                    }
+                }
+                mediumDocument(row.mediaId, row.nodeId, row.metaRevision, row.blobId, meta, type, name, unnamed)?.let { out += it }
+            }
+        } finally {
+            for (k in upKeys.values) k?.fill(0)
+        }
+        return out
     }
 }

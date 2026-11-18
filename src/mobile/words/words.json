@@ -95,6 +95,241 @@
     "en": "Close search",
     "de": "Suche schließen"
   },
+  "search_kind_folder": {
+    "note": "a kind's word in the search (ADR 0146 decision 4, the web's): a kind chip's label and what typing it finds",
+    "en": "Folder",
+    "de": "Ordner"
+  },
+  "search_kind_bookmark": {
+    "en": "Bookmark",
+    "de": "Lesezeichen"
+  },
+  "search_kind_file": {
+    "en": "File",
+    "de": "Datei"
+  },
+  "search_kind_dropbox": {
+    "en": "Drop box",
+    "de": "Briefkasten"
+  },
+  "search_kind_pot": {
+    "en": "Pot",
+    "de": "Kasse"
+  },
+  "search_kind_memory": {
+    "en": "Memory",
+    "de": "Erinnerung"
+  },
+  "search_kind_chapter": {
+    "en": "Chapter",
+    "de": "Kapitel"
+  },
+  "search_kind_photo": {
+    "en": "Photo",
+    "de": "Foto"
+  },
+  "search_kind_video": {
+    "en": "Video",
+    "de": "Video"
+  },
+  "search_kind_person": {
+    "en": "Person",
+    "de": "Person"
+  },
+  "search_kind_setting": {
+    "en": "Setting",
+    "de": "Einstellung"
+  },
+  "search_results": {
+    "note": "the heading over the search's one list of results (the web's shell.search.results)",
+    "en": "Results",
+    "de": "Treffer"
+  },
+  "search_filter_by": {
+    "note": "the heading over the search's chip suggestions: a suggestion filters, a result opens",
+    "en": "Filter by",
+    "de": "Filtern nach"
+  },
+  "search_show_more": {
+    "note": "the last entry of the results: ten more (at most) drawn",
+    "en": "Show {1:int} more",
+    "de": "{1:int} weitere zeigen"
+  },
+  "search_loading": {
+    "note": "said once a space has been loading for 300 ms while the list is open",
+    "en": {
+      "one": "Searching one space…",
+      "other": "Searching {1:int} spaces…"
+    },
+    "de": {
+      "one": "Ein Bereich wird durchsucht …",
+      "other": "{1:int} Bereiche werden durchsucht …"
+    }
+  },
+  "search_not_searched": {
+    "note": "the spaces whose tree or listing could not be read, joined",
+    "en": "Not searched: {1}",
+    "de": "Nicht durchsucht: {1}"
+  },
+  "search_empty": {
+    "en": "Nothing found.",
+    "de": "Nichts gefunden."
+  },
+  "search_explained": {
+    "note": "the empty state's hint: what the search looks at",
+    "en": "Searches names, dates, places and people in all your spaces, and finds members and settings too.",
+    "de": "Durchsucht Namen, Daten, Orte und Personen in all deinen Bereichen und findet auch Mitglieder und Einstellungen."
+  },
+  "search_offline_photos": {
+    "note": "offline: the photos of every space are searched only online (ADR 0146 decision 11; owner's copy 2026-11-18)",
+    "en": "Photos are searched once you are online.",
+    "de": "Fotos werden durchsucht, sobald du online bist."
+  },
+  "search_settings": {
+    "note": "a settings section's result's second line (owner's copy 2026-11-18)",
+    "en": "Settings",
+    "de": "Einstellungen"
+  },
+  "search_chip_year": {
+    "note": "a chip's type, said before its value",
+    "en": "Year",
+    "de": "Jahr"
+  },
+  "search_chip_place": {
+    "en": "Place",
+    "de": "Ort"
+  },
+  "search_chip_person": {
+    "en": "Person",
+    "de": "Person"
+  },
+  "search_chip_space": {
+    "en": "Space",
+    "de": "Bereich"
+  },
+  "search_chip_kind": {
+    "en": "Kind",
+    "de": "Art"
+  },
+  "search_chip_month": {
+    "en": "Month",
+    "de": "Monat"
+  },
+  "search_chip_in": {
+    "en": "In",
+    "de": "In"
+  },
+  "search_announce_none": {
+    "note": "read to a screen reader: the query found nothing",
+    "en": "No results",
+    "de": "Keine Treffer"
+  },
+  "search_announce_results": {
+    "note": "read to a screen reader as the count changes",
+    "en": {
+      "one": "One result",
+      "other": "{1:int} results"
+    },
+    "de": {
+      "one": "Ein Treffer",
+      "other": "{1:int} Treffer"
+    }
+  },
+  "search_announce_chip_added": {
+    "en": "Filter {1} added.",
+    "de": "Filter „{1}“ hinzugefügt."
+  },
+  "search_announce_chip_removed": {
+    "en": "Filter {1} removed.",
+    "de": "Filter „{1}“ entfernt."
+  },
+  "search_month_1": {
+    "note": "a month's name: a month chip's label, and what typing it before a year finds",
+    "en": "January",
+    "de": "Januar"
+  },
+  "search_month_2": {
+    "en": "February",
+    "de": "Februar"
+  },
+  "search_month_3": {
+    "en": "March",
+    "de": "März"
+  },
+  "search_month_4": {
+    "en": "April",
+    "de": "April"
+  },
+  "search_month_5": {
+    "en": "May",
+    "de": "Mai"
+  },
+  "search_month_6": {
+    "en": "June",
+    "de": "Juni"
+  },
+  "search_month_7": {
+    "en": "July",
+    "de": "Juli"
+  },
+  "search_month_8": {
+    "en": "August",
+    "de": "August"
+  },
+  "search_month_9": {
+    "en": "September",
+    "de": "September"
+  },
+  "search_month_10": {
+    "en": "October",
+    "de": "Oktober"
+  },
+  "search_month_11": {
+    "en": "November",
+    "de": "November"
+  },
+  "search_month_12": {
+    "en": "December",
+    "de": "Dezember"
+  },
+  "search_month_year": {
+    "note": "a month chip: the month and its year",
+    "en": "{1} {2}",
+    "de": "{1} {2}"
+  },
+  "search_words_account": {
+    "note": "words a settings section is found by in the search, comma-separated, never shown (ADR 0146 decision 9)",
+    "en": "email, e-mail, address, sign out",
+    "de": "E-Mail, Adresse, abmelden"
+  },
+  "search_words_device": {
+    "en": "this device, stay signed in, trust, unlock",
+    "de": "dieses Gerät, angemeldet bleiben, Vertrauen, entsperren"
+  },
+  "search_words_sessions": {
+    "en": "devices, sign out, log out, sessions",
+    "de": "Geräte, abmelden, Sitzungen"
+  },
+  "search_words_saved_keys": {
+    "en": "saved key, device key, remembered",
+    "de": "gespeicherter Schlüssel, Geräteschlüssel, gemerkt"
+  },
+  "search_words_add_device": {
+    "en": "new device, phone, QR code",
+    "de": "neues Gerät, Handy, QR-Code"
+  },
+  "search_words_storage": {
+    "en": "offline, cache, available offline, space",
+    "de": "offline, Cache, offline verfügbar, Speicherplatz"
+  },
+  "search_words_maps": {
+    "en": "map and place names, map, place names, places, location, consent",
+    "de": "Karte und Ortsnamen, Karte, Ortsnamen, Orte, Standort, Zustimmung"
+  },
+  "search_words_appearance": {
+    "en": "theme, dark mode, light mode, language, colours, colors",
+    "de": "Design, Dunkelmodus, Hellmodus, Sprache, Farben"
+  },
   "back": {
     "en": "Back",
     "de": "Zurück"
