@@ -48,11 +48,12 @@ extension AppModel {
     }
 
     private func searchChanged(_ state: SearchShown) {
-        let was = found?.openSettings
+        let was = found?.openSettingsCount ?? 0
         found = state
-        // a settings result: the Settings page opens there (the field opens the Mac's window, `SearchField`); core keeps
-        // the section in its state until the next action, so only its arrival opens the page
-        if let section = state.openSettings, section != was {
+        // a settings result: the Settings page opens there (the field opens the Mac's window, `SearchField`) — whenever
+        // core's count of openings moves, the same section chosen twice included; a later state keeping the section is
+        // no new opening
+        if let section = state.openSettings, state.openSettingsCount != was {
             settingsAnchor = section
             #if os(iOS)
             let _: Void = openSettings() // the account's page (not the open Pot's)
