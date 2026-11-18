@@ -605,6 +605,22 @@ implementation exists but what holds it to the first.
     Windows-on-ARM PC whose x64 emulation (Prism) hides it. Prism shows AVX to an x64 app by default — measured on the
     VM: CPUID leaf 1 AVX and OSXSAVE, `xgetbv(0)` = 7, `IsProcessorFeaturePresent(PF_AVX)` 1. That this default came
     with Prism's October 2025 update, and that a user can hide it per app, is remembered.
+  - **libwebp's decoder** (2026-11-18, the owner's answer to inbox #885: decode a member's picture ourselves rather than
+    say the WebP Image Extension is missing). `core/webp/build_libwebp.py` builds `makefile.unix`'s `LIBWEBPDECODER_OBJS`
+    for the three bridged slices with the same toolchain, from the web encoder's `libwebp.pin` (ADR 0127: one libwebp in
+    the repository, moved by that ADR's weekly workflow; the clone is refused unless it is the pinned commit).
+    `WebpPicture` answers a WebP as an `RgbaPng` (stored deflate, as `QrPng`), so the host draws it with a codec it
+    always has; `Picture.Decode` carries it. Rejected: a managed decoder in the Windows app (ImageSharp's Six Labors
+    Split License is not vendor-neutral open source, SkiaSharp ships all of Skia for one format) and a libwebp DLL of its
+    own (a second build and pin of the same library). libwebp is BSD-3-Clause with Google's patent grant, a royalty-free
+    format, so "the app ships no codec: patents" (the media formats) does not reach it. Measured 2026-11-18 on the VM:
+    `run.py test --tests '*WebpPicture*'` green (a lossless and a lossy-with-alpha WebP, pixels as `dwebp` writes them;
+    no WebP, a cut one and a non-WebP refused), red with the decoder stubbed (both decodes). The Windows app's
+    `PictureDecode` tries WIC first and hands a WebP WIC refuses to the core: `run.py build` green (`Veyq.Tests` 56, with
+    `AvatarsTest` forcing WIC's WebP to fail; `Veyq.Bridge.Tests`' `CoreTest` holding the DLL's PNG to the bytes
+    `AvatarsTest` feeds WIC), red with a `PictureDecode` that only tries WIC. Live on the VM, extension present: the
+    principal's picture drawn in the switcher (`a member's picture decoded: 11744 B, 256×256`). The live pass with the
+    extension removed is the owner's (a system component); the path WIC refuses is measured by the test only.
 
   Measured 2026-11-10, the binary x64 on an ARM64 Windows 11 VM under x64 emulation (no x64 PC was measured):
   - `python3 src/mobile/windows/run.py test` runs `:core:linkDebugTestMingwX64`'s binary there with zero failures: 176

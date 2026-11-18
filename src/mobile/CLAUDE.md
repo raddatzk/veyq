@@ -231,7 +231,7 @@ A Gradle build of its own, run through its own wrapper.
   a node's header `NodeHeader` with `HeaderPlan`, and its sheets `TrashDialog`, `MoveDialog`, `ShareDialog` with
   `ShareDays`, `ReportDialog`, `CoverDialog`, every `ContentDialog` shown through `Dialogs.Show`),
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
-  each picture through `BitmapImage`, sets it on every `PersonPicture` of that id), `Act` (sends a
+  each picture through `BitmapImage` by `PictureDecode`, a WebP WIC refuses by the core; sets it on every `PersonPicture` of that id), `Act` (sends a
   call, logs its answer), `ScreenSecrets` (the window out of capture while a secret shows, § Secrets on screen), `PotSettingsView` (a Pot's Settings place, editable in place), `PotCreateDialog` (New pot),
   `FilePage` (a Depot file's page; its Save a copy's `InfoBar` is `ShellView.Saving`; a medium in `MediumPlayer`: a
   `MediaPlayerElement` over `MediaSource.CreateFromStream` of `ReaderStream`, a seekable .NET `Stream` whose reads are
@@ -1016,8 +1016,8 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - On iOS what the share extension needs is shared (ADR 0138): defaults go through `Shared.defaults` (the app group's
   suite), never `UserDefaults.standard`, and a Keychain item through `KeychainStore` (the entitlements' first group is the
   shared one). A value only the app reads may stay its own, but nothing the session or the device trust reads.
-- Linux's C libraries (libsodium, utf8proc) are compiled by Kotlin/Native's own toolchain. It is downloaded by
-  `:core:downloadKotlinNativeDistribution`, which `buildLibsodium` and `buildUtf8proc` depend on, and found by
+- Linux's and Windows' C libraries (libsodium, utf8proc, libwebp's decoder) are compiled by Kotlin/Native's own toolchain. It is downloaded by
+  `:core:downloadKotlinNativeDistribution`, which `buildLibsodium`, `buildUtf8proc` and `buildLibwebp` depend on, and found by
   `core/konan_toolchain.py` through `konan.properties`. It is never a container's compiler, since a library built
   against a newer glibc carries versioned symbols the link against Kotlin/Native's old sysroot cannot satisfy.
 - `kotlin.mpp.enableCInteropCommonization=true` (`gradle.properties`) is what lets the shared native source sets see
@@ -1093,7 +1093,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   Kotlin/Native's LLVM has no `llvm-ranlib`: `RANLIB` is `llvm-ar s`.
 - A cinterop task packs the static library into its klib without taking it as an input: a rebuilt `libsodium.a` left
   the old one inside, and the test binary red, until `--rerun` (measured 2026-11-10). `core/build.gradle.kts`'s
-  `libraryInput` declares each `sodium` and `utf8proc` library its interop's input; a new interop over a static library
+  `libraryInput` declares each `sodium`, `utf8proc` and `webp` library its interop's input; a new interop over a static library
   does the same.
 - `veyq.dll` exports only `bridge.h`'s six and `veyq_symbols` because Kotlin/Native's own `veyq.def` is handed to the
   linker; without it lld exports every symbol of the link (185, measured 2026-11-10), and `--exclude-all-symbols`
@@ -1161,8 +1161,11 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   media type on the wire is `mediaType`.
 - WebP, the web's picture format, is not every platform's own. GTK 4.22 decodes it through glycin's loaders
   (`glycin-loaders`, which gtk4 pulls in Fedora; without them "No image loaders are configured" and every person shows
-  initials), so a Flatpak's runtime must carry them. Windows decodes it through the Store's Webp Image Extensions, not
-  the OS image's WIC: without the package the decode throws (`COMException`), so MSIX must depend on it. Its
+  initials), so a Flatpak's runtime must carry them. Windows' WIC decodes it only through the Store's Webp Image
+  Extensions: without the package the decode throws (`COMException`), and a sideloaded MSIX cannot depend on it. So a
+  member's picture goes through `PictureDecode.Decode`: WIC first, and a WebP WIC refuses to the core (`Picture.Decode`,
+  libwebp's decoder built by `core/webp/build_libwebp.py` from the web encoder's `libwebp.pin`), whose answer is a PNG.
+  A new place that decodes a picture which may be a WebP goes through it too. The extension's
   registration needs the logged-on session; over ssh it is refused (`0x80070005`). The same holds for any provisioned
   Store extension a pass removes to measure its absence: the music's Web Media pass (2026-11-16) removed it with
   `Remove-AppxPackage` and could register it again (`Add-AppxPackage -Register` of its provisioned manifest) only in the
