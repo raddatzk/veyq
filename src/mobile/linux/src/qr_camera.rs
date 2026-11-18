@@ -56,11 +56,16 @@ pub fn plane(sample: &gst::Sample) -> Option<Plane> {
 
 /// The pipeline's source for a debug build's test camera at [path]: the image frozen into ten frames a second. None for a
 /// path the description cannot quote.
+///
+/// `is-live=true`, or a frame waits minutes: a non-live `imagefreeze` pushes as fast as it can, the leaky queues behind
+/// the tee keep only its newest frame, stamped far ahead of the clock, and each synced appsink holds that frame until the
+/// clock reaches its stamp — the scan stayed `Starting` for minutes, then took one frame (measured 2026-11-18 in the
+/// container: no frame at all in 6 s; live, the first at once and then ten a second).
 pub fn test_source(path: &str) -> Option<String> {
     if path.is_empty() || path.contains(['"', '\\', '\n']) {
         return None;
     }
-    Some(format!("filesrc location=\"{path}\" ! decodebin ! videoconvert ! imagefreeze ! video/x-raw,framerate=10/1"))
+    Some(format!("filesrc location=\"{path}\" ! decodebin ! videoconvert ! imagefreeze is-live=true ! video/x-raw,framerate=10/1"))
 }
 
 /// Everything after the source: the scan's GRAY8 and the preview's RGBx, each behind a leaky queue of one frame.
@@ -407,10 +412,40 @@ mod tests {
     fn the_test_cameras_path_is_quoted_or_refused() {
         assert_eq!(
             test_source("/tmp/code.png").as_deref(),
-            Some("filesrc location=\"/tmp/code.png\" ! decodebin ! videoconvert ! imagefreeze ! video/x-raw,framerate=10/1")
+            Some("filesrc location=\"/tmp/code.png\" ! decodebin ! videoconvert ! imagefreeze is-live=true ! video/x-raw,framerate=10/1")
         );
         for bad in ["", "/tmp/a\"b.png", "/tmp/a\\b.png", "/tmp/a\nb.png"] {
             assert_eq!(test_source(bad), None, "{bad:?}");
         }
+    }
+
+    #[test]
+    fn the_test_camera_delivers_frames_at_once_through_the_leaky_queue() {
+        // the scan's own branch behind the test camera: a synced appsink after a leaky queue of one frame. A non-live
+        // imagefreeze ran ahead of the clock there, and no frame came within the wait (the bite: drop `is-live=true`).
+        gst::init().expect("GStreamer starts");
+        let png = std::env::temp_dir().join(format!("veyq-test-camera-{}.png", std::process::id()));
+        let write = format!("videotestsrc num-buffers=1 pattern=white ! video/x-raw,width=64,height=48 ! pngenc ! filesink location=\"{}\"", png.display());
+        let writer = gst::parse::launch(&write).unwrap();
+        writer.set_state(gst::State::Playing).unwrap();
+        writer.bus().unwrap().timed_pop_filtered(gst::ClockTime::from_seconds(10), &[gst::MessageType::Eos, gst::MessageType::Error]);
+        writer.set_state(gst::State::Null).unwrap();
+        let description = format!(
+            "{} ! videoconvert ! queue leaky=downstream max-size-buffers=1 ! videoconvert ! video/x-raw,format=GRAY8 ! appsink name=out max-buffers=1 drop=true",
+            test_source(png.to_str().unwrap()).unwrap()
+        );
+        let pipeline = gst::parse::launch(&description).unwrap().downcast::<gst::Pipeline>().unwrap();
+        let sink = pipeline.by_name("out").unwrap().downcast::<gst_app::AppSink>().unwrap();
+        pipeline.set_state(gst::State::Playing).unwrap();
+        let mut frames = 0;
+        let started = std::time::Instant::now();
+        while frames < 3 && started.elapsed() < std::time::Duration::from_secs(5) {
+            if sink.try_pull_sample(gst::ClockTime::from_mseconds(500)).is_some() {
+                frames += 1;
+            }
+        }
+        pipeline.set_state(gst::State::Null).unwrap();
+        let _ = std::fs::remove_file(&png);
+        assert_eq!(frames, 3, "the test camera's frames did not reach the scan within 5 s");
     }
 }
