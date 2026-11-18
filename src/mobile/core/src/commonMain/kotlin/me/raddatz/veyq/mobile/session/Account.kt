@@ -540,6 +540,8 @@ class VeyqAccount private constructor(
     }
 
     private suspend fun close() {
+        if (closed) return
+        closed = true
         probing?.cancel()
         background.coroutineContext[kotlinx.coroutines.Job]?.cancel()
         if (!sendsNothing) runCatching { call { SessionApi(server, http).logout() } }
@@ -724,6 +726,68 @@ class VeyqAccount private constructor(
 
     /** The account's device register as this device opens it (for a check of what [recordThisDevice] wrote). */
     internal suspend fun readRegister(): DeviceRegisterStore.Plain = register().read()
+
+    // ---- the account's credential flows (ADR 0148 decisions 6 and 8): what [AccountCredentialDoor] reads and writes
+
+    /** Closed: [close] ran, the Master Key is zeroed. */
+    private var closed = false
+
+    /** A copy of the Master Key the caller zeroes, null once the account closed. */
+    internal fun masterKeyCopy(): ByteArray? = if (closed) null else masterKey.copyOf()
+
+    /** `getAccountKeyMaterial`, read now (the cold proof reads the floor as the server holds it). */
+    internal suspend fun keyMaterialNow(): AccountKeyMaterial = call { AccountApi(server, http).getAccountKeyMaterial() }
+
+    /** A login challenge for [address] on this server: its instance salt and a nonce. */
+    internal suspend fun challenge(address: String): me.raddatz.veyq.mobile.api.models.LoginChallenge =
+        call { LoginApi(server, http).requestLoginChallenge(LoginChallengeRequest(address.trim())) }
+
+    /**
+     * After a password change: the server deleted every wrap but PASSWORD and RECOVERY, this device's with them. Its
+     * record, keys and kept wrap go as *Stop trusting* forgets them — but the offline store stays (the Master Key is the
+     * same) and nothing is deleted on the server (it is gone already). The trust row then offers *Trust with password*.
+     */
+    internal fun forgetSavedKeyKeepStore() {
+        val record = trusted ?: return
+        runCatching { device.keys.deleteBindKey(record.alias) }
+        runCatching { device.keys.deleteSecret(record.refreshAlias) }
+        device.forget(record.key)
+        trusted = null
+        releaseUnlockKeys()
+    }
+
+    /**
+     * The account was erased (ADR 0101 decision 4, the web's `forgetThisBrowser`): every session of it ended, so nothing
+     * more is sent — no logout, no wrap deleted (the server's go with the purge). This device's records of it go: the
+     * offline store wiped, the saved key and its record, the "Not now", the trust marks; then the keys are zeroed.
+     */
+    internal suspend fun forgetErased() {
+        sendsNothing = true
+        trusted?.let { record ->
+            runCatching { device.keys.deleteBindKey(record.alias) }
+            runCatching { device.keys.deleteSecret(record.refreshAlias) }
+        }
+        device.forget(key)
+        device.setDeclined(key, false)
+        trusted = null
+        releaseUnlockKeys()
+        runCatching { marks.forget() }
+        wipeOffline()
+        close()
+    }
+
+    /**
+     * The record this device keeps of the account, re-addressed where the account signed in with another address than
+     * the record names (an address change confirmed on the web, ADR 0148 decision 6): the record is the account's by its
+     * id, so the sign-in with the new address finds it, and from then on it names the new one.
+     */
+    internal fun readdress() {
+        val record = trusted ?: return
+        if (record.email == email) return
+        val moved = record.copy(email = email)
+        device.remember(moved)
+        trusted = moved
+    }
 
     @OptIn(kotlin.time.ExperimentalTime::class)
     private fun now(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
@@ -1010,6 +1074,7 @@ class VeyqAccount private constructor(
                 mine.serialize(), mine.sign, tenants, device, material, tenantsBody,
             )
             account.answered()
+            account.readdress()
             account.trusted?.let { device.touch(it.key) }
             account.ensureOffline()
             account.recordThisDevice(familyId, label)

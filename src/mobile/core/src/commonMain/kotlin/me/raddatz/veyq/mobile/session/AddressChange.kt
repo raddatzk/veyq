@@ -1,0 +1,142 @@
+package me.raddatz.veyq.mobile.session
+
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.Serializable
+import me.raddatz.veyq.mobile.account.KitStep
+import me.raddatz.veyq.mobile.api.models.EmailChangeRequest
+import me.raddatz.veyq.mobile.crypto.AccountProofs
+import me.raddatz.veyq.mobile.crypto.Primitives
+import me.raddatz.veyq.mobile.crypto.V1
+import me.raddatz.veyq.mobile.crypto.b64
+import me.raddatz.veyq.mobile.crypto.unb64
+import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.MsgKey
+
+/**
+ * Change the address the account signs in with (uc.account.change-email, ADR 0074 decision 8, ADR 0148 decision 6): a
+ * port of the web's `emailChange.ts` request. The password and the Secret Key are proven against the stored floor first
+ * ([ColdCredential]); the auth key is derived under the NEW address's salt from the unchanged password, attested by the
+ * current one (`emailChangeAttestationStatement`) and proven by the Secret Key (`emailChangeProofStatement`). The server
+ * keeps it pending and mails a link to the new address. **The confirm is the web's alone** (owner 2026-11-18): the link
+ * opens the web's page, which confirms; the confirm revokes every other session family, this app's included, and the
+ * app takes the new address at its next sign-in, re-addressing the record it keeps ([VeyqAccount]'s sign-in).
+ *
+ * Afterwards the app offers a new Emergency Kit with the new address ([kit]): the password and the Secret Key checked
+ * against the floor ([ColdCredential.prove]) — a kit made from a mistyped key fails exactly on the day it is needed —,
+ * then [KitStep] with the account's address and the same Secret Key.
+ */
+class AddressChange internal constructor(
+    private val door: CredentialDoor,
+    private val primitives: Primitives,
+) {
+    private val suite = V1(primitives)
+    private val proofs = AccountProofs(primitives)
+
+    @Serializable
+    data class State(
+        val working: Boolean = false,
+        /** The request went through: [Msg.EMAIL_CHANGE_SENT] with this address. */
+        val sentTo: String? = null,
+        @Serializable(with = MsgKey::class) val refusal: Msg? = null,
+    )
+
+    private val _state = MutableStateFlow(State())
+    val state: StateFlow<State> = _state.asStateFlow()
+    val current: State get() = _state.value
+    private val acting = Mutex()
+
+    class Watch internal constructor(private val job: kotlinx.coroutines.Job) {
+        fun stop() = job.cancel()
+    }
+
+    fun watch(listener: (State) -> Unit): Watch = Watch(CoroutineScope(Dispatchers.Default).launch { state.collect(listener) })
+
+    /** Asks for the change to [newEmail]; [secretKey] (32 bytes) is zeroed by this call whatever it comes to. */
+    suspend fun request(newEmail: String, password: String, secretKey: ByteArray) = acting.withLock {
+        try {
+            val address = newEmail.trim()
+            if (address.isEmpty()) return@withLock
+            if (address.lowercase() == door.email.trim().lowercase()) {
+                _state.value = State(refusal = Msg.EMAIL_CHANGE_UNCHANGED)
+                return@withLock
+            }
+            _state.value = State(working = true)
+            _state.value = send(address, password, secretKey)?.let { State(refusal = it) } ?: State(sentTo = address)
+        } finally {
+            secretKey.fill(0)
+        }
+    }
+
+    private suspend fun send(address: String, password: String, secretKey: ByteArray): Msg? {
+        try {
+            ColdCredential.prove(suite, door.masterKey(), door.keyMaterial(), password, secretKey).fill(0)
+        } catch (e: ColdCredential.Refused) {
+            return when (ColdCredential.staleAsRejected(e).reason) {
+                ColdCredential.Refusal.REJECTED -> Msg.EMAIL_CHANGE_ERROR_CREDENTIAL
+                else -> Msg.EMAIL_CHANGE_ERROR_FAILED
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return Msg.EMAIL_CHANGE_ERROR_FAILED
+        }
+        var currentSeed: ByteArray? = null
+        var newSeed: ByteArray? = null
+        try {
+            val challenge = door.challenge(door.email)
+            val instanceSalt = unb64(challenge.instanceSalt)
+            currentSeed = suite.authSeed(password, suite.authSalt(instanceSalt, door.email))
+            newSeed = suite.authSeed(password, suite.authSalt(instanceSalt, address))
+            val currentAuth = primitives.ed25519Public(currentSeed)
+            val newAuth = primitives.ed25519Public(newSeed)
+            val attestation = primitives.ed25519Sign(currentSeed, proofs.emailChangeAttestationStatement(door.userId, address, newAuth))
+            val proof = proofs.secretKeyProofSign(secretKey, proofs.emailChangeProofStatement(currentAuth, newAuth, address))
+            val reply = door.requestEmailChange(EmailChangeRequest(address, b64(newAuth), b64(attestation), b64(proof)))
+            if (reply.ok) return null
+            return when (reply.status) {
+                403 -> Msg.EMAIL_CHANGE_ERROR_CREDENTIAL
+                503 -> Msg.EMAIL_CHANGE_MAIL_UNAVAILABLE
+                404 -> Msg.EMAIL_CHANGE_NOT_MEMBER
+                429 -> Msg.EMAIL_CHANGE_RATE_LIMITED
+                else -> Msg.EMAIL_CHANGE_ERROR_FAILED
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return Msg.EMAIL_CHANGE_ERROR_FAILED
+        } finally {
+            currentSeed?.fill(0)
+            newSeed?.fill(0)
+        }
+    }
+
+    /**
+     * A new kit with the account's (new) address, after [password] and [secretKey] (zeroed by this call) passed the floor:
+     * the step to save it, or null and [State.refusal] ([Msg.EMAIL_CHANGE_KIT_REFUSED], [Msg.EMAIL_CHANGE_KIT_FAILED]).
+     * The caller closes the step.
+     */
+    suspend fun kit(password: String, secretKey: ByteArray): KitStep? = acting.withLock {
+        try {
+            ColdCredential.prove(suite, door.masterKey(), door.keyMaterial(), password, secretKey).fill(0)
+            KitStep(primitives, door.email, door.server, secretKey)
+        } catch (e: ColdCredential.Refused) {
+            _state.value = current.copy(refusal = Msg.EMAIL_CHANGE_KIT_REFUSED)
+            null
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _state.value = current.copy(refusal = Msg.EMAIL_CHANGE_KIT_FAILED)
+            null
+        } finally {
+            secretKey.fill(0)
+        }
+    }
+}

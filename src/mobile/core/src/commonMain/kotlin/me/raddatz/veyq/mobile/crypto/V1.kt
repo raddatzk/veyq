@@ -165,11 +165,11 @@ class V1(val p: Primitives) {
 
     /** The PASSWORD wrap's KEK: Argon2id(lp(secretKey) ‖ lp(utf8(password)), salt). */
     fun kekPasswordSecret(secretKey: ByteArray, password: String, salt: ByteArray, params: ArgonParams = ARGON): ByteArray =
-        argon(concat(lp(secretKey), lp(utf8(password))), salt, params)
+        argonOnce(concat(lp(secretKey), lp(utf8(password))), salt, params)
 
     /** A DEVICE wrap's KEK: Argon2id(lp(deviceFactor) ‖ lp(utf8(password)), salt). */
     fun kekDevicePassword(deviceFactor: ByteArray, password: String, salt: ByteArray, params: ArgonParams = ARGON): ByteArray =
-        argon(concat(lp(deviceFactor), lp(utf8(password))), salt, params)
+        argonOnce(concat(lp(deviceFactor), lp(utf8(password))), salt, params)
 
     fun kekRecovery(recoveryCode: ByteArray, salt: ByteArray, params: ArgonParams = ARGON): ByteArray = argon(recoveryCode, salt, params)
 
@@ -183,7 +183,14 @@ class V1(val p: Primitives) {
         p.hkdfSha256(utf8(email.trim().lowercase()), instanceSalt, utf8("veyq/v1/auth-salt"), 16)
 
     /** ADR 0003: the auth key pair's seed is Argon2id(utf8(password), authSalt); its Ed25519 key signs the nonce. */
-    fun authSeed(password: String, authSalt: ByteArray): ByteArray = argon(utf8(password), authSalt, ARGON)
+    fun authSeed(password: String, authSalt: ByteArray): ByteArray = argonOnce(utf8(password), authSalt, ARGON)
+
+    /** [argon] over an input built for this call alone (a copy of a secret), zeroed once the KDF ran. */
+    private fun argonOnce(secret: ByteArray, salt: ByteArray, a: ArgonParams): ByteArray = try {
+        argon(secret, salt, a)
+    } finally {
+        secret.fill(0)
+    }
 
     /** `u32be t ‖ m ‖ p ‖ dkLen ‖ salt(16)`; anything but the suite's one parameter set is refused before Argon runs. */
     fun decodeKdfParams(encoded: ByteArray): Pair<ArgonParams, ByteArray> {

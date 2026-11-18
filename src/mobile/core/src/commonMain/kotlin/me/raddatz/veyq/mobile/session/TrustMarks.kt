@@ -119,6 +119,9 @@ internal class TrustMarks(private val store: DeviceStore, primitives: Primitives
         write(s.copy(pins = maxOf(s.pins, m.pins), register = maxOf(s.register, m.register), epochs = epochs))
     }
 
+    /** This account's marks gone from this device (its erasure, the web's `forgetMarks`). */
+    suspend fun forget() = lock.withLock { runCatching { store.remove(key) } }
+
     private companion object {
         val JSON = Json { ignoreUnknownKeys = true }
         val COMMITMENT = Regex("^[A-Za-z0-9+/]{43}=$")

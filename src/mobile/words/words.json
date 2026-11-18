@@ -4965,5 +4965,500 @@
   "people_profile": {
     "en": "Profile",
     "de": "Profil"
+  },
+  "password_change_title": {
+    "note": "The web's changePassword.title.",
+    "en": "Change password",
+    "de": "Passwort ändern"
+  },
+  "password_change_current": {
+    "note": "The web's changePassword.currentPasswordLabel.",
+    "en": "Your current password",
+    "de": "Dein aktuelles Passwort"
+  },
+  "password_change_new": {
+    "note": "The web's changePassword.newPasswordLabel.",
+    "en": "New password",
+    "de": "Neues Passwort"
+  },
+  "password_change_confirm": {
+    "note": "The web's changePassword.confirmPasswordLabel.",
+    "en": "Confirm new password",
+    "de": "Neues Passwort bestätigen"
+  },
+  "password_change_secret_key": {
+    "note": "The web's changePassword.secretKeyLabel.",
+    "en": "Your Secret Key",
+    "de": "Dein Secret Key"
+  },
+  "password_change_secret_key_hint": {
+    "note": "The web's changePassword.secretKeyHint.",
+    "en": "From your Emergency Kit. Always needed, even when you know your current password.",
+    "de": "Aus deinem Notfall-Kit. Immer nötig, auch wenn du dein aktuelles Passwort kennst."
+  },
+  "password_change_submit": {
+    "note": "The web's changePassword.submit.",
+    "en": "Change password",
+    "de": "Passwort ändern"
+  },
+  "password_change_mismatch": {
+    "note": "The web's changePassword.mismatch.",
+    "en": "Those two passwords don’t match.",
+    "de": "Die beiden Passwörter stimmen nicht überein."
+  },
+  "password_too_short": {
+    "note": "The web's password.minLength.",
+    "en": "Use at least 10 characters.",
+    "de": "Mindestens 10 Zeichen verwenden."
+  },
+  "password_change_error_credential": {
+    "note": "The web's changePassword.errorCredential.",
+    "en": "That current password and Secret Key don’t open this account. Nothing was changed.",
+    "de": "Dieses aktuelle Passwort und dieser Secret Key öffnen dieses Konto nicht. Es wurde nichts geändert."
+  },
+  "password_change_error_attestation": {
+    "note": "The web's changePassword.errorAttestation.",
+    "en": "That current password didn’t match. Nothing was changed.",
+    "de": "Das aktuelle Passwort stimmte nicht. Es wurde nichts geändert."
+  },
+  "password_change_error_no_floor": {
+    "note": "The web's changePassword.errorNoFloor.",
+    "en": "This account has no password sign-in to check against, so it can’t be changed here.",
+    "de": "Dieses Konto hat keine Passwort-Anmeldung, gegen die geprüft werden könnte — hier also nicht änderbar."
+  },
+  "password_change_error_failed": {
+    "note": "The web's changePassword.errorFailed.",
+    "en": "Your password could not be changed. Nothing was changed — please try again.",
+    "de": "Dein Passwort konnte nicht geändert werden. Es wurde nichts geändert — bitte versuche es erneut."
+  },
+  "password_change_done": {
+    "note": "The web's changePassword.done.",
+    "en": "Your password is changed.",
+    "de": "Dein Passwort ist geändert."
+  },
+  "password_change_done_note": {
+    "note": "The web's changePassword.doneNote.",
+    "en": "Every other device is signed out and loses its saved key. To get back in, each one needs the new password and your Secret Key — or to be added again from this device with “Add a device”.",
+    "de": "Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel. Um wieder hineinzukommen, braucht jedes das neue Passwort und deinen Secret Key — oder es wird von diesem Gerät aus über „Gerät hinzufügen“ neu hinzugefügt."
+  },
+  "email_change_action": {
+    "note": "The web's emailChange.action.",
+    "en": "Change sign-in address",
+    "de": "Anmeldeadresse ändern"
+  },
+  "email_change_form_sub": {
+    "note": "The web's emailChange.formSub.",
+    "en": "You confirm the change with your password and Secret Key, then open the link we send to the new address. Your data and keys stay as they are.",
+    "de": "Du bestätigst die Änderung mit Passwort und Secret Key und öffnest dann den Link, den wir an die neue Adresse schicken. Deine Daten und Schlüssel bleiben, wie sie sind."
+  },
+  "email_change_new_email": {
+    "note": "The web's emailChange.newEmailLabel.",
+    "en": "New email address",
+    "de": "Neue E-Mail-Adresse"
+  },
+  "email_change_submit": {
+    "note": "The web's emailChange.submit.",
+    "en": "Send link to the new address",
+    "de": "Link an die neue Adresse senden"
+  },
+  "email_change_unchanged": {
+    "note": "The web's emailChange.unchanged.",
+    "en": "That is already the address you sign in with.",
+    "de": "Mit dieser Adresse meldest du dich schon an."
+  },
+  "email_change_sent": {
+    "note": "The web's emailChange.sent; {1} the new address.",
+    "en": "If {1} can be used, a link was sent to it. Open it on a device where you are signed in to this account. Until then you keep signing in with your current address.",
+    "de": "Wenn {1} verwendet werden kann, ging ein Link dorthin. Öffne ihn auf einem Gerät, auf dem du in diesem Konto angemeldet bist. Bis dahin meldest du dich weiter mit deiner bisherigen Adresse an."
+  },
+  "email_change_error_credential": {
+    "note": "The web's emailChange.errorCredential.",
+    "en": "That password or Secret Key didn’t match. Nothing was changed.",
+    "de": "Passwort oder Secret Key passen nicht. Es wurde nichts geändert."
+  },
+  "email_change_error_failed": {
+    "note": "The web's emailChange.errorFailed.",
+    "en": "The change couldn’t be started. Nothing was changed — check your connection and try again.",
+    "de": "Die Änderung konnte nicht gestartet werden. Es wurde nichts geändert – prüfe deine Verbindung und versuche es erneut."
+  },
+  "email_change_mail_unavailable": {
+    "note": "The web's emailConfirm.mailUnavailable.",
+    "en": "This space can’t send email yet, so password reset is unavailable here too. Ask the space owner to set up email.",
+    "de": "Dieser Bereich kann noch keine E-Mails senden, daher ist auch das Zurücksetzen des Passworts hier nicht möglich. Bitte die Person, die den Bereich verwaltet, E-Mail einzurichten."
+  },
+  "email_change_not_member": {
+    "note": "The web's emailConfirm.notMember.",
+    "en": "The confirmation is sent through a space you belong to. Open veyq through one of your spaces and try again.",
+    "de": "Die Bestätigung wird über einen Bereich gesendet, zu dem du gehörst. Öffne veyq über einen deiner Bereiche und versuche es erneut."
+  },
+  "email_change_rate_limited": {
+    "note": "The web's emailConfirm.rateLimited.",
+    "en": "Too many confirmation emails for now. Try again later.",
+    "de": "Gerade wurden zu viele Bestätigungen gesendet. Versuche es später erneut."
+  },
+  "kit_save_title": {
+    "note": "The apps' own (CR owner question 4): the step that saves the kit through the system's save dialog.",
+    "en": "Save your Emergency Kit",
+    "de": "Speichere dein Notfall-Kit"
+  },
+  "kit_saved_confirm": {
+    "note": "The apps' own: the checkbox enabled once the core wrote the file the person chose.",
+    "en": "I saved it",
+    "de": "Ich habe es gespeichert"
+  },
+  "kit_save_failed": {
+    "note": "The apps' own: the core's write into the chosen file failed and removed what it had written.",
+    "en": "The Emergency Kit could not be saved there. Nothing was kept — choose another place and try again.",
+    "de": "Das Notfall-Kit ließ sich dort nicht speichern. Nichts wurde behalten – wähle einen anderen Ort und versuche es erneut."
+  },
+  "email_change_kit_title": {
+    "note": "The web's emailChange.kitTitle.",
+    "en": "Print a new Emergency Kit",
+    "de": "Neues Notfall-Kit erstellen"
+  },
+  "email_change_kit_sub": {
+    "note": "The web's emailChange.kitSub.",
+    "en": "Your old kit still works, but it shows your old address. Enter your password and your Secret Key — or import the old kit — and we check them before making one with the new address.",
+    "de": "Dein altes Kit funktioniert weiter, zeigt aber deine alte Adresse. Gib dein Passwort und deinen Secret Key ein – oder importiere das alte Kit –; wir prüfen beides, bevor wir eines mit der neuen Adresse erstellen."
+  },
+  "email_change_kit_check": {
+    "note": "The web's emailChange.kitCheck.",
+    "en": "Check and make the kit",
+    "de": "Prüfen und Kit erstellen"
+  },
+  "email_change_kit_refused": {
+    "note": "The web's emailChange.kitRefused.",
+    "en": "That password or Secret Key didn’t match, so no kit was made — a kit with a wrong key would fail exactly when you need it.",
+    "de": "Passwort oder Secret Key passen nicht, deshalb wurde kein Kit erstellt – ein Kit mit falschem Schlüssel versagt genau dann, wenn du es brauchst."
+  },
+  "email_change_kit_failed": {
+    "note": "The web's emailChange.kitFailed.",
+    "en": "The check didn’t go through, so no kit was made. Check your connection and try again.",
+    "de": "Die Prüfung hat nicht geklappt, deshalb wurde kein Kit erstellt. Prüfe deine Verbindung und versuche es erneut."
+  },
+  "erasure_title": {
+    "note": "The web's erasure.title.",
+    "en": "Erase your account",
+    "de": "Dein Konto löschen"
+  },
+  "erasure_sub": {
+    "note": "The web's erasure.sub.",
+    "en": "Leave this server for good: your account and what is kept about you are erased, apart from what the law keeps.",
+    "de": "Verlasse diesen Server endgültig: Dein Konto und was über dich gespeichert ist, wird gelöscht – bis auf das, was das Gesetz aufzubewahren verlangt."
+  },
+  "erasure_fact_goes": {
+    "note": "The web's erasure.factGoes.",
+    "en": "Your account goes: its keys, devices and sessions, your profiles and memberships in every space, your favorites, and your personal space with everything in it.",
+    "de": "Dein Konto geht: seine Schlüssel, Geräte und Sitzungen, deine Profile und Mitgliedschaften in jedem Bereich, deine Favoriten und dein persönlicher Bereich mit allem darin."
+  },
+  "erasure_fact_shared_stays": {
+    "note": "The web's erasure.factSharedStays.",
+    "en": "What you put into shared spaces and groups stays there and shows as a former member’s. Delete what you want gone from them first, while you are still a member.",
+    "de": "Was du in geteilte Bereiche und Gruppen gelegt hast, bleibt dort und erscheint als das eines ehemaligen Mitglieds. Lösche vorher, was dort verschwinden soll, solange du noch Mitglied bist."
+  },
+  "erasure_fact_kept": {
+    "note": "The web's erasure.factKept.",
+    "en": "Reports, moderation records and held copies that name your account stay until their legal retention ends.",
+    "de": "Meldungen, Moderationsunterlagen und gesicherte Kopien, die dein Konto nennen, bleiben bis zum Ende ihrer gesetzlichen Aufbewahrung."
+  },
+  "erasure_fact_backups": {
+    "note": "The web's erasure.factBackups.",
+    "en": "Backups of this server keep your account until they expire.",
+    "de": "Sicherungen dieses Servers behalten dein Konto, bis sie ablaufen."
+  },
+  "erasure_fact_window": {
+    "note": "The web's erasure.factWindow.",
+    "en": "The erasure completes after a waiting period — 14 days unless the Server Owner set another. From the moment you confirm, you cannot sign in, and only the Server Owner can stop it.",
+    "de": "Die Löschung ist nach einer Wartezeit abgeschlossen – 14 Tage, sofern die Person, die den Server betreibt, keine andere festgelegt hat. Ab deiner Bestätigung kannst du dich nicht mehr anmelden, und nur sie kann die Löschung noch aufhalten."
+  },
+  "erasure_choice_title": {
+    "note": "The web's erasure.choiceTitle.",
+    "en": "Spaces you are the last owner of",
+    "de": "Bereiche, die nur noch dir gehören"
+  },
+  "erasure_choice_sub": {
+    "note": "The web's erasure.choiceSub.",
+    "en": "Others are members here. For each one, choose: delete it along with your account, or make one of its members the owner.",
+    "de": "Hier sind noch andere Mitglieder. Wähle für jeden Bereich: mit deinem Konto löschen oder einem seiner Mitglieder übergeben."
+  },
+  "erasure_delete_along": {
+    "note": "The web's erasure.deleteAlong.",
+    "en": "Delete the space",
+    "de": "Bereich löschen"
+  },
+  "erasure_make_owner": {
+    "note": "The web's erasure.makeOwner; {1} the member's name.",
+    "en": "Make {1} the owner",
+    "de": "An {1} übergeben"
+  },
+  "erasure_sole_title": {
+    "note": "The web's erasure.soleTitle.",
+    "en": "Deleted along with your account",
+    "de": "Wird mit deinem Konto gelöscht"
+  },
+  "erasure_sole_sub": {
+    "note": "The web's erasure.soleSub.",
+    "en": "You are the only member of these spaces.",
+    "de": "Du bist das einzige Mitglied dieser Bereiche."
+  },
+  "erasure_password": {
+    "note": "The web's erasure.passwordLabel.",
+    "en": "Your password",
+    "de": "Dein Passwort"
+  },
+  "erasure_action": {
+    "note": "The web's erasure.action.",
+    "en": "Erase account",
+    "de": "Konto löschen"
+  },
+  "erasure_confirm_title": {
+    "note": "The web's erasure.confirmTitle.",
+    "en": "Erase your account?",
+    "de": "Dein Konto löschen?"
+  },
+  "erasure_confirm_body": {
+    "note": "The web's erasure.confirmBody.",
+    "en": "You are signed out everywhere at once and cannot sign in again. Until the erasure completes, only the Server Owner can stop it.",
+    "de": "Du wirst sofort überall abgemeldet und kannst dich nicht mehr anmelden. Bis die Löschung abgeschlossen ist, kann nur die Person, die den Server betreibt, sie aufhalten."
+  },
+  "erasure_load_failed": {
+    "note": "The web's erasure.loadFailed.",
+    "en": "Could not read what erasing your account would decide. Please try again.",
+    "de": "Es ließ sich nicht lesen, was das Löschen deines Kontos entscheiden würde. Bitte erneut versuchen."
+  },
+  "erasure_server_owner": {
+    "note": "The web's erasure.serverOwner.",
+    "en": "This is the Server Owner’s account. It cannot be erased: nobody would be left to run this server.",
+    "de": "Das ist das Konto der Person, die den Server betreibt. Es kann nicht gelöscht werden: Sonst bliebe niemand, der diesen Server betreibt."
+  },
+  "erasure_error_password": {
+    "note": "The web's erasure.errorPassword.",
+    "en": "That password didn’t match. Nothing was erased.",
+    "de": "Das Passwort stimmt nicht. Es wurde nichts gelöscht."
+  },
+  "erasure_error_choice_required": {
+    "note": "The web's erasure.errorChoiceRequired.",
+    "en": "Choose what happens to every space you are the last owner of. Nothing was erased.",
+    "de": "Wähle für jeden Bereich, der nur noch dir gehört, was mit ihm geschieht. Es wurde nichts gelöscht."
+  },
+  "erasure_error_failed": {
+    "note": "The web's erasure.errorFailed.",
+    "en": "Your account could not be erased. Nothing was changed — please try again.",
+    "de": "Dein Konto konnte nicht gelöscht werden. Es wurde nichts geändert – bitte erneut versuchen."
+  },
+  "erasure_ended": {
+    "note": "The web's erasure.ended.",
+    "en": "Your account is being erased, and you are signed out. You cannot sign in again; until the erasure completes, only the Server Owner can stop it.",
+    "de": "Dein Konto wird gelöscht, und du bist abgemeldet. Du kannst dich nicht mehr anmelden; bis die Löschung abgeschlossen ist, kann nur die Person, die den Server betreibt, sie aufhalten."
+  },
+  "account_on_the_web": {
+    "note": "The apps' own (CR owner question 4, ADR 0148 decision 9): {1} the server's address. A step the apps cannot do yet (the moderation key, #965).",
+    "en": "Do this on the web: {1}",
+    "de": "Erledige das im Web: {1}"
+  },
+  "erasure_moderator_web": {
+    "note": "The web's erasure.keyDeliveryTitle: the last holder of the moderation key, whom the apps send to the web (ADR 0148 decision 9).",
+    "en": "You hold the moderation key alone",
+    "de": "Du hältst den Moderationsschlüssel allein"
+  },
+  "rotation_title": {
+    "note": "The web's rotation.title.",
+    "en": "Secure your account",
+    "de": "Konto absichern"
+  },
+  "rotation_sub": {
+    "note": "The web's rotation.sub.",
+    "en": "For when someone else may have your password, your Secret Key, or a device that was signed in to your account.",
+    "de": "Für den Fall, dass jemand anderes dein Passwort, deinen Secret Key oder ein Gerät haben könnte, das in deinem Konto angemeldet war."
+  },
+  "rotation_fact_shared_spaces": {
+    "note": "The web's rotation.factSharedSpaces.",
+    "en": "You keep every space you are in. The people there see that your account was secured; nobody has to confirm anything.",
+    "de": "Du behältst jeden Bereich, in dem du bist. Die anderen dort sehen, dass dein Konto abgesichert wurde; niemand muss etwas bestätigen."
+  },
+  "rotation_fact_signs_out": {
+    "note": "The web's rotation.factSignsOut.",
+    "en": "All your devices are signed out. Each signs in again with your password and your new Emergency Kit, or you add it from this one with “Add a device”.",
+    "de": "Alle deine Geräte werden abgemeldet. Jedes meldet sich mit deinem Passwort und deinem neuen Notfall-Kit wieder an, oder du fügst es von diesem aus über „Gerät hinzufügen“ hinzu."
+  },
+  "rotation_fact_new_kit": {
+    "note": "The web's rotation.factNewKit.",
+    "en": "You get a new Emergency Kit. You save it before anything changes, and your old kit stops working once your account is secured.",
+    "de": "Du bekommst ein neues Notfall-Kit. Du speicherst es, bevor sich etwas ändert, und dein altes Kit funktioniert nicht mehr, sobald dein Konto abgesichert ist."
+  },
+  "rotation_fact_password": {
+    "note": "The web's rotation.factPassword.",
+    "en": "You can choose a new password at the same time. We recommend it.",
+    "de": "Du kannst dabei ein neues Passwort wählen. Wir empfehlen es."
+  },
+  "rotation_fact_not_repair": {
+    "note": "The web's rotation.factNotRepair.",
+    "en": "What someone else already saw stays seen. Only what is added afterwards is closed to them.",
+    "de": "Was jemand anderes schon gesehen hat, bleibt gesehen. Nur was danach dazukommt, ist für ihn zu."
+  },
+  "rotation_fact_links": {
+    "note": "The web's rotation.factLinks.",
+    "en": "Links you made before stay open until you renew them. You’ll see a list at the end.",
+    "de": "Links, die du vorher erstellt hast, bleiben offen, bis du sie erneuerst. Am Ende siehst du eine Liste."
+  },
+  "rotation_store_wiped": {
+    "note": "The apps' own (CR owner question 4): the rotation replaces the Master Key, so the offline store is wiped and refilled (ADR 0140 decision 2).",
+    "en": "What this device keeps offline is fetched again.",
+    "de": "Was dieses Gerät offline hält, wird neu geladen."
+  },
+  "rotation_blocked_title": {
+    "note": "The web's rotation.blockedTitle.",
+    "en": "These spaces can’t get their new lock yet:",
+    "de": "Diese Bereiche bekommen ihr neues Schloss noch nicht:"
+  },
+  "rotation_password": {
+    "note": "The web's rotation.passwordLabel.",
+    "en": "Your password",
+    "de": "Dein Passwort"
+  },
+  "rotation_secret_key": {
+    "note": "The web's rotation.secretKeyLabel.",
+    "en": "Your Secret Key",
+    "de": "Dein Secret Key"
+  },
+  "rotation_secret_key_hint": {
+    "note": "The web's rotation.secretKeyHint.",
+    "en": "From your Emergency Kit.",
+    "de": "Aus deinem Notfall-Kit."
+  },
+  "rotation_new_password": {
+    "note": "The web's rotation.newPassword.",
+    "en": "Also choose a new password",
+    "de": "Auch ein neues Passwort wählen"
+  },
+  "rotation_next": {
+    "note": "The web's rotation.next.",
+    "en": "Continue",
+    "de": "Weiter"
+  },
+  "rotation_kit_title": {
+    "note": "The web's rotation.kitTitle.",
+    "en": "Your new Emergency Kit",
+    "de": "Dein neues Notfall-Kit"
+  },
+  "rotation_kit_sub": {
+    "note": "The web's rotation.kitSub.",
+    "en": "It holds your new Secret Key. Download it and keep it where only you can reach it; nothing changes before you have.",
+    "de": "Darin steht dein neuer Secret Key. Lade es herunter und bewahr es so auf, dass nur du drankommst; vorher ändert sich nichts."
+  },
+  "rotation_kit_keep_old": {
+    "note": "The web's rotation.kitKeepOld.",
+    "en": "Keep your old kit until this page says your account is secured.",
+    "de": "Bewahr dein altes Kit auf, bis diese Seite sagt, dass dein Konto abgesichert ist."
+  },
+  "rotation_action": {
+    "note": "The web's rotation.action.",
+    "en": "Secure your account",
+    "de": "Konto absichern"
+  },
+  "rotation_confirm_title": {
+    "note": "The web's rotation.confirmTitle.",
+    "en": "Secure your account?",
+    "de": "Konto wirklich absichern?"
+  },
+  "rotation_confirm_body": {
+    "note": "The web's rotation.confirmBody.",
+    "en": "All your devices are signed out, your old Emergency Kit stops working, and every space gets a new lock. This can’t be undone.",
+    "de": "Alle deine Geräte werden abgemeldet, dein altes Notfall-Kit funktioniert nicht mehr, und jeder Bereich bekommt ein neues Schloss. Das lässt sich nicht rückgängig machen."
+  },
+  "rotation_error_credential": {
+    "note": "The web's rotation.errorCredential.",
+    "en": "That password or Secret Key didn’t match. If your account was already secured, use the Secret Key from your new Emergency Kit.",
+    "de": "Passwort oder Secret Key haben nicht gepasst. Wurde dein Konto schon abgesichert, nimm den Secret Key aus deinem neuen Notfall-Kit."
+  },
+  "rotation_error_no_floor": {
+    "note": "The web's rotation.errorNoFloor.",
+    "en": "This account has no password sign-in to check against, so it can’t be secured here.",
+    "de": "Für dieses Konto gibt es keine Passwort-Anmeldung zum Abgleichen, deshalb lässt es sich hier nicht absichern."
+  },
+  "rotation_error_failed": {
+    "note": "The web's rotation.errorFailed.",
+    "en": "Your account could not be secured. Nothing was changed — please try again.",
+    "de": "Dein Konto konnte nicht abgesichert werden. Es wurde nichts geändert — bitte versuche es erneut."
+  },
+  "rotation_error_too_large": {
+    "note": "The web's rotation.errorTooLarge.",
+    "en": "Your account could not be secured, because the request is larger than this server accepts. Nothing was changed, and trying again won’t help. Ask the Server Owner to raise the server’s request limit.",
+    "de": "Dein Konto konnte nicht abgesichert werden, weil die Anfrage größer ist, als dieser Server annimmt. Es wurde nichts geändert, und ein neuer Versuch hilft nicht. Bitte die Person, die den Server betreibt, die Grenze für Anfragen anzuheben."
+  },
+  "rotation_error_unknown_outcome": {
+    "note": "The web's rotation.errorUnknownOutcome.",
+    "en": "We couldn’t confirm whether your account was secured. Unlock again with your new Emergency Kit. If it is refused, nothing was changed and your old kit still works.",
+    "de": "Wir konnten nicht prüfen, ob dein Konto abgesichert wurde. Entsperre veyq noch einmal mit deinem neuen Notfall-Kit. Wird es abgelehnt, wurde nichts geändert, und dein altes Kit funktioniert weiter."
+  },
+  "rotation_error_trust_state": {
+    "note": "The web's rotation.errorTrustState.",
+    "en": "This device can’t open your list of trusted keys or your device names. Nothing was changed. Start that list over first, under “Start a list over”.",
+    "de": "Dieses Gerät kann deine Liste vertrauter Schlüssel oder deine Gerätenamen nicht öffnen. Es wurde nichts geändert. Beginne die Liste zuerst neu, unter „Liste neu beginnen“."
+  },
+  "rotation_moderator_web": {
+    "note": "The apps' own (ADR 0148 decision 9, #965): why a moderator secures the account on the web.",
+    "en": "You hold the moderation key. Securing your account carries it to your new keys, which only the web can do for now.",
+    "de": "Du hältst den Moderationsschlüssel. Beim Absichern deines Kontos wird er an deine neuen Schlüssel übergeben, und das geht vorerst nur im Web."
+  },
+  "rotation_done_old_kit": {
+    "note": "The web's rotation.doneOldKit.",
+    "en": "Your account is secured. Your old Emergency Kit no longer works, so you can destroy it.",
+    "de": "Dein Konto ist abgesichert. Dein altes Notfall-Kit funktioniert nicht mehr, du kannst es vernichten."
+  },
+  "rotation_done_spaces": {
+    "note": "The web's rotation.doneSpaces.",
+    "en": "Below, each space shows whether its new lock is in.",
+    "de": "Unten steht bei jedem Bereich, ob sein neues Schloss drin ist."
+  },
+  "rotation_status_secured": {
+    "note": "The web's rotation.status.secured.",
+    "en": "New lock",
+    "de": "Neues Schloss"
+  },
+  "rotation_status_rekeying": {
+    "note": "The web's rotation.status.rekeying.",
+    "en": "Fitting the new lock",
+    "de": "Schloss wird eingebaut"
+  },
+  "rotation_status_waiting": {
+    "note": "The web's rotation.status.waiting.",
+    "en": "Not yet",
+    "de": "Noch nicht"
+  },
+  "rotation_status_blocked": {
+    "note": "The web's rotation.status.blocked.",
+    "en": "Not possible yet",
+    "de": "Noch nicht möglich"
+  },
+  "rotation_blocked_unreadable": {
+    "note": "The web's rotation.blocked.unreadable.",
+    "en": "This device can’t open it, so it is already closed to you.",
+    "de": "Dieses Gerät kann ihn nicht öffnen, er ist also schon für dich zu."
+  },
+  "rotation_blocked_tenant_suspended": {
+    "note": "The web's rotation.blocked.tenant_suspended.",
+    "en": "It is paused. It gets its new lock once it is back.",
+    "de": "Er ist pausiert. Er bekommt sein neues Schloss, sobald er zurück ist."
+  },
+  "rotation_blocked_scope_deleting": {
+    "note": "The web's rotation.blocked.scope_deleting.",
+    "en": "It is being deleted.",
+    "de": "Er wird gerade gelöscht."
+  },
+  "rotation_personal_space": {
+    "note": "The web's rotation.personalSpace.",
+    "en": "Your personal space",
+    "de": "Dein persönlicher Bereich"
+  },
+  "rotation_scope_name_unavailable": {
+    "note": "The web's rotation.scopeNameUnavailable.",
+    "en": "A space this device hasn’t opened (its name isn’t available here)",
+    "de": "Ein Bereich, den dieses Gerät nicht geöffnet hat (sein Name ist hier nicht verfügbar)"
+  },
+  "rotation_links_title": {
+    "note": "The web's rotation.linksTitle.",
+    "en": "Links to renew",
+    "de": "Links zum Erneuern"
   }
 }
