@@ -12,14 +12,20 @@ namespace Veyq;
 
 internal static class PdfPages
 {
-    /// <summary>The PDF in <paramref name="bytes"/>, opened from memory; throws where Windows reads no PDF there.</summary>
-    public static async Task<PdfDocument> OpenAsync(byte[] bytes)
+    /// <summary>The PDF in <paramref name="bytes"/>, opened from memory with <paramref name="password"/> where one was typed
+    /// (only Windows' renderer sees it; it is neither kept nor sent); throws where Windows reads no PDF there, and
+    /// <see cref="NeedsPassword"/> tells a password-protected one (or a wrong password) apart.</summary>
+    public static async Task<PdfDocument> OpenAsync(byte[] bytes, string? password = null)
     {
         var stream = new InMemoryRandomAccessStream();
         await stream.WriteAsync(bytes.AsBuffer());
         stream.Seek(0);
-        return await PdfDocument.LoadFromStreamAsync(stream);
+        return password is null ? await PdfDocument.LoadFromStreamAsync(stream) : await PdfDocument.LoadFromStreamAsync(stream, password);
     }
+
+    /// <summary>Whether <paramref name="e"/> is Windows refusing a PDF for its password: ERROR_WRONG_PASSWORD, which it
+    /// answers for a protected PDF opened without one and for a wrong one alike.</summary>
+    public static bool NeedsPassword(Exception e) => e.HResult == unchecked((int)0x8007052B);
 
     /// <summary>Page <paramref name="index"/> of <paramref name="pdf"/> as a PNG in memory, <paramref name="width"/>
     /// pixels wide, on white (a receipt's page has no background of its own).</summary>

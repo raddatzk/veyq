@@ -53,6 +53,8 @@ struct Inner {
     pdf: RefCell<Option<Rc<PdfPages>>>,
     /// The medium playing over the core's reader.
     media: RefCell<Option<Playing>>,
+    /// The file's name, which a password-protected PDF's prompt names.
+    name: String,
 }
 
 impl FilePage {
@@ -78,6 +80,7 @@ impl FilePage {
             on_facts: RefCell::new(None),
             pdf: RefCell::new(None),
             media: RefCell::new(None),
+            name: node.name.clone(),
         });
         inner.draw();
         let weak = Rc::downgrade(&inner);
@@ -276,15 +279,7 @@ impl Inner {
             }
             FileViewKind::Pdf => {
                 self.replace(&spinner(&words::file_opening()));
-                self.load(|inner, bytes, scale| match PdfPages::open(bytes, scale) {
-                    Some(pages) => {
-                        inner.replace(&pages.widget());
-                        let pages = Rc::new(pages);
-                        PdfPages::start(&pages);
-                        *inner.pdf.borrow_mut() = Some(pages);
-                    }
-                    None => inner.replace(&message(&words::file_unsupported())),
-                });
+                self.load(|inner, bytes, scale| inner.show_pdf(Rc::new(bytes), scale, None));
             }
             FileViewKind::Media => {
                 self.replace(&spinner(&words::file_opening()));
@@ -292,6 +287,37 @@ impl Inner {
             }
             // nothing shows here: what the core says, and Save a copy in the header bar
             _ => self.replace(&message(&s.words.as_deref().map(said::key).unwrap_or_default())),
+        }
+    }
+
+    /// The PDF in [bytes] shown, opened with [password] where one was typed. A password-protected PDF asks for its password
+    /// in the page first, as the web's does (`FileViewer.vue`): a password entry whose text goes to poppler and nowhere
+    /// else, emptied at each try; a wrong one said; Cancel says the PDF is protected and leaves Save a copy.
+    fn show_pdf(self: &Rc<Self>, bytes: Rc<Vec<u8>>, scale: i32, password: Option<String>) {
+        let asked = *self.drawn.borrow();
+        match PdfPages::open(&bytes, scale, password.as_deref()) {
+            Opened::Pages(pages) => {
+                self.replace(&pages.widget());
+                let pages = Rc::new(pages);
+                PdfPages::start(&pages);
+                *self.pdf.borrow_mut() = Some(pages);
+            }
+            Opened::Locked => {
+                let weak = Rc::downgrade(self);
+                let open = move |typed: String| {
+                    if let Some(inner) = weak.upgrade().filter(|inner| *inner.drawn.borrow() == asked) {
+                        inner.show_pdf(bytes.clone(), scale, Some(typed));
+                    }
+                };
+                let weak = Rc::downgrade(self);
+                let cancel = move || {
+                    if let Some(inner) = weak.upgrade().filter(|inner| *inner.drawn.borrow() == asked) {
+                        inner.replace(&message(&words::file_pdf_password_declined()));
+                    }
+                };
+                self.replace(&pdf_password(&self.name, password.is_some(), open, cancel));
+            }
+            Opened::Failed => self.replace(&message(&words::file_unsupported())),
         }
     }
 
@@ -393,9 +419,12 @@ fn message(words: &str) -> gtk::Widget {
     page.upcast()
 }
 
-/// A text, read only, in a monospace view of its own scroll; a cut one says so above it.
+/// A text, read only and selectable, in a monospace view of its own scroll; a cut one says so above it. The web's two
+/// conveniences (`FileViewer.vue`): *Copy* puts exactly what is shown on the clipboard (a cut text its shown part, which the
+/// button and its note say), and *Wrap lines* wraps long lines instead of scrolling sideways (on at first, as on the web).
 fn text_view(text: &str, cut: Option<String>) -> gtk::Widget {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    let truncated = cut.is_some();
     if let Some(cut) = cut {
         let banner = adw::Banner::new(&glib_escape(&cut));
         banner.set_revealed(true);
@@ -406,9 +435,90 @@ fn text_view(text: &str, cut: Option<String>) -> gtk::Widget {
     view.buffer().set_text(text);
     view.update_property(&[gtk::accessible::Property::Label(&words::tab_depot_file())]);
     let scroll = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).vexpand(true).child(&view).build();
+
+    let tools = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).spacing(12).margin_top(8).margin_start(12).margin_end(12).build();
+    let copy = gtk::Button::with_label(&if truncated { words::file_text_copy_shown() } else { words::file_text_copy() });
+    let wrap = gtk::CheckButton::builder().label(words::file_text_wrap()).active(true).build();
+    let copied = gtk::Label::builder().xalign(0.0).hexpand(true).wrap(true).build();
+    copied.add_css_class("dim-label");
+    let shown = text.to_owned();
+    let note = copied.clone();
+    copy.connect_clicked(move |b| {
+        b.clipboard().set_text(&shown);
+        note.set_label(&if truncated { words::file_text_copied_shown() } else { words::file_text_copied() });
+        eprintln!("veyq: file text copied: {} characters", shown.chars().count());
+        let note = note.clone();
+        glib::timeout_add_seconds_local_once(6, move || note.set_label(""));
+    });
+    let (v, sc) = (view.clone(), scroll.clone());
+    wrap.connect_toggled(move |w| {
+        v.set_wrap_mode(if w.is_active() { gtk::WrapMode::WordChar } else { gtk::WrapMode::None });
+        sc.set_hscrollbar_policy(if w.is_active() { gtk::PolicyType::Never } else { gtk::PolicyType::Automatic });
+    });
+    tools.append(&copy);
+    tools.append(&wrap);
+    tools.append(&copied);
+    column.append(&tools);
     column.append(&scroll);
     eprintln!("veyq: file text shown: {} characters", text.chars().count());
     column.upcast()
+}
+
+/// The prompt of a password-protected PDF (the web's `FileViewer.vue`): its name, a password entry, Open and Cancel, the
+/// hint that it is not saved, or a wrong one said.
+fn pdf_password(name: &str, wrong: bool, open: impl Fn(String) + 'static, cancel: impl Fn() + 'static) -> gtk::Widget {
+    let page = adw::StatusPage::builder().icon_name("dialog-password-symbolic").title(glib_escape(&words::file_pdf_password_title(name))).vexpand(true).build();
+    page.add_css_class("compact");
+    let column = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    let list = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
+    list.add_css_class("boxed-list");
+    let entry = adw::PasswordEntryRow::builder().title(words::file_pdf_password_label()).build();
+    list.append(&entry);
+    let note = gtk::Label::builder().label(if wrong { words::file_pdf_password_wrong() } else { words::file_pdf_password_hint() }).wrap(true).xalign(0.0).build();
+    note.add_css_class(if wrong { "error" } else { "dim-label" });
+    let buttons = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).spacing(12).halign(gtk::Align::Center).build();
+    let go = gtk::Button::builder().label(words::file_pdf_password_open()).sensitive(false).build();
+    go.add_css_class("suggested-action");
+    go.add_css_class("pill");
+    let back = gtk::Button::builder().label(words::file_pdf_password_cancel()).build();
+    back.add_css_class("pill");
+    buttons.append(&back);
+    buttons.append(&go);
+    let open = Rc::new(open);
+    let submit = {
+        let (entry, open) = (entry.clone(), open.clone());
+        move || {
+            let typed = entry.text().to_string();
+            if typed.is_empty() {
+                return;
+            }
+            entry.set_text("");
+            open(typed);
+        }
+    };
+    let submit = Rc::new(submit);
+    {
+        let go = go.clone();
+        entry.connect_changed(move |e| go.set_sensitive(!e.text().is_empty()));
+    }
+    {
+        let submit = submit.clone();
+        entry.connect_entry_activated(move |_| submit());
+    }
+    go.connect_clicked(move |_| submit());
+    {
+        let entry = entry.clone();
+        back.connect_clicked(move |_| {
+            entry.set_text("");
+            cancel();
+        });
+    }
+    column.append(&list);
+    column.append(&note);
+    column.append(&buttons);
+    let clamp = adw::Clamp::builder().maximum_size(420).child(&column).build();
+    page.set_child(Some(&clamp));
+    page.upcast()
 }
 
 /// A picture decoded by GTK from the bytes, held at [edge] pixels on its longest side at most (the core's
@@ -477,13 +587,25 @@ struct PdfPages {
     scale: i32,
 }
 
+/// What opening a PDF came to: its pages, its password still asked (none, or a wrong one), or no PDF poppler reads.
+enum Opened {
+    Pages(PdfPages),
+    Locked,
+    Failed,
+}
+
 impl PdfPages {
-    fn open(bytes: Vec<u8>, scale: i32) -> Option<Self> {
-        let pdf = match poppler::Document::from_bytes(&glib::Bytes::from_owned(bytes), None) {
+    /// The PDF in [bytes], opened by poppler with [password] where one was typed (it goes nowhere else and is not kept).
+    fn open(bytes: &[u8], scale: i32, password: Option<&str>) -> Opened {
+        let pdf = match poppler::Document::from_bytes(&glib::Bytes::from(bytes), password) {
             Ok(pdf) => pdf,
+            Err(e) if e.matches(poppler::Error::Encrypted) => {
+                eprintln!("veyq: the file's PDF asks for its password");
+                return Opened::Locked;
+            }
             Err(e) => {
                 eprintln!("veyq: the file's PDF did not open: {e}");
-                return None;
+                return Opened::Failed;
             }
         };
         let column = gtk::Box::new(gtk::Orientation::Vertical, PDF_GAP);
@@ -491,7 +613,7 @@ impl PdfPages {
         column.set_margin_bottom(12);
         let clamp = adw::Clamp::builder().maximum_size(PDF_WIDTH).child(&column).build();
         let scroll = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).vexpand(true).child(&clamp).build();
-        Some(Self { pdf, scroll, column, rendered: RefCell::new(Vec::new()), scale })
+        Opened::Pages(Self { pdf, scroll, column, rendered: RefCell::new(Vec::new()), scale })
     }
 
     fn widget(&self) -> gtk::Widget {

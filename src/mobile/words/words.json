@@ -1707,6 +1707,62 @@
     "en": "The first {1} of {2} pages are shown. Download the file to see all of them.",
     "de": "Die ersten {1} von {2} Seiten werden gezeigt. Lade die Datei herunter, um alle zu sehen."
   },
+  "file_text_copy": {
+    "note": "a shown text's button: copies the whole text to the clipboard (the web's depot.viewer.text.copy)",
+    "en": "Copy",
+    "de": "Kopieren"
+  },
+  "file_text_copy_shown": {
+    "note": "the same button where only the text's first megabyte is shown",
+    "en": "Copy the shown text",
+    "apple_en": "Copy the Shown Text",
+    "de": "Den angezeigten Text kopieren"
+  },
+  "file_text_copied": {
+    "en": "Copied to the clipboard.",
+    "de": "In die Zwischenablage kopiert."
+  },
+  "file_text_copied_shown": {
+    "en": "Copied the shown part of the text to the clipboard.",
+    "de": "Den angezeigten Teil des Textes in die Zwischenablage kopiert."
+  },
+  "file_text_wrap": {
+    "note": "a shown text's toggle: long lines wrap instead of scrolling sideways",
+    "en": "Wrap lines",
+    "apple_en": "Wrap Lines",
+    "de": "Zeilen umbrechen"
+  },
+  "file_pdf_password_title": {
+    "note": "{1} the PDF's file name",
+    "en": "{1} is password protected",
+    "de": "{1} ist passwortgeschützt"
+  },
+  "file_pdf_password_label": {
+    "en": "Password",
+    "de": "Passwort"
+  },
+  "file_pdf_password_hint": {
+    "note": "the password goes to the PDF reader on this device and nowhere else",
+    "en": "It is not saved: you enter it each time you open this PDF.",
+    "de": "Es wird nicht gespeichert: Du gibst es bei jedem Öffnen dieses PDFs neu ein."
+  },
+  "file_pdf_password_wrong": {
+    "en": "Wrong password, try again",
+    "de": "Falsches Passwort, bitte erneut versuchen"
+  },
+  "file_pdf_password_open": {
+    "en": "Open",
+    "de": "Öffnen"
+  },
+  "file_pdf_password_cancel": {
+    "en": "Cancel",
+    "de": "Abbrechen"
+  },
+  "file_pdf_password_declined": {
+    "note": "a password-protected PDF whose prompt was cancelled, or a device whose PDF reader takes no password",
+    "en": "This PDF is password protected, so it cannot be shown here. You can download it and open it with its password.",
+    "de": "Dieses PDF ist passwortgeschützt und kann hier nicht angezeigt werden. Du kannst es herunterladen und mit dem Passwort öffnen."
+  },
   "share_file_title": {
     "en": "Share this file",
     "de": "Diese Datei teilen"

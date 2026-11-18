@@ -19,6 +19,7 @@ using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -150,18 +151,7 @@ internal sealed class FilePage : IDisposable
                 break;
             case FileViewKind.Pdf:
                 _content.Content = Loading(Words.FileOpening());
-                Load(now, async (bytes, scale) =>
-                {
-                    var pdf = await PdfView.OpenAsync(bytes, scale);
-                    if (pdf is null)
-                    {
-                        _content.Content = Message(Words.FileUnsupported());
-                        return;
-                    }
-                    _pdf = pdf;
-                    _content.Content = pdf.Scroll;
-                    await pdf.Start();
-                });
+                Load(now, (bytes, scale) => ShowPdf(now, bytes, scale, null));
                 break;
             case FileViewKind.Media:
                 _content.Content = Loading(Words.FileOpening());
@@ -239,6 +229,75 @@ internal sealed class FilePage : IDisposable
         }
     }
 
+    /// <summary>
+    /// The PDF in <paramref name="bytes"/> shown, opened with <paramref name="password"/> where one was typed. A
+    /// password-protected PDF asks for its password in the page first, as the web's does (FileViewer.vue): a PasswordBox
+    /// whose value goes to Windows' renderer and nowhere else, emptied at each try; a wrong one said; Cancel says the PDF
+    /// is protected and leaves Save a copy.
+    /// </summary>
+    private async Task ShowPdf((FileViewKind, int) asked, byte[] bytes, double scale, string? password)
+    {
+        var (pdf, locked) = await PdfView.OpenAsync(bytes, scale, password);
+        if (_closed || _drawn != asked) return;
+        if (locked)
+        {
+            _content.Content = PdfPassword(Node.name, wrong: password is not null, typed => _ = ShowPdf(asked, bytes, scale, typed), () => _content.Content = Message(Words.FilePdfPasswordDeclined()));
+            return;
+        }
+        if (pdf is null)
+        {
+            _content.Content = Message(Words.FileUnsupported());
+            return;
+        }
+        _pdf = pdf;
+        _content.Content = pdf.Scroll;
+        await pdf.Start();
+    }
+
+    /// <summary>The prompt of a password-protected PDF: its name, the PasswordBox, Open and Cancel, the hint or a wrong one said.</summary>
+    private static UIElement PdfPassword(string name, bool wrong, Action<string> open, Action cancel)
+    {
+        var column = new StackPanel { Spacing = 12, MaxWidth = 420, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Padding = new Thickness(24) };
+        column.Children.Add(new TextBlock { Text = Words.FilePdfPasswordTitle(name), Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"], TextWrapping = TextWrapping.Wrap });
+        var box = new PasswordBox { Header = Words.FilePdfPasswordLabel() };
+        AutomationProperties.SetAutomationId(box, "file-pdf-password");
+        column.Children.Add(box);
+        var note = new TextBlock { Text = wrong ? Words.FilePdfPasswordWrong() : Words.FilePdfPasswordHint(), TextWrapping = TextWrapping.Wrap };
+        if (wrong) note.Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
+        AutomationProperties.SetAutomationId(note, "file-pdf-password-note");
+        column.Children.Add(note);
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        var go = new Button { Content = Words.FilePdfPasswordOpen(), Style = (Style)Application.Current.Resources["AccentButtonStyle"], IsEnabled = false };
+        AutomationProperties.SetAutomationId(go, "file-pdf-password-open");
+        var back = new Button { Content = Words.FilePdfPasswordCancel() };
+        AutomationProperties.SetAutomationId(back, "file-pdf-password-cancel");
+        void Submit()
+        {
+            if (box.Password.Length == 0) return;
+            var typed = box.Password;
+            box.Password = "";
+            open(typed);
+        }
+        box.PasswordChanged += (_, _) => go.IsEnabled = box.Password.Length > 0;
+        box.KeyDown += (_, e) =>
+        {
+            if (e.Key != Windows.System.VirtualKey.Enter) return;
+            e.Handled = true;
+            Submit();
+        };
+        go.Click += (_, _) => Submit();
+        back.Click += (_, _) =>
+        {
+            box.Password = "";
+            cancel();
+        };
+        buttons.Children.Add(go);
+        buttons.Children.Add(back);
+        column.Children.Add(buttons);
+        column.Loaded += (_, _) => box.Focus(FocusState.Programmatic);
+        return column;
+    }
+
     /// <summary>Stops the medium playing, if one is (MediumPlayer: the player let go first, then the core's reader).</summary>
     private void StopMedia()
     {
@@ -270,10 +329,13 @@ internal sealed class FilePage : IDisposable
     }
 
     /// <summary>A text, monospace, a line a row of a virtualized list (one TextBox of a megabyte drew only its first line,
-    /// measured 2026-11-12); a cut one says so above it.</summary>
+    /// measured 2026-11-12), each line selectable; a cut one says so above it. The web's two conveniences (FileViewer.vue):
+    /// Copy puts exactly what is shown on the clipboard (a cut text its shown part, which the button and its note say), and
+    /// Wrap lines wraps long lines instead of scrolling sideways (on at first, as on the web).</summary>
     private static UIElement Text(string text, string? cut)
     {
         var grid = new Grid();
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         if (cut is not null)
@@ -283,22 +345,58 @@ internal sealed class FilePage : IDisposable
             grid.Children.Add(bar);
         }
         var lines = text.Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+        static DataTemplate Template(bool wrap) => (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(
+            "<DataTemplate xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\">" +
+            $"<TextBlock Text=\"{{Binding}}\" TextWrapping=\"{(wrap ? "Wrap" : "NoWrap")}\" IsTextSelectionEnabled=\"True\" Margin=\"12,0,12,0\" FontFamily=\"Cascadia Mono, Consolas\" /></DataTemplate>");
         var rows = new ListView
         {
             ItemsSource = lines,
             SelectionMode = ListViewSelectionMode.None,
             IsItemClickEnabled = false,
             Margin = new Thickness(0, 8, 0, 8),
-            ItemTemplate = (DataTemplate)Microsoft.UI.Xaml.Markup.XamlReader.Load(
-                "<DataTemplate xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\">" +
-                "<TextBlock Text=\"{Binding}\" TextWrapping=\"Wrap\" Margin=\"12,0,12,0\" FontFamily=\"Cascadia Mono, Consolas\" /></DataTemplate>"),
+            ItemTemplate = Template(true),
         };
         var row = new Style(typeof(ListViewItem));
         row.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, 0d));
         rows.ItemContainerStyle = row;
         AutomationProperties.SetAutomationId(rows, "file-text");
         AutomationProperties.SetName(rows, Words.TabDepotFile());
-        Grid.SetRow(rows, 1);
+
+        var bar2 = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Margin = new Thickness(12, 8, 12, 0) };
+        var copy = new Button { Content = cut is null ? Words.FileTextCopy() : Words.FileTextCopyShown() };
+        AutomationProperties.SetAutomationId(copy, "file-text-copy");
+        var copied = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] };
+        AutomationProperties.SetAutomationId(copied, "file-text-copied");
+        var wrap = new ToggleSwitch { Header = null, OnContent = Words.FileTextWrap(), OffContent = Words.FileTextWrap(), IsOn = true };
+        AutomationProperties.SetName(wrap, Words.FileTextWrap());
+        AutomationProperties.SetAutomationId(wrap, "file-text-wrap");
+        DispatcherQueueTimer? clear = null;
+        copy.Click += (_, _) =>
+        {
+            var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(text);
+            Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+            copied.Text = cut is null ? Words.FileTextCopied() : Words.FileTextCopiedShown();
+            Log.Write($"file text copied: {text.Length} characters");
+            clear?.Stop();
+            clear = copied.DispatcherQueue.CreateTimer();
+            clear.Interval = TimeSpan.FromSeconds(6);
+            clear.IsRepeating = false;
+            clear.Tick += (_, _) => copied.Text = "";
+            clear.Start();
+        };
+        wrap.Toggled += (_, _) =>
+        {
+            rows.ItemTemplate = Template(wrap.IsOn);
+            ScrollViewer.SetHorizontalScrollMode(rows, wrap.IsOn ? ScrollMode.Disabled : ScrollMode.Enabled);
+            ScrollViewer.SetHorizontalScrollBarVisibility(rows, wrap.IsOn ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto);
+        };
+        bar2.Children.Add(copy);
+        bar2.Children.Add(wrap);
+        bar2.Children.Add(copied);
+        Grid.SetRow(bar2, 1);
+        grid.Children.Add(bar2);
+        Grid.SetRow(rows, 2);
         grid.Children.Add(rows);
         Log.Write($"file text shown: {text.Length} characters, {lines.Count} lines");
         return grid;
@@ -392,16 +490,19 @@ internal sealed class FilePage : IDisposable
             AutomationProperties.SetAutomationId(Scroll, "file-pdf");
         }
 
-        public static async Task<PdfView?> OpenAsync(byte[] bytes, double scale)
+        /// <summary>The PDF opened (with <paramref name="password"/> where one was typed), or none and whether it is its
+        /// password that kept it shut.</summary>
+        public static async Task<(PdfView? View, bool Locked)> OpenAsync(byte[] bytes, double scale, string? password)
         {
             try
             {
-                return new PdfView(await PdfPages.OpenAsync(bytes), scale);
+                return (new PdfView(await PdfPages.OpenAsync(bytes, password), scale), false);
             }
             catch (Exception e)
             {
-                Log.Write($"the file's PDF did not open ({e.GetType().Name})");
-                return null;
+                var locked = PdfPages.NeedsPassword(e);
+                Log.Write($"the file's PDF did not open ({e.GetType().Name}{(locked ? ", its password" : "")})");
+                return (null, locked);
             }
         }
 
