@@ -26,7 +26,7 @@ Verbs:
                              the app (`--stop-at`, from its cache), and in that build directory, as the app's module
                              would, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked` (all but
                              SANDBOX_SKIPS) and `cargo build --locked` run. The pinned runtime as `flatpak` installs it;
-                             the registry and target in the volumes `veyq-flatpak-cargo`/`veyq-flatpak-target-<arch>`.
+                             the registry and target in the volumes `veyq-flatpak-cargo`/`veyq-flatpak-target-<arch>-<checkout>`.
                              SANDBOX_SKIPS then run in the Fedora 44 container (`cargo test -- --exact`), where glycin
                              runs without a portal. Its exit code is cargo's.
   run [--port N] [--devlogin [--fill|--unlock]] [--no-secret-service | --home VOLUME]
@@ -122,7 +122,8 @@ THEME = repo_layout.MOBILE / "theme"
 # cargo's registry and its target, kept across runs (named volumes: nothing of them lands in the tree). The target is one
 # per checkout: two worktrees building into one target at once mixed their crates (seen 2026-11-18, a merge's build
 # compiled against another tree's words and Config). The registry is content-addressed and shared.
-TARGET_VOLUME = "veyq-linux-target-" + hashlib.sha256(str(repo_layout.ROOT.resolve()).encode()).hexdigest()[:10]
+CHECKOUT = hashlib.sha256(str(repo_layout.ROOT.resolve()).encode()).hexdigest()[:10]
+TARGET_VOLUME = f"veyq-linux-target-{CHECKOUT}"
 CARGO_VOLUMES = {"veyq-linux-cargo": "/veyq/cargo", TARGET_VOLUME: "/veyq/target"}
 BROADWAY_DISPLAY = 5  # gtk4-broadwayd serves display :N on port 8080 + N
 # This host's architecture -> (Docker platform, Kotlin/Native target as Gradle names it)
@@ -302,8 +303,8 @@ def build() -> int:
         + shlex.quote("set -e; cd /veyq/src; cargo clippy --locked --all-targets -- -D warnings; "
                       f"cargo test --locked -- {skips}; cargo build --locked"))
     rc = in_runtime(flatpak_arch, script, [
-        "-v", f"veyq-flatpak-state-{flatpak_arch}:/veyq/state",
-        "-v", f"veyq-flatpak-cargo:/veyq/cargo", "-v", f"veyq-flatpak-target-{flatpak_arch}:/veyq/target",
+        "-v", f"veyq-flatpak-state-{flatpak_arch}-{CHECKOUT}:/veyq/state",
+        "-v", f"veyq-flatpak-cargo:/veyq/cargo", "-v", f"veyq-flatpak-target-{flatpak_arch}-{CHECKOUT}:/veyq/target",
         "-v", f"{repo_layout.MOBILE}:/veyq/mobile:ro", "-v", f"{FLATPAK_OUT}:/veyq/mobile/build/linux/flatpak",
         "-v", f"{repo_layout.MOBILE_LINUX}:/veyq/src:ro", "-v", f"{GENERATED}:/veyq/generated:ro",
         "-v", f"{lib_dir}:/veyq/lib:ro", "-v", f"{WORDS / 'words.json'}:/veyq/words.json:ro",
@@ -536,7 +537,7 @@ def flatpak(flatpak_arch: str, prebuilt: bool = False, smoke: bool = False) -> i
     if smoke:
         script += "; " + SMOKE.format(arch=flatpak_arch, bundle=bundle, app=APP_ID, line=SMOKE_SIGN_IN)
     rc = in_runtime(flatpak_arch, script,
-                    ["-v", f"veyq-flatpak-state-{flatpak_arch}:/veyq/state",
+                    ["-v", f"veyq-flatpak-state-{flatpak_arch}-{CHECKOUT}:/veyq/state",
                      "-v", f"{repo_layout.MOBILE}:/veyq/mobile:ro",
                      "-v", f"{FLATPAK_OUT}:/veyq/mobile/build/linux/flatpak"])
     if rc == 0:

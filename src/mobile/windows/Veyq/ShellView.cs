@@ -956,37 +956,54 @@ internal sealed class ShellView
 
     /// <summary>New Memory (Shell.CreateMemory) in the level shown, named in a dialog that asks again with the core's
     /// problem; the Memory made opens (the web's MemoryNodeDialog).</summary>
-    private async void NewMemory() => await NewMemory("", null, null);
+    private async void NewMemory() => await NewMemory("", null, null, null);
 
-    private async System.Threading.Tasks.Task NewMemory(string name, string? problem, bool? wasThereBefore)
+    private async System.Threading.Tasks.Task NewMemory(string name, string? problem, bool? wasThereBefore, bool? placeBefore)
     {
         if (_state is not { } state || state.shell.space is not { } space) return;
         var parent = state.shell.path.Count > 0 ? state.shell.path[^1].nodeId : null;
-        // "I was there", ticked, where the core offers it (a tenant or group scope: ADR 0144 decision 2); not remembered
+        // "I was there", ticked, where the core offers it (a tenant or group scope: ADR 0144 decision 2); "Determine location
+        // automatically", unticked, where the map services are shown (uc.memory.place A1); neither remembered
         var offered = false;
+        var offersPlace = false;
         try
         {
-            offered = (await Core.CallAsync(new Call.ShellOffersWasThere { scopeId = space })).Item1 is Answer.WasThere { offered: true };
+            if ((await Core.CallAsync(new Call.ShellOffersWasThere { scopeId = space })).Item1 is Answer.WasThere w)
+            {
+                offered = w.offered;
+                offersPlace = w.autoPlace;
+            }
         }
         catch (Exception e)
         {
             Log.Write($"Shell.OffersWasThere failed ({e.GetType().Name})");
         }
-        CheckBox? wasThere = null;
-        if (offered)
+        CheckBox? Check(bool shown, string id, string label, string hint, bool ticked)
         {
-            wasThere = new CheckBox { Content = Words.MemoryParticipantsWasThere(), IsChecked = wasThereBefore ?? true };
-            AutomationProperties.SetAutomationId(wasThere, "new-memory-was-there");
-            ToolTipService.SetToolTip(wasThere, Words.MemoryParticipantsWasThereHint());
-            AutomationProperties.SetHelpText(wasThere, Words.MemoryParticipantsWasThereHint());
+            if (!shown) return null;
+            var box = new CheckBox { Content = label, IsChecked = ticked };
+            AutomationProperties.SetAutomationId(box, id);
+            ToolTipService.SetToolTip(box, hint);
+            AutomationProperties.SetHelpText(box, hint);
+            return box;
         }
-        var typed = await Dialogs.AskName(_window, "new-memory", Words.MemoryCreateMemoryTitle(), Words.NodeName(), name, problem, Words.FolderCreate(), wasThere);
+        var place = Check(offersPlace, "new-memory-auto-place", Words.MemoryPlaceAuto(), Words.MemoryPlaceAutoHint(), placeBefore ?? false);
+        var wasThere = Check(offered, "new-memory-was-there", Words.MemoryParticipantsWasThere(), Words.MemoryParticipantsWasThereHint(), wasThereBefore ?? true);
+        StackPanel? extra = null;
+        if (place is not null || wasThere is not null)
+        {
+            extra = new StackPanel();
+            if (place is not null) extra.Children.Add(place);
+            if (wasThere is not null) extra.Children.Add(wasThere);
+        }
+        var typed = await Dialogs.AskName(_window, "new-memory", Words.MemoryCreateMemoryTitle(), Words.NodeName(), name, problem, Words.FolderCreate(), extra);
         if (typed is null) return;
         var there = wasThere?.IsChecked == true;
-        Log.Write($"new memory: I was there offered {offered}, ticked {there}");
+        var armed = place?.IsChecked == true;
+        Log.Write($"new memory: I was there offered {offered}, ticked {there}; the place offered {offersPlace}, ticked {armed}");
         try
         {
-            var (answer, _) = await Core.CallAsync(new Call.ShellCreateMemory { scopeId = space, parentId = parent, name = typed, wasThere = there });
+            var (answer, _) = await Core.CallAsync(new Call.ShellCreateMemory { scopeId = space, parentId = parent, name = typed, wasThere = there, autoPlace = armed });
             switch (answer)
             {
                 case Answer.Created { node: { } made }:
@@ -995,7 +1012,7 @@ internal sealed class ShellView
                     break;
                 case Answer.Created { notice: { } n }:
                     Log.Write($"new memory: {n.msg}");
-                    await NewMemory(typed, Said.Notice(n), there);
+                    await NewMemory(typed, Said.Notice(n), there, armed);
                     break;
                 default:
                     Log.Write($"Shell.CreateMemory answered {answer.GetType().Name}");

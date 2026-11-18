@@ -30,6 +30,10 @@ internal sealed class Uploads : IDisposable
     private bool _taking;
     private readonly Dictionary<string, (UploadStatus, int)> _logged = [];
 
+    /// <summary>How many files the queue holds waiting or running, as last shown: what closing the window asks about
+    /// (ADR 0145 decision 2).</summary>
+    public static int Active { get; private set; }
+
     /// <summary>The queue's command for the CommandBar; null while the queue lists nothing.</summary>
     public AppBarButton? Button { get; private set; }
 
@@ -57,6 +61,7 @@ internal sealed class Uploads : IDisposable
 
     private void Draw(UploadsShown? s)
     {
+        Active = s?.active ?? 0;
         _list.Children.Clear();
         var visible = s is not null && (s.summary is not null || s.preparing is not null);
         var was = Button is not null;

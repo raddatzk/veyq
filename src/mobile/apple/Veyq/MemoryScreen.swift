@@ -40,6 +40,7 @@ struct MemoryScreen: View {
     private var node: NodeAt { ref.at }
     private var state: GalleryModel.State? { model.galleryState(node) }
     private var rows: [GalleryModel.Row] { state?.rows ?? [] }
+    private var uploading: [UploadTile] { state?.uploading ?? [] }
     /// What the page adds (core's: the rights' upload, a chapter where it makes one).
     private var uploads: Bool { state?.rights.upload ?? false }
     private var chapterHere: Bool { model.galleryModel(node)?.creates.contains(MemoryCreate.shared.CHAPTER) ?? false }
@@ -154,16 +155,22 @@ struct MemoryScreen: View {
                     Text(say(failure)).foregroundStyle(state?.offline != nil ? Role.muted : Role.danger).padding()
                 } else if state?.rows == nil {
                     ProgressView().frame(maxWidth: .infinity).padding()
-                } else if rows.isEmpty {
+                } else if rows.isEmpty && uploading.isEmpty {
                     Text(say(.memoryGalleryEmpty)).foregroundStyle(Role.muted).padding()
                 } else {
-                    Text(say(.memoryItems, rows.count)).font(.footnote).foregroundStyle(Role.muted).padding(.horizontal)
-                    let layout = GalleryModel.companion.layout(rows: rows, width: Double(gridWidth))
+                    if !rows.isEmpty { Text(say(.memoryItems, rows.count)).font(.footnote).foregroundStyle(Role.muted).padding(.horizontal) }
+                    // what this device sends here leads the grid as placeholder tiles (ADR 0145 decision 3)
+                    let layout = GalleryModel.companion.layout(rows: rows, uploading: uploading, width: Double(gridWidth))
                     let at = Dictionary(uniqueKeysWithValues: rows.enumerated().map { ($0.element.mediaId, $0.offset) })
+                    let sending = Dictionary(uniqueKeysWithValues: uploading.map { ($0.tileId, $0) })
                     ForEach(layout.rows, id: \.key) { r in
                         ZStack(alignment: .topLeading) {
                             ForEach(r.tiles, id: \.id) { t in
                                 if let index = at[t.id] { tile(rows[index], index: index, frame: t) }
+                                else if let upload = sending[t.id] {
+                                    UploadPlaceholder(tile: upload, width: CGFloat(t.width), height: CGFloat(t.height))
+                                        .offset(x: CGFloat(t.left))
+                                }
                             }
                         }
                         .frame(maxWidth: .infinity, minHeight: CGFloat(r.height), maxHeight: CGFloat(r.height), alignment: .topLeading)
@@ -440,6 +447,35 @@ private struct MediaTile: View {
                     (try? await AppleMemories.shared.tile(gallery: gallery, mediaId: row.mediaId)).map { $0 as Data }
                 }
             }
+    }
+}
+
+/// A photo or video on its way into this page (ADR 0145 decision 3): its kind's symbol on the tile's ground, how far it is
+/// along the bottom (an indeterminate bar while its tiers are made on the device), or that it failed — the uploads list
+/// retries it. VoiceOver says its name and what is happening to it.
+private struct UploadPlaceholder: View {
+    let tile: UploadTile
+    let width: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        Rectangle().fill(Role.line)
+            .frame(width: width, height: height)
+            .overlay {
+                Image(systemName: tile.failed ? "exclamationmark.triangle" : tile.isVideo ? "video" : "photo")
+                    .foregroundStyle(tile.failed ? Role.danger : Role.muted)
+            }
+            .overlay(alignment: .bottom) {
+                if !tile.failed {
+                    Group {
+                        if tile.preparing { ProgressView().progressViewStyle(.linear) } else { ProgressView(value: tile.progress).progressViewStyle(.linear) }
+                    }
+                    .padding(6)
+                }
+            }
+            .clipped()
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(tile.failed ? say(.memoryUploadTileFailed, tile.name) : tile.preparing ? say(.memoryUploadTilePreparing, tile.name) : say(.memoryUploadTile, tile.name))
     }
 }
 

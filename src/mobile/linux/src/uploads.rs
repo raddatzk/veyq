@@ -19,6 +19,40 @@ use crate::bridge::{self, wire::Answer, wire::Call, wire::Update, wire::UploadBa
 use crate::home::glib_escape;
 use crate::{header, said, words};
 
+thread_local! {
+    /// How many files the queue holds waiting or running, as last shown: what closing the window asks about.
+    static ACTIVE: Cell<i64> = const { Cell::new(0) };
+    /// The person chose *Quit anyway*: the next close goes through.
+    static QUITTING: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Closing [window] while files still upload asks first (ADR 0145 decision 2): *Keep uploading*, the default, keeps it
+/// open; *Quit anyway* closes it, which ends the app and the uploads with it. A minimized window keeps uploading.
+pub fn ask_before_close(window: &adw::ApplicationWindow) {
+    window.connect_close_request(|w| {
+        let files = ACTIVE.with(Cell::get);
+        if files == 0 || QUITTING.with(Cell::get) {
+            return glib::Propagation::Proceed;
+        }
+        eprintln!("veyq: closing asked: {files} uploads under way");
+        let ask = adw::AlertDialog::builder().heading(words::upload_quit_title()).body(words::upload_quit_body(files)).build();
+        ask.add_responses(&[("keep", &words::upload_quit_keep()), ("quit", &words::upload_quit_anyway())]);
+        ask.set_response_appearance("quit", adw::ResponseAppearance::Destructive);
+        ask.set_default_response(Some("keep"));
+        ask.set_close_response("keep");
+        let window = w.clone();
+        ask.connect_response(None, move |_, response| {
+            eprintln!("veyq: closing answered: {response}");
+            if response == "quit" {
+                QUITTING.with(|q| q.set(true));
+                window.close();
+            }
+        });
+        ask.present(Some(w));
+        glib::Propagation::Stop
+    });
+}
+
 /// The queue's button and what it last drew.
 pub struct Uploads {
     button: gtk::MenuButton,
@@ -247,6 +281,7 @@ impl Uploads {
     fn draw(self: &Rc<Self>, shown: Option<&UploadsShown>) {
         let empty = Vec::new();
         let batches = shown.map(|s| &s.batches).unwrap_or(&empty);
+        ACTIVE.with(|a| a.set(shown.map_or(0, |s| i64::from(s.active))));
         self.draw_batches(batches);
         let Some(s) = shown else {
             self.button.set_visible(false);

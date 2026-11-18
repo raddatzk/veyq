@@ -209,6 +209,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { session.gate.collect(::gateChanged) }
         // a pin's fetch keeps the process once the app is left: WorkManager's worker, a dataSync foreground service
         OfflineWork.watch(app, viewModelScope)
+        // an upload goes on with the app left (ADR 0145 decision 1)
+        UploadWork.watch(app, viewModelScope)
     }
 
     private fun gateChanged(g: me.raddatz.veyq.mobile.session.SessionModel.Gate) {
@@ -1582,14 +1584,17 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * made (the web's), its maker listed among its participants where [wasThere] (ADR 0144 decision 2). Why not, in the
      * dialog's words, or null.
      */
-    suspend fun createMemory(scopeId: String, parentId: String?, name: String, wasThere: Boolean = false): String? {
+    suspend fun createMemory(scopeId: String, parentId: String?, name: String, wasThere: Boolean = false, autoPlace: Boolean = false): String? {
         val app = getApplication<Application>()
         val m = shellModel ?: return app.text(me.raddatz.veyq.mobile.memories.MemoryCreate.refused(null))
-        return opened(m.createMemory(scopeId, parentId, name, wasThere)).also { readRowDetails(m.tenant) }
+        return opened(m.createMemory(scopeId, parentId, name, wasThere, autoPlace)).also { readRowDetails(m.tenant) }
     }
 
     /** Whether New Memory in space [scopeId] offers *I was there* (a tenant or group space, ADR 0144 decision 2). */
     fun offersWasThere(scopeId: String): Boolean = shellModel?.offersWasThere(scopeId) == true
+
+    /** Whether New Memory offers *Determine location automatically* (uc.memory.place A1: this tenant's map services shown on this device). */
+    fun offersAutoPlace(): Boolean = shellModel?.offersAutoPlace() == true
 
     /** A chapter [name] made in [gallery]'s Memory (core's `GalleryModel.createChapter`), opened once made; why not, or null. */
     suspend fun createChapter(gallery: me.raddatz.veyq.mobile.memories.GalleryModel, name: String): String? {

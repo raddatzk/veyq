@@ -27,8 +27,41 @@ public partial class App : Application
     {
         Words.Lookup = MrtWords.Open(null, DebugEnv.Language);
         _window = new MainWindow();
+        AskBeforeClosing(_window);
         _window.Closed += (_, _) => Core.Shutdown();
         _window.Activate();
         _window.StartCore();
+    }
+
+    /// <summary>The person chose "Quit anyway": the next close goes through.</summary>
+    private bool _quitting;
+
+    /// <summary>Closing the window while files still upload asks first (ADR 0145 decision 2): "Keep uploading", the
+    /// default, keeps it open; "Quit anyway" closes it, which ends the app and its uploads. A minimized window keeps
+    /// uploading.</summary>
+    private void AskBeforeClosing(Window window)
+    {
+        window.AppWindow.Closing += async (_, args) =>
+        {
+            var files = Uploads.Active;
+            if (files == 0 || _quitting) return;
+            args.Cancel = true;
+            Log.Write($"closing asked: {files} uploads under way");
+            var dialog = new Microsoft.UI.Xaml.Controls.ContentDialog
+            {
+                Title = Words.UploadQuitTitle(),
+                Content = Words.UploadQuitBody(files),
+                PrimaryButtonText = Words.UploadQuitKeep(),
+                SecondaryButtonText = Words.UploadQuitAnyway(),
+                DefaultButton = Microsoft.UI.Xaml.Controls.ContentDialogButton.Primary,
+            };
+            var answer = await Dialogs.Show(window, dialog);
+            Log.Write($"closing answered: {answer}");
+            if (answer == Microsoft.UI.Xaml.Controls.ContentDialogResult.Secondary)
+            {
+                _quitting = true;
+                window.Close();
+            }
+        };
     }
 }

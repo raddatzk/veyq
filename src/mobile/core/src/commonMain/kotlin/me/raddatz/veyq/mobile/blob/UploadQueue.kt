@@ -185,8 +185,22 @@ class UploadQueue(dispatcher: CoroutineDispatcher) {
     /** Calls [listener] with the state now and with each change after (on a background thread). */
     fun watch(listener: (State) -> Unit): Watch = Watch(CoroutineScope(worker).launch { state.collect { listener(it) } })
 
+    /** This queue's name in [UploadsUnderway]: what a platform's background holds the process for while its files go. */
+    val underwayKey: String = Random.nextLong().toULong().toString(16)
+
     private fun publish() {
-        _state.value = State(groups.filter { !it.acknowledged }.map { it.batch() })
+        val now = State(groups.filter { !it.acknowledged }.map { it.batch() })
+        _state.value = now
+        UploadsUnderway.set(underwayKey, underway(now))
+    }
+
+    /** What [now] holds under way: its waiting and running files, the bytes done of its batches' (none while none waits or runs). */
+    private fun underway(now: State): UploadsUnderway.Progress? {
+        val files = now.active
+        if (files == 0) return null
+        val items = now.batches.flatMap { it.items }.filter { it.status != Status.CANCELLED }
+        val total = items.sumOf { it.sizeBytes.coerceAtLeast(1) }
+        return UploadsUnderway.Progress(files, (total * now.progress).toLong(), total)
     }
 
     private fun newId() = Random.nextLong().toULong().toString(16)

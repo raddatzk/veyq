@@ -220,11 +220,12 @@ class CurationDispatchTest {
                 shell = null, pot = null, me = "u1", pictures = MutableStateFlow(mapOf("u2" to byteArrayOf(1))), loadPictures = {},
                 mediaUploads = { queue, _, _ -> me.raddatz.veyq.mobile.memories.MediaUploads(queue, NoUploads) },
                 gallery = { node, _, _ -> GalleryModel(node, played.door()) },
-                createMemory = { scopeId, _, name, wasThere ->
-                    played.sent += "create:$name:$wasThere"
+                createMemory = { scopeId, _, name, wasThere, autoPlace ->
+                    played.sent += "create:$name:$wasThere" + (if (autoPlace) ":place" else "")
                     MemoryCreate.Made(NodeAt(scopeId, "m-new", MemoryCreate.MEMORY, name), null)
                 },
                 offersWasThere = { scopeId -> scopeId == "s" },
+                offersAutoPlace = { true },
                 profile = { userId -> PersonProfile.of(userId, played.members.associateBy { it.userId }, emptySet()) },
                 personMemories = { userId ->
                     PersonMemories(userId, object : PersonMemories.Door {
@@ -267,11 +268,13 @@ class CurationDispatchTest {
         b.signedIn()
 
         // New Memory: *I was there* offered where the core says, and carried to the core with the name
-        assertEquals(Answer.WasThere(true), b.ask(Call.ShellOffersWasThere("s")))
-        assertEquals(Answer.WasThere(false), b.ask(Call.ShellOffersWasThere("personal")))
+        assertEquals(Answer.WasThere(true, autoPlace = true), b.ask(Call.ShellOffersWasThere("s")))
+        assertEquals(Answer.WasThere(false, autoPlace = true), b.ask(Call.ShellOffersWasThere("personal")))
         assertEquals(Answer.Created(NodeAt("s", "m-new", "MEMORY", "Harz"), null), b.ask(Call.ShellCreateMemory("s", null, "Harz", wasThere = true)))
         b.ask(Call.ShellCreateMemory("s", null, "Amrum"))
-        assertEquals(listOf("create:Harz:true", "create:Amrum:false"), played.sent.filter { it.startsWith("create:") }, "I was there did not reach the core")
+        // *Determine location automatically* (uc.memory.place A1) carried to the core beside the name
+        b.ask(Call.ShellCreateMemory("s", null, "Sylt", autoPlace = true))
+        assertEquals(listOf("create:Harz:true", "create:Amrum:false", "create:Sylt:false:place"), played.sent.filter { it.startsWith("create:") }, "I was there or the place did not reach the core")
 
         // the people line: Anna named, opening her profile; "gone" a former member, opening nothing
         val (g, page) = b.page()

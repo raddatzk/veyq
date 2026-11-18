@@ -63,8 +63,8 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
 2. **_I was there_ in the creation dialog** (owner, 2026-11-17). The apps' New Memory form gains *I was there*, ticked,
    not remembered, offered only for a MEMORY in a tenant or group scope (not a personal one, not a chapter); ticked, the
    create seals `participants: {userIds: [own id]}` into the Memory's first `wrappedMeta` — no second write. The owner's
-   web decision (2026-10-14) carried to the apps: a Memory made in an app and one made on the web mean the same. The date
-   and the place of the same dialog stay inbox #940.
+   web decision (2026-10-14) carried to the apps: a Memory made in an app and one made on the web mean the same. The same
+   dialog's *Determine location automatically* is uc.memory.place A1, the web's opt-in (its date starts `auto`, as on the web).
 3. **A medium's capture time: the core's override, one listed-tier write for three callers.**
    `core/…/memories/CaptureTime.kt` sets and resets (removes) a medium's `capturedAtOverride` through a
    **`ListedTierWrite`** extracted from `TrackLabel` — the raw `media-meta` read-modify-write with every other field
@@ -124,9 +124,12 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
    of them and sees the banner as a member does (share view = member view); the apps reach no link as a guest yet
    (inbox #435), so that path is the core's tests only.
 7. **Offline.**
-   - **Participants are not shown offline:** the member list is no kept read, so offline every id would read as a former
-     member. Kept as a sealed read it would be a list of the tenant's people at rest on the device for one line — inbox
-     #948 decides it.
+   - **Participants are shown offline, read-only:** each scope's member list is a kept read ([ADR 0140](0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)
+     decision 5), so the line names who was there from the list as last read online — without it every id would read as
+     a former member —, and an account opened offline names the tenant's people from the tenant scope's kept list. The
+     cost, accepted: the tenant's and the groups' member directories at rest on the device, sealed under `K_off` like
+     every entry and wiped with the store; a picture is not kept, so offline a person is their letter. Nothing is
+     edited offline: the line offers no picker.
    - **The banner shows offline where a pin kept it:** a pin keeps each node's `BANNER` and `BANNER_POSTER` blobs as it
      keeps covers (the pin's sealed record gains the banner's ids), so a pinned Memory opens with its banner and its video
      plays ([ADR 0140](0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)
@@ -187,10 +190,9 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
       decision 5 orders an application's lists, which a member returns to; a person's Memories are a record of what they
       were part of, read in time — the web's order.
 14. **The profile offline.** The profile opens offline on what the device kept: `trees()` serves the kept listings, so the
-    index and the rows are built offline, and the map says it needs a connection (ADR 0143 decision 9). But its ways in
-    are hidden offline — the participants' line is not shown (decision 7) and an uploader's name cannot be resolved — so
-    in practice it is reached only when it was open as the device went offline; then it stays, naming the person from the
-    session's directory read before. Nothing about it is written to disk.
+    index and the rows are built offline, and the map says it needs a connection (ADR 0143 decision 9). Its ways in hold
+    offline too: the participants' line (decision 7) and an uploader's name, both named from the kept member lists.
+    Nothing about it is written to disk beyond those kept answers.
 
 ## Consequences
 
@@ -200,8 +202,8 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
   changes.
 - **While a banner's video plays, its surround stays the poster's** — a deviation from the web, whose surround follows
   the frames from a 32 px canvas. A per-frame readback from four players is not worth a moving blur.
-- **Participants are not shown offline** (decision 7) until inbox #948 decides whether the member list becomes a kept,
-  sealed read; a corrected time and a pinned banner are.
+- **Participants are shown offline** (decision 7) from the kept member lists, as a corrected time and a pinned banner
+  are.
 - **The core gains its first shared row** (decision 5): a stored `K_blob` wrapped again under another node's key. It is
   the web's wrap, held to a vector the web produces, so an app-made banner that shares a medium and a web-made one are
   the same rows.
@@ -302,8 +304,7 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
     surround holds above and below only.
   - **Linux and Windows.** The profile's List | Map switch is icons, `node_view_list` and `memory_view_map` their
     tooltips and labels.
-- **Not decided here:** the date and place of the creation dialog (inbox #940); the participants offline (#948); one's
-  own profile editing and the safety numbers in the apps (#949); tiles (#950); a guest's view of a received link (#435);
+- **Not decided here:** one's own profile editing and the safety numbers in the apps (#949); tiles (#950); a guest's view of a received link (#435);
   a capture-time shift over several media (not built on the web either,
   [en.memory.buckets](../features/memory/enablers/en.memory.buckets.md)); a people search and a people overview in the
   apps.
@@ -314,8 +315,8 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
   addition would make the editor redo its pick.
 - **Reading the members once per tenant** — a group Memory lists its group's members, which the tenant list is not;
   `listScopeMembers` is per scope, as on the web.
-- **Leaving *I was there* to #940** — #940 holds a map and a date picker in the dialog; this is one checkbox, and without
-  it every Memory made in an app silently lacks its maker where the web would list them.
+- **Leaving *I was there* to the place's opt-in** — that was a separate change; this is one checkbox, and without it
+  every Memory made in an app silently lacks its maker where the web would list them.
 - **A capture-time shift over several media** — not built on the web; a feature, not a catch-up.
 - **A third copy of the listed-tier loop** — three callers, one conflict rule.
 - **Each platform's blur** (Compose `Modifier.blur`, SwiftUI `.blur`, GTK's blur node; WinUI has none without Win2D, a

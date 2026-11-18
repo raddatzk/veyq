@@ -1742,11 +1742,12 @@ final class AppModel {
 
     /// A Memory `name` made in space `scopeId` under `parentId` (nil: the space's top) — New Memory, core's
     /// `ShellModel.createMemory` (the web's `MemoryNodeDialog`: checked against the loaded tree, then sent) —, opened once
-    /// made (the web's), its maker listed among its participants where `wasThere` (ADR 0144 decision 2). Why not, in the
+    /// made (the web's), its maker listed among its participants where `wasThere` (ADR 0144 decision 2), its place armed where
+    /// `autoPlace` (uc.memory.place A1). Why not, in the
     /// dialog's words, or nil.
-    func createMemory(scopeId: String, parentId: String?, name: String, wasThere: Bool = false) async -> String? {
+    func createMemory(scopeId: String, parentId: String?, name: String, wasThere: Bool = false, autoPlace: Bool = false) async -> String? {
         guard let m = shellModel else { return say(notice: MemoryCreate.shared.refused(reason: nil)) }
-        let made = try? await m.createMemory(scopeId: scopeId, parentId: parentId, name: name, wasThere: wasThere)
+        let made = try? await m.createMemory(scopeId: scopeId, parentId: parentId, name: name, wasThere: wasThere, autoPlace: autoPlace)
         applyShell(start: false)
         await readDetails(m.tenant)
         return opened(made)
@@ -1754,6 +1755,9 @@ final class AppModel {
 
     /// Whether New Memory in space `scopeId` offers *I was there* (a tenant or group space, ADR 0144 decision 2).
     func offersWasThere(_ scopeId: String) -> Bool { shellModel?.offersWasThere(scopeId: scopeId) ?? false }
+
+    /// Whether New Memory offers *Determine location automatically* (uc.memory.place A1: this tenant's map services shown on this device).
+    func offersAutoPlace() -> Bool { shellModel?.offersAutoPlace() ?? false }
 
     /// A chapter `name` made in `gallery`'s Memory (core's `GalleryModel.createChapter`, which reads the lists anew), opened
     /// once made; why not, or nil.

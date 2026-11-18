@@ -246,4 +246,33 @@ class UploadQueueTest {
         assertEquals(emptyList(), running.clean)
         assertEquals(1.0, UploadQueue.State(emptyList()).progress)
     }
+
+    /**
+     * What the platforms' background holds the process for (Android's foreground service, iOS's background time): while a
+     * job of this queue waits or runs, [UploadsUnderway] names the queue with its files under way and bytes done of bytes
+     * set out; once none is left the queue is gone from it — a failed one waiting for a retry holds nothing.
+     */
+    @Test
+    fun uploads_under_way_name_this_queue_while_a_job_waits_or_runs_and_let_go_once_none_does() = runTest {
+        val q = queue()
+        val log = mutableListOf<String>()
+        val a = Fake("a", log).apply { gate = CompletableDeferred() }
+        val b = Fake("b", log, mutableListOf("nope", "nope"))
+        q.enqueue(listOf(a, b), "l", null, null, null)
+        advanceUntilIdle()
+        val held = UploadsUnderway.uploads.value[q.underwayKey]
+        assertEquals(2, held?.files, "both files are under way")
+        assertEquals(20L, held?.total)
+        a.gate!!.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(Status.FAILED, q.item("b").status)
+        assertNull(UploadsUnderway.uploads.value[q.underwayKey], "a failed file waiting for its retry holds the process")
+        q.retry(q.item("b").id)
+        b.gate = CompletableDeferred()
+        advanceUntilIdle()
+        assertEquals(1, UploadsUnderway.uploads.value[q.underwayKey]?.files, "a retry is under way again")
+        q.clear()
+        advanceUntilIdle()
+        assertNull(UploadsUnderway.uploads.value[q.underwayKey], "a queue cleared lets go")
+    }
 }

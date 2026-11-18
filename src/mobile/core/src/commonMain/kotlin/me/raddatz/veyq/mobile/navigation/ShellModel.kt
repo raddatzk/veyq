@@ -646,11 +646,15 @@ class ShellModel(
     /**
      * A Memory or a chapter ([kind], `MemoryCreate.offered` where the shell is) named [name] made in [scopeId] under
      * [parentId] (null: the space's top): the node made, to open, or why not; the lists are read anew. [wasThere]: the
-     * maker listed as a Memory's participant from its birth, where [offersWasThere] (ADR 0144 decision 2).
+     * maker listed as a Memory's participant from its birth, where [offersWasThere] (ADR 0144 decision 2); [autoPlace]: its
+     * place armed to come from its photos, where [offersAutoPlace] (uc.memory.place A1).
      */
-    suspend fun createMemoryNode(scopeId: String, parentId: String?, kind: String, name: String, wasThere: Boolean = false): me.raddatz.veyq.mobile.memories.MemoryCreate.Made {
+    suspend fun createMemoryNode(
+        scopeId: String, parentId: String?, kind: String, name: String, wasThere: Boolean = false, autoPlace: Boolean = false,
+    ): me.raddatz.veyq.mobile.memories.MemoryCreate.Made {
         if (!online) return me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, readOnly)
-        val made = me.raddatz.veyq.mobile.memories.MemoryCreate.create(tenant, scopeId, parentId, kind, name, wasThere)
+        val armed = autoPlace && offersAutoPlace()
+        val made = me.raddatz.veyq.mobile.memories.MemoryCreate.create(tenant, scopeId, parentId, kind, name, wasThere, armed)
         refresh()
         return made
     }
@@ -665,6 +669,18 @@ class ShellModel(
      */
     suspend fun createMemory(scopeId: String, parentId: String?, name: String, wasThere: Boolean): me.raddatz.veyq.mobile.memories.MemoryCreate.Made =
         createMemoryNode(scopeId, parentId, me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, name, wasThere)
+
+    /** [createMemory] with *Determine location automatically* ticked or not ([autoPlace], uc.memory.place A1); Swift's form, as above. */
+    suspend fun createMemory(scopeId: String, parentId: String?, name: String, wasThere: Boolean, autoPlace: Boolean): me.raddatz.veyq.mobile.memories.MemoryCreate.Made =
+        createMemoryNode(scopeId, parentId, me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, name, wasThere, autoPlace)
+
+    /**
+     * Whether New Memory offers *Determine location automatically*, unticked (uc.memory.place A1): where this tenant's map services are
+     * shown on this device ([mapServices] built, offered and consented) — the web's `mapsAvailable`.
+     */
+    fun offersAutoPlace(): Boolean = me.raddatz.veyq.mobile.memories.MemoryCreate.offersAutoPlace(
+        me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, placeNames?.maps?.available == true,
+    )
 
     /** Whether New Memory in [scopeId] offers *I was there*, ticked (ADR 0144 decision 2: a tenant or group scope). */
     fun offersWasThere(scopeId: String): Boolean =
@@ -704,6 +720,7 @@ class ShellModel(
             // each read of the lists is a new one (a rebuild after a refresh); a move of the shell alone keeps them
             override val revisions = state.map { it?.lists }.distinctUntilChanged { a, b -> a === b }
             override val uploaded = uploads.uploaded
+            override val uploading = uploads.tiles(ref.nodeId)
             override suspend fun moved(since: me.raddatz.veyq.mobile.memories.MemoryMedia.Gallery) =
                 me.raddatz.veyq.mobile.memories.MemoryMedia.moved(tenant, ref.scopeId, ref.nodeId, since)
             override suspend fun treeMoved() = tenant.treeMoved(ref.scopeId).also { if (it) refresh() }

@@ -3,6 +3,7 @@ package me.raddatz.veyq.mobile.memories
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import me.raddatz.veyq.mobile.AppKinds
+import me.raddatz.veyq.mobile.memories.place.MemoryLocation
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.session.NodeCreate
 import me.raddatz.veyq.mobile.session.NodeMetaWrite
@@ -67,14 +68,32 @@ object MemoryCreate {
     fun offersWasThere(kind: String, scopeKind: String?): Boolean = kind == MEMORY && (scopeKind == "TENANT" || scopeKind == "GROUP")
 
     /**
-     * The first meta a [kind] is born with in a scope of [scopeKind] when its maker ([userId]) ticked [wasThere]: the
-     * maker as its one participant, sealed at birth (no second write); null — no meta at all — where nothing is to be
-     * sealed or *I was there* is not offered there ([offersWasThere]).
+     * Whether New offers *Determine location automatically* for a [kind] (uc.memory.place A1, uc.memory.place A1 as the web's
+     * `MemoryNodeDialog` offers it): a Memory — never a chapter — where this device's map services are shown
+     * ([mapsAvailable]: offered by the tenant and consented here, the web's `mapsAvailable`). Unticked by default.
      */
-    fun birthMeta(kind: String, scopeKind: String?, wasThere: Boolean, userId: String): JsonObject? {
-        if (!wasThere || !offersWasThere(kind, scopeKind) || userId.isEmpty()) return null
-        return JsonObject(mapOf("v" to JsonPrimitive(1), Participants.born(userId)))
+    fun offersAutoPlace(kind: String, mapsAvailable: Boolean): Boolean = kind == MEMORY && mapsAvailable
+
+    /**
+     * The first meta a [kind] is born with in a scope of [scopeKind]: where its maker ([userId]) ticked [wasThere], the maker
+     * as its one participant ([offersWasThere]); where [autoPlace] was ticked, a pending `auto` place — no name yet, a
+     * geocoded one to come from the first geotagged medium (the web's `{name: '', nameSource: 'geocoded', derivedMode:
+     * 'auto'}`, which the settle materializes). Sealed at birth, no second write, in the web's order; null — no meta at all —
+     * where nothing is to be sealed.
+     */
+    fun birthMeta(kind: String, scopeKind: String?, wasThere: Boolean, userId: String, autoPlace: Boolean = false): JsonObject? {
+        val place = autoPlace && kind == MEMORY
+        val participants = wasThere && offersWasThere(kind, scopeKind) && userId.isNotEmpty()
+        if (!place && !participants) return null
+        val meta = LinkedHashMap<String, kotlinx.serialization.json.JsonElement>()
+        meta["v"] = JsonPrimitive(1)
+        if (place) meta[MemoryLocation.FIELD] = PENDING_PLACE.toJson()
+        if (participants) Participants.born(userId).let { (k, v) -> meta[k] = v }
+        return JsonObject(meta)
     }
+
+    /** The place a Memory is armed with at birth: pending, its name and position to come from its media. */
+    private val PENDING_PLACE = MemoryLocation("", MemoryLocation.NameSource.GEOCODED, null, MemoryLocation.DerivedMode.AUTO)
 
     /** What a create came to: the node made (to open), or why not. */
     class Made(val node: NodeAt?, val notice: Notice?)
@@ -82,15 +101,18 @@ object MemoryCreate {
     /**
      * Makes a [kind] named [name] in [scopeId] under [parentId] (null: the space's top) over [tenant]: checked against the
      * loaded tree first, then sent; the tree read before is forgotten after, so the next read lists it. [wasThere]: the
-     * maker listed among a Memory's participants from its birth, where it is offered ([birthMeta]).
+     * maker listed among a Memory's participants from its birth, where it is offered; [autoPlace]: its place armed
+     * ([birthMeta]).
      */
-    suspend fun create(tenant: TenantSession, scopeId: String, parentId: String?, kind: String, name: String, wasThere: Boolean = false): Made {
+    suspend fun create(
+        tenant: TenantSession, scopeId: String, parentId: String?, kind: String, name: String, wasThere: Boolean = false, autoPlace: Boolean = false,
+    ): Made {
         val n = name.trim()
         val tree = runCatching { tenant.trees()[scopeId].orEmpty() }.getOrNull() ?: return Made(null, refused(null))
         val parentKind = parentId?.let { p -> tree.firstOrNull { it.id == p }?.kind ?: return Made(null, refused(null)) }
         check(kind, parentKind, n, tree.filter { it.parentId == parentId }.map { Sibling(it.kind, it.name) })?.let { return Made(null, it) }
         val input = AppKinds.tokenInput(kind, n) ?: return Made(null, refused(null))
-        val born = birthMeta(kind, tenant.scopeKind(scopeId), wasThere, tenant.account.userId)
+        val born = birthMeta(kind, tenant.scopeKind(scopeId), wasThere, tenant.account.userId, autoPlace)
         val sealMeta = born?.let { meta -> { key: ByteArray, nodeId: String -> NodeMetaWrite.seal(tenant.account.suite, scopeId, nodeId, key, meta) } }
         val r = runCatching { NodeCreate.create(tenant, scopeId, parentId, kind, n, input, sealMeta) }.getOrNull()
         tenant.forgetTree()

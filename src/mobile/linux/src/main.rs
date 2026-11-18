@@ -103,6 +103,8 @@ fn activate(app: &adw::Application) {
         .height_request(294)
         .content(&status)
         .build();
+    // closing the window while files upload asks first (ADR 0145 decision 2)
+    veyq::uploads::ask_before_close(&window);
     let shell = Shell::new(&window);
     let manage = Manage::new(&window);
     // the switcher's "Manage servers"

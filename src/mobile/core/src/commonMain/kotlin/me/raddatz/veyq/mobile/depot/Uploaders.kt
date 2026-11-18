@@ -1,6 +1,5 @@
 package me.raddatz.veyq.mobile.depot
 
-import me.raddatz.veyq.mobile.api.apis.ScopesApi
 import me.raddatz.veyq.mobile.session.OpenNode
 import me.raddatz.veyq.mobile.session.TenantSession
 
@@ -41,9 +40,8 @@ object Uploaders {
         }
         if (!key.startsWith(USER)) return null
         val userId = key.removePrefix(USER)
-        val members = runCatching {
-            tenant.account.call { ScopesApi(tenant.base, tenant.account.http).listScopeMembers(file.scopeId) }
-        }.getOrNull() ?: return null
+        // a kept read (ADR 0144 decision 7): offline the list as last read online names them
+        val members = tenant.account.members(tenant.base, tenant.tenant.tenantId, file.scopeId) ?: return null
         val member = members.firstOrNull { it.userId == userId } ?: return Uploader(Kind.FORMER)
         return Uploader(Kind.MEMBER, userId, tenant.people[userId]?.displayName ?: member.username)
     }

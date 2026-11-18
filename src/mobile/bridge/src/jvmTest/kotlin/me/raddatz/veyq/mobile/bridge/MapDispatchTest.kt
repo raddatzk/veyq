@@ -435,6 +435,15 @@ class MapDispatchTest {
         assertEquals(1, page.tracks)
         assertEquals(listOf(DateMode.RANGE, "2026-07-01", "2026-07-14"), page.date!!.let { listOf(it.mode, it.from, it.to) })
         assertNull(page.place)
+        assertFalse(page.placePending, "no place, nothing pending")
+        // a place armed at birth (uc.memory.place A1): no name yet, and the line says it is pending
+        p.memory.places += MemoryLocation("", MemoryLocation.NameSource.GEOCODED, null, MemoryLocation.DerivedMode.AUTO)
+        assertEquals(Answer.Done, b.ask(Call.GalleryReload(g)))
+        val pending = b.watching(Watched.Gallery(g)).until { u -> (u as Update.Gallery).shown?.takeIf { it.placePending } }
+        assertNull(pending.place, "a pending place has no name to show")
+        p.memory.places.removeAt(p.memory.places.lastIndex)
+        assertEquals(Answer.Done, b.ask(Call.GalleryReload(g)))
+        b.watching(Watched.Gallery(g)).until { u -> (u as Update.Gallery).shown?.takeIf { !it.placePending } }
         val dates = b.ask(Call.MemoriesDates) as Answer.MemoryDates
         assertEquals(listOf("m" to "2026-07-14"), dates.dates.map { it.nodeId to it.date.to })
 

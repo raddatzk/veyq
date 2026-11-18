@@ -330,7 +330,7 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
 - **A Memory's date and place stay current wherever it is curated:** today an app's upload leaves a web-made `auto` range
   stale until a browser opens the Memory; with decision 5's settle points it does not.
 - **Not decided here:** a Memory's participants, a medium's capture-time correction and the banner (since built by ADR 0144); the
-  date and the place in the apps' creation dialog (#940); a person's profile map, the apps having no profile page
+  place in the apps' creation dialog (since built as the web's opt-in, uc.memory.place A1 — the web asks no date there); a person's profile map, the apps having no profile page
   (then #941; both since decided in [ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md)); the notice's other "your browser" wording (#942).
 
 ## Alternatives considered
@@ -366,7 +366,7 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
   kept by dropping a tenant's tiles where the consent does not hold (decision 4).
 - **Sorting the Memories list by start date**, as the web's grid does — ADR 0122 orders every list by use.
 - **The date and the place in the creation dialog now** — editing them right after creating does the same, and the
-  dialog is five platforms' forms (#940).
+  dialog is five platforms' forms (since built: the place's opt-in, as the web's; the web asks no date).
 - **A map view on Home's levels**, as the web's level toggle — Home is core's and lists every application's folders;
   Memories' map belongs to its bar (ADR 0122 decision 4).
 - **Spiderfying a cluster** — a Leaflet gesture no platform's map has.

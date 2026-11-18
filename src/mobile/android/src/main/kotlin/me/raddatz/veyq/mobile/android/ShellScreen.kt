@@ -467,8 +467,8 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
     if (naming) NameDialog(stringResource(R.string.folder_new), onClose = { naming = false }) { name -> model.createFolder(name) }
     if (creatingPot) PotCreateSheet(s, model) { creatingPot = false }
     val space = s.shell.space
-    if (namingMemory && space != null) MemoryNameDialog(space, model, onClose = { namingMemory = false }) { name, wasThere ->
-        model.createMemory(space, s.shell.folder?.nodeId, name, wasThere)
+    if (namingMemory && space != null) MemoryNameDialog(space, model, onClose = { namingMemory = false }) { name, wasThere, autoPlace ->
+        model.createMemory(space, s.shell.folder?.nodeId, name, wasThere, autoPlace)
     }
 }
 
@@ -513,25 +513,37 @@ internal fun NameDialog(title: String, onClose: () -> Unit, extra: (@Composable 
  * opens, never remembered (ADR 0144 decision 2); ticked, the Memory is born listing its maker among its participants.
  */
 @Composable
-private fun MemoryNameDialog(space: String, model: AppModel, onClose: () -> Unit, onCreate: suspend (String, Boolean) -> String?) {
+private fun MemoryNameDialog(space: String, model: AppModel, onClose: () -> Unit, onCreate: suspend (String, Boolean, Boolean) -> String?) {
     val offers = remember(space) { model.offersWasThere(space) }
+    // the place armed to come from the photos (uc.memory.place A1, the web's opt-in): offered where the map services are shown, unticked
+    val offersPlace = remember(space) { model.offersAutoPlace() }
     var wasThere by remember { mutableStateOf(true) }
+    var autoPlace by remember { mutableStateOf(false) }
     NameDialog(
         stringResource(R.string.memory_create_memory_title), onClose,
-        extra = if (!offers) null else { {
-            androidx.compose.foundation.layout.Row(
-                Modifier.fillMaxWidth().padding(top = 8.dp)
-                    .toggleable(wasThere, role = androidx.compose.ui.semantics.Role.Checkbox) { wasThere = it },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                androidx.compose.material3.Checkbox(checked = wasThere, onCheckedChange = null)
-                Column(Modifier.padding(start = 12.dp)) {
-                    Text(stringResource(R.string.memory_participants_was_there))
-                    Text(stringResource(R.string.memory_participants_was_there_hint), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
-                }
+        extra = if (!offers && !offersPlace) null else { {
+            Column {
+                if (offersPlace) CheckRow(autoPlace, { autoPlace = it }, stringResource(R.string.memory_place_auto), stringResource(R.string.memory_place_auto_hint))
+                if (offers) CheckRow(wasThere, { wasThere = it }, stringResource(R.string.memory_participants_was_there), stringResource(R.string.memory_participants_was_there_hint))
             }
         } },
-    ) { name -> onCreate(name, offers && wasThere) }
+    ) { name -> onCreate(name, offers && wasThere, offersPlace && autoPlace) }
+}
+
+/** One of New Memory's checkboxes: the whole row toggles it, its hint under its label. */
+@Composable
+private fun CheckRow(checked: Boolean, onChange: (Boolean) -> Unit, label: String, hint: String) {
+    androidx.compose.foundation.layout.Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp)
+            .toggleable(checked, role = androidx.compose.ui.semantics.Role.Checkbox, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.material3.Checkbox(checked = checked, onCheckedChange = null)
+        Column(Modifier.padding(start = 12.dp)) {
+            Text(label)
+            Text(hint, style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
+        }
+    }
 }
 
 /** The web's folder tile: the info role's soft fill and text (`ui.css` § folder). */
@@ -774,8 +786,8 @@ private fun MemoriesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) 
     CreateAction(stringResource(R.string.memory_new), shown = space != null && s.online, onClick = { creating = true }, state = LocalListStates.current.of("app:MEMORIES")) { list, bottom ->
         ArrangedListScreen(s.applicationList(ApplicationId.MEMORIES), onOpen = onOpen, state = list, bottom = bottom)
     }
-    if (creating && space != null) MemoryNameDialog(space, model, onClose = { creating = false }) { name, wasThere ->
-        model.createMemory(space, null, name, wasThere)
+    if (creating && space != null) MemoryNameDialog(space, model, onClose = { creating = false }) { name, wasThere, autoPlace ->
+        model.createMemory(space, null, name, wasThere, autoPlace)
     }
 }
 

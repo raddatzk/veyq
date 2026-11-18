@@ -36,9 +36,14 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.ModalBottomSheet
@@ -185,8 +190,13 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     // the justified grid (core's `GalleryModel.layout`, the web's `MediaGrid.vue`): laid out for the width between the
     // page's margins, each row an item of the lazy list, so only the rows near the viewport are composed (ADR 0105)
     val gridWidth = (maxWidth - GRID_MARGIN * 2).value.toDouble()
-    val layout = remember(rows, gridWidth) { rows?.let { GalleryModel.layout(it, gridWidth) } }
+    // what this device sends here leads the grid as placeholder tiles (ADR 0145 decision 3): laid out anew when one comes or
+    // goes, never on a progress step
+    val uploading = state.uploading
+    val uploadIds = uploading.map { it.id }
+    val layout = remember(rows, uploadIds, gridWidth) { rows?.let { GalleryModel.layout(it, uploading, gridWidth) } }
     val byId = remember(rows) { rows.orEmpty().withIndex().associateBy({ it.value.mediaId }, { it }) }
+    val uploadById = uploading.associateBy { it.id }
     LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = bottom)) {
         // the banner above the header, on every view (ADR 0144 decision 4)
         item(key = "banner") { MemoryBannerFrame(gallery, model) }
@@ -217,11 +227,11 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
             rows == null || layout == null -> item(key = "loading") {
                 Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
-            rows.isEmpty() -> item(key = "empty") {
+            rows.isEmpty() && uploading.isEmpty() -> item(key = "empty") {
                 Text(stringResource(R.string.memory_gallery_empty), color = role(palette.muted), modifier = Modifier.padding(16.dp))
             }
             else -> {
-                item(key = "count") {
+                if (rows.isNotEmpty()) item(key = "count") {
                     Text(
                         pluralStringResource(R.plurals.memory_items, rows.size, rows.size), style = MaterialTheme.typography.bodySmall,
                         color = role(palette.muted), modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 4.dp),
@@ -235,6 +245,9 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
                             .fillMaxWidth().height(r.height.dp),
                     ) {
                         for (t in r.tiles) {
+                            me.raddatz.veyq.mobile.memories.UploadTile.idOf(t.id)?.let { id ->
+                                uploadById[id]?.let { UploadPlaceholder(it, Modifier.offset(x = t.left.dp).size(t.width.dp, t.height.dp)) }
+                            }
                             val at = byId[t.id] ?: continue
                             MediaTile(at.value, gallery, model, Modifier.offset(x = t.left.dp).size(t.width.dp, t.height.dp)) {
                                 open = gallery.lightbox(at.index)
@@ -357,6 +370,31 @@ private fun MediaTile(row: GalleryModel.Row, gallery: GalleryModel, model: AppMo
         if (p != null) Image(p, row.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         else Icon(Icons.Outlined.Image, row.name, tint = role(palette.muted))
         if (row.isVideo) Icon(Icons.Outlined.PlayCircle, null, tint = Color.White, modifier = Modifier.size(32.dp))
+    }
+}
+
+/**
+ * A photo or video on its way into this page (ADR 0145 decision 3): its kind's glyph on the tile's ground, how far it is
+ * along the bottom (a running bar while its tiers are made on the device), or that it failed — the uploads list retries
+ * it. A screen reader hears its name and what is happening to it.
+ */
+@Composable
+private fun UploadPlaceholder(tile: me.raddatz.veyq.mobile.memories.UploadTile, modifier: Modifier) {
+    val palette = LocalPalette.current
+    val label = when {
+        tile.failed -> stringResource(R.string.memory_upload_tile_failed, tile.name)
+        tile.preparing -> stringResource(R.string.memory_upload_tile_preparing, tile.name)
+        else -> stringResource(R.string.memory_upload_tile, tile.name)
+    }
+    Box(modifier.background(role(palette.line)).semantics(mergeDescendants = true) { contentDescription = label }, contentAlignment = Alignment.Center) {
+        Icon(
+            if (tile.failed) Icons.Outlined.ErrorOutline else if (tile.isVideo) Icons.Outlined.Movie else Icons.Outlined.Image, null,
+            tint = role(if (tile.failed) palette.danger else palette.muted),
+        )
+        if (!tile.failed) {
+            val bar = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(6.dp)
+            if (tile.preparing) LinearProgressIndicator(bar) else LinearProgressIndicator({ tile.progress.toFloat() }, bar)
+        }
     }
 }
 

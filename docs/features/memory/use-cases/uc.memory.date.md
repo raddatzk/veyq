@@ -106,7 +106,7 @@ Linux, Windows) follow the flows above, with these differences. Built on every a
 - **`auto`** is kept current at the same three settle points, so an upload from an app no longer leaves a range stale
   until a browser opens the Memory.
 - **Offline** the date is shown and not edited.
-- **Not in the apps:** the date in the creation dialog (inbox #940).
+- **At creation** neither the web nor the apps ask for a date: a new Memory's date is `auto`, its range following its media.
 
 ## Related
 

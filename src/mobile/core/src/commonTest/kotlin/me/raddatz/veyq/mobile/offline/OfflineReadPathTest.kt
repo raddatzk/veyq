@@ -286,4 +286,40 @@ class OfflineReadPathTest {
         assertNull(deviceFiles.list(dir), "a store left open wrote into its wiped directory")
         assertEquals(emptyList(), store.entries())
     }
+
+    /**
+     * ADR 0144 decision 7: a scope's member list is a kept read — read online, it names a Memory's participants offline (the line, never
+     * the picker); a scope the account left takes its list with it at the sweep.
+     */
+    @Test
+    fun a_scopes_members_read_online_are_named_offline_and_go_with_a_left_scope() = runTest {
+        val t = play()
+        val s1 = t.scope("s1")
+        s1.members[t.id("anna")] = "anna"
+        t.node(s1, "n1")
+        val s2 = t.scope("s2")
+        t.node(s2, "n2")
+        t.remember()
+        val a = t.resume()
+        val tenant = tenantOf(a)
+        assertEquals(listOf("me", "anna"), tenant.scopeMembers(s1.id)?.map { it.username })
+        assertEquals(listOf("me"), tenant.scopeMembers(s2.id)?.map { it.username })
+        val o = assertNotNull(a.offline)
+        assertTrue(o.store.entries().any { it.key.kind == KeptRead.MEMBERS.kind && it.key.scope == s1.id }, "the member list was not kept")
+        a.retire()
+
+        t.reachable = false
+        val offline = t.resume()
+        assertIs<Reach.Offline>(offline.reach.value)
+        assertEquals(listOf("me", "anna"), tenantOf(offline).scopeMembers(s1.id)?.map { it.username }, "offline the kept list names the members")
+        offline.retire()
+
+        // the membership ends: the scope leaves the account's scopes, and the next open's read of them sweeps its list
+        t.reachable = true
+        s2.member = false
+        val back = t.resume()
+        tenantOf(back)
+        assertTrue(assertNotNull(back.offline).store.entries().none { it.key.scope == s2.id }, "the left scope's member list outlived the sweep")
+        back.retire()
+    }
 }

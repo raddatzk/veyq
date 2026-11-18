@@ -1021,19 +1021,28 @@ struct NewMemorySheet: View {
     let parentId: String?
     @State private var name = ""
     @State private var wasThere = true
+    @State private var autoPlace = false
     @State private var problem: String?
     @State private var saving = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         let offers = model.offersWasThere(scopeId)
+        // the place armed to come from the photos (uc.memory.place A1, the web's opt-in): where the map services are shown, off
+        let offersPlace = model.offersAutoPlace()
         NavigationStack {
             Form {
                 Section {
                     TextField(say(.nodeName), text: $name)
-                        .onSubmit { create(offers) }
+                        .onSubmit { create(offers, offersPlace) }
                 } footer: {
                     if let problem { Text(problem).foregroundStyle(Role.danger) }
+                }
+                if offersPlace {
+                    Toggle(isOn: $autoPlace) {
+                        Text(say(.memoryPlaceAuto))
+                        Text(say(.memoryPlaceAutoHint))
+                    }
                 }
                 if offers {
                     Toggle(isOn: $wasThere) {
@@ -1050,7 +1059,7 @@ struct NewMemorySheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { dismiss() }.disabled(saving) }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(say(.folderCreate)) { create(offers) }
+                    Button(say(.folderCreate)) { create(offers, offersPlace) }
                         .disabled(saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
@@ -1061,13 +1070,13 @@ struct NewMemorySheet: View {
         #endif
     }
 
-    private func create(_ offers: Bool) {
+    private func create(_ offers: Bool, _ offersPlace: Bool) {
         guard !saving, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         saving = true
         problem = nil
         let typed = name
         Task {
-            let refused = await model.createMemory(scopeId: scopeId, parentId: parentId, name: typed, wasThere: offers && wasThere)
+            let refused = await model.createMemory(scopeId: scopeId, parentId: parentId, name: typed, wasThere: offers && wasThere, autoPlace: offersPlace && autoPlace)
             saving = false
             if let refused { problem = refused } else { dismiss() }
         }

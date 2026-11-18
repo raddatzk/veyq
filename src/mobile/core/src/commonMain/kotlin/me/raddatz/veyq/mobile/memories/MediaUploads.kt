@@ -9,6 +9,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.memories.music.MusicUpload
@@ -78,6 +80,18 @@ class MediaUploads(
     init {
         scope.launch { queue.state.collect(::follow) }
     }
+
+    /**
+     * The photos and videos queued into node [nodeId], in the order queued, as its gallery's placeholder tiles (ADR 0145
+     * decision 3): every medium job of a batch into that node, whatever its state — the gallery leaves out what it lists.
+     * Music and GPX tracks are another view's, not the grid's.
+     */
+    fun tiles(nodeId: String): Flow<List<UploadTile>> = queue.state.map { q ->
+        q.batches.filter { it.key == nodeId }.flatMap { it.items }.mapNotNull { item ->
+            val job = item.job as? MediaUpload.Job ?: return@mapNotNull null
+            UploadTile(item.id, item.name, MediaUpload.claimsVideo(job.picked.type, job.picked.name), item.status, item.progress, job.mediaId)
+        }
+    }.distinctUntilChanged { a, b -> a.size == b.size && a.indices.all { i -> a[i].id == b[i].id && a[i].status == b[i].status && a[i].progress == b[i].progress && a[i].mediaId == b[i].mediaId } }
 
     /** What the queue shows of each held job: done or cancelled hands its file back, failed waits, failed and gone is abandoned. */
     private fun follow(q: UploadQueue.State) {

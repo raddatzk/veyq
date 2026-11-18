@@ -52,6 +52,7 @@ import me.raddatz.veyq.mobile.api.models.LoginChallengeRequest
 import me.raddatz.veyq.mobile.api.models.LoginVerifyRequest
 import me.raddatz.veyq.mobile.api.models.MasterKeyWrap
 import me.raddatz.veyq.mobile.api.models.RefreshRequest
+import me.raddatz.veyq.mobile.api.models.ScopeMember
 import me.raddatz.veyq.mobile.api.models.ScopeSummary
 import me.raddatz.veyq.mobile.api.models.NodeSummary
 import me.raddatz.veyq.mobile.crypto.JoinRecords
@@ -427,10 +428,7 @@ class VeyqAccount private constructor(
         val (tenantScopes, others) = summaries.partition { it.kind.value == "TENANT" }
         tenantScopes.forEach { openOne(it, null) }
         val tenantScope = open.firstOrNull { it.summary.kind.value == "TENANT" && it.summary.id == tenant.tenantId }
-        val members = tenantScope?.let {
-            val r = respond { ScopesApi(base, http).listScopeMembers(tenant.tenantId) }
-            if (r.success) r.body() else null
-        }
+        val members = tenantScope?.let { members(base, tenant.tenantId, tenant.tenantId) }
         val view = if (tenantScope == null || members == null) TenantView.unavailable(tenant.tenantId, suite)
         else TenantView.of(tenant.tenantId, members, tenantScope.key, tenantScope.summary.grantedEpoch.toLong(), suite, anchoring)
         others.forEach { openOne(it, view) }
@@ -450,7 +448,23 @@ class VeyqAccount private constructor(
             is GrantOutcome.Opened -> open += TenantSession.OpenScope(s, o.key, scopeName(s, tenant))
             is GrantOutcome.Refused -> closed[s.id] = o.reason
         }
-        return TenantSession(this, tenant, base, open, emptySet(), closed, closedKinds = kindsOf(summaries, closed))
+        // the tenant's directory as kept (ADR 0144 decision 7): offline a participant and an uploader are named as online, never judged
+        val tenantScope = open.firstOrNull { it.summary.kind.value == "TENANT" && it.summary.id == tenant.tenantId }
+        val members = tenantScope?.let { members(base, tenant.tenantId, tenant.tenantId) }
+        val people = if (tenantScope == null || members == null) emptyMap()
+        else People.of(JoinRecords(suite), tenant.tenantId, tenantScope.key, tenantScope.summary.grantedEpoch.toLong(), members)
+        return TenantSession(this, tenant, base, open, emptySet(), closed, people, closedKinds = kindsOf(summaries, closed))
+    }
+
+    /**
+     * Scope [scopeId]'s member list (`listScopeMembers`) of tenant [tenantId], a kept read (ADR 0144 decision 7): the server's answer
+     * while it is reached, the store's while not; null where it did not read (refused, or offline and not kept).
+     */
+    internal suspend fun members(base: String, tenantId: String, scopeId: String): List<ScopeMember>? {
+        val r = runCatching {
+            kept(KeptRead.MEMBERS, tenantId, scopeId, scopeId) { fetched(respond { ScopesApi(base, http).listScopeMembers(scopeId) }, null) }
+        }.getOrElse { e -> if (e is CancellationException) throw e else return null }
+        return runCatching { KEPT_JSON.decodeFromString(ListSerializer(ScopeMember.serializer()), r.pages.single().decodeToString()) }.getOrNull()
     }
 
     private fun kindsOf(summaries: List<ScopeSummary>, closed: Map<String, GrantOutcome.Reason>): Map<String, String> =
@@ -1424,14 +1438,13 @@ class TenantSession internal constructor(
     /**
      * Reads the tenant's members anew (a person's refresh, `ShellModel.refresh(people = true)`), as the open read them, and
      * keeps them as [people]: a member's new name or picture revision shows from then on. Null, and [people] as it was,
-     * where this account holds no tenant grant or the list did not read. Throws where the server did not answer.
+     * where this account holds no tenant grant or the list did not read (offline: the list as last kept, ADR 0144 decision 7).
      */
     @Throws(Exception::class)
     suspend fun readPeople(): Map<String, Person>? {
         val own = scopes.firstOrNull { it.summary.kind.value == "TENANT" && it.summary.id == tenant.tenantId } ?: return null
-        val r = account.respond { api(::ScopesApi).listScopeMembers(tenant.tenantId) }
-        if (!r.success) return null
-        return People.of(JoinRecords(account.suite), tenant.tenantId, own.key, own.summary.grantedEpoch.toLong(), r.body())
+        val members = account.members(base, tenant.tenantId, tenant.tenantId) ?: return null
+        return People.of(JoinRecords(account.suite), tenant.tenantId, own.key, own.summary.grantedEpoch.toLong(), members)
             .also { people = it }
     }
 
@@ -1481,13 +1494,12 @@ class TenantSession internal constructor(
 
     /**
      * The CURRENT members of [scopeId] (a proposed member who has not accepted is none yet), named by the tenant's
-     * directory; null when the list does not read.
+     * directory; null when the list does not read. A kept read (ADR 0144 decision 7): offline the list as last read online.
      */
     @Throws(Exception::class)
     suspend fun scopeMembers(scopeId: String): List<Person>? {
-        val r = account.respond { api(::ScopesApi).listScopeMembers(scopeId) }
-        if (!r.success) return null
-        return r.body().filter { it.pendingConsent != true }.map { people[it.userId] ?: Person(it.userId, it.username, it.username) }
+        val members = account.members(base, tenant.tenantId, scopeId) ?: return null
+        return members.filter { it.pendingConsent != true }.map { people[it.userId] ?: Person(it.userId, it.username, it.username) }
     }
 
     /** Drops the read tree: the next read of it (a list, [trees]) reads every scope again — after a node was created, or a write met a re-keyed node. */

@@ -4,6 +4,10 @@ import SwiftUI
 struct VeyqApp: App {
     @State private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
+    #if os(macOS)
+    /// A quit while files upload asks first (ADR 0145 decision 2).
+    @NSApplicationDelegateAdaptor(QuitGuard.self) private var quitGuard
+    #endif
 
     init() {
         #if DEBUG
@@ -26,8 +30,9 @@ struct VeyqApp: App {
             root
             #endif
         }
-        // a pin's fetch under way when the app is left asks the system for the time to go on (ADR 0140 decision 9)
-        .onChange(of: scenePhase) { _, phase in OfflineBackground.shared.phase(phase) }
+        // a pin's fetch or an upload under way when the app is left asks the system for the time to go on (ADR 0140
+        // decision 9, ADR 0145 decision 1)
+        .onChange(of: scenePhase) { _, phase in ContinuedWork.phase(phase) }
         #if os(macOS)
         .commands { LightboxCommands() }
         #endif
@@ -50,8 +55,27 @@ struct VeyqApp: App {
         RootView(model: model)
             .task {
                 DevLogin.run(model)
-                OfflineBackground.shared.start()
+                ContinuedWork.start()
                 model.start()
             }
     }
 }
+
+#if os(macOS)
+/// The Mac app keeps running with its windows closed, so its uploads go on; a quit (⌘Q, the menu) while files still
+/// upload asks first — keeping on is the default — and with nothing under way quits as before (ADR 0145 decision 2).
+@MainActor
+final class QuitGuard: NSObject, NSApplicationDelegate {
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let files = ContinuedWork.uploads.files
+        guard files > 0 else { return .terminateNow }
+        let alert = NSAlert()
+        alert.messageText = say(.uploadQuitTitle)
+        alert.informativeText = say(.uploadQuitBody, files)
+        alert.addButton(withTitle: say(.uploadQuitKeep))
+        let quit = alert.addButton(withTitle: say(.uploadQuitAnyway))
+        quit.hasDestructiveAction = true
+        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+    }
+}
+#endif

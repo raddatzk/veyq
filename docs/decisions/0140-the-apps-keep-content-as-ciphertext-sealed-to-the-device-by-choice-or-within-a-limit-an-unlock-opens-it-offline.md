@@ -120,8 +120,10 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
 5. **The read path: the server first when reachable, the store as a copy of its answer.**
    - **Which reads are kept** is one allowlist in the core (`offline/KeptRead`): `getAccountKeyMaterial` (wraps and sealed
      keys only), `listMyTenants` (the tenants' domains an offline unlock needs; it carries no token or address),
-     `listMyScopes`, `listNodes` per scope, `listNodeMedia` per Memory, `listFiles` per folder, `listApplicationBlobs` per
-     node, and blob frames. A test derives the allowlisted answers' models from the generated client and fails on any
+     `listMyScopes`, `listNodes` per scope, `listScopeMembers` per scope (the directory that names a Memory's participants
+     offline: usernames, sealed real names, avatar revisions and public keys, never a picture; reached while the scope is
+     the account's and kept by a pin of a node in it), `listNodeMedia` per Memory, `listFiles` per folder,
+     `listApplicationBlobs` per node, and blob frames. A test derives the allowlisted answers' models from the generated client and fails on any
      field whose name or contract description marks a token or a URL — the set is derived, not listed by hand.
    - **Online, the server's answer replaces the kept one — never merged.** Where a read has a revision, the core sends
      the kept one as `If-None-Match`, and a `304` marks the kept body current. Nothing kept is ever shown beside a newer

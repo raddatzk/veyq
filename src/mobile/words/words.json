@@ -3404,6 +3404,53 @@
     "en": "Creating the folders of “{1}”…",
     "de": "Die Ordner von „{1}“ werden angelegt …"
   },
+  "upload_background_title": {
+    "note": "the system's notice while uploads go on with the app left (Android's notification, iOS's background task; ADR 0145 decision 1): {1} how many files are still to go",
+    "en": {
+      "one": "Uploading 1 file",
+      "other": "Uploading {1:int} files"
+    },
+    "de": {
+      "one": "1 Datei wird hochgeladen",
+      "other": "{1:int} Dateien werden hochgeladen"
+    }
+  },
+  "upload_background_channel": {
+    "note": "the name of Android's notification channel for uploads, shown in the system's settings",
+    "en": "Uploads",
+    "de": "Uploads"
+  },
+  "upload_background_percent": {
+    "note": "how far the uploads are, under their title: {1} a whole percent",
+    "en": "{1} %% done",
+    "de": "{1} %% erledigt"
+  },
+  "upload_quit_title": {
+    "note": "the desktops' question when the window closes or the app quits while files still upload (ADR 0145 decision 2)",
+    "en": "Uploads are still running",
+    "de": "Uploads laufen noch"
+  },
+  "upload_quit_body": {
+    "note": "{1} the files still to go",
+    "en": {
+      "one": "If you quit now, 1 file will not be uploaded.",
+      "other": "If you quit now, {1:int} files will not be uploaded."
+    },
+    "de": {
+      "one": "Wenn du jetzt beendest, wird 1 Datei nicht hochgeladen.",
+      "other": "Wenn du jetzt beendest, werden {1:int} Dateien nicht hochgeladen."
+    }
+  },
+  "upload_quit_anyway": {
+    "en": "Quit anyway",
+    "de": "Trotzdem beenden",
+    "apple_en": "Quit Anyway"
+  },
+  "upload_quit_keep": {
+    "en": "Keep uploading",
+    "de": "Weiter hochladen",
+    "apple_en": "Keep Uploading"
+  },
   "device_unlock_prompt": {
     "note": "the system's biometric prompt, when the app opens a remembered account",
     "en": "Open your spaces",
@@ -4194,6 +4241,29 @@
   "memory_participants_was_there_hint": {
     "en": "lists you among the participants",
     "de": "trägt dich bei den Beteiligten ein"
+  },
+  "memory_place_auto": {
+    "note": "The New Memory form's checkbox (uc.memory.place A1, the web's `memory.place.autoOptIn`): the place is armed and named from the photos' location later",
+    "en": "Determine location automatically",
+    "de": "Ort automatisch ermitteln"
+  },
+  "memory_place_auto_hint": {
+    "en": "from where your photos were taken",
+    "de": "aus dem Standort deiner Fotos"
+  },
+  "memory_upload_tile": {
+    "note": "a placeholder tile in a Memory's gallery for a file on its way (ADR 0145 decision 3), as a screen reader names it: {1} the file's name",
+    "en": "Uploading {1}",
+    "de": "{1} wird hochgeladen"
+  },
+  "memory_upload_tile_preparing": {
+    "en": "Preparing {1}",
+    "de": "{1} wird vorbereitet"
+  },
+  "memory_upload_tile_failed": {
+    "note": "that tile once its upload failed (the uploads list retries it)",
+    "en": "{1} not uploaded",
+    "de": "{1} nicht hochgeladen"
   },
   "memory_participants_dialog_title": {
     "note": "The participants picker's title.",

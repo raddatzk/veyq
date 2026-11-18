@@ -8,6 +8,7 @@ import me.raddatz.veyq.mobile.api.models.AccountKeyMaterial
 import me.raddatz.veyq.mobile.api.models.ApplicationBlobPage
 import me.raddatz.veyq.mobile.api.models.MyTenant
 import me.raddatz.veyq.mobile.api.models.NodeSummary
+import me.raddatz.veyq.mobile.api.models.ScopeMember
 import me.raddatz.veyq.mobile.api.models.ScopeSummary
 
 /**
@@ -34,6 +35,12 @@ enum class KeptRead(val kind: String, internal val model: KSerializer<*>) {
     FILES("listFiles", FileListPage.serializer()),
     /** Per node: its application blobs, `ETag` its revision. */
     APPLICATION_BLOBS("listApplicationBlobs", ApplicationBlobPage.serializer()),
+    /**
+     * Per scope: its members, the directory that names a Memory's participants and a medium's uploader (ADR 0144 decision 7): the
+     * usernames, sealed real names and avatar revisions as the server answered, each scope's own list (a group's members are
+     * not the tenant's). No revision; replaced at each online read.
+     */
+    MEMBERS("listScopeMembers", ListSerializer(ScopeMember.serializer())),
     ;
 
     companion object {
