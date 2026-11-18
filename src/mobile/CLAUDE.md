@@ -1003,6 +1003,18 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   is the system's back and closes the link's dialog: start a slide's drag further in. A link that ends `FAILED` is first
   checked against `/api/setup`: a dead dev backend reads exactly so. Each linked family is signed
   out after the run; the device-register entries stay, orphans that eviction takes first (en.account.device-register § Growth).
+- An app ↔ app linking pass (2026-11-18, every pair through the test cameras): the shown code is a crop of the showing
+  app's shot — Android's through `adb emu screenrecord screenshot` (FLAG_SECURE), Linux's Broadway page, Windows' `drive
+  shot` under `VEYQ_DEV_CAPTURABLE=1` — padded white to 640×480. An emulator takes a new poster at run time with `adb emu
+  virtualscene-image wall <png>`, but caches it **by path**: a second image at the same path showed the old code (a
+  ceremony lost to a stale channel, `GONE`), so each poster gets a fresh name. With a poster of a ~760 px code the gRPC
+  aim `-0.55 0.3 3.4` read it; at `3.0` the same code stayed "nothing read". Linux's and Windows' test camera is read at
+  each camera start, so it is replaced between scans (Linux's is a single-file bind mount: write it in place, `cat new >
+  file`, or the container keeps the old inode). On Android `input keyevent 111` (Escape) closes the link's dialog: hide
+  the keyboard with Back. In GTK's link dialog two Tabs from the name land on "The numbers do not match", where Return
+  ends the ceremony: for the keys, click the slide's knob first, then the arrows and Return. Windows' unpackaged app keeps
+  its data in `%LOCALAPPDATA%\veyq` whatever `VEYQ_WINDOWS_DIR` says, so a pass's device shares the store another pass
+  left (an unlock of a trusted account met there): back the folder up before and `robocopy /MIR` it back after.
 - Under a host load around 20 the swiftshader emulator raises "isn't responding" on a long editor sheet: the main thread is
   idle (`kill -3` after `adb root`, `/data/anr/trace_*`), so tap Wait, never Close; a pass reads its state after it.
 - On iOS one SwiftUI `Text` of a megabyte drew nothing (measured 2026-11-12, a file's cut text): a long text is a line a

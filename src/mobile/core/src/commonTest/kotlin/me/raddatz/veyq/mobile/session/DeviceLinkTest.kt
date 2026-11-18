@@ -440,6 +440,9 @@ class DeviceLinkTest {
      * run the links' delayed work and jump virtual time (to the channel's end, when the racers are slow to get a
      * thread), which made this race flaky (2026-11-13: `expected 1 but was 0` with `Dispatchers.Default` busy). Blocked,
      * no virtual time passes; what the confirmations launch waits on the test dispatcher for the [settle] after.
+     * Measured in this form: red against check-then-act 20/20 at rest, and green 20/20 under load (2026-11-18,
+     * `:core:jvmTest` run 20 times beside a Linux build, an emulator and CPU burners; the 1-minute load 44–154 on 14
+     * cores from the second run on).
      */
     @OptIn(ExperimentalAtomicApi::class, DelicateCoroutinesApi::class)
     private fun <T> race(n: Int, act: () -> T): List<T> {

@@ -98,7 +98,10 @@ computer; hidden where the scan says `NoCamera`); email and server are filled, t
 sign-in model, so only the password is typed — the web's three fixture kits read and a dev kit signed in to the shell,
 measured 2026-11-13 on Android (a throwaway AVD), iOS (a throwaway simulator), macOS, Linux (the Fedora VM's GNOME, the
 portal's chooser, inside the installed Flatpak's sandbox) and Windows (the VM, the open picker; the packaged app too);
-the scan to the shell on Android (the emulator's virtual scene), iOS and macOS (their test cameras). No copy of a kit
+the scan to the shell on Android (the emulator's virtual scene), iOS and macOS (their test cameras); on Linux (the
+container) and Windows (the VM) the scan through each test camera (2026-11-18: a non-veyq code read and skipped, the
+dialog open after 50 and 100 frames; the dev kit's code `Found`, the dialog closed, email and server filled and the
+Secret Key held "From your Emergency Kit" — no sign-in sent). No copy of a kit
 or a frame on any app's disk ([ADR 0047](../decisions/0047-inline-video-playback-range-streaming.md)'s Consequences).
 **The account's Settings page** from the drawer, on all four apps (`uc.account.sessions`): the address, this device (its
 name, the trust level as Manage servers' — one core state —, Stop trusting), devices and sessions named from the
@@ -121,7 +124,13 @@ its test camera), macOS three of four (its test camera), Windows the two showing
 `NoCamera` offers only those) and a linked Windows device showing again; a linked Linux device staying signed in through
 the Secret Service (2026-11-15: `run.py run --home` a volume of its own, the web's code scanned, "Stay signed in" at the
 Login level, the app quit and started twice straight to its shell; a copy of that home without its keyring started to the
-sign-in; Settings' "Sign out" left no session and no saved key of it on the web's list); the slide by pointer and keys on Android, Linux
+sign-in; Settings' "Sign out" left no session and no saved key of it on the web's list). **App with app** (2026-11-18,
+through the test cameras, no password typed, every new device answering "Not now" and every family signed out after):
+Android ↔ Android (two throwaway AVDs: one showing for the other's scan, and a QR sign-in the other way), Android ↔
+Linux and Linux ↔ Windows each in all four roles — so Windows scanned a link's code for the first time (its test
+camera, `VEYQ_DEV_CAMERA` on the VM) and a device linked a moment before served as the trusted one for the next run;
+the check numbers matched on both screens each time, and a code of the other direction was hinted
+(`OTHER_DIRECTION`) before the right one was read. The slide by pointer and keys on Android, Linux
 and Windows; Android's task snapshot and Windows' capture bitten with the code shown.
 The Use page that says this to a person: [Add another device](../../site/src/content/docs/account/adding-another-device.mdx).
 
@@ -437,9 +446,6 @@ open (below). The Use pages: [People in your Memories](../../site/src/content/do
   Linux desktop's camera through the portal (on the Fedora VM the virtual camera of `src/mobile/CLAUDE.md` § Traps and
   **Allow** in GNOME's dialog → `state Found(…)`), and a Windows laptop's (`VEYQ_DEV_SCAN=1 windows/run.py run`, a
   code held up; Settings › Privacy › Camera off → `state Denied`), plus the sign-in's kit scan on each of the desktops.
-- **The desktops' kit scan through a test camera** was not run (machine-doable): the sign-in's "Scan Emergency Kit" with
-  `VEYQ_DEV_CAMERA=<a frame of a kit's code>` on Linux (container or VM) and Windows (the VM), a non-veyq code skipped,
-  the dialog closing with the form filled — the bridge's `KIT` scan is held by `KitDispatchTest` only.
 - The Android camera's frames on the emulator are 640×480 at most; 720p is measured on Apple's test camera only.
 
 **Account**
@@ -450,14 +456,10 @@ open (below). The Use pages: [People in your Memories](../../site/src/content/do
     backend restarting (machine-doable, inbox #928). Apple's runs were driven by debug hooks (`VEYQ_DEV_LINK`,
     `VEYQ_DEV_LINK_DIR`), so the Apple slide itself — drag, arrows and Return, VoiceOver's named action — waits for a
     person (the owner's, #928).
-  - No app has linked with another app yet (phone ↔ phone, phone ↔ desktop): every run had the web on the other side
-    (machine-doable through the test cameras, #928).
-  - Windows has never scanned a link's code: the VM has no camera, so `QrCamera.OpenLink` is proven by its build and
-    Linux's twin only; a real camera's link scan on every app is the owner's (inbox #912).
+  - No Apple app has linked with another app (the other pairs passed 2026-11-18, § Built, by area); Windows' link scan
+    ran only through its test camera — a real camera's link scan on every app is the owner's (inbox #912).
   - On GTK and WinUI a screen reader confirms the slide by the keys, with no named action of its own (ADR 0136's
     Consequences); no screen reader has driven the slide on any platform.
-  - `DeviceLinkTest`'s confirmation race in its final form (its racers on their own threads behind one gate) was
-    measured red against check-then-act 20/20 and green at rest, never yet under load (#928).
   - Every pass leaves a device-register entry per device it linked (no screen removes one): an orphan once a reconcile drops its rows, and orphans are what eviction takes first ([en.account.device-register](../features/account/enablers/en.account.device-register.md) § Growth).
 - The device register's own screen (the devices an account trusts, ADR 0058): every app writes it at each unlock and
   enrolment, only the web shows it.
