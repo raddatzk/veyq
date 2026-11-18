@@ -73,8 +73,9 @@ Verbs:
                              round trip reads, the words and the theme, at their paths in this tree. CI's `app-inputs`
                              runs it on macOS and hands the files to `flatpak --prebuilt`.
 
-cargo's registry and target directory live in the Docker volumes `veyq-linux-cargo` and `veyq-linux-target`, so a
-rebuild is incremental; `docker volume rm` both to start clean.
+cargo's registry and target directory live in the Docker volumes `veyq-linux-cargo` and `veyq-linux-target-<hash>` (one
+target per checkout, so parallel worktrees never mix their crates), so a rebuild is incremental; `docker volume rm` both
+to start clean.
 
 Live runs: `VEYQ_LIVE=http://veyq.localhost:8080 run.py test --tests '*LiveSignInTest*'` (or `run.py bridge`) signs in
 as the seeded principal of `.run/.env` (VEYQ_ENV_FILE names another file, e.g. the main checkout's from a worktree).
@@ -89,6 +90,7 @@ Docker must answer `docker build` / `docker run`; the image is `veyq-linux-dev`,
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -117,8 +119,11 @@ NORMALIZATION_TEST = repo_layout.MOBILE / "build" / "utf8proc" / "NormalizationT
 GENERATED = repo_layout.MOBILE / "build" / "generated"
 WORDS = repo_layout.MOBILE / "words"
 THEME = repo_layout.MOBILE / "theme"
-# cargo's registry and its target, kept across runs (named volumes: nothing of them lands in the tree)
-CARGO_VOLUMES = {"veyq-linux-cargo": "/veyq/cargo", "veyq-linux-target": "/veyq/target"}
+# cargo's registry and its target, kept across runs (named volumes: nothing of them lands in the tree). The target is one
+# per checkout: two worktrees building into one target at once mixed their crates (seen 2026-11-18, a merge's build
+# compiled against another tree's words and Config). The registry is content-addressed and shared.
+TARGET_VOLUME = "veyq-linux-target-" + hashlib.sha256(str(repo_layout.ROOT.resolve()).encode()).hexdigest()[:10]
+CARGO_VOLUMES = {"veyq-linux-cargo": "/veyq/cargo", TARGET_VOLUME: "/veyq/target"}
 BROADWAY_DISPLAY = 5  # gtk4-broadwayd serves display :N on port 8080 + N
 # This host's architecture -> (Docker platform, Kotlin/Native target as Gradle names it)
 ARCHES = {"arm64": ("linux/arm64", "LinuxArm64"), "aarch64": ("linux/arm64", "LinuxArm64"),
