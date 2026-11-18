@@ -36,7 +36,9 @@ internal static class MemoryFacts
     public static UIElement? Line(Window window, long gallery, GalleryShown s)
     {
         var date = DateText(s.date);
-        if (date is null && s.place is null && !s.editsFacts) return null;
+        // a place armed at birth whose name the photos have yet to give says so (#940), as the phones' line does
+        var place = s.place ?? (s.placePending ? Words.MemoryPlacePending() : null);
+        if (date is null && place is null && !s.editsFacts) return null;
         var line = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16 };
         AutomationProperties.SetAutomationId(line, "memory-facts");
         if (date is not null || s.editsFacts)
@@ -44,9 +46,9 @@ internal static class MemoryFacts
             line.Children.Add(Fact("", date ?? Words.MemoryDateNone(), date is null, s.editsFacts, Words.MemoryDateEdit(), "memory-date",
                 () => DateEditor.Open(window, gallery)));
         }
-        if (s.place is not null || s.editsFacts)
+        if (place is not null || s.editsFacts)
         {
-            line.Children.Add(Fact("", s.place ?? Words.MemoryPlaceSet(), s.place is null, s.editsFacts, Words.MemoryPlaceEdit(), "memory-place",
+            line.Children.Add(Fact("", place ?? Words.MemoryPlaceSet(), place is null, s.editsFacts, Words.MemoryPlaceEdit(), "memory-place",
                 () => PlaceEditor.Open(window, gallery)));
         }
         return line;

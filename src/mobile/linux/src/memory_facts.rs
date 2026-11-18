@@ -91,12 +91,14 @@ impl FactsLine {
         self.gallery.set(Some(gallery));
         let date = s.date.as_ref().and_then(date_text);
         let edits = s.edits_facts;
-        let (shows_date, shows_place) = (date.is_some() || edits, s.place.is_some() || edits);
+        // a place armed at birth whose name the photos have yet to give says so (#940), as the phones' line does
+        let place = s.place.clone().or_else(|| s.place_pending.then(words::memory_place_pending));
+        let (shows_date, shows_place) = (date.is_some() || edits, place.is_some() || edits);
         self.date.set_visible(shows_date);
         self.date_content.set_label(&date.clone().unwrap_or_else(words::memory_date_none));
         self.place.set_visible(shows_place);
-        self.place_content.set_label(&s.place.clone().unwrap_or_else(words::memory_place_set));
-        for (b, tip, has) in [(&self.date, words::memory_date_edit(), date.is_some()), (&self.place, words::memory_place_edit(), s.place.is_some())] {
+        self.place_content.set_label(&place.clone().unwrap_or_else(words::memory_place_set));
+        for (b, tip, has) in [(&self.date, words::memory_date_edit(), date.is_some()), (&self.place, words::memory_place_edit(), place.is_some())] {
             b.set_can_target(edits);
             b.set_focusable(edits);
             b.set_tooltip_text(edits.then_some(tip.as_str()));

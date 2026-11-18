@@ -2116,6 +2116,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         musicHere = s.musicHere,
         date = s.facts?.let { dateShown(s.date) },
         place = s.facts?.placeName,
+        placePending = s.facts?.location?.pending == true,
         editsFacts = s.editsFacts,
         tracks = s.tracks.size,
         people = s.people?.let { line ->

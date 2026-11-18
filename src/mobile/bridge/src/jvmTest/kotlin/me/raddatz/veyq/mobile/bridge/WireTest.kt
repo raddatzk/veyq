@@ -473,6 +473,8 @@ class WireTest {
             Update.Gallery(60, GalleryShown(memory, null, false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,
                 date = MemoryDateShown(DateMode.RANGE, "2026-07-01", "2026-07-14"), place = "Berlin", editsFacts = true, tracks = 2)),
             Update.Gallery(60, GalleryShown(memory, null, false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,
+                placePending = true, editsFacts = true)),
+            Update.Gallery(60, GalleryShown(memory, null, false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,
                 uploading = listOf(
                     UploadTileShown("upload:a1", video = false, progress = 0.25, preparing = false, failed = false, label = Notice(Msg.MEMORY_UPLOAD_TILE, listOf("IMG_0002.jpg"))),
                     UploadTileShown("upload:a2", video = true, progress = 0.0, preparing = false, failed = true, label = Notice(Msg.MEMORY_UPLOAD_TILE_FAILED, listOf("clip.mp4"))),

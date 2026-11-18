@@ -1845,6 +1845,11 @@ internal class GalleryShown(
     val date: MemoryDateShown? = null,
     /** The place's name the facts line shows (`MemoryFacts.Facts.placeName`); null: none, or pending. */
     val place: String? = null,
+    /**
+     * The place is armed and its name still to come from the photos (`MemoryLocation.pending`: one made with *Determine
+     * location automatically*, #940): the facts line says *Location pending…* where [place] is null.
+     */
+    val placePending: Boolean = false,
     /** Whether the facts line's date and place open their editors ([Call.DateOpen], [Call.PlaceOpen]; `GalleryModel.State.editsFacts`). */
     val editsFacts: Boolean = false,
     /** How many GPX tracks the node holds (its Map view's, [Call.TracksOpen]; the view itself is offered always). */
