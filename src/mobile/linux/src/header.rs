@@ -600,11 +600,11 @@ pub fn ask_name(
     confirm: &str,
     send: impl Fn(String, Box<dyn Fn(String, String)>) + Clone + 'static,
 ) {
-    ask_name_with(parent, heading, field, name, problem, confirm, None, send);
+    ask_name_with(parent, heading, field, name, problem, confirm, Vec::new(), send);
 }
 
-/// [ask_name] with [extra] (a row of the same boxed list, e.g. New Memory's *I was there*) under the name's field, kept
-/// with what it holds when the name is asked again.
+/// [ask_name] with [extra] (rows of the same boxed list, e.g. New Memory's *I was there* and its place) under the name's
+/// field, kept with what they hold when the name is asked again.
 #[allow(clippy::too_many_arguments)]
 pub fn ask_name_with(
     parent: &gtk::Widget,
@@ -613,14 +613,14 @@ pub fn ask_name_with(
     name: &str,
     problem: Option<&str>,
     confirm: &str,
-    extra: Option<gtk::ListBoxRow>,
+    extra: Vec<gtk::ListBoxRow>,
     send: impl Fn(String, Box<dyn Fn(String, String)>) + Clone + 'static,
 ) {
     let entry = adw::EntryRow::builder().title(field).text(name).build();
     let rows = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
     rows.add_css_class("boxed-list");
     rows.append(&entry);
-    if let Some(row) = &extra {
+    for row in &extra {
         if let Some(old) = row.parent().and_downcast::<gtk::ListBox>() {
             old.remove(row);
         }

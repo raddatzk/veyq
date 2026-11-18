@@ -23,7 +23,7 @@ use std::rc::{Rc, Weak};
 use adw::prelude::*;
 use gtk::{gdk, gio, glib};
 
-use crate::bridge::{self, Watch, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::GalleryRow, wire::GalleryShown,
+use crate::bridge::{self, Watch, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::GalleryRow, wire::GalleryShown, wire::UploadTileShown,
     wire::GridRow, wire::NodeAt, wire::ObjectRef, wire::Update, wire::Watched};
 use crate::drop::Sorted;
 use crate::home::{glib_escape, kind_icon};
@@ -85,6 +85,8 @@ struct Inner {
     grid: gtk::Fixed,
     /// The rows mounted: by row index, its widget and what it was built from.
     mounted: RefCell<HashMap<i32, (gtk::Fixed, String, f64)>>,
+    /// The placeholder tiles' progress bars, by their layout id: set from each update, never rebuilt for a step (ADR 0145 decision 3).
+    bars: RefCell<HashMap<String, glib::WeakRef<gtk::ProgressBar>>>,
     /// The width the grid was last laid out at, and whether a layout is in flight / wanted again.
     laid_width: Cell<i32>,
     asking: Cell<bool>,
@@ -205,6 +207,7 @@ impl MemoryPage {
             status,
             grid,
             mounted: RefCell::new(HashMap::new()),
+            bars: RefCell::new(HashMap::new()),
             laid_width: Cell::new(0),
             asking: Cell::new(false),
             again: Cell::new(false),
@@ -425,6 +428,7 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
                 }
                 inner.draw();
                 inner.relayout();
+                inner.step_uploads();
                 if let (Some(s), Some(id), Some(f)) = (inner.shown.borrow().as_ref(), inner.id.get(), inner.on_shown.borrow().as_ref()) {
                     f(s, id);
                 }
@@ -596,6 +600,8 @@ impl Inner {
         let by_id: HashMap<&str, (usize, &GalleryRow)> = shown.as_ref().and_then(|s| s.rows.as_ref()).map(|r| {
             r.iter().enumerate().map(|(i, row)| (row.media_id.as_str(), (i, row))).collect()
         }).unwrap_or_default();
+        // what this device sends here leads the grid as placeholder tiles (ADR 0145 decision 3)
+        let uploading: HashMap<&str, &UploadTileShown> = shown.as_ref().map(|s| s.uploading.iter().map(|u| (u.id.as_str(), u)).collect()).unwrap_or_default();
         let mut mounted = self.mounted.borrow_mut();
         let wanted: HashSet<i32> = rows.iter().map(|r| r.index).collect();
         mounted.retain(|index, (widget, _, _)| {
@@ -608,7 +614,9 @@ impl Inner {
         for r in rows {
             // a row is built from its frames and its media's tiles: the same row moves, another is made
             let key = r.tiles.iter().map(|t| {
-                let tile = by_id.get(t.media_id.as_str()).and_then(|(_, row)| row.tile.as_deref()).unwrap_or("-");
+                // a placeholder is built anew when it starts sending or fails, never for a step of its progress
+                let stage = uploading.get(t.media_id.as_str()).map(|u| if u.failed { "failed" } else if u.preparing { "preparing" } else { "sending" });
+                let tile = stage.or_else(|| by_id.get(t.media_id.as_str()).and_then(|(_, row)| row.tile.as_deref())).unwrap_or("-");
                 format!("{}:{tile}:{:.1}:{:.1}", t.media_id, t.left, t.width)
             }).collect::<Vec<_>>().join(" ") + &format!(" h{:.1}", r.height);
             if let Some((widget, built, top)) = mounted.get_mut(&r.index) {
@@ -621,17 +629,21 @@ impl Inner {
                 }
                 self.grid.remove(widget);
             }
-            let widget = self.row(r, &by_id);
+            let widget = self.row(r, &by_id, &uploading);
             self.grid.put(&widget, 0.0, r.top);
             mounted.insert(r.index, (widget, key, r.top));
         }
     }
 
     /// One row of the grid: its tiles at their frames.
-    fn row(self: &Rc<Self>, r: &GridRow, by_id: &HashMap<&str, (usize, &GalleryRow)>) -> gtk::Fixed {
+    fn row(self: &Rc<Self>, r: &GridRow, by_id: &HashMap<&str, (usize, &GalleryRow)>, uploading: &HashMap<&str, &UploadTileShown>) -> gtk::Fixed {
         let line = gtk::Fixed::new();
         let height = r.height.round() as i32;
         for t in &r.tiles {
+            if let Some(upload) = uploading.get(t.media_id.as_str()) {
+                line.put(&self.placeholder(upload, t.width.round() as i32, height), t.left, 0.0);
+                continue;
+            }
             let Some((index, row)) = by_id.get(t.media_id.as_str()) else { continue };
             let tile = self.tile(row, *index, t.width.round() as i32, height);
             line.put(&tile, t.left, 0.0);
@@ -686,6 +698,45 @@ impl Inner {
         });
         tile.add_controller(keys);
         tile
+    }
+
+    /// A photo or video on its way into this page (ADR 0145 decision 3): its kind's icon on a card, a spinner while its tiers
+    /// are made on the device, then a bar of how far it is ([step_uploads] moves it), or that it failed — the uploads
+    /// popover retries it. A screen reader reads its name and what is happening to it.
+    fn placeholder(self: &Rc<Self>, upload: &UploadTileShown, width: i32, height: i32) -> gtk::Overlay {
+        let label = said::notice(&upload.label);
+        let tile = gtk::Overlay::builder().width_request(width).height_request(height).tooltip_text(&label).build();
+        tile.update_property(&[gtk::accessible::Property::Label(&label)]);
+        tile.set_overflow(gtk::Overflow::Hidden);
+        tile.add_css_class("card");
+        let icon = if upload.failed { "dialog-warning-symbolic" } else if upload.video { "video-x-generic-symbolic" } else { "image-x-generic-symbolic" };
+        let image = gtk::Image::builder().icon_name(icon).pixel_size(32).halign(gtk::Align::Center).valign(gtk::Align::Center).build();
+        image.add_css_class(if upload.failed { "error" } else { "dim-label" });
+        tile.set_child(Some(&gtk::Box::new(gtk::Orientation::Vertical, 0)));
+        tile.add_overlay(&image);
+        if upload.preparing {
+            let spinner = adw::Spinner::builder().width_request(16).height_request(16).halign(gtk::Align::End).valign(gtk::Align::End)
+                .margin_end(6).margin_bottom(6).build();
+            tile.add_overlay(&spinner);
+        } else if !upload.failed {
+            let bar = gtk::ProgressBar::builder().fraction(upload.progress).valign(gtk::Align::End).margin_start(6).margin_end(6).margin_bottom(6).build();
+            bar.add_css_class("osd");
+            self.bars.borrow_mut().insert(upload.id.clone(), bar.downgrade());
+            tile.add_overlay(&bar);
+        }
+        tile
+    }
+
+    /// Each placeholder's bar moved to its upload's progress as the update says it; a bar no longer shown is forgotten.
+    fn step_uploads(&self) {
+        let shown = self.shown.borrow();
+        let mut bars = self.bars.borrow_mut();
+        bars.retain(|_, bar| bar.upgrade().is_some());
+        for u in shown.as_ref().map(|s| s.uploading.as_slice()).unwrap_or_default() {
+            if let Some(bar) = bars.get(&u.id).and_then(glib::WeakRef::upgrade) {
+                bar.set_fraction(u.progress);
+            }
+        }
     }
 
     /// Shows tile [blob] of [row] in [picture]: from the held tiles, else read (`Gallery.Tile`) once for every picture
@@ -786,7 +837,7 @@ impl Inner {
                 let icon = if shown.as_ref().is_some_and(|s| s.offline.is_some()) { "network-offline-symbolic" } else { "dialog-warning-symbolic" };
                 self.status.append(&status(&said::key(failure), icon))
             }
-            Some((Some(rows), _)) if rows.is_empty() => {
+            Some((Some(rows), _)) if rows.is_empty() && shown.as_ref().is_some_and(|s| s.uploading.is_empty()) => {
                 self.drop_rows();
                 self.status.append(&status(&words::memory_gallery_empty(), kind_icon(&self.node.kind)));
             }
