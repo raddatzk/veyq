@@ -147,26 +147,26 @@ internal static class HomeView
         return empty;
     }
 
-    /// <summary>Home: a folder's head (<paramref name="hero"/>, its cover: the folder's header's, as the Pot's and the
-    /// Memory's pages place it), the filters (where the core offers more than "all"), then the level's groups
+    /// <summary>Home: the filters (where the core offers more than "all"), a folder's head (<paramref name="hero"/>, its
+    /// cover: the folder's header's, as the Pot's and the Memory's pages place it), then the level's groups
     /// (Home.groups): a folder enters, an object opens in its application. With <paramref name="drops"/>, files and folders
     /// dropped onto the level upload there, and onto a folder's row into that folder (ADR 0123's Consequences, the Windows
     /// app's Depot whole).</summary>
     public static UIElement Home(ShellModelState state, ShellShown shown, Drops? drops = null, UIElement? hero = null)
     {
         var (scroll, content) = Column();
-        if (hero is not null)
-        {
-            // the head is the header's one element: taken from the level drawn before
-            if (hero is FrameworkElement { Parent: Panel panel }) panel.Children.Remove(hero);
-            if (hero is FrameworkElement { Parent: Border border }) border.Child = null;
-            content.Children.Add(hero);
-        }
         // the scroller holds only the column's height: the level takes a drop under its last row too
         scroll.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
         AutomationProperties.SetAutomationId(scroll, "level");
         drops?.OntoLevel(scroll);
         if (state.lists.filters.Count > 1) content.Children.Add(Filters(state, shown));
+        if (hero is not null)
+        {
+            // the head is the header's one element: taken from the level drawn before; under the filters, as the phones place it
+            if (hero is FrameworkElement { Parent: Panel panel }) panel.Children.Remove(hero);
+            if (hero is FrameworkElement { Parent: Border border }) border.Child = null;
+            content.Children.Add(hero);
+        }
         if (shown.groups.Count == 0) content.Children.Add(Empty());
         foreach (var g in shown.groups)
         {
