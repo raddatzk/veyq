@@ -498,7 +498,16 @@ first cut.
 or picked veyq download is uploaded as the file it is until then); multi-select and dragging a node onto a folder to move
 it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built). A PDF's text selected and copied on
 Linux (poppler reads it — `selected_text`, `selected_region` — but GTK has no view that selects it, so an overlay of its own
-is the work) and on Windows (`Windows.Data.Pdf` has no text API: not offered there). Built 2026-11-18 (V2 block C): a
+is the work), and on Windows a password-protected PDF's (drawn by `Windows.Data.Pdf`, which has no text API). Built
+2026-11-18 (inbox #955): on Windows a PDF opens in WebView2's own PDF viewer, served from memory, InPrivate, in a
+user-data folder deleted after it, offline by its arguments — taken after a measurement found no byte of the PDF or its
+text on disk and nothing off the device, and held to it by `PdfWebTest` ([ADR 0123](../decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)'s
+Windows Depot; [src/mobile/CLAUDE.md](../../src/mobile/CLAUDE.md) § Nothing on disk the app did not choose). Passed on the
+Windows VM the same day against the dev instance (`run.py drive`): a 25-page report opened in the viewer without Save,
+Print or the More menu, a line selected by a mouse drag and Ctrl+C read back from the clipboard in the logged-on session,
+Ctrl+S and Ctrl+P opening nothing, `jpx.pdf` shown (a picture, no text to select); after the page was left no browser of
+the viewer ran, its folder was gone, and no file written under `%TEMP%`, `%LOCALAPPDATA%` or `%APPDATA%` during the pass
+held the selected words (ASCII, UTF-16). Built 2026-11-18 (V2 block C): a
 text's *Copy* and *Wrap lines* on every app; a PDF's password asked in the page on every app (Android from Android 15,
 `LoadParams`; below it said with the download); its text selectable and copied on Apple (PDFKit's `PDFView`) and Android 15
 (`PdfRenderer.Page.selectContent`, a long press and a drag). Passed on a throwaway API 36 emulator the same day: a text's
