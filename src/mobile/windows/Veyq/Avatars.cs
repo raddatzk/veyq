@@ -2,8 +2,9 @@
 // user ids whose picture the core holds (ShellShown.pictures), each is asked for once with Avatar.Picture, its bytes
 // beside the answer, and held per tenant open (Held, AvatarsHeld.cs). The Pot's update carries the same set, so
 // the shell's alone feeds it. A person is drawn as Fluent draws one, a PersonPicture: their picture where it is held,
-// the initials of their name otherwise. WinUI decodes the picture (BitmapImage over the bytes in memory; the web writes
-// WebP, which Windows decodes through its WebP codec).
+// the initials of their name otherwise. WinUI decodes the picture (BitmapImage over the bytes in memory); the web writes
+// WebP, which WIC decodes only through the Store's WebP Image Extension, so one it refuses is decoded by the core
+// (PictureDecode.cs).
 using System;
 using System.Collections.Generic;
 using Microsoft.UI.Xaml.Controls;
@@ -61,8 +62,20 @@ internal static class Avatars
         if (HeldPictures.Arrived(round, id, picture)) Refresh(id);
     }
 
-    /// <summary>The picture's bytes as WinUI's image: decoded from memory, never from a file.</summary>
-    private static async System.Threading.Tasks.Task<BitmapImage> Decode(byte[] bytes)
+    /// <summary>The picture's bytes as WinUI's image: WIC first, the core's PNG of a WebP WIC refused.</summary>
+    private static System.Threading.Tasks.Task<BitmapImage> Decode(byte[] bytes) => PictureDecode.Decode(bytes, Bitmap, ByCore);
+
+    /// <summary>A WebP decoded by the core (Picture.Decode) as a PNG; null where it decoded none.</summary>
+    private static async System.Threading.Tasks.Task<byte[]?> ByCore(byte[] webp)
+    {
+        var (answer, png) = await Core.CallAsync(new Call.PictureDecode(), webp);
+        if (answer is Answer.Bytes) return png;
+        Log.Write($"Picture.Decode answered {answer.GetType().Name}");
+        return null;
+    }
+
+    /// <summary>The bytes as WinUI's image: decoded from memory, never from a file.</summary>
+    private static async System.Threading.Tasks.Task<BitmapImage> Bitmap(byte[] bytes)
     {
         using var stream = new InMemoryRandomAccessStream();
         await stream.WriteAsync(bytes.AsBuffer());
