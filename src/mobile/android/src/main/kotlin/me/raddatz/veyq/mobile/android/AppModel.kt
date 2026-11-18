@@ -1225,7 +1225,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * A picked file's length as Android's player would play it (core's `MusicUpload.Measure`, ADR 0142 decision 7):
-     * `MediaMetadataRetriever` over the document; null where it cannot read it, and the file is refused as unplayable.
+     * `MediaMetadataRetriever` over the document; null where it cannot read it, and the file is refused as unplayable. Its
+     * two ends decoded by `MediaCodec` for the silence scan ([AudioEnds]).
      */
     private val musicMeasure = object : me.raddatz.veyq.mobile.memories.music.MusicUpload.Measure {
         override fun durationMs(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, done: (Long?) -> Unit) {
@@ -1242,6 +1243,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 }.getOrNull()
                 done(ms)
             }
+        }
+
+        /** A decoded format's two ends, MediaCodec's (inbox #932: [AudioEnds]); null where it does not decode them. */
+        override fun ends(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, durationMs: Long, limitMs: Long, done: (Pair<ByteArray, ByteArray>?) -> Unit) {
+            val uri = (source as? ContentSource)?.uri ?: return done(null)
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { done(AudioEnds.decode(getApplication(), uri, durationMs, limitMs)) }
         }
     }
 

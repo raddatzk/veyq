@@ -50,10 +50,14 @@ internal val wire = Json {
  * `$XDG_DATA_HOME/veyq/offline` on Linux, the app's data folder's `offline` on Windows), null where it keeps none — the
  * core makes and fills it, each bridge host a desktop, so a store starts with `AccountOffline.DESKTOP_LIMIT`; [language]
  * the app's words' language (`en`, `de`), the geocoder's `accept-language` as the web's is the reader's (ADR 0143
- * decision 2). None of them secret: the device keys themselves are the core's (`platformDeviceKeys`).
+ * decision 2); [netLog] true in a debug build only, for its request log ([HostRequest.NetLogLine], inbox #947). None of
+ * them secret: the device keys themselves are the core's (`platformDeviceKeys`).
  */
 @Serializable
-internal class Config(val device: String, val window: Long = 0, val prompt: String = "", val offlineRoot: String? = null, val language: String = "en")
+internal class Config(
+    val device: String, val window: Long = 0, val prompt: String = "", val offlineRoot: String? = null, val language: String = "en",
+    val netLog: Boolean = false,
+)
 
 /**
  * One action of the host ([veyq_call]): each a model's own function, dispatched by [Bridge] one line per case. The
@@ -3148,6 +3152,15 @@ internal sealed class HostRequest {
     @Serializable @SerialName("Media.Duration") data class MediaDuration(val path: String) : HostRequest()
 
     /**
+     * A picked track's audio from [fromMs] up to [toMs] (null: its end), decoded by the platform (inbox #932; Media
+     * Foundation on Windows, GStreamer on Linux) for the core's silence scan (`MusicUpload.Measure.ends`): answered
+     * [HostReply.Wav] with a WAV file of that slice's PCM as the reply's payload, or [HostReply.Failed] where the platform
+     * does not decode it — the track is then sealed untrimmed. Only the slice is decoded, never the whole file; a path and
+     * two numbers outward.
+     */
+    @Serializable @SerialName("Media.Slice") data class MediaSlice(val path: String, val fromMs: Long, val toMs: Long?) : HostRequest()
+
+    /**
      * The tiers of the picked photo or video at [path] (the web's `mediaDeriver.ts`, the core's spec in the request): the
      * `PREVIEW` JPEG — upright, its long edge at most [previewEdge] px, never enlarged, at [previewQuality] (0–1) — and the
      * `THUMBNAIL` JPEG made from it ([thumbnailEdge], [thumbnailQuality]); a video's poster is its frame at [posterAtMs],
@@ -3210,6 +3223,16 @@ internal sealed class HostRequest {
      * with its number, ADR 0142 decision 4), which its queue carries to the bar and the system's controls.
      */
     @Serializable @SerialName("Words.Say") data class WordsSay(val words: Notice) : HostRequest()
+
+    /**
+     * One line of a debug build's request log (inbox #947; Android's `DevNetLog`, logcat `veyq-net`): a request to a host
+     * outside the developer's `*.localhost` instance as it was answered — method, address, the `User-Agent` sent, whether a
+     * `Referer`, cookie or `Authorization` went (never a value) and the status ([NetLog]). Sent only where the host's
+     * [Config.netLog] asked for it, which a release build never does; Linux writes it to stderr, Windows to its `log.txt`.
+     * Told, never waited for. The hosts' generated types are named by the `@SerialName` (`HostRequest::NetLog` in Rust,
+     * `HostRequest.NetLog` in C#), never by this class's name.
+     */
+    @Serializable @SerialName("Net.Log") data class NetLogLine(val line: String) : HostRequest()
 }
 
 @Serializable
@@ -3231,6 +3254,9 @@ internal sealed class HostReply {
      * it is shown at ([width] × [height], upright; null where unknown). [previewSize] 0 and no payload: not decoded here.
      */
     @Serializable @SerialName("Tiers") data class Tiers(val width: Int?, val height: Int?, val previewSize: Int) : HostReply()
+
+    /** A decoded slice of audio ([HostRequest.MediaSlice]): a WAV file as `veyq_reply`'s payload beside this JSON. */
+    @Serializable @SerialName("Wav") data object Wav : HostReply()
 
     /** The host could not do it (a store that does not write): the core's call fails as a store's would. */
     @Serializable @SerialName("Failed") data class Failed(val error: String) : HostReply()

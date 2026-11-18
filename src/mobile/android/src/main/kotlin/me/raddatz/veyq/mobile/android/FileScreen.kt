@@ -1,6 +1,20 @@
 package me.raddatz.veyq.mobile.android
 
 import androidx.compose.foundation.Image
+import kotlinx.coroutines.launch
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Button
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,17 +87,8 @@ internal fun FileScreen(ref: ObjectRef, model: AppModel) {
                 FileModel.Shown.NotUploaded -> Note(stringResource(R.string.depot_not_uploaded))
                 is FileModel.Shown.Message -> Note(say(s.words))
                 is FileModel.Shown.Image -> ShownImage(s, ref.name)
-                is FileModel.Shown.Text -> Column(Modifier.fillMaxSize()) {
-                    if (s.truncated) Text(stringResource(R.string.file_text_truncated), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
-                    LazyColumn(Modifier.fillMaxSize().horizontalScroll(rememberScrollState())) {
-                        item {
-                            SelectionContainer {
-                                Text(s.text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                }
-                is FileModel.Shown.Pdf -> ShownPdf(s)
+                is FileModel.Shown.Text -> ShownText(s)
+                is FileModel.Shown.Pdf -> ShownPdf(s, ref.name)
                 is FileModel.Shown.Media -> ReaderPlayer(s.reader, s, 16f / 9f, Modifier.fillMaxWidth().heightIn(min = 240.dp)) {
                     Note(say(FileView.message(FileView.Kind.UNSUPPORTED)))
                 }
@@ -95,6 +100,46 @@ internal fun FileScreen(ref: ObjectRef, model: AppModel) {
 @Composable
 private fun Note(text: String) {
     Text(text, color = role(LocalPalette.current.muted), modifier = Modifier.padding(top = 24.dp))
+}
+
+/**
+ * A text as plain text, selectable, with the web's two conveniences (`FileViewer.vue`): *Copy* puts exactly what is shown on
+ * the clipboard (a cut text its shown part, which the button and its note say), and *Wrap lines* wraps long lines instead
+ * of scrolling sideways (on at first, as on the web).
+ */
+@Composable
+private fun ShownText(s: FileModel.Shown.Text) {
+    val palette = LocalPalette.current
+    val context = LocalContext.current
+    var wrap by rememberSaveable { mutableStateOf(true) }
+    var copied by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(copied) {
+        if (copied != null) {
+            kotlinx.coroutines.delay(6_000)
+            copied = null
+        }
+    }
+    Column(Modifier.fillMaxSize()) {
+        if (s.truncated) Text(stringResource(R.string.file_text_truncated), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextButton(onClick = {
+                context.getSystemService(android.content.ClipboardManager::class.java)
+                    .setPrimaryClip(android.content.ClipData.newPlainText("veyq", s.text))
+                // Android 13 confirms a copy itself; below it the page says it (Android's own guidance: never twice)
+                if (android.os.Build.VERSION.SDK_INT < 33) copied = if (s.truncated) R.string.file_text_copied_shown else R.string.file_text_copied
+            }) { Text(stringResource(if (s.truncated) R.string.file_text_copy_shown else R.string.file_text_copy)) }
+            FilterChip(selected = wrap, onClick = { wrap = !wrap }, label = { Text(stringResource(R.string.file_text_wrap)) })
+        }
+        copied?.let { Text(stringResource(it), style = MaterialTheme.typography.bodySmall, color = role(palette.muted)) }
+        val sideways = if (wrap) Modifier else Modifier.horizontalScroll(rememberScrollState())
+        LazyColumn(Modifier.fillMaxSize().then(sideways)) {
+            item {
+                SelectionContainer {
+                    Text(s.text, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, softWrap = wrap)
+                }
+            }
+        }
+    }
 }
 
 /** An image decoded off the main thread to core's edge at most (`FileView.IMAGE_EDGE`), from the bytes in memory. */
@@ -127,13 +172,30 @@ internal class OpenPdf(val fd: android.os.ParcelFileDescriptor, val renderer: an
         runCatching { fd.close() }
     }
 
+    /** What opening a PDF came to: [Open], or [Locked] (it needs its password — or another one), or [Failed]. */
+    sealed interface Opening {
+        class Open(val pdf: OpenPdf) : Opening
+        data object Locked : Opening
+        data object Failed : Opening
+    }
+
     companion object {
+        /** Whether this device's renderer takes a password (`LoadParams`, Android 15): below it a locked PDF is said, not asked. */
+        val takesPassword: Boolean get() = android.os.Build.VERSION.SDK_INT >= 35
+
         /**
          * [bytes] written into a `memfd` (anonymous memory, no path, gone with its last descriptor: no plaintext at rest,
          * ADR 0047) and handed to `PdfRenderer`; null where the renderer refuses it.
          */
-        fun of(bytes: ByteArray): OpenPdf? {
-            val fd = runCatching { android.system.Os.memfd_create("veyq-pdf", 0) }.getOrNull() ?: return null
+        fun of(bytes: ByteArray): OpenPdf? = (open(bytes, null) as? Opening.Open)?.pdf
+
+        /**
+         * [bytes] opened as [of] does, with [password] where one was typed (only the renderer on this device sees it: it is
+         * neither kept nor sent): [Opening.Locked] where the PDF needs one, or another — the renderer refuses an encrypted
+         * PDF it cannot open with a `SecurityException`.
+         */
+        fun open(bytes: ByteArray, password: String?): Opening {
+            val fd = runCatching { android.system.Os.memfd_create("veyq-pdf", 0) }.getOrNull() ?: return Opening.Failed
             return runCatching {
                 java.io.FileOutputStream(fd).let { out ->
                     out.write(bytes)
@@ -142,28 +204,58 @@ internal class OpenPdf(val fd: android.os.ParcelFileDescriptor, val renderer: an
                 android.system.Os.lseek(fd, 0, android.system.OsConstants.SEEK_SET)
                 val pfd = android.os.ParcelFileDescriptor.dup(fd)
                 runCatching { android.system.Os.close(fd) }
-                runCatching { OpenPdf(pfd, android.graphics.pdf.PdfRenderer(pfd)) }.getOrElse {
+                try {
+                    Opening.Open(OpenPdf(pfd, renderer(pfd, password)))
+                } catch (e: SecurityException) {
                     runCatching { pfd.close() }
-                    null
+                    Opening.Locked
+                } catch (e: Exception) {
+                    runCatching { pfd.close() }
+                    Opening.Failed
                 }
             }.getOrElse {
                 runCatching { android.system.Os.close(fd) }
-                null
+                Opening.Failed
             }
         }
+
+        private fun renderer(pfd: android.os.ParcelFileDescriptor, password: String?): android.graphics.pdf.PdfRenderer =
+            if (password != null && takesPassword) {
+                android.graphics.pdf.PdfRenderer(pfd, android.graphics.pdf.LoadParams.Builder().setPassword(password).build())
+            } else android.graphics.pdf.PdfRenderer(pfd)
     }
 }
 
-/** A PDF's pages, each drawn when it scrolls into view, at most core's bound (`FileView.PDF_PAGES`), the rest said. */
+/**
+ * A PDF's pages, each drawn when it scrolls into view, at most core's bound (`FileView.PDF_PAGES`), the rest said. A
+ * password-protected PDF asks for its password in the page first, as the web's does (`FileViewer.vue`) — where this
+ * device's renderer takes one (Android 15); the password goes to the renderer and nowhere else, kept only while the field
+ * holds it. Cancelled, or on an older Android, it says so and the download stays.
+ */
 @Composable
-private fun ShownPdf(s: FileModel.Shown.Pdf) {
+private fun ShownPdf(s: FileModel.Shown.Pdf, name: String) {
     val context = LocalContext.current
-    val pdf by produceState<OpenPdf?>(null, s) { value = withContext(Dispatchers.IO) { OpenPdf.of(s.bytes) } }
-    DisposableEffect(pdf) {
-        val held = pdf
+    var password by remember(s) { mutableStateOf<String?>(null) }
+    var declined by remember(s) { mutableStateOf(false) }
+    var opening by remember(s) { mutableStateOf<OpenPdf.Opening?>(null) }
+    LaunchedEffect(s, password) {
+        val tried = password
+        opening = null
+        opening = withContext(Dispatchers.IO) { OpenPdf.open(s.bytes, tried) }
+    }
+    DisposableEffect(opening) {
+        val held = (opening as? OpenPdf.Opening.Open)?.pdf
         onDispose { held?.close() }
     }
-    val open = pdf ?: return CircularProgressIndicator()
+    val open = when (val o = opening) {
+        null -> return CircularProgressIndicator()
+        OpenPdf.Opening.Failed -> return Note(say(FileView.message(FileView.Kind.UNSUPPORTED)))
+        OpenPdf.Opening.Locked -> {
+            if (declined || !OpenPdf.takesPassword) return Note(stringResource(R.string.file_pdf_password_declined))
+            return PdfPassword(name, wrong = password != null, onOpen = { password = it }, onCancel = { declined = true })
+        }
+        is OpenPdf.Opening.Open -> o.pdf
+    }
     val total = open.renderer.pageCount
     val width = context.resources.displayMetrics.widthPixels
     LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -172,11 +264,113 @@ private fun ShownPdf(s: FileModel.Shown.Pdf) {
             val page by produceState<ImageBitmap?>(null, open, i) {
                 value = withContext(Dispatchers.IO) { open.lock.withLock { renderPage(open.renderer, i, width) } }
             }
-            page?.let { Image(it, null, Modifier.fillMaxWidth(), contentScale = ContentScale.FillWidth) }
-                ?: Box(Modifier.fillMaxWidth().heightIn(min = 400.dp))
+            page?.let { PdfPage(it, open, i) } ?: Box(Modifier.fillMaxWidth().heightIn(min = 400.dp))
         }
         FileView.pagesCut(total)?.let { cut ->
             item { Text(say(cut), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted)) }
+        }
+    }
+}
+
+/** What a drag selected on a page: its text and its boxes in the page's points. */
+private class PdfSelection(val text: String, val boxes: List<android.graphics.RectF>)
+
+/**
+ * Page [i] of [open] as drawn, its text selectable where this device's renderer reads it (Android 15: the web's text layer,
+ * `PdfRenderer.Page.selectContent`): a long press and a drag select from where it began to where it is, drawn over the
+ * page, and *Copy* puts the selected text on the clipboard; a tap lets the selection go. Nothing else of the page acts.
+ */
+@Composable
+private fun PdfPage(image: ImageBitmap, open: OpenPdf, i: Int) {
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var selection by remember { mutableStateOf<PdfSelection?>(null) }
+    var pageSize by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    val highlight = role(LocalPalette.current.accent).copy(alpha = 0.3f)
+    val selectable = OpenPdf.takesPassword
+    Box(Modifier.fillMaxWidth()) {
+        var start by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+        val gestures = if (!selectable) Modifier else Modifier
+            .pointerInput(open, i) {
+                detectTapGestures(onTap = { selection = null })
+            }
+            .pointerInput(open, i) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { start = it },
+                    onDrag = { change, _ ->
+                        val (from, to) = start to change.position
+                        val w = size.width.toFloat()
+                        scope.launch {
+                            val picked = withContext(Dispatchers.IO) {
+                                open.lock.withLock {
+                                    runCatching {
+                                        open.renderer.openPage(i).use { p ->
+                                            pageSize = p.width to p.height
+                                            val k = p.width / w
+                                            fun at(o: androidx.compose.ui.geometry.Offset) =
+                                                android.graphics.pdf.models.selection.SelectionBoundary(android.graphics.Point((o.x * k).toInt(), (o.y * k).toInt()))
+                                            p.selectContent(at(from), at(to))?.selectedTextContents.orEmpty()
+                                        }
+                                    }.getOrNull()
+                                }
+                            } ?: return@launch
+                            selection = PdfSelection(picked.joinToString("\n") { it.text }, picked.flatMap { it.bounds }).takeIf { it.text.isNotEmpty() }
+                        }
+                    },
+                )
+            }
+        Image(
+            image, null,
+            Modifier.fillMaxWidth().then(gestures).drawWithContent {
+                drawContent()
+                val sel = selection ?: return@drawWithContent
+                val (pw, _) = pageSize ?: return@drawWithContent
+                val k = size.width / pw
+                for (b in sel.boxes) {
+                    drawRect(highlight, androidx.compose.ui.geometry.Offset(b.left * k, b.top * k), androidx.compose.ui.geometry.Size(b.width() * k, b.height() * k))
+                }
+            },
+            contentScale = ContentScale.FillWidth,
+        )
+        selection?.let { sel ->
+            Button(
+                onClick = {
+                    context.getSystemService(android.content.ClipboardManager::class.java)
+                        .setPrimaryClip(android.content.ClipData.newPlainText("veyq", sel.text))
+                    selection = null
+                },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
+            ) { Text(stringResource(R.string.file_text_copy)) }
+        }
+    }
+}
+
+/**
+ * The prompt of a password-protected PDF (the web's `FileViewer.vue`): its name, the field — a password field, never kept
+ * —, *Open* and *Cancel*, the hint that it is not saved, and a wrong one said.
+ */
+@Composable
+private fun PdfPassword(name: String, wrong: Boolean, onOpen: (String) -> Unit, onCancel: () -> Unit) {
+    var typed by remember { mutableStateOf("") }
+    val submit = { if (typed.isNotEmpty()) onOpen(typed).also { typed = "" } }
+    Column(Modifier.fillMaxWidth().padding(top = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(stringResource(R.string.file_pdf_password_title, name), style = MaterialTheme.typography.titleMedium)
+        OutlinedTextField(
+            typed, { typed = it },
+            label = { Text(stringResource(R.string.file_pdf_password_label)) },
+            supportingText = { Text(stringResource(if (wrong) R.string.file_pdf_password_wrong else R.string.file_pdf_password_hint)) },
+            isError = wrong,
+            singleLine = true,
+            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Password, imeAction = androidx.compose.ui.text.input.ImeAction.Go, autoCorrectEnabled = false,
+            ),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onGo = { submit() }),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { submit() }, enabled = typed.isNotEmpty()) { Text(stringResource(R.string.file_pdf_password_open)) }
+            TextButton(onClick = onCancel) { Text(stringResource(R.string.file_pdf_password_cancel)) }
         }
     }
 }

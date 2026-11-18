@@ -119,6 +119,11 @@ Kartenanbieter deines Servers. Apple sieht dann den Kartenausschnitt, den du ans
 Die App nennt Apple Maps, wenn sie dich bittet, die Kartendienste einzuschalten, und die Datenschutzhinweise deines
 Servers nennen es auch. Ortsnamen kommen weiter vom Dienst für Ortsnamen deines Servers.
 
+**In der veyq-App unter Android, Windows und Linux bleiben die Kartenbilder, die du angesehen hast, auf deinem Gerät**,
+versiegelt wie alles, was die App offline aufbewahrt, damit sie beim nächsten Mal nicht neu geladen werden. Sie zählen
+zum Speicherlimit der App, verschwinden mit **Cache leeren** und wenn du die Kartendienste ausschaltest. Ohne Verbindung
+zeigt die App gar keine Karte, ein aufbewahrtes Kartenbild wird also nie offline gezeigt.
+
 ## Wenn du teilst
 
 Teilen ist der eine Moment, in dem du dich **entscheidest**, die Mauer abzusenken — immer durch deine

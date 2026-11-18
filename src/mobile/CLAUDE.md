@@ -27,10 +27,10 @@ A Gradle build of its own, run through its own wrapper.
   page by medium id, a video's `RangeReader` closed by the model when the page goes, the details, the save, the
   slideshow on the model's clock; the web's rights ported fail-closed, `MemoryRights`; New Memory and Add chapter,
   `MemoryCreate`; the uploads' settle and each picked file handed back once the queue is done with it, `MediaUploads`;
-  the tier spec, `MediaUpload`'s; ADR 0136's Consequences; its music, `memories/music/` (ADR 0142 decisions 4–12): a node's tracks listed and numbered once and its queue, `MusicQueue`; their facts, `AudioFacts` (a WAV's trim from its PCM, `Wav`; an ADTS file's length counted, `Frames`); a picked file checked and uploaded, `MusicUpload`; a rename of the raw listed tier, `TrackLabel`; the Music view, `MusicModel` over the gallery, whose header plays and stops the music and whose lightbox's video interrupts it; a medium's ITEM report, `MediumReport` — drawn for a track by every app's Music view, a photo's or a video's not yet: inbox #891), which
+  the tier spec, `MediaUpload`'s; ADR 0136's Consequences; its music, `memories/music/` (ADR 0142 decisions 4–12): a node's tracks listed and numbered once and its queue, `MusicQueue`; their facts, `AudioFacts` (a WAV's trim from its PCM, `Wav`; a decoded format's from its two ends as the platform decodes them, `MusicUpload.Measure.ends`, each a WAV `PcmWav` wraps; an ADTS file's length counted, `Frames`); a picked file checked and uploaded, `MusicUpload`; a rename of the raw listed tier, `TrackLabel`; the Music view, `MusicModel` over the gallery, whose header plays and stops the music and whose lightbox's video interrupts it; a medium's ITEM report, `MediumReport` — drawn for a track by every app's Music view, a photo's or a video's not yet: inbox #891), which
   uses core's session and is never used by it; an application's spec is generated into `api.<application>`. **Built**
   ([ADR 0143](../../docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)): the map services in core's `map/` (the consent per device, the tile
-  fetch and its memory-only cache, the geocoder, the viewport, clustering), a Memory's date and place in `memories/place/`
+  fetch, its memory cache and its sealed shelf in the offline store's automatic tier (`TileShelf`, inbox #939), the geocoder, the viewport, clustering), a Memory's date and place in `memories/place/`
   and its GPX tracks in `memories/tracks/`. Apple draws them with MapKit (decision 1): `MapViews.swift` (the gate that
   mounts a `Map` only while `MapServices.state` is `Shown`, the consent's offer naming Apple Maps, the facts line and the
   two editors, the bar's Map tab, a photo's map, Settings' Map services) and `MemoryMapView.swift` (the Map view's
@@ -43,6 +43,8 @@ A Gradle build of its own, run through its own wrapper.
   A tile is decoded in memory only (at most 96 kept for drawing) and the core's tile view decides which may be asked. A
   debug build logs every request to an outside host to logcat `veyq-net` (`src/debug/…/DevNetLog.kt`: the `User-Agent` sent,
   and whether a `Referer`, a cookie or an `Authorization` went), the request log of a map pass; a release build has none.
+  Linux's and Windows' debug builds log the same line through the bridge (`Config.netLog`, `NetLog.kt`'s Ktor plugin on
+  every client, `Net.Log` told to the host): Linux's stderr and Windows' `log.txt`, as `veyq-net …` (inbox #947).
   **Built** ([ADR 0144](../../docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md)): a Memory's participants in
   `memories/Participants.kt` (the web's normalizing, cap and merge, written through `NodeMetaWrite` with the merge as its
   edit; *I was there* sealed at birth by `MemoryCreate`), a medium's corrected capture time in `memories/CaptureTime.kt`
@@ -296,8 +298,9 @@ A Gradle build of its own, run through its own wrapper.
   (`buildLibsodium`, a few minutes, once). The music player's rules (`audio/`) are held by `OrderTest`, `FadesTest` and `MusicPlayerTest`: the
   web's `order`, `fades` and `player` tests case for case and the interruption's cases (ADR 0142 decision 13), over decks
   and system controls the test plays (`PlayedAudio`, on virtual time); a rule there changes only with its case. The map services (`map/`, ADR 0143 D2–D4) are held by `MapConsentTest` (the consent per device and its hosts),
-  `MapTilesTest` (only tiles in view, only while the consent holds, the memory-only cache dropped at a withdrawal and a
-  close), `GeocoderTest` (the web's `geocode` and `placeName` cases: the 3-decimal cache, the ≥ 1 s queue), `ViewportTest`,
+  `MapTilesTest` (only tiles in view, only while the consent holds, the memory cache dropped at a withdrawal and a
+  close, the shelf read only behind the gate), `MapTileShelfTest` (a tile kept sealed across launches in the store's
+  automatic tier, counted, swept with its tenant, dropped by Clear cache and a withdrawal), `GeocoderTest` (the web's `geocode` and `placeName` cases: the 3-decimal cache, the ≥ 1 s queue), `ViewportTest`,
   `ClustersTest` (the web's `spaceMap` cases) and `MapRequestIdentityTest` (D3's `User-Agent`, no `Referer` or token), every
   request counted by `PlayedMapServices` — no test calls a real tile server or Nominatim. A Memory's date and place
   (`memories/place/`, D5–D7) by `MemoryDateTest` and `MemoryLocationTest` (the web's `memoryDate` and `memoryLocation`
@@ -405,6 +408,8 @@ A Gradle build of its own, run through its own wrapper.
     pairing secret (a handle, payload, grant, envelope, channel, transport or marker), and a device link's outward shapes
     carry exactly the fields it names.
   - `BridgeHeaderTest` holds `bridge.h` against Kotlin/Native's headers, Linux's and mingw's.
+  - `NetLogTest` holds a debug build's request log (inbox #947): one line per outside request, none for `*.localhost`, no
+    header's value and no presigned query written.
 
   A root or sealed variant added to the wire is in the samples by derivation. With `VEYQ_LIVE` set,
   `--tests '*LiveBridgeTest*'` signs in through a `Call` and reads the shell, Home's groups, Search and every seeded
@@ -769,7 +774,8 @@ Per engine:
   end (a second online unlock, then Stop trusting), `shared_prefs/veyq.device-secrets.xml` (`KeystoreDeviceKeys`). Measured
   2026-11-16 on a throwaway API 36 emulator after ADR 0143's Android map pass (the consent given, real tiles over a pan
   and a pinch, a place, a range, a track, a photo's map): the same listing (beside the offline store's opaque files) and
-  nothing else — no tile, no geocoder answer, no viewport; the consent is `maps-consent` in `shared_prefs/veyq.trust.xml`,
+  nothing else — no tile, no geocoder answer, no viewport (since inbox #939 a viewed tile is kept, but only sealed inside
+  the offline store under an opaque name); the consent is `maps-consent` in `shared_prefs/veyq.trust.xml`,
   the hosts it was given for (`{"tiles":"tile.openstreetmap.org","places":"nominatim.openstreetmap.org"}`) and no more.
 - **Curl (Linux, `Engine.linux.kt`):** libcurl has no response cache, and its cookie engine starts only with
   `CURLOPT_COOKIEFILE`/`COOKIEJAR`, which Ktor's engine never sets (remembered from libcurl's docs; the engine's klib

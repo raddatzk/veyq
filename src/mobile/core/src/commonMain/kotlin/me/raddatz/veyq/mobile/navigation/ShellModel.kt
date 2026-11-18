@@ -850,7 +850,12 @@ class ShellModel(
     ): me.raddatz.veyq.mobile.memories.music.MusicModel =
         me.raddatz.veyq.mobile.memories.music.MusicModel(gallery, object : me.raddatz.veyq.mobile.memories.music.MusicModel.Door {
             override suspend fun check(source: me.raddatz.veyq.mobile.blob.UploadSource) =
-                me.raddatz.veyq.mobile.memories.music.MusicUpload.check(source) { type ->
+                me.raddatz.veyq.mobile.memories.music.MusicUpload.check(
+                    source,
+                    endsOf = { type, durationMs, limitMs ->
+                        kotlinx.coroutines.suspendCancellableCoroutine { c -> measure.ends(source, type, durationMs, limitMs) { ends -> c.resume(ends) { _, _, _ -> } } }
+                    },
+                ) { type ->
                     kotlinx.coroutines.suspendCancellableCoroutine { c -> measure.durationMs(source, type) { ms -> c.resume(ms) { _, _, _ -> } } }
                 }
             override fun queue(tracks: List<me.raddatz.veyq.mobile.memories.music.MusicUpload.Check.Taken>) =

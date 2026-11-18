@@ -61,6 +61,14 @@ data class MemoryLocation(
         val WORLD_CENTER = LatLng(20.0, 0.0)
         const val WORLD_ZOOM = 2.0
 
+        /**
+         * Where a map of [width] × [height] that frames [points] opens (inbox #945): their frame, the world view where there
+         * is none — and no view while they are still read (null): such a map shows nothing and asks for no tile until its
+         * framing is known, so it never fetches the world's tiles first on its way to the framed level.
+         */
+        fun opening(points: List<LatLng>?, width: Double, height: Double): me.raddatz.veyq.mobile.map.Viewport? =
+            points?.let { me.raddatz.veyq.mobile.map.Viewport.fit(it, width, height) ?: me.raddatz.veyq.mobile.map.Viewport(WORLD_CENTER, WORLD_ZOOM, width, height) }
+
         /** A name trimmed and cut to [MAX_NAME] code points, never splitting a character (`boundPlaceName`). */
         fun bound(v: String): String {
             val t = v.trim()

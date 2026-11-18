@@ -41,6 +41,13 @@ enum class KeptRead(val kind: String, internal val model: KSerializer<*>) {
         const val FRAMES = "frames"
 
         /**
+         * A map tile as its tile host served it (ADR 0143 D4 as amended for inbox #939), per tenant, named by the served
+         * template and its `z/x/y`: the automatic tier only — never pinned, never reached by a listing, kept while its
+         * tenant is (the sweep), dropped where the consent no longer holds for its host.
+         */
+        const val TILE = "tile"
+
+        /**
          * The account's pins on this device (ADR 0140 decision 9: each pin's node, its state, a pin dropped with its
          * notice), sealed as every entry is — no server's answer, the store's own record.
          */

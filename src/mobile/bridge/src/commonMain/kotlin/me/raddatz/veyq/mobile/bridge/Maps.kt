@@ -3,6 +3,7 @@ package me.raddatz.veyq.mobile.bridge
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.onEach
 import me.raddatz.veyq.mobile.map.LatLng
 import me.raddatz.veyq.mobile.map.MapPoint
 import me.raddatz.veyq.mobile.map.MapServices
@@ -36,8 +37,12 @@ internal class MapOverlays(
  */
 internal class HeldMap(
     val services: MapServices,
-    /** The view it opens at for a size: the core's (`PlaceEditor.initialView`, `MemoriesMap.framing`, a photo at zoom 15). */
-    private val opening: (width: Double, height: Double) -> Viewport,
+    /**
+     * The view it opens at for a size: the core's (`PlaceEditor.initialView`, `MemoriesMap.framing`, a photo at zoom 15,
+     * `MemoryLocation.opening`) — null while what it frames is still read: no view and no tile then, and the opening is
+     * tried again as [overlays] move (inbox #945).
+     */
+    private val opening: (width: Double, height: Double) -> Viewport?,
     val overlays: Flow<MapOverlays>,
     val gallery: Long? = null,
     val lightbox: Long? = null,
@@ -61,7 +66,10 @@ internal class HeldMap(
     fun view(x: Double?, y: Double?, zoom: Double?, width: Double, height: Double) {
         val before = frame.value
         if (x == null || y == null || zoom == null) {
-            if (before == null) show(opening(width, height), 1) else show(before.view.copy(width = width, height = height), before.moved)
+            if (before == null) {
+                waiting = width to height
+                opening(width, height)?.let { show(it, 1) }
+            } else show(before.view.copy(width = width, height = height), before.moved)
             return
         }
         // the world repeats sideways: a centre past either edge is the same place
@@ -72,10 +80,21 @@ internal class HeldMap(
         if (place != null && before != null && v.center != before.view.center) place.frame(v.center, user = true)
     }
 
+    /** The size a map waiting for its framing was given ([opening] null), none once it shows a view. */
+    private var waiting: Pair<Double, Double>? = null
+
+    /** What the map frames may have been read: a map still waiting for it opens now, once. */
+    private fun retryOpening() {
+        val (w, h) = waiting ?: return
+        if (frame.value != null) return
+        opening(w, h)?.let { show(it, 1) }
+    }
+
     /** The core moves the view itself (a cluster framed, *Follow the photos*, a track selected): the host adopts it. */
     fun moveTo(view: Viewport) = show(view, (frame.value?.moved ?: 0) + 1)
 
     private fun show(v: Viewport, moved: Long) {
+        waiting = null
         frame.value = Frame(v, window?.show(v).orEmpty(), moved)
     }
 
@@ -92,7 +111,7 @@ internal class HeldMap(
     }
 
     /** What the host draws now ([MapShown]): each field the core's answer, none of it computed here. */
-    fun shown(): Flow<MapShown?> = combine(frame, services.state, overlays, open) { f, state, o, isOpen ->
+    fun shown(): Flow<MapShown?> = combine(frame, services.state, overlays.onEach { retryOpening() }, open) { f, state, o, isOpen ->
         if (!isOpen) return@combine null
         MapShown(
             state = mapState(state),

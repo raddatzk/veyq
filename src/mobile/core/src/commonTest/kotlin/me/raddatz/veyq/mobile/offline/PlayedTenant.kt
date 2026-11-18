@@ -304,7 +304,7 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
         if (r.url.host.endsWith("map.example")) {
             mapRequests += r
             return if (path == "/reverse") json("""{"address":{"city":"Berlin","country":"Deutschland"}}""")
-            else respond(byteArrayOf(1, 2, 3), HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "image/png"))
+            else respond(byteArrayOf(1, 2, 3), HttpStatusCode.OK, headersOf(HttpHeaders.ContentType to listOf("image/png"), HttpHeaders.CacheControl to listOf("max-age=600")))
         }
         if (r.url.host == "store.example") {
             if (cutAfterStoreGets?.let { storeGets >= it } == true) {

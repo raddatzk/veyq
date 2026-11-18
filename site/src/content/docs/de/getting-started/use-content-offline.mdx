@@ -4,6 +4,7 @@ description: In der veyq-App bleibt, was du angesehen hast, bis zu einem Limit a
 sources:
   - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
   - docs/crosscutting/native-apps.md
+  - docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md
   - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
 ---
 
@@ -11,8 +12,10 @@ Die veyq-[App](/de/getting-started/install-the-app/) kann Inhalte auf deinem Ger
 Verbindung öffnen kannst. Sie behält zweierlei:
 
 - **Was du zuletzt angesehen hast:** Bilder, Vorschauen, den Teil eines Videos, den du abgespielt hast, und die Dateien,
-  die du geöffnet hast, bis zu einem Speicherlimit, das du festlegst. Ist es erreicht, geht zuerst, was du am längsten
-  nicht angesehen hast.
+  die du geöffnet hast, bis zu einem Speicherlimit, das du festlegst — unter Android, Windows und Linux auch die
+  Kartenbilder, die du angesehen hast, die nie offline gezeigt werden
+  ([Sind meine Daten sicher?](/de/privacy/is-my-data-safe/#karten-nur-wenn-du-sie-einschaltest)). Ist es erreicht, geht
+  zuerst, was du am längsten nicht angesehen hast.
 - **Was du offline verfügbar machst:** eine Erinnerung, ein Kapitel, einen Ordner oder eine Datei, ganz heruntergeladen und
   behalten, bis du es ausschaltest.
 

@@ -170,6 +170,11 @@ unsafe extern "C" fn host(ctx: *mut c_void, token: u64, json: *const c_char, _by
     // SAFETY: a NUL-terminated string valid during this call, copied here.
     let text = unsafe { CStr::from_ptr(json) }.to_string_lossy();
     let (reply, mut payload) = match serde_json::from_str::<HostRequest>(&text) {
+        // a debug build's request log (inbox #947): sent only where the config asked for it
+        Ok(HostRequest::NetLog { line }) => {
+            eprintln!("veyq-net {line}");
+            (HostReply::Done, None)
+        }
         Ok(request) => match crate::music_host::take(token, &request) {
             // a deck's or the controls' request: answered from GTK's main loop ([reply])
             Some(None) => return,

@@ -181,6 +181,39 @@ class AccountOffline internal constructor(
         return byteSize * (chunkCount - kept) / chunkCount
     }
 
+    // ---- a map tile (ADR 0143 D4 as amended for inbox #939)
+
+    private fun tileKey(tenant: String, id: String) = EntryKey(server, tenant, "", KeptRead.TILE, id)
+
+    /** The tile kept as [id] for [tenant], its last view moved; null where none is (or it no longer opens). */
+    internal suspend fun tile(tenant: String, id: String): ByteArray? {
+        val key = tileKey(tenant, id)
+        val bytes = store.get(key) ?: return null
+        store.touch(key)
+        return bytes
+    }
+
+    /**
+     * [content] kept as [tenant]'s tile [id] in the automatic tier — never where the tier is off or the floor reached (then
+     * what was kept under it goes: an older tile never stands for a newer answer) —, then the eviction.
+     */
+    internal suspend fun keepTile(tenant: String, id: String, content: ByteArray) {
+        val key = tileKey(tenant, id)
+        if (!mayWrite(content.size.toLong())) {
+            store.remove(key)
+            return
+        }
+        store.put(key, content, null, clock(), emptySet())
+        evict()
+    }
+
+    /** Drops [tenant]'s kept tiles but those whose id starts with [keep] (null: all of them). */
+    internal suspend fun dropTiles(tenant: String, keep: String?) {
+        store.removeAll(
+            store.entries().filter { it.key.kind == KeptRead.TILE && it.key.tenant == tenant && (keep == null || !it.key.id.startsWith(keep)) }.map { it.key },
+        )
+    }
+
     // ---- the limit
 
     /** Whether the volume keeps 5 % free after [bytes] more, and — for what no pin reaches — the automatic tier is on. */
@@ -250,7 +283,10 @@ class AccountOffline internal constructor(
         reached += pinsKey
         val tenantsKey = key(KeptRead.MY_TENANTS)
         reached += tenantsKey
-        for (tenant in json(tenantsKey).flatMap { it.array() }.mapNotNull { it.text("tenantId") }) {
+        val tenants = json(tenantsKey).flatMap { it.array() }.mapNotNull { it.text("tenantId") }.toSet()
+        // a map tile is reached by no listing: it stays while its tenant does (inbox #939)
+        store.entries().filter { it.key.kind == KeptRead.TILE && it.key.tenant in tenants }.mapTo(reached) { it.key }
+        for (tenant in tenants) {
             val scopesKey = key(KeptRead.MY_SCOPES, tenant)
             reached += scopesKey
             val scopes = json(scopesKey).flatMap { it.array() }.filter { it.text("deletedAt") == null }.mapNotNull { it.text("id") }

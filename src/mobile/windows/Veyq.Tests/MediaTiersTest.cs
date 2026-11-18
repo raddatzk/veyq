@@ -187,4 +187,65 @@ public sealed class MediaTiersTest
         Assert.AreEqual((BitmapFlip.Vertical, BitmapRotation.Clockwise90Degrees, true), MediaTiers.Transform(5), "transpose");
         Assert.AreEqual((BitmapFlip.Horizontal, BitmapRotation.Clockwise90Degrees, true), MediaTiers.Transform(7), "transverse");
     }
+
+    /// <summary>A slice is decoded to its own span only (inbox #932): 3 s of a WAV, its first 1.5 s and its last 1 s.</summary>
+    [TestMethod]
+    public async Task ASliceOfAudioIsDecodedToItsSpanAsAWav()
+    {
+        const int rate = 8000;
+        var pcm = new byte[3 * rate * 2];
+        for (var i = rate; i < 2 * rate; i++) BitConverter.GetBytes((short)16000).CopyTo(pcm, 2 * i);
+        var path = Temp("slice.wav");
+        await File.WriteAllBytesAsync(path, WavOf(pcm, 1, rate));
+        var junk = Temp("junk.mp3");
+        await File.WriteAllTextAsync(junk, "not audio at all");
+        try
+        {
+            // the WAV as Media Foundation writes it: its chunks walked (a `fmt ` of 16, 18 or 40 bytes, a LIST before `data`)
+            static double Seconds(byte[] w)
+            {
+                uint rate = 0, align = 0;
+                for (var at = 12; at + 8 <= w.Length;)
+                {
+                    var id = System.Text.Encoding.ASCII.GetString(w, at, 4);
+                    var size = BitConverter.ToUInt32(w, at + 4);
+                    if (id == "fmt ")
+                    {
+                        rate = BitConverter.ToUInt32(w, at + 12);
+                        align = BitConverter.ToUInt16(w, at + 20);
+                    }
+                    if (id == "data")
+                    {
+                        var bytes = size == 0 || at + 8 + size > w.Length ? (uint)(w.Length - at - 8) : size;
+                        return bytes / (double)align / rate;
+                    }
+                    at += 8 + (int)size + (int)(size % 2);
+                }
+                return double.NaN;
+            }
+            var head = await MediaTiers.SliceAsync(path, 0, 1500);
+            var tail = await MediaTiers.SliceAsync(path, 2000, null);
+            Assert.AreEqual(1.5, Seconds(head), 0.1, "the head");
+            Assert.AreEqual(1.0, Seconds(tail), 0.1, "the tail");
+            var (reply, payload) = await MediaTiers.Answer(new HostRequest.MediaSlice { path = junk, fromMs = 0, toMs = null })!;
+            Assert.IsInstanceOfType<HostReply.Failed>(reply);
+            Assert.IsNull(payload);
+        }
+        finally
+        {
+            File.Delete(path);
+            File.Delete(junk);
+        }
+    }
+
+    private static byte[] WavOf(byte[] pcm, short channels, int rate)
+    {
+        using var m = new MemoryStream();
+        using var w = new BinaryWriter(m);
+        w.Write("RIFF"u8); w.Write(36 + pcm.Length); w.Write("WAVEfmt "u8); w.Write(16); w.Write((short)1); w.Write(channels);
+        w.Write(rate); w.Write(rate * channels * 2); w.Write((short)(channels * 2)); w.Write((short)16);
+        w.Write("data"u8); w.Write(pcm.Length); w.Write(pcm);
+        w.Flush();
+        return m.ToArray();
+    }
 }

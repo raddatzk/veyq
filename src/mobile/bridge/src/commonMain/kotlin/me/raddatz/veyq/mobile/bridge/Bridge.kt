@@ -1301,9 +1301,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 val list = make(g, uploads)
                 val map = mapServices.value?.let { services ->
                     val overlays = combine(list.state, g.state) { t, page -> MapOverlays(tracks = trackLines(t), dots = page.gpsPoints) }
+                    // no view while a track is still read: the map opens on its framing, never on the world first (#945)
                     val opening = { w: Double, h: Double ->
-                        val points = list.current.drawn.flatMap { it.lines.flatten() } + g.current.gpsPoints
-                        Viewport.fit(points, w, h) ?: world(w, h)
+                        me.raddatz.veyq.mobile.memories.place.MemoryLocation.opening(list.current.framed(g.current.gpsPoints), w, h)
                     }
                     held(HeldMap(services, opening, overlays, gallery = call.gallery))
                 }

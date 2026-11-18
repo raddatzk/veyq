@@ -57,10 +57,24 @@ object MusicUpload {
      */
     interface Measure {
         fun durationMs(source: UploadSource, type: String, done: (Long?) -> Unit)
+
+        /**
+         * A decoded format's two ends (inbox #932): the first and the last [limitMs] of [source]'s audio of [durationMs]
+         * as the platform decodes them, each a WAV file's bytes (`PcmWav`) — [done] once, on any thread; null where the
+         * platform does not decode it, and the file is sealed untrimmed. Never the whole file.
+         */
+        fun ends(source: UploadSource, type: String, durationMs: Long, limitMs: Long, done: (Pair<ByteArray, ByteArray>?) -> Unit)
     }
 
-    /** [source] checked (see the header); [durationOf] reads its length as typed by its bytes. Its reads are let go after. */
-    suspend fun check(source: UploadSource, durationOf: suspend (type: String) -> Long?): Check {
+    /**
+     * [source] checked (see the header); [durationOf] reads its length as typed by its bytes, [endsOf] a decoded format's
+     * ends for its trim (none: untrimmed). Its reads are let go after.
+     */
+    suspend fun check(
+        source: UploadSource,
+        endsOf: suspend (type: String, durationMs: Long, limitMs: Long) -> Pair<ByteArray, ByteArray>? = { _, _, _ -> null },
+        durationOf: suspend (type: String) -> Long?,
+    ): Check {
         if (source.size > MAX_BYTES) return Check.Refused(source, Problem.TOO_LARGE)
         try {
             val head = try {
@@ -79,7 +93,7 @@ object MusicUpload {
                 null
             }
             if (durationMs == null || durationMs <= 0) return Check.Refused(source, Problem.UNPLAYABLE)
-            return Check.Taken(source, kind.mime, AudioFacts.measure(source.bytes(), kind.mime, durationMs))
+            return Check.Taken(source, kind.mime, AudioFacts.measure(source.bytes(), kind.mime, durationMs) { limit -> endsOf(kind.mime, durationMs, limit) })
         } finally {
             source.close()
         }

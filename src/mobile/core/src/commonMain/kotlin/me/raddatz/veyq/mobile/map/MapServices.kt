@@ -61,6 +61,8 @@ class MapServices(
     private val reach: StateFlow<Reach> = MutableStateFlow(Reach.Online),
     now: () -> Long = ::wallClockMs,
     context: CoroutineContext = Dispatchers.Default,
+    /** Where the tiles outlive the session (the account's offline store, inbox #939), or none: memory only. */
+    private val shelf: TileShelf? = null,
 ) {
     /** Whether the server serves a map at all (the consent is asked only then). */
     val offered: Boolean = offer.read && !offer.tileTemplate.isNullOrBlank()
@@ -93,7 +95,7 @@ class MapServices(
 
     /** The tiles of the operator's map: null on Apple (MapKit fetches its own) and where no map is served. */
     val tiles: MapTiles? = if (offered && recipient == TileRecipient.TILE_HOST)
-        MapTiles(http, offer.tileTemplate!!, gate = { available }, now = now, context = context)
+        MapTiles(http, offer.tileTemplate!!, gate = { available }, now = now, context = context, shelf = shelf)
     else null
 
     /** The operator's geocoder: null where none is served. */
@@ -106,6 +108,10 @@ class MapServices(
     private val watch = CoroutineScope(SupervisorJob() + context).also { scope ->
         // the reach read at the start may have moved before this runs: every value is compared with what is shown
         scope.launch { reach.collect { if (compute() != _state.value) consentChanged() } }
+    }
+
+    init {
+        shelve(_state.value)
     }
 
     /** Gives this device's consent for the hosts served now (the prompt's and the settings' *Turn on*). */
@@ -124,8 +130,25 @@ class MapServices(
         geocoder?.clear()
     }
 
+    /**
+     * What the shelf may keep for this tenant now (inbox #939): where the map is shown, the tiles of the template served now
+     * and no other; where it is not offered or the consent does not hold for the hosts served now, none — a withdrawal on
+     * this device drops this account's at once, another account's at its next open. Offline nothing is dropped: offline is
+     * no withdrawal, and nothing kept is read then (the gate).
+     */
+    private fun shelve(state: MapState) {
+        val s = shelf ?: return
+        val keep = when (state) {
+            MapState.Offline -> return
+            MapState.Shown -> offer.tileTemplate.takeIf { recipient == TileRecipient.TILE_HOST }
+            else -> null
+        }
+        watch.launch { runCatching { s.drop(keep) } }
+    }
+
     private fun consentChanged() {
         _state.value = compute()
+        shelve(_state.value)
         if (!available) {
             tiles?.drop()
             geocoder?.clear()
@@ -156,6 +179,7 @@ class MapServices(
             MapHttp(tenant.account.outside, tenant.origin),
             recipient,
             tenant.account.reach,
+            shelf = TileShelf.of({ tenant.account.offline }, tenant.tenant.tenantId),
         )
     }
 }

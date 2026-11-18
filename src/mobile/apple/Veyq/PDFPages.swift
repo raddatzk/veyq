@@ -10,9 +10,19 @@ struct PDFPages {
     init(data: Data, maxPages: Int = Int.max) {
         open = {
             guard let doc = PDFDocument(data: data) else { return nil }
-            while doc.pageCount > maxPages { doc.removePage(at: doc.pageCount - 1) }
+            Self.cut(doc, to: maxPages)
             return doc
         }
+    }
+
+    /// A document already opened (and unlocked with its password where it has one) from its bytes in memory.
+    init(document: PDFDocument) {
+        open = { document }
+    }
+
+    /// `doc` without its pages past `maxPages`.
+    static func cut(_ doc: PDFDocument, to maxPages: Int) {
+        while doc.pageCount > maxPages { doc.removePage(at: doc.pageCount - 1) }
     }
 
     /// Takes every link click, so none is followed.

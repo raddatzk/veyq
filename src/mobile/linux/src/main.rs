@@ -138,7 +138,16 @@ fn activate(app: &adw::Application) {
     let offline_root = data.is_dir().then(|| data.join("offline")).and_then(|p| p.to_str().map(str::to_owned));
     // no window owns a prompt here: the Secret Service asks nothing of its own (ADR 0136's Consequences)
     // the geocoder's language is the words' own (ADR 0143 decision 2)
-    let config = Config { device: glib::host_name().to_string(), window: 0, prompt: String::new(), offline_root, language: words::language().into() };
+    // a debug build logs every request to an outside host on stderr (inbox #947, Android's `veyq-net`); a release build
+    // asks the core for none
+    let config = Config {
+        device: glib::host_name().to_string(),
+        window: 0,
+        prompt: String::new(),
+        offline_root,
+        language: words::language().into(),
+        net_log: cfg!(debug_assertions),
+    };
     match bridge::start(&config, store) {
         Start::Started | Start::AlreadyStarted => {}
         Start::NoAes => {

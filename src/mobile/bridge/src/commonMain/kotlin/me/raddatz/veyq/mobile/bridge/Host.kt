@@ -401,6 +401,22 @@ internal class HostAudio(
                 done(runCatching { (host.asking(HostRequest.MediaDuration(path)) as? HostReply.Value)?.value?.toLongOrNull() }.getOrNull())
             }
         }
+
+        /** A decoded format's two ends asked of the host as two slices ([HostRequest.MediaSlice], inbox #932); null where either is not decoded. */
+        override fun ends(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, durationMs: Long, limitMs: Long, done: (Pair<ByteArray, ByteArray>?) -> Unit) {
+            val path = (source as? PathSource)?.path ?: return done(null)
+            scope.launch {
+                done(
+                    runCatching {
+                        suspend fun slice(from: Long, to: Long?): ByteArray? =
+                            host.askingWithPayload(HostRequest.MediaSlice(path, from, to)).takeIf { it.reply is HostReply.Wav }?.payload
+                        val head = slice(0, minOf(limitMs, durationMs)) ?: return@runCatching null
+                        val tail = slice(maxOf(0, durationMs - limitMs), null) ?: return@runCatching null
+                        head to tail
+                    }.getOrNull(),
+                )
+            }
+        }
     }
 
     /** Untitled track [number]'s title as the host says it ([HostRequest.WordsSay]); its number alone where the host says nothing. */

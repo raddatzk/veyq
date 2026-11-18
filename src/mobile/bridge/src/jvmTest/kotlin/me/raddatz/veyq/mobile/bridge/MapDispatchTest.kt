@@ -119,6 +119,8 @@ class MapDispatchTest {
         val sent = CopyOnWriteArrayList<String>()
         val places = CopyOnWriteArrayList<MemoryLocation?>()
         val dates = CopyOnWriteArrayList<MemoryDate>()
+        /** Held open while a test keeps the track's read pending (#945: a map waiting for its framing). */
+        @Volatile var trackRead: kotlinx.coroutines.CompletableDeferred<Unit>? = null
         val gpx = """<gpx><trk><name>Spree</name><trkseg><trkpt lat="52.52" lon="13.40"/><trkpt lat="52.51" lon="13.42"/><trkpt lat="52.50" lon="13.45"/></trkseg></trk></gpx>"""
 
         fun item(id: String, type: String, name: String, lat: Double? = null, lng: Double? = null) = MemoryMedia.Item(
@@ -135,10 +137,13 @@ class MapDispatchTest {
         fun door(node: NodeAt, uploads: MediaUploads) = object : GalleryModel.Door {
             override suspend fun gallery() = MemoryMedia.Gallery(MemoryMedia.order(items.toList()), 1, 0)
             override suspend fun scopeNodes() = emptyList<NodeRef>()
-            override suspend fun read(item: MemoryMedia.Item, blob: MemoryMedia.Blob) =
-                if (item.mediaId == "t1") gpx.encodeToByteArray() else blob.blobId.encodeToByteArray()
+            override suspend fun read(item: MemoryMedia.Item, blob: MemoryMedia.Blob): ByteArray {
+                if (item.mediaId == "t1") trackRead?.await()
+                return if (item.mediaId == "t1") gpx.encodeToByteArray() else blob.blobId.encodeToByteArray()
+            }
             override fun reader(item: MemoryMedia.Item): RangeReader? = null
             override suspend fun stream(item: MemoryMedia.Item, sink: suspend (ByteArray) -> Unit): Boolean {
+                if (item.mediaId == "t1") trackRead?.await()
                 sink(gpx.encodeToByteArray())
                 return true
             }
@@ -383,6 +388,38 @@ class MapDispatchTest {
         assertEquals(Answer.Refused(Answer.Why.NO_MAP_SERVICES), b.ask(Call.MapTurnOn), "map services outlived their tenant")
         delay(200)
         assertEquals(sent, p.server.sent.size, "a request left after the tenant closed")
+        b.shutdown()
+    }
+
+    /**
+     * #945: the Map view opens on its framing — its photos and its tracks — and not on the world view first: while its
+     * tracks are still read it shows no view and asks for no tile, and once they are read the first tiles asked are the
+     * framed level's. Bite: `TracksOpen`'s opening falling back to the world while the tracks read → zoom 2's four world
+     * tiles placed and asked first, red here.
+     */
+    @Test
+    fun theMapViewOpensOnItsFramingNeverOnTheWorldFirst() = runBlocking {
+        val p = Played()
+        p.memory.trackRead = kotlinx.coroutines.CompletableDeferred()
+        val b = bridge(p)
+        b.signedIn()
+        assertEquals(Answer.Done, b.ask(Call.MapTurnOn))
+        val g = b.gallery()
+        val opened = b.ask(Call.TracksOpen(g)) as Answer.TracksOpened
+        val map = assertNotNull(opened.map)
+        assertEquals(Answer.Done, b.ask(Call.MapView(map, null, null, null, 800.0, 600.0, 2.0)))
+        delay(300)
+        // a fresh watch delivers the present state first
+        val drawn = b.watching(Watched.Map(map))
+        val waiting = (drawn.next() as Update.Map).shown!!
+        assertNull(waiting.view, "a view placed before the tracks were read")
+        assertEquals(emptyList(), waiting.tiles, "tiles placed before the map's framing was known")
+
+        p.memory.trackRead!!.complete(Unit)
+        val shown = drawn.until { u -> (u as Update.Map).shown?.takeIf { it.view != null && it.tiles.isNotEmpty() } }
+        assertTrue(shown.view!!.zoom > MemoryLocation.WORLD_ZOOM + 5, "the map opened at zoom ${shown.view!!.zoom}, not on its framing")
+        for (t in shown.tiles.take(2)) b.askWithPayload(Call.MapTile(map, t.tile))
+        assertTrue(p.server.tiles.none { it.startsWith("https://tiles.example/2/") }, "a world tile was asked: ${p.server.tiles}")
         b.shutdown()
     }
 
