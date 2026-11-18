@@ -2393,7 +2393,7 @@ lands (`BannerEditorTest.afterAPeersChangeIsSaidSaveAgainWritesOverThePeersBanne
 ### A live case names what the dev instance must hold for it
 
 The same CR's phase 4 planned a live case over a group's and the tenant's Memory; the dev instance's principal is in
-no group, so `PersonProfileLiveTest` skipped (it says so) and the rule rests on the core's played tenant alone. A refine
+no group, so `PersonProfileLiveTest` skipped (it says so) until a group was made on the web after the CR closed. A refine
 that plans a live case checks that the dev instance holds what it needs — a group membership, a second member, a
 capability switched on — and names the step that makes it, or plans the case without it.
 

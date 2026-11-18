@@ -497,8 +497,8 @@ Android's *Download GPX* and *Report* of a track, a phone's 60 Hz frame budget. 
 iOS, never clicked (the Mac's screen is the owner's; no iOS simulator boots on this Mac): the people line, its popover and
 picker, a profile from a participant and from an uploader and its map, *I was there*, a capture time set and reset, an
 image and a video banner across a 720 pt window, the trash's question, Remove banner, and on an iPhone whether
-`PhotosPicker`'s copy of a gallery photo is still shared. Not run elsewhere: Windows offline (the standing tunnel);
-`PersonProfileLiveTest`'s group case (the dev principal is in no group). Not built: the participants offline (#948), one's
+`PhotosPicker`'s copy of a gallery photo is still shared. Not run elsewhere: Windows offline (the standing tunnel).
+Not built: the participants offline (#948), one's
 own profile and the safety numbers (#949), tiles (#950), a people search or overview, a guest's view (#435). Seen in the
 passes, open: the web's picker dropping a polled peer's addition (#952), an open Memory not following a peer's meta
 change (#953), a landscape phone's list-beside layout (#951).

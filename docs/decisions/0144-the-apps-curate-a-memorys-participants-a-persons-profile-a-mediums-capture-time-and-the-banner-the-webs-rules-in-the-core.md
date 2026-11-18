@@ -278,8 +278,9 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
     the VM reaches the backend through a standing ssh tunnel a pass may not stop; offline is the core's code Linux ran.
     Android's participants list re-read after the reverse write was done by a tenant switch, the phone having no refresh
     (#953). **`PersonProfileLiveTest`'s group case** (a group's and the tenant's Memory listed, the personal scope's not)
-    skips on the dev instance, said so: the dev principal is in no group. The same rule holds in the core's tests
-    (`ParticipantIndexTest`, a played tenant with a tenant and a group scope).
+    skipped at first, the dev principal being in no group; with a group made on the web it ran green on 2026-11-18
+    (`VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest --tests '*PersonProfileLiveTest*'` in `src/mobile/`:
+    1 test, 0 skipped, 0 failures).
 - **As built, where the apps depart from the decisions above or from the web** (each named by its phase's build):
   - **The core.** A banner write's check for a peer's banner compares the two slots' blob ids, not the raw `banner`
     value as the web's field edit does — a peer's banner change always moves a slot, and no client re-frames any more. A
