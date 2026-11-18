@@ -6,8 +6,10 @@
 //! box).
 //!
 //! Everything is the core's `DropBoxPage` (`DropBox.Open`, `Watched.DropBox`): the folders are read anew on each revision
-//! of the shell's lists, so a Refresh (F5, `Shell.Refresh`) shows a guest's new folder; a delete is done only where it was
-//! asked (`DropBox.Delete` is refused otherwise).
+//! of the shell's lists, and while the page stands its live poll (`Watched.DropBoxLive`) reads them anew when the scope's
+//! tree moved, so a guest's new folder shows without a Refresh; a delete is done only where it was asked
+//! (`DropBox.Delete` is refused otherwise). The page starts with the drop box's head, its cover
+//! ([crate::header::Header::hero]), as the Pot's and the Memory's pages.
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
@@ -26,10 +28,15 @@ pub struct DropBoxPage {
 
 struct Inner {
     root: gtk::ScrolledWindow,
+    /// Where the head stands, above the folders (drawn anew on each state).
+    hero_slot: gtk::Box,
+    hero: RefCell<Option<gtk::Widget>>,
     body: gtk::Box,
     toasts: adw::ToastOverlay,
     id: Cell<Option<i64>>,
     watch: RefCell<Option<Watch>>,
+    /// The live poll's watch while the page stands (no update of its own).
+    live: RefCell<Option<Watch>>,
     shown: RefCell<Option<DropBoxShown>>,
     /// The folder whose delete is asked on screen: a later state with the same question shows no second alert.
     asked: RefCell<Option<String>>,
@@ -39,14 +46,21 @@ impl DropBoxPage {
     /// Opens drop box [node] on a page; what its actions say goes to [toasts].
     pub fn open(node: &NodeAt, toasts: &adw::ToastOverlay) -> Self {
         let body = gtk::Box::new(gtk::Orientation::Vertical, 18);
-        let clamp = adw::Clamp::builder().maximum_size(720).child(&body).margin_top(18).margin_bottom(18).margin_start(12).margin_end(12).build();
+        let hero_slot = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        let column = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        column.append(&hero_slot);
+        column.append(&body);
+        let clamp = adw::Clamp::builder().maximum_size(720).child(&column).margin_top(18).margin_bottom(18).margin_start(12).margin_end(12).build();
         let root = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).vexpand(true).child(&clamp).build();
         let inner = Rc::new(Inner {
             root,
+            hero_slot,
+            hero: RefCell::new(None),
             body,
             toasts: toasts.clone(),
             id: Cell::new(None),
             watch: RefCell::new(None),
+            live: RefCell::new(None),
             shown: RefCell::new(None),
             asked: RefCell::new(None),
         });
@@ -64,6 +78,7 @@ impl DropBoxPage {
                 return;
             };
             inner.id.set(Some(r#box));
+            *inner.live.borrow_mut() = bridge::watch(&Watched::DropBoxLive { r#box }).map(|(w, _)| w);
             let Some((watch, updates)) = bridge::watch(&Watched::DropBox { r#box }) else { return };
             *inner.watch.borrow_mut() = Some(watch);
             drop(inner);
@@ -75,10 +90,28 @@ impl DropBoxPage {
     pub fn widget(&self) -> &gtk::ScrolledWindow {
         &self.inner.root
     }
+
+    /// The node's head ([crate::header::Header::hero]) placed first in the page's scroll, as the Pot page places it.
+    pub fn hero(&self, hero: Option<gtk::Widget>) {
+        if *self.inner.hero.borrow() == hero {
+            return;
+        }
+        while let Some(child) = self.inner.hero_slot.first_child() {
+            self.inner.hero_slot.remove(&child);
+        }
+        if let Some(h) = &hero {
+            if let Some(parent) = h.parent().and_downcast::<gtk::Box>() {
+                parent.remove(h);
+            }
+            self.inner.hero_slot.append(h);
+        }
+        *self.inner.hero.borrow_mut() = hero;
+    }
 }
 
 impl Drop for DropBoxPage {
     fn drop(&mut self) {
+        self.inner.live.borrow_mut().take();
         self.inner.watch.borrow_mut().take();
         if let Some(r#box) = self.inner.id.get() {
             bridge::send(Call::DropBoxClose { r#box });

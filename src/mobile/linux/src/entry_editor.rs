@@ -459,6 +459,8 @@ impl Inner {
             for (i, _) in s.payers.iter().enumerate() {
                 let index = i as i32;
                 let person = Combo::new(self, &words::ed_person(), &people, false, move |person| EditorChange::EditPayer { index, person });
+                // the chosen person under the title, so the row's end holds only the amount and the remove (#901)
+                person.row.set_use_subtitle(true);
                 let entry = gtk::Entry::builder().placeholder_text(words::entry_amount()).width_chars(9).valign(gtk::Align::Center).input_purpose(gtk::InputPurpose::Number).build();
                 gtk::prelude::EditableExt::set_alignment(&entry, 1.0);
                 let paid = Field::new(self, &entry, move |text| EditorChange::EditPaid { index, text });
