@@ -212,6 +212,17 @@ question 2*).
 - [ ] **7 Android** — *Open a link* (sign-in and shell), the guest screen, the bookmark's page, dialog and reports; the
   guest session in the Keystore-wrapped store. · Done when: `:android:assembleDebug` and the guidelines and words
   guards green; § Passes' Android row.
+  **Status (2026-11-19):** built (`GuestLinks.kt`, `GuestScreens.kt`, `BookmarkScreen.kt`; *Open a link* under the
+  sign-in, the unlock and in the drawer's foot; #1018's notice; New → Bookmark, #1020); assembleDebug and both guards
+  green. Android pass on a throwaway API 36 AVD, two throwaways, links minted by the owner through the core (not the
+  web): signed out — a READ Memory, a READ_WRITE folder (naming, a file replaced), a password Pot (a wrong password
+  refused, an entry added as the named guest; its session survived an app restart), a drop box's and a Memory's upload
+  links (the notice before naming, a file and a photo sent; the owner's read lists them as guests'); signed in as the
+  member — the drawer's *Open a link*, *Keep* (two bookmarks made), Back with its confirm; a WRITE_ONLY link's report
+  received; `run-as app.veyq` files, logcat and `recent_tasks` hold no key, share id or b64/hex canary; the guest sessions
+  sit under `veyq-guest:<hash>` in the Keystore-sealed store. **Open:** a bookmark opened in place / on its own page and
+  its reports — the shell lists and opens no kept link (#1032); a viewing link's report (#1033); terms and a note were
+  not on the throwaway's links (the gates' order is the core's test); another instance (§ Passes' second row).
 - [x] **8 Apple** — the same; `PasteButton`; the Keychain. · Done when: both Apple builds green; the macOS row run here
   or named open (a locked screen); iOS the owner's.
   **Built 2026-11-19 (branch `claude/h-apple`):** `GuestLinks.swift` (*Open a link* with `PasteButton` on the sign-in, the
