@@ -171,10 +171,19 @@ controls reuse the sign-in's words. No owner question: the words are the web's.
   `BreachCheck.of(account)` wired into `passwordChange()` and `keyRotation()`; each flow's `check`, `edited`,
   `useAnyway`. `BreachCheckTest` (the web test's cases), `BreachCanaryTest` (a signed-in account over `PlayedTenant`).
   Bites (a)–(d) each red, (b) both ways.
-- [ ] **4 bridge** (D3, D7) — the calls, the updates, `ScanKind.FLOW_KIT`; the generated Rust and C# bindings.
+- [x] **4 bridge** (D3, D7) — the calls, the updates, `ScanKind.FLOW_KIT`; the generated Rust and C# bindings.
   · Done when: `:bridge:jvmTest` green with `SecretFreeSchemaTest` holding the new `typedIn` entries. **Bite:** a
   flow's `Update` serialised with the held key or the new password → the test that scans every update of a flow session
   for their canaries red.
+  **Built 2026-11-19 (branch `claude/acct-rest`):** `Kit.Read(flow, path)` (`NO_KIT` where none read), `Kit.Clear(flow)`,
+  `ScanKind.FLOW_KIT` (`Scan.Open`'s `link` the flow), `PasswordChange.Check/Edited/UseAnyway`,
+  `KeyRotation.Check/Edited/UseAnyway`; `Update.PasswordChange`/`.KeyRotation` carry `kit: IntakeState?` and
+  `breach: BreachState?`, `Update.AddressChange` `kit`; a flow's `*.Open` reads the range address; the password and
+  address flows close their intake. `:bridge:generateBindings` writes the new types under their own names (each simple
+  name new, none renamed). `AccountFlowsDispatchTest.aFlowSessionTakesTheKitByPathAndChecksTheNewPasswordAndSendsNeither`
+  scans every update for the key's forms, the token, the new password and its SHA-1 — bitten by serialising the check's
+  password (red); `SecretFreeSchemaTest` red without the two new `typedIn` entries. The words (D8) are left to the
+  platform phases.
 - [ ] **5 Android** (D4, D5's triggers) — the kit picker and scanner in the three flows; the check on focus loss, its
   notice under the new password (`supportingText`) and *Use it anyway* (a checkbox row). · Done when:
   `:android:assembleDebug` and the guidelines and words guards green; § Passes' Android row.

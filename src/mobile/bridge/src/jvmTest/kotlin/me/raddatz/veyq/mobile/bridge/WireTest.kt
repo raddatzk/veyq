@@ -221,6 +221,9 @@ class WireTest {
             Call.AddressChangeKit(122, "pw", "0C5126"), Call.AddressChangeClose(122), Call.KitSave(125, "/home/p/kit.pdf", "de", 20_775),
             Call.KitConfirm(125, true), Call.KitClose(125), Call.KeyRotationOpen("veyq.localhost#u1"), Call.KeyRotationChooseNewPassword(123, false),
             Call.KeyRotationProve(123, "pw", "0C5126", "neu und lang", "neu und lang"), Call.KeyRotationRun(123), Call.KeyRotationRefreshLinks(123), Call.KeyRotationClose(123),
+            Call.PasswordChangeCheck(121, "neu und lang"), Call.PasswordChangeEdited(121), Call.PasswordChangeUseAnyway(121, true),
+            Call.KeyRotationCheck(123, "neu und lang"), Call.KeyRotationEdited(123), Call.KeyRotationUseAnyway(123, false),
+            Call.KitRead(121, "/home/kev/Downloads/kit.pdf"), Call.KitClear(121), Call.ScanOpen(ScanKind.FLOW_KIT, link = 123),
             Call.ErasureOpen("veyq.localhost#u1"), Call.ErasureChoose(124, "t1", null), Call.ErasureChoose(124, "t2", "user-3"),
             Call.ErasureRun(124, "pw"), Call.ErasureClose(124),
         ),
@@ -584,6 +587,17 @@ class WireTest {
             Update.Profile(120, me.raddatz.veyq.mobile.session.ProfileModel.State(loaded = true, username = "kev", firstName = "Kevin", hasKey = true, refusal = Msg.PROFILE_SAVE_FAILED)),
             Update.Profile(120, null),
             Update.PasswordChange(121, me.raddatz.veyq.mobile.session.PasswordChange.State(refusal = Msg.PASSWORD_CHANGE_MISMATCH)), Update.PasswordChange(121, null),
+            Update.PasswordChange(
+                121, me.raddatz.veyq.mobile.session.PasswordChange.State(),
+                me.raddatz.veyq.mobile.account.KeyIntake.IntakeState(
+                    me.raddatz.veyq.mobile.account.KeyIntake.HeldKit(
+                        "alt@example.org", "https://other.example", me.raddatz.veyq.mobile.account.KitImport.ServerFrom.TOKEN,
+                        otherServer = "http://veyq.localhost:8080", otherAccount = "kev@example.org",
+                    ),
+                ),
+                me.raddatz.veyq.mobile.account.BreachCheck.BreachState(me.raddatz.veyq.mobile.account.BreachCheck.BreachKind.HIT, 2401),
+            ),
+            Update.AddressChange(122, me.raddatz.veyq.mobile.session.AddressChange.State(), me.raddatz.veyq.mobile.account.KeyIntake.IntakeState(problem = Msg.SIGNIN_KIT_UNREADABLE)),
             Update.AddressChange(122, me.raddatz.veyq.mobile.session.AddressChange.State(sentTo = "neu@example.org")), Update.AddressChange(122, null),
             Update.KeyRotation(123, me.raddatz.veyq.mobile.session.rotation.KeyRotation.State(
                 me.raddatz.veyq.mobile.session.rotation.KeyRotation.Step.DONE, "http://veyq.localhost:8080", done = true,

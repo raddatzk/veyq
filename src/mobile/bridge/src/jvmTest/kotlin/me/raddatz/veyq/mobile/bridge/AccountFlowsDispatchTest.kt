@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.bridge
 
+import io.ktor.client.engine.mock.respond
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.api.models.AccountErasurePreview
 import me.raddatz.veyq.mobile.api.models.AccountKeyMaterial
@@ -149,7 +150,14 @@ class AccountFlowsDispatchTest {
         override fun picture(): ByteArray? = null
     }
 
-    private fun bridge(played: Played, engine: Engine, profile: Profile, door: Door = Door(), settings: Boolean = false) = Bridge {
+    private fun bridge(
+        played: Played,
+        engine: Engine,
+        profile: Profile,
+        door: Door = Door(),
+        settings: Boolean = false,
+        breach: () -> me.raddatz.veyq.mobile.account.BreachCheck = { me.raddatz.veyq.mobile.account.BreachCheck.none() },
+    ) = Bridge {
         val hidden = Hidden({}, emptySet())
         Composition(
             SessionModel(door, hidden, RecentUses({}, emptyList())), hidden, JvmFiles,
@@ -158,8 +166,8 @@ class AccountFlowsDispatchTest {
             },
             accountFlows = { _, _, _ ->
                 AccountFlows(
-                    { PasswordChange(played, p) }, { AddressChange(played, p) },
-                    { KeyRotation(engine, p, played.email, played.server) }, { AccountErasure(played, p) },
+                    { PasswordChange(played, p, breach()) }, { AddressChange(played, p) },
+                    { KeyRotation(engine, p, played.email, played.server, breach()) }, { AccountErasure(played, p) },
                 )
             },
         ) { _ ->
@@ -299,6 +307,86 @@ class AccountFlowsDispatchTest {
         b.watching(Watched.KeyRotation(rot)).until { u -> (u as Update.KeyRotation).shown?.takeIf { it.step == KeyRotation.Step.GATE } }
         assertEquals(Answer.Done, b.ask(Call.KeyRotationChooseNewPassword(rot, false)))
         assertTrue(b.ask(Call.KeyRotationProve(rot, played.password, token), long) is Answer.KitOpened, "the rotation's gate refused the pasted kit")
+        b.shutdown()
+    }
+
+    /**
+     * ADR 0151 decisions 3 and 7 over the bridge: a kit file read into a flow's intake by its path (`Kit.Read`), shown as
+     * its address only and cleared (`Kit.Clear`); a kit scan routed to the flow (`FLOW_KIT`); the new password's check on
+     * leaving the field (`*.Check`), a hit stopping the change until `*.UseAnyway`, an edit taking it back. Every update
+     * of the session, as the host gets it, is scanned for the Secret Key in each of its forms, the kit's token, the new
+     * password and its SHA-1: none. Bite: the check's password serialized with its state → red here.
+     */
+    @Test
+    fun aFlowSessionTakesTheKitByPathAndChecksTheNewPasswordAndSendsNeither() = runBlocking {
+        val played = Played()
+        val next = "a much better one"
+        val hash = java.security.MessageDigest.getInstance("SHA-1").digest(next.encodeToByteArray()).joinToString("") { "%02X".format(it) }
+        val ranges = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val client = io.ktor.client.HttpClient(io.ktor.client.engine.mock.MockEngine { r ->
+            ranges += r.url.toString()
+            respond("${hash.drop(5)}:12\r\n", io.ktor.http.HttpStatusCode.OK)
+        })
+        val breach = { me.raddatz.veyq.mobile.account.BreachCheck(me.raddatz.veyq.mobile.session.OutsideHttp(client, "http://a.example")) { "https://range.example/range/" } }
+        val b = bridge(played, Engine(played.secretKey), Profile(), breach = breach)
+        b.signedIn()
+        val c = "a.example#u1"
+        val long = kotlin.time.Duration.parse("60s")
+        val dir = Files.createTempDirectory("flowkit")
+        val kitFile = dir.resolve("kit.txt").also { Files.writeString(it, "my kit: ${played.kitToken()}\n") }
+        val noKit = dir.resolve("other.txt").also { Files.writeString(it, "no kit in here") }
+
+        val pw = (b.ask(Call.PasswordChangeOpen(c)) as Answer.FlowOpened).flow
+        val raw = b.watching(Watched.PasswordChange(pw))
+        val w = b.watching(Watched.PasswordChange(pw))
+        assertEquals(Answer.Refused(Answer.Why.NO_KIT), b.ask(Call.KitRead(pw, noKit.toString()), long))
+        assertEquals(Answer.Done, b.ask(Call.KitRead(pw, kitFile.toString()), long))
+        val held = w.until { u -> (u as Update.PasswordChange).kit?.kit }
+        assertEquals(me.raddatz.veyq.mobile.account.KeyIntake.HeldKit(played.email, null, me.raddatz.veyq.mobile.account.KitImport.ServerFrom.NONE), held)
+        assertEquals(Answer.Done, b.ask(Call.KitClear(pw)))
+        w.until { u -> (u as Update.PasswordChange).kit?.takeIf { it.kit == null } }
+        assertEquals(Answer.Done, b.ask(Call.KitRead(pw, kitFile.toString()), long))
+        w.until { u -> (u as Update.PasswordChange).kit?.kit }
+
+        assertEquals(Answer.Done, b.ask(Call.PasswordChangeCheck(pw, next), long))
+        val hit = w.until { u -> (u as Update.PasswordChange).breach?.takeIf { it.kind == me.raddatz.veyq.mobile.account.BreachCheck.BreachKind.HIT } }
+        assertEquals(12, hit.count)
+        assertEquals(listOf("https://range.example/range/${hash.take(5)}"), ranges.toList())
+        assertEquals(Answer.Done, b.ask(Call.PasswordChangeRun(pw, played.password, next, next, ""), long))
+        assertTrue(played.changes.isEmpty(), "a breached password was submitted without Use it anyway")
+        assertEquals(Answer.Done, b.ask(Call.PasswordChangeUseAnyway(pw, true)))
+        w.until { u -> (u as Update.PasswordChange).breach?.takeIf { it.kind == me.raddatz.veyq.mobile.account.BreachCheck.BreachKind.ACCEPTED } }
+        assertEquals(Answer.Done, b.ask(Call.PasswordChangeRun(pw, played.password, next, next, ""), long))
+        w.until(long) { u -> (u as Update.PasswordChange).shown?.takeIf { it.done } }
+        assertEquals(1, played.changes.size, "the held kit's key did not change the password")
+        assertEquals(1, ranges.size, "the accepted password was queried again")
+        assertEquals(Answer.Done, b.ask(Call.PasswordChangeEdited(pw)))
+        w.until { u -> (u as Update.PasswordChange).breach?.takeIf { it.kind == me.raddatz.veyq.mobile.account.BreachCheck.BreachKind.IDLE } }
+
+        // the rotation's gate: its new password checked, its kit scanned into its own intake
+        val rot = (b.ask(Call.KeyRotationOpen(c)) as Answer.FlowOpened).flow
+        val rotRaw = b.watching(Watched.KeyRotation(rot))
+        assertEquals(Answer.Done, b.ask(Call.KeyRotationCheck(rot, next), long))
+        b.watching(Watched.KeyRotation(rot)).until { u -> (u as Update.KeyRotation).breach?.takeIf { it.kind == me.raddatz.veyq.mobile.account.BreachCheck.BreachKind.HIT } }
+        assertEquals(Answer.Done, b.ask(Call.KeyRotationUseAnyway(rot, true)))
+        assertEquals(Answer.Done, b.ask(Call.KeyRotationEdited(rot)))
+        assertTrue(b.ask(Call.ScanOpen(ScanKind.FLOW_KIT, link = rot)) is Answer.ScanOpened)
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_FLOW), b.ask(Call.ScanOpen(ScanKind.FLOW_KIT, link = 999_999)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_FLOW), b.ask(Call.KitRead(999_999, kitFile.toString())))
+
+        assertEquals(Answer.Done, b.ask(Call.PasswordChangeClose(pw)))
+        assertEquals(Answer.Done, b.ask(Call.KeyRotationClose(rot)))
+        w.until { u -> (u as Update.PasswordChange).takeIf { it.shown == null } }
+        val sent = mutableListOf<String>()
+        for (watch in listOf(raw, rotRaw)) while (true) sent += watch.pending() ?: break
+        assertTrue(sent.isNotEmpty())
+        val key = played.secretKey
+        val canaries = listOf(
+            SecretKeyText.format(p, key), SecretKeyText.format(p, key).replace("-", ""), me.raddatz.veyq.mobile.crypto.hex(key), b64(key),
+            java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(key), played.kitToken(), "veyqkit:", next, hash, hash.drop(5),
+        )
+        for (u in sent) for (canary in canaries) assertTrue(canary !in u, "an update carries a secret: $u")
+        dir.toFile().deleteRecursively()
         b.shutdown()
     }
 

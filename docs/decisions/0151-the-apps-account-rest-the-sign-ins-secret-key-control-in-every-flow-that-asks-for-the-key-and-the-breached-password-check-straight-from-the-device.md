@@ -1,6 +1,7 @@
 # ADR 0151 — The apps' account rest: the sign-in's Secret Key control in every flow that asks for the key, and the breached-password check straight from the device
 - Status: Accepted
-- Built: no — cr-app-account-rest
+- Built: partly — the core and the bridge (cr-app-account-rest phases 2–4, 2026-11-19); the platforms' screens, the
+  words and the passes follow in that CR
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md) (the check: [security-model](../crosscutting/security-model.md) § the breached-password check)
 
