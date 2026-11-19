@@ -24,14 +24,14 @@ import me.raddatz.veyq.mobile.session.SignInFailure
 import me.raddatz.veyq.mobile.session.TenantSession
 
 /**
- * One Pot opened by a member, a port of `src/web/src/features/expenses/potSession.ts`: its settings from the node's
+ * One Pot opened by a member or a link's guest (ADR 0150 decision 5: through a [PotDoor] — a member's [TenantPotDoor], a
+ * guest's `GuestPotDoor`), a port of `src/web/src/features/expenses/potSession.ts`: its settings from the node's
  * sealed meta, its revisions read page by page and merged by id, each opened at the address it was read by, the ledger
  * and the ledger check over them, and every write. Expenses is an application: it uses core's session, never the reverse.
  */
-class PotSession private constructor(private val tenant: TenantSession, private var node: OpenNode) {
-    private val account = tenant.account
-    private val codec = RevisionCodec(account.suite)
-    private val api get() = ExpensesApi(tenant.base, account.http)
+class PotSession internal constructor(private val door: PotDoor, private var node: OpenNode) {
+    private val suite = door.suite
+    private val codec = RevisionCodec(suite)
 
     /** The Pot's settings, or null when its meta carries none that reads (no balances, no money entries then). */
     var meta: PotMeta? = openMeta()
@@ -40,7 +40,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     val name: String get() = node.name
 
     private val held = LinkedHashMap<String, HeldRevision>()
-    private var ledgerRevision: Int? = null
+    private var ledgerTag: String? = null
     private var deleteRevision = 0
     private var cursor: String? = null
 
@@ -53,18 +53,18 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         private set
 
     /** Whether this member may write here: Expenses is on for the tenant (a space pending deletion is not opened). */
-    val canWrite: Boolean get() = meta != null && "expenses" !in tenant.applicationsOff()
+    val canWrite: Boolean get() = meta != null && door.writesEntries
 
     /** Whether this member may change the Pot's settings, a Pot without any included: Expenses is on for the tenant. */
-    val canChangeSettings: Boolean get() = "expenses" !in tenant.applicationsOff()
+    val canChangeSettings: Boolean get() = door.changesSettings
 
     /** The waits before each retry while the Pot is not re-keyed since a rotation (`REKEY_RETRY_DELAYS_MS`). */
     internal var rekeyWaitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS
 
-    private fun openMeta(): PotMeta? = PotMeta.opened(account.suite, node)
+    private fun openMeta(): PotMeta? = PotMeta.opened(suite, node)
 
     /** The tenant a member id of this Pot means a person in, for a download (`PotExport`). */
-    internal val tenantId: String get() = tenant.tenant.tenantId
+    internal val tenantId: String get() = door.tenantId
 
     /** What is held, for a pure rule over it. */
     internal fun heldRevisions(): List<HeldRevision> = held.values.toList()
@@ -97,47 +97,14 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     private var receiptsDue = false
 
     private suspend fun read(): Boolean {
-        var since = cursor
-        var first = true
-        var firstLedger = ledgerRevision
-        var firstDelete = deleteRevision
-        val rows = mutableListOf<ServedRevision>()
-        var keep: Set<String>? = null
-        while (true) {
-            val r = account.respond {
-                api.listPotRevisions(
-                    node.scopeId, node.id, ifNoneMatch = if (first) ledgerRevision?.toString() else null, since = since,
-                    sinceDelete = if (first) deleteRevision else firstDelete, limit = PAGE,
-                )
-            }
-            if (r.status == 304) {
-                if (!first) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "304 on a later page")
-                return false
-            }
-            if (!r.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "pot revisions ${r.status}")
-            val page = r.body()
-            if (first) {
-                firstLedger = page.ledgerRevision
-                firstDelete = page.deleteRevision
-                keep = page.revisionIds?.map { "${it.entryId}:${it.revision}" }?.toSet()
-            }
-            rows += page.revisions.map {
-                ServedRevision(it.entryId, it.revision, SealedRevision(unb64(it.sealedBody), unb64(it.wrappedRevisionKey)), epochMs(it.createdAt), it.writer, it.purgeAfter?.let(::epochMs))
-            }
-            if (!page.more) {
-                cursor = page.cursor ?: since
-                break
-            }
-            val next = page.cursor ?: throw SignInFailure(SignInFailure.Reason.PROTOCOL, "a page with more and no cursor")
-            if (next == since) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "a cursor that did not advance")
-            since = next
-            first = false
-        }
-        keep?.let { ids -> held.keys.retainAll(ids) }
+        val r = door.read(node, ledgerTag, cursor, deleteRevision) ?: return false
+        if (r.whole) held.clear() // a guest's read is the link's whole answer, replaced when its tag moved
+        r.keep?.let { ids -> held.keys.retainAll(ids) }
         // A re-served id (a re-key's new wrap) replaces the held row.
-        Revisions.open(codec, node.scopeId, node.id, node.key, rows).forEach { held[it.id] = it }
-        ledgerRevision = firstLedger
-        deleteRevision = firstDelete
+        Revisions.open(codec, node.scopeId, node.id, node.key, r.rows).forEach { held[it.id] = it }
+        ledgerTag = r.tag
+        deleteRevision = r.deleteRevision
+        cursor = r.cursor
         val all = held.values.toList()
         ledger = meta?.let { Ledger.build(all, it.base) }
         check = LedgerCheck.of(all)
@@ -170,7 +137,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         val base = meta?.base ?: return WriteOutcome.INVALID
         return atNodeEpoch { n ->
             val revisions = PotWrites.seal(codec, n.scopeId, n.id, n.key, held.values.toList(), writes, base)
-            suspend { api.appendPotRevisions(n.scopeId, n.id, PotAppendRequest(n.epoch, revisions)) }
+            suspend { door.append(n, revisions) }
         }
     }
 
@@ -180,7 +147,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         val base = meta?.base ?: return WriteOutcome.INVALID
         return atNodeEpoch { n ->
             val request = PotWrites.erasure(codec, n.scopeId, n.id, n.key, n.epoch, held.values.toList(), participantId, base)
-            suspend { api.erasePotRecord(n.scopeId, n.id, request) }
+            suspend { door.erase(n, request) }
         }
     }
 
@@ -188,19 +155,19 @@ class PotSession private constructor(private val tenant: TenantSession, private 
      * A write at the Pot's epoch through core's [NodeEpochWrite] (the floor, `node_rekey_pending` and `stale_epoch`
      * handled there); [prepare] seals on the node it is handed, so an attempt after a re-read seals under its key now.
      */
-    private suspend fun atNodeEpoch(prepare: (OpenNode) -> (suspend () -> HttpResponse<Unit>)): WriteOutcome {
+    private suspend fun atNodeEpoch(prepare: (OpenNode) -> (suspend () -> PotDoor.Sent)): WriteOutcome {
         val result = try {
             NodeEpochWrite.run(
                 waitsMs = rekeyWaitsMs,
-                belowFloor = { node.scopeEpoch < (tenant.scopeEpoch(node.scopeId) ?: Int.MAX_VALUE) },
+                belowFloor = { door.belowFloor(node) },
                 reread = ::reopen,
-                pull = { NodeRekey.pull(tenant, node.scopeId, listOf(node.id)) },
+                pull = { door.pull(node) },
                 attempt = {
                     val send = prepare(node)
-                    val r = account.respond { send() }
-                    val code = if (r.success) null else codeOf(r)
+                    val r = send()
+                    val code = r.code
                     val answer = when {
-                        r.success -> NodeEpochWrite.Answer.DONE
+                        r.status in 200..299 -> NodeEpochWrite.Answer.DONE
                         r.status == 409 && code == NODE_REKEY_PENDING -> NodeEpochWrite.Answer.REKEY_PENDING
                         r.status == 409 && code == STALE_EPOCH -> NodeEpochWrite.Answer.STALE_EPOCH
                         else -> NodeEpochWrite.Answer.OTHER
@@ -241,11 +208,10 @@ class PotSession private constructor(private val tenant: TenantSession, private 
      * and everything held read anew under that key. False when the Pot is no longer there to write to.
      */
     private suspend fun reopen(): Boolean {
-        tenant.forgetTree()
-        node = tenant.trees()[node.scopeId]?.firstOrNull { it.id == node.id && it.kind == KIND } ?: return false
+        node = door.reread(node) ?: return false
         meta = openMeta()
         held.clear()
-        ledgerRevision = null
+        ledgerTag = null
         deleteRevision = 0
         cursor = null
         refresh()
@@ -259,11 +225,10 @@ class PotSession private constructor(private val tenant: TenantSession, private 
      */
     @Throws(Exception::class)
     suspend fun rekeyed(): Boolean = reading.withLock {
-        tenant.forgetTree()
-        node = tenant.trees()[node.scopeId]?.firstOrNull { it.id == node.id && it.kind == KIND } ?: return@withLock false
+        node = door.reread(node) ?: return@withLock false
         meta = openMeta()
         held.clear()
-        ledgerRevision = null
+        ledgerTag = null
         deleteRevision = 0
         cursor = null
         read()
@@ -304,11 +269,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         val skipped = ArrayList<String>()
         for (r in pending) {
             try {
-                blobs.upload(
-                    node.scopeId, { node }, ::reopen, { node.scopeEpoch < (tenant.scopeEpoch(node.scopeId) ?: Int.MAX_VALUE) },
-                    r.id, id, Receipts.ROLE, r.bytes, r.type, r.name, r.modifiedAt,
-                    pull = { NodeRekey.pull(tenant, node.scopeId, listOf(node.id)) },
-                )
+                door.receipts.upload({ node }, ::reopen, r.id, id, r.bytes, r.type, r.name, r.modifiedAt)
                 uploaded += r.id
                 uploadedReceipts = uploaded.toList()
             } catch (e: ApplicationBlobs.UploadRefused) {
@@ -325,17 +286,12 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         return write(listOf(PotWrite(id, content, basedOn = basedOn, droppedReceipts = dropped))).also { if (it == WriteOutcome.WRITTEN) readReceipts() }
     }
 
-    private val blobs = ApplicationBlobs(tenant)
     private var receiptsTag: String? = null
 
     /** Uploads [bytes] as receipt [receiptId] of entry [entryId], which a write then lists (a copy's receipts, written ahead
      *  of the batch holding their entry). Throws `ApplicationBlobs.UploadRefused` with the server's code. */
     internal suspend fun uploadReceipt(entryId: String, receiptId: String, bytes: ByteArray, type: String, name: String?, modifiedAt: Long?) {
-        blobs.upload(
-            node.scopeId, { node }, ::reopen, { node.scopeEpoch < (tenant.scopeEpoch(node.scopeId) ?: Int.MAX_VALUE) },
-            receiptId, entryId, Receipts.ROLE, bytes, type, name, modifiedAt,
-            pull = { NodeRekey.pull(tenant, node.scopeId, listOf(node.id)) },
-        )
+        door.receipts.upload({ node }, ::reopen, receiptId, entryId, bytes, type, name, modifiedAt)
     }
 
     /** Every receipt the Pot holds, each with its sealed name and type where they opened, dropped ones included. */
@@ -347,7 +303,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     suspend fun readReceipts(): Boolean = receiptsReading.withLock { readReceiptsOnce() }
 
     private suspend fun readReceiptsOnce(): Boolean {
-        val listing = runCatching { blobs.list(node.scopeId, node.id, receiptsTag) }.getOrElse {
+        val listing = runCatching { door.receipts.list(node, receiptsTag) }.getOrElse {
             receiptsDue = true
             return false
         }
@@ -356,7 +312,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         receiptsTag = listing.etag
         val n = node
         receipts = listing.blobs.filter { it.role == Receipts.ROLE }.map { b ->
-            val meta = blobs.metaOf(n.scopeId, n, b)
+            val meta = door.receipts.metaOf(n, b)
             Receipts.Receipt(b.id, b.ownerId, b, meta?.name, meta?.type, b.size, b.createdAt, b.dropped, b.blocked, meta?.modifiedAt)
         }
         return true
@@ -367,7 +323,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     suspend fun openReceipt(receiptId: String): ByteArray? {
         val r = receipts.firstOrNull { it.receiptId == receiptId } ?: return null
         if (r.blocked) return null
-        return runCatching { blobs.download(node.scopeId, node, r.listed) }.getOrNull()
+        return runCatching { door.receipts.download(node, r.listed) }.getOrNull()
     }
 
     /** Deletes entry [entryId] on [basedOn], the revision shown: a tombstone revision; it counts nowhere and stays in the
@@ -400,7 +356,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     }
 
     /** Whether the tenant names an exchange-rate service: the editor then fills another currency's empty rate. */
-    val ratesOffered: Boolean get() = tenant.serviceUrl(ExchangeRates.CAPABILITY) != null
+    val ratesOffered: Boolean get() = door.ratesTemplate() != null
 
     /**
      * One unit of [currency] in the Pot's base from [day]'s table (`YYYY-MM-DD`, the device's date), and the day of the
@@ -411,13 +367,13 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     suspend fun rateFor(currency: String, day: String): ExchangeRates.Filled? {
         val base = meta?.base?.currency ?: return null
         if (currency == base) return null
-        val template = tenant.serviceUrl(ExchangeRates.CAPABILITY) ?: return null
-        val table = ExchangeRates.dayTable(template, day, account.deviceStore) { account.fetchOutside(it) } ?: return null
+        val template = door.ratesTemplate() ?: return null
+        val table = door.dayTable(template, day) ?: return null
         return ExchangeRates.crossRate(table, currency, base)
     }
 
     /** The tenant's members by user id, for the history's writers (a member's read carries `user:{id}`). */
-    internal val directory: Map<String, String> get() = tenant.people.mapValues { it.value.displayName }
+    internal val directory: Map<String, String> get() = door.directory
 
     /** The base currency is fixed once the Pot holds any money entry, live or deleted: every entry carries its rate to it. */
     val currencyFixed: Boolean get() = held.values.any { it.body?.content is MoneyContent }
@@ -432,31 +388,19 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         val result = try {
             NodeEpochWrite.run(
                 waitsMs = rekeyWaitsMs,
-                belowFloor = { node.scopeEpoch < (tenant.scopeEpoch(node.scopeId) ?: Int.MAX_VALUE) },
+                belowFloor = { door.belowFloor(node) },
                 reread = ::reopen,
-                pull = { NodeRekey.pull(tenant, node.scopeId, listOf(node.id)) },
+                pull = { door.pull(node) },
                 attempt = {
                     val n = node
                     val r = NodeMetaWrite.write(
                         NodeMetaWrite.State(n.wrappedMeta, n.metaRevision),
-                        open = { NodeMetaWrite.openForWrite(account.suite, n.scopeId, n.id, n.key, it) },
-                        seal = { NodeMetaWrite.seal(account.suite, n.scopeId, n.id, n.key, it) },
+                        open = { NodeMetaWrite.openForWrite(suite, n.scopeId, n.id, n.key, it) },
+                        seal = { NodeMetaWrite.seal(suite, n.scopeId, n.id, n.key, it) },
                         edit = { envelope ->
                             change(PotMeta.of(envelope))?.let { JsonObject(envelope + (PotMeta.KEY to it.toJson())) }
                         },
-                        send = { wrapped, revision ->
-                            val r = account.respond {
-                                ContentApi(tenant.base, account.http).updateNode(
-                                    n.scopeId, n.id, UpdateNodeRequest(wrappedMeta = wrapped, metaRevision = revision, nodeEpoch = n.epoch),
-                                )
-                            }
-                            if (r.success) NodeMetaWrite.Answer.Taken
-                            else {
-                                val body = runCatching { r.response.bodyAsText() }.getOrDefault("")
-                                NodeMetaWrite.staleOf(body)?.let { NodeMetaWrite.Answer.Stale(it) }
-                                    ?: NodeMetaWrite.Answer.Refused(r.status, codeIn(body))
-                            }
-                        },
+                        send = { wrapped, revision -> door.updateMeta(n, wrapped, revision) },
                     )
                     val answer = when {
                         r !is NodeMetaWrite.Result.Refused -> NodeEpochWrite.Answer.DONE
@@ -528,7 +472,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     /** Reads the space's current members again. */
     @Throws(Exception::class)
     suspend fun readMembers() {
-        members = runCatching { tenant.scopeMembers(node.scopeId) }.getOrNull()
+        members = runCatching { door.members(node.scopeId) }.getOrNull()
     }
 
     /** Every person a revision the Pot holds names, live or deleted: one of them is deleted, never removed. */
@@ -572,7 +516,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
 
     /** A fresh record id (a UUID v4), for an entry or a person this device adds. */
     fun newId(): String {
-        val b = account.primitives.randomBytes(16)
+        val b = suite.p.randomBytes(16)
         b[6] = ((b[6].toInt() and 0x0f) or 0x40).toByte()
         b[8] = ((b[8].toInt() and 0x3f) or 0x80).toByte()
         val h = hex(b)
@@ -580,7 +524,7 @@ class PotSession private constructor(private val tenant: TenantSession, private 
     }
 
     companion object {
-        private const val PAGE = 1000
+        internal const val PAGE = 1000
         const val KIND = "EXPENSES_POT"
         private const val NODE_REKEY_PENDING = "node_rekey_pending"
         private const val STALE_EPOCH = "stale_epoch"
@@ -589,12 +533,16 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         /** Opens the Pot [nodeId] of [scopeId] in [tenant] and reads it; null when the tenant holds no such open Pot. */
         suspend fun open(tenant: TenantSession, scopeId: String, nodeId: String): PotSession? {
             val node = tenant.trees()[scopeId]?.firstOrNull { it.id == nodeId && it.kind == KIND } ?: return null
-            return PotSession(tenant, node).also {
+            return open(TenantPotDoor(tenant), node)
+        }
+
+        /** Opens the Pot [node] through [door] (a member's [TenantPotDoor], a link guest's) and reads it. */
+        internal suspend fun open(door: PotDoor, node: OpenNode): PotSession =
+            PotSession(door, node).also {
                 it.refresh()
                 it.readMembers()
                 it.readReceipts()
             }
-        }
 
         private const val MAX_NAME = 100
 
@@ -612,13 +560,13 @@ class PotSession private constructor(private val tenant: TenantSession, private 
         @OptIn(kotlin.time.ExperimentalTime::class)
         internal fun nowMs(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
 
-        private suspend fun codeOf(r: HttpResponse<*>): String? = codeIn(runCatching { r.response.bodyAsText() }.getOrDefault(""))
+        internal suspend fun codeOf(r: HttpResponse<*>): String? = codeIn(runCatching { r.response.bodyAsText() }.getOrDefault(""))
 
-        private fun codeIn(body: String): String? = runCatching {
+        internal fun codeIn(body: String): String? = runCatching {
             (Json.parseToJsonElement(body) as JsonObject)["code"]?.jsonPrimitive?.content
         }.getOrNull()
 
         @OptIn(kotlin.time.ExperimentalTime::class)
-        private fun epochMs(iso: String): Long = runCatching { kotlin.time.Instant.parse(iso).toEpochMilliseconds() }.getOrDefault(0)
+        internal fun epochMs(iso: String): Long = runCatching { kotlin.time.Instant.parse(iso).toEpochMilliseconds() }.getOrDefault(0)
     }
 }

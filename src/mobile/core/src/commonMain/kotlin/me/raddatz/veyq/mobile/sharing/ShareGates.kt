@@ -70,6 +70,9 @@ class ShareGates(
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
     private var pwSalt: String = ""
+    /** The password that opened the link, in memory only: what *Keep* offers to keep with it (a bookmark's, sealed). */
+    internal var enteredPassword: String? = null
+        private set
     private var pwToken: String? = null
     /** The opened head behind the gates (internal: it holds `K_share`); null until [load] passed the password. */
     internal var head: ShareHead? = null
@@ -137,6 +140,7 @@ class ShareGates(
         try {
             pwToken = ShareResolve.passwordToken(client, password, pwSalt)
             load()
+            if (_state.value !is State.Locked) enteredPassword = password
         } finally {
             _busy.value = false
         }
@@ -266,6 +270,7 @@ class ShareGates(
         kShare.fill(0)
         head?.kShare?.fill(0)
         head = null
+        enteredPassword = null
         client.close()
     }
 

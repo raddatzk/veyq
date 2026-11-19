@@ -5992,5 +5992,219 @@
     "note": "the level's view toggle when it switches to rows (the web's viewList)",
     "en": "List view",
     "de": "Listenansicht"
+  },
+  "link_open": {
+    "en": "Open a link",
+    "de": "Link öffnen"
+  },
+  "link_paste_hint": {
+    "en": "Paste the link you received",
+    "de": "Füge den Link ein, den du bekommen hast"
+  },
+  "link_paste": {
+    "en": "Paste",
+    "de": "Einfügen"
+  },
+  "link_open_in_browser": {
+    "en": "Open in the browser",
+    "de": "Im Browser öffnen"
+  },
+  "link_keep": {
+    "en": "Keep",
+    "de": "Behalten",
+    "note": "A received link's guest view: keep the link as a bookmark in a space (ADR 0150 decision 6)."
+  },
+  "link_keep_where": {
+    "en": "Where to keep the link",
+    "de": "Wo der Link aufbewahrt wird"
+  },
+  "link_kept": {
+    "en": "The link is kept in “{1}”.",
+    "de": "Der Link ist in „{1}“ aufbewahrt."
+  },
+  "link_leave_title": {
+    "en": "Leave this link?",
+    "de": "Diesen Link verlassen?",
+    "note": "Back at the root of an opened link: the key lives only in memory (ADR 0150 decision 4)."
+  },
+  "link_leave_body": {
+    "en": "The link is not kept on this device. To open it again you need the link once more — or keep it first.",
+    "de": "Der Link wird auf diesem Gerät nicht aufbewahrt. Um ihn wieder zu öffnen, brauchst du ihn noch einmal – oder du behältst ihn vorher."
+  },
+  "link_leave_accept": {
+    "en": "Leave",
+    "de": "Verlassen"
+  },
+  "link_problem_too_long": {
+    "en": "This link is too long.",
+    "de": "Dieser Link ist zu lang."
+  },
+  "link_problem_not_a_url": {
+    "en": "This is not a link. Paste the whole link, starting with https://",
+    "de": "Das ist kein Link. Füge den ganzen Link ein, beginnend mit https://"
+  },
+  "link_problem_not_https": {
+    "en": "Only links starting with https:// can be opened.",
+    "de": "Nur Links, die mit https:// beginnen, lassen sich öffnen."
+  },
+  "link_problem_credentials": {
+    "en": "This link carries a user name or password in its address and cannot be opened.",
+    "de": "Dieser Link enthält einen Benutzernamen oder ein Passwort in der Adresse und lässt sich nicht öffnen."
+  },
+  "link_problem_not_a_share": {
+    "en": "This is not a veyq share link. A share link looks like https://…/s/…#k=…",
+    "de": "Das ist kein veyq-Freigabelink. Ein Freigabelink sieht so aus: https://…/s/…#k=…"
+  },
+  "link_problem_no_key": {
+    "en": "The link is missing its key (the part after #k=). Copy the whole link again.",
+    "de": "Dem Link fehlt sein Schlüssel (der Teil nach #k=). Kopiere den ganzen Link noch einmal."
+  },
+  "link_problem_moderation": {
+    "en": "This is a moderator’s review link. It opens only in the browser.",
+    "de": "Das ist ein Prüflink für die Moderation. Er öffnet nur im Browser."
+  },
+  "link_refused_unreachable": {
+    "en": "The shared content cannot be shown here: {1} did not answer.",
+    "de": "Die geteilten Inhalte lassen sich hier nicht anzeigen: {1} hat nicht geantwortet."
+  },
+  "link_refused_other_version": {
+    "en": "The shared content cannot be shown here: {1} runs another version of veyq.",
+    "de": "Die geteilten Inhalte lassen sich hier nicht anzeigen: Auf {1} läuft eine andere veyq-Version."
+  },
+  "link_refused_no_links": {
+    "en": "The shared content cannot be shown here: {1} does not serve shared links at the moment.",
+    "de": "Die geteilten Inhalte lassen sich hier nicht anzeigen: {1} stellt gerade keine geteilten Links bereit."
+  },
+  "share_password_title": {
+    "en": "This share is password-protected",
+    "de": "Diese Freigabe ist passwortgeschützt"
+  },
+  "share_password_intro": {
+    "en": "Enter the password to open it.",
+    "de": "Gib das Passwort ein, um sie zu öffnen."
+  },
+  "share_password_label": {
+    "en": "Password",
+    "de": "Passwort"
+  },
+  "share_password_unlock": {
+    "en": "Unlock",
+    "de": "Entsperren"
+  },
+  "share_password_wrong": {
+    "en": "Wrong password — please try again.",
+    "de": "Falsches Passwort — bitte erneut versuchen."
+  },
+  "share_terms_title": {
+    "en": "Please accept the terms of use",
+    "de": "Bitte akzeptiere die Nutzungsbedingungen"
+  },
+  "share_terms_intro": {
+    "en": "The owner of this space and the person running this server ask you to accept their terms before you continue. You accept once for every link of this space, and again when the terms change; your acceptance stays on your device.",
+    "de": "Die Person, der dieser Bereich gehört, und die Person, die diesen Server betreibt, bitten dich, vor dem Fortfahren ihre Bedingungen zu akzeptieren. Du akzeptierst einmal für alle Links dieses Bereichs und erneut, wenn sich die Bedingungen ändern; deine Zustimmung bleibt auf deinem Gerät."
+  },
+  "share_accept_continue": {
+    "en": "Accept and continue",
+    "de": "Akzeptieren und fortfahren"
+  },
+  "share_note_title": {
+    "en": "Please read this note",
+    "de": "Bitte lies diesen Hinweis"
+  },
+  "share_note_intro": {
+    "en": "The person who shared this asks you to accept their note before you continue. Your acceptance stays on this device.",
+    "de": "Die Person, die das mit dir teilt, bittet dich, ihren Hinweis vor dem Fortfahren zu akzeptieren. Deine Zustimmung bleibt auf diesem Gerät."
+  },
+  "share_unavailable": {
+    "en": "This link isn’t available",
+    "de": "Dieser Link ist nicht verfügbar"
+  },
+  "share_unavailable_hint": {
+    "en": "It may have been switched off, expired, or the link is incomplete. Ask the person who shared it for a fresh link.",
+    "de": "Er wurde vielleicht abgeschaltet, ist abgelaufen, oder der Link ist unvollständig. Bitte die Person, die ihn geteilt hat, um einen neuen Link."
+  },
+  "share_not_shown": {
+    "en": "This page cannot show this kind of item.",
+    "de": "Diese Seite kann diese Art von Eintrag nicht anzeigen."
+  },
+  "share_guest_as": {
+    "en": "You are here as {1}.",
+    "de": "Du bist hier als {1}."
+  },
+  "share_guest_not_you": {
+    "en": "Not you?",
+    "de": "Nicht du?"
+  },
+  "share_guest_not_you_title": {
+    "en": "Start over under a new name?",
+    "de": "Mit neuem Namen neu beginnen?"
+  },
+  "share_guest_not_you_accept": {
+    "en": "Start over",
+    "de": "Neu beginnen"
+  },
+  "share_guest_name_title": {
+    "en": "What is your name?",
+    "de": "Wie heißt du?"
+  },
+  "share_guest_name_hint": {
+    "en": "Before you add something, tell us your name. Only the people this belongs to see it.",
+    "de": "Bevor du etwas hinzufügst, sag uns deinen Namen. Ihn sehen nur die Personen, denen das hier gehört."
+  },
+  "bookmark_new": {
+    "en": "New bookmark",
+    "de": "Neues Lesezeichen"
+  },
+  "bookmark_create_title": {
+    "en": "Keep a link you received",
+    "de": "Einen erhaltenen Link aufbewahren"
+  },
+  "bookmark_create_intro": {
+    "en": "Paste a link someone shared with you, from this or any other veyq server. It is kept encrypted here and opens where it was shared.",
+    "de": "Füge einen Link ein, den dir jemand geteilt hat – von diesem oder einem anderen veyq-Server. Er wird hier verschlüsselt aufbewahrt und öffnet dort, wo er geteilt wurde."
+  },
+  "bookmark_link_label": {
+    "en": "Link",
+    "de": "Link"
+  },
+  "bookmark_password_label": {
+    "en": "Password (if the link has one)",
+    "de": "Passwort (falls der Link eines hat)"
+  },
+  "bookmark_password_hint": {
+    "en": "Kept encrypted with the link, so you need not type it again.",
+    "de": "Wird mit dem Link verschlüsselt aufbewahrt, damit du es nicht erneut eingeben musst."
+  },
+  "bookmark_who_can_open": {
+    "en": "Everyone who can open this place in the space can open the link, and see what it shows.",
+    "de": "Alle, die diesen Ort im Bereich öffnen können, können den Link öffnen und sehen, was er zeigt."
+  },
+  "bookmark_save": {
+    "en": "Keep link",
+    "de": "Link aufbewahren"
+  },
+  "bookmark_create_failed": {
+    "en": "The bookmark could not be saved. Please try again.",
+    "de": "Das Lesezeichen konnte nicht gespeichert werden. Versuche es noch einmal."
+  },
+  "bookmark_unreadable": {
+    "en": "This bookmark cannot be read. It may come from a newer version of veyq. You can delete it.",
+    "de": "Dieses Lesezeichen lässt sich nicht lesen. Vielleicht stammt es aus einer neueren veyq-Version. Du kannst es löschen."
+  },
+  "bookmark_report_share": {
+    "en": "Report shared content",
+    "de": "Geteilte Inhalte melden"
+  },
+  "bookmark_report_name": {
+    "en": "Report name",
+    "de": "Namen melden"
+  },
+  "bookmark_open_own_page": {
+    "en": "Open on its own page",
+    "de": "Auf eigener Seite öffnen"
+  },
+  "bookmark_embed_region": {
+    "en": "Shared content from {1}",
+    "de": "Geteilte Inhalte von {1}"
   }
 }

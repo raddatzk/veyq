@@ -103,10 +103,21 @@ object NodeReport {
         val cat = ReportSubmission.Category.entries.firstOrNull { it.value == category } ?: return Sent(Outcome.FAILED)
         if (reason.isBlank()) return Sent(Outcome.FAILED)
         val node = tenant.trees()[scopeId]?.firstOrNull { it.id == nodeId } ?: return Sent(Outcome.NOT_FOUND)
-        val keys = keysOf(tenant, scopeId, node, scope) ?: return Sent(Outcome.UNAVAILABLE)
-        val kind = if (scope == Scope.WHOLE) ReportSubmissionItemsInner.Kind.NODE else ReportSubmissionItemsInner.Kind.NAME
+        val asked = scopeOf(node.kind, scope)
+        val keys = keysOf(tenant, scopeId, node, asked) ?: return Sent(Outcome.UNAVAILABLE)
+        val kind = itemKind(asked)
         return submit(tenant, scopeId, cat, kind, nodeId, keys, reason, contact)
     }
+
+    /**
+     * What a report of a node of [kind] reports when [asked] (ADR 0150 decision 6): a kept link its name only, whatever is
+     * asked — its key would hand this instance's moderators another operator's share —, every other kind as asked.
+     */
+    fun scopeOf(kind: String, asked: Scope): Scope = if (me.raddatz.veyq.mobile.AppKinds.reportsNameOnly(kind)) Scope.NAME else asked
+
+    /** The report item's kind on the wire for [scope]: the whole node `NODE`, its name `NAME`. */
+    fun itemKind(scope: Scope): ReportSubmissionItemsInner.Kind =
+        if (scope == Scope.WHOLE) ReportSubmissionItemsInner.Kind.NODE else ReportSubmissionItemsInner.Kind.NAME
 
     /**
      * Reports item [itemId] of space [scopeId] — an `ITEM`, one thing inside a node (a Memory's medium, ADR 0142 decision

@@ -82,7 +82,7 @@ object MediaUpload {
     internal class Prepared(val type: String, val sha256: String, val derived: Derived, val metaTier: JsonObject?, val exif: JsonObject?)
 
     /** The type of [original] and its bytes' head, then its SHA-256 and metadata, with the tiers from [derive]. */
-    private suspend fun prepare(original: Original, now: Long, derive: suspend (type: String) -> Derived): Prepared {
+    internal suspend fun prepare(original: Original, now: Long, derive: suspend (type: String) -> Derived): Prepared {
         val head = original.source.read(0, minOf(original.source.size, SNIFF_BYTES.toLong()).toInt())
         val type = typeOf(original.type, original.name, head)
         val derived = derive(type)
@@ -258,6 +258,108 @@ object MediaUpload {
         val res = r.body().results.singleOrNull() ?: throw ApplicationBlobs.UploadRefused("complete_mismatch")
         res.error?.let { throw ApplicationBlobs.UploadRefused(it) }
         if (res.mediaId != item.mediaId || res.blobId != blobId) throw ApplicationBlobs.UploadRefused("id_substituted")
+    }
+
+    /**
+     * A link guest's upload of one medium (ADR 0150 decision 5; the web's `addSharePhoto` over `shareUploadTransport`): the
+     * same medium as a member's — its tiers sealed under [sealKey] (a READ_WRITE guest's node key from the link's chain, a
+     * WRITE_ONLY uploader's own `K_up`) bound to a fresh medium id, its blobs reserved through [reserve] (the share's own
+     * upload start) and attached by [complete] (`completeShareMedia`). Never a shared row (ADR 0013 § 5: a guest's upload
+     * matches no banner). Throws [ApplicationBlobs.UploadRefused] with a refusal's code.
+     */
+    internal suspend fun attachAsGuest(
+        suite: V1, mediaId: String, scopeId: String, sealKey: ByteArray, original: Original, prepared: Prepared,
+        reserve: suspend (mediaId: String, blobs: List<ApplicationBlobs.Outgoing>, sent: (Long) -> Unit) -> List<Pair<String, ApplicationBlobs.Plan>>,
+        complete: suspend (item: me.raddatz.veyq.mobile.api.memories.models.ShareMediaRequestItem) -> Unit,
+        progress: (Double) -> Unit,
+    ): Result {
+        val derived = prepared.derived
+        val wrappedMeta = prepared.metaTier?.let { MediaMetadata.sealMeta(suite, sealKey, scopeId, mediaId, it) }
+        val wrappedExif = prepared.exif?.let { MediaMetadata.sealExif(suite, sealKey, scopeId, mediaId, it) }
+        val blobs = ArrayList<ApplicationBlobs.Outgoing>()
+        blobs += ApplicationBlobs.Outgoing(MemoryMedia.ORIGINAL, original.source.size, prepared.type, original.name, original.modifiedAt, prepared.sha256, original.source.read)
+        val tiers = listOfNotNull(
+            derived.thumbnail?.let { MemoryMedia.THUMBNAIL to it },
+            derived.preview?.let { MemoryMedia.PREVIEW to it },
+        ).takeIf { derived.thumbnail != null && derived.preview != null }.orEmpty()
+        for ((role, bytes) in tiers) {
+            blobs += ApplicationBlobs.Outgoing(role, bytes.size.toLong(), "image/jpeg", null, null, null) { from, length ->
+                bytes.copyOfRange(from.toInt(), (from + length).toInt())
+            }
+        }
+        val total = blobs.sumOf { it.size }.coerceAtLeast(1).toDouble()
+        progress(0.0)
+        val sent = reserve(mediaId, blobs) { progress(it / total) }
+        complete(
+            me.raddatz.veyq.mobile.api.memories.models.ShareMediaRequestItem(
+                mediaId = mediaId, originalUploadId = sent[0].first,
+                derivatives = tiers.mapIndexed { i, (role, _) ->
+                    me.raddatz.veyq.mobile.api.memories.models.ShareMediaDerivativeUpload(
+                        if (role == MemoryMedia.THUMBNAIL) me.raddatz.veyq.mobile.api.memories.models.ShareMediaDerivativeUpload.Kind.THUMBNAIL
+                        else me.raddatz.veyq.mobile.api.memories.models.ShareMediaDerivativeUpload.Kind.PREVIEW,
+                        sent[i + 1].first,
+                    )
+                },
+                wrappedMeta = wrappedMeta, wrappedExif = wrappedExif,
+            ),
+        )
+        return Result(Outcome.DONE, mediaId)
+    }
+
+    /**
+     * A link guest's medium as a job of the guest view's upload queue: [MediaUpload.Job]'s on-device stage, then [send]
+     * (the guest door's [attachAsGuest]). A quota fails it with [UploadQueue.QUOTA_EXCEEDED].
+     */
+    class GuestJob internal constructor(
+        private val source: UploadSource, private val deriver: Deriver, private val now: () -> Long,
+        private val send: suspend (original: Original, prepared: Prepared, progress: (Double) -> Unit) -> Result,
+    ) : UploadQueue.Job {
+        override val name get() = source.name
+        override val sizeBytes get() = source.size
+        override val prepares get() = true
+        val picked: UploadSource get() = source
+        var mediaId: String? = null
+            private set
+        private val lock = Mutex()
+        private var prepared: Prepared? = null
+        private val original get() = Original(source.bytes(), source.type, source.name, source.modifiedAt)
+
+        override suspend fun prepare() {
+            ready()
+        }
+
+        private suspend fun ready(): Prepared = lock.withLock {
+            prepared ?: try {
+                prepare(original, now()) { type -> suspendCancellableCoroutine { c -> deriver.derive(source, type) { c.resume(it) { _, _, _ -> } } } }
+            } finally {
+                source.close()
+            }.also { prepared = it }
+        }
+
+        override suspend fun run(progress: (Double) -> Unit) {
+            val p = ready()
+            val r = try {
+                send(original, p, progress)
+            } catch (e: ApplicationBlobs.UploadRefused) {
+                when (e.code) {
+                    "quota_exceeded" -> Result(Outcome.NO_ROOM, code = e.code)
+                    "capability_disabled" -> Result(Outcome.SWITCHED_OFF, code = e.code)
+                    else -> Result(Outcome.FAILED, code = e.code)
+                }
+            } finally {
+                source.close()
+            }
+            when (r.outcome) {
+                Outcome.DONE -> {
+                    mediaId = r.mediaId
+                    prepared = null
+                }
+                Outcome.NO_ROOM -> throw UploadQueue.Failed(UploadQueue.QUOTA_EXCEEDED)
+                Outcome.SWITCHED_OFF -> throw UploadQueue.Failed(UploadQueue.APPLICATION_OFF)
+                Outcome.BUSY -> throw UploadQueue.Failed("node_rekey_pending")
+                Outcome.FAILED -> throw UploadQueue.Failed(r.code ?: "failed")
+            }
+        }
     }
 
     /**
