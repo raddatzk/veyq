@@ -139,12 +139,53 @@ launch; the person chose to copy; a phone's system shows the paste (iOS asks, An
   full pass is phase 7's): login and privacy pages `veyq://open`; a fabricated share link's page `veyq://link`, no key in
   the banner, dismissed → gone after a reload; in headless Chrome with clipboard permission the click put the link
   without `&report` on the clipboard and Chrome tried `veyq://link` ("no registered handler").
-- [ ] **3 Android** (O3). · Done when: `:android:assembleDebug` green; `adb shell am start -a
+- [x] **3 Android** (O3). · Done when: `:android:assembleDebug` green; `adb shell am start -a
   android.intent.action.VIEW -d 'veyq://link#k=CANARY'` opens *Open a link* and `logcat` holds no `CANARY` from the app.
+  **Built 2026-11-19 (branch `claude/open-in-app-apps`):** `AndroidManifest.xml` — a fourth intent filter on `MainActivity`
+  (VIEW, DEFAULT, BROWSABLE, `scheme="veyq"`; the activity stays `singleTask`, so a running app takes it in `onNewIntent`);
+  `MainActivity.deepLink` (from `onCreate` and `onNewIntent`) takes the URI off the intent (`intent.data = null`), ignores a
+  start from the recents list (`FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY`, which hands the task's first intent again), and on
+  `DeepLink.Link` calls `guests.ask()` unless the field is already open (what was typed stays) — `AppRoot`'s
+  `OpenLinkDialog` stands over the sign-in, the unlock and the shell alike. Measured (`:core:jvmTest :bridge:jvmTest
+  :android:assembleDebug` green; a throwaway API 36 AVD, deleted after; a throwaway owner signed in by `devlogin.py`,
+  erased after): `pm query-activities -a VIEW -d veyq://link` → `app.veyq/…MainActivity`; signed out cold
+  (`veyq://link#k=CANARY`) and warm (`veyq://LINK?u=https://x#k=CANARY`), and signed in over the shell (in front and from
+  Home), `uiautomator dump` shows the dialog (*Open a link*, *Paste the link you received*, *Paste*, *Cancel*);
+  `veyq://open?x=CANARY` shows no dialog and brings the task to the front (`topResumedActivity` app.veyq). Canary check:
+  `adb logcat -d | grep -c CANARY` → 0 over the whole log (the app's pid and the system's: `ActivityTaskManager` writes
+  `dat=veyq://link/...`), `run-as app.veyq grep -rl CANARY /data/data/app.veyq` → none; the check bit with a `log -t`
+  line → 1. The share-link pass from Chrome stays phase 7's.
 - [ ] **4 Apple** (O3). · Done when: both Apple builds green; `open 'veyq://link'` on the Mac opens *Open a link* (screen
   unlocked, else named open); iOS the owner's.
+  **Built 2026-11-19 (branch `claude/open-in-app-apps`), the Mac's `open` not run:** `Veyq/Info.plist` — `CFBundleURLTypes`
+  (`CFBundleURLName` `app.veyq.open`, scheme `veyq`, role Viewer; the entitlements untouched, no associated domains);
+  `VeyqApp.swift` — `.onOpenURL` on the root calls `DeepLinkCompanion.shared.parse` and on `DeepLinkLink` `guests.ask`
+  unless the sheet is already open (`openLinkSheet` stands over the sign-in, the unlock and the shell); on the Mac the root
+  takes `.handlesExternalEvents(preferring: ["*"], allowing: ["*"])` so a link goes to the open window, and the lightbox's
+  `WindowGroup` `.handlesExternalEvents(matching: [])` so none opens one. Measured: `xcodegen`, `xcodebuild -target Veyq
+  -sdk macosx|iphonesimulator build CODE_SIGNING_ALLOWED=NO` green; both built `Info.plist`s carry the URL type
+  (`PlistBuddy -c 'Print :CFBundleURLTypes'`). **Open:** `open 'veyq://link'` / `'veyq://open'` on the Mac (an agent has
+  no full-screen control) — the coordinator's; the iPhone the owner's.
 - [ ] **5 Linux** (O3). · Done when: `python3 linux/run.py test` and `flatpak` green; in a GNOME session with the bundle
   installed, `xdg-open veyq://link` opens *Open a link*, a second time in the running window.
+  **Built 2026-11-19 (branch `claude/open-in-app-apps`), the bundle's pass not run:** `theme/generate_theme.py`'s desktop
+  entry — `Exec=veyq %u`, `MimeType=x-scheme-handler/veyq;` (the Flatpak installs it as before; `manifest.yml` only says
+  so, no finish-arg: the app owns its own id on the session bus); `main.rs` — the `adw::Application` takes `HANDLES_OPEN`
+  and `connect_open` → `open`: the window made if the link started the app, presented, each URI through
+  `Call::DeepLink`, and on `DeepScreen::Link` `received::open_link` unless its dialog (named `received::OPEN_LINK_DIALOG`)
+  already shows; stderr says the screen alone (`veyq: a veyq: link opened Open a link` | `… the app where it is`). Test:
+  `theme.rs`'s `the_desktop_entry_names_the_app_icon_and_claims_veyq_links` (red on the old `Exec=veyq`; red with the
+  `MimeType` line dropped from the generator, restored by `/bin/cp -f`). Measured: `run.py build` green (clippy, tests);
+  `run.py run` (own home volume, removed after) with the generated entry under `~/.local/share/applications` (Exec the
+  debug binary) and `mimeapps.list` choosing it, `gio open 'veyq://link#k=CANARY'` — a second `veyq` handed it over D-Bus
+  and exited (one `veyq` process left) — showed *Open a link* over the sign-in (broadway, one screenshot); a second
+  `veyq://LINK?u=…#k=CANARY` kept the one dialog, `veyq://open?x=CANARY` said "the app where it is". Canary: the run's
+  stderr `grep -c CANARY` → 0, `grep -rl CANARY /root /tmp` in the container → none (bit with a planted file).
+  `run.py bridge` green; `run.py flatpak --smoke` green (appstream, flatpak-builder's clippy and tests, both
+  flatpak-builder-lint checks over the entry with its `MimeType`, the installed bundle to its sign-in). `run.py test`
+  **red, not by this phase:** 26 of the import's tests (`SubtreeImportTest`, `ImportScreenTest`, `ImportCasesTest`,
+  `ZipReaderTest`) throw "cannot read contracts/export/import-cases/web-download.zip" in the container (no core file
+  changed here). **Open:** the bundle in a GNOME session, `xdg-open veyq://link` from Firefox, twice — phase 7's pass.
 - [ ] **6 Windows** (O3) — first measured: how the unsigned MSIX installs on the VM (developer mode's
   `Add-AppxPackage -Register` of the layout, or the package), its result into ADR 0150. · Done when: `run.py package`
   green; `start veyq://link` on the VM opens *Open a link*, a second time in the running window.
