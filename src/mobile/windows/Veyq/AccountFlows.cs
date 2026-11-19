@@ -805,8 +805,13 @@ internal sealed class KeyRotationPage : FlowPage
         foreach (var scope in s.scopes) Body.Children.Add(Caption(ScopeLine(scope), $"rotation-scope:{scope.scopeId}"));
     }
 
-    private static string ScopeLine(ScopeStatus scope) =>
-        scope.blocked is { } why ? $"{Said.Key(scope.status)} · {Said.Key(why)}" : Said.Key(scope.status);
+    /// <summary>A space's line: its name (the core's, else its word: one's personal space, or one this device has not
+    /// opened), its new lock's status, and why it is blocked where it is.</summary>
+    private static string ScopeLine(ScopeStatus scope)
+    {
+        var name = scope.name ?? (scope.nameWord is { } word ? Said.Key(word) : Words.RotationScopeNameUnavailable());
+        return scope.blocked is { } why ? $"{name}: {Said.Key(scope.status)} · {Said.Key(why)}" : $"{name}: {Said.Key(scope.status)}";
+    }
 
     private async void Prove()
     {
