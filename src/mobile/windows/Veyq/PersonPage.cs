@@ -1,6 +1,8 @@
 // A person's profile on Windows (ADR 0144 decisions 11–14; Linux's person_page.rs, the web's PersonProfile.vue): a page of
 // the shell while its state names a person (Shell.person), back the shell's. Core's frame — their picture at its largest,
-// their name (the former or unknown member's words), "~username" under a real name — then Memories' section, "Memories with
+// their name (the former or unknown member's words), "~username" under a real name — then the safety number (ADR 0148
+// decision 3, SafetyNumberSection: one's own to show, another member's state and Compare; one's own page has Edit profile
+// in the shell's CommandBar) — then Memories' section, "Memories with
 // {name}": the person's Memories as the level's rows (cover, name, date, place, the group), newest start day first, a row
 // opening its Memory (Shell.Open); a SelectorBar List | Map once something is listed (not stored: it opens on the list),
 // the map ADR 0143's Memories map over the person's located Memories (Person.Map, RasterMap); loading, Try again, empty and
@@ -47,12 +49,20 @@ internal sealed class PersonPage : IDisposable
 
     public string UserId { get; }
 
+    /// <summary>One's own page (ShellShown.me): Edit profile in the CommandBar, one's own safety number to show.</summary>
+    public bool Mine { get; }
+
+    /// <summary>The safety number below the name (ADR 0148 decision 3), made once the person is known to be a member.</summary>
+    private SafetyNumberSection? _safety;
+    private readonly ContentControl _safetyHolder = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+
     public UIElement Page => _scroll;
 
-    public PersonPage(Window window, string userId)
+    public PersonPage(Window window, string userId, bool mine)
     {
         _window = window;
         UserId = userId;
+        Mine = mine;
         AutomationProperties.SetAutomationId(_picture, "person-picture");
         _column.Children.Add(_picture);
         AutomationProperties.SetAutomationId(_name, "person-name");
@@ -64,6 +74,7 @@ internal sealed class PersonPage : IDisposable
         _hint.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
         AutomationProperties.SetAutomationId(_hint, "person-hint");
         _column.Children.Add(_hint);
+        _column.Children.Add(_safetyHolder);
         AutomationProperties.SetAutomationId(_heading, "person-memories-heading");
         AutomationProperties.SetHeadingLevel(_heading, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
         _section.Margin = new Thickness(0, 12, 0, 0);
@@ -153,6 +164,12 @@ internal sealed class PersonPage : IDisposable
             _username.Visibility = s.username is null ? Visibility.Collapsed : Visibility.Visible;
             _hint.Text = s.former ? Words.PeopleFormerMemberHint() : "";
             _hint.Visibility = s.former ? Visibility.Visible : Visibility.Collapsed;
+            // a former member has no safety number to show or compare
+            if (!s.former && _safety is null)
+            {
+                _safety = new SafetyNumberSection(_window, UserId, Mine, () => _name.Text);
+                _safetyHolder.Content = _safety.View;
+            }
             _section.Visibility = m is null ? Visibility.Collapsed : Visibility.Visible;
             if (m is null) return;
             _heading.Text = CurationText.MemoriesWith(s);
@@ -280,6 +297,7 @@ internal sealed class PersonPage : IDisposable
     {
         if (_closed) return;
         _closed = true;
+        _safety?.Close();
         CloseMap();
         _watch?.Dispose();
         if (_id is { } person) Act.Send(new Call.PersonClose { person = person });

@@ -3,11 +3,15 @@
 // guideline for the settings item), a column of cards under the web's section titles —
 //
 // - Account: the address this account signs in with, and whether the server holds it confirmed;
+// - Your profile, Change password, Email address (ADR 0148 decision 10, the web's order): each a card whose button opens
+//   the flow as a page of its own in this frame (AccountFlows: Settings › the flow, Back returning here);
 // - This device: its name in the account's device register, renamed in a TextBox with its button; how it stays signed
 //   in and its change (Manage's: each other level, "Back to your password" asking in place) and "Stop trusting this device";
 // - Devices and sessions: every session family, this device's first and marked, named from the register or by its dates,
-//   its sign-out (and, where the core offers it, "Sign out and remove saved key") behind the card's More, every step asked
-//   first (Dialogs.Confirm); "Sign out everywhere else";
+//   its Rename where the register names its device (the web's renameDeviceOfFamily, ADR 0148 decision 1: this device's
+//   through the name above, any other's through Settings.RenameFamily), its sign-out (and, where the core offers it,
+//   "Sign out and remove saved key") behind the card's More, every step asked first (Dialogs.Confirm); "Sign out
+//   everywhere else";
 // - Add a device (only while the core offers it, addDevice: core.device-linking): "Show a code" and, where there is a
 //   camera, "Scan a code" — each a ceremony of DeviceLinkDialog over the window;
 // - Devices with a saved key: each removable, and "Remove every saved key except this device's";
@@ -17,10 +21,12 @@
 //   content" (asked first, the core's askingRemoveAll), and a card per item available offline with its status, its size
 //   and its Remove; followed live while the page shows (Watched.SettingsStorageLive). Where this device keeps no store of
 //   the account, the section says why (storageUnavailable);
+// - Secure your account (replace the keys) and Erase account, each opening its flow as the profile's does;
 // - Sign out of this account here.
 //
 // Opened from a search's settings result (ADR 0146 decision 9), the page scrolls to that section: each section's
-// heading is kept by its SettingsSection.id (`account device add-device sessions saved-keys storage maps`).
+// heading is kept by its SettingsSection.id (`account profile password email device add-device sessions saved-keys
+// storage maps security erase`).
 //
 // Theme and language follow the system (D3): no card for them. Every state is the core's (Settings.Open,
 // Watched.Settings: SettingsShown), every action one call; why one did not come through is the state's refusal, said in an
@@ -76,9 +82,13 @@ internal sealed class AccountSettingsPage : IDisposable
     private Watch? _storageWatch;
     private bool _removeAllAsked;
 
-    public UIElement Page { get; }
+    /// <summary>The page: its sections, or the account's flow open over them (AccountFlows).</summary>
+    public UIElement Page => _host;
 
+    private readonly Grid _host = new();
     private readonly ScrollViewer _scroll;
+    /// <summary>The account's flow shown in place of the sections, while one is open.</summary>
+    private FlowPage? _flow;
     /// <summary>Each section's heading by its SettingsSection.id, as the last draw built them.</summary>
     private readonly Dictionary<string, FrameworkElement> _anchors = [];
     /// <summary>The section a search's result asked for, scrolled to once the page drew; and the tries that wait for it.</summary>
@@ -127,7 +137,38 @@ internal sealed class AccountSettingsPage : IDisposable
         var scroll = new ScrollViewer { Content = column, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         AutomationProperties.SetAutomationId(scroll, "settings-page");
         _scroll = scroll;
-        Page = scroll;
+        _host.Children.Add(scroll);
+    }
+
+    /// <summary>Opens <paramref name="flow"/> as a page in this frame over the sections (one at a time); Back returns.</summary>
+    public void OpenFlow(AccountFlow flow)
+    {
+        if (_disposed) return;
+        if (_connection is not { } connection)
+        {
+            Log.Write($"settings {AccountFlows.Id(flow)}: no account in the core");
+            return;
+        }
+        CloseFlow();
+        Log.Write($"settings: the {AccountFlows.Id(flow)} flow opened");
+        _flow = AccountFlows.Open(flow, _window, connection, () =>
+        {
+            CloseFlow();
+            ScrollTo(AccountFlows.Id(flow));
+        });
+        _host.Children.Clear();
+        _host.Children.Add(_flow.View);
+    }
+
+    /// <summary>The flow open closed, the sections shown again.</summary>
+    private void CloseFlow()
+    {
+        if (_flow is null) return;
+        _flow.Dispose();
+        _flow = null;
+        _host.Children.Clear();
+        _host.Children.Add(_scroll);
+        Log.Write("settings: back from a flow");
     }
 
     /// <summary>Opens <paramref name="connection"/>'s Settings in the core; <paramref name="closedByCore"/> runs once the
@@ -277,6 +318,8 @@ internal sealed class AccountSettingsPage : IDisposable
     public void Dispose()
     {
         _disposed = true;
+        _flow?.Dispose();
+        _flow = null;
         _scrolling?.Stop();
         _maps.Dispose();
         _storageWatch?.Dispose();
@@ -455,6 +498,9 @@ internal sealed class AccountSettingsPage : IDisposable
         };
         _sections.Children.Add(Card("", Words.AccountSettingsEmail(), new[] { s.email, confirmed }.OfType<string>(), "settings-email"));
 
+        // the account's own flows, in the web's order (ADR 0148 decision 10)
+        foreach (var f in new[] { AccountFlow.Profile, AccountFlow.Password, AccountFlow.Email }) FlowSection(f);
+
         // This device
         _sections.Children.Add(Anchor("device", Heading(Words.AccountSettingsThisDevice())));
         if (_label != s.device)
@@ -540,6 +586,8 @@ internal sealed class AccountSettingsPage : IDisposable
         if (_maps.Panel is FrameworkElement { Parent: Panel holder }) holder.Children.Remove(_maps.Panel);
         _sections.Children.Add(Anchor("maps", (FrameworkElement)_maps.Panel));
 
+        foreach (var f in new[] { AccountFlow.Security, AccountFlow.Erase }) FlowSection(f);
+
         // Sign out
         _sections.Children.Add(Heading(Words.DrawerSignOut()));
         var signOut = TextButton(Words.DrawerSignOut(), "settings-sign-out");
@@ -551,6 +599,33 @@ internal sealed class AccountSettingsPage : IDisposable
         {
             _at = null;
             ScrollTo(at);
+        }
+    }
+
+    /// <summary>A section that opens one of the account's flows: its rubric, what it is for, the button that opens it.</summary>
+    private void FlowSection(AccountFlow f)
+    {
+        var id = AccountFlows.Id(f);
+        _sections.Children.Add(Anchor(id, Heading(AccountFlows.Title(f))));
+        var open = TextButton(AccountFlows.Action(f), $"settings-open:{id}");
+        open.Click += (_, _) => OpenFlow(f);
+        _sections.Children.Add(Card(AccountFlows.Glyph(f), AccountFlows.Action(f), [AccountFlows.Sub(f)], $"settings-flow:{id}", open));
+    }
+
+    /// <summary>Any other device the register names renamed, every session of it (Settings.RenameFamily, ADR 0148 decision
+    /// 1); this device's own through the name above.</summary>
+    private async void RenameFamily(string family, string label)
+    {
+        try
+        {
+            var hint = new TextBlock { Text = Words.AccountSettingsRenameHint(), TextWrapping = TextWrapping.Wrap, Foreground = Brush("TextFillColorSecondaryBrush") };
+            var name = await Dialogs.AskName(_window, "settings-rename-family-ask", $"{Words.NodeRename()} · {label}", Words.AccountSettingsRenamePlaceholder(), label, null, Words.NodeRename(), hint);
+            if (name is null || name.Trim().Length == 0 || _disposed) return;
+            await Send("rename a device", id => new Call.SettingsRenameFamily { settings = id, family = family, label = name });
+        }
+        catch (Exception e)
+        {
+            Log.Write($"settings rename a device failed: {e.GetType().Name}");
         }
     }
 
@@ -768,6 +843,19 @@ internal sealed class AccountSettingsPage : IDisposable
         var title = f.label ?? (f.current ? s.device : Words.AccountSettingsOtherDevice());
         // opened under its button, its right edge on the button's: a wide entry stays inside the window
         var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedRight };
+        // the web's renameDeviceOfFamily: only a device the register names (the core writes nothing for another)
+        if (f.label is { } named)
+        {
+            var rename = new MenuFlyoutItem { Text = Words.NodeRename(), Icon = new FontIcon { Glyph = "\uE8AC" } };
+            AutomationProperties.SetAutomationId(rename, $"settings-rename-family:{f.id}");
+            var renamed = f.id;
+            rename.Click += (_, _) =>
+            {
+                if (f.current) _name.Focus(FocusState.Programmatic);
+                else RenameFamily(renamed, named);
+            };
+            menu.Items.Add(rename);
+        }
         var revokeWords = f.current ? Words.AccountSettingsRevokeSelf() : Words.AccountSettingsRevoke();
         var revoke = new MenuFlyoutItem { Text = revokeWords };
         AutomationProperties.SetAutomationId(revoke, $"settings-revoke:{f.id}");

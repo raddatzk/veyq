@@ -224,7 +224,7 @@ public static unsafe class Core
                 Reply(token, new HostReply.Done(), null);
                 return;
             }
-            if (request is HostRequest.PdfPages or HostRequest.PdfPage or HostRequest.PictureLuma or HostRequest.MediaDuration or HostRequest.MediaSlice or HostRequest.MediaTiers
+            if (request is HostRequest.PdfPages or HostRequest.PdfPage or HostRequest.PictureLuma or HostRequest.PictureSquare or HostRequest.MediaDuration or HostRequest.MediaSlice or HostRequest.MediaTiers
                 or HostRequest.WordsSay)
             {
                 Draw(token, request);

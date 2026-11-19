@@ -49,8 +49,8 @@ public sealed partial class MainWindow : Window
         }
         Start started;
         // an Emergency Kit's pages and pictures are drawn by Windows' own renderer when the core asks (KitDrawing), a picked
-        // medium's tiers by WIC and Windows.Media.Editing (MediaTiers)
-        Core.Drawer = request => KitDrawing.Answer(request) ?? MediaTiers.Answer(request) ?? MusicHost.Words(request);
+        // medium's tiers by WIC and Windows.Media.Editing (MediaTiers), one's own profile picture framed square (ProfilePicture)
+        Core.Drawer = request => KitDrawing.Answer(request) ?? ProfilePicture.Answer(request) ?? MediaTiers.Answer(request) ?? MusicHost.Words(request);
         // the music's two decks and the system's controls play on this window's thread (MusicHost, ADR 0142 decisions 2 and 3)
         MusicHost.Start(DispatcherQueue, WinRT.Interop.WindowNative.GetWindowHandle(this));
         try

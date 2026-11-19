@@ -261,7 +261,7 @@ internal sealed class ManageDialog
         }
     }
 
-    private UIElement TenantRow(ManagedShown server, Tenant t)
+    private UIElement TenantRow(ManagedShown server, ManagedShownTenant t)
     {
         var key = $"{server.connection}\n{t.tenant.tenantId}";
         var name = new StackPanel { VerticalAlignment = VerticalAlignment.Center };

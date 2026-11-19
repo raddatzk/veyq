@@ -322,6 +322,13 @@ internal sealed class ShellView
         Redraw();
     }
 
+    /// <summary>Edit profile on one's own person page: Settings opened at Your profile, the flow open in its frame.</summary>
+    private void EditProfile()
+    {
+        OpenSettingsAt(AccountFlows.Id(AccountFlow.Profile));
+        _account?.OpenFlow(AccountFlow.Profile);
+    }
+
     /// <summary>Leaves Settings (back, another item, or the core closed it): the page closes, the shell's content returns.</summary>
     private void CloseSettings()
     {
@@ -536,7 +543,7 @@ internal sealed class ShellView
             if (_person is null || _person.UserId != person)
             {
                 _person?.Dispose();
-                _person = new PersonPage(_window, person);
+                _person = new PersonPage(_window, person, mine: shown.me == person);
                 Log.Write("shell: a person's profile");
             }
             body = _person.Page;
@@ -792,6 +799,14 @@ internal sealed class ShellView
     {
         _commands.PrimaryCommands.Clear();
         _commands.SecondaryCommands.Clear();
+        // one's own profile: Edit profile (ADR 0148 decision 10), the same page as Settings' Your profile
+        if (_person is { Mine: true } && _account is null)
+        {
+            var edit = new AppBarButton { Icon = new SymbolIcon(Symbol.Edit), Label = Words.ProfileEdit() };
+            AutomationProperties.SetAutomationId(edit, "person-edit-profile");
+            edit.Click += (_, _) => EditProfile();
+            _commands.PrimaryCommands.Add(edit);
+        }
         // a person's profile is no level: nothing is created or acted on there
         if (_shown is not { } shown || _account is not null || _person is not null) return;
         var page = _pot;

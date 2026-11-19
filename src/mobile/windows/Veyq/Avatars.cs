@@ -63,7 +63,7 @@ internal static class Avatars
     }
 
     /// <summary>The picture's bytes as WinUI's image: WIC first, the core's PNG of a WebP WIC refused.</summary>
-    private static System.Threading.Tasks.Task<BitmapImage> Decode(byte[] bytes) => PictureDecode.Decode(bytes, Bitmap, ByCore);
+    public static System.Threading.Tasks.Task<BitmapImage> Decode(byte[] bytes) => PictureDecode.Decode(bytes, Bitmap, ByCore);
 
     /// <summary>A WebP decoded by the core (Picture.Decode) as a PNG; null where it decoded none.</summary>
     private static async System.Threading.Tasks.Task<byte[]?> ByCore(byte[] webp)

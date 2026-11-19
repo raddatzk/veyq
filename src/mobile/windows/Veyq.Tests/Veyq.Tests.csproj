@@ -38,6 +38,7 @@
     <Compile Include="../Veyq/PdfPages.cs" Link="App/PdfPages.cs" />
     <Compile Include="../Veyq/PdfWeb.cs" Link="App/PdfWeb.cs" />
     <Compile Include="../Veyq/KitDrawing.cs" Link="App/KitDrawing.cs" />
+    <Compile Include="../Veyq/ProfilePicture.cs" Link="App/ProfilePicture.cs" />
     <Compile Include="../Veyq/Log.cs" Link="App/Log.cs" />
     <Compile Include="../Veyq/ListScrolls.cs" Link="App/ListScrolls.cs" />
     <Compile Include="../Veyq/ReaderStream.cs" Link="App/ReaderStream.cs" />

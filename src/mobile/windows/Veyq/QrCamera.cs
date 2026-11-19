@@ -44,6 +44,9 @@ internal sealed class QrCamera : IDisposable
     }
 
     public Grid View { get; } = new();
+
+    /// <summary>The scan's id in the core once it opened (a SAFETY scan's compare names it: Trust.CompareScanned).</summary>
+    public long? Scan => _scan;
     private readonly MediaPlayerElement _preview = new() { Stretch = Microsoft.UI.Xaml.Media.Stretch.Uniform };
     private readonly Image _still = new() { Stretch = Microsoft.UI.Xaml.Media.Stretch.Uniform, Visibility = Visibility.Collapsed };
     private readonly ContentControl _other = new() { HorizontalContentAlignment = HorizontalAlignment.Center, VerticalContentAlignment = VerticalAlignment.Center, Visibility = Visibility.Collapsed };
