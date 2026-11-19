@@ -437,9 +437,28 @@ key-touching flows after the vectors that hold them, erasure last.
   and iOS-simulator SDK builds green. **Not run:** the macOS pass and the no-copy check — the screen was locked all
   phase (#976); *Links to renew* has no core state yet (#977).
 
-- [ ] **7 Linux** — first #957 (hold the `ScrolledWindow` itself), since D10 grows that page; then D10's row over the
+- [x] **7 Linux** — first #957 (hold the `ScrolledWindow` itself), since D10 grows that page; then D10's row over the
   bridge. · Done when: `run.py test`, `bridge`, `build` green; the Broadway pass (agent); the no-copy check of the
   app's data and cache directories after a kit save.
+  *Built 2026-11-19:* #957 (the page's `ScrolledWindow` found once among its descendants and held, `scroll_to` on the
+  same); `account_flows.rs` — an `AdwDialog` with an `AdwNavigationView` per flow, `AdwPasswordEntryRow`s emptied once
+  sent, the danger steps an `AdwAlertDialog` with a destructive response, the kit through `gtk::FileDialog` into
+  `Kit.Save` by path; `profile_edit.rs` — *Your profile* with the square cropper over `Cover.Pose` and the host's
+  `Picture.Square` (256 × 256 RGBA, its drawing held by a test bitten by dropping the pose's x); `safety.rs` — the person
+  page's section (own: digits, chain code, the core's code; another's: state, *Compare* by scan where a camera is, or
+  by digits); Settings' five sections by `SettingsSection`'s ids, *Rename* for every device the register names, *Edit
+  profile* in the header of one's own page. `run.py bridge`, `test` (967 + the probes) and `build` green. Broadway pass
+  (headless Chrome, a throwaway with a member, made and erased, both pending erasures listed): this device renamed on a
+  scrolled page and the page stayed put (#957); the name and a cropped picture saved; own safety number shown; the
+  member's number as the owner's app shows it equal to the member's own (a second Linux app as the member), compared by
+  digits → *Verified*; the password changed and changed back; the address request to the `503` mail step (this Mac
+  sends no mail); a kit for the address and the rotation's kit saved into `~/Documents` through GTK's dialog; the
+  rotation without a new password, both scopes *New lock*; the erasure with *Delete the space*, the device's record and
+  offline store gone. No-copy after each kit save: no file under `~/.local`, `~/.cache`, `~/.config`, `/tmp` or the
+  runtime directory holds the Secret Key (as typed, without dashes), `veyqkit:` or a PDF; GTK's recent files name the
+  kit's path (#981). Left: #979 (the rotation's lines name no space), #980 (a saved picture shows after the tenant is
+  read again). Not run: a safety code scanned (the container has no camera; Android ↔ Linux is § Passes' own row), the
+  rename of another device (the throwaway's other session has no register name).
 
 - [ ] **8 Windows** — D10's row over the bridge; `ScreenSecrets.Guard` on every step with a `PasswordBox`. · Done
   when: `run.py test`, `bridge`, `build` green on the VM; the UIA pass (agent); the no-copy check of the package's
