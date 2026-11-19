@@ -6,18 +6,20 @@ import VeyqCore
 /// What another app hands veyq — through the share sheet (the extension) or dropped onto the app (ADR 0138) — copied once,
 /// in order, each into a directory of its own under `AppModel.pickedDir` (`loadFileRepresentation`: the system's file is
 /// valid only inside its callback), and handed on as a source read a frame at a time: nothing is held whole. An image as
-/// JPEG where the sender offers one, a HEIC re-encoded (decision 7), any other image, a video and a PDF as they are. The
-/// kind chosen judges them (core's `ShareAnswer`); each copy is removed once nothing reads it again (`AppModel.removePicked`).
+/// JPEG where the sender offers one, a HEIC re-encoded (decision 7), any other file as it is (decision 1: a folder takes
+/// any file). An attachment that carries no file — a bare text, a web page's link — is neither taken nor counted, so a
+/// share of only that says nothing could be taken (until #1015). The kind chosen judges them (core's `ShareAnswer`); each
+/// copy is removed once nothing reads it again (`AppModel.removePicked`).
 @MainActor
 enum IncomingFiles {
 
-    /// The type identifiers a drop or a share is offered for.
-    static let accepted: [UTType] = [.image, .movie, .pdf]
+    /// The type identifiers a drop is offered for: any item (decision 1); where it lands judges it.
+    static let accepted: [UTType] = [.item]
 
     static func read(_ providers: [NSItemProvider]) async -> AppModel.Incoming {
         var files: [UploadSource] = []
         var refused = 0
-        for provider in providers {
+        for provider in providers where carriesFile(provider) {
             guard let (url, type) = await load(provider), let source = source(url, type: type, suggested: provider.suggestedName) else {
                 refused += 1
                 continue
@@ -36,6 +38,42 @@ enum IncomingFiles {
         return AppleMemories.shared.source(url: url, name: name, size: Int64(size), type: type, modifiedAt: nil)
     }
 
+    /// Whether `provider` carries a file: a file's URL, or a type that is data other than a link — a text only where the
+    /// sender named it (a file's). A bare text or a web page's link carries none. Not measured against Safari's and the
+    /// Files app's shares yet (the owner's iPhone pass, ADR 0138's Consequences).
+    private static func carriesFile(_ provider: NSItemProvider) -> Bool {
+        let types = provider.registeredContentTypes
+        if types.contains(where: { $0.conforms(to: .fileURL) }) { return true }
+        let data = types.filter { $0.conforms(to: .data) && !$0.conforms(to: .url) }
+        if data.isEmpty { return false }
+        if data.allSatisfy({ $0.conforms(to: .text) }) { return provider.suggestedName != nil }
+        return true
+    }
+
+    #if os(macOS)
+    /// The dropped items that are folders, by the URL Finder hands (read in place, as Depot's *Upload folder…* reads its
+    /// pick), apart from the rest (decision 9: a folder dropped onto a level uploads as a folder).
+    static func folders(_ providers: [NSItemProvider]) async -> ([URL], [NSItemProvider]) {
+        var folders: [URL] = []
+        var rest: [NSItemProvider] = []
+        for provider in providers {
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier), let url = await fileURL(provider),
+               (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+                folders.append(url)
+            } else {
+                rest.append(provider)
+            }
+        }
+        return (folders, rest)
+    }
+
+    private static func fileURL(_ provider: NSItemProvider) async -> URL? {
+        await withCheckedContinuation { c in
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in c.resume(returning: url) }
+        }
+    }
+    #endif
+
     private static func load(_ provider: NSItemProvider) async -> (URL, String)? {
         if provider.hasItemConformingToTypeIdentifier(UTType.pdf.identifier) {
             return await copy(provider, .pdf).map { ($0, "application/pdf") }
@@ -44,7 +82,11 @@ enum IncomingFiles {
             let first = provider.registeredContentTypes.first { $0.conforms(to: .movie) } ?? .movie
             return await copy(provider, first).map { ($0, first.preferredMIMEType ?? "video/quicktime") }
         }
-        guard provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) else { return nil }
+        guard provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) else {
+            // any other file as it is, by the first type the sender registered that is data
+            let first = provider.registeredContentTypes.first { $0.conforms(to: .data) && !$0.conforms(to: .url) } ?? .data
+            return await copy(provider, first).map { ($0, first.preferredMIMEType ?? "application/octet-stream") }
+        }
         if provider.hasItemConformingToTypeIdentifier(UTType.jpeg.identifier), let url = await copy(provider, .jpeg) {
             return (url, "image/jpeg")
         }

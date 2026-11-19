@@ -122,7 +122,7 @@ folder.
 - [x] **3 Android** (F2, F3, F5) — `*/*` filters, `ShareIn` for any type, the level's banner *Add here*, a drop onto a
   level (`dragAndDropTarget` on the level, any type). · Done when: `:android:assembleDebug` and the guidelines and words
   guards green; § Passes' Android row.
-- [ ] **4 Apple** (F2–F5) — the activation rule (its first measurement: which types a Safari page and a Files share
+- [x] **4 Apple** (F2–F5) — the activation rule (its first measurement: which types a Safari page and a Files share
   offer), `IncomingFiles` for any type, the handoff's kind, *Add here* on a level, a drop onto a level and a folder dropped
   on macOS. · Done when: both Apple builds green; the macOS row run here or named open; iOS the owner's.
 - [ ] **5 the passes** — § Passes, each a throwaway, erased after; results into ADR 0138's Consequences.
