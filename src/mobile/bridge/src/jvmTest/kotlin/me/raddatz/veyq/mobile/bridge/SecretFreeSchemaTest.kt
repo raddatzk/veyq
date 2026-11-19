@@ -51,6 +51,7 @@ class SecretFreeSchemaTest {
         "KeyRotation.Prove.newPassword" to "the new password the person chose to install with the new keys, on its way to the core",
         "KeyRotation.Prove.confirmPassword" to "the new password typed again, on its way to the core's check that both match",
         "Received.Password.password" to "the password a received link asks for, as the person typed it, on its way to the core",
+        "Bookmark.Create.password" to "a kept link's password as the person typed it into the bookmark dialog, on its way to the core, which seals it",
         "Erasure.Run.password" to "the password the person typed to erase the account, on its way to the core's proof",
     )
     /** The outward fields that carry a guest link's address, its key in the fragment, each with why. */

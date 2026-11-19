@@ -202,8 +202,7 @@ object AppKinds {
         CHAPTER(me.raddatz.veyq.mobile.words.Msg.MEMORY_ADD_CHAPTER),
         /**
          * A kept link (ADR 0120, ADR 0150 decision 6) at a space's top or in a folder: the web's dialog
-         * (`sharing.BookmarkCreate`). Offered by [createsWhere] once the platforms draw the dialog (cr-app-received-links
-         * phases 7–10).
+         * (`sharing.BookmarkCreate`), offered by [createsWhere] (inbox #1020; Windows leaves it out until its phase 10).
          */
         BOOKMARK(me.raddatz.veyq.mobile.words.Msg.BOOKMARK_NEW),
     }
@@ -217,9 +216,10 @@ object AppKinds {
     /**
      * What a desktop's one "New" offers where the shell is ([isHome]: a level of Home, a space's top or a folder): Home's
      * — files and a folder uploaded there too, as on the phones —, else the drawer's; and a Memory, whose placement every
-     * level New makes into allows (a space's top, a folder: `MemoryCreate.offered`). A chapter is a Memory's page's own.
+     * level New makes into allows (a space's top, a folder: `MemoryCreate.offered`), and a bookmark, which every such level
+     * takes (`placementAllowed`). A chapter is a Memory's page's own.
      */
-    fun createsWhere(isHome: Boolean): List<Create> = (if (isHome) homeCreates else drawerCreates) + Create.MEMORY
+    fun createsWhere(isHome: Boolean): List<Create> = (if (isHome) homeCreates else drawerCreates) + Create.MEMORY + Create.BOOKMARK
 
     /**
      * What core's header reads of a kind (the web's `KindRegistration`): whether it brings a share sheet, takes a cover and

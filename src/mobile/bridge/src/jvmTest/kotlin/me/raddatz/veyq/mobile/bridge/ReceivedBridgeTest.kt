@@ -69,8 +69,8 @@ class ReceivedBridgeTest {
         val hidden = Hidden({}, emptySet())
         Composition(
             SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden,
-            received = { link, queue ->
-                GuestView.open(p, link, { block -> HttpClient(MockEngine(share.handler), block) }, MemoryDeviceStore(), MemoryGuestSessions(), { "en" }, queue = queue)
+            received = { link, queue, password ->
+                GuestView.open(p, link, { block -> HttpClient(MockEngine(share.handler), block) }, MemoryDeviceStore(), MemoryGuestSessions(), { "en" }, handedPassword = password, queue = queue)
             },
         ) { null }
     }
@@ -121,6 +121,31 @@ class ReceivedBridgeTest {
         for (json in all) for (c in canaries) if (json.contains(c)) fail("an update carried the link or its key: $json")
         share.assertNoKeyInAnyRequest()
         b.shutdown()
+    }
+
+    /**
+     * The guest-write record's notice (ADR 0093 § 10, inbox #1018): a writing link's update carries the days its instance
+     * keeps a writer's address, port, time and `Origin`, and where its privacy notice says more — the host shows them
+     * before any write. A link that does not write carries none.
+     */
+    @Test
+    fun aWritingLinkCarriesItsRecordDaysAndItsInstancesPrivacyNoticeAReadingOneNone() = runBlocking {
+        suspend fun ready(role: String, days: Int?): ReceivedShown {
+            val share = PlayedShare(p, role = role)
+            days?.let { share.extraResolve["guestWriteRecordDays"] = kotlinx.serialization.json.JsonPrimitive(it) }
+            val b = bridge(share)
+            val opened = assertIs<Answer.ReceivedOpened>(b.ask(Call.ReceivedOpen(share.link)))
+            val shown = b.watching(Watched.Received(opened.received)).untilJson { j ->
+                (wire.decodeFromJsonElement(Update.serializer(), j) as Update.Received).shown?.takeIf { it.gate == ReceivedGate.READY }
+            }
+            for (c in listOf(b64url(share.kShare), share.shareId)) assertFalse(wire.encodeToString(ReceivedShown.serializer(), shown).contains(c))
+            b.shutdown()
+            return shown
+        }
+        val writing = ready("READ_WRITE", 30)
+        assertEquals(30, writing.recordDays)
+        assertEquals("https://photos.example.org/privacy#guest-write-record", writing.privacy)
+        assertNull(ready("READ", null).recordDays)
     }
 
     @Test

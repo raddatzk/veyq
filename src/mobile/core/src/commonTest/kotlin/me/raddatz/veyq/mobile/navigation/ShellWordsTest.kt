@@ -38,8 +38,8 @@ class ShellWordsTest {
         assertEquals(listOf(AppKinds.Create.FOLDER, AppKinds.Create.POT), AppKinds.drawerCreates)
         assertEquals(4, AppKinds.homeCreates.size)
         // a desktop's one New makes a Memory at every level (a space's top, a folder); a chapter only on a Memory's page
-        assertEquals(AppKinds.homeCreates + AppKinds.Create.MEMORY, AppKinds.createsWhere(isHome = true))
-        assertEquals(AppKinds.drawerCreates + AppKinds.Create.MEMORY, AppKinds.createsWhere(isHome = false))
+        assertEquals(AppKinds.homeCreates + AppKinds.Create.MEMORY + AppKinds.Create.BOOKMARK, AppKinds.createsWhere(isHome = true))
+        assertEquals(AppKinds.drawerCreates + AppKinds.Create.MEMORY + AppKinds.Create.BOOKMARK, AppKinds.createsWhere(isHome = false))
         assertTrue(AppKinds.Create.CHAPTER !in AppKinds.createsWhere(true) + AppKinds.createsWhere(false))
         assertEquals(me.raddatz.veyq.mobile.memories.MemoryCreate.offered(null), listOf(AppKinds.Create.MEMORY.name))
         assertEquals(me.raddatz.veyq.mobile.memories.MemoryCreate.offered("MEMORY"), listOf(AppKinds.Create.CHAPTER.name))

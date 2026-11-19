@@ -155,13 +155,20 @@ internal class Composition<A : Connection, T : Any>(
     val squarePicture: (path: String, pose: me.raddatz.veyq.mobile.session.CoverFrame.Pose, edge: Int) -> ByteArray? = { _, _, _ -> null },
     /**
      * A received link opened as its guest (ADR 0150 decisions 2–4): core's `GuestView` over the platform's client, the
-     * device store and [received]'s guest sessions (the host's credential store), the guest's uploads on [queue]. The
-     * real one in the library; a test plays a link's instance, or has none (`Received.Open` then opens nothing).
+     * device store and [received]'s guest sessions (the host's credential store), the guest's uploads on [queue], and a
+     * kept link's [password] handed in memory (null: none, or a pasted link). The real one in the library; a test plays a
+     * link's instance, or has none (`Received.Open` then opens nothing, nor does a bookmark).
      */
-    val received: (link: me.raddatz.veyq.mobile.sharing.ReceivedLink.ShareLink, queue: me.raddatz.veyq.mobile.blob.UploadQueue) -> me.raddatz.veyq.mobile.sharing.GuestView? = { _, _ -> null },
+    val received: (link: me.raddatz.veyq.mobile.sharing.ReceivedLink.ShareLink, queue: me.raddatz.veyq.mobile.blob.UploadQueue, password: String?) -> me.raddatz.veyq.mobile.sharing.GuestView? = { _, _, _ -> null },
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
+
+/** A kept link's page the host opened ([Call.BookmarkOpen]); [inPlace] the received link shown in it, by its id. */
+internal class HeldBookmark(val page: me.raddatz.veyq.mobile.sharing.BookmarkPage) {
+    val open = MutableStateFlow(true)
+    val inPlace = MutableStateFlow<Long?>(null)
+}
 
 /** A received link's screen the host opened ([Call.ReceivedOpen]); the ids its pages' models were registered under. */
 internal class HeldReceived(val screen: me.raddatz.veyq.mobile.sharing.GuestScreen) {
@@ -549,6 +556,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     /** The received links the host opened ([Call.ReceivedOpen]), each until left or closed; not a tenant's (no sign-in needed). */
     private val received = Registry<HeldReceived>()
+
+    /** The kept links' pages the host opened ([Call.BookmarkOpen]), each until closed or its tenant closes. */
+    private val bookmarks = Registry<HeldBookmark>()
 
     /** The app's one upload queue (the phones' `AppModel.uploads`): emptied when the tenant closes. */
     private val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
@@ -1226,6 +1236,43 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 if (sent == 0) sources.forEach { it.close() }
                 taken(sent > 0)
             } ?: noReceived
+            is Call.ReceivedReport -> received[call.received]?.let { h ->
+                val sheet = h.screen.reportSheet() ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = ids.incrementAndFetch()
+                reports.put(id, sheet)
+                Answer.ReportOpened(id)
+            } ?: noReceived
+            is Call.ReceivedKeepPlaces -> received[call.received]?.let { h ->
+                Answer.KeepPlaces(h.screen.keepPlaces().map { ShellShown.ShownSpace(it, ShellWords.space(it)) })
+            } ?: noReceived
+            is Call.ReceivedReportShown -> received[call.received]?.let { h -> h.screen.reportShown(); Answer.Done } ?: noReceived
+            is Call.BookmarkOpen -> openBookmark(parts, call.node)
+            is Call.BookmarkOwnPage -> bookmarks[call.bookmark]?.let { b ->
+                heldReceived(b.page.openOwnPage(tenant.value?.models?.session))
+            } ?: noBookmark
+            is Call.BookmarkReportShared -> bookmarks[call.bookmark]?.let { b -> heldReceived(b.page.reportShared()) } ?: noBookmark
+            is Call.BookmarkClose -> bookmarks.remove(call.bookmark)?.let { b -> closeBookmark(b); Answer.Done } ?: noBookmark
+            is Call.BookmarkCheck -> {
+                val r = me.raddatz.veyq.mobile.sharing.ReceivedLink.parse(call.text)
+                val problem = (r as? me.raddatz.veyq.mobile.sharing.ReceivedLink.Parsed.Refused)?.problem
+                Answer.BookmarkChecked(
+                    problem?.let(me.raddatz.veyq.mobile.sharing.BookmarkCreate::wordOf),
+                    (r as? me.raddatz.veyq.mobile.sharing.ReceivedLink.Parsed.Ok)?.link?.host,
+                    groupSpace(call.scopeId),
+                )
+            }
+            is Call.BookmarkCreate -> tenant.value?.models?.session?.let { t ->
+                val dialog = me.raddatz.veyq.mobile.sharing.BookmarkCreate(
+                    me.raddatz.veyq.mobile.sharing.BookmarkCreate.into(t, call.scopeId, call.parentId), groupSpace(call.scopeId),
+                )
+                dialog.link(call.text)
+                dialog.password(call.password)
+                dialog.name(call.name)
+                if (!dialog.state.value.canSave) return Answer.Refused(Answer.Why.NOT_OFFERED)
+                if (!dialog.save()) return Answer.Refused(Answer.Why.NOT_TAKEN)
+                val made = dialog.state.value
+                Answer.Created(NodeAt(call.scopeId, made.created!!, me.raddatz.veyq.mobile.AppKinds.BOOKMARK_KIND, made.nameShown), null)
+            } ?: noTenant
             is Call.ShellCreateMemory -> tenant.value?.models?.createMemory?.let { make ->
                 make(call.scopeId, call.parentId, call.name, call.wasThere, call.autoPlace).let { Answer.Created(it.node, it.notice) }
             } ?: noTenant
@@ -2054,6 +2101,53 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private fun taken(taken: Boolean): Answer = if (taken) Answer.Done else Answer.Refused(Answer.Why.NOT_TAKEN)
 
     private val noReceived = Answer.Refused(Answer.Why.NO_SUCH_RECEIVED)
+    private val noBookmark = Answer.Refused(Answer.Why.NO_SUCH_BOOKMARK)
+
+    /** Whether space [scopeId] of the open tenant is a group space's (its bookmark dialog says who else opens the link). */
+    private suspend fun groupSpace(scopeId: String): Boolean =
+        tenant.value?.models?.session?.let { t -> runCatching { t.spaces() }.getOrNull()?.firstOrNull { it.scopeId == scopeId }?.kind != "PERSONAL" } ?: false
+
+    /**
+     * Kept link [node]'s page (ADR 0150 decision 6): its meta opened under the open tenant; a share shown in place is held
+     * as a received link of its own, whose id the page's update names.
+     */
+    private suspend fun openBookmark(parts: Composition<A, T>, node: NodeAt): Answer {
+        val t = tenant.value?.models?.session ?: return noTenant
+        // a composition without guest views (a test's) opens no link: the page then reads as its meta alone
+        val page = me.raddatz.veyq.mobile.sharing.BookmarkPage.of(t, node) { link, password ->
+            parts.received(link, queue, password) ?: error("no guest views in this composition")
+        }
+        val held = HeldBookmark(page)
+        val id = ids.incrementAndFetch()
+        bookmarks.put(id, held)
+        runCatching { page.load() }.onFailure { e -> if (e is kotlinx.coroutines.CancellationException) throw e }
+        (page.state.value as? me.raddatz.veyq.mobile.sharing.BookmarkPage.State.InPlace)?.let { inPlace ->
+            val shown = HeldReceived(inPlace.screen)
+            val rid = ids.incrementAndFetch()
+            received.put(rid, shown)
+            pageOf(shown)
+            held.inPlace.value = rid
+        }
+        return Answer.BookmarkOpened(id)
+    }
+
+    /** A bookmark's link opened as its own screen ([screen], null where its meta did not read): held, loaded, answered with its id. */
+    private suspend fun heldReceived(screen: me.raddatz.veyq.mobile.sharing.GuestScreen?): Answer {
+        val s = screen ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+        val held = HeldReceived(s)
+        val id = ids.incrementAndFetch()
+        received.put(id, held)
+        s.load()
+        pageOf(held)
+        return Answer.ReceivedOpened(id)
+    }
+
+    /** A bookmark's page closed: its in-place link let go with it. */
+    private fun closeBookmark(b: HeldBookmark) {
+        b.inPlace.value?.let { rid -> received.remove(rid)?.let(::closeReceived) }
+        b.page.close()
+        b.open.value = false
+    }
 
     /**
      * *Open a link* (ADR 0150 decisions 4, 8): the pasted text parsed by the core; a link opened as its guest — signed in or
@@ -2067,7 +2161,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             return Answer.ReceivedProblem(word, browser = r.problem == me.raddatz.veyq.mobile.sharing.ReceivedLink.Problem.MODERATION)
         }
         val ok = r as me.raddatz.veyq.mobile.sharing.ReceivedLink.Parsed.Ok
-        val view = parts.received(ok.link, queue) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+        val view = parts.received(ok.link, queue, null) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
         val held = HeldReceived(me.raddatz.veyq.mobile.sharing.GuestScreen(view, tenant.value?.models?.session, ok.report))
         val id = ids.incrementAndFetch()
         received.put(id, held)
@@ -2119,6 +2213,16 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         h.open.value = false
     }
 
+    /** What the host is shown of a kept link's page: where it stands and its link's host — never the link, its password or key. */
+    private fun shownBookmark(state: me.raddatz.veyq.mobile.sharing.BookmarkPage.State, inPlace: Long?): BookmarkShown = when (state) {
+        me.raddatz.veyq.mobile.sharing.BookmarkPage.State.Loading -> BookmarkShown(BookmarkState.LOADING, "", null)
+        me.raddatz.veyq.mobile.sharing.BookmarkPage.State.Unreadable -> BookmarkShown(BookmarkState.UNREADABLE, "", null)
+        // in place once the link's screen is held (its id named); until then the page still loads
+        is me.raddatz.veyq.mobile.sharing.BookmarkPage.State.InPlace ->
+            if (inPlace == null) BookmarkShown(BookmarkState.LOADING, state.host, null) else BookmarkShown(BookmarkState.IN_PLACE, state.host, inPlace)
+        is me.raddatz.veyq.mobile.sharing.BookmarkPage.State.OnItsOwn -> BookmarkShown(BookmarkState.ON_ITS_OWN, state.host, null)
+    }
+
     /** What the host is shown of a received link: never the link, its key or anything sealed. */
     private fun shownReceived(h: HeldReceived, gate: me.raddatz.veyq.mobile.sharing.ShareGates.State, busy: Boolean, guest: me.raddatz.veyq.mobile.sharing.GuestSession?, s: me.raddatz.veyq.mobile.sharing.GuestScreen.State, page: ReceivedPage?): ReceivedShown {
         val ready = gate as? me.raddatz.veyq.mobile.sharing.ShareGates.State.Ready
@@ -2150,6 +2254,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             left = s.left,
             keepOffered = h.screen.keepOffered,
             reportAsked = s.reporting,
+            recordDays = h.screen.view.access?.guestWriteRecordDays,
+            privacy = h.screen.view.access?.let { "${it.origin}/privacy#guest-write-record" },
         )
     }
 
@@ -2290,6 +2396,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         // the tree and what was derived from it (a person's index, ADR 0144 decision 12) dropped now, not when collected
         tenant.value?.models?.shell?.tenant?.close()
         tenant.value = null
+        // a kept link's page is the tenant's: it closes with it, its in-place link let go
+        bookmarks.removeAll().forEach(::closeBookmark)
         // the uploads are the tenant's: what still waits or runs is cancelled (the phones' `uploads.clear()` on a switch)
         uploads.value?.close()
         uploads.value = null
@@ -2501,6 +2609,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     )
                 }
         } ?: flowOf(Update.Received(w.received, null))
+        is Watched.Bookmark -> bookmarks[w.bookmark]?.let { b ->
+            combine(b.page.state, b.inPlace, b.open) { state, inPlace, open ->
+                Update.Bookmark(w.bookmark, if (open) shownBookmark(state, inPlace) else null)
+            }
+        } ?: flowOf(Update.Bookmark(w.bookmark, null))
         is Watched.Link -> links[w.link]?.let { held ->
             combine(held.model.state, held.open) { s, open -> Update.Link(w.link, if (open) shownLink(s) else null) }
         } ?: flowOf(Update.Link(w.link, null))
@@ -3012,6 +3125,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     fun shutdown() {
         scans.removeAll().forEach { it.close() }
         links.removeAll().forEach { it.model.close() }
+        bookmarks.removeAll().forEach { runCatching { it.page.close() } }
         received.removeAll().forEach { runCatching { it.screen.leave() } }
         scope.cancel()
     }
@@ -3083,9 +3197,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 },
                 squarePicture = squarePicture,
                 readKey = { text -> me.raddatz.veyq.mobile.crypto.SecretKeyText.read(primitives, text) },
-                received = { link, queue ->
+                received = { link, queue, password ->
                     me.raddatz.veyq.mobile.sharing.GuestView.open(
-                        primitives, link, client, store, guestSessions, { config.language }, queue = queue, deriver = tiers, now = now,
+                        primitives, link, client, store, guestSessions, { config.language }, handedPassword = password, queue = queue,
+                        deriver = tiers, now = now,
                     )
                 },
             ) { t ->
