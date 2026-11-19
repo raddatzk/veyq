@@ -112,7 +112,7 @@ folder.
   passes open); `native-apps.md` § Open's "a folder as a share target (#987)" narrowed; `uc.depot.member-files` gains an
   *In the apps: shared into a folder* alternate flow. · Done when: every guard but guard_gaps green
   (`/usr/bin/python3 scripts/validate_*.py`).
-- [ ] **2 core** (F1, F2, F4's reading of a kind) — `depot/FolderShare`, `AppKinds.share(FOLDER)`, `ShellModel.addHere`
+- [x] **2 core** (F1, F2, F4's reading of a kind) — `depot/FolderShare`, `AppKinds.share(FOLDER)`, `ShellModel.addHere`
   over a level. Tests in `ShareInboxTest`: a folder takes a `.docx`, a ZIP and a photo; a folder in an identity folder,
   offline, or with Depot off is dimmed; *Add here* on a level queues into Depot's queue once and ends the share; a
   space's top takes like a folder. · Done when: `:core:jvmTest :core:macosArm64Test` green. **Bites:** (a) R1's

@@ -85,6 +85,8 @@ class DepotUploadsTest {
         override fun changed() {
             level.changes++
         }
+        var online = true
+        override fun online() = online
     }
 
     private class Model(val uploads: DepotUploads, val queue: UploadQueue, val door: Door)
@@ -186,6 +188,48 @@ class DepotUploadsTest {
         assertNull(m.uploads.current.said)
         advanceUntilIdle()
         assertTrue(level.sent.isEmpty(), "nothing replaced without its action")
+    }
+
+    // ---- a share's files handed back once the queue lets them go (ADR 0138 decision 6) ----
+
+    @Test
+    fun aSharedFileIsHandedBackOnceDoneAndAnOfferedOneOnlyOnceItsOfferIsAnswered() = runTest {
+        val level = Level()
+        level.put("a.txt", "b1")
+        level.put("c.txt", "b3")
+        val m = model(level)
+        val a = source("a.txt")
+        val b = source("b.txt")
+        val c = source("c.txt")
+        val left = mutableListOf<String>()
+        assertEquals(3, m.uploads.upload("s", null, "Home", listOf(a, b, c)) { left += it.name })
+        runCurrent()
+        assertEquals(listOf("b.txt"), left, "the one uploaded is let go; the two offered are still read by their offer")
+        val first = assertNotNull(m.uploads.current.said)
+        assertEquals(Notices.replaceOffered("a.txt"), first.notices.single())
+        m.uploads.seen(first.id)
+        runCurrent()
+        assertEquals(listOf("b.txt", "a.txt"), left, "an offer answered without its action lets its file go")
+        val second = assertNotNull(m.uploads.current.said)
+        m.uploads.take(second)
+        runCurrent()
+        assertEquals(listOf("b.txt", "a.txt", "c.txt"), left, "a taken offer's file goes once its replace is done")
+        assertTrue(level.sent.last().startsWith("replace:"), "the replace read it first")
+        advanceUntilIdle()
+        assertEquals(3, left.size, "each handed back once")
+    }
+
+    @Test
+    fun aSharedFileNotQueuedIsHandedBackAtOnceAndAPickWithoutLeftIsNeverHandedBack() = runTest {
+        val m = model()
+        val left = mutableListOf<String>()
+        m.door.online = false
+        assertEquals(0, m.uploads.upload("s", null, "Home", listOf(source("x.txt"))) { left += it.name })
+        assertEquals(listOf("x.txt"), left, "offline nothing is queued: the file is let go at once")
+        m.door.online = true
+        assertEquals(1, m.uploads.upload("s", null, "Home", listOf(source("y.txt"))))
+        advanceUntilIdle()
+        assertEquals(listOf("x.txt"), left, "a pick has no left: nothing more handed back")
     }
 
     // ---- a replace, expected over the content shown when it was chosen (the web's rule) ----
