@@ -218,9 +218,11 @@ fn act(id: &Id, what: &'static str, make: impl FnOnce(i64) -> Call) {
 /// The kit step [kit] as a page: its words [sub], "Save your Emergency Kit" (the save dialog, the core writing into the
 /// file chosen), "I saved it" only once a file was written, and — for the rotation — its danger button [danger],
 /// enabled once both are done.
-fn kit_page(flow: &Flow, kit: i64, sub: &str, extra: Option<&gtk::Widget>, danger: Option<&gtk::Button>) -> adw::NavigationPage {
+fn kit_page(flow: &Flow, kit: i64, sub: Option<&str>, extra: Option<&gtk::Widget>, danger: Option<&gtk::Button>) -> adw::NavigationPage {
     let col = column();
-    col.append(&text(sub));
+    if let Some(sub) = sub {
+        col.append(&text(sub));
+    }
     let save = pill(&words::kit_save_title(), "suggested-action");
     save.set_widget_name("kit-save");
     col.append(&save);
@@ -329,7 +331,7 @@ pub fn password(parent: &gtk::Widget, connection: String) {
         said_refusal(&error, s.refusal.as_ref());
         if s.done && !done.replace(true) {
             let col = column();
-            let status = adw::StatusPage::builder().icon_name("emblem-ok-symbolic").title(words::password_change_done()).description(words::password_change_done_note()).build();
+            let status = adw::StatusPage::builder().icon_name("object-select-symbolic").title(words::password_change_done()).description(words::password_change_done_note()).build();
             col.append(&status);
             let close = pill(&words::share_done(), "suggested-action");
             let d = f.dialog.clone();
@@ -368,15 +370,19 @@ pub fn address(parent: &gtk::Widget, connection: String) {
     col.append(&new_kit);
     flow.nav.add(&page(&words::email_change_action(), "form", &col));
     let id: Id = Rc::new(Cell::new(None));
-    let i = id.clone();
+    // which form asked last (the request, or the new kit's check): the refusal is said under that one alone
+    let asking_kit = Rc::new(Cell::new(false));
+    let (i, ak) = (id.clone(), asking_kit.clone());
     submit.connect_clicked(move |_| {
+        ak.set(false);
         let (new_email, password, secret_key) = (email.text().to_string(), take(&password), take(&key));
         act(&i, "AddressChange.Request", |flow| Call::AddressChangeRequest { flow, new_email, password, secret_key });
     });
     // the kit's check: the password and the Secret Key, then the kit step
     let kit_error = error_label();
-    let (f, i, ke) = (flow.clone(), id.clone(), kit_error.clone());
+    let (f, i, ke, ak) = (flow.clone(), id.clone(), kit_error.clone(), asking_kit.clone());
     let open_kit = Rc::new(move || {
+        ke.set_visible(false);
         let (password, key) = (secret(&words::signin_password()), secret(&words::password_change_secret_key()));
         let col = column();
         col.append(&text(&words::email_change_kit_sub()));
@@ -384,9 +390,10 @@ pub fn address(parent: &gtk::Widget, connection: String) {
         col.append(&ke);
         let check = pill(&words::email_change_kit_check(), "suggested-action");
         col.append(&check);
-        let (f2, i2) = (f.clone(), i.clone());
+        let (f2, i2, ak2) = (f.clone(), i.clone(), ak.clone());
         check.connect_clicked(move |_| {
             let Some(n) = i2.get() else { return };
+            ak2.set(true);
             let (password, secret_key) = (take(&password), take(&key));
             let f3 = f2.clone();
             glib::spawn_future_local(async move {
@@ -398,7 +405,7 @@ pub fn address(parent: &gtk::Widget, connection: String) {
                         close.connect_clicked(move |_| {
                             d.close();
                         });
-                        let p = kit_page(&f3, kit, &words::email_change_kit_sub(), None, Some(&close));
+                        let p = kit_page(&f3, kit, None, None, Some(&close));
                         f3.nav.push(&p);
                     }
                     other => eprintln!("veyq: AddressChange.Kit: {}", crate::manage::answer_kind(&other)),
@@ -418,8 +425,8 @@ pub fn address(parent: &gtk::Widget, connection: String) {
         };
         eprintln!("veyq: address change: working {}, sent {}, refusal {:?}", s.working, s.sent_to.is_some(), s.refusal);
         submit.set_sensitive(!s.working);
-        said_refusal(&error, s.refusal.as_ref());
-        said_refusal(&kit_error, s.refusal.as_ref());
+        said_refusal(&error, s.refusal.as_ref().filter(|_| !asking_kit.get()));
+        said_refusal(&kit_error, s.refusal.as_ref().filter(|_| asking_kit.get()));
         if let Some(to) = s.sent_to.clone().filter(|to| sent.borrow().as_ref() != Some(to)) {
             *sent.borrow_mut() = Some(to.clone());
             let col = column();
@@ -560,7 +567,7 @@ impl Gate {
                         let extra = column();
                         extra.append(&dim(&words::rotation_kit_keep_old()));
                         extra.append(&ke);
-                        let p = kit_page(&f, kit, &words::rotation_kit_sub(), Some(extra.upcast_ref()), Some(&danger));
+                        let p = kit_page(&f, kit, Some(&words::rotation_kit_sub()), Some(extra.upcast_ref()), Some(&danger));
                         *held_kit.borrow_mut() = Some(p.clone());
                         f.nav.push(&p);
                     }
@@ -628,7 +635,7 @@ fn rotation_done(flow: &Flow, s: &KeyRotationState) -> adw::NavigationPage {
 /// What the apps cannot do yet, said with the server's address (D9).
 fn on_the_web(title: &str, why: &str, server: &str) -> adw::NavigationPage {
     let col = column();
-    let status = adw::StatusPage::builder().icon_name("web-browser-symbolic").title(why).description(words::account_on_the_web(server)).build();
+    let status = adw::StatusPage::builder().icon_name("network-server-symbolic").title(why).description(words::account_on_the_web(server)).build();
     col.append(&status);
     page(title, "on-the-web", &col)
 }
@@ -735,7 +742,9 @@ impl ErasureForm {
         let mut choices = Vec::new();
         let shared: Vec<_> = s.tenants.iter().filter(|t| !t.members.is_empty()).collect();
         if !shared.is_empty() {
-            col.append(&text(&words::erasure_choice_title()));
+            let heading = text(&words::erasure_choice_title());
+            heading.add_css_class("heading");
+            col.append(&heading);
             col.append(&dim(&words::erasure_choice_sub()));
             for t in shared {
                 let group = adw::PreferencesGroup::builder().title(t.name.as_str()).build();
