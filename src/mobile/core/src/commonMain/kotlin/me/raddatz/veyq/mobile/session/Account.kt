@@ -123,15 +123,15 @@ class VeyqAccount private constructor(
     val userId: String,
     /** The email the account signed in with: what a trusted device's record names it by. */
     val email: String,
-    internal val masterKey: ByteArray,
-    private val identity: IdentityPrivate,
-    internal val kem: XWingKey,
-    internal val myPublic: ByteArray,
-    internal val mySignPublic: ByteArray,
+    masterKey: ByteArray,
+    identity: IdentityPrivate,
+    kem: XWingKey,
+    myPublic: ByteArray,
+    mySignPublic: ByteArray,
     override val tenants: List<TenantRef>,
     private val device: ThisDevice,
     /** The `key-material` answer this account opened with (wraps and the sealed identity: what the store keeps of it). */
-    private val material: AccountKeyMaterial,
+    material: AccountKeyMaterial,
     /** The `listMyTenants` answer as the server sent it, kept for an offline unlock; null where it came from the store. */
     private val tenantsBody: ByteArray?,
     /**
@@ -146,8 +146,20 @@ class VeyqAccount private constructor(
         val lock = Mutex()
     }
 
+    // The account's keys: replaced in place once a rotation this device made committed ([swapKeys], ADR 0148 decision 7).
+    internal var masterKey: ByteArray = masterKey
+        private set
+    private var identity: IdentityPrivate = identity
+    internal var kem: XWingKey = kem
+        private set
+    internal var myPublic: ByteArray = myPublic
+        private set
+    internal var mySignPublic: ByteArray = mySignPublic
+        private set
+    private var material: AccountKeyMaterial = material
+
     private val trust = Trust(suite)
-    private val marks = TrustMarks(device.store, primitives, masterKey)
+    private var marks = TrustMarks(device.store, primitives, masterKey)
 
     // ---- reachability and the offline store (ADR 0140 decisions 4 and 5)
 
@@ -368,10 +380,52 @@ class VeyqAccount private constructor(
         }
     }
 
-    private val pins = PinStore(suite, trust, trustApi, marks, masterKey)
+    private var pins = PinStore(suite, trust, trustApi, marks, masterKey)
 
     @OptIn(kotlin.time.ExperimentalTime::class)
-    private val anchoring = Anchoring(suite, trust, trustApi, pins) { kotlin.time.Clock.System.now().toEpochMilliseconds() }
+    private fun anchoringOver(pins: PinStore) = Anchoring(suite, trust, trustApi, pins) { kotlin.time.Clock.System.now().toEpochMilliseconds() }
+
+    private var anchoring = anchoringOver(pins)
+
+    /**
+     * A rotation this device made committed (ADR 0148 decision 7, the web's `setUnlocked` after the publish): the account
+     * takes the published Master Key and identity in place — the old ones zeroed —, and the marks, the pin store and the
+     * anchoring move to the new key's slot. The offline store was sealed under the old key: it is wiped ([wipeOffline],
+     * ADR 0140 decision 2) and opened anew under the new one. [newMaterial] is the key material as the server now serves
+     * it (what an offline unlock opens with). Open tenants hold scope keys opened with the old identity: the host opens
+     * its tenant again.
+     */
+    internal suspend fun swapKeys(newMasterKey: ByteArray, newIdentity: IdentityPrivate, newMaterial: AccountKeyMaterial) {
+        wipeOffline()
+        val oldMk = masterKey
+        val oldIdentity = identity
+        masterKey = newMasterKey
+        identity = newIdentity
+        kem = suite.xwingKey(newIdentity.kemSeed)
+        val mine = suite.identityPublic(newIdentity)
+        myPublic = mine.serialize()
+        mySignPublic = mine.sign
+        material = newMaterial
+        marks = TrustMarks(device.store, primitives, newMasterKey)
+        pins = PinStore(suite, trust, trustApi, marks, newMasterKey)
+        anchoring = anchoringOver(pins)
+        oldMk.fill(0)
+        oldIdentity.kemSeed.fill(0)
+        oldIdentity.signSeed.fill(0)
+        ensureOffline()
+    }
+
+    /** The pin store re-sealed under a rotation's new Master Key ([PinStore.resealed]). */
+    internal suspend fun resealedPins(newMasterKey: ByteArray): IdentityPinsWrite = pins.resealed(newMasterKey)
+
+    /** The device register re-sealed under a rotation's new Master Key ([DeviceRegisterStore.resealed]). */
+    internal suspend fun resealedRegister(newMasterKey: ByteArray): DeviceRegisterUpdate = register().resealed(newMasterKey)
+
+    /** This device's marks object for the account (the rotation carries them to the new key's slot). */
+    internal val trustMarks: TrustMarks get() = marks
+
+    /** The identity's private halves, copied (the rotation's outgoing identity; the caller zeroes them). */
+    internal fun identityCopy(): IdentityPrivate = IdentityPrivate(identity.kemSeed.copyOf(), identity.signSeed.copyOf())
 
     // ---- what the account's trust flows read (ADR 0148: `PersonTrust`, `ProfileModel`) ----
 
@@ -590,6 +644,8 @@ class VeyqAccount private constructor(
         background.coroutineContext[kotlinx.coroutines.Job]?.cancel()
         if (!sendsNothing) runCatching { call { SessionApi(server, http).logout() } }
         masterKey.fill(0)
+        identity.kemSeed.fill(0)
+        identity.signSeed.fill(0)
         authSeed?.fill(0)
         http.close()
         outside.close()

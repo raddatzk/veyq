@@ -146,6 +146,32 @@ internal class PinStore(
         throw IllegalStateException("identity_pins_unsettled")
     }
 
+    /**
+     * The whole store re-sealed under [newMasterKey] for the revision a rotation stores it at (the web's
+     * `resealUnderNewKey(pinStoreDocument)` with `sealWholeSet`): read through this device's marks — a refused store
+     * refuses the rotation ([TrustStateRefused]) —, every pin under the new key's pin ids, the head bound to the served
+     * revision + 1, `replaceAll`. The write is the rotation's publish, guarded by the served revision.
+     */
+    suspend fun resealed(newMasterKey: ByteArray): IdentityPinsWrite {
+        val store = load()
+        val newIndex = trust.identityPinIndexKey(newMasterKey)
+        try {
+            val entries = LinkedHashMap<String, String>()
+            val put = store.pins.map { (userId, pin) ->
+                val pinId = trust.identityPinId(newIndex, userId)
+                val entry = b64(suite.seal(entryContext(pinId), newMasterKey, trust.encodePinEntry(userId, pin)))
+                entries[hex(pinId)] = entry
+                IdentityPinEntry(hex(pinId), entry)
+            }
+            val stored = store.revision + 1
+            val digest = trust.identityPinSetDigest(entries.map { (id, e) -> unhex(id) to unb64(e) })
+            val head = b64(suite.seal(headContext(stored), newMasterKey, trust.encodePinHead(entries.size, digest)))
+            return IdentityPinsWrite(store.revision, head, put, emptyList(), true)
+        } finally {
+            newIndex.fill(0)
+        }
+    }
+
     private companion object {
         const val MAX_ATTEMPTS = 5
         const val PAGE = 1000

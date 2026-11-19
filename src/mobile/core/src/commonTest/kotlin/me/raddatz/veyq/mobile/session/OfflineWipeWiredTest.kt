@@ -28,6 +28,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -131,5 +132,29 @@ class OfflineWipeWiredTest {
         assertTrue(exists(oneDir))
         model.start()
         assertFalse(exists(oneDir), "the start did not finish the interrupted wipe")
+    }
+
+    /**
+     * A rotation this device made (ADR 0148 decision 7, ADR 0140 decision 2 as written): the account takes the new
+     * Master Key, and what the store kept under the old one is gone — wiped, not re-wrapped — while the store opens anew
+     * under the new key. Bite (CR 3i j): keep the store across [VeyqAccount.swapKeys] and the kept entry outlives it.
+     */
+    @Test
+    fun a_rotation_wipes_the_store_and_opens_it_anew_under_the_new_key() = runTest {
+        val (one, oneDir) = resumed("u1")
+        val entry = EntryKey(one.server, "t1", "s1", "listNodes", "s1")
+        val newMk = p.randomBytes(32)
+        val identity = me.raddatz.veyq.mobile.crypto.IdentityPrivate(p.randomBytes(32), p.randomBytes(32))
+        val material = me.raddatz.veyq.mobile.api.models.AccountKeyMaterial(
+            "u1", me.raddatz.veyq.mobile.api.models.AccountKeyMaterial.SuiteId.v1, emptyList(),
+            b64(suite.seal(Context("identity-priv"), newMk, concat(lp(identity.kemSeed), lp(identity.signSeed)))),
+        )
+        one.swapKeys(newMk, identity, material)
+        assertTrue(one.masterKey.contentEquals(newMk))
+        val reopened = assertNotNull(one.offline, "the store was not opened anew under the new Master Key")
+        assertFalse(exists(oneDir), "the store kept under the old Master Key outlived the rotation")
+        assertTrue(reopened.store.directory != oneDir)
+        assertNull(reopened.store.get(entry))
+        one.signOut()
     }
 }

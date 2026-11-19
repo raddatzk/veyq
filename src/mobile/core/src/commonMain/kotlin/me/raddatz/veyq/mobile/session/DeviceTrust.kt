@@ -280,6 +280,16 @@ internal class DeviceRegisterStore(
     /** The register as this device opens it. */
     suspend fun read(): Plain = load().plain
 
+    /** The register re-sealed under [newMasterKey] for the revision a rotation stores it at (the web's
+     *  `resealUnderNewKey(registerDocument)`): read through the marks (a refusal refuses the rotation), guarded by the
+     *  served revision. */
+    suspend fun resealed(newMasterKey: ByteArray): DeviceRegisterUpdate {
+        val base = load()
+        val stored = base.revision + 1
+        val blob = b64(suite.seal(context(stored), newMasterKey, utf8(JSON.encodeToString(Plain.serializer(), base.plain))))
+        return DeviceRegisterUpdate(blob, base.revision)
+    }
+
     /** Records this device (keeping a label it has), the [familyId] its login created and the [wrapId] it holds. */
     suspend fun remember(deviceId: String, label: String, familyId: String?, wrapId: String?, now: Long) = write(load()) { p ->
         Plain(

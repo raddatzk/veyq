@@ -99,7 +99,7 @@ internal fun planOpener(account: VeyqAccount, row: RotationPlanScope, reread: su
 }
 
 /** A plan row as the grant check reads a scope row: the same grant fields, no name and no role (`rowOfPlan`). */
-private fun summaryOf(row: RotationPlanScope) = ScopeSummary(
+internal fun summaryOf(row: RotationPlanScope) = ScopeSummary(
     id = row.scopeId, kind = ScopeKind.decode(row.kind.value) ?: ScopeKind.unknown_default_open_api, role = ScopeSummary.Role.MEMBER,
     tenantId = row.tenantId, nameEpoch = 0, iconEpoch = 0, currentEpoch = row.currentEpoch, grantedEpoch = row.grantedEpoch,
     wrappedGrant = row.wrappedGrant, granterUserId = row.granterUserId, grantSignature = row.grantSignature,

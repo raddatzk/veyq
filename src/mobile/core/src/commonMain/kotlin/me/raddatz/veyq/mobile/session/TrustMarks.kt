@@ -119,6 +119,23 @@ internal class TrustMarks(private val store: DeviceStore, primitives: Primitives
         write(s.copy(pins = maxOf(s.pins, m.pins), register = maxOf(s.register, m.register), epochs = epochs))
     }
 
+    /**
+     * A rotation this device made committed (the web's `raiseMarks` and `carryMarks`, ADR 0028 decision 7): every mark of
+     * this slot carried into [to]'s — the new Master Key's slot —, each the maximum of both, and [to]'s pin-store and
+     * register marks raised to the revisions the publish stored them at ([pins], [register]): this device wrote them.
+     */
+    suspend fun carryInto(to: TrustMarks, pins: Long, register: Long) {
+        val mine = lock.withLock { read() }
+        to.lock.withLock {
+            val s = to.read()
+            val epochs = HashMap(s.epochs)
+            for ((scope, e) in mine.epochs) if (e > (epochs[scope] ?: 0)) epochs[scope] = e
+            val held = HashMap(s.held)
+            for ((scope, k) in mine.held) if ((held[scope]?.epoch ?: -1) < k.epoch) held[scope] = k
+            to.write(Stored(maxOf(s.pins, mine.pins, pins), maxOf(s.register, mine.register, register), epochs, held))
+        }
+    }
+
     /** This account's marks gone from this device (its erasure, the web's `forgetMarks`). */
     suspend fun forget() = lock.withLock { runCatching { store.remove(key) } }
 
