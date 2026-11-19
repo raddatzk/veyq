@@ -61,6 +61,16 @@ struct Inner {
 impl FilePage {
     /// Opens file [node] on a page.
     pub fn open(node: &NodeAt) -> Self {
+        Self::over(node, None)
+    }
+
+    /// File [node]'s page over the model the core already opened as [file] (a received link's guest page, `ReceivedPage.file`):
+    /// watched as a member's, closed with the page as a member's is.
+    pub fn opened(node: &NodeAt, file: i64) -> Self {
+        Self::over(node, Some(file))
+    }
+
+    fn over(node: &NodeAt, opened: Option<i64>) -> Self {
         let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
         let content = gtk::Box::builder().orientation(gtk::Orientation::Vertical).vexpand(true).build();
         root.append(&content);
@@ -87,9 +97,15 @@ impl FilePage {
         let weak = Rc::downgrade(&inner);
         let open = node.clone();
         glib::spawn_future_local(async move {
-            let Ok((Answer::FileOpened { file }, _)) = bridge::call(&Call::FileOpen { node: open }).await else {
-                eprintln!("veyq: the file did not open in the core");
-                return;
+            let file = match opened {
+                Some(file) => file,
+                None => {
+                    let Ok((Answer::FileOpened { file }, _)) = bridge::call(&Call::FileOpen { node: open }).await else {
+                        eprintln!("veyq: the file did not open in the core");
+                        return;
+                    };
+                    file
+                }
             };
             let Some(inner) = weak.upgrade() else {
                 bridge::send(Call::FileClose { file });

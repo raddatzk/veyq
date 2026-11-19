@@ -188,6 +188,11 @@ The web's `export.*` import keys ported to `words.json` (EN+DE, each `note` nami
    closed or put away long enough for the system to end it stops the import, and what was made by then stays (the
    failure's "left over" count says so; a cancel rolls back). *Recommendation:* yes — the web's behaviour; an import
    that outlives the app would need a persistent job of its own, a second import path for one platform's lifecycle.
+   **Answered (owner 2026-11-19): not on the phone for now.** The import is switched on for the desktops (macOS, Linux,
+   Windows) only; on Android and iOS/iPadOS an upload of a veyq download stays a plain file upload, no import is offered
+   (the core's detection is still built and tested; each phone platform's entry stays off behind one flag). Phases 7 and
+   8 build no import UI on Android and iOS/iPadOS; the Mac half of phase 8 does. The question above then holds for the
+   desktops only. Revisit when the owner asks.
 
 ## Definition of done
 

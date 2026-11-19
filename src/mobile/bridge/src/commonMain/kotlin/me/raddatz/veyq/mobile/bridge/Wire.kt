@@ -846,11 +846,54 @@ internal sealed class Call {
     /** *Keep*: the link kept as a bookmark at the top of space [scope] (signed in only), named by its host. */
     @Serializable @SerialName("Received.Keep") data class ReceivedKeep(val received: Long, val scope: String) : Call()
 
+    /** Where *Keep* may keep the link (`GuestScreen.keepPlaces`: the personal space first), [Answer.KeepPlaces]. */
+    @Serializable @SerialName("Received.KeepPlaces") data class ReceivedKeepPlaces(val received: Long) : Call()
+
     /** Files at [paths] added by a WRITE_ONLY link's guest (a drop box's, a Memory's uploader). */
     @Serializable @SerialName("Received.Upload") data class ReceivedUpload(val received: Long, val paths: List<String>) : Call()
 
     /** The link's screen closed without asking (the app quits): as [ReceivedLeave]. */
     @Serializable @SerialName("Received.Close") data class ReceivedClose(val received: Long) : Call()
+
+    /**
+     * The link reported to its own operator (`GuestScreen.reportSheet`, ADR 0150 decision 6): a report sheet for the
+     * `Report.*` calls ([Answer.ReportOpened]); refused before the gates passed.
+     */
+    @Serializable @SerialName("Received.Report") data class ReceivedReport(val received: Long) : Call()
+
+    /** The report the link asked for ([ReceivedShown.reportAsked]) opened by the host: not asked again. */
+    @Serializable @SerialName("Received.ReportShown") data class ReceivedReportShown(val received: Long) : Call()
+
+    /**
+     * Kept link [node]'s page (core's `BookmarkPage`, ADR 0150 decision 6): its meta opened, the share shown in place while
+     * the tenant has `core.share-embedding` on, else opened on its own page. Answered with its id
+     * ([Answer.BookmarkOpened]) for [Watched.Bookmark] and the `Bookmark.*` calls. Loaded at once.
+     */
+    @Serializable @SerialName("Bookmark.Open") data class BookmarkOpen(val node: NodeAt) : Call()
+
+    /** *Open on its own page* (the header's `open-own-page`): the link's screen above the shell ([Answer.ReceivedOpened]). */
+    @Serializable @SerialName("Bookmark.OwnPage") data class BookmarkOwnPage(val bookmark: Long) : Call()
+
+    /** *Report shared content*: the link's screen with its report asked ([Answer.ReceivedOpened]), to the share's own operator. */
+    @Serializable @SerialName("Bookmark.ReportShared") data class BookmarkReportShared(val bookmark: Long) : Call()
+
+    /** The bookmark's page left: an in-place link let go with it. */
+    @Serializable @SerialName("Bookmark.Close") data class BookmarkClose(val bookmark: Long) : Call()
+
+    /**
+     * The bookmark dialog's link as typed (core's `BookmarkCreate.link`): why it is none to keep, the host its name defaults
+     * to, and whether space [scopeId] is a group space's ([Answer.BookmarkChecked]). Inward only: the link never comes back.
+     */
+    @Serializable @SerialName("Bookmark.Check") data class BookmarkCheck(val scopeId: String, val text: String) : Call()
+
+    /**
+     * New → Bookmark saved (core's `BookmarkCreate.save`): link [text] with its [password] (empty: none), named [name]
+     * (empty: its host), in [scopeId] under [parentId] (null: the space's top). [Answer.Created], or refused
+     * ([Answer.Why.NOT_TAKEN]: [me.raddatz.veyq.mobile.words.Msg.BOOKMARK_CREATE_FAILED], the form kept).
+     */
+    @Serializable @SerialName("Bookmark.Create") data class BookmarkCreate(
+        val scopeId: String, val parentId: String?, val text: String, val password: String, val name: String,
+    ) : Call()
 
     /**
      * A Memory [name] made where New makes it (`ShellModel.createMemory`: in [scopeId] under [parentId], null the space's
@@ -1452,6 +1495,30 @@ internal sealed class Call {
     ) : Call()
     @Serializable @SerialName("PasswordChange.Close") data class PasswordChangeClose(val flow: Long) : Call()
 
+    /**
+     * The new password's field was left (ADR 0151 decision 7): the breached-password check runs on [newPassword], typed
+     * on its way to the core (it crosses once, never back) — the check's state arrives in [Update.PasswordChange]'s
+     * `breach`. Never sent while typing.
+     */
+    @Serializable @SerialName("PasswordChange.Check") data class PasswordChangeCheck(val flow: Long, val newPassword: String) : Call()
+
+    /** The new password was edited — no text: the check's verdict, and any acceptance of it, is gone. */
+    @Serializable @SerialName("PasswordChange.Edited") data class PasswordChangeEdited(val flow: Long) : Call()
+
+    /** *Use it anyway* for a breached new password ([on]), or taken back. */
+    @Serializable @SerialName("PasswordChange.UseAnyway") data class PasswordChangeUseAnyway(val flow: Long, val on: Boolean) : Call()
+
+    /**
+     * A kit file the host's dialog picked for flow [flow]'s Secret Key (ADR 0151 decision 3: the password change, the
+     * address change or the rotation): the core reads [path] — never more than a kit file may hold — and draws its pages
+     * through the host's `PdfPages`/`PdfPage`/`PictureLuma` requests, as at [SessionSignInKit]; the key is held by the
+     * flow's intake, the flow's update says what it shows (`kit`). [Answer.Done], `NO_KIT` where no kit was read.
+     */
+    @Serializable @SerialName("Kit.Read") data class KitRead(val flow: Long, val path: String) : Call()
+
+    /** *Use another*: flow [flow]'s held kit ends, its key zeroed. */
+    @Serializable @SerialName("Kit.Clear") data class KitClear(val flow: Long) : Call()
+
     /** Change the address (core's `AddressChange`), its request mailed through the tenant open now: [Answer.FlowOpened]. */
     @Serializable @SerialName("AddressChange.Open") data class AddressChangeOpen(val connection: String) : Call()
     @Serializable @SerialName("AddressChange.Request") data class AddressChangeRequest(val flow: Long, val newEmail: String, val password: String, val secretKey: String) : Call()
@@ -1488,6 +1555,15 @@ internal sealed class Call {
     /** *Links to renew* read anew — after a link's share dialog ([ShareOpen] with the link's node) closed (inbox #977). */
     @Serializable @SerialName("KeyRotation.RefreshLinks") data class KeyRotationRefreshLinks(val flow: Long) : Call()
     @Serializable @SerialName("KeyRotation.Close") data class KeyRotationClose(val flow: Long) : Call()
+
+    /** The rotation's new password's field was left: the breached-password check runs on [newPassword] (as [PasswordChangeCheck]). */
+    @Serializable @SerialName("KeyRotation.Check") data class KeyRotationCheck(val flow: Long, val newPassword: String) : Call()
+
+    /** The rotation's new password was edited — no text. */
+    @Serializable @SerialName("KeyRotation.Edited") data class KeyRotationEdited(val flow: Long) : Call()
+
+    /** *Use it anyway* for the rotation's breached new password ([on]), or taken back. */
+    @Serializable @SerialName("KeyRotation.UseAnyway") data class KeyRotationUseAnyway(val flow: Long, val on: Boolean) : Call()
 
     /** Erase the account (core's `AccountErasure`, its preview read at once): [Answer.FlowOpened] for [Watched.Erasure]. */
     @Serializable @SerialName("Erasure.Open") data class ErasureOpen(val connection: String) : Call()
@@ -1543,6 +1619,13 @@ internal enum class ScanKind {
      * `veyqid`; the host then compares it with [Call.TrustCompareScanned]. A safety number is no secret.
      */
     SAFETY,
+
+    /**
+     * An Emergency Kit's code scanned for a flow's Secret Key ([Call.ScanOpen]'s `link` is the flow: the password change,
+     * the address change or the rotation; ADR 0151 decision 3): a v3 `veyqkit:` token, found as `veyqkit`; the kit goes
+     * to that flow's intake, its key never across the bridge.
+     */
+    FLOW_KIT,
 }
 
 /** A call's one answer; what the call changed arrives as the watched states' updates. */
@@ -1666,6 +1749,18 @@ internal sealed class Answer {
      * with the text it holds (a moderator's review) — the text itself never comes back.
      */
     @Serializable @SerialName("ReceivedProblem") data class ReceivedProblem(val problem: Msg, val browser: Boolean) : Answer()
+
+    /** A kept link's page opened ([Call.BookmarkOpen]): its id, for [Watched.Bookmark] and the `Bookmark.*` calls. */
+    @Serializable @SerialName("BookmarkOpened") data class BookmarkOpened(val bookmark: Long) : Answer()
+
+    /** The spaces *Keep* offers ([Call.ReceivedKeepPlaces]), the personal space first, each with its words. */
+    @Serializable @SerialName("KeepPlaces") data class KeepPlaces(val places: List<ShellShown.ShownSpace>) : Answer()
+
+    /**
+     * The bookmark dialog's link checked ([Call.BookmarkCheck]): why it is none to keep (null: fine, or empty), the host the
+     * name defaults to once it reads, whether the place is a group space's ([Msg.BOOKMARK_WHO_CAN_OPEN]).
+     */
+    @Serializable @SerialName("BookmarkChecked") data class BookmarkChecked(val problem: Msg?, val host: String?, val groupSpace: Boolean) : Answer()
 
     /** A scan opened ([Call.ScanOpen]): its id, for [Watched.Scan] and the scan's calls. */
     @Serializable @SerialName("ScanOpened") data class ScanOpened(val scan: Long) : Answer()
@@ -1847,6 +1942,9 @@ internal sealed class Answer {
         /** A received link: none by that id (left or closed). */
         NO_SUCH_RECEIVED,
 
+        /** A kept link's page: none by that id (closed). */
+        NO_SUCH_BOOKMARK,
+
         /** The music: no player (no tenant open, or a composition without decks); no Music view by that id; no deck by that id. */
         NO_PLAYER, NO_SUCH_MUSIC, NO_SUCH_DECK,
 
@@ -2007,6 +2105,9 @@ internal sealed class Watched {
 
     /** A received link opened by [Call.ReceivedOpen]. */
     @Serializable @SerialName("Received") data class Received(val received: Long) : Watched()
+
+    /** A kept link's page opened by [Call.BookmarkOpen]. */
+    @Serializable @SerialName("Bookmark") data class Bookmark(val bookmark: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -2076,6 +2177,9 @@ internal sealed class Update {
     /** A received link's screen ([Watched.Received]); null once it was left or closed. Never its link nor its key. */
     @Serializable @SerialName("Received") data class Received(val received: Long, val shown: ReceivedShown?) : Update()
 
+    /** A kept link's page ([Watched.Bookmark]); null once it was closed. Never its link, its password nor its key. */
+    @Serializable @SerialName("Bookmark") data class Bookmark(val bookmark: Long, val shown: BookmarkShown?) : Update()
+
     /** An account's Settings; null once it was closed (or an id the bridge does not hold). */
     @Serializable @SerialName("Settings") data class Settings(val settings: Long, val shown: SettingsShown?) : Update()
 
@@ -2121,11 +2225,30 @@ internal sealed class Update {
     /** A person's page; null once it closed (or its tenant did). */
     @Serializable @SerialName("Person") data class Person(val person: Long, val shown: PersonShown?) : Update()
 
-    /** Each of the account's flows: its core model's state, null once it closed (or its tenant did, or the account signed out). */
+    /**
+     * Each of the account's flows: its core model's state, null once it closed (or its tenant did, or the account signed out).
+     * A flow that asks for the Secret Key carries its intake's state ([kit]: the held kit's address and server, the
+     * notices, a file in which no kit was read — never the key), one that chooses a password its breached-password check's
+     * ([breach]: the verdict and the count — never the password), each null once the flow closed (ADR 0151 decisions 3, 7).
+     */
     @Serializable @SerialName("Profile") data class Profile(val profile: Long, val shown: me.raddatz.veyq.mobile.session.ProfileModel.State?) : Update()
-    @Serializable @SerialName("PasswordChange") data class PasswordChange(val flow: Long, val shown: me.raddatz.veyq.mobile.session.PasswordChange.State?) : Update()
-    @Serializable @SerialName("AddressChange") data class AddressChange(val flow: Long, val shown: me.raddatz.veyq.mobile.session.AddressChange.State?) : Update()
-    @Serializable @SerialName("KeyRotation") data class KeyRotation(val flow: Long, val shown: me.raddatz.veyq.mobile.session.rotation.KeyRotation.State?) : Update()
+    @Serializable @SerialName("PasswordChange") data class PasswordChange(
+        val flow: Long,
+        val shown: me.raddatz.veyq.mobile.session.PasswordChange.State?,
+        val kit: me.raddatz.veyq.mobile.account.KeyIntake.IntakeState? = null,
+        val breach: me.raddatz.veyq.mobile.account.BreachCheck.BreachState? = null,
+    ) : Update()
+    @Serializable @SerialName("AddressChange") data class AddressChange(
+        val flow: Long,
+        val shown: me.raddatz.veyq.mobile.session.AddressChange.State?,
+        val kit: me.raddatz.veyq.mobile.account.KeyIntake.IntakeState? = null,
+    ) : Update()
+    @Serializable @SerialName("KeyRotation") data class KeyRotation(
+        val flow: Long,
+        val shown: me.raddatz.veyq.mobile.session.rotation.KeyRotation.State?,
+        val kit: me.raddatz.veyq.mobile.account.KeyIntake.IntakeState? = null,
+        val breach: me.raddatz.veyq.mobile.account.BreachCheck.BreachState? = null,
+    ) : Update()
     @Serializable @SerialName("Erasure") data class Erasure(val flow: Long, val shown: me.raddatz.veyq.mobile.session.AccountErasure.State?) : Update()
     @Serializable @SerialName("Kit") data class Kit(val kit: Long, val shown: me.raddatz.veyq.mobile.account.KitStep.State?) : Update()
 
@@ -3767,4 +3890,25 @@ internal class ReceivedShown(
     val left: Boolean,
     val keepOffered: Boolean,
     val reportAsked: Boolean,
+    /**
+     * The days the link's instance keeps a writing guest's address, port, time and `Origin` (ADR 0093 § 10,
+     * `PublicShare.guestWriteRecordDays`): the host shows the web's notice (`share_guest_record_*`) before any write while
+     * it is set; null for a link that does not write, or before the gates passed.
+     */
+    val recordDays: Int? = null,
+    /** The link's instance's privacy notice at its guest-write record passage (the notice's *more*): its origin's, no share id. */
+    val privacy: String? = null,
 )
+
+/** Where a kept link's page stands (core's `BookmarkPage.State`). */
+@Serializable
+internal enum class BookmarkState { LOADING, UNREADABLE, IN_PLACE, ON_ITS_OWN }
+
+/**
+ * A kept link's page as the host draws it (ADR 0150 decision 6): where it stands, the link's host once the meta read
+ * ([Msg.BOOKMARK_EMBED_REGION]) and, shown in place, the received link's id for [Watched.Received] and the `Received.*`
+ * calls. **Never the link, its password or its key.**
+ */
+@Serializable
+@SerialName("BookmarkShown")
+internal class BookmarkShown(val state: BookmarkState, val host: String, val received: Long?)

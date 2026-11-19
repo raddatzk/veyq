@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.map
 
+import me.raddatz.veyq.mobile.session.OutsideAnswer
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.advanceTimeBy
@@ -185,7 +186,7 @@ class MapTilesTest {
 
     @Test
     fun aTilesLifetimeIsReadFromItsHeaders() {
-        fun life(vararg h: Pair<String, String>) = MapTiles.lifetimeMs(MapAnswer(200, h.associate { it.first.lowercase() to it.second }, ByteArray(0)))
+        fun life(vararg h: Pair<String, String>) = MapTiles.lifetimeMs(OutsideAnswer(200, h.associate { it.first.lowercase() to it.second }, ByteArray(0)))
         assertEquals(600_000, life("Cache-Control" to "public, max-age=600"))
         assertEquals(0, life("Cache-Control" to "no-cache, max-age=600"))
         assertEquals(3_600_000, life("Date" to "Mon, 16 Nov 2026 10:00:00 GMT", "Expires" to "Mon, 16 Nov 2026 11:00:00 GMT"))

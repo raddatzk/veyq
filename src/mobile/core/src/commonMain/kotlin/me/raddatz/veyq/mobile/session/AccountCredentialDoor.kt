@@ -14,7 +14,8 @@ import me.raddatz.veyq.mobile.api.models.EraseOwnAccountRequest
 import me.raddatz.veyq.mobile.api.models.LoginChallenge
 
 /** The password change of this account (ADR 0148 decision 6). */
-fun VeyqAccount.passwordChange(): PasswordChange = PasswordChange(AccountCredentialDoor(this), primitives)
+fun VeyqAccount.passwordChange(): PasswordChange =
+    PasswordChange(AccountCredentialDoor(this), primitives, me.raddatz.veyq.mobile.account.BreachCheck.of(this))
 
 /**
  * The address change of this account and the kit it offers after (ADR 0148 decision 6). The request is sent through

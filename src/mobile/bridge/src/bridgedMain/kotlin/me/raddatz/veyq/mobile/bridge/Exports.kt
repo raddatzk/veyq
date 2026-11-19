@@ -49,6 +49,12 @@ internal expect fun platformHttpClient(block: HttpClientConfig<*>.() -> Unit): H
  */
 internal expect fun platformDeviceKeys(config: Config, store: DeviceStore): DeviceKeys
 
+/**
+ * Where a received link's guest sessions are kept (ADR 0150 decision 3), beside the device keys: the Secret Service
+ * (`linuxMain`); in memory on Windows until its credential locker is wired (cr-app-received-links phase 10, inbox #1019).
+ */
+internal expect fun platformGuestSessions(): me.raddatz.veyq.mobile.sharing.GuestSessions
+
 /** The files the host names by path, written by core's [FileSink]: one not finished is removed (ADR 0137). */
 private object Files : DeviceFiles {
     override suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean): Boolean =
@@ -122,7 +128,8 @@ fun veyqInit(config: CPointer<ByteVar>?, host: VeyqHost?, hostCtx: COpaquePointe
             }
         }
         Bridge.live(LibsodiumPrimitives, client, c, HostStore(it), { platformDeviceKeys(c, it) }, Files, { path -> HostPictures(h, path) }, HostTiers(h), HostAudio(h), HostBannerPictures(h),
-            webp = me.raddatz.veyq.mobile.media.WebpPicture::png, words = HostWords(h), squarePicture = HostSquarePicture(h), calendar = LocalCalendar)
+            webp = me.raddatz.veyq.mobile.media.WebpPicture::png, words = HostWords(h), squarePicture = HostSquarePicture(h), calendar = LocalCalendar,
+            guestSessions = platformGuestSessions())
     }
     return if (composed) STARTED else ALREADY_STARTED
 }

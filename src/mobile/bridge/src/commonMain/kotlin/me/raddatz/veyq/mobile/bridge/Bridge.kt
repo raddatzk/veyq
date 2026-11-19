@@ -150,23 +150,31 @@ internal class Composition<A : Connection, T : Any>(
      * One's own profile picture cropped and drawn square by the host ([HostRequest.PictureSquare]): RGBA of `edge` × `edge`,
      * or null where the host could not; a test plays one, or has none.
      */
-    /** The Secret Key as the person typed it, read by the core's reader (`SecretKeyText.read`); null where it does not read. */
-    val readKey: (String) -> ByteArray? = { null },
     val squarePicture: (path: String, pose: me.raddatz.veyq.mobile.session.CoverFrame.Pose, edge: Int) -> ByteArray? = { _, _, _ -> null },
     /**
      * A received link opened as its guest (ADR 0150 decisions 2–4): core's `GuestView` over the platform's client, the
-     * device store and [received]'s guest sessions (the host's credential store), the guest's uploads on [queue]. The
-     * real one in the library; a test plays a link's instance, or has none (`Received.Open` then opens nothing).
+     * device store and [received]'s guest sessions (the host's credential store), the guest's uploads on [queue], and a
+     * kept link's [password] handed in memory (null: none, or a pasted link). The real one in the library; a test plays a
+     * link's instance, or has none (`Received.Open` then opens nothing, nor does a bookmark).
      */
-    val received: (link: me.raddatz.veyq.mobile.sharing.ReceivedLink.ShareLink, queue: me.raddatz.veyq.mobile.blob.UploadQueue) -> me.raddatz.veyq.mobile.sharing.GuestView? = { _, _ -> null },
+    val received: (link: me.raddatz.veyq.mobile.sharing.ReceivedLink.ShareLink, queue: me.raddatz.veyq.mobile.blob.UploadQueue, password: String?) -> me.raddatz.veyq.mobile.sharing.GuestView? = { _, _, _ -> null },
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
+
+/** A kept link's page the host opened ([Call.BookmarkOpen]); [inPlace] the received link shown in it, by its id. */
+internal class HeldBookmark(val page: me.raddatz.veyq.mobile.sharing.BookmarkPage) {
+    val open = MutableStateFlow(true)
+    val inPlace = MutableStateFlow<Long?>(null)
+}
 
 /** A received link's screen the host opened ([Call.ReceivedOpen]); the ids its pages' models were registered under. */
 internal class HeldReceived(val screen: me.raddatz.veyq.mobile.sharing.GuestScreen) {
     val open = MutableStateFlow(true)
     val page = MutableStateFlow<ReceivedPage?>(null)
+
+    /** A WRITE_ONLY page's sent files followed into [page] while it shows (cancelled when the page changes or closes). */
+    var sending: kotlinx.coroutines.Job? = null
 }
 
 /** The account's flows the bridge opens over one account (ADR 0148 decisions 6–8): each a core model, made on `*.Open`. */
@@ -549,6 +557,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     /** The received links the host opened ([Call.ReceivedOpen]), each until left or closed; not a tenant's (no sign-in needed). */
     private val received = Registry<HeldReceived>()
+
+    /** The kept links' pages the host opened ([Call.BookmarkOpen]), each until closed or its tenant closes. */
+    private val bookmarks = Registry<HeldBookmark>()
 
     /** The app's one upload queue (the phones' `AppModel.uploads`): emptied when the tenant closes. */
     private val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
@@ -1156,6 +1167,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     // (`takeKit`), so the kit is taken as the code is read, watched or not, and never leaves the core
                     ScanKind.KIT -> session.scanKit(call.server, parts.decode)
                     // a safety code: only `veyqid:` is taken, held here for `Trust.CompareScanned`, found as its scheme
+                    // a flow's Secret Key: the kit goes to that flow's intake (`KeyIntake.scan`), never across the bridge
+                    ScanKind.FLOW_KIT -> (call.link?.let { flowIntake(it) } ?: return noFlow).scan(decode = parts.decode)
                     ScanKind.SAFETY -> me.raddatz.veyq.mobile.qr.QrScan(
                         accepts = { text -> SafetyCode(text).takeIf { me.raddatz.veyq.mobile.qr.QrSchemes.of(text) == "veyqid" } },
                         decode = parts.decode,
@@ -1226,6 +1239,43 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 if (sent == 0) sources.forEach { it.close() }
                 taken(sent > 0)
             } ?: noReceived
+            is Call.ReceivedReport -> received[call.received]?.let { h ->
+                val sheet = h.screen.reportSheet() ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = ids.incrementAndFetch()
+                reports.put(id, sheet)
+                Answer.ReportOpened(id)
+            } ?: noReceived
+            is Call.ReceivedKeepPlaces -> received[call.received]?.let { h ->
+                Answer.KeepPlaces(h.screen.keepPlaces().map { ShellShown.ShownSpace(it, ShellWords.space(it)) })
+            } ?: noReceived
+            is Call.ReceivedReportShown -> received[call.received]?.let { h -> h.screen.reportShown(); Answer.Done } ?: noReceived
+            is Call.BookmarkOpen -> openBookmark(parts, call.node)
+            is Call.BookmarkOwnPage -> bookmarks[call.bookmark]?.let { b ->
+                heldReceived(b.page.openOwnPage(tenant.value?.models?.session))
+            } ?: noBookmark
+            is Call.BookmarkReportShared -> bookmarks[call.bookmark]?.let { b -> heldReceived(b.page.reportShared()) } ?: noBookmark
+            is Call.BookmarkClose -> bookmarks.remove(call.bookmark)?.let { b -> closeBookmark(b); Answer.Done } ?: noBookmark
+            is Call.BookmarkCheck -> {
+                val r = me.raddatz.veyq.mobile.sharing.ReceivedLink.parse(call.text)
+                val problem = (r as? me.raddatz.veyq.mobile.sharing.ReceivedLink.Parsed.Refused)?.problem
+                Answer.BookmarkChecked(
+                    problem?.let(me.raddatz.veyq.mobile.sharing.BookmarkCreate::wordOf),
+                    (r as? me.raddatz.veyq.mobile.sharing.ReceivedLink.Parsed.Ok)?.link?.host,
+                    groupSpace(call.scopeId),
+                )
+            }
+            is Call.BookmarkCreate -> tenant.value?.models?.session?.let { t ->
+                val dialog = me.raddatz.veyq.mobile.sharing.BookmarkCreate(
+                    me.raddatz.veyq.mobile.sharing.BookmarkCreate.into(t, call.scopeId, call.parentId), groupSpace(call.scopeId),
+                )
+                dialog.link(call.text)
+                dialog.password(call.password)
+                dialog.name(call.name)
+                if (!dialog.state.value.canSave) return Answer.Refused(Answer.Why.NOT_OFFERED)
+                if (!dialog.save()) return Answer.Refused(Answer.Why.NOT_TAKEN)
+                val made = dialog.state.value
+                Answer.Created(NodeAt(call.scopeId, made.created!!, me.raddatz.veyq.mobile.AppKinds.BOOKMARK_KIND, made.nameShown), null)
+            } ?: noTenant
             is Call.ShellCreateMemory -> tenant.value?.models?.createMemory?.let { make ->
                 make(call.scopeId, call.parentId, call.name, call.wasThere, call.autoPlace).let { Answer.Created(it.node, it.notice) }
             } ?: noTenant
@@ -1682,16 +1732,19 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.PasswordChangeRun, is Call.PasswordChangeClose, is Call.AddressChangeOpen, is Call.AddressChangeRequest,
             is Call.AddressChangeKit, is Call.AddressChangeClose, is Call.KitSave, is Call.KitConfirm, is Call.KitClose,
             is Call.KeyRotationOpen, is Call.KeyRotationChooseNewPassword, is Call.KeyRotationProve, is Call.KeyRotationRun, is Call.KeyRotationRefreshLinks,
-            is Call.KeyRotationClose, is Call.ErasureOpen, is Call.ErasureChoose, is Call.ErasureRun, is Call.ErasureClose,
+            is Call.KeyRotationClose, is Call.PasswordChangeCheck, is Call.PasswordChangeEdited, is Call.PasswordChangeUseAnyway,
+            is Call.KeyRotationCheck, is Call.KeyRotationEdited, is Call.KeyRotationUseAnyway, is Call.KitRead, is Call.KitClear,
+            is Call.ErasureOpen, is Call.ErasureChoose, is Call.ErasureRun, is Call.ErasureClose,
             -> accountFlow(call, parts, payload)
         }
     }
 
     private val noProfile = Answer.Refused(Answer.Why.NO_SUCH_FLOW)
-    private val noFlow = Answer.Refused(Answer.Why.NO_SUCH_FLOW)
 
-    /** The Secret Key as typed, read by the core's own reader; one that does not read stands for no key (the floor refuses it). */
-    private fun typedKey(parts: Composition<A, T>, text: String): ByteArray = parts.readKey(text) ?: ByteArray(32)
+    /** The Secret Key control of flow [id] — a password change, an address change or a rotation (ids are unique across them). */
+    private fun flowIntake(id: Long): me.raddatz.veyq.mobile.account.KeyIntake? =
+        passwordChanges[id]?.model?.intake ?: addressChanges[id]?.model?.intake ?: keyRotations[id]?.model?.intake
+    private val noFlow = Answer.Refused(Answer.Why.NO_SUCH_FLOW)
 
     /**
      * The account's flows (ADR 0148 decision 11): each `*.Open` makes the core's model over the account the connection
@@ -1759,10 +1812,27 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noTenant
             is Call.PasswordChangeOpen -> {
                 val f = flows(call.connection) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
-                Answer.FlowOpened(held(passwordChanges, HeldFlow(f.passwordChange(), call.connection)))
+                val model = f.passwordChange()
+                val id = held(passwordChanges, HeldFlow(model, call.connection) { it.close() })
+                scope.launch { model.breach.load() } // the range service's address, read when the flow opens
+                Answer.FlowOpened(id)
             }
+            is Call.PasswordChangeCheck -> passwordChanges[call.flow]?.model?.check(call.newPassword).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.PasswordChangeEdited -> passwordChanges[call.flow]?.model?.edited().done(Answer.Why.NO_SUCH_FLOW)
+            is Call.PasswordChangeUseAnyway -> passwordChanges[call.flow]?.model?.useAnyway(call.on).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.KeyRotationCheck -> keyRotations[call.flow]?.model?.check(call.newPassword).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.KeyRotationEdited -> keyRotations[call.flow]?.model?.edited().done(Answer.Why.NO_SUCH_FLOW)
+            is Call.KeyRotationUseAnyway -> keyRotations[call.flow]?.model?.useAnyway(call.on).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.KitRead -> {
+                val intake = flowIntake(call.flow) ?: return noFlow
+                // as `Session.SignInKit`: read by its path, never past a kit file's cap; one that does not read is no kit
+                val bytes = runCatching { parts.files.read(call.path, me.raddatz.veyq.mobile.account.KitImport.FILE_CAP) }.getOrNull()
+                val read = if (bytes == null) intake.read(ByteArray(0), NoPictures) else intake.read(bytes, parts.pictures(call.path))
+                if (read != null) Answer.Done else Answer.Refused(Answer.Why.NO_KIT)
+            }
+            is Call.KitClear -> flowIntake(call.flow)?.clear().done(Answer.Why.NO_SUCH_FLOW)
             is Call.PasswordChangeRun -> passwordChanges[call.flow]?.let { held ->
-                held.model.run(call.currentPassword, call.newPassword, call.confirmPassword, typedKey(parts, call.secretKey))
+                held.model.run(call.currentPassword, call.newPassword, call.confirmPassword, call.secretKey)
                 // the change took this device's saved key: the account's Settings pages read anew, so their trust row
                 // offers the levels and the password trust instead of the trust that is gone (inbox #1009)
                 if (held.model.current.done) accountPages.values().filter { it.connection == held.connection }.forEach { it.model.refresh() }
@@ -1772,14 +1842,14 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.PasswordChangeClose -> passwordChanges.remove(call.flow)?.close().done(Answer.Why.NO_SUCH_FLOW)
             is Call.AddressChangeOpen -> {
                 val f = flows(call.connection) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
-                Answer.FlowOpened(held(addressChanges, HeldFlow(f.addressChange(), call.connection)))
+                Answer.FlowOpened(held(addressChanges, HeldFlow(f.addressChange(), call.connection) { it.close() }))
             }
             is Call.AddressChangeRequest -> addressChanges[call.flow]?.model?.let {
-                it.request(call.newEmail, call.password, typedKey(parts, call.secretKey))
+                it.request(call.newEmail, call.password, call.secretKey)
                 Answer.Done
             } ?: noFlow
             is Call.AddressChangeKit -> addressChanges[call.flow]?.let { held ->
-                val step = held.model.kit(call.password, typedKey(parts, call.secretKey)) ?: return Answer.Done
+                val step = held.model.kit(call.password, call.secretKey) ?: return Answer.Done
                 Answer.KitOpened(held(kits, HeldFlow(step, held.connection) { it.close() }))
             } ?: noFlow
             is Call.AddressChangeClose -> addressChanges.remove(call.flow)?.close().done(Answer.Why.NO_SUCH_FLOW)
@@ -1798,7 +1868,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             }
             is Call.KeyRotationChooseNewPassword -> keyRotations[call.flow]?.model?.setNewPassword(call.on).done(Answer.Why.NO_SUCH_FLOW)
             is Call.KeyRotationProve -> keyRotations[call.flow]?.let { held ->
-                held.model.prove(call.password, typedKey(parts, call.secretKey), call.newPassword, call.confirmPassword)
+                held.model.prove(call.password, call.secretKey, call.newPassword, call.confirmPassword)
                 // the kit step is the rotation's: it closes with the rotation, never on its own `Kit.Close`
                 val step = held.model.kit ?: return Answer.Done
                 Answer.KitOpened(held(kits, HeldFlow(step, held.connection)))
@@ -2054,6 +2124,53 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private fun taken(taken: Boolean): Answer = if (taken) Answer.Done else Answer.Refused(Answer.Why.NOT_TAKEN)
 
     private val noReceived = Answer.Refused(Answer.Why.NO_SUCH_RECEIVED)
+    private val noBookmark = Answer.Refused(Answer.Why.NO_SUCH_BOOKMARK)
+
+    /** Whether space [scopeId] of the open tenant is a group space's (its bookmark dialog says who else opens the link). */
+    private suspend fun groupSpace(scopeId: String): Boolean =
+        tenant.value?.models?.session?.let { t -> runCatching { t.spaces() }.getOrNull()?.firstOrNull { it.scopeId == scopeId }?.kind != "PERSONAL" } ?: false
+
+    /**
+     * Kept link [node]'s page (ADR 0150 decision 6): its meta opened under the open tenant; a share shown in place is held
+     * as a received link of its own, whose id the page's update names.
+     */
+    private suspend fun openBookmark(parts: Composition<A, T>, node: NodeAt): Answer {
+        val t = tenant.value?.models?.session ?: return noTenant
+        // a composition without guest views (a test's) opens no link: the page then reads as its meta alone
+        val page = me.raddatz.veyq.mobile.sharing.BookmarkPage.of(t, node) { link, password ->
+            parts.received(link, queue, password) ?: error("no guest views in this composition")
+        }
+        val held = HeldBookmark(page)
+        val id = ids.incrementAndFetch()
+        bookmarks.put(id, held)
+        runCatching { page.load() }.onFailure { e -> if (e is kotlinx.coroutines.CancellationException) throw e }
+        (page.state.value as? me.raddatz.veyq.mobile.sharing.BookmarkPage.State.InPlace)?.let { inPlace ->
+            val shown = HeldReceived(inPlace.screen)
+            val rid = ids.incrementAndFetch()
+            received.put(rid, shown)
+            pageOf(shown)
+            held.inPlace.value = rid
+        }
+        return Answer.BookmarkOpened(id)
+    }
+
+    /** A bookmark's link opened as its own screen ([screen], null where its meta did not read): held, loaded, answered with its id. */
+    private suspend fun heldReceived(screen: me.raddatz.veyq.mobile.sharing.GuestScreen?): Answer {
+        val s = screen ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+        val held = HeldReceived(s)
+        val id = ids.incrementAndFetch()
+        received.put(id, held)
+        s.load()
+        pageOf(held)
+        return Answer.ReceivedOpened(id)
+    }
+
+    /** A bookmark's page closed: its in-place link let go with it. */
+    private fun closeBookmark(b: HeldBookmark) {
+        b.inPlace.value?.let { rid -> received.remove(rid)?.let(::closeReceived) }
+        b.page.close()
+        b.open.value = false
+    }
 
     /**
      * *Open a link* (ADR 0150 decisions 4, 8): the pasted text parsed by the core; a link opened as its guest — signed in or
@@ -2067,7 +2184,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             return Answer.ReceivedProblem(word, browser = r.problem == me.raddatz.veyq.mobile.sharing.ReceivedLink.Problem.MODERATION)
         }
         val ok = r as me.raddatz.veyq.mobile.sharing.ReceivedLink.Parsed.Ok
-        val view = parts.received(ok.link, queue) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+        val view = parts.received(ok.link, queue, null) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
         val held = HeldReceived(me.raddatz.veyq.mobile.sharing.GuestScreen(view, tenant.value?.models?.session, ok.report))
         val id = ids.incrementAndFetch()
         received.put(id, held)
@@ -2088,6 +2205,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * under the existing calls' registries, so `File.*`, `Gallery.*` and `Pot.*` drive it as they drive a member's.
      */
     private suspend fun pageOf(h: HeldReceived) {
+        h.sending?.cancel()
+        h.sending = null
         val page = h.screen.view.page.value ?: return run { h.page.value = null }
         val node = page.node
         fun shown(kind: ReceivedPageKind, rows: List<ReceivedRow> = emptyList(), file: Long? = null, gallery: Long? = null, pot: Long? = null, sent: List<String> = emptyList()) =
@@ -2102,14 +2221,20 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 h.screen.view.access?.tree?.node(node.nodeId)?.asObject()?.let { ref -> scope.launch { page.model.open(ref) } }
                 shown(ReceivedPageKind.POT, pot = id)
             }
-            is me.raddatz.veyq.mobile.sharing.GuestPage.DropBox -> shown(ReceivedPageKind.DROP_BOX, sent = page.model.sent.value)
-            is me.raddatz.veyq.mobile.sharing.GuestPage.Uploader -> shown(ReceivedPageKind.UPLOADER, sent = page.model.sent.value.map { it.name })
+            // what a WRITE_ONLY guest sent shows as it settles: the page follows the model's list while it stands
+            is me.raddatz.veyq.mobile.sharing.GuestPage.DropBox -> shown(ReceivedPageKind.DROP_BOX, sent = page.model.sent.value).also { first ->
+                h.sending = scope.launch { page.model.sent.collect { sent -> h.page.value = ReceivedPage(first.kind, first.name, first.nodeKind, first.rows, null, null, null, sent) } }
+            }
+            is me.raddatz.veyq.mobile.sharing.GuestPage.Uploader -> shown(ReceivedPageKind.UPLOADER, sent = page.model.sent.value.map { it.name }).also { first ->
+                h.sending = scope.launch { page.model.sent.collect { sent -> h.page.value = ReceivedPage(first.kind, first.name, first.nodeKind, first.rows, null, null, null, sent.map { it.name }) } }
+            }
             is me.raddatz.veyq.mobile.sharing.GuestPage.NotShown -> shown(ReceivedPageKind.NOT_SHOWN)
         }
     }
 
     /** A received link let go: its key zeroed, its page's models dropped from the registries. */
     private fun closeReceived(h: HeldReceived) {
+        h.sending?.cancel()
         h.page.value?.let { p ->
             p.file?.let { filePages.remove(it)?.close() }
             p.gallery?.let { galleries.remove(it) }
@@ -2117,6 +2242,16 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         }
         h.screen.leave()
         h.open.value = false
+    }
+
+    /** What the host is shown of a kept link's page: where it stands and its link's host — never the link, its password or key. */
+    private fun shownBookmark(state: me.raddatz.veyq.mobile.sharing.BookmarkPage.State, inPlace: Long?): BookmarkShown = when (state) {
+        me.raddatz.veyq.mobile.sharing.BookmarkPage.State.Loading -> BookmarkShown(BookmarkState.LOADING, "", null)
+        me.raddatz.veyq.mobile.sharing.BookmarkPage.State.Unreadable -> BookmarkShown(BookmarkState.UNREADABLE, "", null)
+        // in place once the link's screen is held (its id named); until then the page still loads
+        is me.raddatz.veyq.mobile.sharing.BookmarkPage.State.InPlace ->
+            if (inPlace == null) BookmarkShown(BookmarkState.LOADING, state.host, null) else BookmarkShown(BookmarkState.IN_PLACE, state.host, inPlace)
+        is me.raddatz.veyq.mobile.sharing.BookmarkPage.State.OnItsOwn -> BookmarkShown(BookmarkState.ON_ITS_OWN, state.host, null)
     }
 
     /** What the host is shown of a received link: never the link, its key or anything sealed. */
@@ -2150,6 +2285,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             left = s.left,
             keepOffered = h.screen.keepOffered,
             reportAsked = s.reporting,
+            recordDays = h.screen.view.access?.guestWriteRecordDays,
+            privacy = h.screen.view.access?.let { "${it.origin}/privacy#guest-write-record" },
         )
     }
 
@@ -2290,6 +2427,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         // the tree and what was derived from it (a person's index, ADR 0144 decision 12) dropped now, not when collected
         tenant.value?.models?.shell?.tenant?.close()
         tenant.value = null
+        // a kept link's page is the tenant's: it closes with it, its in-place link let go
+        bookmarks.removeAll().forEach(::closeBookmark)
         // the uploads are the tenant's: what still waits or runs is cancelled (the phones' `uploads.clear()` on a switch)
         uploads.value?.close()
         uploads.value = null
@@ -2440,11 +2579,21 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         } ?: flowOf(Update.Banner(w.banner, null))
         is Watched.Profile -> profiles[w.profile]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.Profile(w.profile, s.takeIf { open }) } }
             ?: flowOf(Update.Profile(w.profile, null))
-        is Watched.PasswordChange -> passwordChanges[w.flow]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.PasswordChange(w.flow, s.takeIf { open }) } }
+        is Watched.PasswordChange -> passwordChanges[w.flow]?.let { h ->
+            combine(h.model.state, h.model.intake.state, h.model.breach.state, h.open) { s, k, b, open ->
+                Update.PasswordChange(w.flow, s.takeIf { open }, k.takeIf { open }, b.takeIf { open })
+            }
+        }
             ?: flowOf(Update.PasswordChange(w.flow, null))
-        is Watched.AddressChange -> addressChanges[w.flow]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.AddressChange(w.flow, s.takeIf { open }) } }
+        is Watched.AddressChange -> addressChanges[w.flow]?.let { h ->
+            combine(h.model.state, h.model.intake.state, h.open) { s, k, open -> Update.AddressChange(w.flow, s.takeIf { open }, k.takeIf { open }) }
+        }
             ?: flowOf(Update.AddressChange(w.flow, null))
-        is Watched.KeyRotation -> keyRotations[w.flow]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.KeyRotation(w.flow, s.takeIf { open }) } }
+        is Watched.KeyRotation -> keyRotations[w.flow]?.let { h ->
+            combine(h.model.state, h.model.intake.state, h.model.breach.state, h.open) { s, k, b, open ->
+                Update.KeyRotation(w.flow, s.takeIf { open }, k.takeIf { open }, b.takeIf { open })
+            }
+        }
             ?: flowOf(Update.KeyRotation(w.flow, null))
         is Watched.Erasure -> erasures[w.flow]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.Erasure(w.flow, s.takeIf { open }) } }
             ?: flowOf(Update.Erasure(w.flow, null))
@@ -2501,6 +2650,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     )
                 }
         } ?: flowOf(Update.Received(w.received, null))
+        is Watched.Bookmark -> bookmarks[w.bookmark]?.let { b ->
+            combine(b.page.state, b.inPlace, b.open) { state, inPlace, open ->
+                Update.Bookmark(w.bookmark, if (open) shownBookmark(state, inPlace) else null)
+            }
+        } ?: flowOf(Update.Bookmark(w.bookmark, null))
         is Watched.Link -> links[w.link]?.let { held ->
             combine(held.model.state, held.open) { s, open -> Update.Link(w.link, if (open) shownLink(s) else null) }
         } ?: flowOf(Update.Link(w.link, null))
@@ -2541,7 +2695,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             canGoBack = shell.canGoBack,
             isHome = shell.isHome,
             drawerOpensAtStart = shell.drawerOpensAtStart,
-            creates = AppKinds.createsWhere(shell.isHome).map { ShellShown.ShownCreate(it, it.word) },
+            creates = AppKinds.createsWhere(shell.isHome, bookmarks = true).map { ShellShown.ShownCreate(it, it.word) },
             canCreateHere = open.models.shell?.canCreateHere == true,
             topLevelShare = open.models.shell?.offersTopLevelShare(shell) == true,
             headed = shell.openObject?.at ?: shell.space?.let(shell::folderAt),
@@ -3012,6 +3166,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     fun shutdown() {
         scans.removeAll().forEach { it.close() }
         links.removeAll().forEach { it.model.close() }
+        bookmarks.removeAll().forEach { runCatching { it.page.close() } }
         received.removeAll().forEach { runCatching { it.screen.leave() } }
         scope.cancel()
     }
@@ -3082,10 +3237,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     )
                 },
                 squarePicture = squarePicture,
-                readKey = { text -> me.raddatz.veyq.mobile.crypto.SecretKeyText.read(primitives, text) },
-                received = { link, queue ->
+                received = { link, queue, password ->
                     me.raddatz.veyq.mobile.sharing.GuestView.open(
-                        primitives, link, client, store, guestSessions, { config.language }, queue = queue, deriver = tiers, now = now,
+                        primitives, link, client, store, guestSessions, { config.language }, handedPassword = password, queue = queue,
+                        deriver = tiers, now = now,
                     )
                 },
             ) { t ->

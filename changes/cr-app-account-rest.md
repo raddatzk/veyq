@@ -1,7 +1,7 @@
 ---
 id: cr-app-account-rest
 title: The account flows' rest in the apps — the sign-in's Secret Key control in every flow that asks for the key, and the web's breached-password check straight from the device
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0148", "0088", "0003", "0136", "0137", "0026"]
 invariants:
@@ -137,19 +137,27 @@ controls reuse the sign-in's words. No owner question: the words are the web's.
 
 ## Phases
 
-- [ ] **1 ADR 0151 and the docs it binds** — ADR 0151 (D1–D8), its row in `docs/decisions/README.md`; ADR 0148's
+- [x] **1 ADR 0151 and the docs it binds** — ADR 0151 (D1–D8), its row in `docs/decisions/README.md`; ADR 0148's
   Consequences lines on #969/#970 pointed at it; `security-model.md` § the breached-password check corrected to the
   web's five screens (R9) plus the apps' two, and the apps' `User-Agent` beside the browser's `Origin`;
   `native-apps.md` § Open's line narrowed; `uc.account.change-password`, `uc.account.change-email` and
   `uc.account.rotate-keys` gain the apps in their alternate flows. · Done when: every guard but guard_gaps green
   (`/usr/bin/python3 scripts/validate_*.py`).
-- [ ] **2 core — the key intake** (D1, D2) — `KeyIntake`; `SessionModel` on it (`SessionModelTest`'s kit cases and
+  **Built 2026-11-19 (branch `claude/acct-rest`):** ADR 0151 was free (re-measured); every guard but guard_gaps green.
+- [x] **2 core — the key intake** (D1, D2) — `KeyIntake`; `SessionModel` on it (`SessionModelTest`'s kit cases and
   `LiveSignInTest` unchanged and green: the refactor's proof); the three flows on their own intake. Tests: a pasted
   `veyqkit:` token opens each flow (the R4 defect: written first, red on the untouched tree, then green); a kit read in a
   flow; another account's kit warns and proceeds; the key zeroed after the call and at close. **Bites:** (a) `typed`
   reading `SecretKeyText` first → the pasted-token test red; (b) the zeroing removed → the test that inspects the
   intake's held bytes after `run` red.
-- [ ] **3 core — the breach check** (D5, D6) — `Sha1`, `OutsideHttp` (`MapHttp`'s tests unchanged: the refactor's
+  **Built 2026-11-19 (branch `claude/acct-rest`):** `account/KeyIntake` (`typed`, `key`, `read`, `take`, `scan`,
+  `clear`, `spent`; `IntakeState`/`HeldKit` — names unique for the bindings); `SessionModel` on it; each flow's `intake`, its
+  actions taking the field's text (the byte overloads `internal`); the bridge, Android and Apple pass the text (their
+  `typedKey` gone). The R4 test (`AccountFlowsDispatchTest.aPastedKitTokenOpensEachFlow`) red on the untouched tree
+  (`PASSWORD_CHANGE_ERROR_CREDENTIAL`), green after; `FlowKeyIntakeTest` the core's. Bite (a) as written cannot bite —
+  reading `SecretKeyText` first still falls through to the token, which no bare-key reader accepts — so it was run as
+  `typed` reading `SecretKeyText` **only** (the R4 defect): red; (b) red (and the kit-file case with it).
+- [x] **3 core — the breach check** (D5, D6) — `Sha1`, `OutsideHttp` (`MapHttp`'s tests unchanged: the refactor's
   proof), `BreachCheck`, wired into `PasswordChange` and `KeyRotation`. Tests: the web test's cases one for one (a mock
   engine: nothing while typing, one padded request on leaving the field, no re-query, one in flight, a re-query at
   submit after an edit, nothing under the floor, a hit blocks until accepted, an edit clears the acceptance, unavailable
@@ -157,10 +165,25 @@ controls reuse the sign-in's words. No owner question: the words are the web's.
   engine records every request of a flow and the test asserts no request holds the password, its full SHA-1 or its
   suffix, and none carries `Authorization` or goes to the veyq server — bitten by sending the full hash, and by sending
   through the bearer `http` client; (c) `proceed()` passing a hit → red; (d) unavailable blocking → red.
-- [ ] **4 bridge** (D3, D7) — the calls, the updates, `ScanKind.FLOW_KIT`; the generated Rust and C# bindings.
+  **Built 2026-11-19 (branch `claude/acct-rest`):** `account/Sha1` (FIPS 180-4's examples, the padding edges, the web's
+  oracle), `session/OutsideHttp` (`MapHttp` renamed and moved, the map's tests unchanged but for the name),
+  `account/BreachCheck` (`BreachState`/`BreachKind`; the password it speaks about `@Transient`, never printed),
+  `BreachCheck.of(account)` wired into `passwordChange()` and `keyRotation()`; each flow's `check`, `edited`,
+  `useAnyway`. `BreachCheckTest` (the web test's cases), `BreachCanaryTest` (a signed-in account over `PlayedTenant`).
+  Bites (a)–(d) each red, (b) both ways.
+- [x] **4 bridge** (D3, D7) — the calls, the updates, `ScanKind.FLOW_KIT`; the generated Rust and C# bindings.
   · Done when: `:bridge:jvmTest` green with `SecretFreeSchemaTest` holding the new `typedIn` entries. **Bite:** a
   flow's `Update` serialised with the held key or the new password → the test that scans every update of a flow session
   for their canaries red.
+  **Built 2026-11-19 (branch `claude/acct-rest`):** `Kit.Read(flow, path)` (`NO_KIT` where none read), `Kit.Clear(flow)`,
+  `ScanKind.FLOW_KIT` (`Scan.Open`'s `link` the flow), `PasswordChange.Check/Edited/UseAnyway`,
+  `KeyRotation.Check/Edited/UseAnyway`; `Update.PasswordChange`/`.KeyRotation` carry `kit: IntakeState?` and
+  `breach: BreachState?`, `Update.AddressChange` `kit`; a flow's `*.Open` reads the range address; the password and
+  address flows close their intake. `:bridge:generateBindings` writes the new types under their own names (each simple
+  name new, none renamed). `AccountFlowsDispatchTest.aFlowSessionTakesTheKitByPathAndChecksTheNewPasswordAndSendsNeither`
+  scans every update for the key's forms, the token, the new password and its SHA-1 — bitten by serialising the check's
+  password (red); `SecretFreeSchemaTest` red without the two new `typedIn` entries. The words (D8) are left to the
+  platform phases.
 - [ ] **5 Android** (D4, D5's triggers) — the kit picker and scanner in the three flows; the check on focus loss, its
   notice under the new password (`supportingText`) and *Use it anyway* (a checkbox row). · Done when:
   `:android:assembleDebug` and the guidelines and words guards green; § Passes' Android row.

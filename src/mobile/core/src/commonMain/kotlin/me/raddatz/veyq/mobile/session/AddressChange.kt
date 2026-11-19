@@ -43,6 +43,9 @@ class AddressChange(
     private val suite = V1(primitives)
     private val proofs = AccountProofs(primitives)
 
+    /** The Secret Key section's control (ADR 0151 decision 1), the request's and the kit step's: held for this flow. */
+    val intake = me.raddatz.veyq.mobile.account.KeyIntake(primitives, me.raddatz.veyq.mobile.account.KeyIntake.Account(door.email, door.server))
+
     @Serializable
     data class State(
         val working: Boolean = false,
@@ -65,8 +68,12 @@ class AddressChange(
 
     fun watch(listener: (State) -> Unit): Watch = Watch(CoroutineScope(Dispatchers.Default).launch { state.collect(listener) })
 
+    /** Asks for the change with the Secret Key as the field holds it (typed, a pasted kit token, or empty for the held
+     *  kit's, [KeyIntake.key]); the held key is spent once the request went through. */
+    suspend fun request(newEmail: String, password: String, secretKey: String) = request(newEmail, password, intake.key(secretKey))
+
     /** Asks for the change to [newEmail]; [secretKey] (32 bytes) is zeroed by this call whatever it comes to. */
-    suspend fun request(newEmail: String, password: String, secretKey: ByteArray) = acting.withLock {
+    internal suspend fun request(newEmail: String, password: String, secretKey: ByteArray) = acting.withLock {
         try {
             val address = newEmail.trim()
             if (address.isEmpty()) return@withLock
@@ -77,7 +84,10 @@ class AddressChange(
             }
             _state.value = State(working = true, kitOffered = offered)
             _state.value = send(address, password, secretKey)?.let { State(refusal = it, kitOffered = offered) } ?: State(sentTo = address, kitOffered = offered)
-            if (current.sentTo != null) runCatching { door.addressChangeRequested() }
+            if (current.sentTo != null) {
+                intake.spent()
+                runCatching { door.addressChangeRequested() }
+            }
         } finally {
             secretKey.fill(0)
         }
@@ -132,11 +142,14 @@ class AddressChange(
      * ([Msg.EMAIL_CHANGE_KIT_REFUSED], [Msg.EMAIL_CHANGE_KIT_FAILED]). Null and nothing said where it is not offered
      * ([State.kitOffered]). The caller closes the step.
      */
-    suspend fun kit(password: String, secretKey: ByteArray): KitStep? = acting.withLock {
+    suspend fun kit(password: String, secretKey: String): KitStep? = kit(password, intake.key(secretKey))
+
+    /** [kit] with the key read: [secretKey] (32 bytes) zeroed by this call. */
+    internal suspend fun kit(password: String, secretKey: ByteArray): KitStep? = acting.withLock {
         try {
             if (!current.kitOffered) return@withLock null
             ColdCredential.prove(suite, door.masterKey(), door.keyMaterial(), password, secretKey).fill(0)
-            KitStep(primitives, door.heldEmail(), door.server, secretKey)
+            KitStep(primitives, door.heldEmail(), door.server, secretKey).also { intake.spent() }
         } catch (e: ColdCredential.Refused) {
             _state.value = current.copy(refusal = Msg.EMAIL_CHANGE_KIT_REFUSED)
             null
@@ -148,5 +161,10 @@ class AddressChange(
         } finally {
             secretKey.fill(0)
         }
+    }
+
+    /** The flow closed: a held kit's key is zeroed. */
+    fun close() {
+        intake.clear()
     }
 }

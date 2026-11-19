@@ -12,3 +12,6 @@ internal actual fun platformHttpClient(block: HttpClientConfig<*>.() -> Unit): H
 
 /** DPAPI and Windows Hello, Hello's prompt owned by the host's window and in its words. */
 internal actual fun platformDeviceKeys(config: Config, store: DeviceStore): DeviceKeys = WindowsDeviceKeys(store, config.window, config.prompt)
+
+/** In memory until the credential locker keeps them (cr-app-received-links phase 10, inbox #1019): a guest names itself again after a restart. */
+internal actual fun platformGuestSessions(): me.raddatz.veyq.mobile.sharing.GuestSessions = me.raddatz.veyq.mobile.sharing.MemoryGuestSessions()

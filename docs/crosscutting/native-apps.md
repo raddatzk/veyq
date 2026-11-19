@@ -527,8 +527,9 @@ uploaded with the app left; a drop from a freeform window); Apple built, not cli
 - The account's flows ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md), built): the agent's macOS click-through and kit no-copy check (inbox #976, with #917),
   the Windows UIA pass and no-copy check (#983, once the VM resolves a throwaway's tenant), whether iOS's
   `fileExporter` stages the kit in the container (#975); the address change's confirm and re-addressed sign-in live (no
-  mailing backend on the Mac the passes ran on); the breached-password check (#969); the Secret Key from a kit file or a
-  scan in these flows (#970); a live pass that sees #979's and #980's fixes, and the fixes of #1009, #1010, #977 and #984
+  mailing backend on the Mac the passes ran on); the breached-password check (#969) and the Secret Key from a pasted kit
+  token, a kit file or a scan in these flows (#970), decided in [ADR 0151](../decisions/0151-the-apps-account-rest-the-sign-ins-secret-key-control-in-every-flow-that-asks-for-the-key-and-the-breached-password-check-straight-from-the-device.md) and being built
+  (cr-app-account-rest); a live pass that sees #979's and #980's fixes, and the fixes of #1009, #1010, #977 and #984
   on screen. The owner's: iPhone and
   iPad, Touch ID and Windows Hello for real, a real mailbox, a safety code scanned with real cameras (#912).
 - Not in the apps: invites and members, recovery, terms, *Who's who* (#967), the moderation key (#965), the task

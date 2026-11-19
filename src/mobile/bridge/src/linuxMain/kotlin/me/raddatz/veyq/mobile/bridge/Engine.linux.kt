@@ -12,3 +12,6 @@ internal actual fun platformHttpClient(block: HttpClientConfig<*>.() -> Unit): H
 
 /** The Secret Service through libsecret, loaded at run time; without it nothing is kept (`StaySignedIn.NONE`). */
 internal actual fun platformDeviceKeys(config: Config, store: DeviceStore): DeviceKeys = LinuxDeviceKeys()
+
+/** The Secret Service, where the device keys are: an item per guest session under its hashed name. */
+internal actual fun platformGuestSessions(): me.raddatz.veyq.mobile.sharing.GuestSessions = me.raddatz.veyq.mobile.sharing.LinuxGuestSessions()

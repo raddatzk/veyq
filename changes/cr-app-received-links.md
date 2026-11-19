@@ -243,8 +243,28 @@ question 2*).
   session in memory for the run). Measured: `xcodebuild … -sdk macosx` and `-sdk iphonesimulator` `CODE_SIGNING_ALLOWED=NO`
   BUILD SUCCEEDED; the words and guidelines guards OK. **Not run:** the macOS row (a background agent has no
   full-screen control, `src/mobile/CLAUDE.md` § Traps) — the coordinator's; iPhone and iPad the owner's.
-- [ ] **9 Linux** — the same over the bridge; the Secret Service. · Done when: `python3 linux/run.py test` and `build`
+- [x] **9 Linux** — the same over the bridge; the Secret Service. · Done when: `python3 linux/run.py test` and `build`
   green; § Passes' Linux row.
+  **Built 2026-11-19 (branch `claude/h-linux`):** core's `linuxMain` `sharing/LinuxGuestSessions` (a Secret Service item
+  of the device keys' schema, alias `guest/veyq-guest:<hash>`, the libsecret `LinuxDeviceKeys` loads — no new
+  dependency), handed to `Bridge.live` by `platformGuestSessions` (Windows: in memory, #1019); the bridge's
+  `Bookmark.*` calls and watch, `Received.KeepPlaces`/`Report`/`ReportShown`, `ReceivedShown.recordDays`/`privacy`,
+  a WRITE_ONLY page's sent list followed; the app's `received.rs` (*Open a link* under the sign-in and in the switcher's
+  menu, the screen above everything, the gates, a level's rows and the member's file, Memory and Pot pages over the
+  guest's models, the drop box's and uploader's page, *Keep*, *Report shared content*, *Not you?*, the record's notice
+  under the header and in the naming question, #1018), `bookmark_page.rs` (pushed over the content: in place or on its
+  own, *Report shared content*, *Report name*), `bookmark_create.rs` (New → Bookmark, #1020). Measured: `run.py test`
+  (`LinuxGuestSessionsTest` over gnome-keyring), `run.py bridge`, `run.py build` (clippy, tests), `:bridge:jvmTest`
+  green; bites seen red. Broadway pass, one throwaway with member (erased, its home volume removed), links minted by the
+  owner through the core: signed out — a password READ_WRITE Memory (wrong password asked again, the gallery, the
+  notice "kept for 7 days", the naming question with it, a photo added; Back asked, Leave back to the sign-in) and a
+  Memory's uploader link (named, a photo sent — the member then saw three photos); `secret-tool search` lists
+  `guest/veyq-guest:<hash>` labelled "veyq guest session", and after a restart the guest was still named; signed in as
+  the member — the switcher's *Open a link*, *Keep* into the tenant's space, New → Bookmark's dialog (the group-space
+  line). The bookmark's page in place and *Open on its own page* were seen with a local fix of the level's list that is
+  #1032's (reverted: the core agent's). **Open:** a guest's file Replace and a Pot's places on Linux (#1035); a
+  bookmark's rename, move and delete (#1035); a viewing link's report (#1033); terms and a note (not on the links);
+  another instance; Orca not run.
 - [ ] **10 Windows** — the same; the credential locker. · Done when: `python3 windows/run.py build` green on the VM;
   § Passes' Windows row (or #983's reason named open).
 - [ ] **11 the passes** — § Passes, each as a throwaway, erased after; results into ADR 0150's Consequences.
