@@ -87,7 +87,14 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
     class Tenant(val id: String, val domain: String)
     inner class Scope(val name: String, val tenant: Tenant, val kind: String = "PERSONAL") {
         val id = id(name)
-        val key: ByteArray = p.randomBytes(32)
+        /** The scope's one key at its current [epoch]: a new lock ([relock]) replaces it. */
+        var key: ByteArray = p.randomBytes(32)
+        /** The scope's current epoch, the one the account's grant carries. */
+        var epoch = 0
+        /** Whether a node of it is due (served as `rekeying`): set by a new lock, whose nodes are not re-keyed. */
+        var rekeying = false
+        /** The succession statements of every epoch after 0 (`listScopeEpochs`): epoch, public key, signature. */
+        val successions = mutableListOf<Triple<Int, ByteArray, ByteArray>>()
         /** Whether the account is a member: not, and the scope is gone from its scopes and its tree answers `403`. */
         var member = true
         /** Listed in `listMyScopes` while not a member (a list that does not know yet). */
@@ -98,8 +105,31 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
         val members = linkedMapOf(userId to "me")
         /** Its trash: the roots of trashed subtrees, as `listTrashedNodes` lists them ([trashNode] puts one there). */
         val trashed = mutableListOf<Node>()
-        val wrappedGrant: ByteArray = suite.sealTo(Context("scope-grant", "scopeId" to id, "epoch" to 0L), kem.publicKey, key)
-        val signature: ByteArray = p.ed25519Sign(identity.signSeed, suite.grantStatement(id, kind, 0, userId, myPublic, wrappedGrant))
+        var wrappedGrant: ByteArray = suite.sealTo(Context("scope-grant", "scopeId" to id, "epoch" to 0L), kem.publicKey, key)
+        var signature: ByteArray = p.ed25519Sign(identity.signSeed, suite.grantStatement(id, kind, 0, userId, myPublic, wrappedGrant))
+    }
+
+    /**
+     * Scope [s] given a new lock by another device of the account, as `rotateScope` commits it (ADR 0115): a fresh key at
+     * the next epoch, its succession signed by the old one, the account re-granted to itself, every scope-root entry
+     * re-sealed under the new key (each root's entry is under the scope key: [Node.entryKey]) — and no node re-keyed, so
+     * the scope is served as `rekeying` and the tree's revision moves.
+     */
+    fun relock(s: Scope) {
+        val trust = me.raddatz.veyq.mobile.crypto.Trust(suite)
+        val (_, oldSeed) = trust.successionKeyPair(s.key)
+        val next = p.randomBytes(32)
+        val epoch = s.epoch + 1
+        val (nextPublic, nextSeed) = trust.successionKeyPair(next)
+        nextSeed.fill(0)
+        s.successions += Triple(epoch, nextPublic, p.ed25519Sign(oldSeed, trust.scopeSuccessionStatement(s.id, epoch.toLong(), nextPublic)))
+        oldSeed.fill(0)
+        s.key = next
+        s.epoch = epoch
+        s.wrappedGrant = suite.sealTo(Context("scope-grant", "scopeId" to s.id, "epoch" to epoch.toLong()), kem.publicKey, next)
+        s.signature = p.ed25519Sign(identity.signSeed, suite.grantStatement(s.id, s.kind, epoch.toLong(), userId, myPublic, s.wrappedGrant))
+        s.rekeying = true
+        s.revision++
     }
     inner class Node(val scope: Scope, val label: String, val parent: Node?, val kind: String, val name: String) {
         val id = id(label)
@@ -298,7 +328,7 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
 
     private fun tenantOf(r: HttpRequestData) = tenants.firstOrNull { it.domain == r.url.host }
 
-    private fun scopeJson(s: Scope) = """{"id":"${s.id}","kind":"${s.kind}","role":"OWNER","tenantId":"${s.tenant.id}","nameEpoch":0,"iconEpoch":0,"currentEpoch":0,"grantedEpoch":0,"wrappedGrant":"${b64(s.wrappedGrant)}","granterUserId":"$userId","grantSignature":"${b64(s.signature)}"}"""
+    private fun scopeJson(s: Scope) = """{"id":"${s.id}","kind":"${s.kind}","role":"OWNER","tenantId":"${s.tenant.id}","nameEpoch":0,"iconEpoch":0,"currentEpoch":${s.epoch},"grantedEpoch":${s.epoch},"rekeying":${s.rekeying},"wrappedGrant":"${b64(s.wrappedGrant)}","granterUserId":"$userId","grantSignature":"${b64(s.signature)}"}"""
 
     private fun nodeJson(n: Node) = """{"blockedByOperator":${n.blocked},"createdAt":"2026-01-01T00:00:00.000Z","placementRevision":0,"id":"${n.id}","epoch":0,"scopeEpoch":0,"kind":"${n.kind}","encryptedName":"${b64(n.encryptedName)}","slugToken":"c2x1Zw==","orderIndex":0,"wrappedContentKey":"${b64(n.wrappedKey)}","metaRevision":0,"wrappedMeta":${metaOf(n)?.let { "\"$it\"" } ?: "null"},"parentId":${n.parent?.let { "\"${it.id}\"" } ?: "null"}${extrasOf(n)}}"""
 
@@ -360,6 +390,10 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
                 val blobId = Regex("\"blobId\"\\s*:\\s*\"([^\"]+)\"").find(body)!!.groupValues[1]
                 val b = blobs.getValue(blobId)
                 json("""{"results":[{"presignedGets":[${b.frames.indices.joinToString(",") { """{"index":$it,"url":"http://store.example/$blobId/$it"}""" }}]}]}""")
+            }
+            path.matches(Regex("/api/scopes/[^/]+/epochs")) -> {
+                val s = scopes.firstOrNull { it.id == path.split('/')[3] && it.tenant == tenant } ?: return json("{}", HttpStatusCode.NotFound)
+                json(s.successions.joinToString(",", "[", "]") { (e, k, sig) -> """{"epoch":$e,"successionPublicKey":"${b64(k)}","successionSignature":"${b64(sig)}"}""" })
             }
             path.matches(Regex("/api/scopes/[^/]+/members")) -> {
                 val s = scopes.firstOrNull { it.id == path.split('/')[3] && it.tenant == tenant } ?: return json("{}", HttpStatusCode.NotFound)

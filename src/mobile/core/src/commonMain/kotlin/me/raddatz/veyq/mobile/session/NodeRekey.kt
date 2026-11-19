@@ -180,12 +180,19 @@ object NodeRekey {
         val left = HashSet<String>()
         var committed = 0
         var conflicts = 0
+        var reopened = false
         try {
             while (true) {
                 val (scopeKey, heldEpoch) = tenant.scopeKey(scopeId) ?: return Result(Outcome.FAILED, committed)
                 val list = account.call { api.listRekeyNodes(scopeId) }
-                // never seal at an epoch this device does not hold the scope key of
-                if (heldEpoch < list.currentEpoch) return Result(Outcome.LEFT, committed)
+                // never seal at an epoch this device does not hold the scope key of: a scope another device rotated while
+                // this session stayed open is opened anew once (the web's `reopenIfBehind`, inbox #1021) and listed again
+                if (heldEpoch < list.currentEpoch) {
+                    if (reopened) return Result(Outcome.LEFT, committed)
+                    reopened = true
+                    tenant.reopenMoved()
+                    continue
+                }
                 val rows = list.nodes
                 val byId = rows.associateBy { it.id }
                 val wanted = lagging(rows, byId)

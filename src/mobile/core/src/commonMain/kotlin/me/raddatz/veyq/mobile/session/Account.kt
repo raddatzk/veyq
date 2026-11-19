@@ -545,10 +545,44 @@ class VeyqAccount private constructor(
         // the tile provider's attribution beside its address (`memories.map`, shown on every map: ADR 0018)
         val attributions = capabilities.orEmpty().mapNotNull { c -> c.serviceAttribution?.let { c.id to it } }.toMap()
         val off = on?.let { KNOWN_APPLICATIONS - it } ?: emptySet()
+        val opened = openScopes(tenant, base, summaries)
+        return TenantSession(
+            this, tenant, base, opened.open, off, opened.closed, opened.people.orEmpty(), services, ShareLinks.Rules.of(capabilities),
+            attributions = attributions, servicesRead = capabilities != null, closedKinds = opened.closedKinds, on = on, view = opened.view,
+        )
+    }
+
+    /** A tenant's scopes as [openScopes] opened them: the open ones, the closed ones with why and their kinds, the view a
+     *  GROUP's granter was judged against, and the members named — null where the TENANT scope was [held] as it was. */
+    internal class OpenedScopes(
+        val open: List<TenantSession.OpenScope>,
+        val closed: Map<String, GrantOutcome.Reason>,
+        val closedKinds: Map<String, String>,
+        val view: TenantView,
+        val people: Map<String, Person>?,
+    )
+
+    /**
+     * [summaries] of [tenant] opened, each grant verified before it is opened ([GrantOpener]). The TENANT scope opens first:
+     * its member list is what a group's granter is judged against ([TenantView]). A scope of [held] whose grant the list
+     * serves as it was (the same epochs, the same wrapped grant and signature) keeps its key unopened again — a re-read of
+     * the list after the tenant opened ([TenantSession.reopenMoved], inbox #1021) re-opens only what moved; [heldView] is
+     * then the view kept while the TENANT scope did not move.
+     */
+    internal suspend fun openScopes(
+        tenant: TenantRef, base: String, summaries: List<ScopeSummary>,
+        held: List<TenantSession.OpenScope> = emptyList(), heldView: TenantView? = null,
+    ): OpenedScopes {
         val grants = grants(base)
+        val kept = held.associateBy { it.summary.id }
         val open = mutableListOf<TenantSession.OpenScope>()
         val closed = mutableMapOf<String, GrantOutcome.Reason>()
         suspend fun openOne(s: ScopeSummary, view: TenantView?) {
+            val same = kept[s.id]?.takeIf { sameGrant(it.summary, s) }
+            if (same != null) {
+                open += TenantSession.OpenScope(s, same.key, scopeName(s, tenant))
+                return
+            }
             when (val o = grants.open(s, view)) {
                 is GrantOutcome.Opened -> open += TenantSession.OpenScope(s, o.key, scopeName(s, tenant))
                 is GrantOutcome.Refused -> closed[s.id] = o.reason
@@ -557,17 +591,26 @@ class VeyqAccount private constructor(
         val (tenantScopes, others) = summaries.partition { it.kind.value == "TENANT" }
         tenantScopes.forEach { openOne(it, null) }
         val tenantScope = open.firstOrNull { it.summary.kind.value == "TENANT" && it.summary.id == tenant.tenantId }
-        val members = tenantScope?.let { members(base, tenant.tenantId, tenant.tenantId) }
-        val view = if (tenantScope == null || members == null) TenantView.unavailable(tenant.tenantId, suite)
-        else TenantView.of(tenant.tenantId, members, tenantScope.key, tenantScope.summary.grantedEpoch.toLong(), suite, anchoring)
+        val tenantHeld = heldView != null && tenantScope != null && kept[tenantScope.summary.id]?.key === tenantScope.key
+        val members = if (tenantHeld) null else tenantScope?.let { members(base, tenant.tenantId, tenant.tenantId) }
+        val view = when {
+            tenantHeld -> heldView!!
+            tenantScope == null || members == null -> TenantView.unavailable(tenant.tenantId, suite)
+            else -> TenantView.of(tenant.tenantId, members, tenantScope.key, tenantScope.summary.grantedEpoch.toLong(), suite, anchoring)
+        }
         others.forEach { openOne(it, view) }
-        val people = if (tenantScope == null || members == null) emptyMap()
-        else People.of(JoinRecords(suite), tenant.tenantId, tenantScope.key, tenantScope.summary.grantedEpoch.toLong(), members)
-        return TenantSession(
-            this, tenant, base, open, off, closed, people, services, ShareLinks.Rules.of(capabilities),
-            attributions = attributions, servicesRead = capabilities != null, closedKinds = kindsOf(summaries, closed), on = on,
-        )
+        val people = when {
+            tenantHeld -> null
+            tenantScope == null || members == null -> emptyMap()
+            else -> People.of(JoinRecords(suite), tenant.tenantId, tenantScope.key, tenantScope.summary.grantedEpoch.toLong(), members)
+        }
+        return OpenedScopes(open, closed, kindsOf(summaries, closed), view, people)
     }
+
+    /** Whether [now] serves the very grant [was] was opened from: the same epochs, the same wrapped grant, granter and signature. */
+    private fun sameGrant(was: ScopeSummary, now: ScopeSummary): Boolean =
+        was.grantedEpoch == now.grantedEpoch && was.currentEpoch == now.currentEpoch && was.wrappedGrant == now.wrappedGrant &&
+            was.granterUserId == now.granterUserId && was.grantSignature == now.grantSignature
 
     private suspend fun openOffline(tenant: TenantRef, base: String, summaries: List<ScopeSummary>): TenantSession {
         val grants = grants(base)
@@ -1596,10 +1639,9 @@ class TenantSession internal constructor(
     val account: VeyqAccount,
     val tenant: TenantRef,
     internal val base: String,
-    private val scopes: List<OpenScope>,
+    scopes: List<OpenScope>,
     private val applicationsOff: Set<String>,
-    /** The scopes this tenant serves the account that stay closed, by id, and why (a grant refused or awaiting a key). */
-    val closed: Map<String, GrantOutcome.Reason> = emptyMap(),
+    closed: Map<String, GrantOutcome.Reason> = emptyMap(),
     /** The tenant's members as read when the tenant was opened ([people]). */
     people: Map<String, Person> = emptyMap(),
     /** The tenant's external services by capability id, each its configured address (`serviceUrl`): only while the
@@ -1616,10 +1658,70 @@ class TenantSession internal constructor(
     val servicesRead: Boolean = false,
     /** The kind of each scope of [closed] (`TENANT`, `GROUP`, `PERSONAL`), by id: what a walk over the tenant's and the groups'
      *  scopes counts as not read (a person's index, ADR 0144 decision 12). */
-    internal val closedKinds: Map<String, String> = emptyMap(),
+    closedKinds: Map<String, String> = emptyMap(),
     /** The ids of the tenant's capability set that are on, as read when it opened; null where the set did not read. */
     private val on: Set<String>? = null,
+    /** The view a GROUP's granter was judged against when the scopes opened; null offline (nothing new is judged then: a
+     *  later [reopenMoved] online reads the members and judges anew). */
+    private var view: TenantView? = null,
 ) : Library {
+    /**
+     * The open scopes, each with the key its grant carried: as opened with the tenant, and replaced where a later read of
+     * the list serves a scope's grant moved ([reopenMoved]) — another device rotated the account's keys or gave the space a
+     * new lock while this one stayed open (inbox #1021).
+     */
+    private var scopes: List<OpenScope> = scopes
+
+    /** The scopes this tenant serves the account that stay closed, by id, and why (a grant refused or awaiting a key). */
+    var closed: Map<String, GrantOutcome.Reason> = closed
+        private set
+
+    /** The kind of each scope of [closed] (`TENANT`, `GROUP`, `PERSONAL`), by id: what a walk over the tenant's and the groups'
+     *  scopes counts as not read (a person's index, ADR 0144 decision 12). */
+    internal var closedKinds: Map<String, String> = closedKinds
+        private set
+
+    private val reopening = kotlinx.coroutines.sync.Mutex()
+
+    /**
+     * The scope list read anew and every scope whose grant moved since it was opened re-opened ([VeyqAccount.openScopes]: a
+     * new epoch's grant verified and its succession from the held key checked; one behind the scope's current epoch closed
+     * until its re-grant arrives) — what the web does at every scope entry (`openScopeById`) and a write's pull
+     * (`refreshActiveScope`). A scope whose grant did not move keeps its key. Run by every read of the tree ([trees]) and by
+     * a re-key that finds the scope ahead of the key held ([NodeRekey]); true where a key changed, a scope opened or one
+     * closed. Offline, or where the list does not read, nothing changes: the keys held stay.
+     */
+    internal suspend fun reopenMoved(): Boolean = reopening.withLock {
+        if (account.reach.value != Reach.Online) return@withLock false
+        val summaries = try {
+            val r = account.kept(KeptRead.MY_SCOPES, tenant.tenantId, "", "", settle = false) {
+                account.fetched(account.respond { api(::ScopesApi).listMyScopes() }, null)
+            }
+            if (r.offline != null) return@withLock false
+            VeyqAccount.KEPT_JSON.decodeFromString(ListSerializer(ScopeSummary.serializer()), r.pages.single().decodeToString())
+                .filter { it.deletedAt == null }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            return@withLock false
+        }
+        val before = scopes
+        // a failure that says nothing about a grant (a succession or member list that did not read) keeps the keys held
+        val opened = try {
+            account.openScopes(tenant, base, summaries, before, view)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            return@withLock false
+        }
+        val moved = opened.open.size != before.size || opened.closed.keys != closed.keys ||
+            opened.open.any { s -> before.none { it.summary.id == s.summary.id && it.key === s.key } }
+        scopes = opened.open
+        closed = opened.closed
+        closedKinds = opened.closedKinds
+        view = opened.view
+        opened.people?.let { people = it }
+        if (moved) movedSinceRead = true
+        moved
+    }
     /** Whether capability [id] is on for the tenant; null where its set did not read (offline, a failed read). */
     fun capabilityOn(id: String): Boolean? = on?.contains(id)
 
@@ -1810,8 +1912,14 @@ class TenantSession internal constructor(
      * a newer answer replacing the kept one, the store's answer offline ([offline] then says as of when). A scope the
      * server no longer serves the account (`403`/`404`: a removed membership) lists nothing, and what was kept of it is
      * swept (decision 6). The store is swept once, after every scope was read.
+     *
+     * Each read first reads the scope list anew ([reopenMoved]): a scope another device rotated or gave a new lock while
+     * this session stayed open is read under its new key, never under the one the tenant opened with, under which its
+     * re-sealed root entries no longer open (inbox #1021). Where a key changed, the models over this session read again
+     * ([rekeyed]) once this read is held — a Pot under its key, the shell its spaces.
      */
     internal suspend fun trees(): Map<String, List<OpenNode>> = tree ?: run {
+        reopenMoved()
         var asOf: OfflineAsOf? = null
         var unkept: Unreachable? = null
         val unread = HashSet<String>()
@@ -1851,7 +1959,16 @@ class TenantSession internal constructor(
         offline = asOf
         unreadTrees = unread
         read
-    }.also { tree = it }
+    }.also {
+        tree = it
+        if (movedSinceRead) {
+            movedSinceRead = false
+            _rekeyed.value = _rekeyed.value + 1
+        }
+    }
+
+    /** A key changed in a [reopenMoved] since the last read of the tree: told to the models ([rekeyed]) once the next read is held. */
+    private var movedSinceRead = false
 
     /** Where the last read of the tree came from the store with the server unreachable: as of when; null when it was the server's. */
     var offline: OfflineAsOf? = null

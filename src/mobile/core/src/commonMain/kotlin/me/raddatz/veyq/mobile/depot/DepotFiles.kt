@@ -387,7 +387,8 @@ object DepotFiles {
         var ended: Uploaded? = null
         val result = me.raddatz.veyq.mobile.session.NodeEpochWrite.run(
             pull = { me.raddatz.veyq.mobile.session.NodeRekey.pull(tenant, scopeId, listOf(nodeId)) },
-            belowFloor = { node!!.scopeEpoch < scopeEpoch },
+            // the epoch held NOW: the node's read may have re-opened a scope another device rotated (inbox #1021)
+            belowFloor = { node!!.scopeEpoch < (tenant.scopeEpoch(scopeId) ?: scopeEpoch) },
             reread = {
                 tenant.forgetTree()
                 node = tenant.node(scopeId, nodeId)
