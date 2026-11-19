@@ -1376,6 +1376,51 @@ final class AppModel {
         }
     }
 
+    // MARK: The account's flows (ADR 0148 decision 10)
+
+    /// The signed-in member's user id on the tenant shown: whose person page is one's own.
+    var myUserId: String? { session.signedTo?.account.userId }
+
+    /// One's own profile on the tenant shown (core's `ProfileModel`), made anew for each sheet; the sheet closes it.
+    func ownProfile() -> ProfileModel? { tenantSession.map { AppleAccount.shared.profile(tenant: $0) } }
+
+    /// The tenant's safety numbers and their compare (core's `PersonTrust`).
+    var personTrust: PersonTrust? { tenantSession?.personTrust }
+
+    func passwordChangeFlow() -> PasswordChange? { session.signedTo?.account.passwordChange() }
+    func addressChangeFlow() -> AddressChange? {
+        guard let s = session.signedTo else { return nil }
+        return AppleAccount.shared.addressChange(account: s.account, tenant: s.tenant)
+    }
+    func keyRotationFlow() -> KeyRotation? { session.signedTo?.account.keyRotation() }
+    func erasureFlow() -> AccountErasure? { session.signedTo?.account.erasure() }
+
+    /// After a save of one's profile: the shell's people read again, so every name follows (core read them, and the pictures).
+    func profileSaved() {
+        guard let t = tenantSession else { return }
+        Task { await refreshLists(t, people: true) }
+    }
+
+    /// After a password change: this device's saved key is gone (core forgot it), so the open Settings page reads anew —
+    /// its trust row offers the password trust again.
+    func passwordChanged() {
+        guard let m = settingsModel else { return }
+        Task { try? await m.refresh() }
+    }
+
+    /// After a rotation: the account holds the new keys, so the tenant shown is opened anew (its keys were the old identity's).
+    func keysReplaced() {
+        guard let s = session.signedTo else { return }
+        Task { if let opened = try? await session.switchTo(account: s.account, tenant: s.tenant) { try? await show(opened) } }
+    }
+
+    /// After the erasure: core forgot the account on this device; it leaves the session as a sign-out does.
+    func accountErased() {
+        guard let account = session.signedTo?.account else { return }
+        closeSettings()
+        signOut(account)
+    }
+
     // MARK: An open Pot (Expenses)
 
     /// The tenant the shell shows, opened: where an object's own view reads from.
@@ -2078,6 +2123,7 @@ final class CGImageBox {
 /// The Settings page's actions, each a call of core's `AccountSettings` (the page decides nothing).
 extension AppModel: SettingsActions {
     func renameDevice(_ label: String) { onSettings { try await $0.rename(label: label); return nil } }
+    func renameFamily(_ familyId: String, _ label: String) { onSettings { try await $0.renameFamily(familyId: familyId, label: label); return nil } }
     func signOutFamily(_ familyId: String) { onSettings { try await $0.signOut(familyId: familyId) } }
     func signOutOthers() { onSettings { try await $0.signOutOthers(); return nil } }
     func signOutAndRemoveKey(_ familyId: String) { onSettings { try await $0.signOutAndRemoveKey(familyId: familyId); return nil } }

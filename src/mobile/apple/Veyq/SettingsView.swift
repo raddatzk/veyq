@@ -7,6 +7,8 @@ import VeyqCore
 protocol SettingsActions: AnyObject {
     func closeSettings()
     func renameDevice(_ label: String)
+    /// Renames the device of session family `familyId` — any device the register names, every session of it (ADR 0148 D1).
+    func renameFamily(_ familyId: String, _ label: String)
     func signOutFamily(_ familyId: String)
     func signOutOthers()
     func signOutAndRemoveKey(_ familyId: String)
@@ -74,7 +76,11 @@ struct SettingsView: View {
     #endif
     @State private var confirm: Confirm?
     @State private var renaming = false
+    /// The rename's target: nil this device (`renameDevice`), else the family whose device is renamed (`renameFamily`).
+    @State private var renamingFamily: AccountSettingsFamily?
     @State private var name = ""
+    /// The account's flow open over the page (ADR 0148 decision 10), each a sheet of its own.
+    @State private var flow: AccountFlow?
     @State private var askPassword = false
     @State private var password = ""
     @State private var trustSaid: String?
@@ -119,6 +125,11 @@ struct SettingsView: View {
                 Section { Text(say(refusal)).foregroundStyle(Role.danger) }
             }
             account.id("account")
+            if let model = maps {
+                flowSection(.profile, model).id("profile")
+                flowSection(.password, model).id("password")
+                flowSection(.email, model).id("email")
+            }
             device.id("device")
             sessions.id("sessions")
             savedKeys.id("saved-keys")
@@ -152,6 +163,10 @@ struct SettingsView: View {
             }
             .id("appearance")
             #endif
+            if let model = maps {
+                flowSection(.security, model).id("security")
+                flowSection(.erase, model).id("erase")
+            }
             Section {
                 Button(role: .destructive) { actions.signOutHere() } label: {
                     Label(say(.drawerSignOut), systemImage: "rectangle.portrait.and.arrow.right")
@@ -174,13 +189,17 @@ struct SettingsView: View {
         // that field, which showed empty (inbox #917); the change made once it shows is pushed into the live field
         .onChange(of: renaming) { _, open in
             guard open else { return }
-            DispatchQueue.main.async { name = state.device.label }
+            let label = renamingFamily?.label ?? state.device.label
+            DispatchQueue.main.async { name = label }
         }
         .alert(say(.accountSettingsRename), isPresented: $renaming) {
             TextField(say(.accountSettingsRenamePlaceholder), text: $name)
-            Button(say(.signinCancel), role: .cancel) {}
-            Button(say(.ok)) { actions.renameDevice(name) }
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button(say(.signinCancel), role: .cancel) { renamingFamily = nil }
+            Button(say(.ok)) {
+                if let family = renamingFamily, !family.current { actions.renameFamily(family.id, name) } else { actions.renameDevice(name) }
+                renamingFamily = nil
+            }
+            .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
         } message: {
             Text(say(.accountSettingsRenameHint))
         }
@@ -214,6 +233,28 @@ struct SettingsView: View {
             limitUnit = field.unit
         }
         .overlay(alignment: .top) { if state.working { ProgressView().padding(8) } }
+        .sheet(item: $flow) { f in
+            if let model = maps { AccountFlowSheet(flow: f, model: model) }
+        }
+    }
+
+    /// A section that opens one of the account's flows (ADR 0148 decision 10): its rubric, what it is for, the button.
+    private func flowSection(_ f: AccountFlow, _ model: AppModel) -> some View {
+        Section {
+            Button(role: f == .erase ? .destructive : nil) { flow = f } label: { Label(f.action, systemImage: f.symbol) }
+                .disabled(state.working)
+        } header: {
+            Text(f.title)
+        } footer: {
+            Text(f.sub)
+        }
+    }
+
+    /// Opens the rename for this device (`family` nil) or for the device of `family`; the name is set once the alert shows.
+    private func rename(_ family: AccountSettingsFamily?) {
+        renamingFamily = family
+        name = "" // the label is set once the alert shows (`onChange(of: renaming)`), so it is always a change (inbox #917)
+        renaming = true
     }
 
     /// Core's free size field as one value: the field is set anew from it whenever core's changes.
@@ -343,8 +384,7 @@ struct SettingsView: View {
                 Label(state.device.label, systemImage: Self.deviceSymbol).fontWeight(.semibold)
                 Spacer()
                 Button {
-                    name = "" // the label is set once the alert shows (`onChange(of: renaming)`), so it is always a change
-                    renaming = true
+                    rename(nil)
                 } label: {
                     Image(systemName: "pencil")
                 }
@@ -462,6 +502,10 @@ struct SettingsView: View {
     @ViewBuilder
     private func familyActions(_ f: AccountSettingsFamily) -> some View {
         let id = f.id
+        // the web's `renameDeviceOfFamily`: only a device the register names (core writes nothing for another)
+        if f.label != nil {
+            Button { rename(f) } label: { Label(say(.accountSettingsRename), systemImage: "pencil") }
+        }
         if f.current {
             Button(role: .destructive) {
                 confirm = Confirm(
