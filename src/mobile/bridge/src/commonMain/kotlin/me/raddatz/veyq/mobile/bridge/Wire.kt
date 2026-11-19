@@ -843,6 +843,13 @@ internal sealed class Call {
     @Serializable @SerialName("Link.Close") data class LinkClose(val link: Long) : Call()
 
     /**
+     * A `veyq:` link the system handed the app (ADR 0150 § O1: a desktop's command line or activation, a protocol launch):
+     * [uri] as it arrived, inward once. The core reads its host alone (`DeepLink.parse`) and answers the screen it opens
+     * ([Answer.DeepLinked]); nothing of it is kept, logged or sent back. Stateless, signed in or not.
+     */
+    @Serializable @SerialName("DeepLink") data class DeepLink(val uri: String) : Call()
+
+    /**
      * A received link pasted into *Open a link* (ADR 0150 decisions 4, 7): [text] as the person pasted it — the link with
      * its key, inward once and never back. Answered with its id ([Answer.ReceivedOpened]) for [Watched.Received] and the
      * `Received.*` calls, or with why the app does not open it ([Answer.ReceivedProblem]); signed in or not. Loaded at once.
@@ -1802,6 +1809,12 @@ internal sealed class Answer {
 
     /** A device link opened (`Link.*` of a role): its id, for [Watched.Link] and the link's calls. */
     @Serializable @SerialName("LinkOpened") data class LinkOpened(val link: Long) : Answer()
+
+    /**
+     * The screen a `veyq:` link opens ([Call.DeepLink]): [DeepScreen.LINK] *Open a link* — on the sign-in or the unlock
+     * screen, and signed in over the open tenant —, [DeepScreen.OPEN] the app where it is. Nothing of the link.
+     */
+    @Serializable @SerialName("DeepLinked") data class DeepLinked(val screen: DeepScreen) : Answer()
 
     /** A received link opened ([Call.ReceivedOpen]): its id, for [Watched.Received] and the `Received.*` calls. */
     @Serializable @SerialName("ReceivedOpened") data class ReceivedOpened(val received: Long) : Answer()
@@ -3945,6 +3958,10 @@ internal object Roots {
     val outward: List<KSerializer<*>> = listOf(Answer.serializer(), Update.serializer(), HostRequest.serializer())
     val all: List<KSerializer<*>> get() = inward + outward
 }
+
+/** What a `veyq:` link opens (core's `DeepLink`, ADR 0150 § O1): the app where it is, or *Open a link*. */
+@Serializable
+internal enum class DeepScreen { OPEN, LINK }
 
 /** Where a received link stands (core's `ShareGates.State`, ADR 0150 decision 2). */
 @Serializable

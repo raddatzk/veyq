@@ -1189,6 +1189,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShareDelete -> shares[call.share]?.let { Answer.Said(it.delete().notice) } ?: noShare
             is Call.ShareSwitchOff -> shares[call.share]?.let { Answer.Said(it.switchOff(call.link).notice) } ?: noShare
             is Call.ShareReactivate -> shares[call.share]?.let { Answer.Said(it.reactivate(call.link).notice) } ?: noShare
+            is Call.DeepLink -> Answer.DeepLinked(
+                when (me.raddatz.veyq.mobile.sharing.DeepLink.parse(call.uri)) {
+                    is me.raddatz.veyq.mobile.sharing.DeepLink.Link -> DeepScreen.LINK
+                    is me.raddatz.veyq.mobile.sharing.DeepLink.Open -> DeepScreen.OPEN
+                },
+            )
             is Call.ScanOpen -> {
                 val id = ids.incrementAndFetch()
                 scans.put(id, when (call.kind) {
