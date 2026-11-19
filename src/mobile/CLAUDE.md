@@ -1628,6 +1628,15 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   dump` beside it fails — end it first. What TalkBack speaks is read from its verbose log (its developer settings' log
   output level at verbose): `adb logcat -s talkback`, the lines `Speaking fragment text="…"` — not from the tree. An `adb shell input swipe` while the keyboard
   is up types by gesture into the field instead of scrolling: hide the keyboard first (Back).
+- **Hearing TalkBack on the emulator** (2026-11-19, API 36 `google_apis`, TalkBack 16 built in): its verbose log is a
+  preference — `adb root`, the service off, `<string name="pref_log_level">2</string>` written into
+  `/data/user_de/0/com.google.android.marvin.talkback/shared_prefs/com.google.android.marvin.talkback_preferences.xml`,
+  the service on (`settings put secure enabled_accessibility_services …TalkBackService`). An `adb shell input tap`
+  bypasses explore-by-touch (it clicks, nothing is focused); a keyboard's Tab and Shift+Tab (`input keyevent 61`, `input
+  keycombination 59 61`) move the focus and TalkBack speaks each node — read its `Speaking fragment text=` lines per key.
+  Its first start asks for the notification permission in a dialog no tap reaches: `pm grant
+  com.google.android.marvin.talkback android.permission.POST_NOTIFICATIONS`. TalkBack said nothing when Tab reached a chip
+  given `clearAndSetSemantics` (its focused state cleared with the rest) — clear a child's semantics instead.
 - **`gtk_accessible_announce` crashes under Broadway**: the container's test accessibility context (`GtkTestATContext`)
   jumped to NULL once realized (SIGSEGV, 2026-11-18), so the Linux app announces only through a screen reader's context
   (AT-SPI, AccessKit). An announcement is proven on X11 with `dbus-monitor` watching for `Object.Announcement`.

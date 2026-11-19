@@ -139,10 +139,23 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   answering in its own application, a Memory taking a video and refusing a PDF, a chapter taking, a member who may not
   upload dimmed, *Add here* queuing once) and `PotShareTest` (unchanged by the move). Open after it: Apple's passes —
   the macOS drop from Finder, a long video handed over from Photos on a device and the extension cancelled, an iPad's
-  drop (inbox #1005); Android's Pot share and a HEIC share not clicked again since the inbox moved to sources (#1006); a
-  handoff for a space the app does not list waits unsaid until a sign-out (#1007); a drop's read grant over a long
-  upload with the app left (#1008). A folder as a share target is Depot's answer (inbox #987); the desktops have no
+  drop (inbox #1005); a
+  handoff for a space the app does not list waits unsaid until a sign-out (#1007). A folder as a share target is Depot's answer (inbox #987); the desktops have no
   share target (GNOME has none; Windows' needs the packaged app's Share Target contract) and take a drop onto a
   Memory's gallery instead. The Use page: [Share into veyq](../../site/src/content/docs/getting-started/share-into-veyq.mdx).
+- **Android's Pot share after the move to sources** (measured 2026-11-19 on a throwaway API 36 emulator as a throwaway
+  account): a PDF and a photo shared from the Files app, the pick mode's Pot chosen, its new expense opened with both as
+  receipts, closed unsaved (the pick mode back), the Pot chosen again and the expense saved; opened anew in the app and
+  on the web it lists both, at the originals' sizes. A
+  HEIC shared likewise opened as `cat.jpg`, its JPEG copy under `no_backup/share-in/` while the editor held it and gone
+  after the save; one left by a closed app was swept at its next start. The first try opened no editor: the Pot page's
+  effect was keyed on the waiting files, which its own take emptied, so the read was cancelled (`PotScreen`, fixed).
+- **Android's drop grant outlives the activity** (measured 2026-11-19 on a throwaway API 36 emulator as a throwaway
+  account): a 253.5 MB video dragged from the Files app in a freeform window onto a Memory's gallery (11:02:44), its
+  upload's worker started (11:02:47), the app left to Home (11:03:06) and its activity finished by Back (11:03:42, no
+  `MainActivity` left in `dumpsys activity activities`, the process kept by the upload's foreground service); the worker
+  read the file to its end and ended `SUCCESS` at 11:20:10, no `SecurityException` in the log, and the web lists the
+  video at 253.5 MB with its poster. So a drop is read in place as a share is, and needs no copy. A process killed
+  meanwhile is not measured.
 - App groups and keychain groups need the developer team's signing: a Simulator build is signed ad hoc with them; a device
   build needs the team's provisioning profile with the group.
