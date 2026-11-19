@@ -409,8 +409,8 @@ internal sealed class ShellView
         Act.Send(new Call.ShellOfflineGoneSeen());
     }
 
-    /// <summary>The switcher: the space shown and its tenant and server; the spaces, then each server's tenants in its
-    /// menu, then Manage servers (ManageDialog).</summary>
+    /// <summary>The switcher: the space shown and its tenant and server; the spaces, then the tenants (one row each: name
+    /// and where it is), then the trash and Manage servers (ManageDialog).</summary>
     private void DrawSwitcher(ShellModelState state, ShellShown shown)
     {
         _switcherTitle.Text = Said.Piece(shown.spaceName);
@@ -431,23 +431,19 @@ internal sealed class ShellView
             };
             menu.Items.Add(item);
         }
-        foreach (var server in shown.servers)
+        // the tenants, each one row: its name and where it is (ShellWords.switcher, owner 2026-11-19)
+        if (shown.switcher.Count > 0) menu.Items.Add(new MenuFlyoutSeparator());
+        foreach (var e in shown.switcher)
         {
-            menu.Items.Add(new MenuFlyoutSeparator());
-            foreach (var t in server.tenants)
+            var item = new RadioMenuFlyoutItem { Text = e.line, GroupName = "tenant", IsChecked = e.current };
+            AutomationProperties.SetAutomationId(item, $"tenant:{e.name}");
+            var (connection, tenant, current) = (e.connection, e.tenant.tenantId, e.current);
+            item.Click += (_, _) =>
             {
-                var current = server.connection == shown.connection && t.tenantId == shown.tenant.tenantId;
-                var item = new RadioMenuFlyoutItem { Text = t.name, GroupName = "tenant", IsChecked = current };
-                ToolTipService.SetToolTip(item, server.label);
-                AutomationProperties.SetAutomationId(item, $"tenant:{t.name}");
-                var (connection, tenant) = (server.connection, t.tenantId);
-                item.Click += (_, _) =>
-                {
-                    if (current) return;
-                    Act.Send(new Call.SessionSwitchTo { connection = connection, tenantId = tenant });
-                };
-                menu.Items.Add(item);
-            }
+                if (current) return;
+                Act.Send(new Call.SessionSwitchTo { connection = connection, tenantId = tenant });
+            };
+            menu.Items.Add(item);
         }
         menu.Items.Add(new MenuFlyoutSeparator());
         // the space's trash (TrashDialog)
@@ -492,18 +488,29 @@ internal sealed class ShellView
         }
 
         Add(Item(Words.DrawerHome(), "", "home", new Target.Home()), shown.isHome);
-        foreach (var (title, refs, prefix) in new[] { (Words.DrawerFavorites(), state.lists.drawer.favorites, "favorite"), (Words.DrawerRecent(), state.lists.drawer.recent, "recent") })
+        // only the sections that hold something (Lists.drawerSections, owner 2026-11-19): no empty Favorites, Recent or
+        // Applications
+        foreach (var section in shown.drawerSections)
         {
-            // an empty Favorites or Recent is not drawn (owner 2026-11-19)
-            if (refs.Count == 0) continue;
-            items.Add(new NavigationViewItemHeader { Content = title });
-            foreach (var r in refs) Add(Item(r.name, HomeView.KindGlyph(r.kind), $"{prefix}:{r.name}", new Target.Object(r)), Opened(r));
-        }
-        items.Add(new NavigationViewItemHeader { Content = Words.DrawerApplications() });
-        foreach (var app in state.lists.applications)
-        {
-            var chosen = shell.application == app && shell.openObject is null;
-            Add(Item(HomeView.AppName(shown, app), HomeView.AppGlyph(app), $"app:{HomeView.WireName(app)}", new Target.Application(app)), chosen);
+            switch (section)
+            {
+                case DrawerSection.Favorites or DrawerSection.Recent:
+                {
+                    var favorites = section == DrawerSection.Favorites;
+                    var (title, refs, prefix) = favorites ? (Words.DrawerFavorites(), state.lists.drawer.favorites, "favorite") : (Words.DrawerRecent(), state.lists.drawer.recent, "recent");
+                    items.Add(new NavigationViewItemHeader { Content = title });
+                    foreach (var r in refs) Add(Item(r.name, HomeView.KindGlyph(r.kind), $"{prefix}:{r.name}", new Target.Object(r)), Opened(r));
+                    break;
+                }
+                case DrawerSection.Applications:
+                    items.Add(new NavigationViewItemHeader { Content = Words.DrawerApplications() });
+                    foreach (var app in state.lists.applications)
+                    {
+                        var chosen = shell.application == app && shell.openObject is null;
+                        Add(Item(HomeView.AppName(shown, app), HomeView.AppGlyph(app), $"app:{HomeView.WireName(app)}", new Target.Application(app)), chosen);
+                    }
+                    break;
+            }
         }
         _drawing = true;
         try
