@@ -134,7 +134,9 @@ internal sealed class ContributionsView : IDisposable
         _drawing = true;
         try
         {
-            var picker = string.Join("|", s.rows.Select(r => $"{r.bucketId}:{Said.Piece(r.label)}:{r.depth}:{r.mediaCount}")) + "#" + s.selected;
+            // the rows only: a pick changes the selection alone, and clearing the items from inside the pick's own
+            // SelectionChanged ended the app in combase (0x8000FFFF, measured 2026-11-19 on the Windows pass)
+            var picker = string.Join("|", s.rows.Select(r => $"{r.bucketId}:{Said.Piece(r.label)}:{r.depth}:{r.mediaCount}"));
             if (picker != _pickerDrawn)
             {
                 _pickerDrawn = picker;
@@ -144,9 +146,10 @@ internal sealed class ContributionsView : IDisposable
                     var item = new ComboBoxItem { Content = RowWords(r), Tag = r.bucketId };
                     AutomationProperties.SetAutomationId(item, $"memory-bucket:{Said.Piece(r.label)}");
                     _picker.Items.Add(item);
-                    if (r.bucketId == s.selected) _picker.SelectedItem = item;
                 }
             }
+            var chosen = _picker.Items.OfType<ComboBoxItem>().FirstOrDefault(i => (string)i.Tag == s.selected);
+            if (!ReferenceEquals(_picker.SelectedItem, chosen)) _picker.SelectedItem = chosen;
             _picker.Visibility = s.rows.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         }
         finally
