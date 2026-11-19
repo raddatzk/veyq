@@ -119,7 +119,7 @@ folder.
   assertion flipped is the first red (guard → red → fix → green, the folder's test written before `FolderShare`);
   (b) `may` ignoring `inIdentityFolder` → the dimmed test red; (c) *Add here* queuing into `MediaUploads` instead of
   Depot's → the fake door that records which queue was handed the sources red.
-- [ ] **3 Android** (F2, F3, F5) — `*/*` filters, `ShareIn` for any type, the level's banner *Add here*, a drop onto a
+- [x] **3 Android** (F2, F3, F5) — `*/*` filters, `ShareIn` for any type, the level's banner *Add here*, a drop onto a
   level (`dragAndDropTarget` on the level, any type). · Done when: `:android:assembleDebug` and the guidelines and words
   guards green; § Passes' Android row.
 - [ ] **4 Apple** (F2–F5) — the activation rule (its first measurement: which types a Safari page and a Files share
