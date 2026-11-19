@@ -22,6 +22,22 @@
 	<array>
 		<string>audio</string>
 	</array>
+	<!-- A veyq: link opens the app (ADR 0150 § O): `veyq://link` its *Open a link*, any other the app where it is
+	     (VeyqApp's onOpenURL). The link carries nothing; no associated domains (a self-hosted domain has no
+	     association file). -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.veyq.open</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>veyq</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+		</dict>
+	</array>
 	<!-- App Transport Security stays on everywhere but the developer's own dev instance, a *.localhost tenant. -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
