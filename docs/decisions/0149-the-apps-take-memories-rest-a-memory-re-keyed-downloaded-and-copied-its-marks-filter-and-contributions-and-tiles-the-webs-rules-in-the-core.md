@@ -1,8 +1,8 @@
 # ADR 0149 — The apps take Memories' rest: a Memory re-keyed, downloaded and copied as the web's, its marks, filter and contributions, and every level drawn as tiles — the web's rules in the core
 - Status: Accepted
-- Built: yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android and Linux as throwaways
-  and by the core's live tests (§ Consequences, the passes); on Apple and Windows built and compiled, their passes open
-  (inbox #994, #1000); the four owner questions answered 2026-11-19 (§ Consequences)
+- Built: yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android, Linux and Windows as
+  throwaways and by the core's live tests, on macOS in part (§ Consequences, the passes; what is left inbox #994); the
+  four owner questions answered 2026-11-19 (§ Consequences)
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md) (the rights: [Memories](../apps/memories.md))
 
@@ -191,8 +191,9 @@ the branch the refine read (each claim's command is in the refine's record of it
 - **What no pass has proved yet.** On Android and Linux: the re-key after a member's removal followed by an upload in the
   app (held by `MemoryRekeyLiveTest` in the core), a link guest's upload named in the app, a report seen in the
   moderation inbox, the copy opened on the web, a sub-bucket renamed and deleted, a screen reader's speech (TalkBack did
-  not take the taps, #992; the Linux container has no accessibility bus, #998), German on Linux. On Apple: everything — a
-  macOS and an iOS-simulator build only, the Mac's screen locked, then its pass of 2026-11-19 without full-screen control (#994). **The owner's:** an iPhone and an iPad — the tiles at a phone's and a tablet's width, the
+  not take the taps, #992; the Linux container has no accessibility bus, #998), German on Linux. On macOS: the marks
+  counted by two sessions, *Copy to…* and *Report* after their fixes, a sub-bucket renamed and deleted, the columns across
+  a resized window, the gallery's filter field (#1029) — inbox #994. **The owner's:** an iPhone and an iPad — the tiles at a phone's and a tablet's width, the
   badge's legibility, `.searchable`'s tokens, the lightbox's heart (no simulator boots here, #928).
 - **What the Windows pass proved** (2026-11-19, the VM through UI Automation, a throwaway with a member on the fixed
   tenant `tw-win.localhost`; the marks' second session the core's `MarksLiveTest` as the member, then the member signed
@@ -204,6 +205,19 @@ the branch the refine read (each claim's command is in the refine's record of it
   `.veyq/manifest.json`) and *Copy to…*; Home's, a folder's and a profile's tiles, the View's *List* kept across a
   restart and the tiles' columns following the window (4, 5, 7). A bucket picked in the picker ended the app (its items
   cleared inside the pick's own `SelectionChanged`); fixed in the pass.
+
+- **What the macOS pass proved** (2026-11-19, the coordinator's main session with full-screen control, a throwaway with
+  a member): a tile's context menu marked a photo (its badge ♥1) and the lightbox's heart took the mark back and set it
+  again; the marks' menu narrowed the grid to *Only mine* (one item) and back to *All*; Contributions (the fourth
+  segment): the bucket picker listed the owner's bucket with its count, the bucket's menu made a sub-bucket and a tile's
+  *Move item* moved a photo into it, both counts following; Home drawn as tiles, the View menu's *List* chosen and kept
+  across a restart; a Memory's *Download* through `NSSavePanel`: the zip held the photos and `.veyq/manifest.json`, each
+  original byte-equal (`shasum`) to the file dropped in. Three defects it found were fixed after it, unclicked: *Copy
+  to…*'s sheet drew only its title and Cancel (a Mac's sheet takes a `List`'s ideal size: `NodeMoveSheet` has a frame now);
+  the report sheet from the lightbox took the lightbox's dark scheme on a light sheet and a Mac's columns `Form` (the
+  lightbox's sheets take the window's scheme now, `ReportSheet` is grouped with a frame of its own); Home's list drew
+  *Filter* with its segments at the window's far edge (its label hidden, as the other switches). The gallery's filter
+  field took no click or keystroke; its cause is open (#1029).
 
 ## Alternatives considered
 

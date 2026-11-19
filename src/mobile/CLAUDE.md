@@ -1443,7 +1443,14 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   the tools' actions ("user interrupt"). That is not the only cause: on the second try (2026-11-19) the owner approved it
   and kept off the Mac, yet every full-screen action — a bare `screenshot` in `computer_batch` — was aborted the same way
   at its first step ("0 of 1 actions"), twice, the second after `app_release`; the background `app_*` tools went on
-  working. Until that is understood, a pass that needs it is the owner's by hand, not another agent retry.
+  working. **Understood 2026-11-19 (measured):** full-screen control works from the **main session** — the coordinator's
+  macOS pass ran on it that day (#976, #994, #1005), clicking, typing, `Menu`s, both panels and a drag from Finder — and
+  fails from a **background subagent**, every time at its first action. So a macOS pass is run by the main session, never
+  delegated; a subagent builds and fixes, and names what it left unclicked.
+- **TheBoringNotch shields the top centre of the owner's displays**: that utility (the notch's shelf) swallows clicks
+  in a band at the top centre of each display, so a pass's click on whatever the app draws there lands nowhere and reads
+  like an app defect (remembered from the coordinator's macOS pass, 2026-11-19). Move the app's window to a side of the
+  display or onto the external one before the pass.
 - **A git merge of words.json can duplicate a key without a conflict**: two branches that each add the same new key
   (with the same text) at different places merge cleanly into a file holding that key twice — JSON parsers keep the
   last one silently (seen 2026-11-19 merging ADR 0148's platform phases). `generate_words.py`'s `load()` refuses a

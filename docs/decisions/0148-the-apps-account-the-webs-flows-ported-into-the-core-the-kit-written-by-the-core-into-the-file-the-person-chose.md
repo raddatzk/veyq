@@ -1,8 +1,8 @@
 # ADR 0148 — The apps' account: the web's flows ported into the core, the kit written by the core into the file the person chose
 - Status: Accepted
-- Built: yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android, Linux and Windows as
-  throwaways (§ Consequences, the passes); on Apple built and compiled, the agent's pass open (inbox #976); what the
-  Windows pass left is #983; the owner's passes are named in § Consequences
+- Built: yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android, Linux, Windows and
+  macOS as throwaways (§ Consequences, the passes); what the macOS pass left is #976, the Windows pass's #983; the
+  owner's passes are named in § Consequences
 - Date: 2026-11-18
 - Model: [native-apps](../crosscutting/native-apps.md) (the flows: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md))
 
@@ -204,11 +204,25 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
   defect was fixed on the way: a control kept across redraws was put into each draw's new row while still the old
   row's child, so every draw after the first threw and the profile stopped drawing once a picture was chosen (the
   password, address and erasure pages held the same pattern). Two findings are #1009 and #1010.
+- **What the macOS pass proved** (2026-11-19, the coordinator's main session with full-screen control, the ad-hoc debug
+  build, a throwaway with a member on its own tenant): a first name and a picture chosen through the open panel, framed
+  and saved, the shell's avatar showing it; *Change password* (current, new twice, the Secret Key) done; *Change sign-in
+  address*'s request sent and its kit made, *I saved it* off until `NSSavePanel` had saved it (named for the old address,
+  #1010); *Secure your account* — *Secure* off until the kit was saved and confirmed, the destructive confirm, committed:
+  on relaunch the old Secret Key refused (*The Secret Key is not right.*) and the new kit, opened through *Open
+  Emergency Kit*, and the password signing in, the Memory and its photos read back; *Erase account* offering the last
+  owner's choice, the space handed to the member, the app back at the sign-in with no record of the address left in
+  `~/Library/Application Support/app.veyq` and `offline/` empty. After two kit saves neither form of the Secret Key (with
+  and without dashes) was in any file under `~/Library/Application Support/app.veyq`, `~/Library/Caches` or `$TMPDIR`, and
+  no kit file (`%PDF-`, `veyqkit:`) in the app's own folders. Two defects it found were fixed after it, unclicked: the
+  crash at the rotation's commit (a gallery on screen indexed rows newer than its layout, `MemoryScreen.photoGrid`) and
+  the Settings window left as an empty placeholder after the erasure (it now closes with its page); a click into a sheet
+  form's later fields focused nothing (Tab did, #1030).
 - **What no pass has proved yet.** The address change's confirm and the re-addressed sign-in live (the dev backend on
   the Mac the passes ran on sends no mail; `ReaddressTest` holds the re-address, `LiveCredentialFlowsTest` skips there
   and says so); a rotation begun on the web and finished by an app's unlock (held by `FinishRotationTest`); a safety
-  code scanned between two apps and the rename of another named device (the throwaways had none). The agent's macOS
-  click-through and its kit no-copy check, with #917's rename alert from another device's menu (inbox #976: the screen was locked, then the pass of 2026-11-19 lacked full-screen control; this device's pencil held the name twice); on Windows the
+  code scanned between two apps and the rename of another named device (the throwaways had none). On macOS the rotation's
+  done screen with each scope's new name, both safety-number sides and #917's other device (inbox #976); on Windows the
   MSIX's no-copy check and the rest #983 names. **The owner's:** iPhone and iPad (the
   sheets, `fileExporter` into Files, Face ID's re-enrolment, #975 — no simulator boots here, #928), Touch ID and Windows
   Hello for real after a password change and a rotation, an address change to a real mailbox with the link opened on a
