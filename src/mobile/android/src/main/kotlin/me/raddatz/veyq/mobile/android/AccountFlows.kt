@@ -107,6 +107,10 @@ import me.raddatz.veyq.mobile.words.Msg
 internal fun AccountFlowDialog(flow: AppModel.AccountFlow, model: AppModel) {
     when (flow) {
         is AppModel.AccountFlow.Profile -> ProfileFlow(flow.model, model)
+        is AppModel.AccountFlow.Password -> PasswordFlow(flow.model, model)
+        is AppModel.AccountFlow.Address -> AddressFlow(flow.model, model)
+        is AppModel.AccountFlow.Rotation -> RotationFlow(flow.model, model)
+        is AppModel.AccountFlow.Erasure -> ErasureFlow(flow.model, model)
     }
 }
 

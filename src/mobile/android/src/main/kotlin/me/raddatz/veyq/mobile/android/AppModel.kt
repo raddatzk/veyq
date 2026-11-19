@@ -39,6 +39,10 @@ import me.raddatz.veyq.mobile.session.LivePoll
 import me.raddatz.veyq.mobile.session.ThisDevice
 import me.raddatz.veyq.mobile.session.TrustedDevice
 import me.raddatz.veyq.mobile.session.VeyqAccount
+import me.raddatz.veyq.mobile.session.addressChange
+import me.raddatz.veyq.mobile.session.erasure
+import me.raddatz.veyq.mobile.session.passwordChange
+import me.raddatz.veyq.mobile.session.rotation.keyRotation
 
 /** One server in the switcher: its account and the tenants the switcher lists there. */
 data class ServerEntry(val account: VeyqAccount, val label: String, val tenants: List<TenantRef>)
@@ -673,19 +677,36 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         override fun linkScan() = scanSignInCode()
         override fun renameFamily(familyId: String, label: String) = onSettings { it.renameFamily(familyId, label); null }
         override fun openProfile() = this@AppModel.openProfile()
+        override fun openPasswordChange() = this@AppModel.openPasswordChange()
+        override fun openAddressChange() = this@AppModel.openAddressChange()
+        override fun openKeyRotation() = this@AppModel.openKeyRotation()
+        override fun openErasure() = this@AppModel.openErasure()
     }
 
-    // ---- the account's own flows (ADR 0148): the profile ----
+    // ---- the account's own flows (ADR 0148): the profile, the password, the address, the keys, the erasure ----
 
     /** One of the account's flows open over the page it was started from: the core's model, drawn by [AccountFlowDialog]. */
     sealed interface AccountFlow {
         class Profile(val model: me.raddatz.veyq.mobile.session.ProfileModel) : AccountFlow
+        class Password(val model: me.raddatz.veyq.mobile.session.PasswordChange) : AccountFlow
+        class Address(val model: me.raddatz.veyq.mobile.session.AddressChange) : AccountFlow
+        class Rotation(val model: me.raddatz.veyq.mobile.session.rotation.KeyRotation) : AccountFlow
+        class Erasure(val model: me.raddatz.veyq.mobile.session.AccountErasure) : AccountFlow
     }
 
     private val _accountFlow = MutableStateFlow<AccountFlow?>(null)
 
     /** The account flow open now; null while none is. */
     val accountFlow: StateFlow<AccountFlow?> = _accountFlow.asStateFlow()
+
+    private val _ended = MutableStateFlow<me.raddatz.veyq.mobile.words.Msg?>(null)
+
+    /** What the sign-in says once after the account was erased here ([me.raddatz.veyq.mobile.words.Msg.ERASURE_ENDED]). */
+    val ended: StateFlow<me.raddatz.veyq.mobile.words.Msg?> = _ended.asStateFlow()
+
+    fun endedSeen() {
+        _ended.value = null
+    }
 
     private fun openFlow(flow: AccountFlow) {
         closeAccountFlow()
@@ -696,7 +717,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun closeAccountFlow() {
         when (val f = _accountFlow.value) {
             is AccountFlow.Profile -> f.model.close()
-            null -> Unit
+            is AccountFlow.Rotation -> f.model.close()
+            else -> Unit
         }
         _accountFlow.value = null
     }
@@ -748,6 +770,92 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             }.getOrNull()
         }
 
+    fun openPasswordChange() {
+        val account = session.signedTo?.account ?: return
+        openFlow(AccountFlow.Password(account.passwordChange()))
+    }
+
+    /** The password changed with [current] and the Secret Key typed as [secretKey]; the saved key's row is read anew after. */
+    fun changePassword(m: me.raddatz.veyq.mobile.session.PasswordChange, current: String, next: String, confirm: String, secretKey: String) {
+        viewModelScope.launch {
+            m.run(current, next, confirm, typedKey(secretKey))
+            trustLog("password change: done=${m.current.done} refusal=${m.current.refusal?.key}")
+            settingsModel?.refresh()
+        }
+    }
+
+    fun openAddressChange() {
+        val signed = session.signedTo ?: return
+        openFlow(AccountFlow.Address(signed.account.addressChange(signed.tenant)))
+    }
+
+    fun requestAddressChange(m: me.raddatz.veyq.mobile.session.AddressChange, newEmail: String, password: String, secretKey: String) {
+        viewModelScope.launch {
+            m.request(newEmail, password, typedKey(secretKey))
+            trustLog("address change: sent=${m.current.sentTo != null} refusal=${m.current.refusal?.key}")
+        }
+    }
+
+    /** A new kit with the account's address after the cold proof; [made] gets its step (null: refused, said by the model). */
+    fun addressKit(m: me.raddatz.veyq.mobile.session.AddressChange, password: String, secretKey: String, made: (me.raddatz.veyq.mobile.account.KitStep?) -> Unit) {
+        viewModelScope.launch { made(m.kit(password, typedKey(secretKey))) }
+    }
+
+    fun openKeyRotation() {
+        val account = session.signedTo?.account ?: return
+        val m = account.keyRotation()
+        openFlow(AccountFlow.Rotation(m))
+        viewModelScope.launch { m.open() }
+    }
+
+    fun proveRotation(m: me.raddatz.veyq.mobile.session.rotation.KeyRotation, password: String, secretKey: String, newPassword: String, confirm: String) {
+        viewModelScope.launch {
+            m.prove(password, typedKey(secretKey), newPassword, confirm)
+            trustLog("rotation gate: step=${m.current.step} refusal=${m.current.refusal?.key}")
+        }
+    }
+
+    /** The danger step: the new keys published; once done the tenant is opened anew on them (its keys were the old ones). */
+    fun runRotation(m: me.raddatz.veyq.mobile.session.rotation.KeyRotation) {
+        viewModelScope.launch {
+            m.run()
+            trustLog("rotation: step=${m.current.step} done=${m.current.done} refusal=${m.current.refusal?.key}")
+            if (!m.current.done) return@launch
+            val signed = session.signedTo ?: return@launch
+            session.switchTo(signed.account, signed.tenant)?.let { show(it) }
+            settingsModel?.refresh()
+        }
+    }
+
+    fun openErasure() {
+        val account = session.signedTo?.account ?: return
+        val m = account.erasure()
+        openFlow(AccountFlow.Erasure(m))
+        viewModelScope.launch { m.load() }
+    }
+
+    /** Erases the account with [password]; once erased the device forgot it (the core) and it leaves as a sign-out does. */
+    fun erase(m: me.raddatz.veyq.mobile.session.AccountErasure, password: String) {
+        val account = session.signedTo?.account ?: return
+        viewModelScope.launch {
+            m.erase(password)
+            trustLog("erasure: erased=${m.current.erased} refusal=${m.current.refusal?.key}")
+            if (!m.current.erased) return@launch
+            uploads.clear()
+            closeAccountFlow()
+            closeSettings()
+            _ended.value = me.raddatz.veyq.mobile.words.Msg.ERASURE_ENDED
+            signedOut(session.signOut(account))
+        }
+    }
+
+    /** A typed Secret Key's 32 bytes; a malformed one is 32 zero bytes, which the core's cold proof refuses as a wrong key. */
+    private fun typedKey(text: String): ByteArray =
+        me.raddatz.veyq.mobile.crypto.SecretKeyText.read(BouncyCastlePrimitives, text) ?: ByteArray(32)
+
+    /** The person's language for a kit's words (the app's, as Android applies it) and their local date. */
+    fun kitLanguage(): String = appLanguage()
+
     /** The open tenant's safety numbers (core's `PersonTrust`); null while no tenant is open. */
     fun personTrust(): me.raddatz.veyq.mobile.session.PersonTrust? = tenantSession?.personTrust
 
@@ -759,6 +867,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         accepts = { text -> text.takeIf { me.raddatz.veyq.mobile.qr.QrSchemes.of(it) == "veyqid" } },
         decode = me.raddatz.veyq.mobile.qr.QrFrames.timedDecode(::qrDecodeTiming),
     )
+
+    /** A space's name as the shell lists it, for the rotation's per-space status; null for one this device has not opened. */
+    fun spaceNamed(scopeId: String): SpaceRef? = (_screen.value as? Screen.Signed)?.spaces?.firstOrNull { it.scopeId == scopeId }
 
     private fun refreshManaged() = _screen.update { s ->
         if (s is Screen.Signed && s.managing != null) s.copy(managing = session.managed().also { m ->

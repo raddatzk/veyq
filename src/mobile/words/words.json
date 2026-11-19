@@ -5581,6 +5581,21 @@
     "de": "Profil bearbeiten",
     "note": "The web's profilePicture.editProfile."
   },
+  "password_change_sub": {
+    "en": "Set a new password for signing in.",
+    "de": "Setze ein neues Passwort für die Anmeldung.",
+    "note": "The web's changePassword.sub."
+  },
+  "erasure_choice_placeholder": {
+    "en": "Choose…",
+    "de": "Auswählen…",
+    "note": "The web's erasure.choicePlaceholder."
+  },
+  "rotation_after_title": {
+    "en": "What happens",
+    "de": "Was passiert",
+    "note": "The web's rotation.afterTitle."
+  },
   "safety_mine_title": {
     "en": "Your safety number",
     "de": "Deine Sicherheitsnummer",

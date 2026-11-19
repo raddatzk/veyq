@@ -26,6 +26,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.AlternateEmail
+import androidx.compose.material.icons.outlined.Password
+import androidx.compose.material.icons.outlined.PersonRemove
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Edit
@@ -135,6 +138,10 @@ interface SettingsActions {
 
     /** The account's flows (ADR 0148 decision 10), each its own full-screen dialog over the page. */
     fun openProfile() {}
+    fun openPasswordChange() {}
+    fun openAddressChange() {}
+    fun openKeyRotation() {}
+    fun openErasure() {}
 }
 
 /** A step the page asks to be confirmed first, as the web's `SessionsPanel` does: what it says and what it does. */
@@ -246,8 +253,9 @@ fun SettingsScreen(
                     )
                 }
             }
-            account(state)
+            account(state, actions)
             profile(state, actions)
+            password(state, actions)
             thisDevice(state, onRename = { renaming = true }, onStay = { actions.stay(it, trustDone) }, onPassword = { askPassword = true }) {
                 confirm = Confirm(
                     context.getString(R.string.account_settings_untrust_confirm_title), context.getString(R.string.account_settings_untrust_confirm),
@@ -260,9 +268,11 @@ fun SettingsScreen(
                 val camera = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)
                 addDevice(camera, !state.working, actions)
             }
+            security(state, actions)
             storage(state, context, onLimit = { limiting = true }, actions)
             maps?.let { mapServices(it) }
             appearance(context)
+            erase(state, actions)
             item(key = "sign-out") {
                 Column(Modifier.padding(16.dp)) {
                     OutlinedButton(
@@ -305,7 +315,7 @@ private fun LazyListScope.header(key: String, title: @Composable () -> String, s
 @Composable
 private fun listColors() = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background)
 
-private fun LazyListScope.account(state: AccountSettings.State) {
+private fun LazyListScope.account(state: AccountSettings.State, actions: SettingsActions) {
     header("account", { stringResource(R.string.account_settings_account) })
     item(key = "email") {
         ListItem(
@@ -319,6 +329,15 @@ private fun LazyListScope.account(state: AccountSettings.State) {
             colors = listColors(),
         )
     }
+    // the address changed beside the address shown (ADR 0148 decision 10); the mailed link confirms it on the web
+    item(key = "email-change") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.email_change_action)) },
+            leadingContent = { Icon(Icons.Outlined.Edit, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openAddressChange).testTag("settings-email-change"),
+        )
+    }
 }
 
 /** *Your profile* (the web's rubric): one's username, name, picture and the group-add consent in this space. */
@@ -330,6 +349,47 @@ private fun LazyListScope.profile(state: AccountSettings.State, actions: Setting
             leadingContent = { Icon(Icons.Outlined.AccountCircle, null) },
             colors = listColors(),
             modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openProfile).testTag("settings-profile"),
+        )
+    }
+}
+
+/** *Change password*: the current password and the Secret Key prove the account, the new one replaces it. */
+private fun LazyListScope.password(state: AccountSettings.State, actions: SettingsActions) {
+    header("password", { stringResource(R.string.password_change_title) }, { stringResource(R.string.password_change_sub) })
+    item(key = "password") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.password_change_title)) },
+            leadingContent = { Icon(Icons.Outlined.Password, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openPasswordChange).testTag("settings-password"),
+        )
+    }
+}
+
+/** *Secure your account*: the keys replaced, a new Emergency Kit saved first (ADR 0148 decision 7). */
+private fun LazyListScope.security(state: AccountSettings.State, actions: SettingsActions) {
+    item(key = "security-divider") { HorizontalDivider(Modifier.padding(top = 16.dp)) }
+    header("security", { stringResource(R.string.rotation_title) }, { stringResource(R.string.rotation_sub) })
+    item(key = "security") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.rotation_action)) },
+            leadingContent = { Icon(Icons.Outlined.Shield, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openKeyRotation).testTag("settings-security"),
+        )
+    }
+}
+
+/** *Erase your account*: what goes and what stays, then the password (ADR 0148 decision 8). */
+private fun LazyListScope.erase(state: AccountSettings.State, actions: SettingsActions) {
+    item(key = "erase-divider") { HorizontalDivider(Modifier.padding(top = 8.dp)) }
+    header("erase", { stringResource(R.string.erasure_title) }, { stringResource(R.string.erasure_sub) })
+    item(key = "erase") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.erasure_action), color = MaterialTheme.colorScheme.error) },
+            leadingContent = { Icon(Icons.Outlined.PersonRemove, null, tint = MaterialTheme.colorScheme.error) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openErasure).testTag("settings-erase"),
         )
     }
 }
@@ -358,9 +418,11 @@ private fun LazyListScope.thisDevice(
             colors = listColors(),
         )
     }
-    // how it stays signed in: the changes "Manage servers" offers, the same core state (D2)
-    trust.method?.let { method ->
-        for (change in trustChanges(method, trust.level, trust.levels)) {
+    // how it stays signed in: the changes "Manage servers" offers, the same core state (D2); a device with no saved unlock
+    // (a password change took its saved key, ADR 0148 decision 6) is offered the password trust and each level again
+    val changes = trust.method?.let { trustChanges(it, trust.level, trust.levels) } ?: (trust.levels + listOf(null))
+    run {
+        for (change in changes) {
             item(key = "trust-$change") {
                 ListItem(
                     headlineContent = {
@@ -378,11 +440,11 @@ private fun LazyListScope.thisDevice(
                         }, null)
                     },
                     colors = listColors(),
-                    modifier = Modifier.clickable(enabled = !state.working) { if (change == null) onPassword() else onStay(change) },
+                    modifier = Modifier.clickable(enabled = !state.working) { if (change == null) onPassword() else onStay(change) }.testTag("settings-trust-${change ?: "password"}"),
                 )
             }
         }
-        item(key = "stop-trusting") {
+        if (trust.method != null) item(key = "stop-trusting") {
             ListItem(
                 headlineContent = { Text(stringResource(R.string.manage_forget_device), color = MaterialTheme.colorScheme.error) },
                 leadingContent = { Icon(Icons.Outlined.NoEncryption, null, tint = MaterialTheme.colorScheme.error) },
