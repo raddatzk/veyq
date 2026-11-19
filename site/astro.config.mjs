@@ -142,6 +142,7 @@ export default defineConfig({
                 'sharing/manage-links',
                 'sharing/what-guests-see',
                 'sharing/keep-a-link',
+                'sharing/open-a-link-in-the-app',
               ],
             },
             {
