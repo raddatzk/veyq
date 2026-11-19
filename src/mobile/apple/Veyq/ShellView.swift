@@ -406,6 +406,13 @@ struct Bar: View {
         main
         .sheet(item: $trashOf) { SpaceTrashSheet(model: model, scopeId: $0.scopeId) }
         .sheet(item: $uploadShareOf) { TopLevelUploadSheet(model: model, scopeId: $0.scopeId) }
+        #if os(macOS)
+        // a download's import an upload offered (ADR 0152 decision 1); its imported line said once the sheet is gone
+        .sheet(item: Binding(get: { model.importing }, set: { model.importing = $0 }), onDismiss: {
+            if let line = model.importedLine, !line.isEmpty { model.notice = AppModel.Notice(text: line) }
+            model.importedLine = nil
+        }) { ImportSheet(model: model, dialog: $0.dialog) }
+        #endif
         // what the model says once (an upload's refusal, its "Replace anyway")
         // its dismissal may run before its button's action (ADR 0136's trap): the action is the presented notice's own
         .alert(model.notice?.text ?? "", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } }), presenting: model.notice) { n in
