@@ -81,7 +81,11 @@ fun PotScreen(ref: ObjectRef, tab: BarTab?, model: AppModel) {
     var refreshing by remember { mutableStateOf(false) }
     when {
         s == null || (view == null && !s.failed) -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        view == null -> Note(stringResource(R.string.list_empty))
+        // offline, a Pot this device does not keep says so (muted: no failure), else the open failed (core's words)
+        view == null -> Text(
+            s.failure?.let { say(it) } ?: stringResource(R.string.list_empty),
+            color = role(if (s.offline != null) LocalPalette.current.muted else LocalPalette.current.danger), modifier = Modifier.padding(24.dp),
+        )
         !view.ready -> PotSettings(view, s, model)
         else -> Column(Modifier.fillMaxSize()) {
             if (view.missing.isNotEmpty()) LedgerNotice(view)

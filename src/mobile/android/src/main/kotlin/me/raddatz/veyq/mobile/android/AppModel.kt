@@ -2194,6 +2194,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun openReceipt(receiptId: String): ByteArray? = openPot?.openReceipt(receiptId)
 
+    /** Why the open Pot's receipt did not open (core's `PotModel.receiptFailure`): not kept offline, or unreadable. */
+    fun receiptFailure(): me.raddatz.veyq.mobile.words.Msg = openPot?.receiptFailure() ?: me.raddatz.veyq.mobile.words.Msg.RECEIPTS_UNREADABLE
+
 
     /** Forgets the open Pot's last refusal (a dialog closed). */
     fun clearPotMessage() {

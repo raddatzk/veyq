@@ -136,7 +136,10 @@ private fun ReceiptViewer(view: PotView, model: AppModel, receiptId: String, onC
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 val b = bytes
                 when {
-                    failed -> Text(stringResource(R.string.receipts_unreadable), color = MaterialTheme.colorScheme.error)
+                    // offline, a receipt this device did not keep says so (muted: no failure), else it is unreadable (core's words)
+                    failed -> model.receiptFailure().let { why ->
+                        Text(say(why), color = if (why == me.raddatz.veyq.mobile.words.Msg.OFFLINE_NOT_KEPT) role(LocalPalette.current.muted) else MaterialTheme.colorScheme.error)
+                    }
                     b == null -> CircularProgressIndicator()
                     else -> when (Receipts.kindOf(b)) {
                         Receipts.Kind.IMAGE -> BitmapFactory.decodeByteArray(b, 0, b.size)?.let {
