@@ -706,6 +706,8 @@ impl Shell {
                 Create::Memory => "win.create-memory",
                 // a chapter is a Memory's page's own (its "Add chapter"), never a level's
                 Create::Chapter => continue,
+                // the bookmark's dialog is drawn by cr-app-received-links phase 9 (`createsWhere` offers it then)
+                Create::Bookmark => continue,
             };
             menu.append(Some(&said::key(&c.word)), Some(action));
         }

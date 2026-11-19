@@ -195,18 +195,18 @@ question 2*).
   asserts no request's path, query, headers or body holds `K_share` as b64url, b64std or hex — bitten by appending the key
   as a query parameter → red; (c) the guest session written to `DeviceStore` instead of the credential store → red (a
   fake `DeviceStore` that fails on a secret-shaped write).
-- [ ] **4 core — each kind's guest door** (H5) — `PotSession` onto a door first (`PotShareTest` and the Pot's tests
+- [x] **4 core — each kind's guest door** (H5) — `PotSession` onto a door first (`PotShareTest` and the Pot's tests
   unchanged and green: the refactor's proof); `AppKinds.guestDoor`; the folder level, a file, a Memory, a Pot read as a
   guest; a drop box's and a Memory's WRITE_ONLY upload. Tests: a READ guest's Memory offers no upload, no marks, no
   contributions; a READ_WRITE guest's file offers replace; a READ guest's Pot no entry. **Bites:** (a) `Access.Member()`
   handed to a guest → red; (b) `AppKinds.guestDoor` routing a MEMORY to the Depot file's door → the per-kind
   guest test (each kind opened from a fixture share holding every kind) red.
-- [ ] **5 core — bookmarks and *Open a link*** (H4, H6) — `Create.BOOKMARK` and its dialog's model; the bookmark's page
+- [x] **5 core — bookmarks and *Open a link*** (H4, H6) — `Create.BOOKMARK` and its dialog's model; the bookmark's page
   (in place or not by `core.share-embedding`); `open-own-page`; the two reports; *Open a link*'s model before and after
   the sign-in. Tests: a meta the web sealed (a fixture) opens; a meta the core seals is padded to 512 and validates
   against the schema; Report name sends `NAME` only. **Bites:** (a) padding dropped → the length test red; (b) a
   bookmark's `NODE` item sent → the report test red.
-- [ ] **6 bridge** (H7) — the calls and updates; the generated Rust and C# bindings. · Done when: `:bridge:jvmTest`
+- [x] **6 bridge** (H7) — the calls and updates; the generated Rust and C# bindings. · Done when: `:bridge:jvmTest`
   green. **Bite:** an `Update` serialized with the link in it → the bridge test that scans every update of a guest
   session for the key's canaries red.
 - [ ] **7 Android** — *Open a link* (sign-in and shell), the guest screen, the bookmark's page, dialog and reports; the
