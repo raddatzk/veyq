@@ -42,7 +42,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import me.raddatz.veyq.mobile.memories.GalleryFilter
@@ -86,11 +89,17 @@ private fun markWords(mark: GalleryModel.Mark): String {
 internal fun MarkButton(mark: GalleryModel.Mark?, enabled: Boolean, onToggle: () -> Unit) {
     val mine = mark?.mine == true
     val count = mark?.count ?: 0
+    // The count is said in words inside the button's one reading; the badge's bare digit read as "1" after it (inbox #993's
+    // pass, heard with TalkBack 2026-11-19)
+    val said = listOfNotNull(
+        stringResource(if (mine) R.string.media_marks_unmark else R.string.media_marks_mark),
+        if (count > 0) pluralStringResource(R.plurals.media_marks_count, count, count) else null,
+    ).joinToString(", ")
     IconButton(onClick = onToggle, enabled = enabled) {
-        BadgedBox(badge = { if (count > 0) Badge { Text("$count") } }) {
+        BadgedBox(badge = { if (count > 0) Badge { Text("$count", Modifier.clearAndSetSemantics {}) } }) {
             Icon(
                 if (mine) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                stringResource(if (mine) R.string.media_marks_unmark else R.string.media_marks_mark),
+                said,
                 tint = if (mine) role(LocalPalette.current.favorite) else Color.White,
             )
         }
@@ -210,10 +219,16 @@ private fun MarksModeMenu(mode: GalleryFilter.Mode, onMode: (GalleryFilter.Mode)
         FilterChip(
             selected = mode != GalleryFilter.Mode.ALL,
             onClick = { open = true },
-            label = { Text(shown) },
+            label = { Text(shown, Modifier.clearAndSetSemantics {}) },
             leadingIcon = { Icon(if (mode == GalleryFilter.Mode.ALL) Icons.Outlined.FavoriteBorder else Icons.Filled.Favorite, null, Modifier.size(18.dp)) },
             trailingIcon = { Icon(Icons.Filled.ArrowDropDown, null, Modifier.size(18.dp)) },
-            modifier = Modifier.semantics { contentDescription = "$label: $shown" },
+            // The label and the mode as one reading: the chip's own text, merged in, read the mode a second time to
+            // TalkBack (inbox #993, heard 2026-11-19). It opens a menu, so it is no checkbox. Not `clearAndSetSemantics`
+            // on the chip: that drops its focused state too, and TalkBack no longer follows a keyboard's Tab onto it.
+            modifier = Modifier.semantics {
+                contentDescription = "$label: $shown"
+                role = Role.DropdownList
+            },
         )
         DropdownMenu(open, { open = false }) {
             for (m in GalleryFilter.Mode.entries) {
