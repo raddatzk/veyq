@@ -293,6 +293,8 @@ class AccountOffline internal constructor(
             for (scope in scopes) {
                 // a scope's member list (ADR 0144 decision 7) is reached while the scope is the account's; a list refused drops itself
                 reached += key(KeptRead.MEMBERS, tenant, scope, scope)
+                // the space's media as the search reads them (ADR 0153 decision 7): kept while the scope is the account's
+                reached += key(KeptRead.SCOPE_MEDIA, tenant, scope, scope)
                 val nodesKey = key(KeptRead.NODES, tenant, scope, scope)
                 reached += nodesKey
                 val rows = json(nodesKey).flatMap { it.array() }

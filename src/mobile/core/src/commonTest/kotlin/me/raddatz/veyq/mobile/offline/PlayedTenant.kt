@@ -467,6 +467,18 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
                 s.revision++
                 respond("", HttpStatusCode.NoContent)
             }
+            path.matches(Regex("/api/scopes/[^/]+/media")) -> {
+                val s = scopes.firstOrNull { it.id == path.split('/')[3] && it.tenant == tenant } ?: return json("""{"code":"scope_not_found"}""", HttpStatusCode.NotFound)
+                if (!s.member) return json("""{"code":"scope_not_found"}""", HttpStatusCode.NotFound)
+                // the tag is a function of the tree and every node's media, as the server's
+                val tag = "\"sm-${s.revision}-${s.nodes.sumOf { it.mediaRevision }}\""
+                if (r.headers[HttpHeaders.IfNoneMatch] == tag) return respond("", HttpStatusCode.NotModified)
+                val rows = s.nodes.flatMap { n -> n.media.filter { !it.trashed }.map { n to it } }
+                json(
+                    """{"media":[${rows.joinToString(",") { (n, m) -> """{"blockedByOperator":${m.blocked},"nodeId":"${n.id}","mediaId":"${m.id}",${blobRef(m.original)},"metaRevision":0}""" }}],"more":false,"nodes":[]}""",
+                    etag = tag,
+                )
+            }
             path.matches(Regex("/api/scopes/[^/]+/pots/[^/]+/revisions")) -> {
                 val parts = path.split('/')
                 val s = scopes.firstOrNull { it.id == parts[3] && it.tenant == tenant } ?: return json("""{"code":"scope_not_found"}""", HttpStatusCode.NotFound)

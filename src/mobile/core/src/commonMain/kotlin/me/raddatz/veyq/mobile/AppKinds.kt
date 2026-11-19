@@ -337,16 +337,18 @@ object AppKinds {
      * What a pin keeps of each kind (ADR 0140 decision 9, `OfflinePins`): a Memory and a chapter their media's tiles and
      * previews and a video's original (`MemoryMedia.pinned`, never a photo's original), a Depot file its content
      * (`DepotFiles.pinned`), a folder nothing of its own — the walk below it reaches what it holds; a Memory's and a
-     * chapter's banner by the ids their meta names (`Banner.pinned`, ADR 0144 decision 7). A Pot is not kept
-     * offline (Expenses offline is #898), nor is a kind this build does not know.
+     * chapter's banner by the ids their meta names (`Banner.pinned`, ADR 0144 decision 7), a Pot its whole ledger and
+     * its receipts (`PotPins.pinned`, ADR 0153 decision 6) — every node's cover is core's. A kind this build does not know
+     * is not kept.
      */
     val pins: me.raddatz.veyq.mobile.offline.PinKinds = object : me.raddatz.veyq.mobile.offline.PinKinds {
-        override fun pinnable(kind: String): Boolean = kind == MEMORY || kind == CHAPTER || kind == FOLDER || kind == FILE
+        override fun pinnable(kind: String): Boolean = kind == MEMORY || kind == CHAPTER || kind == FOLDER || kind == FILE || kind == PotSession.KIND
 
         override suspend fun blobs(tenant: me.raddatz.veyq.mobile.session.TenantSession, node: me.raddatz.veyq.mobile.session.OpenNode) =
             when (node.kind) {
                 MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoryMedia.pinned(tenant, node)
                 FILE -> me.raddatz.veyq.mobile.depot.DepotFiles.pinned(tenant, node)
+                PotSession.KIND -> me.raddatz.veyq.mobile.expenses.PotPins.pinned(tenant, node)
                 else -> emptyList()
             }
 

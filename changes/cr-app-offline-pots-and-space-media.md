@@ -84,12 +84,23 @@ ADR 0153 decisions 6 and 7 hold them; here only what the work needs beside them.
   test red (`[r2, r1]` kept); (c) a `LeakyPage(shareToken)` model → `KeptReadsTest` red; each restored with `/bin/cp -f`.
   `./gradlew :core:jvmTest :core:macosArm64Test`: macOS green; JVM 1353 tests, one red, `DeviceLinkTest.the_state_carries_no_secret`
   (untouched, load ~5), green re-run alone.
-- [ ] **2 core — a Pot pins; the space's media** (D3, D4) — `AppKinds.pins`, `belowNode`, `SCOPE_MEDIA` in
+- [x] **2 core — a Pot pins; the space's media** (D3, D4) — `AppKinds.pins`, `belowNode`, `SCOPE_MEDIA` in
   `MemoriesSearch`, the sweep's reach. Tests: a pinned Pot fetches its ledger, receipts and cover and survives
   "Clear cache"; a Pot unpinned and not viewed is swept; search offline finds a medium of an unopened Memory from the kept
   space listing; a scope gone from `MY_SCOPES` drops its `SCOPE_MEDIA`. · Done when: the same checks green. **Bites:**
   (a) `belowNode` without the Pot branch → the pinned Pot's ledger swept, red; (b) `SCOPE_MEDIA` in `PROTECTED` → the
   "Clear cache" test red.
+  **Built** (2026-11-20): `AppKinds.pins` takes `EXPENSES_POT`, its blobs `expenses/PotPins.pinned` (the whole ledger
+  through `TenantPotDoor.whole`, every held receipt, not dropped or blocked; the cover is core's `coverOf`);
+  `KeptRead.SCOPE_MEDIA` reached by the sweep from `MY_SCOPES` (not in `LISTINGS`, never pinned, never `PROTECTED`);
+  `VeyqAccount.Read.revision` (the kept or fetched answer's) so `MemoriesSearch.scopeMediaDocuments` keeps its "unchanged:
+  null" over the kept read; `SearchModel` asks the applications offline too and falls back to "searched once online"
+  (`search_offline_photos`) only where the listing is not kept — ADR 0146 decision 11's "offline no listing is read" is
+  replaced here (the harvest names it; the word's note still cites decision 11). Tests `OfflinePotPinsTest` (4); the
+  "swept" Pot is dropped by Clear cache after its unpin (an unpinned Pot that still exists is reached, so the sweep keeps
+  it in the automatic tier). Bites (a) the `POT_REVISIONS` line out of `belowNode` → both Pot pin tests red ("Clear
+  cache dropped the pinned Pot's ledger"); (b) `SCOPE_MEDIA` in `PROTECTED` → the Clear-cache test red; each restored with
+  `/bin/cp -f`. `./gradlew :core:jvmTest :core:macosArm64Test` green.
 - [ ] **3 bridge** — the Pot's offline state and the toggle's state on the wire. · Done when: `:bridge:jvmTest` green.
   **Bite:** a state carrying a sealed body → `SecretFreeSchemaTest` red.
 - [ ] **4 Android** — the Pot's header *Available offline*, its offline banner and disabled writes. · Done when:

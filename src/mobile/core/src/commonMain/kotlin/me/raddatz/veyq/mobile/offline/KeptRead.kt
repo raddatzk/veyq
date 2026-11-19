@@ -57,6 +57,12 @@ enum class KeptRead(val kind: String, internal val model: KSerializer<*>) {
      * not kept, so an entry a co-member deleted or an erasure dropped is gone from the next whole answer.
      */
     POT_REVISIONS("listPotRevisions", me.raddatz.veyq.mobile.api.expenses.models.PotRevisionPage.serializer()),
+    /**
+     * Per scope: every live medium of the space (ADR 0153 decision 7), what the search opens (`MemoriesSearch`), `ETag` its
+     * revision. The automatic tier only — never pinned, never among [PROTECTED] —, replaced and never merged, kept while
+     * its scope is the account's (the sweep, from [MY_SCOPES]).
+     */
+    SCOPE_MEDIA("listScopeMedia", me.raddatz.veyq.mobile.api.memories.models.ScopeMediaPage.serializer()),
     ;
 
     companion object {
