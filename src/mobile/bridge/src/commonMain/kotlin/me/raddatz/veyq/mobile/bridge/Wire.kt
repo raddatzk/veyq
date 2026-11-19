@@ -1481,8 +1481,12 @@ internal sealed class Call {
         val flow: Long, val password: String, val secretKey: String, val newPassword: String = "", val confirmPassword: String = "",
     ) : Call()
 
-    /** The danger step: the publish, refused until the kit step is ready. A done rotation re-opens the tenant. */
+    /** The danger step: the publish, refused until the kit step is ready. A done rotation re-opens the tenant and outlives
+     *  it (inbox #984): its watch goes on with the done step until [KeyRotationClose] or a sign-out. */
     @Serializable @SerialName("KeyRotation.Run") data class KeyRotationRun(val flow: Long) : Call()
+
+    /** *Links to renew* read anew — after a link's share dialog ([ShareOpen] with the link's node) closed (inbox #977). */
+    @Serializable @SerialName("KeyRotation.RefreshLinks") data class KeyRotationRefreshLinks(val flow: Long) : Call()
     @Serializable @SerialName("KeyRotation.Close") data class KeyRotationClose(val flow: Long) : Call()
 
     /** Erase the account (core's `AccountErasure`, its preview read at once): [Answer.FlowOpened] for [Watched.Erasure]. */

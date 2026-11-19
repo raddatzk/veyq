@@ -90,17 +90,22 @@ struct Inner {
 
 /// Opens the share sheet of [node] over [parent].
 pub fn open(parent: &impl IsA<gtk::Widget>, node: &NodeAt) {
-    open_call(parent, Call::ShareOpen { node: node.clone() });
+    open_call(parent, Call::ShareOpen { node: node.clone() }, None);
+}
+
+/// [open], and [closed] once the sheet closed (the rotation's *Links to renew* reads its links anew, inbox #977).
+pub fn open_then(parent: &impl IsA<gtk::Widget>, node: &NodeAt, closed: impl Fn() + 'static) {
+    open_call(parent, Call::ShareOpen { node: node.clone() }, Some(Box::new(closed)));
 }
 
 /// Opens the share of space [scope_id]'s top level over [parent]: "Add files only" alone, its form at once; the sheet
 /// closes once its form does (`ShareShown.atTopLevel`).
 pub fn open_top_level(parent: &impl IsA<gtk::Widget>, scope_id: String) {
-    open_call(parent, Call::ShareOpenTopLevel { scope_id });
+    open_call(parent, Call::ShareOpenTopLevel { scope_id }, None);
 }
 
 /// Opens the sheet [call] opens in the core (answered `ShareOpened`) over [parent].
-fn open_call(parent: &impl IsA<gtk::Widget>, call: Call) {
+fn open_call(parent: &impl IsA<gtk::Widget>, call: Call, closed: Option<Box<dyn Fn()>>) {
     let toasts = adw::ToastOverlay::new();
     let title = adw::WindowTitle::new("", "");
     let header = adw::HeaderBar::builder().title_widget(&title).build();
@@ -224,6 +229,9 @@ fn open_call(parent: &impl IsA<gtk::Widget>, call: Call) {
         held.watch.borrow_mut().take();
         if let Some(share) = held.id.take() {
             bridge::send(Call::ShareClose { share });
+        }
+        if let Some(closed) = &closed {
+            closed();
         }
     });
     dialog.present(Some(parent));

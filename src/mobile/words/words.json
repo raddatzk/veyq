@@ -5953,6 +5953,31 @@
     "en": "Links to renew",
     "de": "Links zum Erneuern"
   },
+  "rotation_renew": {
+    "note": "The web's rotation.renew: a link's button, opening its node's share dialog.",
+    "en": "Renew",
+    "de": "Erneuern"
+  },
+  "rotation_link_open": {
+    "note": "The web's rotation.linkOpen: an upload link's button, opening its node's share dialog.",
+    "en": "Open",
+    "de": "Öffnen"
+  },
+  "rotation_link_upload": {
+    "note": "The web's rotation.linkUpload.",
+    "en": "An upload link: make a new one, then switch this one off.",
+    "de": "Ein Upload-Link: Erstell einen neuen und schalte diesen dann ab."
+  },
+  "rotation_link_elsewhere": {
+    "note": "The web's rotation.linkElsewhere; {1} the tenant's name.",
+    "en": "This link is in “{1}”. Open veyq there to renew it.",
+    "de": "Dieser Link liegt in „{1}“. Öffne veyq dort, um ihn zu erneuern."
+  },
+  "rotation_link_name_unavailable": {
+    "note": "The web's rotation.linkNameUnavailable.",
+    "en": "A link (its name isn’t available here)",
+    "de": "Ein Link (sein Name ist hier nicht verfügbar)"
+  },
   "safety_qr_failed": {
     "en": "The code could not be shown. The digits above say the same.",
     "de": "Der Code konnte nicht angezeigt werden. Die Ziffern oben sagen dasselbe.",

@@ -34,7 +34,10 @@ import me.raddatz.veyq.mobile.words.MsgKey
  *    core's write into the file chosen, "I saved it".
  * 4. [run], the danger step, publishes — **only once the kit step is [KitStep.State.ready]**: a key nobody saved would
  *    lock the person out once the old kit stops working.
- * 5. Each scope's status ([State.scopes], the server's word after the finish).
+ * 5. Each scope's status ([State.scopes], the server's word after the finish), then the *Links to renew* ([State.links],
+ *    the web's `listLinksToRenew`, decision 13): the person's own links the server marks `reissueRequired` — a link made
+ *    before still opens what it opened, its key being the link's own. A link whose node the open tenant holds names it
+ *    ([RenewLink.node]): *Renew* opens that node's share dialog, the platform's own; [refreshLinks] reads them anew after.
  *
  * The password, the new password and both Secret Keys live in this model only between the steps and are zeroed at
  * [close] (a String cannot be zeroed: it is dropped). After [State.done] the host opens its tenant again: the account
@@ -61,7 +64,29 @@ class KeyRotation(
 
         /** What this device can call each scope ([ScopeNames]), read once the statuses are in; none known by default. */
         suspend fun names(): ScopeNames = ScopeNames()
+
+        /** The person's own links that need renewing, every tenant's ([RenewLink]), each space named by [names]. */
+        suspend fun linksToRenew(names: ScopeNames): List<RenewLink> = emptyList()
     }
+
+    /**
+     * One link to renew (the web's `LinkToRenew`): the share, its space as the status lines name it ([scopeName] or
+     * [scopeWord]), whether it is an upload link ([upload] — a drop box offers no renew: a new link replaces it, *Open*),
+     * and [node] where the tenant open on this device holds it: its share dialog opens from there, named by [node]'s name.
+     * Without [node] the link is another tenant's ([tenant], said by [Msg.ROTATION_LINK_ELSEWHERE]) or its name is not
+     * available here ([Msg.ROTATION_LINK_NAME_UNAVAILABLE]).
+     */
+    @Serializable
+    data class RenewLink(
+        val shareId: String,
+        val scopeId: String,
+        val node: me.raddatz.veyq.mobile.navigation.NodeAt? = null,
+        val upload: Boolean = false,
+        /** The tenant the link's space is in, where it is not the one open here. */
+        val tenant: String? = null,
+        val scopeName: String? = null,
+        @Serializable(with = MsgKey::class) val scopeWord: Msg? = Msg.ROTATION_SCOPE_NAME_UNAVAILABLE,
+    )
 
     /**
      * What a space is called on this device, never its raw id (the web's `KeyRotationPanel.scopeLabel`, inbox #979): a
@@ -110,6 +135,8 @@ class KeyRotation(
         /** Scopes this device could not open and declared: each keeps its grant and gets no new lock. */
         val unreadable: List<String> = emptyList(),
         @Serializable(with = MsgKey::class) val refusal: Msg? = null,
+        /** *Links to renew*, read once the rotation is done ([RenewLink]); empty where there are none or the read failed. */
+        val links: List<RenewLink> = emptyList(),
     )
 
     private val _state = MutableStateFlow(State(server = server))
@@ -181,6 +208,7 @@ class KeyRotation(
                     } catch (e: Exception) {
                         current.copy(step = Step.GATE, refusal = Msg.ROTATION_ERROR_FAILED)
                     }
+                    if (current.done) _state.value = current.copy(links = links(names()))
                 }
                 ColdCredential.Refusal.NO_FLOOR -> refuse(Msg.ROTATION_ERROR_NO_FLOOR)
                 else -> refuse(Msg.ROTATION_ERROR_CREDENTIAL)
@@ -210,10 +238,12 @@ class KeyRotation(
         val newKey = step.keyCopy()
         try {
             val result = engine.publish(pw, sk, newKey, nextPassword)
+            val names = names()
             _state.value = current.copy(
-                step = Step.DONE, done = true, resumed = result.resumed, scopes = statuses(result.states, names()), unreadable = result.unreadable,
+                step = Step.DONE, done = true, resumed = result.resumed, scopes = statuses(result.states, names), unreadable = result.unreadable,
             )
             forget()
+            _state.value = current.copy(links = links(names))
         } catch (e: Refused) {
             _state.value = current.copy(step = Step.KIT, refusal = e.msg)
         } catch (e: OutcomeUnknown) {
@@ -226,6 +256,21 @@ class KeyRotation(
         } finally {
             newKey.fill(0)
         }
+    }
+
+    /** *Links to renew* read anew — after a link's share dialog closed (a renewed link drops out). Nothing before [State.done]. */
+    suspend fun refreshLinks() = acting.withLock {
+        if (!current.done) return@withLock
+        _state.value = current.copy(links = links(names()))
+    }
+
+    /** The links, best effort: a read that fails lists none (the web's `.catch(() => [])`). */
+    private suspend fun links(names: ScopeNames): List<RenewLink> = try {
+        engine.linksToRenew(names)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        emptyList()
     }
 
     /** The names, best effort: a read that fails names nothing (every line then "a space this device hasn't opened"). */
@@ -249,6 +294,16 @@ class KeyRotation(
     fun close() = forget()
 
     companion object {
+        /** [link]'s space named as a status line's ([statuses]' order). */
+        internal fun named(link: RenewLink, names: ScopeNames): RenewLink {
+            val name = names.named[link.scopeId]?.takeIf { it.isNotBlank() }
+            return when {
+                name != null -> link.copy(scopeName = name, scopeWord = null)
+                link.scopeId in names.personal -> link.copy(scopeWord = Msg.ROTATION_PERSONAL_SPACE)
+                else -> link
+            }
+        }
+
         internal fun statuses(states: List<RotationScopeState>, names: ScopeNames = ScopeNames()): List<ScopeStatus> = states.map { s ->
             val status = when (s.state) {
                 RotationScopeState.State.secured -> ScopeStatus(s.scopeId, Msg.ROTATION_STATUS_SECURED)
@@ -279,8 +334,9 @@ class KeyRotation(
  * open, if any: its spaces' names name the status lines (inbox #979); the tenants' own names come from the account.
  */
 fun VeyqAccount.keyRotation(open: me.raddatz.veyq.mobile.session.TenantSession?): KeyRotation =
-    keyRotation { open?.spaces().orEmpty() }
-
-/** [keyRotation] with the spaces this device has open handed as a read (the bridge's, over its open tenant). */
-fun VeyqAccount.keyRotation(spaces: suspend () -> List<me.raddatz.veyq.mobile.navigation.SpaceRef>): KeyRotation =
-    KeyRotation(AccountRotation(this, spaces), primitives, email, server)
+    KeyRotation(
+        AccountRotation(this, { open?.spaces().orEmpty() }) { scopeId, nodeId ->
+            open?.node(scopeId, nodeId)?.let { me.raddatz.veyq.mobile.navigation.NodeAt(it.scopeId, it.id, it.kind, it.name) }
+        },
+        primitives, email, server,
+    )

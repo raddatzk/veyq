@@ -70,6 +70,8 @@ internal class AccountRotation(
     private val account: VeyqAccount,
     /** The spaces the host has open, by their names (a group's name is known only where a tenant opened it). */
     private val spaces: suspend () -> List<me.raddatz.veyq.mobile.navigation.SpaceRef> = { emptyList() },
+    /** A node of the tenant the host has open, as its share dialog opens it; null where that tenant does not hold it. */
+    private val node: suspend (scopeId: String, nodeId: String) -> me.raddatz.veyq.mobile.navigation.NodeAt? = { _, _ -> null },
 ) : KeyRotation.Engine {
     private val p = account.primitives
     private val suite = account.suite
@@ -122,6 +124,29 @@ internal class AccountRotation(
         val personal = plan.filter { it.kind == RotationPlanScope.Kind.PERSONAL }.map { it.scopeId }.toSet() +
             open.filter { it.kind == "PERSONAL" }.map { it.scopeId }
         return KeyRotation.ScopeNames(personal, named)
+    }
+
+    /**
+     * The web's `listLinksToRenew`: the person's own links (`listShares()` without a node, account-addressed: every
+     * tenant's) the server marks `reissueRequired`; each named from the open tenant's tree where it holds the node, else
+     * by its tenant (the plan's) — never a key read for it.
+     */
+    override suspend fun linksToRenew(names: KeyRotation.ScopeNames): List<KeyRotation.RenewLink> {
+        val mine = account.call { me.raddatz.veyq.mobile.api.apis.SharingApi(account.server, account.http).listShares() }
+            .filter { it.mine && it.reissueRequired }
+        if (mine.isEmpty()) return emptyList()
+        val tenantOf = runCatching { plan() }.getOrElse { if (it is CancellationException) throw it else emptyList() }
+            .associate { it.scopeId to it.tenantId }
+        return mine.map { share ->
+            val at = runCatching { node(share.scopeId, share.nodeId) }.getOrElse { if (it is CancellationException) throw it else null }
+            val tenant = if (at != null) null else tenantOf[share.scopeId]?.let { t -> account.tenants.firstOrNull { it.tenantId == t }?.name }
+            KeyRotation.named(
+                KeyRotation.RenewLink(
+                    share.shareId, share.scopeId, at, share.role == me.raddatz.veyq.mobile.api.models.ShareRole.WRITE_ONLY, tenant,
+                ),
+                names,
+            )
+        }
     }
 
     override suspend fun publish(password: String, secretKey: ByteArray, newSecretKey: ByteArray, newPassword: String?): KeyRotation.Published {

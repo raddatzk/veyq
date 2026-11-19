@@ -563,6 +563,8 @@ internal sealed class AddressChangePage : FlowPage
     private Watch? _watch;
     private AddressChangeState? _state;
     private KitSection? _kit;
+    /// <summary>Which half asked last (the request, or the kit's check): the one refusal is said under that one.</summary>
+    private bool _kitAsked;
 
     public AddressChangePage(Window window, string connection, Action back) : base(window, connection, back, AccountFlow.Email)
     {
@@ -607,22 +609,7 @@ internal sealed class AddressChangePage : FlowPage
         {
             _password.Password = "";
             Body.Children.Add(Card(Text(Words.EmailChangeSent(sent), "email-sent"), "email-sent-card"));
-            Body.Children.Add(Heading(Words.EmailChangeKitTitle()));
-            if (_kit is { } kit)
-            {
-                Body.Children.Add(kit.View);
-            }
-            else
-            {
-                Body.Children.Add(Caption(Words.EmailChangeKitSub()));
-                Body.Children.Add(_kitPassword);
-                Body.Children.Add(_kitKey);
-                var row = Held(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 });
-                row.Children.Add(_check);
-                if (s.working) row.Children.Add(Ring());
-                Body.Children.Add(row);
-                if (Refusal(s.refusal) is { } refused) Body.Children.Add(refused);
-            }
+            DrawKit(s);
             var close = Plain(Words.ShareDone(), "email-close");
             close.Click += (_, _) => Back();
             Body.Children.Add(close);
@@ -638,13 +625,36 @@ internal sealed class AddressChangePage : FlowPage
         send.Children.Add(_request);
         if (s is { working: true }) send.Children.Add(Ring());
         Body.Children.Add(send);
-        if (Refusal(s?.refusal) is { } r) Body.Children.Add(r);
+        if (!_kitAsked && Refusal(s?.refusal) is { } r) Body.Children.Add(r);
+        DrawKit(s);
         Enable();
+    }
+
+    /// <summary>"Print a new Emergency Kit" — only where the core offers it: once this sign-in took the new address, never
+    /// right after the request (the confirm is still to come, inbox #1010).</summary>
+    private void DrawKit(AddressChangeState? s)
+    {
+        if (s is not { kitOffered: true }) return;
+        Body.Children.Add(Heading(Words.EmailChangeKitTitle()));
+        if (_kit is { } kit)
+        {
+            Body.Children.Add(kit.View);
+            return;
+        }
+        Body.Children.Add(Caption(Words.EmailChangeKitSub()));
+        Body.Children.Add(_kitPassword);
+        Body.Children.Add(_kitKey);
+        var row = Held(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 });
+        row.Children.Add(_check);
+        if (s.working) row.Children.Add(Ring());
+        Body.Children.Add(row);
+        if (_kitAsked && Refusal(s.refusal) is { } refused) Body.Children.Add(refused);
     }
 
     private async void Request()
     {
         if (_id is not { } flow) return;
+        _kitAsked = false;
         var call = new Call.AddressChangeRequest { flow = flow, newEmail = _email.Text.Trim(), password = _password.Password, secretKey = _key.Password };
         _key.Password = "";
         _request.IsEnabled = false;
@@ -655,6 +665,7 @@ internal sealed class AddressChangePage : FlowPage
     private async void MakeKit()
     {
         if (_id is not { } flow) return;
+        _kitAsked = true;
         var call = new Call.AddressChangeKit { flow = flow, password = _kitPassword.Password, secretKey = _kitKey.Password };
         _kitKey.Password = "";
         _kitPassword.Password = "";
@@ -684,8 +695,9 @@ internal sealed class AddressChangePage : FlowPage
 
 /// <summary>The web's order: the facts → the gate (the password, the Secret Key, "also choose a new password") → the new
 /// kit saved (never shown) and "I saved it" → the danger confirmation → the publish. A moderator is sent to the web (D9).
-/// Once the keys are replaced the bridge opens the tenant anew (its keys were the old identity's), which closes this
-/// page with the Settings page: what it came to is told over the window.</summary>
+/// Once the keys are replaced the bridge opens the tenant anew (its keys were the old identity's); the done rotation
+/// outlives that (inbox #984), so its last step — each space's new lock, the links to renew — is drawn in place, and the
+/// Settings page under it reads anew on Back. A sign-out ends it: what it came to is told over the window then.</summary>
 internal sealed class KeyRotationPage : FlowPage
 {
     private readonly PasswordBox _password = Secret(Words.RotationPassword(), "rotation-password");
@@ -823,7 +835,33 @@ internal sealed class KeyRotationPage : FlowPage
         if (s.scopes.Count > 0) done.Children.Add(Caption(Words.RotationDoneSpaces()));
         Body.Children.Add(Card(done, "rotation-done-card"));
         foreach (var scope in s.scopes) Body.Children.Add(Caption(ScopeLine(scope), $"rotation-scope:{scope.scopeId}"));
+        // the links made before, which stay open until renewed (the web's decision 13): the person's own (inbox #977)
+        if (s.links.Count == 0) return;
+        Body.Children.Add(Heading(Words.RotationLinksTitle()));
+        foreach (var link in s.links)
+        {
+            var row = new StackPanel { Spacing = 4 };
+            row.Children.Add(Text(link.node?.name ?? Words.RotationLinkNameUnavailable(), $"rotation-link:{link.shareId}"));
+            var space = link.scopeName ?? (link.scopeWord is { } word ? Said.Key(word) : Words.RotationScopeNameUnavailable());
+            row.Children.Add(Caption(space));
+            if (link.node is { } node)
+            {
+                var renew = Plain(link.upload ? Words.RotationLinkOpen() : Words.RotationRenew(), $"rotation-renew:{link.shareId}");
+                // read anew once its dialog closed: a renewed link drops out
+                renew.Click += (_, _) => ShareDialog.Open(Window, node, () =>
+                {
+                    if (!Closed && _id is { } flow) Act.Send(new Call.KeyRotationRefreshLinks { flow = flow });
+                });
+                row.Children.Add(renew);
+                if (link.upload) row.Children.Add(Caption(Words.RotationLinkUpload()));
+            }
+            else if (link.tenant is { } tenant) row.Children.Add(Caption(Words.RotationLinkElsewhere(tenant)));
+            Body.Children.Add(row);
+        }
     }
+
+    /// <summary>Whether this page is a done rotation, which stays on screen across the tenant the bridge opened anew.</summary>
+    public bool KeptAcrossReopen => _state is { done: true };
 
     /// <summary>A space's line: its name (the core's, else its word: one's personal space, or one this device has not
     /// opened), its new lock's status, and why it is blocked where it is.</summary>
@@ -860,8 +898,8 @@ internal sealed class KeyRotationPage : FlowPage
         if (!await Dialogs.Confirm(Window, "rotation-confirm", Words.RotationConfirmTitle(), Words.RotationConfirmBody(), Words.RotationAction())) return;
         if (Closed) return;
         _publish.IsEnabled = false;
-        var answer = await Ask("KeyRotation.Run", new Call.KeyRotationRun { flow = flow });
-        if (answer is not null && _state is { done: true } last) TellDone(last);
+        // the done step is drawn in place (the flow outlives the tenant's reopen, inbox #984): nothing told over the window
+        await Ask("KeyRotation.Run", new Call.KeyRotationRun { flow = flow });
     }
 
     /// <summary>The keys replaced: told once over the window, the spaces' new locks with it where the core named them.</summary>

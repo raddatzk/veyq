@@ -89,6 +89,20 @@ enum class StaySignedIn {
     LOGIN,
 }
 
+/**
+ * The changes a trust row offers ("Manage servers" and Settings' *This device*, ADR 0123 decision 8) for an account this
+ * device trusts by [method] at [level], the device offering [levels]; null is the password trust. Staying signed in: each
+ * offered level it is not at, then back to the password. Password-trusted: each level. Not trusted at all — a password
+ * change took this device's saved key (ADR 0148 decision 6, inbox #1009), or *Stop trusting* ran — each level, then the
+ * password trust: the session stays, so there is no next sign-in to offer them. Android and Apple read this; Linux's
+ * `manage::changes` and Windows' `TrustWords.Changes` repeat it rule for rule.
+ */
+fun trustChanges(method: TrustedDevice.Method?, level: StaySignedIn?, levels: List<StaySignedIn>): List<StaySignedIn?> = when (method) {
+    null -> levels + listOf(null)
+    TrustedDevice.Method.DEVICE_KEY -> levels.filter { it != level } + listOf(null)
+    else -> levels
+}
+
 /** The person did not authenticate for the unlock key ([cancelled]), or the key no longer works. */
 class DeviceAuthFailed(val cancelled: Boolean, detail: String? = null) : Exception(detail ?: if (cancelled) "cancelled" else "unlock key unusable")
 
@@ -171,6 +185,20 @@ class ThisDevice(
 
     internal fun instanceSalt(host: String): String? = store.read(SALT + host)
 
+    /**
+     * An address change requested for account [key] from address [from] (ADR 0148 decision 6): kept until a sign-in of the
+     * account with another address took it, so that sign-in offers the new kit — on a device that keeps no record of the
+     * account too. The person's own address on their own device, as a record names it.
+     */
+    internal fun rememberAddressChange(key: String, from: String) = store.write(MOVING + key, from)
+
+    internal fun addressChangeFrom(key: String): String? = store.read(MOVING + key)
+
+    internal fun forgetAddressChange(key: String) = store.remove(MOVING + key)
+
+    /** Server [host]'s instance salt dropped: no account this device keeps a record of names that host any more (inbox #971). */
+    internal fun dropInstanceSalt(host: String) = store.remove(SALT + host)
+
     /** A random id, kept outside the key stores (the web's `veyq:device-id`): it names this device in the register. */
     val id: String
         get() = store.read(ID) ?: uuid().also { store.write(ID, it) }
@@ -227,6 +255,7 @@ class ThisDevice(
         const val DECLINED = "veyq.stay-signed-in-declined"
         const val WRAP = "veyq.offline-wrap."
         const val SALT = "veyq.instance-salt."
+        const val MOVING = "veyq.address-change."
         val JSON = Json { ignoreUnknownKeys = true }
     }
 }

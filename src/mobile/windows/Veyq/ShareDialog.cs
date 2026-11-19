@@ -53,6 +53,13 @@ internal sealed class ShareDialog
     /// <summary>Opens the share sheet of <paramref name="node"/> over <paramref name="window"/>.</summary>
     public static void Open(Window window, NodeAt node) => new ShareDialog(window).Show(node.name, new Call.ShareOpen { node = node });
 
+    /// <summary><see cref="Open(Window, NodeAt)"/>, and <paramref name="closed"/> once the dialog closed (the rotation's
+    /// Links to renew reads its links anew, inbox #977).</summary>
+    public static void Open(Window window, NodeAt node, Action closed) =>
+        new ShareDialog(window) { _closedThen = closed }.Show(node.name, new Call.ShareOpen { node = node });
+
+    private Action? _closedThen;
+
     /// <summary>Opens the share of space <paramref name="scopeId"/>'s top level over <paramref name="window"/>: "Add files
     /// only" alone, its form at once; the dialog closes once its form does (ShareShown.atTopLevel).</summary>
     public static void OpenTopLevel(Window window, string scopeId) =>
@@ -93,6 +100,7 @@ internal sealed class ShareDialog
         _watch = null;
         if (_id is { } id) Act.Send(new Call.ShareClose { share = id });
         _id = null;
+        _closedThen?.Invoke();
     }
 
     private async void Watch(Call open)

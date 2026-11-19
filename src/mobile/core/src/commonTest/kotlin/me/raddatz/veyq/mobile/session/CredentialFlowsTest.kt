@@ -12,6 +12,7 @@ import me.raddatz.veyq.mobile.words.Msg
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -131,12 +132,27 @@ class CredentialFlowsTest {
         change.request("other@b.example", a.password, p.randomBytes(32))
         assertEquals(Msg.EMAIL_CHANGE_ERROR_CREDENTIAL, change.current.refusal)
         assertEquals(1, a.emailChanges.size)
-        // the kit after it: refused for a wrong key, a step for the right one, its key the account's
+        // no kit before the confirm (inbox #1010): the account's address is still the old one, so a kit would print it
+        assertFalse(change.current.kitOffered)
+        assertNull(change.kit(a.password, a.secretKeyCopy()), "a kit was made before the confirm")
+    }
+
+    /**
+     * Inbox #1010: the new kit follows the confirm, as on the web's confirm page — offered once the sign-in took the new
+     * address, refused for a wrong key, and made with the address the server holds now, never the one the session began with.
+     */
+    @Test
+    fun theNewKitFollowsTheConfirmAndPrintsTheAddressTheServerHolds() = runTest {
+        val a = PlayedCredentials(p)
+        a.taken = true
+        a.held = "new@b.example"
+        val change = AddressChange(a, p)
+        assertTrue(change.current.kitOffered)
         assertNull(change.kit(a.password, p.randomBytes(32)))
         assertEquals(Msg.EMAIL_CHANGE_KIT_REFUSED, change.current.refusal)
         val step = change.kit(a.password, a.secretKeyCopy())!!
         assertContentEquals(a.secretKey, step.keyCopy())
-        assertEquals("veyq-emergency-kit-p@a.example.pdf", step.current.fileName)
+        assertEquals("veyq-emergency-kit-new@b.example.pdf", step.current.fileName)
         step.close()
     }
 

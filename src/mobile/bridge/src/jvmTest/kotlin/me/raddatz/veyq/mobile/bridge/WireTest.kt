@@ -220,7 +220,7 @@ class WireTest {
             Call.PasswordChangeClose(121), Call.AddressChangeOpen("veyq.localhost#u1"), Call.AddressChangeRequest(122, "neu@example.org", "pw", "0C5126"),
             Call.AddressChangeKit(122, "pw", "0C5126"), Call.AddressChangeClose(122), Call.KitSave(125, "/home/p/kit.pdf", "de", 20_775),
             Call.KitConfirm(125, true), Call.KitClose(125), Call.KeyRotationOpen("veyq.localhost#u1"), Call.KeyRotationChooseNewPassword(123, false),
-            Call.KeyRotationProve(123, "pw", "0C5126", "neu und lang", "neu und lang"), Call.KeyRotationRun(123), Call.KeyRotationClose(123),
+            Call.KeyRotationProve(123, "pw", "0C5126", "neu und lang", "neu und lang"), Call.KeyRotationRun(123), Call.KeyRotationRefreshLinks(123), Call.KeyRotationClose(123),
             Call.ErasureOpen("veyq.localhost#u1"), Call.ErasureChoose(124, "t1", null), Call.ErasureChoose(124, "t2", "user-3"),
             Call.ErasureRun(124, "pw"), Call.ErasureClose(124),
         ),

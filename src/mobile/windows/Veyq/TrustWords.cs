@@ -49,12 +49,13 @@ internal static class TrustWords
 
     /// <summary>The changes "Manage servers" lists for a server trusted by <paramref name="method"/> at
     /// <paramref name="level"/>, the device offering <paramref name="levels"/>: each offered level it is not at, then the
-    /// way back to the password (null) from staying signed in. None where the device trusts it not.</summary>
+    /// way back to the password (null) from staying signed in — core's <c>trustChanges</c> rule for rule. Where the device
+    /// trusts it not (a password change took its saved key, inbox #1009): each level and the password trust, since the
+    /// session stays and no next sign-in offers them.</summary>
     public static IReadOnlyList<StaySignedIn?> Changes(Method? method, StaySignedIn? level, IEnumerable<StaySignedIn> levels)
     {
-        if (method is null) return [];
         var changes = levels.Where(l => !(method == Method.DeviceKey && level == l)).Select(l => (StaySignedIn?)l).ToList();
-        if (method == Method.DeviceKey) changes.Add(null);
+        if (method != Method.Device) changes.Add(null);
         return changes;
     }
 }

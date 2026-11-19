@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.api.apis.AccountEmailApi
 import me.raddatz.veyq.mobile.api.apis.AccountEmailChangeApi
 import me.raddatz.veyq.mobile.api.apis.AccountErasureApi
 import me.raddatz.veyq.mobile.api.apis.AccountPasswordApi
@@ -54,6 +55,12 @@ internal class AccountCredentialDoor(
 
     override suspend fun requestEmailChange(body: EmailChangeRequest): FlowReply =
         reply { AccountEmailChangeApi(mailOrigin, account.http).requestEmailChange(body) }
+
+    override fun addressChangeRequested() = account.addressChangeRequested()
+
+    override val addressTaken: Boolean get() = account.readdressedFrom != null
+
+    override suspend fun heldEmail(): String = account.call { AccountEmailApi(account.server, account.http).getAccountEmail() }.email
 
     override suspend fun erasurePreview(): Pair<FlowReply, AccountErasurePreview?> {
         val r = account.respond { AccountErasureApi(account.server, account.http).getOwnAccountErasurePreview() }

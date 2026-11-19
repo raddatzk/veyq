@@ -423,9 +423,9 @@ private fun LazyListScope.thisDevice(
             colors = listColors(),
         )
     }
-    // how it stays signed in: the changes "Manage servers" offers, the same core state (D2); a device with no saved unlock
-    // (a password change took its saved key, ADR 0148 decision 6) is offered the password trust and each level again
-    val changes = trust.method?.let { trustChanges(it, trust.level, trust.levels) } ?: (trust.levels + listOf(null))
+    // how it stays signed in: the changes "Manage servers" offers, the same core state (D2) and the core's pick — a device
+    // with no saved unlock (a password change took its saved key, ADR 0148 decision 6) is offered each level and the password trust
+    val changes = trust.changes
     run {
         for (change in changes) {
             item(key = "trust-$change") {

@@ -51,7 +51,8 @@ public sealed class TrustWordsTest
         CollectionAssert.AreEqual(new StaySignedIn?[] { StaySignedIn.Login, null }, TrustWords.Changes(Method.DeviceKey, StaySignedIn.Presence, both).ToArray());
         CollectionAssert.AreEqual(new StaySignedIn?[] { StaySignedIn.Presence, null }, TrustWords.Changes(Method.DeviceKey, StaySignedIn.Login, both).ToArray());
         CollectionAssert.AreEqual(new StaySignedIn?[] { StaySignedIn.Presence, StaySignedIn.Login }, TrustWords.Changes(Method.Device, null, both).ToArray());
-        Assert.AreEqual(0, TrustWords.Changes(null, null, both).Count);
+        // not trusted (a password change took the saved key, inbox #1009): each level and the password trust
+        CollectionAssert.AreEqual(new StaySignedIn?[] { StaySignedIn.Presence, StaySignedIn.Login, null }, TrustWords.Changes(null, null, both).ToArray());
         Assert.AreEqual(0, TrustWords.Changes(Method.Device, null, []).Count);
     }
 }

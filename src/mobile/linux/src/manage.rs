@@ -34,17 +34,17 @@ pub enum Change {
     Password,
 }
 
-/// The changes for a server trusted by [trusted] at [level], the device offering [levels]: each offered level it is not
-/// at (and that has words here), then the way back to the password from staying signed in. Nothing where the device does
-/// not trust it: the next sign-in does.
+/// The changes for a server trusted by [trusted] at [level], the device offering [levels] — core's `trustChanges` rule for
+/// rule: each offered level it is not at (and that has words here), then the way back to the password from staying signed
+/// in. Where the device trusts it not (a password change took its saved key, inbox #1009) each level and the password
+/// trust: the session stays, so no next sign-in offers them.
 pub fn changes(trusted: Option<Method>, level: Option<StaySignedIn>, levels: &[StaySignedIn]) -> Vec<Change> {
-    let Some(method) = trusted else { return Vec::new() };
     let mut out: Vec<Change> = levels
         .iter()
-        .filter(|&&l| !(method == Method::DeviceKey && level == Some(l)) && sign_in::level_words(l).is_some())
+        .filter(|&&l| !(trusted == Some(Method::DeviceKey) && level == Some(l)) && sign_in::level_words(l).is_some())
         .map(|&l| Change::Stay(l))
         .collect();
-    if method == Method::DeviceKey {
+    if trusted != Some(Method::Device) {
         out.push(Change::Password);
     }
     out
@@ -304,9 +304,11 @@ mod tests {
         assert_eq!(changes(Some(Method::Device), None, &[Login]), vec![Change::Stay(Login)]);
         // PRESENCE has no words here and is never offered as LOGIN's
         assert_eq!(changes(Some(Method::Device), None, &[StaySignedIn::Presence, Login]), vec![Change::Stay(Login)]);
-        // not trusted, or nothing offered
-        assert!(changes(None, None, &[Login]).is_empty());
+        // nothing offered
         assert!(changes(Some(Method::Device), None, &[]).is_empty());
+        // not trusted (a password change took the saved key, inbox #1009): each level and the password trust
+        assert_eq!(changes(None, None, &[Login]), vec![Change::Stay(Login), Change::Password]);
+        assert_eq!(changes(None, None, &[]), vec![Change::Password]);
         assert_eq!(trust_line(Some(Method::DeviceKey)), Some(words::manage_trusted_remembered()));
         assert_eq!(trust_line(Some(Method::Device)), Some(words::manage_trusted_password()));
         assert_eq!(trust_line(None), None);

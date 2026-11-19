@@ -183,31 +183,34 @@ internal fun AddressFlow(m: AddressChange, model: AppModel) {
             ) { Text(stringResource(R.string.email_change_submit)) }
         }
         if (state.working) LinearProgressIndicator(Modifier.fillMaxWidth())
-        HorizontalDivider(Modifier.padding(vertical = 8.dp))
-        // a kit naming the address the account signs in with now — after a confirmed change, the new one (D6)
-        Heading(stringResource(R.string.email_change_kit_title))
-        val step = kit
-        if (step == null) {
-            Body(stringResource(R.string.email_change_kit_sub), muted = true)
-            SecretField(kitPassword, { kitPassword = it }, stringResource(R.string.rotation_password), "address-kit-password", enabled)
-            SecretField(kitSecretKey, { kitSecretKey = it }, stringResource(R.string.rotation_secret_key), "address-kit-secret-key", enabled, stringResource(R.string.rotation_secret_key_hint))
-            if (kitAsked) Refusal(state.refusal, "address-kit-refusal")
-            OutlinedButton(
-                onClick = {
-                    kitAsked = true
-                    model.addressKit(m, kitPassword, kitSecretKey) { made ->
-                        kit = made
-                        if (made != null) {
-                            kitPassword = ""
-                            kitSecretKey = ""
+        // the new kit follows the confirm (D6, inbox #1010): offered once this sign-in took the new address, never right
+        // after the request — the account's address is still the old one then
+        if (state.kitOffered) {
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            Heading(stringResource(R.string.email_change_kit_title))
+            val step = kit
+            if (step == null) {
+                Body(stringResource(R.string.email_change_kit_sub), muted = true)
+                SecretField(kitPassword, { kitPassword = it }, stringResource(R.string.rotation_password), "address-kit-password", enabled)
+                SecretField(kitSecretKey, { kitSecretKey = it }, stringResource(R.string.rotation_secret_key), "address-kit-secret-key", enabled, stringResource(R.string.rotation_secret_key_hint))
+                if (kitAsked) Refusal(state.refusal, "address-kit-refusal")
+                OutlinedButton(
+                    onClick = {
+                        kitAsked = true
+                        model.addressKit(m, kitPassword, kitSecretKey) { made ->
+                            kit = made
+                            if (made != null) {
+                                kitPassword = ""
+                                kitSecretKey = ""
+                            }
                         }
-                    }
-                },
-                enabled = enabled && kitPassword.isNotEmpty() && kitSecretKey.isNotBlank(),
-                modifier = Modifier.testTag("address-kit-check"),
-            ) { Text(stringResource(R.string.email_change_kit_check)) }
-        } else {
-            KitSave(step, model)
+                    },
+                    enabled = enabled && kitPassword.isNotEmpty() && kitSecretKey.isNotBlank(),
+                    modifier = Modifier.testTag("address-kit-check"),
+                ) { Text(stringResource(R.string.email_change_kit_check)) }
+            } else {
+                KitSave(step, model)
+            }
         }
     }
 }
@@ -276,6 +279,9 @@ internal fun RotationFlow(m: KeyRotation, model: AppModel) {
     var newPassword by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var asking by remember { mutableStateOf(false) }
+    // a link's share dialog opened from *Links to renew* (inbox #977); its links read anew once it closed
+    var renewing by remember { mutableStateOf<me.raddatz.veyq.mobile.navigation.NodeAt?>(null) }
+    val scope = rememberCoroutineScope()
     FlowDialog(stringResource(R.string.rotation_title), secure = true, tag = "rotation", onClose = model::closeAccountFlow) {
         when (state.step) {
             KeyRotation.Step.LOADING, KeyRotation.Step.WORKING -> {
@@ -344,8 +350,30 @@ internal fun RotationFlow(m: KeyRotation, model: AppModel) {
                         }
                         s.blocked?.let { Body(say(it), muted = true) }
                     }
+                    // the links made before, which stay open until renewed (the web's decision 13): the person's own
+                    if (state.links.isNotEmpty()) Heading(stringResource(R.string.rotation_links_title))
+                    for (l in state.links) {
+                        Column(Modifier.fillMaxWidth().testTag("rotation-link-${l.shareId}")) {
+                            Text(l.node?.name ?: stringResource(R.string.rotation_link_name_unavailable))
+                            Body(l.scopeName ?: l.scopeWord?.let { say(it) } ?: stringResource(R.string.rotation_scope_name_unavailable), muted = true)
+                            val node = l.node
+                            when {
+                                node != null -> OutlinedButton(onClick = { renewing = node }, modifier = Modifier.testTag("rotation-renew-${l.shareId}")) {
+                                    Text(stringResource(if (l.upload) R.string.rotation_link_open else R.string.rotation_renew))
+                                }
+                                l.tenant != null -> Body(say(Msg.ROTATION_LINK_ELSEWHERE, l.tenant!!), muted = true)
+                            }
+                            if (node != null && l.upload) Body(stringResource(R.string.rotation_link_upload), muted = true)
+                        }
+                    }
                 }
                 Button(onClick = model::closeAccountFlow) { Text(stringResource(R.string.ok)) }
+                renewing?.let { node ->
+                    ShareSheet(node, model) {
+                        renewing = null
+                        scope.launch { m.refreshLinks() }
+                    }
+                }
             }
         }
     }

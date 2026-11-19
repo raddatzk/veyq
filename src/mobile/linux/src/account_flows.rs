@@ -354,7 +354,8 @@ pub fn password(parent: &gtk::Widget, connection: String) {
 // ---- change the sign-in address (D6), and the new kit after it ----
 
 /// "Change sign-in address" for the account [connection] names: the request (the confirm is the web's), and "Print a
-/// new Emergency Kit" with the account's address once the password and the Secret Key passed.
+/// new Emergency Kit" with the account's address once the password and the Secret Key passed — offered only once this
+/// sign-in took the new address, never right after the request (the confirm is still to come, inbox #1010).
 pub fn address(parent: &gtk::Widget, connection: String) {
     let flow = Flow::new(&words::email_change_action());
     let email = adw::EntryRow::builder().title(words::email_change_new_email()).input_purpose(gtk::InputPurpose::Email).build();
@@ -367,6 +368,7 @@ pub fn address(parent: &gtk::Widget, connection: String) {
     let submit = pill(&words::email_change_submit(), "suggested-action");
     col.append(&submit);
     let new_kit = pill(&words::email_change_kit_title(), "flat");
+    new_kit.set_visible(false);
     col.append(&new_kit);
     flow.nav.add(&page(&words::email_change_action(), "form", &col));
     let id: Id = Rc::new(Cell::new(None));
@@ -416,6 +418,7 @@ pub fn address(parent: &gtk::Widget, connection: String) {
     });
     let o = open_kit.clone();
     new_kit.connect_clicked(move |_| o());
+    let offer = new_kit.clone();
     let (f, sent) = (flow.clone(), Rc::new(RefCell::new(None::<String>)));
     open_flow(&flow, &id, Call::AddressChangeOpen { connection }, |flow| Watched::AddressChange { flow }, move |u| {
         let Update::AddressChange { shown, .. } = u else { return true };
@@ -425,6 +428,7 @@ pub fn address(parent: &gtk::Widget, connection: String) {
         };
         eprintln!("veyq: address change: working {}, sent {}, refusal {:?}", s.working, s.sent_to.is_some(), s.refusal);
         submit.set_sensitive(!s.working);
+        offer.set_visible(s.kit_offered);
         said_refusal(&error, s.refusal.as_ref().filter(|_| !asking_kit.get()));
         said_refusal(&kit_error, s.refusal.as_ref().filter(|_| asking_kit.get()));
         if let Some(to) = s.sent_to.clone().filter(|to| sent.borrow().as_ref() != Some(to)) {
@@ -432,10 +436,12 @@ pub fn address(parent: &gtk::Widget, connection: String) {
             let col = column();
             let status = adw::StatusPage::builder().icon_name("mail-send-symbolic").description(words::email_change_sent(&to)).build();
             col.append(&status);
-            let kit = pill(&words::email_change_kit_title(), "");
-            let o = open_kit.clone();
-            kit.connect_clicked(move |_| o());
-            col.append(&kit);
+            if s.kit_offered {
+                let kit = pill(&words::email_change_kit_title(), "");
+                let o = open_kit.clone();
+                kit.connect_clicked(move |_| o());
+                col.append(&kit);
+            }
             f.nav.push(&page(&words::email_change_action(), "sent", &col));
         }
         true
@@ -459,7 +465,7 @@ pub fn rotation(parent: &gtk::Widget, connection: String) {
     let gate = Rc::new(Gate::new(&flow, &id));
     let shown = Rc::new(Cell::new(None::<Step>));
     let done = Rc::new(Cell::new(false));
-    let f = flow.clone();
+    let (f, id_done) = (flow.clone(), id.clone());
     open_flow(&flow, &id, Call::KeyRotationOpen { connection }, |flow| Watched::KeyRotation { flow }, move |u| {
         let Update::KeyRotation { shown: state, .. } = u else { return true };
         // a finished rotation re-opens the tenant, which closes the flow in the core: its last page stays
@@ -486,7 +492,7 @@ pub fn rotation(parent: &gtk::Widget, connection: String) {
                 }
             }
             Step::Working => f.nav.replace(&[spinner_page(&words::rotation_title(), "working")]),
-            Step::Done => f.nav.replace(&[rotation_done(&f, &s)]),
+            Step::Done => f.nav.replace(&[rotation_done(&f, &id_done, &s)]),
         }
         true
     });
@@ -593,7 +599,7 @@ impl Gate {
 
 /// The rotation's end: the old kit no longer works, this device's offline content is fetched again, and each space's
 /// new lock as the server says it.
-fn rotation_done(flow: &Flow, s: &KeyRotationState) -> adw::NavigationPage {
+fn rotation_done(flow: &Flow, flow_id: &Id, s: &KeyRotationState) -> adw::NavigationPage {
     let col = column();
     if let Some(r) = &s.refusal {
         let e = error_label();
@@ -627,6 +633,44 @@ fn rotation_done(flow: &Flow, s: &KeyRotationState) -> adw::NavigationPage {
             col.append(&text(&words::rotation_blocked_title()));
             let blocked: Vec<String> = s.unreadable.iter().map(|_| words::rotation_blocked_unreadable()).collect();
             col.append(&facts(&blocked));
+        }
+        // the links made before, which stay open until renewed (the web's decision 13): the person's own (inbox #977)
+        if !s.links.is_empty() {
+            col.append(&text(&words::rotation_links_title()));
+            let list = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
+            list.add_css_class("boxed-list");
+            list.set_widget_name("rotation-links");
+            for link in &s.links {
+                let title = link.node.as_ref().map(|n| n.name.clone()).unwrap_or_else(words::rotation_link_name_unavailable);
+                let space = match (&link.scope_name, &link.scope_word) {
+                    (Some(name), _) => name.clone(),
+                    (None, Some(word)) => said::key(word),
+                    (None, None) => words::rotation_scope_name_unavailable(),
+                };
+                let subtitle = match (&link.node, &link.tenant) {
+                    (Some(_), _) if link.upload => format!("{space} · {}", words::rotation_link_upload()),
+                    (None, Some(tenant)) => format!("{space} · {}", words::rotation_link_elsewhere(tenant)),
+                    _ => space,
+                };
+                let row = adw::ActionRow::builder().title(title).subtitle(subtitle).use_markup(false).build();
+                if let Some(node) = link.node.clone() {
+                    let label = if link.upload { words::rotation_link_open() } else { words::rotation_renew() };
+                    let renew = gtk::Button::builder().label(label).valign(gtk::Align::Center).build();
+                    let (dialog, id) = (flow.dialog.clone(), flow_id.clone());
+                    renew.connect_clicked(move |_| {
+                        let id = id.clone();
+                        // read anew once its sheet closed: a renewed link drops out
+                        crate::share_sheet::open_then(&dialog, &node, move || {
+                            if let Some(flow) = id.get() {
+                                bridge::send(Call::KeyRotationRefreshLinks { flow });
+                            }
+                        });
+                    });
+                    row.add_suffix(&renew);
+                }
+                list.append(&row);
+            }
+            col.append(&list);
         }
     }
     let close = pill(&words::share_done(), "suggested-action");
