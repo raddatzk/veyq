@@ -9,8 +9,9 @@ import me.raddatz.veyq.mobile.session.Person
  * that claims one ([ApplicationShape.personSection]), each the application's own model. Core names no application here.
  *
  * Opened for a member only ([Shell.openPerson]): from a current member in a Memory's participants or a photo's uploader;
- * a former member and a guest open nothing. One's own profile is the same frame. The web's own-page editing (name,
- * picture) and the safety numbers are not in it (inbox #949). Offline it names the person from the directory the session
+ * a former member and a guest open nothing. One's own profile is the same frame. Its *Edit profile* (`ProfileModel`) and
+ * the safety number below the name (`PersonTrust`) are models of their own that each platform draws beside this frame
+ * (ADR 0148 decisions 2 and 3). Offline it names the person from the directory the session
  * read before (decision 14); nothing of it is written to disk.
  */
 class PersonProfile(

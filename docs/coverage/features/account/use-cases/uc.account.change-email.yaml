@@ -4,6 +4,10 @@ title: Change the address an account signs in with
 # Built by cr-change-email (ADR 0074 Decision 8). Every refusal is asserted against a live control on the same predicate,
 # and each was bitten by injection: removing the check it names turned its test red (the race by dropping the replay
 # question of createOrConflict, which turned the loser into a 500).
+# The apps (ADR 0148, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named here, not
+# cited — core `CredentialFlowsTest.anAddressChangeSignsUnderTheNewAddressAndTheKitAfterItIsChecked`, `ReaddressTest`;
+# live as a throwaway `LiveCredentialFlowsTest.anAddressChangeConfirmedOnTheWebReaddressesTheRecord` (skips where the dev
+# backend sends no mail, saying so — not yet run to its end). The confirm stays the web's (owner 2026-11-18).
 acceptanceCriteria:
   - id: request-needs-password-and-secret-key
     text: >-

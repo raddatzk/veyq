@@ -2396,6 +2396,28 @@ The same CR's phase 4 planned a live case over a group's and the tenant's Memory
 no group, so `PersonProfileLiveTest` skipped (it says so) until a group was made on the web after the CR closed. A refine
 that plans a live case checks that the dev instance holds what it needs — a group membership, a second member, a
 capability switched on — and names the step that makes it, or plans the case without it.
+**And it names what the machines the pass runs on must resolve and send.** The apps' account CR (ADR 0148) planned
+every pass as a throwaway in a fresh tenant `tw-<stamp>.localhost` — and the Windows VM resolves only the names its
+`hosts` file maps, which is the owner's to change, so the Windows pass did not run (inbox #983); it planned the address
+change's confirm live, read from Mailpit, beside a machine hint that this Mac's dev backend sends no mail, so that case
+skipped on every run and the confirm is held by a unit test only. A refine that mints a host name or needs a mail checks
+each machine of its passes once (a `Resolve-DnsName` on the VM, one mail through the dev backend) and plans the step
+that makes it hold, or the pass without it.
+
+### A command a CR hands over is run once at refine, with the identifiers the build sets today
+
+The same CR's phase 5 done-when read `run-as me.raddatz.veyq find . -type f`, copied from `src/mobile/CLAUDE.md`, which
+recorded a measurement from before the Android id moved to `app.veyq` two days earlier; the command failed as written
+(inbox #972). A command a CR copies from a doc is run once at refine, or its identifiers (a package, a bundle id, a
+path) are read from the build file that sets them; a doc that records a measurement under an old identifier says the
+identifier was then.
+
+### A flow whose last step reopens the session names where its last state survives
+
+The same CR's rotation ends on each space's new lock. On the desktops the bridge reopens the tenant after a rotation
+(its keys were the old identity's), and closing the tenant drops every flow, so Linux and Windows could tell the end
+only in a dialog, without the spaces' states (inbox #984). A refine whose flow ends in an action that closes or reopens
+what the flow's model hangs on (a tenant, a session, an account) says which model carries the outcome across it.
 
 ### A refine that puts an application's state on a type reads whose type it is
 

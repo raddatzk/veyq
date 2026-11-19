@@ -40,6 +40,9 @@ title: Manage active sessions — see every login, sign out remotely
 # back, and runs revoke-then-logout in that order. What stays unprovable here is only the LIVE end-to-end shape:
 # it needs two live sessions of one account, which the current e2e harness does not stand up (the same reason
 # the panel's own e2e was not extended).
+# The apps (ADR 0148, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named here, not
+# cited — core `AccountSettingsTest.aFamilysRenameNamesThatFamilysDeviceAndNoOther`,
+# `.aFamilysRenameRetriedAfterAConflictKeepsTheOtherDevicesWrite` (the rename of any named device).
 acceptanceCriteria:
   - id: list-shows-every-active-family
     text: >-

@@ -128,7 +128,7 @@ device cannot change it without your Secret Key.
 
 ## Related
 
-- **The apps** (planned, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 6): the cold proof and `changePassword` ported into the core; afterwards the device offers *Trust with password* again.
+- **The apps** (built 2026-11-19, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 6; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): the cold proof (`session/ColdCredential`) and `changePassword` (`session/PasswordChange`) ported into the core; afterwards the device forgets its saved key's record, keeps its offline store and offers the password trust again. The length policy only — the breached-password check is not in the apps (inbox #969); the Secret Key typed only (#970). Tests (no coverage surface, ADR 0040): `CredentialFlowsTest` (what is sent, the refusals, nothing left of a secret it was handed), `AccountFlowsDispatchTest`, the vectors `secret_key_proof.change_password` and `auth_attestation.change_password` in `ConformanceTest`/`LibsodiumConformanceTest`; live as a throwaway, `LiveCredentialFlowsTest.aChangedPasswordSignsInAndTheOldOneIsRefused`, `LiveAccountBridgeTest`.
 - [en.account.key-model](../enablers/en.account.key-model.md) — the wrap inventory this flow reads and rewrites
 - [uc.account.recover-access](uc.account.recover-access.md) — the unauthenticated sibling this mirrors (mailed
   token instead of a live session; revokes every session instead of sparing the caller's own)

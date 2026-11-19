@@ -90,7 +90,7 @@ stay and why.
 
 ## Related
 
-- **The apps** (planned, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 8): the preview, the last-owner choices and `eraseOwnAccount` ported into the core, then the device forgets the account; the last moderation-key holder is sent to the web.
+- **The apps** (built 2026-11-19, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 8; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): the preview, the last-owner choices and `eraseOwnAccount` ported into the core (`session/AccountErasure`), then the device forgets the account (`VeyqAccount.forgetErased`: its offline store, saved key, trust marks and record); the last moderation-key holder is sent to the web. Left: the instance salt a device caches by host (inbox #971). Tests (no coverage surface, ADR 0040): `CredentialFlowsTest.theErasureSignsTheNonceWithThePasswordAndAsksForEveryChoice`, `.theServerOwnerAndAModeratorAreToldAndSendNothing`; live as a throwaway, `LiveErasureTest`.
 [ADR 0101](../../../decisions/0101-an-account-is-erased-on-request-and-only-what-the-law-keeps-stays.md),
 [ADR 0056](../../../decisions/0056-instance-durable-state-and-cold-logical-backup.md) decision 8 (the ledger),
 [ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)

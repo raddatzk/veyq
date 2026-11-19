@@ -1,6 +1,8 @@
 # ADR 0148 — The apps' account: the web's flows ported into the core, the kit written by the core into the file the person chose
 - Status: Accepted
-- Built: no
+- Built: yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android and Linux as
+  throwaways (§ Consequences, the passes); on Apple and Windows built and compiled, the agent's passes open (inbox #976,
+  #983); the owner's passes are named in § Consequences
 - Date: 2026-11-18
 - Model: [native-apps](../crosscutting/native-apps.md) (the flows: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md))
 
@@ -155,6 +157,49 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
   seam.
 - **A moderator replaces their keys and erases their account on the web** until the apps hold the moderation key
   (inbox #965).
+- **Where it was built otherwise than decided** (2026-11-19): on Windows each flow is a page in the settings frame
+  (breadcrumb Settings › the flow, Back), Fluent's sub-page, not a `ContentDialog` per step — so the danger step can be
+  a dialog of its own (`Dialogs.Confirm`, accent-free, Cancel the default) — decision 10. The Secret Key of the
+  password change, the address change and the rotation's gate is typed or pasted only; the sign-in's kit file and scan
+  are not offered there yet (inbox #970) — decision 6. The rotation's end shows each scope's state but no *Links to
+  renew* (inbox #977), and on the desktops the bridge reopens the tenant after a rotation, which closes the flow, so
+  Linux and Windows tell the outcome in a dialog (inbox #984) — decision 7. The new password is held to the length
+  policy only; the web's breached-password check is not in the apps (inbox #969). An iOS kit is written through
+  `fileExporter` with an in-memory document made only when the exporter asks; whether UIKit stages it in the
+  container first is unmeasured (inbox #975).
+- **The save dialogs' recent-files records are accepted** (2026-11-19, inbox #981). After a kit saved through GTK's
+  dialog, `~/.local/share/recently-used.xbel` named the kit's path (measured in the Linux pass; in the Flatpak the
+  portal keeps the same record on the host), and Windows' save picker may leave a `.lnk` under `Recent`. Such a record
+  names the path the person chose, never a byte of the kit, and it is the place the person picked for a file they keep
+  on purpose; removing it would reach only the app's own GTK manager, not a portal's or the shell's. So the no-copy
+  rule is about content, and the Use page on the kit tells the person that the file is where they saved it, to be kept
+  or deleted there like any sensitive file, and that the system may list it among recent files
+  ([Your Emergency Kit](../../site/src/content/docs/getting-started/emergency-kit.mdx)).
+- **What the passes proved** (each as a throwaway with a member, made and erased by the pass, both pending erasures
+  listed). *Android* (API 36 emulator): a session renamed and read back; a name and a square-cropped picture saved and
+  read back after an unlock; one's own safety number shown and the member verified by digits (*Verified by you.*); the
+  address change to the mail step; a kit saved into Downloads through `CreateDocument`; the password changed, the old one
+  refused, the new one signing in and the fingerprint re-trust; the rotation with a new password, both scopes *New
+  lock*, the old Secret Key refused and the rotation's kit read by the sign-in; the erasure refused without the last
+  owner's choice, then done, the device's offline store and record gone. No file of the app held a canary of the Secret
+  Key after each kit save (bitten by grepping Downloads, which held the kit), and the Recents snapshots of every secret
+  step were blank. *Linux* (Broadway): the same, over the bridge — this device renamed on a scrolled page that stayed
+  put, a picture cropped and saved, the member's number equal on both apps and verified by digits, the password changed
+  and changed back, a kit for the address and the rotation's kit saved through GTK's dialog, the rotation without a new
+  password, the erasure with *Delete the space*; no file under the data, cache, config, temp or runtime directories
+  held the Secret Key, `veyqkit:` or a PDF. *The core's live tests* as throwaways: verification both ways, a name and a
+  picture read by the other member, the password changed and the old one refused, the rotation (both scopes secured,
+  the old Secret Key refused, the new kit signing in to the same spaces), the erasure. A kit the core writes is read by
+  the web's import by each of its three paths (`kit-app.pdf`).
+- **What no pass has proved yet.** The address change's confirm and the re-addressed sign-in live (the dev backend on
+  the Mac the passes ran on sends no mail; `ReaddressTest` holds the re-address, `LiveCredentialFlowsTest` skips there
+  and says so); a rotation begun on the web and finished by an app's unlock (held by `FinishRotationTest`); a safety
+  code scanned between two apps and the rename of another named device (the throwaways had none). The agent's macOS
+  click-through and its kit no-copy check, with #917's rename alert (inbox #976: the screen was locked); the Windows UIA
+  pass and its no-copy check (inbox #983: the VM resolves no throwaway tenant). **The owner's:** iPhone and iPad (the
+  sheets, `fileExporter` into Files, Face ID's re-enrolment, #975 — no simulator boots here, #928), Touch ID and Windows
+  Hello for real after a password change and a rotation, an address change to a real mailbox with the link opened on a
+  phone, and a safety code scanned between two phones with real cameras (#912).
 
 ## Alternatives considered
 

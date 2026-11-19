@@ -63,7 +63,7 @@ they can read and the server cannot.
 
 ## Related
 
-- **The apps** (planned, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 2): one core model behind Settings' *Your profile* and *Edit profile* on one's own person page.
+- **The apps** (built 2026-11-19, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 2; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): one core model (`session/ProfileModel`) behind Settings' *Your profile* and *Edit profile* on one's own person page. Tests (no coverage surface, ADR 0040): `ProfileModelTest` (the name sealed for every reader, the stale-epoch retry, a taken username, no tenant grant, the key zeroed at close); live as throwaways, `LiveAccountFlowsTest.aNameSetIsReadByTheOtherMember`, `LiveAccountBridgeTest`.
 - Feature: [Spaces (scopes)](../_index.md)
 - Enabler: [en.spaces.member-identity](../enablers/en.spaces.member-identity.md) (the per-tenant username and
   sealed name this edits)

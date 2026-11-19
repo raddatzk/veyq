@@ -4,6 +4,10 @@ title: Edit your profile in a space
 # The "Your profile" rubric of the settings hub (src/web/src/features/account/profile/ProfilePanel.vue). The panel's
 # mounted test mocks ./profile at its I/O functions and keeps the sealing real, so each name assertion unseals
 # what the panel sent at the member's own address.
+# The apps (ADR 0148, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named here, not
+# cited — core `ProfileModelTest` (the name sealed for every reader, the stale-epoch retry, a taken
+# username, no tenant grant, the key zeroed at close); live as throwaways `LiveAccountFlowsTest.aNameSetIsReadByTheOtherMember`,
+# `LiveAccountBridgeTest`.
 acceptanceCriteria:
   - id: edit-username
     text: A member changes their per-tenant username from the profile. The client sends it trimmed and lower-cased; the server re-checks it is free in this tenant and stores it. A taken handle is `409 username_taken`, the panel says so, and nothing is saved (not the handle, the name or the consent preference).

@@ -14,6 +14,12 @@ title: Secure my account after a compromise
 # (and that every field is required — an optional one is a discriminator spelled by omission) and computes the
 # longest body the contract admits against the server's limit (ADR 0111 decision 22). It is not listed as coverage
 # because `scripts/` is not a coverage surface (ADR 0040); the tests below cover what the one producer actually sends.
+# The apps (ADR 0148, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named here, not
+# cited — core `KeyRotationTest` (nothing published before the kit was saved
+# and confirmed, a moderator sent to the web, a secured account resumed), `FinishRotationTest`,
+# `OfflineWipeWiredTest.a_rotation_wipes_the_store_and_opens_it_anew_under_the_new_key`, `KitWriterTest` and
+# `KitFixtureTest` (`kit-app.pdf`, also read by `src/features/account/emergencyKit/emergencyKit.import.test.ts`), the
+# `rotation_stage` and `secret_key_proof` vectors; live as a throwaway `LiveRotationTest`.
 acceptanceCriteria:
   - id: one-mode-every-key-together
     text: Securing the account replaces the Master Key, the identity keypair and the Secret Key together, as one step of the account's key chain — there is no identity-only mode and no choice offered. wrappedIdentityPrivateKey is re-wrapped under the new Master Key, the new identity public bundle replaces the directory value, the new Secret-Key proof key replaces the stored one, and the chain gains a step whose head every directory read then serves.

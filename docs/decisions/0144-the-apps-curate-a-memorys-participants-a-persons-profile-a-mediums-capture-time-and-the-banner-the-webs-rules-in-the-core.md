@@ -304,7 +304,7 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
     surround holds above and below only.
   - **Linux and Windows.** The profile's List | Map switch is icons, `node_view_list` and `memory_view_map` their
     tooltips and labels.
-- **Not decided here:** one's own profile editing and the safety numbers in the apps (#949); tiles (#950); a guest's view of a received link (#435);
+- **Not decided here:** one's own profile editing and the safety numbers in the apps (#949, since decided and built by [ADR 0148](0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md)); tiles (#950); a guest's view of a received link (#435);
   a capture-time shift over several media (not built on the web either,
   [en.memory.buckets](../features/memory/enablers/en.memory.buckets.md)); a people search and a people overview in the
   apps.

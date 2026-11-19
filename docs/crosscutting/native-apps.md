@@ -111,6 +111,26 @@ language; the desktops have no row); "Add a device" where the instance has `core
 2026-11-13 against the dev backend on Android, iOS, macOS, Linux (the Fedora VM, inside the Flatpak's sandbox) and
 Windows (the VM), the desktops in English/light and German/dark: this device renamed, a second session of the account signed out from
 the list, "Sign out" taken — on macOS a session's own menu not driven (§ Open).
+**The account's own flows, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md), built 2026-11-19): the web's flows ported into the core and
+held to the shared vectors (`secret_key_proof`, `auth_attestation`, `rotation_stage`, `verification`, `fingerprint`'s
+digits and chain code, `safety_code`, on the JVM and libsodium) — the rename of any device a row names
+(`AccountSettings.renameFamily`); *Your profile* in Settings and *Edit profile* on one's own person page over one
+`ProfileModel`, the picture cropped square by the platform and encoded as WebP by the core (libwebp on every native
+slice, `Bitmap.compress` on Android); the safety number below a person's name (own: the digits, the chain code and the
+core's QR; another's: the state and *Compare* by a `veyqid:` scan or by digits, a verification sealed for the tenant);
+*Change password*, the address change (the request in the app, the confirm on the web's page, the new address taken at
+the next sign-in), *Secure your account* (the whole rotation, `finishRotation` at every unlock and every 45 s, the
+offline store wiped and refilled) and *Erase your account* (the device forgetting the account after). The Emergency Kit
+is written by the core straight into the file the person chose in the system's save dialog and never shown; a
+moderator is sent to the web for the rotation and the erasure. Passed on Android (an API 36 emulator) and Linux
+(Broadway) as throwaways with a member, every kit save followed by a no-copy check of the app's files; the core's live
+tests ran every flow but the address change's confirm as throwaways (ADR 0148's Consequences say what each pass proved
+and what is open). The Use pages: [Your profile](../../site/src/content/docs/account/your-profile.mdx),
+[Verify a person](../../site/src/content/docs/account/verify-a-person.mdx),
+[Change your password](../../site/src/content/docs/account/change-password.mdx),
+[Your email address](../../site/src/content/docs/account/change-email.mdx),
+[Secure your account](../../site/src/content/docs/account/replace-your-keys.mdx),
+[Erase your account](../../site/src/content/docs/account/erase-your-account.mdx).
 **Device linking, on all four apps** ([ADR 0059](../decisions/0059-device-linking.md); the core's model, ADR 0136's
 Consequences; `uc.account.onboard-device` § In the apps): both directions in both roles — Settings' "Add a device" shows
 a code and, where the device has a camera, scans one; the sign-in's "Scan a code from another device" (camera only) and
@@ -470,11 +490,16 @@ open (below). The Use pages: [People in your Memories](../../site/src/content/do
   - On GTK and WinUI a screen reader confirms the slide by the keys, with no named action of its own (ADR 0136's
     Consequences); no screen reader has driven the slide on any platform.
   - Every pass leaves a device-register entry per device it linked (no screen removes one): an orphan once a reconcile drops its rows, and orphans are what eviction takes first ([en.account.device-register](../features/account/enablers/en.account.device-register.md) § Growth).
-- The device register's own screen is the sessions section every app draws (the register written at each unlock and
-  enrolment); renaming any device a row names, as the web does, is planned ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 1, cr-app-account).
-- The rest of the web's account settings — one's profile, password, email, replacing the keys, erasure — planned
-  ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md), cr-app-account, inbox #863); invites and members, recovery, terms, and an in-app choice of appearance and
-  language (the apps follow the system's; the desktops have no per-app language of their own).
+- The account's flows ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md), built): the agent's macOS click-through and kit no-copy check (inbox #976, with #917),
+  the Windows UIA pass and no-copy check (#983, once the VM resolves a throwaway's tenant), whether iOS's
+  `fileExporter` stages the kit in the container (#975); the address change's confirm and re-addressed sign-in live (no
+  mailing backend on the Mac the passes ran on); *Links to renew* after a rotation (#977); the desktops' rotation end
+  screen (#984); the breached-password check (#969); the Secret Key from a kit file or a scan in these flows (#970); an
+  erased account's cached instance salt (#971); a live pass that sees #979's and #980's fixes. The owner's: iPhone and
+  iPad, Touch ID and Windows Hello for real, a real mailbox, a safety code scanned with real cameras (#912).
+- Not in the apps: invites and members, recovery, terms, *Who's who* (#967), the moderation key (#965), the task
+  queue's jobs (#966), and an in-app choice of appearance and language (the apps follow the system's; the desktops
+  have no per-app language of their own).
 - **On macOS a session's menu in Settings was never driven** ("Weitere" → "Dieses Gerät abmelden" on another session:
   the background tools open no menu) — the owner's click (inbox #916); **and its rename alert shows the current name
   only the first time** — later openings were empty (the binding set before presenting; AppKit's alert keeps its field);
@@ -551,8 +576,8 @@ iOS, never clicked (the Mac's screen is the owner's; no iOS simulator boots on t
 picker, a profile from a participant and from an uploader and its map, *I was there*, a capture time set and reset, an
 image and a video banner across a 720 pt window, the trash's question, Remove banner, and on an iPhone whether
 `PhotosPicker`'s copy of a gallery photo is still shared. Not run elsewhere: Windows offline (the standing tunnel).
-Not built: one's
-own profile and the safety numbers (#949, planned: [ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decisions 2 and 3), tiles (#950), a people search or overview, a guest's view (#435).
+One's own profile and the safety numbers on a person's page are built by [ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md)
+(above). Not built: tiles (#950), a people search or overview, a guest's view (#435).
 
 **Uploads** ([ADR 0145](../decisions/0145-the-apps-uploads-go-on-with-the-app-left-and-show-in-the-gallery-a-desktop-asks-before-a-quit-drops-them.md), built above): **iOS is the owner's** — on a real iPhone whether the
 continued-processing task is granted for an upload (`app.veyq.uploads.*`), how long `beginBackgroundTask` lasts and what

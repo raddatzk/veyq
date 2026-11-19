@@ -70,6 +70,31 @@ A Gradle build of its own, run through its own wrapper.
   Apple in `MemoryCuration.swift` and `PersonScreen.swift`, `appleMain`'s `AppleMemories` adapting what Swift cannot call
   (`watch`, `bannerPictures`, `bannerPick`/`bannerSave`, `loadPerson`). A host calls `TenantSession.close()` where its
   tenant closes: the bridge's `closeTenant`, the phones' tenant switch, any gate but Signed, and a sign-out.
+- **The account's own flows** ([ADR 0148](../../docs/decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md), built 2026-11-19): each a port of the web's, every byte it signs, seals or
+  derives held to the vectors before a flow uses it (`crypto/AccountProofs`: the Secret-Key proof key, its four
+  statements, the attestations, the stage digest; `crypto/Verifications`). The rename of any named device,
+  `AccountSettings.renameFamily`. One's profile, `session/ProfileModel` (over `TenantProfileDoor`; a `409 stale_epoch`
+  re-opens the scope by `VeyqAccount.reopenScope` and seals once more; the tenant key zeroed at close), its picture
+  encoded behind `media/WebpEncoder` (`LibwebpEncoder` on every native target from `core/webp/build_libwebp.py`;
+  Android's host `AndroidWebpEncoder`). The safety number, `trust/SafetyNumbers` (digits, chain code, `veyqid:2`),
+  and a person's state and `verify`, `session/PersonTrust` with `VerificationCount`. The credential flows over one
+  `CredentialDoor` (`AccountCredentialDoor`; `VeyqAccount.passwordChange()`, `addressChange()`, `erasure()`):
+  `session/ColdCredential` (the floor proof), `PasswordChange` (the saved key's record forgotten after, the store kept:
+  `forgetSavedKeyKeepStore`), `AddressChange` (sent through the tenant's origin; a sign-in with a new address
+  re-addresses the record, `readdress`), `AccountErasure` (the device forgets an erased account, `forgetErased`). The
+  Emergency Kit: `account/KitWriter` (one A4 page, the standard 14 fonts, no date in the Info dictionary, so the bytes
+  are deterministic; its words `KitWords` over the generated `CoreText`, the keys words.json marks `"core_text": true`)
+  and `account/KitStep` (written straight into the path the platform's save dialog gave, `KitFile`; "saved" only after a
+  write; Android writes into `CreateDocument`'s stream by `KitStep.saveInto`; Apple's `appleMain` `AppleAccount`). The
+  rotation, `session/rotation/`: `AccountRotation` (`rotateKeys` ported, `resumeCommitted`), `KeyRotation` (the web's
+  order as one model, a moderator sent to the web), `ScopeRotation` and `FinishRotation` (`commitRotation`, run at
+  every unlock and every 45 s by `RotationFinisher`), `VeyqAccount.swapKeys` (the keys replaced in place, the offline
+  store wiped and opened anew), Memories' item marks through `AppKinds.masterKeyRotated`
+  (`memories/ItemMarksRotation`). The bridge carries each as a model with an id, typed secrets inbound only
+  (`SecretFreeSchemaTest`'s `typedIn`), the kit's save as `Kit.Save` by path; `closeTenant` drops every flow. The
+  platforms: Android `AccountFlows.kt`, `AccountSecretFlows.kt`, `SafetyNumber.kt`; Apple `AccountFlows.swift`; Linux
+  `account_flows.rs`, `profile_edit.rs`, `safety.rs`; Windows `AccountFlows.cs`, `ProfileFlow.cs`, `ProfilePicture.cs`,
+  `SafetyNumber.cs`.
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
   decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's
   (`session/Account.kt`, `SessionModel.kt`: every sign-in enrols the password trust, `Gate.Signed.offer` offers staying
@@ -580,6 +605,15 @@ A Gradle build of its own, run through its own wrapper.
   the principal — "Sign out every other" only with `VEYQ_LIVE_OTHERS_ENV=<env file>` of a throwaway account, never the
   principal. **A live case skips by a JUnit `Assume` before `runTest`, never an early `return@runTest`**, which reported
   two live files as passed on every plain run: the test XML then says `skipped`.
+  **A live case or a pass that changes the account — a password, an address, a key replacement, an erasure, a profile,
+  a verification — runs as a throwaway, never as the seeded principal or member** ([ADR 0148](../../docs/decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 12): `pnpm run
+  throwaway:account -- --out <file> [--with-member]` in `src/web/` makes a fresh tenant `tw-<stamp>.localhost` with its
+  owner (and a member through a link invite, so no mailbox is read), writes the credentials to `<file>` (mode 0600,
+  outside the repository: the scratchpad), and `--erase <file>` erases them after (the sole-member tenant along; its
+  pending erasure listed). The core's such cases read `VEYQ_LIVE_THROWAWAY_ENV=<file>` (`Throwaway`, `core/src/liveTest`)
+  and **fail**, not skip, on a file naming `.run/.env`'s principal or member; an app pass points `VEYQ_ENV_FILE` at the
+  file for `devlogin.py` / `run.py --devlogin`. A machine that resolves no `*.localhost` (the Windows VM) needs the
+  throwaway's host mapped first (inbox #983).
   Dev helpers for a device pass (not checks): `VEYQ_DEV_KIT_OUT=<dir> --tests '*DevKitTest*'` writes `dev-kit.pdf` (the
   principal's token in its `Keywords`) and `dev-kit-qr.png`, for a pass to pick or show a camera — kept outside an
   indexed folder (GNOME's Tracker indexes all of `~`; `/tmp` is reached by the chooser's path) and removed after;
@@ -723,7 +757,8 @@ mechanism per platform, never a per-screen copy:
   foreground). `.secretOnScreen()` (`SecretOnScreen.swift`) covers the view while the scene is not active (bitten
   2026-11-13: without it the snapshot of the scanner held the key's text the test camera showed). macOS keeps no
   snapshot of the app's windows: Mission Control and the switcher draw them live, and `~/Library/Saved Application
-  State` holds no `me.raddatz.veyq` entry after every pass so far (measured 2026-11-13 by listing it; phase 7 found no
+  State` holds no `me.raddatz.veyq` entry after every pass so far (the bundle id then, `app.veyq` since 2026-11-17;
+  measured 2026-11-13 by listing it; phase 7 found no
   frame in the temp folder, the caches or `HTTPStorages`). The modifier is harmless there.
   A `SecureField` is masked; iOS echoes the last typed character for a moment, a residual not measured (the
   simulator took no typing in the sweep).
@@ -762,9 +797,20 @@ sealed again under a key of this account on this device, in one directory per ac
 never holds a decrypted byte, a token or a presigned URL, and sign-out, "Stop trusting this device" and removing the
 device wipe it. Anything else the app writes still has to be named here or in ADR 0047's Consequences.
 
+**The one plaintext secret the app writes is the Emergency Kit** ([ADR 0148](../../docs/decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 5), and only into the file the person
+chose in the system's save dialog: the core writes it straight there (Android `CreateDocument`'s stream, macOS
+`NSSavePanel`, iOS `fileExporter` over an in-memory document, Linux `gtk::FileDialog`, Windows `FileSavePicker`), never a
+temporary or app-owned copy, never a share sheet or a print; a failed write removes what it began. A pass that saves a
+kit then greps every file of the app (data, cache, config, temp, runtime directories; Android `run-as app.veyq find .
+-type f`) for the Secret Key's canaries — as typed, without dashes, and `veyqkit:` — and for a PDF, bitten by grepping
+the folder that does hold the kit. The save dialogs' **recent-files records are accepted** (ADR 0148's Consequences, inbox #981 closed; GTK's
+`recently-used.xbel`, Windows' `Recent` links): they name the path the person chose, never the kit's content; the Use
+page on the kit says the file is where it was saved. Open: whether iOS's `fileExporter` stages the document in the
+container (#975).
+
 Per engine:
 - **Darwin (Apple, `appleHttpClient` in `Apple.kt`):** Ktor starts from `defaultSessionConfiguration`, whose shared
-  `URLCache` wrote every answer to `Library/Caches/me.raddatz.veyq/Cache.db` + `fsCachedData` — measured 2026-11-13 on
+  `URLCache` wrote every answer to `Library/Caches/me.raddatz.veyq/Cache.db` (the bundle id then, `app.veyq` today) + `fsCachedData` — measured 2026-11-13 on
   an iOS 27 simulator after a sign-in, a Memory's gallery and a medium's details: 67 responses, among them
   `/api/login/verify` with its access and refresh token in clear, `key-material`, `members`, `exif`,
   `blob-downloads-batch`, 39 `files` and 9 blob frames (4.9 MB). `keepNothingOnDisk()` sets no `URLCache`,
@@ -781,12 +827,13 @@ Per engine:
   gallery and a medium's details: the container held no `Cache.db`, no `fsCachedData` and no `HTTPStorages` (before:
   `HTTPStorages` present); `NoDiskSessionTest` pins the configuration's ephemeral disposition, red on the default one.
 - **OkHttp (Android, `Network.kt`):** no cache and `CookieJar.NO_COOKIES` are OkHttp's defaults, pinned explicitly.
-  Measured 2026-11-13 on a throwaway API 36 emulator after the same pass: `run-as me.raddatz.veyq find . -type f`
+  Measured 2026-11-13 on a throwaway API 36 emulator after the same pass: `run-as me.raddatz.veyq find . -type f` (the
+  id then; the app is `app.veyq` since 2026-11-17, so today's command is `run-as app.veyq find . -type f`)
   listed only `shared_prefs/veyq.trust.xml`, `shared_prefs/veyq-recent.xml` and `files/profileInstalled` — no `cache/`.
   Since the pins' worker (ADR 0140 decision 9, `OfflineWork.kt`; the uploads' since ADR 0145, `UploadWork.kt`, the same
   shape under the unique name `veyq-uploads`), WorkManager keeps its own records under
   `no_backup/`, not `databases/`: `no_backup/androidx.work.workdb` (with its `-wal`/`-shm`) and Room's lock file
-  `cache/data/user/0/me.raddatz.veyq/no_backup/androidx.work.workdb.lck` (empty) — so `cache/` is no longer empty; its
+  `cache/data/user/0/me.raddatz.veyq/no_backup/androidx.work.workdb.lck` (`app.veyq` today) (empty) — so `cache/` is no longer empty; its
   preferences (`last_force_stop_ms`, `next_job_scheduler_id`) are a table of that database, no
   `shared_prefs/androidx.work.util.preferences.xml`. Measured 2026-11-15 on a throwaway API 36 emulator after a pin
   (ADR 0140's Android pass, `sqlite3` over the pulled database): one `workspec` row — `PinWorker`, its state, an empty
@@ -1330,6 +1377,15 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   add to the second threw `0x800F1000` ("no installed components were detected"); thrown out of a watch's callback it
   ended the app in combase with nothing in the log (the Pot's head after the editor closed, measured 2026-11-12). A page
   keeps the panel it put an element in itself (`PotPage._heroHolder`), and a page's draw logs what it throws.
+- **A desktop pass on this Mac needs an unlocked screen**: with the session locked the computer-use tools deliver no
+  picture and drive nothing, and a whole phase's macOS pass was lost to it (ADR 0148's Apple phase, 2026-11-19, inbox #976). Check
+  first: `ioreg -n Root -d1 -a | grep -A1 CGSSessionScreenIsLocked` shows `<false/>` (or no key) before a pass is
+  started; with `<true/>` the pass is the owner's or waits.
+- **A git merge of words.json can duplicate a key without a conflict**: two branches that each add the same new key
+  (with the same text) at different places merge cleanly into a file holding that key twice — JSON parsers keep the
+  last one silently, so no build and no guard notices (seen 2026-11-19 merging ADR 0148's platform phases). After
+  every merge that touched words.json: `/usr/bin/python3 -c "import json,collections;json.load(open('src/mobile/words/words.json'),object_pairs_hook=lambda p:[print('duplicate',k) for k,n in collections.Counter(k for k,_ in p).items() if n>1] and dict(p) or dict(p))"`
+  prints nothing.
 - words.json writes a percent sign `%%`, as Android's and Apple's format strings read it; `generate_words.py` writes one
   `%` into the desktops' catalogs (`desktop_text`), and both desktops' words tests expect that.
 - Driving the desktops' editors: Playwright names `Backspace` and presses no `Ü` (Broadway); `Veyq.Drive`'s `key` has no

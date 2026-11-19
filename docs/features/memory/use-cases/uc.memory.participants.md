@@ -73,8 +73,8 @@ Memories of the scopes read in that visit only (no cover cache across scope swit
 the app's own (no `#people` route: the app has no address bar), opened over what was on screen and left by back. Its ways
 in are a **current member in a Memory's participants list** and a **photo's uploader** in its details where that uploader
 is a current member; a former member and a guest open nothing, and the apps have no people search or people overview to
-link from. The frame shows the name, the picture and `~username`, but no safety number and no profile editing (inbox
-#949); Memories' section lists the person's Memories as rows, newest first, or on the Memories map — no tiles (#950) and
+link from. The frame shows the name, the picture and `~username`, and since [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md)
+the safety number below the name and, on one's own page, *Edit profile*; Memories' section lists the person's Memories as rows, newest first, or on the Memories map — no tiles (#950) and
 no stored choice. The index is the same walk on the device, over the trees the app already reads.
 
 **Naming the participants in the apps** ([ADR 0144](../../../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decisions 1, 2 and 7): the people line stands under the facts line

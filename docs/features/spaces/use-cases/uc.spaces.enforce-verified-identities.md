@@ -147,7 +147,7 @@ that space then sees that you verified them, and you see when someone's key no l
 
 ## Related
 
-- **The apps** (planned, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 3): the safety number, its compare by scan or by digits and the verification ported into the core.
+- **The apps** (built 2026-11-19, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 3; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): the safety number, its compare by scan or by digits and the verification ported into the core (`trust/SafetyNumbers`, `session/PersonTrust`, `crypto/Verifications`), drawn below the name on every person page. Not in the apps: *Who's who* (inbox #967). Tests (no coverage surface, ADR 0040): `SafetyNumbersTest`, `VerificationCountTest`, the `fingerprint` (digits, chain code), `verification` and `safety_code` vectors in `ConformanceTest`/`LibsodiumConformanceTest`; live as throwaways, `LiveAccountFlowsTest.twoMembersVerifyEachOtherAndEachReadsTheOthersRow`.
 - Model: [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (verifications and what a member sees)
 - Feature: [Spaces (scopes)](../_index.md)
 - Enablers: [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md) (the pin store and

@@ -4,6 +4,10 @@ title: Erase an account
 # Built by cr-account-erasure. The backend's slice drives both doors over HTTP, the purge by its forced entry and the
 # race against a sign-in; the web's refs are the settings' erase panel and its flow. That a restore erases an erased
 # account again is the erasure ledger's (ADR 0056 decision 8), criterion `a-restore-erases-the-account-again`.
+# The apps (ADR 0148, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named here, not
+# cited — core `CredentialFlowsTest.theErasureSignsTheNonceWithThePasswordAndAsksForEveryChoice`,
+# `.theServerOwnerAndAModeratorAreToldAndSendNothing`; live as a throwaway `LiveErasureTest` (erased, refused at sign-in,
+# forgotten by the device).
 acceptanceCriteria:
   - id: both-doors-start-the-same-erasure
     text: A member with their password, and the Server Owner by address on the admin channel, both start the same pending erasure; the Server Owner's own account is refused.

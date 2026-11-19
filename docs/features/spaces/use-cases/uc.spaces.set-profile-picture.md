@@ -68,7 +68,7 @@ You can show a picture of yourself instead of a letter in each space, seen by it
 
 ## Related
 
-- **The apps** (planned, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 2): the crop drawn by the platform, the WebP encoded, padded and sealed by the core.
+- **The apps** (built 2026-11-19, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 2; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): the crop drawn by the platform, the WebP encoded (libwebp on every native target, `LibwebpEncoder`; Android's `Bitmap.compress`, `AndroidWebpEncoder`), padded and sealed by the core (`ProfileModel`). Tests (no coverage surface, ADR 0040): `ProfileModelTest.aPictureIsSteppedDownToTheBudgetPaddedSealedAndOpensForEveryReader`, `.everyPictureSealsToTheContractsOneLength`, `.aSavedPictureReachesTheSessionsPicturesAtOnce`, `LibwebpEncoderTest`, Windows' `ProfilePictureTest`; live as throwaways, `LiveAccountFlowsTest.aPictureSetIsReadBackByTheOtherMemberAndCleared`.
 - Feature: [Spaces (scopes)](../_index.md)
 - End-user view (docs site): [People in your Memories](../../../../site/src/content/docs/memories/people-in-your-memories.md)
 - Enabler: [en.spaces.member-identity](../enablers/en.spaces.member-identity.md) (the per-tenant profile row)

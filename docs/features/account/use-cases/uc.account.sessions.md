@@ -266,7 +266,7 @@ without your Emergency Kit.
 
 ## Related
 
-- **The apps** (planned, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 1): the rename of any device a row names, as the web's `renameDeviceOfFamily`.
+- **The apps** (built 2026-11-19, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 1; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): the rename of any device a row names, as the web's `renameDeviceOfFamily` (`AccountSettings.renameFamily`). Tests (no coverage surface, ADR 0040): `AccountSettingsTest.aFamilysRenameNamesThatFamilysDeviceAndNoOther`, `.aFamilysRenameRetriedAfterAConflictKeepsTheOtherDevicesWrite`.
 - Feature: [Account & auth](../_index.md)
 - Concepts: [Account & Key Model](../enablers/en.account.key-model.md) (auth ≠ unlock),
   [en.account.device-register](../enablers/en.account.device-register.md) (the sealed register this view reads

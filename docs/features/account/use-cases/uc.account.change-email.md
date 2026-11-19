@@ -74,7 +74,7 @@ You can move your sign-in to a new email address without losing your account, yo
 
 ## Related
 
-- **The apps** (planned, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 6): `emailChange`'s request ported into the core; the confirm stays the web's (the mailed link opens the web page as today), and the app takes the new address from its next account read.
+- **The apps** (built 2026-11-19, [ADR 0148](../../../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 6; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): `emailChange`'s request ported into the core (`session/AddressChange`, sent through the tenant's origin); the confirm stays the web's (the mailed link opens the web page as today), and the app takes the new address at its next sign-in, re-addressing the record it keeps (`VeyqAccount.readdress`), then offers a kit with the new address. Tests (no coverage surface, ADR 0040): `CredentialFlowsTest.anAddressChangeSignsUnderTheNewAddressAndTheKitAfterItIsChecked`, `ReaddressTest`; live, `LiveCredentialFlowsTest.anAddressChangeConfirmedOnTheWebReaddressesTheRecord` — not yet run to its end (the dev backend the passes used sends no mail). The owner's answer (2026-11-18): no app-side confirm; an *Open in the app* banner on the web's page is block H's (inbox #435).
 - Feature: [Account](../_index.md)
 - **End-user view (docs site):** [Your email address](../../../../site/src/content/docs/account/change-email.mdx)
 - Use-cases: [uc.account.confirm-email-address](uc.account.confirm-email-address.md) (the confirmation record this sets),

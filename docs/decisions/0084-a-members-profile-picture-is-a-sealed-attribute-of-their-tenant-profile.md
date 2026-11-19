@@ -4,7 +4,7 @@
 - Built: yes
 - Date: 2026-10-13
 - Model: [en.spaces.member-identity](../features/spaces/enablers/en.spaces.member-identity.md)
-- Extended: the picture in the apps, the web's flow ported into the core, by ADR 0148 (not built)
+- Extended: the picture in the apps, the web's flow ported into the core, by ADR 0148 (built 2026-11-19)
 
 ## Context
 

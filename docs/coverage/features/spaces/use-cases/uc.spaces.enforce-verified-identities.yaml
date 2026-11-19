@@ -6,6 +6,11 @@ title: Actively verify a member's identity (safety number)
 # this file once carried as a planned criterion, lives on uc.spaces.require-verified-identities: the coverage model has
 # no partially built file (ADR 0040). A real-browser pass would be recorded in the use-case, not here: a browser run is
 # no CI run.
+# The apps (ADR 0148, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named here, not
+# cited — core `SafetyNumbersTest`, `VerificationCountTest`, the `fingerprint` (digits, chain code),
+# `verification` and `safety_code` vectors in `ConformanceTest` and `LibsodiumConformanceTest`; live as throwaways
+# `LiveAccountFlowsTest.twoMembersVerifyEachOtherAndEachReadsTheOthersRow`. The `safety_code` vector is read by the web's
+# `src/features/account/safetyCode.test.ts` too.
 acceptanceCriteria:
   - id: show-my-safety-number
     text: A member's own profile shows, in the dialog its "Show" opens, their own safety number (6x5 digits over the vector-pinned fingerprint of their vault's identity key), their chain code (10 digits of their key-chain head) and a QR of both whose payload is the veyqid:2 marker, the 32-byte fingerprint digest and the 32-byte head, and nothing else - far below the jsqr bound. The chain code is shown only when the chain the server serves ends at the vault's identity; otherwise the page says so and shows neither.

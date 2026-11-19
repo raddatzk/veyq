@@ -4,7 +4,7 @@
 - Built: yes
 - Date: 2026-09-28
 - Model: [cc.mail](../crosscutting/cc.mail.md)
-- Extended: the address change in the apps, the web's flow ported into the core, by ADR 0148 (not built)
+- Extended: the address change in the apps, the web's flow ported into the core, by ADR 0148 (built 2026-11-19)
 - Replaced in part: decision 2 (the member-invite event keyed on the role), decision 3 (where an unconfirmed address is surfaced; the scope of the pre-creation gate) by ADR 0129 (built)
 
 ## Context

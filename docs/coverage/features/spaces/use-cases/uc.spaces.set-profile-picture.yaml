@@ -6,6 +6,10 @@ title: Set your profile picture in a space
 # `maxLength` is read from the YAML by memberAvatar.test.ts. The WebP encode is libwebp's own build since ADR 0127, run for real
 # in Node (webp-encoder/encodeWebp.test.ts). NOT verified in a real browser by a test: the crop and the canvas bake, and how the
 # picture draws in the header, the popover, the profile page, the members list and the user menu were never seen by eye.
+# The apps (ADR 0148, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named here, not
+# cited — core `ProfileModelTest` (stepped to the budget, padded, sealed to the contract's one
+# length, opened by every reader; a saved picture reaching the session's pictures at once), `LibwebpEncoderTest`,
+# Windows' `ProfilePictureTest`; live as throwaways `LiveAccountFlowsTest.aPictureSetIsReadBackByTheOtherMemberAndCleared`.
 acceptanceCriteria:
   - id: picture-sealed-on-device-constant-length
     text: The picture is cropped 1:1, encoded to a 256 px WebP, padded to a constant length and sealed on the device under a field key derived from its own value key, whose wrap `K_tenant` holds with the `member-avatar` purpose at (tenant scope, own user id); the server stores the blob verbatim, every blob has the same length, and the contract `maxLength` equals that sealed constant.
