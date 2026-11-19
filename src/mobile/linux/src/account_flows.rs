@@ -7,16 +7,21 @@
 //!
 //! Every state is the core's (`PasswordChange.*`, `AddressChange.*`, `KeyRotation.*`, `Erasure.*`, `Kit.*`, each watched):
 //! this side draws it and sends what is typed or pressed. A typed secret is read out of its row once, sent, and the row
-//! emptied; nothing of it is kept here. Linux keeps no snapshot of a window (src/mobile/CLAUDE.md § Secrets on screen), so
-//! no secure-window flag is set.
+//! emptied; nothing of it is kept here — but for the password change and the rotation's gate, whose rows stay until the
+//! core took them (a breached new password stops the submit until *Use it anyway*, and the web keeps the form as typed).
+//! Each Secret Key is the sign-in's control ([KeyControl], ADR 0151 decision 4) and each new password checked against
+//! known breaches ([NewPassword], decision 5). Linux keeps no snapshot of a window (src/mobile/CLAUDE.md § Secrets on
+//! screen), so no secure-window flag is set.
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, Watch, wire::AccountErasureState, wire::Answer, wire::Call, wire::KeyRotationState, wire::KitStepState,
-    wire::Step, wire::Update, wire::Watched};
+use crate::bridge::{self, Watch, wire::AccountErasureState, wire::Answer, wire::BreachKind, wire::BreachState, wire::Call,
+    wire::HeldKit, wire::IntakeState, wire::KeyRotationState, wire::KitStepState, wire::ScanState, wire::Step, wire::Update,
+    wire::Watched};
+use crate::qr_camera::ScanView;
 use crate::{said, words};
 
 /// What one flow's dialog holds while it is open: its watches, and the kit steps it opened itself (closed with it).
@@ -213,6 +218,244 @@ fn act(id: &Id, what: &'static str, make: impl FnOnce(i64) -> Call) {
     });
 }
 
+// ---- the Secret Key's control (ADR 0151 decision 4): the sign-in's, in each flow that asks for the key ----
+
+/// A flow's Secret Key as the sign-in takes it: typed or pasted into its row (a `veyqkit:` token too: the core reads it
+/// first), or an Emergency Kit read from a file GTK's open dialog picked (`Kit.Read`, the core reading the path) or
+/// scanned where the Camera portal names a camera (`Scan.Open` of kind `FLOW_KIT`). A kit's key stays in the flow's
+/// intake in the core: this side only draws what the flow's update says it holds (`kit`) — the row "From your Emergency
+/// Kit" with *Enter it instead*, a kit of another account's warning (it never blocks: only the wrap can judge a key), a
+/// kit of another server's note — and sends the field empty while a kit is held.
+struct KeyControl {
+    key: adw::PasswordEntryRow,
+    held: adw::ActionRow,
+    open: adw::ButtonRow,
+    scan: adw::ButtonRow,
+    list: gtk::ListBox,
+    notes: gtk::Box,
+    problem: gtk::Label,
+    other_account: gtk::Label,
+    other_server: gtk::Label,
+    /// The kit last drawn, so a newly held one empties the typed row once.
+    shown: RefCell<Option<HeldKit>>,
+}
+
+impl KeyControl {
+    fn new(flow: &Flow, id: &Id, title: &str) -> Rc<Self> {
+        let key = secret(title);
+        let held = adw::ActionRow::builder().title(title).subtitle(words::signin_kit_held()).visible(false).build();
+        let clear = gtk::Button::builder().label(words::signin_kit_clear()).valign(gtk::Align::Center).build();
+        clear.add_css_class("flat");
+        held.add_suffix(&clear);
+        // the file first on a desktop, as the sign-in; the scan only where there is a camera
+        let open = adw::ButtonRow::builder().title(words::signin_kit_open()).start_icon_name("document-open-symbolic").build();
+        let scan = adw::ButtonRow::builder().title(words::signin_kit_scan()).start_icon_name("camera-photo-symbolic").visible(false).build();
+        let list = rows(&[key.upcast_ref(), held.upcast_ref(), open.upcast_ref(), scan.upcast_ref()]);
+        let problem = error_label();
+        let other_account = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
+        other_account.add_css_class("warning");
+        let other_server = dim("");
+        other_server.set_visible(false);
+        let notes = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(6).build();
+        for l in [&problem, &other_account, &other_server] {
+            notes.append(l);
+        }
+        let i = id.clone();
+        clear.connect_clicked(move |_| act(&i, "Kit.Clear", |flow| Call::KitClear { flow }));
+        let (f, i) = (flow.clone(), id.clone());
+        open.connect_activated(move |_| pick_flow_kit(&f, &i));
+        let (f, i) = (flow.clone(), id.clone());
+        scan.connect_activated(move |_| scan_flow_kit(&f, &i));
+        let s = Rc::new(Self { key, held, open, scan, list, notes, problem, other_account, other_server, shown: RefCell::new(None) });
+        // the scan's entry only where the Camera portal names a camera (no camera, no entry)
+        let w = Rc::downgrade(&s);
+        glib::spawn_future_local(async move {
+            let present = crate::qr_camera::camera_present().await;
+            eprintln!("veyq: a flow's kit scan {}", if present { "offered" } else { "not offered: no camera" });
+            if let Some(s) = w.upgrade() {
+                s.scan.set_visible(present);
+            }
+        });
+        s
+    }
+
+    /// The Secret Key as the field holds it, the row kept (the flow may stop for a breached password and go on): empty
+    /// while a kit's key is held, so the core takes the intake's.
+    fn typed(&self) -> String {
+        if self.held.is_visible() { String::new() } else { self.key.text().to_string() }
+    }
+
+    /// As [typed], the row emptied: a typed secret is sent and not kept.
+    fn take(&self) -> String {
+        if self.held.is_visible() { String::new() } else { take(&self.key) }
+    }
+
+    /// Draws the intake's [state] (none: nothing held).
+    fn draw(&self, state: Option<&IntakeState>) {
+        let kit = state.and_then(|s| s.kit.as_ref());
+        let reading = state.is_some_and(|s| s.reading);
+        let new_kit = kit.is_some() && self.shown.borrow().as_ref() != kit;
+        *self.shown.borrow_mut() = kit.cloned();
+        if new_kit {
+            self.key.set_text("");
+        }
+        self.key.set_visible(kit.is_none());
+        self.held.set_visible(kit.is_some());
+        self.key.set_sensitive(!reading);
+        self.open.set_sensitive(!reading);
+        self.scan.set_sensitive(!reading);
+        said_refusal(&self.problem, state.and_then(|s| s.problem.as_ref()));
+        match kit.and_then(|k| Some((k.email.as_str(), k.other_account.as_deref()?))) {
+            Some((kits, expected)) => {
+                self.other_account.set_label(&words::kit_email_mismatch(kits, expected));
+                self.other_account.set_visible(true);
+            }
+            None => self.other_account.set_visible(false),
+        }
+        match kit.and_then(|k| Some((k.server.as_deref().unwrap_or_default(), k.other_server.as_deref()?))) {
+            Some((made_at, before)) => {
+                self.other_server.set_label(&words::signin_kit_other_server(made_at, before));
+                self.other_server.set_visible(true);
+            }
+            None => self.other_server.set_visible(false),
+        }
+    }
+}
+
+/// "Open Emergency Kit" in a flow: GTK's open dialog for a PDF or a picture; the core reads the file at the path picked
+/// into the flow's intake (`Kit.Read`), drawing its pages through this side's PDF and picture requests.
+fn pick_flow_kit(flow: &Flow, id: &Id) {
+    let (f, i) = (flow.clone(), id.clone());
+    glib::spawn_future_local(async move {
+        let kits = gtk::FileFilter::new();
+        kits.add_mime_type("application/pdf");
+        kits.add_mime_type("image/*");
+        kits.set_name(Some(&words::signin_kit_open()));
+        let filters = gio::ListStore::new::<gtk::FileFilter>();
+        filters.append(&kits);
+        let dialog = gtk::FileDialog::builder().title(words::signin_kit_open()).filters(&filters).default_filter(&kits).modal(true).build();
+        let file = match dialog.open_future(f.window().as_ref()).await {
+            Ok(file) => file,
+            Err(e) => return eprintln!("veyq: no kit picked ({e})"),
+        };
+        // the core opens the path itself; one that is no UTF-8 does not cross the wire
+        let Some(path) = file.path().and_then(|p| p.to_str().map(str::to_owned)) else {
+            return eprintln!("veyq: the kit's path is no UTF-8");
+        };
+        // the outcome alone: never the path or anything of the kit
+        act(&i, "Kit.Read", |flow| Call::KitRead { flow, path });
+    });
+}
+
+/// "Scan Emergency Kit" in a flow: the camera in a dialog over a scan of kind `FLOW_KIT`; the kit it finds goes to the
+/// flow's intake in the core, and the dialog closes on it.
+fn scan_flow_kit(flow: &Flow, id: &Id) {
+    let Some(n) = id.get() else { return };
+    let hint = gtk::Label::builder().label(words::signin_kit_scan_hint()).wrap(true).justify(gtk::Justification::Center).build();
+    hint.add_css_class("dim-label");
+    let col = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).margin_start(12).margin_end(12).margin_bottom(12).build();
+    let view_slot = gtk::Box::builder().vexpand(true).height_request(320).build();
+    col.append(&view_slot);
+    col.append(&hint);
+    let content = adw::ToolbarView::new();
+    content.add_top_bar(&adw::HeaderBar::new());
+    content.set_content(Some(&col));
+    let dialog = adw::Dialog::builder().title(words::signin_kit_scan()).content_width(520).content_height(480).child(&content).build();
+    let closing = dialog.downgrade();
+    let seen = Rc::new(Cell::new(false));
+    let view = ScanView::open_flow_kit(n, crate::sign_in::scan_said, move |shown| {
+        eprintln!("veyq: a flow's kit scan {:?}", shown.state);
+        if shown.state == ScanState::Found && !seen.replace(true) && let Some(d) = closing.upgrade() {
+            d.close();
+        }
+    });
+    view_slot.append(&view.widget);
+    view.widget.set_hexpand(true);
+    // the scan and its camera end with the dialog, however it closes
+    dialog.connect_closed(move |_| view.close());
+    dialog.present(Some(&flow.dialog));
+}
+
+// ---- the new password's breached-password check (ADR 0151 decision 5): the web's ----
+
+/// The new password's row with the web's breached-password check: checked when the row is left (`*.Check`), never while
+/// typing; each edit drops the verdict (`*.Edited`, no text); a hit says so under the rows with its count and *Use it
+/// anyway* (`*.UseAnyway`); a check that could not run says that and stops nothing. No range service configured: the
+/// core sends no state, and nothing is drawn.
+struct NewPassword {
+    row: adw::PasswordEntryRow,
+    notice: gtk::Label,
+    anyway: gtk::CheckButton,
+    /// Set while this side writes a row or the check itself, so that no `Edited` or `UseAnyway` goes back.
+    quiet: Rc<Cell<bool>>,
+}
+
+/// The three calls of a flow's check: the password change's or the rotation's.
+#[derive(Clone, Copy)]
+struct BreachCalls {
+    check: fn(i64, String) -> Call,
+    edited: fn(i64) -> Call,
+    anyway: fn(i64, bool) -> Call,
+}
+
+impl NewPassword {
+    fn new(id: &Id, calls: BreachCalls) -> Self {
+        let row = secret(&words::password_change_new());
+        let notice = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
+        let anyway = gtk::CheckButton::builder().label(words::password_pwned_anyway()).visible(false).build();
+        let quiet = Rc::new(Cell::new(false));
+        let (i, q) = (id.clone(), quiet.clone());
+        row.connect_changed(move |_| {
+            if !q.get() && let Some(flow) = i.get() {
+                bridge::send((calls.edited)(flow));
+            }
+        });
+        let (i, r) = (id.clone(), row.clone());
+        let leaving = gtk::EventControllerFocus::new();
+        leaving.connect_leave(move |_| {
+            let typed = r.text().to_string();
+            if !typed.is_empty() {
+                act(&i, "a new password's check", |flow| (calls.check)(flow, typed));
+            }
+        });
+        row.add_controller(leaving);
+        let (i, q) = (id.clone(), quiet.clone());
+        anyway.connect_toggled(move |c| {
+            if !q.get() {
+                let on = c.is_active();
+                act(&i, "a new password's Use it anyway", |flow| (calls.anyway)(flow, on));
+            }
+        });
+        Self { row, notice, anyway, quiet }
+    }
+
+    /// Draws the check's [state] (none: no check).
+    fn draw(&self, state: Option<&BreachState>) {
+        let kind = state.map_or(BreachKind::Idle, |s| s.kind);
+        let count = state.map_or(0, |s| s.count);
+        let said = match kind {
+            BreachKind::Hit | BreachKind::Accepted => Some(words::password_pwned_warning(i64::from(count))),
+            BreachKind::Unavailable => Some(words::password_pwned_unavailable()),
+            _ => None,
+        };
+        self.notice.set_visible(said.is_some());
+        self.notice.set_label(said.as_deref().unwrap_or_default());
+        if kind == BreachKind::Hit { self.notice.add_css_class("warning") } else { self.notice.remove_css_class("warning") }
+        if kind == BreachKind::Unavailable { self.notice.add_css_class("dim-label") } else { self.notice.remove_css_class("dim-label") }
+        self.anyway.set_visible(matches!(kind, BreachKind::Hit | BreachKind::Accepted));
+        self.quiet.set(true);
+        self.anyway.set_active(kind == BreachKind::Accepted);
+        self.quiet.set(false);
+    }
+
+    /// The row emptied once the core took the password, sending nothing.
+    fn forget(&self) {
+        self.quiet.set(true);
+        self.row.set_text("");
+        self.quiet.set(false);
+    }
+}
+
 // ---- the Emergency Kit's step (D5): saved through the save dialog, never shown ----
 
 /// The kit step [kit] as a page: its words [sub], "Save your Emergency Kit" (the save dialog, the core writing into the
@@ -296,40 +539,54 @@ fn draw_kit(st: &KitStepState, check: &gtk::CheckButton, error: &gtk::Label, dan
 /// "Change password" for the account [connection] names, over [parent].
 pub fn password(parent: &gtk::Widget, connection: String) {
     let flow = Flow::new(&words::password_change_title());
-    let (current, next, confirm, key) = (
-        secret(&words::password_change_current()),
-        secret(&words::password_change_new()),
-        secret(&words::password_change_confirm()),
-        secret(&words::password_change_secret_key()),
-    );
+    let id: Id = Rc::new(Cell::new(None));
+    let (current, confirm) = (secret(&words::password_change_current()), secret(&words::password_change_confirm()));
+    let next = Rc::new(NewPassword::new(&id, BreachCalls {
+        check: |flow, new_password| Call::PasswordChangeCheck { flow, new_password },
+        edited: |flow| Call::PasswordChangeEdited { flow },
+        anyway: |flow, on| Call::PasswordChangeUseAnyway { flow, on },
+    }));
+    let key = KeyControl::new(&flow, &id, &words::password_change_secret_key());
     let col = column();
-    col.append(&rows(&[current.upcast_ref(), next.upcast_ref(), confirm.upcast_ref()]));
-    col.append(&rows(&[key.upcast_ref()]));
+    col.append(&rows(&[current.upcast_ref(), next.row.upcast_ref(), confirm.upcast_ref()]));
+    col.append(&next.notice);
+    col.append(&next.anyway);
+    col.append(&key.list);
+    col.append(&key.notes);
     col.append(&dim(&words::password_change_secret_key_hint()));
     let error = error_label();
     col.append(&error);
     let submit = pill(&words::password_change_submit(), "suggested-action");
     col.append(&submit);
     flow.nav.add(&page(&words::password_change_title(), "form", &col));
-    let id: Id = Rc::new(Cell::new(None));
-    let i = id.clone();
+    let (i, cu, n, co, k) = (id.clone(), current.clone(), next.clone(), confirm.clone(), key.clone());
     submit.connect_clicked(move |_| {
-        let (c, n, k, key) = (take(&current), take(&next), take(&confirm), take(&key));
-        act(&i, "PasswordChange.Run", |flow| Call::PasswordChangeRun { flow, current_password: c, new_password: n, confirm_password: k, secret_key: key });
+        // the rows stay: a breached new password stops here until *Use it anyway*, the form as typed
+        let (c, nw, cf, key) = (cu.text().to_string(), n.row.text().to_string(), co.text().to_string(), k.typed());
+        act(&i, "PasswordChange.Run", |flow| Call::PasswordChangeRun { flow, current_password: c, new_password: nw, confirm_password: cf, secret_key: key });
     });
     let (f, done) = (flow.clone(), Rc::new(Cell::new(false)));
     open_flow(&flow, &id, Call::PasswordChangeOpen { connection }, |flow| Watched::PasswordChange { flow }, move |u| {
-        let Update::PasswordChange { shown, .. } = u else { return true };
+        let Update::PasswordChange { shown, kit, breach, .. } = u else { return true };
         let Some(s) = shown else {
             if !done.get() {
                 f.dialog.force_close();
             }
             return false;
         };
-        eprintln!("veyq: password change: working {}, done {}, refusal {:?}", s.working, s.done, s.refusal);
+        eprintln!("veyq: password change: working {}, done {}, refusal {:?}, kit held {}, breach {:?}", s.working, s.done, s.refusal,
+            kit.as_ref().is_some_and(|k| k.kit.is_some()), breach.as_ref().map(|b| b.kind));
         submit.set_sensitive(!s.working);
         said_refusal(&error, s.refusal.as_ref());
+        key.draw(kit.as_ref());
+        next.draw(breach.as_ref());
         if s.done && !done.replace(true) {
+            // the core took them: the rows emptied before the page goes
+            for r in [&current, &confirm] {
+                r.set_text("");
+            }
+            next.forget();
+            key.take();
             let col = column();
             let status = adw::StatusPage::builder().icon_name("object-select-symbolic").title(words::password_change_done()).description(words::password_change_done_note()).build();
             col.append(&status);
@@ -358,11 +615,18 @@ pub fn password(parent: &gtk::Widget, connection: String) {
 /// sign-in took the new address, never right after the request (the confirm is still to come, inbox #1010).
 pub fn address(parent: &gtk::Widget, connection: String) {
     let flow = Flow::new(&words::email_change_action());
+    let id: Id = Rc::new(Cell::new(None));
     let email = adw::EntryRow::builder().title(words::email_change_new_email()).input_purpose(gtk::InputPurpose::Email).build();
-    let (password, key) = (secret(&words::signin_password()), secret(&words::password_change_secret_key()));
+    let password = secret(&words::signin_password());
+    // one intake for both halves (the request, the new kit's check): each control draws the flow's `kit`
+    let key = KeyControl::new(&flow, &id, &words::password_change_secret_key());
+    let controls: Rc<RefCell<Vec<Rc<KeyControl>>>> = Rc::new(RefCell::new(vec![key.clone()]));
+    let intake: Rc<RefCell<Option<IntakeState>>> = Rc::new(RefCell::new(None));
     let col = column();
     col.append(&dim(&words::email_change_form_sub()));
-    col.append(&rows(&[email.upcast_ref(), password.upcast_ref(), key.upcast_ref()]));
+    col.append(&rows(&[email.upcast_ref(), password.upcast_ref()]));
+    col.append(&key.list);
+    col.append(&key.notes);
     let error = error_label();
     col.append(&error);
     let submit = pill(&words::email_change_submit(), "suggested-action");
@@ -371,24 +635,28 @@ pub fn address(parent: &gtk::Widget, connection: String) {
     new_kit.set_visible(false);
     col.append(&new_kit);
     flow.nav.add(&page(&words::email_change_action(), "form", &col));
-    let id: Id = Rc::new(Cell::new(None));
     // which form asked last (the request, or the new kit's check): the refusal is said under that one alone
     let asking_kit = Rc::new(Cell::new(false));
     let (i, ak) = (id.clone(), asking_kit.clone());
     submit.connect_clicked(move |_| {
         ak.set(false);
-        let (new_email, password, secret_key) = (email.text().to_string(), take(&password), take(&key));
+        let (new_email, password, secret_key) = (email.text().to_string(), take(&password), key.take());
         act(&i, "AddressChange.Request", |flow| Call::AddressChangeRequest { flow, new_email, password, secret_key });
     });
     // the kit's check: the password and the Secret Key, then the kit step
     let kit_error = error_label();
-    let (f, i, ke, ak) = (flow.clone(), id.clone(), kit_error.clone(), asking_kit.clone());
+    let (f, i, ke, ak, cs, held) = (flow.clone(), id.clone(), kit_error.clone(), asking_kit.clone(), controls.clone(), intake.clone());
     let open_kit = Rc::new(move || {
         ke.set_visible(false);
-        let (password, key) = (secret(&words::signin_password()), secret(&words::password_change_secret_key()));
+        let password = secret(&words::signin_password());
+        let key = KeyControl::new(&f, &i, &words::password_change_secret_key());
+        key.draw(held.borrow().as_ref());
+        cs.borrow_mut().push(key.clone());
         let col = column();
         col.append(&text(&words::email_change_kit_sub()));
-        col.append(&rows(&[password.upcast_ref(), key.upcast_ref()]));
+        col.append(&rows(&[password.upcast_ref()]));
+        col.append(&key.list);
+        col.append(&key.notes);
         col.append(&ke);
         let check = pill(&words::email_change_kit_check(), "suggested-action");
         col.append(&check);
@@ -396,7 +664,7 @@ pub fn address(parent: &gtk::Widget, connection: String) {
         check.connect_clicked(move |_| {
             let Some(n) = i2.get() else { return };
             ak2.set(true);
-            let (password, secret_key) = (take(&password), take(&key));
+            let (password, secret_key) = (take(&password), key.take());
             let f3 = f2.clone();
             glib::spawn_future_local(async move {
                 match bridge::call(&Call::AddressChangeKit { flow: n, password, secret_key }).await.map(|(a, _)| a) {
@@ -421,11 +689,15 @@ pub fn address(parent: &gtk::Widget, connection: String) {
     let offer = new_kit.clone();
     let (f, sent) = (flow.clone(), Rc::new(RefCell::new(None::<String>)));
     open_flow(&flow, &id, Call::AddressChangeOpen { connection }, |flow| Watched::AddressChange { flow }, move |u| {
-        let Update::AddressChange { shown, .. } = u else { return true };
+        let Update::AddressChange { shown, kit, .. } = u else { return true };
         let Some(s) = shown else {
             f.dialog.force_close();
             return false;
         };
+        for c in controls.borrow().iter() {
+            c.draw(kit.as_ref());
+        }
+        *intake.borrow_mut() = kit;
         eprintln!("veyq: address change: working {}, sent {}, refusal {:?}", s.working, s.sent_to.is_some(), s.refusal);
         submit.set_sensitive(!s.working);
         offer.set_visible(s.kit_offered);
@@ -467,7 +739,7 @@ pub fn rotation(parent: &gtk::Widget, connection: String) {
     let done = Rc::new(Cell::new(false));
     let (f, id_done) = (flow.clone(), id.clone());
     open_flow(&flow, &id, Call::KeyRotationOpen { connection }, |flow| Watched::KeyRotation { flow }, move |u| {
-        let Update::KeyRotation { shown: state, .. } = u else { return true };
+        let Update::KeyRotation { shown: state, kit, breach, .. } = u else { return true };
         // a finished rotation re-opens the tenant, which closes the flow in the core: its last page stays
         let Some(s) = state else {
             if !done.get() {
@@ -475,9 +747,10 @@ pub fn rotation(parent: &gtk::Widget, connection: String) {
             }
             return false;
         };
-        eprintln!("veyq: rotation: {:?}, new password {}, done {}, refusal {:?}", s.step, s.new_password, s.done, s.refusal);
+        eprintln!("veyq: rotation: {:?}, new password {}, done {}, refusal {:?}, kit held {}, breach {:?}", s.step, s.new_password, s.done,
+            s.refusal, kit.as_ref().is_some_and(|k| k.kit.is_some()), breach.as_ref().map(|b| b.kind));
         done.set(s.done);
-        gate.draw(&s);
+        gate.draw(&s, kit.as_ref(), breach.as_ref());
         if shown.replace(Some(s.step)) == Some(s.step) && s.step != Step::Done {
             return true;
         }
@@ -508,7 +781,8 @@ pub fn rotation(parent: &gtk::Widget, connection: String) {
 struct Gate {
     page: adw::NavigationPage,
     new_password: adw::SwitchRow,
-    next: adw::PasswordEntryRow,
+    key: Rc<KeyControl>,
+    next: Rc<NewPassword>,
     confirm: adw::PasswordEntryRow,
     error: gtk::Label,
     kit_error: gtk::Label,
@@ -531,12 +805,22 @@ impl Gate {
             words::rotation_fact_links(),
             words::rotation_store_wiped(),
         ]));
-        let (password, key) = (secret(&words::rotation_password()), secret(&words::rotation_secret_key()));
+        let password = secret(&words::rotation_password());
+        let key = KeyControl::new(flow, id, &words::rotation_secret_key());
         let new_password = adw::SwitchRow::builder().title(words::rotation_new_password()).build();
-        let (next, confirm) = (secret(&words::password_change_new()), secret(&words::password_change_confirm()));
-        col.append(&rows(&[password.upcast_ref(), key.upcast_ref()]));
+        let next = Rc::new(NewPassword::new(id, BreachCalls {
+            check: |flow, new_password| Call::KeyRotationCheck { flow, new_password },
+            edited: |flow| Call::KeyRotationEdited { flow },
+            anyway: |flow, on| Call::KeyRotationUseAnyway { flow, on },
+        }));
+        let confirm = secret(&words::password_change_confirm());
+        col.append(&rows(&[password.upcast_ref()]));
+        col.append(&key.list);
+        col.append(&key.notes);
         col.append(&dim(&words::rotation_secret_key_hint()));
-        col.append(&rows(&[new_password.upcast_ref(), next.upcast_ref(), confirm.upcast_ref()]));
+        col.append(&rows(&[new_password.upcast_ref(), next.row.upcast_ref(), confirm.upcast_ref()]));
+        col.append(&next.notice);
+        col.append(&next.anyway);
         let error = error_label();
         col.append(&error);
         let go = pill(&words::rotation_next(), "suggested-action");
@@ -552,15 +836,25 @@ impl Gate {
         let kit_error = error_label();
         let gate_page = page(&words::rotation_title(), "gate", &col);
         let kit = Rc::new(RefCell::new(None));
-        let this = Self { page: gate_page, new_password, next: next.clone(), confirm: confirm.clone(), error, kit_error, go: go.clone(), drawing, kit: kit.clone() };
+        let this = Self { page: gate_page, new_password, key: key.clone(), next: next.clone(), confirm: confirm.clone(), error, kit_error, go: go.clone(), drawing, kit: kit.clone() };
         let (f, i, ke, held_kit) = (flow.clone(), id.clone(), this.kit_error.clone(), kit);
         go.connect_clicked(move |_| {
             let Some(n) = i.get() else { return };
-            let (password, secret_key, new_password, confirm_password) = (take(&password), take(&key), take(&next), take(&confirm));
+            // the rows stay until the kit step opened: a breached new password stops here until *Use it anyway*
+            let (secret_key, new_password, confirm_password) = (key.typed(), next.row.text().to_string(), confirm.text().to_string());
+            let password_typed = password.text().to_string();
             let (f, i, ke, held_kit) = (f.clone(), i.clone(), ke.clone(), held_kit.clone());
+            let (password, key, next, confirm) = (password.clone(), key.clone(), next.clone(), confirm.clone());
             glib::spawn_future_local(async move {
-                match bridge::call(&Call::KeyRotationProve { flow: n, password, secret_key, new_password, confirm_password }).await.map(|(a, _)| a) {
+                let proving = Call::KeyRotationProve { flow: n, password: password_typed, secret_key, new_password, confirm_password };
+                match bridge::call(&proving).await.map(|(a, _)| a) {
                     Ok(Answer::KitOpened { kit }) => {
+                        // the core took them: the gate's rows emptied
+                        for r in [&password, &confirm] {
+                            r.set_text("");
+                        }
+                        next.forget();
+                        key.take();
                         let danger = pill(&words::rotation_action(), "destructive-action");
                         danger.set_widget_name("rotation-run");
                         let (f2, i2) = (f.clone(), i.clone());
@@ -584,11 +878,13 @@ impl Gate {
         this
     }
 
-    fn draw(&self, s: &KeyRotationState) {
+    fn draw(&self, s: &KeyRotationState, kit: Option<&IntakeState>, breach: Option<&BreachState>) {
         self.drawing.set(true);
         self.new_password.set_active(s.new_password);
         self.drawing.set(false);
-        self.next.set_visible(s.new_password);
+        self.key.draw(kit);
+        self.next.draw(breach.filter(|_| s.new_password));
+        self.next.row.set_visible(s.new_password);
         self.confirm.set_visible(s.new_password);
         self.go.set_sensitive(s.step == Step::Gate);
         let at_gate = matches!(s.step, Step::Gate | Step::Loading);

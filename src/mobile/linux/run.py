@@ -49,7 +49,9 @@ Verbs:
                              session (no sign-in); VEYQ_DEV_CAMERA=<image on this host> is its test camera (mounted
                              read-only). The container has no Camera portal, so without it the harness says NoCamera.
                              VEYQ_DEV_SETTINGS=1 opens a debug build's account Settings over a state of its own
-                             instead of the session (no sign-in, no server).
+                             instead of the session (no sign-in, no server). VEYQ_UNREACHABLE=<host>[,<host>…] maps
+                             each host to the container's own loopback, where nothing listens, so a pass sends it
+                             nothing (the breached-password range service: its "could not be checked" state).
   lock                       `cargo update`: writes Cargo.lock anew from Cargo.toml (the one way it changes).
   flatpak [--arch aarch64|x86_64]
                              the Flatpak bundle (ADR 0139): the bridge's release library and everything `build`
@@ -380,6 +382,9 @@ def run_app(port: int, devlogin: bool, unlock: bool = False, fill: bool = False,
     # the account Settings' harness (dev_settings.rs)
     if os.environ.get("VEYQ_DEV_SETTINGS"):
         env["VEYQ_DEV_SETTINGS"] = os.environ["VEYQ_DEV_SETTINGS"]
+    # a third party a pass must not reach (the real range service an instance names): refused at once in the container
+    for host in filter(None, (h.strip() for h in os.environ.get("VEYQ_UNREACHABLE", "").split(","))):
+        docker_args += ["--add-host", f"{host}:127.0.0.1"]
     if os.environ.get("VEYQ_DEV_CAMERA"):
         image = Path(os.environ["VEYQ_DEV_CAMERA"]).resolve()
         if not image.is_file():
