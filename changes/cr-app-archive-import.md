@@ -64,7 +64,7 @@ Branch `claude/refine-open` at `6de08a8d0`. `C=src/mobile/core/src/commonMain/ko
 
 ## Decisions
 
-Written into **ADR 0152** in phase 1 (the next after [cr-app-account-rest](cr-app-account-rest.md)'s 0151; re-run
+Written into **ADR 0152** in phase 1 (the next after cr-app-account-rest's 0151; re-run
 `git log --all --name-only --format= | grep -o 'docs/decisions/01[4-9][0-9]-' | sort -u` in phase 1 and take the next
 free number). Its title: *The apps import a download as the web does: the web's reader and walk in the core, each kind's
 import its application's, recognised by every Depot upload.* ADR 0149's "Import stays the web's until #985" and the use

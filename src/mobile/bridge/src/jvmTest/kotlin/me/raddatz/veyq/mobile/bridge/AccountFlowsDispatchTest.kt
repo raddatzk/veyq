@@ -274,7 +274,7 @@ class AccountFlowsDispatchTest {
     }
 
     /**
-     * R4 (cr-app-account-rest): a `veyqkit:` token pasted into a flow's Secret Key field is that kit's key, as at the
+     * ADR 0151 decision 1 (inbox #970): a `veyqkit:` token pasted into a flow's Secret Key field is that kit's key, as at the
      * sign-in — the web's paste swap. Written first: red while the bridge read the field as a bare key only, the token
      * becoming 32 zero bytes the floor refused as a wrong key.
      */

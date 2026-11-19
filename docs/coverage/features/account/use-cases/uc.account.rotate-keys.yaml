@@ -20,6 +20,9 @@ title: Secure my account after a compromise
 # `OfflineWipeWiredTest.a_rotation_wipes_the_store_and_opens_it_anew_under_the_new_key`, `KitWriterTest` and
 # `KitFixtureTest` (`kit-app.pdf`, also read by `src/features/account/emergencyKit/emergencyKit.import.test.ts`), the
 # `rotation_stage` and `secret_key_proof` vectors; live as a throwaway `LiveRotationTest`.
+# ADR 0151 (built 2026-11-19): the gate's Secret Key from a pasted kit token, a kit file or a scan and the new password's
+# breach check — core `FlowKeyIntakeTest`, `BreachCheckTest`, `BreachCanaryTest`; bridge
+# `AccountFlowsDispatchTest.aPastedKitTokenOpensEachFlow` and `.aFlowSessionTakesTheKitByPathAndChecksTheNewPasswordAndSendsNeither`.
 acceptanceCriteria:
   - id: one-mode-every-key-together
     text: Securing the account replaces the Master Key, the identity keypair and the Secret Key together, as one step of the account's key chain — there is no identity-only mode and no choice offered. wrappedIdentityPrivateKey is re-wrapped under the new Master Key, the new identity public bundle replaces the directory value, the new Secret-Key proof key replaces the stored one, and the chain gains a step whose head every directory read then serves.

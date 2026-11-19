@@ -2366,7 +2366,9 @@ into its phase note only, and the harvest moved them. The Memories-rest CR (ADR 
 and Linux passes' outputs went into inbox rows (#992, #998) and the phase notes, and the harvest moved them into the
 ADR's Consequences. The received-links CR (ADR 0150) did it a fourth time — every platform's pass and the core's three
 live tests in phase notes only, its phase 11 ("results into ADR 0150's Consequences") left to the harvest — so the
-platform phases' done-when names the ADR's Consequences, not § Passes' row.
+platform phases' done-when names the ADR's Consequences, not § Passes' row. The account-rest CR (ADR 0151), refined
+the same day before that sentence was written, did it a fifth time: its platform phases' done-when named § Passes' row,
+and its phase 9 ("results into ADR 0151's Consequences") moved the three passes at the harvest.
 
 ### A permission a refine plans is put through the packager's own linter at refine
 
@@ -2480,6 +2482,24 @@ Pot's share now reads its receipts on a new path — held by `ShareInboxTest` an
 shared into a chapter only, and the Pot's share, its HEIC copy and its editor closed unsaved were not clicked since
 (inbox #1006). A CR that reshapes what an already-passed flow runs on lists that flow's pass beside the new one's in §
 Passes, not only the new target's.
+
+### A bite written as a mutation is read against the code it mutates
+
+The account-rest CR (ADR 0151) planned phase 2's bite (a) as "`typed` reading `SecretKeyText` first → the pasted-token
+test red". Reading the bare key first still falls through to the token, which no bare-key reader accepts, so that
+mutation changes nothing a test can see; the implementer bit with `SecretKeyText` **only** — the defect itself — instead.
+A refine that writes a bite as a mutation checks, against the code, that the mutation changes what the test asserts —
+two readers that never both accept one input are no order to swap.
+
+### A pass that plans a third party's answer names where the app gets a played one
+
+The same CR's § Passes asked each platform for a known-breached password warned with its count, the submit held until
+*Use it anyway*. A dev instance serves the real Have I Been Pwned as its range address, no pass sends a chosen password's
+prefix there, and no played range service reaches an app — so all three passes blocked the address (each platform its
+own way, `src/mobile/CLAUDE.md` § Prove your work), measured *could not be checked*, and the hit stayed
+`BreachCheckTest`'s, drawn on no screen. A refine that plans a pass of a third party's answer names the played service
+and how the app is pointed at it (a served address the pass may change, a proxy that rewrites it), or writes the answer
+as the unit test's case and the pass as the failure path.
 
 ### Every CR closes with a short, honest retrospective
 

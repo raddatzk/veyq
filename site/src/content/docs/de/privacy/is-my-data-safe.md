@@ -73,16 +73,18 @@ Datenschutzerklärung deines Servers nennt beide, und wer ihn betreibt, kann sie
 ### Ein neues Passwort prüfen
 
 Wenn du ein Passwort wählst — beim Einrichten eines Servers, beim Beitreten zu einem Bereich, beim Ändern deines
-Passworts oder nach einem Zurücksetzen —, gleicht veyq es mit Passwörtern aus bekannten Datenlecks ab. Das
-passiert **von selbst**, sobald du das Passwortfeld verlässt, und noch einmal beim Bestätigen, wenn du das
-Passwort seitdem geändert hast. Solange du noch tippst, wird nie geprüft.
+Passworts, beim Absichern deines Kontos mit einem neuen oder nach einem Zurücksetzen; in der veyq-App die beiden
+mittleren —, gleicht veyq es mit Passwörtern aus bekannten Datenlecks ab. Das passiert **von selbst**, sobald du das
+Passwortfeld verlässt, und noch einmal beim Bestätigen, wenn du das Passwort seitdem geändert hast. Solange du noch
+tippst, wird nie geprüft.
 
 **Was dein Gerät verlässt:** die ersten **5 Zeichen eines daraus berechneten Hashwerts** — einer Art
 Fingerabdruck des Passworts, nie das Passwort selbst — **direkt von deinem Gerät** an den kostenlosen Dienst *Have I Been
 Pwned*, nicht über unseren Server. Die Antwort enthält Hunderte Fingerabdrücke, die genauso anfangen, und dein Gerät
 sucht den des Passworts selbst darin.
 
-**Was dieser Dienst trotzdem erfährt:** Dein Browser teilt ihm mit, von welcher Seite die Frage kommt. *Have I
+**Was dieser Dienst trotzdem erfährt:** Dein Browser teilt ihm mit, von welcher Seite die Frage kommt, und die App
+nennt ihm deinen veyq-Server genauso. *Have I
 Been Pwned* (und das Netzwerkunternehmen davor) erfährt also, dass jemand unter deiner Internetadresse diesen
 veyq-Server nutzt und gerade ein Passwort wählt — nicht, wer du bist, und nicht das Passwort.
 

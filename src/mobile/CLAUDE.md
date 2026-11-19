@@ -102,6 +102,23 @@ A Gradle build of its own, run through its own wrapper.
   platforms: Android `AccountFlows.kt`, `AccountSecretFlows.kt`, `SafetyNumber.kt`; Apple `AccountFlows.swift`; Linux
   `account_flows.rs`, `profile_edit.rs`, `safety.rs`; Windows `AccountFlows.cs`, `ProfileFlow.cs`, `ProfilePicture.cs`,
   `SafetyNumber.cs`.
+- **The flows' Secret Key and the breached-password check** ([ADR 0151](../../docs/decisions/0151-the-apps-account-rest-the-sign-ins-secret-key-control-in-every-flow-that-asks-for-the-key-and-the-breached-password-check-straight-from-the-device.md), built 2026-11-19):
+  `account/KeyIntake` is the sign-in's key control as a model — `typed(text)` (a `veyqkit:` token first, then a bare
+  key: the web's paste swap), `read` (a kit file, `KitImport`), `scan`, `take`, `clear`, `spent`; the screen sees only
+  `IntakeState`/`HeldKit` (the kit's address and server, the other-account and other-server notices), never the key.
+  `SessionModel` holds one, and so does each of `PasswordChange`, `AddressChange` (request and kit step share it) and
+  `KeyRotation`'s gate: their actions take the field's text (empty while a kit is held), the key a copy the call zeroes,
+  the held key zeroed after a successful call, at `clear` and at the flow's close. `account/BreachCheck` is the web's
+  `useBreachCheck` + `pwned.ts` (`BreachState`/`BreachKind`; `check` on leaving the field, `edited` on every edit,
+  `useAnyway`; `proceed()` decides, and the core refuses a submit it does not pass), over `account/Sha1` (no
+  dependency, no suite primitive) and `session/OutsideHttp` — the core's one door to a third party (the map's former
+  `MapHttp`): https only, no bearer, no cookie, no `Referer`, the app's `User-Agent` naming the instance. The address is
+  `getSetupStatus`' `core.breached-password` `serviceUrl`, read when a flow opens; none, no check. The bridge: `Kit.Read(flow,
+  path)`, `Kit.Clear(flow)`, `ScanKind.FLOW_KIT` (`Scan.Open`'s `link` the flow), `PasswordChange.`/`KeyRotation.Check`,
+  `.Edited`, `.UseAnyway`; the updates carry `kit` and `breach`. The platforms: Android `AccountSecretFlows.kt`
+  (`FlowKeyField`, `NewPasswordField`); Apple `AccountFlows.swift` (`FlowKeySection`, `NewPasswordRows`; the scan over
+  appleMain's `AppleKit.scan(intake:timing:)`); Linux `account_flows.rs` (`KeyControl`, `NewPassword`); Windows
+  `AccountFlows.cs` (`FlowKeyControl`, `NewPasswordField`).
 - **A received link** ([ADR 0150](../../docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md), built 2026-11-19): the web's share page in core's `sharing/` —
   `ReceivedLink` (the web's parse, held to `contracts/platform/share-links/cases.v1.json` by `ReceivedLinkTest` and the
   web's `bookmarkLink.test.ts`), `ShareInstance` (the link instance's `/api/setup`), `ShareGates` (password, terms, note,
@@ -658,6 +675,16 @@ A Gradle build of its own, run through its own wrapper.
   is free at once (measured: create, erase, create again under `tw-probe2`). A pass that erases in the app erases the
   member there and leaves the owner to `--erase`: an owner erased in the app takes the tenant into its deletion, which no
   move can leave, and the name stays taken until its purge.
+  **A pass that chooses a password never asks the real range service.** A dev instance serves Have I Been Pwned's
+  address (`core.breached-password`), so a pass blocks it on its own platform and proves *could not be checked* going
+  ahead; a hit is `BreachCheckTest`'s (no played range service reaches an app). Android: start the throwaway emulator
+  with `-dns-server 192.0.2.1` (a dead resolver) and reach the instance at `10.0.2.2` by address (`ping
+  api.pwnedpasswords.com` → unknown host). Linux: `VEYQ_UNREACHABLE=api.pwnedpasswords.com python3 linux/run.py run`
+  maps each named host to the container's loopback. Windows: WinHTTP takes no per-process proxy, so the app reaches
+  the backend through a port of its own (`ssh -R`) behind a pass-only proxy on the Mac that rewrites the setup answer's
+  range address to one under `.invalid` — nothing changed on the VM or the instance (ADR 0151's Consequences,
+  2026-11-19). Afterwards grep the app's files and logs for the passwords, the key, the token, the full SHA-1 (upper,
+  lower) and its suffix.
   Dev helpers for a device pass (not checks): `VEYQ_DEV_KIT_OUT=<dir> --tests '*DevKitTest*'` writes `dev-kit.pdf` (the
   principal's token in its `Keywords`) and `dev-kit-qr.png`, for a pass to pick or show a camera — kept outside an
   indexed folder (GNOME's Tracker indexes all of `~`; `/tmp` is reached by the chooser's path) and removed after;
