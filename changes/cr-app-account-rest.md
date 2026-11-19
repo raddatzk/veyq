@@ -236,8 +236,31 @@ controls reuse the sign-in's words. No owner question: the words are the web's.
   (printed or compact), no token, no SHA-1 (upper, lower) nor suffix. Not run: the scan (no camera in the container; a
   `VEYQ_DEV_CAMERA` scan is open), the rotation run with a kit, the Flatpak build's pass (the container's debug build
   instead), the hit and its *Use it anyway* (`BreachCheckTest`'s).
-- [ ] **8 Windows** — the same (`FileOpenPicker`, `QrCamera`, `LostFocus`, a `CheckBox`). · Done when:
+- [x] **8 Windows** — the same (`FileOpenPicker`, `QrCamera`, `LostFocus`, a `CheckBox`). · Done when:
   `python3 windows/run.py build` green on the VM; § Passes' Windows row.
+  **Built 2026-11-19 (branch `claude/acct-rest-win`):** `AccountFlows.cs`: `FlowKeyControl` (the Secret Key box, or "From
+  your Emergency Kit" with *Enter it instead* → `Kit.Clear`; *Open Emergency Kit* through `FileOpenPicker` → `Kit.Read` by
+  path, the sign-in's `SignInView.KitFileTypes`; *Scan Emergency Kit* where `QrCamera.PresentAsync` finds a camera, in a
+  `ContentDialog` over `QrCamera.OpenFlowKit` — `FLOW_KIT`, the flow as `link` —; under them the problem, the
+  other-account warning and the other-server note) in the password change, both halves of the address change (one intake,
+  each control drawing the flow's `kit`) and the rotation's gate; `NewPasswordField` (`LostFocus` → `*.Check`, each edit →
+  `*.Edited`, the notice under the box, *Use it anyway* a `CheckBox` → `*.UseAnyway`). As Linux, the password change's and
+  the rotation gate's boxes stay until the core took them; and both forms are now built once and drawn in place, so a
+  check's verdict arriving while the next box is typed in never takes the focus (each draw rebuilt the body before).
+  `run.py build` (the app, Veyq.Tests, Veyq.Bridge.Tests, PdfWebTest), `bridge` and `test` (1126 passed) green; words and
+  guidelines guards green. `run.py test` was red on the untouched tree (26 import tests: the import's contract files never
+  reached the VM) — it now pushes `contracts/export`'s cases, download and schema beside the search's vectors. Pass (measured, the VM, a throwaway on `tw-win`, erased after; Veyq.Drive's UIA steps): the password
+  changed with the kit **file** picked in the open picker and no key typed, again with the `veyqkit:` token typed into the
+  Secret Key box, and a third time with the kit **scanned** (`VEYQ_DEV_CAMERA`, the token's QR); another account's kit in
+  the address change warned with both addresses and *Enter it instead* went back to the box; the rotation's gate proved with
+  the kit file (`KeyRotation.Prove` → the kit step; left there, nothing published). No live query: WinHTTP takes no
+  per-process proxy, so the app reached the backend through a port of its own (`ssh -R`) behind a pass-only proxy on the
+  Mac that rewrote the instance's range address to one under `.invalid` — no change to the VM or the instance; leaving the
+  new password showed *could not be checked* (`Checking` → `Unavailable` in the log) in the password change and the
+  rotation, and the changes went through. Afterwards the app's data, `TEMP`, `INetCache` and `Recent` (1167 files) held no
+  password (old, each new, the member's), no Secret Key (printed or compact, either account's), no token, no SHA-1 (upper,
+  lower) nor suffix. Not run: the hit and its *Use it anyway* (`BreachCheckTest`'s), the address change's request and kit
+  step with a kit.
 - [ ] **9 the passes** — § Passes, each a throwaway, erased after; results into ADR 0151's Consequences.
 - [ ] **10 harvest** — the Use pages EN+DE: `account/change-password.mdx`, `account/change-email.mdx`,
   `account/replace-your-keys.mdx` (*In the app*: the kit file and the scan; the breach check), `privacy/is-my-data-safe.md`
