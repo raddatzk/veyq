@@ -1312,6 +1312,99 @@ internal sealed class Call {
      */
     @Serializable @SerialName("Person.Open") data class PersonOpen(val userId: String) : Call()
 
+    // ---- the account's flows (ADR 0148 decision 11): each a model with an id, its watch, plain calls per action ----
+
+    /** Any device a session row names renamed (core's `AccountSettings.renameFamily`, the web's `renameDeviceOfFamily`). */
+    @Serializable @SerialName("Settings.RenameFamily") data class SettingsRenameFamily(val settings: Long, val family: String, val label: String) : Call()
+
+    /** One's own profile in the tenant open now (core's `ProfileModel`, read at once), [Answer.ProfileOpened] for [Watched.Profile]. */
+    @Serializable @SerialName("Profile.Open") data object ProfileOpen : Call()
+    @Serializable @SerialName("Profile.Username") data class ProfileUsername(val profile: Long, val value: String) : Call()
+    @Serializable @SerialName("Profile.FirstName") data class ProfileFirstName(val profile: Long, val value: String) : Call()
+    @Serializable @SerialName("Profile.LastName") data class ProfileLastName(val profile: Long, val value: String) : Call()
+    @Serializable @SerialName("Profile.Consent") data class ProfileConsent(val profile: Long, val on: Boolean) : Call()
+
+    /**
+     * A picture the host's picker gave ([path]) with the square cropper's [pose] (core's `CoverFrame` with an equal width
+     * and height): the core asks the host to render it to `ProfileModel.EDGE` square RGBA ([HostRequest.PictureSquare]),
+     * then encodes, pads and seals it on the save.
+     */
+    @Serializable @SerialName("Profile.Picture") data class ProfilePicture(val profile: Long, val path: String, val pose: me.raddatz.veyq.mobile.session.CoverFrame.Pose) : Call()
+    @Serializable @SerialName("Profile.RemovePicture") data class ProfileRemovePicture(val profile: Long) : Call()
+    @Serializable @SerialName("Profile.DiscardPicture") data class ProfileDiscardPicture(val profile: Long) : Call()
+
+    /** The picture to draw (the draft's, else the one held): [Answer.Bytes] with the bytes beside the JSON. */
+    @Serializable @SerialName("Profile.PictureBytes") data class ProfilePictureBytes(val profile: Long) : Call()
+    @Serializable @SerialName("Profile.Save") data class ProfileSave(val profile: Long) : Call()
+    @Serializable @SerialName("Profile.Close") data class ProfileClose(val profile: Long) : Call()
+
+    /** One's own safety number in the tenant open now (core's `PersonTrust.mine`): [Answer.SafetyNumber]. */
+    @Serializable @SerialName("Trust.Mine") data object TrustMine : Call()
+
+    /** One's own safety code as a picture (`QrPng` of its `veyqid:2` text): [Answer.Bytes], a PNG beside the JSON. */
+    @Serializable @SerialName("Trust.MineCode") data class TrustMineCode(val px: Int) : Call()
+
+    /** Another member's state on their page (`PersonTrust.person`): [Answer.PersonTrust]. */
+    @Serializable @SerialName("Trust.Person") data class TrustPerson(val userId: String) : Call()
+
+    /** The digits compared aloud: "They match" ([match]) or not (`PersonTrust.compareDigits`): [Answer.TrustOutcome]. */
+    @Serializable @SerialName("Trust.CompareDigits") data class TrustCompareDigits(val userId: String, val match: Boolean) : Call()
+
+    /** What a [ScanKind.SAFETY] scan found, compared (`PersonTrust.compareScan`): [Answer.TrustOutcome]. */
+    @Serializable @SerialName("Trust.CompareScanned") data class TrustCompareScanned(val userId: String, val scan: Long) : Call()
+
+    /** Change the password of the account [connection] names (core's `PasswordChange`): [Answer.FlowOpened] for [Watched.PasswordChange]. */
+    @Serializable @SerialName("PasswordChange.Open") data class PasswordChangeOpen(val connection: String) : Call()
+
+    /** The change, the secrets typed on their way to the core (each crosses once, never back). */
+    @Serializable @SerialName("PasswordChange.Run") data class PasswordChangeRun(
+        val flow: Long, val currentPassword: String, val newPassword: String, val confirmPassword: String, val secretKey: String,
+    ) : Call()
+    @Serializable @SerialName("PasswordChange.Close") data class PasswordChangeClose(val flow: Long) : Call()
+
+    /** Change the address (core's `AddressChange`), its request mailed through the tenant open now: [Answer.FlowOpened]. */
+    @Serializable @SerialName("AddressChange.Open") data class AddressChangeOpen(val connection: String) : Call()
+    @Serializable @SerialName("AddressChange.Request") data class AddressChangeRequest(val flow: Long, val newEmail: String, val password: String, val secretKey: String) : Call()
+
+    /** A new Emergency Kit with the account's address, once the password and Secret Key passed: [Answer.KitOpened] for [Watched.Kit]. */
+    @Serializable @SerialName("AddressChange.Kit") data class AddressChangeKit(val flow: Long, val password: String, val secretKey: String) : Call()
+    @Serializable @SerialName("AddressChange.Close") data class AddressChangeClose(val flow: Long) : Call()
+
+    /**
+     * The kit written by the core straight into [path], the file the host's save dialog gave (ADR 0137 decision 3) — a
+     * path, never bytes —, in [language], dated [createdEpochDay] (the person's local date, days since 1970-01-01).
+     */
+    @Serializable @SerialName("Kit.Save") data class KitSave(val kit: Long, val path: String, val language: String, val createdEpochDay: Long) : Call()
+
+    /** "I saved it" ([KitStep] takes it only once a file was written). */
+    @Serializable @SerialName("Kit.Confirm") data class KitConfirm(val kit: Long, val checked: Boolean) : Call()
+    @Serializable @SerialName("Kit.Close") data class KitClose(val kit: Long) : Call()
+
+    /** Replace the keys (core's `KeyRotation`, its gate read at once): [Answer.FlowOpened] for [Watched.KeyRotation]. */
+    @Serializable @SerialName("KeyRotation.Open") data class KeyRotationOpen(val connection: String) : Call()
+
+    /** "Also choose a new password" on or off. */
+    @Serializable @SerialName("KeyRotation.ChooseNewPassword") data class KeyRotationChooseNewPassword(val flow: Long, val on: Boolean) : Call()
+
+    /** The gate: answered [Answer.KitOpened] with the kit step to save, or [Answer.Done] (refused, or resumed: the state says). */
+    @Serializable @SerialName("KeyRotation.Prove") data class KeyRotationProve(
+        val flow: Long, val password: String, val secretKey: String, val newPassword: String = "", val confirmPassword: String = "",
+    ) : Call()
+
+    /** The danger step: the publish, refused until the kit step is ready. A done rotation re-opens the tenant. */
+    @Serializable @SerialName("KeyRotation.Run") data class KeyRotationRun(val flow: Long) : Call()
+    @Serializable @SerialName("KeyRotation.Close") data class KeyRotationClose(val flow: Long) : Call()
+
+    /** Erase the account (core's `AccountErasure`, its preview read at once): [Answer.FlowOpened] for [Watched.Erasure]. */
+    @Serializable @SerialName("Erasure.Open") data class ErasureOpen(val connection: String) : Call()
+
+    /** A last-owner tenant's choice: [newOwner] one of its members, or null to delete it along. */
+    @Serializable @SerialName("Erasure.Choose") data class ErasureChoose(val flow: Long, val tenantId: String, val newOwner: String?) : Call()
+
+    /** The erasure with the password typed; once erased the account is signed out here, answered as [SessionSignOut] is. */
+    @Serializable @SerialName("Erasure.Run") data class ErasureRun(val flow: Long, val password: String) : Call()
+    @Serializable @SerialName("Erasure.Close") data class ErasureClose(val flow: Long) : Call()
+
     /** The Memories section's List | Map (`PersonMemories.view`; not stored), where offered ([PersonMemoriesShown.offersViews]). */
     @Serializable @SerialName("Person.View") data class PersonView(val person: Long, val view: MemoriesView) : Call()
 
@@ -1350,6 +1443,12 @@ internal enum class ScanKind {
      * `veyqsignin`) — the code's text never crosses.
      */
     LINK,
+
+    /**
+     * A safety code's scan on another member's page (ADR 0148 decision 3): only a `veyqid:` code is taken, found as
+     * `veyqid`; the host then compares it with [Call.TrustCompareScanned]. A safety number is no secret.
+     */
+    SAFETY,
 }
 
 /** A call's one answer; what the call changed arrives as the watched states' updates. */
@@ -1578,6 +1677,24 @@ internal sealed class Answer {
     /** A person's page opened ([Call.PersonOpen]): its id, for [Watched.Person] and its calls. */
     @Serializable @SerialName("PersonOpened") data class PersonOpened(val person: Long) : Answer()
 
+    /** One's own profile opened ([Call.ProfileOpen]). */
+    @Serializable @SerialName("ProfileOpened") data class ProfileOpened(val profile: Long) : Answer()
+
+    /** One of the account's flows opened (password, address, rotation, erasure): its id for its watch and its calls. */
+    @Serializable @SerialName("FlowOpened") data class FlowOpened(val flow: Long) : Answer()
+
+    /** A kit step opened ([Call.AddressChangeKit], [Call.KeyRotationProve]): its id for [Watched.Kit] and `Kit.*`. */
+    @Serializable @SerialName("KitOpened") data class KitOpened(val kit: Long) : Answer()
+
+    /** One's own safety number: its six groups of digits and its two-group chain code (the code itself is `Trust.MineCode`). */
+    @Serializable @SerialName("SafetyNumber") data class SafetyNumber(val number: String, val chainCode: String) : Answer()
+
+    /** Another member's state on their page; null where they are no member here. */
+    @Serializable @SerialName("PersonTrust") data class PersonTrust(val shown: me.raddatz.veyq.mobile.session.PersonTrust.Shown?, val status: me.raddatz.veyq.mobile.session.PersonTrust.Status?) : Answer()
+
+    /** What a compare came to. */
+    @Serializable @SerialName("TrustOutcome") data class TrustOutcome(val outcome: me.raddatz.veyq.mobile.session.PersonTrust.Outcome) : Answer()
+
     /** A search opened ([Call.SearchOpen]): its id, for [Watched.Search] and its calls. */
     @Serializable @SerialName("SearchOpened") data class SearchOpened(val search: Long) : Answer()
 
@@ -1624,6 +1741,9 @@ internal sealed class Answer {
 
         /** Curating a Memory and a person's page: no participants picker, capture-time editor, banner dialog or person's page by that id. */
         NO_SUCH_PARTICIPANTS, NO_SUCH_CAPTURE_TIME, NO_SUCH_BANNER, NO_SUCH_PERSON,
+
+        /** One of the account's flows (a profile, the password, the address, the rotation, the erasure, a kit step): none by that id. */
+        NO_SUCH_FLOW,
 
         /** A search: none by that id (never opened, or its tenant closed). */
         NO_SUCH_SEARCH,
@@ -1754,6 +1874,13 @@ internal sealed class Watched {
     /** A person's page opened by [Call.PersonOpen]. */
     @Serializable @SerialName("Person") data class Person(val person: Long) : Watched()
 
+    @Serializable @SerialName("Profile") data class Profile(val profile: Long) : Watched()
+    @Serializable @SerialName("PasswordChange") data class PasswordChange(val flow: Long) : Watched()
+    @Serializable @SerialName("AddressChange") data class AddressChange(val flow: Long) : Watched()
+    @Serializable @SerialName("KeyRotation") data class KeyRotation(val flow: Long) : Watched()
+    @Serializable @SerialName("Erasure") data class Erasure(val flow: Long) : Watched()
+    @Serializable @SerialName("Kit") data class Kit(val kit: Long) : Watched()
+
     /** A search opened by [Call.SearchOpen]. */
     @Serializable @SerialName("Search") data class Search(val search: Long) : Watched()
 }
@@ -1863,6 +1990,14 @@ internal sealed class Update {
 
     /** A person's page; null once it closed (or its tenant did). */
     @Serializable @SerialName("Person") data class Person(val person: Long, val shown: PersonShown?) : Update()
+
+    /** Each of the account's flows: its core model's state, null once it closed (or its tenant did, or the account signed out). */
+    @Serializable @SerialName("Profile") data class Profile(val profile: Long, val shown: me.raddatz.veyq.mobile.session.ProfileModel.State?) : Update()
+    @Serializable @SerialName("PasswordChange") data class PasswordChange(val flow: Long, val shown: me.raddatz.veyq.mobile.session.PasswordChange.State?) : Update()
+    @Serializable @SerialName("AddressChange") data class AddressChange(val flow: Long, val shown: me.raddatz.veyq.mobile.session.AddressChange.State?) : Update()
+    @Serializable @SerialName("KeyRotation") data class KeyRotation(val flow: Long, val shown: me.raddatz.veyq.mobile.session.rotation.KeyRotation.State?) : Update()
+    @Serializable @SerialName("Erasure") data class Erasure(val flow: Long, val shown: me.raddatz.veyq.mobile.session.AccountErasure.State?) : Update()
+    @Serializable @SerialName("Kit") data class Kit(val kit: Long, val shown: me.raddatz.veyq.mobile.account.KitStep.State?) : Update()
 
     /**
      * A search (ADR 0146 decision 7): core's `SearchShown` as it is — names, parts, words and ids, never a key, a seal or a
@@ -3221,6 +3356,13 @@ internal sealed class HostRequest {
 
     /** Page [page] (1-based) drawn [width] px wide on white, answered as [HostReply.Pixels]. */
     @Serializable @SerialName("Pdf.Page") data class PdfPage(val path: String, val page: Int, val width: Int) : HostRequest()
+
+    /**
+     * The picture at [path] cropped as the square cropper's [pose] says (core's `CoverFrame`, its frame [edge] × [edge])
+     * and drawn [edge] × [edge] pixels: answered [HostReply.Pixels] with RGBA, 4 bytes a pixel, beside the JSON — one's own
+     * profile picture, which the core encodes, pads and seals (ADR 0148 decision 2).
+     */
+    @Serializable @SerialName("Picture.Square") data class PictureSquare(val path: String, val pose: me.raddatz.veyq.mobile.session.CoverFrame.Pose, val edge: Int) : HostRequest()
 
     /** The file decoded as a picture, scaled so its longer side is [longSide] px, over white: [HostReply.Pixels]. */
     @Serializable @SerialName("Picture.Luma") data class PictureLuma(val path: String, val longSide: Int) : HostRequest()

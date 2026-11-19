@@ -79,7 +79,8 @@ interface CredentialDoor {
  * (none on their sign-in either — inbox #969). The Secret Key, the passwords and every key derived here live for the call
  * only: zeroed in a `finally`.
  */
-class PasswordChange internal constructor(
+class PasswordChange(
+    /** The account the change is of: [VeyqAccount.passwordChange]'s, a played one in a test. */
     private val door: CredentialDoor,
     private val primitives: Primitives,
 ) {

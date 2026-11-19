@@ -75,13 +75,6 @@ internal class AccountRotation(private val account: VeyqAccount) : KeyRotation.E
     private val verifications = Verifications(suite)
     private fun api() = AccountRotationApi(account.server, account.http)
 
-    /** A refusal before or of the publish: nothing was written. [msg] is what the gate says. */
-    class Refused(val msg: Msg) : Exception(msg.key)
-
-    /** The publish's outcome could not be settled: the account was closed, the person unlocks again. */
-    class OutcomeUnknown(cause: Throwable?) : Exception("rotation outcome unknown", cause)
-
-    class Result(val resumed: Boolean, val states: List<RotationScopeState>, val unreadable: List<String>)
 
     override suspend fun holdsModerationKey(): Boolean {
         val r = account.respond { ModerationApi(account.server, account.http).listMyModerationGrants() }
@@ -111,9 +104,9 @@ internal class AccountRotation(private val account: VeyqAccount) : KeyRotation.E
         return runCatching { account.finishRotation() }.getOrElse { if (it is CancellationException) throw it else emptyList() }
     }
 
-    override suspend fun publish(password: String, secretKey: ByteArray, newSecretKey: ByteArray, newPassword: String?): Result {
+    override suspend fun publish(password: String, secretKey: ByteArray, newSecretKey: ByteArray, newPassword: String?): KeyRotation.Published {
         require(newSecretKey.size == 32) { "the new Secret Key is 32 bytes" }
-        val oldMk = account.masterKeyCopy() ?: throw Refused(Msg.ROTATION_ERROR_FAILED)
+        val oldMk = account.masterKeyCopy() ?: throw KeyRotation.Refused(Msg.ROTATION_ERROR_FAILED)
         val current = account.identityCopy()
         val identity = IdentityPrivate(p.randomBytes(32), p.randomBytes(32))
         val newMk = p.randomBytes(32)
@@ -125,8 +118,8 @@ internal class AccountRotation(private val account: VeyqAccount) : KeyRotation.E
         try {
             // the cold gate once more, against the floor as served now: a stale vault resumes instead of minting
             val proven = prove(password, secretKey)
-            if (proven == ColdCredential.Refusal.STALE) return Result(true, resume(password, secretKey), emptyList())
-            if (proven != null) throw Refused(if (proven == ColdCredential.Refusal.NO_FLOOR) Msg.ROTATION_ERROR_NO_FLOOR else Msg.ROTATION_ERROR_CREDENTIAL)
+            if (proven == ColdCredential.Refusal.STALE) return KeyRotation.Published(true, resume(password, secretKey), emptyList())
+            if (proven != null) throw KeyRotation.Refused(if (proven == ColdCredential.Refusal.NO_FLOOR) Msg.ROTATION_ERROR_NO_FLOOR else Msg.ROTATION_ERROR_CREDENTIAL)
 
             val currentPublic = account.myPublic
             val newPub = suite.identityPublic(identity)
@@ -170,8 +163,8 @@ internal class AccountRotation(private val account: VeyqAccount) : KeyRotation.E
 
             for (attempt in 1..MAX_PUBLISH_ATTEMPTS) {
                 // the pin store and the register ride inside the publish, re-sealed under MK'; a refused one refuses (E8)
-                val pins = try { account.resealedPins(newMk) } catch (e: TrustStateRefused) { throw Refused(Msg.ROTATION_ERROR_TRUST_STATE) }
-                val register = try { account.resealedRegister(newMk) } catch (e: TrustStateRefused) { throw Refused(Msg.ROTATION_ERROR_TRUST_STATE) }
+                val pins = try { account.resealedPins(newMk) } catch (e: TrustStateRefused) { throw KeyRotation.Refused(Msg.ROTATION_ERROR_TRUST_STATE) }
+                val register = try { account.resealedRegister(newMk) } catch (e: TrustStateRefused) { throw KeyRotation.Refused(Msg.ROTATION_ERROR_TRUST_STATE) }
                 val digest = stage.digest()
                 val statement = proofs.rotationProofStatement(
                     currentPublic, newPublic, wrappedPriv, passwordWrap, recoveryWrap, step, currentAuth, nextAuth, newProofPublic,
@@ -215,25 +208,25 @@ internal class AccountRotation(private val account: VeyqAccount) : KeyRotation.E
                     stageRooted(stage, rooted, plan)
                     continue
                 }
-                if (r != null && r.status == 413) throw Refused(Msg.ROTATION_ERROR_TOO_LARGE)
-                if (r != null && declared(r.status, code)) throw Refused(refusalOf(r.status))
+                if (r != null && r.status == 413) throw KeyRotation.Refused(Msg.ROTATION_ERROR_TOO_LARGE)
+                if (r != null && declared(r.status, code)) throw KeyRotation.Refused(refusalOf(r.status))
                 when (readOutcome(newMk, newPublic, oldMk, currentPublic)) {
                     Outcome.COMMITTED -> {
                         committed = true
                         afterCommit(oldMk, newMk, identity, pins.revision ?: 0, register.revision ?: 0, stage.planScopeIds(), carried, step)
                     }
-                    Outcome.NOT_COMMITTED -> throw Refused(Msg.ROTATION_ERROR_FAILED)
+                    Outcome.NOT_COMMITTED -> throw KeyRotation.Refused(Msg.ROTATION_ERROR_FAILED)
                     Outcome.UNKNOWN -> {
                         // neither identity can be held with certainty: the account closes, the person unlocks again
                         runCatching { account.retire() }
-                        throw OutcomeUnknown(null)
+                        throw KeyRotation.OutcomeUnknown(null)
                     }
                 }
                 break
             }
-            if (!committed) throw Refused(Msg.ROTATION_ERROR_FAILED)
+            if (!committed) throw KeyRotation.Refused(Msg.ROTATION_ERROR_FAILED)
             val states = runCatching { account.finishRotation() }.getOrElse { if (it is CancellationException) throw it else emptyList() }
-            return Result(false, states, stage.unreadableIds())
+            return KeyRotation.Published(false, states, stage.unreadableIds())
         } finally {
             oldMk.fill(0)
             current.kemSeed.fill(0)

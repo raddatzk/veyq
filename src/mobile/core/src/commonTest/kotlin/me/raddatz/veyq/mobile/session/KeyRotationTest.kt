@@ -2,7 +2,6 @@ package me.raddatz.veyq.mobile.session
 
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.api.models.RotationScopeState
-import me.raddatz.veyq.mobile.session.rotation.AccountRotation
 import me.raddatz.veyq.mobile.session.rotation.KeyRotation
 import me.raddatz.veyq.mobile.offline.freshTestDirectory
 import me.raddatz.veyq.mobile.offline.removeAll
@@ -30,9 +29,9 @@ class KeyRotationTest {
             resumed++
             return listOf(RotationScopeState("s1", RotationScopeState.State.secured))
         }
-        override suspend fun publish(password: String, secretKey: ByteArray, newSecretKey: ByteArray, newPassword: String?): AccountRotation.Result {
+        override suspend fun publish(password: String, secretKey: ByteArray, newSecretKey: ByteArray, newPassword: String?): KeyRotation.Published {
             published += newSecretKey.copyOf() to newPassword
-            return AccountRotation.Result(false, listOf(RotationScopeState("s1", RotationScopeState.State.waiting)), emptyList())
+            return KeyRotation.Published(false, listOf(RotationScopeState("s1", RotationScopeState.State.waiting)), emptyList())
         }
     }
 

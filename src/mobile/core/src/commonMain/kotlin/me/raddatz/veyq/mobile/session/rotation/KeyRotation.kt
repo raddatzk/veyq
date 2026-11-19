@@ -40,14 +40,14 @@ import me.raddatz.veyq.mobile.words.MsgKey
  * [close] (a String cannot be zeroed: it is dropped). After [State.done] the host opens its tenant again: the account
  * holds the new keys, and every key a tenant session opened before is the old identity's.
  */
-class KeyRotation internal constructor(
+class KeyRotation(
     private val engine: Engine,
     private val primitives: Primitives,
     private val email: String,
     private val server: String,
 ) {
     /** What the model drives: [AccountRotation] over the signed-in account, a played one in the tests. */
-    internal interface Engine {
+    interface Engine {
         suspend fun holdsModerationKey(): Boolean
 
         /** The cold proof's outcome: null when it passed, else the refusal (STALE included). */
@@ -56,9 +56,18 @@ class KeyRotation internal constructor(
         /** An account secured elsewhere: the account takes its current keys from the floor, then the finish runs. */
         suspend fun resume(password: String, secretKey: ByteArray): List<RotationScopeState>
 
-        /** The publish and what follows it; throws [AccountRotation.Refused] or [AccountRotation.OutcomeUnknown]. */
-        suspend fun publish(password: String, secretKey: ByteArray, newSecretKey: ByteArray, newPassword: String?): AccountRotation.Result
+        /** The publish and what follows it; throws [Refused] or [OutcomeUnknown]. */
+        suspend fun publish(password: String, secretKey: ByteArray, newSecretKey: ByteArray, newPassword: String?): Published
     }
+
+    /** What a publish came to: committed ([resumed] false) or an earlier one resumed, each scope's state after the finish. */
+    class Published(val resumed: Boolean, val states: List<RotationScopeState>, val unreadable: List<String>)
+
+    /** A refusal before or of the publish: nothing was written. [msg] is what the gate says. */
+    class Refused(val msg: Msg) : Exception(msg.key)
+
+    /** The publish's outcome could not be settled: the account was closed, the person unlocks again. */
+    class OutcomeUnknown(cause: Throwable?) : Exception("rotation outcome unknown", cause)
 
     enum class Step { LOADING, ON_THE_WEB, GATE, KIT, WORKING, DONE }
 
@@ -189,9 +198,9 @@ class KeyRotation internal constructor(
                 step = Step.DONE, done = true, resumed = result.resumed, scopes = statuses(result.states), unreadable = result.unreadable,
             )
             forget()
-        } catch (e: AccountRotation.Refused) {
+        } catch (e: Refused) {
             _state.value = current.copy(step = Step.KIT, refusal = e.msg)
-        } catch (e: AccountRotation.OutcomeUnknown) {
+        } catch (e: OutcomeUnknown) {
             _state.value = current.copy(step = Step.DONE, refusal = Msg.ROTATION_ERROR_UNKNOWN_OUTCOME)
             forget()
         } catch (e: CancellationException) {

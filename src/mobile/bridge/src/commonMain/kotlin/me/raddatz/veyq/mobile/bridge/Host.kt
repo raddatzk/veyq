@@ -528,3 +528,21 @@ internal class HostWords(private val host: Host) : me.raddatz.veyq.mobile.search
             ?.takeIf { it.isNotBlank() } ?: msg.key).also { said[msg] = it }
     }
 }
+
+/**
+ * One's own profile picture cropped and drawn square by the host ([HostRequest.PictureSquare], ADR 0148 decision 2: the
+ * platform decodes and draws, the core encodes and seals): the RGBA of `edge` × `edge`, or null where the host answered
+ * anything else or a payload of another size.
+ */
+internal class HostSquarePicture(private val host: Host) : (String, me.raddatz.veyq.mobile.session.CoverFrame.Pose, Int) -> ByteArray? {
+    override fun invoke(path: String, pose: me.raddatz.veyq.mobile.session.CoverFrame.Pose, edge: Int): ByteArray? {
+        val r = runCatching { host.askWithPayload(HostRequest.PictureSquare(path, pose, edge)) }.getOrNull() ?: return null
+        val pixels = r.reply as? HostReply.Pixels
+        val payload = r.payload
+        if (pixels == null || payload == null || pixels.width != edge || pixels.height != edge || payload.size != edge * edge * 4) {
+            payload?.fill(0)
+            return null
+        }
+        return payload
+    }
+}

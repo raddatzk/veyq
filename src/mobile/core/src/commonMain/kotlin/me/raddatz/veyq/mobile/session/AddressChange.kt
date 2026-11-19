@@ -33,7 +33,7 @@ import me.raddatz.veyq.mobile.words.MsgKey
  * against the floor ([ColdCredential.prove]) — a kit made from a mistyped key fails exactly on the day it is needed —,
  * then [KitStep] with the account's address and the same Secret Key.
  */
-class AddressChange internal constructor(
+class AddressChange(
     private val door: CredentialDoor,
     private val primitives: Primitives,
 ) {

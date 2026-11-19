@@ -31,7 +31,7 @@ import me.raddatz.veyq.mobile.words.MsgKey
  * so nothing is sent after it: the device forgets the account as the web's ending does for a browser
  * ([CredentialDoor.erased]: the offline store wiped, the saved key, the trust marks and the record removed).
  */
-class AccountErasure internal constructor(
+class AccountErasure(
     private val door: CredentialDoor,
     private val primitives: Primitives,
 ) {

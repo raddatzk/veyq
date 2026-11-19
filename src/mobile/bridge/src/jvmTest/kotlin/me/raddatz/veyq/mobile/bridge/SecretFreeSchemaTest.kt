@@ -38,6 +38,19 @@ class SecretFreeSchemaTest {
         "Manage.PasswordTrust.password" to "the password the person typed to go back to the password trust, on its way to the core",
         "Share.Password.password" to "the password a guest link is to ask for, as the person typed it, on its way to the core",
         "Settings.PasswordTrust.password" to "the password the person typed on Settings to go back to the password trust, on its way to the core",
+        "PasswordChange.Run.currentPassword" to "the current password the person typed to change it, on its way to the core's cold proof",
+        "PasswordChange.Run.newPassword" to "the new password the person typed, on its way to the core",
+        "PasswordChange.Run.confirmPassword" to "the new password typed again, on its way to the core's check that both match",
+        "PasswordChange.Run.secretKey" to "the Secret Key the person typed for the cold proof, on its way to the core",
+        "AddressChange.Request.password" to "the password the person typed to change the address, on its way to the core's cold proof",
+        "AddressChange.Request.secretKey" to "the Secret Key the person typed to change the address, on its way to the core's cold proof",
+        "AddressChange.Kit.password" to "the password the person typed for a new kit, on its way to the core's cold proof",
+        "AddressChange.Kit.secretKey" to "the Secret Key the person typed for a new kit, on its way to the core, which writes it into the file chosen",
+        "KeyRotation.Prove.password" to "the password the person typed at the rotation's gate, on its way to the core's cold proof",
+        "KeyRotation.Prove.secretKey" to "the Secret Key the person typed at the rotation's gate, on its way to the core's cold proof",
+        "KeyRotation.Prove.newPassword" to "the new password the person chose to install with the new keys, on its way to the core",
+        "KeyRotation.Prove.confirmPassword" to "the new password typed again, on its way to the core's check that both match",
+        "Erasure.Run.password" to "the password the person typed to erase the account, on its way to the core's proof",
     )
     /** The outward fields that carry a guest link's address, its key in the fragment, each with why. */
     private val linkAddresses = mapOf(
@@ -54,6 +67,8 @@ class SecretFreeSchemaTest {
         "me.raddatz.veyq.mobile.session.TrustedDevice.wrapId" to "the id the server gave this device's wrap: it names the wrap, holds none of it",
         "SettingsShown.otherSavedKeys" to "whether Settings offers to remove the other devices' saved keys: a flag, no key",
         "SettingsFamily.removesKey" to "whether a session's row offers \"Sign out and remove saved key\": a flag, no key",
+        "me.raddatz.veyq.mobile.session.rotation.KeyRotation.State.newPassword" to "whether \"Also choose a new password\" is ticked: a flag, no password",
+        "me.raddatz.veyq.mobile.session.ProfileModel.State.hasKey" to "whether this account holds the tenant key here (the name and picture editable): a flag, no key",
     )
 
     @Test

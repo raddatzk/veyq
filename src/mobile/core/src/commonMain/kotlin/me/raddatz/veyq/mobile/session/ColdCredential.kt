@@ -17,7 +17,7 @@ import me.raddatz.veyq.mobile.crypto.unb64
  * Nothing here writes. The Secret Key bytes are the caller's and are zeroed by the caller; every key derived here is
  * zeroed before this returns.
  */
-internal object ColdCredential {
+object ColdCredential {
     /** Why the proof refused — the web's `ColdCredentialRefusal`. Nothing was written on any of them. */
     enum class Refusal {
         /** The password and Secret Key offered do not open this account's `PASSWORD` floor. */

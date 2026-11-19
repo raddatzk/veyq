@@ -73,6 +73,10 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.concurrent.atomics.incrementAndFetch
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import me.raddatz.veyq.mobile.session.addressChange
+import me.raddatz.veyq.mobile.session.erasure
+import me.raddatz.veyq.mobile.session.passwordChange
+import me.raddatz.veyq.mobile.session.rotation.keyRotation
 
 /**
  * The models one process holds, and what a tenant opened becomes: its shell and, per Pot opened, a Pot model. [A] is the
@@ -134,9 +138,42 @@ internal class Composition<A : Connection, T : Any>(
      * (`WebpPicture.png`); none on the JVM, where every such call is refused.
      */
     val webp: (ByteArray) -> ByteArray? = { null },
+    /**
+     * The account's flows over a signed-in account (ADR 0148 decision 11): the real account's in the library; a test plays
+     * its own, or has none (each `*.Open` of a flow is then refused for the connection).
+     */
+    val accountFlows: (account: A, tenant: TenantRef?) -> AccountFlows? = { _, _ -> null },
+    /**
+     * One's own profile picture cropped and drawn square by the host ([HostRequest.PictureSquare]): RGBA of `edge` × `edge`,
+     * or null where the host could not; a test plays one, or has none.
+     */
+    /** The Secret Key as the person typed it, read by the core's reader (`SecretKeyText.read`); null where it does not read. */
+    val readKey: (String) -> ByteArray? = { null },
+    val squarePicture: (path: String, pose: me.raddatz.veyq.mobile.session.CoverFrame.Pose, edge: Int) -> ByteArray? = { _, _, _ -> null },
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
+
+/** The account's flows the bridge opens over one account (ADR 0148 decisions 6–8): each a core model, made on `*.Open`. */
+internal class AccountFlows(
+    val passwordChange: () -> me.raddatz.veyq.mobile.session.PasswordChange,
+    val addressChange: () -> me.raddatz.veyq.mobile.session.AddressChange,
+    val keyRotation: () -> me.raddatz.veyq.mobile.session.rotation.KeyRotation,
+    val erasure: () -> me.raddatz.veyq.mobile.session.AccountErasure,
+)
+
+/** One of the account's flows the host opened over the connection [connection]; [open] turns false as it closes. */
+internal class HeldFlow<M : Any>(val model: M, val connection: String, private val closing: (M) -> Unit = {}) {
+    val open = MutableStateFlow(true)
+
+    fun close() {
+        open.value = false
+        closing(model)
+    }
+}
+
+/** What a [ScanKind.SAFETY] scan found: a safety code's text, which the bridge compares and never sends (found as `veyqid`). */
+internal class SafetyCode(val text: String)
 
 /**
  * What a tenant opened offers the bridge: its shell, a Pot model per Pot opened (both null for a test's tenant, as they
@@ -280,6 +317,10 @@ internal class Tenant(
     val trackList: ((
         gallery: me.raddatz.veyq.mobile.memories.GalleryModel, uploads: me.raddatz.veyq.mobile.memories.MediaUploads,
     ) -> me.raddatz.veyq.mobile.memories.tracks.TrackList)? = shell?.let { s -> { g, uploads -> s.trackList(g, uploads, left = {}) } },
+    /** One's own profile in this tenant (core's `ProfileModel`, `TenantSession.profile`); null for a test's tenant without one. */
+    val ownProfile: (() -> me.raddatz.veyq.mobile.session.ProfileModel)? = null,
+    /** The safety numbers of this tenant (core's `PersonTrust`, `TenantSession.personTrust`); null for a test's tenant without one. */
+    val trust: me.raddatz.veyq.mobile.session.PersonTrust? = null
 )
 
 /**
@@ -538,6 +579,14 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val banners = Registry<HeldBanner>()
     private val bannerReaders = Registry<Long>()
     private val persons = Registry<HeldPerson>()
+
+    // the account's flows (ADR 0148 decision 11): each closed with the tenant and at a sign-out
+    private val profiles = Registry<HeldFlow<me.raddatz.veyq.mobile.session.ProfileModel>>()
+    private val passwordChanges = Registry<HeldFlow<me.raddatz.veyq.mobile.session.PasswordChange>>()
+    private val addressChanges = Registry<HeldFlow<me.raddatz.veyq.mobile.session.AddressChange>>()
+    private val keyRotations = Registry<HeldFlow<me.raddatz.veyq.mobile.session.rotation.KeyRotation>>()
+    private val erasures = Registry<HeldFlow<me.raddatz.veyq.mobile.session.AccountErasure>>()
+    private val kits = Registry<HeldFlow<me.raddatz.veyq.mobile.account.KitStep>>()
 
     /** The searches the host opened (ADR 0146 decision 13), the tenant's: each disposed when it closes. */
     private val searches = Registry<HeldSearch>()
@@ -1074,6 +1123,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     // the sign-in's own scan (the phones' too): its accepts reads the kit and hands it to the sign-in
                     // (`takeKit`), so the kit is taken as the code is read, watched or not, and never leaves the core
                     ScanKind.KIT -> session.scanKit(call.server, parts.decode)
+                    // a safety code: only `veyqid:` is taken, held here for `Trust.CompareScanned`, found as its scheme
+                    ScanKind.SAFETY -> me.raddatz.veyq.mobile.qr.QrScan(
+                        accepts = { text -> SafetyCode(text).takeIf { me.raddatz.veyq.mobile.qr.QrSchemes.of(text) == "veyqid" } },
+                        decode = parts.decode,
+                    )
                     // the link's own scan: what it reads goes into the link (`DeviceLink.scan`), the found scheme its direction's
                     ScanKind.LINK -> {
                         val link = call.link?.let { links[it] }?.model ?: return noLink
@@ -1486,6 +1540,160 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.MapOpened(held(HeldMap(services, opening, flowOf(MapOverlays()), pins = pins, person = call.person)))
             } ?: noPerson
             is Call.PersonClose -> persons.remove(call.person)?.let { closePerson(call.person, it); Answer.Done } ?: noPerson
+            is Call.SettingsRenameFamily, Call.ProfileOpen, is Call.ProfileUsername, is Call.ProfileFirstName, is Call.ProfileLastName,
+            is Call.ProfileConsent, is Call.ProfilePicture, is Call.ProfileRemovePicture, is Call.ProfileDiscardPicture,
+            is Call.ProfilePictureBytes, is Call.ProfileSave, is Call.ProfileClose, Call.TrustMine, is Call.TrustMineCode,
+            is Call.TrustPerson, is Call.TrustCompareDigits, is Call.TrustCompareScanned, is Call.PasswordChangeOpen,
+            is Call.PasswordChangeRun, is Call.PasswordChangeClose, is Call.AddressChangeOpen, is Call.AddressChangeRequest,
+            is Call.AddressChangeKit, is Call.AddressChangeClose, is Call.KitSave, is Call.KitConfirm, is Call.KitClose,
+            is Call.KeyRotationOpen, is Call.KeyRotationChooseNewPassword, is Call.KeyRotationProve, is Call.KeyRotationRun,
+            is Call.KeyRotationClose, is Call.ErasureOpen, is Call.ErasureChoose, is Call.ErasureRun, is Call.ErasureClose,
+            -> accountFlow(call, parts, payload)
+        }
+    }
+
+    private val noProfile = Answer.Refused(Answer.Why.NO_SUCH_FLOW)
+    private val noFlow = Answer.Refused(Answer.Why.NO_SUCH_FLOW)
+
+    /** The Secret Key as typed, read by the core's own reader; one that does not read stands for no key (the floor refuses it). */
+    private fun typedKey(parts: Composition<A, T>, text: String): ByteArray = parts.readKey(text) ?: ByteArray(32)
+
+    /**
+     * The account's flows (ADR 0148 decision 11): each `*.Open` makes the core's model over the account the connection
+     * names (or the tenant open now), held by id; each other call is one line onto that model. The typed secrets arrive
+     * here and go straight into the model, which zeroes what it was handed; nothing of them comes back.
+     */
+    private suspend fun accountFlow(call: Call, parts: Composition<A, T>, payload: (ByteArray) -> Unit): Answer {
+        val session = parts.session
+        fun flows(connection: String): AccountFlows? {
+            val account = session.accounts.firstOrNull { it.key == connection } ?: return null
+            val on = tenant.value?.takeIf { it.account.key == connection }?.tenant
+            return parts.accountFlows(account, on)
+        }
+        fun <M : Any> held(registry: Registry<HeldFlow<M>>, flow: HeldFlow<M>): Long = ids.incrementAndFetch().also { registry.put(it, flow) }
+        return when (call) {
+            is Call.SettingsRenameFamily -> onPage(call.settings) { it.renameFamily(call.family, call.label) }
+            Call.ProfileOpen -> {
+                val open = tenant.value ?: return noTenant
+                val model = open.models.ownProfile?.invoke() ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = held(profiles, HeldFlow(model, open.account.key) { it.close() })
+                scope.launch { model.load() }
+                Answer.ProfileOpened(id)
+            }
+            is Call.ProfileUsername -> profiles[call.profile]?.model?.setUsername(call.value).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.ProfileFirstName -> profiles[call.profile]?.model?.setFirstName(call.value).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.ProfileLastName -> profiles[call.profile]?.model?.setLastName(call.value).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.ProfileConsent -> profiles[call.profile]?.model?.setRequireGroupAddConsent(call.on).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.ProfilePicture -> profiles[call.profile]?.model?.let { model ->
+                val edge = me.raddatz.veyq.mobile.session.ProfileModel.EDGE
+                val rgba = parts.squarePicture(call.path, call.pose, edge)?.takeIf { it.size == edge * edge * 4 }
+                    ?: return Answer.Refused(Answer.Why.NOT_A_PICTURE)
+                try {
+                    model.choosePicture(rgba)
+                } finally {
+                    rgba.fill(0)
+                }
+                Answer.Done
+            } ?: noProfile
+            is Call.ProfileRemovePicture -> profiles[call.profile]?.model?.removePicture().done(Answer.Why.NO_SUCH_FLOW)
+            is Call.ProfileDiscardPicture -> profiles[call.profile]?.model?.discardPicture().done(Answer.Why.NO_SUCH_FLOW)
+            is Call.ProfilePictureBytes -> profiles[call.profile]?.model?.let { model ->
+                val picture = model.picture() ?: return Answer.Refused(Answer.Why.NO_PICTURE)
+                payload(picture)
+                Answer.Bytes(Sniff.image(picture)?.mime)
+            } ?: noProfile
+            is Call.ProfileSave -> profiles[call.profile]?.model?.let { it.save(); Answer.Done } ?: noProfile
+            is Call.ProfileClose -> profiles.remove(call.profile)?.close().done(Answer.Why.NO_SUCH_FLOW)
+            Call.TrustMine -> tenant.value?.models?.trust?.let { t ->
+                val mine = t.mine() ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                Answer.SafetyNumber(mine.number, mine.chainCode)
+            } ?: noTenant
+            is Call.TrustMineCode -> tenant.value?.models?.trust?.let { t ->
+                val mine = t.mine() ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                drawnCode(mine.payload, call.px, payload)
+            } ?: noTenant
+            is Call.TrustPerson -> tenant.value?.models?.trust?.let { t ->
+                val shown = t.person(call.userId)
+                Answer.PersonTrust(shown, shown?.status)
+            } ?: noTenant
+            is Call.TrustCompareDigits -> tenant.value?.models?.trust?.let { t -> Answer.TrustOutcome(t.compareDigits(call.userId, call.match)) } ?: noTenant
+            is Call.TrustCompareScanned -> tenant.value?.models?.trust?.let { t ->
+                val found = (scans[call.scan]?.current as? me.raddatz.veyq.mobile.qr.QrScan.State.Found<*>)?.value as? SafetyCode
+                    ?: return Answer.Refused(Answer.Why.NO_SUCH_SCAN)
+                Answer.TrustOutcome(t.compareScan(call.userId, found.text))
+            } ?: noTenant
+            is Call.PasswordChangeOpen -> {
+                val f = flows(call.connection) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+                Answer.FlowOpened(held(passwordChanges, HeldFlow(f.passwordChange(), call.connection)))
+            }
+            is Call.PasswordChangeRun -> passwordChanges[call.flow]?.model?.let {
+                it.run(call.currentPassword, call.newPassword, call.confirmPassword, typedKey(parts, call.secretKey))
+                managed(parts)
+                Answer.Done
+            } ?: noFlow
+            is Call.PasswordChangeClose -> passwordChanges.remove(call.flow)?.close().done(Answer.Why.NO_SUCH_FLOW)
+            is Call.AddressChangeOpen -> {
+                val f = flows(call.connection) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+                Answer.FlowOpened(held(addressChanges, HeldFlow(f.addressChange(), call.connection)))
+            }
+            is Call.AddressChangeRequest -> addressChanges[call.flow]?.model?.let {
+                it.request(call.newEmail, call.password, typedKey(parts, call.secretKey))
+                Answer.Done
+            } ?: noFlow
+            is Call.AddressChangeKit -> addressChanges[call.flow]?.let { held ->
+                val step = held.model.kit(call.password, typedKey(parts, call.secretKey)) ?: return Answer.Done
+                Answer.KitOpened(held(kits, HeldFlow(step, held.connection) { it.close() }))
+            } ?: noFlow
+            is Call.AddressChangeClose -> addressChanges.remove(call.flow)?.close().done(Answer.Why.NO_SUCH_FLOW)
+            // the kit's bytes are the core's alone: written at the path the host's dialog gave, never over the bridge
+            is Call.KitSave -> kits[call.kit]?.model?.let { step ->
+                if (step.save(call.path, call.language, call.createdEpochDay)) Answer.Done else Answer.Refused(Answer.Why.NOT_WRITTEN)
+            } ?: noFlow
+            is Call.KitConfirm -> kits[call.kit]?.model?.confirm(call.checked).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.KitClose -> kits.remove(call.kit)?.close().done(Answer.Why.NO_SUCH_FLOW)
+            is Call.KeyRotationOpen -> {
+                val f = flows(call.connection) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+                val model = f.keyRotation()
+                val id = held(keyRotations, HeldFlow(model, call.connection) { it.close() })
+                scope.launch { model.open() }
+                Answer.FlowOpened(id)
+            }
+            is Call.KeyRotationChooseNewPassword -> keyRotations[call.flow]?.model?.setNewPassword(call.on).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.KeyRotationProve -> keyRotations[call.flow]?.let { held ->
+                held.model.prove(call.password, typedKey(parts, call.secretKey), call.newPassword, call.confirmPassword)
+                // the kit step is the rotation's: it closes with the rotation, never on its own `Kit.Close`
+                val step = held.model.kit ?: return Answer.Done
+                Answer.KitOpened(held(kits, HeldFlow(step, held.connection)))
+            } ?: noFlow
+            is Call.KeyRotationRun -> keyRotations[call.flow]?.let { held ->
+                held.model.run()
+                // the account holds the new keys: the tenant open on it is opened anew (its keys were the old identity's)
+                if (held.model.current.done) {
+                    val open = tenant.value
+                    if (open != null && open.account.key == held.connection) return opened(session.switchTo(open.account, open.tenant)).also { managed(parts) }
+                }
+                Answer.Done
+            } ?: noFlow
+            is Call.KeyRotationClose -> keyRotations.remove(call.flow)?.close().done(Answer.Why.NO_SUCH_FLOW)
+            is Call.ErasureOpen -> {
+                val f = flows(call.connection) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+                val model = f.erasure()
+                val id = held(erasures, HeldFlow(model, call.connection))
+                scope.launch { model.load() }
+                Answer.FlowOpened(id)
+            }
+            is Call.ErasureChoose -> erasures[call.flow]?.model?.choose(call.tenantId, call.newOwner).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.ErasureRun -> erasures[call.flow]?.let { held ->
+                held.model.erase(call.password)
+                if (!held.model.current.erased) return Answer.Done
+                // the account is erased and forgotten by the device: it leaves the session as a sign-out does
+                val account = session.accounts.firstOrNull { it.key == held.connection } ?: return Answer.Done
+                val out = session.signOut(account)
+                if (out.wasCurrent) closeTenant()
+                opened(out.next).also { managed(parts) }
+            } ?: noFlow
+            is Call.ErasureClose -> erasures.remove(call.flow)?.close().done(Answer.Why.NO_SUCH_FLOW)
+            else -> Answer.Refused(Answer.Why.NOT_A_CALL)
         }
     }
 
@@ -1625,6 +1833,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /** What a scan's [ScanShown.found] says of what it settled on: a scheme as it is, a kit (where its server came from) as its scheme alone. */
     private fun foundAs(value: Any): String = when (value) {
         is me.raddatz.veyq.mobile.account.KitImport.ServerFrom -> "veyqkit"
+        is SafetyCode -> "veyqid"
         else -> value as String
     }
 
@@ -1880,6 +2089,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         dropBoxes.removeAll().forEach { it.page.close() }
         reports.removeAll()
         accountPages.removeAll().forEach { it.close() }
+        // the account's flows (ADR 0148 decision 11): every model dropped, its secrets zeroed, each watch delivering null
+        profiles.removeAll().forEach { it.close() }
+        kits.removeAll().forEach { it.close() }
+        passwordChanges.removeAll().forEach { it.close() }
+        addressChanges.removeAll().forEach { it.close() }
+        keyRotations.removeAll().forEach { it.close() }
+        erasures.removeAll().forEach { it.close() }
         // the trusted device's links are the tenant's; a new device's (opened before any tenant) stays
         links.keys().forEach { id -> if (links[id]?.trusted == true) links.remove(id)?.let(::closeLink) }
     }
@@ -1958,6 +2174,18 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Watched.Banner -> banners[w.banner]?.let { held ->
             combine(held.model.state, held.pick, held.open) { s, pick, open -> Update.Banner(w.banner, if (open) shownBanner(s, pick) else null) }
         } ?: flowOf(Update.Banner(w.banner, null))
+        is Watched.Profile -> profiles[w.profile]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.Profile(w.profile, s.takeIf { open }) } }
+            ?: flowOf(Update.Profile(w.profile, null))
+        is Watched.PasswordChange -> passwordChanges[w.flow]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.PasswordChange(w.flow, s.takeIf { open }) } }
+            ?: flowOf(Update.PasswordChange(w.flow, null))
+        is Watched.AddressChange -> addressChanges[w.flow]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.AddressChange(w.flow, s.takeIf { open }) } }
+            ?: flowOf(Update.AddressChange(w.flow, null))
+        is Watched.KeyRotation -> keyRotations[w.flow]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.KeyRotation(w.flow, s.takeIf { open }) } }
+            ?: flowOf(Update.KeyRotation(w.flow, null))
+        is Watched.Erasure -> erasures[w.flow]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.Erasure(w.flow, s.takeIf { open }) } }
+            ?: flowOf(Update.Erasure(w.flow, null))
+        is Watched.Kit -> kits[w.kit]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.Kit(w.kit, s.takeIf { open }) } }
+            ?: flowOf(Update.Kit(w.kit, null))
         is Watched.Person -> persons[w.person]?.let { held ->
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
             val section = held.memories?.state ?: flowOf(null)
@@ -2490,6 +2718,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             bannerPictures: me.raddatz.veyq.mobile.memories.banner.BannerWrite.Pictures = NoBannerPictures,
             /** A WebP as a PNG ([Call.PictureDecode]): the core's libwebp (`WebpPicture.png`). */
             webp: (ByteArray) -> ByteArray? = { null },
+            /** One's own picture cropped square by the host ([HostSquarePicture]). */
+            squarePicture: (path: String, pose: me.raddatz.veyq.mobile.session.CoverFrame.Pose, edge: Int) -> ByteArray? = { _, _, _ -> null },
+            /** One's own picture's WebP encoder: the core's libwebp (`LibwebpEncoder`); none on the JVM. */
+            profileEncoder: me.raddatz.veyq.mobile.media.WebpEncoder? = me.raddatz.veyq.mobile.media.coreWebpEncoder,
             /** The search's words in the host's language: the host's ([HostWords]). */
             words: me.raddatz.veyq.mobile.search.SearchWords = me.raddatz.veyq.mobile.search.SearchWords { it.key },
             now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
@@ -2518,8 +2750,19 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                         else -> null
                     }
                 },
+                accountFlows = { account, on ->
+                    AccountFlows(
+                        { account.passwordChange() }, { account.addressChange(on ?: account.defaultTenant) },
+                        { account.keyRotation() }, { account.erasure() },
+                    )
+                },
+                squarePicture = squarePicture,
+                readKey = { text -> me.raddatz.veyq.mobile.crypto.SecretKeyText.read(primitives, text) },
             ) { t ->
-                Tenant(ShellModel(t, hidden, recent, now), { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load, t.pictures.held.map { it.round })
+                Tenant(
+                    ShellModel(t, hidden, recent, now), { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load, t.pictures.held.map { it.round },
+                    ownProfile = { t.profile(profileEncoder) }, trust = t.personTrust,
+                )
             }
         }
 

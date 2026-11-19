@@ -46,7 +46,7 @@ import me.raddatz.veyq.mobile.words.MsgKey
  * encodes it to WebP through [WebpEncoder], stepping the quality down until it fits the pad's budget, pads it to
  * [PADDED_LEN] and seals it (`member-avatar`). The model's copy of the tenant key is zeroed at [close].
  */
-class ProfileModel internal constructor(
+class ProfileModel(
     private val door: Door,
     private val suite: V1,
     private val encoder: WebpEncoder?,
