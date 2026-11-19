@@ -140,9 +140,10 @@ internal class Composition<A : Connection, T : Any>(
     val webp: (ByteArray) -> ByteArray? = { null },
     /**
      * The account's flows over a signed-in account (ADR 0148 decision 11): the real account's in the library; a test plays
-     * its own, or has none (each `*.Open` of a flow is then refused for the connection).
+     * its own, or has none (each `*.Open` of a flow is then refused for the connection). [spaces] reads the open tenant's
+     * spaces (none where the connection's tenant is not open): the rotation names its status lines by them (inbox #979).
      */
-    val accountFlows: (account: A, tenant: TenantRef?) -> AccountFlows? = { _, _ -> null },
+    val accountFlows: (account: A, tenant: TenantRef?, spaces: suspend () -> List<me.raddatz.veyq.mobile.navigation.SpaceRef>) -> AccountFlows? = { _, _, _ -> null },
     /**
      * One's own profile picture cropped and drawn square by the host ([HostRequest.PictureSquare]): RGBA of `edge` × `edge`,
      * or null where the host could not; a test plays one, or has none.
@@ -320,7 +321,9 @@ internal class Tenant(
     /** One's own profile in this tenant (core's `ProfileModel`, `TenantSession.profile`); null for a test's tenant without one. */
     val ownProfile: (() -> me.raddatz.veyq.mobile.session.ProfileModel)? = null,
     /** The safety numbers of this tenant (core's `PersonTrust`, `TenantSession.personTrust`); null for a test's tenant without one. */
-    val trust: me.raddatz.veyq.mobile.session.PersonTrust? = null
+    val trust: me.raddatz.veyq.mobile.session.PersonTrust? = null,
+    /** The tenant's spaces as it opened them (`TenantSession.spaces`): the names a rotation's status lines are drawn by. */
+    val spaces: suspend () -> List<me.raddatz.veyq.mobile.navigation.SpaceRef> = { emptyList() },
 )
 
 /**
@@ -1567,8 +1570,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         val session = parts.session
         fun flows(connection: String): AccountFlows? {
             val account = session.accounts.firstOrNull { it.key == connection } ?: return null
-            val on = tenant.value?.takeIf { it.account.key == connection }?.tenant
-            return parts.accountFlows(account, on)
+            val open = tenant.value?.takeIf { it.account.key == connection }
+            return parts.accountFlows(account, open?.tenant, open?.models?.spaces ?: { emptyList() })
         }
         fun <M : Any> held(registry: Registry<HeldFlow<M>>, flow: HeldFlow<M>): Long = ids.incrementAndFetch().also { registry.put(it, flow) }
         return when (call) {
@@ -2750,10 +2753,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                         else -> null
                     }
                 },
-                accountFlows = { account, on ->
+                accountFlows = { account, on, spaces ->
                     AccountFlows(
                         { account.passwordChange() }, { account.addressChange(on ?: account.defaultTenant) },
-                        { account.keyRotation() }, { account.erasure() },
+                        { account.keyRotation(spaces = spaces) }, { account.erasure() },
                     )
                 },
                 squarePicture = squarePicture,
@@ -2761,7 +2764,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ) { t ->
                 Tenant(
                     ShellModel(t, hidden, recent, now), { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load, t.pictures.held.map { it.round },
-                    ownProfile = { t.profile(profileEncoder) }, trust = t.personTrust,
+                    ownProfile = { t.profile(profileEncoder) }, trust = t.personTrust, spaces = { t.spaces() },
                 )
             }
         }

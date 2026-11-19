@@ -561,7 +561,11 @@ class WireTest {
             Update.AddressChange(122, me.raddatz.veyq.mobile.session.AddressChange.State(sentTo = "neu@example.org")), Update.AddressChange(122, null),
             Update.KeyRotation(123, me.raddatz.veyq.mobile.session.rotation.KeyRotation.State(
                 me.raddatz.veyq.mobile.session.rotation.KeyRotation.Step.DONE, "http://veyq.localhost:8080", done = true,
-                scopes = listOf(me.raddatz.veyq.mobile.session.rotation.KeyRotation.ScopeStatus("s1", Msg.ROTATION_STATUS_BLOCKED, Msg.ROTATION_BLOCKED_SCOPE_DELETING)),
+                scopes = listOf(
+                    me.raddatz.veyq.mobile.session.rotation.KeyRotation.ScopeStatus("s1", Msg.ROTATION_STATUS_BLOCKED, Msg.ROTATION_BLOCKED_SCOPE_DELETING),
+                    me.raddatz.veyq.mobile.session.rotation.KeyRotation.ScopeStatus("s2", Msg.ROTATION_STATUS_SECURED, name = "Familie", nameWord = null),
+                    me.raddatz.veyq.mobile.session.rotation.KeyRotation.ScopeStatus("s3", Msg.ROTATION_STATUS_WAITING, nameWord = Msg.ROTATION_PERSONAL_SPACE),
+                ),
             )),
             Update.KeyRotation(123, null),
             Update.Erasure(124, me.raddatz.veyq.mobile.session.AccountErasure.State(

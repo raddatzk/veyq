@@ -96,4 +96,34 @@ class KeyRotationTest {
         assertTrue(engine.published.isEmpty())
         assertEquals(listOf(Msg.ROTATION_STATUS_SECURED), model.current.scopes.map { it.status })
     }
+
+    /**
+     * Inbox #979: each status line is named as the web's `scopeLabel` names it — a tenant root or an opened space by its
+     * name, a personal space as such, any other as "a space this device hasn't opened" —, and a names read that fails
+     * leaves every line named the last way, never refuses the result. Bitten by statuses that drop the names: red.
+     */
+    @Test
+    fun eachStatusLineIsNamedAsTheWebNamesIt() = runTest {
+        val names = KeyRotation.ScopeNames(personal = setOf("personal"), named = mapOf("tenant" to "Familie Raddatz", "group" to "Urlaub"))
+        val engine = object : KeyRotation.Engine by Played(ColdCredential.Refusal.STALE) {
+            override suspend fun resume(password: String, secretKey: ByteArray) = listOf("tenant", "group", "personal", "unseen")
+                .map { RotationScopeState(it, RotationScopeState.State.secured) }
+            override suspend fun names() = names
+        }
+        val model = KeyRotation(engine, p, "p@a.example", "http://a.example").also { it.open() }
+        model.prove("pw", p.randomBytes(32), "a much better password", "a much better password")
+        val lines = model.current.scopes.associateBy { it.scopeId }
+        assertEquals("Familie Raddatz" to null, lines.getValue("tenant").let { it.name to it.nameWord })
+        assertEquals("Urlaub" to null, lines.getValue("group").let { it.name to it.nameWord })
+        assertEquals(null to Msg.ROTATION_PERSONAL_SPACE, lines.getValue("personal").let { it.name to it.nameWord })
+        assertEquals(null to Msg.ROTATION_SCOPE_NAME_UNAVAILABLE, lines.getValue("unseen").let { it.name to it.nameWord })
+
+        val failing = object : KeyRotation.Engine by Played(ColdCredential.Refusal.STALE) {
+            override suspend fun names(): KeyRotation.ScopeNames = error("the plan did not read")
+        }
+        val unnamed = KeyRotation(failing, p, "p@a.example", "http://a.example").also { it.open() }
+        unnamed.prove("pw", p.randomBytes(32), "a much better password", "a much better password")
+        assertTrue(unnamed.current.done)
+        assertEquals(listOf(Msg.ROTATION_SCOPE_NAME_UNAVAILABLE), unnamed.current.scopes.map { it.nameWord })
+    }
 }

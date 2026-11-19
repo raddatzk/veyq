@@ -13,6 +13,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import me.raddatz.veyq.mobile.api.memories.models.OwnItemFavoritesEntry
+import me.raddatz.veyq.mobile.api.models.ScopeKind
 import me.raddatz.veyq.mobile.api.models.RotationScopeState
 import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.ItemMarks
@@ -203,11 +204,17 @@ class FinishRotationTest {
         assertFailsWith<Exception> { account.finishRotation() }
     }
 
+    /**
+     * The web's `retagItemMarksUnderNewMasterKey`: every own mark the server lists is re-tagged, whatever its scope — the
+     * personal space's here, which no plan was handed in for —; a co-member's set and a scope that does not open are left.
+     * Bitten by a re-tag filtered to the tenant scope (the old `scopeIds` filter): red.
+     */
     @Test
-    fun aMasterKeyRotationReTagsOnlyTheAccountsOwnMarksOfTheScopesNamed() = runTest {
+    fun aMasterKeyRotationReTagsEveryOwnMarkTheServerLists() = runTest {
         val server = PlayedRotation(p)
         val account = opened(server)
-        server.myScopes = listOf(server.tenantScope(account))
+        val personal = server.uuid()
+        server.myScopes = listOf(server.tenantScope(account), server.tenantScope(account, personal, ScopeKind.PERSONAL))
         val suite = server.suite
         val marks = ItemMarks(suite)
         val values = ValueKeys(suite)
@@ -222,25 +229,29 @@ class FinishRotationTest {
         }
         val mine = server.uuid()
         val notMine = server.uuid()
+        val inPersonal = server.uuid()
         server.ownMarks = listOf(
             row(server.tenantId, mine, marks.selfKey(oldMk)),
             // a co-member's set the listing slipped in: its tag does not verify under the old key, so it is not re-tagged
             row(server.tenantId, notMine, marks.selfKey(p.randomBytes(32))),
-            // a scope the rotation did not name
+            // one's own mark in another scope this device opens: re-tagged too
+            row(personal, inPersonal, marks.selfKey(oldMk)),
+            // a scope that does not open here: left
             row(server.uuid(), server.uuid(), marks.selfKey(oldMk)),
         )
 
-        realTime { me.raddatz.veyq.mobile.AppKinds.masterKeyRotated(account, oldMk, newMk, listOf(server.tenantId)) }
+        realTime { me.raddatz.veyq.mobile.AppKinds.masterKeyRotated(account, oldMk, newMk) }
 
-        val (scopeId, nodeId, put) = server.markPuts.single()
-        assertEquals(server.tenantId to mine, scopeId to nodeId)
-        assertEquals(3, put.epoch)
-        val ctx = Context("item-favorites", "scopeId" to scopeId, "nodeId" to nodeId)
-        val kv = values.unwrap(server.k3, 3, ctx, unb64(put.wrappedValueKey))
-        val (tag, opened) = assertNotNull(marks.decode(suite.open(ctx, kv, unb64(put.ciphertext))))
-        assertEquals(ids.sorted(), opened)
-        assertTrue(marks.selfTagVerifies(marks.selfKey(newMk), scopeId, nodeId, opened, tag))
-        assertFalse(marks.selfTagVerifies(marks.selfKey(oldMk), scopeId, nodeId, opened, tag))
+        assertEquals(setOf(server.tenantId to mine, personal to inPersonal), server.markPuts.map { it.first to it.second }.toSet())
+        for ((scopeId, nodeId, put) in server.markPuts) {
+            assertEquals(3, put.epoch)
+            val ctx = Context("item-favorites", "scopeId" to scopeId, "nodeId" to nodeId)
+            val kv = values.unwrap(server.k3, 3, ctx, unb64(put.wrappedValueKey))
+            val (tag, opened) = assertNotNull(marks.decode(suite.open(ctx, kv, unb64(put.ciphertext))))
+            assertEquals(ids.sorted(), opened)
+            assertTrue(marks.selfTagVerifies(marks.selfKey(newMk), scopeId, nodeId, opened, tag))
+            assertFalse(marks.selfTagVerifies(marks.selfKey(oldMk), scopeId, nodeId, opened, tag))
+        }
     }
 
     @Test

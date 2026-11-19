@@ -66,7 +66,11 @@ import me.raddatz.veyq.mobile.words.Msg
  *
  * Every secret — both Master Keys, both identities, both Secret Keys, every derived key — is zeroed in a `finally`.
  */
-internal class AccountRotation(private val account: VeyqAccount) : KeyRotation.Engine {
+internal class AccountRotation(
+    private val account: VeyqAccount,
+    /** The spaces the host has open, by their names (a group's name is known only where a tenant opened it). */
+    private val spaces: suspend () -> List<me.raddatz.veyq.mobile.navigation.SpaceRef> = { emptyList() },
+) : KeyRotation.Engine {
     private val p = account.primitives
     private val suite = account.suite
     private val proofs = AccountProofs(p)
@@ -102,6 +106,22 @@ internal class AccountRotation(private val account: VeyqAccount) : KeyRotation.E
         }
         account.swapKeys(floor.masterKey, identity, material)
         return runCatching { account.finishRotation() }.getOrElse { if (it is CancellationException) throw it else emptyList() }
+    }
+
+    /**
+     * The web's `scopeLabel` over what this device holds: a tenant root by its tenant's name (its scope id is the tenant
+     * id), a personal space by the plan's kind, a space the open tenant lists by its name. Read after the commit — the plan
+     * still lists every scope of the account; a read that fails names fewer.
+     */
+    override suspend fun names(): KeyRotation.ScopeNames {
+        val plan = runCatching { plan() }.getOrElse { if (it is CancellationException) throw it else emptyList() }
+        val open = runCatching { spaces() }.getOrElse { if (it is CancellationException) throw it else emptyList() }
+        val named = LinkedHashMap<String, String>()
+        for (s in open) if (s.kind != "PERSONAL" && s.name.isNotBlank()) named[s.scopeId] = s.name
+        for (t in account.tenants) named[t.tenantId] = t.name
+        val personal = plan.filter { it.kind == RotationPlanScope.Kind.PERSONAL }.map { it.scopeId }.toSet() +
+            open.filter { it.kind == "PERSONAL" }.map { it.scopeId }
+        return KeyRotation.ScopeNames(personal, named)
     }
 
     override suspend fun publish(password: String, secretKey: ByteArray, newSecretKey: ByteArray, newPassword: String?): KeyRotation.Published {
@@ -489,7 +509,7 @@ internal class AccountRotation(private val account: VeyqAccount) : KeyRotation.E
         account.swapKeys(newMk, identity, material)
         runCatching { oldMarks.carryInto(account.trustMarks, pinsRevision + 1, registerRevision + 1) }
         runCatching { resealFavorites(oldMk, newMk, scopeIds) }
-        runCatching { AppKinds.masterKeyRotated(account, oldMk, newMk, scopeIds) }
+        runCatching { AppKinds.masterKeyRotated(account, oldMk, newMk) }
         runCatching { resignVerifications(carried, trust.keyChainHead(step)) }
     }
 

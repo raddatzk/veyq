@@ -47,7 +47,7 @@ class LiveRotationTest {
             assertNotNull(session.personTrust.person(member.userId), "the member is not anchored")
             assertEquals(PersonTrust.Outcome.VERIFIED, session.personTrust.compareDigits(member.userId, true))
 
-            val rotation = owner.keyRotation()
+            val rotation = owner.keyRotation(open = null)
             rotation.open()
             assertEquals(KeyRotation.Step.GATE, rotation.current.step)
             rotation.setNewPassword(false)

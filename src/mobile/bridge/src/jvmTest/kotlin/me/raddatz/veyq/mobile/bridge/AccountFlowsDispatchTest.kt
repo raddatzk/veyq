@@ -141,7 +141,7 @@ class AccountFlowsDispatchTest {
         val hidden = Hidden({}, emptySet())
         Composition(
             SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles,
-            accountFlows = { _, _ ->
+            accountFlows = { _, _, _ ->
                 AccountFlows(
                     { PasswordChange(played, p) }, { AddressChange(played, p) },
                     { KeyRotation(engine, p, played.email, played.server) }, { AccountErasure(played, p) },
