@@ -40,6 +40,16 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/features/memories/media.buckets.test.ts, src/features/memories/components/MemoryBuckets.test.ts]
+  - id: your-own-root-is-yours
+    text: >-
+      The caller's own root is told apart by their own user id (`user:<self>`, the buckets door's `self()`): the virtual
+      "You" stands until THEIR primary exists, never replaced by another member's materialized primary; it counts and
+      shows only their own unbucketed media, and the picker opens on their own primary. Every root is offered only what
+      the server takes: a sub-bucket under a primary (another member's too), a sub-bucket renamed or deleted, a move
+      within the chosen root (inbox #1003, the web's twin of the core's #991).
+    coverage:
+      web:
+        unit: [src/features/memories/components/MemoryBuckets.test.ts]
   - id: members-named-by-the-display-rule
     text: >-
       A member's bucket is named by the one display rule (ADR 0083 decision 9), read from core's people directory: the

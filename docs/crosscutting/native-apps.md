@@ -591,7 +591,8 @@ iPad and a Mac (#995); **Windows' UIA pass** (#1000, once the VM resolves a thro
 #990, #991, #996, #997 and #1001 are in, checked by tests, not by a pass yet; #989's calendars are handed on every app,
 Apple's unclicked. A copy that a rotation interrupts fails (#988). The owner answered its four questions 2026-11-19 as built (ADR 0149's Consequences). Not built: import of an archive, for every
 kind (#985); a folder as a share target (#987); a guest's view of a received link
-(#435, a source for the same model); the web's own heart in its lightbox (#986) and its Contributions' "You" (#1003).
+(#435, a source for the same model). The web's own heart in its lightbox (#986) and its Contributions' "You" (#1003) are
+built (2026-11-19).
 A share into a Memory (built above): Apple's passes — the macOS drop, the iOS handoff, the iPad drop (#1005); Android's
 Pot share not clicked again since the inbox moved to sources (#1006); an iOS handoff for a space the app does not list
 (#1007); a drop's read grant over a long upload (#1008).

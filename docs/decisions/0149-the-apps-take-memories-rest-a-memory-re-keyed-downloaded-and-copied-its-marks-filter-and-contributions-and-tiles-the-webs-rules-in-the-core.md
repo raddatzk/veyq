@@ -80,7 +80,7 @@ the branch the refine read (each claim's command is in the refine's record of it
    so. In a personal scope there is no count. **Shown:** the tile carries a badge — the heart, filled when mine, with the
    count above zero — not a button: a phone's tile in the justified grid is one touch target (Material 3, HIG). The mark
    is toggled in the **lightbox's toolbar** on every platform and from a tile's menu where the platform has one (Apple's
-   context menu). This is `uc.memory.gallery` step 7 ("and in the lightbox"), which the web's lightbox lacks (#986).
+   context menu). This is `uc.memory.gallery` step 7 ("and in the lightbox"), which the web's lightbox lacked until #986 (2026-11-19).
    **Offline** the marks' listing is a kept read; nothing is marked offline.
 5. **The gallery's filter: the core's port over core's search chips.** `core/…/memories/GalleryFilter.kt` ports
    `galleryFilter.ts`: a day (the gallery's own chip), and year, place and kind through `search/Query.kt`'s
@@ -162,8 +162,8 @@ the branch the refine read (each claim's command is in the refine's record of it
   deleted, a medium moved within one root, never a primary renamed and never a move across roots (ADR 0034 point 6,
   [en.memory.buckets](../features/memory/enablers/en.memory.buckets.md) § Ownership). The Android pass found the core
   taking another member's primary for the caller's (inbox #991); the core now names "You" by the caller's own id and
-  offers only what the server takes (`Contributions.State`'s `createsSub`, `renames`, `moveTargets`). The web has the same
-  display mistake (#1003, open). *Decision 3's copy* writes at the epoch the new node was born at, so a rotation another
+  offers only what the server takes (`Contributions.State`'s `createsSub`, `renames`, `moveTargets`). The web had the same
+  display mistake (#1003), fixed 2026-11-19 by the same rule (the buckets door's `self()`). *Decision 3's copy* writes at the epoch the new node was born at, so a rotation another
   member makes mid-copy fails it and its node goes to the trash, where the web's copy pulls the node forward and re-sends
   (#988). *A bucket's lightbox* pages that bucket's media, not the gallery (#996). *Decision 5's
   places:* on Android the filter is the Photos view's own toolbar under the view switch (the shell's top bar is core's
