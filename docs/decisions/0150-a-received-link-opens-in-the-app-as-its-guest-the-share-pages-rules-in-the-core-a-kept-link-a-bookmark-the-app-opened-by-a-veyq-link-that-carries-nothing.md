@@ -1,7 +1,8 @@
 # ADR 0150 — A received link opens in the app as its guest — the share page's rules in the core, a kept link a bookmark, the app opened by a `veyq:` link that carries nothing
 - Status: Accepted
-- Built: partly — the core and the bridge (cr-app-received-links phases 1–6, 2026-11-19); the platforms' screens, their
-  credential stores and the passes follow in that CR; § O is cr-open-in-the-app's, not built
+- Built: decisions 1–9 yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android, Linux
+  and Windows as throwaways and by the core's live tests; the macOS pass is open and the iPhone's and iPad's are the
+  owner's (§ Consequences); § O is cr-open-in-the-app's, not built
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md) (the share page: [uc.sharing.share-public-viewer](../features/sharing/use-cases/uc.sharing.share-public-viewer.md))
 
@@ -10,8 +11,8 @@
 Inbox #435 and #438, V2 block H. A link someone sent opens only in a browser: the apps build links for others
 (`ShareLinks`, `/s/<shareId>#k=<K_share>`) but parse none, hold no guest session, and list a kept link — a
 `SHARE_BOOKMARK` node ([ADR 0120](0120-a-received-link-is-kept-as-a-bookmark-node-that-opens-and-reports-where-the-share-lives.md))
-— with an icon that opens nothing. Measured 2026-11-19 at the refine (each claim's command is in
-`changes/cr-app-received-links.md` § Measured at refine, kept here as the claim itself):
+— with an icon that opens nothing. Measured 2026-11-19 at the refine (each claim's command was in
+cr-app-received-links' § Measured at refine; the CR is deleted, the claim kept here):
 
 - **The web's share page** is `/s/:shareId` with no session gate; its key is read from the fragment and never sent —
   the resolve takes the id and `X-Share-Password` only. Its parts are `resolvePublicShare.ts` (resolve, key check, the
@@ -164,9 +165,94 @@ den du bekommen hast*, *Open in the browser* / *Im Browser öffnen*, *Keep* / *B
   search (by name), never in a link or a review.
 - ADR 0120's "the account-level list remains open as #435" is answered by decision 1; ADR 0149 decision 9's "the apps
   reach no link as a guest yet" by decisions 2 and 5.
-- **Built 2026-11-19 (cr-app-received-links phases 1–6):** the core's `sharing/` (the link, the instance, the gates, the
-  guest's tree and session port, the bookmark's meta, *Open a link*'s and *Keep*'s models), each kind's guest door, the
-  Pot onto a door, and the bridge's calls; the platforms and the passes follow in that CR.
+- **Built 2026-11-19 on every app** (cr-app-received-links): the core's `sharing/` (`ReceivedLink`, `ShareInstance`,
+  `ShareGates`, `GuestTree`, `GuestView`, `GuestAccess`, `GuestReport`, the `GuestSessions` port, `BookmarkMeta`,
+  `BookmarkCreate`, `BookmarkPage`, `OpenLink` and `GuestScreen`), each kind's guest door in its application's package
+  (core's `GuestLevel`, Depot's `DepotGuest`, Memories' `MemoriesGuest`, Expenses' `PotGuest` over the Pot's new
+  `PotDoor`), the bridge's `Received.*` and `Bookmark.*`, and each platform's screens: Android `GuestLinks.kt`,
+  `GuestScreens.kt`, `BookmarkScreen.kt`; Apple `GuestLinks.swift`, `BookmarkScreen.swift` (`PasteButton`); Linux
+  `received.rs`, `bookmark_page.rs`, `bookmark_create.rs`; Windows `ReceivedView.cs`, `BookmarkPage.cs`,
+  `BookmarkCreateDialog.cs`. The guest's session is in each platform's credential store under its hashed name
+  (`veyq-guest:<hash>`): Android's Keystore-sealed store; the Keychain on Apple (`KeychainGuestSessions` — where the
+  Keychain refuses, as an ad-hoc Mac or an unsigned simulator build's does, the session is kept in memory for the run);
+  a Secret Service item of the device keys' schema on Linux (`LinuxGuestSessions`, alias `guest/veyq-guest:<hash>`, no new
+  dependency); the Credential Locker on Windows (`WindowsGuestSessions`, WinRT's `PasswordVault` through C helpers, user
+  `veyq`). No permission, entitlement or dependency was added.
+- **The owner's answers** (2026-11-19): **no separate list** — a link kept privately is a bookmark in the personal space
+  (decision 1); **_Keep_ in the apps only** as a first step, the web share page's half staying inbox #1013 (decision 6);
+  **a share's root has a confirmed _Back_** that returns where the person was (decision 4); **_Open a link_ only on the
+  sign-in and unlock screens** — built first also in the drawer's foot (Android), the drawer and the Mac's File menu
+  (Apple) and the switcher's menu (Linux, Windows), and taken out of each the same day (decision 4). Two answers given
+  while this was built belong to the shell, not to this ADR, and are recorded where its rules live
+  ([src/mobile/CLAUDE.md](../../src/mobile/CLAUDE.md), the drawer and the switcher; [native-apps](../crosscutting/native-apps.md)
+  § Spaces and navigation): a drawer section with nothing in it is not shown, and every switcher row names its server
+  (and the account where two signed-in accounts list the same tenant).
+- **The two answers together** (read in the code, not measured): *Keep* is offered where a tenant is open
+  (`GuestScreen`'s `tenant`), and *Open a link* now only where none is — so a freshly received link reaches *Keep* only
+  when the sign-in screen is opened over an open tenant (adding an account); otherwise a person keeps it by *New →
+  Bookmark*, and *Keep* shows on a kept link's *Open on its own page*. Whether *Keep* wants a way in for a signed-in
+  person is the owner's, carried in inbox #1013.
+- **Where it was built otherwise than decided.** *Decision 7's names:* the bridge's calls are `Received.*`
+  (`Call.ReceivedOpen(text)` → `ReceivedOpened(id)` or `ReceivedProblem(why, browser)`), since `Link.*` is device
+  linking's. *Decision 6's opening:* a kept link is listed on its level as the web's *All* tab lists it and opened as
+  core's page (`Shell.bookmark`, `ShellModel.openBookmark`, a search's hit by `ShellModel.found`), its page left by the
+  core after its rename or trash (`ShellModel.afterRename`, `afterTrash`) — the Android pass found the shell listing and
+  opening none (#1032). *The guest's reports:* a viewing guest reports from the views as the web's dialog does (the root
+  whole at `&report` and *Report shared content*, a node whole or by name, a medium as an `ITEM`; `GuestReport.nodeSheet`),
+  the link itself only on an upload link (#1033); a kept link's report sheet offers its name alone (`ReportSheet.offersName`
+  false for a `nameOnly` sheet, #1036). *A READ_WRITE guest's level* adds a folder and files and reads the link anew after
+  (`GuestLevel.writes`, `GuestView.reload`), a guest's Memory plays its music (#1034); a READ_WRITE guest replaces a file
+  on the link's own queue, signed in or out (`GuestAccess.replace`, the bridge's `Received.Replace`), and a writing guest
+  of a Pot gets the web's guest Settings — its people added and renamed, nothing else (`PotView.settingsOffered`,
+  `metaShown`, #1035). *The guest-write record's notice* (ADR 0093 § 10) stands before every guest write on every app:
+  in a READ_WRITE guest's naming question and on a drop box's and an uploader's page, with the N the resolve served
+  (#1018).
+- **What the passes proved** (each as a throwaway owner and member, made and erased by the pass; the links minted by the
+  owner through the core or the bridge, not the web). *Android* (a throwaway API 36 emulator): signed out — a READ
+  Memory; a READ_WRITE folder (named, a file replaced); a password Pot (a wrong password refused, an entry added as the
+  named guest, its session surviving an app restart); a drop box's and a Memory's upload links (the record's notice
+  before the naming, "kept for 7 days", a file and a photo sent, the owner's read listing them as guests'); signed in as
+  the member — *Keep* (two bookmarks made) and *Back* with its question; a WRITE_ONLY link's report received; the app's
+  files (`run-as app.veyq`), logcat and `recent_tasks` held no key, share id or b64/hex canary, and the guest sessions sat
+  under `veyq-guest:<hash>`. *Linux* (Broadway, two passes): signed out — a password READ_WRITE Memory (a wrong password
+  asked again, the notice in the gallery and in the naming question, a photo added; *Back* asked, *Leave* to the
+  sign-in) and a Memory's uploader link; `secret-tool search` listing `guest/veyq-guest:<hash>` labelled "veyq guest
+  session", the guest still named after a restart; signed in — *Keep* into the tenant's space, *New → Bookmark*'s dialog
+  with its group-space line; a READ_WRITE folder (named, a folder and a file added, `seed.txt` replaced — the owner
+  listing all three; a row's report sheet), a READ_WRITE Pot (Entries, Overview, the name asked before *Add entry*), a
+  READ folder kept, its bookmark listed, opened in place, renamed, moved into a folder and deleted (the page left, Undo
+  offered); the app's stderr held none of the links' share ids or keys. *Windows* (the VM through UI Automation, a
+  throwaway with a member on the fixed tenant `tw-win.localhost`): signed out over the unlock — a non-link refused with
+  the core's words; the password gate (a wrong one asked again); a Memory's gallery with the notice, *Add photos* → the
+  naming question with the notice → a photo added; the guest still named after a restart and *Not you?* removing its
+  Credential Locker entry; *Back* asked (*Stay*, then *Leave* → the unlock); the uploader's and the drop box's pages; a
+  folder's level, a file's page and *Report shared content*'s sheet (not sent); a Pot (named on *Add entry*, an entry
+  saved as the guest); a READ_WRITE guest's file replaced signed out (revision 2); a guest Pot's Settings with its
+  currency and categories hidden; signed in — *Keep*, *New → Bookmark* (a bad link refused, a good one kept), the kept
+  link's page in place, *Open on its own page*, *Report shared content*, the header's report of its name, a bookmark
+  deleted from its header leaving its page. `%LOCALAPPDATA%\veyq`, `%TEMP%`, INetCache and Recent (two scans, 982 and 1137
+  files) held none of the links' keys (b64url, b64, hex), share ids or the password; the Credential Locker listed
+  `veyq-guest:<hash>` / `veyq` only. *The core's live tests* as throwaways: `ReceivedLinkLiveTest` (a READ_WRITE Memory
+  link with a password opened signed out — the instance, the password and the gates passed, the owner's photo read
+  through the link byte-equal, the guest named and its photo listed by the owner as a guest's, no request of the visit
+  holding `K_share` as b64url, b64 or hex; the link kept as a bookmark in the personal space and read back with its
+  password), `GuestGapsLiveTest` (#1032–#1034: a READ Memory link reported whole and a medium as an `ITEM`, both received;
+  a READ_WRITE folder's guest adding a folder and a file the owner lists; a bookmark listed on its level, found by search
+  and opened on its own page), `GuestRemainderLiveTest` (#1035: a guest's file replaced on the link's queue and read anew;
+  a Pot guest's Settings with its people alone; a kept link's page renamed and, trashed, left).
+- **What no pass has proved yet.** **macOS: no pass ran** — the agents' sessions have no full-screen control
+  (`src/mobile/CLAUDE.md` § Traps); the coordinator runs it from the main session (`PasteButton` on the sign-in, the
+  guest screen, the record's notice before a guest's write — Apple's part of #1018, built and never seen —, the Keychain
+  entry and *Not you?*, a bookmark in place). **The owner's:** an iPhone and an iPad — a link
+  from Messages pasted signed out, a bookmark opened in place, the Keychain entry surviving a restart (no simulator boots
+  here, #928). **On no platform:** a link of another instance (the second dev instance was not set up; a major the app
+  does not speak and an instance without public links are refused in the core's tests only,
+  `ShareGatesTest.anInstanceTheAppDoesNotSpeakOrThatServesNoLinksIsRefusedBeforeAnyResolve`,
+  `BookmarksTest.anInstanceTheAppDoesNotOpenOffersTheLinkToTheBrowser`); terms and a note on a live link (no throwaway's
+  link had them — their order is `ShareGatesTest`'s); a screen reader over the guest screens. *Android:* the fixes of
+  #1032–#1036 not re-passed (a bookmark in place and on its own page, its reports, a viewing guest's report). *Linux:* a
+  signed-out guest's Replace and a guest Pot's Settings (built after its passes). *Windows:* a guest file's Download, a
+  row's report through its context menu (UI Automation has no context-menu step).
 
 ## Alternatives considered
 
@@ -175,3 +261,8 @@ den du bekommen hast*, *Open in the browser* / *Im Browser öffnen*, *Keep* / *B
 - **The guest's session in `DeviceStore`** (as the web's `localStorage`) — a token that writes as the guest would sit in
   a plain file; decision 3.
 - **The key in the `veyq:` link** — § O1.
+
+Explained for users on the docs site: [Open a link in the app](../../site/src/content/docs/sharing/open-a-link-in-the-app.mdx)
+(the guest view, its gates, *Keep*, the record's notice), [Keep a link someone sent you](../../site/src/content/docs/sharing/keep-a-link.mdx)
+(a bookmark in the app), [What a guest sees](../../site/src/content/docs/sharing/what-guests-see.mdx); what the app holds,
+[Install the app](../../site/src/content/docs/getting-started/install-the-app.mdx).

@@ -2364,7 +2364,9 @@ records a measurement writes it where it binds (the ADR's Consequences, the doc 
 note says only that it did. The maps CR (ADR 0143) did it again: its phase 8 measured both desktops' dashed strokes
 into its phase note only, and the harvest moved them. The Memories-rest CR (ADR 0149) did it a third time: the Android
 and Linux passes' outputs went into inbox rows (#992, #998) and the phase notes, and the harvest moved them into the
-ADR's Consequences.
+ADR's Consequences. The received-links CR (ADR 0150) did it a fourth time — every platform's pass and the core's three
+live tests in phase notes only, its phase 11 ("results into ADR 0150's Consequences") left to the harvest — so the
+platform phases' done-when names the ADR's Consequences, not § Passes' row.
 
 ### A permission a refine plans is put through the packager's own linter at refine
 
@@ -2452,6 +2454,24 @@ layout, its sweep and sign-out clear, and which account and space pick it up. Th
 a space the app does not list waits unsaid until a sign-out, inbox #1007) was found by the implementation, not by a
 refine. Where an owner question's answer changes what a phase builds, the refine writes the shape of each answer it
 offers — at least its files on disk, who takes them and when they go — so the answer chosen arrives already refined.
+
+### An owner's answer that moves an entry point re-reads what is reached only through it
+
+The received-links CR (ADR 0150) had two owner answers of one day: *Keep* is offered to a signed-in person (decision 6),
+and *Open a link* sits on the sign-in and unlock screens only (decision 4), taken out of the shell's menus after the
+owner saw it there. Each was built and passed alone; together, a freshly received link reaches *Keep* only when the
+sign-in is opened over an open tenant — found by the harvest reading `GuestScreen`'s callers, not by a pass (inbox
+#1013). An answer that removes or moves an entry point lists every function whose only way in it was, and asks the owner
+about each before the platforms build it.
+
+### A core page is opened by the shell in the phase that builds it
+
+The same CR's phase 5 built a kept link's page (`BookmarkPage`) and a viewing guest's reports in the core, each with its
+tests, and the shell listed no `SHARE_BOOKMARK` and opened none; the Android pass found three such gaps at once (#1032–#1034:
+the bookmark never listed, a viewing link's report missing, a READ_WRITE guest's level unable to write), and a branch of
+its own closed them before the other platforms could pass. A core phase that adds a page, a sheet or an action names in
+its done-when the shell model or the menu that reaches it (`ShellModel.openBookmark`, `Home.level`), with a test that
+reaches it from there, not only the model's own test.
 
 ### A refactor that moves an existing flow re-runs that flow's pass
 

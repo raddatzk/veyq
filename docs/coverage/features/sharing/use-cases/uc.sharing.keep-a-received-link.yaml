@@ -1,6 +1,12 @@
 useCase: uc.sharing.keep-a-received-link
 feature: sharing
 title: Keep a link someone sent as a bookmark in a space
+# The apps (ADR 0150 decision 6, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named
+# here, not cited — core `BookmarksTest` (a meta the web sealed opens, the core's padded to 512 and as the schema allows,
+# the dialog's checks, Report name sends the name only, Keep only for a signed-in person), `ShellModelTest` (a kept
+# link's report sheet offers its name alone; its page after rename and trash); live as throwaways
+# `ReceivedLinkLiveTest` (kept in the personal space, read back with its password), `GuestGapsLiveTest` (listed on its
+# level, found by search, opened on its own page), `GuestRemainderLiveTest` (renamed, trashed).
 acceptanceCriteria:
   - id: placed-at-a-folder-level
     text: A member places a SHARE_BOOKMARK at a space's top level or directly in a folder and nowhere else; nothing is placed inside one, it roots no link of any role, and no guest creates one.

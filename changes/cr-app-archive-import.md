@@ -38,7 +38,7 @@ folders, Depot's files and drop boxes, Expenses' Pots, Memories' Memories and ch
   this Mac (#928)**; the macOS app runs here when the screen is unlocked (else named open).
 - **Order:** after #987 (done 2026-11-19), whose share into a folder and drop onto a level on Android and Apple are two
   of this CR's entries (core's `navigation/AddHere`: `Level.take` and `Level.drop`; iOS's handoff of kind `FOLDER`,
-  queued by `AppModel.pickUpHandoffs`). Block H's [cr-app-received-links](cr-app-received-links.md) edits `AppKinds.kt` in parallel: re-read it
+  queued by `AppModel.pickUpHandoffs`). Block H's cr-app-received-links (done 2026-11-19, ADR 0150) edited `AppKinds.kt` in parallel: re-read it
   before editing.
 - **Out of scope:** a guest's import (never, ADR 0082 decision 7); an import that goes on with the app closed (Q1);
   the web's own import, unchanged but for phase 2's test reading the shared cases.
