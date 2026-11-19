@@ -497,7 +497,7 @@ implementation exists but what holds it to the first.
     opened from a phone, the Undo's race, and Android's pager crashing when a trash shrank its rows (its key and page now
     guard a gone index).
   Not built yet: item marks, buckets, the re-key, export and copy (inbox #891–#893, decided by
-  [ADR 0149](0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), its re-key built, its download and copy next); the participants, a capture-time
+  [ADR 0149](0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), its re-key, download and copy built); the participants, a capture-time
   correction and the banner since built by
   [ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md),
   music by

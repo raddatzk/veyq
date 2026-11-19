@@ -243,13 +243,21 @@ object MediaUpload {
             },
             wrappedMeta = wrappedMeta, wrappedExif = wrappedExif,
         )
+        complete(tenant, scopeId, item, shared?.blobId ?: sent[0].second.blobId)
+        return Result(Outcome.DONE, mediaId)
+    }
+
+    /**
+     * One medium attached by its `media-batch` completion ([item], its original [blobId]); throws [ApplicationBlobs.UploadRefused]
+     * with a refusal's code, and where the server echoes other ids than it was sent (an id substituted under the seals).
+     * An upload's and a copy's (`MemoryCopy`).
+     */
+    internal suspend fun complete(tenant: TenantSession, scopeId: String, item: MediaRequestItem, blobId: String) {
         val r = tenant.account.respond { MediaApi(tenant.base, tenant.account.http).completeMedia(scopeId, MediaBatchRequest(listOf(item))) }
         if (!r.success) throw ApplicationBlobs.UploadRefused(codeOf(runCatching { r.response.bodyAsText() }.getOrDefault("")) ?: "complete ${r.status}")
         val res = r.body().results.singleOrNull() ?: throw ApplicationBlobs.UploadRefused("complete_mismatch")
         res.error?.let { throw ApplicationBlobs.UploadRefused(it) }
-        // the server echoes the ids it stored: anything else is an id substituted under the seals
-        if (res.mediaId != mediaId || res.blobId != (shared?.blobId ?: sent[0].second.blobId)) throw ApplicationBlobs.UploadRefused("id_substituted")
-        return Result(Outcome.DONE, mediaId)
+        if (res.mediaId != item.mediaId || res.blobId != blobId) throw ApplicationBlobs.UploadRefused("id_substituted")
     }
 
     /**

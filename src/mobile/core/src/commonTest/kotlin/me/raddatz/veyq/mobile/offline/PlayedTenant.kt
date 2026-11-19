@@ -130,19 +130,26 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
             suite.sealTo(Context("upload-identity-key", "scopeId" to scope.id, "nodeId" to parent!!.id, "identityId" to identityId), suite.dropKeyPublic(wrapSeed ?: parent.dropSeed!!), kUp)
         }
     }
-    inner class Blob(val label: String, val plain: List<ByteArray>, private val role: String, private val ownerId: String, private val nodeKey: () -> ByteArray, private val scopeId: String, type: String?) {
+    inner class Blob(
+        val label: String, val plain: List<ByteArray>, private val role: String, private val ownerId: String, private val nodeKey: () -> ByteArray,
+        private val scopeId: String, type: String?, fileName: String? = null, modifiedAt: Long? = null,
+    ) {
         val id = id(label)
         val key: ByteArray = p.randomBytes(32)
         val frames: List<ByteArray> = plain.mapIndexed { i, f -> suite.sealFrame(key, i, plain.size, f) }
         /** `K_blob` under its node's key as it is now: a re-key re-wraps it, the blob and its frames stay (R5). */
         val wrapped: ByteArray get() = suite.seal(Context("blob-key", "scopeId" to scopeId, "ownerId" to ownerId, "blobId" to id, "role" to role), nodeKey(), key)
-        val meta: ByteArray? = type?.let { BlobMeta.seal(suite, key, it, "$id.bin", null) }
+        val meta: ByteArray? = type?.let { BlobMeta.seal(suite, key, it, fileName ?: "$id.bin", modifiedAt) }
         val byteSize: Long get() = frames.sumOf { it.size.toLong() }
     }
     inner class Medium(val node: Node, val label: String, val original: Blob, val thumbnail: Blob?, val preview: Blob? = null) {
         val id = id(label)
         var trashed = false
         var blocked = false
+        /** Its listed tier as the web seals it (`media-meta`, a JSON text), under its node's key; null: none sealed. */
+        var tier: String? = null
+        /** Who added it (`user:<id>`, `share:<identityId>`); null: not listed. */
+        var owner: String? = null
     }
 
     val tenants = mutableListOf(Tenant("t1", "a.example"))
@@ -167,9 +174,12 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
      * A medium of [node] whose original is [frames] frames, whose thumbnail (where [thumbnail]) one and whose preview (where
      * [preview]) [preview] frames, each with a marker.
      */
-    fun medium(node: Node, name: String, frames: Int = 1, video: Boolean = false, thumbnail: Boolean = true, preview: Int = 0): Medium {
+    fun medium(
+        node: Node, name: String, frames: Int = 1, video: Boolean = false, thumbnail: Boolean = true, preview: Int = 0,
+        fileName: String? = null, modifiedAt: Long? = null,
+    ): Medium {
         val mediaId = id(name)
-        val original = Blob("$name-o", (0 until frames).map { "original $name frame $it".encodeToByteArray() }, "ORIGINAL", mediaId, { node.key }, node.scope.id, if (video) "video/mp4" else "image/jpeg")
+        val original = Blob("$name-o", (0 until frames).map { "original $name frame $it".encodeToByteArray() }, "ORIGINAL", mediaId, { node.key }, node.scope.id, if (video) "video/mp4" else "image/jpeg", fileName, modifiedAt)
         val thumb = if (thumbnail) Blob("$name-t", listOf("thumbnail $name".encodeToByteArray()), "THUMBNAIL", mediaId, { node.key }, node.scope.id, null) else null
         blobs[original.id] = original
         val prev = if (preview > 0) Blob("$name-p", (0 until preview).map { "preview $name frame $it".encodeToByteArray() }, "PREVIEW", mediaId, { node.key }, node.scope.id, null) else null
@@ -302,7 +312,13 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
 
     private fun blobRef(b: Blob) = """"blobId":"${b.id}","chunkCount":${b.frames.size},"byteSize":${b.byteSize},"wrappedBlobKey":"${b64(b.wrapped)}"${b.meta?.let { ",\"wrappedBlobMeta\":\"${b64(it)}\"" } ?: ""}"""
 
-    private fun mediumJson(m: Medium) = """{"blockedByOperator":${m.blocked},"mediaId":"${m.id}",${blobRef(m.original)},"updatedAt":"2026-01-01T00:00:00.000Z","derivatives":[${listOfNotNull(m.thumbnail?.let { """{"kind":"THUMBNAIL",${blobRef(it)}}""" }, m.preview?.let { """{"kind":"PREVIEW",${blobRef(it)}}""" }).joinToString(",")}]}"""
+    private fun mediumJson(m: Medium) = """{"blockedByOperator":${m.blocked},"mediaId":"${m.id}",${blobRef(m.original)},${listedOf(m)}"updatedAt":"2026-01-01T00:00:00.000Z","derivatives":[${listOfNotNull(m.thumbnail?.let { """{"kind":"THUMBNAIL",${blobRef(it)}}""" }, m.preview?.let { """{"kind":"PREVIEW",${blobRef(it)}}""" }).joinToString(",")}]}"""
+
+    /** A medium's listed tier and owner as `listNodeMedia` serves them (each with its trailing comma), or nothing. */
+    private fun listedOf(m: Medium): String = buildString {
+        m.tier?.let { append(""""wrappedMeta":"${b64(suite.sealField(Context("media-meta", "scopeId" to m.node.scope.id, "mediaId" to m.id), m.node.key, it.encodeToByteArray()))}",""") }
+        m.owner?.let { append(""""ownerKey":"$it",""") }
+    }
 
     private suspend fun MockRequestHandleScope.answer(r: HttpRequestData): HttpResponseData {
         val path = r.url.encodedPath

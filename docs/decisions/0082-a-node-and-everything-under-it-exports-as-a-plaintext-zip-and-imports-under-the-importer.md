@@ -212,7 +212,7 @@ shows it:
   schemas under `contracts/export/` are the one contract artefact: core's envelope and each application's content
   schema beside it, so a new application adds its own file and core's is not touched.
 - **The apps write the same archive and copy the same way** (ADR 0136's core for every kind it exports): a Memory's and a
-  chapter's content and copy as the web's are [ADR 0149](0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decision 3 (not built);
+  chapter's content and copy as the web's are [ADR 0149](0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decision 3;
   the apps import nothing yet (inbox #985).
 - **The format is a public promise.** `version` bumps only for a change an old reader would misread; kinds version their
   own `content.schema`, named per application in `applications`. A reader that tolerates additions keeps old files

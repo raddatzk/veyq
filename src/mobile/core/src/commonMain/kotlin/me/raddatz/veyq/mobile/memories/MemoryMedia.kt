@@ -82,6 +82,8 @@ object MemoryMedia {
          * banner's picture (ADR 0144 decision 5) — sealed under the blob's own key, so only a holder of it reads it.
          */
         internal val sha256: String? = null,
+        /** Its original's modified time as its sealed `blob-meta` names it (a download's payload time where no capture time is). */
+        internal val modifiedAt: Long? = null,
     ) {
         val isVideo: Boolean get() = type?.startsWith("video/") == true
 
@@ -166,7 +168,7 @@ object MemoryMedia {
             Item(
                 scopeId, nodeId, row.mediaId, original, tier(MediaDerivativeKind.THUMBNAIL), tier(MediaDerivativeKind.PREVIEW),
                 openMeta(suite, scopeId, row.mediaId, key, row.wrappedMeta), opened?.type?.takeIf { it.isNotBlank() }, opened?.name,
-                row.ownerKey, row.blockedByOperator, key, row.metaRevision ?: 0, row.wrappedMeta, opened?.sha256,
+                row.ownerKey, row.blockedByOperator, key, row.metaRevision ?: 0, row.wrappedMeta, opened?.sha256, opened?.modifiedAt,
             )
         }
         return Gallery(order(items), mediaRevision, deleteRevision, read.offline)

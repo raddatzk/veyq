@@ -105,7 +105,8 @@ object NodeCover {
         put("crop", cropJson(crop))
     }
 
-    private fun cropJson(c: Crop) = buildJsonObject {
+    /** A crop as the meta writes it (the web's key order and number form). */
+    internal fun cropJson(c: Crop) = buildJsonObject {
         fun n(v: Double): JsonPrimitive = if (v == kotlin.math.floor(v) && kotlin.math.abs(v) < 1e15) JsonPrimitive(v.toLong()) else JsonPrimitive(v)
         put("x", n(c.x)); put("y", n(c.y)); put("width", n(c.width)); put("height", n(c.height))
     }

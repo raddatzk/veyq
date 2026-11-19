@@ -278,7 +278,7 @@ Each phase ends with every platform building.
   banner's wraps not moved → the fixture's banner read red; (b) a trashed medium skipped → the trashed case red; (c) a
   primary bucket re-sealed → the primary case red; (d) the meta sealed before the kind runs → the banner case red.
 
-- [ ] **4 core: download and copy** — D3, D7. Tests: `exportImport.test.ts`'s download and copy cases twinned; a folder's
+- [x] **4 core: download and copy** — D3, D7. Tests: `exportImport.test.ts`'s download and copy cases twinned; a folder's
   download with a Memory no longer leaving it out; a copy's tier count and upload count (no decode: the reader is
   asked by frame only); a guest's download without names; the fixture written and the web's new import case green
   (`pnpm run check` in `src/web/`). Live: download a Memory with a video and a banner, import it on the web (the

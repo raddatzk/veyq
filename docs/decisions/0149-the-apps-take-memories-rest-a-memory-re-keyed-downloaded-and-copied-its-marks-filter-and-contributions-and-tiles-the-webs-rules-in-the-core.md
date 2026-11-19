@@ -1,6 +1,6 @@
 # ADR 0149 — The apps take Memories' rest: a Memory re-keyed, downloaded and copied as the web's, its marks, filter and contributions, and every level drawn as tiles — the web's rules in the core
 - Status: Accepted
-- Built: partly (not built: decisions 3–11)
+- Built: partly (not built: decisions 4–6, 8–11)
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md) (the rights: [Memories](../apps/memories.md))
 

@@ -671,3 +671,66 @@ describe('the banner travels with its Memory', () => {
     expect(writeMemoryBanner).not.toHaveBeenCalled()
   })
 })
+
+// The app's download read by the web (ADR 0149 decision 7): the core writes `fixtures/app-memory-download.zip`
+// (`MemoryDownloadFixtureTest`, its bytes pinned there) and the web imports it through its own `openExport` and
+// `importSubtree` - the ZIP's CRCs and the manifest's SHA-256s checked, the content validated, every hook the registry's.
+// A core export the web cannot read is red here.
+describe("the app's download imports on the web", () => {
+  const ref = (blobId: string) => ({ blobId, chunkCount: 1, byteSize: 100, wrappedBlobKey: 'k' })
+  const CHAPTER_NODE = '77777777-7777-4777-8777-777777777777'
+
+  beforeEach(() => {
+    const keys = [v1.randomBytes(32), v1.randomBytes(32)]
+    vi.mocked(createContentNode)
+      .mockResolvedValueOnce({ nodeId: NEW, contentKey: keys[0], epoch: 0, scopeEpoch: 0 })
+      .mockResolvedValueOnce({ nodeId: CHAPTER_NODE, contentKey: keys[1], epoch: 0, scopeEpoch: 0 })
+    let n = 0
+    vi.mocked(addMedia).mockImplementation(async () => ({ blobId: 'b', mediaId: `m${++n}` }))
+    vi.mocked(prepareMedia).mockImplementation(async (source) => ({ source, sha256: 'd', tiers: [], meta: { dims: null } }) as unknown as PreparedMedia)
+    vi.mocked(fetchTreeRows).mockResolvedValue([{ id: NEW, wrappedMeta: null, metaRevision: 0, epoch: 0, scopeEpoch: 0 } as unknown as Awaited<ReturnType<typeof fetchTreeRows>>[number]])
+    vi.mocked(uploadBanner).mockResolvedValue({ medium: 'image', uploadId: 'bu', posterUploadId: null, blob: ref('nb'), poster: undefined, type: undefined, sha256: undefined } as unknown as Awaited<ReturnType<typeof uploadBanner>>)
+  })
+
+  it('creates the Memory and its chapter with their facts, adds every original with its own, restores the cover and the banner', async () => {
+    // a node-environment file has no registry (`test/setup.ts`): Memories' two kinds go in with their real import hooks
+    const { registry } = await import('../../core/applications/registry')
+    const { testKind } = await import('../../test/testApplication')
+    if (!registry.kind(MEMORY_KIND).supported) {
+      for (const kind of [MEMORY_KIND, CHAPTER_KIND]) {
+        testKind(registry, {
+          kind, icon: 'images', importContent: importMemoryContent(kind), rekeyContent: async () => {}, validateContent: validateMemoryContent,
+          contentSchema: { application: 'memories', version: 1 },
+        } as unknown as Parameters<typeof testKind>[1], 'memories')
+      }
+    }
+    const { openExport, importSubtree } = await import('../../core/export/importSubtree')
+    const bytes = readFileSync(new URL('./fixtures/app-memory-download.zip', import.meta.url))
+    const opened = await openExport({ kind: 'zip', file: new File([bytes], 'app-memory-download.zip', { type: 'application/zip' }) })
+    const result = await importSubtree({ opened, scopeId: SCOPE, epochs: {} as ScopeKey, tree: [], parent: null })
+    expect(result.nodeId).toBe(NEW)
+    expect(result.skipped).toEqual([])
+
+    const creates = vi.mocked(createContentNode).mock.calls
+    expect(creates.map((c) => [c[3], c[4]])).toEqual([[MEMORY_KIND, 'Lisbon'], [CHAPTER_KIND, 'Day one']])
+    const memoryKey = (await vi.mocked(createContentNode).mock.results[0].value).contentKey as Uint8Array
+    const raw = unsealNodeMeta(memoryKey, { scopeId: SCOPE, nodeId: NEW }, creates[0][5]!(memoryKey, { scopeId: SCOPE, nodeId: NEW, scopeEpoch: 0, placementRevision: 0 }))
+    expect(raw.date).toEqual({ mode: 'range', from: '2025-09-12', to: '2025-09-14' })
+    expect(raw.location).toMatchObject({ name: 'Lisboa', nameSource: 'manual' })
+
+    const added = vi.mocked(addMedia).mock.calls.map((c) => ({ name: c[3].name, type: c[3].mediaType, at: c[3].lastModified, restored: c[5]?.restored }))
+    expect(added).toEqual([
+      { name: 'IMG_0001.jpg', type: 'image/jpeg', at: 1_757_670_000_000, restored: { capturedAtOverride: Date.parse('2025-09-12T09:40:00.000Z'), placeName: 'Alfama' } },
+      { name: 'IMG_0002.jpg', type: 'image/jpeg', at: 1_600_000_100_000, restored: {} },
+      { name: 'IMG_0003.jpg', type: 'image/jpeg', at: 1_757_600_000_000, restored: {} },
+    ])
+    expect(vi.mocked(addMedia).mock.calls[2][1], "the chapter's photo lands in the chapter").toBe(CHAPTER_NODE)
+
+    expect(vi.mocked(uploadCoverImage)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(writeNodeCover)).toHaveBeenCalledWith(expect.objectContaining({ nodeId: NEW }))
+    expect(vi.mocked(uploadBanner).mock.calls[0][3]).toMatchObject({ medium: 'image', image: { upload: expect.any(File) } })
+    expect(vi.mocked(writeMemoryBanner)).toHaveBeenCalledWith(expect.objectContaining({
+      nodeId: NEW, banner: expect.objectContaining({ medium: 'image', blob: ref('nb'), frame: 'fit', focal: { x: 0.5, y: 0.5 } }),
+    }))
+  })
+})

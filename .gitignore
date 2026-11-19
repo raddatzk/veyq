@@ -129,6 +129,8 @@ fabric.properties
 *.nar
 *.ear
 *.zip
+# the app's download the web's import test reads (ADR 0149 decision 7): a fixture, committed
+!src/web/src/features/memories/fixtures/app-memory-download.zip
 *.tar.gz
 *.rar
 

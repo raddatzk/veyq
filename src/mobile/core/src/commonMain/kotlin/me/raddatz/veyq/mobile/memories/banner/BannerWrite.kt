@@ -144,9 +144,10 @@ object BannerWrite {
         val uploadId: String?, val posterUploadId: String?,
         val shared: SharedBlob.Request?, val posterShared: SharedBlob.Request?,
         val blob: Banner.Ref, val poster: Banner.Ref?, val type: String?, val sha256: String,
+        val frame: Banner.Frame = Banner.Frame.FIT, val focal: Banner.Focal = Banner.CENTRE,
     ) {
-        /** The `banner` value naming these slots: the whole picture, the file's digest (decision 5). */
-        val banner: JsonObject get() = Banner.sealed(medium, blob, poster, type, sha256)
+        /** The `banner` value naming these slots: the whole picture (or a copy's framing), the file's digest (decision 5). */
+        val banner: JsonObject get() = Banner.sealed(medium, blob, poster, type, sha256, frame, focal)
     }
 
     /**
@@ -157,6 +158,7 @@ object BannerWrite {
      */
     internal suspend fun upload(
         suite: V1, scopeId: String, nodeId: String, nodeKey: ByteArray, prepared: Prepared, newId: () -> String,
+        frame: Banner.Frame = Banner.Frame.FIT, focal: Banner.Focal = Banner.CENTRE,
         pump: suspend (List<ApplicationBlobs.Outgoing>) -> List<Pair<String, ApplicationBlobs.Plan>>,
     ): Uploaded {
         fun share(p: Part.Share, role: String, meta: SharedBlob.Meta) = SharedBlob.share(suite, scopeId, p.stored, nodeKey, nodeId, role, newId(), meta)
@@ -178,7 +180,7 @@ object BannerWrite {
         val posterRef = posterShared?.let(::ref) ?: posterUp?.second?.let(::ref)
         return Uploaded(
             prepared.medium, mainUp?.first, posterUp?.first, mainShared?.request, posterShared?.request,
-            blob, posterRef, prepared.type, prepared.sha256,
+            blob, posterRef, prepared.type, prepared.sha256, frame, focal,
         )
     }
 
@@ -287,6 +289,22 @@ object BannerWrite {
                 upload(tenant.account.suite, scopeId, node.id, node.key, prepared, { NodeCreate.uuid(tenant.account) }) { outgoing ->
                     ApplicationBlobs(tenant).reserveAndPumpAll(scopeId, node.id, node.key, outgoing) { progress(it / total) }
                 }
+            }
+        }
+    }
+
+    /**
+     * A copied Memory's banner (`MemoryCopy`, ADR 0149 decision 3): [prepared]'s parts — the original's files read by frame —
+     * uploaded as they are into the new node [nodeId]'s slots with the original's [frame] and [focal], and written over its
+     * meta, which names no banner yet.
+     */
+    @Throws(Exception::class)
+    suspend fun copy(
+        tenant: TenantSession, scopeId: String, nodeId: String, prepared: Prepared, frame: Banner.Frame, focal: Banner.Focal,
+    ): Outcome = onServer(tenant, scopeId, nodeId) { node ->
+        write(tenant, node, Banner.Slots.NONE) {
+            upload(tenant.account.suite, scopeId, node.id, node.key, prepared, { NodeCreate.uuid(tenant.account) }, frame, focal) { outgoing ->
+                ApplicationBlobs(tenant).reserveAndPumpAll(scopeId, node.id, node.key, outgoing)
             }
         }
     }

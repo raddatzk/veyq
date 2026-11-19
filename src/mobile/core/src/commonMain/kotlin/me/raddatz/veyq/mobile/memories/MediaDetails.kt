@@ -105,6 +105,21 @@ object MediaDetails {
         return openExif(tenant.account.suite, item.scopeId, item.mediaId, item.key, wrapped)
     }
 
+    /**
+     * [item]'s EXIF tier as it was sealed (a download's and a copy's copy of it, `MemoryExport`, `MemoryCopy`), or null
+     * where none was sealed; a read that fails throws, a tier that does not open or parse is null.
+     */
+    @Throws(Exception::class)
+    internal suspend fun rawExif(tenant: TenantSession, item: MemoryMedia.Item): JsonObject? {
+        val api = MediaApi(tenant.base, tenant.account.http)
+        val wrapped = tenant.account.call { api.getMediaExif(item.scopeId, item.mediaId) }.wrappedExif ?: return null
+        return runCatching {
+            json.parseToJsonElement(
+                tenant.account.suite.openField(Context("media-exif", "scopeId" to item.scopeId, "mediaId" to item.mediaId), item.key, unb64(wrapped)).decodeToString(),
+            ) as JsonObject
+        }.getOrNull()
+    }
+
     internal fun openExif(suite: me.raddatz.veyq.mobile.crypto.V1, scopeId: String, mediaId: String, key: ByteArray, wrapped: String): Exif? = runCatching {
         val text = suite.openField(Context("media-exif", "scopeId" to scopeId, "mediaId" to mediaId), key, unb64(wrapped)).decodeToString()
         exifOf(json.parseToJsonElement(text) as JsonObject)

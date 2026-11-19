@@ -153,7 +153,7 @@ class BannerWriteTest {
     @Test
     fun aVideoGoesInOneStartThePosterFirstEachInItsRoleTheVideosTypeAndDigestItsOwn() = runTest {
         val pump = Pump()
-        val u = BannerWrite.upload(suite, m.scopeId, m.nodeId, m.key, BannerWrite.prepare(picked(5000, "video/mp4"), digest, emptyList()), newId, pump::pump)
+        val u = BannerWrite.upload(suite, m.scopeId, m.nodeId, m.key, BannerWrite.prepare(picked(5000, "video/mp4"), digest, emptyList()), newId, pump = pump::pump)
         val start = pump.starts.single()
         assertEquals(listOf(Banner.POSTER_ROLE, Banner.ROLE), start.map { it.role })
         assertEquals(listOf(BannerWrite.JPEG, "video/mp4"), start.map { it.type })
@@ -182,7 +182,7 @@ class BannerWriteTest {
             null, "video/mp4", "eq.mp4", "user:u1", false, m.key, sha256 = digest,
         )
         val pump = Pump()
-        val u = BannerWrite.upload(suite, m.scopeId, m.nodeId, m.key, BannerWrite.prepare(picked(5000, "video/mp4"), digest, listOf(eq)), newId, pump::pump)
+        val u = BannerWrite.upload(suite, m.scopeId, m.nodeId, m.key, BannerWrite.prepare(picked(5000, "video/mp4"), digest, listOf(eq)), newId, pump = pump::pump)
         assertEquals(0, pump.starts.size, "nothing uploaded")
         assertNull(u.uploadId)
         assertEquals(o, u.shared?.sourceBlobId)

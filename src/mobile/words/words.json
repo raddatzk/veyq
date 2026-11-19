@@ -2658,6 +2658,10 @@
     "en": "A drop box becomes an ordinary folder, its people’s folders ordinary folders: no links, nobody can drop files into it, no cover.",
     "de": "Ein Briefkasten wird ein gewöhnlicher Ordner, die Ordner der Personen darin gewöhnliche Ordner: keine Links, niemand kann mehr einwerfen, kein Titelbild."
   },
+  "copy_loss_memory": {
+    "en": "Who was there, and who added each photo.",
+    "de": "Wer dabei war und wer welches Foto hinzugefügt hat."
+  },
   "copy_loss_folder_cover": {
     "en": "A folder’s cover.",
     "de": "Das Titelbild eines Ordners."

@@ -71,18 +71,20 @@ object AppKinds {
     /**
      * How the build's kinds export into a download (the web's `exportContent` hooks, `NodeExport.walk`): a Pot its ledger and
      * receipts (`PotExport`, its erased people named [deletedName]), a Depot file its content streamed and a drop box a
-     * directory of its guests' folders (`DepotExport`); every other kind but a folder is left out and said. One per run:
+     * directory of its guests' folders (`DepotExport`), a Memory and a chapter their media, facts, cover and banner
+     * (`MemoryExport`, ADR 0149 decision 3); every other kind but a folder is left out and said. One per run:
      * Depot's files are listed once.
      */
     fun exports(deletedName: String): me.raddatz.veyq.mobile.export.NodeExport.Kinds {
         val depot = me.raddatz.veyq.mobile.depot.DepotExport()
         return me.raddatz.veyq.mobile.export.NodeExport.Kinds(
-            exports = { it == PotSession.KIND || it == FILE || it == DROPBOX },
+            exports = { it == PotSession.KIND || it == FILE || it == DROPBOX || it == MEMORY || it == CHAPTER },
             content = { tenant, node ->
                 when (node.kind) {
                     PotSession.KIND -> PotSession.open(tenant, node.scopeId, node.id)?.let { PotExport.content(it, deletedName) }
                     FILE -> depot.file(tenant, node)
                     DROPBOX -> me.raddatz.veyq.mobile.depot.DepotExport.dropBox()
+                    MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoryExport.content(tenant, node)
                     else -> null
                 }
             },
@@ -119,13 +121,14 @@ object AppKinds {
     /**
      * How the build's kinds copy (the web's `importContent` for a copy, `SubtreeCopy`): a Pot by Expenses' copy (`PotCopy`,
      * its erased people named [deletedName]; it names itself), a Depot file read here and uploaded again under a fresh key
-     * (`DepotExport.duplicate`), a drop box as a plain folder (the web's `importsAsFolder`); every other kind but a folder is
+     * (`DepotExport.duplicate`), a drop box as a plain folder (the web's `importsAsFolder`), a Memory and a chapter by
+     * Memories' copy (`MemoryCopy`: its media and their tiers read by frame, never decoded); every other kind but a folder is
      * left out and said. One per run: Depot's files are listed once.
      */
     fun copies(deletedName: String, uuid: () -> String): me.raddatz.veyq.mobile.export.SubtreeCopy.Kinds {
         val depot = me.raddatz.veyq.mobile.depot.DepotExport()
         return me.raddatz.veyq.mobile.export.SubtreeCopy.Kinds(
-            copies = { it == PotSession.KIND || it == FILE || it == DROPBOX },
+            copies = { it == PotSession.KIND || it == FILE || it == DROPBOX || it == MEMORY || it == CHAPTER },
             asFolder = { it == DROPBOX },
             duplicate = { tenant, node, scopeId, parentId, name ->
                 when (node.kind) {
@@ -136,6 +139,7 @@ object AppKinds {
                         },
                     )
                     FILE -> depot.duplicate(tenant, node, parentId, name, ::tokenInput)
+                    MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoryCopy.duplicate(tenant, node, scopeId, parentId, name)
                     else -> me.raddatz.veyq.mobile.export.SubtreeCopy.Made(null)
                 }
             },
@@ -248,13 +252,13 @@ object AppKinds {
     /**
      * The doors a node of [kind] opens, given what its page knows ([facts]): a folder and a drop box copy and download
      * whole; a Pot downloads, and takes a cover and a copy only while it takes writes (the web's `canCopy`); a file copies and
-     * downloads only with content; a Memory and a chapter neither (yet). A kind this build does not know opens none.
+     * downloads only with content; a Memory and a chapter both (ADR 0149 decision 3). A kind this build does not know opens none.
      */
     fun doors(kind: String, facts: Facts): Doors = when (kind) {
         FOLDER, DROPBOX -> Doors(coverOffered = true, copies = true, downloads = true)
         PotSession.KIND -> Doors(coverOffered = facts.canWrite, copies = facts.canWrite, downloads = true)
         FILE -> Doors(coverOffered = true, copies = facts.hasContent, downloads = facts.hasContent)
-        MEMORY, CHAPTER -> Doors(coverOffered = true, copies = false, downloads = false)
+        MEMORY, CHAPTER -> Doors(coverOffered = true, copies = true, downloads = true)
         else -> Doors(coverOffered = false, copies = false, downloads = false)
     }
 
@@ -270,6 +274,7 @@ object AppKinds {
             FOLDER -> listOf(me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_FOLDER_COVER)
             PotSession.KIND -> listOf(me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_POT, me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_COVER)
             DROPBOX -> listOf(me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_DROPBOX)
+            MEMORY, CHAPTER -> listOf(me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_MEMORY)
             else -> emptyList()
         }
     }.distinct()
