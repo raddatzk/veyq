@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Devices
@@ -128,6 +129,12 @@ interface SettingsActions {
     fun askRemoveAllOffline() {}
     fun cancelRemoveAllOffline() {}
     fun removeAllOffline() {}
+
+    /** Renames the device of session family [familyId] (the web's `renameDeviceOfFamily`, ADR 0148 decision 1). */
+    fun renameFamily(familyId: String, label: String) {}
+
+    /** The account's flows (ADR 0148 decision 10), each its own full-screen dialog over the page. */
+    fun openProfile() {}
 }
 
 /** A step the page asks to be confirmed first, as the web's `SessionsPanel` does: what it says and what it does. */
@@ -177,6 +184,7 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     var confirm by remember { mutableStateOf<Confirm?>(null) }
     var renaming by remember { mutableStateOf(false) }
+    var renamingFamily by remember { mutableStateOf<AccountSettings.Family?>(null) }
     var askPassword by remember { mutableStateOf(false) }
     BackHandler { actions.close() }
     val trustFailed = stringResource(R.string.trust_failed)
@@ -196,6 +204,9 @@ fun SettingsScreen(
         )
     }
     if (renaming) RenameDialog(state.device.label, onRename = { renaming = false; actions.rename(it) }, onClose = { renaming = false })
+    renamingFamily?.let { f ->
+        RenameDialog(f.label.orEmpty(), onRename = { renamingFamily = null; actions.renameFamily(f.id, it) }, onClose = { renamingFamily = null })
+    }
     if (askPassword) PasswordDialog(state.working, actions) { askPassword = false }
     var limiting by remember { mutableStateOf(false) }
     state.storage?.let { storage -> if (limiting) LimitDialog(storage.field, actions) { limiting = false } }
@@ -236,13 +247,14 @@ fun SettingsScreen(
                 }
             }
             account(state)
+            profile(state, actions)
             thisDevice(state, onRename = { renaming = true }, onStay = { actions.stay(it, trustDone) }, onPassword = { askPassword = true }) {
                 confirm = Confirm(
                     context.getString(R.string.account_settings_untrust_confirm_title), context.getString(R.string.account_settings_untrust_confirm),
                     context.getString(R.string.manage_forget_device), actions::stopTrusting,
                 )
             }
-            sessions(state, context, ask = { confirm = it }, actions)
+            sessions(state, context, ask = { confirm = it }, actions, onRename = { renamingFamily = it })
             savedKeys(state, context, ask = { confirm = it }, actions)
             if (state.addDevice) {
                 val camera = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)
@@ -309,6 +321,19 @@ private fun LazyListScope.account(state: AccountSettings.State) {
     }
 }
 
+/** *Your profile* (the web's rubric): one's username, name, picture and the group-add consent in this space. */
+private fun LazyListScope.profile(state: AccountSettings.State, actions: SettingsActions) {
+    header("profile", { stringResource(R.string.profile_title) }, { stringResource(R.string.profile_sub) })
+    item(key = "profile") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.profile_title)) },
+            leadingContent = { Icon(Icons.Outlined.AccountCircle, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openProfile).testTag("settings-profile"),
+        )
+    }
+}
+
 private fun LazyListScope.thisDevice(
     state: AccountSettings.State,
     onRename: () -> Unit,
@@ -368,7 +393,7 @@ private fun LazyListScope.thisDevice(
     }
 }
 
-private fun LazyListScope.sessions(state: AccountSettings.State, context: Context, ask: (Confirm) -> Unit, actions: SettingsActions) {
+private fun LazyListScope.sessions(state: AccountSettings.State, context: Context, ask: (Confirm) -> Unit, actions: SettingsActions, onRename: (AccountSettings.Family) -> Unit) {
     header("sessions", { stringResource(R.string.account_settings_sessions) }, { stringResource(R.string.account_settings_sessions_sub) })
     state.registerRefusal?.let { why ->
         item(key = "register-refusal") {
@@ -386,7 +411,7 @@ private fun LazyListScope.sessions(state: AccountSettings.State, context: Contex
         families.isEmpty() -> item(key = "sessions-empty") {
             Text(stringResource(R.string.account_settings_sessions_empty), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         }
-        else -> items(families, key = { "family-${it.id}" }) { f -> FamilyRow(f, state.working, context, ask, actions) }
+        else -> items(families, key = { "family-${it.id}" }) { f -> FamilyRow(f, state.working, context, ask, actions, onRename) }
     }
     if (state.hasOthers) item(key = "sign-out-others") {
         TextButton(
@@ -405,7 +430,7 @@ private fun LazyListScope.sessions(state: AccountSettings.State, context: Contex
 
 /** One session: its device's name (or what it is, where the register names none), its dates, its actions in an overflow menu. */
 @Composable
-private fun FamilyRow(f: AccountSettings.Family, working: Boolean, context: Context, ask: (Confirm) -> Unit, actions: SettingsActions) {
+private fun FamilyRow(f: AccountSettings.Family, working: Boolean, context: Context, ask: (Confirm) -> Unit, actions: SettingsActions, onRename: (AccountSettings.Family) -> Unit) {
     var menu by remember { mutableStateOf(false) }
     val name = f.label ?: stringResource(if (f.current) R.string.account_settings_this_device else R.string.account_settings_other_device)
     ListItem(
@@ -432,6 +457,16 @@ private fun FamilyRow(f: AccountSettings.Family, working: Boolean, context: Cont
                     Icon(Icons.Outlined.MoreVert, stringResource(if (f.current) R.string.account_settings_revoke_self else R.string.account_settings_revoke))
                 }
                 DropdownMenu(menu, { menu = false }) {
+                    // the device a register names is renamed, every session of it (the web's rename); one it cannot name offers none
+                    if (f.label != null) DropdownMenuItem(
+                        text = { Text(stringResource(R.string.account_settings_rename)) },
+                        leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                        onClick = {
+                            menu = false
+                            onRename(f)
+                        },
+                        modifier = Modifier.testTag("settings-family-rename-${f.id}"),
+                    )
                     if (f.current) DropdownMenuItem(
                         text = { Text(stringResource(R.string.account_settings_revoke_self)) },
                         leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Logout, null) },

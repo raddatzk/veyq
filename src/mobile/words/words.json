@@ -5460,5 +5460,310 @@
     "note": "The web's rotation.linksTitle.",
     "en": "Links to renew",
     "de": "Links zum Erneuern"
+  },
+  "safety_qr_failed": {
+    "en": "The code could not be shown. The digits above say the same.",
+    "de": "Der Code konnte nicht angezeigt werden. Die Ziffern oben sagen dasselbe.",
+    "note": "The web's safety.qrFailed."
+  },
+  "profile_title": {
+    "en": "Your profile",
+    "de": "Dein Profil",
+    "note": "The web's profile.title."
+  },
+  "profile_sub": {
+    "en": "Your username and name in this shared space. Only members can read your real name.",
+    "de": "Dein Benutzername und Name in diesem geteilten Bereich. Nur Mitglieder können deinen echten Namen lesen.",
+    "note": "The web's profile.sub."
+  },
+  "profile_loading": {
+    "en": "Loading your profile…",
+    "de": "Dein Profil wird geladen…",
+    "note": "The web's profile.loading."
+  },
+  "profile_username": {
+    "en": "Username",
+    "de": "Benutzername",
+    "note": "The web's profile.username."
+  },
+  "profile_username_hint": {
+    "en": "Your handle in this space (letters, digits, . _ -), unique here.",
+    "de": "Dein Handle in diesem Bereich (Buchstaben, Ziffern, . _ -), hier eindeutig.",
+    "note": "The web's profile.usernameHint."
+  },
+  "profile_first_name": {
+    "en": "First name",
+    "de": "Vorname",
+    "note": "The web's profile.firstName."
+  },
+  "profile_last_name": {
+    "en": "Last name",
+    "de": "Nachname",
+    "note": "The web's profile.lastName."
+  },
+  "profile_consent_group_add": {
+    "en": "Ask before adding me to groups",
+    "de": "Frag mich, bevor du mich zu Gruppen hinzufügst",
+    "note": "The web's profile.consentGroupAdd."
+  },
+  "profile_consent_group_add_hint": {
+    "en": "When on, being added to a group becomes an invitation you accept or decline — nothing reaches you until you say yes. Applies in every space you belong to.",
+    "de": "Ist das an, wird das Hinzufügen zu einer Gruppe zu einer Einladung, die du annimmst oder ablehnst — nichts erreicht dich, bevor du zustimmst. Gilt in jedem Bereich, zu dem du gehörst.",
+    "note": "The web's profile.consentGroupAddHint."
+  },
+  "profile_save": {
+    "en": "Save profile",
+    "de": "Profil speichern",
+    "note": "The web's profile.save."
+  },
+  "profile_saved": {
+    "en": "Profile updated.",
+    "de": "Profil aktualisiert.",
+    "note": "The web's profile.saved."
+  },
+  "profile_picture_label": {
+    "en": "Profile picture",
+    "de": "Profilbild",
+    "note": "The web's profilePicture.label."
+  },
+  "profile_picture_choose": {
+    "en": "Choose a picture",
+    "de": "Bild wählen",
+    "note": "The web's profilePicture.choose."
+  },
+  "profile_picture_change": {
+    "en": "Change picture",
+    "de": "Bild ändern",
+    "note": "The web's profilePicture.change."
+  },
+  "profile_picture_remove": {
+    "en": "Remove picture",
+    "de": "Bild entfernen",
+    "note": "The web's profilePicture.remove."
+  },
+  "profile_picture_hint": {
+    "en": "Shown instead of your initial to the members of this space.",
+    "de": "Wird den Mitgliedern dieses Bereichs statt deines Anfangsbuchstabens gezeigt.",
+    "note": "The web's profilePicture.hint."
+  },
+  "profile_picture_no_key": {
+    "en": "A picture can be added once your access to the shared space is ready.",
+    "de": "Ein Bild kannst du hinterlegen, sobald dein Zugang zum geteilten Bereich bereit ist.",
+    "note": "The web's profilePicture.noKeyYet."
+  },
+  "profile_picture_pending_set": {
+    "en": "New picture — saved with your profile.",
+    "de": "Neues Bild — wird mit deinem Profil gespeichert.",
+    "note": "The web's profilePicture.pendingSet."
+  },
+  "profile_picture_pending_clear": {
+    "en": "The picture is removed when you save.",
+    "de": "Das Bild wird beim Speichern entfernt.",
+    "note": "The web's profilePicture.pendingClear."
+  },
+  "profile_picture_dialog_intro": {
+    "en": "Choose a picture and frame it. Only members of this space can see it.",
+    "de": "Wähle ein Bild und lege den Ausschnitt fest. Nur Mitglieder dieses Bereichs können es sehen.",
+    "note": "The web's profilePicture.dialogIntro."
+  },
+  "profile_picture_use": {
+    "en": "Use this picture",
+    "de": "Dieses Bild verwenden",
+    "note": "The web's profilePicture.use."
+  },
+  "profile_picture_not_image": {
+    "en": "This file could not be used. Choose an image (JPEG, PNG, WebP or similar).",
+    "de": "Diese Datei konnte nicht verwendet werden. Wähle ein Bild (JPEG, PNG, WebP o. Ä.).",
+    "note": "The web's profilePicture.notImage."
+  },
+  "profile_edit": {
+    "en": "Edit profile",
+    "de": "Profil bearbeiten",
+    "note": "The web's profilePicture.editProfile."
+  },
+  "safety_mine_title": {
+    "en": "Your safety number",
+    "de": "Deine Sicherheitsnummer",
+    "note": "The web's safety.mineTitle."
+  },
+  "safety_show": {
+    "en": "Show",
+    "de": "Anzeigen",
+    "note": "The web's safety.show."
+  },
+  "safety_open": {
+    "en": "Compare",
+    "de": "Vergleichen",
+    "note": "The web's safety.open."
+  },
+  "safety_mine_intro": {
+    "en": "Another member compares this number and your chain code with the ones their app shows for you - by scanning the code or reading the digits aloud - to be sure the server gave them your real key.",
+    "de": "Ein anderes Mitglied vergleicht diese Nummer und deinen Kettencode mit denen, die seine App für dich zeigt - per Code-Scan oder indem ihr die Ziffern vorlest -, um sicher zu sein, dass der Server ihm deinen echten Schlüssel gegeben hat.",
+    "note": "The web's safety.mineIntro."
+  },
+  "safety_mine_unavailable": {
+    "en": "Your safety number could not be shown. Unlock again and reopen this page.",
+    "de": "Deine Sicherheitsnummer konnte nicht angezeigt werden. Entsperre erneut und öffne diese Seite noch einmal.",
+    "note": "The web's safety.mineUnavailable."
+  },
+  "safety_qr_alt": {
+    "en": "Your safety number as a code for another member to scan",
+    "de": "Deine Sicherheitsnummer als Code, den ein anderes Mitglied scannen kann",
+    "note": "The web's safety.qrAlt."
+  },
+  "safety_theirs_title": {
+    "en": "Safety number",
+    "de": "Sicherheitsnummer",
+    "note": "The web's safety.theirsTitle."
+  },
+  "safety_theirs_dialog_title": {
+    "en": "{1}’s safety number",
+    "de": "Sicherheitsnummer von {1}",
+    "note": "The web's safety.theirsDialogTitle."
+  },
+  "safety_theirs_intro": {
+    "en": "Compare this number and the chain code with the ones {1} sees on their own profile - scan their code, or read the digits aloud. If both match, you know the server gave you their real key, and everyone in this space sees that you verified {1}.",
+    "de": "Vergleiche diese Nummer und den Kettencode mit denen, die {1} im eigenen Profil sieht - scanne den Code oder lest die Ziffern vor. Stimmen beide überein, weißt du, dass der Server dir den echten Schlüssel gegeben hat, und alle in diesem Bereich sehen, dass du {1} verifiziert hast.",
+    "note": "The web's safety.theirsIntro."
+  },
+  "safety_chain_code": {
+    "en": "Chain code",
+    "de": "Kettencode",
+    "note": "The web's safety.chainCode."
+  },
+  "safety_chain_code_hint": {
+    "en": "It stands for the whole history of {1}’s key and changes each time {1} secures their account. If only the chain code differs, one of you is missing a step.",
+    "de": "Er steht für die ganze Geschichte des Schlüssels von {1} und ändert sich jedes Mal, wenn {1} das Konto absichert. Unterscheidet sich nur der Kettencode, fehlt einem von euch ein Schritt.",
+    "note": "The web's safety.chainCodeHint."
+  },
+  "safety_mine_chain_code_hint": {
+    "en": "It stands for the whole history of your key and changes each time you secure your account. If the safety number matches but the chain code doesn’t, one of you is missing a step.",
+    "de": "Er steht für die ganze Geschichte deines Schlüssels und ändert sich jedes Mal, wenn du dein Konto absicherst. Stimmt die Sicherheitsnummer überein, der Kettencode aber nicht, fehlt einem von euch ein Schritt.",
+    "note": "The web's safety.mineChainCodeHint."
+  },
+  "safety_state_verified": {
+    "en": "Verified",
+    "de": "Verifiziert",
+    "note": "The web's safety.stateVerified."
+  },
+  "safety_state_unverified": {
+    "en": "Not verified",
+    "de": "Nicht verifiziert",
+    "note": "The web's safety.stateUnverified."
+  },
+  "safety_state_new": {
+    "en": "New",
+    "de": "Neu",
+    "note": "The web's safety.stateNew."
+  },
+  "safety_verified_by": {
+    "en": "Verified by {1}.",
+    "de": "Verifiziert von {1}.",
+    "note": "The web's safety.verifiedBy."
+  },
+  "safety_verified_by_you": {
+    "en": "you",
+    "de": "dir",
+    "note": "The web's safety.verifiedByYou."
+  },
+  "safety_replaced": {
+    "en": "The key you saw before wasn’t theirs. Their invitation confirms this one.",
+    "de": "Der Schlüssel, den du vorher gesehen hast, gehörte nicht zu dieser Person. Die Einladung dieser Person bestätigt diesen.",
+    "note": "The web's safety.replaced."
+  },
+  "safety_load_error": {
+    "en": "The safety number could not be loaded.",
+    "de": "Die Sicherheitsnummer konnte nicht geladen werden.",
+    "note": "The web's safety.loadError."
+  },
+  "safety_unreadable": {
+    "en": "The key the server sent for this member cannot be read on this device, so there is no number to compare.",
+    "de": "Der Schlüssel, den der Server für dieses Mitglied geschickt hat, lässt sich auf diesem Gerät nicht lesen, daher gibt es keine Nummer zum Vergleichen.",
+    "note": "The web's safety.unreadable."
+  },
+  "safety_scan": {
+    "en": "Scan their code",
+    "de": "Code scannen",
+    "note": "The web's safety.scan."
+  },
+  "safety_compare": {
+    "en": "Compare digits",
+    "de": "Ziffern vergleichen",
+    "note": "The web's safety.compare."
+  },
+  "safety_compare_hint": {
+    "en": "Read the digits and the chain code aloud with {1}, or hold both screens side by side.",
+    "de": "Lest die Ziffern und den Kettencode gemeinsam mit {1} vor oder haltet beide Bildschirme nebeneinander.",
+    "note": "The web's safety.compareHint."
+  },
+  "safety_they_match": {
+    "en": "They match",
+    "de": "Sie stimmen überein",
+    "note": "The web's safety.theyMatch."
+  },
+  "safety_they_differ": {
+    "en": "They don’t match",
+    "de": "Sie stimmen nicht überein",
+    "note": "The web's safety.theyDiffer."
+  },
+  "safety_scan_hint": {
+    "en": "Point your camera at the code on {1}’s own profile.",
+    "de": "Richte deine Kamera auf den Code im eigenen Profil von {1}.",
+    "note": "The web's safety.scanHint."
+  },
+  "safety_scan_error": {
+    "en": "Camera unavailable - compare the digits instead.",
+    "de": "Kamera nicht verfügbar - vergleiche stattdessen die Ziffern.",
+    "note": "The web's safety.scanError."
+  },
+  "safety_verified": {
+    "en": "{1} is verified. Everyone in this space sees that you verified them.",
+    "de": "{1} ist verifiziert. Alle in diesem Bereich sehen, dass du diese Person verifiziert hast.",
+    "note": "The web's safety.verified."
+  },
+  "safety_mismatch": {
+    "en": "These are different keys. Do not mark {1} as verified: the key you have may not be theirs. Ask them to check their own profile, and compare again.",
+    "de": "Das sind verschiedene Schlüssel. Markiere {1} nicht als verifiziert: Der Schlüssel, den du hast, gehört womöglich nicht zu dieser Person. Bitte sie, im eigenen Profil nachzusehen, und vergleicht erneut.",
+    "note": "The web's safety.mismatch."
+  },
+  "safety_foreign": {
+    "en": "That is not a veyq safety number code. Scan the code on their profile page.",
+    "de": "Das ist kein veyq-Sicherheitsnummern-Code. Scanne den Code auf der Profilseite.",
+    "note": "The web's safety.foreign."
+  },
+  "safety_outdated": {
+    "en": "That code comes from an older version of the app. Ask {1} to update their app, then scan again.",
+    "de": "Dieser Code stammt aus einer älteren Version der App. Bitte {1}, die App zu aktualisieren, und scanne dann erneut.",
+    "note": "The web's safety.outdated."
+  },
+  "safety_moved": {
+    "en": "The key you trust for {1} changed while you compared, so nothing was saved. Compare again.",
+    "de": "Der Schlüssel, dem du für {1} vertraust, hat sich während des Vergleichs geändert, daher wurde nichts gespeichert. Vergleicht erneut.",
+    "note": "The web's safety.moved."
+  },
+  "safety_unanchored": {
+    "en": "Nothing was saved: {1}’s key can’t be confirmed in this space.",
+    "de": "Nichts gespeichert: Der Schlüssel von {1} lässt sich in diesem Bereich nicht bestätigen.",
+    "note": "The web's safety.unanchored."
+  },
+  "safety_failed": {
+    "en": "Could not save the verification. Please try again.",
+    "de": "Die Verifizierung konnte nicht gespeichert werden. Bitte versuche es erneut.",
+    "note": "The web's safety.failed."
+  },
+  "trust_anomaly": {
+    "en": "Can’t confirm this key",
+    "de": "Schlüssel nicht bestätigt",
+    "note": "The web's trust.anomaly."
+  },
+  "trust_anomaly_note": {
+    "en": "This person’s key doesn’t follow from the one you knew. Nothing is shared with it until it does. Compare your safety numbers in person.",
+    "de": "Der Schlüssel dieser Person folgt nicht aus dem, den du kanntest. Bis er das tut, wird nichts mit ihm geteilt. Vergleicht eure Sicherheitsnummern persönlich.",
+    "note": "The web's trust.anomalyNote."
+  },
+  "trust_rotated": {
+    "en": "New identity, signed by their previous key, on {1}.",
+    "de": "Neue Identität, mit ihrem vorherigen Schlüssel unterschrieben, am {1}.",
+    "note": "The web's trust.rotated."
   }
 }

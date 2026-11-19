@@ -563,6 +563,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         when {
             out.next != null -> show(out.next!!)
             out.wasCurrent -> {
+                closeAccountFlow()
                 shellWatch?.cancel()
                 shellModel = null
                 stopMusic()
@@ -670,7 +671,94 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         override fun removeAllOffline() = onSettings { it.removeAllOffline(); null }
         override fun linkShow() = showForNewDevice()
         override fun linkScan() = scanSignInCode()
+        override fun renameFamily(familyId: String, label: String) = onSettings { it.renameFamily(familyId, label); null }
+        override fun openProfile() = this@AppModel.openProfile()
     }
+
+    // ---- the account's own flows (ADR 0148): the profile ----
+
+    /** One of the account's flows open over the page it was started from: the core's model, drawn by [AccountFlowDialog]. */
+    sealed interface AccountFlow {
+        class Profile(val model: me.raddatz.veyq.mobile.session.ProfileModel) : AccountFlow
+    }
+
+    private val _accountFlow = MutableStateFlow<AccountFlow?>(null)
+
+    /** The account flow open now; null while none is. */
+    val accountFlow: StateFlow<AccountFlow?> = _accountFlow.asStateFlow()
+
+    private fun openFlow(flow: AccountFlow) {
+        closeAccountFlow()
+        _accountFlow.value = flow
+    }
+
+    /** Closes the open flow; its model drops every secret it held (the profile its tenant key copy, a kit its key). */
+    fun closeAccountFlow() {
+        when (val f = _accountFlow.value) {
+            is AccountFlow.Profile -> f.model.close()
+            null -> Unit
+        }
+        _accountFlow.value = null
+    }
+
+    /** *Your profile* (Settings) or *Edit profile* (one's own person page): the core's model over the open tenant. */
+    fun openProfile() {
+        val t = tenantSession ?: return
+        val m = t.profile(AndroidWebpEncoder)
+        openFlow(AccountFlow.Profile(m))
+        viewModelScope.launch { m.load() }
+    }
+
+    fun saveProfile(m: me.raddatz.veyq.mobile.session.ProfileModel) {
+        viewModelScope.launch {
+            m.save()
+            // the shell's people were read anew by the core: the names on screen follow
+            shellModel?.rebuild()
+        }
+    }
+
+    /** The framed picture's pixels handed to the core, which encodes, pads and seals it with the profile's save. */
+    fun choosePicture(m: me.raddatz.veyq.mobile.session.ProfileModel, rgba: ByteArray) {
+        viewModelScope.launch { m.choosePicture(rgba) }
+    }
+
+    /**
+     * The part of [image] that [crop] frames, drawn to the core's square ([me.raddatz.veyq.mobile.session.ProfileModel.EDGE]
+     * px a side) as straight RGBA, 4 bytes a pixel (the host's render of `HostRequest.PictureSquare`); null where it fails.
+     */
+    suspend fun avatarPixels(image: androidx.compose.ui.graphics.ImageBitmap, crop: me.raddatz.veyq.mobile.session.NodeCover.Crop): ByteArray? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            runCatching {
+                val edge = me.raddatz.veyq.mobile.session.ProfileModel.EDGE
+                val whole = image.asAndroidBitmap()
+                val (x, y, w, h) = me.raddatz.veyq.mobile.session.CoverFrame.pixels(crop, whole.width, whole.height).toList()
+                val square = android.graphics.Bitmap.createBitmap(edge, edge, android.graphics.Bitmap.Config.ARGB_8888)
+                try {
+                    android.graphics.Canvas(square).drawBitmap(
+                        whole, android.graphics.Rect(x, y, x + w, y + h), android.graphics.Rect(0, 0, edge, edge),
+                        android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG),
+                    )
+                    // ARGB_8888 holds its pixels as R, G, B, A bytes: the buffer is the core's RGBA
+                    val out = java.nio.ByteBuffer.allocate(edge * edge * 4)
+                    square.copyPixelsToBuffer(out)
+                    out.array()
+                } finally {
+                    square.recycle()
+                }
+            }.getOrNull()
+        }
+
+    /** The open tenant's safety numbers (core's `PersonTrust`); null while no tenant is open. */
+    fun personTrust(): me.raddatz.veyq.mobile.session.PersonTrust? = tenantSession?.personTrust
+
+    /** The signed-in account's own user id, for one's own person page. */
+    fun ownUserId(): String? = tenantSession?.account?.userId
+
+    /** A scan of a safety code (`veyqid:`), the text held for the compare; any other code is skipped by the core. */
+    fun safetyScan(): me.raddatz.veyq.mobile.qr.QrScan<String> = me.raddatz.veyq.mobile.qr.QrScan(
+        accepts = { text -> text.takeIf { me.raddatz.veyq.mobile.qr.QrSchemes.of(it) == "veyqid" } },
+        decode = me.raddatz.veyq.mobile.qr.QrFrames.timedDecode(::qrDecodeTiming),
+    )
 
     private fun refreshManaged() = _screen.update { s ->
         if (s is Screen.Signed && s.managing != null) s.copy(managing = session.managed().also { m ->
