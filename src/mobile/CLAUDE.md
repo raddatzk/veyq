@@ -1383,9 +1383,8 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   started; with `<true/>` the pass is the owner's or waits.
 - **A git merge of words.json can duplicate a key without a conflict**: two branches that each add the same new key
   (with the same text) at different places merge cleanly into a file holding that key twice — JSON parsers keep the
-  last one silently, so no build and no guard notices (seen 2026-11-19 merging ADR 0148's platform phases). After
-  every merge that touched words.json: `/usr/bin/python3 -c "import json,collections;json.load(open('src/mobile/words/words.json'),object_pairs_hook=lambda p:[print('duplicate',k) for k,n in collections.Counter(k for k,_ in p).items() if n>1] and dict(p) or dict(p))"`
-  prints nothing.
+  last one silently (seen 2026-11-19 merging ADR 0148's platform phases). `generate_words.py`'s `load()` refuses a
+  duplicate since then, so every platform's build fails on one; keep one of the two.
 - words.json writes a percent sign `%%`, as Android's and Apple's format strings read it; `generate_words.py` writes one
   `%` into the desktops' catalogs (`desktop_text`), and both desktops' words tests expect that.
 - Driving the desktops' editors: Playwright names `Backspace` and presses no `Ü` (Broadway); `Veyq.Drive`'s `key` has no

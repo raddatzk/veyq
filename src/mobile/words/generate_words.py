@@ -56,8 +56,19 @@ class CatalogError(Exception):
     pass
 
 
+def _no_duplicate_keys(pairs: list) -> dict:
+    # json keeps the last of two equal keys silently; git's merge writes exactly that when both sides add the same
+    # key, without a conflict (block F's phases did, 2026-11-19), so a duplicate is refused here, not read.
+    seen = set()
+    for key, _ in pairs:
+        if key in seen:
+            raise CatalogError(f"{key}: the catalog holds this key twice (a merge's leftover?) — keep one")
+        seen.add(key)
+    return dict(pairs)
+
+
 def load() -> dict:
-    words = json.loads(CATALOG.read_text(encoding="utf-8"))
+    words = json.loads(CATALOG.read_text(encoding="utf-8"), object_pairs_hook=_no_duplicate_keys)
     for key, entry in words.items():
         if not re.fullmatch(r"[a-z][a-z0-9_]*", key):
             raise CatalogError(f"{key}: a key is lower snake case")
