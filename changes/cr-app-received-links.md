@@ -187,7 +187,7 @@ question 2*).
   `bookmarkLink.test.ts` cases plus `#moderation` and `&report`; the web's test reads the file (a test change only —
   `parseShareLink` unchanged). · Done when: `pnpm run check` in `src/web/` green. **Bite:** a case's expected
   normalization altered in the file → the web's test red (injection, restored by snapshot).
-- [ ] **3 core — the link, the instance, the gates** (H2, H3, H8) — `ReceivedLink`, `ShareInstance`, `ShareGates`,
+- [x] **3 core — the link, the instance, the gates** (H2, H3, H8) — `ReceivedLink`, `ShareInstance`, `ShareGates`,
   the guest session store behind an interface each platform implements. Tests: the cases file; a locked share asks the
   password and a wrong token keeps the form; terms before the note before the content; a foreign major refused.
   **Bites:** (a) the gate order swapped so the content resolves before the terms → red; (b) **the key canary**: a
