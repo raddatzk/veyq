@@ -257,7 +257,7 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
                 eqHex(marks.encode(c.hex("tag"), ids), c.str("plaintext"))
                 val (tag, decoded) = marks.decode(c.hex("plaintext")) ?: fail("did not decode")
                 eqHex(tag, c.str("tag"))
-                eq(decoded, ids.toSortedSet().toList())
+                eq(decoded, ids.toSet().sorted())
             }
         }
         check("item_mark_self refuses a plaintext no encoder writes") {

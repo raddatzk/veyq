@@ -14,7 +14,7 @@ class ItemMarks(private val suite: V1) {
     fun selfKey(masterKey: ByteArray): ByteArray = p.hkdfSha256(masterKey, ByteArray(0), utf8("veyq/v1/item-mark-self"), 32)
 
     /** SHA-256 over `lp(utf8(id))…` of the ids, de-duplicated and sorted: the set, however it was listed. */
-    fun marksDigest(ids: Collection<String>): ByteArray = p.sha256(concat(*ids.toSortedSet().map { lp(utf8(it)) }.toTypedArray()))
+    fun marksDigest(ids: Collection<String>): ByteArray = p.sha256(concat(*ids.toSet().sorted().map { lp(utf8(it)) }.toTypedArray()))
 
     /** The `item-mark-self` statement over ([scopeId], [nodeId], [ids]). */
     fun statement(scopeId: String, nodeId: String, ids: Collection<String>): ByteArray =
@@ -35,7 +35,7 @@ class ItemMarks(private val suite: V1) {
     /** `tag ‖ id…`: each distinct id's 16 bytes ascending. Canonical lowercase UUIDs only. */
     fun encode(tag: ByteArray, ids: Collection<String>): ByteArray {
         if (tag.size != TAG_BYTES) throw IllegalArgumentException("item-mark tag is not 32 bytes")
-        val sorted = ids.toSortedSet()
+        val sorted = ids.toSet().sorted()
         val out = ByteArray(TAG_BYTES + ID_BYTES * sorted.size)
         tag.copyInto(out)
         sorted.forEachIndexed { i, id ->
