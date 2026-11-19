@@ -75,6 +75,8 @@ class GalleryModel(
     val music: Music? = null,
     /** The tenant's search (ADR 0146 decision 8): what the page contributes and the request it takes; null: none. */
     private val search: Search? = null,
+    /** The viewer's calendar for the filter's day chips (ADR 0149 decision 5): the platform's; ISO dates in UTC by default. */
+    private val calendar: GalleryFilter.Calendar = GalleryFilter.Calendar.UTC,
     /** A clock in milliseconds for the live poll's catch-up gap (only its differences count). */
     private val now: () -> Long = monotonicMs(),
 ) {
@@ -205,6 +207,19 @@ class GalleryModel(
         ): me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome = me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome.Refused("refused")
 
         /** The node's banner removed, the dialog having opened on [openedWith] (`BannerWrite.remove`). Absent: refused. */
+        /** The node's item marks (ADR 0149 decision 4: `ItemMarks.of`); null: none read here (a guest's, a test's). */
+        fun marks(): ItemMarks? = null
+
+        /** [item] reported as an ITEM (`MediumReport.report`, ADR 0149 decision 6). */
+        suspend fun report(item: MemoryMedia.Item, category: String, reason: String, contact: String): me.raddatz.veyq.mobile.session.NodeReport.Sent =
+            throw IllegalStateException("report not offered")
+
+        /** Whether the server takes reports at all (it publishes a moderation key). */
+        suspend fun reportOffered(): Boolean = false
+
+        /** The tenant's origin, under which its privacy notice is served (the report sheet's). */
+        val origin: String get() = ""
+
         suspend fun removeBanner(openedWith: me.raddatz.veyq.mobile.memories.banner.Banner.Slots): me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome =
             me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome.Refused("refused")
     }
@@ -290,7 +305,25 @@ class GalleryModel(
          * platform shows it and says [searchOpenedSeen].
          */
         val searchOpened: String? = null,
+        /**
+         * Each medium's mark as the tile's badge shows it (ADR 0149 decision 4): how many marked it (null: a personal scope,
+         * no count) and whether the caller did; a medium nobody marked is absent.
+         */
+        val marks: Map<String, Mark> = emptyMap(),
+        /** The caller's own set read: the mark may be toggled (ADR 0077); false before, or where it did not read. */
+        val marksLoaded: Boolean = false,
+        /** The page's filter (ADR 0149 decision 5): stored nowhere, gone with the page. */
+        val filter: GalleryFilter.State = GalleryFilter.State(),
+        /** What the last mark toggle said (too many, not saved); null once seen ([seen]). */
+        val markSaid: Notice? = null,
+        /** The filter's predicate over a medium id, as the filter, the marks and the rows last made it; null: nothing narrows. */
+        internal val keep: ((String) -> Boolean)? = null,
     ) {
+        /** The rows the grid and the lightbox page: [rows] narrowed by the filter (ADR 0149 decision 5). */
+        val shown: List<Row>? get() = rows?.let { r -> keep?.let { k -> r.filter { k(it.mediaId) } } ?: r }
+
+        /** Whether a mark is offered here: the right, online (nothing is marked offline, ADR 0140 decision 7). */
+        val marking: Boolean get() = rights.mark && offline == null
         /** The banner above the header (ADR 0144 decision 4) as sealed: what it shows; null for none (no frame drawn). */
         val banner: me.raddatz.veyq.mobile.memories.banner.Banner.Shown? get() = me.raddatz.veyq.mobile.memories.banner.Banner.shown(facts?.banner)
 
@@ -327,6 +360,9 @@ class GalleryModel(
             else -> Msg.MEMORY_GALLERY_FAILED
         }
     }
+
+    /** A medium's badge: how many marked it (null: no count, a personal scope) and whether the caller did. */
+    data class Mark(val count: Int?, val mine: Boolean)
 
     /** What whoever looks may do here online; offline the page offers none of its writes ([State.rights]). */
     private val granted = MemoryRights.of(access, node.kind)
@@ -473,12 +509,92 @@ class GalleryModel(
                 failed = false,
             ).let { it.copy(uploading = UploadTile.shown(queued, it.listedIds)) }
         }
-        if (read != null) searched(settled = true)
+        if (read != null) {
+            filterFacts = null
+            refilter()
+            searched(settled = true)
+            // the marks with each listing (a kept read: offline as last read), the badges and the filter after them
+            scope.launch { readMarks() }
+        }
         // the Memory opening is a settle point (the self-heal): once, on its first listing the server answered
         if (read != null && read.offline == null && !openedSettle) {
             openedSettle = true
             scope.launch { settle() }
         }
+    }
+
+    // ---- the item marks and the filter (ADR 0149 decisions 4 and 5) ----
+
+    /** The node's marks, made once ([Door.marks]); null where none are read here. */
+    private val itemMarks: ItemMarks? by lazy { if (granted.mark) door.marks() else null }
+
+    /** The filter's facts of the rows listed now, made at the first narrowing and dropped at the next read. */
+    private var filterFacts: GalleryFilter.Facts? = null
+
+    private fun factsNow(): GalleryFilter.Facts =
+        filterFacts ?: GalleryFilter.Facts.of(current.rows.orEmpty().map { it.item }, calendar.dayOf, calendar.label).also { filterFacts = it }
+
+    /** Every member's marks read (with the gallery's first read and its live poll's); the badges and the filter follow. */
+    suspend fun readMarks() {
+        val m = itemMarks ?: return
+        val ok = runCatching { m.load() }.getOrDefault(false)
+        _state.update { it.copy(marksLoaded = ok || it.marksLoaded) }
+        refilter()
+    }
+
+    /** The badges and the predicate made anew from the marks, the filter and the rows as they stand. */
+    private fun refilter() {
+        val m = itemMarks
+        _state.update { s ->
+            val ids = s.rows.orEmpty().map { it.mediaId }
+            val badges = if (m == null) emptyMap() else ids.mapNotNull { id ->
+                val mine = m.markedByMe(id)
+                val count = m.count(id)
+                if (mine || (count ?: 0) > 0) id to Mark(count, mine) else null
+            }.toMap()
+            val keep = if (s.filter.narrows && s.rights.filterFacts) GalleryFilter.predicate(s.filter, ::factsNow, m, m?.personal != false) else null
+            s.copy(marks = badges, keep = keep)
+        }
+    }
+
+    /**
+     * The caller's mark on [mediaId] flipped (the lightbox's heart, a tile's menu): refused before the own set was read and
+     * offline; what did not land is put back and said ([State.markSaid]).
+     */
+    suspend fun toggleMark(mediaId: String): Notice? {
+        val m = itemMarks ?: return null
+        if (!current.marking || !current.marksLoaded) return null
+        val out = m.toggle(mediaId)
+        refilter()
+        out.notice?.let { said -> _state.update { it.copy(markSaid = said) } }
+        return out.notice
+    }
+
+    /** The filter changed to [filter] (its text, a chip added or taken, the marks' mode, cleared); the grid narrows at once. */
+    fun filter(filter: GalleryFilter.State) {
+        _state.update { it.copy(filter = filter) }
+        refilter()
+    }
+
+    /** The chips offered for the filter's text ([photo], [video]: the kinds' words), none already chosen. */
+    fun suggestions(photo: String, video: String): List<Pair<GalleryFilter.Chip, String>> =
+        if (!current.rights.filterFacts) emptyList() else GalleryFilter.suggest(current.filter.text, current.filter.chips, factsNow(), photo, video)
+
+    /** Whether the marks' mode is offered (a member's, not in a personal scope, E4). */
+    val marksModeOffered: Boolean get() = current.rights.mark && itemMarks?.personal == false
+
+    /** What [State.markSaid] said was seen. */
+    fun markSeen() = _state.update { it.copy(markSaid = null) }
+
+    /** Medium [mediaId]'s report (an ITEM) in the one report sheet, whole only; null where not offered (the server takes none). */
+    suspend fun reportSheet(mediaId: String): me.raddatz.veyq.mobile.navigation.ReportSheet? {
+        val row = row(mediaId) ?: return null
+        if (!runCatching { door.reportOffered() }.getOrDefault(false)) return null
+        return me.raddatz.veyq.mobile.navigation.ReportSheet(node, object : me.raddatz.veyq.mobile.navigation.ReportSheet.Door {
+            override val origin get() = door.origin
+            override suspend fun send(scope: me.raddatz.veyq.mobile.session.NodeReport.Scope, category: String, reason: String, contact: String) =
+                door.report(row.item, category, reason, contact)
+        }, offersName = false)
     }
 
     // ---- the search (ADR 0146 decision 8) ----
@@ -935,7 +1051,7 @@ class GalleryModel(
      */
     fun lightboxOn(mediaId: String): Lightbox {
         open?.close()
-        val at = current.rows?.indexOfFirst { it.mediaId == mediaId } ?: -1
+        val at = current.shown?.indexOfFirst { it.mediaId == mediaId } ?: -1
         return Lightbox(this, maxOf(at, 0), scope, wanted = mediaId.takeIf { at < 0 }).also { open = it }
     }
 
@@ -1096,6 +1212,18 @@ class Lightbox internal constructor(
     /** The Memory or chapter whose gallery it pages (a window of its own is titled by it and reopened by its ids). */
     val node: NodeAt get() = gallery.node
 
+    /** Whether the heart is offered on the current medium: the mark's right, online, the own set read (ADR 0149 decision 4). */
+    val canMark: Boolean get() = gallery.current.let { it.marking && it.marksLoaded } && current.row != null
+
+    /** The current medium's badge (its count, whether it is mine); null where nobody marked it. */
+    val mark: GalleryModel.Mark? get() = current.row?.let { gallery.current.marks[it.mediaId] }
+
+    /** The current medium's mark flipped (the toolbar's heart); what did not land said. */
+    suspend fun toggleMark(): Notice? = current.row?.let { gallery.toggleMark(it.mediaId) }
+
+    /** The current medium's report in the one report sheet; null where not offered. */
+    suspend fun reportSheet(): me.raddatz.veyq.mobile.navigation.ReportSheet? = current.row?.let { gallery.reportSheet(it.mediaId) }
+
     private val _state: MutableStateFlow<State>
     val state: StateFlow<State>
     val current: State get() = _state.value
@@ -1104,10 +1232,11 @@ class Lightbox internal constructor(
     private val scope = CoroutineScope(parent.coroutineContext + SupervisorJob(parent.coroutineContext[Job]))
 
     init {
-        val rows = gallery.current.rows.orEmpty()
+        val rows = gallery.current.shown.orEmpty()
         _state = MutableStateFlow(State(rows, if (rows.isEmpty()) -1 else start.coerceIn(0, rows.size - 1)))
         state = _state.asStateFlow()
-        scope.launch { gallery.state.collect { s -> s.rows?.let(::follow) } }
+        // the rows the grid shows: a filter narrows the lightbox's pages too (ADR 0149 decision 5)
+        scope.launch { gallery.state.collect { s -> s.shown?.let(::follow) } }
         gallery.music?.let { m -> scope.launch { m.player.state.collect { p -> _state.update { it.copy(music = p.nowPlaying) } } } }
     }
 

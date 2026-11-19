@@ -26,12 +26,6 @@ object ItemMarksRotation {
     /** The contract's cap per page of the scope re-key listing and per stage. */
     private const val REKEY_BATCH = 256
 
-    /** The contract's cap on one member's sealed marks for one Memory (`PutItemFavoritesRequest.ciphertext`). */
-    private const val CIPHERTEXT_MAX = 262_144
-
-    /** Every member's marks on one node, bound to (scope, node) — the address their value key's wrap is bound to. */
-    private fun context(scopeId: String, nodeId: String) = Context("item-favorites", "scopeId" to scopeId, "nodeId" to nodeId)
-
     /**
      * Memories' part of a rotation's scope-level move: every member's marked set of every Memory in the scope, listed page
      * by page as its value key's wrap — never its ciphertext —, that wrap moved to the new key by core's re-wrap (a wrap
@@ -43,7 +37,7 @@ object ItemMarksRotation {
         var since: String? = null
         while (true) {
             val page = ctx.send { api.listScopeItemFavoritesRekey(ctx.scopeId, since, REKEY_BATCH) }.body()
-            val marks = page.marks.map { m -> ItemFavoritesRekeyWrap(m.markId, ctx.rewrap(context(ctx.scopeId, m.nodeId), m.wrappedValueKey), m.wrappedValueKey) }
+            val marks = page.marks.map { m -> ItemFavoritesRekeyWrap(m.markId, ctx.rewrap(me.raddatz.veyq.mobile.memories.ItemMarks.context(ctx.scopeId, m.nodeId), m.wrappedValueKey), m.wrappedValueKey) }
             if (marks.isNotEmpty()) ctx.send { api.stageScopeItemFavoritesRekey(ctx.scopeId, ctx.rekeyId, ScopeItemFavoritesRekeyStage(ctx.fromEpoch, marks)) }
             if (!page.more || page.cursor == null) return@ScopeRekeyParticipant
             since = page.cursor
@@ -60,7 +54,7 @@ object ItemMarksRotation {
      * Memory's set reading as someone else's until its next toggle, and every other is still re-tagged.
      */
     suspend fun retag(account: VeyqAccount, oldMk: ByteArray, newMk: ByteArray) {
-        val marks = ItemMarks(account.suite)
+        val marks = me.raddatz.veyq.mobile.crypto.ItemMarks(account.suite)
         // the rows of every tenant (the listing answers on a tenant's origin), each row once, with the tenant it came from
         val rows = LinkedHashMap<Pair<String, String>, Pair<OwnItemFavoritesEntry, me.raddatz.veyq.mobile.navigation.TenantRef>>()
         for (tenant in account.tenants) {
@@ -88,7 +82,7 @@ object ItemMarksRotation {
                 var held: Pair<ByteArray, Long> = opened
                 try {
                     for ((row, _) in scopeRows) {
-                        val (tag, ids) = openMarks(account, scopeId, row.nodeId, held.first, held.second, row.ciphertext, row.wrappedValueKey) ?: continue
+                        val (tag, ids) = me.raddatz.veyq.mobile.memories.ItemMarks.open(account.suite, scopeId, row.nodeId, held.first, held.second, row.ciphertext, row.wrappedValueKey) ?: continue
                         if (!marks.selfTagVerifies(oldKey, scopeId, row.nodeId, ids, tag)) continue
                         held = putAtCurrentEpoch(account, tenant, scopeId, row.nodeId, held, newKey, ids) ?: held
                     }
@@ -103,19 +97,6 @@ object ItemMarksRotation {
         }
     }
 
-    /** One entry opened: its value key from the wrap, the set under it, decoded; null for anything that does not open. */
-    private fun openMarks(
-        account: VeyqAccount, scopeId: String, nodeId: String, scopeKey: ByteArray, epoch: Long, ciphertext: String, wrapped: String,
-    ): Pair<ByteArray, List<String>>? = runCatching {
-        val ctx = context(scopeId, nodeId)
-        val valueKey = ValueKeys(account.suite).unwrap(scopeKey, epoch, ctx, unb64(wrapped))
-        try {
-            ItemMarks(account.suite).decode(account.suite.open(ctx, valueKey, unb64(ciphertext)))
-        } finally {
-            valueKey.fill(0)
-        }
-    }.getOrNull()
-
     /**
      * The set sealed with its tag under [selfKey] at [held]'s epoch and stored; on `409 stale_epoch` once more under the
      * scope opened again. The scope key now held where it was opened again (the caller zeroes it), else null. Best effort:
@@ -127,7 +108,7 @@ object ItemMarksRotation {
     ): Pair<ByteArray, Long>? {
         val api = ItemFavoritesApi(account.originOf(tenant), account.http)
         suspend fun put(key: ByteArray, epoch: Long): Int? {
-            val request = seal(account, scopeId, nodeId, key, epoch, selfKey, ids) ?: return null
+            val request = me.raddatz.veyq.mobile.memories.ItemMarks.seal(account.suite, account.primitives, scopeId, nodeId, key, epoch, selfKey, ids) ?: return null
             val r = account.respond { api.putItemFavorites(scopeId, nodeId, request) }
             return if (r.success) 0 else if (r.status == 409 && account.errorCode(r) == "stale_epoch") 409 else null
         }
@@ -141,21 +122,6 @@ object ItemMarksRotation {
             throw e
         } catch (e: Exception) {
             null
-        }
-    }
-
-    /** `tag ‖ ids` sealed under a fresh value key, wrapped under the scope key at [epoch]; null past the contract's cap. */
-    private fun seal(account: VeyqAccount, scopeId: String, nodeId: String, scopeKey: ByteArray, epoch: Long, selfKey: ByteArray, ids: List<String>): PutItemFavoritesRequest? {
-        val marks = ItemMarks(account.suite)
-        val ctx = context(scopeId, nodeId)
-        val plaintext = marks.encode(marks.selfTag(selfKey, scopeId, nodeId, ids), ids)
-        val valueKey = account.primitives.randomBytes(ValueKeys.VALUE_KEY_BYTES)
-        try {
-            val sealed = b64(account.suite.seal(ctx, valueKey, plaintext))
-            if (sealed.length > CIPHERTEXT_MAX) return null
-            return PutItemFavoritesRequest(epoch.toInt(), sealed, b64(ValueKeys(account.suite).wrap(scopeKey, epoch, ctx, valueKey)))
-        } finally {
-            valueKey.fill(0)
         }
     }
 }

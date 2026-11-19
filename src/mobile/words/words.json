@@ -3038,6 +3038,31 @@
     "en": "Former member",
     "de": "Ehemaliges Mitglied"
   },
+  "memory_uploader_guest_named": {
+    "note": "a guest's own name, marked as a guest's (the web's node.guestName; inbox #433)",
+    "en": "{1} (guest)",
+    "de": "{1} (Gast)"
+  },
+  "memory_buckets_contributor": {
+    "en": "Contribution",
+    "de": "Beitrag"
+  },
+  "memory_buckets_member": {
+    "en": "Member",
+    "de": "Mitglied"
+  },
+  "memory_buckets_you": {
+    "en": "You",
+    "de": "Du"
+  },
+  "media_marks_too_many": {
+    "en": "You have marked as many photos in this Memory as one list of marks can hold (12,284). Remove a mark to add another.",
+    "de": "Du hast in dieser Erinnerung so viele Fotos markiert, wie eine Liste von Markierungen fassen kann (12.284). Entferne eine Markierung, um eine weitere zu setzen."
+  },
+  "media_marks_save_failed": {
+    "en": "Your mark could not be saved. Try again.",
+    "de": "Deine Markierung konnte nicht gespeichert werden. Versuche es noch einmal."
+  },
   "memory_uploader_guest": {
     "en": "A guest",
     "de": "Ein Gast"
@@ -5228,6 +5253,11 @@
     "note": "{1} the person's display name.",
     "en": "Open the profile of {1}",
     "de": "Profil von {1} öffnen"
+  },
+  "node_view_tiles": {
+    "note": "the view switch's tiles (ADR 0149 decision 8; pending the owner, the recommendation: a short word beside node_view_list)",
+    "en": "Tiles",
+    "de": "Kacheln"
   },
   "node_view_list": {
     "note": "A person's Memories: the List | Map switch's list (owner 2026-11-17: a short word, not the web's \"List view\").",

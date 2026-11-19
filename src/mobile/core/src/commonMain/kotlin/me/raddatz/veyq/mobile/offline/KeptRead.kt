@@ -41,6 +41,16 @@ enum class KeptRead(val kind: String, internal val model: KSerializer<*>) {
      * not the tenant's). No revision; replaced at each online read.
      */
     MEMBERS("listScopeMembers", ListSerializer(ScopeMember.serializer())),
+    /**
+     * Per Memory or chapter: every member's sealed item-mark set (ADR 0149 decision 4), so a kept Memory shows its badges
+     * offline. No member id: whose a set is, is its self-tag. No revision; replaced at each online read.
+     */
+    ITEM_FAVORITES("getItemFavorites", ListSerializer(me.raddatz.veyq.mobile.api.memories.models.ItemFavoritesEntry.serializer())),
+    /**
+     * Per Memory or chapter: its buckets with their sealed names (ADR 0149 decision 6), so a guest stays named offline. No
+     * revision; replaced at each online read.
+     */
+    NODE_BUCKETS("listNodeBuckets", me.raddatz.veyq.mobile.api.memories.models.BucketListResponse.serializer()),
     ;
 
     companion object {

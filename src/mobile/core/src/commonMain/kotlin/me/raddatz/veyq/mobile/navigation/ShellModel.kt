@@ -703,6 +703,7 @@ class ShellModel(
      */
     fun galleryModel(
         ref: NodeAt, uploads: me.raddatz.veyq.mobile.memories.MediaUploads, music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null,
+        calendar: me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar = me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar.UTC,
     ): me.raddatz.veyq.mobile.memories.GalleryModel =
         me.raddatz.veyq.mobile.memories.GalleryModel(ref, object : me.raddatz.veyq.mobile.memories.GalleryModel.Door {
             override suspend fun gallery() = me.raddatz.veyq.mobile.memories.MemoryMedia.list(tenant, ref.scopeId, ref.nodeId)
@@ -736,6 +737,11 @@ class ShellModel(
             override suspend fun placeName(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, mayWrite: Boolean, slideshow: Boolean) =
                 me.raddatz.veyq.mobile.memories.place.PhotoPlace.resolve(tenant, item, placeNames, mayWrite, slideshow)
             override val personal = tenant.scopeKind(ref.scopeId) == "PERSONAL"
+            override fun marks() = me.raddatz.veyq.mobile.memories.ItemMarks.of(tenant, ref.scopeId, ref.nodeId)
+            override suspend fun report(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, category: String, reason: String, contact: String) =
+                me.raddatz.veyq.mobile.memories.MediumReport.report(tenant, item, category, reason, contact)
+            override suspend fun reportOffered() = this@ShellModel.reportOffered()
+            override val origin get() = tenant.origin
             override suspend fun members() = tenant.scopeMembers(ref.scopeId)
             override suspend fun setParticipants(wanted: List<String>, openedWith: List<String>) =
                 me.raddatz.veyq.mobile.memories.Participants.set(tenant, ref.scopeId, ref.nodeId, wanted, openedWith).also { runCatching { refresh() } }
@@ -754,7 +760,7 @@ class ShellModel(
             override suspend fun removeBanner(openedWith: me.raddatz.veyq.mobile.memories.banner.Banner.Slots) =
                 me.raddatz.veyq.mobile.memories.banner.BannerWrite.remove(tenant, ref.scopeId, ref.nodeId, openedWith).also { runCatching { refresh() } }
         }, access = memoryAccess(ref), now = now, music = music,
-            search = me.raddatz.veyq.mobile.memories.GalleryModel.Search(openRequests, searchContributions))
+            search = me.raddatz.veyq.mobile.memories.GalleryModel.Search(openRequests, searchContributions), calendar = calendar)
 
     // ---- the search (ADR 0146) ----
 

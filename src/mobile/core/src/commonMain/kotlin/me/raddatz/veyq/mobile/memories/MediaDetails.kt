@@ -219,6 +219,7 @@ object MediaDetails {
      * decision 11) — a former member and a guest open nothing.
      */
     class Uploader(val kind: UploaderKind, val name: String? = null, val userId: String? = null) {
+        /* a guest's [name] is the one its primary bucket's seal holds (`Buckets.guestNames`): marked as a guest's when said */
         /** The profile the uploader's name opens: a current member's, else none (uc.memory.participants § Uploader attribution). */
         val profile: String? get() = userId?.takeIf { kind == UploaderKind.MEMBER }
     }
@@ -227,7 +228,10 @@ object MediaDetails {
     fun uploaderWords(u: Uploader): me.raddatz.veyq.mobile.words.Piece = when (u.kind) {
         UploaderKind.MEMBER -> me.raddatz.veyq.mobile.words.Piece.Plain(u.name.orEmpty())
         UploaderKind.FORMER -> me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MEMORY_UPLOADER_FORMER))
-        UploaderKind.GUEST -> me.raddatz.veyq.mobile.words.Piece.Said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MEMORY_UPLOADER_GUEST))
+        UploaderKind.GUEST -> me.raddatz.veyq.mobile.words.Piece.Said(
+            u.name?.let { me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MEMORY_UPLOADER_GUEST_NAMED, it) }
+                ?: me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MEMORY_UPLOADER_GUEST),
+        )
     }
 
     /** Where the uploader's row stands among [rows]: before the place, as on the web; after the last where none is. */
@@ -236,27 +240,33 @@ object MediaDetails {
 
     /**
      * Who added each of [items], by its owner key (`useUploaderNames`): `user:<id>` a member, named by core's display
-     * rule while in the space, else a former member; `share:<identity>` a link's guest. Empty where the space's members could
-     * not be read (a member is then left unnamed, never "former").
+     * rule while in the space, else a former member; `share:<identity>` a link's guest, named by its primary bucket's sealed
+     * name in node [nodeId] where it opens (`Buckets.guestNames`, ADR 0149 decision 6), else "a guest". Empty where the
+     * space's members could not be read (a member is then left unnamed, never "former").
      */
     @Throws(Exception::class)
-    suspend fun uploaders(tenant: TenantSession, scopeId: String, items: List<MemoryMedia.Item>): Map<String, Uploader> {
+    suspend fun uploaders(tenant: TenantSession, scopeId: String, items: List<MemoryMedia.Item>, nodeId: String? = items.firstOrNull()?.nodeId): Map<String, Uploader> {
         val keys = items.mapNotNull { it.ownerKey }.toSet()
         if (keys.isEmpty()) return emptyMap()
         // a kept read (ADR 0144 decision 7): offline the list as last read online names them
         val members = tenant.account.members(tenant.base, tenant.tenant.tenantId, scopeId)
-        return uploaders(keys, members?.map { it.userId to it.username }, tenant.people)
+        // the buckets a kept read too (ADR 0149 decision 6): offline a guest stays named
+        val guests = if (nodeId != null && keys.any { it.startsWith("share:") }) Buckets.guestNames(tenant, scopeId, nodeId) else emptyMap()
+        return uploaders(keys, members?.map { it.userId to it.username }, tenant.people, guests)
     }
 
     /**
      * Who each owner key of [keys] is, the space's [members] (user id and username; null: not read) and the tenant's
      * directory [people] at hand: a member named, one the members do not list a former member — each with its user id —, a link's guest a guest; a member key while the members did not read is left out.
      */
-    internal fun uploaders(keys: Set<String>, members: List<Pair<String, String>>?, people: Map<String, me.raddatz.veyq.mobile.session.Person>): Map<String, Uploader> {
+    internal fun uploaders(
+        keys: Set<String>, members: List<Pair<String, String>>?, people: Map<String, me.raddatz.veyq.mobile.session.Person>,
+        guests: Map<String, String> = emptyMap(),
+    ): Map<String, Uploader> {
         val out = HashMap<String, Uploader>()
         for (key in keys) {
             when {
-                key.startsWith("share:") -> out[key] = Uploader(UploaderKind.GUEST)
+                key.startsWith("share:") -> out[key] = Uploader(UploaderKind.GUEST, guests[key])
                 key.startsWith("user:") && members != null -> {
                     val userId = key.removePrefix("user:")
                     val member = members.firstOrNull { it.first == userId }

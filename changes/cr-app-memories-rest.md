@@ -287,7 +287,7 @@ Each phase ends with every platform building.
   **Bites:** (a) the banner left out of the content → the web's fixture case red; (b) a copy that decodes the original →
   the frame-only reader's count red; (c) participants exported for a guest → red.
 
-- [ ] **5 core: marks, filter, contributions, report** — D4, D5, D6, D9: `ItemMarks` (with `ItemMarksRotation` on the
+- [x] **5 core: marks, filter, contributions, report** — D4, D5, D6, D9: `ItemMarks` (with `ItemMarksRotation` on the
   moved open/seal, its tests unchanged), `GalleryFilter`, `Buckets`, the guest's name in `MediaDetails`, the lightbox's
   report, the kept reads. Tests: R1–R3's web tests twinned; two sessions marking one medium → the count 2, each `mine`
   only for itself; a toggle before the own set is read refused; a personal scope without a count and without the mode;

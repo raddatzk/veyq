@@ -329,6 +329,9 @@ class AccountOffline internal constructor(
             row.text("blobId")?.let { into += blobKey(tenant, scope, it) }
             for (d in row.field("derivatives").array()) d.text("blobId")?.let { into += blobKey(tenant, scope, it) }
         }
+        // a Memory's marks and buckets (ADR 0149 decisions 4 and 6): its badges and its guests' names, kept as its listing is
+        into += key(KeptRead.ITEM_FAVORITES, tenant, scope, node)
+        into += key(KeptRead.NODE_BUCKETS, tenant, scope, node)
         val files = key(KeptRead.FILES, tenant, scope, node)
         into += files
         filesOf(files, tenant, scope, into, null)
