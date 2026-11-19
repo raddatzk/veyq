@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
@@ -126,9 +127,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private val recent = RecentUses(persist = ::persistRecent, initial = loadRecent())
     private val hidden = Hidden(persist = { prefs.edit().putStringSet("hidden", it).apply() }, initial = prefs.getStringSet("hidden", emptySet()).orEmpty())
     private var host: java.lang.ref.WeakReference<android.app.Activity>? = null
+    /** The device's keys in the Keystore: its wraps, its unlock keys, its sealed secrets (a link's guest sessions among them). */
+    private val deviceKeys = KeystoreDeviceKeys(app) { host?.get() }
     private val device = ThisDevice(
         PreferencesStore(app),
-        KeystoreDeviceKeys(app) { host?.get() },
+        deviceKeys,
         android.os.Build.MODEL,
         BouncyCastlePrimitives,
         // ADR 0140 decision 3: app-private, credential-encrypted, left out of Auto Backup by the directory itself
@@ -250,6 +253,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             closeCuration()
             personSection = null
             closeSearch()
+            // a kept link shown in place goes with the tenant; a link open on its own page is a guest's and stays
+            openBookmark?.close()
+            openBookmark = null
             tenantSession?.close()
         }
         _offer.value = (g as? me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed)?.offer
@@ -1104,7 +1110,21 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** The Pot open in the app (core's `PotModel`): its views, its live poll, its writes. */
     private var potModel: me.raddatz.veyq.mobile.expenses.PotModel? = null
     private var potWatch: kotlinx.coroutines.Job? = null
-    private val potSession: PotSession? get() = potModel?.session
+    private val potSession: PotSession? get() = openPot?.session
+
+    /**
+     * The Pot of a link open as its guest (ADR 0150 decision 5, `GuestPage.Pot`) while its page is on screen: the Pot's
+     * page and its sheets are the member's, so they read and write through whichever Pot is shown — the guest's above
+     * the shell while it is, the shell's otherwise ([openPot], [pot]).
+     */
+    private val _guestPot = MutableStateFlow<me.raddatz.veyq.mobile.expenses.PotModel?>(null)
+    private val openPot: me.raddatz.veyq.mobile.expenses.PotModel? get() = _guestPot.value ?: potModel
+
+    /** The guest's Pot [pot] shown (its page composed) or, null, gone. */
+    fun showGuestPot(pot: me.raddatz.veyq.mobile.expenses.PotModel?) {
+        if (pot == null) _guestPot.value?.close()
+        _guestPot.value = pot
+    }
 
     private val _pot = MutableStateFlow<me.raddatz.veyq.mobile.expenses.PotModel.State?>(null)
 
@@ -1999,22 +2019,24 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         refreshLists(t)
         return done
     }
-    val pot: StateFlow<me.raddatz.veyq.mobile.expenses.PotModel.State?> = _pot.asStateFlow()
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val pot: StateFlow<me.raddatz.veyq.mobile.expenses.PotModel.State?> =
+        _guestPot.flatMapLatest { g -> g?.state ?: _pot }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
 
     /** Opens and reads the Pot [ref] unless it is the one shown. */
     fun loadPot(ref: ObjectRef) {
-        val pots = potModel ?: return
+        val pots = openPot ?: return
         viewModelScope.launch { pots.open(ref) }
     }
 
     /** The open Pot's live poll, for as long as the caller runs it (the Pot's screen while it is started). */
     suspend fun livePot() {
-        potModel?.live()
+        openPot?.live()
     }
 
     /** Reads the open Pot again now (pull to refresh); [done] when it settled, moved or not. */
     fun refreshPot(done: () -> Unit) {
-        val pots = potModel ?: return done()
+        val pots = openPot ?: return done()
         viewModelScope.launch {
             pots.refresh()
             done()
@@ -2023,28 +2045,28 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** Records settle-up [rows] as paid, dated the core's today (core's `PotModel.record`); a refusal is the Pot's message. */
     fun recordSettleUp(rows: List<me.raddatz.veyq.mobile.expenses.PotView.SettleRow>) {
-        val pots = potModel ?: return
+        val pots = openPot ?: return
         viewModelScope.launch { pots.record(rows) }
     }
 
     /** Whether deleted entry [entryId] may be restored now, by the core's clock. */
-    fun restorable(entryId: String): Boolean = potModel?.restorable(entryId) == true
+    fun restorable(entryId: String): Boolean = openPot?.restorable(entryId) == true
 
     /** Restores deleted entry [entryId] (core's `PotModel.restore`, its window the core's); [done] once it was. */
     fun restoreEntry(entryId: String, done: () -> Unit) {
-        val pots = potModel ?: return
+        val pots = openPot ?: return
         viewModelScope.launch { if (pots.restore(entryId)) done() }
     }
 
     /** The open Pot's settings and people (core's `PotSettings`); null while none is read. */
-    fun potSettings(): me.raddatz.veyq.mobile.expenses.PotSettings? = potModel?.settings()
+    fun potSettings(): me.raddatz.veyq.mobile.expenses.PotSettings? = openPot?.settings()
 
     /**
      * One change of the open Pot's settings or people ([op], a `PotSettings` action); [done] once it was stored. A new base
      * currency is said on the Pot's row at once.
      */
     fun settingsWrite(op: suspend () -> Boolean, done: () -> Unit = {}) {
-        val pots = potModel ?: return
+        val pots = openPot ?: return
         val ref = _pot.value?.ref ?: return
         viewModelScope.launch {
             val stored = op()
@@ -2070,7 +2092,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * over the Pot's model; [pending] what another app shared as its receipts. Null when the Pot cannot take one.
      */
     fun entryEditor(entryId: String?, separator: Char, pending: List<PotSession.PendingReceipt> = emptyList()): me.raddatz.veyq.mobile.expenses.EntryEditor? =
-        potModel?.editor(entryId, separator, pending)
+        openPot?.editor(entryId, separator, pending)
 
     /** A receipt of the open Pot opened to its bytes, or null (blocked, or it did not read). */
     /**
@@ -2103,12 +2125,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         skipped
     }
 
-    suspend fun openReceipt(receiptId: String): ByteArray? = potModel?.openReceipt(receiptId)
+    suspend fun openReceipt(receiptId: String): ByteArray? = openPot?.openReceipt(receiptId)
 
 
     /** Forgets the open Pot's last refusal (a dialog closed). */
     fun clearPotMessage() {
-        potModel?.clearMessage()
+        openPot?.clearMessage()
     }
 
     /** The shell's lists from what was read, less what this device hides; on [start], the shell where the app opens. */
@@ -2212,4 +2234,67 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun loadRecent(): List<UseKey> = prefs.getString("uses", "").orEmpty().lines().mapNotNull(UseKey::decode)
+
+    // ---- a received link opened as its guest, and a kept one (ADR 0150) ----
+
+    /**
+     * *Open a link* and the link open as its guest (ADR 0150 decisions 3–5): a screen above the sign-in or the shell, its
+     * guest's session in the Keystore-wrapped store, its uploads in the app's one queue.
+     */
+    val guests: GuestLinks by lazy {
+        GuestLinks(viewModelScope, PreferencesStore(getApplication()), AndroidGuestSessions(deviceKeys), uploads, deriver, { shellModel?.tenant }, ::appLanguage)
+    }
+
+    /** The bookmark page on screen (core's `BookmarkPage`): one at a time; an in-place link let go with it. */
+    private var openBookmark: me.raddatz.veyq.mobile.sharing.BookmarkPage? = null
+
+    /** The page of bookmark [node], loading (its meta opened, the share shown in place where the tenant embeds). */
+    fun bookmarkPage(node: me.raddatz.veyq.mobile.navigation.NodeAt): me.raddatz.veyq.mobile.sharing.BookmarkPage? {
+        openBookmark?.takeIf { it.node == node }?.let { return it }
+        val t = shellModel?.tenant ?: return null
+        openBookmark?.close()
+        val page = me.raddatz.veyq.mobile.sharing.BookmarkPage.of(t, node) { link, password -> guests.view(link, password) }
+        openBookmark = page
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { page.load() }
+        return page
+    }
+
+    /** The bookmark's page left: its in-place link let go. */
+    fun closeBookmark(page: me.raddatz.veyq.mobile.sharing.BookmarkPage) {
+        if (openBookmark !== page) return
+        page.close()
+        openBookmark = null
+    }
+
+    /** *Open on its own page*: the kept link's screen above the shell, its password handed in memory, *Keep* offered. */
+    fun bookmarkOwnPage(page: me.raddatz.veyq.mobile.sharing.BookmarkPage) {
+        page.openOwnPage(shellModel?.tenant)?.let(guests::show)
+    }
+
+    /** *Report shared content*: the kept link's screen with its report to the share's own operator open. */
+    fun bookmarkReportShared(page: me.raddatz.veyq.mobile.sharing.BookmarkPage) {
+        page.reportShared()?.let(guests::show)
+    }
+
+    /** New → Bookmark (core's `BookmarkCreate`) at [parentId] of space [scopeId] (null: its top); null before the shell is read. */
+    fun bookmarkCreate(scopeId: String, parentId: String?): me.raddatz.veyq.mobile.sharing.BookmarkCreate? {
+        val t = shellModel?.tenant ?: return null
+        val kind = (_screen.value as? Screen.Signed)?.spaces?.firstOrNull { it.scopeId == scopeId }?.kind
+        return me.raddatz.veyq.mobile.sharing.BookmarkCreate(me.raddatz.veyq.mobile.sharing.BookmarkCreate.into(t, scopeId, parentId), groupSpace = kind != "PERSONAL")
+    }
+
+    /**
+     * A READ_WRITE guest's replace of [file]'s content with the picked document (ADR 0150 decision 5): the job the guest's
+     * file door makes, in the app's one queue; the page reads the file anew once it settled.
+     */
+    fun guestReplace(file: me.raddatz.veyq.mobile.depot.FileModel, uri: android.net.Uri) {
+        viewModelScope.launch {
+            val p = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { picked(uri) } ?: return@launch
+            val job = file.replace(source(p)) ?: return@launch
+            uploads.enqueue(listOf(job), p.name, file.node.nodeId, onSettled = { file.reload() }, onFinished = null)
+        }
+    }
+
+    /** A bookmark was made (New or a link's *Keep*): the lists read anew, so its row shows. */
+    fun bookmarkMade() = refreshLists {}
 }

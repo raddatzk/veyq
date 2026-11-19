@@ -180,8 +180,8 @@ internal enum class MemoryView { PHOTOS, MUSIC, MAP, CONTRIBUTIONS }
  * to whoever looks ([contributions]: a member's, `MemoryRights.buckets` and `Contributions.OFFERED`).
  */
 @Composable
-internal fun MemoryViewSwitch(view: MemoryView, music: Boolean, contributions: Boolean, onView: (MemoryView) -> Unit) {
-    val views = MemoryView.entries.filter { (it != MemoryView.MUSIC || music) && (it != MemoryView.CONTRIBUTIONS || contributions) }
+internal fun MemoryViewSwitch(view: MemoryView, music: Boolean, contributions: Boolean, map: Boolean = true, onView: (MemoryView) -> Unit) {
+    val views = MemoryView.entries.filter { (it != MemoryView.MUSIC || music) && (it != MemoryView.CONTRIBUTIONS || contributions) && (it != MemoryView.MAP || map) }
     val selected = views.indexOf(view).coerceAtLeast(0)
     // four views' words do not fit a phone's fixed tabs ("Contributions" broke mid-word, 2026-11-19): Material's scrollable tabs then
     val tabs: @Composable (@Composable () -> Unit) -> Unit = { content ->

@@ -67,5 +67,9 @@ class MainActivity : ComponentActivity() {
             model.devFillPasswordTrust(it)
         }
         DevLogin.kitPassword(intent)?.let(model::devSignInWithKit)
+        DevLogin.openLink(intent)?.let { link ->
+            model.guests.ask()
+            model.guests.asking.value?.text(link)
+        }
     }
 }

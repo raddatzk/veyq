@@ -27,5 +27,11 @@ object DevLogin {
 
     fun kitPassword(intent: Intent?): String? = intent?.extras?.getString("veyq.devKitPassword")
 
+    /**
+     * `veyq.devOpenLink`: a received link typed into *Open a link*'s field as a paste would (a pass's; `adb shell input
+     * text` drops characters of a long link under load). The field checks it; the pass still taps Open.
+     */
+    fun openLink(intent: Intent?): String? = intent?.extras?.getString("veyq.devOpenLink")
+
     class Credentials(val server: String, val email: String, val password: String, val secretKey: String, val remember: Boolean)
 }

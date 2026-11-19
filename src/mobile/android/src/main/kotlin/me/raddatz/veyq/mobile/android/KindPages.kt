@@ -56,7 +56,11 @@ internal object KindPages {
     /** Memories' Memory and chapter: their music's play/stop (core's), their ZIP, their gallery (`MemoryScreen`); their cover and copy are core's. */
     private val memory = KindPage(header = { node, model -> memoryHeader(node, model) }, body = { ref, _, model -> MemoryScreen(ref, model) })
 
+    /** Core's kept link (ADR 0150 decision 6): *Open on its own page* and *Report shared content*, the share shown in place. */
+    private val bookmark = KindPage(header = { node, model -> bookmarkHeader(node, model) }, body = { ref, _, model -> BookmarkScreen(ref, model) })
+
     fun of(kind: String): KindPage? = when (kind) {
+        me.raddatz.veyq.mobile.AppKinds.BOOKMARK_KIND -> bookmark
         "MEMORY", "CHAPTER" -> memory
         me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX -> dropBox
         "FOLDER" -> folder
