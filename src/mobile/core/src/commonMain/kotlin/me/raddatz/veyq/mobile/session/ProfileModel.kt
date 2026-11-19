@@ -62,7 +62,8 @@ class ProfileModel(
         suspend fun update(body: ProfileUpdateRequest): Reply
         suspend fun setAvatar(body: SetAvatarRequest): Reply
         suspend fun clearAvatar(): Reply
-        /** The tenant's people read anew (`readPeople`) and their pictures synced. */
+        /** The tenant's people read anew (`readPeople`) and their pictures synced through the session's [AvatarsModel], so
+         *  every place that draws them follows ([OwnPeople]). */
         suspend fun peopleChanged()
         /** One's own picture as the pictures hold it (the encoded image), or null: the letter. */
         fun picture(): ByteArray?
@@ -121,6 +122,8 @@ class ProfileModel(
     private var key: ByteArray? = null
     private var epoch: Long = 0
     private var draft: ByteArray? = null
+    /** The picture this model saved last: what [picture] draws until the pictures hold the server's copy (inbox #980). */
+    private var saved: ByteArray? = null
     private var closed = false
 
     /** Reads the profile and opens the name. */
@@ -148,11 +151,14 @@ class ProfileModel(
     fun setLastName(value: String) { if (current.hasKey) _state.value = current.copy(lastName = value) }
     fun setRequireGroupAddConsent(value: Boolean) { _state.value = current.copy(requireGroupAddConsent = value) }
 
-    /** The picture to draw: the draft's, none for a removal, else the one the pictures hold. */
+    /**
+     * The picture to draw: the draft's, none for a removal, else the one this model just saved — the pictures still hold
+     * the one before it while the people are read anew (inbox #980) —, else the one the pictures hold.
+     */
     fun picture(): ByteArray? = when (current.picture) {
         PictureDraft.SET -> draft
         PictureDraft.CLEAR -> null
-        PictureDraft.KEEP -> door.picture()
+        PictureDraft.KEEP -> if (current.serverHasPicture) saved ?: door.picture() else null
     }
 
     /**
@@ -227,6 +233,8 @@ class ProfileModel(
         }
         val set = current.picture == PictureDraft.SET
         if (current.picture != PictureDraft.KEEP) {
+            // the saved bytes stay drawable: the pictures hold the server's copy only once the people are read anew
+            saved = if (set) draft else null
             draft = null
             _state.value = current.copy(picture = PictureDraft.KEEP, serverHasPicture = set)
         }
@@ -239,6 +247,7 @@ class ProfileModel(
         closed = true
         hold(null)
         draft = null
+        saved = null
     }
 
     // ---- the seals ----
@@ -362,10 +371,25 @@ internal class TenantProfileDoor(private val tenant: TenantSession) : ProfileMod
         return ProfileModel.Reply(r.status, if (r.success) null else account.errorCode(r))
     }
 
-    override suspend fun peopleChanged() {
-        val people = tenant.readPeople() ?: return
-        tenant.avatars.sync(people.values)
+    private val own = OwnPeople({ tenant.readPeople()?.values }, tenant.pictures, account.userId)
+    override suspend fun peopleChanged() = own.peopleChanged()
+    override fun picture(): ByteArray? = own.picture()
+}
+
+/**
+ * The door's people half (inbox #980): the members read anew and synced through the session's [AvatarsModel] — the one
+ * every app and the bridge's `ShellShown` watch —, never [MemberAvatars] alone, which moved the bytes but told no watcher,
+ * so a saved picture showed only after the tenant was read again. One's own picture is read from the same model.
+ */
+internal class OwnPeople(
+    private val read: suspend () -> Collection<Person>?,
+    private val pictures: AvatarsModel,
+    private val userId: String,
+) {
+    suspend fun peopleChanged() {
+        val people = read() ?: return
+        pictures.peopleRead(people)
     }
 
-    override fun picture(): ByteArray? = tenant.avatars.pictureOf(account.userId)
+    fun picture(): ByteArray? = pictures.state.value[userId]
 }

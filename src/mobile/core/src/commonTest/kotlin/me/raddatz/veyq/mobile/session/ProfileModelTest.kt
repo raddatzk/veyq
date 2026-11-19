@@ -83,8 +83,28 @@ class ProfileModelTest {
             return ProfileModel.Reply(204)
         }
         override suspend fun clearAvatar(): ProfileModel.Reply { avatar = null; avatarRevision++; return ProfileModel.Reply(204) }
-        override suspend fun peopleChanged() { peopleRead++ }
-        override fun picture(): ByteArray? = null
+        /** The session's people half, when a test wires one ([OwnPeople] over an [AvatarsModel]); else only counted. */
+        var own: OwnPeople? = null
+        /** What a host would see mid-save, as the people are read anew (the bridge's `Profile.PictureBytes`). */
+        var duringPeople: (() -> Unit)? = null
+        override suspend fun peopleChanged() { peopleRead++; duringPeople?.invoke(); own?.peopleChanged() }
+        override fun picture(): ByteArray? = own?.picture()
+
+        /** The members as the directory lists them now: one's own row with its picture revision. */
+        fun people(): List<Person> = listOf(Person(userId, username, username, avatarRevision))
+
+        /** The session's pictures over this server: a sync opens one's own picture as every member does. */
+        fun pictures(): AvatarsModel = AvatarsModel(
+            object : AvatarsModel.Avatars {
+                val held = HashMap<String, ByteArray>()
+                override suspend fun sync(people: Collection<Person>): Boolean {
+                    held.clear()
+                    pictureAsMembersOpenIt()?.let { held[userId] = it }
+                    return true
+                }
+                override fun pictures(): Map<String, ByteArray> = held.toMap()
+            },
+        ) { people() }
 
         /** The picture as every member opens it (`MemberAvatars.open`). */
         fun pictureAsMembersOpenIt(): ByteArray? = avatar?.let {
@@ -239,6 +259,53 @@ class ProfileModelTest {
         assertEquals("kevin2", s.username)
         assertEquals(Msg.PROFILE_PICTURE_SAVE_FAILED, m.current.pictureRefusal)
         assertEquals(ProfileModel.PictureDraft.SET, m.current.picture, "the draft went before it was saved")
+    }
+
+    /**
+     * Inbox #980: a saved picture shows at once wherever the session's pictures are drawn (the person page, the switcher,
+     * the bridge's `ShellShown.picturesRound`) — the door syncs the people through the session's [AvatarsModel], never
+     * [MemberAvatars] alone, which told no watcher. Bitten by an [OwnPeople.peopleChanged] that skips
+     * [AvatarsModel.peopleRead]: red.
+     */
+    @Test
+    fun aSavedPictureReachesTheSessionsPicturesAtOnce() = runTest {
+        val fits = webp(700)
+        val s = Played()
+        val pictures = s.pictures()
+        pictures.load()
+        s.own = OwnPeople({ s.people() }, pictures, s.userId)
+        val round = pictures.held.value.round
+        val m = ProfileModel(s, suite, FixedEncoder(fits))
+        m.load()
+        m.choosePicture(ByteArray(ProfileModel.EDGE * ProfileModel.EDGE * 4))
+        m.save()
+        assertContentEquals(fits, pictures.state.value[s.userId]?.copyOfRange(0, fits.size), "the session's pictures did not follow the save")
+        assertTrue(pictures.held.value.round > round, "the round did not move: a host keeping pictures by id never asks again")
+        assertContentEquals(fits, m.picture()?.copyOfRange(0, fits.size))
+    }
+
+    /**
+     * Inbox #980: the picture asked while the people are read anew — the draft gone, the server's not yet held — is the
+     * one just saved, never the letter; and it stays so where the read fails (offline). Bitten by a model that drops the
+     * saved bytes with the draft: red.
+     */
+    @Test
+    fun theSavedPictureShowsWhileThePeopleAreReadAnew() = runTest {
+        val fits = webp(700)
+        val s = Played()
+        val m = ProfileModel(s, suite, FixedEncoder(fits))
+        m.load()
+        m.choosePicture(ByteArray(ProfileModel.EDGE * ProfileModel.EDGE * 4))
+        var asked: ByteArray? = null
+        s.duringPeople = { asked = m.picture() }
+        m.save()
+        assertEquals(1, s.peopleRead)
+        assertContentEquals(fits, asked, "mid-save the picture was the letter (NO_PICTURE)")
+        assertContentEquals(fits, m.picture(), "the people did not read: the saved picture must still show")
+        // and a removal saved draws the letter at once
+        m.removePicture()
+        m.save()
+        assertNull(m.picture())
     }
 
     @Test
