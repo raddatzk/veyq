@@ -73,6 +73,12 @@ final class PlayedSettings: SettingsActions {
         label = trimmed
         rows = rows.map { var r = $0; if r.current { r.label = trimmed }; return r }
     }
+    func renameFamily(_ familyId: String, _ name: String) {
+        log("renameFamily \(familyId)")
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        rows = rows.map { var r = $0; if r.id == familyId, r.label != nil { r.label = trimmed }; return r }
+    }
     func signOutFamily(_ familyId: String) {
         log("signOut \(familyId)")
         rows.removeAll { $0.id == familyId && !$0.current }

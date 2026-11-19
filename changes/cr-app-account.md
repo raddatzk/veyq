@@ -407,6 +407,16 @@ key-touching flows after the vectors that hold them, erasure last.
   the alert; then D10's rows, the kit through `fileExporter` (iOS) and `NSSavePanel` (macOS). · Done when: the macOS
   and iOS-simulator SDK builds green; the macOS pass (agent, its accessibility tree); the container's no-copy check
   after a kit save on macOS; the iPhone and iPad passes are the owner's.
+  *Built 2026-11-19 (passes open):* #917's fix re-read and kept (the alert now also renames another named device, D1);
+  `AccountFlows.swift` — a sheet with a `NavigationStack` per flow over the core's model, `.secretOnScreen()`,
+  `SecureField`s, the danger step a destructive `.confirmationDialog` (iOS) / `.alert` (macOS); `KitSaveSection` (macOS
+  `NSSavePanel` → `KitStep.save` by path; iOS `fileExporter` with `KitDocument`, its bytes made only when the exporter asks,
+  zeroed after, #975); *Your profile* with the square cropper rendering 256 px RGBA; the person page's toolbar *Edit
+  profile* and safety-number section (own: digits, chain code, QR drawn from the core's matrix; another's: state, *Compare*
+  by scan or digits). Settings gains the five sections, `SettingsSection` the five ids (shared with the other platforms);
+  `appleMain`'s `AppleAccount` carries what Swift cannot (default arguments, a typed key, bytes in one copy). The macOS
+  and iOS-simulator SDK builds green. **Not run:** the macOS pass and the no-copy check — the screen was locked all
+  phase (#976); *Links to renew* has no core state yet (#977).
 
 - [ ] **7 Linux** — first #957 (hold the `ScrolledWindow` itself), since D10 grows that page; then D10's row over the
   bridge. · Done when: `run.py test`, `bridge`, `build` green; the Broadway pass (agent); the no-copy check of the

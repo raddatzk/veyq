@@ -11,6 +11,10 @@ struct PersonScreen: View {
     /// Memories' section while the profile shows (core's `PersonMemories`, read off the main thread); its List | Map choice
     /// is not stored: it opens on the list.
     @State private var section: PersonSection?
+    /// *Edit profile* on one's own page (ADR 0148 decision 2): the same sheet as Settings' *Your profile*.
+    @State private var editing = false
+
+    private var mine: Bool { model.myUserId == userId }
 
     private var profile: PersonProfile? { model.profile(userId) }
 
@@ -29,6 +33,10 @@ struct PersonScreen: View {
                         frame(profile)
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
+                        // the safety number below the name (ADR 0148 decision 3): one's own to show, another's to compare
+                        if !profile.former {
+                            SafetyNumberSection(model: model, userId: userId, name: Self.name(profile), mine: mine)
+                        }
                         if let section {
                             Section {
                                 PersonMemoriesRows(model: model, section: section)
@@ -41,6 +49,14 @@ struct PersonScreen: View {
             }
         }
         .navigationTitle(profile.map(Self.name) ?? "")
+        .toolbar {
+            if mine {
+                ToolbarItem(placement: .automatic) {
+                    Button(say(.profileEdit)) { editing = true }
+                }
+            }
+        }
+        .sheet(isPresented: $editing) { ProfileSheet(model: model) }
         .task(id: userId) {
             section?.close()
             section = profile.flatMap { $0.sections.contains(.memories) ? model.personMemories(userId) : nil }
