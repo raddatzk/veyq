@@ -30,7 +30,7 @@ import me.raddatz.veyq.mobile.session.DeviceStore
  * - **A write the store does not take** (the tier off, the floor) drops what it kept under that key: an older answer is
  *   never left to stand for a newer one.
  * - **The sweep** ([sweep]) marks from the kept `listMyTenants` and each tenant's `listMyScopes` down through each
- *   scope's tree to the media, files and application blobs of every node it opens, and drops every entry it does not
+ *   scope's tree to the media, files, application blobs and a Pot's ledger of every node it opens, and drops every entry it does not
  *   reach: a trashed medium, a removed membership, a tenant left, a replaced file — and a node or medium the operator
  *   blocked with all below it, and a tenant answered as suspended ([suspend]): kept ciphertext is never a way around a
  *   hold the server states (decision 6). A pin of such a node keeps its place, not its content ([Pin.State.UNAVAILABLE]).
@@ -332,6 +332,8 @@ class AccountOffline internal constructor(
         // a Memory's marks and buckets (ADR 0149 decisions 4 and 6): its badges and its guests' names, kept as its listing is
         into += key(KeptRead.ITEM_FAVORITES, tenant, scope, node)
         into += key(KeptRead.NODE_BUCKETS, tenant, scope, node)
+        // a Pot's ledger (ADR 0153 decision 6): its receipts are its application blobs, below
+        into += key(KeptRead.POT_REVISIONS, tenant, scope, node)
         val files = key(KeptRead.FILES, tenant, scope, node)
         into += files
         filesOf(files, tenant, scope, into, null)

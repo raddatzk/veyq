@@ -151,6 +151,15 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
         var identity: Pair<String, ByteArray>? = null
         /** Another drop key seed the guest's `K_up` is wrapped to (a wrap that does not open under the box's key); null: the box's. */
         var wrapSeed: ByteArray? = null
+        /** A Pot's revisions as `listPotRevisions` serves them, in append order ([revise]); its counters with them. */
+        val revisions = mutableListOf<PotRevision>()
+        var ledgerRevision = 1
+        var deleteRevision = 0
+        /** The status `listPotRevisions` answers instead of the ledger (a Pot no longer the account's); null: the ledger. */
+        var refuseLedger: Int? = null
+        /** Its application blobs as `listApplicationBlobs` serves them ([receipt]), each with the record it belongs to. */
+        val appBlobs = mutableListOf<Pair<Blob, String>>()
+        var blobsRevision = 1
         /** The key this node's directory entry lives under: a guest's `K_up`, else its parent's key, else the scope key. */
         val entryKey: ByteArray get() = identity?.second ?: parent?.key ?: scope.key
         val encryptedName: ByteArray get() = suite.sealField(Context("node-name", *binding), entryKey, name.encodeToByteArray())
@@ -181,6 +190,43 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
         /** Who added it (`user:<id>`, `share:<identityId>`); null: not listed. */
         var owner: String? = null
     }
+
+    /** One revision of a Pot's record, sealed under the Pot's key at its address as `PotWrites` seals it (ADR 0108). */
+    class PotRevision(val entryId: String, val revision: Long, val sealed: me.raddatz.veyq.mobile.expenses.SealedRevision, val tombstone: Boolean)
+
+    /** A Pot in [scope] whose settings are euros (its sealed meta's `pot`), with no revision yet. */
+    fun pot(scope: Scope, label: String, name: String = "Pot $label"): Node =
+        node(scope, label, me.raddatz.veyq.mobile.expenses.PotSession.KIND, name = name).also {
+            it.meta = mapOf(me.raddatz.veyq.mobile.expenses.PotMeta.KEY to me.raddatz.veyq.mobile.expenses.PotMeta(me.raddatz.veyq.mobile.expenses.Ledger.BaseCurrency("EUR", 2), emptyList()).toJson())
+        }
+
+    /** The next revision of record [entryId] of Pot [pot] appended, carrying [content]; the ledger's revision moves. */
+    fun revise(pot: Node, entryId: String, content: me.raddatz.veyq.mobile.expenses.RevisionContent): PotRevision {
+        val revision = (pot.revisions.filter { it.entryId == entryId }.maxOfOrNull { it.revision } ?: 0) + 1
+        val sealed = me.raddatz.veyq.mobile.expenses.RevisionCodec(suite).seal(
+            me.raddatz.veyq.mobile.expenses.RevisionAddress(pot.scope.id, pot.id, entryId, revision), pot.key,
+            me.raddatz.veyq.mobile.expenses.RevisionBody(emptyList(), content),
+        )
+        return PotRevision(entryId, revision, sealed, content == me.raddatz.veyq.mobile.expenses.Deleted).also {
+            pot.revisions += it
+            pot.ledgerRevision++
+        }
+    }
+
+    /** Record [entryId] of Pot [pot] erased (`erasePotRecord`): every revision of it gone, both counters moved. */
+    fun eraseRecord(pot: Node, entryId: String) {
+        pot.revisions.removeAll { it.entryId == entryId }
+        pot.ledgerRevision++
+        pot.deleteRevision++
+    }
+
+    /** A receipt of entry [entryId] in Pot [pot]: a one-frame blob with a marker, its type sealed; the listing's tag moves. */
+    fun receipt(pot: Node, label: String, entryId: String, type: String = "image/png"): Blob =
+        Blob(label, listOf("receipt $label".encodeToByteArray()), me.raddatz.veyq.mobile.expenses.Receipts.ROLE, pot.id, { pot.key }, pot.scope.id, type, "$label.png").also {
+            blobs[it.id] = it
+            pot.appBlobs += it to entryId
+            pot.blobsRevision++
+        }
 
     val tenants = mutableListOf(Tenant("t1", "a.example"))
     val scopes = mutableListOf<Scope>()
@@ -420,6 +466,35 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
                 s.nodes += n
                 s.revision++
                 respond("", HttpStatusCode.NoContent)
+            }
+            path.matches(Regex("/api/scopes/[^/]+/pots/[^/]+/revisions")) -> {
+                val parts = path.split('/')
+                val s = scopes.firstOrNull { it.id == parts[3] && it.tenant == tenant } ?: return json("""{"code":"scope_not_found"}""", HttpStatusCode.NotFound)
+                if (!s.member) return json("""{"code":"scope_not_found"}""", HttpStatusCode.NotFound)
+                val n = s.nodes.firstOrNull { it.id == parts[5] } ?: return json("""{"code":"node_not_found"}""", HttpStatusCode.NotFound)
+                n.refuseLedger?.let { return json("""{"code":"node_not_found"}""", HttpStatusCode.fromValue(it)) }
+                if (r.headers[HttpHeaders.IfNoneMatch] == n.ledgerRevision.toString()) return respond("", HttpStatusCode.NotModified)
+                // the cursor is a position in the append order: what is past it is the delta
+                val since = r.url.parameters["since"]?.toInt() ?: 0
+                val rows = n.revisions.drop(since)
+                val sinceDelete = r.url.parameters["sinceDelete"]?.toInt() ?: 0
+                val ids = if (sinceDelete < n.deleteRevision) n.revisions.joinToString(",", "[", "]") { """{"entryId":"${it.entryId}","revision":${it.revision}}""" } else "null"
+                json(
+                    """{"revisions":[${rows.joinToString(",") { """{"entryId":"${it.entryId}","revision":${it.revision},"tombstone":${it.tombstone},"erasure":false,"sealedBody":"${b64(it.sealed.sealedBody)}","wrappedRevisionKey":"${b64(it.sealed.wrappedRevisionKey)}","writer":"user:$userId","createdAt":"2026-01-01T00:00:00.000Z"}""" }}],""" +
+                        """"more":false,"cursor":${if (rows.isEmpty()) "null" else "\"${n.revisions.size}\""},"ledgerRevision":${n.ledgerRevision},"deleteRevision":${n.deleteRevision},"revisionIds":$ids,"guestWriters":[]}""",
+                )
+            }
+            path.matches(Regex("/api/scopes/[^/]+/nodes/[^/]+/application-blobs")) -> {
+                val parts = path.split('/')
+                val s = scopes.firstOrNull { it.id == parts[3] && it.tenant == tenant } ?: return json("{}", HttpStatusCode.NotFound)
+                if (!s.member) return json("{}", HttpStatusCode.Forbidden)
+                val n = s.nodes.firstOrNull { it.id == parts[5] } ?: return json("{}", HttpStatusCode.NotFound)
+                val tag = "\"ab-${n.blobsRevision}\""
+                if (r.headers[HttpHeaders.IfNoneMatch] == tag) return respond("", HttpStatusCode.NotModified)
+                json(
+                    """{"blobs":[${n.appBlobs.joinToString(",") { (b, owner) -> """{"id":"${b.id}","ownerId":"$owner","role":"${me.raddatz.veyq.mobile.expenses.Receipts.ROLE}",${blobRef(b)},"writer":"user:$userId","createdAt":"2026-01-01T00:00:00.000Z","blockedByOperator":false}""" }}],"more":false}""",
+                    etag = tag,
+                )
             }
             path.matches(Regex("/api/scopes/[^/]+/nodes/[^/]+/media")) -> {
                 val parts = path.split('/')

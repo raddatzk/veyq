@@ -65,12 +65,25 @@ ADR 0153 decisions 6 and 7 hold them; here only what the work needs beside them.
 
 ## Phases
 
-- [ ] **1 core — the ledger and receipts** (D1, D2) — `POT_REVISIONS`, `PotDoor.read` kept, `PotModel` offline state and
+- [x] **1 core — the ledger and receipts** (D1, D2) — `POT_REVISIONS`, `PotDoor.read` kept, `PotModel` offline state and
   refusal, the receipt viewer's keep. Tests: a Pot read online then offline shows the same entries with `asOf`; a newer
   ledger replaces (an entry tombstoned on the server is gone from the kept copy); a `403`/`404` drops it; an export
   keeps no frame. · Done when: `:core:jvmTest :core:macosArm64Test` green, `KeptReadsTest` green with the new model.
   **Bites:** (a) the ledger merged instead of replaced → the tombstone test red; (b) `PotExport` reading with
   `keep = true` → the export test red; (c) the model carrying a token-named field (a test-only serializer) → `KeptReadsTest` red.
+  **Built** (2026-11-19): `KeptRead.POT_REVISIONS`; `TenantPotDoor.whole` (a read with no cursor — the Pot's open, a
+  re-open — is the kept whole read, `PotDoor.Read.offline`); `PotSession.offline`/`wentOffline`, `canWrite` and
+  `canChangeSettings` false offline, every write `WriteOutcome.OFFLINE` (`Notices` → `offline_read_only`);
+  `PotModel.State.offline` and `failure` (`offline_not_kept` / `pot_open_failed`), the reach watched (offline: read-only as
+  of the last read; online: read anew, a failed open retried), `receiptFailure()`; `PotSession.openReceipt` keeps,
+  `readReceipt(id, keep = false)` for `PotExport` and `PotCopy`. Tests `OfflinePotTest` (5) over `PlayedTenant`, which now
+  plays a Pot's revisions and application blobs. Deviations: `belowNode` reaches `POT_REVISIONS` already here — without it
+  the sweep after the first keep drops the ledger at once, so phase 1 cannot work without it (phase 2's bite (a) still
+  bites it); bite (a)'s "tombstone" is an **erasure** (`eraseRecord`): a tombstone is an appended revision a merge carries
+  too, an erased record is what a merge brings back. Bites (a) merge in `whole` → the erasure test red; (b) → the export
+  test red (`[r2, r1]` kept); (c) a `LeakyPage(shareToken)` model → `KeptReadsTest` red; each restored with `/bin/cp -f`.
+  `./gradlew :core:jvmTest :core:macosArm64Test`: macOS green; JVM 1353 tests, one red, `DeviceLinkTest.the_state_carries_no_secret`
+  (untouched, load ~5), green re-run alone.
 - [ ] **2 core — a Pot pins; the space's media** (D3, D4) — `AppKinds.pins`, `belowNode`, `SCOPE_MEDIA` in
   `MemoriesSearch`, the sweep's reach. Tests: a pinned Pot fetches its ledger, receipts and cover and survives
   "Clear cache"; a Pot unpinned and not viewed is swept; search offline finds a medium of an unopened Memory from the kept

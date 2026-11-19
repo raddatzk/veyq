@@ -44,7 +44,7 @@ object PotExport {
             val carried = c.receipts.mapNotNull { id ->
                 val r = listed[id]?.takeIf { it.entryId == e.id && !it.dropped && !it.blocked } ?: return@mapNotNull null
                 payloads += NodeExport.Payload.whole(Receipts.downloadName(r.name, r.type), r.size, r.type.orEmpty(), r.modifiedAt) {
-                    session.openReceipt(id) ?: throw IllegalStateException("receipt $id did not open")
+                    session.readReceipt(id, keep = false) ?: throw IllegalStateException("receipt $id did not open")
                 }
                 val name = r.name?.takeIf { it.isNotEmpty() && RevisionFormat.codePoints(it) <= MAX_RECEIPT_NAME }
                 Carried(id, name, payloads.size - 1)

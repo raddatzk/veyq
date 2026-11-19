@@ -293,6 +293,7 @@ object Notices {
     fun entryRefused(outcome: String): Msg = when (outcome) {
         "STALE" -> Msg.ED_STALE
         "BLOCKED" -> Msg.ED_BLOCKED
+        "OFFLINE" -> Msg.OFFLINE_READ_ONLY
         "BUSY" -> Msg.POT_BUSY
         else -> Msg.ED_SAVE_FAILED
     }
@@ -304,6 +305,7 @@ object Notices {
         "BUSY" -> Msg.POT_BUSY
         "BLOCKED" -> Msg.POT_BLOCKED
         "INVALID" -> Msg.PEOPLE_INVALID
+        "OFFLINE" -> Msg.OFFLINE_READ_ONLY
         "NOT_RESTORABLE" -> Msg.ENTRY_NOT_RESTORABLE
         else -> Msg.PEOPLE_FAILED
     }
