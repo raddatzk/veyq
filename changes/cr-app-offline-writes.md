@@ -150,6 +150,8 @@ write waiting asks. Apple's are the owner's (named open).
    copy*, the sign-out ask), EN and DE. *Recommendation:* drafted in phase 5 beside the existing `offline_*` words, the
    owner's to change before phase 7.
 
+**Answered (owner 2026-11-19): every question as recommended.**
+
 ## Definition of done
 
 Phases 1–12 checked; every bite seen red and green; the passes run as throwaways and erased, Apple's named open; the Use

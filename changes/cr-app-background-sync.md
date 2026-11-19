@@ -89,6 +89,8 @@ ADR 0153 decision 8 holds them; beside it:
 2. **The switch's default.** *Recommendation:* on for an account at the login level (it chose not to be asked; pins that
    go stale defeat "available offline"), off and absent elsewhere; the Use page says what it does.
 
+**Answered (owner 2026-11-19): every question as recommended.**
+
 ## Definition of done
 
 Phases 1–5 checked (after question 1's answer); every bite seen red and green; Android's run as a throwaway, iOS's named

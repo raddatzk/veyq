@@ -1,5 +1,5 @@
 # ADR 0153 — The apps queue a person's own additions and edits made offline, sealed to the device, and send them through the online write path; Expenses joins the store; a login-level device syncs in the background
-- Status: Proposed
+- Status: Accepted (owner 2026-11-19, the CRs' owner questions answered as recommended)
 - Built: no
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md)
