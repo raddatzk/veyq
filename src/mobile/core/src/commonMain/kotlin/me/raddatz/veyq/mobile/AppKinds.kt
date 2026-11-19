@@ -202,7 +202,7 @@ object AppKinds {
         CHAPTER(me.raddatz.veyq.mobile.words.Msg.MEMORY_ADD_CHAPTER),
         /**
          * A kept link (ADR 0120, ADR 0150 decision 6) at a space's top or in a folder: the web's dialog
-         * (`sharing.BookmarkCreate`). Offered by [createsWhere] once the platforms draw the dialog (cr-app-received-links
+         * (`sharing.BookmarkCreate`). Offered by [createsWhere] where the platform says it draws the dialog (cr-app-received-links
          * phases 7–10).
          */
         BOOKMARK(me.raddatz.veyq.mobile.words.Msg.BOOKMARK_NEW),
@@ -218,8 +218,11 @@ object AppKinds {
      * What a desktop's one "New" offers where the shell is ([isHome]: a level of Home, a space's top or a folder): Home's
      * — files and a folder uploaded there too, as on the phones —, else the drawer's; and a Memory, whose placement every
      * level New makes into allows (a space's top, a folder: `MemoryCreate.offered`). A chapter is a Memory's page's own.
+     * [bookmarks]: the platform draws the bookmark's dialog (`sharing.BookmarkCreate`), so a kept link is offered last —
+     * each platform switches it on with its dialog (cr-app-received-links phases 7–10; inbox #1020).
      */
-    fun createsWhere(isHome: Boolean): List<Create> = (if (isHome) homeCreates else drawerCreates) + Create.MEMORY
+    fun createsWhere(isHome: Boolean, bookmarks: Boolean = false): List<Create> =
+        (if (isHome) homeCreates else drawerCreates) + Create.MEMORY + listOfNotNull(Create.BOOKMARK.takeIf { bookmarks })
 
     /**
      * What core's header reads of a kind (the web's `KindRegistration`): whether it brings a share sheet, takes a cover and
@@ -241,6 +244,8 @@ object AppKinds {
         DROPBOX -> Header(true, true, false, me.raddatz.veyq.mobile.words.Msg.DROPBOX_DELETE, me.raddatz.veyq.mobile.words.Msg.DROPBOX_DELETE_CONFIRM)
         MEMORY -> Header(true, true, true, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_MEMORY, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CONFIRM)
         CHAPTER -> Header(true, true, true, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CHAPTER, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CONFIRM)
+        // a kept link is never shared on (ADR 0120 decision 7) and takes no cover; its delete says what it is
+        SHARE_BOOKMARK -> Header(false, false, true, me.raddatz.veyq.mobile.words.Msg.BOOKMARK_DELETE, me.raddatz.veyq.mobile.words.Msg.BOOKMARK_DELETE_CONFIRM)
         else -> null
     }
 

@@ -6231,5 +6231,127 @@
   "bookmark_embed_region": {
     "en": "Shared content from {1}",
     "de": "Geteilte Inhalte von {1}"
+  },
+  "share_loading": {
+    "note": "the guest view while the link is read (the web's share.loading)",
+    "en": "Opening this link…",
+    "de": "Link wird geöffnet …"
+  },
+  "share_guest_record_kept": {
+    "note": "the guest-write record's first-layer notice before a guest writes (ADR 0093 § 10, GDPR Art. 13; the web's share.guest.recordKept), N the share's guestWriteRecordDays",
+    "en": {
+      "one": "When you add something here, your IP address, your source port, the time and the website it came from are kept for one day, longer only if a report or an authority’s order concerns what you added.",
+      "other": "When you add something here, your IP address, your source port, the time and the website it came from are kept for {1:int} days, longer only if a report or an authority’s order concerns what you added."
+    },
+    "de": {
+      "one": "Wenn du hier etwas hinzufügst, werden deine IP-Adresse, dein Quellport, die Uhrzeit und die Website, von der es kam, einen Tag aufbewahrt, länger nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was du hinzugefügt hast.",
+      "other": "Wenn du hier etwas hinzufügst, werden deine IP-Adresse, dein Quellport, die Uhrzeit und die Website, von der es kam, {1:int} Tage aufbewahrt, länger nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was du hinzugefügt hast."
+    }
+  },
+  "share_guest_record_objection": {
+    "note": "the record notice's second sentence, the right to object (GDPR Art. 21; the web's share.guest.recordObjection)",
+    "en": "You can object to this at any time on grounds relating to your particular situation; if you do not want it, you can still look without adding anything.",
+    "de": "Du kannst dem jederzeit aus Gründen widersprechen, die sich aus deiner besonderen Situation ergeben; wenn du das nicht möchtest, kannst du weiterhin ansehen, ohne etwas hinzuzufügen."
+  },
+  "share_guest_record_more": {
+    "note": "the record notice's link to the instance's privacy notice, its guest-write-record passage (the web's share.guest.recordMore)",
+    "en": "Who keeps it, why, and your rights",
+    "de": "Wer es aufbewahrt, warum, und deine Rechte"
+  },
+  "share_guest_id": {
+    "note": "the web's share.guest.guestId",
+    "en": "Your guest id, to name if you object:",
+    "de": "Deine Gast-Kennung, falls du widersprichst:"
+  },
+  "share_guest_as_unnamed": {
+    "en": "You gave your name on this device.",
+    "de": "Du hast auf diesem Gerät deinen Namen angegeben."
+  },
+  "share_guest_not_you_confirm": {
+    "en": "This device forgets that you are here as “{1}”. What you already added stays. Before you add anything else, you give a name again.",
+    "de": "Dieses Gerät vergisst, dass du hier als „{1}“ bist. Was du schon hinzugefügt hast, bleibt. Bevor du wieder etwas hinzufügst, gibst du erneut einen Namen an."
+  },
+  "share_guest_not_you_confirm_unnamed": {
+    "en": "This device forgets the name you gave here. What you already added stays. Before you add anything else, you give a name again.",
+    "de": "Dieses Gerät vergisst den Namen, den du hier angegeben hast. Was du schon hinzugefügt hast, bleibt. Bevor du wieder etwas hinzufügst, gibst du erneut einen Namen an."
+  },
+  "share_your_name": {
+    "en": "Your name",
+    "de": "Dein Name"
+  },
+  "share_your_name_placeholder": {
+    "en": "e.g. Grandma",
+    "de": "z. B. Oma"
+  },
+  "share_name_visibility": {
+    "en": "Only the people this belongs to see your name.",
+    "de": "Deinen Namen sehen nur die Personen, denen das hier gehört."
+  },
+  "share_join": {
+    "en": "Continue",
+    "de": "Weiter"
+  },
+  "share_join_failed": {
+    "en": "Something went wrong — please try again.",
+    "de": "Etwas ist schiefgelaufen — bitte erneut versuchen."
+  },
+  "share_add_photos": {
+    "en": "Add photos",
+    "de": "Fotos hinzufügen"
+  },
+  "share_uploader_intro": {
+    "en": "You can add your own photos here. You won’t see what is already here or what others added. First, tell us your name.",
+    "de": "Du kannst hier eigene Fotos hinzufügen. Was schon hier ist und was andere hinzugefügt haben, siehst du nicht. Sag uns zuerst deinen Namen."
+  },
+  "share_uploader_session": {
+    "note": "the web's share.uploaderSessionNote, its 'session' the open link in the app (a reload is leaving the link)",
+    "en": "These photos are visible only to you, and only while this link is open here. You can delete your own while they’re shown.",
+    "de": "Diese Fotos sind nur für dich sichtbar und nur, solange dieser Link hier offen ist. Solange sie angezeigt werden, kannst du eigene löschen."
+  },
+  "share_delete_failed": {
+    "en": "The photo could not be deleted — please try again.",
+    "de": "Das Foto konnte nicht gelöscht werden — bitte erneut versuchen."
+  },
+  "share_dropbox_title": {
+    "note": "a drop box's guest page (the web's depot.dropBox.guestTitle)",
+    "en": "Send files",
+    "de": "Dateien senden"
+  },
+  "share_dropbox_hint": {
+    "en": "Your files go to {1}. You cannot see what others sent, and you cannot see your files again here after you leave.",
+    "de": "Deine Dateien gehen an {1}. Was andere gesendet haben, siehst du nicht, und deine eigenen Dateien siehst du hier nach dem Verlassen nicht mehr."
+  },
+  "share_dropbox_name_hint": {
+    "en": "The owner sees your files under this name.",
+    "de": "Unter diesem Namen sieht die Person, die den Link geteilt hat, deine Dateien."
+  },
+  "share_dropbox_pick": {
+    "en": "Choose files",
+    "de": "Dateien auswählen"
+  },
+  "share_dropbox_session": {
+    "en": "Your files in this session",
+    "de": "Deine Dateien in dieser Sitzung"
+  },
+  "share_dropbox_sending": {
+    "en": "Sending…",
+    "de": "Wird gesendet…"
+  },
+  "share_dropbox_failed": {
+    "en": "Not sent: something went wrong. You can try again.",
+    "de": "Nicht gesendet: Etwas ist schiefgelaufen. Du kannst es erneut versuchen."
+  },
+  "share_dropbox_sent": {
+    "en": "Sent",
+    "de": "Gesendet"
+  },
+  "bookmark_delete": {
+    "note": "a kept link's delete in its header (the web's node.bookmark.delete)",
+    "en": "Delete bookmark",
+    "de": "Lesezeichen löschen"
+  },
+  "bookmark_delete_confirm": {
+    "en": "“{1}” moves to the trash. You can restore it from there until it is removed for good.",
+    "de": "„{1}“ wird in den Papierkorb verschoben. Von dort kannst du es wiederherstellen, bis es endgültig gelöscht wird."
   }
 }

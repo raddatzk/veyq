@@ -18,12 +18,14 @@ struct MemoryViewSwitch: View {
     @Binding var view: MemoryView
     var music = true
     var contributions = false
+    /// The Map view: a member's (its tracks and places are the account's); a link's guest has none (ADR 0150 decision 5).
+    var map = true
 
     var body: some View {
         Picker(say(.memoryViewMap), selection: $view) {
             Text(say(.musicViewPhotos)).tag(MemoryView.photos)
             if music { Text(say(.musicViewMusic)).tag(MemoryView.music) }
-            Text(say(.memoryViewMap)).tag(MemoryView.map)
+            if map { Text(say(.memoryViewMap)).tag(MemoryView.map) }
             if contributions { Text(say(.memoryBucketsTitle)).tag(MemoryView.contributions) }
         }
         .pickerStyle(.segmented)
