@@ -1,7 +1,7 @@
 # ADR 0138 — The apps take what the system shares; the chosen node's kind decides what it becomes
 
 - Status: Accepted
-- Built: partly (Android's share target, iOS's share extension, the pick mode on both, a drop onto the Apple app, the app group and the shared keychain group; being built: a Memory as a share target and a drop onto a phone's gallery, cr-app-share-into-a-memory)
+- Built: yes on Android and Apple (the share target, the share extension, the pick mode, a Pot, a Memory and a chapter as targets, a drop onto the app and onto a Memory's gallery, the app group and the shared keychain group; 2026-11-19 for a Memory); open: a folder as a target (inbox #987), Apple's passes of a Memory's share and drop (#1005)
 - Date: 2026-11-08
 
 ## Context
@@ -132,9 +132,17 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   start); a drop onto a Memory's gallery (`MemoryScreen`'s `.onDrop`). Built for macOS and the iOS simulator SDK; not
   clicked — the macOS drop and the device passes are the owner's (inbox #1005), and a handoff for a space the app does
   not list waits until a sign-out (inbox #1007).
-- **Decision 2's Memory is being built** (cr-app-share-into-a-memory, inbox #893): a Memory and a chapter as a share
-  target, a Memory's files sealed in frames from disk out of iOS's share extension (decision 6), and a drop onto a
-  phone's gallery. A folder as a share target is Depot's answer (inbox #987); the desktops have no share target (GNOME
-  has none; Windows' needs the packaged app's Share Target contract).
+- **Decision 2's Memory, built 2026-11-19** (cr-app-share-into-a-memory, inbox #893): each kind's answer is its
+  application's (`navigation/ShareAnswer`, `AppKinds.share`; Expenses' `PotShare.answer`, Memories'
+  `memories/MemoryShare`), the files waiting as sources in core's `navigation/ShareInbox` — the Pot reads its bounded
+  receipts from them when it is chosen, a Memory's *Add here* queues them; held by core's `ShareInboxTest` (each kind
+  answering in its own application, a Memory taking a video and refusing a PDF, a chapter taking, a member who may not
+  upload dimmed, *Add here* queuing once) and `PotShareTest` (unchanged by the move). Open after it: Apple's passes —
+  the macOS drop from Finder, a long video handed over from Photos on a device and the extension cancelled, an iPad's
+  drop (inbox #1005); Android's Pot share and a HEIC share not clicked again since the inbox moved to sources (#1006); a
+  handoff for a space the app does not list waits unsaid until a sign-out (#1007); a drop's read grant over a long
+  upload with the app left (#1008). A folder as a share target is Depot's answer (inbox #987); the desktops have no
+  share target (GNOME has none; Windows' needs the packaged app's Share Target contract) and take a drop onto a
+  Memory's gallery instead. The Use page: [Share into veyq](../../site/src/content/docs/getting-started/share-into-veyq.mdx).
 - App groups and keychain groups need the developer team's signing: a Simulator build is signed ad hoc with them; a device
   build needs the team's provisioning profile with the group.

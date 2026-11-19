@@ -69,6 +69,12 @@ uploader picker, sub-buckets curated by the rule of [en.memory.buckets](../featu
 **tiles** or rows, one choice per account on the device. The rights are `MemoryRights` as ported; nothing in the backend
 or the contracts changes. Import of an archive stays the web's (inbox #985).
 
+**A share into a Memory** ([ADR 0138](../decisions/0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md) decisions 2, 3 and 9, built 2026-11-19 on Android and Apple;
+passed on Android, Apple's passes open, inbox #1005): photos and videos another app shares go into a Memory or a
+chapter through *Add here* on its page, and a drop onto its gallery uploads at once — Memories' answer to a share is
+`memories/MemoryShare` (`MediaUpload.isMedia`, where `MemoryRights` lets the member upload and the account is online),
+asked by core through `AppKinds.share`. The files go through the apps' one upload queue, as a pick's.
+
 ## Places and the map
 
 A place ([uc.memory.place](../features/memory/use-cases/uc.memory.place.md)) and the maps reach two outside services,

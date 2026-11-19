@@ -2417,7 +2417,8 @@ identifier was then.
 **And a done-when names only a tool or a section that exists.** The apps' Memories-rest CR (ADR 0149) closed its harvest
 on "the reuse sweep (`core-reuse-sweep` …, changes/README.md § Core first)" — neither the agent nor the section exists
 in the repository (`git grep -n 'core-reuse-sweep\|Core first'` names only that CR), so the step could not be run as
-written and was dropped at the harvest. A refine that names a skill, an agent or a section greps for it once.
+written and was dropped at the harvest. A refine that names a skill, an agent or a section greps for it once. The
+share CR (ADR 0138), refined beside it, named the same sweep in its harvest phase, and its harvest dropped it too.
 
 ### A flow whose last step reopens the session names where its last state survives
 
@@ -2441,6 +2442,24 @@ sub-buckets curated". The server lets any member curate any owner root, never ac
 web's display mistake, and the Android pass found it as offers the server refused (inbox #991; the web's twin #1003).
 A refine that ports a web flow reads, for every action it offers, the enabler's rule and the server's gate
 (`MediaHandler`'s checks), and writes the offer from them; a web test is the list of cases to twin, not the rule.
+
+### An owner question that decides a phase's shape gets each answer's shape at refine
+
+The apps' share CR (ADR 0138) asked whether iOS's share extension stays open through a large upload, recommended yes,
+and planned phase 4 for yes only (S4: the extension running the upload queue). The owner answered no — the extension
+hands the files to the app through the app group — and phase 4 designed that handoff while building it: its file
+layout, its sweep and sign-out clear, and which account and space pick it up. The gap that design left (a handoff for
+a space the app does not list waits unsaid until a sign-out, inbox #1007) was found by the implementation, not by a
+refine. Where an owner question's answer changes what a phase builds, the refine writes the shape of each answer it
+offers — at least its files on disk, who takes them and when they go — so the answer chosen arrives already refined.
+
+### A refactor that moves an existing flow re-runs that flow's pass
+
+The same CR moved the share inbox from the Pot's bytes to sources every kind reads (`navigation/ShareInbox`), so the
+Pot's share now reads its receipts on a new path — held by `ShareInboxTest` and `PotShareTest`, but the Android pass
+shared into a chapter only, and the Pot's share, its HEIC copy and its editor closed unsaved were not clicked since
+(inbox #1006). A CR that reshapes what an already-passed flow runs on lists that flow's pass beside the new one's in §
+Passes, not only the new target's.
 
 ### Every CR closes with a short, honest retrospective
 

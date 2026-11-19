@@ -43,5 +43,7 @@ The receipt stays with the expense it proves, readable only by the people of the
 - **Feature:** [expenses](../_index.md).
 - **Use-cases:** [uc.expenses.record-entries](uc.expenses.record-entries.md), [uc.expenses.share-pot](uc.expenses.share-pot.md),
   [uc.sharing.share-link-storage-limit](../../sharing/use-cases/uc.sharing.share-link-storage-limit.md).
-- **Decisions:** [ADR 0108](../../../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 7.
+- **Decisions:** [ADR 0108](../../../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md) decision 7;
+  in the apps, [ADR 0138](../../../decisions/0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md) decision 2: images and PDFs another app shares open a Pot's new
+  expense as its receipts (core's `PotShareTest`, `ShareInboxTest`; [Share into veyq](../../../../site/src/content/docs/getting-started/share-into-veyq.mdx)).
 - End-user view (docs site): [Record an expense](../../../../site/src/content/docs/expenses/record-an-expense.mdx), and [Expenses](../../../../site/src/content/docs/expenses/index.mdx) for the receipts in the download and what the server sees

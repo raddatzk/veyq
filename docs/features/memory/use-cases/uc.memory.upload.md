@@ -168,4 +168,7 @@ encrypted on your device before it leaves.
 - Use-cases: [browse](uc.memory.browse.md), [gallery](uc.memory.gallery.md) (where the upload affordance lives).
 - Decisions: [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (blob store + transport;
   windowed presigning; resuming **across a page reload** deferred).
+- **The apps** (built 2026-11-19, [ADR 0138](../../../decisions/0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md) decisions 2, 3 and 9): photos and videos another
+  app shares go into a Memory or a chapter through *Add here*, and a drop onto its gallery uploads at once, through the
+  apps' one upload queue; core's `ShareInboxTest`. End-user view: [Share into veyq](../../../../site/src/content/docs/getting-started/share-into-veyq.mdx).
 - End-user view (docs site): [Add photos and videos](../../../../site/src/content/docs/memories/add-photos-and-videos.mdx)

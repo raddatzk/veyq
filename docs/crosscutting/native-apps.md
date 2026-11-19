@@ -15,7 +15,7 @@ Everything that is not drawing a screen or talking to the device belongs in the 
 rules as a core model both apps draw — the way in (`session/SessionModel`), the shell and its lists (`navigation/ShellModel`,
 `RowDetails`), the trash sheet (`navigation/TrashSheet`), the open Pot (`expenses/PotModel`) with its entry editor, settings
 and New pot (`EntryEditor`, `PotSettings`, `PotCreateSheet`), shared files
-(`expenses/ShareInbox`), the link form and a link's row (`session/LinkForm`, `LinkRow`), a header's plan and words
+(`navigation/ShareInbox`, each kind's `ShareAnswer`), the link form and a link's row (`session/LinkForm`, `LinkRow`), a header's plan and words
 (`navigation/NodeHeader`), an open node's header with pin, trash, rename and cover (`navigation/NodeHeaderModel`) and the
 sheets behind it (`MoveSheet`, `ShareSheet`, `ReportSheet`; ADR 0136's Consequences), a file's page and its Save a copy
 (`depot/FileModel`, `FileSave`), Depot's uploads (`depot/DepotUploads`, the walk's rule `FolderUpload.keeps`) and a drop
@@ -190,7 +190,8 @@ each platform's keys are ADR 0146's Consequences and decision 12.
 at a space's top level too; a Memory's or chapter's upload-only link sealing to the node's own drop key, neither edited
 nor renewed): create, edit, renew, switch off and on, delete; closing a link re-keys the subtree, an interrupted re-key
 is resumed — measured 2026-11-09. Taking shared images and PDFs into a Pot from the system's share sheet (Android, iOS;
-ADR 0138), measured 2026-11-08.
+ADR 0138), measured 2026-11-08; photos and videos into a Memory or a chapter, and a drop onto its gallery, since
+2026-11-19 (below).
 
 **Expenses.** Every web use case: create a Pot, record entries, receipts, balances, an entry's history, exchange
 rates, participants, share, verify the ledger; the live poll; export and copy of a Pot — measured 2026-11-08/09. On
@@ -357,6 +358,15 @@ what each pass proved). The Use pages: [Mark the best photos](../../site/src/con
 [Views, tabs and favorites](../../site/src/content/docs/spaces/views-and-favorites.mdx),
 [Download and import](../../site/src/content/docs/spaces/download-and-import.md),
 [Copy things](../../site/src/content/docs/spaces/copy-things.mdx).
+
+**A share into a Memory** ([ADR 0138](../decisions/0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md) decisions 2, 3, 6, 8 and 9, built 2026-11-19 on Android and Apple): each kind
+answers a share in its application's code (`navigation/ShareAnswer`: Expenses' `PotShare`, Memories' `MemoryShare`),
+the files wait as sources (`navigation/ShareInbox`); a Memory and a chapter take photos and videos through *Add here*
+into the one upload queue, and a drop onto the gallery uploads at once (Android `ShareDrop.kt`, Apple `MemoryScreen`'s
+`.onDrop`). Android reads a shared file in place; iOS's extension hands a Memory's files to the app through the app
+group (`ShareHandoff.swift`) and closes. Passed on Android as a throwaway (a 303 MB video shared into a chapter and
+uploaded with the app left; a drop from a freeform window); Apple built, not clicked (§ Open). The Use page:
+[Share into veyq](../../site/src/content/docs/getting-started/share-into-veyq.mdx).
 
 ## Open
 
@@ -579,8 +589,11 @@ agent's on the unlocked Mac (#994) and the owner's on an iPhone and an iPad (#92
 iPad and a Mac (#995); **Windows' UIA pass** (#1000, once the VM resolves a throwaway's tenant, #983). The fixes of
 #990, #991, #996, #997 and #1001 are in, checked by tests, not by a pass yet; #989's calendars are handed on every app,
 Apple's unclicked. A copy that a rotation interrupts fails (#988). The owner answered its four questions 2026-11-19 as built (ADR 0149's Consequences). Not built: import of an archive, for every
-kind (#985); a Memory as a share target and a drop onto a phone's gallery (#893, phases 1–4 built by [cr-app-share-into-a-memory](../../changes/cr-app-share-into-a-memory.md), its passes #1005–#1008); a guest's view of a received link
+kind (#985); a folder as a share target (#987); a guest's view of a received link
 (#435, a source for the same model); the web's own heart in its lightbox (#986) and its Contributions' "You" (#1003).
+A share into a Memory (built above): Apple's passes — the macOS drop, the iOS handoff, the iPad drop (#1005); Android's
+Pot share not clicked again since the inbox moved to sources (#1006); an iOS handoff for a space the app does not list
+(#1007); a drop's read grant over a long upload (#1008).
 
 **Music** ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md), built above): **Apple's passes are the owner's** — on a real iPhone the background play,
 the lock screen, Control Center and a call's interruption, and iOS's format matrix (no simulator boots on this Mac); on

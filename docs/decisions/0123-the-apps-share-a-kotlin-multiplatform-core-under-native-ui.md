@@ -498,7 +498,7 @@ implementation exists but what holds it to the first.
     guard a gone index).
   Item marks, the contributions, the gallery's filter, a medium's report, the re-key, download and copy since built by
   [ADR 0149](0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md)
-  (a Memory as a share target is #893, import #985); the participants, a capture-time
+  (a Memory as a share target since built by [ADR 0138](0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md), 2026-11-19; import is #985); the participants, a capture-time
   correction and the banner since built by
   [ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md),
   music by
