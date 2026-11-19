@@ -2749,6 +2749,32 @@ class DispatchTest {
         assertNull(png)
         b.shutdown()
     }
+
+    /**
+     * A `veyq:` link handed in (ADR 0150 § O1): the screen it opens and nothing of it — the answer's JSON, as the host
+     * receives it, holds no canary of a fragment, a query, a path or user info. Signed out (no session needed).
+     */
+    @Test
+    fun aDeepLinkAnswersItsScreenAndNothingOfTheLink() = runBlocking {
+        val b = bridge()
+        val canary = "CANARY-a3f9c1"
+        suspend fun raw(uri: String): String {
+            val answered = kotlinx.coroutines.CompletableDeferred<String>()
+            b.call(wire.encodeToString(Call.serializer(), Call.DeepLink(uri)), null) { a, payload -> check(payload == null); answered.complete(a) }
+            return kotlinx.coroutines.withTimeout(10.seconds) { answered.await() }
+        }
+        for ((uri, screen) in listOf(
+            "veyq://link" to DeepScreen.LINK, "veyq://open" to DeepScreen.OPEN,
+            "veyq://link#k=$canary" to DeepScreen.LINK, "veyq://link?u=https://photos.example.org/s/$canary" to DeepScreen.LINK,
+            "veyq://$canary@link/s/$canary" to DeepScreen.LINK, "veyq://$canary" to DeepScreen.OPEN,
+            "https://photos.example.org/s/$canary#k=$canary" to DeepScreen.OPEN,
+        )) {
+            val json = raw(uri)
+            assertEquals(Answer.DeepLinked(screen), wire.decodeFromString(Answer.serializer(), json), uri)
+            assertTrue(canary !in json && canary.lowercase() !in json.lowercase(), "$uri → $json")
+        }
+        b.shutdown()
+    }
 }
 
 private const val PAIRING_TEXT = "veyqpair:3q2-7wABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4"

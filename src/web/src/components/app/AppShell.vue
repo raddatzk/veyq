@@ -15,7 +15,9 @@
 // confirmed or cannot be read. The banner's read is the only one (`unconfirmedAddress.ts`). Below the footer sits core's
 // audio bar (`core/audio/AudioBar.vue`, ADR 0135 decision 8), mounted here once so the music outlives every change of page,
 // and only while the session is signed in and unlocked: a lock unmounts it, which stops the player and releases every
-// source it opened (a sign-out or a tenant switch loads a new document).
+// source it opened (a sign-out or a tenant switch loads a new document). The *Open in the app* banner
+// (`core/openInApp/`, ADR 0150 § O2) heads the signed-in app's pages (waiting, like the other notices, while the
+// address banner stands) and the public card's; the share page (the plain layout) draws its own.
 import { computed, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -35,6 +37,7 @@ import UnconfirmedEmailBanner from '../../features/account/email/UnconfirmedEmai
 import { unconfirmedAddress } from '../../features/account/email/unconfirmedAddress'
 import ShortcutsDialog from '../../core/shortcuts/ShortcutsDialog.vue'
 import AudioBar from '../../core/audio/AudioBar.vue'
+import OpenInAppBanner from '../../core/openInApp/OpenInAppBanner.vue'
 
 const route = useRoute()
 const { serverState } = useServerState()
@@ -85,6 +88,7 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
     <div class="app-workspace">
       <main class="content">
         <UnconfirmedEmailBanner />
+        <OpenInAppBanner v-if="otherNoticesOn" />
         <DonationBanner v-if="otherNoticesOn" member />
         <FinishProfilePrompt v-if="otherNoticesOn" />
         <RouterView />
@@ -104,6 +108,7 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
   <main v-else class="public-shell">
     <div class="veyq-shell-inner" :class="{ 'veyq-shell-inner--reading': readingLayout }">
       <p v-if="serverState.unreachable" class="veyq-banner" role="alert">{{ t('common.unreachable') }}</p>
+      <OpenInAppBanner />
       <RouterView />
     </div>
   </main>

@@ -58,6 +58,7 @@ import { setPreferenceAudience } from '../shared/state/scopedPreference'
 import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
 import AudioBar from '../core/audio/AudioBar.vue'
 import DonationBanner from '../core/project/DonationBanner.vue'
+import OpenInAppBanner from '../core/openInApp/OpenInAppBanner.vue'
 import { closeGuestPage, openGuestPage } from '../core/sharing/guestNotice'
 import { openReport, useReportOffered } from '../core/report/report'
 import { linkReportKeys } from '../core/report/reportKeys'
@@ -139,6 +140,7 @@ watch(
 <template>
   <ShareReview v-if="moderation" :case-id="shareId" />
   <div v-else class="share-view">
+    <OpenInAppBanner />
     <DonationBanner />
     <ShareGates :gates="gates" />
 

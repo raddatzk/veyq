@@ -28,12 +28,15 @@ import VeyqPassword from '../shared/ui/VeyqPassword.vue'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
 import { ColdCredentialRefused, checkColdCredential } from '../features/account/coldCredential'
 import { useAsyncAction } from '../shared/state/useAsyncAction'
+import { afterTheStep } from '../core/openInApp/openInApp'
 
 const { t } = useI18n()
 const router = useRouter()
 
 type Phase = 'noLink' | 'confirming' | 'done' | ConfirmRefusal
 const phase = ref<Phase>('noLink')
+// The *Open in the app* banner appears once this page's step is done (ADR 0150 § O2), never before.
+afterTheStep(() => phase.value === 'done')
 const newEmail = ref('')
 const kitPassword = ref('')
 const secretKey = ref('')

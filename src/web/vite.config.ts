@@ -11,6 +11,7 @@ import vue from '@vitejs/plugin-vue'
 import { buildCsp, CSP_POLICY_FILE } from './src/shared/security/csp.ts'
 import { PDF_DECODER_FILES, pdfDataBase } from './src/shared/pdf/pdfOptions.ts'
 import { DEV_BREACH_ORIGIN, DEV_GEOCODER_ORIGIN, DEV_RATES_ORIGIN, DEV_TILE_ORIGIN } from './src/shared/state/mapDefaults.ts'
+import { APP_STORE_ID, smartAppBannerContent } from './src/core/openInApp/smartAppBanner.ts'
 
 // Vite dev-server config. `pnpm run dev` works with the defaults below; the env vars only matter for special
 // setups (the IntelliJ run configs, the media live-smoke). In production the backend's app shell serves the built
@@ -57,6 +58,18 @@ function cspPlugin(dev: boolean): Plugin {
     generateBundle() {
       if (dev) return
       this.emitFile({ type: 'asset', fileName: CSP_POLICY_FILE, source: `${csp}\n` })
+    },
+  }
+}
+
+// Apple's Smart App Banner (ADR 0150 § O2, `src/core/openInApp/smartAppBanner.ts`): Safari on iOS reads the tag from the
+// document it loads, so it is written into `index.html` — and only once the app has an App Store id; until then nothing.
+function smartAppBannerPlugin(): Plugin {
+  return {
+    name: 'veyq-smart-app-banner',
+    transformIndexHtml() {
+      const content = smartAppBannerContent(APP_STORE_ID)
+      return content === null ? [] : [{ tag: 'meta', attrs: { name: 'apple-itunes-app', content }, injectTo: 'head' }]
     },
   }
 }
@@ -338,7 +351,7 @@ function platformMajor(): number {
 
 export default defineConfig(({ command }) => {
   return {
-    plugins: [vue(), vueWithoutPassThroughPolicyPlugin(), cspPlugin(command === 'serve'), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin(), licenseSourcesPlugin()],
+    plugins: [vue(), vueWithoutPassThroughPolicyPlugin(), cspPlugin(command === 'serve'), smartAppBannerPlugin(), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin(), licenseSourcesPlugin()],
     define: {
       __PDFJS_VERSION__: JSON.stringify(pdfjsPackage().version),
       // The platform's one major (ADR 0085 decision 1), read from the repository's VERSION as the backend's build reads

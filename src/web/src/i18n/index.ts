@@ -1372,6 +1372,14 @@ const en = {
     security: 'Why is veyq secure?',
     donate: 'Donate',
   },
+  // the *Open in the app* banner (core/openInApp/, ADR 0150 § O2): a `veyq:` link that opens the installed veyq app
+  openInApp: {
+    label: 'veyq app',
+    open: 'Open in the veyq app',
+    copyAndOpen: 'Copy link and open the app',
+    line: 'For the installed veyq app',
+    dismiss: 'Close and don’t show again',
+  },
   operatorTerms: {
     title: 'Terms of this server',
     intro: 'This section applies to every space on this server. A space can add terms of its own, which you see when you join it or open one of its links.',
@@ -3624,6 +3632,14 @@ const de: typeof en = {
     },
     security: 'Wieso ist veyq sicher?',
     donate: 'Spenden',
+  },
+  // the *Open in the app* banner (core/openInApp/, ADR 0150 § O2): a `veyq:` link that opens the installed veyq app
+  openInApp: {
+    label: 'veyq-App',
+    open: 'In der veyq-App öffnen',
+    copyAndOpen: 'Link kopieren und App öffnen',
+    line: 'Für die installierte veyq-App',
+    dismiss: 'Schließen und nicht mehr anzeigen',
   },
   operatorTerms: {
     title: 'Bedingungen dieses Servers',
