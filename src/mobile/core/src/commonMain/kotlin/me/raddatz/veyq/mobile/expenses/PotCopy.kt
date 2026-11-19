@@ -79,7 +79,7 @@ object PotCopy {
             val pot = PotSession.open(tenant, scopeId, nodeId) ?: return@runCatching false
             (people + money).chunked(PotCreate.BATCH).all { batch ->
                 for (w in batch) for (u in uploads[w.entryId].orEmpty()) {
-                    val bytes = source.openReceipt(u.old.receiptId) ?: return@all false
+                    val bytes = source.readReceipt(u.old.receiptId, keep = false) ?: return@all false
                     pot.uploadReceipt(w.entryId, u.newId, bytes, u.old.type.orEmpty(), u.old.name, u.old.modifiedAt)
                 }
                 if (batch.any { uploads.containsKey(it.entryId) }) pot.readReceipts()

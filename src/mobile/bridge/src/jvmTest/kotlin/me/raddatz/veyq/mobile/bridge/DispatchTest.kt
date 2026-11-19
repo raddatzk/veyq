@@ -1952,6 +1952,9 @@ class DispatchTest {
         val uploads = java.util.concurrent.CopyOnWriteArrayList<List<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt>>()
         @Volatile var skipped: List<String> = emptyList()
         override suspend fun openReceipt(receiptId: String): ByteArray? = receipts[receiptId]
+        /** Shown from the offline store as of then (ADR 0153 decision 6); null: online. */
+        @Volatile var offlineAt: me.raddatz.veyq.mobile.session.OfflineAsOf? = null
+        override val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? get() = offlineAt
         override suspend fun saveEntry(
             entryId: String, form: me.raddatz.veyq.mobile.expenses.EntryForm, basedOn: Long?,
             pending: List<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt>, own: Set<String>,
@@ -2154,6 +2157,30 @@ class DispatchTest {
         val other = (b.ask(Call.EditorOpen(potId, null, ".")) as Answer.EditorOpened).editor
         assertEquals(Answer.Done, b.ask(Call.PotClose(potId)))
         assertEquals(Answer.Refused(Answer.Why.NO_SUCH_EDITOR), b.ask(Call.EditorSave(other)))
+        b.shutdown()
+    }
+
+    /**
+     * A Pot shown offline (ADR 0153 decision 6; cr-app-offline-pots-and-space-media phase 3): its state says as of when, a
+     * write is refused with the offline notice and never reaches the Pot, the receipt kept opens and one not kept is refused `NOT_KEPT_OFFLINE`.
+     */
+    @Test
+    fun aPotShownOfflineCrossesAsItsTimeAndStateAndRefusesItsWrites() = runBlocking {
+        val noon = 1_794_484_800_000L
+        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xE0.toByte(), 0, 0x10, 'J'.code.toByte(), 'F'.code.toByte(), 'I'.code.toByte(), 'F'.code.toByte(), 0, 1)
+        val pot = PlayedPot(purgeAfter = noon + 86_400_000, receipts = mapOf("kept" to jpeg)).also { it.offlineAt = me.raddatz.veyq.mobile.session.OfflineAsOf(noon - 60_000) }
+        val b = bridgeWithPot(pot, java.util.concurrent.atomic.AtomicLong(noon), kotlinx.coroutines.CompletableDeferred(Unit))
+        b.signedIn()
+        val potId = (b.ask(Call.PotOpen(ObjectRef("s", "p", "EXPENSES_POT", ApplicationId.EXPENSES, "Trip"))) as Answer.PotOpened).pot
+        val shown = b.watching(Watched.Pot(potId)).untilJson { u -> (u["state"] as? kotlinx.serialization.json.JsonObject)?.takeIf { it["view"] is kotlinx.serialization.json.JsonObject } }
+        assertEquals("""{"asOf":${noon - 60_000}}""", shown["offline"].toString())
+        // a write offline: the notice, nothing sent
+        assertEquals(Answer.Said(me.raddatz.veyq.mobile.words.Notice(Msg.OFFLINE_READ_ONLY)), b.ask(Call.PotRestore(potId, TAXI)))
+        assertEquals(emptyList(), pot.ops, "an offline write reached the Pot")
+        val (opened, bytes) = b.askWithPayload(Call.ReceiptOpen(potId, "kept"))
+        assertEquals(Answer.Bytes("image/jpeg"), opened)
+        assertTrue(jpeg.contentEquals(bytes))
+        assertEquals(Answer.Refused(Answer.Why.NOT_KEPT_OFFLINE), b.ask(Call.ReceiptOpen(potId, "nowhere")))
         b.shutdown()
     }
 

@@ -21,7 +21,10 @@ import me.raddatz.veyq.mobile.search.ScopeDocument
 import me.raddatz.veyq.mobile.search.SearchFacets
 import me.raddatz.veyq.mobile.search.YearSpan
 import me.raddatz.veyq.mobile.search.localDate
+import io.ktor.client.statement.readRawBytes
+import me.raddatz.veyq.mobile.offline.KeptRead
 import me.raddatz.veyq.mobile.session.OpenNode
+import me.raddatz.veyq.mobile.session.VeyqAccount
 
 /**
  * What Memories adds to core's search (ADR 0125 decisions 6 and 8a; the web's `features/memories/search.ts`, ported for
@@ -114,11 +117,13 @@ object MemoriesSearch {
     /**
      * Every photo and video of one space (the web's `scopeMediaDocuments`; ADR 0125 decision 8a): `listScopeMedia` read by the
      * last answer's tag (a `304`: null, nothing opened), else page by page, [SCOPE_MEDIA_PAGE] at a time, each page opened by
-     * [pageDocuments] under the shell's node keys. Not a kept read (ADR 0146 decision 11): offline it is not asked.
+     * [pageDocuments] under the shell's node keys. A kept read where the account keeps a store (ADR 0153 decision 7,
+     * [kept]): offline the space's kept listing is searched.
      */
     @Throws(Exception::class)
     suspend fun scopeMediaDocuments(ctx: ScopeDocumentsContext): ScopeDocumentsAnswer? {
         val tenant = ctx.tenant
+        if (tenant.account.offline != null) return kept(ctx)
         val api = MediaApi(tenant.base, tenant.account.http)
         val first = tenant.account.respond { api.listScopeMedia(ctx.scopeId, limit = SCOPE_MEDIA_PAGE, ifNoneMatch = ctx.tag) }
         if (first.status == 304 && ctx.tag != null) return null
@@ -133,6 +138,50 @@ object MemoriesSearch {
             page = tenant.account.call { api.listScopeMedia(ctx.scopeId, after = last, limit = SCOPE_MEDIA_PAGE) }
         }
         return ScopeDocumentsAnswer(tag, out)
+    }
+
+    /**
+     * [scopeMediaDocuments] through the offline store (`KeptRead.SCOPE_MEDIA`, automatic tier): the kept `ETag` sent as
+     * `If-None-Match`, a newer listing replacing the kept one — never merged, so a medium trashed elsewhere is gone with the
+     * next answer —, the kept listing while the server is unreachable. The answer is null where its tag is still [ctx]'s.
+     */
+    private suspend fun kept(ctx: ScopeDocumentsContext): ScopeDocumentsAnswer? {
+        val tenant = ctx.tenant
+        val api = MediaApi(tenant.base, tenant.account.http)
+        val read = try {
+            tenant.account.kept(KeptRead.SCOPE_MEDIA, tenant.tenant.tenantId, ctx.scopeId, ctx.scopeId, conditional = true) { tag -> pages(tenant, api, ctx.scopeId, tag) }
+        } catch (e: VeyqAccount.Refused) {
+            throw IllegalStateException("scope media ${e.status}")
+        }
+        if (ctx.tag != null && read.revision == ctx.tag) return null
+        val out = ArrayList<ScopeDocument>()
+        for (raw in read.pages) {
+            val page = VeyqAccount.KEPT_JSON.decodeFromString(ScopeMediaPage.serializer(), raw.decodeToString())
+            out += pageDocuments(tenant.account.suite, ctx.scopeId, page, ctx.nodes, ctx.previous, ctx.unnamed)
+        }
+        return ScopeDocumentsAnswer(read.revision, out)
+    }
+
+    /** Every page of [scopeId]'s media as the server sent them, the first conditional on [tag] (the kept `ETag`). */
+    private suspend fun pages(tenant: me.raddatz.veyq.mobile.session.TenantSession, api: MediaApi, scopeId: String, tag: String?): VeyqAccount.Fetched {
+        val out = ArrayList<ByteArray>()
+        var after: String? = null
+        var revision: String? = null
+        while (true) {
+            val first = after == null
+            val r = tenant.account.respond { api.listScopeMedia(scopeId, after = after, limit = SCOPE_MEDIA_PAGE, ifNoneMatch = if (first) tag else null) }
+            if (first && r.status == 304) return VeyqAccount.Fetched.NotModified
+            if (!r.success) return VeyqAccount.Fetched.Refused(r.status, tenant.account.errorCode(r))
+            // a later page carries no tag: the first page's stands for the read
+            if (first) revision = r.response.headers[HttpHeaders.ETag]
+            val raw = r.response.readRawBytes()
+            out += raw
+            val page = VeyqAccount.KEPT_JSON.decodeFromString(ScopeMediaPage.serializer(), raw.decodeToString())
+            val last = page.media.lastOrNull()?.mediaId
+            if (!page.more || last == null || last == after) break
+            after = last
+        }
+        return VeyqAccount.Fetched.Pages(out, revision)
     }
 
     /**

@@ -51,6 +51,18 @@ enum class KeptRead(val kind: String, internal val model: KSerializer<*>) {
      * revision; replaced at each online read.
      */
     NODE_BUCKETS("listNodeBuckets", me.raddatz.veyq.mobile.api.memories.models.BucketListResponse.serializer()),
+    /**
+     * Per Pot: its whole ledger (ADR 0153 decision 6), every page of a read without `since`, `ledgerRevision` its revision.
+     * Kept by each whole read — the Pot's open and a pin's sync —, replaced and never merged; the live poll's deltas are
+     * not kept, so an entry a co-member deleted or an erasure dropped is gone from the next whole answer.
+     */
+    POT_REVISIONS("listPotRevisions", me.raddatz.veyq.mobile.api.expenses.models.PotRevisionPage.serializer()),
+    /**
+     * Per scope: every live medium of the space (ADR 0153 decision 7), what the search opens (`MemoriesSearch`), `ETag` its
+     * revision. The automatic tier only — never pinned, never among [PROTECTED] —, replaced and never merged, kept while
+     * its scope is the account's (the sweep, from [MY_SCOPES]).
+     */
+    SCOPE_MEDIA("listScopeMedia", me.raddatz.veyq.mobile.api.memories.models.ScopeMediaPage.serializer()),
     ;
 
     companion object {
@@ -77,7 +89,7 @@ enum class KeptRead(val kind: String, internal val model: KSerializer<*>) {
         internal val PROTECTED = OPENING + PINS
 
         /** The listings below a scope: what a pin reaches through. */
-        internal val LISTINGS = setOf(NODES.kind, NODE_MEDIA.kind, FILES.kind, APPLICATION_BLOBS.kind)
+        internal val LISTINGS = setOf(NODES.kind, NODE_MEDIA.kind, FILES.kind, APPLICATION_BLOBS.kind, POT_REVISIONS.kind)
     }
 }
 

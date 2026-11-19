@@ -144,7 +144,10 @@ class SearchModel(
         /** Node [node]'s sealed meta opened under its key (core's node-meta opener); null where it does not open. */
         fun openMeta(node: OpenNode): JsonObject?
 
-        /** Whether the account reaches its server: offline no listing is read (ADR 0146 decision 11). */
+        /**
+         * Whether the account reaches its server: offline only what the store keeps is read (ADR 0153 decision 7: a
+         * space's media where its listing was read online); the rest is searched once online.
+         */
         fun online(): Boolean
 
         /** The tenant's members as the shell's roster holds them (kept offline too). */
@@ -369,11 +372,6 @@ class SearchModel(
                 for ((app, search) in kinds.applications) {
                     if (app in off) continue
                     val prev = withContext(lane) { objects[s.scopeId]?.get(app) }
-                    if (!online) {
-                        if (prev == null) unreadOffline = true
-                        else if (prev.placedIn !== nowTrees) place(s.scopeId, app, prev.tag, prev.objects, byId, nowTrees)
-                        continue
-                    }
                     try {
                         val answer = door.scopeDocuments(search, s.scopeId, prev?.tag, prev?.objects.orEmpty(), byId) { unnamed.getValue(it) }
                         if (answer == null) {
@@ -385,8 +383,15 @@ class SearchModel(
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        // a listing that does not read keeps the space's nodes and names it as not searched
-                        notSearched += s.scopeId
+                        if (!online) {
+                            // offline a listing this device does not keep (ADR 0153 decision 7) is searched once online: the
+                            // objects it last read stand
+                            if (prev == null) unreadOffline = true
+                            else if (prev.placedIn !== nowTrees) place(s.scopeId, app, prev.tag, prev.objects, byId, nowTrees)
+                        } else {
+                            // a listing that does not read keeps the space's nodes and names it as not searched
+                            notSearched += s.scopeId
+                        }
                     }
                 }
             }

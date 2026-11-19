@@ -65,20 +65,53 @@ ADR 0153 decisions 6 and 7 hold them; here only what the work needs beside them.
 
 ## Phases
 
-- [ ] **1 core — the ledger and receipts** (D1, D2) — `POT_REVISIONS`, `PotDoor.read` kept, `PotModel` offline state and
+- [x] **1 core — the ledger and receipts** (D1, D2) — `POT_REVISIONS`, `PotDoor.read` kept, `PotModel` offline state and
   refusal, the receipt viewer's keep. Tests: a Pot read online then offline shows the same entries with `asOf`; a newer
   ledger replaces (an entry tombstoned on the server is gone from the kept copy); a `403`/`404` drops it; an export
   keeps no frame. · Done when: `:core:jvmTest :core:macosArm64Test` green, `KeptReadsTest` green with the new model.
   **Bites:** (a) the ledger merged instead of replaced → the tombstone test red; (b) `PotExport` reading with
   `keep = true` → the export test red; (c) the model carrying a token-named field (a test-only serializer) → `KeptReadsTest` red.
-- [ ] **2 core — a Pot pins; the space's media** (D3, D4) — `AppKinds.pins`, `belowNode`, `SCOPE_MEDIA` in
+  **Built** (2026-11-19): `KeptRead.POT_REVISIONS`; `TenantPotDoor.whole` (a read with no cursor — the Pot's open, a
+  re-open — is the kept whole read, `PotDoor.Read.offline`); `PotSession.offline`/`wentOffline`, `canWrite` and
+  `canChangeSettings` false offline, every write `WriteOutcome.OFFLINE` (`Notices` → `offline_read_only`);
+  `PotModel.State.offline` and `failure` (`offline_not_kept` / `pot_open_failed`), the reach watched (offline: read-only as
+  of the last read; online: read anew, a failed open retried), `receiptFailure()`; `PotSession.openReceipt` keeps,
+  `readReceipt(id, keep = false)` for `PotExport` and `PotCopy`. Tests `OfflinePotTest` (5) over `PlayedTenant`, which now
+  plays a Pot's revisions and application blobs. Deviations: `belowNode` reaches `POT_REVISIONS` already here — without it
+  the sweep after the first keep drops the ledger at once, so phase 1 cannot work without it (phase 2's bite (a) still
+  bites it); bite (a)'s "tombstone" is an **erasure** (`eraseRecord`): a tombstone is an appended revision a merge carries
+  too, an erased record is what a merge brings back. Bites (a) merge in `whole` → the erasure test red; (b) → the export
+  test red (`[r2, r1]` kept); (c) a `LeakyPage(shareToken)` model → `KeptReadsTest` red; each restored with `/bin/cp -f`.
+  `./gradlew :core:jvmTest :core:macosArm64Test`: macOS green; JVM 1353 tests, one red, `DeviceLinkTest.the_state_carries_no_secret`
+  (untouched, load ~5), green re-run alone.
+- [x] **2 core — a Pot pins; the space's media** (D3, D4) — `AppKinds.pins`, `belowNode`, `SCOPE_MEDIA` in
   `MemoriesSearch`, the sweep's reach. Tests: a pinned Pot fetches its ledger, receipts and cover and survives
   "Clear cache"; a Pot unpinned and not viewed is swept; search offline finds a medium of an unopened Memory from the kept
   space listing; a scope gone from `MY_SCOPES` drops its `SCOPE_MEDIA`. · Done when: the same checks green. **Bites:**
   (a) `belowNode` without the Pot branch → the pinned Pot's ledger swept, red; (b) `SCOPE_MEDIA` in `PROTECTED` → the
   "Clear cache" test red.
-- [ ] **3 bridge** — the Pot's offline state and the toggle's state on the wire. · Done when: `:bridge:jvmTest` green.
+  **Built** (2026-11-20): `AppKinds.pins` takes `EXPENSES_POT`, its blobs `expenses/PotPins.pinned` (the whole ledger
+  through `TenantPotDoor.whole`, every held receipt, not dropped or blocked; the cover is core's `coverOf`);
+  `KeptRead.SCOPE_MEDIA` reached by the sweep from `MY_SCOPES` (not in `LISTINGS`, never pinned, never `PROTECTED`);
+  `VeyqAccount.Read.revision` (the kept or fetched answer's) so `MemoriesSearch.scopeMediaDocuments` keeps its "unchanged:
+  null" over the kept read; `SearchModel` asks the applications offline too and falls back to "searched once online"
+  (`search_offline_photos`) only where the listing is not kept — ADR 0146 decision 11's "offline no listing is read" is
+  replaced here (the harvest names it; the word's note still cites decision 11). Tests `OfflinePotPinsTest` (4); the
+  "swept" Pot is dropped by Clear cache after its unpin (an unpinned Pot that still exists is reached, so the sweep keeps
+  it in the automatic tier). Bites (a) the `POT_REVISIONS` line out of `belowNode` → both Pot pin tests red ("Clear
+  cache dropped the pinned Pot's ledger"); (b) `SCOPE_MEDIA` in `PROTECTED` → the Clear-cache test red; each restored with
+  `/bin/cp -f`. `./gradlew :core:jvmTest :core:macosArm64Test` green.
+- [x] **3 bridge** — the Pot's offline state and the toggle's state on the wire. · Done when: `:bridge:jvmTest` green.
   **Bite:** a state carrying a sealed body → `SecretFreeSchemaTest` red.
+  **Built** (2026-11-20): `Update.Pot` carries `PotModel.State` with its new `offline` (`OfflineAsOf`) and a `failure`
+  word (`MsgKey`: `offline_not_kept` / `pot_open_failed`, null where it opened); `Receipt.Open` and `Receipt.Save` refuse
+  `NOT_KEPT_OFFLINE` (a new `Answer.Why`) where the Pot is shown offline and the receipt is not kept. The header's
+  *Available offline* is the existing `HeaderShown.offline` (`OfflineToggle`), offered for a Pot now that it is pinnable —
+  no new wire. Tests: `DispatchTest.aPotShownOfflineCrossesAsItsTimeAndStateAndRefusesItsWrites`; `SecretFreeSchemaTest`
+  pins `PotModel.State`'s fields. Bite: `sealedBody` on `PotModel.State` → `SecretFreeSchemaTest` red twice (the field
+  list and "named like a secret"), restored with `/bin/cp -f`. `./gradlew :bridge:jvmTest :bridge:generateBindings` green
+  (the generated `bridge.rs`/`Bridge.g.cs` are not committed; Linux matches `Update::Pot { state, .. }` and Windows
+  `is Update.Pot`, so neither breaks — not built here).
 - [ ] **4 Android** — the Pot's header *Available offline*, its offline banner and disabled writes. · Done when:
   `:android:assembleDebug`, the guidelines and words guards green.
 - [ ] **5 Apple** — the same. · Done when: both Apple builds green.

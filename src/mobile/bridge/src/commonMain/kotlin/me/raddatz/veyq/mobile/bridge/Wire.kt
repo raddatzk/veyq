@@ -339,7 +339,9 @@ internal sealed class Call {
     /**
      * Receipt [receipt] of Pot [pot] opened to its bytes (`PotModel.openReceipt`), answered as [Answer.Bytes] with what the
      * bytes are (`Receipts.mediaTypeOf`: an image's type, `application/pdf`, or null — a file only saved); refused
-     * `NO_RECEIPT` where it does not open (blocked, not held, not read). The host decodes it in memory, never from a file.
+     * `NO_RECEIPT` where it does not open (blocked, not held, not read), `NOT_KEPT_OFFLINE` where the Pot is shown offline
+     * and this device does not keep the receipt (`PotModel.receiptFailure`: never shown here, nor fetched by a pin; its
+     * word `offline_not_kept`). The host decodes it in memory, never from a file.
      */
     @Serializable @SerialName("Receipt.Open") data class ReceiptOpen(val pot: Long, val receipt: String) : Call()
 
@@ -348,8 +350,8 @@ internal sealed class Call {
 
     /**
      * Receipt [receipt] of Pot [pot] saved into the file at [path], which the host's save dialog gave (ADR 0137 decision 3:
-     * the core opens and writes it; nothing is left there on a failure): done, or refused `NO_RECEIPT` (it does not open)
-     * or `NOT_WRITTEN` (the file was not written).
+     * the core opens and writes it; nothing is left there on a failure): done, or refused `NO_RECEIPT` (it does not open;
+     * `NOT_KEPT_OFFLINE` offline where this device does not keep it) or `NOT_WRITTEN` (the file was not written).
      */
     @Serializable @SerialName("Receipt.Save") data class ReceiptSave(val pot: Long, val receipt: String, val path: String) : Call()
 
@@ -1991,6 +1993,9 @@ internal sealed class Answer {
         /** An import: none open by that id (ADR 0152). */
         NO_SUCH_IMPORT,
 
+        /** A receipt the Pot shown offline does not keep (ADR 0153 decision 6): its word is `offline_not_kept`. */
+        NOT_KEPT_OFFLINE,
+
         /** A drop box's page: none by that id; no guest's folder listed by that id; a delete that was not asked. */
         NO_SUCH_DROPBOX, NO_SUCH_FOLDER, NOT_ASKED,
 
@@ -2210,8 +2215,14 @@ internal sealed class Update {
     /**
      * Null while nothing is open in this Pot model (closed, or an id the bridge does not hold). [pictures] are the user
      * ids whose picture the core holds ([Call.AvatarPicture]); a person whose member id is not among them shows the letter.
+     * Offline (ADR 0153 decision 6) the state's `offline` says as of when — read-only: its view's `canWrite` is off — and
+     * [failure] what the page says where the Pot did not open (`PotModel.State.failure`: offline, that this device does
+     * not keep it; else that it did not open); null where it opened.
      */
-    @Serializable @SerialName("Pot") data class Pot(val pot: Long, val state: PotModel.State?, val pictures: List<String> = emptyList()) : Update()
+    @Serializable @SerialName("Pot") data class Pot(
+        val pot: Long, val state: PotModel.State?, val pictures: List<String> = emptyList(),
+        @Serializable(with = MsgKey::class) val failure: Msg? = state?.failure,
+    ) : Update()
 
     /** A header's state; null once it was closed (or an id the bridge does not hold). */
     @Serializable @SerialName("Header") data class Header(val header: Long, val shown: HeaderShown?) : Update()

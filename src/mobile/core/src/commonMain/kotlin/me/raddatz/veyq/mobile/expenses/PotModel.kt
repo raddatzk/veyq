@@ -13,7 +13,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.navigation.ShellModel
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import me.raddatz.veyq.mobile.session.LivePoll
+import me.raddatz.veyq.mobile.session.OfflineAsOf
+import me.raddatz.veyq.mobile.session.Reach
+import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.session.LocalDays
 import me.raddatz.veyq.mobile.session.TenantSession
 
@@ -21,12 +26,19 @@ import me.raddatz.veyq.mobile.session.TenantSession
  * The Pot open in the app (ADR 0136 decision 2): its session and what its screens show ([PotView]) — loading, failed,
  * saving a write and that write's refusal —, its live poll while a screen runs it (skipped while a write is saving), a
  * pull to refresh, the writes, and a new Pot's creation. Both apps observe [state] (or [watch]); what they draw is theirs.
+ *
+ * **Offline** (ADR 0153 decision 6, as ADR 0140 decisions 5 and 7 have it for a gallery) the Pot shows the ledger the
+ * offline store kept, [State.offline] saying as of when, every write refused with one notice (`offline_read_only`,
+ * [PotSession.WriteOutcome.OFFLINE]) and its controls off ([PotView.canWrite]); a Pot the store does not hold says so
+ * ([State.failure]), and a receipt not kept too ([receiptFailure]). Back online it reads anew.
  */
 class PotModel internal constructor(
     private val tenant: TenantSession?,
     private val now: () -> Long,
     private val opener: suspend (ObjectRef) -> Opened?,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    /** Whether the account reaches its server ([me.raddatz.veyq.mobile.session.VeyqAccount.reach]); null: always. */
+    private val reach: StateFlow<Reach>? = tenant?.account?.reach,
 ) {
     constructor(tenant: TenantSession, now: () -> Long) : this(tenant, now, { ref -> PotSession.open(tenant, ref.scopeId, ref.nodeId)?.let(::SessionOpened) })
 
@@ -66,6 +78,12 @@ class PotModel internal constructor(
 
         /** A receipt's bytes ([PotSession.openReceipt]), or null: blocked, not held, or it did not read. */
         suspend fun openReceipt(receiptId: String): ByteArray? = null
+
+        /** Shown from the offline store, as of when ([PotSession.offline]); null online. */
+        val offline: OfflineAsOf? get() = null
+
+        /** The account went offline with the Pot open ([PotSession.wentOffline]). */
+        fun wentOffline() {}
     }
 
     /**
@@ -120,16 +138,34 @@ class PotModel internal constructor(
         override suspend fun deleteEntry(entryId: String, basedOn: Long) = session.deleteEntry(entryId, basedOn)
         override suspend fun rateFor(currency: String, day: String) = session.rateFor(currency, day)
         override suspend fun openReceipt(receiptId: String) = session.openReceipt(receiptId)
+        override val offline: OfflineAsOf? get() = session.offline
+        override fun wentOffline() = session.wentOffline()
     }
 
     /**
-     * The open Pot's views: [view] null while it loads, [failed] when it did not open; [message] the last write's refusal.
+     * The open Pot's views: [view] null while it loads, [failed] when it did not open; [message] the last write's refusal;
+     * [offline] shown from the offline store, read-only, its ledger as of when (null online; ADR 0153 decision 6).
      * Serializable, since the native bridge sends it as it is (ADR 0123's Consequences, the bridge).
      */
     @kotlinx.serialization.Serializable
-    class State(val ref: ObjectRef, val view: PotView? = null, val failed: Boolean = false, val saving: Boolean = false, val message: String? = null) {
-        internal fun with(view: PotView? = this.view, failed: Boolean = this.failed, saving: Boolean = this.saving, message: String? = this.message) =
-            State(ref, view, failed, saving, message)
+    class State(
+        val ref: ObjectRef, val view: PotView? = null, val failed: Boolean = false, val saving: Boolean = false, val message: String? = null,
+        val offline: OfflineAsOf? = null,
+    ) {
+        internal fun with(
+            view: PotView? = this.view, failed: Boolean = this.failed, saving: Boolean = this.saving, message: String? = this.message,
+            offline: OfflineAsOf? = this.offline,
+        ) = State(ref, view, failed, saving, message, offline)
+
+        /**
+         * What the page says where the Pot did not open ([failed]): offline, that the store does not hold it (not made
+         * available offline, nor viewed within the limit) — not a failed load; online, that it did not open. Null where it opened.
+         */
+        val failure: Msg? get() = when {
+            !failed -> null
+            offline != null -> Msg.OFFLINE_NOT_KEPT
+            else -> Msg.POT_OPEN_FAILED
+        }
     }
 
     private val _state = MutableStateFlow<State?>(null)
@@ -168,7 +204,9 @@ class PotModel internal constructor(
         if (_state.value?.ref != ref) return
         opened = o
         poll = LivePoll(now = now)
-        _state.value = State(ref, o?.view(), failed = o == null)
+        // a Pot that did not open while the account is offline is one the store does not hold
+        val offline = o?.offline ?: if (o == null && !online()) OfflineAsOf(null) else null
+        _state.value = State(ref, o?.view(), failed = o == null, offline = offline)
         rekeys?.cancel()
         rekeys = tenant?.let { t -> scope.launch { t.rekeyed.drop(1).collect { rekeyed() } } }
     }
@@ -199,7 +237,7 @@ class PotModel internal constructor(
                 cadence.run {
                     when (if (_state.value?.saving != false) null else o.poll()) {
                         null -> LivePoll.Tick.SKIP
-                        true -> LivePoll.Tick.DONE.also { if (opened === o) _state.update { it?.with(view = o.view()) } }
+                        true -> LivePoll.Tick.DONE.also { if (opened === o) _state.update { it?.with(view = o.view(), offline = o.offline) } }
                         false -> LivePoll.Tick.DONE
                     }
                 }
@@ -216,7 +254,7 @@ class PotModel internal constructor(
     suspend fun refresh() {
         val o = opened ?: return
         runCatching { o.refresh() }
-        if (opened === o) _state.update { it?.with(view = o.view()) }
+        if (opened === o) _state.update { it?.with(view = o.view(), offline = o.offline) }
     }
 
     /**
@@ -226,14 +264,17 @@ class PotModel internal constructor(
     suspend fun rekeyed() {
         val o = opened ?: return
         runCatching { o.rekeyed() }
-        if (opened === o) _state.update { it?.with(view = o.view()) }
+        if (opened === o) _state.update { it?.with(view = o.view(), offline = o.offline) }
     }
 
     /** The write ended: the Pot as read after it, and — where [said] — a refusal as the message. */
     private fun ended(outcome: PotSession.WriteOutcome, said: Boolean): Boolean {
         val o = opened
         _state.update {
-            it?.with(view = o?.view() ?: it.view, saving = false, message = if (said) outcome.takeIf { x -> x != PotSession.WriteOutcome.WRITTEN }?.name else it.message)
+            it?.with(
+                view = o?.view() ?: it.view, saving = false, offline = o?.offline ?: it.offline,
+                message = if (said) outcome.takeIf { x -> x != PotSession.WriteOutcome.WRITTEN }?.name else it.message,
+            )
         }
         return outcome == PotSession.WriteOutcome.WRITTEN
     }
@@ -241,9 +282,7 @@ class PotModel internal constructor(
     /** One [Op] on the open Pot, its refusal the Pot's message where [said]; what it came to. */
     internal suspend fun written(op: Op, said: Boolean): PotSession.WriteOutcome {
         val o = opened ?: return PotSession.WriteOutcome.REFUSED
-        var outcome = PotSession.WriteOutcome.REFUSED
-        writing(said) { o.write(op).also { outcome = it } }
-        return outcome
+        return outcomeOf(said) { o.write(op) } ?: PotSession.WriteOutcome.REFUSED
     }
 
     private suspend fun write(op: Op): Boolean = written(op, said = true) == PotSession.WriteOutcome.WRITTEN
@@ -283,10 +322,24 @@ class PotModel internal constructor(
      * [op] as a write of the open Pot: saving while it runs (the live poll skips meanwhile), the Pot read after it; its
      * refusal the Pot's message where [said] (a sheet that says its own, the entry editor, passes false).
      */
-    internal suspend fun writing(said: Boolean, op: suspend () -> PotSession.WriteOutcome): Boolean {
-        if (opened == null) return false
+    internal suspend fun writing(said: Boolean, op: suspend () -> PotSession.WriteOutcome): Boolean =
+        outcomeOf(said, op) == PotSession.WriteOutcome.WRITTEN
+
+    /**
+     * [writing]'s outcome, null where no Pot is open. Offline nothing is sent: the write is refused at once with
+     * [PotSession.WriteOutcome.OFFLINE] (`offline_read_only`, ADR 0153 decision 6) — what the controls the state turns off
+     * would have sent.
+     */
+    private suspend fun outcomeOf(said: Boolean, op: suspend () -> PotSession.WriteOutcome): PotSession.WriteOutcome? {
+        if (opened == null) return null
+        if (_state.value?.offline != null) {
+            ended(PotSession.WriteOutcome.OFFLINE, said)
+            return PotSession.WriteOutcome.OFFLINE
+        }
         _state.update { it?.with(saving = true, message = if (said) null else it.message) }
-        return ended(runCatching { op() }.getOrDefault(PotSession.WriteOutcome.REFUSED), said)
+        val outcome = runCatching { op() }.getOrDefault(PotSession.WriteOutcome.REFUSED)
+        ended(outcome, said)
+        return outcome
     }
 
     /**
@@ -305,6 +358,7 @@ class PotModel internal constructor(
         override fun newId(): String = opened?.newId() ?: error("no Pot open")
         override suspend fun rate(currency: String, day: String) = rateFor(currency, day)
         override suspend fun save(entryId: String, form: EntryForm, basedOn: Long?, pending: List<PotSession.PendingReceipt>, own: Set<String>): EntryEditor.Written {
+            if (_state.value?.offline != null) return EntryEditor.Written(PotSession.WriteOutcome.OFFLINE)
             var written = EntryEditor.Written(PotSession.WriteOutcome.REFUSED)
             writing(said = false) {
                 val o = opened ?: return@writing PotSession.WriteOutcome.REFUSED
@@ -314,9 +368,7 @@ class PotModel internal constructor(
             return written
         }
         override suspend fun delete(entryId: String, basedOn: Long): PotSession.WriteOutcome {
-            var outcome = PotSession.WriteOutcome.REFUSED
-            writing(said = false) { (opened?.deleteEntry(entryId, basedOn) ?: PotSession.WriteOutcome.REFUSED).also { outcome = it } }
-            return outcome
+            return outcomeOf(said = false) { opened?.deleteEntry(entryId, basedOn) ?: PotSession.WriteOutcome.REFUSED } ?: PotSession.WriteOutcome.REFUSED
         }
     }
 
@@ -342,8 +394,46 @@ class PotModel internal constructor(
     /** One unit of [currency] in the open Pot's base from [day]'s table (`yyyy-MM-dd`, the device's today), or null. */
     suspend fun rateFor(currency: String, day: String): ExchangeRates.Filled? = opened?.let { runCatching { it.rateFor(currency, day) }.getOrNull() }
 
-    /** A receipt of the open Pot opened to its bytes, or null (blocked, or it did not read). */
+    /**
+     * A receipt of the open Pot opened to its bytes, or null (blocked, or it did not read; offline, not kept): its frames
+     * kept as it is shown (ADR 0153 decision 6). Where it is null, [receiptFailure] says why.
+     */
     suspend fun openReceipt(receiptId: String): ByteArray? = opened?.let { runCatching { it.openReceipt(receiptId) }.getOrNull() }
+
+    /**
+     * What the viewer says where [openReceipt] gave nothing: offline, that this device does not keep it (a receipt never
+     * shown here, nor fetched by a pin) — not a failed read; online, that it does not read.
+     */
+    fun receiptFailure(): Msg = if (_state.value?.offline != null) Msg.OFFLINE_NOT_KEPT else Msg.RECEIPTS_UNREADABLE
+
+    /** Whether the account reaches its server now. */
+    private fun online(): Boolean = reach?.value?.let { it == Reach.Online } ?: true
+
+    init {
+        // going offline with a Pot open shows it read-only as of its last read; back online it reads anew — a Pot that
+        // did not open offline (the store did not hold it) is opened again
+        reach?.let { r ->
+            // each change from what the account was at the model's start: an open reads the reach itself
+            var was = online()
+            scope.launch {
+                r.map { it == Reach.Online }.distinctUntilChanged().collect { on ->
+                    if (on == was) return@collect
+                    was = on
+                    val s = _state.value ?: return@collect
+                    val o = opened
+                    when {
+                        !on && o != null -> {
+                            o.wentOffline()
+                            _state.update { it?.takeIf { opened === o }?.with(view = o.view(), offline = o.offline) ?: it }
+                        }
+                        !on -> _state.update { it?.takeIf { x -> x.failed }?.with(offline = it.offline ?: OfflineAsOf(null)) ?: it }
+                        s.failed -> open(s.ref)
+                        s.offline != null -> refresh()
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * The open Pot downloaded as the web's ZIP into [sink] (`PotExport.download`), or null when nothing is open or it has
