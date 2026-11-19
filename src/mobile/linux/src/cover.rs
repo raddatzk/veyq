@@ -411,7 +411,7 @@ impl Inner {
 }
 
 /// [texture] drawn at [width] × [height] into cairo's surface (ARGB32, premultiplied: the frame draws it, the encoder reads it).
-fn scaled(texture: &gdk::Texture, width: i32, height: i32) -> Option<cairo::ImageSurface> {
+pub(crate) fn scaled(texture: &gdk::Texture, width: i32, height: i32) -> Option<cairo::ImageSurface> {
     let (tw, th) = (texture.width(), texture.height());
     let mut downloader = gdk::TextureDownloader::new(texture);
     downloader.set_format(gdk::MemoryFormat::B8g8r8a8Premultiplied);

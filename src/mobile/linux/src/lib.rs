@@ -4,6 +4,7 @@
 //! [sign_in] with the unlock, [shell] with [home], [pot] with its [pot_settings], a file's page ([file_page], a PDF's text selected by [pdf_text], a medium played from [reader_stream] by [player]), a Memory's page ([memory_page]) with its [banner], its participants and capture time ([curation]) and its [lightbox], a person's profile ([person_page]), its Music view ([music_view]) and a picked medium's tiers ([media_tiers]), the account's music — its bar ([music_bar]), its decks and the desktop's media controls ([music_host]) —, a drop box's ([drop_box]), [entry_editor] (a text field's rule, [typed]), a node's [header] with its [move_sheet], [share_sheet], [report] and [cover] and a space's [trash], New pot ([pot_create]), the search in the shell's sidebar ([search]), [manage] ("Manage
 //! servers", from the switcher), the account's Settings ([account_settings], from the sidebar) with its device linking ([device_link], from the sign-in too), the uploads ([uploads]) with drag and drop ([drop]), a QR scan's camera ([qr_camera]), an Emergency Kit's pages drawn for the core ([kit_drawing]), and, in a debug build, [dev_login] and
 //! the harnesses [dev_scan] and [dev_settings].
+pub mod account_flows;
 pub mod account_settings;
 pub mod avatars;
 pub mod banner;
@@ -41,11 +42,13 @@ pub mod pdf_text;
 pub mod pot;
 pub mod pot_create;
 pub mod pot_settings;
+pub mod profile_edit;
 pub mod qr_camera;
 pub mod raster_map;
 pub mod reader_stream;
 pub mod receipt_viewer;
 pub mod report;
+pub mod safety;
 pub mod said;
 pub mod search;
 pub mod share_sheet;

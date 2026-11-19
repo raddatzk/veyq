@@ -48,6 +48,10 @@ struct Inner {
     drawing: Cell<bool>,
     watch: RefCell<Option<Watch>>,
     window: gtk::Window,
+    /// The safety number's place below the name (ADR 0148 decision 3), filled once the person is shown; [mine]: one's own.
+    safety_slot: gtk::Box,
+    mine: bool,
+    safety_drawn: Cell<bool>,
 }
 
 /// A row's second line: its date, its place and the group it lies in, as the Memories list says each.
@@ -58,8 +62,8 @@ pub fn row_subtitle(row: &PersonRowShown) -> String {
 }
 
 impl PersonPage {
-    /// Person [user_id]'s page over [window].
-    pub fn open(user_id: &str, window: &gtk::Window) -> Self {
+    /// Person [user_id]'s page over [window]; [mine]: the signed-in member's own.
+    pub fn open(user_id: &str, mine: bool, window: &gtk::Window) -> Self {
         let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).margin_top(24).margin_bottom(24).margin_start(12).margin_end(12).build();
         let avatar_slot = gtk::Box::builder().halign(gtk::Align::Center).build();
         let name = gtk::Label::builder().wrap(true).justify(gtk::Justification::Center).build();
@@ -69,7 +73,8 @@ impl PersonPage {
         username.add_css_class("dim-label");
         let hint = gtk::Label::builder().label(words::people_former_member_hint()).visible(false).build();
         hint.add_css_class("dim-label");
-        for w in [avatar_slot.upcast_ref::<gtk::Widget>(), name.upcast_ref(), username.upcast_ref(), hint.upcast_ref()] {
+        let safety_slot = gtk::Box::builder().orientation(gtk::Orientation::Vertical).build();
+        for w in [avatar_slot.upcast_ref::<gtk::Widget>(), name.upcast_ref(), username.upcast_ref(), hint.upcast_ref(), safety_slot.upcast_ref()] {
             column.append(w);
         }
         let head = gtk::Box::builder().spacing(12).margin_top(18).build();
@@ -131,6 +136,9 @@ impl PersonPage {
             drawing: Cell::new(false),
             watch: RefCell::new(None),
             window: window.clone(),
+            safety_slot,
+            mine,
+            safety_drawn: Cell::new(false),
         });
         Inner::connect(&inner);
         let (weak, user) = (Rc::downgrade(&inner), user_id.to_owned());
@@ -207,6 +215,10 @@ impl Inner {
         self.username.set_visible(s.username.is_some());
         self.username.set_label(s.username.as_deref().unwrap_or_default());
         self.hint.set_visible(s.former);
+        // the safety number: one's own to show, a member's to compare; a former member has none here
+        if !s.former && !self.safety_drawn.replace(true) {
+            self.safety_slot.append(&crate::safety::section(&s.user_id, self.mine, &name));
+        }
         let avatar_key = (name.clone(), s.picture);
         if self.drawn_avatar.replace(Some(avatar_key.clone())) != Some(avatar_key) {
             while let Some(c) = self.avatar_slot.first_child() {
