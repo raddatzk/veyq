@@ -148,6 +148,16 @@ the branch the refine read (each claim's command is in the refine's record of it
 - **A download is held to the web's importer by a committed fixture**, not by a schema validator in the core's tests: a
   validator would be a new test dependency, and an archive the schema accepts can still be one the importer refuses.
 - **Import stays the web's** until #985; a person imports an app's download on the web.
+- **What the Windows pass proved** (2026-11-19, the VM through UI Automation, a throwaway with a member on the fixed
+  tenant `tw-win.localhost`; the marks' second session the core's `MarksLiveTest` as the member, then the member signed
+  in on the same app): a tile's badge counted two marks, each session calling only its own mark its own; the lightbox's
+  heart and a tile's right-click *Mark* (Shift+F10) flipped the caller's mark; the filter's `AutoSuggestBox` took a local
+  day chip by keys and dropped it, free text narrowed the grid, the marks' menu narrowed it to *Only mine* and
+  *Everyone's*; Contributions made, renamed, filled (a photo moved from its tile's menu) and deleted a sub-bucket, and the
+  bucket's lightbox paged the bucket; *Report* on a photo was received; a Memory's *Download* (its zip: both photos and
+  `.veyq/manifest.json`) and *Copy to…*; Home's, a folder's and a profile's tiles, the View's *List* kept across a
+  restart and the tiles' columns following the window (4, 5, 7). A bucket picked in the picker ended the app (its items
+  cleared inside the pick's own `SelectionChanged`); fixed in the pass.
 
 ## Alternatives considered
 

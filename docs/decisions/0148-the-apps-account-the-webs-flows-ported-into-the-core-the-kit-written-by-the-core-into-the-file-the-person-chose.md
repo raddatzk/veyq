@@ -1,8 +1,8 @@
 # ADR 0148 — The apps' account: the web's flows ported into the core, the kit written by the core into the file the person chose
 - Status: Accepted
-- Built: yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android and Linux as
-  throwaways (§ Consequences, the passes); on Apple and Windows built and compiled, the agent's passes open (inbox #976,
-  #983); the owner's passes are named in § Consequences
+- Built: yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android, Linux and Windows as
+  throwaways (§ Consequences, the passes); on Apple built and compiled, the agent's pass open (inbox #976); what the
+  Windows pass left is #983; the owner's passes are named in § Consequences
 - Date: 2026-11-18
 - Model: [native-apps](../crosscutting/native-apps.md) (the flows: [keys-grants-and-trust](../crosscutting/keys-grants-and-trust.md))
 
@@ -169,7 +169,7 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
   container first is unmeasured (inbox #975).
 - **The save dialogs' recent-files records are accepted** (2026-11-19, inbox #981). After a kit saved through GTK's
   dialog, `~/.local/share/recently-used.xbel` named the kit's path (measured in the Linux pass; in the Flatpak the
-  portal keeps the same record on the host), and Windows' save picker may leave a `.lnk` under `Recent`. Such a record
+  portal keeps the same record on the host), and Windows' save picker leaves a `.lnk` under `Recent` (measured in the Windows pass). Such a record
   names the path the person chose, never a byte of the kit, and it is the place the person picked for a file they keep
   on purpose; removing it would reach only the app's own GTK manager, not a portal's or the shell's. So the no-copy
   rule is about content, and the Use page on the kit tells the person that the file is where they saved it, to be kept
@@ -190,13 +190,26 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
   held the Secret Key, `veyqkit:` or a PDF. *The core's live tests* as throwaways: verification both ways, a name and a
   picture read by the other member, the password changed and the old one refused, the rotation (both scopes secured,
   the old Secret Key refused, the new kit signing in to the same spaces), the erasure. A kit the core writes is read by
-  the web's import by each of its three paths (`kit-app.pdf`).
+  the web's import by each of its three paths (`kit-app.pdf`). *Windows* (the VM, UI Automation, the unpackaged debug
+  build, 2026-11-19, on the fixed tenant `tw-win.localhost` the throwaway tool's `--tenant` names): a 600 × 400 picture
+  framed, saved and read back in the shell and on the person page with the name; one's own safety number and the
+  member's verified by digits (*Verified by you.*), each side's number equal on the other's app, before and after the
+  rotation; this device renamed; the password changed and changed back, the old one refused; the address change's
+  request and its kit through `FileSavePicker` behind *I saved it*, that kit signing in; the rotation without a new
+  password, both scopes named *New lock*, the old kit refused and the rotation's kit signing in; the member's erasure in
+  the app (its offline store gone), the owner's erasure preview listing the sole tenant (the owner erased by the tool, so
+  the fixed name is freed at once). No file under `%LOCALAPPDATA%\veyq`, `%TEMP%` or `INetCache` held either Secret Key,
+  `veyqkit:` or `%PDF-` (the scan bitten on the saved kits); `Recent` held a `.lnk` naming each kit the pickers saved or
+  opened (accepted above, the save dialogs' records; a save picker's own `.lnk` measured on the Memory's download). A
+  defect was fixed on the way: a control kept across redraws was put into each draw's new row while still the old
+  row's child, so every draw after the first threw and the profile stopped drawing once a picture was chosen (the
+  password, address and erasure pages held the same pattern). Two findings are #1009 and #1010.
 - **What no pass has proved yet.** The address change's confirm and the re-addressed sign-in live (the dev backend on
   the Mac the passes ran on sends no mail; `ReaddressTest` holds the re-address, `LiveCredentialFlowsTest` skips there
   and says so); a rotation begun on the web and finished by an app's unlock (held by `FinishRotationTest`); a safety
   code scanned between two apps and the rename of another named device (the throwaways had none). The agent's macOS
-  click-through and its kit no-copy check, with #917's rename alert (inbox #976: the screen was locked); the Windows UIA
-  pass and its no-copy check (inbox #983: the VM resolves no throwaway tenant). **The owner's:** iPhone and iPad (the
+  click-through and its kit no-copy check, with #917's rename alert (inbox #976: the screen was locked); on Windows the
+  MSIX's no-copy check and the rest #983 names. **The owner's:** iPhone and iPad (the
   sheets, `fileExporter` into Files, Face ID's re-enrolment, #975 — no simulator boots here, #928), Touch ID and Windows
   Hello for real after a password change and a rotation, an address change to a real mailbox with the link opened on a
   phone, and a safety code scanned between two phones with real cameras (#912).
