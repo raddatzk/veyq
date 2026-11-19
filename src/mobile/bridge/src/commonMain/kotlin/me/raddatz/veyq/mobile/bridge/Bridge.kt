@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -261,8 +262,11 @@ internal class Tenant(
      * The uploads over the app's one [queue] (`ShellModel.depotUploads`), [changed] after each write (the shell's lists and
      * the open file pages read anew); a test's tenant plays one over a door of its own.
      */
-    val uploads: ((queue: me.raddatz.veyq.mobile.blob.UploadQueue, changed: () -> Unit) -> me.raddatz.veyq.mobile.depot.DepotUploads)? =
-        shell?.let { s -> { queue, changed -> s.depotUploads(queue, changed) } },
+    val uploads: ((
+        queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver, changed: () -> Unit,
+    ) -> me.raddatz.veyq.mobile.depot.DepotUploads)? =
+        // a desktop offers a download's import at its uploads (ADR 0152 decision 1): each bridge host is one
+        shell?.let { s -> { queue, deriver, changed -> s.depotUploadsImporting(queue, deriver, changed) } },
     /**
      * Memories' uploads over the app's one [queue] (`ShellModel.mediaUploads`): each picked medium's tiers made by [deriver],
      * [changed] at a batch's end. A desktop reads each picked file in place at its path, so a file the queue is done with
@@ -552,6 +556,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /** Each reader a file's page opened ([Call.FileReader]), by the reader's id: the page's id, so it closes with it. */
     private val pageReaders = Registry<Long>()
     private val saves = Registry<me.raddatz.veyq.mobile.depot.FileSave>()
+    private val imports = Registry<me.raddatz.veyq.mobile.export.ImportDialog>()
 
     /** The QR scans the host opened ([Call.ScanOpen]): no tenant's, each until [Call.ScanClose] or [shutdown]. */
     private val scans = Registry<me.raddatz.veyq.mobile.qr.QrScan<*>>()
@@ -1007,6 +1012,20 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 val found = parts.files.walk(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
                 Answer.Queued(u.uploadFolder(call.scopeId, call.parentId, null, call.path, found))
             } ?: noTenant
+            is Call.ImportScreen -> uploads.value?.let { u ->
+                val sources = call.paths.map { it to parts.files.source(it) }
+                val notRead = Notices.notRead(sources.filter { it.second == null }.map { pathName(it.first) })
+                val screened = u.screen(call.scopeId, call.parentId, call.label, sources.mapNotNull { it.second }, deletedName = call.deletedName)
+                screened.offer?.let { Answer.ImportOffered(holdImport(it), screened.queued, notRead) } ?: Answer.Queued(screened.queued, notRead)
+            } ?: noTenant
+            is Call.ImportScreenFolder -> uploads.value?.let { u ->
+                val found = parts.files.walk(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
+                val screened = u.screenFolder(call.scopeId, call.parentId, call.label, null, call.path, found, call.deletedName)
+                screened.offer?.let { Answer.ImportOffered(holdImport(it), 0) } ?: Answer.Queued(screened.queued)
+            } ?: noTenant
+            is Call.ImportRun -> imports[call.import]?.let { it.import(); Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_IMPORT)
+            is Call.ImportAsFile -> imports[call.import]?.let { it.uploadAsFile(); Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_IMPORT)
+            is Call.ImportCancel -> imports[call.import]?.let { it.cancel(); Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_IMPORT)
             is Call.UploadReplace -> uploads.value?.let { u ->
                 val page = filePages[call.file] ?: return noFile
                 val source = parts.files.source(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
@@ -2447,7 +2466,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         closeTenant()
         tenant.value = Open(t, o.account, o.tenant)
         // a write of the uploads reads the shell's lists anew and every file page open (a replaced file shows its new content)
-        uploads.value = t.uploads?.invoke(queue) {
+        uploads.value = t.uploads?.invoke(queue, parts.await().tiers) {
             scope.launch {
                 runCatching { t.shell?.refresh() }
                 filePages.values().forEach { it.reload() }
@@ -2517,6 +2536,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         filePages.removeAll().forEach { it.close() }
         // a save stops with its tenant: its partial file removed by the sink as its job is cancelled
         saves.removeAll().forEach { save -> scope.launch { save.cancel() } }
+        imports.removeAll().forEach { it.cancel() }
         readers.removeAll()
         pageReaders.removeAll()
         headers.removeAll()
@@ -2672,6 +2692,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         } ?: flowOf(Update.PotCreate(w.create, null))
         is Watched.File -> filePages[w.file]?.let { f -> f.state.map { Update.File(w.file, shownFile(f, it)) } }
             ?: flowOf(Update.File(w.file, null))
+        is Watched.Import -> imports[w.import]?.let { d -> d.state.map { Update.Import(w.import, shownImport(it)) } }
+            ?: flowOf(Update.Import(w.import, null))
         is Watched.Save -> saves[w.save]?.let { sv -> sv.state.map { Update.Save(w.save, SaveShown(sv.name, it.written, it.total, it.fraction, it.end, it.notice)) } }
             ?: flowOf(Update.Save(w.save, null))
         is Watched.DropBox -> dropBoxes[w.box]?.let { h -> h.page.state.map { Update.DropBox(w.box, shownDropBox(h.page, it)) } }
@@ -3096,6 +3118,29 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     /** A file's page as the host draws it ([FileShown]), each field the model's own answer. */
+    /** An import offered (ADR 0152 decision 6): held by its id until its dialog closes. */
+    private fun holdImport(dialog: me.raddatz.veyq.mobile.export.ImportDialog): Long {
+        val id = ids.incrementAndFetch()
+        imports.put(id, dialog)
+        scope.launch {
+            dialog.state.first { it.closed }
+            imports.remove(id)
+        }
+        return id
+    }
+
+    /** What the host draws of an import's dialog: counts, the manifest's names and words, never a path or a byte. */
+    private fun shownImport(s: me.raddatz.veyq.mobile.export.ImportDialog.State): ImportShown {
+        val done = s.progress?.nodesDone ?: 0
+        val total = s.progress?.nodesTotal ?: s.nodes
+        return ImportShown(
+            step = ImportStep.valueOf(s.step.name), root = s.root, summary = s.summary, leftOut = s.leftOut, fits = s.fits,
+            done = done, total = total,
+            progress = if (s.step == me.raddatz.veyq.mobile.export.ImportDialog.Step.RUNNING) Notice(Msg.IMPORT_IMPORTING, done, total) else null,
+            said = s.said, canImport = s.canImport, importWord = s.importWord, canAsFile = s.canAsFile, closed = s.closed,
+        )
+    }
+
     private fun shownFile(f: me.raddatz.veyq.mobile.depot.FileModel, s: me.raddatz.veyq.mobile.depot.FileModel.State): FileShown {
         val shown = s.shown
         val view = when (shown) {

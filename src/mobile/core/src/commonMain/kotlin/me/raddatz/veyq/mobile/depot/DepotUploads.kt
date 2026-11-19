@@ -80,11 +80,12 @@ class DepotUploads(
 
         /**
          * The import of [input] under [parentId] of [scopeId] ([target]: the level's name) as its dialog's model, [asFile]
-         * its *Upload as a file* (a ZIP), [closed] once it is gone; null where this tenant imports nothing.
+         * its *Upload as a file* (a ZIP), [closed] once it is gone, an erased person of an imported Pot named [deletedName];
+         * null where this tenant imports nothing.
          */
         fun importDialog(
             scopeId: String, parentId: String?, target: String, input: me.raddatz.veyq.mobile.export.ImportInput,
-            asFile: (() -> Unit)?, closed: () -> Unit,
+            asFile: (() -> Unit)?, closed: () -> Unit, deletedName: String,
         ): me.raddatz.veyq.mobile.export.ImportDialog? = null
     }
 
@@ -194,18 +195,21 @@ class DepotUploads(
      * ([me.raddatz.veyq.mobile.export.ImportSource.isDownload]: its end and directory read, never the whole file) becomes
      * the import's offer, *Upload as a file* beside it; every other file is queued as [upload] queues it. One import per
      * pick, drop or share. A share's [left] takes the offered file back once its dialog is gone (an upload as a file hands
-     * it back as [upload] does).
+     * it back as [upload] does). [deletedName]: how an erased person of an imported Pot is named (the app's words).
      */
-    suspend fun screen(scopeId: String, parentId: String?, label: String, sources: List<UploadSource>, left: ((UploadSource) -> Unit)? = null): Screened {
+    suspend fun screen(
+        scopeId: String, parentId: String?, label: String, sources: List<UploadSource>, left: ((UploadSource) -> Unit)? = null, deletedName: String = "",
+    ): Screened {
         val download = if (importOffered && door.online() && door.mayImport(scopeId, parentId)) {
             withContext(work) { sources.firstOrNull { me.raddatz.veyq.mobile.export.ImportSource.isDownload(it) } }
         } else {
             null
         }
         val offer = download?.let { d ->
-            door.importDialog(scopeId, parentId, label, me.raddatz.veyq.mobile.export.ImportInput.Zip(d), { upload(scopeId, parentId, label, listOf(d), left) }) {
-                left?.let { l -> runCatching { l(d) } }
-            }
+            door.importDialog(
+                scopeId, parentId, label, me.raddatz.veyq.mobile.export.ImportInput.Zip(d), { upload(scopeId, parentId, label, listOf(d), left) },
+                { left?.let { l -> runCatching { l(d) } } }, deletedName,
+            )
         }
         val rest = if (offer != null) sources.filter { it !== download } else sources
         return Screened(upload(scopeId, parentId, label, rest, left), offer)
@@ -216,13 +220,15 @@ class DepotUploads(
      * walk that holds `.veyq/manifest.json` at its root is a download unpacked and becomes the import's offer — no *Upload
      * as a file*; any other directory is uploaded as its tree. [label]: the level's name, where the import goes.
      */
-    suspend fun screenFolder(scopeId: String, parentId: String?, label: String, shownName: String?, path: String, found: List<FolderUpload.Found>): Screened {
+    suspend fun screenFolder(
+        scopeId: String, parentId: String?, label: String, shownName: String?, path: String, found: List<FolderUpload.Found>, deletedName: String = "",
+    ): Screened {
         val files = found.filter(FolderUpload::keeps)
         if (importOffered && door.online() && door.mayImport(scopeId, parentId) &&
             me.raddatz.veyq.mobile.export.ImportSource.holdsManifest(files.map { it.path })
         ) {
             val input = me.raddatz.veyq.mobile.export.ImportInput.Folder(FolderUpload.rootName(shownName, path), files.map { it.path to it.source!! })
-            door.importDialog(scopeId, parentId, label, input, null) {}?.let { return Screened(0, it) }
+            door.importDialog(scopeId, parentId, label, input, null, {}, deletedName)?.let { return Screened(0, it) }
         }
         return Screened(uploadFolder(scopeId, parentId, shownName, path, found), null)
     }

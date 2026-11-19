@@ -566,8 +566,8 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
 **Expenses**: reading a receipt's text on the device (#549); what [expenses.md](../apps/expenses.md) keeps out of the
 first cut.
 
-**Depot**: a READ_WRITE guest's own name as uploader; importing a download on the desktops (cr-app-archive-import; the phones
-upload one as a file, owner 2026-11-19); multi-select and dragging a node onto a folder to move
+**Depot**: a READ_WRITE guest's own name as uploader; importing a download on the desktops (cr-app-archive-import: the core and the bridge built, the dialogs not; the
+phones upload one as a file, owner 2026-11-19); multi-select and dragging a node onto a folder to move
 it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built). A password-protected PDF's text
 selected and copied on Windows (drawn by `Windows.Data.Pdf`, which has no text API). Built 2026-11-18 (inbox #955): on
 Linux an overlay of its own over poppler's rendered pages (`src/mobile/linux/src/pdf_text.rs`; GTK has no view that

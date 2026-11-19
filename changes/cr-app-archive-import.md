@@ -157,7 +157,7 @@ The web's `export.*` import keys ported to `words.json` (EN+DE, each `note` nami
 - [x] **5 core — the entries** (I1) — `DepotUploads` screens before queueing; the share into a folder screens.
   Tests: a pick of three files with one download offers one import and queues two; a guest's download queues as a file;
   a folder without a manifest uploads as a folder. **Bite:** the member check dropped → the guest test red.
-- [ ] **6 bridge** (I6) — the calls and updates; the generated Rust and C# bindings. · Done when: `:bridge:jvmTest`
+- [x] **6 bridge** (I6) — the calls and updates; the generated Rust and C# bindings. · Done when: `:bridge:jvmTest`
   green. **Bite:** an `Update.Import` carrying a payload's bytes or a sealed key → the schema test red.
 - [ ] **7 Android** — the offer from *Upload files*, *Upload folder*, a level drop and a share; the dialog (M3 full-screen
   dialog). · Done when: `:android:assembleDebug`, the guidelines and words guards green; § Passes' Android row.

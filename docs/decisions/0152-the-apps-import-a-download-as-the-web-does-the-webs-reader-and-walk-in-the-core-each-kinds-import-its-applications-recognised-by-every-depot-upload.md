@@ -1,6 +1,7 @@
 # ADR 0152 — The apps import a download as the web does: the web's reader and walk in the core, each kind's import its application's, recognised by every Depot upload
 - Status: Accepted
-- Built: not yet — cr-app-archive-import
+- Built: partly — the cases, the core and the bridge (cr-app-archive-import phases 2–6, 2026-11-19); the desktops'
+  dialogs and the passes follow in that CR
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md) (the format: [ADR 0082](0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md), [uc.platform.export-import](../features/platform/use-cases/uc.platform.export-import.md))
 
@@ -29,8 +30,8 @@ first four bytes, the end of the file and the central directory — never the wh
 
 **The phones offer no import for now (owner 2026-11-19).** The import is switched on for the desktops (macOS, Linux,
 Windows); on Android and iOS/iPadOS a veyq download is uploaded as the file it is. The core's screen is built and tested
-on every target; each phone platform's entry stays off behind one flag (`ShellModel.depotUploads(imports)`, the
-`DepotUploads.importOffered` it passes on), so switching it on is that flag and the platform's dialog. An import runs while the app is open, as on the web, where closing the tab stops one;
+on every target; each phone platform's entry stays off behind one flag (`ShellModel.depotUploadsImporting` where a
+platform offers it, `depotUploads` where not; `DepotUploads.importOffered` underneath), so switching it on is that flag and the platform's dialog. An import runs while the app is open, as on the web, where closing the tab stops one;
 an import that outlives the app would need a persistent job of its own — a second import path for one platform's
 lifecycle, which is why the phones wait.
 
@@ -78,9 +79,10 @@ on the web.
 
 ### 6. The bridge carries paths
 
-`Import.Screen(scopeId, parentId?, paths, folder)` → `ImportOffered(id, asFile)` or `ImportNone` (the caller uploads as
-before); `Import.Run(id)`, `Import.AsFile(id)`, `Import.Cancel(id)`, `Import.Close(id)`; `Watched.Import(id)` →
-`Update.Import(id, ImportShown?)` (the step, the summary, the progress, the refusal) — paths in, never bytes
+`Import.Screen(scopeId, parentId?, label, paths, deletedName)` and `Import.ScreenFolder(scopeId, parentId?, label, path,
+deletedName)` → `ImportOffered(import, queued, notice)` — the other files queued — or the ordinary upload's `Queued`;
+`Import.Run(import)`, `Import.AsFile(import)`, `Import.Cancel(import)`; `Watched.Import(import)` → `Update.Import(import,
+ImportShown?)` (the step, the summary, what is left out, the progress, what it says, its buttons) — paths in, never bytes
 ([ADR 0137](0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)). The
 desktops' drops and pickers send their paths through `Import.Screen` before `Upload.Files`/`Upload.Folder`.
 

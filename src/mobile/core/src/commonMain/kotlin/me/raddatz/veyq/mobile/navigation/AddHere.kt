@@ -62,22 +62,22 @@ sealed class AddHere {
          * [take] through the import's screen (ADR 0152 decision 1; `DepotUploads.screen`): a download among what waits is
          * offered as an import, the rest queued. [Offered.offer] null where none is offered (a phone, a guest's folder).
          */
-        suspend fun takeOrOffer(inbox: ShareInbox, label: String, depot: DepotUploads?, left: (UploadSource) -> Unit): Offered? {
+        suspend fun takeOrOffer(inbox: ShareInbox, label: String, depot: DepotUploads?, left: (UploadSource) -> Unit, deletedName: String): Offered? {
             if (depot == null || !answer.mayChoose(place)) return null
             var fit: List<UploadSource> = emptyList()
             val taken = inbox.queue(answer) { fit = it; it.size } ?: return null
-            return Offered(taken, depot.screen(scopeId, parentId, label, fit, left).offer)
+            return Offered(taken, depot.screen(scopeId, parentId, label, fit, left, deletedName).offer)
         }
 
         /** [drop] through the import's screen: a dropped download offered as an import, the rest uploaded at once. */
-        suspend fun dropOrOffer(files: List<UploadSource>, label: String, depot: DepotUploads?, left: (UploadSource) -> Unit): DepotUploads.Screened {
+        suspend fun dropOrOffer(files: List<UploadSource>, label: String, depot: DepotUploads?, left: (UploadSource) -> Unit, deletedName: String): DepotUploads.Screened {
             val sorted = answer.sort(files)
             sorted.left.forEach { runCatching { left(it) } }
             if (depot == null || !answer.mayChoose(place)) {
                 sorted.taken.forEach { runCatching { left(it) } }
                 return DepotUploads.Screened(0, null)
             }
-            return depot.screen(scopeId, parentId, label, sorted.taken, left)
+            return depot.screen(scopeId, parentId, label, sorted.taken, left, deletedName)
         }
     }
 

@@ -136,6 +136,8 @@ class WireTest {
             Call.FileChooseReplace(20), Call.UploadFiles("s1", null, "Familie", listOf("/home/p/Büro 中文.pdf", "C:\\Users\\p\\a.jpg")),
             Call.UploadFiles("s1", "f1", "Trip", emptyList()), Call.UploadFolder("s1", "f1", "/home/p/Trip"), Call.UploadReplace(20, "/tmp/b.bin"),
             Call.UploadCancel("i1"), Call.UploadRetry("i1"), Call.UploadCancelAll, Call.UploadAcknowledge("b1"), Call.UploadTakeOffer(3), Call.UploadSeen(4),
+            Call.ImportScreen("s1", null, "Home", listOf("/home/a/Trip.zip"), "Gelöschte Personen"), Call.ImportScreenFolder("s1", "f1", "Trip", "/home/a/Trip", "Deleted people"),
+            Call.ImportRun(60), Call.ImportAsFile(60), Call.ImportCancel(60),
             Call.HeaderFacts(7, me.raddatz.veyq.mobile.AppKinds.Facts(canWrite = true, hasContent = true), 20),
             // every edit the editor takes
             Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.Kind(me.raddatz.veyq.mobile.expenses.EntryForm.Kind.REFUND)), Call.EditorChange(12, me.raddatz.veyq.mobile.expenses.EditorChange.Day("2026-11-12")),
@@ -233,7 +235,7 @@ class WireTest {
             Call.ErasureOpen("veyq.localhost#u1"), Call.ErasureChoose(124, "t1", null), Call.ErasureChoose(124, "t2", "user-3"),
             Call.ErasureRun(124, "pw"), Call.ErasureClose(124),
         ),
-        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.DropBox(30), Watched.DropBoxLive(30), Watched.Scan(40), Watched.Link(70), Watched.Received(80), Watched.Bookmark(90), Watched.Settings(50),
+        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.Import(60), Watched.DropBox(30), Watched.DropBoxLive(30), Watched.Scan(40), Watched.Link(70), Watched.Received(80), Watched.Bookmark(90), Watched.Settings(50),
             Watched.Gallery(60), Watched.GalleryLive(60), Watched.SettingsStorageLive(50), Watched.Lightbox(61), Watched.Player, Watched.Music(80), Watched.Buckets(120),
             Watched.Map(100), Watched.MapServices, Watched.Date(101), Watched.Place(102), Watched.Tracks(103),
             Watched.Participants(110), Watched.CaptureTime(111), Watched.Banner(112), Watched.Person(113), Watched.Search(114),
@@ -245,7 +247,7 @@ class WireTest {
             Answer.Groups(listOf(Home.Group(true, lists.nodes.take(1), Msg.HOME_GROUP_FOLDERS), Home.Group(false, lists.nodes.drop(1), null))),
             Answer.PotOpened(3), Answer.Name("Trip to Lyon.zip"), Answer.Bytes("image/png"), Answer.Bytes(null),
             Answer.Reader(5, 9_000_000_000, "video/mp4"), Answer.Reader(6, 0, null),
-            Answer.HeaderOpened(7), Answer.FileOpened(20), Answer.Saving(21), Answer.Queued(3), Answer.TrashOpened(8), Answer.Said(Notice(Msg.TRASH_MOVED, listOf("Trip"))), Answer.Said(null), Answer.Trashed(Notice(Msg.TRASH_MOVED, listOf("Trip")), undoable = true),
+            Answer.HeaderOpened(7), Answer.FileOpened(20), Answer.Saving(21), Answer.ImportOffered(60, 2, Notice(Msg.DEPOT_FOLDER_UNREADABLE, listOf("gone.txt"))), Answer.ImportOffered(61, 0), Answer.Queued(3), Answer.TrashOpened(8), Answer.Said(Notice(Msg.TRASH_MOVED, listOf("Trip"))), Answer.Said(null), Answer.Trashed(Notice(Msg.TRASH_MOVED, listOf("Trip")), undoable = true),
             Answer.Renamed(Notice(Msg.NODE_SLUG_TAKEN), null), Answer.Renamed(null, Notice(Msg.SHARE_NAME_RESEAL_FAILED)), Answer.Refused(Answer.Why.NO_SUCH_ROW),
             Answer.MoveOpened(9), Answer.ShareOpened(10), Answer.DropBoxOpened(30), Answer.Refused(Answer.Why.NOT_ASKED), Answer.ReportOpened(11), Answer.Refused(Answer.Why.NO_COVER),
             Answer.CoverPosed(me.raddatz.veyq.mobile.session.CoverFrame.Pose(1.0, 0.0, -12.5), 640.0, 385.0, me.raddatz.veyq.mobile.session.NodeCover.Crop(0.0, 0.1, 1.0, 0.75)),
@@ -401,6 +403,15 @@ class WireTest {
             Update.Save(21, SaveShown("a.zip", 10, 10, 1.0, me.raddatz.veyq.mobile.depot.FileSave.End.SAVED, Notice(Msg.DOWNLOAD_DONE, listOf("a.zip")))),
             Update.Save(23, null),
             Update.Uploads(null),
+            Update.Import(60, ImportShown(
+                ImportStep.READY, "Trip", Notice(Msg.IMPORT_SUMMARY, listOf(7, me.raddatz.veyq.mobile.words.Bytes(8_486), "Home")),
+                listOf(Notice(Msg.IMPORT_SKIP_UNKNOWN_APPLICATION, listOf(2, "ledgers"))), true, 0, 7, null, emptyList(), true, Msg.IMPORT_REST, true, false,
+            )),
+            Update.Import(60, ImportShown(
+                ImportStep.RUNNING, "Trip", null, emptyList(), null, 3, 7, Notice(Msg.IMPORT_IMPORTING, listOf(3, 7)),
+                listOf(Notice(Msg.IMPORT_REFUSED_CHECKSUM)), false, Msg.IMPORT_SUBMIT, false, false,
+            )),
+            Update.Import(61, null),
             Update.Uploads(UploadsShown(
                 Notice(Msg.UPLOAD_ACTIVE, listOf(1)), 1, 0.25, Notice(Msg.UPLOAD_PREPARING_FOLDER, listOf("Trip")),
                 listOf(UploadsShown.Batch("b1", "Familie", false, listOf(

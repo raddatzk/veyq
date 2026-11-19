@@ -48,7 +48,7 @@ class ImportScreenTest {
         override fun replaceJob(file: DepotFiles.File, source: UploadSource, expectedBlobId: String?) = error("no replace here")
         override fun changed() {}
         override fun mayImport(scopeId: String, parentId: String?) = mayImport
-        override fun importDialog(scopeId: String, parentId: String?, target: String, input: ImportInput, asFile: (() -> Unit)?, closed: () -> Unit): ImportDialog {
+        override fun importDialog(scopeId: String, parentId: String?, target: String, input: ImportInput, asFile: (() -> Unit)?, closed: () -> Unit, deletedName: String): ImportDialog {
             offered += input
             return ImportDialog(input, target, scopeId, parentId, this.target, this.target.played(), PlayedImport.tokenInput, asFile, closed, dispatcher = dispatcher)
         }
@@ -158,7 +158,7 @@ class ImportScreenTest {
     fun theDialogSaysARefusalInTheWebsWords() = runTest {
         val m = model()
         val bad = ImportFixtures.cases().first { it.id == "newer_version" }.input
-        val dialog = m.door.importDialog("s", null, "Space", bad, null) {}
+        val dialog = m.door.importDialog("s", null, "Space", bad, null, {}, "Deleted people")
         dialog.start()
         advanceUntilIdle()
         assertEquals(ImportDialog.Step.INVALID, dialog.current.step)

@@ -634,12 +634,22 @@ class ShellModel(
     /**
      * The uploads of this tenant over the app's [queue] ([me.raddatz.veyq.mobile.depot.DepotUploads]): files and folders
      * uploaded into a level, a file's replace, the settle's offer; [changed] after each write (the app reads its lists anew).
-     * [imports]: the platform offers a download's import at its uploads (ADR 0152 decision 1: the desktops; the phones not
-     * for now), each medium's tiers made by its [deriver] and an erased person in an imported Pot named [deletedName].
+     * A download is uploaded as the file it is: the phones offer no import for now (owner 2026-11-19).
      */
-    fun depotUploads(
-        queue: me.raddatz.veyq.mobile.blob.UploadQueue, changed: () -> Unit, imports: Boolean = false,
-        deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver? = null, deletedName: String = "",
+    fun depotUploads(queue: me.raddatz.veyq.mobile.blob.UploadQueue, changed: () -> Unit): me.raddatz.veyq.mobile.depot.DepotUploads =
+        depotUploads(queue, imports = false, deriver = null, changed = changed)
+
+    /**
+     * [depotUploads] where the platform offers a download's import at its uploads (ADR 0152 decision 1: the desktops),
+     * each imported medium's tiers made by its [deriver].
+     */
+    fun depotUploadsImporting(
+        queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver?, changed: () -> Unit,
+    ): me.raddatz.veyq.mobile.depot.DepotUploads = depotUploads(queue, imports = true, deriver = deriver, changed = changed)
+
+    private fun depotUploads(
+        queue: me.raddatz.veyq.mobile.blob.UploadQueue, imports: Boolean,
+        deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver?, changed: () -> Unit,
     ): me.raddatz.veyq.mobile.depot.DepotUploads =
         me.raddatz.veyq.mobile.depot.DepotUploads(queue, object : me.raddatz.veyq.mobile.depot.DepotUploads.Door {
             override fun uploadJob(scopeId: String, parentId: String?, source: me.raddatz.veyq.mobile.blob.UploadSource, name: String) =
@@ -656,7 +666,7 @@ class ShellModel(
                 this@ShellModel.online && (parentId == null || !tenant.inIdentityFolder(scopeId, parentId))
             override fun importDialog(
                 scopeId: String, parentId: String?, target: String, input: me.raddatz.veyq.mobile.export.ImportInput,
-                asFile: (() -> Unit)?, closed: () -> Unit,
+                asFile: (() -> Unit)?, closed: () -> Unit, deletedName: String,
             ) = me.raddatz.veyq.mobile.export.ImportDialog(
                 input, target, scopeId, parentId, me.raddatz.veyq.mobile.export.SubtreeImport.Server(tenant, scopeId),
                 AppKinds.imports(deletedName, { NodeCreate.uuid(tenant.account) }, deriver, now), AppKinds::tokenInput, asFile, closed,
