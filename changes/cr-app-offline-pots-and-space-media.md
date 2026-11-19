@@ -101,8 +101,17 @@ ADR 0153 decisions 6 and 7 hold them; here only what the work needs beside them.
   it in the automatic tier). Bites (a) the `POT_REVISIONS` line out of `belowNode` → both Pot pin tests red ("Clear
   cache dropped the pinned Pot's ledger"); (b) `SCOPE_MEDIA` in `PROTECTED` → the Clear-cache test red; each restored with
   `/bin/cp -f`. `./gradlew :core:jvmTest :core:macosArm64Test` green.
-- [ ] **3 bridge** — the Pot's offline state and the toggle's state on the wire. · Done when: `:bridge:jvmTest` green.
+- [x] **3 bridge** — the Pot's offline state and the toggle's state on the wire. · Done when: `:bridge:jvmTest` green.
   **Bite:** a state carrying a sealed body → `SecretFreeSchemaTest` red.
+  **Built** (2026-11-20): `Update.Pot` carries `PotModel.State` with its new `offline` (`OfflineAsOf`) and a `failure`
+  word (`MsgKey`: `offline_not_kept` / `pot_open_failed`, null where it opened); `Receipt.Open` and `Receipt.Save` refuse
+  `NOT_KEPT_OFFLINE` (a new `Answer.Why`) where the Pot is shown offline and the receipt is not kept. The header's
+  *Available offline* is the existing `HeaderShown.offline` (`OfflineToggle`), offered for a Pot now that it is pinnable —
+  no new wire. Tests: `DispatchTest.aPotShownOfflineCrossesAsItsTimeAndStateAndRefusesItsWrites`; `SecretFreeSchemaTest`
+  pins `PotModel.State`'s fields. Bite: `sealedBody` on `PotModel.State` → `SecretFreeSchemaTest` red twice (the field
+  list and "named like a secret"), restored with `/bin/cp -f`. `./gradlew :bridge:jvmTest :bridge:generateBindings` green
+  (the generated `bridge.rs`/`Bridge.g.cs` are not committed; Linux matches `Update::Pot { state, .. }` and Windows
+  `is Update.Pot`, so neither breaks — not built here).
 - [ ] **4 Android** — the Pot's header *Available offline*, its offline banner and disabled writes. · Done when:
   `:android:assembleDebug`, the guidelines and words guards green.
 - [ ] **5 Apple** — the same. · Done when: both Apple builds green.
