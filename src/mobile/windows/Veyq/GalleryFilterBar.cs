@@ -131,13 +131,13 @@ internal sealed class GalleryFilterBar
         foreach (var chip in chips)
         {
             var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
-            content.Children.Add(new TextBlock { Text = chip.label, VerticalAlignment = VerticalAlignment.Center });
+            content.Children.Add(new TextBlock { Text = GalleryText.ChipLabel(chip), VerticalAlignment = VerticalAlignment.Center });
             content.Children.Add(new FontIcon { Glyph = "\uE711", FontSize = 10 });
             var button = new Button { Content = content, Padding = new Thickness(8, 3, 8, 4), CornerRadius = new CornerRadius(12) };
             // the button takes the chip back: its name says so (the shell search's words, the web's ui.removeTag)
-            AutomationProperties.SetName(button, Words.SearchRemoveChip(chip.label));
+            AutomationProperties.SetName(button, Words.SearchRemoveChip(GalleryText.ChipLabel(chip)));
             AutomationProperties.SetAutomationId(button, $"memory-filter-chip:{chip.chip}");
-            ToolTipService.SetToolTip(button, chip.label);
+            ToolTipService.SetToolTip(button, GalleryText.ChipLabel(chip));
             var key = chip.chip;
             button.Click += (_, _) => Act.Send(new Call.FilterRemove { gallery = _gallery, chip = key });
             _chips.Children.Add(button);
@@ -151,10 +151,10 @@ internal sealed class GalleryFilterBar
         foreach (var s in suggestions)
         {
             // the content carries the chip too: a click hands the box the content, the keyboard the item
-            var text = new TextBlock { Text = s.label, Tag = s.chip };
+            var text = new TextBlock { Text = GalleryText.ChipLabel(s), Tag = s.chip };
             var item = new ListViewItem { Content = text, Tag = s.chip };
             AutomationProperties.SetAutomationId(item, $"memory-filter-suggestion:{s.chip}");
-            AutomationProperties.SetName(item, s.label);
+            AutomationProperties.SetName(item, GalleryText.ChipLabel(s));
             items.Add(item);
         }
         _box.ItemsSource = items.Count > 0 ? items : null;

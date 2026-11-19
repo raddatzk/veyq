@@ -20,12 +20,16 @@ internal static class GalleryText
             if (f.mode == MarkMode.Mine) return Words.MediaMarksEmptyMine();
             if (f.mode == MarkMode.Everyone) return Words.MediaMarksEmptyEveryone();
         }
-        var parts = f.chips.Select(c => c.label).ToList();
+        var parts = f.chips.Select(ChipLabel).ToList();
         if (f.text.Trim().Length > 0) parts.Add(Words.MediaFilterText(f.text.Trim()));
         if (f.mode == MarkMode.Mine) parts.Add(Words.MediaFilterMarksMine());
         else if (f.mode == MarkMode.Everyone) parts.Add(Words.MediaFilterMarksEveryone());
         return Words.MediaFilterEmpty(string.Join(", ", parts));
     }
+
+    /// <summary>A chip as it reads: a day chip (<c>day:YYYY-MM-DD</c>, its label the ISO day of the bridge's LocalCalendar,
+    /// inbox #989) as the culture's short date, any other by the core's label.</summary>
+    public static string ChipLabel(ChipShown c) => c.chip.StartsWith("day:", System.StringComparison.Ordinal) ? Said.Day(c.label) : c.label;
 
     /// <summary>What a tile's badge says to a screen reader: marked by the caller, how often; null for no badge.</summary>
     public static string? MarkWords(GalleryRow row)
