@@ -98,6 +98,9 @@ class PasswordChange(
     private val suite = V1(primitives)
     private val proofs = AccountProofs(primitives)
 
+    /** The Secret Key section's control (ADR 0151 decision 1): a pasted kit token, a kit file or a scan, held for this flow. */
+    val intake = me.raddatz.veyq.mobile.account.KeyIntake(primitives, me.raddatz.veyq.mobile.account.KeyIntake.Account(door.email, door.server))
+
     @Serializable
     data class State(
         val working: Boolean = false,
@@ -119,10 +122,17 @@ class PasswordChange(
     fun watch(listener: (State) -> Unit): Watch = Watch(CoroutineScope(Dispatchers.Default).launch { state.collect(listener) })
 
     /**
+     * Changes the password with the Secret Key as the field holds it ([secretKey]: typed, a pasted kit token, or empty
+     * while the [intake] holds a kit's key — [KeyIntake.key]); the held key is spent once the change went through.
+     */
+    suspend fun run(currentPassword: String, next: String, confirm: String, secretKey: String) =
+        run(currentPassword, next, confirm, intake.key(secretKey))
+
+    /**
      * Changes the password: [currentPassword] and [secretKey] (32 bytes; zeroed by this call, whatever it comes to)
      * prove the account, [next] is installed once [confirm] repeats it and it is long enough. Refusals change nothing.
      */
-    suspend fun run(currentPassword: String, next: String, confirm: String, secretKey: ByteArray) = acting.withLock {
+    internal suspend fun run(currentPassword: String, next: String, confirm: String, secretKey: ByteArray) = acting.withLock {
         try {
             if (next != confirm) return@withLock refuse(Msg.PASSWORD_CHANGE_MISMATCH)
             if (next.length < MIN_PASSWORD_LENGTH) return@withLock refuse(Msg.PASSWORD_TOO_SHORT)
@@ -131,6 +141,7 @@ class PasswordChange(
                 null -> State(done = true)
                 else -> State(refusal = outcome)
             }
+            if (current.done) intake.spent()
         } finally {
             secretKey.fill(0)
         }
@@ -200,6 +211,11 @@ class PasswordChange(
     /** Back to the form ("Change it again"). */
     fun reset() {
         _state.value = State()
+    }
+
+    /** The flow closed: a held kit's key is zeroed. */
+    fun close() {
+        intake.clear()
     }
 
     companion object {

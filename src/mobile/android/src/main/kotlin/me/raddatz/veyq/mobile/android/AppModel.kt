@@ -777,10 +777,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         openFlow(AccountFlow.Password(account.passwordChange()))
     }
 
-    /** The password changed with [current] and the Secret Key typed as [secretKey]; the saved key's row is read anew after. */
+    /** The password changed with [current] and the Secret Key field's text [secretKey] (the flow's intake reads it); the saved key's row is read anew after. */
     fun changePassword(m: me.raddatz.veyq.mobile.session.PasswordChange, current: String, next: String, confirm: String, secretKey: String) {
         viewModelScope.launch {
-            m.run(current, next, confirm, typedKey(secretKey))
+            m.run(current, next, confirm, secretKey)
             trustLog("password change: done=${m.current.done} refusal=${m.current.refusal?.key}")
             settingsModel?.refresh()
         }
@@ -793,14 +793,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     fun requestAddressChange(m: me.raddatz.veyq.mobile.session.AddressChange, newEmail: String, password: String, secretKey: String) {
         viewModelScope.launch {
-            m.request(newEmail, password, typedKey(secretKey))
+            m.request(newEmail, password, secretKey)
             trustLog("address change: sent=${m.current.sentTo != null} refusal=${m.current.refusal?.key}")
         }
     }
 
     /** A new kit with the account's address after the cold proof; [made] gets its step (null: refused, said by the model). */
     fun addressKit(m: me.raddatz.veyq.mobile.session.AddressChange, password: String, secretKey: String, made: (me.raddatz.veyq.mobile.account.KitStep?) -> Unit) {
-        viewModelScope.launch { made(m.kit(password, typedKey(secretKey))) }
+        viewModelScope.launch { made(m.kit(password, secretKey)) }
     }
 
     fun openKeyRotation() {
@@ -812,7 +812,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     fun proveRotation(m: me.raddatz.veyq.mobile.session.rotation.KeyRotation, password: String, secretKey: String, newPassword: String, confirm: String) {
         viewModelScope.launch {
-            m.prove(password, typedKey(secretKey), newPassword, confirm)
+            m.prove(password, secretKey, newPassword, confirm)
             trustLog("rotation gate: step=${m.current.step} refusal=${m.current.refusal?.key}")
         }
     }
@@ -850,10 +850,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             signedOut(session.signOut(account))
         }
     }
-
-    /** A typed Secret Key's 32 bytes; a malformed one is 32 zero bytes, which the core's cold proof refuses as a wrong key. */
-    private fun typedKey(text: String): ByteArray =
-        me.raddatz.veyq.mobile.crypto.SecretKeyText.read(BouncyCastlePrimitives, text) ?: ByteArray(32)
 
     /** The person's language for a kit's words (the app's, as Android applies it) and their local date. */
     fun kitLanguage(): String = appLanguage()

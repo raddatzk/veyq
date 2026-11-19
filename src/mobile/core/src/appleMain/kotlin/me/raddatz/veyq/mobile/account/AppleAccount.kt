@@ -3,8 +3,6 @@ package me.raddatz.veyq.mobile.account
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
-import me.raddatz.veyq.mobile.crypto.LibsodiumPrimitives
-import me.raddatz.veyq.mobile.crypto.SecretKeyText
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.AddressChange
 import me.raddatz.veyq.mobile.session.ProfileModel
@@ -18,7 +16,7 @@ import platform.posix.memcpy
 
 /**
  * The account's flows as the Apple app reaches them (ADR 0148 decision 10, `apple/Veyq/AccountFlows.swift`): what Swift
- * cannot write itself — Kotlin's default arguments, a typed Secret Key read into the core's array, a picture's or a
+ * cannot write itself — Kotlin's default arguments, a picture's or a
  * kit's bytes in one copy across the language boundary instead of byte by byte.
  */
 object AppleAccount {
@@ -27,12 +25,6 @@ object AppleAccount {
 
     /** The address change of [account], its mail sent through [tenant]'s origin (the tenant on screen). */
     fun addressChange(account: VeyqAccount, tenant: TenantRef?): AddressChange = account.addressChange(tenant ?: account.defaultTenant)
-
-    /**
-     * A typed Secret Key as the flows take it (the bridge's `typedKey`): its 32 bytes, or 32 zero bytes where the text
-     * is no Secret Key — the cold proof refuses those as a wrong key, so a typo is said as one. The flow zeroes the array.
-     */
-    fun typedKey(text: String): ByteArray = SecretKeyText.read(LibsodiumPrimitives, text) ?: ByteArray(32)
 
     /** The picture [profile] draws now (the draft's, else the one the pictures hold), in one copy; null: the letter. */
     @OptIn(ExperimentalForeignApi::class, kotlinx.cinterop.BetaInteropApi::class)

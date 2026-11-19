@@ -150,8 +150,6 @@ internal class Composition<A : Connection, T : Any>(
      * One's own profile picture cropped and drawn square by the host ([HostRequest.PictureSquare]): RGBA of `edge` × `edge`,
      * or null where the host could not; a test plays one, or has none.
      */
-    /** The Secret Key as the person typed it, read by the core's reader (`SecretKeyText.read`); null where it does not read. */
-    val readKey: (String) -> ByteArray? = { null },
     val squarePicture: (path: String, pose: me.raddatz.veyq.mobile.session.CoverFrame.Pose, edge: Int) -> ByteArray? = { _, _, _ -> null },
     /**
      * A received link opened as its guest (ADR 0150 decisions 2–4): core's `GuestView` over the platform's client, the
@@ -1690,9 +1688,6 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noProfile = Answer.Refused(Answer.Why.NO_SUCH_FLOW)
     private val noFlow = Answer.Refused(Answer.Why.NO_SUCH_FLOW)
 
-    /** The Secret Key as typed, read by the core's own reader; one that does not read stands for no key (the floor refuses it). */
-    private fun typedKey(parts: Composition<A, T>, text: String): ByteArray = parts.readKey(text) ?: ByteArray(32)
-
     /**
      * The account's flows (ADR 0148 decision 11): each `*.Open` makes the core's model over the account the connection
      * names (or the tenant open now), held by id; each other call is one line onto that model. The typed secrets arrive
@@ -1759,10 +1754,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noTenant
             is Call.PasswordChangeOpen -> {
                 val f = flows(call.connection) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
-                Answer.FlowOpened(held(passwordChanges, HeldFlow(f.passwordChange(), call.connection)))
+                Answer.FlowOpened(held(passwordChanges, HeldFlow(f.passwordChange(), call.connection) { it.close() }))
             }
             is Call.PasswordChangeRun -> passwordChanges[call.flow]?.let { held ->
-                held.model.run(call.currentPassword, call.newPassword, call.confirmPassword, typedKey(parts, call.secretKey))
+                held.model.run(call.currentPassword, call.newPassword, call.confirmPassword, call.secretKey)
                 // the change took this device's saved key: the account's Settings pages read anew, so their trust row
                 // offers the levels and the password trust instead of the trust that is gone (inbox #1009)
                 if (held.model.current.done) accountPages.values().filter { it.connection == held.connection }.forEach { it.model.refresh() }
@@ -1772,14 +1767,14 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.PasswordChangeClose -> passwordChanges.remove(call.flow)?.close().done(Answer.Why.NO_SUCH_FLOW)
             is Call.AddressChangeOpen -> {
                 val f = flows(call.connection) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
-                Answer.FlowOpened(held(addressChanges, HeldFlow(f.addressChange(), call.connection)))
+                Answer.FlowOpened(held(addressChanges, HeldFlow(f.addressChange(), call.connection) { it.close() }))
             }
             is Call.AddressChangeRequest -> addressChanges[call.flow]?.model?.let {
-                it.request(call.newEmail, call.password, typedKey(parts, call.secretKey))
+                it.request(call.newEmail, call.password, call.secretKey)
                 Answer.Done
             } ?: noFlow
             is Call.AddressChangeKit -> addressChanges[call.flow]?.let { held ->
-                val step = held.model.kit(call.password, typedKey(parts, call.secretKey)) ?: return Answer.Done
+                val step = held.model.kit(call.password, call.secretKey) ?: return Answer.Done
                 Answer.KitOpened(held(kits, HeldFlow(step, held.connection) { it.close() }))
             } ?: noFlow
             is Call.AddressChangeClose -> addressChanges.remove(call.flow)?.close().done(Answer.Why.NO_SUCH_FLOW)
@@ -1798,7 +1793,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             }
             is Call.KeyRotationChooseNewPassword -> keyRotations[call.flow]?.model?.setNewPassword(call.on).done(Answer.Why.NO_SUCH_FLOW)
             is Call.KeyRotationProve -> keyRotations[call.flow]?.let { held ->
-                held.model.prove(call.password, typedKey(parts, call.secretKey), call.newPassword, call.confirmPassword)
+                held.model.prove(call.password, call.secretKey, call.newPassword, call.confirmPassword)
                 // the kit step is the rotation's: it closes with the rotation, never on its own `Kit.Close`
                 val step = held.model.kit ?: return Answer.Done
                 Answer.KitOpened(held(kits, HeldFlow(step, held.connection)))
@@ -3082,7 +3077,6 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     )
                 },
                 squarePicture = squarePicture,
-                readKey = { text -> me.raddatz.veyq.mobile.crypto.SecretKeyText.read(primitives, text) },
                 received = { link, queue ->
                     me.raddatz.veyq.mobile.sharing.GuestView.open(
                         primitives, link, client, store, guestSessions, { config.language }, queue = queue, deriver = tiers, now = now,

@@ -144,12 +144,19 @@ controls reuse the sign-in's words. No owner question: the words are the web's.
   `uc.account.rotate-keys` gain the apps in their alternate flows. · Done when: every guard but guard_gaps green
   (`/usr/bin/python3 scripts/validate_*.py`).
   **Built 2026-11-19 (branch `claude/acct-rest`):** ADR 0151 was free (re-measured); every guard but guard_gaps green.
-- [ ] **2 core — the key intake** (D1, D2) — `KeyIntake`; `SessionModel` on it (`SessionModelTest`'s kit cases and
+- [x] **2 core — the key intake** (D1, D2) — `KeyIntake`; `SessionModel` on it (`SessionModelTest`'s kit cases and
   `LiveSignInTest` unchanged and green: the refactor's proof); the three flows on their own intake. Tests: a pasted
   `veyqkit:` token opens each flow (the R4 defect: written first, red on the untouched tree, then green); a kit read in a
   flow; another account's kit warns and proceeds; the key zeroed after the call and at close. **Bites:** (a) `typed`
   reading `SecretKeyText` first → the pasted-token test red; (b) the zeroing removed → the test that inspects the
   intake's held bytes after `run` red.
+  **Built 2026-11-19 (branch `claude/acct-rest`):** `account/KeyIntake` (`typed`, `key`, `read`, `take`, `scan`,
+  `clear`, `spent`; `IntakeState`/`HeldKit` — names unique for the bindings); `SessionModel` on it; each flow's `intake`, its
+  actions taking the field's text (the byte overloads `internal`); the bridge, Android and Apple pass the text (their
+  `typedKey` gone). The R4 test (`AccountFlowsDispatchTest.aPastedKitTokenOpensEachFlow`) red on the untouched tree
+  (`PASSWORD_CHANGE_ERROR_CREDENTIAL`), green after; `FlowKeyIntakeTest` the core's. Bite (a) as written cannot bite —
+  reading `SecretKeyText` first still falls through to the token, which no bare-key reader accepts — so it was run as
+  `typed` reading `SecretKeyText` **only** (the R4 defect): red; (b) red (and the kit-file case with it).
 - [ ] **3 core — the breach check** (D5, D6) — `Sha1`, `OutsideHttp` (`MapHttp`'s tests unchanged: the refactor's
   proof), `BreachCheck`, wired into `PasswordChange` and `KeyRotation`. Tests: the web test's cases one for one (a mock
   engine: nothing while typing, one padded request on leaving the field, no re-query, one in flight, a re-query at

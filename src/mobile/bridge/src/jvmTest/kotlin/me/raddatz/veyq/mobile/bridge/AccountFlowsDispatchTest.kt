@@ -118,6 +118,8 @@ class AccountFlowsDispatchTest {
         override suspend fun erase(body: EraseOwnAccountRequest) = FlowReply(200)
         override suspend fun erased() { erased++ }
         fun typedKey() = SecretKeyText.format(p, secretKey)
+        /** The account's kit as a pasted `veyqkit:` token (the web's paste, a kit's text copied). */
+        fun kitToken() = me.raddatz.veyq.mobile.crypto.EmergencyKit.write(p, email, secretKey, null)
     }
 
     /** The rotation's engine as the test plays it: the gate passes for [Played]'s key, the publish answers every scope secured. */
@@ -160,7 +162,6 @@ class AccountFlowsDispatchTest {
                     { KeyRotation(engine, p, played.email, played.server) }, { AccountErasure(played, p) },
                 )
             },
-            readKey = { SecretKeyText.read(p, it) },
         ) { _ ->
             Tenant(
                 shell = null, pot = null, me = "u1", pictures = kotlinx.coroutines.flow.MutableStateFlow(emptyMap()), loadPictures = {},
@@ -261,6 +262,43 @@ class AccountFlowsDispatchTest {
         assertEquals(gone, b.ask(Call.ProfileSave(prof)))
         assertEquals(Update.KeyRotation(rot, null), b.watching(Watched.KeyRotation(rot)).next())
         dir.toFile().deleteRecursively()
+        b.shutdown()
+    }
+
+    /**
+     * R4 (cr-app-account-rest): a `veyqkit:` token pasted into a flow's Secret Key field is that kit's key, as at the
+     * sign-in — the web's paste swap. Written first: red while the bridge read the field as a bare key only, the token
+     * becoming 32 zero bytes the floor refused as a wrong key.
+     */
+    @Test
+    fun aPastedKitTokenOpensEachFlow() = runBlocking {
+        val played = Played()
+        val b = bridge(played, Engine(played.secretKey), Profile())
+        b.signedIn()
+        val c = "a.example#u1"
+        val long = kotlin.time.Duration.parse("60s")
+        val token = played.kitToken()
+
+        val pw = (b.ask(Call.PasswordChangeOpen(c)) as Answer.FlowOpened).flow
+        val pwWatch = b.watching(Watched.PasswordChange(pw))
+        assertEquals(Answer.Done, b.ask(Call.PasswordChangeRun(pw, played.password, "a much better one", "a much better one", token), long))
+        val changed = pwWatch.until(long) { u -> (u as Update.PasswordChange).shown?.takeIf { it.done || it.refusal != null } }
+        assertTrue(changed.done, "the password change refused the pasted kit: ${changed.refusal}")
+
+        val address = (b.ask(Call.AddressChangeOpen(c)) as Answer.FlowOpened).flow
+        val addressWatch = b.watching(Watched.AddressChange(address))
+        assertEquals(Answer.Done, b.ask(Call.AddressChangeRequest(address, "new@b.example", played.password, token), long))
+        val sent = addressWatch.until(long) { u -> (u as Update.AddressChange).shown?.takeIf { it.sentTo != null || it.refusal != null } }
+        assertEquals("new@b.example", sent.sentTo, "the address change refused the pasted kit: ${sent.refusal}")
+
+        played.taken = true
+        val kitFlow = (b.ask(Call.AddressChangeOpen(c)) as Answer.FlowOpened).flow
+        assertTrue(b.ask(Call.AddressChangeKit(kitFlow, played.password, token), long) is Answer.KitOpened, "the address's kit refused the pasted kit")
+
+        val rot = (b.ask(Call.KeyRotationOpen(c)) as Answer.FlowOpened).flow
+        b.watching(Watched.KeyRotation(rot)).until { u -> (u as Update.KeyRotation).shown?.takeIf { it.step == KeyRotation.Step.GATE } }
+        assertEquals(Answer.Done, b.ask(Call.KeyRotationChooseNewPassword(rot, false)))
+        assertTrue(b.ask(Call.KeyRotationProve(rot, played.password, token), long) is Answer.KitOpened, "the rotation's gate refused the pasted kit")
         b.shutdown()
     }
 

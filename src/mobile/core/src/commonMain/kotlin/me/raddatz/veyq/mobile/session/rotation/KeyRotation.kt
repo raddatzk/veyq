@@ -150,6 +150,9 @@ class KeyRotation(
 
     fun watch(listener: (State) -> Unit): Watch = Watch(CoroutineScope(Dispatchers.Default).launch { state.collect(listener) })
 
+    /** The gate's Secret Key control (ADR 0151 decision 1): a pasted kit token, a kit file or a scan, held for this flow. */
+    val intake = me.raddatz.veyq.mobile.account.KeyIntake(primitives, me.raddatz.veyq.mobile.account.KeyIntake.Account(email, server))
+
     private var password: String? = null
     private var nextPassword: String? = null
     private var secretKey: ByteArray? = null
@@ -172,7 +175,11 @@ class KeyRotation(
      * the floor; [newPassword] with [confirm] when [State.newPassword]. On success the kit step opens with a key minted
      * here.
      */
-    suspend fun prove(password: String, secretKey: ByteArray, newPassword: String = "", confirm: String = "") = acting.withLock {
+    suspend fun prove(password: String, secretKey: String, newPassword: String = "", confirm: String = "") =
+        prove(password, intake.key(secretKey), newPassword, confirm)
+
+    /** [prove] with the key read: [secretKey] (32 bytes) zeroed by this call. */
+    internal suspend fun prove(password: String, secretKey: ByteArray, newPassword: String = "", confirm: String = "") = acting.withLock {
         val held = secretKey.copyOf()
         secretKey.fill(0)
         try {
@@ -215,6 +222,8 @@ class KeyRotation(
             }
         } finally {
             held.fill(0)
+            // the gate passed (the kit step opened, or an earlier rotation was resumed): the held kit's key is spent
+            if (current.step == Step.KIT || current.done) intake.spent()
         }
     }
 
@@ -288,6 +297,7 @@ class KeyRotation(
         secretKey?.fill(0)
         secretKey = null
         kitStep?.close()
+        intake.clear()
     }
 
     /** Drops every secret the model holds. */
