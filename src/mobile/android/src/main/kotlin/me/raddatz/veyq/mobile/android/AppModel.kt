@@ -992,7 +992,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** Whether the pick mode lets [ref] be chosen for what waits (core's answer of its kind, and this member's right there). */
     fun takesShare(ref: ObjectRef): Boolean = shellModel?.takesShare(shareInbox, ref.at) ?: false
 
-    /** The Memory's or chapter's page on screen, where the pick mode's banner offers *Add here*; null on any other page. */
+    /** The Memory's or chapter's page on screen, which the pick mode's banner may offer *Add here* for; null on any other page. */
     private val _shareTarget = MutableStateFlow<me.raddatz.veyq.mobile.memories.GalleryModel?>(null)
     val shareTarget: StateFlow<me.raddatz.veyq.mobile.memories.GalleryModel?> = _shareTarget.asStateFlow()
 
@@ -1001,14 +1001,37 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         if (shown) _shareTarget.value = gallery else _shareTarget.compareAndSet(gallery, null)
     }
 
-    /** Whether [gallery]'s page offers *Add here* for what waits (Memories' `MemoryShare`). */
-    fun offersAddHere(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): Boolean =
-        me.raddatz.veyq.mobile.memories.MemoryShare.offered(shareInbox, gallery)
+    /**
+     * What *Add here* puts the waiting files into on [shell] (core's `ShellModel.addHere`): [gallery]'s page, the open
+     * Memory's or chapter's, or the level shown — a folder or a space's top — where this member may put files; null elsewhere.
+     */
+    fun addHereTarget(shell: Shell, gallery: me.raddatz.veyq.mobile.memories.GalleryModel?): me.raddatz.veyq.mobile.navigation.AddHere? =
+        shellModel?.addHere(shareInbox, shell, gallery)
 
-    /** *Add here* on [gallery]'s page: the waiting photos and videos queued into it, the share ended; what was left out said. */
-    fun addHere(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.words.Notice? {
-        val taken = me.raddatz.veyq.mobile.memories.MemoryShare.addHere(shareInbox, gallery) ?: return null
+    /**
+     * *Add here* on [target]: what its place takes queued there — a gallery's photos and videos, a level's files into
+     * Depot's queue under [label] —, the share ended; what was left out said.
+     */
+    fun addHere(target: me.raddatz.veyq.mobile.navigation.AddHere, label: String): me.raddatz.veyq.mobile.words.Notice? {
+        val taken = target.take(shareInbox, label, _depot.value, ShareIn::release) ?: return null
         return me.raddatz.veyq.mobile.memories.MediaUploads.notTaken(taken.refused)
+    }
+
+    /**
+     * Files dropped onto the level [shell] shows (ADR 0138 decision 9): uploaded under it at once, named [label], where
+     * Depot may put files there (core's `ShellModel.dropLevel`); anywhere else they wait in the pick mode, as a share's do.
+     * What did not read is said.
+     */
+    fun dropOntoLevel(shell: Shell, incoming: me.raddatz.veyq.mobile.navigation.ShareInbox.Incoming, label: String) {
+        val level = shellModel?.dropLevel(shell)
+        if (level == null) {
+            receiveDrop(incoming)
+            return
+        }
+        level.drop(incoming.files, label, _depot.value, ShareIn::release)
+        if (incoming.refused > 0) {
+            notify(Notice(getApplication<Application>().text(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.SHARE_UNREAD, incoming.refused))))
+        }
     }
 
     /** Files dropped onto [gallery]'s page (ADR 0138 decision 9): its photos and videos queued into it at once, as a pick's. */

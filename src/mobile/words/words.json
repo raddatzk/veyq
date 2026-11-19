@@ -1767,7 +1767,7 @@
     "de": "Umbenannt. Einige Links darauf konnten nicht aktualisiert werden und zeigen ihren Gästen noch den alten Namen."
   },
   "share_nothing": {
-    "note": "The pick mode's banner when none of what was shared or dropped could be read (ADR 0138).",
+    "note": "The pick mode's banner when none of what was shared or dropped could be read, or the share carried no file at all — a text, a link (ADR 0138 decision 1).",
     "en": "None of the shared files could be read.",
     "de": "Keine der geteilten Dateien konnte gelesen werden."
   },
@@ -1783,7 +1783,7 @@
     }
   },
   "share_pick": {
-    "note": "The pick mode's banner (ADR 0138 decision 1; owner 2026-11-19): the place is a Pot, a Memory or a chapter.",
+    "note": "The pick mode's banner (ADR 0138 decision 1; owner 2026-11-19): the place is a Pot, a Memory, a chapter, a folder or a space's top.",
     "en": {
       "one": "Choose where this file goes",
       "other": "Choose where these {1:int} files go"
@@ -1794,7 +1794,7 @@
     }
   },
   "share_add_here": {
-    "note": "A Memory's or a chapter's own save in the pick mode: the shared photos and videos queued into it (ADR 0138 decision 3; owner 2026-11-19).",
+    "note": "A Memory's, a chapter's or a level's own save in the pick mode: the shared photos and videos queued into the Memory or chapter, any shared file into the folder or the space's top (ADR 0138 decision 3; owner 2026-11-19).",
     "en": "Add here",
     "de": "Hier hinzufügen",
     "apple_en": "Add Here"

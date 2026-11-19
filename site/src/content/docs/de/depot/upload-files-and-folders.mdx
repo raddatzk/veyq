@@ -2,6 +2,7 @@
 title: "Dateien und Ordner hochladen"
 sources:
   - docs/features/depot/use-cases/uc.depot.member-files.md
+  - docs/decisions/0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -26,6 +27,15 @@ Uploads laufen im Hintergrund, du kannst also weiterarbeiten.
 Ein Name, den manche Computer nicht erlauben, wird leicht geändert, und ein schon vergebener Name heißt dann „Name (2)“.
 Ist der gewählte Ordner ein ausgepackter veyq-Download, bietet veyq dir stattdessen den Import an
 ([Herunterladen und Importieren](/de/spaces/download-and-import/)).
+
+## In der App
+
+In der veyq-[App](/de/getting-started/install-the-app/) lädst du genauso hoch, über **Neu**. Unter Android, auf dem
+iPhone oder dem iPad kannst du Dateien auch aus einer anderen App in einen Ordner teilen: Wähle im Teilen-Menü der
+anderen App **veyq**, öffne in veyq den Ordner oder bleib auf Home deines Bereichs und wähle **Hier hinzufügen**
+([In veyq teilen](/de/getting-started/share-into-veyq/)). Unter Android, auf dem iPad und auf dem Mac werden Dateien,
+die du aus einer anderen App auf einen geöffneten Ordner ziehst, sofort dorthin hochgeladen; auf dem Mac wird ein
+Ordner, den du darauf ziehst, als Ordner hochgeladen.
 
 ## Wenn etwas denselben Namen hat
 
