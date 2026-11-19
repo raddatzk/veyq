@@ -65,6 +65,8 @@ internal fun PersonScreen(userId: String, model: AppModel) {
             profile.handle?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = role(LocalPalette.current.muted)) }
             if (profile.former) Text(stringResource(R.string.people_former_member_hint), style = MaterialTheme.typography.bodyMedium, color = role(LocalPalette.current.muted))
         }
+        // the safety number, a section below the name (ADR 0148 decision 10): one's own to show, another member's to compare
+        if (!profile.former) SafetyNumberSection(profile.userId, name, model)
         if (memories != null && state != null) SectionHead(profile, memories, state)
     }
     // the map takes the screen below the frame; the list scrolls with it

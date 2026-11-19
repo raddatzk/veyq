@@ -5752,5 +5752,15 @@
     "note": "The web's rotation.linksTitle.",
     "en": "Links to renew",
     "de": "Links zum Erneuern"
+  },
+  "safety_qr_failed": {
+    "en": "The code could not be shown. The digits above say the same.",
+    "de": "Der Code konnte nicht angezeigt werden. Die Ziffern oben sagen dasselbe.",
+    "note": "The web's safety.qrFailed."
+  },
+  "profile_picture_no_key": {
+    "en": "A picture can be added once your access to the shared space is ready.",
+    "de": "Ein Bild kannst du hinterlegen, sobald dein Zugang zum geteilten Bereich bereit ist.",
+    "note": "The web's profilePicture.noKeyYet."
   }
 }

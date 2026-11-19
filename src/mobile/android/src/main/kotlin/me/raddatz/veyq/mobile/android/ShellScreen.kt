@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.platform.testTag
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.automirrored.outlined.Logout
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
@@ -229,6 +231,12 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                         actions = {
+                            // one's own profile: *Edit profile* opens the same model as Settings' *Your profile* (ADR 0084 decision 6)
+                            if (shell.person != null && shell.person == model.ownUserId()) {
+                                IconButton(onClick = model::openProfile, modifier = Modifier.testTag("person-edit-profile")) {
+                                    Icon(Icons.Outlined.Edit, stringResource(R.string.profile_edit))
+                                }
+                            }
                             if (headed != null && contribution != null) {
                                 NodeHeaderActions(headed, contribution, model, snackbar, scope)
                             }
