@@ -150,7 +150,7 @@ the branch the refine read (each claim's command is in the refine's record of it
   the one meta core seals, never in a second write that would wait for the node it is re-keying.
 - **A download is held to the web's importer by a committed fixture**, not by a schema validator in the core's tests: a
   validator would be a new test dependency, and an archive the schema accepts can still be one the importer refuses.
-- **Import stays the web's** until #985; a person imports an app's download on the web.
+- **Import is [ADR 0152](0152-the-apps-import-a-download-as-the-web-does-the-webs-reader-and-walk-in-the-core-each-kinds-import-its-applications-recognised-by-every-depot-upload.md)'s**: the core reads the web's archive and the web's tests read the same cases.
 - **The owner's answers** (2026-11-19; each was built as recommended, so nothing changed): the rule is that the apps
   **behave exactly as the web** and **look as their platform's guidelines** say (owner 2026-11-09). So the first view is
   Tiles, the web's default (`ViewMode.FIRST`, decision 8); the Contributions are the fourth view exactly as the web

@@ -135,7 +135,7 @@ The web's `export.*` import keys ported to `words.json` (EN+DE, each `note` nami
 
 ## Phases
 
-- [ ] **1 ADR 0152 and the docs it binds** — ADR 0152 (I1–I8), its row in `docs/decisions/README.md`; ADR 0149's and
+- [x] **1 ADR 0152 and the docs it binds** — ADR 0152 (I1–I8), its row in `docs/decisions/README.md`; ADR 0149's and
   ADR 0082's mentions of the apps' missing import pointed at it; `uc.platform.export-import` gains *In the apps*;
   `native-apps.md` § Open's line narrowed. · Done when: every guard but guard_gaps green.
 - [ ] **2 contracts — the cases** (I4) — `generate.py`, `cases.v1.json`, `web-download.zip` written by a web test; the
