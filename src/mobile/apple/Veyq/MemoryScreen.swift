@@ -219,9 +219,13 @@ struct MemoryScreen: View {
                 } else if (state?.rows ?? []).isEmpty && uploading.isEmpty {
                     Text(say(.memoryGalleryEmpty)).foregroundStyle(Role.muted).padding()
                 } else {
+                    // the rows read once per body: `rows` reads live state, and a ForEach's child re-evaluated after a newer,
+                    // shorter state (a rotation's commit wipes the offline store) must index the array `at` was built from
+                    // (the macOS pass's crash, 2026-11-19)
+                    let shown = rows
                     // the count of what is shown, and the marks' mode beside it where offered (a member's, not personal)
                     HStack {
-                        if !rows.isEmpty { Text(say(.memoryItems, rows.count)).font(.footnote).foregroundStyle(Role.muted) }
+                        if !shown.isEmpty { Text(say(.memoryItems, shown.count)).font(.footnote).foregroundStyle(Role.muted) }
                         Spacer(minLength: 0)
                         if showsPhotos, let gallery = model.galleryModel(node), gallery.marksModeOffered, let filter = state?.filter {
                             MarksModeMenu(gallery: gallery, filter: filter)
@@ -229,17 +233,17 @@ struct MemoryScreen: View {
                     }
                     .padding(.horizontal)
                     // every filter in force named, so an empty grid never reads as an empty Memory (E5)
-                    if rows.isEmpty, let filter = state?.filter, filter.narrows {
+                    if shown.isEmpty, let filter = state?.filter, filter.narrows {
                         Text(GalleryFilterWords.empty(filter)).foregroundStyle(Role.muted).padding()
                     }
                     // what this device sends here leads the grid as placeholder tiles (ADR 0145 decision 3)
-                    let layout = GalleryModel.companion.layout(rows: rows, uploading: uploading, width: Double(gridWidth))
-                    let at = Dictionary(uniqueKeysWithValues: rows.enumerated().map { ($0.element.mediaId, $0.offset) })
+                    let layout = GalleryModel.companion.layout(rows: shown, uploading: uploading, width: Double(gridWidth))
+                    let at = Dictionary(uniqueKeysWithValues: shown.enumerated().map { ($0.element.mediaId, $0.offset) })
                     let sending = Dictionary(uniqueKeysWithValues: uploading.map { ($0.tileId, $0) })
                     ForEach(layout.rows, id: \.key) { r in
                         ZStack(alignment: .topLeading) {
                             ForEach(r.tiles, id: \.id) { t in
-                                if let index = at[t.id] { tile(rows[index], index: index, frame: t) }
+                                if let index = at[t.id], shown.indices.contains(index) { tile(shown[index], index: index, frame: t) }
                                 else if let upload = sending[t.id] {
                                     UploadPlaceholder(tile: upload, width: CGFloat(t.width), height: CGFloat(t.height))
                                         .offset(x: CGFloat(t.left))
@@ -632,6 +636,9 @@ private struct Lightbox: View {
     @State private var reports = 0
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
+    /// The window's own scheme, read above the lightbox's `.dark`: a Mac's sheet is a window of the window's appearance, so
+    /// one drawn in the lightbox's scheme had black fields and pale words on its light ground (the macOS pass, 2026-11-19)
+    @Environment(\.colorScheme) private var windowScheme
     #endif
 
     init(model: AppModel, gallery: GalleryModel, box: VeyqCore.Lightbox, mode: LightboxMode, onClose: @escaping () -> Void) {
@@ -747,6 +754,7 @@ private struct Lightbox: View {
                         #if os(macOS)
                         // a Mac's sheet takes its content's ideal size, which a List has none of: it drew one row's height
                         .frame(minWidth: 420, minHeight: 440)
+                        .environment(\.colorScheme, windowScheme)
                         #endif
                 }
             }
@@ -769,7 +777,7 @@ private struct Lightbox: View {
             .sheet(item: $reporting, onDismiss: { reports += 1 }) { report in
                 ReportSheet(model: model, ref: held.box.node, make: { report.sheet })
                     #if os(macOS)
-                    .frame(minWidth: 460, minHeight: 520)
+                    .environment(\.colorScheme, windowScheme)
                     #endif
             }
             #if os(macOS)

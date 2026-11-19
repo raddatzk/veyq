@@ -225,7 +225,7 @@ slideshow — with everything decrypted only on your own device.
 
 ## Related
 
-- **The apps** (built 2026-11-19, [ADR 0149](../../../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decisions 4–6; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): the item marks (a badge on the tile, the heart in the lightbox, step 7's "and in the lightbox"; the web's is #986), the filter of step 8 (`GalleryFilter`) and a medium's report. Tests (no coverage surface, ADR 0040): `ItemMarksTest`, `GalleryFilterTest`, `MarksAndBucketsOfflineTest`, live `MarksLiveTest`.
+- **The apps** (built 2026-11-19, [ADR 0149](../../../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decisions 4–6; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): the item marks (a badge on the tile, the heart in the lightbox, step 7's "and in the lightbox", which the web's lightbox carries too since 2026-11-19, inbox #986), the filter of step 8 (`GalleryFilter`) and a medium's report. Tests (no coverage surface, ADR 0040): `ItemMarksTest`, `GalleryFilterTest`, `MarksAndBucketsOfflineTest`, live `MarksLiveTest`.
 - Feature: [Memory](../_index.md)
 - Enablers: [en.memory.derivatives](../enablers/en.memory.derivatives.md) (the three tiers),
   [en.memory.media](../enablers/en.memory.media.md) (the blob transport),

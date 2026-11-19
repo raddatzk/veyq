@@ -24,6 +24,11 @@ struct NodeMoveSheet: View {
                     ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { dismiss() }.disabled(box.state?.busy == true) }
                 }
         }
+        #if os(macOS)
+        // a Mac's sheet takes its content's ideal size, which a List has none of: the copy sheet drew its title and Cancel
+        // alone (the macOS pass, 2026-11-19)
+        .frame(minWidth: 460, idealWidth: 520, minHeight: 480)
+        #endif
         .task {
             guard box.sheet == nil, let made = model.moveSheet(ref, copying: copying) else { return }
             box.start(made)

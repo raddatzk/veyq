@@ -6,8 +6,10 @@
 // MediaGrid filtered to the active bucket with a per-tile checkbox (top-left) + 3-dot (top-right), and a selection
 // bar with a select-all toggle + visible Move/Delete. Delete is a straight soft-delete to trash with a local undo
 // bar (no confirm modal), and names every medium the server refused to trash (inbox #427) or, on Undo, to restore
-// (#429). The primary bucket is VIRTUAL until the first sub-bucket or upload materializes it (the
-// server's lazy ensurePrimaryBucket). Names are sealed under K_node — the client unseals; the server never sees one.
+// (#429). The caller's own primary — `user:<self>`, the door's `self()`, never another member's (inbox #1003) — is VIRTUAL
+// ("You") until the first sub-bucket or upload materializes it (the server's lazy ensurePrimaryBucket). A member curates
+// every root, their own, another member's or a guest's (ADR 0034 point 6, the server's gate is membership), and is offered
+// only what the server takes: a sub-bucket under a primary, a sub-bucket renamed or deleted, a move within one root. Names are sealed under K_node — the client unseals; the server never sees one.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqSelect from '../../../shared/ui/VeyqSelect.vue'
@@ -59,6 +61,10 @@ const buckets = (() => {
   return door
 })()
 const SELF_PRIMARY = '__veyq_self_primary__'
+/** The owner key of the caller's own root (core's `Buckets.ownKey`). */
+const mine = computed(() => `user:${buckets.self()}`)
+/** A medium of the caller's that sits in no materialized bucket (a pre-buckets row without an owner key among them). */
+const unbucketedOwn = (m: MediaItem) => (!m.ownerKey || m.ownerKey === mine.value) && !m.bucketId
 
 type BucketVM = {
   id: string
@@ -67,7 +73,6 @@ type BucketVM = {
   isPrimary: boolean
   displayName: string
   mediaCount: number
-  canManage: boolean // you may create/rename/delete/move here (your own bucket)
   virtual: boolean // client-only placeholder for your not-yet-materialized primary
 }
 type BucketRow = BucketVM & { depth: number }
@@ -134,7 +139,6 @@ async function loadBuckets() {
       isPrimary: b.isPrimary,
       displayName: labelFor(b, key, names, above),
       mediaCount: b.mediaCount,
-      canManage: b.ownerKey.startsWith('user:'), // your own bucket; a contributor (share:) is not yours to manage/move (yet — cr-0123)
       virtual: false,
     }))
     status.value = 'ready'
@@ -148,18 +152,17 @@ watch(() => [props.nodeId, props.memoryKey] as const, () => { selected.value = n
 // --- the virtual own-primary + the flattened hierarchy ----------------------
 
 // media that are yours and not yet in a materialized bucket → shown under the virtual primary before it exists.
-const virtualPrimaryCount = computed(() =>
-  props.media.filter((m) => (!m.ownerKey || m.ownerKey.startsWith('user:')) && !m.bucketId).length,
-)
+const virtualPrimaryCount = computed(() => props.media.filter(unbucketedOwn).length)
 
 const bucketsWithSelf = computed<BucketVM[]>(() => {
   const list = rawBuckets.value
-  if (list.some((b) => b.isPrimary && b.ownerKey.startsWith('user:'))) return list
+  // only the caller's OWN primary stands in for "You" — another member's materialized primary is theirs (inbox #1003)
+  if (list.some((b) => b.isPrimary && b.ownerKey === mine.value)) return list
   // no materialized own primary yet → synthesize a virtual one so you can create sub-buckets / upload
   return [
     {
-      id: SELF_PRIMARY, ownerKey: 'user:self', parentBucketId: null, isPrimary: true,
-      displayName: t('memory.buckets.you'), mediaCount: virtualPrimaryCount.value, canManage: true, virtual: true,
+      id: SELF_PRIMARY, ownerKey: mine.value, parentBucketId: null, isPrimary: true,
+      displayName: t('memory.buckets.you'), mediaCount: virtualPrimaryCount.value, virtual: true,
     },
     ...list,
   ]
@@ -188,7 +191,7 @@ const BUCKET_MEMO_KEY = 'veyq.beitraege.bucket'
 function preferredBucketId(rows: BucketRow[]): string {
   const remembered = localStorage.getItem(`${BUCKET_MEMO_KEY}.${props.nodeId}`)
   if (remembered && rows.some((r) => r.id === remembered)) return remembered
-  const own = rows.find((r) => r.isPrimary && r.ownerKey.startsWith('user:'))
+  const own = rows.find((r) => r.isPrimary && r.ownerKey === mine.value)
   return own?.id ?? rows[0]?.id ?? ''
 }
 watch(bucketRows, (rows) => {
@@ -206,7 +209,7 @@ function optionRow(id: string): BucketRow | undefined {
 const filteredMedia = computed<MediaItem[]>(() => {
   const b = activeBucket.value
   if (!b) return []
-  if (b.virtual) return props.media.filter((m) => (!m.ownerKey || m.ownerKey.startsWith('user:')) && !m.bucketId)
+  if (b.virtual) return props.media.filter(unbucketedOwn)
   return props.media.filter((m) => m.bucketId === b.id)
 })
 
@@ -298,7 +301,7 @@ async function confirmDeleteBucket() {
   if (!b || !canConfirmDeleteBucket.value) return
   deleteBucketDialog.value.saving = true
   try {
-    await buckets.remove(props.nodeId, b.id) // media reparent to your primary (server-side)
+    await buckets.remove(props.nodeId, b.id) // media reparent to its root's primary (server-side)
     deleteBucketDialog.value.open = false
     await loadBuckets()
     emit('changed')

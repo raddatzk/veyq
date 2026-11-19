@@ -27,7 +27,8 @@
 // default can fall through to a member call), and every write is offered per right, never by a mode flag:
 // the delete where `canDelete` answers for the shown item (a member's trash any, a
 // guest's purge only its own — the parent runs each), the capture-time correction and the place-name backfill where
-// the source carries the medium's meta door (`mediaMeta`), the heavy EXIF where it carries `exifLoader`.
+// the source carries the medium's meta door (`mediaMeta`), the heavy EXIF where it carries `exifLoader`, the item mark
+// where the parent hands `mark` (a scope member's, ADR 0068; uc.memory.gallery step 7, inbox #986).
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
@@ -56,6 +57,7 @@ import { registerPlayback, revokePlayback, handleFromUrl } from '../../../sw/reg
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 import { formatBytes } from '../../../shared/formatBytes'
 import type { MediaMetaDoor } from '../source'
+import type { LightboxMark } from '../lightboxMark'
 import type { UploaderLabel } from '../useUploaderNames'
 import { profileHash } from '../../../core/people/directory'
 import { usePanZoom } from '../../../shared/ui/usePanZoom'
@@ -96,6 +98,9 @@ const props = defineProps<{
   suspendKeys?: boolean // pause the global Escape/arrow handler while a modal (a cover or banner dialog) is open over it
   /** Offer "Report" for the shown item (`report` event; core's dialog, uc.moderation.report): its host decides. */
   canReport?: boolean
+  /** The item mark (ADR 0068), the tile's heart in the toolbar: the caller's own mark toggled, and how many members marked
+   *  the shown item — the aggregate, as the tile's badge shows it (0 where none may be shown). Absent: no heart. */
+  mark?: LightboxMark
 }>()
 const emit = defineEmits<{
   /** Closed — on the item shown last (null: none left), whose grid tile takes the focus back (ADR 0105 decision 5). */
@@ -758,6 +763,20 @@ onBeforeUnmount(() => {
           @click="toggleSlideshow"
         >
           <VeyqIcon :name="playing ? 'pause' : 'play'" />
+        </button>
+        <button
+          v-if="item && mark && !item.blocked"
+          class="veyq-icon-button lightbox-icon-button lightbox-mark-button"
+          :class="{ 'is-marked': mark.mine(item), 'has-count': mark.count(item) > 0 }"
+          type="button"
+          data-testid="lightbox-mark"
+          :aria-pressed="mark.mine(item)"
+          :aria-label="t(mark.mine(item) ? 'media.marks.unmark' : 'media.marks.mark')"
+          :title="mark.count(item) > 0 ? t('media.marks.markedBy', { count: mark.count(item) }, mark.count(item)) : t(mark.mine(item) ? 'media.marks.unmark' : 'media.marks.mark')"
+          @click="mark.toggle(item)"
+        >
+          <VeyqIcon :name="mark.mine(item) ? 'heart-fill' : 'heart'" />
+          <span v-if="mark.count(item) > 0" class="lightbox-mark-count">{{ mark.count(item) }}</span>
         </button>
         <button
           v-if="!item?.blocked"

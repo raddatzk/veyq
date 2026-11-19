@@ -66,6 +66,7 @@ import { MEMORY_VIEW, memberMemorySource, guestMemorySource } from '../source'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
 import { authenticatedCalls } from '../../../test/guestMode'
+import { setAccountUserId } from '../../../app/account'
 
 // Stub the layer's Select + Menu (not under test) and MediaGrid (renders the tile slot per item so the tile chrome
 // — checkbox + 3-dot — is exercised).
@@ -104,6 +105,7 @@ function mountBuckets(mediaItems: MediaItem[]) {
 beforeEach(() => {
   vi.clearAllMocks()
   localStorage.clear() // the picker remembers the last bucket per node — reset between tests
+  setAccountUserId('me') // the caller: `user:me` is their own root (the buckets door's `self()`, inbox #1003)
   vi.mocked(moveBucketMedia).mockResolvedValue(undefined)
   vi.mocked(deleteMedia).mockResolvedValue(undefined)
   vi.mocked(restoreMedia).mockResolvedValue(undefined)
@@ -348,6 +350,86 @@ describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () =>
     const w2 = mountBuckets([media('m3', 'share:x', 'b-share')]) // re-enter the same node → restores the last pick
     await flushPromises()
     expect(w2.find('.select-stub').text()).toContain('Aaa Contributor')
+  })
+})
+
+describe("MemoryBuckets — another member's primary is never the caller's (inbox #1003, core's ContributionsTest)", () => {
+  const DialogStub = { props: ['visible'], template: '<div v-if="visible" class="dialog-stub"><slot /></div>' }
+  function mountWithDialogs(mediaItems: MediaItem[]) {
+    return mount(MemoryBuckets, {
+      props: { scopeId: 's-1', nodeId: 'n-1', nodeEpoch: 0, memoryKey: new Uint8Array(32), media: mediaItems, thumbs: new Map() },
+      global: {
+        plugins: [realI18n()],
+        stubs: { VeyqSelect: SelectStub, VeyqMenu: MenuStub, MediaGrid: MediaGridStub, VeyqDialog: DialogStub },
+        provide: memberView('s-1'),
+      },
+    })
+  }
+  const pickerIds = (w: ReturnType<typeof mountWithDialogs>) =>
+    w.findAll('.bucket-picker .bucket-opt').map((o) => o.attributes('data-val'))
+  const activeName = (w: ReturnType<typeof mountWithDialogs>) => w.find('.bucket-select-value > span:not(.veyq-icon)').text()
+  const activeCount = (w: ReturnType<typeof mountWithDialogs>) => w.find('.bucket-select-value small').text()
+
+  it("shows the virtual \"You\" beside another member's materialized primary, opens on it, and counts only the caller's unbucketed media", async () => {
+    vi.mocked(loadScopePeople).mockResolvedValue([person('u-anna', 'anna', 'Anna Meyer'), person('me', 'me', 'Zoe Self')])
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-anna', 'user:u-anna', 1)])
+    const wrapper = mountWithDialogs([
+      media('m-anna', 'user:u-anna', 'b-anna'),
+      mediaItem({ mediaId: 'm-anna-loose', ownerKey: 'user:u-anna' }), // Anna's, in no bucket: never "You"'s
+      mediaItem({ mediaId: 'm-mine', ownerKey: 'user:me' }),
+    ])
+    await flushPromises()
+
+    expect(pickerIds(wrapper)).toHaveLength(2) // "You" and Anna's — Anna's primary did not replace the caller's
+    expect(activeName(wrapper)).toBe(t('memory.buckets.you'))
+    expect(activeCount(wrapper)).toBe('1')
+    expect(wrapper.findAll('.media-tile-check')).toHaveLength(1) // m-mine only
+
+    await selectBucket(wrapper, 'b-anna')
+    expect(activeName(wrapper)).toBe('Anna Meyer') // Anna's bucket is Anna's
+  })
+
+  it("with the caller's own primary materialized, no virtual \"You\" — and the picker opens on it, not on another member's that sorts first", async () => {
+    vi.mocked(loadScopePeople).mockResolvedValue([person('u-anna', 'anna', 'Anna Meyer'), person('me', 'me', 'Zoe Self')])
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-anna', 'user:u-anna', 1), bucket('b-me', 'user:me', 2)])
+    const wrapper = mountWithDialogs([
+      media('m-anna', 'user:u-anna', 'b-anna'), media('m1', 'user:me', 'b-me'), media('m2', 'user:me', 'b-me'),
+    ])
+    await flushPromises()
+
+    expect(pickerIds(wrapper)).toEqual(['b-anna', 'b-me']) // Anna sorts first; no virtual row
+    expect(activeName(wrapper)).toBe('Zoe Self')
+    expect(wrapper.findAll('.media-tile-check')).toHaveLength(2)
+  })
+
+  it("offers a sub-bucket under any primary, a rename and delete on a sub-bucket only, and a move within the chosen root only", async () => {
+    vi.mocked(loadScopePeople).mockResolvedValue([person('u-anna', 'anna', 'Anna Meyer'), person('me', 'me', 'Zoe Self')])
+    vi.mocked(openBucketName).mockImplementation((_s, _n, _k, b) => `Sub ${b.bucketId}`)
+    vi.mocked(listBuckets).mockResolvedValue([
+      bucket('b-anna', 'user:u-anna', 1),
+      bucket('s-anna', 'user:u-anna', 1, 'ct', false, 'b-anna'),
+      bucket('s-anna-2', 'user:u-anna', 0, 'ct', false, 'b-anna'),
+      bucket('b-me', 'user:me', 0),
+      bucket('s-me', 'user:me', 0, 'ct', false, 'b-me'),
+    ])
+    const wrapper = mountWithDialogs([media('m-anna', 'user:u-anna', 'b-anna'), media('m-sub', 'user:u-anna', 's-anna')])
+    await flushPromises()
+    const offered = (label: string) => wrapper.find(`.bucket-picker .bucket-action-button[aria-label="${t(label)}"]`).exists()
+
+    await selectBucket(wrapper, 'b-anna') // another member's primary: a sub-bucket under it, never a rename or delete
+    expect(offered('memory.buckets.createBucket')).toBe(true)
+    expect(offered('memory.buckets.rename')).toBe(false)
+    expect(offered('memory.buckets.delete')).toBe(false)
+
+    await selectBucket(wrapper, 's-anna') // another member's sub-bucket: renamed or deleted, never nested further
+    expect(offered('memory.buckets.createBucket')).toBe(false)
+    expect(offered('memory.buckets.rename')).toBe(true)
+    expect(offered('memory.buckets.delete')).toBe(true)
+
+    await wrapper.find('.bucket-selection-bar .veyq-text-button').trigger('click') // select all
+    await wrapper.find('.bucket-selection-bar .bucket-action-button:not(.bucket-action-danger)').trigger('click') // Move
+    const targets = wrapper.findAll('.dialog-stub .bucket-opt').map((o) => o.attributes('data-val'))
+    expect(targets.sort()).toEqual(['b-anna', 's-anna-2']) // Anna's root only — never the caller's b-me / s-me
   })
 })
 

@@ -1,7 +1,7 @@
 # ADR 0138 — The apps take what the system shares; the chosen node's kind decides what it becomes
 
 - Status: Accepted
-- Built: yes on Android and Apple (the share target, the share extension, the pick mode, a Pot, a Memory and a chapter as targets, a drop onto the app and onto a Memory's gallery, the app group and the shared keychain group; 2026-11-19 for a Memory); open: a folder as a target (inbox #987), Apple's passes of a Memory's share and drop (#1005)
+- Built: yes on Android and Apple (the share target, the share extension, the pick mode, a Pot, a Memory and a chapter as targets, a drop onto the app and onto a Memory's gallery, the app group and the shared keychain group; 2026-11-19 for a Memory); the macOS drop onto a Memory's gallery passed 2026-11-19; open: a folder as a target (inbox #987), Apple's device passes of a Memory's share and the iPad's drop (#1005)
 - Date: 2026-11-08
 
 ## Context
@@ -129,20 +129,34 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   re-encoded file to file) and handing sources on; the banner's *Add here*; in the extension the handoff through the app
   group (`apple/Veyq/ShareHandoff.swift`: `share-in/<id>/` with `target.json`, written under a dot name and renamed
   whole, queued by the app on its next open, each copy removed by the queue's `left`, cleared at a sign-out, swept at
-  start); a drop onto a Memory's gallery (`MemoryScreen`'s `.onDrop`). Built for macOS and the iOS simulator SDK; not
-  clicked — the macOS drop and the device passes are the owner's (inbox #1005), and a handoff for a space the app does
-  not list waits until a sign-out (inbox #1007).
+  start); a drop onto a Memory's gallery (`MemoryScreen`'s `.onDrop`). Built for macOS and the iOS simulator SDK. **The
+  macOS pass proved the drop** (2026-11-19, the coordinator's main session with full-screen control, a throwaway): three
+  photos dragged from Finder onto a new Memory's gallery were uploaded into it (*3 items*). The device passes are the
+  owner's (inbox #1005), and a handoff for a space the app does not list waits until a sign-out (inbox #1007).
 - **Decision 2's Memory, built 2026-11-19** (cr-app-share-into-a-memory, inbox #893): each kind's answer is its
   application's (`navigation/ShareAnswer`, `AppKinds.share`; Expenses' `PotShare.answer`, Memories'
   `memories/MemoryShare`), the files waiting as sources in core's `navigation/ShareInbox` — the Pot reads its bounded
   receipts from them when it is chosen, a Memory's *Add here* queues them; held by core's `ShareInboxTest` (each kind
   answering in its own application, a Memory taking a video and refusing a PDF, a chapter taking, a member who may not
-  upload dimmed, *Add here* queuing once) and `PotShareTest` (unchanged by the move). Open after it: Apple's passes —
-  the macOS drop from Finder, a long video handed over from Photos on a device and the extension cancelled, an iPad's
-  drop (inbox #1005); Android's Pot share and a HEIC share not clicked again since the inbox moved to sources (#1006); a
-  handoff for a space the app does not list waits unsaid until a sign-out (#1007); a drop's read grant over a long
-  upload with the app left (#1008). A folder as a share target is Depot's answer (inbox #987); the desktops have no
+  upload dimmed, *Add here* queuing once) and `PotShareTest` (unchanged by the move). Open after it: Apple's device
+  passes — a long video handed over from Photos and the extension cancelled, an iPad's drop (inbox #1005; the macOS drop
+  from Finder passed 2026-11-19); a
+  handoff for a space the app does not list waits unsaid until a sign-out (#1007). A folder as a share target is Depot's answer (inbox #987); the desktops have no
   share target (GNOME has none; Windows' needs the packaged app's Share Target contract) and take a drop onto a
   Memory's gallery instead. The Use page: [Share into veyq](../../site/src/content/docs/getting-started/share-into-veyq.mdx).
+- **Android's Pot share after the move to sources** (measured 2026-11-19 on a throwaway API 36 emulator as a throwaway
+  account): a PDF and a photo shared from the Files app, the pick mode's Pot chosen, its new expense opened with both as
+  receipts, closed unsaved (the pick mode back), the Pot chosen again and the expense saved; opened anew in the app and
+  on the web it lists both, at the originals' sizes. A
+  HEIC shared likewise opened as `cat.jpg`, its JPEG copy under `no_backup/share-in/` while the editor held it and gone
+  after the save; one left by a closed app was swept at its next start. The first try opened no editor: the Pot page's
+  effect was keyed on the waiting files, which its own take emptied, so the read was cancelled (`PotScreen`, fixed).
+- **Android's drop grant outlives the activity** (measured 2026-11-19 on a throwaway API 36 emulator as a throwaway
+  account): a 253.5 MB video dragged from the Files app in a freeform window onto a Memory's gallery (11:02:44), its
+  upload's worker started (11:02:47), the app left to Home (11:03:06) and its activity finished by Back (11:03:42, no
+  `MainActivity` left in `dumpsys activity activities`, the process kept by the upload's foreground service); the worker
+  read the file to its end and ended `SUCCESS` at 11:20:10, no `SecurityException` in the log, and the web lists the
+  video at 253.5 MB with its poster. So a drop is read in place as a share is, and needs no copy. A process killed
+  meanwhile is not measured.
 - App groups and keychain groups need the developer team's signing: a Simulator build is signed ad hoc with them; a device
   build needs the team's provisioning profile with the group.

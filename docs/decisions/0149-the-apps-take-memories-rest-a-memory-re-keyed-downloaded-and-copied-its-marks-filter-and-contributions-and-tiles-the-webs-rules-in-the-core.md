@@ -1,8 +1,8 @@
 # ADR 0149 — The apps take Memories' rest: a Memory re-keyed, downloaded and copied as the web's, its marks, filter and contributions, and every level drawn as tiles — the web's rules in the core
 - Status: Accepted
-- Built: yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android and Linux as throwaways
-  and by the core's live tests (§ Consequences, the passes); on Apple and Windows built and compiled, their passes open
-  (inbox #994, #1000); the four owner questions answered 2026-11-19 (§ Consequences)
+- Built: yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android, Linux and Windows as
+  throwaways and by the core's live tests, on macOS in part (§ Consequences, the passes; what is left inbox #994); the
+  four owner questions answered 2026-11-19 (§ Consequences)
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md) (the rights: [Memories](../apps/memories.md))
 
@@ -80,7 +80,7 @@ the branch the refine read (each claim's command is in the refine's record of it
    so. In a personal scope there is no count. **Shown:** the tile carries a badge — the heart, filled when mine, with the
    count above zero — not a button: a phone's tile in the justified grid is one touch target (Material 3, HIG). The mark
    is toggled in the **lightbox's toolbar** on every platform and from a tile's menu where the platform has one (Apple's
-   context menu). This is `uc.memory.gallery` step 7 ("and in the lightbox"), which the web's lightbox lacks (#986).
+   context menu). This is `uc.memory.gallery` step 7 ("and in the lightbox"), which the web's lightbox lacked until #986 (2026-11-19).
    **Offline** the marks' listing is a kept read; nothing is marked offline.
 5. **The gallery's filter: the core's port over core's search chips.** `core/…/memories/GalleryFilter.kt` ports
    `galleryFilter.ts`: a day (the gallery's own chip), and year, place and kind through `search/Query.kt`'s
@@ -162,8 +162,8 @@ the branch the refine read (each claim's command is in the refine's record of it
   deleted, a medium moved within one root, never a primary renamed and never a move across roots (ADR 0034 point 6,
   [en.memory.buckets](../features/memory/enablers/en.memory.buckets.md) § Ownership). The Android pass found the core
   taking another member's primary for the caller's (inbox #991); the core now names "You" by the caller's own id and
-  offers only what the server takes (`Contributions.State`'s `createsSub`, `renames`, `moveTargets`). The web has the same
-  display mistake (#1003, open). *Decision 3's copy* writes at the epoch the new node was born at, so a rotation another
+  offers only what the server takes (`Contributions.State`'s `createsSub`, `renames`, `moveTargets`). The web had the same
+  display mistake (#1003), fixed 2026-11-19 by the same rule (the buckets door's `self()`). *Decision 3's copy* writes at the epoch the new node was born at, so a rotation another
   member makes mid-copy fails it and its node goes to the trash, where the web's copy pulls the node forward and re-sends
   (#988). *A bucket's lightbox* pages that bucket's media, not the gallery (#996). *Decision 5's
   places:* on Android the filter is the Photos view's own toolbar under the view switch (the shell's top bar is core's
@@ -188,11 +188,23 @@ the branch the refine read (each claim's command is in the refine's record of it
   `MarksLiveTest` (two marks counted, each mine only for itself; a member's sub-bucket under the owner's primary taken,
   the owner's photo moved into the member's own sub-bucket refused, across roots — #991's server answers). The web imports the core's download through its own
   importer (`app-memory-download.zip`, decision 7).
-- **What no pass has proved yet.** On Android and Linux: the re-key after a member's removal followed by an upload in the
+- **Android's second pass** (2026-11-19, a throwaway API 36 emulator, a throwaway owner and member, the web in headless
+  Chrome): a WRITE_ONLY link's guest uploaded through the share page and the app named them (the lightbox's Details
+  "Added by Gast Gina (guest)", their bucket in the Contributions); a sub-bucket made, renamed and deleted in the app,
+  each step read back on the web's bucket picker; the Memory copied into a folder and opened on the web (five media, the
+  original in its lightbox); a report sent from the lightbox and received (its reference shown); the member removed and the
+  space given a new lock on the web with its re-key held back — the app re-keyed the due nodes at its next open and an
+  upload went in, every medium of the Memory opening on the web after. TalkBack's speech was heard from its verbose log
+  over a keyboard's focus (`src/mobile/CLAUDE.md` § Traps): the marks' mode chip read its mode twice and the lightbox's
+  heart a bare "1" — both fixed to one reading ("Show marked photos: All, Drop down list"; "Remove your mark, Marked
+  once"); the badge reads "Marked by you, Marked once". Not proved: a report seen in the moderation inbox (no throwaway is
+  a moderator) and an upload pulling a due Memory's re-key forward, unreachable while an app open across another device's
+  rotation keeps the old key (#992, #1021).
+- **What no pass has proved yet.** On Linux: the re-key after a member's removal followed by an upload in the
   app (held by `MemoryRekeyLiveTest` in the core), a link guest's upload named in the app, a report seen in the
-  moderation inbox, the copy opened on the web, a sub-bucket renamed and deleted, a screen reader's speech (TalkBack did
-  not take the taps, #992; the Linux container has no accessibility bus, #998), German on Linux. On Apple: everything — a
-  macOS and an iOS-simulator build only, the Mac's screen locked, then its pass of 2026-11-19 without full-screen control (#994). **The owner's:** an iPhone and an iPad — the tiles at a phone's and a tablet's width, the
+  moderation inbox, the copy opened on the web, a sub-bucket renamed and deleted, a screen reader's speech (the Linux container has no accessibility bus, #998), German. On Android: a report seen in the moderation inbox, and an upload pulling a due Memory's re-key forward (#992, #1021). On macOS: the marks
+  counted by two sessions, *Copy to…* and *Report* after their fixes, a sub-bucket renamed and deleted, the columns across
+  a resized window, the gallery's filter field (#1029) — inbox #994. **The owner's:** an iPhone and an iPad — the tiles at a phone's and a tablet's width, the
   badge's legibility, `.searchable`'s tokens, the lightbox's heart (no simulator boots here, #928).
 - **What the Windows pass proved** (2026-11-19, the VM through UI Automation, a throwaway with a member on the fixed
   tenant `tw-win.localhost`; the marks' second session the core's `MarksLiveTest` as the member, then the member signed
@@ -204,6 +216,19 @@ the branch the refine read (each claim's command is in the refine's record of it
   `.veyq/manifest.json`) and *Copy to…*; Home's, a folder's and a profile's tiles, the View's *List* kept across a
   restart and the tiles' columns following the window (4, 5, 7). A bucket picked in the picker ended the app (its items
   cleared inside the pick's own `SelectionChanged`); fixed in the pass.
+
+- **What the macOS pass proved** (2026-11-19, the coordinator's main session with full-screen control, a throwaway with
+  a member): a tile's context menu marked a photo (its badge ♥1) and the lightbox's heart took the mark back and set it
+  again; the marks' menu narrowed the grid to *Only mine* (one item) and back to *All*; Contributions (the fourth
+  segment): the bucket picker listed the owner's bucket with its count, the bucket's menu made a sub-bucket and a tile's
+  *Move item* moved a photo into it, both counts following; Home drawn as tiles, the View menu's *List* chosen and kept
+  across a restart; a Memory's *Download* through `NSSavePanel`: the zip held the photos and `.veyq/manifest.json`, each
+  original byte-equal (`shasum`) to the file dropped in. Three defects it found were fixed after it, unclicked: *Copy
+  to…*'s sheet drew only its title and Cancel (a Mac's sheet takes a `List`'s ideal size: `NodeMoveSheet` has a frame now);
+  the report sheet from the lightbox took the lightbox's dark scheme on a light sheet and a Mac's columns `Form` (the
+  lightbox's sheets take the window's scheme now, `ReportSheet` is grouped with a frame of its own); Home's list drew
+  *Filter* with its segments at the window's far edge (its label hidden, as the other switches). The gallery's filter
+  field took no click or keystroke; its cause is open (#1029).
 
 ## Alternatives considered
 

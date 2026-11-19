@@ -11,7 +11,7 @@ title: Open a Memory & browse its gallery
 # `MarksAndBucketsOfflineTest` (a kept Memory's badges offline, no toggle), bridge
 # `MemoriesDispatchTest.theContributionsTheFilterAndTheTilesAnswerThroughCalls_andTheViewClosesWithItsTenant`,
 # `SecretFreeSchemaTest.theMarksTheFilterAndTheContributionsCrossAsIdsCountsAndLabelsAlone`, Windows' `GalleryTextTest`;
-# live as throwaways `MarksLiveTest`. The heart in the lightbox (step 7) is the apps'; the web's is #986.
+# live as throwaways `MarksLiveTest`. The heart in the lightbox (step 7) is on the apps and the web (inbox #986).
 acceptanceCriteria:
   - id: thumbnail-grid
     text: Opening a Memory lists its media and renders a thumbnail grid (each thumbnail fetched as ciphertext and decrypted on device under K_node). The grid is the Gallery tab of a tabbed detail view (Gallery / Chapters, cr-0061).
@@ -324,6 +324,17 @@ acceptanceCriteria:
       web:
         unit:
           - src/features/memories/itemFavoritesStore.test.ts
+          - src/features/memories/components/MemoryDetail.test.ts
+  - id: lightbox-carries-the-mark
+    text: >
+      The lightbox's toolbar carries the tile's heart for the shown item (step 7, "and in the lightbox"): the caller's own
+      mark toggled through the same marks door, filled where it is theirs, the number of members who marked it beside it
+      as on the tile (none in a personal scope), following the item paged to; where the tile has no heart (no mark
+      right, a guest's session), neither has the lightbox (inbox #986).
+    coverage:
+      web:
+        unit:
+          - src/features/memories/components/MediaLightbox.test.ts
           - src/features/memories/components/MemoryDetail.test.ts
   - id: degenerate-filter-is-hidden-not-disabled
     text: >
