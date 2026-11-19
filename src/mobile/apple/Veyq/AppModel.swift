@@ -210,6 +210,8 @@ final class AppModel {
             // locked or gone: the open dialogs and the tenant's tree go — a person's index with it (ADR 0144 decision 12)
             closeCuration()
             closeSearch()
+            // a kept link shown in place goes with the tenant; a link open on its own screen is a guest's and stays
+            closeBookmark()
             tenantSession?.close()
         }
         switch session.current {
@@ -623,6 +625,9 @@ final class AppModel {
         if let was = tenantSession, was !== t { was.close() }
         tenantSession = t
         let pots = PotModel(tenant: t, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
+        // a link's Pot shown in the member's place meanwhile: the member's goes with the tenant, the guest's with its page
+        memberPot?.watch?.stop()
+        memberPot = nil
         potWatch?.stop()
         potModel = pots
         potWatch = pots.watch { @Sendable _ in
@@ -997,6 +1002,12 @@ final class AppModel {
         guard let m = shellModel, let uploads = media else { return nil }
         closeGallery()
         let made = m.galleryModel(ref: node, uploads: uploads, music: galleryMusic, calendar: Self.galleryCalendar)
+        holdGallery(made)
+        return made
+    }
+
+    /// `made` the gallery on screen, its state followed on the main actor (the shell's page, or a link's guest's).
+    private func holdGallery(_ made: GalleryModel) {
         let id = ObjectIdentifier(made)
         let watch = made.watch { @Sendable state in
             nonisolated(unsafe) let state = state
@@ -1009,7 +1020,6 @@ final class AppModel {
             }
         }
         openGallery = (made, watch)
-        return made
     }
 
     /// `node`'s page's live poll (core's `GalleryModel.live`, run by core) for as long as the calling task runs — the page
@@ -1609,6 +1619,12 @@ final class AppModel {
         let shares = false
         #endif
         let made = m.fileModel(ref: node, shares: shares)
+        holdFile(made)
+        return made
+    }
+
+    /// `made` the file page on screen, its state followed on the main actor (the shell's page, or a link's guest's).
+    private func holdFile(_ made: FileModel) {
         let id = ObjectIdentifier(made)
         let watch = made.watch { @Sendable state in
             nonisolated(unsafe) let state = state
@@ -1619,7 +1635,6 @@ final class AppModel {
             }
         }
         openFile = (made, watch)
-        return made
     }
 
     private func closeFile() {
@@ -1951,7 +1966,7 @@ final class AppModel {
     }
 
     /// What the drawer's "New" asked Home to create, until Home opens its dialog.
-    enum NewKind { case folder, pot, memory }
+    enum NewKind { case folder, pot, memory, bookmark }
     var newRequest: NewKind?
 
     /// The drawer's "New": Home, where its dialog for `kind` opens.
@@ -2203,6 +2218,146 @@ final class AppModel {
     func enter(_ folder: FolderRef) { moveShell { $0.enter(folder: folder) } }
     func setFilter(_ app: ApplicationId?) { moveShell { $0.filter(app: app) } }
     func goBack() { moveShell { $0.goBack() } }
+
+    // MARK: Received links and kept ones (ADR 0150)
+
+    /// *Open a link* and the link open as its guest (ADR 0150 decisions 3–5): a screen in the place of the sign-in or the
+    /// shell, its guest's session in the Keychain, its uploads in the app's one queue.
+    let guests = GuestLinks()
+
+    /// The tenant a signed-in person keeps a link in (*Keep*); nil signed out.
+    var guestTenant: TenantSession? { shellModel?.tenant }
+
+    /// The member's Pot while a link's Pot is shown in its place (its page and sheets read `potModel`).
+    @ObservationIgnored private var memberPot: (model: PotModel?, watch: PotModel.Watch?)?
+
+    /// A link's page `page` on screen: its kind's member page reads its model here (the gallery, the file, the Pot), so the
+    /// guest's model is held in the shell's place while it shows (ADR 0150 decision 5: share view = member view).
+    func adoptGuestPage(_ page: GuestPage) {
+        switch page {
+        case let g as GuestPage.Gallery:
+            if openGallery?.model !== g.model {
+                closeGallery()
+                galleryShown = nil
+                holdGallery(g.model)
+            }
+        case let f as GuestPage.File:
+            if openFile?.model !== f.model {
+                closeFile()
+                fileShown = nil
+                holdFile(f.model)
+            }
+        case let p as GuestPage.Pot:
+            if memberPot == nil { memberPot = (potModel, potWatch) } else { potWatch?.stop() }
+            potModel = p.model
+            potWatch = p.model.watch { @Sendable _ in
+                Task { @MainActor [weak self] in self?.syncPot() }
+            }
+            pot = nil
+            syncPot()
+        default:
+            break
+        }
+    }
+
+    /// A link's page `page` left: its model goes, the member's place is the shell's again.
+    func releaseGuestPage(_ page: GuestPage) {
+        switch page {
+        case let g as GuestPage.Gallery:
+            if openGallery?.model === g.model {
+                closeGallery()
+                galleryShown = nil
+            } else {
+                g.model.close()
+            }
+        case let f as GuestPage.File:
+            if openFile?.model === f.model {
+                closeFile()
+                fileShown = nil
+            } else {
+                f.model.close()
+            }
+        case let p as GuestPage.Pot:
+            if potModel === p.model, let member = memberPot {
+                potWatch?.stop()
+                potModel = member.model
+                potWatch = member.watch
+                memberPot = nil
+                syncPot()
+            }
+            p.model.close(ref: nil)
+        default:
+            break
+        }
+    }
+
+    /// The bookmark page on screen (core's `BookmarkPage`): one at a time; an in-place link let go with it.
+    @ObservationIgnored private var openBookmark: (page: BookmarkPage, held: BookmarkHeld)?
+
+    /// The page of bookmark `node`, loading (its meta opened, the share shown in place where the tenant embeds). Called while
+    /// a view is drawn, so it changes nothing observed.
+    func bookmarkPage(_ node: NodeAt) -> BookmarkHeld? {
+        if let held = openBookmark, held.page.node == node { return held.held }
+        guard let t = shellModel?.tenant else { return nil }
+        closeBookmark()
+        let page = AppleSharing.shared.bookmarkPage(tenant: t, node: node, opener: guests.opener(self))
+        let held = BookmarkHeld(page, model: self)
+        openBookmark = (page, held)
+        Task { _ = try? await AppleSharing.shared.load(page: page) }
+        return held
+    }
+
+    /// The bookmark's page left: its in-place link let go.
+    func closeBookmark() {
+        openBookmark?.held.stop()
+        openBookmark?.page.close()
+        openBookmark = nil
+    }
+
+    /// *Open on its own page*: the kept link's screen, its password handed in memory, *Keep* offered.
+    func bookmarkOwnPage(_ page: BookmarkPage) {
+        if let screen = page.openOwnPage(tenant: shellModel?.tenant) { guests.show(screen, self) }
+    }
+
+    /// *Report shared content*: the kept link's screen with its report to the share's own operator open.
+    func bookmarkReportShared(_ page: BookmarkPage) {
+        if let screen = page.reportShared() { guests.show(screen, self) }
+    }
+
+    /// New → Bookmark (core's `BookmarkCreate`) at `parentId` of space `scopeId` (nil: its top); nil before the shell is read.
+    func bookmarkCreate(scopeId: String, parentId: String?) -> BookmarkCreate? {
+        guard let t = shellModel?.tenant else { return nil }
+        let kind = spaces.first { $0.scopeId == scopeId }?.kind
+        return BookmarkCreate(door: BookmarkCreate.companion.into(tenant: t, scopeId: scopeId, parentId: parentId), groupSpace: kind != "PERSONAL", link: nil, password: nil)
+    }
+
+    /// A bookmark was made (New or a link's *Keep*): the lists read anew, so its row shows.
+    func bookmarkMade() {
+        guard let t = tenantSession else { return }
+        Task { await refreshLists(t) }
+    }
+
+    /// A READ_WRITE guest's replace of `file`'s content with the picked file (ADR 0150 decision 5): the job the guest's file
+    /// door makes, in the app's one queue; the page reads the file anew once it settled.
+    func guestReplace(_ file: FileModel, url: URL) {
+        guard let source = guestSource(url) else { return }
+        _ = AppleSharing.shared.replace(queue: uploads, file: file, source: source)
+    }
+
+    /// A picked file as a guest's upload source (a drop box's, a replace's), read in place where it lies.
+    func guestSource(_ url: URL) -> UploadSource? {
+        guard let p = Picked(url) else { return nil }
+        return AppleDepot.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
+    }
+
+    /// A picked photo or video as a guest uploader's source; a copy the Photos picker made is removed if it does not read.
+    func guestMediaSource(_ url: URL, fromPhotos: Bool) -> UploadSource? {
+        guard let p = Picked(url) else {
+            if fromPhotos { Self.removePicked(url) }
+            return nil
+        }
+        return AppleMemories.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: fromPhotos ? nil : p.modifiedAt.map { KotlinLong(value: $0) })
+    }
 
     func open(_ ref: ObjectRef) {
         shellModel?.open(ref: ref)

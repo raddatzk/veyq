@@ -19,6 +19,9 @@ struct SignInView: View {
     /// The two linking entries (ADR 0059 §1) over the server as typed now; nil where the app offers none (the extension).
     var onScanFromTrusted: ((String) -> Void)?
     var onShowForSignIn: ((String) -> Void)?
+    /// *Open a link* (ADR 0150 decision 4): a received link opened as its guest, no session needed; nil where the app
+    /// offers none (the extension).
+    var onOpenLink: (() -> Void)?
     let onSignIn: (String, String, String, String) -> Void
 
     @State private var server: String
@@ -37,6 +40,7 @@ struct SignInView: View {
         onKit: @escaping (URL, String) -> Void = { _, _ in }, onClearKit: @escaping () -> Void = {},
         onScanKit: ((String) -> QrScan<AnyObject>)? = nil,
         onScanFromTrusted: ((String) -> Void)? = nil, onShowForSignIn: ((String) -> Void)? = nil,
+        onOpenLink: (() -> Void)? = nil,
         onSignIn: @escaping (String, String, String, String) -> Void
     ) {
         self.working = working
@@ -49,6 +53,7 @@ struct SignInView: View {
         self.onScanKit = onScanKit
         self.onScanFromTrusted = onScanFromTrusted
         self.onShowForSignIn = onShowForSignIn
+        self.onOpenLink = onOpenLink
         self.onSignIn = onSignIn
         _server = State(initialValue: server.map(Self.shortServer) ?? "veyq.localhost:8080")
         _email = State(initialValue: email ?? "")
@@ -149,6 +154,15 @@ struct SignInView: View {
                 }
             }
             .listRowBackground(Color.clear)
+            // *Open a link* under the sign-in (owner 2026-11-19): a received link needs no session
+            if let onOpenLink {
+                Section {
+                    Button(action: onOpenLink) { Label(say(.linkOpen), systemImage: "link").frame(maxWidth: .infinity) }
+                        .disabled(working)
+                        .accessibilityIdentifier("signin-open-link")
+                }
+                .listRowBackground(Color.clear)
+            }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
@@ -284,6 +298,8 @@ struct UnlockView: View {
     let error: Msg?
     let onUnlock: (String) -> Void
     let onOther: () -> Void
+    /// *Open a link* under the unlock (ADR 0150 decision 4); nil where the app offers none.
+    var onOpenLink: (() -> Void)?
 
     @State private var password = ""
 
@@ -330,6 +346,14 @@ struct UnlockView: View {
                 Button(say(.unlockOther), action: onOther).frame(maxWidth: .infinity).disabled(working)
             }
             .listRowBackground(Color.clear)
+            if let onOpenLink {
+                Section {
+                    Button(action: onOpenLink) { Label(say(.linkOpen), systemImage: "link").frame(maxWidth: .infinity) }
+                        .disabled(working)
+                        .accessibilityIdentifier("unlock-open-link")
+                }
+                .listRowBackground(Color.clear)
+            }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)

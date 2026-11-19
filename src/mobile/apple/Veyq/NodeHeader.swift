@@ -44,6 +44,7 @@ struct KindPage {
         case DepotFiles.shared.FILE: file
         case DepotFiles.shared.DROPBOX: dropBox
         case "MEMORY", "CHAPTER": memory
+        case AppKinds.shared.BOOKMARK_KIND: bookmark
         default: nil
         }
     }

@@ -97,6 +97,19 @@ struct DrawerList: View {
         VStack(spacing: 0) {
             list
             Divider()
+            // the account menu's *Open a link* (ADR 0150 decision 4; owner 2026-11-19: the drawer's foot), above Settings
+            Button { model.guests.ask(model) } label: {
+                HStack(spacing: 12) {
+                    Tile(symbol: "link")
+                    Text(say(.linkOpen)).foregroundStyle(Role.controlText)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .accessibilityIdentifier("drawer-open-link")
             Button {
                 // the account's Settings: the app's Settings window on a Mac (⌘,), a sheet on iOS
                 #if os(macOS)
@@ -126,8 +139,11 @@ struct DrawerList: View {
                 TenantSwitcher(model: model)
                 // the web's sidebar "New": what a level creates, opened on Home
                 Menu {
-                    ForEach(AppKinds.shared.createsWhere(isHome: false), id: \.self) { c in
-                        Button(say(c.word), systemImage: Names.createSymbol(c)) { model.requestNew(c == .pot ? .pot : c == .memory ? .memory : .folder) }
+                    // a kept link last (ADR 0150 decision 6): this platform draws the bookmark's dialog (#1020)
+                    ForEach(AppKinds.shared.createsWhere(isHome: false, bookmarks: true), id: \.self) { c in
+                        Button(say(c.word), systemImage: Names.createSymbol(c)) {
+                            model.requestNew(c == .pot ? .pot : c == .memory ? .memory : c == .bookmark ? .bookmark : .folder)
+                        }
                     }
                 } label: {
                     // drawn here: a Mac draws a bordered menu as its own grey pop-up, whatever its button style
@@ -553,6 +569,7 @@ struct HomeView: View {
     @State private var pickingFiles = false
     @State private var pickingFolder = false
     @State private var namingMemory = false
+    @State private var keepingLink = false
 
     /// A group's rows: a folder enters, an object opens.
     @ViewBuilder private func rows(_ nodes: [NodeRef]) -> some View {
@@ -675,13 +692,15 @@ struct HomeView: View {
         // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
         .createMenu(say(.drawerNew), shown: model.canCreateHere) {
             // core's `createsWhere`: a folder, a Pot, files and a folder uploaded here, and a Memory here
-            ForEach(AppKinds.shared.createsWhere(isHome: true), id: \.self) { c in
+            ForEach(AppKinds.shared.createsWhere(isHome: true, bookmarks: true), id: \.self) { c in
                 Button(say(c.word), systemImage: Names.createSymbol(c)) {
                     switch c {
                     case .pot: creatingPot = true
                     case .uploadFiles: pickingFiles = true
                     case .uploadFolder: pickingFolder = true
                     case .memory: newName = ""; nameProblem = nil; namingMemory = true
+                    // a link kept here (ADR 0150 decision 6): the web's bookmark dialog
+                    case .bookmark: keepingLink = true
                     default: newName = ""; nameProblem = nil; naming = true
                     }
                 }
@@ -715,12 +734,16 @@ struct HomeView: View {
             if let space = model.shell.space { NewMemorySheet(model: model, scopeId: space, parentId: model.shell.folder?.nodeId) }
         }
         .sheet(isPresented: $creatingPot) { NewPotSheet(model: model) }
+        .sheet(isPresented: $keepingLink) {
+            if let space = model.shell.space { NewBookmarkSheet(model: model, scopeId: space, parentId: model.shell.folder?.nodeId) }
+        }
         // what the drawer's "New" asked for
         .onChange(of: model.newRequest, initial: true) { _, asked in
             switch asked {
             case .folder: newName = ""; nameProblem = nil; naming = true
             case .memory: namingMemory = true
             case .pot: creatingPot = true
+            case .bookmark: keepingLink = true
             case nil: return
             }
             model.newRequest = nil
@@ -1185,6 +1208,7 @@ enum Names {
         case .pot: "wallet.bifold"
         case .uploadFiles: "square.and.arrow.up.on.square"
         case .memory, .chapter: "photo.badge.plus"
+        case .bookmark: "link.badge.plus"
         default: "folder.badge.plus"
         }
     }

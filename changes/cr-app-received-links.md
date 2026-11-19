@@ -212,8 +212,18 @@ question 2*).
 - [ ] **7 Android** — *Open a link* (sign-in and shell), the guest screen, the bookmark's page, dialog and reports; the
   guest session in the Keystore-wrapped store. · Done when: `:android:assembleDebug` and the guidelines and words
   guards green; § Passes' Android row.
-- [ ] **8 Apple** — the same; `PasteButton`; the Keychain. · Done when: both Apple builds green; the macOS row run here
+- [x] **8 Apple** — the same; `PasteButton`; the Keychain. · Done when: both Apple builds green; the macOS row run here
   or named open (a locked screen); iOS the owner's.
+  **Built 2026-11-19 (branch `claude/h-apple`):** `GuestLinks.swift` (*Open a link* with `PasteButton` on the sign-in, the
+  unlock, the drawer's foot and the Mac's File menu; the guest screen in the place of the sign-in or the shell, its gates,
+  each kind's member page over the guest's model the app model holds in the shell's place — `adoptGuestPage` —, the
+  drop box's and the uploader's pages, the record's notice before every guest write (#1018), *Keep*, *Back* asking at the
+  root), `BookmarkScreen.swift` (the bookmark's page in place or on its own, *Report shared content*), New → Bookmark
+  (`createsWhere(bookmarks: true)`, #1020); `appleMain`'s `sharing/AppleSharing.kt` (the guest's calls off the main
+  thread, `KeychainGuestSessions` — a Keychain that refuses, as an ad-hoc Mac or unsigned simulator build's, keeps the
+  session in memory for the run). Measured: `xcodebuild … -sdk macosx` and `-sdk iphonesimulator` `CODE_SIGNING_ALLOWED=NO`
+  BUILD SUCCEEDED; the words and guidelines guards OK. **Not run:** the macOS row (a background agent has no
+  full-screen control, `src/mobile/CLAUDE.md` § Traps) — the coordinator's; iPhone and iPad the owner's.
 - [ ] **9 Linux** — the same over the bridge; the Secret Service. · Done when: `python3 linux/run.py test` and `build`
   green; § Passes' Linux row.
 - [ ] **10 Windows** — the same; the credential locker. · Done when: `python3 windows/run.py build` green on the VM;
