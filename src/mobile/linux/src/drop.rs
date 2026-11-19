@@ -1,19 +1,20 @@
 //! Drag and drop onto a level and onto a folder's row (ADR 0123's Consequences, the Linux app's Depot whole), GNOME's way: a `gtk::DropTarget` for a
 //! `gdk::FileList` (what Files hands over, through the portal on a sandboxed desktop) taking a copy; the row or the level
 //! under the pointer is highlighted by the theme's own `:drop(active)` style. Each dropped file's local path goes to the
-//! core as a picked one does (`Upload.Files`, all files of one drop in one batch), each dropped directory's to
-//! `Upload.Folder`, which the core walks (ADR 0137 decision 3: the core opens and reads each at offsets, nothing of a file
-//! crosses). A dropped item with no local path (a remote location without a mount) is refused and said
-//! (`depot_drop_not_local`). A dropped veyq download is uploaded as the file it is (until import is built, native-apps § Open).
+//! core as a picked one does (`Import.Screen`, all files of one drop in one batch), each dropped directory's to
+//! `Import.ScreenFolder`, which the core walks (ADR 0137 decision 3: the core opens and reads each at offsets, nothing of a
+//! file crosses). A dropped veyq download — a ZIP, or its folder unpacked — is offered as an import (ADR 0152 decision 1,
+//! `import_dialog`), the rest uploaded. A dropped item with no local path (a remote location without a mount) is refused
+//! and said (`depot_drop_not_local`).
 //!
 //! What a drop is sorted into is this side's only rule ([sort], [calls]); where a drop is taken at all is the core's: the
 //! level takes one where its New offers Upload files (`ShellShown.creates`).
 use adw::prelude::*;
-use gtk::{gdk, gio, glib};
+use gtk::{gdk, gio};
 
-use crate::bridge::{self, wire::Call};
-use crate::uploads::{self, Level};
-use crate::{home::glib_escape, words};
+use crate::bridge::wire::Call;
+use crate::uploads::Level;
+use crate::{home::glib_escape, import_dialog, words};
 
 /// A drop sorted: the files' paths, the directories' paths, and the names of what has no local path.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -39,19 +40,27 @@ pub fn sort(files: &[gio::File]) -> Sorted {
     sorted
 }
 
-/// The calls a sorted drop onto [level] makes: the files as one batch, then one folder upload per directory.
-pub fn calls(level: &Level, sorted: &Sorted) -> Vec<Call> {
+/// The calls a sorted drop onto [level] makes, each screened for a download: the files as one batch, then one folder per
+/// directory; [deleted_name] the `pot_deleted_person` word an imported Pot names an erased person by.
+pub fn calls(level: &Level, sorted: &Sorted, deleted_name: &str) -> Vec<Call> {
     let mut calls = Vec::new();
     if !sorted.files.is_empty() {
-        calls.push(Call::UploadFiles {
+        calls.push(Call::ImportScreen {
             scope_id: level.scope_id.clone(),
             parent_id: level.parent_id.clone(),
             label: level.label.clone(),
             paths: sorted.files.clone(),
+            deleted_name: deleted_name.to_owned(),
         });
     }
     for path in &sorted.folders {
-        calls.push(Call::UploadFolder { scope_id: level.scope_id.clone(), parent_id: level.parent_id.clone(), path: path.clone() });
+        calls.push(Call::ImportScreenFolder {
+            scope_id: level.scope_id.clone(),
+            parent_id: level.parent_id.clone(),
+            label: level.label.clone(),
+            path: path.clone(),
+            deleted_name: deleted_name.to_owned(),
+        });
     }
     calls
 }
@@ -80,7 +89,7 @@ impl Drops {
 pub fn target(level: Level, toasts: &adw::ToastOverlay) -> gtk::DropTarget {
     let target = gtk::DropTarget::new(gdk::FileList::static_type(), gdk::DragAction::COPY);
     let toasts = toasts.clone();
-    target.connect_drop(move |_, value, _, _| {
+    target.connect_drop(move |target, value, _, _| {
         let Ok(list) = value.get::<gdk::FileList>() else { return false };
         let sorted = sort(&list.files());
         eprintln!(
@@ -93,11 +102,11 @@ pub fn target(level: Level, toasts: &adw::ToastOverlay) -> gtk::DropTarget {
         for name in &sorted.refused {
             toasts.add_toast(adw::Toast::new(&glib_escape(&words::depot_drop_not_local(name))));
         }
-        for call in calls(&level, &sorted) {
-            let toasts = toasts.clone();
-            let what = if matches!(call, Call::UploadFolder { .. }) { "Upload.Folder" } else { "Upload.Files" };
-            let answer = bridge::call(&call);
-            glib::spawn_future_local(async move { uploads::queued(&toasts, answer.await.map(|(a, _)| a), what) });
+        // an offered import's dialog sits over the window the drop landed in
+        let Some(parent) = target.widget().and_then(|w| w.root()).map(|r| r.upcast::<gtk::Widget>()) else { return false };
+        for call in calls(&level, &sorted, &words::pot_deleted_person()) {
+            let what = if matches!(call, Call::ImportScreenFolder { .. }) { "Import.ScreenFolder" } else { "Import.Screen" };
+            import_dialog::screened(&parent, call, what, &toasts);
         }
         !(sorted.files.is_empty() && sorted.folders.is_empty())
     });
@@ -131,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn a_dropped_file_list_reaches_upload_files_and_upload_folder_with_its_paths() {
+    fn a_dropped_file_list_reaches_the_import_screens_with_its_paths() {
         let root = made("sorted");
         let path = |name: &str| root.0.join(name).to_str().unwrap().to_owned();
         let list = gdk::FileList::from_array(&[
@@ -141,16 +150,24 @@ mod tests {
         ]);
         let sorted = sort(&list.files());
         assert_eq!(sorted, Sorted { files: vec![path("a.txt"), path("b.jpg")], folders: vec![path("Reise ü")], refused: vec![] });
-        let sent: Vec<serde_json::Value> = calls(&level(), &sorted).iter().map(|c| serde_json::to_value(c).unwrap()).collect();
-        let files = serde_json::to_value(Call::UploadFiles {
+        let sent: Vec<serde_json::Value> = calls(&level(), &sorted, "Deleted").iter().map(|c| serde_json::to_value(c).unwrap()).collect();
+        let files = serde_json::to_value(Call::ImportScreen {
             scope_id: "s1".into(),
             parent_id: Some("f1".into()),
             label: "Trip".into(),
             paths: vec![path("a.txt"), path("b.jpg")],
+            deleted_name: "Deleted".into(),
         })
         .unwrap();
-        let folder = serde_json::to_value(Call::UploadFolder { scope_id: "s1".into(), parent_id: Some("f1".into()), path: path("Reise ü") }).unwrap();
-        assert_eq!(sent, vec![files, folder], "the files as one batch, the directory walked by the core");
+        let folder = serde_json::to_value(Call::ImportScreenFolder {
+            scope_id: "s1".into(),
+            parent_id: Some("f1".into()),
+            label: "Trip".into(),
+            path: path("Reise ü"),
+            deleted_name: "Deleted".into(),
+        })
+        .unwrap();
+        assert_eq!(sent, vec![files, folder], "the files as one batch, the directory walked by the core, each screened for a download");
     }
 
     #[test]
@@ -161,6 +178,6 @@ mod tests {
         assert_eq!(sorted.refused, vec!["away.pdf".to_string()]);
         assert_eq!(sorted.files.len(), 1);
         let only_far = Sorted { refused: sorted.refused.clone(), ..Sorted::default() };
-        assert!(calls(&level(), &only_far).is_empty(), "a drop of nothing local sends nothing");
+        assert!(calls(&level(), &only_far, "Deleted").is_empty(), "a drop of nothing local sends nothing");
     }
 }

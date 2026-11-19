@@ -27,6 +27,7 @@ pub mod file_page;
 pub mod gallery_filter;
 pub mod header;
 pub mod home;
+pub mod import_dialog;
 pub mod kit_drawing;
 pub mod lightbox;
 pub mod manage;
