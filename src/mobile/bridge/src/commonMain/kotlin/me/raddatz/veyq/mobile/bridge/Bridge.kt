@@ -2839,6 +2839,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             profileEncoder: me.raddatz.veyq.mobile.media.WebpEncoder? = me.raddatz.veyq.mobile.media.coreWebpEncoder,
             /** The search's words in the host's language: the host's ([HostWords]). */
             words: me.raddatz.veyq.mobile.search.SearchWords = me.raddatz.veyq.mobile.search.SearchWords { it.key },
+            /** The gallery filter's day chips' calendar (inbox #989): the desktop's zone in the library ([LocalCalendar]); UTC on the JVM. */
+            calendar: me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar = me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar.UTC,
             now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
         ): Bridge<VeyqAccount, TenantSession> = Bridge {
             val recent = RecentUses(
@@ -2874,9 +2876,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 squarePicture = squarePicture,
                 readKey = { text -> me.raddatz.veyq.mobile.crypto.SecretKeyText.read(primitives, text) },
             ) { t ->
+                val shell = ShellModel(t, hidden, recent, now)
                 Tenant(
-                    ShellModel(t, hidden, recent, now), { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load, t.pictures.held.map { it.round },
+                    shell, { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load, t.pictures.held.map { it.round },
                     ownProfile = { t.profile(profileEncoder) }, trust = t.personTrust, spaces = { t.spaces() },
+                    gallery = { node, uploads, music -> shell.galleryModel(node, uploads, music, calendar) },
                 )
             }
         }

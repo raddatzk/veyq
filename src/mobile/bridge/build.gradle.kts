@@ -56,6 +56,10 @@ kotlin {
         mingwMain.dependencies {
             implementation(libs.ktor.client.winhttp)
         }
+        // the desktop's calendar for the gallery filter's day chips (`LocalCalendar`, inbox #989): the zone as core's wall clock reads it
+        getByName("bridgedMain").dependencies {
+            implementation(libs.kotlinx.datetime)
+        }
         // core's in-memory device keys (SoftwareDeviceKeys), the fake every flow test runs over, and the live runs' cleanup
         // (LiveRun), compiled here too.
         jvmTest {
