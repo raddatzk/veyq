@@ -526,7 +526,7 @@ struct Bar: View {
         } else if let app = model.shell.application, app == .memories {
             MemoriesList(model: model)
         } else if let app = model.shell.application {
-            ArrangedListView(list: model.applicationList(app), onOpen: model.open, key: "app:\(app)")
+            ArrangedListView(model: model, list: model.applicationList(app), onOpen: model.open, key: "app:\(app)")
                 .navigationTitle(Names.application(app))
         } else {
             HomeView(model: model).environment(\.nodeHero, model.shell.space.flatMap { model.shell.folderAt(scopeId: $0) }.map(hero))
@@ -539,6 +539,11 @@ struct Bar: View {
 /// switched in the drawer's switcher, with the tenants (owner 2026-11-10); the title is its name.
 struct HomeView: View {
     @Bindable var model: AppModel
+    @Environment(\.rowDetails) private var details
+    @Environment(\.covers) private var covers
+    @Environment(\.picking) private var picking
+    /// The tiles' width between the page's margins, as last measured.
+    @State private var tilesWidth: CGFloat = 0
     @State private var naming = false
     @State private var newName = ""
     @State private var nameProblem: String?
@@ -586,35 +591,75 @@ struct HomeView: View {
         level.modifier(KeepsScroll(key: levelKey))
     }
 
-    private var level: some View {
-        List {
-            NodeHeroRow()
-            if model.filters.count > 1 {
-                Picker(say(.filter), selection: Binding(get: { model.shell.filter }, set: { model.setFilter($0) })) {
-                    ForEach(Array(model.filters.enumerated()), id: \.offset) { _, f in
-                        Text(f.map { Names.application($0) } ?? say(.filterAll)).tag(f)
+    /// The filters at the top: one application's objects kept, the folders stay.
+    @ViewBuilder private var filterPicker: some View {
+        if model.filters.count > 1 {
+            Picker(say(.filter), selection: Binding(get: { model.shell.filter }, set: { model.setFilter($0) })) {
+                ForEach(Array(model.filters.enumerated()), id: \.offset) { _, f in
+                    Text(f.map { Names.application($0) } ?? say(.filterAll)).tag(f)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    /// The level as rows (`List`) or as tiles (ADR 0149 decision 8), as the account chose.
+    @ViewBuilder private var levelBody: some View {
+        let groups = model.levelGroups
+        if model.levelView == .tiles {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    NodeHeroRow().padding(.horizontal)
+                    filterPicker.padding(.horizontal)
+                    if groups.isEmpty {
+                        Text(say(.listEmpty)).foregroundStyle(Role.muted).padding(.horizontal)
+                    }
+                    // the folders apart from the rest, as the web's level view (core's `Home.groups`)
+                    ForEach(groups, id: \.folders) { group in
+                        if let heading = group.heading { SectionLabel(title: say(heading)).padding(.horizontal) }
+                        NodeTiles(items: group.nodes.compactMap(tile), width: tilesWidth).padding(.horizontal)
                     }
                 }
-                .pickerStyle(.segmented)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                .padding(.vertical, 8)
             }
-            let groups = model.levelGroups
-            if groups.isEmpty {
-                Text(say(.listEmpty)).foregroundStyle(Role.muted).listRowBackground(Color.clear)
-            }
-            // the folders apart from the rest, as the web's level view (core's `Home.groups`)
-            ForEach(groups, id: \.folders) { group in
-                Section {
-                    rows(group.nodes)
-                } header: {
-                    if let heading = group.heading { SectionLabel(title: say(heading)) }
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { tilesWidth = max(0, $0 - 32) }
+        } else {
+            List {
+                NodeHeroRow()
+                filterPicker
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
+                if groups.isEmpty {
+                    Text(say(.listEmpty)).foregroundStyle(Role.muted).listRowBackground(Color.clear)
+                }
+                // the folders apart from the rest, as the web's level view (core's `Home.groups`)
+                ForEach(groups, id: \.folders) { group in
+                    Section {
+                        rows(group.nodes)
+                    } header: {
+                        if let heading = group.heading { SectionLabel(title: say(heading)) }
+                    }
                 }
             }
         }
+    }
+
+    /// A node of the level as a tile: a folder enters, an object opens.
+    private func tile(_ node: NodeRef) -> NodeTileItem? {
+        if let folder = node.asFolder() {
+            return NodeTileItem(id: node.nodeId, name: node.name, cover: model.covers[node.nodeId]?.image, symbol: "folder", folder: true) { model.enter(folder) }
+        }
+        guard let ref = node.asObject() else { return nil }
+        return NodeTileItem(ref: ref, details: details, covers: covers, picking: picking, onOpen: model.open)
+    }
+
+    private var level: some View {
+        levelBody
         // the level's "New" (the web's menu): a folder here, or a Pot here
         // a folder Home shows: core's actions on it, as the web's level header has them
         .toolbar {
+            // List or Tiles (Files' View menu)
+            ToolbarItem(placement: ViewModeMenu.placement) { ViewModeMenu(model: model) }
             // one "More" menu (as Files' folder menu): a level's bar keeps its room for its title
             if let space = model.shell.space, let folder = model.shell.folderAt(scopeId: space), let contribution = KindPage.of(folder.kind)?.header(folder, model) {
                 ToolbarItem(placement: .primaryAction) {
@@ -801,24 +846,52 @@ struct ShareBanner: View {
     }
 }
 
+/// An application's arranged list — its favorites, the recent ones, all — as rows or as tiles (the account's one choice,
+/// ADR 0149 decision 8), with the View menu in its toolbar.
 struct ArrangedListView: View {
+    @Bindable var model: AppModel
     let list: ArrangedList
     let onOpen: (ObjectRef) -> Void
     /// Which list this is, for where it was scrolled to (`KeepsScroll`).
     let key: String
+    @Environment(\.rowDetails) private var details
+    @Environment(\.covers) private var covers
+    @Environment(\.picking) private var picking
+    @State private var tilesWidth: CGFloat = 0
 
     var body: some View {
-        if list.favorites.isEmpty && list.recent.isEmpty && list.all.isEmpty {
-            ContentUnavailableView(say(.listEmpty), systemImage: "tray")
-        } else {
-            List {
-                if !list.favorites.isEmpty { Section { rows(list.favorites) } header: { SectionLabel(title: say(.drawerFavorites)) } }
-                if !list.recent.isEmpty { Section { rows(list.recent) } header: { SectionLabel(title: say(.drawerRecent)) } }
-                if !list.all.isEmpty { Section { rows(list.all) } }
+        Group {
+            if list.favorites.isEmpty && list.recent.isEmpty && list.all.isEmpty {
+                ContentUnavailableView(say(.listEmpty), systemImage: "tray")
+            } else if model.levelView == .tiles {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        if !list.favorites.isEmpty { tiles(list.favorites, heading: say(.drawerFavorites)) }
+                        if !list.recent.isEmpty { tiles(list.recent, heading: say(.drawerRecent)) }
+                        if !list.all.isEmpty { tiles(list.all, heading: nil) }
+                    }
+                    .padding(.vertical, 8)
+                }
+                .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { tilesWidth = max(0, $0 - 32) }
+                .modifier(KeepsScroll(key: key))
+            } else {
+                List {
+                    if !list.favorites.isEmpty { Section { rows(list.favorites) } header: { SectionLabel(title: say(.drawerFavorites)) } }
+                    if !list.recent.isEmpty { Section { rows(list.recent) } header: { SectionLabel(title: say(.drawerRecent)) } }
+                    if !list.all.isEmpty { Section { rows(list.all) } }
+                }
+                .scrollContentBackground(.hidden)
+                .modifier(KeepsScroll(key: key))
             }
-            .scrollContentBackground(.hidden)
-            .modifier(KeepsScroll(key: key))
         }
+        // List or Tiles (Files' View menu)
+        .toolbar { ToolbarItem(placement: ViewModeMenu.placement) { ViewModeMenu(model: model) } }
+    }
+
+    @ViewBuilder private func tiles(_ refs: [ObjectRef], heading: String?) -> some View {
+        if let heading { SectionLabel(title: heading).padding(.horizontal) }
+        NodeTiles(items: refs.map { NodeTileItem(ref: $0, details: details, covers: covers, picking: picking, onOpen: onOpen) }, width: tilesWidth)
+            .padding(.horizontal)
     }
 
     private func rows(_ refs: [ObjectRef]) -> some View {
@@ -970,7 +1043,7 @@ struct ExpensesList: View {
     @State private var creating = false
 
     var body: some View {
-        ArrangedListView(list: model.applicationList(.expenses), onOpen: model.open, key: "app:\(ApplicationId.expenses)")
+        ArrangedListView(model: model, list: model.applicationList(.expenses), onOpen: model.open, key: "app:\(ApplicationId.expenses)")
             .navigationTitle(Names.application(.expenses))
             .createAction(say(.createPot), shown: !model.spaces.isEmpty && model.online) { creating = true }
             .sheet(isPresented: $creating) { NewPotSheet(model: model) }
@@ -985,7 +1058,7 @@ struct MemoriesList: View {
     private var space: String? { model.shell.space ?? model.spaces.first?.scopeId }
 
     var body: some View {
-        ArrangedListView(list: model.applicationList(.memories), onOpen: model.open, key: "app:\(ApplicationId.memories)")
+        ArrangedListView(model: model, list: model.applicationList(.memories), onOpen: model.open, key: "app:\(ApplicationId.memories)")
             .navigationTitle(Names.application(.memories))
             .createAction(say(.memoryNew), shown: space != nil && model.online) { naming = true }
             .sheet(isPresented: $naming) {

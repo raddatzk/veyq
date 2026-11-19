@@ -49,11 +49,12 @@ struct KindPage {
     }
 
     /// Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover; its ZIP and its copy (a plain folder).
-    /// Memories' Memory and chapter: their gallery (`MemoryScreen`); their cover is core's. Their header plays or stops their
+    /// Memories' Memory and chapter: their gallery (`MemoryScreen`); their cover, copy and download are core's. Their header plays or stops their
     /// music (core's `GalleryModel.headerActions`' MUSIC, ADR 0142 decision 6) and opens the banner's dialog where whoever
     /// looks may set it, online (ADR 0144 decision 5; the web's header `banner`); adding photos is the page's creating menu.
     private static let memory = KindPage(header: { node, model in
-        guard let gallery = model.galleryModel(node), let state = model.galleryState(node) else { return HeaderContribution() }
+        let download: (String) async -> [NodeExport.Skipped]? = { await model.downloadNode(node, to: $0) }
+        guard let gallery = model.galleryModel(node), let state = model.galleryState(node) else { return HeaderContribution(download: download) }
         let music = gallery.headerActions.filter { $0.id == GalleryModel.companion.MUSIC }.map { a in
             OwnAction(id: a.id, label: gallery.label(id: a.id).map { say($0) } ?? a.id, systemImage: state.musicHere ? "stop.fill" : "music.note", slot: a.slot) {
                 gallery.toggleMusic()
@@ -62,7 +63,8 @@ struct KindPage {
         let banner = state.editsBanner ? [OwnAction(id: bannerAction, label: say(state.banner != nil ? .memoryBannerChange : .memoryBannerAdd), systemImage: "photo.artframe") {
             model.openBanner(gallery)
         }] : []
-        return HeaderContribution(actions: music + banner)
+        // its download, the web's archive of the Memory (core's `MemoryExport`); its copy is core's door (ADR 0149 decision 3)
+        return HeaderContribution(download: download, actions: music + banner)
     }, body: { ref, _, model in AnyView(MemoryScreen(model: model, ref: ref)) })
 
     /// The header's banner action: its id in the kind's order (`AppKinds.headerOrder`).

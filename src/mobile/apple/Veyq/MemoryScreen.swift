@@ -32,14 +32,21 @@ struct MemoryScreen: View {
     @State private var pickingTracks = false
     /// The page's size as last measured: the banner's frame is never taller than 60 % of its height (ADR 0144 decision 4).
     @State private var page: CGSize = .zero
+    /// The Contributions view's model while it is asked for (ADR 0149 decision 6).
+    @State private var contributions: ContributionsHeld?
+    /// The filter's text as typed (core's follows a moment later: a field never reads core right after its edit).
+    @State private var filterText = ""
     @Environment(\.scenePhase) private var phase
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
+    #else
+    @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
 
     private var node: NodeAt { ref.at }
     private var state: GalleryModel.State? { model.galleryState(node) }
-    private var rows: [GalleryModel.Row] { state?.rows ?? [] }
+    /// The rows the grid shows: the gallery's, narrowed by the filter (core's `shown`; the lightbox pages the same).
+    private var rows: [GalleryModel.Row] { state?.shown ?? [] }
     private var uploading: [UploadTile] { state?.uploading ?? [] }
     /// What the page adds (core's: the rights' upload, a chapter where it makes one).
     private var uploads: Bool { state?.rights.upload ?? false }
@@ -53,7 +60,24 @@ struct MemoryScreen: View {
     private var musicAdds: Bool { showsMusic && (model.musicShown?.rights.add ?? false) }
     private var showsMap: Bool { view == .map }
     private var tracksAdd: Bool { showsMap && (model.tracksShown?.rights.add ?? false) }
-    private var viewSwitch: MemoryViewSwitch { MemoryViewSwitch(view: $view, music: musicOffered) }
+    /// The Contributions view, the fourth segment: a member's (core's `buckets` right), where offered (ADR 0149 decision 6).
+    private var contributionsOffered: Bool { (state?.rights.buckets ?? false) && Contributions.companion.OFFERED }
+    private var showsContributions: Bool { view == .contributions && contributionsOffered }
+    private var showsPhotos: Bool { !showsMusic && !showsMap && !showsContributions }
+    private var viewSwitch: MemoryViewSwitch { MemoryViewSwitch(view: $view, music: musicOffered, contributions: contributionsOffered) }
+
+    /// Whether the gallery's filter is offered (core's `filterFacts`): the Photos view, online or offline.
+    private var filters: Bool { showsPhotos && (state?.rights.filterFacts ?? false) }
+    /// The filter as a search field in the navigation bar, with its chips as tokens: an iPhone's page, whose bar holds no
+    /// other search. On an iPad and a Mac the toolbar's one field is the shell's search (owner 2026-11-10), so the filter is a
+    /// field of the page's own above the grid (`GalleryFilterBar`).
+    private var filterInBar: Bool {
+        #if os(iOS)
+        sizeClass == .compact
+        #else
+        false
+        #endif
+    }
 
     /// The page's date and place under its header (ADR 0143 D5).
     @ViewBuilder private var factsLine: some View {
@@ -94,16 +118,43 @@ struct MemoryScreen: View {
                 MusicList(model: model, music: music, banner: listBanner, facts: listFacts, viewSwitch: viewSwitch)
             } else if showsMap, let tracks {
                 MemoryMapView(model: model, tracks: tracks, gallery: state, banner: listBanner, facts: listFacts, viewSwitch: viewSwitch)
+            } else if showsContributions, let contributions, let gallery = model.galleryModel(node) {
+                ContributionsView(model: model, gallery: gallery, held: contributions, marks: state?.marks ?? [:], head: AnyView(pageHead)) { mediaId in
+                    open = LightboxStart(gallery: gallery, box: gallery.lightboxOn(mediaId: mediaId))
+                }
             } else {
                 photoGrid
             }
         }
         .onGeometryChange(for: CGSize.self, of: { $0.size }) { page = $0 }
         .navigationTitle(ref.name))
+        .modifier(GalleryFilterField(shown: filters && filterInBar, gallery: model.galleryModel(node), filter: state?.filter, text: $filterText))
         .task(id: showsMusic) {
             guard showsMusic, let gallery = model.galleryModel(node) else { return }
             music = model.musicModel(gallery)
         }
+        // the Contributions view's model while it shows; read anew as the gallery's rows change (an upload, a move)
+        .task(id: ContributionsKey(node: node, shown: showsContributions, rows: state?.rows?.count ?? -1)) {
+            // another page's view goes with its page
+            if contributions?.gallery !== model.galleryModel(node) { contributions?.stop(); contributions = nil }
+            guard showsContributions, let gallery = model.galleryModel(node) else {
+                contributions?.stop()
+                contributions = nil
+                return
+            }
+            if contributions == nil, let made = model.contributions(gallery) { contributions = ContributionsHeld(made, gallery: gallery) }
+            await contributions?.read()
+        }
+        // the page left: the view's watch stops (its task makes it anew when the page shows again)
+        .onDisappear { contributions?.stop(); contributions = nil }
+        // the filter is the page's (stored nowhere): what is typed goes to core, which narrows the grid
+        .onChange(of: filterText) { _, now in
+            guard let gallery = model.galleryModel(node), now != gallery.current.filter.text else { return }
+            let f = gallery.current.filter
+            gallery.filter(filter: GalleryFilter.State(mode: f.mode, chips: f.chips, text: now))
+        }
+        // another Memory's page: its filter starts empty, as core's does
+        .onChange(of: ref) { filterText = "" }
         .task(id: showsMap) {
             guard showsMap, let gallery = model.galleryModel(node) else { return }
             tracks = model.trackList(gallery)
@@ -124,15 +175,24 @@ struct MemoryScreen: View {
         })
     }
 
+    /// The page's head above every scrolling view: the banner, the cover, the facts and people lines and the view switch.
+    @ViewBuilder private var pageHead: some View {
+        bannerRow
+        NodeHeroRow()
+        factsLine.padding(.horizontal)
+        peopleLine.padding(.horizontal)
+        viewSwitch.padding(.horizontal)
+    }
+
     private var photoGrid: some View {
         ScrollView {
             // lazy: only the rows near the viewport are built (ADR 0105), the grid's rows among the page's own
             LazyVStack(alignment: .leading, spacing: Self.margin) {
-                bannerRow
-                NodeHeroRow()
-                factsLine.padding(.horizontal)
-                peopleLine.padding(.horizontal)
-                viewSwitch.padding(.horizontal)
+                pageHead
+                // an iPad's and a Mac's filter: a field of the page's own (the toolbar's is the shell's search)
+                if filters, !filterInBar, let gallery = model.galleryModel(node), let filter = state?.filter {
+                    GalleryFilterBar(gallery: gallery, filter: filter, text: $filterText).padding(.horizontal)
+                }
                 if let chapters = state?.chapters, !chapters.isEmpty {
                     Text(say(.memoryChapters)).font(.headline).padding(.horizontal)
                     ForEach(chapters, id: \.nodeId) { c in
@@ -155,10 +215,22 @@ struct MemoryScreen: View {
                     Text(say(failure)).foregroundStyle(state?.offline != nil ? Role.muted : Role.danger).padding()
                 } else if state?.rows == nil {
                     ProgressView().frame(maxWidth: .infinity).padding()
-                } else if rows.isEmpty && uploading.isEmpty {
+                } else if (state?.rows ?? []).isEmpty && uploading.isEmpty {
                     Text(say(.memoryGalleryEmpty)).foregroundStyle(Role.muted).padding()
                 } else {
-                    if !rows.isEmpty { Text(say(.memoryItems, rows.count)).font(.footnote).foregroundStyle(Role.muted).padding(.horizontal) }
+                    // the count of what is shown, and the marks' mode beside it where offered (a member's, not personal)
+                    HStack {
+                        if !rows.isEmpty { Text(say(.memoryItems, rows.count)).font(.footnote).foregroundStyle(Role.muted) }
+                        Spacer(minLength: 0)
+                        if showsPhotos, let gallery = model.galleryModel(node), gallery.marksModeOffered, let filter = state?.filter {
+                            MarksModeMenu(gallery: gallery, filter: filter)
+                        }
+                    }
+                    .padding(.horizontal)
+                    // every filter in force named, so an empty grid never reads as an empty Memory (E5)
+                    if rows.isEmpty, let filter = state?.filter, filter.narrows {
+                        Text(GalleryFilterWords.empty(filter)).foregroundStyle(Role.muted).padding()
+                    }
                     // what this device sends here leads the grid as placeholder tiles (ADR 0145 decision 3)
                     let layout = GalleryModel.companion.layout(rows: rows, uploading: uploading, width: Double(gridWidth))
                     let at = Dictionary(uniqueKeysWithValues: rows.enumerated().map { ($0.element.mediaId, $0.offset) })
@@ -210,6 +282,10 @@ struct MemoryScreen: View {
             Button(say(.signinCancel), role: .cancel) {}
         } message: {
             if let chapterProblem { Text(chapterProblem) }
+        }
+        // what a mark's toggle left to say (too many, not saved): the heart sprang back (the lightbox says it over itself)
+        .alert(state?.markSaid.map { say(notice: $0) } ?? "", isPresented: Binding(get: { open == nil && state?.markSaid != nil }, set: { if !$0 { model.galleryModel(node)?.markSeen() } })) {
+            Button(say(.ok), role: .cancel) {}
         }
         // a medium's delete said: "Moved to trash" with its Undo while core offers it, what a restore refused
         .overlay(alignment: .bottom) {
@@ -292,15 +368,20 @@ struct MemoryScreen: View {
             #endif
             if let gallery = model.galleryModel(node) { open = LightboxStart(gallery: gallery, box: gallery.lightbox(index: Int32(index))) }
         } label: {
-            MediaTile(model: model, node: node, row: row, width: CGFloat(frame.width), height: CGFloat(frame.height))
+            MediaTile(model: model, node: node, row: row, mark: state?.marks[row.mediaId], width: CGFloat(frame.width), height: CGFloat(frame.height))
         }
         .buttonStyle(.plain)
         .offset(x: CGFloat(frame.left))
-        #if os(macOS)
+        // the tile's menu (ADR 0149 decision 4): its mark where whoever looks may mark, online, the own marks read; on a Mac
+        // "Open in New Window" too
         .contextMenu {
+            if let state, state.marking, state.marksLoaded, let gallery = model.galleryModel(node) {
+                MarkButton(gallery: gallery, mediaId: row.mediaId, mine: state.marks[row.mediaId]?.mine ?? false)
+            }
+            #if os(macOS)
             Button { openInWindow(row.mediaId) } label: { Label(say(.memoryOpenInWindow), systemImage: "macwindow.badge.plus") }
+            #endif
         }
-        #endif
     }
 
     #if os(macOS)
@@ -424,10 +505,12 @@ final class GalleryBox {
 
 /// One tile at the size the justified grid gave it: the medium's grid tier cropped to fill (its aspect is the tile's,
 /// bounded), a video marked; an icon where it has no tile to show.
-private struct MediaTile: View {
+struct MediaTile: View {
     let model: AppModel
     let node: NodeAt
     let row: GalleryModel.Row
+    /// Its badge (ADR 0149 decision 4): how many marked it and whether the caller did; nil where nobody did.
+    var mark: GalleryModel.Mark?
     let width: CGFloat
     let height: CGFloat
     @State private var picture: CGImage?
@@ -445,8 +528,12 @@ private struct MediaTile: View {
             .overlay {
                 if row.isVideo { Image(systemName: "play.circle.fill").font(.title).foregroundStyle(.white) }
             }
+            .overlay(alignment: .topTrailing) {
+                if let mark { MarkBadge(mark: mark).padding(5) }
+            }
             .clipped()
             .accessibilityLabel(row.name ?? "")
+            .accessibilityValue(mark.map(MarkBadge.said) ?? "")
             .task(id: row.mediaId) {
                 guard let blob = row.tile, let gallery = model.galleryModel(node) else { return }
                 picture = await model.mediaPicture(blob) {
@@ -531,6 +618,11 @@ private struct Lightbox: View {
     @State private var downloading = false
     @State private var downloaded: URL?
     @State private var failed: String?
+    /// The current medium's report sheet, made where the server takes reports (ADR 0149 decision 6); nil: not offered.
+    @State private var reportable: VeyqCore.ReportSheet?
+    /// The report sheet shown, and how many were sent or closed (each makes a fresh sheet for the next).
+    @State private var reporting: LightboxReport?
+    @State private var reports = 0
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -657,6 +749,22 @@ private struct Lightbox: View {
             .alert(failed ?? "", isPresented: Binding(get: { failed != nil }, set: { if !$0 { failed = nil } })) {
                 Button(say(.ok), role: .cancel) {}
             }
+            // what a mark's toggle left to say (too many, not saved): the heart sprang back
+            .alert(gallery.state.markSaid.map { say(notice: $0) } ?? "", isPresented: Binding(get: { gallery.state.markSaid != nil }, set: { if !$0 { gallery.gallery.markSeen() } })) {
+                Button(say(.ok), role: .cancel) {}
+            }
+            // a photo's or a video's report: core's sheet, as an ITEM (the track's path, ADR 0149 decision 6)
+            .task(id: "\(current?.mediaId ?? "") \(reports)") {
+                reportable = nil
+                guard let row = current, !row.blocked, gallery.state.offline == nil else { return }
+                reportable = try? await held.box.reportSheet()
+            }
+            .sheet(item: $reporting, onDismiss: { reports += 1 }) { report in
+                ReportSheet(model: model, ref: held.box.node, make: { report.sheet })
+                    #if os(macOS)
+                    .frame(minWidth: 460, minHeight: 520)
+                    #endif
+            }
             #if os(macOS)
             // Escape returns to the gallery (inline), the File menu's "Open in New Window" detaches it
             .onExitCommand { if mode == .inline { onClose() } }
@@ -681,7 +789,14 @@ private struct Lightbox: View {
             }
             .disabled(!playing && Int(state.index) >= state.rows.count - 1)
         }
+        // the mark (ADR 0149 decision 4): offered where whoever looks may mark, online, once the own marks are read
+        if let row = current, gallery.state.marking, gallery.state.marksLoaded {
+            MarkButton(gallery: gallery.gallery, mediaId: row.mediaId, mine: gallery.state.marks[row.mediaId]?.mine ?? false, filled: true)
+        }
         Button { details = true } label: { Label(say(.memoryDetails), systemImage: "info.circle") }
+        if let reportable {
+            Button { reporting = LightboxReport(sheet: reportable) } label: { Label(say(.reportAction), systemImage: "flag") }
+        }
         if let row = current, !row.blocked {
             if downloading {
                 ProgressView()
@@ -727,6 +842,12 @@ private struct Lightbox: View {
         if let url = downloaded { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         downloaded = nil
     }
+}
+
+/// A medium's report sheet shown from the lightbox, by its identity.
+private struct LightboxReport: Identifiable {
+    let sheet: VeyqCore.ReportSheet
+    var id: ObjectIdentifier { ObjectIdentifier(sheet) }
 }
 
 /// One medium of the lightbox: its preview fitted, a video's poster with its play button, a blocked one said so.

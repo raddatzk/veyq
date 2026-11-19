@@ -8,8 +8,8 @@ import VeyqCore
 struct PersonScreen: View {
     @Bindable var model: AppModel
     let userId: String
-    /// Memories' section while the profile shows (core's `PersonMemories`, read off the main thread); its List | Map choice
-    /// is not stored: it opens on the list.
+    /// Memories' section while the profile shows (core's `PersonMemories`, read off the main thread); its List | Tiles | Map
+    /// choice is the account's one view choice on this device (ADR 0149 decision 8), Tiles before any.
     @State private var section: PersonSection?
     /// *Edit profile* on one's own page (ADR 0148 decision 2): the same sheet as Settings' *Your profile*.
     @State private var editing = false
@@ -25,7 +25,7 @@ struct PersonScreen: View {
                     // the map takes the page below the frame; the list scrolls with it
                     VStack(spacing: 0) {
                         frame(profile).padding(.bottom, 8)
-                        PersonMemoriesHead(profile: profile, section: section).padding(.horizontal)
+                        PersonMemoriesHead(model: model, profile: profile, section: section).padding(.horizontal)
                         MemoriesPinMap(model: model, pins: section.state.value.map) { section.memories.open(pin: $0) }
                     }
                 } else {
@@ -41,7 +41,7 @@ struct PersonScreen: View {
                             Section {
                                 PersonMemoriesRows(model: model, section: section)
                             } header: {
-                                PersonMemoriesHead(profile: profile, section: section)
+                                PersonMemoriesHead(model: model, profile: profile, section: section)
                             }
                         }
                     }
@@ -117,9 +117,10 @@ final class PersonSection {
     }
 }
 
-/// "Memories with {name}", the List | Map switch once something is listed (a segmented control, as the system's own apps
-/// switch a page between views of the same thing), and the partial list said.
+/// "Memories with {name}", the List | Tiles | Map switch once something is listed (a segmented control, as the system's own
+/// apps switch a page between views of the same thing), and the partial list said.
 private struct PersonMemoriesHead: View {
+    let model: AppModel
     let profile: PersonProfile
     let section: PersonSection
 
@@ -132,8 +133,9 @@ private struct PersonMemoriesHead: View {
                 .foregroundStyle(Role.text)
                 .textCase(nil)
             if s.offersViews {
-                Picker(say(.memoryPeopleWith), selection: Binding(get: { s.view }, set: { section.view($0) })) {
+                Picker(say(.memoryPeopleWith), selection: Binding(get: { s.view }, set: { section.view($0); model.viewChosen() })) {
                     Text(say(.nodeViewList)).tag(PersonMemories.View.list)
+                    Text(say(.nodeViewTiles)).tag(PersonMemories.View.tiles)
                     Text(say(.memoryViewMap)).tag(PersonMemories.View.map)
                 }
                 .pickerStyle(.segmented)
@@ -151,6 +153,8 @@ private struct PersonMemoriesHead: View {
 private struct PersonMemoriesRows: View {
     let model: AppModel
     let section: PersonSection
+    @Environment(\.covers) private var covers
+    @State private var width: CGFloat = 0
 
     private var s: PersonMemories.State { section.state.value }
 
@@ -165,6 +169,15 @@ private struct PersonMemoriesRows: View {
             Button(say(.memoryPeopleRetry)) { section.reload() }
         } else if s.empty {
             Text(say(.memoryPeopleEmpty)).foregroundStyle(Role.muted)
+        } else if s.view == .tiles {
+            // the tiles in one row of the list, its width the row's (ADR 0149 decision 8)
+            NodeTiles(items: s.rows.map { row in
+                NodeTileItem(id: row.ref.nodeId, name: row.ref.name, details: PersonMemoryRow.details(row), cover: covers[row.ref.nodeId], symbol: Names.kindSymbol(row.ref.kind)) {
+                    section.memories.open(row: row)
+                }
+            }, width: width)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width = $0 }
+            .listRowBackground(Color.clear)
         } else {
             ForEach(s.rows, id: \.ref.nodeId) { row in
                 PersonMemoryRow(row: row) { section.memories.open(row: row) }
@@ -179,9 +192,14 @@ private struct PersonMemoryRow: View {
     let onOpen: () -> Void
     @Environment(\.covers) private var covers
 
+    /// Its date, place and group, as its second line says them.
+    static func details(_ row: PersonMemories.Row) -> String {
+        [row.date.flatMap { MemoryDateText.text($0) }, row.placeName.flatMap { $0.isEmpty ? nil : $0 }, row.group.map { Names.spaceName($0) }]
+            .compactMap { $0 }.joined(separator: " · ")
+    }
+
     var body: some View {
-        let details = [row.date.flatMap { MemoryDateText.text($0) }, row.placeName.flatMap { $0.isEmpty ? nil : $0 }, row.group.map { Names.spaceName($0) }]
-            .compactMap { $0 }
+        let details = Self.details(row)
         Button(action: onOpen) {
             HStack(spacing: 12) {
                 if let cover = covers[row.ref.nodeId] {
@@ -193,7 +211,7 @@ private struct PersonMemoryRow: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(row.ref.name).fontWeight(.bold).foregroundStyle(Role.text)
-                    if !details.isEmpty { Text(details.joined(separator: " · ")).font(.caption).foregroundStyle(Role.muted) }
+                    if !details.isEmpty { Text(details).font(.caption).foregroundStyle(Role.muted) }
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Role.muted)

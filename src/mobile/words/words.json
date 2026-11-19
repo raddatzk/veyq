@@ -3055,6 +3055,59 @@
     "en": "You",
     "de": "Du"
   },
+  "memory_buckets_title": {
+    "note": "the Memory's Contributions view: the view switch's fourth segment (ADR 0149 decision 6)",
+    "en": "Contributions",
+    "de": "Beiträge"
+  },
+  "memory_buckets_empty_bucket": {
+    "en": "Nothing in this bucket yet.",
+    "de": "Noch nichts in diesem Bucket."
+  },
+  "memory_buckets_create_bucket": {
+    "en": "New sub-bucket",
+    "de": "Neues Unter-Bucket",
+    "apple_en": "New Sub-Bucket"
+  },
+  "memory_buckets_bucket_dialog_rename": {
+    "en": "Rename bucket",
+    "de": "Bucket umbenennen",
+    "apple_en": "Rename Bucket"
+  },
+  "memory_buckets_delete_bucket_title": {
+    "en": "Delete bucket?",
+    "de": "Bucket löschen?"
+  },
+  "memory_buckets_delete_bucket_copy": {
+    "en": "This deletes the bucket “{1}”. Its media move back to your main bucket — nothing is deleted. Type the name to confirm.",
+    "de": "Das löscht den Bucket „{1}“. Seine Medien wandern zurück in dein Haupt-Bucket — nichts wird gelöscht. Gib den Namen ein, um fortzufahren."
+  },
+  "memory_buckets_delete_bucket_name_label": {
+    "en": "Bucket name to confirm",
+    "de": "Bucket-Name zur Bestätigung"
+  },
+  "memory_buckets_delete_bucket_confirm": {
+    "en": "Delete bucket",
+    "de": "Bucket löschen",
+    "apple_en": "Delete Bucket"
+  },
+  "memory_buckets_move_media": {
+    "en": "Move item",
+    "de": "Medium verschieben",
+    "apple_en": "Move Item"
+  },
+  "memory_buckets_move_empty": {
+    "en": "No other bucket of yours yet — create a sub-bucket first.",
+    "de": "Noch kein anderes eigenes Bucket — leg zuerst ein Unter-Bucket an."
+  },
+  "memory_buckets_save_failed": {
+    "en": "Could not save the bucket.",
+    "de": "Bucket konnte nicht gespeichert werden."
+  },
+  "memory_buckets_move_failed": {
+    "en": "Could not move the media.",
+    "de": "Medien konnten nicht verschoben werden."
+  },
   "media_marks_too_many": {
     "en": "You have marked as many photos in this Memory as one list of marks can hold (12,284). Remove a mark to add another.",
     "de": "Du hast in dieser Erinnerung so viele Fotos markiert, wie eine Liste von Markierungen fassen kann (12.284). Entferne eine Markierung, um eine weitere zu setzen."
@@ -3062,6 +3115,89 @@
   "media_marks_save_failed": {
     "en": "Your mark could not be saved. Try again.",
     "de": "Deine Markierung konnte nicht gespeichert werden. Versuche es noch einmal."
+  },
+  "media_marks_mark": {
+    "note": "the web's media.marks.mark: a mark is shared with the space, so the words say so",
+    "en": "Mark this photo — everyone in this space sees it",
+    "de": "Dieses Foto markieren — alle in diesem Bereich sehen es"
+  },
+  "media_marks_unmark": {
+    "note": "the web's media.marks.unmark",
+    "en": "Remove your mark",
+    "de": "Deine Markierung entfernen"
+  },
+  "media_marks_filter_label": {
+    "note": "the web's media.marks.filterLabel: the marks' mode menu",
+    "en": "Show marked photos",
+    "de": "Markierte Fotos anzeigen"
+  },
+  "media_marks_filter_all": {
+    "en": "All",
+    "de": "Alle"
+  },
+  "media_marks_filter_everyone": {
+    "en": "Everyone's",
+    "de": "Von allen"
+  },
+  "media_marks_filter_mine": {
+    "en": "Only mine",
+    "de": "Nur meine"
+  },
+  "media_marks_empty_mine": {
+    "en": "You have not marked anything in this Memory yet.",
+    "de": "Du hast in dieser Erinnerung noch nichts markiert."
+  },
+  "media_marks_empty_everyone": {
+    "en": "Nobody has marked anything in this Memory yet.",
+    "de": "Niemand hat in dieser Erinnerung bisher etwas markiert."
+  },
+  "media_marks_count": {
+    "note": "a tile's badge as a screen reader says it: how many marked the photo (the web shows the bare count beside the heart)",
+    "en": {
+      "one": "Marked once",
+      "other": "Marked {1:int} times"
+    },
+    "de": {
+      "one": "Einmal markiert",
+      "other": "{1:int}-mal markiert"
+    }
+  },
+  "media_marks_yours": {
+    "note": "a tile's badge as a screen reader says it: the caller marked it",
+    "en": "Marked by you",
+    "de": "Von dir markiert"
+  },
+  "media_filter_label": {
+    "note": "the web's media.filter.label",
+    "en": "Filter the photos of this Memory",
+    "de": "Die Fotos dieser Erinnerung filtern"
+  },
+  "media_filter_placeholder": {
+    "en": "Day, place, name …",
+    "de": "Tag, Ort, Name …"
+  },
+  "media_filter_text": {
+    "note": "the free text as the empty state names it (the web's media.filter.text)",
+    "en": "“{1}”",
+    "de": "„{1}“"
+  },
+  "media_filter_marks_mine": {
+    "en": "your marks",
+    "de": "deine Markierungen"
+  },
+  "media_filter_marks_everyone": {
+    "en": "everyone’s marks",
+    "de": "Markierungen von allen"
+  },
+  "media_filter_empty": {
+    "note": "every filter in force, so an empty grid never reads as an empty Memory (the web's media.filter.empty)",
+    "en": "Nothing in this Memory matches {1}.",
+    "de": "Nichts in dieser Erinnerung passt zu {1}."
+  },
+  "media_filter_clear": {
+    "note": "the filter field's clear button (the web's field clears with its own control; no word of its own)",
+    "en": "Clear filter",
+    "de": "Filter löschen"
   },
   "memory_uploader_guest": {
     "en": "A guest",
@@ -5263,6 +5399,11 @@
     "note": "A person's Memories: the List | Map switch's list (owner 2026-11-17: a short word, not the web's \"List view\").",
     "en": "List",
     "de": "Liste"
+  },
+  "node_view_mode": {
+    "note": "the level's View menu (the web's node.viewMode)",
+    "en": "View",
+    "de": "Ansicht"
   },
   "memory_meta_unreadable": {
     "en": "This Memory’s details (date, place, cover) can’t be opened: they are damaged, or were replaced by something this app didn’t write. They can’t be changed, so nothing was saved, and trying again won’t help. Its photos are not affected.",

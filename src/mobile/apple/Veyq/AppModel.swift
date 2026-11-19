@@ -931,7 +931,7 @@ final class AppModel {
         if let held = openGallery, held.model.node == node { return held.model }
         guard let m = shellModel, let uploads = media else { return nil }
         closeGallery()
-        let made = m.galleryModel(ref: node, uploads: uploads, music: galleryMusic)
+        let made = m.galleryModel(ref: node, uploads: uploads, music: galleryMusic, calendar: Self.galleryCalendar)
         let id = ObjectIdentifier(made)
         let watch = made.watch { @Sendable state in
             nonisolated(unsafe) let state = state
@@ -984,7 +984,7 @@ final class AppModel {
     /// read it waits for it). Nil where the node is no longer a listed Memory or chapter, or no tenant is open.
     func windowLightbox(_ value: LightboxWindowValue) -> WindowLightbox? {
         guard let m = shellModel, let uploads = media, let node = m.galleryAt(scopeId: value.scopeId, nodeId: value.nodeId) else { return nil }
-        let gallery = m.galleryModel(ref: node, uploads: uploads, music: galleryMusic)
+        let gallery = m.galleryModel(ref: node, uploads: uploads, music: galleryMusic, calendar: Self.galleryCalendar)
         windowGalleries[ObjectIdentifier(gallery)] = gallery
         return WindowLightbox(gallery: gallery, box: gallery.lightboxOn(mediaId: value.mediaId))
     }
@@ -1104,6 +1104,45 @@ final class AppModel {
     func personMemories(_ userId: String) -> PersonSection? {
         shellModel.map { PersonSection($0.personMemories(userId: userId)) }
     }
+
+    // MARK: The gallery's filter, the contributions and the view mode (ADR 0149 decisions 5, 6 and 8)
+
+    /// The viewer's calendar for a gallery filter's day chips (inbox #989): an instant's day and its words in this device's
+    /// own calendar and time zone, as a picked time is converted for the core — the core does no zone arithmetic.
+    static let galleryCalendar = GalleryFilter.Calendar(
+        dayOf: { ms in
+            let c = Calendar.current.dateComponents([.year, .month, .day], from: Date(timeIntervalSince1970: Double(truncating: ms) / 1000))
+            return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+        },
+        label: { ms, withYear in
+            let at = Date(timeIntervalSince1970: Double(truncating: ms) / 1000)
+            return withYear.boolValue ? at.formatted(.dateTime.day().month(.abbreviated).year()) : at.formatted(.dateTime.day().month(.abbreviated))
+        }
+    )
+
+    /// The Contributions view of the page `gallery` (core's `Contributions`): made when the view is asked for, its state
+    /// watched by the view.
+    func contributions(_ gallery: GalleryModel) -> Contributions? {
+        shellModel?.contributions(gallery: gallery)
+    }
+
+    /// Moves with each view choice, so every level and a person's Memories draw the account's one choice anew.
+    private(set) var viewRevision = 0
+
+    /// How a level is drawn: the account's choice on this device (core's `ViewModes`), Tiles before any (`ViewMode.FIRST`).
+    var levelView: ViewMode {
+        _ = viewRevision
+        return shellModel?.levelView ?? ViewMode.companion.FIRST
+    }
+
+    /// `mode` chosen for every level and a person's Memories (one choice per account on this device).
+    func chooseView(_ mode: ViewMode) {
+        shellModel?.chooseView(mode: mode)
+        viewRevision += 1
+    }
+
+    /// A person's Memories chose their view through their own model (the same store): the levels follow.
+    func viewChosen() { viewRevision += 1 }
 
     // MARK: Map services (ADR 0143)
 

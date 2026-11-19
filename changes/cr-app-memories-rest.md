@@ -309,9 +309,15 @@ Each phase ends with every platform building.
   words from `words.json` (EN+DE). · Done when: `:android:assembleDebug` and `scripts/validate_mobile_words.py` and
   `scripts/validate_mobile_platform_guidelines.py` green; clicked on the emulator as a throwaway (§ Passes).
 
-- [ ] **9 Apple (iOS, macOS)** — as phase 8 in SwiftUI (`.searchable` with tokens, the tile's context menu marking, *View
+- [x] **9 Apple (iOS, macOS)** — as phase 8 in SwiftUI (`.searchable` with tokens, the tile's context menu marking, *View
   as* in the toolbar, `NSSavePanel`/`fileMover` for the download). · Done when: both Apple builds green; clicked on the
   Mac where its screen is free, else the owner's (#925).
+  *Status 2026-11-19:* built — `GalleryFilterViews.swift` (the badge, the heart, the marks' mode menu, the filter: an
+  iPhone's `.searchable` with tokens, an iPad's and a Mac's own field, #995), `ContributionsView.swift` (the fourth
+  segment), `LevelTiles.swift` (the View menu, core's `TileGrid`) on Home, a folder, the applications' lists and a
+  profile (List | Tiles | Map); the lightbox's heart and *Report*; a Memory's header download; the device's calendar
+  (#989's Apple half). Both builds green (`xcodebuild … -sdk macosx` and `-sdk iphonesimulator`, measured). Not clicked:
+  the Mac's screen was locked — #994; the bucket's lightbox pages the gallery — #996.
 
 - [ ] **10 Linux and Windows** — as phase 8 over the bridge (`gtk::SearchBar` / `AutoSuggestBox`, the header bar's
   toggle / the `CommandBar`'s *View*, a `gtk::GridView`/`FlowBox` / `ItemsRepeater` with a `UniformGridLayout` for the

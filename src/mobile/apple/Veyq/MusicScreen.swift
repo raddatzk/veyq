@@ -8,20 +8,23 @@ import VeyqCore
 
 /// Which of a Memory's views shows: its photos and videos, its music, or its map with its tracks (ADR 0143 D8).
 enum MemoryView: Hashable {
-    case photos, music, map
+    case photos, music, map, contributions
 }
 
-/// The view switch inside a Memory's or a chapter's screen (ADR 0142 decision 6, ADR 0143 D8): a segmented control, as
-/// the system's own apps switch a page between views of the same thing — Music where the page offers it, Map always.
+/// The view switch inside a Memory's or a chapter's screen (ADR 0142 decision 6, ADR 0143 D8, ADR 0149 decision 6): a
+/// segmented control, as the system's own apps switch a page between views of the same thing — Music where the page offers
+/// it, Map always, Contributions for a member.
 struct MemoryViewSwitch: View {
     @Binding var view: MemoryView
     var music = true
+    var contributions = false
 
     var body: some View {
         Picker(say(.memoryViewMap), selection: $view) {
             Text(say(.musicViewPhotos)).tag(MemoryView.photos)
             if music { Text(say(.musicViewMusic)).tag(MemoryView.music) }
             Text(say(.memoryViewMap)).tag(MemoryView.map)
+            if contributions { Text(say(.memoryBucketsTitle)).tag(MemoryView.contributions) }
         }
         .pickerStyle(.segmented)
         .labelsHidden()
