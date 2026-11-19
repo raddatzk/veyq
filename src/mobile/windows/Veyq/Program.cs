@@ -1,5 +1,5 @@
 // The process's entry in place of WinUI's generated Main (DISABLE_XAML_GENERATED_MAIN, Veyq.csproj), for one instance of
-// the packaged app (ADR 0150 § O3, cr-open-in-the-app phase 6): a `veyq:` link opened while the app runs starts a second
+// the packaged app (ADR 0150 § O3): a `veyq:` link opened while the app runs starts a second
 // process, which hands its activation to the running one (AppInstance's key "main") and exits; the running one shows
 // what the link asks (DeepLinks). Only with package identity: the MSIX is what claims `veyq:` (Package.appxmanifest.in),
 // and the unpackaged development loop keeps starting as many windows as it is asked for, each pass beside another its own.
