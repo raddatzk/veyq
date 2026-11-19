@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import me.raddatz.veyq.mobile.sharing.DeepLink
 
 class MainActivity : ComponentActivity() {
     private val model: AppModel by viewModels()
@@ -15,6 +16,7 @@ class MainActivity : ComponentActivity() {
         if (savedInstanceState == null) {
             devLogin(intent) // a recreation (rotation, dark mode) keeps its session
             receive(intent)
+            deepLink(intent)
             // a debug build's format matrix of the music's decks, logged (DevAudio)
             if (DevAudio.requested(intent)) DevAudio.run(applicationContext)
         }
@@ -48,6 +50,22 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         devLogin(intent)
         receive(intent)
+        deepLink(intent)
+    }
+
+    /**
+     * A `veyq:` link (ADR 0150 § O): `veyq://link` opens *Open a link* over whatever shows — the sign-in, the unlock or the
+     * open tenant —, anything else only brings the app to the front, which the system already did. Nothing of the URI is
+     * read but what core's [DeepLink.parse] reads, nothing of it is logged, and it is taken off the activity's intent so
+     * nothing later finds it there. A start from the recents list hands the task's first intent again: it opens nothing.
+     */
+    private fun deepLink(intent: android.content.Intent?) {
+        if (intent?.action != android.content.Intent.ACTION_VIEW || intent.scheme?.equals("veyq", ignoreCase = true) != true) return
+        val uri = intent.dataString
+        intent.data = null
+        if (intent.flags and android.content.Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0 || uri == null) return
+        // a field already open keeps what the person typed there
+        if (DeepLink.parse(uri) is DeepLink.Link && model.guests.asking.value == null) model.guests.ask()
     }
 
     /** What another app shared, read now (its permission is this intent's) and handed to the model to be placed. */
