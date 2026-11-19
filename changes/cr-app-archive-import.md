@@ -165,8 +165,22 @@ The web's `export.*` import keys ported to `words.json` (EN+DE, each `note` nami
   green; the macOS row run here or named open; iOS the owner's.
 - [ ] **9 Linux** — the same over the bridge (`AdwDialog` with an `AdwNavigationView`); its drops screened. · Done when:
   `python3 linux/run.py test` and `build` green; § Passes' Linux row.
-- [ ] **10 Windows** — the same (the settings frame's sub-page form or a `ContentDialog`, as ADR 0148's Windows
+- [x] **10 Windows** — the same (the settings frame's sub-page form or a `ContentDialog`, as ADR 0148's Windows
   flows); its drops screened. · Done when: `python3 windows/run.py build` green on the VM; § Passes' Windows row.
+  *Status (2026-11-19):* built — `ImportDialog.cs` (one `ContentDialog` through reading, the summary, running and done;
+  Import keeps it open and runs, *Upload as a file*, Cancel and Escape send `Import.Cancel`, a done import closes with the
+  core's line in the shell's `InfoBar`), its face without a widget in `ImportText.cs` (`ImportTextTest`, 8 cases; bitten:
+  no-room counted as an error → red); *Upload files*, *Upload folder…* and every drop go through `Import.Screen` /
+  `Import.ScreenFolder` (`DropSort.Screen`/`ScreenFolder`, one import per drop — the rest `DropSort.Plain`, `DropSortTest`).
+  `run.py build` green on the VM (`Veyq.Tests` 84, `Veyq.Bridge.Tests` 5, `PdfWebTest`). The Windows pass, a throwaway on
+  `tw-win.localhost` (UI Automation, the debug build): `web-download.zip` picked by *Upload files* into a folder → offered
+  (7 items, the web's summary) → Cancel wrote nothing; *Upload as a file* uploaded the ZIP (9778 B) as a file; Import then
+  Cancel while running → the level kept only the ZIP and *Trip* lay in the trash; Import → `Done, 7 of 7`, *Imported
+  “Trip”*; read back: `notes.txt` (44 B, its text), the drop box as a folder, the Pot's entry with its receipt (1661 B
+  JPEG opened), the Memory with its chapter and its photo's tile; the unpacked download picked by *Upload folder…* →
+  offered without *Upload as a file* → imported as *Trip (2)*. A drop from Explorer was not proven by UIA: the host kept
+  the app's window above Explorer, so the driven press landed on the app (no drag reached it); the drop's calls are
+  `DropSortTest`'s.
 - [ ] **11 the passes** — § Passes, each a throwaway, erased after; results into ADR 0152's Consequences.
 - [ ] **12 harvest** — the Use pages EN+DE: `spaces/download-and-import.md` § In the app, `depot/upload-files-and-folders.mdx`;
   `native-apps.md` § Built; #985's row deleted; this CR deleted. · Done when: `pnpm run check` in `site/` and every
