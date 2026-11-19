@@ -77,7 +77,8 @@ differences:
   open: as a **List**, newest first, or on a **Map**. There are no tiles, and the app does not remember your choice: a
   profile always opens on the list. You reach a profile from a Memory's people, or from **Added by** in a photo's details,
   while that person is still a member. The app has no search for people and no list of everyone.
-- **Not in the app yet:** your own name and picture, and a member's [safety number](/account/verify-a-person/). Change or check those in the browser.
+- **Your own profile page** has **Edit profile** for your name and picture ([Your profile](/account/your-profile/)), and
+  a member's profile shows their [safety number](/account/verify-a-person/) below their name.
 - **Offline** the people are shown as they were when the app last had a connection — the app keeps the space's member
   list on your device, locked like everything it keeps offline —, each with their letter instead of their picture, and
   nobody can be added.

@@ -89,8 +89,9 @@ Unterschieden:
   sich deine Wahl nicht: Ein Profil öffnet immer mit der Liste. Du erreichst ein Profil über die Personen einer
   Erinnerung oder über **Hinzugefügt von** in den Details eines Fotos, solange die Person noch Mitglied ist. Eine Suche
   nach Personen und eine Liste aller gibt es in der App nicht.
-- **Noch nicht in der App:** dein eigener Name und dein Bild und die [Sicherheitsnummer](/de/account/verify-a-person/) eines Mitglieds. Ändern oder
-  prüfen kannst du sie im Browser.
+- **Deine eigene Profilseite** hat **Profil bearbeiten** für deinen Namen und dein Bild
+  ([Dein Profil](/de/account/your-profile/)), und das Profil eines Mitglieds zeigt unter seinem Namen seine
+  [Sicherheitsnummer](/de/account/verify-a-person/).
 - **Offline** werden die Personen so angezeigt, wie die App sie zuletzt mit Verbindung kannte – sie behält die
   Mitgliederliste des Bereichs auf deinem Gerät, verschlossen wie alles, was sie offline behält –, jede mit ihrem
   Buchstaben statt ihres Bildes, und niemand lässt sich hinzufügen.
