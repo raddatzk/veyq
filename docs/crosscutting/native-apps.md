@@ -704,5 +704,6 @@ build, the pass the other three ran, and whether `BGContinuedProcessingTask`'s s
 identifier and how long `beginBackgroundTask` lasts (the Simulator has no background processing, and an ad-hoc macOS
 build keeps no trust and so no store). Not run on any app: a real phone's release build and the system killing the app,
 the presence level's offline unlock (a PIN or Windows Hello typed), the Flatpak's and the MSIX's own data folders, a
-pinned Depot file or folder (built, run by no test). Not part of it: a sync of pins while the app is not running (#896),
-writes made offline and sent later (#897), Expenses offline (#898).
+pinned Depot file or folder (built, run by no test). Not built: writes made offline and sent later, a sync of pins
+while the app is not running, Expenses offline and a space's media kept for search
+([ADR 0153](../decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md), Proposed; #897, #896, #898, #956).
