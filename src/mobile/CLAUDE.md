@@ -254,7 +254,10 @@ A Gradle build of its own, run through its own wrapper.
   popover, what it says as a toast), `drop_box` (a drop box's page: each guest's folder with its menu and files, the delete
   asked), `manage`
   for "Manage servers"; `header` with `trash`, `move_sheet`, `share_sheet`, `report` and `cover` for a node's header and
-  its sheets; `dev_login` in a debug build only), and `avatars` (`Held`, no widget and tested: the open
+  its sheets; Memories' rest (ADR 0149): `gallery_filter` (a gallery's filter as a `gtk::SearchBar`), `contributions` (the
+  Contributions view) and `tiles` (a level's and a profile's tiles, a `FlowBox` framed by the core's `TileGrid`), with the
+  app's own symbolic icons in `linux/icons/` (an item mark's heart: Adwaita draws none; build.rs adds them to the GResource);
+  `dev_login` in a debug build only), and `avatars` (`Held`, no widget and tested: the open
   tenant's pictures, asked for again only when the shell's id set or `picturesRound` changes; drawn as `adw::Avatar`).
   `src/main.rs` is the app. `build.rs` reads the generated bridge, words and theme from `VEYQ_GENERATED` and the
   library from `VEYQ_LIB_DIR`, both set by `run.py`. `Containerfile` (Fedora 44 by digest) is its build and run

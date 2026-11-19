@@ -23,7 +23,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::Facts, wire::NodeAt, wire::ObjectRef, wire::ShellModelState, wire::ShellShown};
+use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::Facts, wire::NodeAt, wire::ObjectRef, wire::ShellModelState, wire::ShellShown, wire::ViewModeShown};
 use crate::drop_box::DropBoxPage;
 use crate::file_page::FilePage;
 use crate::memories_map::MemoriesMap;
@@ -80,6 +80,9 @@ pub struct Shell {
     refresh: gtk::Button,
     /// The space's top level's share, "Add files only", shown where the core offers it (`ShellShown.topLevelShare`).
     top_share: gtk::Button,
+    /// A level's view (ADR 0149 decision 8), Files' way: one header bar button showing the view it turns to — tiles from the
+    /// list, the list from tiles (`View.Set`, the account's choice on this device). Shown on a level that offers both.
+    view_toggle: gtk::Button,
     /// An open Pot's "Add entry", the content's creating action, shown once the Pot is read and takes writes.
     add_entry: gtk::Button,
     /// A Memory's "Add chapter", its page's own creating action, shown where its gallery offers one.
@@ -184,6 +187,9 @@ impl Shell {
         let top_share = gtk::Button::builder().icon_name("send-to-symbolic").tooltip_text(words::share_role_uploader()).visible(false).build();
         top_share.update_property(&[gtk::accessible::Property::Label(&words::share_role_uploader())]);
         content_header.pack_end(&top_share);
+        let view_toggle = gtk::Button::builder().icon_name("view-grid-symbolic").visible(false).build();
+        view_toggle.set_widget_name("view-toggle");
+        content_header.pack_end(&view_toggle);
         let refresh_action = gio::SimpleAction::new("pot-refresh", None);
         window.add_action(&refresh_action);
         let content_view = adw::ToolbarView::new();
@@ -247,6 +253,7 @@ impl Shell {
             header_bar,
             refresh,
             top_share,
+            view_toggle,
             add_entry: add_entry.clone(),
             add_chapter: add_chapter.clone(),
             refresh_action,
@@ -288,6 +295,14 @@ impl Shell {
             s.split.set_show_content(true);
         });
         self.back.connect_clicked(|_| bridge::send(Call::ShellBack));
+        // the level's view turned: the other of the two it offers
+        let weak = Rc::downgrade(self);
+        self.view_toggle.connect_clicked(move |_| {
+            let Some(s) = weak.upgrade() else { return };
+            let Some(mode) = s.now.borrow().as_ref().and_then(|(_, shown)| other_view(shown)) else { return };
+            eprintln!("veyq: view set {mode:?}");
+            bridge::send(Call::ViewSet { mode });
+        });
         let download = gio::SimpleAction::new("pot-download", None);
         let weak = Rc::downgrade(self);
         download.connect_activate(move |_, _| {
@@ -943,7 +958,7 @@ impl Shell {
                     page.widget().clone().upcast()
                 } else {
                     let list = if shell.application.is_some() {
-                        home::list(shown.list.as_ref())
+                        home::list(shown.list.as_ref(), shown.view)
                     } else {
                         // a folder's level starts with its head, as the Pot's and the Memory's pages (none on a space's root)
                         home::home(state, shown, self.drops().as_ref(), self.header.borrow().as_ref().map(Header::hero))
@@ -978,10 +993,27 @@ impl Shell {
         }
         self.refresh.set_visible(pot_open || memory_open || self.drop_box.borrow().is_some());
         self.top_share.set_visible(shown.top_level_share);
+        // a level's view: where a level shows (no object, no person, not the bar's Map tab) and it offers another
+        let level = shell.person.is_none() && shell.open_object.is_none() && !map_tab;
+        match other_view(shown).filter(|_| level) {
+            Some(to) => {
+                let (icon, label) = if to == ViewModeShown::Tiles { ("view-grid-symbolic", words::node_view_grid_label()) } else { ("view-list-symbolic", words::node_view_list_label()) };
+                self.view_toggle.set_icon_name(icon);
+                self.view_toggle.set_tooltip_text(Some(&label));
+                self.view_toggle.update_property(&[gtk::accessible::Property::Label(&label)]);
+                self.view_toggle.set_visible(true);
+            }
+            None => self.view_toggle.set_visible(false),
+        }
         if self.content_view.content().as_ref() != Some(&body) {
             self.content_view.set_content(Some(&body));
         }
     }
+}
+
+/// The view a level's toggle turns to: the other of the two it offers (`ShellShown.views`), none where it offers one.
+fn other_view(shown: &ShellShown) -> Option<ViewModeShown> {
+    (shown.views.len() > 1).then(|| shown.views.iter().copied().find(|v| *v != shown.view)).flatten()
 }
 
 /// Where each list was scrolled to, by its place ([ListScrolls::place]): the shell draws a list anew on every state and

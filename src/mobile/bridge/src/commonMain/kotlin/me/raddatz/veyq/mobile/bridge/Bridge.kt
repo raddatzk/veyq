@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -1214,7 +1215,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noGallery
             is Call.GalleryLayout -> galleries[call.gallery]?.let { g ->
                 val now = g.state.value
-                val laid = me.raddatz.veyq.mobile.memories.GalleryModel.layout(now.rows.orEmpty(), now.uploading, call.width)
+                // the rows the filter shows (ADR 0149 decision 5), as `GalleryShown.rows` names them: the host builds a tile from those
+                val laid = me.raddatz.veyq.mobile.memories.GalleryModel.layout(now.shown.orEmpty(), now.uploading, call.width)
                 val shown = laid.window(call.top, call.viewHeight).map { laid.rows[it] }
                 Answer.GridLayout(shown.map { r -> GridRow(r.index, r.top, r.height, r.tiles.map { GridTile(it.id, it.left, it.width) }) }, laid.height, laid.rows.size)
             } ?: noGallery
@@ -2214,7 +2216,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Watched.GalleryLive -> flow { galleries[w.gallery]?.live() }
         // the section's follow runs inside this watch's own job, as a gallery's poll: it ends with the watch or the page
         is Watched.SettingsStorageLive -> flow { accountPages[w.settings]?.model?.followStorage() }
-        is Watched.Lightbox -> lightboxes[w.lightbox]?.let { held -> held.model.state.map { Update.Lightbox(w.lightbox, shownLightbox(held, it)) } }
+        // the heart's state is the gallery's marks (ADR 0149 decision 4): a toggle moves them, not the lightbox's own state
+        is Watched.Lightbox -> lightboxes[w.lightbox]?.let { held ->
+            combine(held.model.state, held.page.state.map { it.marks to it.marksLoaded }.distinctUntilChanged()) { s, _ -> Update.Lightbox(w.lightbox, shownLightbox(held, s)) }
+        }
             ?: flowOf(Update.Lightbox(w.lightbox, null))
         Watched.Player -> player.flatMapLatest { p ->
             p?.state?.map { Update.Player(PlayerShown(it.nowPlaying?.let(NowPlayingShown::of), it.notice?.let { n -> playerNotice(n) })) }
@@ -2839,6 +2844,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             profileEncoder: me.raddatz.veyq.mobile.media.WebpEncoder? = me.raddatz.veyq.mobile.media.coreWebpEncoder,
             /** The search's words in the host's language: the host's ([HostWords]). */
             words: me.raddatz.veyq.mobile.search.SearchWords = me.raddatz.veyq.mobile.search.SearchWords { it.key },
+            /** The gallery filter's day chips' calendar (inbox #989): the desktop's zone in the library ([LocalCalendar]); UTC on the JVM. */
+            calendar: me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar = me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar.UTC,
             now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
         ): Bridge<VeyqAccount, TenantSession> = Bridge {
             val recent = RecentUses(
@@ -2874,9 +2881,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 squarePicture = squarePicture,
                 readKey = { text -> me.raddatz.veyq.mobile.crypto.SecretKeyText.read(primitives, text) },
             ) { t ->
+                val shell = ShellModel(t, hidden, recent, now)
                 Tenant(
-                    ShellModel(t, hidden, recent, now), { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load, t.pictures.held.map { it.round },
+                    shell, { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load, t.pictures.held.map { it.round },
                     ownProfile = { t.profile(profileEncoder) }, trust = t.personTrust, spaces = { t.spaces() },
+                    gallery = { node, uploads, music -> shell.galleryModel(node, uploads, music, calendar) },
                 )
             }
         }

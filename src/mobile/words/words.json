@@ -3108,6 +3108,11 @@
     "en": "Could not move the media.",
     "de": "Medien konnten nicht verschoben werden."
   },
+  "media_unavailable": {
+    "note": "the Contributions view did not read (the web's media.unavailable)",
+    "en": "This Memory can’t be opened right now.",
+    "de": "Diese Erinnerung lässt sich gerade nicht öffnen."
+  },
   "media_marks_too_many": {
     "en": "You have marked as many photos in this Memory as one list of marks can hold (12,284). Remove a mark to add another.",
     "de": "Du hast in dieser Erinnerung so viele Fotos markiert, wie eine Liste von Markierungen fassen kann (12.284). Entferne eine Markierung, um eine weitere zu setzen."

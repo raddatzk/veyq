@@ -15,6 +15,11 @@
 //! head, the facts line: the node's date and place, each opening its editor where whoever looks may edit them
 //! ([crate::memory_facts]).
 //!
+//! Memories' rest (ADR 0149 decisions 4–6): a tile carries its mark's badge — the heart, filled where the caller marked it,
+//! with how many did where the scope counts them; no button (the heart is the lightbox's) —; over the grid the filter
+//! ([crate::gallery_filter]), which the grid and the lightbox both follow; and for a member a fourth toggle,
+//! Contributions ([crate::contributions]).
+//!
 //! Every state is the core's `GalleryModel` (`Gallery.Open`, `Watched.Gallery`): the rows, the chapters, what it offers
 //! (rights only remove functions: share view = member view). Nothing decrypted is written to show it (ADR 0047).
 use std::cell::{Cell, RefCell};
@@ -29,6 +34,8 @@ use crate::bridge::{self, Watch, wire::Answer, wire::ApplicationId, wire::Call, 
 use crate::drop::Sorted;
 use crate::home::{glib_escape, kind_icon};
 use crate::banner::BannerView;
+use crate::contributions::ContributionsView;
+use crate::gallery_filter::FilterBar;
 use crate::curation::PeopleLine;
 use crate::lightbox::Lightbox;
 use crate::memory_facts::FactsLine;
@@ -73,7 +80,13 @@ struct Inner {
     /// Photos | Music | Map (Music where the gallery offers its Music view, and whether it is listed now); the photos'
     /// part (the chapters and the grid), the Music view's place and the Map view's, one of them shown.
     switch: adw::ToggleGroup,
-    music_listed: Cell<Option<bool>>,
+    /// What the switch lists beyond Photos and Map: (Music, Contributions), once a state said so.
+    listed: Cell<Option<(bool, bool)>>,
+    /// The filter over the photos (ADR 0149 decision 5).
+    filter: FilterBar,
+    /// The Contributions view's place and the view while it shows (ADR 0149 decision 6).
+    contributions_slot: gtk::Box,
+    contributions: RefCell<Option<ContributionsView>>,
     photos: gtk::Box,
     music_slot: gtk::Box,
     music: RefCell<Option<MusicView>>,
@@ -175,8 +188,12 @@ impl MemoryPage {
         column.append(&music_slot);
         let map_slot = gtk::Box::builder().orientation(gtk::Orientation::Vertical).visible(false).build();
         column.append(&map_slot);
+        let contributions_slot = gtk::Box::builder().orientation(gtk::Orientation::Vertical).visible(false).build();
+        column.append(&contributions_slot);
         let chapters = adw::PreferencesGroup::builder().title(words::memory_chapters()).visible(false).build();
         photos.append(&chapters);
+        let filter = FilterBar::new();
+        photos.append(filter.widget());
         let status = gtk::Box::new(gtk::Orientation::Vertical, 0);
         photos.append(&status);
         let grid = gtk::Fixed::builder().hexpand(true).build();
@@ -199,7 +216,10 @@ impl MemoryPage {
             add_banner_content: add_content,
             banner_asked: Cell::new(false),
             switch,
-            music_listed: Cell::new(None),
+            listed: Cell::new(None),
+            filter,
+            contributions_slot,
+            contributions: RefCell::new(None),
             photos,
             music_slot,
             music: RefCell::new(None),
@@ -363,6 +383,7 @@ impl Drop for MemoryPage {
         self.inner.lightbox.borrow_mut().take();
         self.inner.music.borrow_mut().take();
         self.inner.map.borrow_mut().take();
+        self.inner.contributions.borrow_mut().take();
         self.inner.watch.borrow_mut().take();
         self.inner.live.borrow_mut().take();
         if let Some(t) = self.inner.undo_toast.borrow_mut().take() {
@@ -434,6 +455,9 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
                 inner.relayout();
                 inner.step_uploads();
                 inner.open_searched();
+                if let Some(c) = inner.contributions.borrow().as_ref() {
+                    c.gallery_changed();
+                }
                 if let (Some(s), Some(id), Some(f)) = (inner.shown.borrow().as_ref(), inner.id.get(), inner.on_shown.borrow().as_ref()) {
                     f(s, id);
                 }
@@ -504,9 +528,31 @@ impl Inner {
         let active = self.switch.active_name();
         let music = active.as_deref() == Some("music") && self.switch.is_visible();
         let map = active.as_deref() == Some("map") && self.switch.is_visible();
-        self.photos.set_visible(!music && !map);
+        let contributions = active.as_deref() == Some("contributions") && self.switch.is_visible();
+        self.photos.set_visible(!music && !map && !contributions);
         self.music_slot.set_visible(music);
         self.map_slot.set_visible(map);
+        self.contributions_slot.set_visible(contributions);
+        if contributions != self.contributions.borrow().is_some() {
+            eprintln!("veyq: memory view: {}", if contributions { "contributions" } else { "not contributions" });
+            while let Some(child) = self.contributions_slot.first_child() {
+                self.contributions_slot.remove(&child);
+            }
+            *self.contributions.borrow_mut() = None;
+            if let (true, Some(gallery)) = (contributions, self.id.get()) {
+                let weak = Rc::downgrade(self);
+                let view = ContributionsView::open(gallery, &self.window, &self.toasts, move |media_id| {
+                    let Some(inner) = weak.upgrade() else { return };
+                    let at = inner.shown.borrow().as_ref().and_then(|s| s.rows.as_ref()?.iter().position(|r| r.media_id == media_id));
+                    match at {
+                        Some(at) => inner.open_lightbox(at),
+                        None => eprintln!("veyq: contributions: the medium is not in the gallery's filtered rows"),
+                    }
+                });
+                self.contributions_slot.append(view.widget());
+                *self.contributions.borrow_mut() = Some(view);
+            }
+        }
         if music != self.music.borrow().is_some() {
             eprintln!("veyq: memory view: {}", if music { "music" } else if map { "map" } else { "photos" });
             while let Some(child) = self.music_slot.first_child() {
@@ -533,18 +579,23 @@ impl Inner {
         }
     }
 
-    /// The switch's toggles: Photos, Music where the gallery offers it, Map; the view shown kept where it is still listed.
-    fn list_views(self: &Rc<Self>, music: bool) {
-        if self.music_listed.replace(Some(music)) == Some(music) {
+    /// The switch's toggles: Photos, Music where the gallery offers it, Map, Contributions where it offers them (a member's);
+    /// the view shown kept where it is still listed.
+    fn list_views(self: &Rc<Self>, music: bool, contributions: bool) {
+        if self.listed.replace(Some((music, contributions))) == Some((music, contributions)) {
             return;
         }
-        let active = self.switch.active_name().map(|n| n.to_string()).filter(|n| music || n != "music").unwrap_or_else(|| "photos".into());
+        let active = self.switch.active_name().map(|n| n.to_string())
+            .filter(|n| (music || n != "music") && (contributions || n != "contributions")).unwrap_or_else(|| "photos".into());
         self.switch.remove_all();
         let mut views = vec![("photos", words::music_view_photos())];
         if music {
             views.push(("music", words::music_view_music()));
         }
         views.push(("map", words::memory_view_map()));
+        if contributions {
+            views.push(("contributions", words::memory_buckets_title()));
+        }
         for (name, label) in views {
             self.switch.add(adw::Toggle::builder().name(name).label(label).build());
         }
@@ -622,7 +673,9 @@ impl Inner {
                 // a placeholder is built anew when it starts sending or fails, never for a step of its progress
                 let stage = uploading.get(t.media_id.as_str()).map(|u| if u.failed { "failed" } else if u.preparing { "preparing" } else { "sending" });
                 let tile = stage.or_else(|| by_id.get(t.media_id.as_str()).and_then(|(_, row)| row.tile.as_deref())).unwrap_or("-");
-                format!("{}:{tile}:{:.1}:{:.1}", t.media_id, t.left, t.width)
+                // a mark's badge changed builds the tile anew
+                let mark = by_id.get(t.media_id.as_str()).map_or((None, false), |(_, row)| (row.marks, row.mine));
+                format!("{}:{tile}:{:.1}:{:.1}:{mark:?}", t.media_id, t.left, t.width)
             }).collect::<Vec<_>>().join(" ") + &format!(" h{:.1}", r.height);
             if let Some((widget, built, top)) = mounted.get_mut(&r.index) {
                 if *built == key {
@@ -674,6 +727,10 @@ impl Inner {
                 image.add_css_class("dim-label");
                 tile.add_overlay(&image);
             }
+        }
+        if let Some(badge) = mark_badge(row) {
+            tile.add_overlay(&badge);
+            tile.update_property(&[gtk::accessible::Property::Description(&mark_said(row).unwrap_or_default())]);
         }
         if row.video && !row.blocked {
             let badge = gtk::Image::builder().icon_name("media-playback-start-symbolic").pixel_size(16).halign(gtk::Align::Start).valign(gtk::Align::End)
@@ -801,7 +858,7 @@ impl Inner {
     fn open_lightbox(self: &Rc<Self>, index: usize) {
         let Some(gallery) = self.id.get() else { return };
         eprintln!("veyq: lightbox asked at {index}");
-        let lightbox = Lightbox::open(gallery, index as i32, &self.window, &self.toasts, &self.nav);
+        let lightbox = Lightbox::open(gallery, index as i32, &self.node, &self.window, &self.toasts, &self.nav);
         *self.lightbox.borrow_mut() = Some(lightbox);
     }
 
@@ -863,12 +920,17 @@ impl Inner {
             }
             Some((Some(rows), _)) if rows.is_empty() && shown.as_ref().is_some_and(|s| s.uploading.is_empty()) => {
                 self.drop_rows();
-                self.status.append(&status(&words::memory_gallery_empty(), kind_icon(&self.node.kind)));
+                // a filter that keeps nothing says so, never that the Memory is empty (E5)
+                match shown.as_ref().and_then(|s| s.filter.as_ref()).and_then(crate::gallery_filter::empty_text) {
+                    Some(text) => self.status.append(&status(&text, "edit-find-symbolic")),
+                    None => self.status.append(&status(&words::memory_gallery_empty(), kind_icon(&self.node.kind))),
+                }
             }
             Some((Some(_), _)) => {}
         }
         let Some(s) = shown.as_ref() else { return };
         if let Some(gallery) = self.id.get() {
+            self.filter.draw(s.filter.as_ref(), gallery);
             self.facts.draw(s, gallery);
             self.banner.draw(s.banner.as_ref(), gallery);
             self.people.draw(s.people.as_ref(), gallery);
@@ -907,7 +969,7 @@ impl Inner {
             });
             ask.present(Some(&self.window));
         }
-        self.list_views(s.music_view);
+        self.list_views(s.music_view, s.contributions);
         // the offer ended (its window, or the undo): the toast goes with it — once a state showed the offer, so an update
         // from before the trash that arrives after its answer ends nothing (src/mobile/CLAUDE.md § Traps)
         if let Some(undo) = &s.undo {
@@ -967,6 +1029,38 @@ impl Inner {
     }
 }
 
+/// A medium's mark as its tile shows it (ADR 0149 decision 4): the heart — filled where the caller marked it — with the count
+/// where the scope counts marks and someone did; none where nobody marked it (or, in a personal scope, the caller did not).
+/// A badge, no button: the mark is toggled in the lightbox.
+fn mark_badge(row: &GalleryRow) -> Option<gtk::Box> {
+    let (heart, count) = badge_of(row)?;
+    let badge = gtk::Box::builder().spacing(3).halign(gtk::Align::End).valign(gtk::Align::Start).margin_end(6).margin_top(6).can_target(false).build();
+    badge.add_css_class("osd");
+    badge.add_css_class("veyq-mark-badge");
+    badge.append(&gtk::Image::from_icon_name(heart));
+    if let Some(n) = count {
+        badge.append(&gtk::Label::new(Some(&n)));
+    }
+    Some(badge)
+}
+
+/// What a tile's badge draws ([mark_badge]): its heart's icon and the count it shows; none where it shows no badge.
+fn badge_of(row: &GalleryRow) -> Option<(&'static str, Option<String>)> {
+    let count = row.marks.filter(|n| *n > 0);
+    if count.is_none() && !row.mine {
+        return None;
+    }
+    Some((if row.mine { crate::theme::HEART_FILLED } else { crate::theme::HEART }, count.map(|n| n.to_string())))
+}
+
+/// What a screen reader says of a tile's badge: how many marked it, and that the caller did.
+fn mark_said(row: &GalleryRow) -> Option<String> {
+    let count = row.marks.filter(|n| *n > 0).map(|n| words::media_marks_count(i64::from(n)));
+    let yours = row.mine.then(words::media_marks_yours);
+    let said: Vec<String> = [count, yours].into_iter().flatten().collect();
+    (!said.is_empty()).then(|| said.join(", "))
+}
+
 /// What shows in the grid's place: [text] under [icon].
 fn status(text: &str, icon: &str) -> gtk::Widget {
     let page = adw::StatusPage::builder().icon_name(icon).title(glib_escape(text)).vexpand(true).build();
@@ -1003,6 +1097,25 @@ mod tests {
         let only_folder = Sorted { folders: vec!["/x/y".into()], ..Sorted::default() };
         assert!(calls(7, &only_folder).is_none(), "a folder alone sends nothing");
         assert_eq!(said_at_once(&only_folder), vec![words::memory_drop_folder("y")]);
+    }
+
+    fn row(marks: Option<i32>, mine: bool) -> GalleryRow {
+        GalleryRow { media_id: "m".into(), name: None, media_type: None, video: false, blocked: false, tile: None, picture: None, captured_at: None,
+            width: None, height: None, said: None, can_delete: false, marks, mine }
+    }
+
+    /// A tile's badge (ADR 0149 decision 4): the count where the scope counts and someone marked it, the heart filled where
+    /// the caller did; nothing where nobody did; in a personal scope (no count) only the caller's own heart.
+    #[test]
+    fn a_tiles_badge_shows_the_count_and_the_callers_own_heart() {
+        assert_eq!(badge_of(&row(Some(0), false)), None, "nobody marked it");
+        assert_eq!(badge_of(&row(None, false)), None, "a personal scope, not marked");
+        assert_eq!(mark_said(&row(Some(2), false)), Some(words::media_marks_count(2)));
+        assert_eq!(mark_said(&row(Some(1), true)), Some(format!("{}, {}", words::media_marks_count(1), words::media_marks_yours())));
+        assert_eq!(mark_said(&row(None, true)), Some(words::media_marks_yours()), "a personal scope says no count");
+        assert_eq!(badge_of(&row(Some(3), true)), Some((crate::theme::HEART_FILLED, Some("3".into()))));
+        assert_eq!(badge_of(&row(Some(2), false)), Some((crate::theme::HEART, Some("2".into()))), "others' marks: the open heart");
+        assert_eq!(badge_of(&row(None, true)), Some((crate::theme::HEART_FILLED, None)), "no count in a personal scope");
     }
 
     #[test]

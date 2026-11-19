@@ -1,6 +1,7 @@
 //! Home and an application's list (ADR 0122): Home's level as the core groups it — the folders, then the contents —
 //! under the filters the core offers, and an application's own list in its Favorites, Recent and the rest. Each drawn
-//! as GNOME draws a list of places: boxed lists in a clamped, scrolled column, a filter as a toggle group.
+//! as GNOME draws a list of places: boxed lists in a clamped, scrolled column, a filter as a toggle group — or, where the
+//! account chose tiles (`ShellShown.view`, ADR 0149 decision 8), each group as a grid of tiles ([crate::tiles]).
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -8,7 +9,8 @@ use adw::prelude::*;
 use gtk::{gdk, glib};
 
 use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::ArrangedList, wire::Call, wire::Crop, wire::MemoryDateShown, wire::NodeRef, wire::ObjectRef,
-    wire::ShellModelState, wire::ShellShown, wire::FolderRef};
+    wire::ShellModelState, wire::ShellShown, wire::FolderRef, wire::ViewModeShown};
+use crate::tiles::{self, Tile};
 use crate::drop::Drops;
 use crate::{said, words};
 
@@ -57,21 +59,40 @@ thread_local! {
     /// objects they were asked for last, and whether an ask is in flight.
     static ROW_DATES: RefCell<HashMap<String, MemoryDateShown>> = RefCell::new(HashMap::new());
     static DATES_ASKED: RefCell<(String, bool)> = const { RefCell::new((String::new(), false)) };
-    /// The rows drawn that show a date, each told it again when the dates arrive.
-    static DATED_ROWS: RefCell<Vec<(String, glib::WeakRef<adw::ActionRow>)>> = const { RefCell::new(Vec::new()) };
+    /// The rows and tiles drawn that show a date (a row's subtitle, a tile's second line), each told it again when the
+    /// dates arrive.
+    static DATED_ROWS: RefCell<Vec<(String, glib::WeakRef<gtk::Widget>)>> = const { RefCell::new(Vec::new()) };
 }
 
 /// A Memory's row's second line, its date (ADR 0143 decision 5; the facts line's way of saying it), set now where it is
 /// held and again whenever the dates arrive.
 fn dated(row: &adw::ActionRow, node_id: &str) {
+    date_on(row.upcast_ref(), node_id);
+}
+
+/// A Memory's tile's second line, its date, as [dated] tells a row's.
+pub fn dated_label(line: &gtk::Label, node_id: &str) {
+    date_on(line.upcast_ref(), node_id);
+}
+
+fn date_on(widget: &gtk::Widget, node_id: &str) {
     if let Some(text) = ROW_DATES.with(|d| d.borrow().get(node_id).and_then(crate::memory_facts::date_text)) {
-        row.set_subtitle(&glib_escape(&text));
+        set_date(widget, &text);
     }
     DATED_ROWS.with(|r| {
         let mut r = r.borrow_mut();
         r.retain(|(_, w)| w.upgrade().is_some());
-        r.push((node_id.to_owned(), row.downgrade()));
+        r.push((node_id.to_owned(), widget.downgrade()));
     });
+}
+
+/// [text] as [widget]'s date: a row's subtitle (markup), a tile's line (plain).
+fn set_date(widget: &gtk::Widget, text: &str) {
+    if let Some(row) = widget.downcast_ref::<adw::ActionRow>() {
+        row.set_subtitle(&glib_escape(text));
+    } else if let Some(line) = widget.downcast_ref::<gtk::Label>() {
+        line.set_label(text);
+    }
 }
 
 /// The rows' dates asked for (`Memories.Dates`) unless they were for the objects [key] names (or [again]: a page closed
@@ -102,15 +123,16 @@ pub fn ask_dates(key: &str, again: bool) {
             for (node, row) in r.borrow().iter() {
                 if let Some(row) = row.upgrade() {
                     let text = ROW_DATES.with(|d| d.borrow().get(node).and_then(crate::memory_facts::date_text)).unwrap_or_default();
-                    row.set_subtitle(&glib_escape(&text));
+                    set_date(&row, &text);
                 }
             }
         });
     });
 }
 
-/// The longest side a list row's cover is held at (it is drawn 64 × 36).
-const ROW_COVER_EDGE: i32 = 128;
+/// The longest side a list row's cover is held at: it is drawn 64 × 36 in a row, and as a tile's square cover up to about
+/// 250 wide (the core's `TileGrid` at a wide window), which a smaller one would blur.
+const ROW_COVER_EDGE: i32 = 320;
 
 /// How many rows' covers are held at once.
 const ROW_COVERS_HELD: usize = 256;
@@ -129,6 +151,19 @@ pub fn cover_prefix(icon: gtk::Image, node_id: &str) -> gtk::Stack {
     cover.add_css_class("card");
     // sized by what it shows: a row whose cover went is an icon's width again, not the picture's
     let prefix = gtk::Stack::builder().hhomogeneous(false).vhomogeneous(false).build();
+    with_cover(&prefix, icon, cover, node_id);
+    prefix
+}
+
+/// [icon] in a tile's square, replaced by node [node_id]'s cover in [picture] as [cover_prefix] replaces a row's.
+pub fn cover_stack(icon: gtk::Image, picture: gtk::Picture, node_id: &str) -> gtk::Stack {
+    let stack = gtk::Stack::new();
+    with_cover(&stack, icon, picture, node_id);
+    stack
+}
+
+/// [prefix] showing [icon], then [cover] once the core names node [node_id]'s cover (`Shell.RowCover`).
+fn with_cover(prefix: &gtk::Stack, icon: gtk::Image, cover: gtk::Picture, node_id: &str) {
     prefix.add_child(&icon);
     prefix.add_child(&cover);
     if let Some((_, t)) = ROW_COVERS.with(|c| c.borrow().get(node_id).cloned()) {
@@ -150,7 +185,6 @@ pub fn cover_prefix(icon: gtk::Image, node_id: &str) -> gtk::Stack {
             }
         }
     });
-    prefix
 }
 
 /// Node [node_id]'s list-row cover (a Memories map's pin shows it too, ADR 0143 decision 6): the one held, else asked for
@@ -231,13 +265,14 @@ pub fn glib_escape(text: &str) -> String {
     gtk::glib::markup_escape_text(text).into()
 }
 
-fn column() -> (gtk::ScrolledWindow, gtk::Box) {
+/// A level's scrolled column: clamped as GNOME clamps a list, wider for tiles (Files' grid fills its window).
+fn column(tiles: bool) -> (gtk::ScrolledWindow, gtk::Box) {
     let content = gtk::Box::new(gtk::Orientation::Vertical, 24);
     content.set_margin_top(18);
     content.set_margin_bottom(24);
     content.set_margin_start(12);
     content.set_margin_end(12);
-    let clamp = adw::Clamp::builder().maximum_size(720).child(&content).build();
+    let clamp = adw::Clamp::builder().maximum_size(if tiles { 1400 } else { 720 }).child(&content).build();
     let scroll = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).vexpand(true).child(&clamp).build();
     (scroll, content)
 }
@@ -258,7 +293,8 @@ fn filter_name(f: Option<ApplicationId>) -> String {
 /// opens in its application. With [drops], files and folders dropped onto the level upload there, and onto a folder's row
 /// into that folder (ADR 0123's Consequences, the Linux app's Depot whole).
 pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, hero: Option<gtk::Widget>) -> gtk::Widget {
-    let (scroll, content) = column();
+    let as_tiles = shown.view == ViewModeShown::Tiles;
+    let (scroll, content) = column(as_tiles);
     if let Some(d) = drops {
         scroll.add_controller(d.onto_level());
     }
@@ -280,6 +316,11 @@ pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, 
         if let Some(heading) = &g.heading {
             list.set_title(&said::key(heading));
         }
+        if as_tiles {
+            list.add(&level_tiles(state, &g.nodes, g.folders, drops));
+            content.append(&list);
+            continue;
+        }
         for n in &g.nodes {
             if g.folders {
                 let row = folder_row(n);
@@ -294,6 +335,37 @@ pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, 
         content.append(&list);
     }
     scroll.upcast()
+}
+
+/// A group of Home's level as tiles: a folder's enters it (and takes a drop as its row does), an object's opens it.
+fn level_tiles(state: &ShellModelState, nodes: &[NodeRef], folders: bool, drops: Option<&Drops>) -> gtk::FlowBox {
+    let mut tiles = Vec::new();
+    let mut dropping = Vec::new();
+    for n in nodes {
+        if folders {
+            let folder = FolderRef { node_id: n.node_id.clone(), name: n.name.clone() };
+            tiles.push(Tile { name: n.name.clone(), subtitle: None, dated: false, icon: kind_icon(&n.kind), node_id: n.node_id.clone(),
+                open: Box::new(move || bridge::send(Call::ShellEnter { folder: folder.clone() })) });
+            dropping.push(drops.filter(|_| n.kind == "FOLDER").map(|d| d.onto_folder(&n.node_id, &n.name)));
+        } else if let Some(o) = state.lists.objects.iter().find(|o| o.scope_id == n.scope_id && o.node_id == n.node_id) {
+            tiles.push(object_tile(o));
+            dropping.push(None);
+        }
+    }
+    let grid = tiles::grid(tiles);
+    for (i, target) in dropping.into_iter().enumerate() {
+        if let (Some(t), Some(child)) = (target, grid.child_at_index(i as i32)) {
+            child.add_controller(t);
+        }
+    }
+    grid
+}
+
+/// An object as a tile: opens in its application; a Memory's second line its date, as its row's.
+fn object_tile(r: &ObjectRef) -> Tile {
+    let open = r.clone();
+    Tile { name: r.name.clone(), subtitle: None, dated: r.kind == "MEMORY", icon: kind_icon(&r.kind), node_id: r.node_id.clone(),
+        open: Box::new(move || bridge::send(Call::ShellOpen { r#ref: open.clone() })) }
 }
 
 fn folder_row(n: &NodeRef) -> adw::ActionRow {
@@ -327,8 +399,9 @@ fn filter_group(state: &ShellModelState, shown: &ShellShown) -> adw::ToggleGroup
 }
 
 /// An application's own list: Favorites, Recent, then the rest, each where it holds something.
-pub fn list(list: Option<&ArrangedList>) -> gtk::Widget {
-    let (scroll, content) = column();
+pub fn list(list: Option<&ArrangedList>, view: ViewModeShown) -> gtk::Widget {
+    let as_tiles = view == ViewModeShown::Tiles;
+    let (scroll, content) = column(as_tiles);
     let Some(l) = list.filter(|l| !(l.favorites.is_empty() && l.recent.is_empty() && l.all.is_empty())) else {
         content.append(&empty());
         return scroll.upcast();
@@ -340,6 +413,11 @@ pub fn list(list: Option<&ArrangedList>) -> gtk::Widget {
         let group = adw::PreferencesGroup::new();
         if let Some(t) = title {
             group.set_title(&t);
+        }
+        if as_tiles {
+            group.add(&tiles::grid(refs.iter().map(object_tile).collect()));
+            content.append(&group);
+            continue;
         }
         for r in refs {
             group.add(&object_row(r));

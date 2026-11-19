@@ -2,7 +2,9 @@
 //! types and the words' Rust and gettext catalogs and the theme, all generated under `$VEYQ_GENERATED` (run.py mounts
 //! `src/mobile/build/generated` there), and links `libveyq.so` from `$VEYQ_LIB_DIR`. Into `OUT_DIR` it writes:
 //! `bridge.rs` and `words.rs` as they are, `locale/<lang>/LC_MESSAGES/veyq.mo` (msgfmt), and `veyq.gresource`
-//! (glib-compile-resources over the theme, under the app's resource base path, where libadwaita finds `style.css`).
+//! (glib-compile-resources over the theme and the app's own symbolic icons in `icons/` beside this file — those Adwaita
+//! draws none of, such as an item mark's heart —, under the app's resource base path, where libadwaita finds `style.css`
+//! and GtkApplication the icons).
 //! The app's id comes from `$VEYQ_APP_ID` (run.py reads it from `src/mobile/desktop-identity.json`, ADR 0139 decision 12);
 //! where the catalogs are read from is `$VEYQ_LOCALE_DIR` when the build sets it (the Flatpak's `/app/share/locale`),
 //! else the build's own `OUT_DIR/locale`.
@@ -47,10 +49,20 @@ fn main() {
     if !files.iter().any(|f| f == Path::new("style.css")) {
         panic!("{}: no style.css — run.py writes it with generate_theme.py --gtk", theme.display());
     }
+    // the app's own icons, under the same `icons/` the theme's app icon lies in
+    let here = PathBuf::from(need("CARGO_MANIFEST_DIR"));
+    let own: Vec<PathBuf> = files_under(&here.join("icons")).into_iter().map(|f| Path::new("icons").join(f)).collect();
     let mut xml = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gresources>\n  <gresource prefix=\"{resource_base}\">\n");
     for f in &files {
         xml += &format!("    <file>{}</file>\n", f.display());
         println!("cargo:rerun-if-changed={}", theme.join(f).display());
+    }
+    for f in &own {
+        if files.contains(f) {
+            panic!("{}: the theme writes a file by that name too", f.display());
+        }
+        xml += &format!("    <file>{}</file>\n", f.display());
+        println!("cargo:rerun-if-changed={}", here.join(f).display());
     }
     xml += "  </gresource>\n</gresources>\n";
     let manifest = out.join("veyq.gresource.xml");
@@ -58,6 +70,8 @@ fn main() {
     run(Command::new("glib-compile-resources")
         .arg("--sourcedir")
         .arg(&theme)
+        .arg("--sourcedir")
+        .arg(&here)
         .arg("--target")
         .arg(out.join("veyq.gresource"))
         .arg(&manifest));
