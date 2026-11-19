@@ -35,6 +35,7 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
@@ -167,22 +168,33 @@ internal fun MusicCompactControls(now: NowPlaying, commands: PlayerCommands) {
     }
 }
 
-/** Which of a Memory's views shows: its photos and videos, its music (ADR 0142 decision 6), its map (ADR 0143 D8). */
-internal enum class MemoryView { PHOTOS, MUSIC, MAP }
+/**
+ * Which of a Memory's views shows: its photos and videos, its music (ADR 0142 decision 6), its map (ADR 0143 D8), its
+ * contributions (ADR 0149 decision 6).
+ */
+internal enum class MemoryView { PHOTOS, MUSIC, MAP, CONTRIBUTIONS }
 
 /**
- * The view switch inside a Memory's screen (Material's primary tabs): Photos | Music | Map — Music where the node has music
- * or the viewer may add some ([music]), Map always, as the web's tab is.
+ * The view switch inside a Memory's screen (Material's primary tabs): Photos | Music | Map | Contributions — Music where the
+ * node has music or the viewer may add some ([music]), Map always, as the web's tab is, Contributions where core offers them
+ * to whoever looks ([contributions]: a member's, `MemoryRights.buckets` and `Contributions.OFFERED`).
  */
 @Composable
-internal fun MemoryViewSwitch(view: MemoryView, music: Boolean, onView: (MemoryView) -> Unit) {
-    val views = if (music) MemoryView.entries else listOf(MemoryView.PHOTOS, MemoryView.MAP)
-    PrimaryTabRow(selectedTabIndex = views.indexOf(view).coerceAtLeast(0), containerColor = MaterialTheme.colorScheme.background) {
+internal fun MemoryViewSwitch(view: MemoryView, music: Boolean, contributions: Boolean, onView: (MemoryView) -> Unit) {
+    val views = MemoryView.entries.filter { (it != MemoryView.MUSIC || music) && (it != MemoryView.CONTRIBUTIONS || contributions) }
+    val selected = views.indexOf(view).coerceAtLeast(0)
+    // four views' words do not fit a phone's fixed tabs ("Contributions" broke mid-word, 2026-11-19): Material's scrollable tabs then
+    val tabs: @Composable (@Composable () -> Unit) -> Unit = { content ->
+        if (views.size > 3) PrimaryScrollableTabRow(selectedTabIndex = selected, containerColor = MaterialTheme.colorScheme.background, edgePadding = 0.dp) { content() }
+        else PrimaryTabRow(selectedTabIndex = selected, containerColor = MaterialTheme.colorScheme.background) { content() }
+    }
+    tabs {
         for (v in views) {
             val words = when (v) {
                 MemoryView.PHOTOS -> Msg.MUSIC_VIEW_PHOTOS
                 MemoryView.MUSIC -> Msg.MUSIC_VIEW_MUSIC
                 MemoryView.MAP -> Msg.MEMORY_VIEW_MAP
+                MemoryView.CONTRIBUTIONS -> Msg.MEMORY_BUCKETS_TITLE
             }
             Tab(selected = view == v, onClick = { onView(v) }, text = { Text(say(words)) })
         }

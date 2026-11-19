@@ -53,7 +53,7 @@ internal object KindPages {
         )
     }, body = { ref, _, model -> DropBoxScreen(ref, model) })
 
-    /** Memories' Memory and chapter: their music's play/stop (core's), their gallery (`MemoryScreen`); their cover is core's. */
+    /** Memories' Memory and chapter: their music's play/stop (core's), their ZIP, their gallery (`MemoryScreen`); their cover and copy are core's. */
     private val memory = KindPage(header = { node, model -> memoryHeader(node, model) }, body = { ref, _, model -> MemoryScreen(ref, model) })
 
     fun of(kind: String): KindPage? = when (kind) {
@@ -86,6 +86,8 @@ private fun memoryHeader(node: NodeAt, model: AppModel): HeaderContribution {
         androidx.compose.material.icons.Icons.Outlined.Panorama,
     ) { model.openBanner(gallery) }
     return HeaderContribution(
+        // a Memory's and a chapter's ZIP, the web's archive (ADR 0149 decision 3: core's `MemoryExport` behind `NodeExport`)
+        download = { out -> model.downloadNode(node, out) },
         actions = gallery.headerActions.filter { it.id == me.raddatz.veyq.mobile.memories.GalleryModel.MUSIC }.map { a ->
             OwnAction(
                 a.id, say(gallery.label(a.id)!!),

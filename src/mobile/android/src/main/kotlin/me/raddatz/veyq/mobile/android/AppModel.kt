@@ -905,6 +905,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val model = me.raddatz.veyq.mobile.navigation.ShellModel(t, hidden, recent, System::currentTimeMillis)
         shellWatch?.cancel()
         shellModel = model
+        openContributions = null
+        _levelView.value = model.levelView
         closeSearch()
         val app = getApplication<Application>()
         _searchModel.value = model.searchModel({ msg -> app.words(msg) }, appearance = true) { android.util.Log.i("veyq-search", it) }
@@ -1253,7 +1255,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         openGallery?.close()
         val app = getApplication<Application>()
         val music = _music.value?.let { p -> me.raddatz.veyq.mobile.memories.GalleryModel.Music(p) { n -> app.words(me.raddatz.veyq.mobile.words.Msg.MUSIC_UNTITLED, n) } }
-        return m.galleryModel(node, uploads, music).also {
+        openContributions = null
+        return m.galleryModel(node, uploads, music, galleryCalendar()).also {
             openGallery = it
             followSearchOpened(it)
         }
@@ -1280,6 +1283,67 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * The viewer's calendar for a gallery filter's day chips (ADR 0149 decision 5, inbox #989): a capture time's local day on
+     * this device's zone, its chip labelled in the app's language by the platform's own skeleton (with the year where the
+     * gallery spans more than one) — the core does no zone arithmetic.
+     */
+    private fun galleryCalendar(): me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar {
+        val locale = getApplication<Application>().resources.configuration.locales.get(0) ?: java.util.Locale.getDefault()
+        val zone = java.time.ZoneId.systemDefault()
+        fun format(skeleton: String) = java.time.format.DateTimeFormatter.ofPattern(android.text.format.DateFormat.getBestDateTimePattern(locale, skeleton), locale)
+        val short = format("dMMM")
+        val long = format("dMMMy")
+        return me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar({ ms -> java.time.Instant.ofEpochMilli(ms).atZone(zone).toLocalDate().toString() }) { ms, withYear ->
+            (if (withYear) long else short).format(java.time.Instant.ofEpochMilli(ms).atZone(zone))
+        }
+    }
+
+    // ---- a Memory's Contributions view (ADR 0149 decision 6) ----
+
+    /** The Contributions view on screen: one at a time, the open gallery's. */
+    private var openContributions: me.raddatz.veyq.mobile.memories.Contributions? = null
+    private var contributionsOf: me.raddatz.veyq.mobile.memories.GalleryModel? = null
+
+    /** [gallery]'s Contributions view (core's `Contributions`), read on its first ask; null while no tenant is open. */
+    fun contributions(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.memories.Contributions? {
+        openContributions?.takeIf { contributionsOf === gallery }?.let { return it }
+        val m = shellModel ?: return null
+        return m.contributions(gallery).also { c ->
+            openContributions = c
+            contributionsOf = gallery
+            viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) { c.read() }
+        }
+    }
+
+    /** A curation of [contributions] (a sub-bucket made, renamed, deleted, a medium moved), off the main thread. */
+    fun curate(write: suspend () -> Unit) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) { write() }
+    }
+
+    /** Whether the tenant's server takes reports at all (it publishes a moderation key). */
+    suspend fun reportOffered(): Boolean = shellModel?.reportOffered() == true
+
+    // ---- the view mode (ADR 0149 decision 8) ----
+
+    private val _levelView = MutableStateFlow(me.raddatz.veyq.mobile.navigation.ViewMode.FIRST)
+
+    /** How every level is drawn now: the account's one choice on this device (core's `ShellModel.levelView`). */
+    val levelView: StateFlow<me.raddatz.veyq.mobile.navigation.ViewMode> = _levelView.asStateFlow()
+
+    /** A level's view chosen: kept for every level and a person's Memories. */
+    fun chooseLevelView(mode: me.raddatz.veyq.mobile.navigation.ViewMode) {
+        val m = shellModel ?: return
+        m.chooseView(mode)
+        _levelView.value = m.levelView
+    }
+
+    /** A person's Memories drawn as [view]: the section keeps it as the account's choice, which every level then follows. */
+    fun choosePersonView(section: me.raddatz.veyq.mobile.memories.people.PersonMemories, view: me.raddatz.veyq.mobile.memories.people.PersonMemories.View) {
+        section.view(view)
+        shellModel?.let { _levelView.value = it.levelView }
+    }
+
     /** The gallery page went: its lightbox and any video's reader close with it, and its Music view (the music plays on). */
     fun closeGallery(gallery: me.raddatz.veyq.mobile.memories.GalleryModel) {
         if (openGallery !== gallery) return
@@ -1290,6 +1354,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         closeCuration()
         gallery.close()
         openGallery = null
+        openContributions = null
+        contributionsOf = null
     }
 
     // ---- a Memory's curation (ADR 0144): its participants picker and its banner's dialog, held here so a rotation keeps them ----
