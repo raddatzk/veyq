@@ -6379,5 +6379,174 @@
   "bookmark_delete_confirm": {
     "en": "“{1}” moves to the trash. You can restore it from there until it is removed for good.",
     "de": "„{1}“ wird in den Papierkorb verschoben. Von dort kannst du es wiederherstellen, bis es endgültig gelöscht wird."
+  },
+  "import_title": {
+    "note": "the web's export.importTitle (ADR 0152 decision 8)",
+    "en": "Import",
+    "de": "Importieren"
+  },
+  "import_reading": {
+    "note": "the web's export.reading (ADR 0152 decision 8)",
+    "en": "Reading the file…",
+    "de": "Lese die Datei…"
+  },
+  "import_invalid": {
+    "note": "the web's export.invalid (ADR 0152 decision 8)",
+    "en": "This download is damaged or incomplete.",
+    "de": "Dieser Download ist beschädigt oder unvollständig."
+  },
+  "import_detail": {
+    "note": "a refusal's path or node name beside its words (the web's `${text} (${detail})` in ImportSubtreeDialog.vue)",
+    "en": "({1})",
+    "untranslated": true
+  },
+  "import_refused_not_an_export": {
+    "note": "the web's export.refused.not_an_export (ADR 0152 decision 8)",
+    "en": "This is not a veyq download.",
+    "de": "Das ist kein veyq-Download."
+  },
+  "import_refused_newer_version": {
+    "note": "the web's export.refused.newer_version (ADR 0152 decision 8)",
+    "en": "This download was made by a newer version of veyq. Update veyq, then try again.",
+    "de": "Dieser Download stammt aus einer neueren Version von veyq. Aktualisiere veyq und versuche es dann erneut."
+  },
+  "import_refused_invalid_manifest": {
+    "note": "the web's export.refused.invalid_manifest (ADR 0152 decision 8)",
+    "en": "The list of contents in this download is not in the expected form. Nothing was imported.",
+    "de": "Die Inhaltsliste dieses Downloads hat nicht die erwartete Form. Es wurde nichts importiert."
+  },
+  "import_refused_too_large": {
+    "note": "the web's export.refused.too_large (ADR 0152 decision 8)",
+    "en": "This download holds more than veyq imports: too many items, too deep, or a name or text too long. Nothing was imported.",
+    "de": "Dieser Download enthält mehr, als veyq importiert: zu viele Einträge, zu tief verschachtelt oder ein zu langer Name oder Text. Es wurde nichts importiert."
+  },
+  "import_refused_unsafe_path": {
+    "note": "the web's export.refused.unsafe_path (ADR 0152 decision 8)",
+    "en": "This download names a file at a place it may not be. Nothing was imported.",
+    "de": "Dieser Download nennt eine Datei an einer Stelle, an der sie nicht liegen darf. Es wurde nichts importiert."
+  },
+  "import_refused_damaged_archive": {
+    "note": "the web's export.refused.damaged_archive (ADR 0152 decision 8)",
+    "en": "This ZIP file is damaged or was changed. Nothing was imported.",
+    "de": "Diese ZIP-Datei ist beschädigt oder wurde verändert. Es wurde nichts importiert."
+  },
+  "import_refused_payload_missing": {
+    "note": "the web's export.refused.payload_missing (ADR 0152 decision 8)",
+    "en": "A file this download lists is missing. Nothing was imported.",
+    "de": "Eine Datei, die dieser Download aufführt, fehlt. Es wurde nichts importiert."
+  },
+  "import_refused_size_mismatch": {
+    "note": "the web's export.refused.size_mismatch (ADR 0152 decision 8)",
+    "en": "A file in this download is not the size its list says. Nothing was imported.",
+    "de": "Eine Datei in diesem Download hat nicht die Größe, die seine Liste nennt. Es wurde nichts importiert."
+  },
+  "import_refused_checksum": {
+    "note": "the web's export.refused.checksum (ADR 0152 decision 8)",
+    "en": "A file in this download does not match its checksum; the download is damaged.",
+    "de": "Eine Datei im Download passt nicht zu ihrer Prüfsumme; der Download ist beschädigt."
+  },
+  "import_refused_nothing_to_import": {
+    "note": "the web's export.refused.nothing_to_import (ADR 0152 decision 8)",
+    "en": "This version of veyq cannot import anything in this download.",
+    "de": "Diese Version von veyq kann nichts aus diesem Download importieren."
+  },
+  "import_skip_unknown_application": {
+    "note": "the web's export.skipReason.unknown_application (ADR 0152 decision 8)",
+    "en": {
+      "one": "{2}: {1:int} item, of an application this veyq does not have",
+      "other": "{2}: {1:int} items, of an application this veyq does not have"
+    },
+    "de": {
+      "one": "{2}: {1:int} Eintrag einer Anwendung, die dieses veyq nicht hat",
+      "other": "{2}: {1:int} Einträge einer Anwendung, die dieses veyq nicht hat"
+    }
+  },
+  "import_skip_newer_content": {
+    "note": "the web's export.skipReason.newer_content (ADR 0152 decision 8)",
+    "en": {
+      "one": "{2}: {1:int} item, made by a newer version of veyq",
+      "other": "{2}: {1:int} items, made by a newer version of veyq"
+    },
+    "de": {
+      "one": "{2}: {1:int} Eintrag aus einer neueren Version von veyq",
+      "other": "{2}: {1:int} Einträge aus einer neueren Version von veyq"
+    }
+  },
+  "import_nothing": {
+    "note": "the web's export.importNothing (ADR 0152 decision 8)",
+    "en": "This version of veyq cannot import anything in it.",
+    "de": "Diese Version von veyq kann nichts davon importieren."
+  },
+  "import_rest": {
+    "note": "the web's export.importRest (ADR 0152 decision 8)",
+    "en": "Import the rest",
+    "de": "Den Rest importieren",
+    "apple_en": "Import the Rest"
+  },
+  "import_imported_left_out": {
+    "note": "the web's export.importedLeftOut (ADR 0152 decision 8)",
+    "en": "Imported “{1}”. Left out: {2}",
+    "de": "„{1}“ importiert. Weggelassen: {2}"
+  },
+  "import_upload_as_file": {
+    "note": "the web's export.uploadAsFile (ADR 0152 decision 8)",
+    "en": "Upload as a file",
+    "de": "Als Datei hochladen",
+    "apple_en": "Upload as a File"
+  },
+  "import_summary": {
+    "note": "the web's export.importSummary (ADR 0152 decision 8)",
+    "en": "{1:int} items, {2}, will be added to “{3}”.",
+    "de": "{1:int} Einträge, {2}, werden zu „{3}“ hinzugefügt."
+  },
+  "import_notice": {
+    "note": "the web's export.importNotice (ADR 0152 decision 8)",
+    "en": "You become the owner of everything imported. Shares, members and the trash are not part of a download.",
+    "de": "Alles Importierte gehört dann dir. Freigaben, Mitglieder und der Papierkorb sind nicht Teil eines Downloads."
+  },
+  "import_skipped": {
+    "note": "the web's export.importSkipped (ADR 0152 decision 8)",
+    "en": "Left out, because this version cannot import them:",
+    "de": "Weggelassen, weil diese Version sie nicht importieren kann:"
+  },
+  "import_submit": {
+    "note": "the web's export.importSubmit (ADR 0152 decision 8)",
+    "en": "Import",
+    "de": "Importieren"
+  },
+  "import_importing": {
+    "note": "the web's export.importing (ADR 0152 decision 8)",
+    "en": "Importing… {1:int} of {2:int} items",
+    "de": "Importiere… {1:int} von {2:int} Einträgen"
+  },
+  "import_imported": {
+    "note": "the web's export.imported (ADR 0152 decision 8)",
+    "en": "Imported “{1}”",
+    "de": "„{1}“ importiert"
+  },
+  "import_failed": {
+    "note": "the web's export.importFailed (ADR 0152 decision 8)",
+    "en": "The import stopped after {1:int} of {2:int} items. What was created has been moved to the trash.",
+    "de": "Der Import wurde nach {1:int} von {2:int} Einträgen abgebrochen. Was angelegt wurde, liegt jetzt im Papierkorb."
+  },
+  "import_failed_left": {
+    "note": "the web's export.importFailedLeft (ADR 0152 decision 8)",
+    "en": "The import stopped after {1:int} of {2:int} items and what was created could not be removed. Look for “{3}” and delete it.",
+    "de": "Der Import wurde nach {1:int} von {2:int} Einträgen abgebrochen, und das Angelegte konnte nicht entfernt werden. Suche „{3}“ und lösche es."
+  },
+  "import_quota": {
+    "note": "the web's export.importQuota (ADR 0152 decision 8)",
+    "en": "There is not enough storage space for this import.",
+    "de": "Für diesen Import ist nicht genug Speicherplatz vorhanden."
+  },
+  "import_no_room": {
+    "note": "the web's export.importNoRoom (ADR 0152 decision 8)",
+    "en": "There is not enough storage space for this import ({1}). Free some space, or ask whoever runs your space.",
+    "de": "Für diesen Import ist nicht genug Speicherplatz vorhanden ({1}). Gib Platz frei oder frage die Person, die deinen Bereich betreibt."
+  },
+  "import_checksum": {
+    "note": "the web's export.importChecksum (ADR 0152 decision 8)",
+    "en": "A file in the download does not match its checksum; the download is damaged.",
+    "de": "Eine Datei im Download passt nicht zu ihrer Prüfsumme; der Download ist beschädigt."
   }
 }

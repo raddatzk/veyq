@@ -634,8 +634,13 @@ class ShellModel(
     /**
      * The uploads of this tenant over the app's [queue] ([me.raddatz.veyq.mobile.depot.DepotUploads]): files and folders
      * uploaded into a level, a file's replace, the settle's offer; [changed] after each write (the app reads its lists anew).
+     * [imports]: the platform offers a download's import at its uploads (ADR 0152 decision 1: the desktops; the phones not
+     * for now), each medium's tiers made by its [deriver] and an erased person in an imported Pot named [deletedName].
      */
-    fun depotUploads(queue: me.raddatz.veyq.mobile.blob.UploadQueue, changed: () -> Unit): me.raddatz.veyq.mobile.depot.DepotUploads =
+    fun depotUploads(
+        queue: me.raddatz.veyq.mobile.blob.UploadQueue, changed: () -> Unit, imports: Boolean = false,
+        deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver? = null, deletedName: String = "",
+    ): me.raddatz.veyq.mobile.depot.DepotUploads =
         me.raddatz.veyq.mobile.depot.DepotUploads(queue, object : me.raddatz.veyq.mobile.depot.DepotUploads.Door {
             override fun uploadJob(scopeId: String, parentId: String?, source: me.raddatz.veyq.mobile.blob.UploadSource, name: String) =
                 me.raddatz.veyq.mobile.depot.DepotFiles.UploadJob(tenant, scopeId, parentId, source, AppKinds::tokenInput, name)
@@ -646,7 +651,18 @@ class ShellModel(
                 me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob(tenant, file, source, expectedBlobId, source.name)
             override fun changed() = changed()
             override fun online() = this@ShellModel.online
-        })
+            // a member's level: a space's top, or a folder that is no guest's (the web's `folderRights` createFolder)
+            override fun mayImport(scopeId: String, parentId: String?) =
+                this@ShellModel.online && (parentId == null || !tenant.inIdentityFolder(scopeId, parentId))
+            override fun importDialog(
+                scopeId: String, parentId: String?, target: String, input: me.raddatz.veyq.mobile.export.ImportInput,
+                asFile: (() -> Unit)?, closed: () -> Unit,
+            ) = me.raddatz.veyq.mobile.export.ImportDialog(
+                input, target, scopeId, parentId, me.raddatz.veyq.mobile.export.SubtreeImport.Server(tenant, scopeId),
+                AppKinds.imports(deletedName, { NodeCreate.uuid(tenant.account) }, deriver, now), AppKinds::tokenInput, asFile, closed,
+                { tenant.forgetTree(); changed() },
+            ).also { it.start() }
+        }, importOffered = imports)
 
     /**
      * Memories' uploads of this tenant over the app's [queue] ([me.raddatz.veyq.mobile.memories.MediaUploads]): each picked

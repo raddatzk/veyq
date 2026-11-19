@@ -45,6 +45,11 @@ class DepotUploads(
     private val queue: UploadQueue,
     private val door: Door,
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
+    /**
+     * Whether this platform offers a download's import at its uploads ([screen], [screenFolder]; ADR 0152 decision 1): the
+     * desktops do; the phones upload a download as the file it is until the owner switches them on (owner 2026-11-19).
+     */
+    private val importOffered: Boolean = false,
 ) {
     /** What the uploads read and make ([over] a shell, a test over a server it plays). */
     interface Door {
@@ -65,7 +70,26 @@ class DepotUploads(
 
         /** Whether the account reaches its server: offline nothing is queued (ADR 0140 decision 7). Absent: always. */
         fun online(): Boolean = true
+
+        /**
+         * Whether a download picked, dropped or shared under [parentId] of [scopeId] may be imported there: a member who may
+         * create a folder at that level (the web's `access.mode === 'member' && rights.createFolder`), never a guest, never
+         * in a guest's folder. Absent: never.
+         */
+        fun mayImport(scopeId: String, parentId: String?): Boolean = false
+
+        /**
+         * The import of [input] under [parentId] of [scopeId] ([target]: the level's name) as its dialog's model, [asFile]
+         * its *Upload as a file* (a ZIP), [closed] once it is gone; null where this tenant imports nothing.
+         */
+        fun importDialog(
+            scopeId: String, parentId: String?, target: String, input: me.raddatz.veyq.mobile.export.ImportInput,
+            asFile: (() -> Unit)?, closed: () -> Unit,
+        ): me.raddatz.veyq.mobile.export.ImportDialog? = null
     }
+
+    /** What an upload's screen came to: how many files it queued, and the import it offers (null: none). */
+    class Screened(val queued: Int, val offer: me.raddatz.veyq.mobile.export.ImportDialog?)
 
     /** What the uploads say once: a folder upload's outcome (one line each), or a replace offered with its [action]. */
     class Said(val id: Long, val notices: List<Notice>, val offer: DepotFiles.Offer? = null) {
@@ -162,6 +186,45 @@ class DepotUploads(
         }
         enqueue(jobs.map { it.first }, label, parentId ?: scopeId)
         return jobs.size
+    }
+
+    /**
+     * [upload] that first screens what it is handed (ADR 0152 decision 1; the web's `screenUpload`): where the import is
+     * offered here ([importOffered], [Door.mayImport]), the first of [sources] that is a veyq download by its content
+     * ([me.raddatz.veyq.mobile.export.ImportSource.isDownload]: its end and directory read, never the whole file) becomes
+     * the import's offer, *Upload as a file* beside it; every other file is queued as [upload] queues it. One import per
+     * pick, drop or share. A share's [left] takes the offered file back once its dialog is gone (an upload as a file hands
+     * it back as [upload] does).
+     */
+    suspend fun screen(scopeId: String, parentId: String?, label: String, sources: List<UploadSource>, left: ((UploadSource) -> Unit)? = null): Screened {
+        val download = if (importOffered && door.online() && door.mayImport(scopeId, parentId)) {
+            withContext(work) { sources.firstOrNull { me.raddatz.veyq.mobile.export.ImportSource.isDownload(it) } }
+        } else {
+            null
+        }
+        val offer = download?.let { d ->
+            door.importDialog(scopeId, parentId, label, me.raddatz.veyq.mobile.export.ImportInput.Zip(d), { upload(scopeId, parentId, label, listOf(d), left) }) {
+                left?.let { l -> runCatching { l(d) } }
+            }
+        }
+        val rest = if (offer != null) sources.filter { it !== download } else sources
+        return Screened(upload(scopeId, parentId, label, rest, left), offer)
+    }
+
+    /**
+     * [uploadFolder] that first screens the directory (the web's `screenDirectory`): where the import is offered here, a
+     * walk that holds `.veyq/manifest.json` at its root is a download unpacked and becomes the import's offer — no *Upload
+     * as a file*; any other directory is uploaded as its tree. [label]: the level's name, where the import goes.
+     */
+    suspend fun screenFolder(scopeId: String, parentId: String?, label: String, shownName: String?, path: String, found: List<FolderUpload.Found>): Screened {
+        val files = found.filter(FolderUpload::keeps)
+        if (importOffered && door.online() && door.mayImport(scopeId, parentId) &&
+            me.raddatz.veyq.mobile.export.ImportSource.holdsManifest(files.map { it.path })
+        ) {
+            val input = me.raddatz.veyq.mobile.export.ImportInput.Folder(FolderUpload.rootName(shownName, path), files.map { it.path to it.source!! })
+            door.importDialog(scopeId, parentId, label, input, null) {}?.let { return Screened(0, it) }
+        }
+        return Screened(uploadFolder(scopeId, parentId, shownName, path, found), null)
     }
 
     /**

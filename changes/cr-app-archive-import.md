@@ -154,7 +154,7 @@ The web's `export.*` import keys ported to `words.json` (EN+DE, each `note` nami
   freeing; a payload's SHA-256 mismatch rolls back every top-level node; *Import the rest*; quota refused before any
   write. Live (throwaway): the web's archive imported and opened. **Bites:** (a) the rollback removed → the mismatch test
   red; (b) `AppKinds.imports` routing a MEMORY to Depot's hook → the per-kind test red.
-- [ ] **5 core — the entries** (I1) — `DepotUploads` screens before queueing; the share into a folder screens.
+- [x] **5 core — the entries** (I1) — `DepotUploads` screens before queueing; the share into a folder screens.
   Tests: a pick of three files with one download offers one import and queues two; a guest's download queues as a file;
   a folder without a manifest uploads as a folder. **Bite:** the member check dropped → the guest test red.
 - [ ] **6 bridge** (I6) — the calls and updates; the generated Rust and C# bindings. · Done when: `:bridge:jvmTest`

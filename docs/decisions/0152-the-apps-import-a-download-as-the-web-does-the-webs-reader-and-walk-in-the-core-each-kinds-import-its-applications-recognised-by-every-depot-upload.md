@@ -19,7 +19,8 @@ the web reads.
 
 ### 1. No Import entry: every Depot upload recognises a download
 
-The core's `DepotUploads` screens what it is handed before it queues, as the web's `screenUpload`/`screenDirectory`: the
+The core's `DepotUploads` screens what it is handed before it queues (`screen`, `screenFolder`; a share's and a drop's
+through `AddHere.Level.takeOrOffer` and `dropOrOffer`), as the web's `screenUpload`/`screenDirectory`: the
 first picked, dropped or shared **file** that is a download (by its content: `PK\3\4`, a central directory that holds
 `.veyq/manifest.json` or version 1's `manifest.json`) becomes an import offer with *Upload as a file*; a picked or dropped
 **folder** holding `.veyq/manifest.json` at its root becomes an import offer without it; every other file or folder is the
@@ -28,8 +29,8 @@ first four bytes, the end of the file and the central directory — never the wh
 
 **The phones offer no import for now (owner 2026-11-19).** The import is switched on for the desktops (macOS, Linux,
 Windows); on Android and iOS/iPadOS a veyq download is uploaded as the file it is. The core's screen is built and tested
-on every target; each phone platform's entry stays off behind one flag (`ImportScreen.offered`), so switching it on is
-that flag and the platform's dialog. An import runs while the app is open, as on the web, where closing the tab stops one;
+on every target; each phone platform's entry stays off behind one flag (`ShellModel.depotUploads(imports)`, the
+`DepotUploads.importOffered` it passes on), so switching it on is that flag and the platform's dialog. An import runs while the app is open, as on the web, where closing the tab stops one;
 an import that outlives the app would need a persistent job of its own — a second import path for one platform's
 lifecycle, which is why the phones wait.
 
