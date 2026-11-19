@@ -125,7 +125,18 @@ is written by the core straight into the file the person chose in the system's s
 moderator is sent to the web for the rotation and the erasure. Passed on Android (an API 36 emulator) and Linux
 (Broadway) as throwaways with a member, every kit save followed by a no-copy check of the app's files; the core's live
 tests ran every flow but the address change's confirm as throwaways (ADR 0148's Consequences say what each pass proved
-and what is open). The Use pages: [Your profile](../../site/src/content/docs/account/your-profile.mdx),
+and what is open). **The flows' Secret Key and the breached-password check** ([ADR 0151](../decisions/0151-the-apps-account-rest-the-sign-ins-secret-key-control-in-every-flow-that-asks-for-the-key-and-the-breached-password-check-straight-from-the-device.md), built 2026-11-19
+on every app): the password change, the address change (its request and its kit step) and the rotation's gate take the
+Secret Key as the sign-in does — typed, a pasted `veyqkit:` token, the kit file from the system's picker or a scan where
+the app has a camera, held by the flow's own `account/KeyIntake` and zeroed after; a kit of another account warns,
+never blocks. The new password of the password change and of the rotation is checked as the web checks it
+(`account/BreachCheck`): when the field is left and again at submit if edited, a 5-hex SHA-1 prefix with
+`Add-Padding` straight from the device to the address the instance's `core.breached-password` serves, through
+`session/OutsideHttp` (the app's `User-Agent` naming the instance, no bearer, no cookie), a hit waiting for *Use it
+anyway*, a check that could not run going ahead with one line. Passed on Android, Linux and Windows as throwaways, the
+range address blocked on each so no live query was sent (the kit file, a pasted token, another account's kit, *could
+not be checked*; Windows also a scan and the rotation's gate with the kit file); a hit is held by `BreachCheckTest`,
+never drawn live (ADR 0151's Consequences). The Use pages: [Your profile](../../site/src/content/docs/account/your-profile.mdx),
 [Verify a person](../../site/src/content/docs/account/verify-a-person.mdx),
 [Change your password](../../site/src/content/docs/account/change-password.mdx),
 [Your email address](../../site/src/content/docs/account/change-email.mdx),
@@ -560,11 +571,13 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
 - The account's flows ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md), built): the agent's macOS click-through and kit no-copy check (inbox #976, with #917),
   the Windows UIA pass and no-copy check (#983, once the VM resolves a throwaway's tenant), whether iOS's
   `fileExporter` stages the kit in the container (#975); the address change's confirm and re-addressed sign-in live (no
-  mailing backend on the Mac the passes ran on); the breached-password check (#969) and the Secret Key from a pasted kit
-  token, a kit file or a scan in these flows (#970), decided in [ADR 0151](../decisions/0151-the-apps-account-rest-the-sign-ins-secret-key-control-in-every-flow-that-asks-for-the-key-and-the-breached-password-check-straight-from-the-device.md) and being built
-  (cr-app-account-rest); a live pass that sees #979's and #980's fixes, and the fixes of #1009, #1010, #977 and #984
+  mailing backend on the Mac the passes ran on); of [ADR 0151](../decisions/0151-the-apps-account-rest-the-sign-ins-secret-key-control-in-every-flow-that-asks-for-the-key-and-the-breached-password-check-straight-from-the-device.md) (built): the macOS pass
+  (the coordinator's), a breach hit drawn live on any app (no played range service reaches one; `BreachCheckTest` holds
+  it), a flow's kit scan on Android and Linux, the rotation's gate with a kit on Android and Linux, and an address change
+  sent with a kit; a live pass that sees #979's and #980's fixes, and the fixes of #1009, #1010, #977 and #984
   on screen. The owner's: iPhone and
-  iPad, Touch ID and Windows Hello for real, a real mailbox, a safety code scanned with real cameras (#912).
+  iPad (a flow's kit scanned with the real camera, the breach notice too), Touch ID and Windows Hello for real, a real
+  mailbox, a safety code scanned with real cameras (#912).
 - Not in the apps: invites and members, recovery, terms, *Who's who* (#967), the moderation key (#965), the task
   queue's jobs (#966), and an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).

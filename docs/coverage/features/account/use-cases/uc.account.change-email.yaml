@@ -8,6 +8,8 @@ title: Change the address an account signs in with
 # cited — core `CredentialFlowsTest.anAddressChangeSignsUnderTheNewAddressAndTheKitAfterItIsChecked`, `ReaddressTest`;
 # live as a throwaway `LiveCredentialFlowsTest.anAddressChangeConfirmedOnTheWebReaddressesTheRecord` (skips where the dev
 # backend sends no mail, saying so — not yet run to its end). The confirm stays the web's (owner 2026-11-18).
+# ADR 0151 (built 2026-11-19): the request's and the kit step's Secret Key from a pasted kit token, a kit file or a scan
+# — core `FlowKeyIntakeTest`, bridge `AccountFlowsDispatchTest.aPastedKitTokenOpensEachFlow`.
 acceptanceCriteria:
   - id: request-needs-password-and-secret-key
     text: >-
