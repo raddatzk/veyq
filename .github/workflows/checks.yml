@@ -91,6 +91,11 @@ jobs:
           fi
           echo "$count guards green"
 
+      # The import cases both clients answer to (ADR 0152 decision 4): the committed file is what its generator writes, so
+      # a case edited by hand, or a generator changed without its file, is red here, before either client reads it.
+      - name: Import cases reproduce
+        run: python3 contracts/export/import-cases/generate.py --check
+
       # The snapshot's pure decisions (the asset-set hash, the lane records and predicates, the write-once verdicts),
       # offline: publish.yml acts on them only after every stage, so they are proven here, before it.
       - name: Snapshot self-test

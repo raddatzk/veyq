@@ -147,6 +147,33 @@ object AppKinds {
     }
 
     /**
+     * How the build's kinds import a download (ADR 0152 decision 3; the web's `importContent`, `importsAsFolder`,
+     * `validateContent`, `contentSchema`, `SubtreeImport`): a Depot file uploaded from its checked payload and a drop box as a
+     * plain folder (`DepotImport`), a Pot by Expenses' import (`PotImport`, an erased person named [deletedName], its ids
+     * minted by [uuid]), a Memory and a chapter by Memories' (`MemoryImport`: each medium's tiers derived by the platform's
+     * [deriver], as an upload's; [now] bounds a video's capture time); a kept link and every kind this build does not know
+     * have none, and are left out with what is under them (`unknown_application`), as on the web.
+     */
+    fun imports(
+        deletedName: String, uuid: () -> String, deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver?, now: () -> Long,
+    ): me.raddatz.veyq.mobile.export.SubtreeImport.Kinds {
+        val file = me.raddatz.veyq.mobile.depot.DepotImport.file(::tokenInput)
+        val pot = me.raddatz.veyq.mobile.expenses.PotImport.hook(deletedName, uuid)
+        val memory = me.raddatz.veyq.mobile.memories.MemoryImport.hook(MEMORY, deriver, now)
+        val chapter = me.raddatz.veyq.mobile.memories.MemoryImport.hook(CHAPTER, deriver, now)
+        return me.raddatz.veyq.mobile.export.SubtreeImport.Kinds { kind ->
+            when (kind) {
+                FILE -> file
+                DROPBOX -> me.raddatz.veyq.mobile.depot.DepotImport.dropBox
+                PotSession.KIND -> pot
+                MEMORY -> memory
+                CHAPTER -> chapter
+                else -> null
+            }
+        }
+    }
+
+    /**
      * Where a node of a kind may be placed (each kind's `placement`, the web's `registry.placementAllows` mirroring the
      * backend's `NodeKindRules`): a folder, a Pot, a Memory, a Depot file and drop box and a kept link at the space's top or
      * in a folder, a chapter in a Memory; a kind this build does not know nowhere. A hint: the server decides.

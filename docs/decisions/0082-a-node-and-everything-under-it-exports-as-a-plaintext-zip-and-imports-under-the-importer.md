@@ -213,7 +213,7 @@ shows it:
   schema beside it, so a new application adds its own file and core's is not touched.
 - **The apps write the same archive and copy the same way** (ADR 0136's core for every kind it exports): a Memory's and a
   chapter's content and copy as the web's are [ADR 0149](0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decision 3;
-  the apps import nothing yet (inbox #985).
+  their import is [ADR 0152](0152-the-apps-import-a-download-as-the-web-does-the-webs-reader-and-walk-in-the-core-each-kinds-import-its-applications-recognised-by-every-depot-upload.md)'s — the web's reader and walk in the core, held to one set of cases.
 - **The format is a public promise.** `version` bumps only for a change an old reader would misread; kinds version their
   own `content.schema`, named per application in `applications`. A reader that tolerates additions keeps old files
   importable, and a reader keeps every older `version` it ever wrote: the tree layout (2) replaced `data/<id>/` (1), and

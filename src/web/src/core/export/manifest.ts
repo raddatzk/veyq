@@ -32,7 +32,7 @@ export const MANIFEST_PATH_V1 = 'manifest.json'
 export const MANIFEST_MAX_BYTES = 128 * 1024 * 1024
 export const MAX_DEPTH = 100
 export const MAX_NODES = 200_000
-/** The contract's `maxLength` (and `maxItems`) of every field core reads; `manifest.test.ts` pins each to the schema. */
+/** The contract's `maxLength` (and `maxItems`) of every field core reads; `importHardening.test.ts` pins each to the schema. */
 export const LIMITS = {
   appVersion: 64,
   applications: 64,

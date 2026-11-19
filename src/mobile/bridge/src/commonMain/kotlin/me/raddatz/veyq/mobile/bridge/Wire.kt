@@ -590,6 +590,33 @@ internal sealed class Call {
     @Serializable @SerialName("Upload.Seen") data class UploadSeen(val said: Long) : Call()
 
     /**
+     * Files picked or dropped into a level, screened first (ADR 0152 decisions 1 and 6, `DepotUploads.screen`): where the
+     * member may create there, the first that is a veyq download by its content becomes an import offered ([Answer.ImportOffered],
+     * watched as [Watched.Import]) and every other file is queued as [UploadFiles] queues it; with none, the answer is
+     * [Answer.Queued]. Paths in, never bytes (ADR 0137): the core opens each and reads its end and directory only.
+     * [deletedName]: how an erased person of an imported Pot is named (the host's `pot_deleted_person`).
+     */
+    @Serializable @SerialName("Import.Screen")
+    data class ImportScreen(val scopeId: String, val parentId: String?, val label: String, val paths: List<String>, val deletedName: String) : Call()
+
+    /**
+     * A directory picked or dropped into a level, screened first (`DepotUploads.screenFolder`): one holding
+     * `.veyq/manifest.json` at its root is a download unpacked and offered as an import ([Answer.ImportOffered]); any other is
+     * uploaded as [UploadFolder] uploads it ([Answer.Queued]).
+     */
+    @Serializable @SerialName("Import.ScreenFolder")
+    data class ImportScreenFolder(val scopeId: String, val parentId: String?, val label: String, val path: String, val deletedName: String) : Call()
+
+    /** Import [import] ([ImportShown.canImport]): everything its dry run does not leave out, under its level. */
+    @Serializable @SerialName("Import.Run") data class ImportRun(val import: Long) : Call()
+
+    /** *Upload as a file* ([ImportShown.canAsFile]): the offered file queued as an ordinary upload; the import closes. */
+    @Serializable @SerialName("Import.AsFile") data class ImportAsFile(val import: Long) : Call()
+
+    /** *Cancel*, or the dialog closed: a run stops and what it made goes to the trash; the import closes. */
+    @Serializable @SerialName("Import.Cancel") data class ImportCancel(val import: Long) : Call()
+
+    /**
      * Where a picture of [imageWidth] × [imageHeight] sits in a cover's frame of [frameWidth] × [frameHeight] (core's
      * `CoverFrame`, the web's cropper; asked per change, the math never the host's): from [at] — or, none, from [crop] (a
      * stored cover reopens as framed) or centred (a fresh picture) — moved by [panX], [panY] and zoomed by [zoom] about the
@@ -1690,6 +1717,12 @@ internal sealed class Answer {
     @Serializable @SerialName("Saving") data class Saving(val save: Long) : Answer()
 
     /**
+     * An import offered by [Call.ImportScreen] or [Call.ImportScreenFolder] (ADR 0152 decision 6): its id for [Watched.Import]
+     * and the `Import.*` calls, with the other files queued ([queued]) and what is said of those that did not read ([notice]).
+     */
+    @Serializable @SerialName("ImportOffered") data class ImportOffered(val import: Long, val queued: Int, val notice: Notice? = null) : Answer()
+
+    /**
      * An upload call's files queued ([Call.UploadFiles], [Call.UploadFolder], [Call.UploadReplace], [Call.MemoryUpload]): how
      * many, and what is said of those left out ([notice]: `MediaUploads.notTaken`; null where none was).
      */
@@ -1942,6 +1975,9 @@ internal sealed class Answer {
         /** An upload: no replace offered or chosen on that page; a path that is no file (or directory) that reads; no such said. */
         NO_REPLACE, NOT_CHOSEN, NO_SUCH_PATH, NO_SUCH_SAID,
 
+        /** An import: none open by that id (ADR 0152). */
+        NO_SUCH_IMPORT,
+
         /** A drop box's page: none by that id; no guest's folder listed by that id; a delete that was not asked. */
         NO_SUCH_DROPBOX, NO_SUCH_FOLDER, NOT_ASKED,
 
@@ -2046,6 +2082,9 @@ internal sealed class Watched {
 
     /** The uploads of the tenant open now (`DepotUploads`), whichever that is: the tray, what it says once. */
     @Serializable @SerialName("Uploads") data object Uploads : Watched()
+
+    /** An import offered by [Call.ImportScreen] or [Call.ImportScreenFolder]: its dialog ([ImportShown]). */
+    @Serializable @SerialName("Import") data class Import(val import: Long) : Watched()
 
     /** A drop box's page opened by [Call.DropBoxOpen]. */
     @Serializable @SerialName("DropBox") data class DropBox(val box: Long) : Watched()
@@ -2193,6 +2232,9 @@ internal sealed class Update {
 
     /** The uploads; null while no tenant is open. */
     @Serializable @SerialName("Uploads") data class Uploads(val shown: UploadsShown?) : Update()
+
+    /** Import [import]'s dialog as it is now; null once it is gone. */
+    @Serializable @SerialName("Import") data class Import(val import: Long, val shown: ImportShown?) : Update()
 
     /** A drop box's page; null once it was closed (or an id the bridge does not hold). */
     @Serializable @SerialName("DropBox") data class DropBox(val box: Long, val shown: DropBoxShown?) : Update()
@@ -3109,6 +3151,37 @@ internal enum class LinkRefusal { OFF, GONE, REFUSED, FAILED }
 /** `DeviceLink.Hint`: what the words add. */
 @Serializable
 internal enum class LinkHint { OTHER_DIRECTION, SAME_SERVER }
+
+/** Where an import's dialog is (core's `ImportDialog.Step`). */
+@Serializable
+internal enum class ImportStep { READING, READY, RUNNING, INVALID, DONE }
+
+/**
+ * An import's dialog as the host draws it (core's `ImportDialog`, the web's `ImportSubtreeDialog.vue`; ADR 0152 decisions 5
+ * and 6): its [step]; the dry run's [summary] (items, size, where) with what it leaves out ([leftOut], each the web's line);
+ * whether the tenant has room ([fits]: null where the server did not say); a run's progress in nodes ([done] of [total],
+ * [progress]: the web's line); what it says ([said]: a refusal, a failure, or once [ImportStep.DONE] the imported line the
+ * host shows as its toast); the buttons it offers ([canImport] with its word [importWord] — *Import* or *Import the rest* —,
+ * [canAsFile]); and [closed], after which the host takes the dialog down. Nothing of the download crosses: no path, no
+ * byte, no key — only counts, names the manifest gives and words.
+ */
+@Serializable
+@SerialName("ImportShown")
+internal class ImportShown(
+    val step: ImportStep,
+    val root: String,
+    val summary: Notice?,
+    val leftOut: List<Notice>,
+    val fits: Boolean?,
+    val done: Int,
+    val total: Int,
+    val progress: Notice?,
+    val said: List<Notice>,
+    val canImport: Boolean,
+    @Serializable(with = MsgKey::class) val importWord: Msg,
+    val canAsFile: Boolean,
+    val closed: Boolean,
+)
 
 /**
  * The uploads as the host draws them (core's `DepotUploads` over the app's one upload queue, the web's `UploadStatusMenu`),

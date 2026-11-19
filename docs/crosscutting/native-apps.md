@@ -253,7 +253,7 @@ two placeholders, closing asked (*Uploads laufen noch*, *2 Dateien*) and *Weiter
 for macOS and the iOS Simulator SDK, never run (§ Open).
 
 **Out and in.** The ZIP of a Pot, a folder, a file or a drop box, as the web writes it — measured 2026-11-09; a Memory's
-and a chapter's since 2026-11-19 (Memories' rest, below). No import in the apps (#985).
+and a chapter's since 2026-11-19 (Memories' rest, below). Import of a download: [ADR 0152](../decisions/0152-the-apps-import-a-download-as-the-web-does-the-webs-reader-and-walk-in-the-core-each-kinds-import-its-applications-recognised-by-every-depot-upload.md), the desktops only (§ Open).
 
 **QR codes** ([ADR 0141](../decisions/0141-qr-codes-are-read-and-drawn-by-the-core.md)). One decoder and one encoder in
 the core, a scan model (`qr/QrScan`) and a camera on all four apps — CameraX, AVFoundation, the Camera portal over
@@ -566,8 +566,8 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
 **Expenses**: reading a receipt's text on the device (#549); what [expenses.md](../apps/expenses.md) keeps out of the
 first cut.
 
-**Depot**: a READ_WRITE guest's own name as uploader; importing a download (a ZIP, or one unpacked as a folder; a dropped
-or picked veyq download is uploaded as the file it is until then); multi-select and dragging a node onto a folder to move
+**Depot**: a READ_WRITE guest's own name as uploader; importing a download on the desktops (cr-app-archive-import: the core and the bridge built, the dialogs not; the
+phones upload one as a file, owner 2026-11-19); multi-select and dragging a node onto a folder to move
 it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built). A password-protected PDF's text
 selected and copied on Windows (drawn by `Windows.Data.Pdf`, which has no text API). Built 2026-11-18 (inbox #955): on
 Linux an overlay of its own over poppler's rendered pages (`src/mobile/linux/src/pdf_text.rs`; GTK has no view that
@@ -602,8 +602,8 @@ bucket (#1031); **Apple's pass**, the
 agent's on the unlocked Mac (#994) and the owner's on an iPhone and an iPad (#925, #928), with the filter's place on an
 iPad and a Mac (#995); **Windows' UIA pass** (#1000, once the VM resolves a throwaway's tenant, #983). The fixes of
 #990, #991, #996, #997 and #1001 are in, checked by tests; #990's seen on Android, #996's on Android and Linux; #989's calendars are handed on every app,
-Apple's unclicked. A copy that a rotation interrupts fails (#988). The owner answered its four questions 2026-11-19 as built (ADR 0149's Consequences). Not built: import of an archive, for every
-kind (#985); a guest's view of a received link
+Apple's unclicked. A copy that a rotation interrupts fails (#988). The owner answered its four questions 2026-11-19 as built (ADR 0149's Consequences). Not built: import of an archive on the desktops
+(#985, cr-app-archive-import); a guest's view of a received link
 (#435, a source for the same model). The web's own heart in its lightbox (#986) and its Contributions' "You" (#1003) are
 built (2026-11-19).
 A share into a Memory and into a folder (built above): Apple's passes — the iOS handoff, which types a Safari page and a

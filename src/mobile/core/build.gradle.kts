@@ -359,6 +359,8 @@ tasks.named<Test>("jvmTest") {
 val vectors = rootDir.resolve("../../contracts/crypto/vectors/v1.json").canonicalFile
 // The web's Emergency Kit fixtures, which the kit's read order is held to (KitFixtureCases), on the JVM and Apple.
 val kitFixtures = rootDir.resolve("../web/src/features/account/emergencyKit/__fixtures__").canonicalFile
+// The import cases and the web's download both clients answer to (ADR 0152 decision 4), on the JVM and Apple.
+val importCases = rootDir.resolve("../../contracts/export/import-cases").canonicalFile
 tasks.withType<Test>().configureEach {
     systemProperty("veyq.vectors", vectors.absolutePath)
     systemProperty("veyq.repoRoot", rootDir.resolve("../..").canonicalPath)
@@ -374,6 +376,7 @@ tasks.withType<Test>().configureEach {
     testLogging { showStandardStreams = System.getenv("VEYQ_LIVE") != null || System.getenv("VEYQ_MEASURE") != null }
     inputs.file(vectors).withPropertyName("vectors")
     inputs.dir(kitFixtures).withPropertyName("kitFixtures")
+    inputs.dir(importCases).withPropertyName("importCases")
 }
 
 tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
@@ -386,6 +389,7 @@ tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest
     testLogging { showStandardStreams = System.getenv("VEYQ_LIVE") != null || System.getenv("VEYQ_MEASURE") != null }
     inputs.file(vectors).withPropertyName("vectors")
     inputs.dir(kitFixtures).withPropertyName("kitFixtures")
+    inputs.dir(importCases).withPropertyName("importCases")
 }
 
 tasks.matching { it.name.startsWith("compile") || it.name.endsWith("SourcesJar") }.configureEach { dependsOn(generateApi, generateMajor, generateTheme, generateWords) }
