@@ -110,7 +110,7 @@ the apps (Android, iOS, macOS, Windows, Linux) follow the flows above, with thes
   ALAC M4A, Windows without the Web Media extension no Ogg, Linux's Flatpak and the Mac play all ten formats tried.
 - **Offline:** a Memory made available offline keeps its tracks whole and plays them without a connection; its Music
   view is then read-only (no add, rename, remove or report).
-- **Not in the apps:** a guest's listening (the apps open a gallery as a member only, inbox #435).
+- **A guest in the apps** hears a Memory's music through the player the app hands the link ([ADR 0150](../../../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md)'s Consequences, #1034).
 
 ## Related
 

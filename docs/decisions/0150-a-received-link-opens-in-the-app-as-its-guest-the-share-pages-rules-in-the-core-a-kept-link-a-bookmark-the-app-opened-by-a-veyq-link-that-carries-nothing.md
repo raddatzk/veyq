@@ -2,7 +2,8 @@
 - Status: Accepted
 - Built: decisions 1–9 yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android, Linux
   and Windows as throwaways and by the core's live tests; the macOS pass is open and the iPhone's and iPad's are the
-  owner's (§ Consequences); § O is cr-open-in-the-app's, not built
+  owner's (§ Consequences); § O yes — the web's banner and `veyq:` on every app, 2026-11-19; passed on the web,
+  Android, Linux and Windows as throwaways; the Mac's `open` and the iPhone's are open (§ Consequences)
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md) (the share page: [uc.sharing.share-public-viewer](../features/sharing/use-cases/uc.sharing.share-public-viewer.md))
 
@@ -258,6 +259,55 @@ den du bekommen hast*, *Open in the browser* / *Im Browser öffnen*, *Keep* / *B
   `run.py package --sign` signs with the host's development certificate installs in the logged-on session with no system
   change once that certificate is trusted (a one-time step the host's owner took, 2026-11-13). `veyq:` therefore exists
   only in a signed, installed package; the unpackaged development loop claims nothing and keeps one process per start.
+- **§ O built** (2026-11-19): the core's `sharing/DeepLink.parse` (`Open` or `Link`, nothing else read; the bridge's
+  `Call.DeepLink` → `DeepScreen`), the web's `core/openInApp/` (`OpenInAppBanner.vue`: on every page per the owner's answer,
+  `veyq://link` on a share page with the copy, `veyq://open` elsewhere and on the four mailed pages after their step;
+  none on `/moderation` or in a review; the dismissal per browser; hidden where Safari draws Apple's Smart App Banner,
+  whose `apple-itunes-app` tag waits for an App Store id, `smartAppBanner.ts`), Android's VIEW filter on `MainActivity`,
+  Apple's `CFBundleURLTypes` with `.onOpenURL`, the Linux desktop entry's `x-scheme-handler/veyq` with `HANDLES_OPEN`, the
+  MSIX's `windows.protocol` with `AppInstance`'s redirect (`Program.cs`, `DeepLinks.cs`). On `Link` each app shows *Open
+  a link* over whatever stands — the sign-in, the unlock or the open tenant (the owner's answer of 2026-11-19, so a
+  signed-in person reaches a received link and *Keep* through the banner) — keeping what was typed when it already
+  shows; on `Open` only the app in front. The Android, Linux and Windows phases' own passes (as throwaways; Apple's built only): `veyq://link#k=CANARY`,
+  `veyq://LINK?u=…#k=CANARY` and `veyq://open?x=CANARY` from the system's own launcher (`am start`, `gio open`,
+  `Start-Process`), cold and warm, signed out and over the shell, the canary in no log or file of the app's.
+- **§ O's passes from a browser** (2026-11-19, throwaways made and erased by the pass, each link minted by the throwaway
+  owner on the web). *The web* (headless system Chrome): the share page's banner reads *Copy link and open the app*, its
+  `href` exactly `veyq://link`, the banner holding no key; the click put the link on the clipboard — the same link, and
+  without `&report` when the page was opened with it — and Chrome tried `veyq://link` (no handler on that machine); the
+  address-change confirm page showed no banner with no link and none for a link the server refused, none while the
+  step's answer was pending, and *Open in the veyq app* (`veyq://open`) once the step was done — that success answered by
+  the browser, not the server, since the dev backend's relay delivered no mail on that network (the request answered `503`
+  after 11 s, the send failed), so no live token existed; dismissed, the banner stayed gone after a reload and on the
+  app's home (`veyq.openInAppDismissed`). *Android* (a throwaway API 36 emulator, its Chrome): the share page's *Copy link
+  and open the app* opened the app straight to *Open a link* over the sign-in (no chooser: one handler), *Paste* filled
+  the link (the system's "veyq pasted from your clipboard"), *Open a link* showed the share as its guest; the tenant's
+  sign-in page's *Open in the veyq app* brought the same task to the front on the guest view. The app's files held none
+  of the link's key or share id; the system did — Android 16's window manager logs the browser task's current address,
+  fragment included, as `capturedLink` when that task is left, and the recents list holds Chrome's opening intent — the
+  browser's exposure, not the app's. *Linux* (the Fedora VM's GNOME session, the Flatpak bundle installed for the pass,
+  Firefox): the desktop entry registered as `x-scheme-handler/veyq`'s default; Firefox asked *Allow this site to open the
+  veyq link with veyq?* (answered *Open Link* once, never *Always allow*); the app started to *Open a link* over its
+  sign-in, *Paste* and *Open a link* showed the share as its guest; a second click went to the running window (one
+  `veyq` process, the dialog over the guest view), and the sign-in page's banner brought it to the front where it was.
+  The app's data, the user journal, `/tmp` and the caches held none of the key (b64url, b64, hex) or the share id.
+  *Windows* (the VM, Edge, the MSIX signed with the host's development certificate under a pass-only identity,
+  `app.veyq.VeyqOiah`, installed in the logged-on session and uninstalled after with no data left): Edge asked *Diese
+  Website versucht, veyq zu öffnen* (answered *Öffnen*, never *immer erlauben*); the app started to *Open a link* over its
+  sign-in, *Einfügen* and *Link öffnen* showed the share as its guest (its name decrypted, so the key arrived whole); a
+  second click went to the running process (one `Veyq.App`) with the dialog over the guest view, and the sign-in page's
+  *In der veyq-App öffnen* brought it to the front on the guest view, no dialog. The app's log said the screen alone
+  (`veyq: link opened Open a link`, `… the app where it is`); its package data, install directory and `%TEMP%` (1824
+  files) held none of the key or the share id (the scan bit with a planted file). Edge kept the link in its history and
+  tabs, as a browser does.
+  The residual of decision O4 is in [Known limitations](../../site/src/content/docs/security/known-limitations.md#copy-link-and-open-the-app-hands-the-link-to-whichever-app-holds-veyq)
+  and the banner on the guest's page in [What a guest sees](../../site/src/content/docs/sharing/what-guests-see.mdx).
+  **Not passed:** the Mac's `open 'veyq://link'` (the coordinator's: an agent has no full-screen control) and the
+  iPhone from Safari with the system's "Open in veyq?" and the paste control (the owner's, no simulator boots, #928); a
+  mailed page's banner over a token the server issued (the relay on the passes' network sends nothing); a signed-in
+  person's *Keep* reached through the banner (read in the code: *Open a link* stands over the open tenant, measured by
+  the Android and Windows phases' own passes, the guest screen after it not); the foreground on Windows when the system
+  grants none to the starter.
 
 ## Alternatives considered
 

@@ -1,4 +1,4 @@
-// The *Open in the app* banner's rule (ADR 0150 § O2; cr-open-in-the-app): which page shows it, and which `veyq:` link it
+// The *Open in the app* banner's rule (ADR 0150 § O2): which page shows it, and which `veyq:` link it
 // opens. Pure but for the step flag below, so the component only draws what this decides.
 //
 // A `veyq:` link carries NOTHING (§ O1): a custom scheme is owned by no one — any app on the device may claim `veyq:` and

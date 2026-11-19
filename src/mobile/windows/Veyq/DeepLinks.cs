@@ -1,4 +1,4 @@
-// A `veyq:` link the system handed the app (ADR 0150 § O, cr-open-in-the-app phase 6) — Linux's main.rs `open`, in
+// A `veyq:` link the system handed the app (ADR 0150 § O) — Linux's main.rs `open`, in
 // WinUI. The MSIX claims the scheme (Package.appxmanifest.in); the first activation arrives at the start (App.OnLaunched),
 // every later one at the running instance (Program.cs's AppInstance redirect). The core reads the URI's host alone
 // (Call.DeepLink): `veyq://link` shows *Open a link* over whatever stands — the sign-in, the unlock, the open tenant, a

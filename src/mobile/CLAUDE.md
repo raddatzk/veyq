@@ -1664,6 +1664,16 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   keysyms and frames (`pipewiresrc path=<node> keepalive-time=100`), with no portal dialog; the session stays unlocked
   (`lock-enabled false`). Sound is read from the default sink's monitor (`parec -d <sink>.monitor`), unmuted for it. A drag
   across libadwaita's sidebar activates the row under the pointer (a Pot opened mid-drag, 2026-11-12): cross it on a heading.
+- A browser pass into the VM's apps (ADR 0150 § O's, 2026-11-19): the VM's sshd refused a remote forward
+  on port 8095 (`remote port forwarding failed`; on 38095 it took — remembered as SELinux's port labels, not measured), and
+  Fedora resolves `*.localhost` to `::1` first, so the tunnel lands on a high port and a forwarder in the session listens
+  on both `127.0.0.1` and `::1` at the page's port. A Firefox started over ssh while another window has the focus only
+  posts "… is ready" (GNOME's focus-stealing prevention): click the notice. Firefox asks *Allow this site to open the veyq
+  link with veyq?* before each `veyq:` launch — answer *Open Link*, never *Always allow*. A Firefox first started by a
+  pass creates `~/.config/mozilla` and `~/.cache/mozilla` (its history holds the pass's links): removed after. On the
+  Android emulator `adb root` restarts adbd and drops every `adb reverse`: set them after it; its Chrome skips the first
+  run with `_ --disable-fre --no-first-run` in `/data/local/tmp/chrome-command-line` and `am set-debug-app --persistent
+  com.android.chrome`, which declines nothing on the person's behalf.
 - A Linux debug build run outside its container (the VM) found no catalogs — they lie in the build's directory — and spoke English
   under `LANGUAGE=de` (measured 2026-11-12): copy `out/locale` beside it and set `VEYQ_LOCALE_DIR`. GTK's file dialog in an app
   that is not sandboxed is GTK's own; `GDK_DEBUG=portals` takes the portal's, as a Flatpak does.

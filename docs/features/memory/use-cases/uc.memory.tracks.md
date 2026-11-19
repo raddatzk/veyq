@@ -97,7 +97,7 @@ Linux, Windows) follow the flows above, with these differences. Built on every a
   Android, Linux and Windows, MapKit on iPhone, iPad and Mac; the lines and the dots are drawn on the device either way.
 - **Offline:** a Memory made available offline keeps its tracks' files, and its Map view lists them with their numbers
   and the download, read-only and with no map.
-- **Not in the apps:** a link guest's view (the apps open a gallery as a member only, inbox #435).
+- **A link guest in the apps** opens a Memory since [ADR 0150](../../../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md); its tracks there were not passed.
 
 ## Related
 

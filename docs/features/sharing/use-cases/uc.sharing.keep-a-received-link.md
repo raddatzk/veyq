@@ -78,5 +78,7 @@ was shared — without this server learning anything about it.
   [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) (a core kind).
 - **Built since:** browsing the share in place, of this or another instance —
   [uc.sharing.browse-a-received-share-in-place](uc.sharing.browse-a-received-share-in-place.md) (ADR 0121).
-- **Planned:** a received link kept in the account (inbox #435).
+- **Built since:** no account-level list — a link kept privately is a bookmark in the personal space; the apps open,
+  keep and report a received link, and the web's share page opens the app with *Copy link and open the app*
+  ([ADR 0150](../../../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md) decision 1, § O).
 - End-user view (docs site): [Keep a link someone sent you](../../../../site/src/content/docs/sharing/keep-a-link.mdx)

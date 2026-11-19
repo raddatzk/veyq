@@ -392,6 +392,21 @@ logs finding no key, share id or password, and by the core's live tests (`Receiv
 each pass proved). The Use pages: [Open a link in the app](../../site/src/content/docs/sharing/open-a-link-in-the-app.mdx),
 [Keep a link someone sent you](../../site/src/content/docs/sharing/keep-a-link.mdx).
 
+**The app opened by a `veyq:` link** ([ADR 0150](../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md) § O, built 2026-11-19 on every app and the web): `veyq://link`
+opens *Open a link* — over the sign-in, the unlock or the open tenant, what was typed kept when it already shows —, and
+`veyq://open` (any other form too) only brings the app to the front; the core's `sharing/DeepLink` reads the host alone,
+the bridge answers `Call.DeepLink` with the screen. Claimed by Android's VIEW filter on `MainActivity` (`singleTask`),
+Apple's `CFBundleURLTypes` with `.onOpenURL` (the Mac's window takes it, the lightbox's opens none), the Flatpak's desktop
+entry (`Exec=veyq %u`, `MimeType=x-scheme-handler/veyq;`; `HANDLES_OPEN`, a second launch hands the URI over D-Bus and
+exits) and the MSIX's `windows.protocol` (`Program.cs`: with package identity, `AppInstance` redirects a second activation
+to the running one); the unpackaged Windows loop and a Linux run outside the Flatpak claim nothing. The web's banner
+(`src/web/src/core/openInApp/`) is on every page: *Copy link and open the app* on a share page copies the link and opens
+`veyq://link`, *Open in the veyq app* (`veyq://open`) elsewhere and on the four mailed pages after their step. Passed from
+a browser on the web (headless Chrome), Android (the emulator's Chrome), Linux (the Fedora VM's Firefox, the Flatpak)
+and Windows (the VM's Edge, the MSIX) as throwaways; the Mac's `open` and the iPhone are open (below; ADR 0150's Consequences say what each pass
+proved). The Use page: [What a guest sees](../../site/src/content/docs/sharing/what-guests-see.mdx) § Open in the app; the
+residual in [Known limitations](../../site/src/content/docs/security/known-limitations.md).
+
 **A share into a Memory** ([ADR 0138](../decisions/0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md) decisions 2, 3, 6, 8 and 9, built 2026-11-19 on Android and Apple): each kind
 answers a share in its application's code (`navigation/ShareAnswer`: Expenses' `PotShare`, Memories' `MemoryShare`),
 the files wait as sources (`navigation/ShareInbox`); a Memory and a chapter take photos and videos through *Add here*
@@ -597,8 +612,8 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   owner's** iPhone and iPad (#928); on no platform a link of another instance, a live link with terms and a note, or a
   screen reader over the guest screens; Android's re-pass of the kept link's page and the guests' reports
   (#1032–#1036), Linux's signed-out Replace and a guest Pot's Settings, Windows' guest Download and a row's context-menu
-  report. Not built: the handover from the browser, `veyq:` and the web's banner (#435, cr-open-in-the-app); *Keep* on
-  the web's share page (#1013); a moderator's review link (#1014); a link shared in from another app (#1015); a guest's
+  report; the `veyq:` link (§ O): the Mac's `open 'veyq://link'` (the coordinator's) and the iPhone from Safari (the
+  owner's). Not built: *Keep* on the web's share page (#1013); a moderator's review link (#1014); a link shared in from another app (#1015); a guest's
   upload with the app left (#1016); a guest's pages following the link live, and a guest medium's EXIF (#1017).
 - Dropping files onto the app (Android; Apple's drop is built, not measured).
 - Quick capture: widgets, shortcuts; notifications, among them the reminder of what one owes in a Pot (#550).
