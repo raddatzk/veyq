@@ -295,6 +295,171 @@ struct KitDocument: FileDocument {
 }
 #endif
 
+// MARK: The Secret Key section and the new password (ADR 0151)
+
+/// A flow's Secret Key section (ADR 0151 decision 4): the sign-in's control — the key typed or a `veyqkit:` token pasted
+/// (core's intake swaps it), a kit file opened in place (`.fileImporter`: Files on iOS, the open panel on a Mac), the
+/// scan where a camera may be (`KitScannerView`) — and a held kit shown as at the sign-in, its key never on screen, with
+/// *Enter it instead*. A kit of another account warns, one made at another server informs (decision 2); neither blocks.
+/// The fields carry a `prompt:` (#1030: a grouped form's empty field on a Mac takes a click only where it draws text).
+struct FlowKeySection<Extra: View>: View {
+    let intake: KeyIntake
+    @Binding var text: String
+    /// Whether a kit's key is held: the flow's action may go with the field empty.
+    @Binding var holds: Bool
+    let label: String
+    let hint: String
+    let working: Bool
+    let model: AppModel
+    /// Rows drawn above the key in the same section (the password).
+    @ViewBuilder var extra: () -> Extra
+    @State private var held: HeldFlow<KeyIntake, KeyIntake.IntakeState>?
+    @State private var picking = false
+    @State private var scan: QrScan<AnyObject>?
+    @State private var noCamera = !QrCamera.available
+
+    private var state: KeyIntake.IntakeState? { held?.value }
+
+    var body: some View {
+        Section {
+            extra()
+            if let kit = state?.kit {
+                // the kit's Secret Key is core's, never shown: the row says where it came from; its clear goes back to typing
+                LabeledContent(label) {
+                    HStack(spacing: 8) {
+                        Text(say(.signinKitHeld)).foregroundStyle(Role.muted)
+                        Button {
+                            intake.clear()
+                            held?.state.refresh()
+                        } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(Role.muted)
+                            .accessibilityLabel(say(.signinKitClear))
+                            .help(say(.signinKitClear))
+                            .disabled(working)
+                    }
+                }
+                .accessibilityIdentifier("flow-kit-held")
+                Text(kit.email).foregroundStyle(Role.muted)
+            } else {
+                SecureField(label, text: $text, prompt: Text(label))
+                    .disabled(working || state?.reading == true)
+            }
+            if state?.reading == true { ProgressView() }
+            // the scan first on a phone or tablet, the file first on a Mac, as at the sign-in
+            #if os(iOS)
+            scanButton
+            openButton
+            #else
+            openButton
+            scanButton
+            #endif
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(hint)
+                if let problem = state?.problem { Text(say(problem)).foregroundStyle(Role.danger) }
+                if let kit = state?.kit, let expected = kit.otherAccount {
+                    Text(say(.kitEmailMismatch, kit.email, expected)).foregroundStyle(Role.danger)
+                }
+                if let kit = state?.kit, let here = kit.otherServer {
+                    Text(say(.signinKitOtherServer, kit.server ?? "", here))
+                }
+            }
+        }
+        .fileImporter(isPresented: $picking, allowedContentTypes: [.pdf, .image]) { result in
+            if case .success(let url) = result { model.readFlowKit(intake, url) }
+        }
+        .sheet(isPresented: Binding(get: { scan != nil }, set: { if !$0 { scan = nil } })) {
+            if let scan {
+                KitScannerView(scan: scan, onClose: { self.scan = nil }, onNoCamera: { noCamera = true })
+            }
+        }
+        .onAppear {
+            if held == nil { held = HeldFlow(intake, current: { $0.current }, flow: { $0.state }) }
+        }
+        .onDisappear {
+            held?.stop()
+            held = nil
+        }
+        // a kit taken empties the typed field: the held key is what the action uses
+        .onChange(of: state?.kit != nil, initial: true) { _, now in
+            holds = now
+            if now { text = "" }
+        }
+    }
+
+    private var openButton: some View {
+        Button { picking = true } label: { Label(say(.signinKitOpen), systemImage: "folder") }
+            .disabled(working)
+    }
+
+    @ViewBuilder private var scanButton: some View {
+        if !noCamera {
+            Button { scan = model.scanFlowKit(intake) } label: { Label(say(.signinKitScan), systemImage: "qrcode.viewfinder") }
+                .disabled(working)
+        }
+    }
+}
+
+extension FlowKeySection where Extra == EmptyView {
+    init(intake: KeyIntake, text: Binding<String>, holds: Binding<Bool>, label: String, hint: String, working: Bool, model: AppModel) {
+        self.init(intake: intake, text: text, holds: holds, label: label, hint: hint, working: working, model: model) { EmptyView() }
+    }
+}
+
+/// The new password and its confirmation with the web's breached-password check (ADR 0151 decision 5): checked when
+/// the field is left (`@FocusState`), never while typing; any edit drops the verdict; a hit says so under the field (the
+/// count) with *Use it anyway* as a `Toggle`; a check that could not run says that and stops nothing. No range service
+/// configured: nothing is drawn.
+struct NewPasswordRows: View {
+    let breach: BreachCheck
+    @Binding var next: String
+    @Binding var confirm: String
+    let check: (String) async -> Void
+    @State private var held: HeldFlow<BreachCheck, BreachCheck.BreachState>?
+    @FocusState private var focused: Bool
+
+    private var state: BreachCheck.BreachState? { held?.value }
+
+    var body: some View {
+        SecureField(say(.passwordChangeNew), text: $next, prompt: Text(say(.passwordChangeNew)))
+            .textContentType(.newPassword)
+            .focused($focused)
+            .onChange(of: focused) { was, now in
+                guard was, !now else { return }
+                let n = next
+                Task {
+                    await check(n)
+                    held?.state.refresh()
+                }
+            }
+            .onChange(of: next) {
+                breach.edited()
+                held?.state.refresh()
+            }
+        if let state {
+            if state.kind == .hit || state.kind == .accepted {
+                Text(say(.passwordPwnedWarning, Int(state.count))).foregroundStyle(Role.danger)
+                Toggle(say(.passwordPwnedAnyway), isOn: Binding(get: { state.kind == .accepted }, set: { on in
+                    breach.useAnyway(on: on)
+                    held?.state.refresh()
+                }))
+            } else if state.kind == .unavailable {
+                Text(say(.passwordPwnedUnavailable)).foregroundStyle(Role.muted)
+            }
+        }
+        SecureField(say(.passwordChangeConfirm), text: $confirm, prompt: Text(say(.passwordChangeConfirm)))
+            .textContentType(.newPassword)
+            .onAppear {
+                if held == nil { held = HeldFlow(breach, current: { $0.current }, flow: { $0.state }) }
+            }
+            .onDisappear {
+                held?.stop()
+                held = nil
+            }
+    }
+}
+
 // MARK: Change password (D6)
 
 struct PasswordChangeSheet: View {
@@ -304,13 +469,14 @@ struct PasswordChangeSheet: View {
     @State private var next = ""
     @State private var confirm = ""
     @State private var secretKey = ""
+    @State private var kitHeld = false
 
     private var state: PasswordChange.State? { held?.value }
 
     var body: some View {
         FlowFrame(
             title: say(.passwordChangeTitle), done: state?.done ?? false, working: state?.working ?? false,
-            confirm: (say(.passwordChangeSubmit), !current.isEmpty && !next.isEmpty && !confirm.isEmpty && !secretKey.isEmpty, run)
+            confirm: (say(.passwordChangeSubmit), !current.isEmpty && !next.isEmpty && !confirm.isEmpty && (!secretKey.isEmpty || kitHeld), run)
         ) {
             if state?.done == true {
                 Section {
@@ -319,18 +485,18 @@ struct PasswordChangeSheet: View {
                 }
             } else {
                 Section {
-                    SecureField(say(.passwordChangeCurrent), text: $current).textContentType(.password)
+                    SecureField(say(.passwordChangeCurrent), text: $current, prompt: Text(say(.passwordChangeCurrent))).textContentType(.password)
                 } footer: {
                     Text(say(.passwordChangeSub))
                 }
-                Section {
-                    SecureField(say(.passwordChangeNew), text: $next).textContentType(.newPassword)
-                    SecureField(say(.passwordChangeConfirm), text: $confirm).textContentType(.newPassword)
-                }
-                Section {
-                    SecureField(say(.passwordChangeSecretKey), text: $secretKey)
-                } footer: {
-                    Text(say(.passwordChangeSecretKeyHint))
+                if let f = held?.model {
+                    Section {
+                        NewPasswordRows(breach: f.breach, next: $next, confirm: $confirm) { n in _ = try? await f.check(newPassword: n) }
+                    }
+                    FlowKeySection(
+                        intake: f.intake, text: $secretKey, holds: $kitHeld, label: say(.passwordChangeSecretKey), hint: say(.passwordChangeSecretKeyHint),
+                        working: state?.working ?? false, model: model
+                    )
                 }
                 Section { Refusal(msg: state?.refusal) }
             }
@@ -340,6 +506,7 @@ struct PasswordChangeSheet: View {
             if held == nil, let f = model.passwordChangeFlow() { held = HeldFlow(f, current: { $0.current }, flow: { $0.state }) }
         }
         .onDisappear {
+            held?.model.close()
             held?.stop()
             held = nil
         }
@@ -373,6 +540,7 @@ struct AddressChangeSheet: View {
     @State private var secretKey = ""
     @State private var kitPassword = ""
     @State private var kitSecretKey = ""
+    @State private var kitHeld = false
     @State private var kit: KitStep?
 
     private var state: AddressChange.State? { held?.value }
@@ -380,7 +548,7 @@ struct AddressChangeSheet: View {
     var body: some View {
         FlowFrame(
             title: say(.emailChangeAction), done: state?.sentTo != nil, working: state?.working ?? false,
-            confirm: (say(.emailChangeSubmit), !newEmail.isEmpty && !password.isEmpty && !secretKey.isEmpty, request)
+            confirm: (say(.emailChangeSubmit), !newEmail.isEmpty && !password.isEmpty && (!secretKey.isEmpty || kitHeld), request)
         ) {
             if let sent = state?.sentTo {
                 Section { Label(say(.emailChangeSent, sent), systemImage: "envelope.badge") }
@@ -396,11 +564,13 @@ struct AddressChangeSheet: View {
                 } footer: {
                     Text(say(.emailChangeFormSub))
                 }
-                Section {
-                    SecureField(say(.emailChangePassword), text: $password).textContentType(.password)
-                    SecureField(say(.emailChangeSecretKey), text: $secretKey)
-                } footer: {
-                    Text(say(.rotationSecretKeyHint))
+                if let f = held?.model {
+                    FlowKeySection(
+                        intake: f.intake, text: $secretKey, holds: $kitHeld, label: say(.emailChangeSecretKey), hint: say(.rotationSecretKeyHint),
+                        working: state?.working ?? false, model: model
+                    ) {
+                        SecureField(say(.emailChangePassword), text: $password, prompt: Text(say(.emailChangePassword))).textContentType(.password)
+                    }
                 }
                 Section { Refusal(msg: state?.refusal) }
             }
@@ -414,6 +584,7 @@ struct AddressChangeSheet: View {
         .onDisappear {
             kit?.close()
             kit = nil
+            held?.model.close()
             held?.stop()
             held = nil
         }
@@ -426,15 +597,23 @@ struct AddressChangeSheet: View {
             KitSaveSection(step: kit)
         } else {
             Section {
-                SecureField(say(.emailChangePassword), text: $kitPassword).textContentType(.password)
-                SecureField(say(.emailChangeSecretKey), text: $kitSecretKey)
-                Button(say(.emailChangeKitCheck)) { makeKit() }
-                    .disabled(kitPassword.isEmpty || kitSecretKey.isEmpty || (state?.working ?? false))
-                Refusal(msg: state?.refusal)
+                Text(say(.emailChangeKitSub)).foregroundStyle(Role.muted)
             } header: {
                 Text(say(.emailChangeKitTitle))
-            } footer: {
-                Text(say(.emailChangeKitSub))
+            }
+            if let f = held?.model {
+                // the flow's one intake: a kit held for the request serves the kit step too (the request sent, its key spent)
+                FlowKeySection(
+                    intake: f.intake, text: $kitSecretKey, holds: $kitHeld, label: say(.emailChangeSecretKey), hint: say(.rotationSecretKeyHint),
+                    working: state?.working ?? false, model: model
+                ) {
+                    SecureField(say(.emailChangePassword), text: $kitPassword, prompt: Text(say(.emailChangePassword))).textContentType(.password)
+                }
+            }
+            Section {
+                Button(say(.emailChangeKitCheck)) { makeKit() }
+                    .disabled(kitPassword.isEmpty || (kitSecretKey.isEmpty && !kitHeld) || (state?.working ?? false))
+                Refusal(msg: state?.refusal)
             }
         }
     }
@@ -476,6 +655,7 @@ struct KeyRotationSheet: View {
     @State private var secretKey = ""
     @State private var newPassword = ""
     @State private var confirmPassword = ""
+    @State private var kitHeld = false
     @State private var kit: KitStep?
     @State private var kitReady = false
     @State private var asking = false
@@ -526,25 +706,26 @@ struct KeyRotationSheet: View {
                 Text(say(fact))
             }
         }
-        Section {
-            SecureField(say(.rotationPassword), text: $password).textContentType(.password)
-            SecureField(say(.rotationSecretKey), text: $secretKey)
-        } footer: {
-            Text(say(.rotationSecretKeyHint))
-        }
-        Section {
-            Toggle(say(.rotationNewPassword), isOn: Binding(get: { state.newPassword }, set: { on in
-                held?.model.setNewPassword(on: on)
-                held?.state.refresh()
-            }))
-            if state.newPassword {
-                SecureField(say(.passwordChangeNew), text: $newPassword).textContentType(.newPassword)
-                SecureField(say(.passwordChangeConfirm), text: $confirmPassword).textContentType(.newPassword)
+        if let f = held?.model {
+            FlowKeySection(
+                intake: f.intake, text: $secretKey, holds: $kitHeld, label: say(.rotationSecretKey), hint: say(.rotationSecretKeyHint),
+                working: false, model: model
+            ) {
+                SecureField(say(.rotationPassword), text: $password, prompt: Text(say(.rotationPassword))).textContentType(.password)
+            }
+            Section {
+                Toggle(say(.rotationNewPassword), isOn: Binding(get: { state.newPassword }, set: { on in
+                    f.setNewPassword(on: on)
+                    held?.state.refresh()
+                }))
+                if state.newPassword {
+                    NewPasswordRows(breach: f.breach, next: $newPassword, confirm: $confirmPassword) { n in _ = try? await f.check(newPassword: n) }
+                }
             }
         }
         Section {
             Button(say(.rotationNext)) { prove() }
-                .disabled(password.isEmpty || secretKey.isEmpty || (state.newPassword && (newPassword.isEmpty || confirmPassword.isEmpty)))
+                .disabled(password.isEmpty || (secretKey.isEmpty && !kitHeld) || (state.newPassword && (newPassword.isEmpty || confirmPassword.isEmpty)))
             Refusal(msg: state.refusal)
         }
     }

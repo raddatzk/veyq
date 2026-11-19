@@ -18,15 +18,19 @@ final class GuestLinks {
     private(set) var screen: GuestHeld?
     @ObservationIgnored private var made: GuestOpener?
 
-    /// The opener every guest view of this run is made by.
+    /// The opener every guest view of this run is made by; a guest's Memory plays its music with the app's player (#1034).
     func opener(_ model: AppModel) -> GuestOpener {
-        if let made { return made }
+        if let made {
+            made.music = model.guestMusic()
+            return made
+        }
         let o = AppleSharing.shared.opener(
             store: AppleSharing.shared.store(defaults: Shared.defaults),
             sessions: AppleSharing.shared.sessions(keychain: KeychainStore(movesLegacy: false)),
             language: Locale.current.language.languageCode?.identifier ?? "en",
             queue: model.uploads, deriver: MediaDeriver.shared
         )
+        o.music = model.guestMusic()
         made = o
         return o
     }
@@ -243,6 +247,8 @@ struct GuestLinkView: View {
     let held: GuestHeld
     @State private var keeping = false
     @State private var reporting = false
+    /// Whether the link's instance takes reports (it publishes a moderation key).
+    @State private var reportOffered = false
 
     private var ready: Bool { held.gate.value is ShareGates.StateReady }
     private var title: String { ready ? (held.page?.node.name ?? held.host) : held.host }
@@ -250,6 +256,8 @@ struct GuestLinkView: View {
     var body: some View {
         NavigationStack {
             GuestContent(model: model, held: held)
+                // the music bar while a queue plays, as under the shell (a guest's Memory's music, #1034)
+                .safeAreaInset(edge: .bottom, spacing: 0) { MusicBar(model: model) }
                 .navigationTitle(title)
                 .navigationSubtitle(ready ? held.host : "")
                 #if os(iOS)
@@ -263,11 +271,21 @@ struct GuestLinkView: View {
                     }
                     ToolbarItemGroup(placement: .automatic) {
                         if let file = held.page as? GuestPage.File { GuestFileActions(model: model, held: held, file: file.model) }
+                        // a Memory's music played or stopped, as the member's header offers it (#1034)
+                        if let g = held.page as? GuestPage.Gallery, let gallery = model.galleryModel(g.node), let state = model.galleryState(g.node),
+                           gallery.headerActions.contains(where: { $0.id == GalleryModel.companion.MUSIC }) {
+                            Button { gallery.toggleMusic() } label: {
+                                Label(gallery.label(id: GalleryModel.companion.MUSIC).map { say($0) } ?? "", systemImage: state.musicHere ? "stop.fill" : "music.note")
+                            }
+                            .accessibilityIdentifier("guest-music")
+                        }
                         if ready, held.screen.keepOffered {
                             Button { keeping = true } label: { Label(say(.linkKeep), systemImage: "bookmark") }
                                 .accessibilityIdentifier("guest-keep")
                         }
-                        if ready {
+                        // an upload link's guest reports the link; a viewing guest the page on screen (#1033) — while the
+                        // link's instance takes reports
+                        if ready, reportOffered {
                             Button { reporting = true } label: { Label(say(.reportAction), systemImage: "flag") }
                                 .accessibilityIdentifier("guest-report")
                         }
@@ -291,6 +309,10 @@ struct GuestLinkView: View {
             }
         }
         .sheet(isPresented: $keeping) { KeepSheet(model: model, held: held) }
+        .task(id: ready) {
+            guard ready, let access = held.access else { return }
+            reportOffered = (try? await GuestReport.shared.offered(access: access))?.boolValue ?? false
+        }
     }
 }
 
@@ -391,25 +413,7 @@ private struct GuestPageBody: View {
     var body: some View {
         switch page {
         case let level as GuestPage.Level:
-            let rows = level.model.rows
-            if rows.isEmpty {
-                Text(say(.listEmpty)).foregroundStyle(Role.muted).padding()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            } else {
-                List(rows, id: \.nodeId) { r in
-                    Button { held.open(r.nodeId) } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: r.kind == "FOLDER" ? "folder" : Names.kindSymbol(r.kind)).foregroundStyle(Role.accent).frame(width: 28)
-                            Text(r.name).foregroundStyle(Role.text)
-                            Spacer(minLength: 0)
-                        }
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-                .scrollContentBackground(.hidden)
-                .accessibilityIdentifier("guest-level")
-            }
+            GuestLevelView(model: model, held: held, level: level.model)
         case let file as GuestPage.File:
             FileScreen(model: model, ref: Self.ref(file.node, .depot))
         case let gallery as GuestPage.Gallery:
@@ -431,6 +435,67 @@ private struct GuestPageBody: View {
     /// The guest's node as the member's page takes it.
     static func ref(_ node: NodeAt, _ app: ApplicationId) -> ObjectRef {
         ObjectRef(scopeId: node.scopeId, nodeId: node.nodeId, kind: node.kind, application: app, name: node.name)
+    }
+}
+
+/// A folder of the link (core's level over the guest's tree): its rows, each opened as its kind's page, and — for a named
+/// READ_WRITE guest outside an identity folder (`GuestLevel.writes`, #1034; the web's `ShareTreePage`) — the level's New:
+/// a folder, files uploaded here. The link is read anew after each write, so what was added is listed.
+private struct GuestLevelView: View {
+    @Bindable var model: AppModel
+    let held: GuestHeld
+    let level: GuestLevel
+    @State private var naming = false
+    @State private var newName = ""
+    @State private var nameProblem: String?
+    @State private var pickingFiles = false
+
+    var body: some View {
+        let rows = level.rows
+        Group {
+            if rows.isEmpty {
+                Text(say(.listEmpty)).foregroundStyle(Role.muted).padding()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                List(rows, id: \.nodeId) { r in
+                    Button { held.open(r.nodeId) } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: r.kind == "FOLDER" ? "folder" : Names.kindSymbol(r.kind)).foregroundStyle(Role.accent).frame(width: 28)
+                            Text(r.name).foregroundStyle(Role.text)
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .scrollContentBackground(.hidden)
+                .accessibilityIdentifier("guest-level")
+            }
+        }
+        // what a guest adds here: a folder and files (Depot's level action); a guest makes no Memory, Pot or drop box
+        .createMenu(say(.drawerNew), shown: level.writes && held.guest.value != nil) {
+            ForEach([AppKinds.Create.folder, AppKinds.Create.uploadFiles], id: \.self) { c in
+                Button(say(c.word), systemImage: Names.createSymbol(c)) {
+                    if c == .folder { newName = ""; nameProblem = nil; naming = true } else { pickingFiles = true }
+                }
+            }
+        }
+        .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
+            guard case .success(let urls) = result, !urls.isEmpty else { return }
+            _ = level.upload(sources: urls.compactMap(model.guestSource))
+        }
+        .alert(say(.folderNew), isPresented: $naming) {
+            TextField(say(.peopleName), text: $newName)
+            Button(say(.createPotCreate)) {
+                let name = newName
+                Task {
+                    if let problem = try? await AppleSharing.shared.createFolder(level: level, name: name) { nameProblem = say(notice: problem); naming = true }
+                }
+            }
+            Button(say(.signinCancel), role: .cancel) {}
+        } message: {
+            if let nameProblem { Text(nameProblem) }
+        }
     }
 }
 

@@ -499,7 +499,8 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
         val mark = galleryState.marks[row.mediaId]
         val canMark = galleryState.marking && galleryState.marksLoaded
         // a medium's report (an ITEM, ADR 0149 decision 6) where the server takes reports and the medium is readable, online
-        val reportOffered by produceState(false) { value = model.reportOffered() }
+        // the server whoever looks reports to: the tenant's, or a guest's link's own instance (#1033)
+        val reportOffered by produceState(false, gallery) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { gallery.reportOffered() } }
         val reports = reportOffered && !row.blocked && galleryState.offline == null
         var reporting by remember { mutableStateOf<me.raddatz.veyq.mobile.navigation.ReportSheet?>(null) }
         val scope = androidx.compose.runtime.rememberCoroutineScope()

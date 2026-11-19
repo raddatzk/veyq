@@ -184,11 +184,36 @@ controls reuse the sign-in's words. No owner question: the words are the web's.
   scans every update for the key's forms, the token, the new password and its SHA-1 — bitten by serialising the check's
   password (red); `SecretFreeSchemaTest` red without the two new `typedIn` entries. The words (D8) are left to the
   platform phases.
-- [ ] **5 Android** (D4, D5's triggers) — the kit picker and scanner in the three flows; the check on focus loss, its
+- [x] **5 Android** (D4, D5's triggers) — the kit picker and scanner in the three flows; the check on focus loss, its
   notice under the new password (`supportingText`) and *Use it anyway* (a checkbox row). · Done when:
   `:android:assembleDebug` and the guidelines and words guards green; § Passes' Android row.
-- [ ] **6 Apple** — the same (`.fileImporter`, `KitScannerView`, `@FocusState`, a `Toggle`). · Done when: both Apple
+  **Built 2026-11-19 (branch `claude/acct-rest-ma`):** the words (D8) in `words.json` (`kit_email_mismatch`,
+  `password_pwned_warning` a plural, `_anyway`, `_unavailable`; the web's EN and DE). `AccountSecretFlows.kt`:
+  `FlowKeyField` (the sign-in's `OpenDocument` and scan, the held kit with *Enter it instead*, the mismatch warning, the
+  other-server note) in the password change, both halves of the address change (one intake) and the rotation's gate;
+  `NewPasswordField` (`onFocusChanged` leaving → `check`, each edit → `edited`, the notice as `supportingText`, *Use it
+  anyway* a `CheckRow`); the flow's scanner drawn once over the flow (`AccountFlowDialog`); `closeAccountFlow` closes the
+  password and address models too. Pass (measured, a throwaway API 36 AVD, deleted after; a throwaway, erased): the
+  password changed with the kit **file** picked in DocumentsUI and no key typed, then again with the `veyqkit:` token
+  entered into the Secret Key field (`adb input text`, no clipboard); another account's kit in the address change warned
+  with both addresses and *Enter it instead* went back to typing. The instance's range address is the real HIBP
+  (`/api/setup`), so no live query was sent: the emulator ran with a dead DNS server (`-dns-server 192.0.2.1`; `ping
+  api.pwnedpasswords.com` → unknown host; the instance at 10.0.2.2 by address) — leaving the new password showed *could
+  not be checked* and the change went through. The hit, its count and *Use it anyway* were not drawn live (no played
+  range service reaches the app): their states are `BreachCheckTest`'s. Afterwards the app's 20 files and logcat held no
+  password (old, both new), no Secret Key (printed or compact), no token, no SHA-1 (upper, lower) nor suffix, no
+  `pwnedpasswords`. Not run: the scan (no virtual-scene kit) and the rotation's gate with a kit (Apple's and the desktops'
+  passes or § Passes' row).
+- [x] **6 Apple** — the same (`.fileImporter`, `KitScannerView`, `@FocusState`, a `Toggle`). · Done when: both Apple
   builds green; the macOS row run here or named open; iOS the owner's.
+  **Built 2026-11-19 (branch `claude/acct-rest-ma`):** `AccountFlows.swift`: `FlowKeySection` (the field or the held kit
+  with *Enter it instead*, `.fileImporter([.pdf, .image])` read by `AppModel.readFlowKit`, `KitScannerView` over
+  `AppleKit.scan(intake:timing:)` — appleMain's, since Swift sees no default arguments —, the mismatch warning and the
+  other-server note in the footer) in the three flows; `NewPasswordRows` (`@FocusState` leaving → `check`, `.onChange` →
+  `edited`, the notice and a `Toggle` *Use it anyway*); the password and address sheets close their model on disappear.
+  The phase-2 edits compiled unchanged. The fields touched carry a `prompt:` (#1030, still unproven). Both builds green
+  (`xcodebuild -sdk macosx` and `-sdk iphonesimulator`, `CODE_SIGNING_ALLOWED=NO`, fresh derived data). **Open:** the
+  macOS row (no full-screen control from a background agent — nothing clicked) and iOS, the owner's.
 - [ ] **7 Linux** — the same over the bridge (`gtk::FileDialog`, `ScanView`, the entry's focus-leave controller, an
   `adw::SwitchRow`/check row). · Done when: `python3 linux/run.py test` and `build` green; § Passes' Linux row.
 - [ ] **8 Windows** — the same (`FileOpenPicker`, `QrCamera`, `LostFocus`, a `CheckBox`). · Done when:

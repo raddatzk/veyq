@@ -18,6 +18,26 @@ object MediumReport {
     /** The keys a report of [item] hands over; null where none of its blobs' wraps opens here. */
     suspend fun keys(tenant: TenantSession, item: MemoryMedia.Item, withExif: Boolean = true): List<Report.Key>? {
         val suite = tenant.account.suite
+        val keys = keys(suite, item)?.toMutableList() ?: return null
+        if (withExif) {
+            val exif = try {
+                tenant.account.call { MediaApi(tenant.base, tenant.account.http).getMediaExif(item.scopeId, item.mediaId) }.wrappedExif
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            }
+            exif?.let { runCatching { suite.fieldKeyOf(Context("media-exif", "scopeId" to item.scopeId, "mediaId" to item.mediaId), item.key, unb64(it)) }.getOrNull() }
+                ?.let { keys += Report.Key("MEDIA_EXIF", null, it) }
+        }
+        return keys
+    }
+
+    /**
+     * The keys of [item] any viewer hands over (a link's guest too, whose report reads no EXIF tier — the web's
+     * `mediumReportKeys(…, withExif = false)`): every blob's `K_blob` whose wrap opens, its listed tier's field key.
+     */
+    fun keys(suite: me.raddatz.veyq.mobile.crypto.V1, item: MemoryMedia.Item): List<Report.Key>? {
         val keys = ArrayList<Report.Key>()
         for ((blob, role) in listOfNotNull(
             item.original to MemoryMedia.ORIGINAL,
@@ -28,18 +48,9 @@ object MediumReport {
             MemoryMedia.openBlobKey(suite, item.scopeId, item.mediaId, item.key, blob, role)?.let { keys += Report.Key("BLOB", blob.blobId, it) }
         }
         if (keys.isEmpty()) return null
-        fun field(context: Context, envelope: String?): ByteArray? =
-            envelope?.let { runCatching { suite.fieldKeyOf(context, item.key, unb64(it)) }.getOrNull() }
-        field(Context("media-meta", "scopeId" to item.scopeId, "mediaId" to item.mediaId), item.wrappedMeta)?.let { keys += Report.Key("MEDIA_META", null, it) }
-        if (withExif) {
-            val exif = try {
-                tenant.account.call { MediaApi(tenant.base, tenant.account.http).getMediaExif(item.scopeId, item.mediaId) }.wrappedExif
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                null
-            }
-            field(Context("media-exif", "scopeId" to item.scopeId, "mediaId" to item.mediaId), exif)?.let { keys += Report.Key("MEDIA_EXIF", null, it) }
+        item.wrappedMeta?.let { meta ->
+            runCatching { suite.fieldKeyOf(Context("media-meta", "scopeId" to item.scopeId, "mediaId" to item.mediaId), item.key, unb64(meta)) }.getOrNull()
+                ?.let { keys += Report.Key("MEDIA_META", null, it) }
         }
         return keys
     }

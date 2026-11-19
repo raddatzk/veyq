@@ -46,6 +46,8 @@ class GuestLinks(
     /** The tenant a signed-in person keeps a link in (*Keep*); null signed out. */
     private val tenant: () -> TenantSession?,
     private val language: () -> String,
+    /** The player a guest's Memory plays its music with (#1034): the tenant's, or the app's own signed out. */
+    private val music: () -> me.raddatz.veyq.mobile.memories.GalleryModel.Music? = { null },
 ) {
     private val _asking = MutableStateFlow<OpenLink?>(null)
 
@@ -60,7 +62,7 @@ class GuestLinks(
     /** A guest view of [link], [password] handed in memory (a bookmark's): the core's model over this device's doors. */
     fun view(link: ReceivedLink.ShareLink, password: String? = null): GuestView = GuestView.open(
         BouncyCastlePrimitives, link, { block -> Network.client(block) }, store, sessions, language, password,
-        queue, deriver, System::currentTimeMillis,
+        queue, deriver, System::currentTimeMillis, music = music(),
     )
 
     /** Whether the link the field opened asked for its report (`&report`). */

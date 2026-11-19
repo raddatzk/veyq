@@ -495,6 +495,9 @@ struct Bar: View {
             if model.shell.person != nil {
                 // a person's profile carries no node's header (ADR 0144 decision 11)
                 EmptyView()
+            } else if let bookmark = model.shell.bookmark, let contribution = KindPage.of(bookmark.kind)?.header(bookmark, model) {
+                // a kept link's page (core's, #1032): its header as every node's
+                NodeHeaderActions(model: model, node: bookmark, contribution: contribution).id(bookmark.nodeId)
             } else if let ref = model.shell.openObject, let contribution = KindPage.of(ref.kind)?.header(ref.at, model) {
                 NodeHeaderActions(model: model, node: ref.at, contribution: contribution).id(ref.nodeId)
             } else if model.shell.openObject == nil, model.shell.application == nil, !model.shell.searching, let space = model.shell.space {
@@ -531,6 +534,9 @@ struct Bar: View {
         if let person = model.shell.person {
             // a person's profile over what was on screen (ADR 0144 decision 11): back returns there
             PersonScreen(model: model, userId: person)
+        } else if let bookmark = model.shell.bookmark {
+            // a kept link's page over what was on screen (ADR 0150 decision 6, #1032): back returns there
+            BookmarkScreen(model: model, node: bookmark)
         } else if let ref = model.shell.openObject, let body = KindPage.of(ref.kind)?.body {
             body(ref, key, model).environment(\.nodeHero, hero(ref.at))
         } else if let ref = model.shell.openObject {
@@ -594,7 +600,10 @@ struct HomeView: View {
                 .listRowBackground(Role.surface)
             } else if let ref = node.asObject() {
                 ObjectRow(ref: ref, onOpen: model.open).listRowBackground(Role.surface)
-        }
+            } else if let bookmark = node.asBookmark() {
+                // a kept link (core's, #1032): its row opens the bookmark's page
+                BookmarkRow(node: bookmark) { model.openBookmark(bookmark) }.listRowBackground(Role.surface)
+            }
         }
     }
 
@@ -670,6 +679,9 @@ struct HomeView: View {
     private func tile(_ node: NodeRef) -> NodeTileItem? {
         if let folder = node.asFolder() {
             return NodeTileItem(id: node.nodeId, name: node.name, cover: model.covers[node.nodeId]?.image, symbol: "folder", folder: true) { model.enter(folder) }
+        }
+        if let bookmark = node.asBookmark() {
+            return NodeTileItem(id: node.nodeId, name: node.name, symbol: Names.kindSymbol(bookmark.kind), enabled: !picking) { model.openBookmark(bookmark) }
         }
         guard let ref = node.asObject() else { return nil }
         return NodeTileItem(ref: ref, details: details, covers: covers, picking: picking, takesShare: takesShare, onOpen: model.open)
@@ -768,6 +780,30 @@ extension EnvironmentValues {
     @Entry var rowDetails: [String: [String]] = [:]
     /// Each listed node's cover, by node id (`AppModel.covers`).
     @Entry var covers: [String: CGImage] = [:]
+}
+
+/// A kept link's row on a level (ADR 0150 decision 6): its name and the link's symbol; a tap opens its page. It takes
+/// nothing shared, so a pick dims it.
+struct BookmarkRow: View {
+    let node: NodeAt
+    let onOpen: () -> Void
+    @Environment(\.picking) private var picking
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(spacing: 12) {
+                Tile(symbol: Names.kindSymbol(node.kind))
+                Text(node.name).fontWeight(.bold).foregroundStyle(Role.text)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Role.muted)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(picking)
+        .opacity(picking ? 0.38 : 1)
+        .accessibilityIdentifier("bookmark-row")
+    }
 }
 
 /// One object as a row of the web's lists: its kind's tile, its name in bold, and the application's facts about it (a

@@ -83,6 +83,9 @@ import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.sharing.BookmarkCreate
 import me.raddatz.veyq.mobile.sharing.GuestAccess
 import me.raddatz.veyq.mobile.sharing.GuestPage
+import me.raddatz.veyq.mobile.sharing.GuestReport
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.MusicOff
 import me.raddatz.veyq.mobile.sharing.GuestScreen
 import me.raddatz.veyq.mobile.sharing.OpenLink
 import me.raddatz.veyq.mobile.sharing.ShareGates
@@ -181,16 +184,22 @@ internal fun GuestLinkScreen(screen: GuestScreen, model: AppModel) {
                         if (screen.keepOffered) {
                             IconButton(onClick = { keeping = true }, modifier = Modifier.testTag("guest-keep")) { Icon(Icons.Outlined.BookmarkAdd, stringResource(R.string.link_keep)) }
                         }
-                        // an upload link's guest sees no node, so it reports the link itself; a viewing guest reports
-                        // from the views (the web's `ShareView` `reportsLink`; the backend refuses a LINK item of a
-                        // READ or READ_WRITE link, `report_item_not_found`)
-                        if (ready && view.access?.role == GuestAccess.WRITE_ONLY) {
+                        // a Memory's music, played or stopped as on the member's header (#1034)
+                        (page as? GuestPage.Gallery)?.let { GuestMusicAction(it) }
+                        // an upload link's guest sees no node, so it reports the link itself; a viewing guest reports the
+                        // page on screen from the views (#1033: the web's `reportNodes`; the backend refuses a LINK item
+                        // of a READ or READ_WRITE link) — while the link's instance takes reports
+                        val access = view.access
+                        val offered by produceState(false, access) { value = access != null && withContext(Dispatchers.IO) { GuestReport.offered(access) } }
+                        if (ready && offered) {
                             IconButton(onClick = { reporting = true }, modifier = Modifier.testTag("guest-report")) { Icon(Icons.Outlined.Flag, stringResource(R.string.report_action)) }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 )
             },
+            // the music bar while a queue plays, as under the shell (a guest's Memory's music, #1034)
+            bottomBar = { MusicBar(model) },
         ) { padding ->
             Box(Modifier.padding(padding).fillMaxSize()) {
                 GuestContent(screen, model, snackbar)
@@ -307,20 +316,7 @@ private fun GuestPageBody(page: GuestPage, screen: GuestScreen, model: AppModel,
     val view = screen.view
     val session = view.access?.session?.collectAsStateWithLifecycle()?.value
     when (page) {
-        is GuestPage.Level -> {
-            val rows = page.model.rows
-            if (rows.isEmpty()) Text(stringResource(R.string.list_empty), color = role(LocalPalette.current.muted), modifier = Modifier.padding(16.dp))
-            else LazyColumn(Modifier.fillMaxSize().testTag("guest-level")) {
-                items(rows, key = { it.nodeId }) { r ->
-                    ListItem(
-                        headlineContent = { Text(r.name) },
-                        leadingContent = { Icon(kindIcon(r.kind), null, tint = role(LocalPalette.current.accent)) },
-                        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
-                        modifier = Modifier.clickableRow { scope.launch(Dispatchers.IO) { view.open(r.nodeId) } },
-                    )
-                }
-            }
-        }
+        is GuestPage.Level -> GuestLevelPage(page.model, view, model, session != null)
         is GuestPage.File -> {
             DisposableEffect(page.model) { onDispose { page.model.close() } }
             FilePage(page.model, page.node.name)
@@ -333,6 +329,61 @@ private fun GuestPageBody(page: GuestPage, screen: GuestScreen, model: AppModel,
         is GuestPage.DropBox -> GuestDropBoxPage(page.model, view.access, model)
         is GuestPage.Uploader -> GuestUploaderPage(page.model, view.access, model, snackbar)
         is GuestPage.NotShown -> Text(stringResource(R.string.share_not_shown), color = role(LocalPalette.current.muted), modifier = Modifier.padding(16.dp).testTag("guest-not-shown"))
+    }
+}
+
+/**
+ * A folder of the link (core's level over the guest's tree): its rows, each opened as its kind's page, and — for a named
+ * READ_WRITE guest outside an identity folder (`GuestLevel.writes`, #1034; the web's `ShareTreePage`) — the level's New:
+ * a folder, files uploaded here. The link is read anew after each write, so what was added is listed.
+ */
+@Composable
+private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, view: me.raddatz.veyq.mobile.sharing.GuestView, model: AppModel, named: Boolean) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var naming by remember(level) { mutableStateOf(false) }
+    val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) model.guestLevelUpload(level, uris)
+    }
+    val rows = level.rows
+    // what a guest adds here: a folder and files (Depot's level action); a guest makes no Memory, Pot or drop box
+    val creates = listOf(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES)
+    CreateAction(stringResource(R.string.create_new), shown = level.writes && named, onClick = {}, menu = { close ->
+        creates.forEach { c ->
+            androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, modifier = Modifier.testTag("guest-create-${c.name.lowercase()}"), onClick = {
+                close()
+                if (c == me.raddatz.veyq.mobile.AppKinds.Create.FOLDER) naming = true else pickFiles.launch(arrayOf("*/*"))
+            })
+        }
+    }) { list, bottom ->
+        if (rows.isEmpty()) Text(stringResource(R.string.list_empty), color = role(LocalPalette.current.muted), modifier = Modifier.padding(16.dp))
+        else LazyColumn(Modifier.fillMaxSize().testTag("guest-level"), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
+            items(rows, key = { it.nodeId }) { r ->
+                ListItem(
+                    headlineContent = { Text(r.name) },
+                    leadingContent = { Icon(kindIcon(r.kind), null, tint = role(LocalPalette.current.accent)) },
+                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
+                    modifier = Modifier.clickableRow { scope.launch(Dispatchers.IO) { view.open(r.nodeId) } },
+                )
+            }
+        }
+    }
+    if (naming) NameDialog(stringResource(R.string.folder_new), onClose = { naming = false }) { name ->
+        withContext(Dispatchers.IO) { level.createFolder(name) }?.let { context.text(it) }
+    }
+}
+
+/** A guest's Memory's music played or stopped (core's `GalleryModel.headerActions`' MUSIC), as the member's header offers it. */
+@Composable
+private fun GuestMusicAction(page: GuestPage.Gallery) {
+    val gallery = page.model
+    val state by gallery.state.collectAsStateWithLifecycle()
+    if (gallery.headerActions.none { it.id == me.raddatz.veyq.mobile.memories.GalleryModel.MUSIC }) return
+    IconButton(onClick = gallery::toggleMusic, modifier = Modifier.testTag("guest-music")) {
+        Icon(
+            if (state.musicHere) androidx.compose.material.icons.Icons.Outlined.MusicOff else androidx.compose.material.icons.Icons.Outlined.MusicNote,
+            say(gallery.label(me.raddatz.veyq.mobile.memories.GalleryModel.MUSIC)!!),
+        )
     }
 }
 

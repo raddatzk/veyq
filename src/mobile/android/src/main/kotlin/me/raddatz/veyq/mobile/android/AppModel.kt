@@ -381,6 +381,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         closeKitScan()
+        closeFlowKitScan()
         super.onCleared()
     }
 
@@ -723,12 +724,56 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** Closes the open flow; its model drops every secret it held (the profile its tenant key copy, a kit its key). */
     fun closeAccountFlow() {
+        closeFlowKitScan()
         when (val f = _accountFlow.value) {
             is AccountFlow.Profile -> f.model.close()
+            is AccountFlow.Password -> f.model.close()
+            is AccountFlow.Address -> f.model.close()
             is AccountFlow.Rotation -> f.model.close()
             else -> Unit
         }
         _accountFlow.value = null
+    }
+
+    /**
+     * A flow's Secret Key section took a kit file ([uri], `OpenDocument`; ADR 0151 decision 4): read into memory as the
+     * sign-in's is and handed to the flow's [intake], which holds its key until the call or the flow ends.
+     */
+    fun readFlowKit(intake: me.raddatz.veyq.mobile.account.KeyIntake, uri: android.net.Uri) {
+        viewModelScope.launch {
+            val bytes = KitFile.read(getApplication<Application>().contentResolver, uri)
+            AndroidKitPictures(bytes).use { pictures -> intake.read(bytes, pictures) }
+        }
+    }
+
+    private val _flowKitScan = MutableStateFlow<me.raddatz.veyq.mobile.qr.QrScan<*>?>(null)
+
+    /** A flow's kit scan on screen ([KitScanner]), or null: this model's, so a rotation keeps it (#937), as the sign-in's. */
+    val flowKitScan: StateFlow<me.raddatz.veyq.mobile.qr.QrScan<*>?> = _flowKitScan.asStateFlow()
+
+    /** Opens a flow's kit scan: the core's, the kit found taken by the flow's [intake]. */
+    fun scanFlowKit(intake: me.raddatz.veyq.mobile.account.KeyIntake) {
+        closeFlowKitScan()
+        _flowKitScan.value = intake.scan(decode = me.raddatz.veyq.mobile.qr.QrFrames.timedDecode(::qrDecodeTiming))
+    }
+
+    private val _flowNoCamera = MutableStateFlow(false)
+
+    /** A flow's scan found no camera: its entry is dropped for the rest of this run (an emulator names a camera it lacks). */
+    val flowNoCamera: StateFlow<Boolean> = _flowNoCamera.asStateFlow()
+
+    fun flowCameraMissing() {
+        _flowNoCamera.value = true
+    }
+
+    fun closeFlowKitScan() {
+        _flowKitScan.value?.close()
+        _flowKitScan.value = null
+    }
+
+    /** The new password's field was left: the flow's breached-password check runs (ADR 0151 decision 5). */
+    fun checkBreach(check: suspend () -> Unit) {
+        viewModelScope.launch { check() }
     }
 
     /** *Your profile* (Settings) or *Edit profile* (one's own person page): the core's model over the open tenant. */
@@ -2170,6 +2215,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun filter(app: ApplicationId?) = updateShell { it.filter(app) }
     fun goBack() = updateShell { it.goBack() }
 
+    /** Kept link [node]'s page opened over what is on screen (core's `ShellModel.openBookmark`, #1032). */
+    fun openBookmark(node: me.raddatz.veyq.mobile.navigation.NodeAt) {
+        shellModel?.openBookmark(node)
+    }
+
     fun open(ref: ObjectRef) {
         shellModel?.open(ref)
     }
@@ -2238,7 +2288,31 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * guest's session in the Keystore-wrapped store, its uploads in the app's one queue.
      */
     val guests: GuestLinks by lazy {
-        GuestLinks(viewModelScope, PreferencesStore(getApplication()), AndroidGuestSessions(deviceKeys), uploads, deriver, { shellModel?.tenant }, ::appLanguage)
+        GuestLinks(viewModelScope, PreferencesStore(getApplication()), AndroidGuestSessions(deviceKeys), uploads, deriver, { shellModel?.tenant }, ::appLanguage, ::guestMusic)
+    }
+
+    /**
+     * The player a guest's Memory plays its music with (#1034; the member's, ADR 0142 decision 1): the tenant's one, or —
+     * signed out — one made for the links, which the music bar draws as it draws the tenant's.
+     */
+    private fun guestMusic(): me.raddatz.veyq.mobile.memories.GalleryModel.Music {
+        val app = getApplication<Application>()
+        val player = _music.value ?: me.raddatz.veyq.mobile.audio.MusicPlayer(
+            { events -> MediaDeck(app, events) }, musicControls,
+            me.raddatz.veyq.mobile.audio.randomIntOf { n -> ByteArray(n).also { java.security.SecureRandom().nextBytes(it) } },
+        ).also { _music.value = it }
+        return me.raddatz.veyq.mobile.memories.GalleryModel.Music(player) { n -> app.words(me.raddatz.veyq.mobile.words.Msg.MUSIC_UNTITLED, n) }
+    }
+
+    /**
+     * A READ_WRITE guest's files picked for the folder on screen ([level], #1034; the web's level upload): each its own file
+     * made as the guest, on the app's one queue; the level reads the link anew as each settles.
+     */
+    fun guestLevelUpload(level: me.raddatz.veyq.mobile.sharing.GuestLevel, uris: List<android.net.Uri>) {
+        viewModelScope.launch {
+            val sources = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { uris.mapNotNull { picked(it)?.let(::source) } }
+            if (level.upload(sources) == 0) sources.forEach { it.close() }
+        }
     }
 
     /** The bookmark page on screen (core's `BookmarkPage`): one at a time; an in-place link let go with it. */

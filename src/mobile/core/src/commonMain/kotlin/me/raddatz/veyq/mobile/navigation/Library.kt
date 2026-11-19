@@ -24,8 +24,15 @@ data class NodeRef(
     fun asObject(): ObjectRef? = application?.let { ObjectRef(scopeId, nodeId, kind, it, name) }
     fun asFolder(): FolderRef? = if (isFolder) FolderRef(nodeId, name) else null
 
+    /** A kept link (`SHARE_BOOKMARK`, ADR 0120): core's kind, listed on its level and opened as core's page ([Shell.openBookmark]). */
+    val isBookmark: Boolean get() = kind == BOOKMARK
+
+    /** The bookmark this node is, as its page takes it; null for any other kind. */
+    fun asBookmark(): NodeAt? = if (isBookmark) NodeAt(scopeId, nodeId, kind, name) else null
+
     companion object {
         const val FOLDER = "FOLDER"
+        const val BOOKMARK = "SHARE_BOOKMARK"
     }
 }
 

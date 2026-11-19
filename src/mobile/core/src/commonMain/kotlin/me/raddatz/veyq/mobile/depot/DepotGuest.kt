@@ -104,6 +104,55 @@ object DepotGuest {
         }
     }
 
+    /**
+     * One file a READ_WRITE guest uploads into a folder of the link (the web's `guestFileUploadJob`, #1034): its `FILE`
+     * node created as the guest under [parent] — a fresh key under the folder's —, its content sealed under that key and
+     * completed (`completeShareFile`). A retry reuses the node it created; given up, a node that holds nothing is taken
+     * back (`abandonShareNode`). The folder's key is copied at once: a reload of the link meanwhile leaves this job its own.
+     */
+    class LevelUpload internal constructor(
+        private val access: GuestAccess, private val session: GuestSession, parent: OpenNode, private val source: UploadSource,
+    ) : UploadQueue.Job {
+        private val parent = OpenNode(
+            parent.scopeId, parent.id, parent.parentId, parent.kind, parent.name, parent.key.copyOf(), parent.epoch, null, 0, parent.scopeEpoch,
+        )
+        private var created: Pair<String, ByteArray>? = null
+        private var filled = false
+        override val name get() = source.name
+        override val sizeBytes get() = source.size
+        override fun isFinal(code: String) = code == DepotFiles.Codes.NAME_TAKEN || code == "illegal_structure"
+
+        override suspend fun run(progress: (Double) -> Unit) {
+            val node = created ?: when (val made = access.createNode(session, parent, FILE_KIND, source.name)) {
+                is GuestAccess.Created.Done -> (made.nodeId to made.key).also { created = it }
+                GuestAccess.Created.Taken -> throw UploadQueue.Failed(DepotFiles.Codes.NAME_TAKEN)
+                is GuestAccess.Created.Refused -> throw UploadQueue.Failed(made.code ?: "failed")
+            }
+            val r = contentUpload(access, session, parent.scopeId, node.first, node.second, 0, source, null, null, progress)
+            when (r.outcome) {
+                DepotFiles.Outcome.DONE -> {
+                    filled = true
+                    node.second.fill(0)
+                    parent.key.fill(0)
+                }
+                DepotFiles.Outcome.NO_ROOM -> throw UploadQueue.Failed(UploadQueue.QUOTA_EXCEEDED)
+                else -> throw UploadQueue.Failed("failed")
+            }
+        }
+
+        override suspend fun abandon() {
+            val node = created ?: return
+            if (!filled) access.abandonNode(session, node.first)
+            node.second.fill(0)
+            parent.key.fill(0)
+            created = null
+        }
+
+        private companion object {
+            const val FILE_KIND = "FILE"
+        }
+    }
+
     internal fun httpOf(access: GuestAccess) = access.client.http
     internal fun pwOf(access: GuestAccess) = access.pwToken
     internal fun suiteOf(access: GuestAccess) = access.suite

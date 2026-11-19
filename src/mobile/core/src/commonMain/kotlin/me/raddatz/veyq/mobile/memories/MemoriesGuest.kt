@@ -37,7 +37,8 @@ object MemoriesGuest {
     /** A Memory or a chapter of a READ or READ_WRITE link: its gallery. */
     val gallery = GuestDoor { access, node, _ ->
         val opened = access.tree?.node(node.nodeId) ?: return@GuestDoor GuestPage.NotShown(node)
-        GuestPage.Gallery(node, GalleryModel(node, GuestGalleryDoor(access, opened), access = MemoryRights.Access.Guest(access.role)))
+        // its music as the member's (#1034): the player the host handed the link — the account's, or the app's signed out
+        GuestPage.Gallery(node, GalleryModel(node, GuestGalleryDoor(access, opened), access = MemoryRights.Access.Guest(access.role), music = access.music))
     }
 
     /** A Memory's or a chapter's WRITE_ONLY link: the uploader. */
@@ -165,6 +166,13 @@ object MemoriesGuest {
         }
 
         override val origin: String get() = access.origin
+
+        /** A medium the guest sees reported as an `ITEM` to the link's own operator (#1033; the web's guest `mediumReportKeys`, no EXIF). */
+        override suspend fun report(item: MemoryMedia.Item, category: String, reason: String, contact: String) =
+            me.raddatz.veyq.mobile.sharing.GuestReport.reportItem(access, item.mediaId, MediumReport.keys(suite, item), category, reason, contact)
+
+        /** Whether the link's instance takes reports (a viewing guest's report, #1033). */
+        override suspend fun reportOffered(): Boolean = access.role != GuestAccess.WRITE_ONLY && me.raddatz.veyq.mobile.sharing.GuestReport.offered(access)
     }
 
     /** One guest medium sealed under [sealKey], sent through the link and completed (`completeShareMedia`, [nodeEpoch] stated). */

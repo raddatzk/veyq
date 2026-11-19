@@ -223,6 +223,14 @@ question 2*).
   sit under `veyq-guest:<hash>` in the Keystore-sealed store. **Open:** a bookmark opened in place / on its own page and
   its reports — the shell lists and opens no kept link (#1032); a viewing link's report (#1033); terms and a note were
   not on the throwaway's links (the gates' order is the core's test); another instance (§ Passes' second row).
+  **The core's three gaps closed (2026-11-19, branch `claude/h-core-gaps`):** #1032 — a kept link is listed on its level
+  (`Home.level`, the web's `All` tab) and opened as core's page (`Shell.bookmark`, `ShellModel.openBookmark`, a search's
+  hit by `ShellModel.found`); #1033 — a viewing guest reports from the views (`GuestReport.nodeSheet`: the root whole at
+  `&report` and *Report shared content*, a node whole or by name, a medium as an `ITEM`), the link only on an upload link;
+  #1034 — a READ_WRITE guest's level adds a folder and files (`GuestLevel.writes`, `createFolder`, `upload`; the link read
+  anew, `GuestView.reload`) and a guest's Memory plays its music (`GuestView.open(music)`). Bridge: `Shell.OpenBookmark`,
+  `Bookmark.*`, `Received.NewFolder`, `Received.Report`, `ReceivedPage.writes`. Android and Apple switched on. Measured
+  live as a throwaway through the core (`GuestGapsLiveTest`); the apps' own passes of these screens are open.
 - [x] **8 Apple** — the same; `PasteButton`; the Keychain. · Done when: both Apple builds green; the macOS row run here
   or named open (a locked screen); iOS the owner's.
   **Built 2026-11-19 (branch `claude/h-apple`):** `GuestLinks.swift` (*Open a link* with `PasteButton` on the sign-in, the

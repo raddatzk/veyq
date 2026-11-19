@@ -148,6 +148,47 @@ class ShellTest {
         assertEquals(profile, profile.openBeside(other).goBack())
     }
 
+    // ---- a kept link's page (ADR 0150 decision 6, #1032) ----
+
+    @Test
+    fun aKeptLinksPageOpensFromItsLevelAndBackReturnsThere() {
+        val link = NodeAt("s", "b", "SHARE_BOOKMARK", "Ein Link")
+        val level = Shell(null, space = "s").enter(FolderRef("a", "Reisen"))
+        val page = level.openBookmark(link)
+        assertEquals(link, page.bookmark)
+        assertEquals(link, page.headed, "the header is not the bookmark's")
+        assertNull(page.openObject, "a kept link is no application's object")
+        assertNull(page.application)
+        assertFalse(page.isHome)
+        assertTrue(page.canGoBack)
+        assertTrue(page.barTabs.isEmpty())
+        assertEquals(level, page.goBack(), "back does not return to the level it was opened from")
+        assertEquals(level, page.leave(), "its delete does not return to the level")
+        assertEquals(FolderRef("a", "Reisen").let { NodeAt("s", it.nodeId, NodeRef.FOLDER, it.name) }, level.headed)
+        // the drawer leaves it
+        assertNull(page.choose(ApplicationId.MEMORIES).bookmark)
+    }
+
+    @Test
+    fun aSearchHitOnAKeptLinkOpensItsPageNotTheFolderAboveIt() {
+        val nodes = listOf(
+            NodeRef("s", "f", null, NodeRef.FOLDER, "Reisen"),
+            NodeRef("s", "b", "f", "SHARE_BOOKMARK", "Ein Link"),
+            NodeRef("s", "m", "f", "MEMORY", "Ostsee"),
+        )
+        val searching = Shell(null, space = "t").search(true)
+        val (onLink, used) = ShellModel.found(searching, nodes, "s", "b")
+        assertEquals(NodeAt("s", "b", "SHARE_BOOKMARK", "Ein Link"), onLink.bookmark, "a kept link's hit opened something else")
+        assertEquals("s", onLink.space)
+        assertNull(used, "a kept link's open was recorded as an object's use")
+        assertEquals(searching, onLink.goBack())
+        // an object and a folder as before
+        val (onMemory, memory) = ShellModel.found(searching, nodes, "s", "m")
+        assertEquals("m", onMemory.openObject?.nodeId)
+        assertEquals(onMemory.openObject, memory)
+        assertEquals(listOf("f"), ShellModel.found(searching, nodes, "s", "f").first.path.map { it.nodeId })
+    }
+
     @Test
     fun theDrawerAndASpaceSwitchLeaveAProfile() {
         val profile = Shell(ApplicationId.MEMORIES, space = "s").open(memory).openPerson("u-ada")

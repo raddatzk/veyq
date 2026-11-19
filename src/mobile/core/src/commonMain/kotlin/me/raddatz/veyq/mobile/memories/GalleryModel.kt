@@ -595,6 +595,12 @@ class GalleryModel(
     /** What [State.markSaid] said was seen. */
     fun markSeen() = _state.update { it.copy(markSaid = null) }
 
+    /**
+     * Whether a medium's report is offered here: the server whoever looks reports to takes reports — the tenant's for a
+     * member, the link's own instance for a viewing guest (#1033).
+     */
+    suspend fun reportOffered(): Boolean = runCatching { door.reportOffered() }.getOrDefault(false)
+
     /** Medium [mediaId]'s report (an ITEM) in the one report sheet, whole only; null where not offered (the server takes none). */
     suspend fun reportSheet(mediaId: String): me.raddatz.veyq.mobile.navigation.ReportSheet? {
         val row = row(mediaId) ?: return null
