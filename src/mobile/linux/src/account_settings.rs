@@ -72,6 +72,9 @@ struct Page {
     maps: MapServices,
     /// The section a search's result asked for (`SettingsSection.id`), scrolled to once the page first drew.
     at: RefCell<Option<String>>,
+    /// The page's own `GtkScrolledWindow`, held once found (inbox #957: the page's first child is not it, so a redraw
+    /// read no position and the page jumped to its top at every storage update).
+    scroll: RefCell<Option<gtk::ScrolledWindow>>,
 }
 
 /// Opens [connection]'s Settings over [window]; the core reads and delivers what it shows. [at]: the section it scrolls to
@@ -199,6 +202,7 @@ impl Page {
             remove_all_ask: RefCell::new(None),
             maps: MapServices::new(),
             at: RefCell::new(None),
+            scroll: RefCell::new(None),
         });
         // the limit typed, set in the unit chosen (the core parses it and says why where it is no size)
         let weak = Rc::downgrade(&p);
@@ -310,7 +314,7 @@ impl Page {
     /// Draws [s]: every group anew, the name's row kept, the page left where it was scrolled to (the storage section
     /// redraws it at each change of a pin's fetch).
     fn draw(self: &Rc<Self>, s: &SettingsShown) {
-        let scroll = self.page.first_child().and_downcast::<gtk::ScrolledWindow>().map(|w| w.vadjustment());
+        let scroll = self.scrolled().map(|w| w.vadjustment());
         let at = scroll.as_ref().map(|a| a.value());
         self.draw_groups(s);
         if let Some(section) = self.at.borrow_mut().take() {
@@ -324,6 +328,17 @@ impl Page {
             glib::idle_add_local_once(move || again.set_value(at));
             glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || a.set_value(at));
         }
+    }
+
+    /// The `GtkScrolledWindow` inside the page's template, found once among its descendants and held: libadwaita does
+    /// not hand it out, and which child of the page it is changed between its versions (a banner's box came first).
+    fn scrolled(&self) -> Option<gtk::ScrolledWindow> {
+        if let Some(held) = self.scroll.borrow().as_ref() {
+            return Some(held.clone());
+        }
+        let found = find_scrolled(self.page.upcast_ref());
+        self.scroll.replace(found.clone());
+        found
     }
 
     /// Scrolls the page to [section]'s group once it is laid out; a section this page does not show leaves it at its top.
@@ -342,7 +357,7 @@ impl Page {
                 eprintln!("veyq: settings shows no section {section}");
                 return glib::ControlFlow::Break;
             };
-            let scroll = group.ancestor(gtk::ScrolledWindow::static_type()).and_downcast::<gtk::ScrolledWindow>();
+            let scroll = page.scrolled();
             let a = scroll.as_ref().map(gtk::ScrolledWindow::vadjustment);
             // the group's top in the view, plus where the view stands: its place in what scrolls
             let at = scroll.as_ref().and_then(|s| s.child()).and_then(|view| group.compute_point(&view, &gtk::graphene::Point::new(0.0, 0.0)));
@@ -769,6 +784,21 @@ impl Page {
         group.add(&row);
         Some(group)
     }
+}
+
+/// The first `GtkScrolledWindow` under [widget], depth first.
+fn find_scrolled(widget: &gtk::Widget) -> Option<gtk::ScrolledWindow> {
+    let mut child = widget.first_child();
+    while let Some(c) = child {
+        if let Ok(s) = c.clone().downcast::<gtk::ScrolledWindow>() {
+            return Some(s);
+        }
+        if let Some(s) = find_scrolled(&c) {
+            return Some(s);
+        }
+        child = c.next_sibling();
+    }
+    None
 }
 
 /// A family's dates as its row says them: when it signed in and when it was last used, the ones the server sent.
