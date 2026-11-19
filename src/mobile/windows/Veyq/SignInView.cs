@@ -154,13 +154,16 @@ internal sealed class SignInView
         }
     }
 
+    /// <summary>What the open picker offers for a kit: a PDF or a picture (the account flows' kit control too).</summary>
+    internal static readonly string[] KitFileTypes = [".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".avif", ".bmp", ".tif", ".tiff"];
+
     /// <summary>"Open Emergency Kit": the open picker for a PDF or a picture; the core reads the file at the path picked.</summary>
     private async void PickKit()
     {
         try
         {
             var picker = new Windows.Storage.Pickers.FileOpenPicker { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary };
-            foreach (var ext in new[] { ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".avif", ".bmp", ".tif", ".tiff" }) picker.FileTypeFilter.Add(ext);
+            foreach (var ext in KitFileTypes) picker.FileTypeFilter.Add(ext);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
             var file = await picker.PickSingleFileAsync();
             if (file is null || string.IsNullOrEmpty(file.Path)) return;
@@ -217,7 +220,7 @@ internal sealed class SignInView
 
     /// <summary>What the kit's scan shows but its camera: no camera or a refused one says to open the file or type the key
     /// instead (the web's scanError); a found kit closes the dialog.</summary>
-    private static UIElement? ScanSaid(ScanShown shown) => shown.state is ScanState.NoCamera or ScanState.Denied
+    internal static UIElement? ScanSaid(ScanShown shown) => shown.state is ScanState.NoCamera or ScanState.Denied
         ? new TextBlock { Text = Words.SigninKitScanDenied(), TextWrapping = TextWrapping.Wrap, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
         : null;
 
