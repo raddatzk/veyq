@@ -750,7 +750,9 @@ A Gradle build of its own, run through its own wrapper.
   password-trusted, else it says to open veyq first. `adb shell am start -a android.intent.action.SEND --grant-read-uri-permission` with a MediaStore URI reaches
   the app but grants nothing (the shell may not), so the stream does not read (`veyq-share` in logcat).
   `devlogin.py --kit` hands only the password, for a sign-in that holds a kit the pass picks or scans, and signs in as
-  the button does with an empty Secret Key. Debug-only harnesses (a release build has none): the camera alone over a
+  the button does with an empty Secret Key. Debug-only harnesses (a release build has none): Android's extra
+  `veyq.devOpenLink=<link>` (a received link written into *Open a link*'s field, the pass still taps Open: `adb shell
+  input text` drops characters of a long link under load, 2026-11-19); the camera alone over a
   scan that takes any veyq code by its scheme — Android's extra `veyq.devScan=1`, `VEYQ_DEV_SCAN=1` on Apple and both
   desktops (`run.py run` passes it), the states and times to the log as `veyq-scan` —; a test camera
   `VEYQ_DEV_CAMERA=<image>` (Apple, Linux, Windows; the image offered ten times a second) and on Android the emulator's

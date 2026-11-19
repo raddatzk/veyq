@@ -143,7 +143,7 @@ internal fun openInBrowser(context: android.content.Context, link: String) {
  * The link open as its guest, above the sign-in or the shell (ADR 0150 decision 4): its own top app bar — the page's name,
  * the link's host under it, *Back* inside the link —, no drawer and no bar. *Back* at its root asks first (the key lives
  * only in memory: leaving drops the link unless it was kept) and then returns where the person was. Its actions: *Keep*
- * for a signed-in person, the file's download and a READ_WRITE guest's replace, and *Report* to the share's own operator.
+ * for a signed-in person, the file's download and a READ_WRITE guest's replace, and, on an upload link, *Report* to the share's own operator.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -181,7 +181,10 @@ internal fun GuestLinkScreen(screen: GuestScreen, model: AppModel) {
                         if (screen.keepOffered) {
                             IconButton(onClick = { keeping = true }, modifier = Modifier.testTag("guest-keep")) { Icon(Icons.Outlined.BookmarkAdd, stringResource(R.string.link_keep)) }
                         }
-                        if (ready) {
+                        // an upload link's guest sees no node, so it reports the link itself; a viewing guest reports
+                        // from the views (the web's `ShareView` `reportsLink`; the backend refuses a LINK item of a
+                        // READ or READ_WRITE link, `report_item_not_found`)
+                        if (ready && view.access?.role == GuestAccess.WRITE_ONLY) {
                             IconButton(onClick = { reporting = true }, modifier = Modifier.testTag("guest-report")) { Icon(Icons.Outlined.Flag, stringResource(R.string.report_action)) }
                         }
                     },
@@ -286,7 +289,10 @@ internal fun GuestContent(screen: GuestScreen, model: AppModel, snackbar: Snackb
             if (g.note.isNotBlank()) Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { MarkdownText(g.note) }
             val access = view.access
             // a READ_WRITE link's guest: who this device is here as, or the way to name itself before its first write
-            if (access != null && access.role == GuestAccess.READ_WRITE) GuestLine(access)
+            if (access != null && access.role == GuestAccess.READ_WRITE) GuestLine(access) {
+                // a Pot's page reads its write right anew: a named guest adds entries (the web's `requestGuest`, then the write)
+                if (view.page.value is GuestPage.Pot) model.refreshPot {}
+            }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 page?.let { GuestPageBody(it, screen, model, snackbar) } ?: Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
@@ -393,7 +399,7 @@ private fun GuestFileActions(page: GuestPage.File, access: GuestAccess?, model: 
  * the way to name itself, which a guest's first write needs; the record kept of a guest's writes said in both (#1018).
  */
 @Composable
-private fun GuestLine(access: GuestAccess) {
+private fun GuestLine(access: GuestAccess, onNamed: () -> Unit) {
     val session by access.session.collectAsStateWithLifecycle()
     var naming by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
@@ -401,14 +407,14 @@ private fun GuestLine(access: GuestAccess) {
         if (named == null) {
             TextButton(onClick = { naming = true }, modifier = Modifier.testTag("guest-name-ask")) { Text(stringResource(R.string.share_guest_name_title)) }
         } else {
-            NotYou(named, access::forgetGuest)
+            NotYou(named) { access.forgetGuest(); onNamed() }
         }
         RecordNotice(access.guestWriteRecordDays, access.origin, named?.identityId)
     }
     if (naming) NamingDialog(
         title = stringResource(R.string.share_guest_name_title), hint = stringResource(R.string.share_guest_name_hint),
         days = access.guestWriteRecordDays, origin = access.origin, onClose = { naming = false },
-    ) { name -> runCatching { access.nameGuest(name.trim()) }.isSuccess }
+    ) { name -> runCatching { access.nameGuest(name.trim()) }.isSuccess.also { if (it) onNamed() } }
 }
 
 /** "You are here as …" and *Not you?*, which asks first and then forgets this device's session (the web's words). */
