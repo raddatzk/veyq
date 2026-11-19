@@ -28,6 +28,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.FileOpen
+import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -85,6 +88,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.raddatz.veyq.mobile.account.BreachCheck
+import me.raddatz.veyq.mobile.account.KeyIntake
 import me.raddatz.veyq.mobile.account.KitStep
 import me.raddatz.veyq.mobile.session.AccountErasure
 import me.raddatz.veyq.mobile.session.AddressChange
@@ -98,14 +103,121 @@ import me.raddatz.veyq.mobile.words.Msg
  */
 /** A secret typed: masked, no reveal, the platform's password keyboard (no suggestions, no learning). */
 @Composable
-internal fun SecretField(value: String, onValue: (String) -> Unit, label: String, tag: String, enabled: Boolean = true, hint: String? = null) {
+internal fun SecretField(
+    value: String, onValue: (String) -> Unit, label: String, tag: String, enabled: Boolean = true, hint: String? = null,
+    /** Called when the field is left (its focus lost after it had it): the breached-password check's moment. */
+    onLeave: (() -> Unit)? = null,
+    /** Drawn under the field in place of [hint] (the breach check's notice); [warn] draws it as a warning. */
+    notice: String? = null,
+    warn: Boolean = false,
+) {
+    var focused by remember { mutableStateOf(false) }
     OutlinedTextField(
         value, onValue, label = { Text(label) }, singleLine = true, enabled = enabled,
-        supportingText = hint?.let { { Text(it) } },
+        supportingText = (notice ?: hint)?.let { { Text(it, modifier = Modifier.testTag("$tag-notice")) } },
+        isError = warn,
         visualTransformation = PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
-        modifier = Modifier.fillMaxWidth().testTag(tag),
+        modifier = Modifier.fillMaxWidth().testTag(tag).onFocusChanged {
+            if (focused && !it.isFocused) onLeave?.invoke()
+            focused = it.isFocused
+        },
     )
+}
+
+/**
+ * A flow's Secret Key section (ADR 0151 decision 4): the sign-in's control — the key typed or a `veyqkit:` token pasted
+ * (the core's intake swaps it), a kit file opened through the system's picker, a scan where a camera may be — and a kit
+ * held shown as at the sign-in, the key never drawn, with *Enter it instead*. A kit of another account warns, one made at
+ * another server informs (decision 2); neither blocks.
+ */
+@Composable
+internal fun FlowKeyField(
+    intake: KeyIntake, value: String, onValue: (String) -> Unit, label: String, tag: String, enabled: Boolean, hint: String?, model: AppModel,
+) {
+    val state by intake.state.collectAsStateWithLifecycle()
+    val cameraMissing by model.flowNoCamera.collectAsStateWithLifecycle()
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri -> uri?.let { model.readFlowKit(intake, it) } }
+    val context = LocalContext.current
+    // as the sign-in: offered while the device may have a camera; a scan that finds none drops the entry (the scanner is
+    // drawn once over the flow, AccountFlowDialog)
+    val noCamera = cameraMissing || !context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)
+    val kit = state.kit
+    LaunchedEffect(kit) { if (kit != null) onValue("") }
+    if (kit != null) {
+        OutlinedTextField(
+            stringResource(R.string.signin_kit_held), {}, readOnly = true, singleLine = true, label = { Text(label) },
+            supportingText = { Text(kit.email) },
+            trailingIcon = {
+                IconButton(onClick = { intake.clear() }, enabled = enabled, modifier = Modifier.testTag("$tag-kit-clear")) {
+                    Icon(Icons.Filled.Close, stringResource(R.string.signin_kit_clear))
+                }
+            },
+            modifier = Modifier.fillMaxWidth().testTag("$tag-kit"),
+        )
+    } else {
+        SecretField(value, onValue, label, tag, enabled && !state.reading, hint)
+    }
+    if (state.reading) LinearProgressIndicator(Modifier.fillMaxWidth())
+    Refusal(state.problem, "$tag-kit-problem")
+    kit?.otherAccount?.let { expected ->
+        Text(
+            say(Msg.KIT_EMAIL_MISMATCH, kit.email, expected), color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("$tag-kit-other-account"),
+        )
+    }
+    kit?.otherServer?.let { here ->
+        Text(
+            stringResource(R.string.signin_kit_other_server, kit.server.orEmpty(), here),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (!noCamera) {
+        OutlinedButton(onClick = { model.scanFlowKit(intake) }, enabled = enabled, modifier = Modifier.fillMaxWidth().testTag("$tag-kit-scan")) {
+            Icon(Icons.Outlined.QrCodeScanner, null, Modifier.padding(end = 8.dp))
+            Text(stringResource(R.string.signin_kit_scan))
+        }
+    }
+    OutlinedButton(
+        onClick = { pick.launch(arrayOf("application/pdf", "image/*")) }, enabled = enabled,
+        modifier = Modifier.fillMaxWidth().testTag("$tag-kit-open"),
+    ) {
+        Icon(Icons.Outlined.FileOpen, null, Modifier.padding(end = 8.dp))
+        Text(stringResource(R.string.signin_kit_open))
+    }
+}
+
+/**
+ * The new password with the web's breached-password check (ADR 0151 decision 5): checked when the field is left, never
+ * while typing; any edit drops the verdict; a hit says so under the field (the count) with *Use it anyway* as a checkbox
+ * row; a check that could not run says that and stops nothing. No range service configured: nothing is drawn.
+ */
+@Composable
+internal fun NewPasswordField(
+    breach: BreachCheck, value: String, onValue: (String) -> Unit, label: String, tag: String, enabled: Boolean,
+    check: suspend (String) -> Unit, model: AppModel,
+) {
+    val state by breach.state.collectAsStateWithLifecycle()
+    val notice = when (state.kind) {
+        BreachCheck.BreachKind.HIT, BreachCheck.BreachKind.ACCEPTED -> say(Msg.PASSWORD_PWNED_WARNING, state.count)
+        BreachCheck.BreachKind.UNAVAILABLE -> say(Msg.PASSWORD_PWNED_UNAVAILABLE)
+        else -> null
+    }
+    SecretField(
+        value, {
+            onValue(it)
+            breach.edited()
+        }, label, tag, enabled,
+        onLeave = { model.checkBreach { check(value) } },
+        notice = notice, warn = state.kind == BreachCheck.BreachKind.HIT,
+    )
+    if (state.kind == BreachCheck.BreachKind.HIT || state.kind == BreachCheck.BreachKind.ACCEPTED) {
+        CheckRow(state.kind == BreachCheck.BreachKind.ACCEPTED, enabled = enabled, label = stringResource(R.string.password_pwned_anyway), tag = "$tag-anyway") {
+            breach.useAnyway(it)
+        }
+    }
 }
 
 
@@ -118,6 +230,7 @@ internal fun PasswordFlow(m: PasswordChange, model: AppModel) {
     var next by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var secretKey by remember { mutableStateOf("") }
+    val intake by m.intake.state.collectAsStateWithLifecycle()
     FlowDialog(stringResource(R.string.password_change_title), secure = true, tag = "password-change", onClose = model::closeAccountFlow) {
         if (state.done) {
             Text(say(Msg.PASSWORD_CHANGE_DONE), style = MaterialTheme.typography.titleMedium, modifier = Modifier.testTag("password-change-done"))
@@ -128,17 +241,17 @@ internal fun PasswordFlow(m: PasswordChange, model: AppModel) {
         Body(stringResource(R.string.password_change_sub), muted = true)
         val enabled = !state.working
         SecretField(current, { current = it }, stringResource(R.string.password_change_current), "password-change-current", enabled)
-        SecretField(next, { next = it }, stringResource(R.string.password_change_new), "password-change-new", enabled)
+        NewPasswordField(m.breach, next, { next = it }, stringResource(R.string.password_change_new), "password-change-new", enabled, m::check, model)
         SecretField(confirm, { confirm = it }, stringResource(R.string.password_change_confirm), "password-change-confirm", enabled)
-        SecretField(
-            secretKey, { secretKey = it }, stringResource(R.string.password_change_secret_key), "password-change-secret-key", enabled,
-            hint = stringResource(R.string.password_change_secret_key_hint),
+        FlowKeyField(
+            m.intake, secretKey, { secretKey = it }, stringResource(R.string.password_change_secret_key), "password-change-secret-key", enabled,
+            hint = stringResource(R.string.password_change_secret_key_hint), model = model,
         )
         if (state.working) LinearProgressIndicator(Modifier.fillMaxWidth())
         Refusal(state.refusal, "password-change-refusal")
         Button(
             onClick = { model.changePassword(m, current, next, confirm, secretKey) },
-            enabled = enabled && current.isNotEmpty() && next.isNotEmpty() && confirm.isNotEmpty() && secretKey.isNotBlank(),
+            enabled = enabled && current.isNotEmpty() && next.isNotEmpty() && confirm.isNotEmpty() && (secretKey.isNotBlank() || intake.kit != null),
             modifier = Modifier.testTag("password-change-submit"),
         ) { Text(stringResource(R.string.password_change_submit)) }
     }
@@ -157,6 +270,7 @@ internal fun AddressFlow(m: AddressChange, model: AppModel) {
     // which half acted last says the model's one refusal
     var kitAsked by remember { mutableStateOf(false) }
     var kit by remember { mutableStateOf<KitStep?>(null) }
+    val intake by m.intake.state.collectAsStateWithLifecycle()
     DisposableEffect(Unit) { onDispose { kit?.close() } }
     FlowDialog(stringResource(R.string.email_change_action), secure = true, tag = "address-change", onClose = model::closeAccountFlow) {
         val enabled = !state.working
@@ -171,14 +285,14 @@ internal fun AddressFlow(m: AddressChange, model: AppModel) {
                 modifier = Modifier.fillMaxWidth().testTag("address-change-email"),
             )
             SecretField(password, { password = it }, stringResource(R.string.rotation_password), "address-change-password", enabled)
-            SecretField(secretKey, { secretKey = it }, stringResource(R.string.rotation_secret_key), "address-change-secret-key", enabled, stringResource(R.string.rotation_secret_key_hint))
+            FlowKeyField(m.intake, secretKey, { secretKey = it }, stringResource(R.string.rotation_secret_key), "address-change-secret-key", enabled, stringResource(R.string.rotation_secret_key_hint), model)
             if (!kitAsked) Refusal(state.refusal, "address-change-refusal")
             Button(
                 onClick = {
                     kitAsked = false
                     model.requestAddressChange(m, newEmail, password, secretKey)
                 },
-                enabled = enabled && newEmail.isNotBlank() && password.isNotEmpty() && secretKey.isNotBlank(),
+                enabled = enabled && newEmail.isNotBlank() && password.isNotEmpty() && (secretKey.isNotBlank() || intake.kit != null),
                 modifier = Modifier.testTag("address-change-submit"),
             ) { Text(stringResource(R.string.email_change_submit)) }
         }
@@ -192,7 +306,7 @@ internal fun AddressFlow(m: AddressChange, model: AppModel) {
             if (step == null) {
                 Body(stringResource(R.string.email_change_kit_sub), muted = true)
                 SecretField(kitPassword, { kitPassword = it }, stringResource(R.string.rotation_password), "address-kit-password", enabled)
-                SecretField(kitSecretKey, { kitSecretKey = it }, stringResource(R.string.rotation_secret_key), "address-kit-secret-key", enabled, stringResource(R.string.rotation_secret_key_hint))
+                FlowKeyField(m.intake, kitSecretKey, { kitSecretKey = it }, stringResource(R.string.rotation_secret_key), "address-kit-secret-key", enabled, stringResource(R.string.rotation_secret_key_hint), model)
                 if (kitAsked) Refusal(state.refusal, "address-kit-refusal")
                 OutlinedButton(
                     onClick = {
@@ -205,7 +319,7 @@ internal fun AddressFlow(m: AddressChange, model: AppModel) {
                             }
                         }
                     },
-                    enabled = enabled && kitPassword.isNotEmpty() && kitSecretKey.isNotBlank(),
+                    enabled = enabled && kitPassword.isNotEmpty() && (kitSecretKey.isNotBlank() || intake.kit != null),
                     modifier = Modifier.testTag("address-kit-check"),
                 ) { Text(stringResource(R.string.email_change_kit_check)) }
             } else {
@@ -279,6 +393,7 @@ internal fun RotationFlow(m: KeyRotation, model: AppModel) {
     var newPassword by remember { mutableStateOf("") }
     var confirm by remember { mutableStateOf("") }
     var asking by remember { mutableStateOf(false) }
+    val intake by m.intake.state.collectAsStateWithLifecycle()
     // a link's share dialog opened from *Links to renew* (inbox #977); its links read anew once it closed
     var renewing by remember { mutableStateOf<me.raddatz.veyq.mobile.navigation.NodeAt?>(null) }
     val scope = rememberCoroutineScope()
@@ -299,10 +414,10 @@ internal fun RotationFlow(m: KeyRotation, model: AppModel) {
                     R.string.rotation_fact_password, R.string.rotation_fact_not_repair, R.string.rotation_fact_links, R.string.rotation_store_wiped,
                 )) Body("• " + stringResource(fact))
                 SecretField(password, { password = it }, stringResource(R.string.rotation_password), "rotation-password")
-                SecretField(secretKey, { secretKey = it }, stringResource(R.string.rotation_secret_key), "rotation-secret-key", hint = stringResource(R.string.rotation_secret_key_hint))
+                FlowKeyField(m.intake, secretKey, { secretKey = it }, stringResource(R.string.rotation_secret_key), "rotation-secret-key", true, stringResource(R.string.rotation_secret_key_hint), model)
                 CheckRow(state.newPassword, enabled = true, label = stringResource(R.string.rotation_new_password), tag = "rotation-choose-new-password") { m.setNewPassword(it) }
                 if (state.newPassword) {
-                    SecretField(newPassword, { newPassword = it }, stringResource(R.string.password_change_new), "rotation-new-password")
+                    NewPasswordField(m.breach, newPassword, { newPassword = it }, stringResource(R.string.password_change_new), "rotation-new-password", true, m::check, model)
                     SecretField(confirm, { confirm = it }, stringResource(R.string.password_change_confirm), "rotation-confirm-password")
                 }
                 Refusal(state.refusal, "rotation-refusal")
@@ -311,7 +426,7 @@ internal fun RotationFlow(m: KeyRotation, model: AppModel) {
                         model.proveRotation(m, password, secretKey, newPassword, confirm)
                         secretKey = ""
                     },
-                    enabled = password.isNotEmpty() && secretKey.isNotBlank() && (!state.newPassword || (newPassword.isNotEmpty() && confirm.isNotEmpty())),
+                    enabled = password.isNotEmpty() && (secretKey.isNotBlank() || intake.kit != null) && (!state.newPassword || (newPassword.isNotEmpty() && confirm.isNotEmpty())),
                     modifier = Modifier.testTag("rotation-next"),
                 ) { Text(stringResource(R.string.rotation_next)) }
             }

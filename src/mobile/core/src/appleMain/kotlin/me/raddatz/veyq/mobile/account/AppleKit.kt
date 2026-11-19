@@ -60,6 +60,14 @@ object AppleKit {
         timing: (width: Int, height: Int, millis: Double, read: Boolean) -> Unit,
     ): QrScan<Any> = session.scanKit(typedServer, QrFrames.timedDecode(timing)) as QrScan<Any>
 
+    /**
+     * A flow's kit scan (ADR 0151 decision 4): [intake]'s, the kit found taken by the flow's intake, each decode's time to
+     * [timing] — never the text. Swift sees no default arguments, and its camera takes a `QrScan<AnyObject>`.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun scan(intake: KeyIntake, timing: (width: Int, height: Int, millis: Double, read: Boolean) -> Unit): QrScan<Any> =
+        intake.scan(decode = QrFrames.timedDecode(timing)) as QrScan<Any>
+
     fun pictures(drawing: KitDrawing): KitPictures = object : KitPictures {
         override suspend fun pdfPages(): Int? = withContext(Dispatchers.Default) { drawing.pdfPages().takeIf { it > 0 } }
 
