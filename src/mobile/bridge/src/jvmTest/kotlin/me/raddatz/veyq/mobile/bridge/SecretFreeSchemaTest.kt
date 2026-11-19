@@ -234,8 +234,8 @@ class SecretFreeSchemaTest {
         )
         assertEquals(listOf("offered", "mode", "modeOffered", "chips", "text", "suggestions", "shown", "total"), of("FilterShown"))
         assertEquals(listOf("chip", "label", "rest"), of("ChipShown"))
-        assertEquals(listOf("rows", "selected", "media", "curates", "loading", "failed", "refused"), of("BucketsShown"))
-        assertEquals(listOf("bucketId", "label", "depth", "mediaCount", "isPrimary", "canManage"), of("BucketRowShown"))
+        assertEquals(listOf("rows", "selected", "media", "createsSub", "renames", "moveTargets", "loading", "failed", "refused"), of("BucketsShown"))
+        assertEquals(listOf("bucketId", "label", "depth", "mediaCount", "isPrimary", "own"), of("BucketRowShown"))
         assertEquals(listOf("x", "y", "size"), of("TileFrame"))
     }
 

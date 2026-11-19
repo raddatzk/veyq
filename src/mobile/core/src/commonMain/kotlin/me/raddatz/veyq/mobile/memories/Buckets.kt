@@ -77,17 +77,29 @@ object Buckets {
         suite.openAs(Context("upload-identity-key", "scopeId" to scopeId, "nodeId" to nodeId, "identityId" to identity), suite.xwingKey(seed), unb64(wrapped))
     }.getOrNull()
 
-    /** One row of the Contributions picker: a bucket at its depth, its label, its count, whether it is yours to curate. */
-    class Row(val bucketId: String, val label: Piece, val depth: Int, val mediaCount: Int, val isPrimary: Boolean, val canManage: Boolean, val virtual: Boolean)
+    /** The owner key a member's own primary carries: `user:<userId>`. */
+    fun ownKey(userId: String) = "user:$userId"
+
+    /**
+     * One row of the Contributions picker: a bucket at its depth, its label, its count; [own] where it is in the caller's
+     * own root (their primary, virtual or not, and the sub-buckets under it), [root] the owner key of the root it is in.
+     * Every row is a member's to curate (ADR 0034 point 6, the server's gate is membership): a sub-bucket made under a
+     * primary, a sub-bucket renamed or deleted, media moved within one root — never a primary renamed, never across roots.
+     */
+    class Row(
+        val bucketId: String, val label: Piece, val depth: Int, val mediaCount: Int, val isPrimary: Boolean, val own: Boolean, val virtual: Boolean,
+        val root: String,
+    )
 
     /**
      * The picker's rows (`MemoryBuckets.vue`'s `bucketRows`): each primary with the sub-buckets under it, depth first, siblings
      * by label; a guest's primary "Name (guest)" (or "Contribution" where its name does not open), a member's by [people]
-     * (else "Member"), a sub-bucket by its own name; where no own primary is materialized yet, a virtual "You" first holding
-     * the members' unbucketed media ([unbucketed]). [label] sorts by the words a platform would show (the label's first
-     * argument, else its key: the platform's collation is not the core's).
+     * (else "Member"), a sub-bucket by its own name; where the caller's own primary ([self]'s, `user:<self>`) is not
+     * materialized yet, a virtual "You" first holding their unbucketed media ([unbucketed]) — another member's primary is
+     * never taken for it (inbox #991). [label] sorts by the words a platform would show (the label's first argument, else
+     * its key: the platform's collation is not the core's).
      */
-    fun rows(listed: Listed, names: Map<String, String?>, people: (String) -> String?, unbucketed: Int): List<Row> {
+    fun rows(listed: Listed, names: Map<String, String?>, people: (String) -> String?, unbucketed: Int, self: String): List<Row> {
         fun said(n: Notice) = Piece.Said(n)
         fun label(b: Bucket): Piece {
             val opened = names[b.bucketId]
@@ -98,10 +110,11 @@ object Buckets {
                 else -> said(Notice(Msg.MEMORY_BUCKETS_CONTRIBUTOR))
             }
         }
-        class Vm(val id: String, val parent: String?, val label: Piece, val count: Int, val primary: Boolean, val manage: Boolean, val virtual: Boolean)
-        val all = listed.buckets.map { Vm(it.bucketId, it.parentBucketId, label(it), it.mediaCount, it.isPrimary, it.ownerKey.startsWith("user:"), false) }
-        val withSelf = if (listed.buckets.any { it.isPrimary && it.ownerKey.startsWith("user:") }) all
-        else listOf(Vm(SELF, null, said(Notice(Msg.MEMORY_BUCKETS_YOU)), unbucketed, true, true, true)) + all
+        val mine = ownKey(self)
+        class Vm(val id: String, val parent: String?, val label: Piece, val count: Int, val primary: Boolean, val root: String, val virtual: Boolean)
+        val all = listed.buckets.map { Vm(it.bucketId, it.parentBucketId, label(it), it.mediaCount, it.isPrimary, it.ownerKey, false) }
+        val withSelf = if (listed.buckets.any { it.isPrimary && it.ownerKey == mine }) all
+        else listOf(Vm(SELF, null, said(Notice(Msg.MEMORY_BUCKETS_YOU)), unbucketed, true, mine, true)) + all
         fun key(p: Piece) = when (p) {
             is Piece.Plain -> p.text
             is Piece.Said -> p.notice.args.firstOrNull() as? String ?: p.notice.msg.name
@@ -110,23 +123,33 @@ object Buckets {
         val kids = withSelf.groupBy { it.parent }.mapValues { (_, v) -> v.sortedBy { key(it.label) } }
         val out = ArrayList<Row>()
         fun visit(v: Vm, depth: Int) {
-            out += Row(v.id, v.label, depth, v.count, v.primary, v.manage, v.virtual)
+            out += Row(v.id, v.label, depth, v.count, v.primary, v.root == mine, v.virtual, v.root)
             kids[v.id].orEmpty().forEach { visit(it, depth + 1) }
         }
         kids[null].orEmpty().forEach { visit(it, 0) }
         return out
     }
 
-    /** The media of bucket [bucketId] among [items]: a materialized one by its id, the virtual "You" the members' unbucketed. */
-    fun mediaOf(bucketId: String, items: List<MemoryMedia.Item>): List<MemoryMedia.Item> =
-        if (bucketId == SELF) items.filter { (it.ownerKey == null || it.ownerKey.startsWith("user:")) && it.bucketId == null }
+    /**
+     * Where a medium of bucket [from] may move (`MemoryBuckets.vue`'s `moveTargets`): every other materialized bucket of its
+     * root — the server moves media within one owner's root only (`moveBucketMedia`, 403 across owners).
+     */
+    fun moveTargets(rows: List<Row>, from: String?): List<Row> {
+        val at = rows.firstOrNull { it.bucketId == from } ?: return emptyList()
+        return rows.filter { it.root == at.root && !it.virtual && it.bucketId != at.bucketId }
+    }
+
+    /**
+     * The media of bucket [bucketId] among [items]: a materialized one by its id, the virtual "You" the caller's ([self]'s)
+     * unbucketed ones (a pre-buckets row without an owner key among them).
+     */
+    fun mediaOf(bucketId: String, items: List<MemoryMedia.Item>, self: String): List<MemoryMedia.Item> =
+        if (bucketId == SELF) items.filter { (it.ownerKey == null || it.ownerKey == ownKey(self)) && it.bucketId == null }
         else items.filter { it.bucketId == bucketId }
 
-    /** Which row the picker opens on: your own primary (materialized or virtual), else the first. */
-    fun preferred(rows: List<Row>, listed: Listed): String? =
-        rows.firstOrNull { it.virtual }?.bucketId
-            ?: listed.buckets.firstOrNull { it.isPrimary && it.ownerKey.startsWith("user:") }?.bucketId
-            ?: rows.firstOrNull()?.bucketId
+    /** Which row the picker opens on: the caller's own primary (materialized or virtual), else the first. */
+    fun preferred(rows: List<Row>): String? =
+        (rows.firstOrNull { it.own && it.isPrimary } ?: rows.firstOrNull())?.bucketId
 
     // ---- against the server ----
 
@@ -187,18 +210,18 @@ object Buckets {
         }
     }
 
-    /** One of the caller's own sub-buckets renamed: its name sealed anew under the node's key. */
+    /** A sub-bucket renamed (any member's, a guest's root's too: ADR 0034 point 6): its name sealed anew under the node's key. */
     suspend fun rename(tenant: TenantSession, scopeId: String, nodeId: String, bucketId: String, name: String): Outcome {
         val node = tenant.node(scopeId, nodeId) ?: return Outcome.FAILED
         val sealed = b64(tenant.account.suite.sealField(nameContext(scopeId, nodeId, bucketId), node.key, utf8(name.trim())))
         return outcome { tenant.account.respond { BucketsApi(tenant.base, tenant.account.http).renameBucket(scopeId, nodeId, bucketId, RenameBucketRequest(node.epoch, sealed)) }.status }
     }
 
-    /** One of the caller's own sub-buckets deleted: its media go back to the primary (the server's). */
+    /** A sub-bucket deleted (any root's): its media go back to that root's primary (the server's). */
     suspend fun delete(tenant: TenantSession, scopeId: String, nodeId: String, bucketId: String): Outcome =
         outcome { tenant.account.respond { BucketsApi(tenant.base, tenant.account.http).deleteBucket(scopeId, nodeId, bucketId) }.status }
 
-    /** The caller's own [mediaIds] moved into [targetBucketId] (null or [SELF]: its primary), in slices of [MOVE_MAX_IDS]; not atomic across slices. */
+    /** [mediaIds] of one root moved into [targetBucketId] of the same root (null or [SELF]: its primary), in slices of [MOVE_MAX_IDS]; not atomic across slices. */
     suspend fun move(tenant: TenantSession, scopeId: String, nodeId: String, mediaIds: List<String>, targetBucketId: String?): Outcome {
         val api = BucketsApi(tenant.base, tenant.account.http)
         for (slice in mediaIds.chunked(MOVE_MAX_IDS)) {

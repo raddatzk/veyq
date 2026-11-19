@@ -55,31 +55,31 @@ class BucketsTest {
 
     @Test
     fun thePickersRows_depthFirst_theGuestMarked_aMemberByTheDirectory() {
-        val rows = Buckets.rows(listed, named(), { if (it == "u1") "Ana Lima" else null }, unbucketed = 0)
+        val rows = Buckets.rows(listed, named(), { if (it == "u1") "Ana Lima" else null }, unbucketed = 0, self = "u1")
         assertEquals(listOf(memberPrimary to 0, sub to 1, guestPrimary to 0), rows.map { it.bucketId to it.depth }, "each primary by its label, its sub-buckets under it")
         assertEquals(Piece.Plain("Ana Lima"), rows[0].label)
         assertEquals(Piece.Plain("Sunsets"), rows[1].label)
         assertEquals(Piece.Said(Notice(Msg.MEMORY_UPLOADER_GUEST_NAMED, "Ben")), rows[2].label)
-        assertEquals(listOf(true, true, false), rows.map { it.canManage }, "a guest's contribution is not a member's to curate")
-        assertEquals(memberPrimary, Buckets.preferred(rows, listed))
+        assertEquals(listOf(true, true, false), rows.map { it.own }, "a guest's contribution is not the caller's own root")
+        assertEquals(memberPrimary, Buckets.preferred(rows))
     }
 
     @Test
     fun beforeTheOwnPrimaryExists_aVirtualYouHoldsTheMembersUnbucketedMedia() {
         val guestOnly = Buckets.Listed(listOf(listed.buckets[2]), null)
-        val rows = Buckets.rows(guestOnly, named(), { null }, unbucketed = 4)
+        val rows = Buckets.rows(guestOnly, named(), { null }, unbucketed = 4, self = "u1")
         val you = rows.single { it.virtual }
         assertEquals(Buckets.SELF, you.bucketId)
         assertEquals(Piece.Said(Notice(Msg.MEMORY_BUCKETS_YOU)), you.label)
-        assertEquals(4 to true, you.mediaCount to you.canManage)
-        assertEquals(Buckets.SELF, Buckets.preferred(rows, guestOnly))
+        assertEquals(4 to true, you.mediaCount to you.own)
+        assertEquals(Buckets.SELF, Buckets.preferred(rows))
         fun item(id: String, owner: String, bucket: String?) = MemoryMedia.Item(
             scope, node, id, MemoryMedia.Blob("b$id", 1, 100, "", null), null, null, null, "image/jpeg", "$id.jpg", owner, false, nodeKey, bucketId = bucket,
         )
         val items = listOf(item("1", "user:u1", null), item("2", "user:u1", sub), item("3", "share:$guest", guestPrimary))
-        assertEquals(listOf("1"), Buckets.mediaOf(Buckets.SELF, items).map { it.mediaId })
-        assertEquals(listOf("2"), Buckets.mediaOf(sub, items).map { it.mediaId })
-        assertEquals(listOf("3"), Buckets.mediaOf(guestPrimary, items).map { it.mediaId })
+        assertEquals(listOf("1"), Buckets.mediaOf(Buckets.SELF, items, "u1").map { it.mediaId })
+        assertEquals(listOf("2"), Buckets.mediaOf(sub, items, "u1").map { it.mediaId })
+        assertEquals(listOf("3"), Buckets.mediaOf(guestPrimary, items, "u1").map { it.mediaId })
     }
 
     @Test

@@ -474,6 +474,14 @@ class GalleryModel(
         scope.launch { read() }
     }
 
+    /**
+     * The gallery read anew on its own scope, returning once its rows hold that listing (or the read failed): what a write
+     * that moved the rows awaits before it reads what follows them — a curation's buckets (`Contributions`, inbox #990).
+     */
+    suspend fun readAnew() {
+        scope.launch { read() }.join()
+    }
+
     /** Every medium id the rows list (a placeholder whose medium is among them gives way). */
     private val State.listedIds: Set<String> get() = rows.orEmpty().mapTo(HashSet()) { it.mediaId }
 
@@ -1050,10 +1058,17 @@ class GalleryModel(
      * The lightbox opened on medium [mediaId] (one at a time: an open one closes) — a page opened anew for it, a window of
      * its own on a Mac, before its first read: it shows that medium once the rows hold it, else the first.
      */
-    fun lightboxOn(mediaId: String): Lightbox {
+    fun lightboxOn(mediaId: String): Lightbox = lightboxOver(mediaId) { it.shown }
+
+    /**
+     * The lightbox opened on medium [mediaId] over the rows [pages] picks from the gallery's state (one at a time: an open
+     * one closes) — a bucket's media in the Contributions view (`Contributions.lightbox`, inbox #996), which it pages and
+     * follows across the gallery's reads; [lightboxOn] is the one over the shown rows.
+     */
+    fun lightboxOver(mediaId: String, pages: (State) -> List<Row>?): Lightbox {
         open?.close()
-        val at = current.shown?.indexOfFirst { it.mediaId == mediaId } ?: -1
-        return Lightbox(this, maxOf(at, 0), scope, wanted = mediaId.takeIf { at < 0 }).also { open = it }
+        val at = pages(current)?.indexOfFirst { it.mediaId == mediaId } ?: -1
+        return Lightbox(this, maxOf(at, 0), scope, wanted = mediaId.takeIf { at < 0 }, pages = pages).also { open = it }
     }
 
     /** The page went: nothing more is read or watched; its lightbox closes (its reader with it). */
@@ -1182,6 +1197,8 @@ class Lightbox internal constructor(
     parent: CoroutineScope,
     /** The medium to show once the rows first hold any ([GalleryModel.lightboxOn] before the gallery's first read). */
     private var wanted: String? = null,
+    /** The rows it pages, from the gallery's state: the shown ones (a filter narrows them), or a bucket's ([GalleryModel.lightboxOver]). */
+    private val pages: (GalleryModel.State) -> List<GalleryModel.Row>? = { it.shown },
 ) {
     /** A medium's details as the lightbox shows them: its rows, who added it, where that row stands ([MediaDetails.uploaderAt]). */
     class Details(
@@ -1233,11 +1250,11 @@ class Lightbox internal constructor(
     private val scope = CoroutineScope(parent.coroutineContext + SupervisorJob(parent.coroutineContext[Job]))
 
     init {
-        val rows = gallery.current.shown.orEmpty()
+        val rows = pages(gallery.current).orEmpty()
         _state = MutableStateFlow(State(rows, if (rows.isEmpty()) -1 else start.coerceIn(0, rows.size - 1)))
         state = _state.asStateFlow()
-        // the rows the grid shows: a filter narrows the lightbox's pages too (ADR 0149 decision 5)
-        scope.launch { gallery.state.collect { s -> s.shown?.let(::follow) } }
+        // the rows the grid shows: a filter narrows the lightbox's pages too (ADR 0149 decision 5); a bucket's, its media
+        scope.launch { gallery.state.collect { s -> pages(s)?.let(::follow) } }
         gallery.music?.let { m -> scope.launch { m.player.state.collect { p -> _state.update { it.copy(music = p.nowPlaying) } } } }
     }
 

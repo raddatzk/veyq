@@ -1279,6 +1279,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 if (!g.current.marking || !g.current.marksLoaded) return Answer.Refused(Answer.Why.NOT_OFFERED)
                 Answer.Said(g.toggleMark(call.mediaId))
             } ?: noGallery
+            is Call.MarksSeen -> galleries[call.gallery]?.markSeen().done(Answer.Why.NO_SUCH_GALLERY)
             is Call.FilterText -> galleries[call.gallery]?.let { g -> g.filter(g.current.filter.copy(text = call.text)); Answer.Done } ?: noGallery
             is Call.FilterChip -> galleries[call.gallery]?.let { g ->
                 val (chip, rest) = suggestions(g).firstOrNull { me.raddatz.veyq.mobile.memories.GalleryFilter.key(it.first) == call.chip }
@@ -1311,6 +1312,15 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.BucketsDelete -> buckets[call.buckets]?.let { Answer.BucketsDone(it.model.delete()) } ?: noBuckets
             is Call.BucketsMove -> buckets[call.buckets]?.let { Answer.BucketsDone(it.model.move(call.mediaIds, call.target)) } ?: noBuckets
             is Call.BucketsSeen -> buckets[call.buckets]?.model?.seen().done(Answer.Why.NO_SUCH_BUCKETS)
+            is Call.BucketsLightbox -> buckets[call.buckets]?.let { held ->
+                val page = galleries[held.gallery] ?: return noGallery
+                // one lightbox a gallery, as `Lightbox.Open`'s: the one open before is closed as this one opens
+                closeLightboxesOf(held.gallery)
+                val box = held.model.lightbox(call.mediaId) ?: return Answer.Refused(Answer.Why.NO_MEDIUM)
+                val id = ids.incrementAndFetch()
+                lightboxes.put(id, HeldLightbox(held.gallery, page, box))
+                Answer.LightboxOpened(id)
+            } ?: noBuckets
             is Call.BucketsClose -> buckets.remove(call.buckets)?.let { Answer.Done } ?: noBuckets
             is Call.ViewSet -> tenant.value?.models?.shell?.let { s ->
                 s.chooseView(me.raddatz.veyq.mobile.navigation.ViewMode.valueOf(call.mode.name))
@@ -2360,8 +2370,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     /** A Contributions view as the host draws it ([BucketsShown]), each field the model's own answer. */
     private fun shownBuckets(s: me.raddatz.veyq.mobile.memories.Contributions.State) = BucketsShown(
-        rows = s.rows.map { BucketRowShown(it.bucketId, it.label, it.depth, it.mediaCount, it.isPrimary, it.canManage) },
-        selected = s.selected, media = s.media.map { it.mediaId }, curates = s.curates, loading = s.loading, failed = s.failed, refused = s.refused,
+        rows = s.rows.map { BucketRowShown(it.bucketId, it.label, it.depth, it.mediaCount, it.isPrimary, it.own) },
+        selected = s.selected, media = s.media.map { it.mediaId }, createsSub = s.createsSub, renames = s.renames,
+        moveTargets = s.moveTargets.map { it.bucketId }, loading = s.loading, failed = s.failed, refused = s.refused,
     )
 
     /** An entry editor as the host draws it ([EditorShown]), each field one core function's answer. */

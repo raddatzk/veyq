@@ -940,6 +940,9 @@ internal sealed class Call {
     /** Medium [mediaId]'s mark flipped from its tile's menu (`GalleryModel.toggleMark`): [Answer.Said]. */
     @Serializable @SerialName("Marks.Toggle") data class MarksToggle(val gallery: Long, val mediaId: String) : Call()
 
+    /** What [GalleryShown.markSaid] said was seen (`GalleryModel.markSeen`): it clears, so a host that draws it says it once (inbox #997). */
+    @Serializable @SerialName("Marks.Seen") data class MarksSeen(val gallery: Long) : Call()
+
     /** The filter's text (`GalleryFilter.State.text`): the grid and the lightbox narrow at once ([GalleryShown.filter]). */
     @Serializable @SerialName("Filter.Text") data class FilterText(val gallery: Long, val text: String) : Call()
 
@@ -958,12 +961,19 @@ internal sealed class Call {
     /** A page's Contributions view (`Contributions`, ADR 0149 decision 6): [Answer.BucketsOpened]; refused `NOT_OFFERED` where `rights.buckets` is false. */
     @Serializable @SerialName("Buckets.Open") data class BucketsOpen(val gallery: Long) : Call()
     @Serializable @SerialName("Buckets.Pick") data class BucketsPick(val buckets: Long, val bucketId: String) : Call()
-    /** A sub-bucket named [name] under the chosen bucket: [Answer.Stored]. */
+    /** A sub-bucket named [name] under the chosen primary ([BucketsShown.createsSub]): [Answer.BucketsDone]; refused under a sub-bucket. */
     @Serializable @SerialName("Buckets.Create") data class BucketsCreate(val buckets: Long, val name: String) : Call()
     @Serializable @SerialName("Buckets.Rename") data class BucketsRename(val buckets: Long, val name: String) : Call()
     @Serializable @SerialName("Buckets.Delete") data class BucketsDelete(val buckets: Long) : Call()
-    /** The caller's [mediaIds] moved into bucket [target] (its own primary: `self`). */
+    /** The chosen bucket's [mediaIds] moved into bucket [target], one of [BucketsShown.moveTargets] (`REFUSED` otherwise: never across roots). */
     @Serializable @SerialName("Buckets.Move") data class BucketsMove(val buckets: Long, val mediaIds: List<String>, val target: String) : Call()
+
+    /**
+     * The lightbox over the chosen bucket's media, opened on [mediaId] (`Contributions.lightbox`, inbox #996): it pages that
+     * bucket, not the gallery. Answered [Answer.LightboxOpened] — the same lightbox as [LightboxOpen]'s (one per gallery, an
+     * open one closes; [Watched.Lightbox] and the `Lightbox.*` calls); refused `NO_MEDIUM` before a bucket is chosen.
+     */
+    @Serializable @SerialName("Buckets.Lightbox") data class BucketsLightbox(val buckets: Long, val mediaId: String) : Call()
     @Serializable @SerialName("Buckets.Seen") data class BucketsSeen(val buckets: Long) : Call()
     @Serializable @SerialName("Buckets.Close") data class BucketsClose(val buckets: Long) : Call()
 
@@ -2403,8 +2413,10 @@ internal class ChipShown(val chip: String, val label: String, val rest: String? 
 
 /**
  * A Contributions view as the host draws it (`Contributions.State`): each bucket row at its depth with its label, its count,
- * whether it is the caller's to curate; the chosen one ([selected]) and its media's ids in the gallery's order; loading,
- * failed, and the last curation refused ([refused]).
+ * whether it is in the caller's own root; the chosen one ([selected]) and its media's ids in the gallery's order; what the
+ * server takes on it — a sub-bucket under it ([createsSub]: a primary), its rename and delete ([renames]: a sub-bucket), the
+ * buckets a medium of it may move into ([moveTargets]: its root's others, inbox #991); loading, failed, and the last
+ * curation refused ([refused]).
  */
 @Serializable
 @SerialName("BucketsShown")
@@ -2412,15 +2424,18 @@ internal class BucketsShown(
     val rows: List<BucketRowShown>,
     val selected: String?,
     val media: List<String>,
-    val curates: Boolean,
+    val createsSub: Boolean,
+    val renames: Boolean,
+    val moveTargets: List<String>,
     val loading: Boolean,
     val failed: Boolean,
     val refused: me.raddatz.veyq.mobile.memories.Buckets.Outcome?,
 )
 
+/** One bucket of the picker (`Buckets.Row`): [own] where it is in the caller's own root (their primary, "You" until it exists, and its sub-buckets). */
 @Serializable
 @SerialName("BucketRowShown")
-internal class BucketRowShown(val bucketId: String, val label: Piece, val depth: Int, val mediaCount: Int, val isPrimary: Boolean, val canManage: Boolean)
+internal class BucketRowShown(val bucketId: String, val label: Piece, val depth: Int, val mediaCount: Int, val isPrimary: Boolean, val own: Boolean)
 
 /** A view of a level or a person's Memories (`ViewMode`, ADR 0149 decision 8). */
 @Serializable

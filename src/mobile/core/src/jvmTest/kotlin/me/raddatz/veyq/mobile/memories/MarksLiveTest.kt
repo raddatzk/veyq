@@ -25,10 +25,11 @@ import kotlin.time.Duration.Companion.minutes
  * into it, and the owner reads the bucket by its name and the photo in it. Everything stays in the throwaway, erased with it.
  */
 class MarksLiveTest {
-    private val liveRun = LiveRun()
+    /** Each account's devices taken off that account of the throwaway (never the seeded principal's `.run/.env`). */
+    private val runs = mutableMapOf<String, LiveRun>()
 
     @AfterTest
-    fun takeOffTheDevices() = liveRun.removeAll()
+    fun takeOffTheDevices() = runs.values.forEach { it.removeAll() }
 
     @Test
     fun twoMembersMarkOnePhoto_andASubBucketIsMadeAndFilled() {
@@ -39,7 +40,8 @@ class MarksLiveTest {
         val root = File(System.getProperty("veyq.repoRoot"))
         runTest(timeout = 5.minutes) {
             suspend fun session(who: String): TenantSession {
-                val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(who), t.env.getValue("${who}_PASSWORD"), t.env.getValue("${who}_SECRET_KEY"), liveRun.device()) { block -> HttpClient(OkHttp, block) }
+                val run = runs.getOrPut(who) { LiveRun(who, t.file) }
+                val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(who), t.env.getValue("${who}_PASSWORD"), t.env.getValue("${who}_SECRET_KEY"), run.device()) { block -> HttpClient(OkHttp, block) }
                 return a.open(a.tenants.first { it.domain == domain }).also { it.rekeyRules = AppKinds.rules }
             }
             val owner = session("VEYQ")
@@ -71,8 +73,20 @@ class MarksLiveTest {
             val node = assertNotNull(fresh.node(scopeId, memory))
             assertEquals("Sunsets", Buckets.name(fresh.account.suite, scopeId, memory, node.key, listed, listed.buckets.single { it.bucketId == sub.bucketId }))
             val items = assertNotNull(MemoryMedia.list(fresh, scopeId, memory)).items
-            assertEquals(listOf(membersPhoto), Buckets.mediaOf(sub.bucketId, items).map { it.mediaId })
-            println("[live] marks counted two in each session, mine only my own; the member's sub-bucket named and filled for the owner")
+            assertEquals(listOf(membersPhoto), Buckets.mediaOf(sub.bucketId, items, member.account.userId).map { it.mediaId })
+
+            // #991, the server's rule on another member's root (ADR 0034 point 6): a member's sub-bucket under the owner's
+            // primary is taken, a move across roots refused; the member's picker calls only their own root theirs
+            val ownersPrimary = listed.buckets.single { it.isPrimary && it.ownerKey == Buckets.ownKey(owner.account.userId) }
+            assertEquals(Buckets.Outcome.DONE, Buckets.create(member, scopeId, memory, "Curated", ownersPrimary.bucketId), "a member curates the owner's root")
+            assertEquals(Buckets.Outcome.REFUSED, Buckets.move(member, scopeId, memory, listOf(ownersPhoto), sub.bucketId), "never across roots")
+            val seen = Buckets.list(member, scopeId, memory)
+            val rows = Buckets.rows(seen, emptyMap(), { null }, 0, member.account.userId)
+            val membersPrimary = seen.buckets.single { it.isPrimary && it.ownerKey == Buckets.ownKey(member.account.userId) }.bucketId
+            assertEquals(setOf(membersPrimary, sub.bucketId), rows.filter { it.own }.map { it.bucketId }.toSet())
+            val curated = seen.buckets.single { it.parentBucketId == ownersPrimary.bucketId }.bucketId
+            assertEquals(listOf(curated), Buckets.moveTargets(rows, ownersPrimary.bucketId).map { it.bucketId }, "the owner's root only")
+            println("[live] marks counted two in each session, mine only my own; the member's sub-bucket named and filled for the owner; the member's sub-bucket under the owner's primary taken, a move across roots refused")
         }
     }
 }

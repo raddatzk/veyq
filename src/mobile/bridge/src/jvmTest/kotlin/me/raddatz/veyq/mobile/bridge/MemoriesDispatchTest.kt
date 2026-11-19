@@ -127,19 +127,25 @@ class MemoriesDispatchTest {
 
         private fun blob(id: String, size: Int = 29, chunks: Int = 1) = MemoryMedia.Blob(id, chunks, size.toLong() + chunks * V1.FRAME_OVERHEAD, "", null)
 
-        fun item(id: String, at: Long, nodeId: String = "m", type: String = "image/jpeg", thumbnail: Boolean = true, preview: Boolean = true, blocked: Boolean = false) =
+        fun item(id: String, at: Long, nodeId: String = "m", type: String = "image/jpeg", thumbnail: Boolean = true, preview: Boolean = true, blocked: Boolean = false, bucket: String = "b1") =
             MemoryMedia.Item(
                 "s", nodeId, id,
                 if (type.startsWith("video/")) blob("o-$id", original.size, frames.size) else blob("o-$id"),
                 if (thumbnail) blob("t-$id") else null, if (preview) blob("p-$id") else null,
                 MemoryMedia.Meta(4000, 3000, at * 1000, null, "exif", null, null, null, null), type, "$id.${type.substringAfter('/')}",
-                "user:u1", blocked, ByteArray(0),
+                "user:u1", blocked, ByteArray(0), bucketId = bucket,
             )
+
+        /** Media [ids] re-filed into bucket [bucket], as the server's move does. */
+        fun refile(ids: List<String>, bucket: String?) = items.replaceAll {
+            if (it.mediaId !in ids) it
+            else MemoryMedia.Item(it.scopeId, it.nodeId, it.mediaId, it.original, it.thumbnail, it.preview, it.meta, it.type, it.name, it.ownerKey, it.blocked, ByteArray(0), bucketId = bucket)
+        }
 
         init {
             items += item("a", 30)
             items += item("clip", 20, type = "video/webm")
-            items += item("raw", 10, type = "video/mp4", thumbnail = false, preview = false)
+            items += item("raw", 10, type = "video/mp4", thumbnail = false, preview = false, bucket = "b2")
             items += item("bad", 5, blocked = true)
         }
 
@@ -541,23 +547,28 @@ class MemoriesDispatchTest {
         assertEquals(2, asked.size)
     }
 
-    /** A Contributions view the test plays: one bucket per call recorded, its curations answered done. */
-    private class PlayedBuckets : me.raddatz.veyq.mobile.memories.Contributions.Door {
+    /** A Contributions view the test plays: the caller's primary and a sub-bucket of it, one create per call recorded, a move re-filing [played]'s media. */
+    private class PlayedBuckets(val played: PlayedMemory) : me.raddatz.veyq.mobile.memories.Contributions.Door {
         val created = CopyOnWriteArrayList<String>()
         override suspend fun list() = me.raddatz.veyq.mobile.memories.Buckets.Listed(
-            listOf(me.raddatz.veyq.mobile.memories.Buckets.Bucket("b1", "user:u1", null, true, 2, null, null, null)), null,
-        ) to emptyMap<String, String?>()
+            listOf(
+                me.raddatz.veyq.mobile.memories.Buckets.Bucket("b1", "user:u1", null, true, played.items.count { it.bucketId == "b1" }, null, null, null),
+                me.raddatz.veyq.mobile.memories.Buckets.Bucket("b2", "user:u1", "b1", false, played.items.count { it.bucketId == "b2" }, null, null, null),
+            ),
+            null,
+        ) to mapOf<String, String?>("b2" to "Sunsets")
+        override val self = "u1"
         override fun person(userId: String) = "Ana"
         override suspend fun create(name: String, parent: String?) = me.raddatz.veyq.mobile.memories.Buckets.Outcome.DONE.also { created += name }
         override suspend fun rename(bucketId: String, name: String) = me.raddatz.veyq.mobile.memories.Buckets.Outcome.DONE
         override suspend fun delete(bucketId: String) = me.raddatz.veyq.mobile.memories.Buckets.Outcome.DONE
-        override suspend fun move(mediaIds: List<String>, target: String?) = me.raddatz.veyq.mobile.memories.Buckets.Outcome.DONE
+        override suspend fun move(mediaIds: List<String>, target: String?) = me.raddatz.veyq.mobile.memories.Buckets.Outcome.DONE.also { played.refile(mediaIds, target) }
     }
 
     @Test
     fun theContributionsTheFilterAndTheTilesAnswerThroughCalls_andTheViewClosesWithItsTenant() = runBlocking {
         val played = PlayedMemory()
-        val buckets = PlayedBuckets()
+        val buckets = PlayedBuckets(played)
         val b = bridge(played, PlayedHost()) { g -> me.raddatz.veyq.mobile.memories.Contributions(g, buckets) }
         b.signedIn()
         val g = (b.ask(Call.GalleryOpen(memory)) as Answer.GalleryOpened).gallery
@@ -567,10 +578,32 @@ class MemoriesDispatchTest {
 
         val id = (b.ask(Call.BucketsOpen(g)) as Answer.BucketsOpened).buckets
         val view = b.watching(Watched.Buckets(id)).until { u -> (u as Update.Buckets).shown?.takeIf { !it.loading } }
-        assertEquals(listOf("b1"), view.rows.map { it.bucketId })
+        assertEquals(listOf("b1", "b2"), view.rows.map { it.bucketId })
+        assertEquals(listOf(true, true), view.rows.map { it.own })
         assertEquals("b1", view.selected, "the own primary first")
+        assertEquals(listOf("b2"), view.moveTargets, "a medium moves within its root")
+        assertEquals(true to false, view.createsSub to view.renames)
         assertEquals(Answer.BucketsDone(me.raddatz.veyq.mobile.memories.Buckets.Outcome.DONE), b.ask(Call.BucketsCreate(id, "Sunsets")))
         assertEquals(listOf("Sunsets"), buckets.created)
+
+        // a bucket's tile opens a lightbox over that bucket (#996): the gallery holds more
+        val b1 = view.media
+        val l = (b.ask(Call.BucketsLightbox(id, b1.last())) as Answer.LightboxOpened).lightbox
+        val box = b.watching(Watched.Lightbox(l)).until { u -> (u as Update.Lightbox).shown?.takeIf { it.row != null } }
+        assertEquals(b1.size to b1.last(), box.count to box.row?.mediaId)
+        assertTrue(b1.size < (page.until { u -> (u as Update.Gallery).shown?.rows }).size, "the bucket is fewer than the gallery")
+        assertEquals(Answer.Done, b.ask(Call.LightboxClose(l)))
+
+        // a move answers once the moved medium has left the chosen bucket (#990): the state after it says so
+        val watched = b.watching(Watched.Buckets(id))
+        assertEquals(Answer.BucketsDone(me.raddatz.veyq.mobile.memories.Buckets.Outcome.DONE), b.ask(Call.BucketsMove(id, listOf("a"), "b2")))
+        val after = watched.until { u -> (u as Update.Buckets).shown?.takeIf { "a" !in it.media } }
+        assertEquals(b1 - "a", after.media)
+        assertEquals(me.raddatz.veyq.mobile.memories.Buckets.Outcome.REFUSED.let(Answer::BucketsDone), b.ask(Call.BucketsMove(id, listOf("clip"), "elsewhere")), "never outside its root")
+
+        // the mark's notice told seen (#997)
+        assertEquals(Answer.Done, b.ask(Call.MarksSeen(g)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_GALLERY), b.ask(Call.MarksSeen(-1)))
 
         // the filter narrows the rows the host lays out
         assertEquals(Answer.Done, b.ask(Call.FilterText(g, "no such name")))
