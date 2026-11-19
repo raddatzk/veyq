@@ -11,6 +11,10 @@
 //! entry editor ([crate::entry_editor], which holds its history), a deleted one its history and restore
 //! ([crate::entry_history]); "Add entry" is the shell's header bar's creating action ([PotPage::add_entry]). Its download (`Pot.Download`) goes where GTK's save
 //! dialog says, under the name the core gives (`Pot.ArchiveName`); the core writes the file (ADR 0137 decision 3).
+//!
+//! A link's guest has no shell bar, so the page holds the places itself there ([PotPage::own_places], #1035): Entries and
+//! Overview, as Android's and Apple's guest Pot. The web gives a writing guest a Settings tab of its people (add, rename);
+//! core's `PotSettings` offers a guest a member's people actions (deactivate, erase), so it is not offered here yet.
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
@@ -54,6 +58,8 @@ struct Inner {
     read: RefCell<Option<OnRead>>,
     /// The Settings place, opened in the core when it is first shown and kept while the page is.
     settings: RefCell<Option<crate::pot_settings::SettingsPlace>>,
+    /// The places the page holds itself (a guest's, [PotPage::own_places]): the one chosen; none while the shell's are.
+    own: RefCell<Option<String>>,
 }
 
 impl PotPage {
@@ -84,6 +90,7 @@ impl PotPage {
             place: RefCell::new(None),
             read: RefCell::new(None),
             settings: RefCell::new(None),
+            own: RefCell::new(None),
         });
         inner.scroll.set_child(Some(&inner.clamp));
         inner.root.append(&inner.scroll);
@@ -210,6 +217,12 @@ impl PotPage {
         &self.inner.root
     }
 
+    /// The page holds its places itself (a link's guest page, which has no bar): [guest_places], Entries first.
+    pub fn own_places(&self) {
+        *self.inner.own.borrow_mut() = Some(ENTRIES.into());
+        self.inner.draw();
+    }
+
     /// The places the shell offers for this Pot and the one selected (`Shell.barTabs`, `selectedTab`).
     pub fn places(&self, tabs: &[ShownTab], selected: Option<&BarTab>) {
         let next = (tabs.to_vec(), selected.cloned());
@@ -302,13 +315,25 @@ impl Inner {
             _ => {}
         }
         let view = view.expect("matched above");
-        if tabs.len() > 1 {
-            self.root.prepend(&places(tabs, selected.as_ref()));
-        }
+        let own = self.own.borrow().clone();
+        let place = match own {
+            Some(chosen) => {
+                // a guest's places: the chosen one while it is still offered, else Entries
+                let offered = guest_places();
+                let chosen = if offered.contains(&chosen.as_str()) { chosen } else { ENTRIES.to_string() };
+                self.root.prepend(&self.own_toggles(&offered, &chosen));
+                Some(chosen)
+            }
+            None => {
+                if tabs.len() > 1 {
+                    self.root.prepend(&places(tabs, selected.as_ref()));
+                }
+                selected.as_ref().map(|t| t.key.clone())
+            }
+        };
         // another place starts at its top
-        let place = selected.as_ref().map(|t| t.key.clone());
         if *self.place.borrow() != place {
-            *self.place.borrow_mut() = place;
+            *self.place.borrow_mut() = place.clone();
             self.scroll.vadjustment().set_value(0.0);
         }
         let content = column();
@@ -318,7 +343,7 @@ impl Inner {
         if !view.missing.is_empty() {
             content.append(&missing(view));
         }
-        match selected.as_ref().map(|t| t.key.as_str()) {
+        match place.as_deref() {
             // the settings choose a base currency the Pot does not have yet
             Some("expenses.settings") => self.settings(&content),
             _ if !view.ready => content.append(&note(&words::settings_missing_read_only())),
@@ -470,6 +495,40 @@ impl Inner {
     }
 }
 
+/// The Entries place's key (the shell's `BarTab`), the first a guest's page shows.
+const ENTRIES: &str = "expenses.entries";
+
+/// A guest's places ([PotPage::own_places]): Entries and Overview — never Settings, whose people actions core's
+/// `PotSettings` offers a guest as a member's.
+pub fn guest_places() -> Vec<&'static str> {
+    vec![ENTRIES, "expenses.overview"]
+}
+
+impl Inner {
+    /// A guest's places as the toggle group the shell's are drawn as: [offered], [chosen] active, a choice kept here.
+    fn own_toggles(self: &Rc<Self>, offered: &[&str], chosen: &str) -> gtk::Widget {
+        let group = adw::ToggleGroup::builder().halign(gtk::Align::Center).margin_top(12).margin_bottom(6).build();
+        for key in offered {
+            let word = match *key {
+                "expenses.overview" => words::tab_expenses_overview(),
+                _ => words::tab_expenses_entries(),
+            };
+            group.add(adw::Toggle::builder().label(word).name(*key).build());
+        }
+        group.set_active_name(Some(chosen));
+        let w = Rc::downgrade(self);
+        group.connect_active_name_notify(move |g| {
+            let (Some(i), Some(key)) = (w.upgrade(), g.active_name()) else { return };
+            if i.own.borrow().as_deref() != Some(key.as_str()) {
+                *i.own.borrow_mut() = Some(key.into());
+                // drawn once the toggle's own signal is done: the group is replaced by the redraw
+                glib::idle_add_local_once(move || i.draw());
+            }
+        });
+        group.upcast()
+    }
+}
+
 /// The Pot's places as a toggle group above its body (GNOME's inline view switcher); a choice is the shell's.
 pub fn places(tabs: &[ShownTab], selected: Option<&BarTab>) -> gtk::Widget {
     let group = adw::ToggleGroup::builder().halign(gtk::Align::Center).margin_top(12).margin_bottom(6).build();
@@ -525,3 +584,13 @@ fn missing(view: &PotView) -> adw::PreferencesGroup {
     group
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_guest_sees_entries_and_overview_never_the_settings() {
+        assert_eq!(guest_places(), vec!["expenses.entries", "expenses.overview"]);
+    }
+}

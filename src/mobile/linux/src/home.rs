@@ -375,8 +375,8 @@ fn object_tile(r: &ObjectRef) -> Tile {
         open: Box::new(move || bridge::send(Call::ShellOpen { r#ref: open.clone() })) }
 }
 
-/// A kept link's row (ADR 0150 decision 6): no application's object, so the shell opens no object for it — its page is
-/// pushed over the content ([crate::bookmark_page::open_kept]).
+/// A kept link's row (ADR 0150 decision 6): no application's object — the core's shell opens its page
+/// ([crate::bookmark_page::open_kept], `Shell.OpenBookmark`, #1032).
 fn bookmark_row(n: &NodeRef) -> adw::ActionRow {
     let row = adw::ActionRow::builder().title(glib_escape(&n.name)).activatable(true).build();
     row.add_prefix(&gtk::Image::from_icon_name(kind_icon(&n.kind)));
