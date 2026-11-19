@@ -355,7 +355,7 @@ internal fun RotationFlow(m: KeyRotation, model: AppModel) {
 @Composable
 private fun rotationScopeName(scopeId: String, model: AppModel): String {
     val space = model.spaceNamed(scopeId) ?: return stringResource(R.string.rotation_scope_name_unavailable)
-    return if (space.kind == "personal") stringResource(R.string.rotation_personal_space) else spaceName(space)
+    return if (space.kind == "PERSONAL") stringResource(R.string.rotation_personal_space) else spaceName(space)
 }
 
 // ---- erasing the account (uc.account.erase-account) ----

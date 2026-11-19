@@ -397,11 +397,30 @@ key-touching flows after the vectors that hold them, erasure last.
   (b) `Kit.Save.pdf: ByteArray` → `SecretFreeSchemaTest`; (c) the rotations left in `closeTenant` →
   `AccountFlowsDispatchTest`. Live: `LiveAccountBridgeTest` (the profile and the password change, as a throwaway).
 
-- [ ] **5 Android** — D10's row; the words (`scripts/validate_mobile_words.py`). Two halves, each with its pass:
+- [x] **5 Android** — D10's row; the words (`scripts/validate_mobile_words.py`). Two halves, each with its pass:
   **5a** rename, profile, picture, safety numbers; **5b** password, address, kit, rotation, erasure. · Done when:
   `./gradlew :android:assembleDebug` and the words guard green; the emulator passes (agent, as a throwaway, § Passes);
   the no-copy check after a kit save (`run-as me.raddatz.veyq find . -type f` and a grep of every file for the Secret
   Key's canary) empty; the Recents snapshot during the password and Secret Key steps blank.
+  *Built 2026-11-19:* `AccountFlows.kt` (the flows' full-screen dialog, the profile with its square crop rendered to
+  256 × 256 RGBA by `AppModel.avatarPixels`), `AccountSecretFlows.kt` (password, address, kit, rotation, erasure, each
+  `SecureFlagPolicy.SecureOn`; the kit written by `KitStep.saveInto` into `CreateDocument`'s stream, the document deleted
+  when the write fails), `SafetyNumber.kt` (own: digits, chain code, the core's QR; another's: state, *Compare* by scan
+  or digits), Settings' sections and every named session's *Rename*, *Edit profile* in the person page's bar. A device
+  a password change left without a saved unlock is offered the password trust and each level in Settings (it offered
+  nothing). Pass on a throwaway API 36 emulator, as a throwaway with a member (made and erased, both pending erasures
+  listed): the session renamed and read back; the name and a picture saved and read back after an unlock (the person
+  page, *Change picture* from the server's revision); own safety number shown; the member compared by digits →
+  *Verified by you.* read back; the address change to the `503` mail step (this Mac sends no mail — confirm pending a
+  mailing backend); a kit saved into Downloads through the system's dialog; the password changed, the old one refused,
+  the new one signs in, the fingerprint re-trust (`adb emu finger touch 1`) DONE; the rotation with a new password, both
+  scopes *New lock*, the old Secret Key refused, the rotation's kit read by the sign-in's *Open Emergency Kit* and
+  signing in; the erasure refused without the last owner's choice, then erased, the device's offline store and record
+  gone, the sign-in told once. No-copy: the app's files after each kit save hold none of the canaries (the Secret Key's
+  text, folded, `veyqkit:`); bitten by grepping Downloads, which held the kit. Recents: the address, password, rotation
+  and erasure steps' snapshots blank (10 KB) where Settings' held the page (166 KB). The package is `app.veyq` (#972);
+  left: #971. Not run: a scan of a safety code (the emulator's camera shows no member's code; Android ↔ Linux is § Passes'
+  own row), the rename of another device than this one (the throwaway had one session).
 
 - [ ] **6 Apple (iOS, iPadOS, macOS)** — first #917 (the rename alert's field bound at presenting), since D1 reuses
   the alert; then D10's rows, the kit through `fileExporter` (iOS) and `NSSavePanel` (macOS). · Done when: the macOS
