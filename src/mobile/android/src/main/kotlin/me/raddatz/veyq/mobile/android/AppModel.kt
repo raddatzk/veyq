@@ -803,7 +803,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     fun openKeyRotation() {
         val account = session.signedTo?.account ?: return
-        val m = account.keyRotation()
+        val m = account.keyRotation(open = tenantSession?.takeIf { it.account === account })
         openFlow(AccountFlow.Rotation(m))
         viewModelScope.launch { m.open() }
     }
@@ -869,8 +869,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     )
 
     /** A space's name as the shell lists it, for the rotation's per-space status; null for one this device has not opened. */
-    fun spaceNamed(scopeId: String): SpaceRef? = (_screen.value as? Screen.Signed)?.spaces?.firstOrNull { it.scopeId == scopeId }
-
     private fun refreshManaged() = _screen.update { s ->
         if (s is Screen.Signed && s.managing != null) s.copy(managing = session.managed().also { m ->
             trustLog("manage servers: " + m.joinToString { "${it.trusted}/${it.level}" })

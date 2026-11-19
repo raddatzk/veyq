@@ -608,7 +608,13 @@ fn rotation_done(flow: &Flow, s: &KeyRotationState) -> adw::NavigationPage {
         list.add_css_class("boxed-list");
         list.set_widget_name("rotation-scopes");
         for scope in &s.scopes {
-            let row = adw::ActionRow::builder().title(words::rotation_scope_name_unavailable()).subtitle(said::key(&scope.status)).use_markup(false).build();
+            // core names the line (inbox #979): the space's own name, else the personal space or one not opened here
+            let title = match (&scope.name, &scope.name_word) {
+                (Some(name), _) => name.clone(),
+                (None, Some(word)) => said::key(word),
+                (None, None) => words::rotation_scope_name_unavailable(),
+            };
+            let row = adw::ActionRow::builder().title(title).subtitle(said::key(&scope.status)).use_markup(false).build();
             if let Some(why) = &scope.blocked {
                 row.set_subtitle(&format!("{} · {}", said::key(&scope.status), said::key(why)));
             }

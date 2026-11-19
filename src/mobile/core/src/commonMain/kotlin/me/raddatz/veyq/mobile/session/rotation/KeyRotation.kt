@@ -58,7 +58,17 @@ class KeyRotation(
 
         /** The publish and what follows it; throws [Refused] or [OutcomeUnknown]. */
         suspend fun publish(password: String, secretKey: ByteArray, newSecretKey: ByteArray, newPassword: String?): Published
+
+        /** What this device can call each scope ([ScopeNames]), read once the statuses are in; none known by default. */
+        suspend fun names(): ScopeNames = ScopeNames()
     }
+
+    /**
+     * What a space is called on this device, never its raw id (the web's `KeyRotationPanel.scopeLabel`, inbox #979): a
+     * tenant root or a space by the name this device holds ([named]), a personal space as such ([personal], from the
+     * plan's kind); any other is "a space this device hasn't opened".
+     */
+    class ScopeNames(val personal: Set<String> = emptySet(), val named: Map<String, String> = emptyMap())
 
     /** What a publish came to: committed ([resumed] false) or an earlier one resumed, each scope's state after the finish. */
     class Published(val resumed: Boolean, val states: List<RotationScopeState>, val unreadable: List<String>)
@@ -71,12 +81,18 @@ class KeyRotation(
 
     enum class Step { LOADING, ON_THE_WEB, GATE, KIT, WORKING, DONE }
 
-    /** One scope's line after the finish: its id, the server's state and, when blocked, why (the words a host draws). */
+    /**
+     * One scope's line after the finish: its id, the server's state and, when blocked, why (the words a host draws), and
+     * what it is called: its [name] where this device holds one, else [nameWord] — [Msg.ROTATION_PERSONAL_SPACE] or
+     * [Msg.ROTATION_SCOPE_NAME_UNAVAILABLE] ([ScopeNames]).
+     */
     @Serializable
     data class ScopeStatus(
         val scopeId: String,
         @Serializable(with = MsgKey::class) val status: Msg,
         @Serializable(with = MsgKey::class) val blocked: Msg? = null,
+        val name: String? = null,
+        @Serializable(with = MsgKey::class) val nameWord: Msg? = Msg.ROTATION_SCOPE_NAME_UNAVAILABLE,
     )
 
     @Serializable
@@ -159,7 +175,7 @@ class KeyRotation(
                 ColdCredential.Refusal.STALE -> {
                     _state.value = try {
                         val states = engine.resume(password, held)
-                        current.copy(step = Step.DONE, done = true, resumed = true, scopes = statuses(states))
+                        current.copy(step = Step.DONE, done = true, resumed = true, scopes = statuses(states, names()))
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -195,7 +211,7 @@ class KeyRotation(
         try {
             val result = engine.publish(pw, sk, newKey, nextPassword)
             _state.value = current.copy(
-                step = Step.DONE, done = true, resumed = result.resumed, scopes = statuses(result.states), unreadable = result.unreadable,
+                step = Step.DONE, done = true, resumed = result.resumed, scopes = statuses(result.states, names()), unreadable = result.unreadable,
             )
             forget()
         } catch (e: Refused) {
@@ -212,6 +228,15 @@ class KeyRotation(
         }
     }
 
+    /** The names, best effort: a read that fails names nothing (every line then "a space this device hasn't opened"). */
+    private suspend fun names(): ScopeNames = try {
+        engine.names()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        ScopeNames()
+    }
+
     private fun forget() {
         password = null
         nextPassword = null
@@ -224,8 +249,8 @@ class KeyRotation(
     fun close() = forget()
 
     companion object {
-        internal fun statuses(states: List<RotationScopeState>): List<ScopeStatus> = states.map { s ->
-            when (s.state) {
+        internal fun statuses(states: List<RotationScopeState>, names: ScopeNames = ScopeNames()): List<ScopeStatus> = states.map { s ->
+            val status = when (s.state) {
                 RotationScopeState.State.secured -> ScopeStatus(s.scopeId, Msg.ROTATION_STATUS_SECURED)
                 RotationScopeState.State.rekeying -> ScopeStatus(s.scopeId, Msg.ROTATION_STATUS_REKEYING)
                 RotationScopeState.State.blocked -> ScopeStatus(
@@ -238,9 +263,24 @@ class KeyRotation(
                 )
                 else -> ScopeStatus(s.scopeId, Msg.ROTATION_STATUS_WAITING)
             }
+            // the web's order: a tenant root's or a space's own name, the personal space as such, else not opened here
+            val name = names.named[s.scopeId]?.takeIf { it.isNotBlank() }
+            when {
+                name != null -> status.copy(name = name, nameWord = null)
+                s.scopeId in names.personal -> status.copy(nameWord = Msg.ROTATION_PERSONAL_SPACE)
+                else -> status
+            }
         }
     }
 }
 
-/** Replacing this account's keys (ADR 0148 decision 7): the model over the core's port. */
-fun VeyqAccount.keyRotation(): KeyRotation = KeyRotation(AccountRotation(this), primitives, email, server)
+/**
+ * Replacing this account's keys (ADR 0148 decision 7): the model over the core's port. [open] is the tenant the host has
+ * open, if any: its spaces' names name the status lines (inbox #979); the tenants' own names come from the account.
+ */
+fun VeyqAccount.keyRotation(open: me.raddatz.veyq.mobile.session.TenantSession?): KeyRotation =
+    keyRotation { open?.spaces().orEmpty() }
+
+/** [keyRotation] with the spaces this device has open handed as a read (the bridge's, over its open tenant). */
+fun VeyqAccount.keyRotation(spaces: suspend () -> List<me.raddatz.veyq.mobile.navigation.SpaceRef>): KeyRotation =
+    KeyRotation(AccountRotation(this, spaces), primitives, email, server)

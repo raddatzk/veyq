@@ -52,13 +52,14 @@ object AppKinds {
 
     /**
      * The account's Master Key replaced (an account rotation's `afterCommit`, the web's lifecycle `onMasterKeyRotated`):
-     * each application's material derived from the Master Key carried from [oldMk] to [newMk] for the scopes [scopeIds] —
-     * Memories re-tags the account's own item marks (`ItemMarksRotation.retag`; rows of other scopes are left). Best
-     * effort: nothing here fails the rotation, and neither key is kept or zeroed (the caller owns both).
+     * each application's material derived from the Master Key carried from [oldMk] to [newMk] — Memories re-tags every one
+     * of the account's own item marks the server lists, whatever scope (`ItemMarksRotation.retag`, as the web's
+     * `retagItemMarksUnderNewMasterKey`). Best effort: nothing here fails the rotation, and neither key is kept or zeroed
+     * (the caller owns both).
      */
-    suspend fun masterKeyRotated(account: me.raddatz.veyq.mobile.session.VeyqAccount, oldMk: ByteArray, newMk: ByteArray, scopeIds: List<String>) {
+    suspend fun masterKeyRotated(account: me.raddatz.veyq.mobile.session.VeyqAccount, oldMk: ByteArray, newMk: ByteArray) {
         try {
-            me.raddatz.veyq.mobile.memories.ItemMarksRotation.retag(account, oldMk, newMk, scopeIds)
+            me.raddatz.veyq.mobile.memories.ItemMarksRotation.retag(account, oldMk, newMk)
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {

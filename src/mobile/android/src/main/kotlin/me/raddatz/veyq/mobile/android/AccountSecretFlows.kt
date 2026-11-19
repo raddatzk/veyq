@@ -339,7 +339,7 @@ internal fun RotationFlow(m: KeyRotation, model: AppModel) {
                     Body(stringResource(R.string.rotation_done_spaces), muted = true)
                     for (s in state.scopes) {
                         Row(Modifier.fillMaxWidth().testTag("rotation-scope-${s.scopeId}"), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text(rotationScopeName(s.scopeId, model), modifier = Modifier.weight(1f))
+                            Text(rotationScopeName(s), modifier = Modifier.weight(1f))
                             Text(say(s.status), color = if (s.blocked != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                         }
                         s.blocked?.let { Body(say(it), muted = true) }
@@ -351,12 +351,10 @@ internal fun RotationFlow(m: KeyRotation, model: AppModel) {
     }
 }
 
-/** A space of the rotation's status list by its name: the personal space as the web says it, one not opened here as such. */
+/** A space of the rotation's status list as core names it: its own name, else the personal space or one not opened here. */
 @Composable
-private fun rotationScopeName(scopeId: String, model: AppModel): String {
-    val space = model.spaceNamed(scopeId) ?: return stringResource(R.string.rotation_scope_name_unavailable)
-    return if (space.kind == "PERSONAL") stringResource(R.string.rotation_personal_space) else spaceName(space)
-}
+private fun rotationScopeName(s: KeyRotation.ScopeStatus): String =
+    s.name ?: s.nameWord?.let { say(it) } ?: stringResource(R.string.rotation_scope_name_unavailable)
 
 // ---- erasing the account (uc.account.erase-account) ----
 

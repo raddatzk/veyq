@@ -52,13 +52,14 @@ object ItemMarksRotation {
 
     /**
      * Re-tags the account's own marks from [oldMk] to [newMk] (an account rotation, ADR 0060): of the rows the server lists
-     * as the account's own, each of a scope in [scopeIds] whose tag verifies under the OLD key — the listing is a hint, the
-     * old key the licence — is sealed again with its tag under the new one, at the scope's current epoch (once more under
-     * the scope opened again on `409 stale_epoch`). Best effort per Memory: a scope that does not open or a write that fails
-     * leaves that Memory's set reading as someone else's until its next toggle, and every other is still re-tagged.
+     * as the account's own, each whose tag verifies under the OLD key — the listing is a hint, the old key the licence — is
+     * sealed again with its tag under the new one, at the scope's current epoch (once more under the scope opened again on
+     * `409 stale_epoch`). Every listed scope, as the web's `retagItemMarksUnderNewMasterKey`: the old Master Key tagged the
+     * account's marks wherever it marked, not only in the rotation's plan, and a mark left under the old tag would read as
+     * someone else's for good. Best effort per Memory: a scope that does not open or a write that fails leaves that
+     * Memory's set reading as someone else's until its next toggle, and every other is still re-tagged.
      */
-    suspend fun retag(account: VeyqAccount, oldMk: ByteArray, newMk: ByteArray, scopeIds: List<String>) {
-        val wanted = scopeIds.toSet()
+    suspend fun retag(account: VeyqAccount, oldMk: ByteArray, newMk: ByteArray) {
         val marks = ItemMarks(account.suite)
         // the rows of every tenant (the listing answers on a tenant's origin), each row once, with the tenant it came from
         val rows = LinkedHashMap<Pair<String, String>, Pair<OwnItemFavoritesEntry, me.raddatz.veyq.mobile.navigation.TenantRef>>()
@@ -70,7 +71,7 @@ object ItemMarksRotation {
             } catch (e: Exception) {
                 continue
             }
-            for (row in listed) if (row.scopeId in wanted) rows.getOrPut(row.scopeId to row.nodeId) { row to tenant }
+            for (row in listed) rows.getOrPut(row.scopeId to row.nodeId) { row to tenant }
         }
         val oldKey = marks.selfKey(oldMk)
         val newKey = marks.selfKey(newMk)

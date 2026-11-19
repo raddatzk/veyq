@@ -571,7 +571,7 @@ struct KeyRotationSheet: View {
             if !state.scopes.isEmpty {
                 Section {
                     ForEach(state.scopes, id: \.scopeId) { s in
-                        LabeledContent(scopeName(s.scopeId)) {
+                        LabeledContent(scopeName(s)) {
                             VStack(alignment: .trailing, spacing: 2) {
                                 Text(say(s.status))
                                 if let blocked = s.blocked { Text(say(blocked)).font(.footnote).foregroundStyle(Role.muted) }
@@ -583,8 +583,10 @@ struct KeyRotationSheet: View {
         }
     }
 
-    private func scopeName(_ id: String) -> String {
-        model.spaces.first { $0.scopeId == id }.map { Names.spaceName($0) } ?? say(.rotationScopeNameUnavailable)
+    /// A space of the status list as core names it (inbox #979): its own name, else the personal space or one not opened here.
+    private func scopeName(_ s: KeyRotation.ScopeStatus) -> String {
+        if let name = s.name { return name }
+        return say(s.nameWord ?? .rotationScopeNameUnavailable)
     }
 
     private func prove() {

@@ -163,11 +163,11 @@ internal class PlayedRotation(val p: Primitives) {
     var myScopes: List<ScopeSummary>? = null
     val markPuts = mutableListOf<Triple<String, String, PutItemFavoritesRequest>>()
 
-    /** The TENANT scope as `listMyScopes` serves it: the account's self-grant of `E_3`. */
-    fun tenantScope(account: VeyqAccount): ScopeSummary {
-        val g = account.sealSelfGrant(k3, tenantId, "TENANT", epoch.toLong())
+    /** The TENANT scope (or another of [kind] at [id]) as `listMyScopes` serves it: the account's self-grant of `E_3`. */
+    fun tenantScope(account: VeyqAccount, id: String = tenantId, kind: ScopeKind = ScopeKind.TENANT): ScopeSummary {
+        val g = account.sealSelfGrant(k3, id, kind.value, epoch.toLong())
         return ScopeSummary(
-            id = tenantId, kind = ScopeKind.TENANT, role = ScopeSummary.Role.OWNER, tenantId = tenantId, nameEpoch = 0, iconEpoch = 0,
+            id = id, kind = kind, role = ScopeSummary.Role.OWNER, tenantId = tenantId, nameEpoch = 0, iconEpoch = 0,
             currentEpoch = epoch, grantedEpoch = epoch, wrappedGrant = g.wrappedGrant, granterUserId = me.userId,
             grantSignature = g.grantSignature, granterIdentityPublicKey = b64(me.bundle),
         )

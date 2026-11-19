@@ -1392,7 +1392,10 @@ final class AppModel {
         guard let s = session.signedTo else { return nil }
         return AppleAccount.shared.addressChange(account: s.account, tenant: s.tenant)
     }
-    func keyRotationFlow() -> KeyRotation? { session.signedTo?.account.keyRotation() }
+    func keyRotationFlow() -> KeyRotation? {
+        guard let account = session.signedTo?.account else { return nil }
+        return account.keyRotation(open: tenantSession.flatMap { $0.account === account ? $0 : nil })
+    }
     func erasureFlow() -> AccountErasure? { session.signedTo?.account.erasure() }
 
     /// After a save of one's profile: the shell's people read again, so every name follows (core read them, and the pictures).
