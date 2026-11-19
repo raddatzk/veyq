@@ -1,7 +1,7 @@
 ---
 id: cr-app-account-rest
 title: The account flows' rest in the apps — the sign-in's Secret Key control in every flow that asks for the key, and the web's breached-password check straight from the device
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0148", "0088", "0003", "0136", "0137", "0026"]
 invariants:
@@ -137,12 +137,13 @@ controls reuse the sign-in's words. No owner question: the words are the web's.
 
 ## Phases
 
-- [ ] **1 ADR 0151 and the docs it binds** — ADR 0151 (D1–D8), its row in `docs/decisions/README.md`; ADR 0148's
+- [x] **1 ADR 0151 and the docs it binds** — ADR 0151 (D1–D8), its row in `docs/decisions/README.md`; ADR 0148's
   Consequences lines on #969/#970 pointed at it; `security-model.md` § the breached-password check corrected to the
   web's five screens (R9) plus the apps' two, and the apps' `User-Agent` beside the browser's `Origin`;
   `native-apps.md` § Open's line narrowed; `uc.account.change-password`, `uc.account.change-email` and
   `uc.account.rotate-keys` gain the apps in their alternate flows. · Done when: every guard but guard_gaps green
   (`/usr/bin/python3 scripts/validate_*.py`).
+  **Built 2026-11-19 (branch `claude/acct-rest`):** ADR 0151 was free (re-measured); every guard but guard_gaps green.
 - [ ] **2 core — the key intake** (D1, D2) — `KeyIntake`; `SessionModel` on it (`SessionModelTest`'s kit cases and
   `LiveSignInTest` unchanged and green: the refactor's proof); the three flows on their own intake. Tests: a pasted
   `veyqkit:` token opens each flow (the R4 defect: written first, red on the untouched tree, then green); a kit read in a

@@ -83,9 +83,11 @@ Measured on the apps' passes (2026-11-16, ADR 0143's Consequences): on Android a
 with that `User-Agent` and no `Referer`, cookie or `Authorization` (89 and 148 requests), and none before the consent.
 Apple's map was not passed (the owner's).
 
-**The breached-password check is the second instance, and the first exception to opt-in.** The four dialogs that
-choose a password (set up the server, join a tenant, change a password, recover access) ask the Have I Been Pwned
-range API whether the password appears in known breaches. The fences apply like this:
+**The breached-password check is the second instance, and the first exception to opt-in.** The web's five screens
+that choose a password (set up the server, join a tenant, change a password, recover access, replace the keys with a
+new password) and the apps' two, being built (change a password, replace the keys with a new password —
+[ADR 0151](../decisions/0151-the-apps-account-rest-the-sign-ins-secret-key-control-in-every-flow-that-asks-for-the-key-and-the-breached-password-check-straight-from-the-device.md) decisions 5–6) ask the Have I Been Pwned
+range API whether the password appears in known breaches, straight from the device, never through veyq. The fences apply like this:
 
 - **Only a 5-hex SHA-1 prefix leaves the device** (k-anonymity, padded response); the match against the returned
   suffixes is computed locally.
@@ -98,7 +100,8 @@ range API whether the password appears in known breaches. The fences apply like 
 - **Automatic, not opt-in** (owner decision 2026-10-14). It is one of the two third-party requests that run without
   consent (the exchange rates below are the other), and the reason is what crosses: a 5-hex prefix carries no content and no identity, where a geocoding request
   carries the coordinate itself. **What it does disclose, stated:** the browser's `Origin` header names the veyq
-  instance, so HIBP (and the CDN in front of it) learns that this IP uses this instance and is choosing a password.
+  instance — an app's `User-Agent` (`veyq/<major> (+https://veyq.app; <instance origin>)`) names it alike —, so HIBP
+  (and the CDN in front of it) learns that this IP uses this instance and is choosing a password.
   The docs site says so, in [Is my data safe?](../../site/src/content/docs/privacy/is-my-data-safe.md) and
   [Change your password](../../site/src/content/docs/account/change-password.mdx). The field itself carries no note: the privacy notice names the check, its recipient and its switch
   (ADR 0093 § Legal basis; the note was removed under the copy rule, owner 2026-10-21).
