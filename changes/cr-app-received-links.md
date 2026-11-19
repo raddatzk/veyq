@@ -265,8 +265,35 @@ question 2*).
   #1032's (reverted: the core agent's). **Open:** a guest's file Replace and a Pot's places on Linux (#1035); a
   bookmark's rename, move and delete (#1035); a viewing link's report (#1033); terms and a note (not on the links);
   another instance; Orca not run.
-- [ ] **10 Windows** — the same; the credential locker. · Done when: `python3 windows/run.py build` green on the VM;
+- [x] **10 Windows** — the same; the credential locker. · Done when: `python3 windows/run.py build` green on the VM;
   § Passes' Windows row (or #983's reason named open).
+  **Built 2026-11-19 (branch `claude/h-windows`):** core's `mingwMain` `sharing/WindowsGuestSessions` (a credential of WinRT's
+  `PasswordVault` — the Credential Locker — through `wincred/veyq_wincred.h`'s C helpers over the C ABI, its internals in
+  `veyq_wincred_vault.h`; resource the hashed name, user `veyq`), handed to `Bridge.live` by `platformGuestSessions` (#1019);
+  the app's `ReceivedView.cs` (*Open a link* under the sign-in, the unlock and in the switcher's menu, a `ContentDialog`
+  with Paste on the tap only; the screen above every face, its gates, a level's rows with a viewing link's row report, the
+  member's file, Memory and Pot pages over the guest's models, a WRITE_ONLY guest's page, a READ_WRITE guest's New folder
+  and upload, the record's notice as an `InfoBar` and in the naming question (#1018), *Keep*, *Report shared content*,
+  *Not you?*, Back with its question), `ReceivedText.cs` (its rules, `ReceivedTextTest`), `BookmarkPage.cs` (the kept link's
+  page while `Shell.bookmark` names it: in place or on its own, *Open on its own page*, *Report shared content*, the header's
+  report), `BookmarkCreateDialog.cs` (New → Bookmark, #1020). Measured: `run.py test --tests '*WindowsGuestSessionsTest*'`
+  green (bitten: a write that keeps nothing turns two cases red), `run.py build`, `bridge` and `test` green, the words and
+  guidelines guards OK. UIA pass on the VM, one throwaway with member on `tw-win.localhost` (`--tenant tw-win`), links
+  minted by the owner through the bridge (a folder with a file READ, a Memory READ_WRITE with a password and its uploader,
+  a Pot READ_WRITE, a drop box): signed out (over the unlock) — a non-link refused with the core's words; the password
+  gate (a wrong one asked again); the Memory's gallery with the notice "kept for 7 days", Add photos → the naming question
+  with the notice → a photo added through the picker; after an app restart the guest still named; *Not you?* removed its
+  Credential Locker entry; Back asked, Stay, Back, Leave → the unlock again; the uploader's and the drop box's pages (named,
+  the notice, a photo and a file sent, listed); the folder's level, the file's page, Back inside the link, *Report shared
+  content*'s sheet (not sent); the Pot (named on Add entry, an entry saved as the guest). Signed in as the member — the
+  switcher's *Open a link*, *Keep* into the tenant's space (said kept; the level lists it after a refresh, which Keep now
+  asks for), New → Bookmark (a bad link refused, a good one kept), the kept link's page in place (Back only inside the
+  link), *Open on its own page* (Back asked, back to the bookmark), *Report shared content* (the link's screen with its
+  sheet), the header's report (name). `%LOCALAPPDATA%\veyq`, `%TEMP%`, INetCache and Recent (982 files) hold none of the
+  links' keys (b64url, b64, hex), share ids or the password; the Credential Locker lists `veyq-guest:<hash>` / `veyq` only.
+  **Open:** a guest's file Replace and a Pot's Overview/Settings places (#1035, now Windows' too); terms and a note (not on
+  the links); another instance; a row's report by its context menu (not driven: UIA has no context-menu step); the
+  bookmark's header report offers "It and everything in it" beside the name (#1036).
 - [ ] **11 the passes** — § Passes, each as a throwaway, erased after; results into ADR 0150's Consequences.
 - [ ] **12 harvest** — the Use pages (EN+DE): `keep-a-link.mdx` (a bookmark in the apps) and `what-guests-see.mdx`
   (a link opened in the app); `native-apps.md` § Built; #435's row narrowed to cr-open-in-the-app or deleted when both
