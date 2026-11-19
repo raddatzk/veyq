@@ -17,7 +17,7 @@ Inbox #435's handover, V2 block H's second CR, implemented after cr-app-received
 into [ADR 0150](../docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md):
 its *Open a link* screen is this CR's target). **Re-read at its landing:** *Open a link* sits on the sign-in and the
 unlock screens alone (owner 2026-11-19, ADR 0150 decision 4) — what `veyq://link` opens while a tenant is open (no field
-there) is this CR's to decide before phase 3. The owner decided (2026-11-18,
+there): **owner 2026-11-19 — signed in, `veyq://link` opens the *Open a link* screen over the open tenant** (paste on tap, then the guest view with *Keep*), so a signed-in person's way in to a received link is the banner's deep link; until this CR lands it is New → Bookmark. The owner decided (2026-11-18,
 ADR 0148 decision 6) that a web page a mailed link opens shows an *Open in the app* banner carrying a token-free
 custom-scheme link that only opens the app, with no universal or app links. After this CR every app answers `veyq:`
 links — Android, iOS, macOS, Linux (the Flatpak), Windows (the MSIX) — and the web shows the banner on the share page
