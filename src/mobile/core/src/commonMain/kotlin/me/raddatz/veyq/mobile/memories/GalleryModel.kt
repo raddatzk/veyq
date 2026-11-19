@@ -507,11 +507,9 @@ class GalleryModel(
                 music = MusicQueue.tracks(read.items.filter { it.mediaId !in pending }),
                 tracks = read.items.filter { it.mediaId !in pending && it.isTrack },
                 failed = false,
-            ).let { it.copy(uploading = UploadTile.shown(queued, it.listedIds)) }
+            ).let { it.copy(uploading = UploadTile.shown(queued, it.listedIds)) }.refiltered()
         }
         if (read != null) {
-            filterFacts = null
-            refilter()
             searched(settled = true)
             // the marks with each listing (a kept read: offline as last read), the badges and the filter after them
             scope.launch { readMarks() }
@@ -528,11 +526,14 @@ class GalleryModel(
     /** The node's marks, made once ([Door.marks]); null where none are read here. */
     private val itemMarks: ItemMarks? by lazy { if (granted.mark) door.marks() else null }
 
-    /** The filter's facts of the rows listed now, made at the first narrowing and dropped at the next read. */
-    private var filterFacts: GalleryFilter.Facts? = null
+    /** The filter's facts of the rows they were made of, made at the first narrowing and again for other rows. */
+    private var filterFacts: Pair<List<Row>?, GalleryFilter.Facts>? = null
 
-    private fun factsNow(): GalleryFilter.Facts =
-        filterFacts ?: GalleryFilter.Facts.of(current.rows.orEmpty().map { it.item }, calendar.dayOf, calendar.label).also { filterFacts = it }
+    private fun factsOf(rows: List<Row>?): GalleryFilter.Facts =
+        filterFacts?.takeIf { it.first === rows }?.second
+            ?: GalleryFilter.Facts.of(rows.orEmpty().map { it.item }, calendar.dayOf, calendar.label).also { filterFacts = rows to it }
+
+    private fun factsNow(): GalleryFilter.Facts = factsOf(current.rows)
 
     /** Every member's marks read (with the gallery's first read and its live poll's); the badges and the filter follow. */
     suspend fun readMarks() {
@@ -543,16 +544,19 @@ class GalleryModel(
     }
 
     /** The badges and the predicate made anew from the marks, the filter and the rows as they stand. */
-    private fun refilter() {
+    private fun refilter() = _state.update { it.refiltered() }
+
+    /** [this] with its badges and predicate made anew: one state, so no host ever sees a filter without its rows. */
+    private fun State.refiltered(): State {
         val m = itemMarks
-        _state.update { s ->
+        return let { s ->
             val ids = s.rows.orEmpty().map { it.mediaId }
             val badges = if (m == null) emptyMap() else ids.mapNotNull { id ->
                 val mine = m.markedByMe(id)
                 val count = m.count(id)
                 if (mine || (count ?: 0) > 0) id to Mark(count, mine) else null
             }.toMap()
-            val keep = if (s.filter.narrows && s.rights.filterFacts) GalleryFilter.predicate(s.filter, ::factsNow, m, m?.personal != false) else null
+            val keep = if (s.filter.narrows && s.rights.filterFacts) GalleryFilter.predicate(s.filter, { factsOf(s.rows) }, m, m?.personal != false) else null
             s.copy(marks = badges, keep = keep)
         }
     }
@@ -571,10 +575,7 @@ class GalleryModel(
     }
 
     /** The filter changed to [filter] (its text, a chip added or taken, the marks' mode, cleared); the grid narrows at once. */
-    fun filter(filter: GalleryFilter.State) {
-        _state.update { it.copy(filter = filter) }
-        refilter()
-    }
+    fun filter(filter: GalleryFilter.State) = _state.update { it.copy(filter = filter).refiltered() }
 
     /** The chips offered for the filter's text ([photo], [video]: the kinds' words), none already chosen. */
     fun suggestions(photo: String, video: String): List<Pair<GalleryFilter.Chip, String>> =

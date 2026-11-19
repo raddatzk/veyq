@@ -215,6 +215,30 @@ class SecretFreeSchemaTest {
         assertEquals(listOf("Digested.sha256", "Digested.originalDigest", "Digested.contentHash"), digests(listOf(Digested.serializer())))
     }
 
+    /**
+     * Memories' rest crosses as ids, counts, labels and states alone (ADR 0149 decision 10): a medium's badge as a count and
+     * whether it is mine — never a mark set's ciphertext, its value key's wrap or its member's self tag —, the filter as its
+     * mode, chips by identity and label and the text typed, the Contributions view as rows of ids and labels (a bucket's name
+     * opened, never sealed). No field anywhere on the wire is named like a tag; and these shapes carry exactly these fields.
+     */
+    @Test
+    fun theMarksTheFilterAndTheContributionsCrossAsIdsCountsAndLabelsAlone() {
+        val schema = Schema(Roots.all)
+        val fields = schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }
+        assertEquals(emptyList(), fields.filter { TAG.containsMatchIn(it.name) }.map { "${it.owner}.${it.name}" })
+        val byOwner = fields.groupBy({ it.owner }, { it.name })
+        fun of(name: String) = byOwner[name] ?: byOwner.entries.single { (owner, _) -> owner.endsWith(".$name") }.value
+        assertEquals(
+            listOf("mediaId", "name", "mediaType", "video", "blocked", "tile", "picture", "capturedAt", "width", "height", "said", "canDelete", "marks", "mine"),
+            of("GalleryRow"), "a gallery row says more than its medium's facts and its badge",
+        )
+        assertEquals(listOf("offered", "mode", "modeOffered", "chips", "text", "suggestions", "shown", "total"), of("FilterShown"))
+        assertEquals(listOf("chip", "label", "rest"), of("ChipShown"))
+        assertEquals(listOf("rows", "selected", "media", "curates", "loading", "failed", "refused"), of("BucketsShown"))
+        assertEquals(listOf("bucketId", "label", "depth", "mediaCount", "isPrimary", "canManage"), of("BucketRowShown"))
+        assertEquals(listOf("x", "y", "size"), of("TileFrame"))
+    }
+
     @Serializable @kotlinx.serialization.SerialName("Digested")
     class Digested(val medium: String, val sha256: String?, val originalDigest: String, val contentHash: String)
 
@@ -312,6 +336,8 @@ class SecretFreeSchemaTest {
     }
 
     companion object {
+        /** A mark set's self tag (`itemMarkSelfTag`) or any field named like one: what tells whose a set is. */
+        private val TAG = Regex("tag", RegexOption.IGNORE_CASE)
         private val SECRET = Regex("key|seal|token|secret|passw|private|wrap|bearer|authori[sz]|cookie|credential", RegexOption.IGNORE_CASE)
 
         /**

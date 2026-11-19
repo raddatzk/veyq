@@ -14,7 +14,7 @@ import me.raddatz.veyq.mobile.session.TenantSession
  * holds (a member's; **the fourth segment of the view switch, pending the owner**: [OFFERED]). Online only for a write
  * (ADR 0140 decision 7); offline the rows read from the kept listing.
  */
-class Contributions internal constructor(private val gallery: GalleryModel, private val door: Door) {
+class Contributions(private val gallery: GalleryModel, private val door: Door) {
     companion object {
         /** Whether the Contributions view is offered beside Photos | Music | Map — pending the owner (ADR 0149 decision 6); recommended: yes. */
         const val OFFERED = true

@@ -246,6 +246,9 @@ internal class Tenant(
         node: NodeAt, uploads: me.raddatz.veyq.mobile.memories.MediaUploads, music: me.raddatz.veyq.mobile.memories.GalleryModel.Music?,
     ) -> me.raddatz.veyq.mobile.memories.GalleryModel)? =
         shell?.let { s -> { node, uploads, music -> s.galleryModel(node, uploads, music) } },
+    /** A page's Contributions view (`ShellModel.contributions`, ADR 0149 decision 6); a test's tenant plays one over its own door. */
+    val contributions: ((me.raddatz.veyq.mobile.memories.GalleryModel) -> me.raddatz.veyq.mobile.memories.Contributions)? =
+        shell?.let { s -> { g -> s.contributions(g) } },
     /**
      * The account's music player (`ShellModel.musicPlayer`, ADR 0142 decision 1) over the host's decks and system controls;
      * one per tenant opened, stopped when it closes. A test's tenant plays one over its own randomness.
@@ -387,6 +390,9 @@ internal class HeldTracks(val gallery: Long, val model: me.raddatz.veyq.mobile.m
 
 /** A Music view the host opened ([Call.MusicOpen]) over gallery [gallery]. */
 internal class HeldMusic(val gallery: Long, val model: me.raddatz.veyq.mobile.memories.music.MusicModel)
+
+/** A page's Contributions view ([Call.BucketsOpen]), held with its gallery: it closes with that gallery and its tenant. */
+internal class HeldBuckets(val gallery: Long, val model: me.raddatz.veyq.mobile.memories.Contributions)
 
 /** A lightbox the host opened ([Call.LightboxOpen]) over gallery [gallery], its [page]. */
 internal class HeldLightbox(val gallery: Long, val page: me.raddatz.veyq.mobile.memories.GalleryModel, val model: me.raddatz.veyq.mobile.memories.Lightbox)
@@ -552,6 +558,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val player = MutableStateFlow<me.raddatz.veyq.mobile.audio.MusicPlayer?>(null)
     private val decks = Registry<HostDeck>()
     private val musics = Registry<HeldMusic>()
+    private val buckets = Registry<HeldBuckets>()
+
+    /** The account's view choice turned ([Call.ViewSet]): the shell's state shows it anew. */
+    private val viewTurned = MutableStateFlow(0L)
 
     /** A deck's reader held for the host as any reader is ([openReader]), only while a tenant is open. */
     private val deckReaders = object : HeldReaders {
@@ -1187,6 +1197,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 closeFactsOf(call.gallery)
                 closeCurationOf(call.gallery)
                 musics.removeIf { it.gallery == call.gallery }.forEach { it.model.close() }
+                buckets.removeIf { it.gallery == call.gallery }
                 g.close()
                 Answer.Done
             } ?: noGallery
@@ -1252,6 +1263,62 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 )
             } ?: noLightbox
             is Call.LightboxTrash -> lightboxes[call.lightbox]?.let { held -> trashed(held.page, held.model.trash()) } ?: noLightbox
+            is Call.LightboxMark -> lightboxes[call.lightbox]?.let { held ->
+                if (!held.model.canMark) return Answer.Refused(Answer.Why.NOT_OFFERED)
+                Answer.Said(held.model.toggleMark())
+            } ?: noLightbox
+            is Call.LightboxReport -> lightboxes[call.lightbox]?.let { held ->
+                val sheet = held.model.reportSheet() ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = ids.incrementAndFetch()
+                reports.put(id, sheet)
+                Answer.ReportOpened(id)
+            } ?: noLightbox
+            is Call.MarksToggle -> galleries[call.gallery]?.let { g ->
+                if (!g.current.marking || !g.current.marksLoaded) return Answer.Refused(Answer.Why.NOT_OFFERED)
+                Answer.Said(g.toggleMark(call.mediaId))
+            } ?: noGallery
+            is Call.FilterText -> galleries[call.gallery]?.let { g -> g.filter(g.current.filter.copy(text = call.text)); Answer.Done } ?: noGallery
+            is Call.FilterChip -> galleries[call.gallery]?.let { g ->
+                val (chip, rest) = suggestions(g).firstOrNull { me.raddatz.veyq.mobile.memories.GalleryFilter.key(it.first) == call.chip }
+                    ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                g.filter(g.current.filter.let { it.copy(chips = it.chips + chip, text = rest) })
+                Answer.Done
+            } ?: noGallery
+            is Call.FilterRemove -> galleries[call.gallery]?.let { g ->
+                g.filter(g.current.filter.let { f -> f.copy(chips = f.chips.filter { me.raddatz.veyq.mobile.memories.GalleryFilter.key(it) != call.chip }) })
+                Answer.Done
+            } ?: noGallery
+            is Call.FilterMode -> galleries[call.gallery]?.let { g ->
+                if (!g.marksModeOffered) return Answer.Refused(Answer.Why.NOT_OFFERED)
+                g.filter(g.current.filter.copy(mode = me.raddatz.veyq.mobile.memories.GalleryFilter.Mode.valueOf(call.mode.name)))
+                Answer.Done
+            } ?: noGallery
+            is Call.FilterClear -> galleries[call.gallery]?.let { g -> g.filter(me.raddatz.veyq.mobile.memories.GalleryFilter.State()); Answer.Done } ?: noGallery
+            is Call.BucketsOpen -> galleries[call.gallery]?.let { g ->
+                val make = tenant.value?.models?.contributions ?: return noTenant
+                if (!g.current.rights.buckets || !me.raddatz.veyq.mobile.memories.Contributions.OFFERED) return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = ids.incrementAndFetch()
+                val model = make(g)
+                buckets.put(id, HeldBuckets(call.gallery, model))
+                model.read()
+                Answer.BucketsOpened(id)
+            } ?: noGallery
+            is Call.BucketsPick -> buckets[call.buckets]?.model?.pick(call.bucketId).done(Answer.Why.NO_SUCH_BUCKETS)
+            is Call.BucketsCreate -> buckets[call.buckets]?.let { Answer.BucketsDone(it.model.create(call.name)) } ?: noBuckets
+            is Call.BucketsRename -> buckets[call.buckets]?.let { Answer.BucketsDone(it.model.rename(call.name)) } ?: noBuckets
+            is Call.BucketsDelete -> buckets[call.buckets]?.let { Answer.BucketsDone(it.model.delete()) } ?: noBuckets
+            is Call.BucketsMove -> buckets[call.buckets]?.let { Answer.BucketsDone(it.model.move(call.mediaIds, call.target)) } ?: noBuckets
+            is Call.BucketsSeen -> buckets[call.buckets]?.model?.seen().done(Answer.Why.NO_SUCH_BUCKETS)
+            is Call.BucketsClose -> buckets.remove(call.buckets)?.let { Answer.Done } ?: noBuckets
+            is Call.ViewSet -> tenant.value?.models?.shell?.let { s ->
+                s.chooseView(me.raddatz.veyq.mobile.navigation.ViewMode.valueOf(call.mode.name))
+                viewTurned.value++
+                Answer.Done
+            } ?: noTenant
+            is Call.ViewTiles -> {
+                val frames = me.raddatz.veyq.mobile.navigation.TileGrid.frames(call.width, call.count, call.labelHeight)
+                Answer.Tiles(me.raddatz.veyq.mobile.navigation.TileGrid.columns(call.width), frames.map { TileFrame(it.x, it.y, it.size) })
+            }
             is Call.LightboxStop -> lightboxes[call.lightbox]?.model?.stop().done(Answer.Why.NO_SUCH_LIGHTBOX)
             is Call.MediumReader -> lightboxes[call.lightbox]?.let { held ->
                 val reader = held.model.play() ?: return Answer.Refused(Answer.Why.NO_MEDIUM)
@@ -1891,6 +1958,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noScan = Answer.Refused(Answer.Why.NO_SUCH_SCAN)
     private val noLink = Answer.Refused(Answer.Why.NO_SUCH_LINK)
     private val noMusic = Answer.Refused(Answer.Why.NO_SUCH_MUSIC)
+    private val noBuckets = Answer.Refused(Answer.Why.NO_SUCH_BUCKETS)
+
+    /** A gallery's filter suggestions for its text, the kinds' words in the host's language. */
+    private suspend fun suggestions(g: me.raddatz.veyq.mobile.memories.GalleryModel) =
+        g.suggestions(parts.await().words.say(Msg.SEARCH_KIND_PHOTO), parts.await().words.say(Msg.SEARCH_KIND_VIDEO))
     private val noMap = Answer.Refused(Answer.Why.NO_SUCH_MAP)
     private val noMapServices = Answer.Refused(Answer.Why.NO_MAP_SERVICES)
     private val noDate = Answer.Refused(Answer.Why.NO_SUCH_DATE)
@@ -2049,6 +2121,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         // the music is the tenant's: its views close, and the player stops — every track it opened released, its decks
         // cleared, the system's controls cleared (ADR 0142 decision 1, as the web's shell unmount stops it)
         musics.removeAll().forEach { it.model.close() }
+        buckets.removeAll()
         player.value?.stop()
         player.value = null
         decks.removeAll()
@@ -2125,7 +2198,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             tenant.flatMapLatest { open ->
                 val m = open?.models
                 m?.shell?.state?.let { state ->
-                    combine(state, m.pictures, m.picturesRound, hiddenTurned) { s, pictures, round, _ -> Update.Shell(s, s?.let { shown(parts, open, it, pictures.keys, round) }) }
+                    combine(state, m.pictures, m.picturesRound, hiddenTurned, viewTurned) { s, pictures, round, _, _ -> Update.Shell(s, s?.let { shown(parts, open, it, pictures.keys, round) }) }
                 } ?: flowOf(Update.Shell(null))
             }
         }
@@ -2149,6 +2222,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         }
         is Watched.Music -> musics[w.music]?.let { held -> held.model.state.map { Update.Music(w.music, shownMusic(held, it)) } }
             ?: flowOf(Update.Music(w.music, null))
+        is Watched.Buckets -> buckets[w.buckets]?.let { held -> held.model.state.map { Update.Buckets(w.buckets, shownBuckets(it)) } }
+            ?: flowOf(Update.Buckets(w.buckets, null))
         is Watched.Map -> maps[w.map]?.let { held -> held.shown().map { Update.Map(w.map, it) } } ?: flowOf(Update.Map(w.map, null))
         Watched.MapServices -> mapServices.flatMapLatest { services ->
             services?.state?.map { s ->
@@ -2274,8 +2349,15 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             pictures = pictures.sorted(),
             picturesRound = round,
             offlineBanner = s.banner,
+            view = open.models.shell?.levelView?.let { ViewModeShown.valueOf(it.name) } ?: ViewModeShown.valueOf(me.raddatz.veyq.mobile.navigation.ViewMode.FIRST.name),
         )
     }
+
+    /** A Contributions view as the host draws it ([BucketsShown]), each field the model's own answer. */
+    private fun shownBuckets(s: me.raddatz.veyq.mobile.memories.Contributions.State) = BucketsShown(
+        rows = s.rows.map { BucketRowShown(it.bucketId, it.label, it.depth, it.mediaCount, it.isPrimary, it.canManage) },
+        selected = s.selected, media = s.media.map { it.mediaId }, curates = s.curates, loading = s.loading, failed = s.failed, refused = s.refused,
+    )
 
     /** An entry editor as the host draws it ([EditorShown]), each field one core function's answer. */
     private fun shownEditor(e: HeldEditor, s: EntryEditor.State): EditorShown {
@@ -2380,9 +2462,19 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     /** A Memory's or a chapter's page as the host draws it ([GalleryShown]), each field the model's own answer. */
-    private fun shownGallery(g: me.raddatz.veyq.mobile.memories.GalleryModel, s: me.raddatz.veyq.mobile.memories.GalleryModel.State) = GalleryShown(
+    private suspend fun shownGallery(g: me.raddatz.veyq.mobile.memories.GalleryModel, s: me.raddatz.veyq.mobile.memories.GalleryModel.State) = GalleryShown(
         node = g.node,
-        rows = s.rows?.map { galleryRow(g, it) },
+        // the rows the filter shows (ADR 0149 decision 5): the grid's and the lightbox's
+        rows = s.shown?.map { galleryRow(g, it) },
+        filter = if (!s.rights.filterFacts) null else FilterShown(
+            offered = true, mode = MarkMode.valueOf(s.filter.mode.name), modeOffered = g.marksModeOffered,
+            chips = s.filter.chips.map { ChipShown(me.raddatz.veyq.mobile.memories.GalleryFilter.key(it), chipLabel(it)) },
+            text = s.filter.text,
+            suggestions = if (s.filter.text.isBlank()) emptyList() else suggestions(g).map { (c, rest) -> ChipShown(me.raddatz.veyq.mobile.memories.GalleryFilter.key(c), chipLabel(c), rest) },
+            shown = s.shown?.size ?: 0, total = s.count,
+        ),
+        contributions = s.rights.buckets && me.raddatz.veyq.mobile.memories.Contributions.OFFERED && tenant.value?.models?.contributions != null,
+        markSaid = s.markSaid,
         failed = s.failed,
         failure = s.failure,
         count = Notice(Msg.MEMORY_ITEMS, s.count),
@@ -2541,10 +2633,26 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         said = s.said,
     )
 
-    /** One medium as a gallery's row and a lightbox's page show it ([GalleryRow]). */
-    private fun galleryRow(g: me.raddatz.veyq.mobile.memories.GalleryModel, r: me.raddatz.veyq.mobile.memories.GalleryModel.Row) = GalleryRow(
-        r.mediaId, r.name, r.type, r.isVideo, r.blocked, r.tile, r.picture, r.capturedAt, r.width, r.height, r.said, g.deletes(r.mediaId),
-    )
+    /** One medium as a gallery's row and a lightbox's page show it ([GalleryRow]), with its mark's badge. */
+    private fun galleryRow(g: me.raddatz.veyq.mobile.memories.GalleryModel, r: me.raddatz.veyq.mobile.memories.GalleryModel.Row): GalleryRow {
+        val mark = g.current.marks[r.mediaId]
+        val personal = g.current.marks.values.any { it.count == null }
+        return GalleryRow(
+            r.mediaId, r.name, r.type, r.isVideo, r.blocked, r.tile, r.picture, r.capturedAt, r.width, r.height, r.said, g.deletes(r.mediaId),
+            marks = mark?.count ?: if (personal) null else 0, mine = mark?.mine == true,
+        )
+    }
+
+    /** A filter chip as it reads: a year by its number, a day, a place or a kind by its label. */
+    private fun chipLabel(c: me.raddatz.veyq.mobile.memories.GalleryFilter.Chip): String = when (c) {
+        is me.raddatz.veyq.mobile.memories.GalleryFilter.Chip.Day -> c.label
+        is me.raddatz.veyq.mobile.memories.GalleryFilter.Chip.Search -> when (val k = c.chip) {
+            is me.raddatz.veyq.mobile.search.SearchChip.Year -> k.year.toString()
+            is me.raddatz.veyq.mobile.search.SearchChip.Place -> k.label
+            is me.raddatz.veyq.mobile.search.SearchChip.Kind -> k.label
+            else -> me.raddatz.veyq.mobile.search.Query.chipKey(k)
+        }
+    }
 
     /** A lightbox as the host draws it ([LightboxShown]), each field the model's own answer; none once it closed. */
     private fun shownLightbox(held: HeldLightbox, s: me.raddatz.veyq.mobile.memories.Lightbox.State): LightboxShown? {
@@ -2560,6 +2668,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             downloadName = held.model.downloadName()?.takeIf { held.page.rights.download },
             canTrash = row != null && held.page.deletes(row.mediaId),
             music = s.music?.let(NowPlayingShown::of),
+            canMark = held.model.canMark,
+            marked = row?.let { held.page.current.marks[it.mediaId]?.mine } == true,
+            // a photo's or a video's report (ADR 0149 decision 6), not a blocked one's; the server may still take none
+            canReport = row != null && !row.blocked && held.page.current.offline == null,
         )
     }
 

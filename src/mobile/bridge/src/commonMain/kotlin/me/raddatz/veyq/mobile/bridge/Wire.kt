@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.bridge
 
+import me.raddatz.veyq.mobile.navigation.ViewMode as CoreViewMode
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -930,6 +931,48 @@ internal sealed class Call {
     /** The current medium deleted as its gallery deletes it ([GalleryTrash]'s answers). */
     @Serializable @SerialName("Lightbox.Trash") data class LightboxTrash(val lightbox: Long) : Call()
 
+    /** The current medium's mark flipped (the toolbar's heart, ADR 0149 decision 4): [Answer.Said] what did not land, or nothing. */
+    @Serializable @SerialName("Lightbox.Mark") data class LightboxMark(val lightbox: Long) : Call()
+
+    /** The current photo's or video's report sheet (ADR 0149 decision 6): [Answer.ReportOpened]; refused `NOT_OFFERED` where the server takes none. */
+    @Serializable @SerialName("Lightbox.Report") data class LightboxReport(val lightbox: Long) : Call()
+
+    /** Medium [mediaId]'s mark flipped from its tile's menu (`GalleryModel.toggleMark`): [Answer.Said]. */
+    @Serializable @SerialName("Marks.Toggle") data class MarksToggle(val gallery: Long, val mediaId: String) : Call()
+
+    /** The filter's text (`GalleryFilter.State.text`): the grid and the lightbox narrow at once ([GalleryShown.filter]). */
+    @Serializable @SerialName("Filter.Text") data class FilterText(val gallery: Long, val text: String) : Call()
+
+    /** One of [FilterShown.suggestions] chosen by its [chip]: the chip joins, the text becomes the suggestion's rest. */
+    @Serializable @SerialName("Filter.Chip") data class FilterChip(val gallery: Long, val chip: String) : Call()
+
+    /** The chip [chip] taken back. */
+    @Serializable @SerialName("Filter.Remove") data class FilterRemove(val gallery: Long, val chip: String) : Call()
+
+    /** The marks' mode (refused `NOT_OFFERED` where [FilterShown.modeOffered] is false: a personal scope, a guest). */
+    @Serializable @SerialName("Filter.Mode") data class FilterMode(val gallery: Long, val mode: MarkMode) : Call()
+
+    /** The filter cleared: every medium shown again. */
+    @Serializable @SerialName("Filter.Clear") data class FilterClear(val gallery: Long) : Call()
+
+    /** A page's Contributions view (`Contributions`, ADR 0149 decision 6): [Answer.BucketsOpened]; refused `NOT_OFFERED` where `rights.buckets` is false. */
+    @Serializable @SerialName("Buckets.Open") data class BucketsOpen(val gallery: Long) : Call()
+    @Serializable @SerialName("Buckets.Pick") data class BucketsPick(val buckets: Long, val bucketId: String) : Call()
+    /** A sub-bucket named [name] under the chosen bucket: [Answer.Stored]. */
+    @Serializable @SerialName("Buckets.Create") data class BucketsCreate(val buckets: Long, val name: String) : Call()
+    @Serializable @SerialName("Buckets.Rename") data class BucketsRename(val buckets: Long, val name: String) : Call()
+    @Serializable @SerialName("Buckets.Delete") data class BucketsDelete(val buckets: Long) : Call()
+    /** The caller's [mediaIds] moved into bucket [target] (its own primary: `self`). */
+    @Serializable @SerialName("Buckets.Move") data class BucketsMove(val buckets: Long, val mediaIds: List<String>, val target: String) : Call()
+    @Serializable @SerialName("Buckets.Seen") data class BucketsSeen(val buckets: Long) : Call()
+    @Serializable @SerialName("Buckets.Close") data class BucketsClose(val buckets: Long) : Call()
+
+    /** The account's view choice on this device (ADR 0149 decision 8): every level and a person's Memories follow ([ShellShown.view]). */
+    @Serializable @SerialName("View.Set") data class ViewSet(val mode: ViewModeShown) : Call()
+
+    /** The tiles' frames for [count] tiles at [width] (`TileGrid`, no tenant): [Answer.Tiles]. */
+    @Serializable @SerialName("View.Tiles") data class ViewTiles(val width: Double, val count: Int, val labelHeight: Double = 0.0) : Call()
+
     /** The player's view went (`stop`): the medium's reader closes. */
     @Serializable @SerialName("Lightbox.Stop") data class LightboxStop(val lightbox: Long) : Call()
 
@@ -1610,6 +1653,15 @@ internal sealed class Answer {
         val profile: String? = null,
     ) : Answer()
 
+    /** A page's Contributions view opened ([Call.BucketsOpen]): its id, for [Watched.Buckets] and its calls. */
+    @Serializable @SerialName("BucketsOpened") data class BucketsOpened(val buckets: Long) : Answer()
+
+    /** A curation's outcome ([Call.BucketsCreate] and its siblings): done, refused or failed. */
+    @Serializable @SerialName("BucketsDone") data class BucketsDone(val outcome: me.raddatz.veyq.mobile.memories.Buckets.Outcome) : Answer()
+
+    /** The tiles' grid ([Call.ViewTiles]): its columns and each square cover's frame. */
+    @Serializable @SerialName("Tiles") data class Tiles(val columns: Int, val frames: List<TileFrame>) : Answer()
+
     /** A page's Music view opened ([Call.MusicOpen]): its id, for [Watched.Music] and its calls. */
     @Serializable @SerialName("MusicOpened") data class MusicOpened(val music: Long) : Answer()
 
@@ -1735,6 +1787,9 @@ internal sealed class Answer {
         /** The music: no player (no tenant open, or a composition without decks); no Music view by that id; no deck by that id. */
         NO_PLAYER, NO_SUCH_MUSIC, NO_SUCH_DECK,
 
+        /** No Contributions view by that id (closed, or its gallery or tenant was). */
+        NO_SUCH_BUCKETS,
+
         /** The maps: no map by that id (closed, or its page or tenant was); the tenant has no map services; no date or place
          *  editor, no Map view by that id. */
         NO_SUCH_MAP, NO_MAP_SERVICES, NO_SUCH_DATE, NO_SUCH_PLACE, NO_SUCH_TRACKS,
@@ -1846,6 +1901,9 @@ internal sealed class Watched {
 
     /** A Music view opened by [Call.MusicOpen]. */
     @Serializable @SerialName("Music") data class Music(val music: Long) : Watched()
+
+    /** A Contributions view opened by [Call.BucketsOpen]. */
+    @Serializable @SerialName("Buckets") data class Buckets(val buckets: Long) : Watched()
 
     /** A map opened by [Call.MapOpenMemories], [Call.LightboxMap], [Call.PlaceOpen] or [Call.TracksOpen]. */
     @Serializable @SerialName("Map") data class Map(val map: Long) : Watched()
@@ -1964,6 +2022,9 @@ internal sealed class Update {
     /** A Music view; null for an id the bridge does not hold (closed, or its gallery or tenant was). */
     @Serializable @SerialName("Music") data class Music(val music: Long, val shown: MusicShown?) : Update()
 
+    /** A Contributions view; null for an id the bridge does not hold (closed, or its gallery or tenant was). */
+    @Serializable @SerialName("Buckets") data class Buckets(val buckets: Long, val shown: BucketsShown?) : Update()
+
     /** A map; null for an id the bridge does not hold (closed, or its page or tenant was). */
     @Serializable @SerialName("Map") data class Map(val map: Long, val shown: MapShown?) : Update()
 
@@ -2038,6 +2099,12 @@ internal class GalleryShown(
     val said: Notice?,
     /** Shown from the offline store, read-only, as of when (ADR 0140 decision 5): a time, nothing else; null online. */
     val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null,
+    /** The filter (ADR 0149 decision 5): [rows] are the media it shows; null where it is not offered. */
+    val filter: FilterShown? = null,
+    /** Whether the Contributions view is offered ([Call.BucketsOpen]; `rights.buckets` and `Contributions.OFFERED`). */
+    val contributions: Boolean = false,
+    /** What the last mark toggle said (too many, not saved); null once seen. */
+    val markSaid: Notice? = null,
     /** Whether the page offers its Music view ([Call.MusicOpen]; `MusicModel.shown`: it has music, or whoever looks may add some). */
     val musicView: Boolean = false,
     /** This node's music is the player's queue now, playing or paused (the header's action then stops it). */
@@ -2203,7 +2270,7 @@ internal class BannerPickedShown(val medium: BannerMedium, val mediaType: String
 
 /** A person's Memories section's view (core's `PersonMemories.View`). */
 @Serializable
-internal enum class MemoriesView { LIST, MAP }
+internal enum class MemoriesView { LIST, TILES, MAP }
 
 /**
  * A person's page as the host draws it (core's `PersonProfile`, ADR 0144 decision 11): who [userId] is — the display name
@@ -2273,6 +2340,9 @@ internal class GalleryRow(
     val height: Int?,
     @Serializable(with = MsgKey::class) val said: Msg?,
     val canDelete: Boolean,
+    /** Its badge (ADR 0149 decision 4): how many marked it (null: a personal scope, no count; 0: nobody) and whether the caller did. */
+    val marks: Int? = 0,
+    val mine: Boolean = false,
 )
 
 /**
@@ -2295,7 +2365,71 @@ internal class LightboxShown(
     val canTrash: Boolean,
     /** What the player plays while it holds a queue: the compact controls' (`Lightbox.State.music`; their commands are `Player.*`). */
     val music: NowPlayingShown? = null,
+    /** Whether the heart is offered ([Call.LightboxMark]; `Lightbox.canMark`: a member's, online, the own set read). */
+    val canMark: Boolean = false,
+    /** Whether the caller marked the current medium. */
+    val marked: Boolean = false,
+    /** Whether *Report* is offered for the current photo or video ([Call.LightboxReport]); the server may still take none. */
+    val canReport: Boolean = false,
 )
+
+/** The marks' mode of a gallery's filter (`GalleryFilter.Mode`). */
+@Serializable
+internal enum class MarkMode { ALL, EVERYONE, MINE }
+
+/**
+ * A gallery's filter as the host draws it (`GalleryFilter`, ADR 0149 decision 5): whether the field is offered at all
+ * ([offered]: `rights.filterFacts`), the marks' [mode] and whether it is offered ([modeOffered]), the chips chosen and the
+ * suggestions for the [text] (each by its identity, its label as the chip reads, the text that stays), and how many of [total]
+ * media the grid shows now ([shown]). Stored nowhere.
+ */
+@Serializable
+@SerialName("FilterShown")
+internal class FilterShown(
+    val offered: Boolean,
+    val mode: MarkMode,
+    val modeOffered: Boolean,
+    val chips: List<ChipShown>,
+    val text: String,
+    val suggestions: List<ChipShown>,
+    val shown: Int,
+    val total: Int,
+)
+
+/** A filter chip: its identity [chip] (`GalleryFilter.key`, what [Call.FilterChip] and [Call.FilterRemove] name), its [label], the text that stays ([rest], a suggestion's). */
+@Serializable
+@SerialName("ChipShown")
+internal class ChipShown(val chip: String, val label: String, val rest: String? = null)
+
+/**
+ * A Contributions view as the host draws it (`Contributions.State`): each bucket row at its depth with its label, its count,
+ * whether it is the caller's to curate; the chosen one ([selected]) and its media's ids in the gallery's order; loading,
+ * failed, and the last curation refused ([refused]).
+ */
+@Serializable
+@SerialName("BucketsShown")
+internal class BucketsShown(
+    val rows: List<BucketRowShown>,
+    val selected: String?,
+    val media: List<String>,
+    val curates: Boolean,
+    val loading: Boolean,
+    val failed: Boolean,
+    val refused: me.raddatz.veyq.mobile.memories.Buckets.Outcome?,
+)
+
+@Serializable
+@SerialName("BucketRowShown")
+internal class BucketRowShown(val bucketId: String, val label: Piece, val depth: Int, val mediaCount: Int, val isPrimary: Boolean, val canManage: Boolean)
+
+/** A view of a level or a person's Memories (`ViewMode`, ADR 0149 decision 8). */
+@Serializable
+internal enum class ViewModeShown { LIST, TILES, MAP }
+
+/** One tile's square cover ([Answer.Tiles], `TileGrid.Frame`). */
+@Serializable
+@SerialName("TileFrame")
+internal class TileFrame(val x: Double, val y: Double, val size: Double)
 
 /**
  * What plays now (core's `NowPlaying`, ADR 0142 decision 5) for the bar, the lightbox's compact controls and the system's
@@ -3303,6 +3437,9 @@ internal class ShellShown(
      * is refused and New is not offered ([canCreateHere]).
      */
     val offlineBanner: Notice? = null,
+    /** How a level is drawn (the account's choice on this device, ADR 0149 decision 8; [Call.ViewSet]) and what it offers. */
+    val view: ViewModeShown = ViewModeShown.valueOf(CoreViewMode.FIRST.name),
+    val views: List<ViewModeShown> = CoreViewMode.LEVEL.map { ViewModeShown.valueOf(it.name) },
 ) {
     @Serializable class ShownServer(val connection: String, val label: String, val tenants: List<TenantRef>)
     @Serializable class ShownSpace(val space: SpaceRef, val name: Piece)

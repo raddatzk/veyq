@@ -248,7 +248,10 @@ class MemoriesDispatchTest {
         }
     }
 
-    private fun bridge(played: PlayedMemory, host: PlayedHost) = Bridge {
+    private fun bridge(
+        played: PlayedMemory, host: PlayedHost,
+        contributions: ((GalleryModel) -> me.raddatz.veyq.mobile.memories.Contributions)? = null,
+    ) = Bridge {
         val hidden = Hidden({}, emptySet())
         Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles, tiers = HostTiers(host.host)) { _ ->
             Tenant(
@@ -266,6 +269,7 @@ class MemoriesDispatchTest {
                         me.raddatz.veyq.mobile.session.NodeCover.uploaded(me.raddatz.veyq.mobile.blob.ApplicationBlobs.Plan("b-m", 1, 5, "d3JhcA==", "m"), me.raddatz.veyq.mobile.session.NodeCover.Crop(0.25, 0.0, 0.5, 1.0)))))
                     me.raddatz.veyq.mobile.session.NodeCover.row(cover, held) { played.rowCoverOpens++; "row-m".encodeToByteArray() }
                 },
+                contributions = contributions,
                 createMemory = { scopeId, parentId, name, _, _ ->
                     MemoryCreate.check(MemoryCreate.MEMORY, parentId?.let { "FOLDER" }, name, emptyList())?.let { MemoryCreate.Made(null, it) }
                         ?: MemoryCreate.Made(NodeAt(scopeId, "m-new", MemoryCreate.MEMORY, name.trim()), null)
@@ -535,5 +539,54 @@ class MemoriesDispatchTest {
         tiers.derive(UploadSource.of("x.jpg", 1, "image/jpeg", null) { _, n -> ByteArray(n) }, "image/jpeg") { none.complete(it) }
         assertNull(withTimeout(5.seconds) { none.await() }.preview)
         assertEquals(2, asked.size)
+    }
+
+    /** A Contributions view the test plays: one bucket per call recorded, its curations answered done. */
+    private class PlayedBuckets : me.raddatz.veyq.mobile.memories.Contributions.Door {
+        val created = CopyOnWriteArrayList<String>()
+        override suspend fun list() = me.raddatz.veyq.mobile.memories.Buckets.Listed(
+            listOf(me.raddatz.veyq.mobile.memories.Buckets.Bucket("b1", "user:u1", null, true, 2, null, null, null)), null,
+        ) to emptyMap<String, String?>()
+        override fun person(userId: String) = "Ana"
+        override suspend fun create(name: String, parent: String?) = me.raddatz.veyq.mobile.memories.Buckets.Outcome.DONE.also { created += name }
+        override suspend fun rename(bucketId: String, name: String) = me.raddatz.veyq.mobile.memories.Buckets.Outcome.DONE
+        override suspend fun delete(bucketId: String) = me.raddatz.veyq.mobile.memories.Buckets.Outcome.DONE
+        override suspend fun move(mediaIds: List<String>, target: String?) = me.raddatz.veyq.mobile.memories.Buckets.Outcome.DONE
+    }
+
+    @Test
+    fun theContributionsTheFilterAndTheTilesAnswerThroughCalls_andTheViewClosesWithItsTenant() = runBlocking {
+        val played = PlayedMemory()
+        val buckets = PlayedBuckets()
+        val b = bridge(played, PlayedHost()) { g -> me.raddatz.veyq.mobile.memories.Contributions(g, buckets) }
+        b.signedIn()
+        val g = (b.ask(Call.GalleryOpen(memory)) as Answer.GalleryOpened).gallery
+        val page = b.watching(Watched.Gallery(g))
+        val shown = page.until { u -> (u as Update.Gallery).shown?.takeIf { it.rows != null } }
+        assertTrue(shown.contributions, "a member's page offers its Contributions view")
+
+        val id = (b.ask(Call.BucketsOpen(g)) as Answer.BucketsOpened).buckets
+        val view = b.watching(Watched.Buckets(id)).until { u -> (u as Update.Buckets).shown?.takeIf { !it.loading } }
+        assertEquals(listOf("b1"), view.rows.map { it.bucketId })
+        assertEquals("b1", view.selected, "the own primary first")
+        assertEquals(Answer.BucketsDone(me.raddatz.veyq.mobile.memories.Buckets.Outcome.DONE), b.ask(Call.BucketsCreate(id, "Sunsets")))
+        assertEquals(listOf("Sunsets"), buckets.created)
+
+        // the filter narrows the rows the host lays out
+        assertEquals(Answer.Done, b.ask(Call.FilterText(g, "no such name")))
+        val narrowed = page.until { u -> (u as Update.Gallery).shown?.takeIf { it.filter?.text == "no such name" } }
+        assertEquals(0, narrowed.rows?.size)
+        assertEquals(Answer.Done, b.ask(Call.FilterClear(g)))
+        // no marks read here: the toggle and the mode are not offered
+        assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.MarksToggle(g, "a")))
+        assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.FilterMode(g, MarkMode.MINE)))
+        val tiles = b.ask(Call.ViewTiles(360.0, 3, 40.0)) as Answer.Tiles
+        assertEquals(2, tiles.columns)
+        assertEquals(TileFrame(0.0, 226.0, 174.0).let { listOf(it.x, it.y, it.size) }, tiles.frames[2].let { listOf(it.x, it.y, it.size) })
+
+        // the view is the tenant's: gone with it
+        assertEquals(Answer.Done, b.ask(Call.SessionSignOut("a.example#u1")))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_BUCKETS), b.ask(Call.BucketsCreate(id, "After")), "a Contributions view outlived its tenant")
+        assertEquals(listOf("Sunsets"), buckets.created)
     }
 }

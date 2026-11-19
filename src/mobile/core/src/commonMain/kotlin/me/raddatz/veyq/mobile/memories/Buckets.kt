@@ -166,6 +166,7 @@ object Buckets {
     }
 
     /** What a curation came to. */
+    @kotlinx.serialization.Serializable
     enum class Outcome { DONE, REFUSED, FAILED }
 
     private suspend fun outcome(status: suspend () -> Int): Outcome = when (runCatching { status() }.getOrDefault(-1)) {

@@ -300,7 +300,7 @@ Each phase ends with every platform building.
   Tests: the store per account; the columns at 359, 360 and 1200 units; the profile's three views. · **Bite:** the store
   keyed without the account → the two-account case red.
 
-- [ ] **7 the bridge** — D10, under `SecretFreeSchemaTest`. · Done when: `:bridge:jvmTest` green; **bites:** (a) a
+- [x] **7 the bridge** — D10, under `SecretFreeSchemaTest`. · Done when: `:bridge:jvmTest` green; **bites:** (a) a
   mark's self tag in `GalleryRow` → `SecretFreeSchemaTest` red; (b) a Contributions dialog answering after
   `closeTenant()` → red.
 

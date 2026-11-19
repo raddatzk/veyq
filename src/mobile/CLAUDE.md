@@ -163,6 +163,13 @@ A Gradle build of its own, run through its own wrapper.
   payload; `MediaDuration` for a poster's time), never on the deriving or the UI thread; `Shell.CreateMemory` and
   `Gallery.CreateChapter` answer `Created(node, notice)`; a list row's cover is `Shell.RowCover` (ADR 0137's
   Consequences).
+  Memories' rest (ADR 0149 decision 10): a gallery row's badge (`GalleryRow.marks`, `mine`), the filter on `GalleryShown.filter`
+  (`FilterShown`: chips by identity, `GalleryShown.rows` the rows it shows) with `Filter.Text|Chip|Remove|Mode|Clear`, a
+  tile's mark `Marks.Toggle`, the lightbox's `Lightbox.Mark` and `Lightbox.Report` (`LightboxShown.canMark`, `marked`,
+  `canReport`), the Contributions view `Buckets.Open|Pick|Create|Rename|Delete|Move|Seen|Close` (`Watched.Buckets`:
+  `BucketsShown`, closed with its gallery and its tenant), the view choice `View.Set` (`ShellShown.view`, `views`; a person's
+  `MemoriesView` List | Tiles | Map) and the tiles' frames `View.Tiles` (`Answer.Tiles`, no tenant). No mark set, wrap or tag
+  crosses (`SecretFreeSchemaTest.theMarksTheFilterAndTheContributionsCrossAsIdsCountsAndLabelsAlone`).
   A node's music (ADR 0142): the account's one player is made when a tenant opens and stopped when it closes (its readers
   released, its decks cleared); `Watched.Player` → `PlayerShown` (the bar), its commands — the bar's, the lightbox's compact
   controls' and the system's — `Player.Pause|Resume|Next|Previous|Seek|Stop|OpenNode`; the header's play or stop

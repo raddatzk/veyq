@@ -698,6 +698,10 @@ class ShellModel(
      */
     fun galleryAt(scopeId: String, nodeId: String): NodeAt? = galleryAt(current?.lists?.nodes.orEmpty(), scopeId, nodeId)
 
+    /** A Memory's or a chapter's Contributions view over this tenant (`Contributions.of`, ADR 0149 decision 6). */
+    fun contributions(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.memories.Contributions =
+        me.raddatz.veyq.mobile.memories.Contributions.of(tenant, gallery)
+
     /** The account's view choice on this device (ADR 0149 decision 8): every level's and a person's Memories'. */
     val viewModes: ViewModes get() = ViewModes(tenant.account.deviceStore)
 
