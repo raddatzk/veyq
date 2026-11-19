@@ -2,6 +2,8 @@ useCase: uc.sharing.browse-a-received-share-in-place
 feature: sharing
 title: Browse a received share in place, inside the space
 # ADR 0121 (its live two-origin pass, and what it did not prove, is the ADR's § Consequences).
+# The apps (ADR 0150 decision 6, built 2026-11-19; src/mobile is no coverage surface, ADR 0040): core
+# `BookmarksTest.aBookmarksPageShowsTheShareInPlaceWhileEmbeddingIsOnElseOnItsOwn`; live `GuestGapsLiveTest`.
 acceptanceCriteria:
   # the share API's CORS (backend)
   - id: share-api-answers-any-origin

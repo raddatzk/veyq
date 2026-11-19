@@ -1,0 +1,63 @@
+---
+title: "Einen Link in der App öffnen"
+sources:
+  - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
+  - docs/features/sharing/use-cases/uc.sharing.keep-a-received-link.md
+  - docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md
+---
+
+Dir hat jemand einen veyq-Link geschickt, von deinem Server oder einem anderen. Du kannst ihn in irgendeinem Browser
+öffnen oder in der veyq-[App](/de/getting-started/install-the-app/). Ein Konto braucht die App dafür nicht: Du öffnest
+den Link als sein Gast, genau wie im Browser.
+
+## Öffnen
+
+1. Wähle auf dem Anmeldebildschirm der App, oder auf dem Bildschirm, auf dem du sie entsperrst, **Link öffnen**.
+2. Wähle **Einfügen**, oder füge den Link selbst in das Feld ein. Die App liest, was du kopiert hast, nur, wenn du
+   Einfügen wählst, nie von sich aus. Füge den ganzen Link ein: Der Teil nach `#k=` ist sein Schlüssel.
+3. Wähle **Link öffnen**.
+
+## Was du siehst
+
+Bevor etwas gezeigt wird, fragt der Link, was er alle fragt, die ihn öffnen: sein Passwort, die Regeln des Bereichs, der
+geteilt hat, und einen Hinweis, den die Person, die geteilt hat, dich lesen lassen will. Dann siehst du, was geteilt
+wurde, in denselben Ansichten, die die Leute dieses Bereichs benutzen, mit nur den Schaltflächen, die der Link erlaubt:
+[Was ein Gast sieht](/de/sharing/what-guests-see/).
+
+- Mit einem Link, über den du etwas hinzufügen darfst, fragt die App beim ersten Hinzufügen **Wie heißt du?**.
+  **Nicht du?** lässt jemand anderen mit einem neuen Namen neu beginnen.
+- Vor dem ersten Hinzufügen sagt dir die App, was der Server davon aufbewahrt: deine IP-Adresse, deinen Quellport, die
+  Uhrzeit und woher es kam, für eine Zahl von Tagen. **Wer es aufbewahrt, warum, und deine Rechte** öffnet die
+  Datenschutzerklärung des Servers.
+- Ein Upload-Link oder ein Briefkasten zeigt nur die Seite zum Hinzufügen.
+
+**Zurück** bringt dich innerhalb des Links eine Ebene nach oben. Ganz oben fragt es erst **Diesen Link verlassen?**: Die
+App bewahrt den Link nicht auf, um ihn wieder zu öffnen, brauchst du ihn also noch einmal. **Verlassen** bringt dich
+dorthin zurück, wo du warst.
+
+## Behalten
+
+Bist du angemeldet, bewahrt **Behalten** oben den Link als **Lesezeichen** auf. Wähle, wo: Dein eigener Bereich wird
+zuerst angeboten, dann bleibt der Link nur deiner; in einem Bereich, den du mit anderen teilst, ist das so, als würdest
+du ihnen den Link weiterleiten. Vom Anmeldebildschirm aus geöffnet, bist du noch nicht angemeldet: Melde dich an, wähle
+**Neu** und dann **Neues Lesezeichen**, und füge den Link dort ein
+([Einen geschickten Link aufbewahren](/de/sharing/keep-a-link/)).
+
+Ein Lesezeichen öffnet sich in der App wie im Browser: Seine Seite zeigt die Inhalte des Links direkt dort, oder, wo das
+Anzeigen von Links an Ort und Stelle ausgeschaltet ist, öffnet sie den Link für sich. **Auf eigener Seite öffnen**,
+**Geteilte Inhalte melden** und **Namen melden** funktionieren wie im Web.
+
+## Links, die die App nicht öffnet
+
+Ein Prüflink für die Moderation, ein Link eines Servers mit einer anderen veyq-Version oder eines Servers, der seine
+Links nicht anzeigt: Die App sagt, warum, und bietet **Im Browser öffnen** an, das den Link an deinen Browser gibt, wie
+ein Tippen darauf in einem Chat. Wurde der Link ausgeschaltet oder ist er abgelaufen, sagt die App **Dieser Link ist
+nicht verfügbar**.
+
+## Was privat bleibt
+
+Der Schlüssel des Links bleibt im Arbeitsspeicher der App, solange der Link offen ist, und nirgends sonst: nicht auf
+deinem Gerät, nicht in einer Anfrage an irgendeinen Server. Hast du etwas hinzugefügt, merkt sich die App den Namen, den
+du angegeben hast, im Passwortspeicher deines Systems, damit sie dich beim nächsten Mal noch kennt, bis du **Nicht du?**
+wählst. Der Server, auf dem die Inhalte liegen, sieht dasselbe wie wenn ein Browser den Link öffnet:
+[Sind meine Daten sicher?](/de/privacy/is-my-data-safe/#wenn-du-teilst)

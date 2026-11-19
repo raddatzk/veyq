@@ -1,0 +1,58 @@
+---
+title: "Open a link in the app"
+sources:
+  - docs/features/sharing/use-cases/uc.sharing.share-public-viewer.md
+  - docs/features/sharing/use-cases/uc.sharing.keep-a-received-link.md
+  - docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md
+---
+
+Someone sent you a veyq link, from your server or another one. You can open it in any browser, or in the veyq
+[app](/getting-started/install-the-app/). The app needs no account for it: you open the link as its guest, exactly as
+the browser would.
+
+## Open it
+
+1. On the app's sign-in screen, or on the screen where you unlock it, choose **Open a link**.
+2. Choose **Paste**, or paste the link into the field yourself. The app reads what you copied only when you choose
+   Paste, never on its own. Paste the whole link: the part after `#k=` is its key.
+3. Choose **Open a link**.
+
+## What you see
+
+Before anything is shown, the link asks what it asks of anyone who opens it: its password, the rules of the space that
+shared it, and a note the person who shared it wants you to read. Then you see what was shared, on the same screens the
+people of that space use, with only the buttons the link allows: [What a guest sees](/sharing/what-guests-see/).
+
+- With a link that lets you add things, the app asks **What is your name?** the first time you add something.
+  **Not you?** lets someone else start over under a new name.
+- Before the first thing you add, the app tells you what the server keeps about it: your IP address, source port, the
+  time and where it came from, for a number of days. **Who keeps it, why, and your rights** opens the server's privacy
+  notice.
+- An upload link or a drop box shows only the page to add things.
+
+**Back** inside the link takes you up a level. At the top, it asks **Leave this link?** first: the app does not keep the
+link, so to open it again you need it once more. **Leave** takes you back to where you were.
+
+## Keep it
+
+When you are signed in, **Keep** at the top keeps the link as a **bookmark**. Choose where: your own space is offered
+first, so the link stays yours alone; in a space you share with others, keeping it there is like forwarding it to them.
+Opened from the sign-in screen you are not signed in yet: sign in, choose **New** and then **New bookmark**, and paste
+the link there ([Keep a link someone sent you](/sharing/keep-a-link/)).
+
+A bookmark opens in the app as it does in the browser: its page shows the link's content right there, or, where showing
+links in place is switched off, opens the link on its own. **Open on its own page**, **Report shared content** and
+**Report name** work as on the web.
+
+## Links the app does not open
+
+A moderator's review link, a link of a server that runs another version of veyq, or one of a server that does not
+show its links: the app says why and offers **Open in the browser**, which hands the link to your browser, as tapping it
+in a chat would. If the link was switched off or has expired, the app says **This link isn't available**.
+
+## What stays private
+
+The link's key stays in the app's memory while the link is open, and nowhere else: not on your device, not in a
+request to any server. Where you added something, the app remembers the name you gave in your system's password storage,
+so it still knows you next time, until you choose **Not you?**. The server that stores the content sees the same as when
+a browser opens the link: [Is my data safe?](/privacy/is-my-data-safe/#when-you-share)

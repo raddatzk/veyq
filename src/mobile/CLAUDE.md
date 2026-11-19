@@ -102,6 +102,20 @@ A Gradle build of its own, run through its own wrapper.
   platforms: Android `AccountFlows.kt`, `AccountSecretFlows.kt`, `SafetyNumber.kt`; Apple `AccountFlows.swift`; Linux
   `account_flows.rs`, `profile_edit.rs`, `safety.rs`; Windows `AccountFlows.cs`, `ProfileFlow.cs`, `ProfilePicture.cs`,
   `SafetyNumber.cs`.
+- **A received link** ([ADR 0150](../../docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md), built 2026-11-19): the web's share page in core's `sharing/` —
+  `ReceivedLink` (the web's parse, held to `contracts/platform/share-links/cases.v1.json` by `ReceivedLinkTest` and the
+  web's `bookmarkLink.test.ts`), `ShareInstance` (the link instance's `/api/setup`), `ShareGates` (password, terms, note,
+  content, the naming), `GuestTree`, `GuestView` and `GuestAccess` (the link's reads, writes and own upload queue),
+  `GuestReport`, the `GuestSessions` port; *Open a link* and the screen above the shell, `OpenLink` and `GuestScreen`
+  (*Keep* where a tenant is open, *Back* that asks at the root); a kept link's meta, dialog and page, `BookmarkMeta`,
+  `BookmarkCreate`, `BookmarkPage` (listed and opened through `Shell.bookmark`). Each kind's guest door is its
+  application's, through `AppKinds.guestDoor`: core's `GuestLevel`, Depot's `DepotGuest`, Memories' `MemoriesGuest`,
+  Expenses' `PotGuest` over `PotDoor` (the Pot's session reads and writes through a door, the member's
+  `TenantPotDoor`). The bridge: `Received.*`, `Bookmark.*`, `Shell.OpenBookmark` (`ReceivedBridgeTest`: no update holds
+  the link or its key). The platforms: Android `GuestLinks.kt`, `GuestScreens.kt`, `BookmarkScreen.kt`; Apple
+  `GuestLinks.swift`, `BookmarkScreen.swift`, `appleMain`'s `sharing/AppleSharing.kt`; Linux `received.rs`,
+  `bookmark_page.rs`, `bookmark_create.rs`; Windows `ReceivedView.cs`, `ReceivedText.cs`, `BookmarkPage.cs`,
+  `BookmarkCreateDialog.cs`. The guest's session stores: § Nothing on disk the app did not choose.
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
   decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's
   (`session/Account.kt`, `SessionModel.kt`: every sign-in enrols the password trust, `Gate.Signed.offer` offers staying

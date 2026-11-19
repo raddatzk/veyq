@@ -13,8 +13,11 @@ invariants:
 
 ## Goal
 
-Inbox #435's handover, V2 block H's second CR, implemented after [cr-app-received-links](cr-app-received-links.md)
-(**planned**: its *Open a link* screen is this CR's target; re-read it when it lands). The owner decided (2026-11-18,
+Inbox #435's handover, V2 block H's second CR, implemented after cr-app-received-links (**done 2026-11-19**, harvested
+into [ADR 0150](../docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md):
+its *Open a link* screen is this CR's target). **Re-read at its landing:** *Open a link* sits on the sign-in and the
+unlock screens alone (owner 2026-11-19, ADR 0150 decision 4) — what `veyq://link` opens while a tenant is open (no field
+there) is this CR's to decide before phase 3. The owner decided (2026-11-18,
 ADR 0148 decision 6) that a web page a mailed link opens shows an *Open in the app* banner carrying a token-free
 custom-scheme link that only opens the app, with no universal or app links. After this CR every app answers `veyq:`
 links — Android, iOS, macOS, Linux (the Flatpak), Windows (the MSIX) — and the web shows the banner on the share page
@@ -23,9 +26,13 @@ app once the web has done the step).
 
 ## Context & constraints
 
-- **Read first:** ADR 0148 decision 6 and its Consequences; ADR 0150 (written by cr-app-received-links' phase 1; its
-  § O is this CR's); ADR 0139 (packaging: the MSIX, the Flatpak); `src/mobile/CLAUDE.md` § Prove your work.
-- **Where what runs:** as cr-app-received-links' § Context. The Windows protocol exists only in the packaged app
+- **Read first:** ADR 0148 decision 6 and its Consequences; ADR 0150 (its § O is this CR's; its Consequences say what the guest
+  view's passes proved); ADR 0139 (packaging: the MSIX, the Flatpak); `src/mobile/CLAUDE.md` § Prove your work.
+- **Where what runs** (from `src/mobile/`, `src/mobile/CLAUDE.md` § Prove your work): `./gradlew :core:jvmTest
+  :core:macosArm64Test :bridge:jvmTest`; `ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :android:assembleDebug`; the
+  Apple builds after `./gradlew :core:assembleVeyqCoreDebugXCFramework`; `python3 linux/run.py test|build`;
+  `python3 windows/run.py build` over ssh to the VM; live cases as a throwaway (`VEYQ_LIVE`, `VEYQ_LIVE_THROWAWAY_ENV`;
+  a Windows throwaway with `--tenant tw-win`, the VM mapping `tw-win.localhost` only). The Windows protocol exists only in the packaged app
   (`run.py package`, R5); its install on the VM is measured first in phase 6. **No iOS simulator boots (#928):** the
   iPhone pass is the owner's.
 - **Out of scope:** a `veyq:` link that carries a link, a key or a token (O1 refuses it); app or universal links;
@@ -45,12 +52,12 @@ Branch `claude/h-refine` at `9cc562ae2`. `M=src/mobile`, `W=src/web/src`.
 | R6 | **The pages a mailed link opens:** `/tenant/accept#<token>` (`SmtpTenantInviteMailer`), `/recover#<token>` (`RecoveryMailer`), `/confirm-email#<token>` (`EmailConfirmationMailer`), `/confirm-email-change#<token>` (`EmailChangeMailer`); a share link `/s/<id>#k=` is sent by a member, not mailed by the server. | `grep -n "path: '/tenant/accept'\|path: '/recover'\|path: '/confirm-email" $W/router.ts`; `git grep -n 'accept#\|recover#\|confirm-email' -- src/backend/core/src/main` |
 | R7 | **The web already puts a share link with its key on the clipboard**, on the person's click (the share dialog's copy). | `grep -n 'clipboard.writeText' $W/core/sharing/FolderShareDialog.vue` |
 
-## Decisions (ADR 0150 § O, written by cr-app-received-links' phase 1)
+## Decisions (ADR 0150 § O)
 
 ### O1 — `veyq:` with two forms, and nothing read
 
 The scheme is **`veyq`** — the product's name, distinct from the QR prefixes (R1). Two forms: **`veyq://open`** opens the
-app where it is; **`veyq://link`** opens *Open a link* (cr-app-received-links H4). The core's `DeepLink.parse(uri)`
+app where it is; **`veyq://link`** opens *Open a link* (ADR 0150 decision 4). The core's `DeepLink.parse(uri)`
 answers `Open` or `Link` and **reads nothing else**: any other host is `Open`; a path, a query, a fragment, user info are
 ignored, never stored, never logged. So a crafted `veyq://link#k=…` or `veyq://link?u=https://…` does what `veyq://link`
 does.
@@ -119,7 +126,7 @@ launch; the person chose to copy; a phone's system shows the paste (iOS asks, An
   green; `start veyq://link` on the VM opens *Open a link*, a second time in the running window.
 - [ ] **7 passes and harvest** — § Passes; ADR 0150's Consequences (the passes, the residual); a Use page section
   "Open in the app" in `sharing/what-guests-see.mdx` (EN+DE) and the known limitation; `native-apps.md` § Built; #435
-  deleted (with cr-app-received-links done) and #438's handover clause removed; this CR deleted. · Done when: `pnpm run
+  deleted (cr-app-received-links is done) and #438's handover clause removed; this CR deleted. · Done when: `pnpm run
   check` in `site/` and every guard but guard_gaps green.
 
 ## Passes

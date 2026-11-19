@@ -176,6 +176,9 @@ Neither level is offered on Android or Apple without a screen lock or passcode, 
 application ending in Search, Home's tree with its filters; favorites, the trash (delete with undo,
 restore, purge), move, copy (Pot, folder, file, drop box, with the storage check), rename (its links' names re-sealed),
 a node's cover with its crop, core's header for every kind, a report to the moderators — each measured 2026-11-08/09.
+The drawer shows only a section with something in it, and every switcher row names its server (and the account where
+two signed-in accounts list the same tenant) — the owner's rules of 2026-11-19, core's `Lists.drawerSections` and
+`ShellWords.switcher` on every app ([src/mobile/CLAUDE.md](../../src/mobile/CLAUDE.md), the drawer and the switcher).
 
 **Search** ([ADR 0146](../decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md)): the web's search ported into the core (`search/`) and held to the web by
 `contracts/platform/search/v1-vectors.json` — every visible space of the current tenant, chips, one ordered list, every
@@ -358,6 +361,25 @@ what each pass proved). The Use pages: [Mark the best photos](../../site/src/con
 [Views, tabs and favorites](../../site/src/content/docs/spaces/views-and-favorites.mdx),
 [Download and import](../../site/src/content/docs/spaces/download-and-import.md),
 [Copy things](../../site/src/content/docs/spaces/copy-things.mdx).
+
+**A received link, on all four apps** ([ADR 0150](../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md), built 2026-11-19): the web's share page ported into the core
+(`sharing/`: the link held to the web's parse by `contracts/platform/share-links/cases.v1.json`, the link instance's
+`/api/setup`, the gates — password, terms, note — in the web's order, the guest's tree and its write session), each kind's
+guest door its application's (a folder's level, Depot's file and drop box, Memories' gallery and uploader, Expenses' Pot
+over a door). *Open a link* on the sign-in and unlock screens (a paste control that reads the clipboard on the tap only;
+`PasteButton` on Apple) opens the link as its guest in a screen above the shell, the member's own pages with a guest's
+rights; at the share's root *Back* asks first, since the key lives only in memory. A write link's guest session is in
+the platform's credential store under a hashed name (the Keystore-sealed store, the Keychain, the Secret Service, the
+Credential Locker), the record's notice before every guest write. A kept link (`SHARE_BOOKMARK`) is listed, created
+(*New → Bookmark*), opened in place while `core.share-embedding` is on or on its own page, reported (its share to the
+share's operator, its name to this one), and *Keep* turns an opened link into one for a signed-in person, the personal
+space first. The bridge carries it as `Received.*` and `Bookmark.*`, no update holding the link or its key
+(`ReceivedBridgeTest`). No permission, entitlement or dependency was added. Passed on Android (a throwaway API 36
+emulator), Linux (Broadway) and Windows (the VM through UI Automation) as throwaways, with scans of each app's files and
+logs finding no key, share id or password, and by the core's live tests (`ReceivedLinkLiveTest`, `GuestGapsLiveTest`,
+`GuestRemainderLiveTest`); the macOS pass and the owner's iPhone and iPad are open (below; ADR 0150's Consequences say what
+each pass proved). The Use pages: [Open a link in the app](../../site/src/content/docs/sharing/open-a-link-in-the-app.mdx),
+[Keep a link someone sent you](../../site/src/content/docs/sharing/keep-a-link.mdx).
 
 **A share into a Memory** ([ADR 0138](../decisions/0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md) decisions 2, 3, 6, 8 and 9, built 2026-11-19 on Android and Apple): each kind
 answers a share in its application's code (`navigation/ShareAnswer`: Expenses' `PotShare`, Memories' `MemoryShare`),
@@ -557,9 +579,14 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   the iPad's field with tokens and VoiceOver's count on a device (no simulator boots here, #928), Orca reading the count
   and a chip in a real GNOME session, and ⌘F, Return and Esc with the Mac app frontmost. Open findings: #957–#962;
   offline over every space's photos (#956). Not built: listing a kind across scopes.
-- A received link opened in the app as its guest, a kept link's page and *Keep* ([ADR 0150](../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md)): the
-  core and the bridge are built (cr-app-received-links phases 1–6), the platforms' screens and the passes are not; the
-  handover from the browser, `veyq:` (#438, cr-open-in-the-app), is not built.
+- A received link opened in the app ([ADR 0150](../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md), built above): **the macOS pass** (`PasteButton`, the guest
+  screen, the record's notice before a guest's write, the Keychain entry and *Not you?*, a bookmark in place — the coordinator's, from the main session) and **the
+  owner's** iPhone and iPad (#928); on no platform a link of another instance, a live link with terms and a note, or a
+  screen reader over the guest screens; Android's re-pass of the kept link's page and the guests' reports
+  (#1032–#1036), Linux's signed-out Replace and a guest Pot's Settings, Windows' guest Download and a row's context-menu
+  report. Not built: the handover from the browser, `veyq:` and the web's banner (#435, cr-open-in-the-app); *Keep* on
+  the web's share page (#1013); a moderator's review link (#1014); a link shared in from another app (#1015); a guest's
+  upload with the app left (#1016); a guest's pages following the link live, and a guest medium's EXIF (#1017).
 - Dropping files onto the app (Android; Apple's drop is built, not measured).
 - Quick capture: widgets, shortcuts; notifications, among them the reminder of what one owes in a Pot (#550).
 
@@ -603,8 +630,7 @@ agent's on the unlocked Mac (#994) and the owner's on an iPhone and an iPad (#92
 iPad and a Mac (#995); **Windows' UIA pass** (#1000, once the VM resolves a throwaway's tenant, #983). The fixes of
 #990, #991, #996, #997 and #1001 are in, checked by tests; #990's seen on Android, #996's on Android and Linux; #989's calendars are handed on every app,
 Apple's unclicked. A copy that a rotation interrupts fails (#988). The owner answered its four questions 2026-11-19 as built (ADR 0149's Consequences). Not built: import of an archive on the desktops
-(#985, cr-app-archive-import); a guest's view of a received link
-(#435, a source for the same model). The web's own heart in its lightbox (#986) and its Contributions' "You" (#1003) are
+(#985, cr-app-archive-import). A guest's gallery of a received link is ADR 0150's (built above). The web's own heart in its lightbox (#986) and its Contributions' "You" (#1003) are
 built (2026-11-19).
 A share into a Memory and into a folder (built above): Apple's passes — the iOS handoff, which types a Safari page and a
 Files share offer the extension, the iPad drop and the macOS drop onto a level (#1005); an iOS handoff for a space the app does not list
@@ -635,7 +661,7 @@ picker, a profile from a participant and from an uploader and its map, *I was th
 image and a video banner across a 720 pt window, the trash's question, Remove banner, and on an iPhone whether
 `PhotosPicker`'s copy of a gallery photo is still shared. Not run elsewhere: Windows offline (the standing tunnel).
 One's own profile and the safety numbers on a person's page are built by [ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md)
-(above), tiles by ADR 0149 (above). Not built: a people search or overview, a guest's view (#435).
+(above), tiles by ADR 0149 (above). Not built: a people search or overview.
 
 **Uploads** ([ADR 0145](../decisions/0145-the-apps-uploads-go-on-with-the-app-left-and-show-in-the-gallery-a-desktop-asks-before-a-quit-drops-them.md), built above): **iOS is the owner's** — on a real iPhone whether the
 continued-processing task is granted for an upload (`app.veyq.uploads.*`), how long `beginBackgroundTask` lasts and what
