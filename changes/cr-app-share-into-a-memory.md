@@ -118,7 +118,7 @@ upload.
   Tests: `PotShareTest` unchanged and green (the refactor's proof); a Memory takes a video and refuses a PDF; a chapter
   takes; a read-only member's Memory dimmed; *Add here* queues once. **Bites:** (a) `share` returning the Pot's answer
   for a Memory → red; (b) *Add here* queuing twice → red.
-- [ ] **3 Android** — S3 (the grant measured first, its result into ADR 0138), the drop. · Done when:
+- [x] **3 Android** — S3 (the grant measured first, its result into ADR 0138), the drop. · Done when:
   `:android:assembleDebug`, the guidelines and words guards green; § Passes' Android rows.
 - [ ] **4 Apple** — S4, S5. · Done when: both Apple builds green; the macOS drop clicked here; iOS the owner's.
 - [ ] **5 the passes and harvest** — § Passes into ADR 0138's Consequences; a Use page "Share into veyq" (EN+DE) and

@@ -80,9 +80,11 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
    takes the JPEG, so a receipt reads in every browser, as the web's own uploads do.
 
 8. **Android's share target is an activity of the app**, in its process, for `ACTION_SEND` and `ACTION_SEND_MULTIPLE`
-   of `image/*`, `video/*` and `application/pdf`: the session, the navigation and the editor are the app's own. Whether a
-   Memory's queue reads a shared file where the system put it or from the app's one copy of it follows from whether the
-   share's read grant outlives the activity for the upload's worker (measured, Consequences).
+   of `image/*`, `video/*` and `application/pdf`: the session, the navigation and the editor are the app's own. A shared
+   file is read where the system put it, a frame at a time (`ContentSource`, a pick's): the share's read grant is the
+   receiving activity's and outlives the app being left, so the upload's worker reads it to its end (measured,
+   Consequences). The one copy the app writes is a HEIC re-encoded as a JPEG (decision 7), under
+   `no_backup/share-in/`, removed once nothing reads it and swept at start.
 
 9. **A drop onto the app is a share** (owner 2026-11-09: a screenshot's thumbnail dragged onto veyq). Where it lands
    decides: an open Pot that takes it — writable, with people — opens its new expense with the files at once; a Memory's
@@ -113,6 +115,15 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   one reader the share extension uses too, re-encoding a HEIC through ImageIO so macOS reads the same way;
   `AppModel.receiveDrop`). The reader is measured through the extension; a drop itself is not, since the Simulator's one
   scripted finger cannot hold a thumbnail and switch apps. Android's drag and drop is not built.
+- **Built on Android, decisions 2, 3, 8 and 9 for a Memory** (cr-app-share-into-a-memory): `video/*` in both filters,
+  `ShareIn` handing sources read in place, the banner's *Add here* on a Memory's and a chapter's page, a drop onto the
+  gallery (`Modifier.dragAndDropTarget`, `ShareDrop.kt`) and onto the shell (a share). Measured 2026-11-19 on a throwaway
+  API 36 emulator as a throwaway account: a photo and a 303 MB video shared from the Files app into a chapter, *Add
+  here* pressed and the app left at once (Home) — the upload's worker read the video to its end in the background
+  (09:02:56 to 09:22:24, about 329 MB sent, no `SecurityException` in the app's log), and after the app was force-stopped
+  and opened anew the chapter listed both from the server; `run-as app.veyq find . -type f` then showed no share copy
+  (WorkManager's records, the offline store's opaque files and the known preferences only). A photo dragged from the
+  Files app in a second (freeform) window onto the chapter's gallery was uploaded into it.
 - **Decision 2's Memory is being built** (cr-app-share-into-a-memory, inbox #893): a Memory and a chapter as a share
   target, a Memory's files sealed in frames from disk out of iOS's share extension (decision 6), and a drop onto a
   phone's gallery. A folder as a share target is Depot's answer (inbox #987); the desktops have no share target (GNOME

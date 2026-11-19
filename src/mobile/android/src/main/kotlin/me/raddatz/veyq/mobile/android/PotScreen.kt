@@ -60,6 +60,7 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 import java.math.BigDecimal
 import java.text.NumberFormat
 import java.util.Currency
+import kotlinx.coroutines.launch
 
 /**
  * An open Pot (ADR 0122 decision 4: Expenses' bar is its open Pot's Entries, Overview and Settings, as the web's Pot has
@@ -189,10 +190,16 @@ private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMod
     // Files shared to veyq and placed here: a new expense with them as its receipts (ADR 0138), where entries may be added.
     var shared by remember { mutableStateOf<List<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt>?>(null) }
     val incoming by model.incoming.collectAsStateWithLifecycle()
+    val notices = LocalShellNotices.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     LaunchedEffect(incoming, view.canWrite) {
         // Only while the shell still shows this Pot: files given back (its editor closed unsaved) move the shell Home first.
         val open = (model.screen.value as? Screen.Signed)?.shell?.openObject == state.ref
-        if (incoming != null && open && model.shareInbox.goesInto(view)) shared = model.takeShare()
+        if (incoming == null || !open || !me.raddatz.veyq.mobile.expenses.PotShare.goesInto(view)) return@LaunchedEffect
+        val taken = model.takeShare() ?: return@LaunchedEffect
+        shared = taken.pending
+        // what the new expense left out, in Expenses' own words: no image or PDF, too large, too many
+        if (taken.refused > 0) notices?.let { n -> n.scope.launch { n.snackbar.showSnackbar(context.resources.getQuantityString(R.plurals.share_refused, taken.refused, taken.refused)) } }
     }
     // Its editor closed unsaved: the files wait again in the pick mode, for this Pot or another.
     shared?.let { files ->
