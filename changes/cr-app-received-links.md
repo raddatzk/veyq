@@ -183,7 +183,7 @@ question 2*).
   pointed at ADR 0150; `native-apps.md` § Open's line (R12) narrowed to what stays open; `src/mobile/CLAUDE.md`
   § Nothing on disk names the guest session (H3); the three sharing use-cases gain an *In the apps* alternate flow.
   · Done when: every guard but guard_gaps green (`/usr/bin/python3 scripts/validate_*.py`).
-- [ ] **2 contracts — the link cases** — `contracts/platform/share-links/cases.v1.json` from the web's
+- [x] **2 contracts — the link cases** — `contracts/platform/share-links/cases.v1.json` from the web's
   `bookmarkLink.test.ts` cases plus `#moderation` and `&report`; the web's test reads the file (a test change only —
   `parseShareLink` unchanged). · Done when: `pnpm run check` in `src/web/` green. **Bite:** a case's expected
   normalization altered in the file → the web's test red (injection, restored by snapshot).
