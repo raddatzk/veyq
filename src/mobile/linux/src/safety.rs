@@ -9,7 +9,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gdk, glib};
 
-use crate::bridge::{self, wire::Answer, wire::Call, wire::Outcome, wire::PersonTrustStatus, wire::ScanKind, wire::ScanState, wire::Shown};
+use crate::bridge::{self, wire::Answer, wire::Call, wire::PersonTrustOutcome as Outcome, wire::PersonTrustStatus, wire::ScanKind, wire::ScanState, wire::Shown};
 use crate::qr_camera::ScanView;
 use crate::{said, words};
 

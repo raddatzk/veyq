@@ -62,6 +62,45 @@ pub fn open(parent: &impl IsA<gtk::Widget>, node: &NodeAt) {
 /// Opens the report sheet the core opens for [call] (a node's `Report.Open`, a track's `Music.Report`: both answered
 /// `ReportOpened`), titled by [node], over [parent].
 pub fn open_by(parent: &impl IsA<gtk::Widget>, node: &NodeAt, call: Call) {
+    let weak = Rc::downgrade(&sheet(parent, node));
+    glib::spawn_future_local(async move {
+        let Ok((Answer::ReportOpened { report }, _)) = bridge::call(&call).await else {
+            eprintln!("veyq: the report sheet did not open in the core");
+            return;
+        };
+        attach(weak, report).await;
+    });
+}
+
+/// The report sheet the core opens for [call] (a photo's or a video's `Lightbox.Report`, ADR 0149 decision 6), shown only
+/// once the core opened it: where it answers otherwise (`NOT_OFFERED`, the server takes no reports) [refused] is told
+/// that answer and no sheet shows.
+pub fn open_asked(parent: &impl IsA<gtk::Widget>, node: &NodeAt, call: Call, refused: impl FnOnce(Result<Answer, bridge::Unreadable>) + 'static) {
+    let (parent, node) = (parent.clone().upcast::<gtk::Widget>(), node.clone());
+    glib::spawn_future_local(async move {
+        match bridge::call(&call).await.map(|(a, _)| a) {
+            Ok(Answer::ReportOpened { report }) => attach(Rc::downgrade(&sheet(&parent, &node)), report).await,
+            other => refused(other),
+        }
+    });
+}
+
+/// The core's report [report] held by the sheet [weak] while it stands, its states drawn there; closed in the core when
+/// the sheet went first.
+async fn attach(weak: Weak<Inner>, report: i64) {
+    let Some(inner) = weak.upgrade() else {
+        bridge::send(Call::ReportClose { report });
+        return;
+    };
+    inner.id.set(Some(report));
+    let Some((watch, updates)) = bridge::watch(&Watched::Report { report }) else { return };
+    *inner.watch.borrow_mut() = Some(watch);
+    drop(inner);
+    follow(weak, updates).await;
+}
+
+/// The sheet over [parent], titled by [node], presented; its report attached once the core opened one.
+fn sheet(parent: &impl IsA<gtk::Widget>, node: &NodeAt) -> Rc<Inner> {
     let header = adw::HeaderBar::builder().title_widget(&adw::WindowTitle::new(&words::report_title(), &node.name)).show_end_title_buttons(false).show_start_title_buttons(false).build();
     let cancel = gtk::Button::with_label(&words::entry_cancel());
     let send = gtk::Button::with_label(&words::report_send());
@@ -179,22 +218,7 @@ pub fn open_by(parent: &impl IsA<gtk::Widget>, node: &NodeAt, call: Call) {
         }
     });
     dialog.present(Some(parent));
-    let weak = Rc::downgrade(&inner);
-    glib::spawn_future_local(async move {
-        let Ok((Answer::ReportOpened { report }, _)) = bridge::call(&call).await else {
-            eprintln!("veyq: the report sheet did not open in the core");
-            return;
-        };
-        let Some(inner) = weak.upgrade() else {
-            bridge::send(Call::ReportClose { report });
-            return;
-        };
-        inner.id.set(Some(report));
-        let Some((watch, updates)) = bridge::watch(&Watched::Report { report }) else { return };
-        *inner.watch.borrow_mut() = Some(watch);
-        drop(inner);
-        follow(weak, updates).await;
-    });
+    inner
 }
 
 /// A page of the dialog: its content clamped and scrolled, with GNOME's margins.

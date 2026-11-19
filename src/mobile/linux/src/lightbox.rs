@@ -1,7 +1,9 @@
 //! A Memory's lightbox (core's `Lightbox`; ADR 0123's Consequences, the Linux app), GNOME's way, as Loupe shows a
 //! picture: an `AdwNavigationPage` pushed over the gallery, the medium over black, its header bar with the position as its
 //! title and the medium's name under it, Previous and Next at its start, Slideshow, Details, Save and Move to trash at its
-//! end — each only where the core offers it. A picture zooms in its own scroll (Ctrl+wheel, a pinch, `+`, `-`, `0`); ←
+//! end, with the heart and Report beside them (ADR 0149 decisions 4 and 6) — each only where the core offers it. The
+//! mark is the heart a member toggles here (`Lightbox.Mark`; a tile shows it as a badge, no button), what did not land said
+//! as a toast; *Report* opens core's report sheet for the photo or the video (`Lightbox.Report`). A picture zooms in its own scroll (Ctrl+wheel, a pinch, `+`, `-`, `0`); ←
 //! and → and a swipe page; Escape goes back. A video shows its poster with Play — it never plays by itself — and plays
 //! through the core's reader (`Medium.Reader`, [crate::player]); what the system cannot decode says so, Save stays. The
 //! details are an `AdwDialog` of rows (`Lightbox.Details`); Save writes the original where GTK's save dialog says
@@ -19,7 +21,7 @@ use std::rc::{Rc, Weak};
 use adw::prelude::*;
 use gtk::{gdk, glib};
 
-use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::LightboxShown, wire::SlideshowState, wire::Update, wire::Watched};
+use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::LightboxShown, wire::NodeAt, wire::SlideshowState, wire::Update, wire::Watched};
 use crate::home::glib_escape;
 use crate::player::Playing;
 use crate::{said, words};
@@ -50,6 +52,12 @@ struct Inner {
     details: gtk::Button,
     save: gtk::Button,
     trash: gtk::Button,
+    /// The heart: the caller's mark of the medium shown (ADR 0149 decision 4), where the core offers it.
+    mark: gtk::Button,
+    /// *Report* (ADR 0149 decision 6): the photo's or the video's report sheet, where the core offers it.
+    report: gtk::Button,
+    /// The page's node, which the report sheet is titled by.
+    node: NodeAt,
     /// The music's compact controls: shown while the player holds a queue.
     music: gtk::Box,
     music_title: gtk::Label,
@@ -74,7 +82,7 @@ struct Inner {
 
 impl Lightbox {
     /// The lightbox over gallery [gallery] at row [index], pushed onto [nav] over [window].
-    pub fn open(gallery: i64, index: i32, window: &gtk::Window, toasts: &adw::ToastOverlay, nav: &adw::NavigationView) -> Self {
+    pub fn open(gallery: i64, index: i32, node: &NodeAt, window: &gtk::Window, toasts: &adw::ToastOverlay, nav: &adw::NavigationView) -> Self {
         style_once();
         let title = adw::WindowTitle::new("", "");
         let icon = |name: &str, label: &str| {
@@ -88,6 +96,12 @@ impl Lightbox {
         let details = icon("dialog-information-symbolic", &words::memory_details());
         let save = icon("folder-download-symbolic", &words::memory_download());
         let trash = icon("user-trash-symbolic", &words::memory_trash());
+        let mark = icon(crate::theme::HEART, &words::media_marks_mark());
+        mark.set_widget_name("lightbox-mark");
+        mark.set_visible(false);
+        let report = icon(crate::header::icon_of("report"), &words::report_action());
+        report.set_widget_name("lightbox-report");
+        report.set_visible(false);
         let music_previous = icon("media-skip-backward-symbolic", &words::music_previous());
         let music_play = icon("media-playback-pause-symbolic", &words::music_pause());
         let music_next = icon("media-skip-forward-symbolic", &words::music_next());
@@ -107,7 +121,7 @@ impl Lightbox {
         bar.pack_start(&previous);
         bar.pack_start(&next);
         bar.pack_start(&music);
-        for b in [&trash, &save, &details, &slideshow] {
+        for b in [&report, &trash, &save, &details, &mark, &slideshow] {
             bar.pack_end(b);
         }
         let stage = gtk::Box::builder().orientation(gtk::Orientation::Vertical).hexpand(true).vexpand(true).build();
@@ -127,6 +141,9 @@ impl Lightbox {
             details,
             save,
             trash,
+            mark,
+            report,
+            node: node.clone(),
             music,
             music_title,
             music_play,
@@ -231,6 +248,8 @@ impl Inner {
             bridge::send(if playing { Call::PlayerPause } else { Call::PlayerResume });
         }));
         this.details.connect_clicked(call(this, Inner::show_details));
+        this.mark.connect_clicked(call(this, Inner::toggle_mark));
+        this.report.connect_clicked(call(this, Inner::report));
         this.save.connect_clicked(call(this, Inner::save));
         this.trash.connect_clicked(call(this, |i| {
             let Some(lightbox) = i.id.get() else { return };
@@ -279,6 +298,26 @@ impl Inner {
         this.page.add_controller(shortcuts);
     }
 
+    /// The heart pressed: the medium's mark flipped (`Lightbox.Mark`); what did not land is said (the heart is put back by the
+    /// core's state).
+    fn toggle_mark(self: &Rc<Self>) {
+        let Some(lightbox) = self.id.get() else { return };
+        let toasts = self.toasts.clone();
+        glib::spawn_future_local(async move {
+            crate::header::say(&toasts, bridge::call(&Call::LightboxMark { lightbox }).await.map(|(a, _)| a), "Lightbox.Mark");
+        });
+    }
+
+    /// *Report*: core's report sheet for the medium shown, once the core opened it (`Lightbox.Report`); where the server
+    /// takes no reports nothing opens.
+    fn report(self: &Rc<Self>) {
+        let Some(lightbox) = self.id.get() else { return };
+        eprintln!("veyq: lightbox report asked");
+        crate::report::open_asked(&self.window, &self.node, Call::LightboxReport { lightbox }, |answered| {
+            eprintln!("veyq: Lightbox.Report answered {answered:?}");
+        });
+    }
+
     /// Pages by [by] (−1 back, 1 on) where there is a medium there.
     fn step(&self, by: i32) {
         let Some(lightbox) = self.id.get() else { return };
@@ -321,6 +360,14 @@ impl Inner {
         self.slideshow.update_property(&[gtk::accessible::Property::Label(&label)]);
         self.save.set_visible(s.download_name.is_some());
         self.trash.set_visible(s.can_trash);
+        // the heart: filled where the caller marked the medium; its label what pressing it does
+        self.mark.set_visible(s.can_mark);
+        let (icon, label) = if s.marked { (crate::theme::HEART_FILLED, words::media_marks_unmark()) } else { (crate::theme::HEART, words::media_marks_mark()) };
+        self.mark.set_icon_name(icon);
+        self.mark.set_tooltip_text(Some(&label));
+        self.mark.update_property(&[gtk::accessible::Property::Label(&label)]);
+        if s.marked { self.mark.add_css_class("accent") } else { self.mark.remove_css_class("accent") }
+        self.report.set_visible(s.can_report);
         self.music.set_visible(s.music.is_some());
         if let Some(m) = &s.music {
             self.music_title.set_label(&m.title);

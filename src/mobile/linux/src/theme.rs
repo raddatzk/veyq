@@ -25,6 +25,11 @@ pub fn register() {
 /// The resource path GtkApplication adds to the icon theme: its resource base path's `icons/`.
 pub const ICONS: &str = concat!(env!("VEYQ_RESOURCE_BASE"), "/icons");
 
+/// An item mark's heart, open and filled (ADR 0149 decision 4): the app's own icons (`linux/icons/`, build.rs), as Adwaita
+/// draws no heart.
+pub const HEART: &str = "veyq-heart-symbolic";
+pub const HEART_FILLED: &str = "veyq-heart-filled-symbolic";
+
 /// Makes the app icon the windows' icon (X11 reads the name; Wayland's shell matches the app id to the desktop entry)
 /// and says on stderr whether the display's icon theme resolves it. After the application's startup, which adds
 /// [ICONS] to that theme.
@@ -49,6 +54,10 @@ mod tests {
         theme.add_resource_path(ICONS);
         assert!(theme.has_icon(APP_ID), "{APP_ID} under {ICONS}: {:?}", theme.icon_names());
         assert!(theme.has_icon(&format!("{APP_ID}-symbolic")));
+        // the app's own symbolic icons (`linux/icons/`, what Adwaita draws none of): an item mark's heart, open and filled
+        for own in [HEART, HEART_FILLED] {
+            assert!(theme.has_icon(own), "{own} under {ICONS}: {:?}", theme.icon_names());
+        }
         assert!(!theme.has_icon(&format!("{APP_ID}.nothing")), "has_icon answers yes to anything");
     }
 

@@ -1,9 +1,10 @@
 //! A person's profile on Linux (ADR 0144 decisions 11–13; Windows' `PersonPage.cs`): a page of the shell while its state
 //! names a person (`Shell.person`), GNOME's way — their avatar at its largest, their name, the `~username` line under a real
 //! name, a former member's hint, then Memories' section: "Memories with {name}", its loading, failure with *Try again*,
-//! empty and partial words, and once something is listed a List | Map toggle group (not stored: it opens on the list).
-//! The list is a boxed list of rows like the Memories list's (cover, name, date, place, the group), newest first as the
-//! core orders them; a row opens its Memory (`Shell.Open`). The map is ADR 0143's Memories map over the person's located
+//! empty and partial words, and once something is listed a List | Tiles | Map toggle group (the account's view choice on
+//! this device, ADR 0149 decision 8: the core opens it on that choice). The list is a boxed list of rows like the Memories
+//! list's (cover, name, date, place, the group), newest first as the core orders them; the tiles the same Memories as a
+//! grid ([crate::tiles]); a row or a tile opens its Memory (`Shell.Open`). The map is ADR 0143's Memories map over the person's located
 //! Memories (`Person.Map`, drawn by [crate::raster_map]); a pin opens its Memory. Every state is the core's
 //! (`Person.Open`, `Watched.Person`).
 use std::cell::{Cell, RefCell};
@@ -16,6 +17,7 @@ use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::MapStatus, wire
     wire::PersonRowShown, wire::PersonShown, wire::Update, wire::Watched};
 use crate::home::{cover_prefix, glib_escape, kind_icon};
 use crate::raster_map::RasterMap;
+use crate::tiles::{self, Tile};
 use crate::{avatars, said, words};
 
 /// A person's page on screen: opened in the core when made, closed when dropped.
@@ -37,6 +39,8 @@ struct Inner {
     retry: gtk::Button,
     partial: gtk::Label,
     list: gtk::ListBox,
+    /// The tiles' place: the same rows as a grid, drawn anew with them.
+    tiles: gtk::Box,
     map_slot: gtk::Overlay,
     map_empty: gtk::Box,
     map: RefCell<Option<RasterMap>>,
@@ -83,7 +87,11 @@ impl PersonPage {
         heading.set_widget_name("person-memories");
         let switch = adw::ToggleGroup::builder().visible(false).valign(gtk::Align::Center).build();
         switch.set_widget_name("person-view");
-        for (name, icon, tip) in [("list", "view-list-symbolic", words::node_view_list()), ("map", "mark-location-symbolic", words::memory_view_map())] {
+        for (name, icon, tip) in [
+            ("list", "view-list-symbolic", words::node_view_list()),
+            ("tiles", "view-grid-symbolic", words::node_view_tiles()),
+            ("map", "mark-location-symbolic", words::memory_view_map()),
+        ] {
             switch.add(adw::Toggle::builder().name(name).icon_name(icon).tooltip(tip).build());
         }
         switch.set_active_name(Some("list"));
@@ -99,6 +107,8 @@ impl PersonPage {
         let list = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).visible(false).build();
         list.add_css_class("boxed-list");
         list.set_widget_name("person-rows");
+        let tiles = gtk::Box::builder().orientation(gtk::Orientation::Vertical).visible(false).build();
+        tiles.set_widget_name("person-tiles");
         let map_slot = gtk::Overlay::builder().height_request(420).visible(false).build();
         let map_empty = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(4).halign(gtk::Align::Center).valign(gtk::Align::End)
             .margin_bottom(36).visible(false).can_target(false).build();
@@ -108,7 +118,7 @@ impl PersonPage {
         empty_title.add_css_class("heading");
         map_empty.append(&empty_title);
         map_slot.add_overlay(&map_empty);
-        for w in [spinner.upcast_ref::<gtk::Widget>(), status.upcast_ref(), retry.upcast_ref(), partial.upcast_ref(), list.upcast_ref(), map_slot.upcast_ref()] {
+        for w in [spinner.upcast_ref::<gtk::Widget>(), status.upcast_ref(), retry.upcast_ref(), partial.upcast_ref(), list.upcast_ref(), tiles.upcast_ref(), map_slot.upcast_ref()] {
             column.append(w);
         }
         let clamp = adw::Clamp::builder().maximum_size(720).child(&column).build();
@@ -126,6 +136,7 @@ impl PersonPage {
             retry,
             partial,
             list,
+            tiles,
             map_slot,
             map_empty,
             map: RefCell::new(None),
@@ -201,7 +212,11 @@ impl Inner {
                 return;
             }
             let Some(person) = i.id.get() else { return };
-            let view = if s.active_name().as_deref() == Some("map") { MemoriesView::Map } else { MemoriesView::List };
+            let view = match s.active_name().as_deref() {
+                Some("map") => MemoriesView::Map,
+                Some("tiles") => MemoriesView::Tiles,
+                _ => MemoriesView::List,
+            };
             eprintln!("veyq: person view {view:?}");
             bridge::send(Call::PersonView { person, view });
         });
@@ -230,7 +245,7 @@ impl Inner {
         match &s.memories {
             Some(m) => self.draw_memories(m),
             None => {
-                for w in [self.heading.upcast_ref::<gtk::Widget>(), self.switch.upcast_ref(), self.list.upcast_ref(), self.map_slot.upcast_ref(), self.status.upcast_ref()] {
+                for w in [self.heading.upcast_ref::<gtk::Widget>(), self.switch.upcast_ref(), self.list.upcast_ref(), self.tiles.upcast_ref(), self.map_slot.upcast_ref(), self.status.upcast_ref()] {
                     w.set_visible(false);
                 }
             }
@@ -256,10 +271,16 @@ impl Inner {
         self.status.set_label(&status.unwrap_or_default());
         self.partial.set_visible(m.partial);
         self.switch.set_visible(m.offers_views);
-        self.switch.set_active_name(Some(if m.view == MemoriesView::Map { "map" } else { "list" }));
+        self.switch.set_active_name(Some(match m.view {
+            MemoriesView::Map => "map",
+            MemoriesView::Tiles => "tiles",
+            MemoriesView::List => "list",
+        }));
         self.drawing.set(false);
         let map = m.view == MemoriesView::Map && m.offers_views;
-        self.list.set_visible(!map && !m.rows.is_empty());
+        let tiles = m.view == MemoriesView::Tiles && m.offers_views;
+        self.list.set_visible(!map && !tiles && !m.rows.is_empty());
+        self.tiles.set_visible(tiles && !m.rows.is_empty());
         self.map_slot.set_visible(map);
         self.map_empty.set_visible(map && m.located == 0);
         if *self.rows.borrow() != m.rows {
@@ -282,6 +303,19 @@ impl Inner {
                 });
                 self.list.append(&row);
             }
+            while let Some(c) = self.tiles.first_child() {
+                self.tiles.remove(&c);
+            }
+            let tiles = m.rows.iter().map(|r| {
+                let open = r.r#ref.clone();
+                let subtitle = row_subtitle(r);
+                Tile { name: r.r#ref.name.clone(), subtitle: (!subtitle.is_empty()).then_some(subtitle), dated: false, icon: kind_icon(&r.r#ref.kind),
+                    node_id: r.r#ref.node_id.clone(), open: Box::new(move || {
+                        eprintln!("veyq: a person's Memory opened");
+                        bridge::send(Call::ShellOpen { r#ref: open.clone() });
+                    }) }
+            }).collect();
+            self.tiles.append(&tiles::grid(tiles));
         }
         if self.map_on.replace(map) != map {
             if map { self.open_map() } else { self.close_map() }
