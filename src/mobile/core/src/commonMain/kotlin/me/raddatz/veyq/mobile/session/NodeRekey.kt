@@ -32,14 +32,15 @@ import me.raddatz.veyq.mobile.crypto.utf8
  * entry under the new key — its key re-wrapped, its name re-sealed, its slug token recomputed (its kind's fold,
  * [tokenInput]); its attachment and application blobs; core's cover in its meta; each open link rooted here (a link whose
  * recovery copy opens for no one is named by its digest, and the commit closes it); a link guest's name; the kind's own
- * content through its [ContentRekey]. A drop box's drop key is replaced (the web's `replaceDropKey`): a fresh key pair,
+ * content through its [ContentRekey], which is handed the node's opened meta to move its own references in (Memories'
+ * banner) before the meta is sealed under the new key. A drop box's drop key is replaced (the web's `replaceDropKey`): a fresh key pair,
  * its private half under the new key, each WRITE_ONLY link's public half anew under its K_share, each guest's K_up sealed
  * to the new public half; a guest's identity folder keeps its entry under that K_up. Staged in slices of 256, then
  * committed — the server swaps it all in, or nothing.
  *
  * What this client leaves for another device, the node staying due ([Outcome.LEFT]): a node only an owner re-keys where
  * this account is no owner (a drop box, a guest's identity folder and what lies below them are owner-only); a kind it does
- * not re-key ([Kinds] answers null: Memories' media are the web's); and what lies below any of those. Its device's grant
+ * not re-key ([Kinds] answers null: one this build does not know); and what lies below any of those. Its device's grant
  * behind the scope's current epoch leaves everything.
  */
 object NodeRekey {
@@ -59,8 +60,21 @@ object NodeRekey {
         fun contentOf(kind: String): ContentRekey?
     }
 
-    /** What a [ContentRekey] is handed: the node, both keys, the rekey id its stage goes under. */
-    class RekeyContext(val tenant: TenantSession, val scopeId: String, val nodeId: String, val fromEpoch: Int, val rekeyId: String, val oldKey: ByteArray, val newKey: ByteArray)
+    /**
+     * What a [ContentRekey] is handed: the node, both keys, the rekey id its stage goes under, and the node's [meta] (the
+     * web's `RekeyNodeContext`).
+     */
+    class RekeyContext(
+        val tenant: TenantSession, val scopeId: String, val nodeId: String, val fromEpoch: Int, val rekeyId: String,
+        val oldKey: ByteArray, val newKey: ByteArray, meta: JsonObject? = null,
+    ) {
+        /**
+         * The node's sealed meta opened under [oldKey], core's cover already moved in it; null where it has none. A kind with
+         * references of its own in it (Memories' banner) replaces it with them moved; only then is it sealed under [newKey] —
+         * one meta, one commit, every field neither side knows carried as it was.
+         */
+        var meta: JsonObject? = meta
+    }
 
     enum class Outcome {
         /** Nothing this run wanted lags any more. */
@@ -326,9 +340,11 @@ object NodeRekey {
                 val plain = suite.openField(context, oldKey, unb64(sealed))
                 RekeyIdentitySeal(i.identityId, sealedDisplayName = b64(suite.sealField(context, newKey, plain)))
             }
-            val meta = node.wrappedMeta?.let { NodeMetaWrite.openForWrite(suite, scopeId, node.id, oldKey, it) }
-            val wrappedMeta = meta?.let { NodeMetaWrite.seal(suite, scopeId, node.id, newKey, rewrapCover(suite, scopeId, node.id, oldKey, newKey, it)) }
-            content.rekey(RekeyContext(tenant, scopeId, node.id, node.epoch, rekeyId, oldKey, newKey))
+            val meta = node.wrappedMeta?.let { rewrapCover(suite, scopeId, node.id, oldKey, newKey, NodeMetaWrite.openForWrite(suite, scopeId, node.id, oldKey, it)) }
+            val context = RekeyContext(tenant, scopeId, node.id, node.epoch, rekeyId, oldKey, newKey, meta)
+            content.rekey(context)
+            // sealed only once the kind moved its own references in it (the web's hook shape, `hooks.ts`)
+            val wrappedMeta = context.meta?.let { NodeMetaWrite.seal(suite, scopeId, node.id, newKey, it) }
 
             val batches = listOf(childEntries.size, blobs.size, shares.size, identities.size).maxOf { (it + STAGE_BATCH - 1) / STAGE_BATCH }
             for (i in 0 until batches) {
@@ -363,7 +379,8 @@ object NodeRekey {
         "stale_epoch", "node_rekey_pending", "rekey_parts_stale", "rekey_parts_missing", "stale_placement", "stale_revision",
     ).any { "\"$it\"" in body }
 
-    private fun rewrapBlob(suite: V1, scopeId: String, ownerId: String, blobId: String, role: String, oldKey: ByteArray, newKey: ByteArray, wrapped: String): String {
+    /** `K_blob` of [blobId] (owner, role) moved from [oldKey] to [newKey], bound as before; a wrap that does not open throws. */
+    internal fun rewrapBlob(suite: V1, scopeId: String, ownerId: String, blobId: String, role: String, oldKey: ByteArray, newKey: ByteArray, wrapped: String): String {
         val context = Context("blob-key", "scopeId" to scopeId, "ownerId" to ownerId, "blobId" to blobId, "role" to role)
         val kBlob = suite.open(context, oldKey, unb64(wrapped))
         try {

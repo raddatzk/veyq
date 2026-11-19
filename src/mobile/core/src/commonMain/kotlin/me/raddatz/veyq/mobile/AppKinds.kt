@@ -28,13 +28,14 @@ object AppKinds {
 
     /**
      * How the app re-keys a node of a kind (ADR 0114): core's kinds and Depot's with nothing of their own under the node's
-     * key (their blobs are core's, the re-key moves them), a Pot its revisions' keys (`PotRekey`); Memories' media rows are
-     * the web's re-key, so a Memory and a chapter stay due for a web device.
+     * key (their blobs are core's, the re-key moves them), a Pot its revisions' keys (`PotRekey`), a Memory and a chapter
+     * the banner's wraps in their meta, their media's sealed tiers and their bucket names (`MemoryRekey`, ADR 0149 decision 2).
      */
     val rekeys = NodeRekey.Kinds { kind ->
         when (kind) {
             FOLDER, FILE, DROPBOX, SHARE_BOOKMARK -> NodeRekey.ContentRekey.NONE
             PotSession.KIND -> PotRekey.content
+            MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoryRekey.content
             else -> null
         }
     }

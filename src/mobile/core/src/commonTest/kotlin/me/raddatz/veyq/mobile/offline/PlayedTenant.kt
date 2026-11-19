@@ -65,6 +65,11 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
     val requests = mutableListOf<String>()
     /** The tenant's capability set as `getTenantCapabilities` answers it (the JSON array of entries); null: not served. */
     var capabilities: String? = null
+    /**
+     * A test's own answers, asked before the played ones: a status and a JSON body for a request it serves, null for one it
+     * leaves to this server (a node's re-key, `MemoryRekeyTest`).
+     */
+    var route: ((HttpRequestData) -> Pair<Int, String>?)? = null
     /** Every request to a third party under `map.example` (a map service, ADR 0143 D3), as sent: its URL and headers. */
     val mapRequests = mutableListOf<HttpRequestData>()
 
@@ -321,6 +326,7 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
         }
         val tenant = tenantOf(r)
         if (tenant != null && tenant.id in suspended && path != "/api/setup") return json("""{"code":"tenant_suspended"}""", HttpStatusCode.Forbidden)
+        route?.invoke(r)?.let { (status, body) -> return json(body, HttpStatusCode.fromValue(status)) }
         return when {
             path == "/api/setup" -> json("""{"setupRequired":false,"version":{"major":${VeyqAccount.MAJOR},"build":1},"capabilities":[],"suites":["v1"],"instanceSalt":"${b64(ByteArray(16))}"}""")
             path == "/api/token/refresh" -> if (refreshStatus == 200) json("""{"accessToken":"access-1","refreshToken":"refresh-1"}""") else json("{}", HttpStatusCode.fromValue(refreshStatus))

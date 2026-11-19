@@ -266,10 +266,10 @@ Each phase ends with every platform building.
   #986 the web); `docs/apps/memories.md` and `native-apps.md` § Open point #891/#892/#950 here; `src/mobile/CLAUDE.md`
   names the new models. · Done when: every guard but guard_gaps exits 0.
 
-- [ ] **2 contracts** — none changes: `git diff --stat contracts/` empty at the phase's end; the generated clients the
+- [x] **2 contracts** — none changes: `git diff --stat contracts/` empty at the phase's end; the generated clients the
   core needs (`memories/item-favorites`, `memories/media`) are already in `applicationSpecs` (R9). Recorded, no commit.
 
-- [ ] **3 core: the re-key (first)** — D2: `RekeyContext`'s meta, `MemoryRekey`, `AppKinds.rekeys`. Tests: the web's
+- [x] **3 core: the re-key (first)** — D2: `RekeyContext`'s meta, `MemoryRekey`, `AppKinds.rekeys`. Tests: the web's
   `rekey.test.ts` twinned; the **cross-surface fixture** of ADR 0143/0144 re-keyed — every plaintext byte equal after,
   every `K_blob` equal, a field the core does not know carried; `PotRekey`'s tests unchanged. Live (`VEYQ_LIVE`, a
   throwaway with a member): the owner removes the member on the web → the Memory due → the app's re-key completes it →

@@ -258,14 +258,14 @@ implementation exists but what holds it to the first.
   each open link rooted there wrapped anew (one whose recovery copy opens for no one named by its digest, so the commit
   closes it), a link guest's name sealed anew, the kind's own content through its hook, staged and committed at the
   scope's current epoch. The kinds and their hooks are the app's composition root's (`AppKinds`, the web's registry):
-  Expenses' `expenses/PotRekey.kt` (every revision's `K_rev`); a folder, a file, a Depot drop box and a bookmark need
+  Expenses' `expenses/PotRekey.kt` (every revision's `K_rev`), Memories' `memories/MemoryRekey.kt` (the banner's wraps in
+  the meta core hands it before sealing, every medium's sealed tiers, the bucket names; ADR 0149 decision 2); a folder, a file, a Depot drop box and a bookmark need
   none. The run resumes from the server's marks: an app closed mid-run leaves the rest due, and a member's device that
   opens the tenant finishes, in the background, what it can of every scope it is served as re-keying (`NodeRekey.resume`).
   A drop box's drop key is replaced as the web's `replaceDropKey` does (a fresh key pair, each WRITE_ONLY link's public
   half and each guest's `K_up` sealed to it anew, a guest's identity folder kept under its `K_up`); drop boxes and
   identity folders are owner-only, so a member's device that is no owner leaves them due. What this client does not
-  fully hold — a Memory or a Chapter (Memories' media re-key is not in the app yet), a node only an owner may re-key where it is
-  none — is left due for a device that does, and the app says so (a
+  fully hold — a kind this build does not know, a node only an owner may re-key where it is none — is left due for a device that does, and the app says so (a
   Pot's re-key with an entry and a receipt, the other link still opening it on the web's guest page and the closed one
   nothing, measured live by `PotLiveTest`; a revision key sealed under the old key killed by it; the web opens a Pot the
   iOS app re-keyed, receipt included; a close of a folder with a Pot and a folder holding a Pot below re-keys all four,
@@ -497,7 +497,7 @@ implementation exists but what holds it to the first.
     opened from a phone, the Undo's race, and Android's pager crashing when a trash shrank its rows (its key and page now
     guard a gone index).
   Not built yet: item marks, buckets, the re-key, export and copy (inbox #891–#893, decided by
-  [ADR 0149](0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), its re-key, download and copy planned first); the participants, a capture-time
+  [ADR 0149](0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), its re-key built, its download and copy next); the participants, a capture-time
   correction and the banner since built by
   [ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md),
   music by

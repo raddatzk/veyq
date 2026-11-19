@@ -40,7 +40,7 @@ object ShareLinkChanges {
         RULES,
         /** Another renew or a delete got there first (`409 share_deleted`): read the list again. */
         GONE,
-        /** Done; the re-key of what the closed link opened is left to a member's web device. */
+        /** Done; the re-key of what the closed link opened is left to a member's device (this one's background run or another's). */
         DONE_REKEY_PENDING,
         /** A departed member may hold it (`409 reissue_required`, ADR 0075): it comes back only renewed. */
         REISSUE_REQUIRED,

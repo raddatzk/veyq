@@ -46,8 +46,10 @@ class NodeRekeyRulesTest {
         assertTrue(NodeRekey.isMine(row("a", null, true), owner = false, kinds))
         assertTrue(NodeRekey.isMine(row("a", null, true, "EXPENSES_POT"), owner = false, kinds))
         assertTrue(NodeRekey.isMine(row("a", null, true, "FILE"), owner = false, kinds))
-        // Memories' media are the web's re-key
-        assertFalse(NodeRekey.isMine(row("a", null, true, "MEMORY"), owner = true, kinds))
+        // a Memory and a chapter are re-keyed here too (ADR 0149 decision 2); a kind this build does not know is not
+        assertTrue(NodeRekey.isMine(row("a", null, true, "MEMORY"), owner = false, kinds))
+        assertTrue(NodeRekey.isMine(row("a", null, true, "CHAPTER"), owner = false, kinds))
+        assertFalse(NodeRekey.isMine(row("a", null, true, "SOMETHING_NEW"), owner = true, kinds))
         // an owner-only node is an owner's
         assertFalse(NodeRekey.isMine(row("a", null, true, ownerOnly = true), owner = false, kinds))
         assertTrue(NodeRekey.isMine(row("a", null, true, ownerOnly = true), owner = true, kinds))

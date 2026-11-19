@@ -548,8 +548,8 @@ Apple's were built and their tests run, not clicked (a Linux pass under a load a
 server; Apple's is the owner's, #925). The Use page that says this to a person: [Open and look at a
 file](../../site/src/content/docs/depot/view-a-file.mdx) (§ In the app).
 
-**Memories**: decided by [ADR 0149](../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), not built yet — the re-key, the
-download and the copy of a Memory or chapter (#892), item marks, uploader buckets with guests' names, the gallery's filter
+**Memories**: decided by [ADR 0149](../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), the re-key of a Memory or
+chapter built (`MemoryRekey`, the meta handed to the kind before core seals it), not built yet — its download and copy (#892), item marks, uploader buckets with guests' names, the gallery's filter
 and a medium's report (#891), and tiles on every level and a person's Memories (#950); import of an archive, for every kind
 (#985); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a received link (#435, a
 source for the same model).
