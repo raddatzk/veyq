@@ -132,11 +132,12 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   shared from the Photos app was placed in a Pot after Face ID, saved as a new expense's receipt, and opened on the web
   (measured 2026-11-08 in the iOS Simulator); the editor closed unsaved returned to the pick mode, and the pick mode's
   cancel ended the request — on Android likewise (measured the same day on the emulator).
-- **Built on Apple, decision 9:** the shell takes images and PDFs dropped onto it (`apple/Veyq/IncomingFiles.swift`, the
+- **Built on Apple, decision 9:** the shell takes any file dropped onto it (`apple/Veyq/IncomingFiles.swift`, the
   one reader the share extension uses too, re-encoding a HEIC through ImageIO so macOS reads the same way;
   `AppModel.receiveDrop`). The reader is measured through the extension; a drop itself is not, since the Simulator's one
-  scripted finger cannot hold a thumbnail and switch apps. Android's drag and drop is not built.
-- **Built on Android, decisions 2, 3, 8 and 9 for a Memory** (cr-app-share-into-a-memory): `video/*` in both filters,
+  scripted finger cannot hold a thumbnail and switch apps.
+- **Built on Android, decisions 2, 3, 8 and 9 for a Memory** (cr-app-share-into-a-memory): `video/*` in both filters
+  (`*/*` since a folder's answer),
   `ShareIn` handing sources read in place, the banner's *Add here* on a Memory's and a chapter's page, a drop onto the
   gallery (`Modifier.dragAndDropTarget`, `ShareDrop.kt`) and onto the shell (a share). Measured 2026-11-19 on a throwaway
   API 36 emulator as a throwaway account: a photo and a 303 MB video shared from the Files app into a chapter, *Add
@@ -146,7 +147,7 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   (WorkManager's records, the offline store's opaque files and the known preferences only). A photo dragged from the
   Files app in a second (freeform) window onto the chapter's gallery was uploaded into it.
 - **Built on Apple, decisions 2, 3, 6 and 9 for a Memory** (cr-app-share-into-a-memory): `public.movie` in the
-  extension's activation rule; `IncomingFiles` copying each file inside `loadFileRepresentation`'s callback (a HEIC
+  extension's activation rule (`public.data` since a folder's answer); `IncomingFiles` copying each file inside `loadFileRepresentation`'s callback (a HEIC
   re-encoded file to file) and handing sources on; the banner's *Add here*; in the extension the handoff through the app
   group (`apple/Veyq/ShareHandoff.swift`: `share-in/<id>/` with `target.json`, written under a dot name and renamed
   whole, queued by the app on its next open, each copy removed by the queue's `left`, cleared at a sign-out, swept at
@@ -162,9 +163,33 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   upload dimmed, *Add here* queuing once) and `PotShareTest` (unchanged by the move). Open after it: Apple's device
   passes — a long video handed over from Photos and the extension cancelled, an iPad's drop (inbox #1005; the macOS drop
   from Finder passed 2026-11-19); a
-  handoff for a space the app does not list waits unsaid until a sign-out (#1007). A folder as a share target is Depot's answer (inbox #987); the desktops have no
-  share target (GNOME has none; Windows' needs the packaged app's Share Target contract) and take a drop onto a
-  Memory's gallery instead. The Use page: [Share into veyq](../../site/src/content/docs/getting-started/share-into-veyq.mdx).
+  handoff for a space the app does not list waits unsaid until a sign-out (#1007). The desktops have no share target
+  (GNOME has none; Windows' needs the packaged app's Share Target contract) and take a drop onto a Memory's gallery, a
+  level and a folder's row instead. The Use page: [Share into veyq](../../site/src/content/docs/getting-started/share-into-veyq.mdx).
+- **Decisions 1–3, 6, 8 and 9 for a folder and a space's top, built 2026-11-19** (cr-app-folder-share-target, inbox
+  #987): Depot's answer `depot/FolderShare` (any file, where Depot may upload), core's `navigation/AddHere` picking the
+  open gallery or the level shown for *Add here* (`ShellModel.addHere`) and a drop (`ShellModel.dropLevel`), and
+  `DepotUploads` handing a share's file back once its queue — and a same-name file's replace offer — let it go; held by
+  `ShareInboxTest` (a folder taking a `.docx`, a ZIP, a photo, a video and a file of no type; dimmed in an identity
+  folder, offline and with Depot off; *Add here* on a folder queuing into Depot's queue once and ending the share; a
+  space's top asking as a folder; a drop uploading at once) and `DepotUploadsTest` (a shared file handed back once
+  done, an offered one once its offer is answered). Android: `*/*` in both filters, a share with no stream waiting with
+  none, *Add here* on a level, a drop onto a level (`ShellScreen`'s level). Apple: `public.data` in the activation rule,
+  `IncomingFiles` taking any file and leaving out an attachment that carries none (a bare text, a link), the handoff
+  naming its kind (`FOLDER`, `MEMORY`, `CHAPTER`; none is a Memory's) and a null node for a space's top, *Add here* on a
+  level, a drop onto a level and on macOS a dropped folder uploaded as a folder. **Measured on Android** (2026-11-19, a
+  throwaway API 36 emulator, a throwaway account): veyq was offered in the share sheet for a `.docx`, a ZIP and a photo
+  shared together from the Files app, and for a text (`ACTION_SEND` `text/plain`); the three went into a folder by
+  *Add here* and a PDF and a file of an unknown type with them into the space's top, each listed at its size after the
+  app was force-stopped and opened anew; a second share of the `.docx` into the folder offered its replace, which was
+  taken; the text said *None of the shared files could be read.* with no *Add here*; a file dragged from the Files app
+  in a freeform window onto the space's top and another onto the folder were uploaded there at once; a HEIC shared
+  into the folder arrived as a JPEG and its copy under `no_backup/share-in/` was gone once it was uploaded, and
+  `run-as app.veyq find . -type f` showed no other share copy. Not run on Android: an identity folder's level (the
+  core's tests hold it). **Apple built, not clicked** (macOS and the iOS simulator SDK): the macOS drop of a file and a
+  folder onto a level is open (an agent cannot take the unlocked Mac's screen); which types a Safari page and a Files
+  share offer the activation rule and `IncomingFiles.carriesFile`, a folder's handoff and the iPad's drop onto a level
+  are the owner's device passes (inbox #1005).
 - **Android's Pot share after the move to sources** (measured 2026-11-19 on a throwaway API 36 emulator as a throwaway
   account): a PDF and a photo shared from the Files app, the pick mode's Pot chosen, its new expense opened with both as
   receipts, closed unsaved (the pick mode back), the Pot chosen again and the expense saved; opened anew in the app and

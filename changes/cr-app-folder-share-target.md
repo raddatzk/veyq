@@ -125,7 +125,7 @@ folder.
 - [x] **4 Apple** (F2–F5) — the activation rule (its first measurement: which types a Safari page and a Files share
   offer), `IncomingFiles` for any type, the handoff's kind, *Add here* on a level, a drop onto a level and a folder dropped
   on macOS. · Done when: both Apple builds green; the macOS row run here or named open; iOS the owner's.
-- [ ] **5 the passes** — § Passes, each a throwaway, erased after; results into ADR 0138's Consequences.
+- [x] **5 the passes** — § Passes, each a throwaway, erased after; results into ADR 0138's Consequences.
 - [ ] **6 harvest** — the Use pages EN+DE: `getting-started/share-into-veyq.mdx` (a folder takes any file, a drop onto a
   folder), `depot/upload-files-and-folders.mdx` (*In the app*: sharing and dropping into a folder); `native-apps.md`
   § Built; #987's row deleted; this CR deleted. · Done when: `pnpm run check` in `site/` and every guard but guard_gaps
