@@ -62,7 +62,7 @@ mod tests {
     }
 
     #[test]
-    fn the_desktop_entry_names_the_app_icon() {
+    fn the_desktop_entry_names_the_app_icon_and_claims_veyq_links() {
         let resource = gio::Resource::from_data(&glib::Bytes::from_static(RESOURCE)).unwrap();
         let entry = resource.lookup_data(&format!("{RESOURCE_BASE}/{APP_ID}.desktop"), gio::ResourceLookupFlags::NONE).unwrap();
         let file = glib::KeyFile::new();
@@ -70,7 +70,9 @@ mod tests {
         let get = |key: &str| file.string("Desktop Entry", key).map(|v| v.to_string()).unwrap_or_else(|e| panic!("{key}: {e}"));
         assert_eq!(get("Type"), "Application");
         assert_eq!(get("Icon"), APP_ID);
-        assert_eq!(get("Exec"), "veyq");
+        // `veyq:` (ADR 0150 § O3): the link handed in as `%u`, to `main.rs`'s HANDLES_OPEN
+        assert_eq!(get("Exec"), "veyq %u");
+        assert_eq!(get("MimeType"), "x-scheme-handler/veyq;");
         assert!(!get("Name").is_empty());
     }
 

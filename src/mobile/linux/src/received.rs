@@ -70,6 +70,9 @@ pub fn present(received: i64, browser: Option<String>) {
     }
 }
 
+/// The widget name of *Open a link*'s dialog ([open_link]).
+pub const OPEN_LINK_DIALOG: &str = "open-link";
+
 /// *Open a link* over [parent]: the field, Paste, the core's reason, *Open in the browser* for what only a browser opens.
 pub fn open_link(parent: &impl IsA<gtk::Widget>) {
     let entry = adw::EntryRow::builder().title(words::link_paste_hint()).input_purpose(gtk::InputPurpose::Url).build();
@@ -94,6 +97,8 @@ pub fn open_link(parent: &impl IsA<gtk::Widget>) {
     view.add_top_bar(&adw::HeaderBar::new());
     view.set_content(Some(&column));
     let dialog = adw::Dialog::builder().title(words::link_open()).content_width(520).child(&view).build();
+    // named, so a `veyq://link` arriving while it shows keeps it and what was typed (main.rs's `open`)
+    dialog.set_widget_name(OPEN_LINK_DIALOG);
 
     // the clipboard read on the tap only, never on its own (ADR 0150 decision 4)
     let e = entry.clone();

@@ -366,10 +366,12 @@ def css_colour(c: tuple) -> str:
 
 def desktop_entry() -> str:
     """The app's desktop entry: its name the catalog's (`app_name`, one word in every language), its icon the theme's
-    by the application id, which is also the file's name — how GNOME's shell matches the running window to it."""
+    by the application id, which is also the file's name — how GNOME's shell matches the running window to it. It claims
+    `veyq:` (ADR 0150 § O3): `Exec=veyq %u` hands the link to the app, whose `HANDLES_OPEN` passes a second launch's on to
+    the running one over D-Bus; the link carries nothing, since it reaches this command line."""
     name = json.loads((repo_layout.MOBILE / "words" / "words.json").read_text())["app_name"]["en"]
-    return "\n".join(["[Desktop Entry]", "Type=Application", f"Name={name}", "Exec=veyq", f"Icon={APP_ID}",
-                      "Terminal=false", "Categories=Utility;", "StartupNotify=true", ""])
+    return "\n".join(["[Desktop Entry]", "Type=Application", f"Name={name}", "Exec=veyq %u", f"Icon={APP_ID}",
+                      "Terminal=false", "Categories=Utility;", "MimeType=x-scheme-handler/veyq;", "StartupNotify=true", ""])
 
 
 def write_gtk(out: Path, pal: dict[str, dict[str, tuple]]) -> None:
