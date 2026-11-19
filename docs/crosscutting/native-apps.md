@@ -527,9 +527,9 @@ uploaded with the app left; a drop from a freeform window); Apple built, not cli
 - The account's flows ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md), built): the agent's macOS click-through and kit no-copy check (inbox #976, with #917),
   the Windows UIA pass and no-copy check (#983, once the VM resolves a throwaway's tenant), whether iOS's
   `fileExporter` stages the kit in the container (#975); the address change's confirm and re-addressed sign-in live (no
-  mailing backend on the Mac the passes ran on); *Links to renew* after a rotation (#977); the desktops' rotation end
-  screen (#984); the breached-password check (#969); the Secret Key from a kit file or a scan in these flows (#970); an
-  erased account's cached instance salt (#971); a live pass that sees #979's and #980's fixes. The owner's: iPhone and
+  mailing backend on the Mac the passes ran on); the breached-password check (#969); the Secret Key from a kit file or a
+  scan in these flows (#970); a live pass that sees #979's and #980's fixes, and the fixes of #1009, #1010, #977 and #984
+  on screen. The owner's: iPhone and
   iPad, Touch ID and Windows Hello for real, a real mailbox, a safety code scanned with real cameras (#912).
 - Not in the apps: invites and members, recovery, terms, *Who's who* (#967), the moderation key (#965), the task
   queue's jobs (#966), and an in-app choice of appearance and language (the apps follow the system's; the desktops
