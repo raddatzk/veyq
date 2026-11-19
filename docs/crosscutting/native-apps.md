@@ -551,7 +551,7 @@ file](../../site/src/content/docs/depot/view-a-file.mdx) (§ In the app).
 **Memories**: decided by [ADR 0149](../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), the re-key of a Memory or
 chapter built (`MemoryRekey`, the meta handed to the kind before core seals it), its download and copy built (`MemoryExport`, `MemoryCopy`: the web's archive, a folder's download carrying its Memories, a copy reading every original and tier by frame and decoding nothing; a rotation mid-copy fails it, #988); the marks, the filter, the contributions and a medium's report built in the core (`ItemMarks`, `GalleryFilter`, `Buckets`, `Contributions`), not drawn by any platform yet; not built yet — item marks, uploader buckets with guests' names, the gallery's filter
 and a medium's report (#891), and tiles on every level and a person's Memories (#950); import of an archive, for every kind
-(#985); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a received link (#435, a
+(#985); a Memory as a share target and a drop onto a phone's gallery (#893, being built by [cr-app-share-into-a-memory](../../changes/cr-app-share-into-a-memory.md)); a guest's view of a received link (#435, a
 source for the same model).
 
 **Music** ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md), built above): **Apple's passes are the owner's** — on a real iPhone the background play,

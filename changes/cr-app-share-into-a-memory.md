@@ -1,7 +1,7 @@
 ---
 id: cr-app-share-into-a-memory
 title: A Memory as a share target, and a drop onto a phone's gallery — each kind's share answer in the core, a Memory's files queued from disk, iOS's extension uploading in frames
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0138", "0136", "0137", "0145", "0122", "0123", "0140"]
 invariants:
@@ -108,7 +108,7 @@ upload.
 
 ## Phases
 
-- [ ] **1 ADR 0138 amended** (decisions 2, 3, 6, 8, 9, Consequences), `native-apps.md` § Open, `src/mobile/CLAUDE.md`
+- [x] **1 ADR 0138 amended** (decisions 2, 3, 6, 8, 9, Consequences), `native-apps.md` § Open, `src/mobile/CLAUDE.md`
   § Nothing on disk (S3's copy if taken, S4's). · Done when: every guard but guard_gaps green.
 - [ ] **2 core** — S1, S2: `ShareAnswer`, `MemoryShare`, `ShareInbox` in `navigation/`, the pick mode's Memory page.
   Tests: `PotShareTest` unchanged and green (the refactor's proof); a Memory takes a video and refuses a PDF; a chapter

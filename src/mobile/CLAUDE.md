@@ -822,6 +822,12 @@ the folder that does hold the kit. The save dialogs' **recent-files records are 
 page on the kit says the file is where it was saved. Open: whether iOS's `fileExporter` stages the document in the
 container (#975).
 
+**A file shared into a Memory is read from disk, never held whole** ([ADR 0138](../../docs/decisions/0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md)
+decision 6): iOS's share extension copies each file inside `loadFileRepresentation`'s callback into its own temporary
+directory, `share-in/<random>`, and removes each copy once the queue lets the file go (`MediaUploads`' `left`), on the
+share's cancel and at its end; what a killed extension left is swept at its next start. The copy is the plaintext the
+person shared, inside the extension's own container, for as long as its upload runs.
+
 Per engine:
 - **Darwin (Apple, `appleHttpClient` in `Apple.kt`):** Ktor starts from `defaultSessionConfiguration`, whose shared
   `URLCache` wrote every answer to `Library/Caches/me.raddatz.veyq/Cache.db` (the bundle id then, `app.veyq` today) + `fsCachedData` — measured 2026-11-13 on
