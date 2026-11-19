@@ -428,7 +428,7 @@ a member's per-tenant username and identity public key are enumerable by any fel
 is plaintext (it is the login identifier); range-streamed video playback shows the object store which chunks a
 playing client fetches and when; a public share's guest learns the shared node's scope id, so two links into one
 space are linkable by anyone holding both. The automatic breached-password check sends a 5-hex SHA-1 prefix to Have
-I Been Pwned, and the browser's `Origin` header names the veyq instance to that service. Expenses' automatic day
+I Been Pwned, and the browser's `Origin` header (an app's `User-Agent` alike) names the veyq instance to that service. Expenses' automatic day
 exchange rates send the device's date to the rate provider (on a new instance Frankfurter), at most once per device
 and day, with the same `Origin`, so that provider learns that this address writes a foreign-currency entry that day.
 
