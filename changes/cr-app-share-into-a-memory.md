@@ -84,6 +84,10 @@ at start — and the Pot reads its bytes from there as before. Either way nothin
 
 ### S4 — iOS: the extension uploads in frames, and stays until it is done
 
+**Superseded by the owner (2026-11-19, question 2 answered no):** the extension copies the files into the app group's
+container and closes; the app queues them the next time it has that space open and removes each copy once the queue
+lets it go (ADR 0138 decision 6). The paragraph below is the refine's plan, kept for its rejected alternatives.
+
 The activation rule gains `public.movie`; `IncomingFiles` takes a Memory's files with `loadFileRepresentation`, copying
 each into the extension's own temporary directory inside the callback (the system's URL is valid only there) — a JPEG
 where offered as now. After *Add here* the extension **runs the core's upload queue itself** (the Pot's save already runs
@@ -110,7 +114,7 @@ upload.
 
 - [x] **1 ADR 0138 amended** (decisions 2, 3, 6, 8, 9, Consequences), `native-apps.md` § Open, `src/mobile/CLAUDE.md`
   § Nothing on disk (S3's copy if taken, S4's). · Done when: every guard but guard_gaps green.
-- [ ] **2 core** — S1, S2: `ShareAnswer`, `MemoryShare`, `ShareInbox` in `navigation/`, the pick mode's Memory page.
+- [x] **2 core** — S1, S2: `ShareAnswer`, `MemoryShare`, `ShareInbox` in `navigation/`, the pick mode's Memory page.
   Tests: `PotShareTest` unchanged and green (the refactor's proof); a Memory takes a video and refuses a PDF; a chapter
   takes; a read-only member's Memory dimmed; *Add here* queues once. **Bites:** (a) `share` returning the Pot's answer
   for a Memory → red; (b) *Add here* queuing twice → red.
@@ -132,10 +136,11 @@ upload.
 ## Owner questions
 
 1. **Words:** "Choose where these files go" / "Wähle, wohin diese Dateien gehören" and "Add here" / "Hier hinzufügen".
-   *Recommendation:* these.
+   *Recommendation:* these. **Answered 2026-11-19: these.**
 2. **iOS keeps the share sheet open until a large video is uploaded** (S4): a minute-long upload shows its progress in
    the sheet; closing it cancels. *Recommendation:* yes — the only way a share extension finishes an upload without
-   leaving the files behind as plaintext for the app to find later.
+   leaving the files behind as plaintext for the app to find later. **Answered 2026-11-19: no** — "noch ist es ja nicht
+   hochgeladen, dann wäre auch unverschlüsselt okay": the extension hands the files to the app through the app group.
 
 ## Definition of done
 

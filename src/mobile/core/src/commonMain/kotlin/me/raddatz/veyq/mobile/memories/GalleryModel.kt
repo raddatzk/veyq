@@ -797,7 +797,10 @@ class GalleryModel(
      * The picked [sources] added to this Memory or chapter (the app's one upload queue), where the rights let whoever looks
      * upload; how many were queued.
      */
-    fun upload(sources: List<UploadSource>): Int = if (rights.upload && current.offline == null) door.upload(sources) else 0
+    fun upload(sources: List<UploadSource>): Int = if (takesUploads) door.upload(sources) else 0
+
+    /** Whether this page takes an upload now: the rights let whoever looks upload, and it is not shown offline. */
+    val takesUploads: Boolean get() = rights.upload && current.offline == null
 
     // ---- a chapter made ----
 

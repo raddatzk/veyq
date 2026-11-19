@@ -823,10 +823,11 @@ page on the kit says the file is where it was saved. Open: whether iOS's `fileEx
 container (#975).
 
 **A file shared into a Memory is read from disk, never held whole** ([ADR 0138](../../docs/decisions/0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md)
-decision 6): iOS's share extension copies each file inside `loadFileRepresentation`'s callback into its own temporary
-directory, `share-in/<random>`, and removes each copy once the queue lets the file go (`MediaUploads`' `left`), on the
-share's cancel and at its end; what a killed extension left is swept at its next start. The copy is the plaintext the
-person shared, inside the extension's own container, for as long as its upload runs.
+decision 6): iOS's share extension copies each file inside `loadFileRepresentation`'s callback into the app group's
+container, `share-in/<random>/`, with *Add here*'s target beside them, and closes; the app queues them the next time it
+opens that tenant and removes each copy once the queue lets the file go (`MediaUploads`' `left`). A cancel in the
+extension removes them at once, a sign-out removes what still waits. The copies are the plaintext the person shared,
+unencrypted until their upload (owner 2026-11-19: not uploaded yet, and already the person's own on the device).
 
 Per engine:
 - **Darwin (Apple, `appleHttpClient` in `Apple.kt`):** Ktor starts from `defaultSessionConfiguration`, whose shared

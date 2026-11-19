@@ -30,15 +30,15 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
    within its receipts' rules (`receipts.ts`: at most 10 MiB each, 100 an entry) and opens the editor of a new expense
    with them as its receipts — the app's one editor, nothing of its own. **Memories** (`memories/MemoryShare`): a Memory
    and a chapter take photos and videos (`MediaUpload.isMedia`), with no bound beyond the upload's own, into the app's
-   one upload queue, where the member may upload there (`MemoryRights`' `upload`: Memories on, online, not in a guest's
-   identity folder). A folder (as Depot's files) takes its when Depot answers (inbox #987).
+   one upload queue, where the member may upload there (`MemoryRights`' `upload`: Memories switched on for the
+   tenant) and the account is online. A folder (as Depot's files) takes its when Depot answers (inbox #987).
    - Rejected: **a Memory branch beside the Pot's in core** — core would know two applications' rules.
 
 3. **Nothing is stored until the target's own save.** Choosing a node opens its flow; the editor's save uploads the
    receipts and writes the entry as it does in the app; cancelling leaves nothing behind. A Memory can be entered in the
    pick mode: its page, and each chapter's, shows the waiting files' count in the banner with **Add here**, the
    Memory's own save, which queues them into that node (its gallery's placeholder tiles show them, ADR 0145) and ends
-   the share; leaving the page without it gives the files back to the pick mode. **Words (pending the owner):** the
+   the share; leaving the page without it gives the files back to the pick mode. **Words** (owner 2026-11-19): the
    banner says "Choose where these files go" / "Wähle, wohin diese Dateien gehören" and the action "Add here" / "Hier
    hinzufügen".
    - Rejected: **queueing on choosing a Memory's row** — a chapter could not be chosen (it lives inside the Memory's
@@ -60,14 +60,19 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
    order of 120 MB): a receipt is at most 10 MiB, so a Pot's flow holds its files in memory as the app does, at most
    64 MiB of them in one share — a file beyond that is left out, as a too large one is, and the banner counts it. A
    target with larger files (a folder's, a Memory's) seals and uploads them in frames from disk: no file of a share is
-   held whole but a Pot's bounded receipts. iOS's extension takes each file with `loadFileRepresentation`, copying it
-   inside the callback (the system's URL is valid only there) into the extension's own temporary directory — a JPEG
-   where the sender offers one, as decision 7 says. After *Add here* **the extension runs the core's upload queue
-   itself** and shows its progress; it completes the request when the queue is done, and its cancel cancels the queue
-   and leaves nothing (the copies removed; an upload the server never saw attached is reclaimed by its stale-session
-   purge). **Pending the owner:** the share sheet stays open until a large video is uploaded (the recommendation).
-   - Rejected: **handing the files to the app through the app group** — the app cannot be opened from an extension;
-     the files would wait, as plaintext in a shared container, until the person happens to open veyq.
+   held whole but a Pot's bounded receipts. **iOS's extension hands a Memory's files to the app through the app group
+   and closes** (owner 2026-11-19): it takes each file with `loadFileRepresentation`, copying it inside the callback
+   (the system's URL is valid only there) into the app group's container, `share-in/<random>/` — a JPEG where the sender
+   offers one, as decision 7 says —, and *Add here* writes beside the copies which Memory or chapter they go into and
+   completes the request at once. The app, the next time it opens that account's tenant, queues them into that node
+   through its one upload queue, and removes each copy once the queue lets it go (`MediaUploads`' `left`); a cancel in
+   the extension removes them at once, and a sign-out or a hand-off the account no longer has removes them unsent. The
+   owner's reason: the files are not uploaded yet, and they are the person's own plaintext already on the device —
+   a copy in the app's own container until the upload is no exposure the device does not already hold. The apps
+   behave as the web does: the place is chosen and *Add here* pressed in the extension, the upload runs in the app.
+   - Rejected: **the extension running the upload queue itself, open until the upload is done** — the person would
+     wait in the share sheet through a large video's upload, and closing it would cancel the upload (the owner's
+     no, 2026-11-19).
    - Rejected: **a background `URLSession`** — the core's client is not one, and its presigned frame uploads would need
      a second upload path.
 
