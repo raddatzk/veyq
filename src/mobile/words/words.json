@@ -5937,5 +5937,35 @@
     "en": "A picture can be added once your access to the shared space is ready.",
     "de": "Ein Bild kannst du hinterlegen, sobald dein Zugang zum geteilten Bereich bereit ist.",
     "note": "The web's profilePicture.noKeyYet."
+  },
+  "memory_buckets_rename": {
+    "en": "Rename",
+    "de": "Umbenennen"
+  },
+  "memory_buckets_delete": {
+    "en": "Delete",
+    "de": "Löschen"
+  },
+  "memory_buckets_options": {
+    "en": "Options",
+    "de": "Optionen"
+  },
+  "memory_buckets_name": {
+    "en": "Name",
+    "de": "Name"
+  },
+  "memory_buckets_move_target": {
+    "en": "Target bucket",
+    "de": "Ziel-Bucket"
+  },
+  "node_view_grid_label": {
+    "note": "the level's view toggle when it switches to tiles (the web's viewGrid)",
+    "en": "Grid view",
+    "de": "Rasteransicht"
+  },
+  "node_view_list_label": {
+    "note": "the level's view toggle when it switches to rows (the web's viewList)",
+    "en": "List view",
+    "de": "Listenansicht"
   }
 }

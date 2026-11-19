@@ -67,7 +67,7 @@ internal fun PersonScreen(userId: String, model: AppModel) {
         }
         // the safety number, a section below the name (ADR 0148 decision 10): one's own to show, another member's to compare
         if (!profile.former) SafetyNumberSection(profile.userId, name, model)
-        if (memories != null && state != null) SectionHead(profile, memories, state)
+        if (memories != null && state != null) SectionHead(profile, memories, state, model)
     }
     // the map takes the screen below the frame; the list scrolls with it
     if (memories != null && state != null && state.view == PersonMemories.View.MAP) {
@@ -77,26 +77,35 @@ internal fun PersonScreen(userId: String, model: AppModel) {
         }
         return
     }
-    LazyColumn(Modifier.fillMaxSize()) {
-        item(key = "head") { Column { head() } }
-        if (memories != null && state != null) personRows(memories, state, model)
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+        val columns = tileColumns(maxWidth)
+        LazyColumn(Modifier.fillMaxSize()) {
+            item(key = "head") { Column { head() } }
+            if (memories != null && state != null) personRows(memories, state, model, columns)
+        }
     }
 }
 
-/** "Memories with {name}", the List | Map switch once something is listed (not stored: the section opens on the list). */
+/**
+ * "Memories with {name}", the List | Tiles | Map switch once something is listed — the account's one view choice on this
+ * device, every level's too (ADR 0149 decision 8).
+ */
 @Composable
-private fun SectionHead(profile: PersonProfile, memories: PersonMemories, state: PersonMemories.State) {
+private fun SectionHead(profile: PersonProfile, memories: PersonMemories, state: PersonMemories.State, model: AppModel) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
         Text(
             profile.name?.let { stringResource(R.string.memory_people_with_name, it) } ?: stringResource(R.string.memory_people_with),
             style = MaterialTheme.typography.titleMedium,
         )
         if (state.offersViews) {
-            val views = listOf(PersonMemories.View.LIST to R.string.node_view_list, PersonMemories.View.MAP to R.string.memory_view_map)
+            val views = listOf(
+                PersonMemories.View.LIST to R.string.node_view_list, PersonMemories.View.TILES to R.string.node_view_tiles,
+                PersonMemories.View.MAP to R.string.memory_view_map,
+            )
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                 views.forEachIndexed { i, (view, label) ->
                     SegmentedButton(
-                        selected = state.view == view, onClick = { memories.view(view) },
+                        selected = state.view == view, onClick = { model.choosePersonView(memories, view) },
                         shape = SegmentedButtonDefaults.itemShape(i, views.size),
                     ) { Text(stringResource(label)) }
                 }
@@ -107,7 +116,7 @@ private fun SectionHead(profile: PersonProfile, memories: PersonMemories, state:
 }
 
 /** The section's states and rows: loading, failed with *Try again*, empty, the person's Memories newest first (core's order). */
-private fun androidx.compose.foundation.lazy.LazyListScope.personRows(memories: PersonMemories, state: PersonMemories.State, model: AppModel) {
+private fun androidx.compose.foundation.lazy.LazyListScope.personRows(memories: PersonMemories, state: PersonMemories.State, model: AppModel, columns: Int) {
     when {
         state.loading && state.rows.isEmpty() -> item(key = "loading") {
             Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -124,15 +133,26 @@ private fun androidx.compose.foundation.lazy.LazyListScope.personRows(memories: 
         state.empty -> item(key = "empty") {
             Text(stringResource(R.string.memory_people_empty), color = role(LocalPalette.current.muted), modifier = Modifier.padding(16.dp))
         }
+        // as tiles (ADR 0149 decision 8): each Memory's cover square, its name, its date, place and group below
+        state.view == PersonMemories.View.TILES -> tileRows(state.rows, columns, key = { it.ref.scopeId + "/" + it.ref.nodeId }) { row, modifier ->
+            LevelTile(row.ref.name, personDetails(row), LocalCovers.current[row.ref.nodeId]?.second, kindIcon(row.ref.kind), folder = false, modifier = modifier) { memories.open(row) }
+        }
         else -> items(state.rows, key = { it.ref.scopeId + "/" + it.ref.nodeId }) { row -> PersonMemoryRow(row) { memories.open(row) } }
     }
+}
+
+/** A person's Memory's second line: its date, place and group. */
+@Composable
+private fun personDetails(row: PersonMemories.Row): String? {
+    val context = LocalContext.current
+    return listOfNotNull(row.date?.let { context.memoryDateText(it) }, row.placeName?.takeIf { it.isNotEmpty() }, row.group?.let { spaceName(it) })
+        .takeIf { it.isNotEmpty() }?.joinToString(" · ")
 }
 
 /** One of the person's Memories as the level draws a row: its cover, its name, its date, place and group. */
 @Composable
 private fun PersonMemoryRow(row: PersonMemories.Row, onOpen: () -> Unit) {
-    val context = LocalContext.current
-    val details = listOfNotNull(row.date?.let { context.memoryDateText(it) }, row.placeName?.takeIf { it.isNotEmpty() }, row.group?.let { spaceName(it) })
+    val details = personDetails(row)?.let { listOf(it) }.orEmpty()
     ListItem(
         headlineContent = { Text(row.ref.name) },
         supportingContent = if (details.isEmpty()) null else { { Text(details.joinToString(" · ")) } },

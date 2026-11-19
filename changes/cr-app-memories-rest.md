@@ -304,10 +304,19 @@ Each phase ends with every platform building.
   mark's self tag in `GalleryRow` → `SecretFreeSchemaTest` red; (b) a Contributions dialog answering after
   `closeTenant()` → red.
 
-- [ ] **8 Android** — the badge, the lightbox's heart and Report, the filter in the top bar's search with its chips, the
+- [x] **8 Android** — the badge, the lightbox's heart and Report, the filter in the top bar's search with its chips, the
   marks' mode, Contributions in the view switch, Download and Copy on a Memory's header, the tiles and the level's toggle;
   words from `words.json` (EN+DE). · Done when: `:android:assembleDebug` and `scripts/validate_mobile_words.py` and
   `scripts/validate_mobile_platform_guidelines.py` green; clicked on the emulator as a throwaway (§ Passes).
+  *Status 2026-11-19:* built — `GalleryFilterBar.kt` (the badge, the heart, the filter as the Photos view's own toolbar
+  under the switch — the shell's top bar is core's node header —, the marks' mode as a filter chip's menu),
+  `MemoryContributions.kt` (the fourth segment, scrollable tabs where four do not fit; the picker, *New sub-bucket*, a
+  sub-bucket's rename and delete, a long press's move), `LevelTiles.kt` (core's `TileGrid` on Home, a folder, the
+  applications' lists and a profile's List | Tiles | Map; the top bar's grid/list toggle), the lightbox's heart with
+  download, trash and *Report* in its overflow, the Memory header's download, the device's calendar (#989's Android
+  half). `:android:assembleDebug`, `validate_mobile_words.py`, `validate_mobile_platform_guidelines.py` green (measured).
+  Clicked on a throwaway API 36 emulator as a throwaway owner and member — what was and was not: #992; found: #990, #991,
+  #993; the bucket's lightbox as Apple's, #996.
 
 - [x] **9 Apple (iOS, macOS)** — as phase 8 in SwiftUI (`.searchable` with tokens, the tile's context menu marking, *View
   as* in the toolbar, `NSSavePanel`/`fileMover` for the download). · Done when: both Apple builds green; clicked on the

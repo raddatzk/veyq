@@ -7,6 +7,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -33,6 +34,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
@@ -97,6 +100,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.memories.MediaDetails
 import me.raddatz.veyq.mobile.memories.GalleryModel
@@ -146,7 +150,8 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
         gallery.searchOpenedSeen()
     }
     val hero = LocalNodeHero.current
-    val rows = state.rows
+    // the rows the filter shows (ADR 0149 decision 5): the grid's, and the lightbox's pages
+    val rows = state.shown
     // the system's photo picker: photos and videos, several at once
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
         if (uris.isNotEmpty()) model.uploadMedia(gallery, uris)
@@ -177,12 +182,16 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     var view by androidx.compose.runtime.saveable.rememberSaveable(gallery) { mutableStateOf(MemoryView.PHOTOS) }
     val musicOffered = me.raddatz.veyq.mobile.memories.music.MusicModel.shown(state)
     // Photos | Music | Map: Map always, as the web's tab is (ADR 0143 D8)
-    val viewSwitch: @Composable () -> Unit = { MemoryViewSwitch(view, musicOffered) { view = it } }
+    // Photos | Music | Map | Contributions: the contributions where core offers them to whoever looks (ADR 0149 decision 6)
+    val contributionsOffered = state.rights.buckets && me.raddatz.veyq.mobile.memories.Contributions.OFFERED
+    val viewSwitch: @Composable () -> Unit = { MemoryViewSwitch(view, musicOffered, contributionsOffered) { view = it } }
     val music = if (musicOffered && view == MemoryView.MUSIC) remember(gallery) { model.musicModel(gallery) } else null
     val tracks = if (view == MemoryView.MAP) remember(gallery) { model.trackList(gallery) } else null
+    val contributions = if (contributionsOffered && view == MemoryView.CONTRIBUTIONS) remember(gallery) { model.contributions(gallery) } else null
     Box(Modifier.fillMaxSize()) {
     if (tracks != null) MemoryMapView(gallery, tracks, model, snackbar, viewSwitch) else
     if (music != null) MusicView(gallery, music, model, snackbar, viewSwitch) else
+    if (contributions != null) ContributionsView(gallery, contributions, model, snackbar, viewSwitch) { id -> open = gallery.lightboxOn(id) } else
     CreateAction(
         stringResource(if (state.rights.upload) R.string.memory_add else R.string.memory_add_chapter),
         shown = state.rights.upload || chapterHere,
@@ -210,7 +219,13 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
         // the date and the place under the header (ADR 0143 D5), and who was there (ADR 0144 decision 1)
         item(key = "facts") { MemoryFactsLine(gallery, model) }
         item(key = "people") { MemoryPeopleLine(gallery, model) }
-        stickyHeader(key = "views") { viewSwitch() }
+        stickyHeader(key = "views") {
+            Column(Modifier.background(MaterialTheme.colorScheme.background)) {
+                viewSwitch()
+                // the filter in the Photos view's own toolbar, where the facts may be filtered and something is there to filter
+                if (state.rights.filterFacts && (!state.rows.isNullOrEmpty() || state.filter.narrows)) GalleryFilterBar(gallery, state)
+            }
+        }
         if (state.chapters.isNotEmpty()) {
             item(key = "chapters") {
                 Text(stringResource(R.string.memory_chapters), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 8.dp))
@@ -234,7 +249,9 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
                 Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
             rows.isEmpty() && uploading.isEmpty() -> item(key = "empty") {
-                Text(stringResource(R.string.memory_gallery_empty), color = role(palette.muted), modifier = Modifier.padding(16.dp))
+                // a filter that keeps nothing names every filter in force (E5): never read as an empty Memory
+                val said = if (state.rows.isNullOrEmpty()) stringResource(R.string.memory_gallery_empty) else filterEmptyText(state.filter)
+                Text(said, color = role(palette.muted), modifier = Modifier.padding(16.dp))
             }
             else -> {
                 if (rows.isNotEmpty()) item(key = "count") {
@@ -255,7 +272,7 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
                                 uploadById[id]?.let { UploadPlaceholder(it, Modifier.offset(x = t.left.dp).size(t.width.dp, t.height.dp)) }
                             }
                             val at = byId[t.id] ?: continue
-                            MediaTile(at.value, gallery, model, Modifier.offset(x = t.left.dp).size(t.width.dp, t.height.dp)) {
+                            MediaTile(at.value, state.marks[at.value.mediaId], gallery, model, Modifier.offset(x = t.left.dp).size(t.width.dp, t.height.dp)) {
                                 open = gallery.lightbox(at.index)
                             }
                         }
@@ -340,6 +357,13 @@ private fun GalleryNotices(gallery: GalleryModel, model: AppModel, snackbar: Sna
         snackbar.showSnackbar(context.text(said))
         gallery.seen()
     }
+    // a mark that did not land sprang back (core's), and this says why (too many, not saved)
+    val markSaid = state.markSaid
+    LaunchedEffect(markSaid) {
+        if (markSaid == null) return@LaunchedEffect
+        gallery.markSeen()
+        snackbar.showSnackbar(context.text(markSaid))
+    }
 }
 
 /** A guest's own medium's delete, asked first (core's `GalleryModel.purging`): it is purged for good, with no Undo. */
@@ -359,23 +383,33 @@ private fun PurgeQuestion(gallery: GalleryModel, model: AppModel) {
 }
 
 /** The room between the justified grid and the screen's edges: the grid's own gap, so every side of a tile breathes alike. */
-private val GRID_MARGIN = MediaGridLayout.GAP.dp
+internal val GRID_MARGIN = MediaGridLayout.GAP.dp
 
 /**
  * One tile at the frame the justified grid gave it ([modifier]): the medium's grid tier cropped to fill (its aspect is the
  * tile's, bounded), a video marked; an icon where it has no tile to show.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MediaTile(row: GalleryModel.Row, gallery: GalleryModel, model: AppModel, modifier: Modifier, onOpen: () -> Unit) {
+internal fun MediaTile(
+    row: GalleryModel.Row, mark: GalleryModel.Mark?, gallery: GalleryModel, model: AppModel, modifier: Modifier,
+    /** A long press's action and what a screen reader calls it (the Contributions view's move); null: none. */
+    longPress: Pair<String, () -> Unit>? = null,
+    onOpen: () -> Unit,
+) {
     val palette = LocalPalette.current
     val picture by produceState<ImageBitmap?>(null, row.mediaId) {
         value = row.tile?.let { blob -> model.mediaPicture(blob) { gallery.tile(row.mediaId) } }
     }
-    Box(modifier.background(role(palette.line)).clickable(onClick = onOpen), contentAlignment = Alignment.Center) {
+    val tap = if (longPress == null) Modifier.clickable(onClick = onOpen)
+    else Modifier.combinedClickable(onClick = onOpen, onLongClickLabel = longPress.first, onLongClick = longPress.second)
+    Box(modifier.background(role(palette.line)).then(tap), contentAlignment = Alignment.Center) {
         val p = picture
         if (p != null) Image(p, row.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         else Icon(Icons.Outlined.Image, row.name, tint = role(palette.muted))
         if (row.isVideo) Icon(Icons.Outlined.PlayCircle, null, tint = Color.White, modifier = Modifier.size(32.dp))
+        // the marks' badge (ADR 0149 decision 4): no button — the tile is one target, the mark is toggled in the lightbox
+        mark?.let { MarkBadge(it, Modifier.align(Alignment.BottomEnd)) }
     }
 }
 
@@ -440,6 +474,16 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
         val snackbar = remember { SnackbarHostState() }
         GalleryNotices(gallery, model, snackbar)
         var details by remember { mutableStateOf(false) }
+        // the marks are the gallery's: its state drawn here, so the heart turns as the gallery's marks do
+        val galleryState by gallery.state.collectAsStateWithLifecycle()
+        val mark = galleryState.marks[row.mediaId]
+        val canMark = galleryState.marking && galleryState.marksLoaded
+        // a medium's report (an ITEM, ADR 0149 decision 6) where the server takes reports and the medium is readable, online
+        val reportOffered by produceState(false) { value = model.reportOffered() }
+        val reports = reportOffered && !row.blocked && galleryState.offline == null
+        var reporting by remember { mutableStateOf<me.raddatz.veyq.mobile.navigation.ReportSheet?>(null) }
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
+        var more by remember { mutableStateOf(false) }
         val save = state.save
         val saving = save?.state?.collectAsStateWithLifecycle()?.value?.let { it.end == null } == true
         // how a save ended, said once
@@ -474,15 +518,37 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
                                 else Icon(Icons.Outlined.SlideshowIcon, stringResource(R.string.memory_slideshow_start))
                             }
                         }
+                        // the heart (ADR 0149 decision 4): the caller's mark, with how many marked it where a count is kept
+                        if (canMark || mark != null) MarkButton(mark, enabled = canMark) { model.galleryAct { box.toggleMark() } }
                         IconButton(onClick = { details = true }) { Icon(Icons.Outlined.Info, stringResource(R.string.memory_details)) }
-                        if (!row.blocked) {
-                            IconButton(onClick = { box.downloadName()?.let { saveTo.launch(it) } }, enabled = !saving) {
-                                if (saving) CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-                                else Icon(Icons.Outlined.Download, stringResource(R.string.memory_download))
-                            }
+                        if (saving) Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
                         }
-                        if (gallery.deletes(row.mediaId)) {
-                            IconButton(onClick = { model.galleryAct { box.trash() } }) { Icon(Icons.Outlined.Delete, stringResource(R.string.memory_trash)) }
+                        // the rest in the bar's overflow (Material 3: a top app bar holds a few actions): a phone's bar
+                        // held the heart, the details, the download and the trash beside the position no more
+                        val downloads = !row.blocked && !saving
+                        val trashes = gallery.deletes(row.mediaId)
+                        if (downloads || trashes || reports) {
+                            Box {
+                                IconButton(onClick = { more = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
+                                androidx.compose.material3.DropdownMenu(more, { more = false }) {
+                                    if (downloads) androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.memory_download)) },
+                                        leadingIcon = { Icon(Icons.Outlined.Download, null) },
+                                        onClick = { more = false; box.downloadName()?.let { saveTo.launch(it) } },
+                                    )
+                                    if (trashes) androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.memory_trash)) },
+                                        leadingIcon = { Icon(Icons.Outlined.Delete, null) },
+                                        onClick = { more = false; model.galleryAct { box.trash() } },
+                                    )
+                                    if (reports) androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.report_action)) },
+                                        leadingIcon = { Icon(Icons.Outlined.Flag, null) },
+                                        onClick = { more = false; scope.launch { reporting = box.reportSheet() } },
+                                    )
+                                }
+                            }
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -513,6 +579,7 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
                 }
             }
         }
+        reporting?.let { sheet -> ReportSheet(sheet) { reporting = null } }
         if (details) {
             ModalBottomSheet(onDismissRequest = { details = false }) {
                 MediaDetailsSheet(row, box, model, onProfile = { id ->
