@@ -656,6 +656,32 @@
     "de": "Dieses Kit wurde auf {1} erstellt; vorher stand hier {2}. Klappt die Anmeldung dort nicht, versuch es auf {2}.",
     "note": "{1} the server the kit names, {2} the server the form held before (the web's kitOtherServer)"
   },
+  "kit_email_mismatch": {
+    "en": "That kit belongs to {1}, but this is for {2}. Carry on if you know it’s the right key — we can’t tell until it opens your account.",
+    "de": "Dieses Kit gehört zu {1}, hier geht es aber um {2}. Mach weiter, wenn du weißt, dass es der richtige Schlüssel ist — sicher ist das erst, wenn er dein Konto öffnet.",
+    "note": "{1} the address the kit names, {2} the account's address; a warning only, the flow goes on (the web's unlock.kitEmailMismatch)"
+  },
+  "password_pwned_warning": {
+    "note": "under a new password found in known data breaches; {1} how many (the web's password.pwnedWarning)",
+    "en": {
+      "one": "This password appeared in a known data breach. Choose a different one, or use it anyway.",
+      "other": "This password appeared in {1:int} known data breaches. Choose a different one, or use it anyway."
+    },
+    "de": {
+      "one": "Dieses Passwort tauchte in einem bekannten Datenleck auf. Wähle ein anderes oder verwende es trotzdem.",
+      "other": "Dieses Passwort tauchte in {1:int} bekannten Datenlecks auf. Wähle ein anderes oder verwende es trotzdem."
+    }
+  },
+  "password_pwned_anyway": {
+    "en": "Use it anyway",
+    "de": "Trotzdem verwenden",
+    "note": "the check row that accepts a new password found in known data breaches (the web's password.pwnedAnyway)"
+  },
+  "password_pwned_unavailable": {
+    "en": "This password could not be checked against known data breaches.",
+    "de": "Dieses Passwort konnte nicht mit bekannten Datenlecks abgeglichen werden.",
+    "note": "under a new password whose breach check could not run; the flow goes on (the web's password.pwnedUnavailable)"
+  },
   "signin_kit_scan": {
     "en": "Scan Emergency Kit",
     "de": "Notfall-Kit scannen",
