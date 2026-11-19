@@ -7,7 +7,8 @@
 //! toggle beside Photos | Music | Map.
 //!
 //! Every state is the core's (`Buckets.Open`, `Watched.Buckets`); every action one call; a curation not done is said as a
-//! toast and told seen.
+//! toast and told seen. A curation done moves the gallery's rows only once its re-read lands, after the view read its
+//! buckets (inbox #990): the view is read anew at the gallery's next state, the chosen bucket kept.
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
@@ -46,6 +47,9 @@ struct Inner {
     window: gtk::Window,
     toasts: adw::ToastOverlay,
     open: OpenMedium,
+    /// A curation landed: the next gallery state reads the buckets anew (#990), choosing [keep] again once they are read.
+    stale: Cell<bool>,
+    keep: RefCell<Option<String>>,
 }
 
 impl ContributionsView {
@@ -98,9 +102,37 @@ impl ContributionsView {
             window: window.clone(),
             toasts: toasts.clone(),
             open: Box::new(open),
+            stale: Cell::new(false),
+            keep: RefCell::new(None),
         });
         Inner::connect(&inner);
-        let weak = Rc::downgrade(&inner);
+        Inner::attach(&inner);
+        Self { inner }
+    }
+
+    pub fn widget(&self) -> &gtk::Box {
+        &self.inner.root
+    }
+
+    /// The gallery's state moved: where a curation landed since, the buckets are read anew (#990).
+    pub fn gallery_changed(&self) {
+        if self.inner.stale.replace(false) {
+            eprintln!("veyq: contributions read anew after a curation");
+            *self.inner.keep.borrow_mut() = self.inner.shown.borrow().as_ref().and_then(|s| s.selected.clone());
+            self.inner.watch.borrow_mut().take();
+            if let Some(buckets) = self.inner.id.take() {
+                bridge::send(Call::BucketsClose { buckets });
+            }
+            Inner::attach(&self.inner);
+        }
+    }
+}
+
+impl Inner {
+    /// The view opened in the core (`Buckets.Open`) and followed.
+    fn attach(this: &Rc<Self>) {
+        let gallery = this.gallery;
+        let weak = Rc::downgrade(this);
         glib::spawn_future_local(async move {
             let buckets = match bridge::call(&Call::BucketsOpen { gallery }).await.map(|(a, _)| a) {
                 Ok(Answer::BucketsOpened { buckets }) => buckets,
@@ -114,11 +146,6 @@ impl ContributionsView {
             drop(inner);
             follow(weak, updates).await;
         });
-        Self { inner }
-    }
-
-    pub fn widget(&self) -> &gtk::Box {
-        &self.inner.root
     }
 }
 
@@ -197,6 +224,14 @@ impl Inner {
             bridge::send(Call::BucketsSeen { buckets });
         }
         *self.shown.borrow_mut() = Some(s.clone());
+        // read anew after a curation: the bucket chosen before is chosen again
+        if !s.loading
+            && let (Some(keep), Some(buckets)) = (self.keep.borrow_mut().take(), self.id.get())
+            && s.selected.as_ref() != Some(&keep)
+            && s.rows.iter().any(|r| r.bucket_id == keep)
+        {
+            bridge::send(Call::BucketsPick { buckets, bucket_id: keep });
+        }
         self.spinner.set_visible(s.loading && s.rows.is_empty());
         let status = if s.failed {
             Some(words::media_unavailable())
@@ -344,15 +379,21 @@ impl Inner {
     }
 
     /// A curation sent; what did not land said ([moving]: a move's own word).
-    fn curate(&self, call: Call, moving: bool) {
+    fn curate(self: &Rc<Self>, call: Call, moving: bool) {
         if self.id.get().is_none() {
             return;
         }
         let toasts = self.toasts.clone();
+        let weak = Rc::downgrade(self);
         glib::spawn_future_local(async move {
             match bridge::call(&call).await.map(|(a, _)| a) {
                 Ok(Answer::BucketsDone { outcome }) => {
                     eprintln!("veyq: contributions curation: {outcome:?}");
+                    if outcome == BucketsOutcome::Done
+                        && let Some(i) = weak.upgrade()
+                    {
+                        i.stale.set(true);
+                    }
                     if let Some(text) = not_done(outcome, moving) {
                         toasts.add_toast(adw::Toast::new(&glib_escape(&text)));
                     }
@@ -368,7 +409,7 @@ impl Inner {
         let weak = Rc::downgrade(self);
         let parent = self.window.clone().upcast::<gtk::Widget>();
         let title = words::memory_buckets_create_bucket();
-        header::ask_name(&parent, &title, &words::memory_buckets_bucket_name(), "", None, &title, move |name, _again| {
+        header::ask_name(&parent, &title, &words::memory_buckets_name(), "", None, &title, move |name, _again| {
             if let Some(i) = weak.upgrade() {
                 i.curate(Call::BucketsCreate { buckets, name }, false);
             }
@@ -380,7 +421,7 @@ impl Inner {
         let (Some(buckets), Some(row)) = (self.id.get(), self.selected_row()) else { return };
         let weak = Rc::downgrade(self);
         let parent = self.window.clone().upcast::<gtk::Widget>();
-        header::ask_name(&parent, &words::memory_buckets_bucket_dialog_rename(), &words::memory_buckets_bucket_name(), &said::piece(&row.label), None,
+        header::ask_name(&parent, &words::memory_buckets_bucket_dialog_rename(), &words::memory_buckets_name(), &said::piece(&row.label), None,
             &words::memory_buckets_rename(), move |name, _again| {
                 if let Some(i) = weak.upgrade() {
                     i.curate(Call::BucketsRename { buckets, name }, false);

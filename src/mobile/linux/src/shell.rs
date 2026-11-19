@@ -997,7 +997,7 @@ impl Shell {
         let level = shell.person.is_none() && shell.open_object.is_none() && !map_tab;
         match other_view(shown).filter(|_| level) {
             Some(to) => {
-                let (icon, label) = if to == ViewModeShown::Tiles { ("view-grid-symbolic", words::node_view_tiles()) } else { ("view-list-symbolic", words::node_view_list()) };
+                let (icon, label) = if to == ViewModeShown::Tiles { ("view-grid-symbolic", words::node_view_grid_label()) } else { ("view-list-symbolic", words::node_view_list_label()) };
                 self.view_toggle.set_icon_name(icon);
                 self.view_toggle.set_tooltip_text(Some(&label));
                 self.view_toggle.update_property(&[gtk::accessible::Property::Label(&label)]);

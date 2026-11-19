@@ -3108,23 +3108,6 @@
     "en": "Could not move the media.",
     "de": "Medien konnten nicht verschoben werden."
   },
-  "memory_buckets_rename": {
-    "note": "the Contributions view's rename of a sub-bucket (the web's memory.buckets.rename)",
-    "en": "Rename",
-    "de": "Umbenennen"
-  },
-  "memory_buckets_delete": {
-    "en": "Delete",
-    "de": "Löschen"
-  },
-  "memory_buckets_bucket_name": {
-    "en": "Name",
-    "de": "Name"
-  },
-  "memory_buckets_move_target": {
-    "en": "Target bucket",
-    "de": "Ziel-Bucket"
-  },
   "media_unavailable": {
     "note": "the Contributions view did not read (the web's media.unavailable)",
     "en": "This Memory can’t be opened right now.",

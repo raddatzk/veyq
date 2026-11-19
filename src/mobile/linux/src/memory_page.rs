@@ -455,6 +455,9 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
                 inner.relayout();
                 inner.step_uploads();
                 inner.open_searched();
+                if let Some(c) = inner.contributions.borrow().as_ref() {
+                    c.gallery_changed();
+                }
                 if let (Some(s), Some(id), Some(f)) = (inner.shown.borrow().as_ref(), inner.id.get(), inner.on_shown.borrow().as_ref()) {
                     f(s, id);
                 }
