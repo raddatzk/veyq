@@ -548,9 +548,11 @@ Apple's were built and their tests run, not clicked (a Linux pass under a load a
 server; Apple's is the owner's, #925). The Use page that says this to a person: [Open and look at a
 file](../../site/src/content/docs/depot/view-a-file.mdx) (§ In the app).
 
-**Memories**: item marks, uploader buckets with guests' names and the gallery's filter (#891); export, import, copy and the
-re-key of a Memory or chapter (#892); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a
-received link (#435, a source for the same model).
+**Memories**: decided by [ADR 0149](../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), not built yet — the re-key, the
+download and the copy of a Memory or chapter (#892), item marks, uploader buckets with guests' names, the gallery's filter
+and a medium's report (#891), and tiles on every level and a person's Memories (#950); import of an archive, for every kind
+(#985); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a received link (#435, a
+source for the same model).
 
 **Music** ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md), built above): **Apple's passes are the owner's** — on a real iPhone the background play,
 the lock screen, Control Center and a call's interruption, and iOS's format matrix (no simulator boots on this Mac); on
@@ -577,7 +579,7 @@ picker, a profile from a participant and from an uploader and its map, *I was th
 image and a video banner across a 720 pt window, the trash's question, Remove banner, and on an iPhone whether
 `PhotosPicker`'s copy of a gallery photo is still shared. Not run elsewhere: Windows offline (the standing tunnel).
 One's own profile and the safety numbers on a person's page are built by [ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md)
-(above). Not built: tiles (#950), a people search or overview, a guest's view (#435).
+(above). Not built: tiles (#950, decided by [ADR 0149](../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decision 8), a people search or overview, a guest's view (#435).
 
 **Uploads** ([ADR 0145](../decisions/0145-the-apps-uploads-go-on-with-the-app-left-and-show-in-the-gallery-a-desktop-asks-before-a-quit-drops-them.md), built above): **iOS is the owner's** — on a real iPhone whether the
 continued-processing task is granted for an upload (`app.veyq.uploads.*`), how long `beginBackgroundTask` lasts and what

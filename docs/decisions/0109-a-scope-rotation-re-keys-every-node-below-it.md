@@ -82,7 +82,9 @@ key**: chunks are sealed under `K_blob` alone, and each derivative is a blob wit
    else re-keys, and where, is
    [ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
    decision 11. A queued job is `done` only once no node of the scope lags. Who runs what is
-   [keys-grants-and-trust § Re-keying the nodes](../crosscutting/keys-grants-and-trust.md#re-keying-the-nodes).
+   [keys-grants-and-trust § Re-keying the nodes](../crosscutting/keys-grants-and-trust.md#re-keying-the-nodes). The apps'
+   core re-keys every kind it knows but a Memory and a chapter, which it leaves due for a web device until
+   [ADR 0149](0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decision 2 is built.
 8. **What the server stores and learns.** Rewritten ciphertext in rows it already holds, and each node's epoch moving
    to the current one, right after an epoch change it already sees. No key, no new correlation. Moderation hold copies
    ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)) are snapshots of

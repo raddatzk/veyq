@@ -1,9 +1,9 @@
 ---
 id: cr-app-memories-rest
 title: Memories' rest in the apps — a Memory re-keyed, downloaded and copied; item marks, the gallery's filter, the contributions and a medium's report; every level and a person's Memories drawn as tiles
-status: planned
+status: in-progress
 satisfies: []
-adrs: ["0077", "0080", "0082", "0109", "0114", "0122", "0123", "0136", "0137", "0140", "0144", "0145", "0146"]
+adrs: ["0077", "0080", "0082", "0109", "0114", "0122", "0123", "0136", "0137", "0140", "0144", "0145", "0146", "0149"]
 invariants:
   - "operator-blind E2EE: the apps send the server exactly what the web sends for each operation (the same operationIds, the same sealed fields, the same contexts); no endpoint, field or schema is added, the backend and the contracts are unchanged"
   - "every rule is the core's (ADR 0136): the marks' open, count and write, the filter's chips and predicate, the contributions' buckets and a guest's name, a Memory's re-key, download and copy, the view mode and the tile frames; a platform draws the core's state and decides nothing"
@@ -260,7 +260,7 @@ theirs before their first edit.
 
 Each phase ends with every platform building.
 
-- [ ] **1 the ADR and the docs it changes** — ADR 0149 (`ls docs/decisions | tail -3`; 0147 is another branch's) holding
+- [x] **1 the ADR and the docs it changes** — ADR 0149 (`ls docs/decisions | tail -3`; 0147 is another branch's) holding
   D1–D12 and their Alternatives; ADR 0082, 0109 and 0123 (its "not in the app yet" of the media re-key) name the apps as
   planned; ADR 0140 decision 5 (the marks and buckets kept); `uc.memory.gallery` step 7 unchanged (the apps follow it,
   #986 the web); `docs/apps/memories.md` and `native-apps.md` § Open point #891/#892/#950 here; `src/mobile/CLAUDE.md`

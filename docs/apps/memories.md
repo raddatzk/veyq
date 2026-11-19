@@ -55,7 +55,7 @@ Gradle module of its own; the web half is separated by import direction only (se
 **Curating a Memory in the apps** ([ADR 0144](../decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md), built on every app; Apple's pass is the owner's): a Memory's
 **participants** (shown in its header, picked from the scope's members, *I was there* in the creation dialog; not
 shown offline), a **person's profile** opened from a participant or a photo's uploader (their Memories as a list,
-newest first, or on the Memories map — no tiles), a medium's **corrected capture time** (set and reset in its details)
+newest first, or on the Memories map — tiles decided by [ADR 0149](../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), not built), a medium's **corrected capture time** (set and reset in its details)
 and the **banner** (shown whole with its surround, set from an image or a video, sharing an equal gallery file's
 object; a pin keeps it). The rules are the core's ports of the web's; each platform brings its pickers, encoders and
 players. Nothing in the backend, the web or the contracts changes.

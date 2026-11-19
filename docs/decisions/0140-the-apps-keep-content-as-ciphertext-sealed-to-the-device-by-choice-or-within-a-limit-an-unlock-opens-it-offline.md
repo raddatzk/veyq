@@ -4,7 +4,7 @@
   real iPhone and a signed macOS build, are the owner's ([native-apps](../crosscutting/native-apps.md) § Open)
 - Date: 2026-11-15
 - Model: [native-apps](../crosscutting/native-apps.md)
-- Replaced in part: decision 8's and decision 9's kept originals (a music track's too) by ADR 0142 (built); decision 8's kept originals (a GPX track's too) by ADR 0143 (built); decision 9's kept blobs (a banner's too) by ADR 0144 (built); decision 5's kept reads (a map tile's in the automatic tier too) by ADR 0143 decision 4 as amended (built)
+- Replaced in part: decision 8's and decision 9's kept originals (a music track's too) by ADR 0142 (built); decision 8's kept originals (a GPX track's too) by ADR 0143 (built); decision 9's kept blobs (a banner's too) by ADR 0144 (built); decision 5's kept reads (a map tile's in the automatic tier too) by ADR 0143 decision 4 as amended (built); decision 5's kept reads (a Memory's item marks and buckets too) by ADR 0149 decisions 4 and 6 (not built)
 
 ## Context
 
