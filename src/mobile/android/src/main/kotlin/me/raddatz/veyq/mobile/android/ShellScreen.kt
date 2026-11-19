@@ -198,7 +198,6 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
             onAddServer = { closeDrawerThen { model.openManage() } },
             onNew = { kind -> closeDrawerThen { model.requestNew(kind) } },
             onSettings = { closeDrawerThen { model.openSettings() } },
-            onOpenLink = { closeDrawerThen { model.guests.ask() } },
             permanent = wide,
         )
     }
@@ -644,16 +643,21 @@ private fun Switcher(
                 )
             }
             HorizontalDivider()
-            for (server in s.servers) {
-                Text(server.label, style = VeyqType.sectionLabel, color = role(palette.muted), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
-                for (tenant in server.tenants) {
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { Text(tenant.name) },
-                        leadingIcon = { TenantAvatar(tenant.name, small = true) },
-                        trailingIcon = { if (tenant == s.tenant && server.label == s.server) Icon(Icons.Filled.Check, null) },
-                        onClick = { open = false; onSwitch(server.account, tenant) },
-                    )
-                }
+            // every signed-in account's tenants, each row saying where it is (core's `ShellWords.switcher`: its domain, and
+            // the account's address where two accounts list the same tenant; owner 2026-11-19)
+            for (row in s.servers) {
+                val e = row.entry
+                androidx.compose.material3.DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(e.name, maxLines = 1)
+                            Text(e.detail, style = MaterialTheme.typography.bodySmall, color = role(palette.muted), maxLines = 1)
+                        }
+                    },
+                    leadingIcon = { TenantAvatar(e.name, small = true) },
+                    trailingIcon = { if (e.current) Icon(Icons.Filled.Check, null) },
+                    onClick = { open = false; onSwitch(row.account, e.tenant) },
+                )
             }
             HorizontalDivider()
             androidx.compose.material3.DropdownMenuItem(
@@ -692,8 +696,6 @@ private fun Drawer(
     onNew: (String) -> Unit,
     /** The drawer's Settings: the account's page (`uc.account.sessions`). */
     onSettings: () -> Unit,
-    /** *Open a link* (ADR 0150 decision 4): a received link opened as its guest, above the shell. */
-    onOpenLink: () -> Unit = {},
     /** Open for good beside the content (an expanded window), not over it. */
     permanent: Boolean = false,
 ) {
@@ -741,20 +743,27 @@ private fun Drawer(
                 }
                 Spacer(Modifier.height(6.dp))
                 Row(app = Icons.Outlined.Home, label = stringResource(R.string.drawer_home), selected = s.shell.isHome) { onChoose(null) }
-                Section(stringResource(R.string.drawer_favorites))
-                ObjectItems(s.drawer.favorites, s.shell.openObject, onOpen)
-                Section(stringResource(R.string.drawer_recent))
-                ObjectItems(s.drawer.recent, s.shell.openObject, onOpen)
-                Section(stringResource(R.string.drawer_applications))
-                for (app in s.applications) {
-                    Row(app = appIcon(app), label = appName(app), selected = s.shell.application == app && s.shell.openObject == null) { onChoose(app) }
+                // only the sections with something in them (core's `Lists.drawerSections`; owner 2026-11-19)
+                for (section in s.drawerSections) when (section) {
+                    me.raddatz.veyq.mobile.navigation.DrawerSection.FAVORITES -> {
+                        Section(stringResource(R.string.drawer_favorites))
+                        ObjectItems(s.drawer.favorites, s.shell.openObject, onOpen)
+                    }
+                    me.raddatz.veyq.mobile.navigation.DrawerSection.RECENT -> {
+                        Section(stringResource(R.string.drawer_recent))
+                        ObjectItems(s.drawer.recent, s.shell.openObject, onOpen)
+                    }
+                    me.raddatz.veyq.mobile.navigation.DrawerSection.APPLICATIONS -> {
+                        Section(stringResource(R.string.drawer_applications))
+                        for (app in s.applications) {
+                            Row(app = appIcon(app), label = appName(app), selected = s.shell.application == app && s.shell.openObject == null) { onChoose(app) }
+                        }
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
             }
             Column(Modifier.padding(horizontal = 14.dp)) {
                 HorizontalDivider(Modifier.padding(bottom = 8.dp), color = role(palette.line))
-                // the account menu's *Open a link* (owner 2026-11-19: the drawer's foot on the phones)
-                Row(app = Icons.Outlined.Link, label = stringResource(R.string.link_open), selected = false, onClick = onOpenLink)
                 Row(app = Icons.Outlined.Settings, label = stringResource(R.string.drawer_settings), selected = false, onClick = onSettings)
                 Spacer(Modifier.height(12.dp))
             }
@@ -810,10 +819,6 @@ private fun Row(app: ImageVector, label: String, selected: Boolean, onClick: () 
 
 @Composable
 private fun ObjectItems(refs: List<ObjectRef>, open: ObjectRef?, onOpen: (ObjectRef) -> Unit) {
-    if (refs.isEmpty()) {
-        Text(stringResource(R.string.drawer_nothing_yet), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted),
-            modifier = Modifier.padding(start = 8.dp, bottom = 4.dp))
-    }
     for (ref in refs) {
         Row(app = kindIcon(ref.kind), label = ref.name, selected = open?.nodeId == ref.nodeId && open.scopeId == ref.scopeId) { onOpen(ref) }
     }
