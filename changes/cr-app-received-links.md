@@ -321,8 +321,9 @@ question 2*).
   currency and categories hidden where `metaShown` is false — seen as a named guest (its people renamed and added only); a
   bookmark deleted from its header leaves its page by the core (Undo offered); an empty Favorites or Recent not drawn
   (owner). A second no-key scan (1137 files) found none. **Open:** a guest file's Download on Windows; terms and a note (not
-  on the links); another instance; a row's report by its context menu (not driven: UIA has no context-menu step); the
-  bookmark's header report offers "It and everything in it" beside the name (#1036).
+  on the links); another instance; a row's report by its context menu (not driven: UIA has no context-menu step). The
+  bookmark's header report had offered "It and everything in it" beside the name (#1036): fixed in the core — a `nameOnly`
+  sheet's `offersName` is false, so every platform draws no choice and sends the name (`ShellModelTest`).
 - [ ] **11 the passes** — § Passes, each as a throwaway, erased after; results into ADR 0150's Consequences.
 - [ ] **12 harvest** — the Use pages (EN+DE): `keep-a-link.mdx` (a bookmark in the apps) and `what-guests-see.mdx`
   (a link opened in the app); `native-apps.md` § Built; #435's row narrowed to cr-open-in-the-app or deleted when both

@@ -188,7 +188,7 @@ A Gradle build of its own, run through its own wrapper.
   The system's controls are told `Controls.Bind|Show|Clear`; a picked track's length is `Media.Duration`, an untitled
   track's title the host's `Words.Say`. A host answers the deck and control requests from its UI thread, in the order
   sent (Linux `music_host` through `bridge::reply`, Windows `MusicHost` through `Core.Player`), never inside the host
-  function; a track's report is `ReportShown.offersName` false (no "only its name").
+  function; a track's report is `ReportShown.offersName` false (no "only its name"), as a kept link's is (the name alone, no whole).
   A Memory's date, place and maps (ADR 0143 decision 11): the tenant's map services are made when it opens and closed when
   it closes (`Composition.language`, from `Config.language`, is the geocoder's); a map is opened by its owner's call —
   `Map.OpenMemories` (the bar's Map tab), `Lightbox.Map` (a photo's), `Place.Open` and `Tracks.Open` (answered with the
