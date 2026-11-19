@@ -195,7 +195,8 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
   the Mac the passes ran on sends no mail; `ReaddressTest` holds the re-address, `LiveCredentialFlowsTest` skips there
   and says so); a rotation begun on the web and finished by an app's unlock (held by `FinishRotationTest`); a safety
   code scanned between two apps and the rename of another named device (the throwaways had none). The agent's macOS
-  click-through and its kit no-copy check, with #917's rename alert (inbox #976: the screen was locked); the Windows UIA
+  click-through and its kit no-copy check, with #917's rename alert from another device's menu (inbox #976: the screen
+  was locked, then the pass of 2026-11-19 lacked full-screen control; this device's pencil held the name twice); the Windows UIA
   pass and its no-copy check (inbox #983: the VM resolves no throwaway tenant). **The owner's:** iPhone and iPad (the
   sheets, `fileExporter` into Files, Face ID's re-enrolment, #975 — no simulator boots here, #928), Touch ID and Windows
   Hello for real after a password change and a rotation, an address change to a real mailbox with the link opened on a

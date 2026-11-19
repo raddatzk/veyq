@@ -192,7 +192,7 @@ the branch the refine read (each claim's command is in the refine's record of it
   app (held by `MemoryRekeyLiveTest` in the core), a link guest's upload named in the app, a report seen in the
   moderation inbox, the copy opened on the web, a sub-bucket renamed and deleted, a screen reader's speech (TalkBack did
   not take the taps, #992; the Linux container has no accessibility bus, #998), German on Linux. On Apple: everything — a
-  macOS and an iOS-simulator build only, the Mac's screen locked (#994); on Windows: the UIA pass, blocked by the VM's
+  macOS and an iOS-simulator build only, the Mac's screen locked, then its pass of 2026-11-19 without full-screen control (#994); on Windows: the UIA pass, blocked by the VM's
   `hosts` file (#983, #1000). **The owner's:** an iPhone and an iPad — the tiles at a phone's and a tablet's width, the
   badge's legibility, `.searchable`'s tokens, the lightbox's heart (no simulator boots here, #928).
 

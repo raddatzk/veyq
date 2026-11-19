@@ -1418,6 +1418,13 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   picture and drive nothing, and a whole phase's macOS pass was lost to it (ADR 0148's Apple phase, 2026-11-19, inbox #976). Check
   first: `ioreg -n Root -d1 -a | grep -A1 CGSSessionScreenIsLocked` shows `<false/>` (or no key) before a pass is
   started; with `<true/>` the pass is the owner's or waits.
+- **A macOS pass needs full-screen control, not only the background `app_*` tools** (measured 2026-11-19, inbox #976):
+  in the background they press buttons and read the accessibility tree and an alert's field, but they cannot type into
+  the app's SwiftUI fields (a sheet's form, an alert's `TextField`: "cannot be typed into while veyq is in the
+  background", with or without a click first), open a `Menu` (a session's *More*, *New*), drive `NSOpenPanel` or
+  `NSSavePanel` (no keystroke reaches them, so no path is typed; they open on the last folder), nor drag from Finder.
+  Ask for full-screen control at the start, and run the pass while the owner leaves the Mac alone: input on it aborts
+  the tools' actions ("user interrupt").
 - **A git merge of words.json can duplicate a key without a conflict**: two branches that each add the same new key
   (with the same text) at different places merge cleanly into a file holding that key twice — JSON parsers keep the
   last one silently (seen 2026-11-19 merging ADR 0148's platform phases). `generate_words.py`'s `load()` refuses a
