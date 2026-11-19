@@ -86,17 +86,22 @@ interface CredentialDoor {
  * offers each level and the password trust again ([trustChanges]) — once the Settings page shown reads anew (its host's
  * `refresh` after [State.done]; the bridge's for the desktops, inbox #1009).
  *
- * The new password passes the web's length policy ([MIN_PASSWORD_LENGTH]); the apps make no breached-password check
- * (none on their sign-in either — inbox #969). The Secret Key, the passwords and every key derived here live for the call
- * only: zeroed in a `finally`.
+ * The new password passes the web's length policy ([MIN_PASSWORD_LENGTH]) and the web's breached-password check
+ * ([breach], ADR 0151 decision 5): a hit stops the change until *Use it anyway*, a check that could not run does not.
+ * The Secret Key, the passwords and every key derived here live for the call only: zeroed in a `finally`.
  */
 class PasswordChange(
     /** The account the change is of: [VeyqAccount.passwordChange]'s, a played one in a test. */
     private val door: CredentialDoor,
     private val primitives: Primitives,
+    /** The new password's breached-password check: the instance's ([BreachCheck.of]), none in a test that plays none. */
+    val breach: me.raddatz.veyq.mobile.account.BreachCheck = me.raddatz.veyq.mobile.account.BreachCheck.none(),
 ) {
     private val suite = V1(primitives)
     private val proofs = AccountProofs(primitives)
+
+    /** The Secret Key section's control (ADR 0151 decision 1): a pasted kit token, a kit file or a scan, held for this flow. */
+    val intake = me.raddatz.veyq.mobile.account.KeyIntake(primitives, me.raddatz.veyq.mobile.account.KeyIntake.Account(door.email, door.server))
 
     @Serializable
     data class State(
@@ -119,18 +124,31 @@ class PasswordChange(
     fun watch(listener: (State) -> Unit): Watch = Watch(CoroutineScope(Dispatchers.Default).launch { state.collect(listener) })
 
     /**
+     * Changes the password with the Secret Key as the field holds it ([secretKey]: typed, a pasted kit token, or empty
+     * while the [intake] holds a kit's key — [KeyIntake.key]); the held key is spent once the change went through.
+     */
+    suspend fun run(currentPassword: String, next: String, confirm: String, secretKey: String) =
+        run(currentPassword, next, confirm, intake.key(secretKey))
+
+    /**
      * Changes the password: [currentPassword] and [secretKey] (32 bytes; zeroed by this call, whatever it comes to)
      * prove the account, [next] is installed once [confirm] repeats it and it is long enough. Refusals change nothing.
      */
-    suspend fun run(currentPassword: String, next: String, confirm: String, secretKey: ByteArray) = acting.withLock {
+    internal suspend fun run(currentPassword: String, next: String, confirm: String, secretKey: ByteArray) = acting.withLock {
         try {
             if (next != confirm) return@withLock refuse(Msg.PASSWORD_CHANGE_MISMATCH)
             if (next.length < MIN_PASSWORD_LENGTH) return@withLock refuse(Msg.PASSWORD_TOO_SHORT)
             _state.value = State(working = true)
+            // the web's submit guard: a hit waits for *Use it anyway* (the check's own state says so), nothing is sent
+            if (!breach.proceed(next)) {
+                _state.value = State()
+                return@withLock
+            }
             _state.value = when (val outcome = change(currentPassword, next, secretKey)) {
                 null -> State(done = true)
                 else -> State(refusal = outcome)
             }
+            if (current.done) intake.spent()
         } finally {
             secretKey.fill(0)
         }
@@ -200,6 +218,21 @@ class PasswordChange(
     /** Back to the form ("Change it again"). */
     fun reset() {
         _state.value = State()
+    }
+
+    /** The new password's field was left with [newPassword] in it: the breached-password check runs ([BreachCheck.check]). */
+    suspend fun check(newPassword: String) = breach.check(newPassword)
+
+    /** The new password was edited: the check's verdict, and any acceptance of it, is gone. Sends nothing. */
+    fun edited() = breach.edited()
+
+    /** *Use it anyway* for a breached new password, or taken back. */
+    fun useAnyway(on: Boolean) = breach.useAnyway(on)
+
+    /** The flow closed: a held kit's key is zeroed, the check's password dropped. */
+    fun close() {
+        intake.clear()
+        breach.close()
     }
 
     companion object {

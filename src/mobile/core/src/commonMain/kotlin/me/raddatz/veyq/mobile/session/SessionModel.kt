@@ -188,8 +188,8 @@ class SessionModel<A : Connection, T : Any>(
     val gate: StateFlow<Gate> = _gate.asStateFlow()
     val current: Gate get() = _gate.value
 
-    /** The Secret Key of the kit [Gate.SignIn.kit] shows; held only while it shows one. */
-    private var heldKey: ByteArray? = null
+    /** The Secret Key control's logic (ADR 0151 decision 1): the kit [Gate.SignIn.kit] shows, its key held only while it shows one. */
+    private val intake = me.raddatz.veyq.mobile.account.KeyIntake(door.primitives)
 
     /** The gate shown next; a gate without a kit ends the held one (leaving the sign-in, Cancel, a typed key, a success). */
     private fun show(gate: Gate) {
@@ -197,10 +197,7 @@ class SessionModel<A : Connection, T : Any>(
         _gate.value = gate
     }
 
-    private fun dropKey() {
-        heldKey?.fill(0)
-        heldKey = null
-    }
+    private fun dropKey() = intake.clear()
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -272,7 +269,7 @@ class SessionModel<A : Connection, T : Any>(
         val typed = secretKey.isNotBlank()
         val kit = if (typed) null else (current as? Gate.SignIn)?.kit
         // this call's copy of the key, zeroed by the door: the held one stays for a retry until the sign-in succeeds
-        val key = if (typed) EmergencyKit.read(door.primitives, secretKey)?.secretKey else heldKey?.copyOf()
+        val key = if (typed) EmergencyKit.read(door.primitives, secretKey)?.secretKey else intake.heldCopy()
         show(Gate.SignIn(working = true, adding = adding, server = server, email = email, kit = kit))
         return try {
             val account = if (key != null) door.signInWithKey(origin(server), email, password, key)
@@ -339,8 +336,7 @@ class SessionModel<A : Connection, T : Any>(
         }
         val before = typedServer?.takeIf { it.isNotBlank() } ?: state.server?.takeIf { it.isNotBlank() }
         val other = before?.takeIf { kit.server != null && origin(it).lowercase() != kit.server }?.let { origin(it) }
-        dropKey()
-        heldKey = kit.secretKey
+        intake.take(found, before)
         show(
             state.copy(
                 working = false,
@@ -371,13 +367,9 @@ class SessionModel<A : Connection, T : Any>(
         typedServer: String? = null,
         decode: suspend (QrFrame) -> String? = { QrDecoder.decode(it) },
         scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-    ): QrScan<KitImport.ServerFrom> = QrScan(accepts = { text -> takeScanned(text, typedServer) }, decode = decode, scope = scope)
+    ): QrScan<KitImport.ServerFrom> = intake.scan(typedServer, decode, scope) { takeKit(it, typedServer) }
 
-    private fun takeScanned(text: String, typedServer: String?): KitImport.ServerFrom? {
-        val kit = EmergencyKit.read(door.primitives, text) ?: return null
-        val from = if (kit.server != null) KitImport.ServerFrom.TOKEN else KitImport.ServerFrom.NONE
-        return if (takeKit(KitImport.Found(kit, from), typedServer)) from else null
-    }
+
 
     /**
      * The sign-in's "Use another device" (*add a new device*, ADR 0059): a scan of the trusted device's code, the link

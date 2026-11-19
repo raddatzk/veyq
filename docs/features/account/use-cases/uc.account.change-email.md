@@ -55,6 +55,8 @@
   confirmation are refused `404 tenant_not_found` outside a tenant the account belongs to.
 - **E6 — open tenant invites addressed to the old address** can no longer be accepted by this account (they match by
   address); said in the confirmation step's result.
+- **A — in the apps** ([ADR 0151](../../../decisions/0151-the-apps-account-rest-the-sign-ins-secret-key-control-in-every-flow-that-asks-for-the-key-and-the-breached-password-check-straight-from-the-device.md), being built): the request's and the new kit's Secret Key section is the app's sign-in
+  control — typed, a pasted kit token, a kit file or a scan; a kit of another account warns, never blocks.
 
 ## Quality notes
 

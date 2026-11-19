@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.map
 
+import me.raddatz.veyq.mobile.session.OutsideHttp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -36,7 +37,7 @@ data class ResolvedPlace(val name: String, val level: GeoLevel.Key)
 /**
  * The reverse geocoder (ADR 0016, ADR 0143 D2), the port of the web's `geocode.ts` and `placeName.ts`: the operator's
  * Nominatim-compatible service at [base], asked `GET {base}/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=&lon=
- * &accept-language=` with `Accept: application/json` and D3's identification ([MapHttp]) — a bare coordinate, no veyq
+ * &accept-language=` with `Accept: application/json` and D3's identification ([OutsideHttp]) — a bare coordinate, no veyq
  * identity, no Memory. Only while [gate] holds (a geocoder served and this device's consent holding for it), checked when
  * the request is about to leave.
  *
@@ -52,7 +53,7 @@ data class ResolvedPlace(val name: String, val level: GeoLevel.Key)
  * left the device.
  */
 class Geocoder internal constructor(
-    private val http: MapHttp,
+    private val http: OutsideHttp,
     private val base: String,
     private val gate: () -> Boolean,
     private val now: () -> Long,
