@@ -55,10 +55,15 @@ internal sealed class ReceivedView : IDisposable
         }
     }
 
+    /// <summary>Whether *Open a link* shows now (a veyq: link opens no second one, DeepLinks).</summary>
+    public static bool LinkAsked { get; private set; }
+
     /// <summary>*Open a link* over <paramref name="window"/>: the box, Paste, the core's reason, Open in the browser for what
     /// only a browser opens; the link opened shows as its own screen.</summary>
     public static async void OpenLink(Window window)
     {
+        if (LinkAsked) return;
+        LinkAsked = true;
         try
         {
             // the box's label above the row, so Paste sits beside the box itself
@@ -155,12 +160,17 @@ internal sealed class ReceivedView : IDisposable
                 }
             };
             await Dialogs.Show(window, dialog);
+            LinkAsked = false;
             if (opened is { } received) Present(received, box.Text.Trim());
         }
         catch (Exception e)
         {
             // an exception out of an async void would end the app in combase, with nothing in the log
             Log.Write($"Open a link failed ({e.GetType().Name})");
+        }
+        finally
+        {
+            LinkAsked = false;
         }
     }
 
