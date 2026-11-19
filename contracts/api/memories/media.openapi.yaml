@@ -32,8 +32,11 @@ tags:
       ([en.memory.buckets](../../../docs/features/memory/enablers/en.memory.buckets.md), ADR 0034). A lazy virtual
       **primary** bucket per uploader (keyed by an opaque `owner_key`) plus optional **one-level sub-buckets** with
       `K_node`-sealed names; media link via `bucketId` + a denormalized `createdBy`. Operator-blind — opaque
-      `owner_key` + structure, sealed names, **own-bucket authz** (`owner_key == caller`). A distinct resource
-      interface from `media`, sharing the node subtree.
+      `owner_key` + structure, sealed names. **Membership-gated curation:** any member of the scope creates, renames
+      and deletes a sub-bucket under any owner's primary and moves media within one owner root — never a primary
+      created, renamed or deleted here, never a move across roots (ADR 0034 point 6). The gate is membership, not
+      the owner: no `owner_key == caller` guarantee. A distinct resource interface from `media`, sharing the node
+      subtree.
 
 paths:
   /api/scopes/{scopeId}/media-batch:
