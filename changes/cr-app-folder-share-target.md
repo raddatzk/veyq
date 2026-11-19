@@ -147,6 +147,7 @@ No contracts phase and no bridge phase: no endpoint, field or wire call changes 
    file, so veyq is offered for every share — a text or a web page too, where it says that nothing could be taken
    (until #1015 opens a shared link). *Recommendation:* yes — that is what a file store's share target is, and #1015
    will give a shared link its meaning.
+   **Answered (owner 2026-11-19): yes, build it so.**
 
 ## Definition of done
 
