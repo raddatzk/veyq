@@ -572,8 +572,9 @@ class ShellModel(
     fun reportSheet(node: NodeAt): ReportSheet = ReportSheet(node, object : ReportSheet.Door {
         override val origin get() = tenant.origin
         override suspend fun send(scope: NodeReport.Scope, category: String, reason: String, contact: String) =
-            NodeReport.report(tenant, node.scopeId, node.nodeId, scope, category, reason, contact)
-    })
+            // a kept link reports its name only, whatever is asked (ADR 0150 decision 6): its key opens another operator's share
+            NodeReport.report(tenant, node.scopeId, node.nodeId, if (AppKinds.reportsNameOnly(node.kind)) NodeReport.Scope.NAME else scope, category, reason, contact)
+    }, nameOnly = AppKinds.reportsNameOnly(node.kind))
 
     /**
      * Node [ref]'s download into [sink]: a file the file itself ([AppKinds.ownDownload]), any other node with everything

@@ -36,6 +36,11 @@ class ReportSheet(
      * ADR 0142 decision 11) has no name of its own to report apart, so the sheet shows no choice and sends it whole.
      */
     val offersName: Boolean = true,
+    /**
+     * Only the name is reported, never the whole (a kept link, ADR 0120 decision 7, ADR 0150 decision 6): the node's key
+     * would hand this instance's moderators the key of a link to another operator's content, which the backend refuses.
+     */
+    val nameOnly: Boolean = false,
 ) {
     /** What the sheet sends ([ShellModel.reportSheet] over a tenant, a test over a server it plays). */
     interface Door {
@@ -72,7 +77,7 @@ class ReportSheet(
         val receipt: Notice? get() = sent?.let { Notice(Msg.REPORT_RECEIPT, it.reference.orEmpty(), it.receivedAt.orEmpty()) }
     }
 
-    private val _state = MutableStateFlow(State())
+    private val _state = MutableStateFlow(State(whole = !nameOnly))
     val state: StateFlow<State> = _state.asStateFlow()
     val current: State get() = _state.value
 
@@ -92,7 +97,7 @@ class ReportSheet(
     /** A change of the form, taken only while it may still change (nothing under way, nothing sent). */
     private fun edit(change: (State) -> State) = _state.update { if (it.sending || it.sent != null) it else change(it) }
 
-    fun whole(on: Boolean) = edit { if (offersName) it.copy(whole = on) else it }
+    fun whole(on: Boolean) = edit { if (offersName && !nameOnly) it.copy(whole = on) else it }
 
     /** The category by its token; one the contract does not know is not taken. */
     fun category(token: String) = edit { s -> if (NodeReport.CATEGORIES.any { it.token == token }) s.copy(category = token) else s }
@@ -112,7 +117,7 @@ class ReportSheet(
         _state.update { if (it.canSend) it.copy(sending = true, problem = null).also { s -> taken = s } else it }
         val s = taken ?: return current
         val sent = withContext(Dispatchers.Default) {
-            runCatching { door.send(if (s.whole) NodeReport.Scope.WHOLE else NodeReport.Scope.NAME, s.category!!, s.reason, s.contact) }
+            runCatching { door.send(if (s.whole && !nameOnly) NodeReport.Scope.WHOLE else NodeReport.Scope.NAME, s.category!!, s.reason, s.contact) }
                 .getOrElse { NodeReport.Sent(NodeReport.Outcome.FAILED) }
         }
         _state.update {

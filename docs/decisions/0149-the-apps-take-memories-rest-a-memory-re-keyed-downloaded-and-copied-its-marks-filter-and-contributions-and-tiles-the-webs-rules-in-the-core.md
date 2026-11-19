@@ -129,8 +129,8 @@ the branch the refine read (each claim's command is in the refine's record of it
 9. **Rights and the guest.** Every control follows `MemoryRights` as the core computes it: `mark` (a member, read-only
    included), `filterFacts`, `buckets`, the report's right, and copy and download from the doors and the session's role.
    A guest has none of the marks, the filter's marks mode or the contributions and sees the gallery as a member does
-   otherwise (share view = member view); a READ guest's download carries no names. The apps reach no link as a guest yet
-   (#435): the guest's paths are the core's tests.
+   otherwise (share view = member view); a READ guest's download carries no names. A link reached as its guest opens these models
+   through the core's guest doors ([ADR 0150](0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md) decisions 2 and 5).
 10. **The bridge (Linux, Windows)** carries a gallery row's mark count and `mine`, the filter's state and the
     Contributions view's in the gallery's state, the lightbox's `canMark`, `marked` and `canReport`, and the view mode and
     tile frames in the shell's and the person's states; its calls are the marks' toggle, the filter's edits, the

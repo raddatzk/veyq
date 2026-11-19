@@ -36,6 +36,11 @@
   parameter; the member reports there through the page's own action.
 - **A2 Report the name:** the bookmark's name is content on this instance: **Report name** reports it (`NAME`) to this
   instance's moderators, with the name's field key alone. A selection that holds a bookmark reports it the same way.
+- **A3 In the apps** ([ADR 0150](../../../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md) decision 6): *New → Bookmark* is the same dialog with the same checks, sealing the
+  same meta; a bookmark's row opens it as on the web (in place while embedding is on, else its own guest view), and both
+  reports are offered. A person who opened a received link in the app (A5 of
+  [uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md)) and is signed in may **Keep** it: the same
+  bookmark, in a place they pick, their personal space first. The web's share page offers no *Keep* yet (#1013).
 - **E1 Malformed link:** a text that is no link, `http` on a public host, a user name or password in the address, another
   path, or no whole key is refused with its reason, and nothing is created.
 - **E2 Unreadable bookmark:** a bookmark whose meta does not read (another build's format) opens nothing; its page says so

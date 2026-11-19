@@ -1,83 +1,65 @@
-// The link a bookmark keeps (ADR 0120 decision 4): checked and normalized when it is pasted, never fetched. Every refusal
-// stands beside the accepted link it differs from in one part, so a parser that refused everything would be red.
+// The link a bookmark keeps (ADR 0120 decision 4): checked and normalized when it is pasted, never fetched. The cases are
+// contracts/platform/share-links/cases.v1.json (ADR 0150 decision 2), which the apps' core (`ReceivedLinkTest`) reads too:
+// a change to the link's shape changes the file, and both sides go red until they agree. Every refusal there stands
+// beside the accepted link it differs from in one part, so a parser that refused everything would be red.
 import { describe, expect, it } from 'vitest'
-import { b64url } from '@veyq/crypto/base64'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { asksForReport, hostOf, keptLink, parseShareLink, reportLinkOf, withoutReport, MAX_LINK_LENGTH } from './bookmarkLink'
 
-const ID = 'Ab3_-'.padEnd(43, 'x')
-const KEY = b64url(new Uint8Array(32).fill(7))
-const LINK = `https://photos.example.org/s/${ID}#k=${KEY}`
+type Accepted = { input: string; link: string; origin: string; shareId: string; host: string; report?: boolean }
+type Refused = { input: string; problem: string; moderation?: boolean }
+type Cases = { format: string; maxLinkLength: number; parse: (Accepted | Refused)[]; kept: { input: string; link: string | null }[] }
 
-const problem = (input: string) => {
-  const r = parseShareLink(input)
-  return r.ok ? null : r.problem
+const FILE = resolve(__dirname, '../../../../../contracts/platform/share-links/cases.v1.json')
+const cases = JSON.parse(readFileSync(FILE, 'utf8')) as Cases
+const accepted = cases.parse.filter((c): c is Accepted => 'link' in c)
+const refused = cases.parse.filter((c): c is Refused => 'problem' in c)
+const fragmentOf = (input: string) => {
+  const at = input.trim().indexOf('#')
+  return at < 0 ? '' : input.trim().slice(at)
 }
 
+describe('the cases file', () => {
+  it('is the format this test reads, holds both kinds of case and keeps the web\'s length', () => {
+    expect(cases.format).toBe('veyq-share-links-v1')
+    expect(cases.maxLinkLength).toBe(MAX_LINK_LENGTH)
+    expect(accepted.length).toBeGreaterThan(5)
+    expect(new Set(refused.map((c) => c.problem))).toEqual(
+      new Set(['empty', 'tooLong', 'notAUrl', 'notHttps', 'credentials', 'notAShare', 'noKey']),
+    )
+  })
+})
+
 describe('parseShareLink', () => {
-  it('keeps a share link of another instance as it is: origin, path, key', () => {
-    expect(parseShareLink(LINK)).toEqual({ ok: true, value: { link: LINK, origin: 'https://photos.example.org', shareId: ID } })
-    expect(hostOf(keptLink(LINK)!)).toBe('photos.example.org')
-    expect(hostOf(keptLink(`https://photos.example.org:8443/s/${ID}#k=${KEY}`)!)).toBe('photos.example.org:8443')
+  it.each(accepted.map((c) => [c.input.slice(0, 80), c] as const))('accepts %s', (_, c) => {
+    expect(parseShareLink(c.input)).toEqual({ ok: true, value: { link: c.link, origin: c.origin, shareId: c.shareId } })
+    expect(hostOf(keptLink(c.link)!)).toBe(c.host)
+    expect(asksForReport(fragmentOf(c.input))).toBe(c.report === true)
   })
 
-  it('normalizes what is pasted: whitespace, the host\'s case, a query and every other fragment parameter are dropped, a port is kept', () => {
-    const r = parseShareLink(`  https://Photos.EXAMPLE.org:8443/s/${ID}?node=abc#x=1&k=${KEY}&report  `)
-    expect(r).toEqual({ ok: true, value: { link: `https://photos.example.org:8443/s/${ID}#k=${KEY}`, origin: 'https://photos.example.org:8443', shareId: ID } })
-  })
-
-  it('takes plain http only for a development host', () => {
-    for (const host of ['localhost:8081', 'veyq.localhost:8081', '127.0.0.1:5173', '[::1]:8080']) {
-      expect(problem(`http://${host}/s/${ID}#k=${KEY}`), host).toBeNull()
-    }
-    expect(problem(`http://photos.example.org/s/${ID}#k=${KEY}`)).toBe('notHttps')
-    expect(problem(`ftp://photos.example.org/s/${ID}#k=${KEY}`)).toBe('notAUrl')
-    expect(problem(`javascript:alert(1)//s/${ID}#k=${KEY}`)).toBe('notAUrl')
-  })
-
-  it('refuses what is no link at all, or nothing', () => {
-    expect(problem('')).toBe('empty')
-    expect(problem('   ')).toBe('empty')
-    expect(problem('photos.example.org/s/x')).toBe('notAUrl')
-  })
-
-  it('refuses a user name or password in the address', () => {
-    expect(problem(`https://ada:secret@photos.example.org/s/${ID}#k=${KEY}`)).toBe('credentials')
-    expect(problem(`https://ada@photos.example.org/s/${ID}#k=${KEY}`)).toBe('credentials')
-  })
-
-  it('refuses a link that is no share link: another path, a share id of another length, a trailing segment', () => {
-    expect(problem(`https://photos.example.org/x/${ID}#k=${KEY}`)).toBe('notAShare')
-    expect(problem(`https://photos.example.org/s/${ID.slice(1)}#k=${KEY}`)).toBe('notAShare')
-    expect(problem(`https://photos.example.org/s/${ID}/more#k=${KEY}`)).toBe('notAShare')
-    expect(problem(`https://photos.example.org/prefix/s/${ID}#k=${KEY}`)).toBe('notAShare')
-  })
-
-  it('refuses a link without its whole key: none, a moderation review, a short one, one that is no base64url', () => {
-    expect(problem(`https://photos.example.org/s/${ID}`)).toBe('noKey')
-    expect(problem(`https://photos.example.org/s/${ID}#moderation`)).toBe('noKey')
-    expect(problem(`https://photos.example.org/s/${ID}#k=${KEY.slice(1)}`)).toBe('noKey')
-    expect(problem(`https://photos.example.org/s/${ID}#k=${KEY.slice(1)}=`)).toBe('noKey')
-    expect(problem(`https://photos.example.org/s/${ID}#k=${KEY.slice(1)}+`)).toBe('noKey')
-    expect(problem(`https://photos.example.org/s/${ID}#kk=${KEY}`)).toBe('noKey')
-  })
-
-  it('refuses a link longer than it keeps', () => {
-    const long = `https://${'a'.repeat(MAX_LINK_LENGTH)}.example.org/s/${ID}#k=${KEY}`
-    expect(problem(long)).toBe('tooLong')
+  it.each(refused.map((c) => [c.input.slice(0, 80), c] as const))('refuses %s', (_, c) => {
+    expect(parseShareLink(c.input)).toEqual({ ok: false, problem: c.problem })
+    // a moderator's review is the share page's own mode (`#moderation` exactly), never a link's report
+    expect(fragmentOf(c.input) === '#moderation').toBe(c.moderation === true)
   })
 })
 
 describe('keptLink', () => {
-  it('reads back only the normalized form itself', () => {
-    expect(keptLink(LINK)?.link).toBe(LINK)
-    expect(keptLink(`${LINK}&report`)).toBeNull()
-    expect(keptLink(`https://Photos.example.org/s/${ID}#k=${KEY}`)).toBeNull()
+  it.each(cases.kept.map((c) => [c.input.slice(0, 80), c] as const))('reads back %s only as its normalized form', (_, c) => {
+    expect(keptLink(c.input)?.link ?? null).toBe(c.link)
+  })
+
+  it('reads back nothing that is no string', () => {
     expect(keptLink(42)).toBeNull()
     expect(keptLink(undefined)).toBeNull()
   })
 })
 
 describe('the report hand-off in the fragment', () => {
+  const LINK = accepted[0]!.link
+  const KEY = LINK.slice(LINK.indexOf('#k=') + 3)
+
   it('adds one parameter the share page reads beside k=, and the page can drop it again', () => {
     const kept = keptLink(LINK)!
     const report = reportLinkOf(kept)

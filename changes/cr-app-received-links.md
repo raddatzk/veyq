@@ -178,16 +178,16 @@ question 2*).
 
 ## Phases
 
-- [ ] **1 ADR 0150 and the docs it binds** — ADR 0150 (H1–H9 and cr-open-in-the-app's § O), its row in
+- [x] **1 ADR 0150 and the docs it binds** — ADR 0150 (H1–H9 and cr-open-in-the-app's § O), its row in
   `docs/decisions/README.md`; ADR 0120's Consequences amended (H1); ADR 0149 decision 9's "no link as a guest yet"
   pointed at ADR 0150; `native-apps.md` § Open's line (R12) narrowed to what stays open; `src/mobile/CLAUDE.md`
   § Nothing on disk names the guest session (H3); the three sharing use-cases gain an *In the apps* alternate flow.
   · Done when: every guard but guard_gaps green (`/usr/bin/python3 scripts/validate_*.py`).
-- [ ] **2 contracts — the link cases** — `contracts/platform/share-links/cases.v1.json` from the web's
+- [x] **2 contracts — the link cases** — `contracts/platform/share-links/cases.v1.json` from the web's
   `bookmarkLink.test.ts` cases plus `#moderation` and `&report`; the web's test reads the file (a test change only —
   `parseShareLink` unchanged). · Done when: `pnpm run check` in `src/web/` green. **Bite:** a case's expected
   normalization altered in the file → the web's test red (injection, restored by snapshot).
-- [ ] **3 core — the link, the instance, the gates** (H2, H3, H8) — `ReceivedLink`, `ShareInstance`, `ShareGates`,
+- [x] **3 core — the link, the instance, the gates** (H2, H3, H8) — `ReceivedLink`, `ShareInstance`, `ShareGates`,
   the guest session store behind an interface each platform implements. Tests: the cases file; a locked share asks the
   password and a wrong token keeps the form; terms before the note before the content; a foreign major refused.
   **Bites:** (a) the gate order swapped so the content resolves before the terms → red; (b) **the key canary**: a
@@ -195,18 +195,18 @@ question 2*).
   asserts no request's path, query, headers or body holds `K_share` as b64url, b64std or hex — bitten by appending the key
   as a query parameter → red; (c) the guest session written to `DeviceStore` instead of the credential store → red (a
   fake `DeviceStore` that fails on a secret-shaped write).
-- [ ] **4 core — each kind's guest door** (H5) — `PotSession` onto a door first (`PotShareTest` and the Pot's tests
+- [x] **4 core — each kind's guest door** (H5) — `PotSession` onto a door first (`PotShareTest` and the Pot's tests
   unchanged and green: the refactor's proof); `AppKinds.guestDoor`; the folder level, a file, a Memory, a Pot read as a
   guest; a drop box's and a Memory's WRITE_ONLY upload. Tests: a READ guest's Memory offers no upload, no marks, no
   contributions; a READ_WRITE guest's file offers replace; a READ guest's Pot no entry. **Bites:** (a) `Access.Member()`
   handed to a guest → red; (b) `AppKinds.guestDoor` routing a MEMORY to the Depot file's door → the per-kind
   guest test (each kind opened from a fixture share holding every kind) red.
-- [ ] **5 core — bookmarks and *Open a link*** (H4, H6) — `Create.BOOKMARK` and its dialog's model; the bookmark's page
+- [x] **5 core — bookmarks and *Open a link*** (H4, H6) — `Create.BOOKMARK` and its dialog's model; the bookmark's page
   (in place or not by `core.share-embedding`); `open-own-page`; the two reports; *Open a link*'s model before and after
   the sign-in. Tests: a meta the web sealed (a fixture) opens; a meta the core seals is padded to 512 and validates
   against the schema; Report name sends `NAME` only. **Bites:** (a) padding dropped → the length test red; (b) a
   bookmark's `NODE` item sent → the report test red.
-- [ ] **6 bridge** (H7) — the calls and updates; the generated Rust and C# bindings. · Done when: `:bridge:jvmTest`
+- [x] **6 bridge** (H7) — the calls and updates; the generated Rust and C# bindings. · Done when: `:bridge:jvmTest`
   green. **Bite:** an `Update` serialized with the link in it → the bridge test that scans every update of a guest
   session for the key's canaries red.
 - [ ] **7 Android** — *Open a link* (sign-in and shell), the guest screen, the bookmark's page, dialog and reports; the

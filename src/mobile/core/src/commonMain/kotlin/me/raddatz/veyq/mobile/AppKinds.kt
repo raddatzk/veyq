@@ -200,6 +200,12 @@ object AppKinds {
         MEMORY(me.raddatz.veyq.mobile.words.Msg.MEMORY_NEW),
         /** A chapter made in a Memory: the Memory's page's own New (`GalleryModel.creates`), never a level's. */
         CHAPTER(me.raddatz.veyq.mobile.words.Msg.MEMORY_ADD_CHAPTER),
+        /**
+         * A kept link (ADR 0120, ADR 0150 decision 6) at a space's top or in a folder: the web's dialog
+         * (`sharing.BookmarkCreate`). Offered by [createsWhere] once the platforms draw the dialog (cr-app-received-links
+         * phases 7–10).
+         */
+        BOOKMARK(me.raddatz.veyq.mobile.words.Msg.BOOKMARK_NEW),
     }
 
     /** Home's "New": a folder, a Pot, files or a folder uploaded here. */
@@ -267,6 +273,15 @@ object AppKinds {
      * it ([facts] null while the page cannot tell: as a writable one).
      */
     fun coverSettable(kind: String, facts: Facts?): Boolean = header(kind)?.takesCover == true && doors(kind, facts ?: Facts()).coverOffered
+
+    /**
+     * Whether a node of [kind] is reported by its name only (ADR 0150 decision 6): a kept link, whose key would hand this
+     * instance's moderators the key of another operator's share (the backend refuses a `NODE` report of one).
+     */
+    fun reportsNameOnly(kind: String): Boolean = kind == SHARE_BOOKMARK
+
+    /** The kind of a kept link (`SHARE_BOOKMARK`). */
+    val BOOKMARK_KIND: String get() = SHARE_BOOKMARK
 
     /** What a copy of nodes of [kinds] leaves behind (the web descriptor's `copyLosses`), each said once, by kind in order. */
     fun lossesOfCopy(kinds: List<String>): List<me.raddatz.veyq.mobile.words.Msg> = kinds.sorted().flatMap { kind ->
@@ -354,6 +369,28 @@ object AppKinds {
     fun share(kind: String): me.raddatz.veyq.mobile.navigation.ShareAnswer? = when (kind) {
         PotSession.KIND -> me.raddatz.veyq.mobile.expenses.PotShare.answer
         MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoryShare.answer
+        else -> null
+    }
+
+    /**
+     * The answer of [kind] to a link's guest of [role] (ADR 0150 decision 5): each application's own door in its package —
+     * a folder core's level, a Depot file its page with a guest's viewer and a drop box's WRITE_ONLY link its drop page, a
+     * Memory and a chapter their gallery with a guest's access and a WRITE_ONLY link their uploader, a Pot its page over the
+     * link's reads; null for a kind or role without one (the guest view says "not shown here").
+     */
+    fun guestDoor(kind: String, role: String): me.raddatz.veyq.mobile.sharing.GuestDoor? = when (role) {
+        me.raddatz.veyq.mobile.sharing.GuestAccess.WRITE_ONLY -> when (kind) {
+            DROPBOX -> me.raddatz.veyq.mobile.depot.DepotGuest.dropBox
+            MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoriesGuest.uploader
+            else -> null
+        }
+        me.raddatz.veyq.mobile.sharing.GuestAccess.READ, me.raddatz.veyq.mobile.sharing.GuestAccess.READ_WRITE -> when (kind) {
+            FOLDER -> me.raddatz.veyq.mobile.sharing.GuestLevel.door
+            FILE -> me.raddatz.veyq.mobile.depot.DepotGuest.file
+            MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoriesGuest.gallery
+            PotSession.KIND -> me.raddatz.veyq.mobile.expenses.PotGuest.pot
+            else -> null
+        }
         else -> null
     }
 

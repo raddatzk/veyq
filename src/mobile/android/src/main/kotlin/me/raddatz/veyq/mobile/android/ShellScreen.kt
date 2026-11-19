@@ -429,6 +429,8 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                     me.raddatz.veyq.mobile.AppKinds.Create.MEMORY -> namingMemory = true
                     // a Memory's page's own New, never a level's (`createsWhere` holds none)
                     me.raddatz.veyq.mobile.AppKinds.Create.CHAPTER -> {}
+                    // the bookmark's dialog is drawn by cr-app-received-links phase 7 (`createsWhere` offers it then)
+                    me.raddatz.veyq.mobile.AppKinds.Create.BOOKMARK -> {}
                 }
             })
         }

@@ -1,0 +1,167 @@
+{
+  "format": "veyq-share-links-v1",
+  "note": "The cases a received share link is checked against (ADR 0120 decision 4, ADR 0150 decision 2): the web's `parseShareLink`/`keptLink`/`hostOf`/`asksForReport` (src/web/src/core/bookmark/bookmarkLink.ts, bookmarkLink.test.ts) and the apps' core `sharing/ReceivedLink` (ReceivedLinkTest) both answer to them. `parse`: an accepted input with its normalized `link`, `origin`, `shareId` and `host`, and `report` where its fragment asks the share page to open its report dialog; a refused one with its `problem`, and `moderation` where it is a moderator's review (`#moderation`), which the app refuses with a problem of its own while the bookmark's parse calls it `noKey`. `kept`: a stored link read back — only the normalized form itself reads (`link`), anything else is null. Inputs chosen by hand from the web's test; each expectation is the web's function's answer, which the web's test checks on every run.",
+  "maxLinkLength": 2048,
+  "parse": [
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "https://photos.example.org",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "photos.example.org"
+    },
+    {
+      "input": "https://photos.example.org:8443/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "https://photos.example.org:8443/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "https://photos.example.org:8443",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "photos.example.org:8443"
+    },
+    {
+      "input": "  https://Photos.EXAMPLE.org:8443/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?node=abc#x=1&k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc&report  ",
+      "link": "https://photos.example.org:8443/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "https://photos.example.org:8443",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "photos.example.org:8443",
+      "report": true
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc&report",
+      "link": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "https://photos.example.org",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "photos.example.org",
+      "report": true
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?node=n1#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "https://photos.example.org",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "photos.example.org"
+    },
+    {
+      "input": "http://localhost:8081/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "http://localhost:8081/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "http://localhost:8081",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "localhost:8081"
+    },
+    {
+      "input": "http://veyq.localhost:8081/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "http://veyq.localhost:8081/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "http://veyq.localhost:8081",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "veyq.localhost:8081"
+    },
+    {
+      "input": "http://127.0.0.1:5173/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "http://127.0.0.1:5173/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "http://127.0.0.1:5173",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "127.0.0.1:5173"
+    },
+    {
+      "input": "http://[::1]:8080/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "http://[::1]:8080/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "http://[::1]:8080",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "[::1]:8080"
+    },
+    {
+      "input": "http://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "notHttps"
+    },
+    {
+      "input": "ftp://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "notAUrl"
+    },
+    {
+      "input": "javascript:alert(1)//s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "notAUrl"
+    },
+    {
+      "input": "",
+      "problem": "empty"
+    },
+    {
+      "input": "   ",
+      "problem": "empty"
+    },
+    {
+      "input": "photos.example.org/s/x",
+      "problem": "notAUrl"
+    },
+    {
+      "input": "https://ada:secret@photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "credentials"
+    },
+    {
+      "input": "https://ada@photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "credentials"
+    },
+    {
+      "input": "https://photos.example.org/x/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "notAShare"
+    },
+    {
+      "input": "https://photos.example.org/s/b3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "notAShare"
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx/more#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "notAShare"
+    },
+    {
+      "input": "https://photos.example.org/prefix/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "notAShare"
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "problem": "noKey"
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#moderation",
+      "problem": "noKey",
+      "moderation": true
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=wcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "noKey"
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=wcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=",
+      "problem": "noKey"
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=wcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc+",
+      "problem": "noKey"
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#kk=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "noKey"
+    },
+    {
+      "input": "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "tooLong"
+    }
+  ],
+  "kept": [
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc&report",
+      "link": null
+    },
+    {
+      "input": "https://Photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": null
+    },
+    {
+      "input": "  https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": null
+    }
+  ]
+}

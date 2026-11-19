@@ -816,6 +816,43 @@ internal sealed class Call {
     @Serializable @SerialName("Link.Close") data class LinkClose(val link: Long) : Call()
 
     /**
+     * A received link pasted into *Open a link* (ADR 0150 decisions 4, 7): [text] as the person pasted it — the link with
+     * its key, inward once and never back. Answered with its id ([Answer.ReceivedOpened]) for [Watched.Received] and the
+     * `Received.*` calls, or with why the app does not open it ([Answer.ReceivedProblem]); signed in or not. Loaded at once.
+     */
+    @Serializable @SerialName("Received.Open") data class ReceivedOpen(val text: String) : Call()
+
+    /** The link's password as the person typed it (`ShareGates.submitPassword`): inward, never back. */
+    @Serializable @SerialName("Received.Password") data class ReceivedPassword(val received: Long, val password: String) : Call()
+    @Serializable @SerialName("Received.AcceptTerms") data class ReceivedAcceptTerms(val received: Long) : Call()
+    @Serializable @SerialName("Received.AcceptNote") data class ReceivedAcceptNote(val received: Long) : Call()
+
+    /** Child [node] of the level on screen opened as its kind's guest page. */
+    @Serializable @SerialName("Received.OpenNode") data class ReceivedOpenNode(val received: Long, val node: String) : Call()
+
+    /** *Back*: a step inside the link, or at its root the question ([ReceivedShown.leaving]). */
+    @Serializable @SerialName("Received.Back") data class ReceivedBack(val received: Long) : Call()
+    @Serializable @SerialName("Received.Stay") data class ReceivedStay(val received: Long) : Call()
+
+    /** The question confirmed: the link let go (its key zeroed) — the host returns where the person was. */
+    @Serializable @SerialName("Received.Leave") data class ReceivedLeave(val received: Long) : Call()
+
+    /** A READ_WRITE guest's name, or a WRITE_ONLY uploader's (`nameGuest` / `nameUploader`). */
+    @Serializable @SerialName("Received.Name") data class ReceivedName(val received: Long, val name: String) : Call()
+
+    /** *Not you?* */
+    @Serializable @SerialName("Received.ForgetGuest") data class ReceivedForgetGuest(val received: Long) : Call()
+
+    /** *Keep*: the link kept as a bookmark at the top of space [scope] (signed in only), named by its host. */
+    @Serializable @SerialName("Received.Keep") data class ReceivedKeep(val received: Long, val scope: String) : Call()
+
+    /** Files at [paths] added by a WRITE_ONLY link's guest (a drop box's, a Memory's uploader). */
+    @Serializable @SerialName("Received.Upload") data class ReceivedUpload(val received: Long, val paths: List<String>) : Call()
+
+    /** The link's screen closed without asking (the app quits): as [ReceivedLeave]. */
+    @Serializable @SerialName("Received.Close") data class ReceivedClose(val received: Long) : Call()
+
+    /**
      * A Memory [name] made where New makes it (`ShellModel.createMemory`: in [scopeId] under [parentId], null the space's
      * top; `MemoryCreate` checks the name against the loaded tree before anything is sent): [Answer.Created] — the node made,
      * which the host opens ([ShellOpen]), or why not, as the web's `MemoryNodeDialog` says it.
@@ -1617,6 +1654,15 @@ internal sealed class Answer {
     /** A device link opened (`Link.*` of a role): its id, for [Watched.Link] and the link's calls. */
     @Serializable @SerialName("LinkOpened") data class LinkOpened(val link: Long) : Answer()
 
+    /** A received link opened ([Call.ReceivedOpen]): its id, for [Watched.Received] and the `Received.*` calls. */
+    @Serializable @SerialName("ReceivedOpened") data class ReceivedOpened(val received: Long) : Answer()
+
+    /**
+     * A pasted text the app does not open as a link, and why ([problem]); [browser]: the host offers *Open in the browser*
+     * with the text it holds (a moderator's review) — the text itself never comes back.
+     */
+    @Serializable @SerialName("ReceivedProblem") data class ReceivedProblem(val problem: Msg, val browser: Boolean) : Answer()
+
     /** A scan opened ([Call.ScanOpen]): its id, for [Watched.Scan] and the scan's calls. */
     @Serializable @SerialName("ScanOpened") data class ScanOpened(val scan: Long) : Answer()
 
@@ -1794,6 +1840,9 @@ internal sealed class Answer {
          *  confirmation or a code the link did not take. */
         NO_SUCH_LINK, NO_SIGN_IN, NOT_TAKEN,
 
+        /** A received link: none by that id (left or closed). */
+        NO_SUCH_RECEIVED,
+
         /** The music: no player (no tenant open, or a composition without decks); no Music view by that id; no deck by that id. */
         NO_PLAYER, NO_SUCH_MUSIC, NO_SUCH_DECK,
 
@@ -1951,6 +2000,9 @@ internal sealed class Watched {
 
     /** A search opened by [Call.SearchOpen]. */
     @Serializable @SerialName("Search") data class Search(val search: Long) : Watched()
+
+    /** A received link opened by [Call.ReceivedOpen]. */
+    @Serializable @SerialName("Received") data class Received(val received: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -2016,6 +2068,9 @@ internal sealed class Update {
 
     /** A device link; null once it was closed (or its tenant was, or an id the bridge does not hold). */
     @Serializable @SerialName("Link") data class Link(val link: Long, val shown: LinkShown?) : Update()
+
+    /** A received link's screen ([Watched.Received]); null once it was left or closed. Never its link nor its key. */
+    @Serializable @SerialName("Received") data class Received(val received: Long, val shown: ReceivedShown?) : Update()
 
     /** An account's Settings; null once it was closed (or an id the bridge does not hold). */
     @Serializable @SerialName("Settings") data class Settings(val settings: Long, val shown: SettingsShown?) : Update()
@@ -3650,3 +3705,62 @@ internal object Roots {
     val outward: List<KSerializer<*>> = listOf(Answer.serializer(), Update.serializer(), HostRequest.serializer())
     val all: List<KSerializer<*>> get() = inward + outward
 }
+
+/** Where a received link stands (core's `ShareGates.State`, ADR 0150 decision 2). */
+@Serializable
+internal enum class ReceivedGate { LOADING, REFUSED, LOCKED, TERMS, NOTE, READY, UNAVAILABLE }
+
+/** Why the app does not open a link's instance (core's `ShareInstance.Refusal`, decision 8): with *Open in the browser*. */
+@Serializable
+internal enum class ReceivedRefusal { UNREACHABLE, OTHER_VERSION, NO_LINKS }
+
+/** What a received link's page is (core's `GuestPage`): the member's page of its kind, a guest's rights. */
+@Serializable
+internal enum class ReceivedPageKind { LEVEL, FILE, GALLERY, POT, DROP_BOX, UPLOADER, NOT_SHOWN }
+
+/** One child of a guest's level. */
+@Serializable
+@SerialName("ReceivedRow")
+internal class ReceivedRow(val id: String, val kind: String, val name: String, val identity: Boolean)
+
+/**
+ * The page a received link shows: a level's rows, or the id of the member's own model it opened under the existing calls
+ * — [file] for `File.*`/[Watched.File], [gallery] for `Gallery.*`/[Watched.Gallery], [pot] for `Pot.*`/[Watched.Pot] —, or a
+ * WRITE_ONLY guest's page ([sent]: what it sent in this visit, by name).
+ */
+@Serializable
+@SerialName("ReceivedPage")
+internal class ReceivedPage(
+    val kind: ReceivedPageKind, val name: String, val nodeKind: String, val rows: List<ReceivedRow>,
+    val file: Long?, val gallery: Long?, val pot: Long?, val sent: List<String>,
+)
+
+/**
+ * A received link's screen as the host draws it (ADR 0150 decisions 2–4, 7): its host, the gate it stands at with the
+ * texts that gate shows (the space's terms and the operator's section, the note, as markdown), the root's name and the
+ * link's role once open, the page, the guest's name, whether *Back* at the root asked ([leaving]) and the link was let go
+ * ([left]), whether *Keep* is offered. **Never the link, its key or anything sealed** (`ReceivedBridgeTest` scans every
+ * update of a guest session for the key's canaries).
+ */
+@Serializable
+@SerialName("ReceivedShown")
+internal class ReceivedShown(
+    val host: String,
+    val gate: ReceivedGate,
+    val refusal: ReceivedRefusal?,
+    val askedAgain: Boolean,
+    val busy: Boolean,
+    val terms: String,
+    val operatorSection: String,
+    val record: String,
+    val note: String,
+    val rootName: String,
+    val role: String,
+    val page: ReceivedPage?,
+    val atRoot: Boolean,
+    val guestName: String?,
+    val leaving: Boolean,
+    val left: Boolean,
+    val keepOffered: Boolean,
+    val reportAsked: Boolean,
+)

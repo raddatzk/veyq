@@ -565,7 +565,7 @@ class VeyqAccount private constructor(
         else People.of(JoinRecords(suite), tenant.tenantId, tenantScope.key, tenantScope.summary.grantedEpoch.toLong(), members)
         return TenantSession(
             this, tenant, base, open, off, closed, people, services, ShareLinks.Rules.of(capabilities),
-            attributions = attributions, servicesRead = capabilities != null, closedKinds = kindsOf(summaries, closed),
+            attributions = attributions, servicesRead = capabilities != null, closedKinds = kindsOf(summaries, closed), on = on,
         )
     }
 
@@ -1617,7 +1617,12 @@ class TenantSession internal constructor(
     /** The kind of each scope of [closed] (`TENANT`, `GROUP`, `PERSONAL`), by id: what a walk over the tenant's and the groups'
      *  scopes counts as not read (a person's index, ADR 0144 decision 12). */
     internal val closedKinds: Map<String, String> = emptyMap(),
+    /** The ids of the tenant's capability set that are on, as read when it opened; null where the set did not read. */
+    private val on: Set<String>? = null,
 ) : Library {
+    /** Whether capability [id] is on for the tenant; null where its set did not read (offline, a failed read). */
+    fun capabilityOn(id: String): Boolean? = on?.contains(id)
+
     /** The address the tenant configured for external service [capabilityId], or null: off, or not read. */
     fun serviceUrl(capabilityId: String): String? = services[capabilityId]
 
