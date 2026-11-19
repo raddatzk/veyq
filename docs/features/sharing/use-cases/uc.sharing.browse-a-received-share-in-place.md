@@ -29,6 +29,10 @@
   and offers **Open link**, ADR 0120's open. With embedding switched off here the page is ADR 0120's as it was, without a
   line, and the bookmark's row opens the link directly.
 - **A2 Open on its own page:** the member opens the link on the share page instead, as before.
+- **A3 In the apps** ([ADR 0150](../../../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md) decision 6): a bookmark's page shows the share in place under its header while
+  `core.share-embedding` is on for the tenant, through the app's guest view of the link (the share's instance's major and
+  `core.public-shares` checked; `.embeddable` is a web page's gate and not asked); otherwise the row opens the guest view
+  on its own.
 - **E1 Link gone:** revoked, expired or re-keyed away → the embedded view says the link is unavailable; the bookmark stays.
 - **E2 Wrong password:** the bookmark's password is refused → the password form, as on the share page.
 

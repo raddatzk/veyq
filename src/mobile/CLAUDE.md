@@ -832,6 +832,14 @@ reads a shared file where the system put it (the share's grant outlives the app 
 its one copy is a shared HEIC re-encoded as a JPEG, `no_backup/share-in/<random>`, removed once nothing reads it and
 swept at start.
 
+**A received link's guest keeps its session in the credential store, and its key nowhere** ([ADR 0150](../../docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md)
+decision 3): `K_share` lives only in the open link's model (`sharing/ShareGates`, `GuestTree`) — no `DeviceStore`, no
+offline store, no recent use, no log, no bridge update. A write link's guest session (identity id, contributor token, an
+uploader's `K_up`; the web's `localStorage` entry) goes through core's `sharing/GuestSessions` port into the platform's
+credential store — the Keychain, the Keystore-wrapped store, the Secret Service, the credential locker — under
+`GuestNames.of(origin, shareId)` (a truncated SHA-256, never the id); the terms' and the note's acceptances, no secret,
+are `DeviceStore` entries under the same kind of name. *Not you?* removes the session.
+
 Per engine:
 - **Darwin (Apple, `appleHttpClient` in `Apple.kt`):** Ktor starts from `defaultSessionConfiguration`, whose shared
   `URLCache` wrote every answer to `Library/Caches/me.raddatz.veyq/Cache.db` (the bundle id then, `app.veyq` today) + `fsCachedData` — measured 2026-11-13 on

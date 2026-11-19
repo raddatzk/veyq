@@ -535,8 +535,9 @@ what each pass proved). The Use pages: [Mark the best photos](../../site/src/con
   the iPad's field with tokens and VoiceOver's count on a device (no simulator boots here, #928), Orca reading the count
   and a chip in a real GNOME session, and ⌘F, Return and Esc with the Mac app frontmost. Open findings: #957–#962;
   offline over every space's photos (#956). Not built: listing a kind across scopes.
-- Opening a received link in the app, as its guest, and the handover from the browser that must not carry a link's
-  `#k=` key unguarded (#435); a kept link (`SHARE_BOOKMARK`) has no page yet.
+- A received link opened in the app as its guest, a kept link's page and *Keep* ([ADR 0150](../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md)): the
+  core and the bridge are built (cr-app-received-links phases 1–6), the platforms' screens and the passes are not; the
+  handover from the browser, `veyq:` (#438, cr-open-in-the-app), is not built.
 - Dropping files onto the app (Android; Apple's drop is built, not measured).
 - Quick capture: widgets, shortcuts; notifications, among them the reminder of what one owes in a Pot (#550).
 

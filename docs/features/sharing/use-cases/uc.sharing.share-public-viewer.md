@@ -90,6 +90,12 @@ sequenceDiagram
   exactly as an unknown link, the curator's share list names the stop *blocked by the operator*, and neither a
   reactivation nor — for a blocked link — a re-issue passes until a moderator lifts it. Content a moderator blocked
   inside a live link shows as the placeholder *Blocked by the operator*, as it does for a member.
+- **A5 — in the apps** ([ADR 0150](../../../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md) decisions 2–5, 8): the visitor pastes the link into the app's *Open a link*,
+  signed in or not. The app reads the link instance's `/api/setup`, then passes the same gates in the same order with the
+  same requests, and opens the member's own screens of the root's kind with the guest's rights. The key stays in the
+  app's memory; a write link's guest session goes to the platform's credential store. A `#moderation` link, a major the
+  app does not speak or an instance without public links is refused with *Open in the browser*. At the share's root,
+  *Back* asks before it drops the link and returns where the visitor was.
 - **E1 — link without the fragment key:** the `shareId` alone is **inert** — the server returns the wrapped key,
   but without `K_share` the client cannot unwrap `K_node`, so nothing decrypts. Both halves are required.
 - **E2 — wrong / guessed id:** unknown `shareId` → `404`. The 256-bit id is unguessable; there is no enumeration.

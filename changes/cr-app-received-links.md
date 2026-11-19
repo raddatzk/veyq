@@ -178,7 +178,7 @@ question 2*).
 
 ## Phases
 
-- [ ] **1 ADR 0150 and the docs it binds** — ADR 0150 (H1–H9 and cr-open-in-the-app's § O), its row in
+- [x] **1 ADR 0150 and the docs it binds** — ADR 0150 (H1–H9 and cr-open-in-the-app's § O), its row in
   `docs/decisions/README.md`; ADR 0120's Consequences amended (H1); ADR 0149 decision 9's "no link as a guest yet"
   pointed at ADR 0150; `native-apps.md` § Open's line (R12) narrowed to what stays open; `src/mobile/CLAUDE.md`
   § Nothing on disk names the guest session (H3); the three sharing use-cases gain an *In the apps* alternate flow.

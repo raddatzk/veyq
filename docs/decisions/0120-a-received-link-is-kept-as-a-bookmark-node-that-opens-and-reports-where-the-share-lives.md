@@ -95,7 +95,8 @@ or the key to it, at this instance's moderators.
   member gave the bookmark and nothing behind it; a foreign operator receives an ordinary guest report.
 - **Rejected: a bookmark sealed under the account's key** (inbox #435's first idea). It would keep the link private to
   one person, but a node is what the owner asked for — placed beside the content it belongs to, shared with the space by
-  being in it — and the account-level list remains open as #435.
+  being in it. The account-level list #435 asked for is not built either: a bookmark in one's personal space is as
+  private to the account and reaches every client ([ADR 0150](0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md) decision 1).
 - **Rejected: a report of the bookmark node to this instance's moderators.** It hands them `K_node` and so the link's
   key: they would read a foreign operator's content, which this instance neither hosts nor may act on.
 - **Rejected: resolving the link when it is pasted** (to show the share's name or check it is live). It needs a
