@@ -9,6 +9,7 @@ sources:
   - docs/features/moderation/enablers/en.moderation.guest-write-record.md
   - docs/features/moderation/use-cases/uc.moderation.authority-order.md
   - docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md
+  - docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -62,6 +63,17 @@ where the blocked item would be: what was blocked and why, without what they fou
 and the address to ask for it and to write to if the guest disagrees. A page that only takes uploads shows every such
 reason, whether or not the link still works. Nobody else sees that, and nothing is shown while
 an authority has asked the server to wait.
+
+## Open in the app
+
+At the top of the page, **Copy link and open the app** is for a guest who has the veyq app installed. It copies the
+link as it was shared and opens the app at **Open a link**, where **Paste** fills it in
+([Open a link in the app](/sharing/open-a-link-in-the-app/)). A password is not copied: the app asks for it as the page
+does. On a device without the app, nothing opens, or the browser says it cannot open the link. Closed with **×**, the
+line does not come back in that browser.
+
+The copied link holds its key, and the app that opens is whichever app on the device answers veyq links — normally
+only veyq: [Known limitations](/security/known-limitations/#copy-link-and-open-the-app-hands-the-link-to-whichever-app-holds-veyq).
 
 Everything a guest sees is unlocked in their own browser with the key from the link:
 [Is my data safe?](/privacy/is-my-data-safe/#when-you-share)

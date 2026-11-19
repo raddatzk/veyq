@@ -63,6 +63,5 @@ do there is each application's role matrix ([Memories](../../apps/memories.md#wh
   moderation of contributions before they show; and a client-side id list so an uploader can delete after a reload.
 - **A password that keys the link** — folding `Argon2id(passphrase)` into the key, against a malicious operator
   ([ADR 0037](../../decisions/0037-password-protected-shares.md), alternative A).
-- **A received link kept in the account** (inbox #435); **person-resolution** and
-  the **pre-auth login-page terms** surface.
+- **Person-resolution** and the **pre-auth login-page terms** surface.
 - **A foreign-operator-proof no-install viewer** — needs the future trusted-web client.

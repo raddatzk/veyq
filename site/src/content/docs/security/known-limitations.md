@@ -15,6 +15,7 @@ sources:
   - docs/crosscutting/cc.security.csp.md
   - docs/decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md
   - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
+  - docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md
 ---
 
 This page collects what veyq does **not** protect against today, in one place. Each entry says why it remains, where
@@ -51,6 +52,7 @@ operator is you, and the active-operator entries do not apply.
 | [Losing every way back is final](#losing-every-way-back-is-final) | — | security-model § Recovery | by design (no escrow) |
 | [The apps' offline store](#the-apps-offline-store) | a thief who passes the device's unlock and keeps it offline; whoever can write the device's disk | ADR 0140 | accepted; nothing recorded against a replay |
 | [The desktop app: Flathub's runtime, Windows' trust, no auto-update](#the-desktop-app-flathubs-runtime-windows-trust-no-auto-update) | whoever controls what Flathub serves you; whoever holds the MSIX's signing key | ADR 0139 | nothing recorded; a store listing would bring updates |
+| [*Copy link and open the app* hands the link to whichever app holds `veyq:`](#copy-link-and-open-the-app-hands-the-link-to-whichever-app-holds-veyq) | an app on the device that claimed `veyq:` and reads the clipboard | ADR 0150 § O | accepted: the person chose to copy |
 
 ## The operator-served web client is passive-operator only
 
@@ -620,3 +622,25 @@ does ([ADR 0139](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0139-
 
 **Closed by:** nothing recorded for the runtime; the certificate step and updates by a Microsoft Store listing (the
 Store signs its package under a certificate Windows already trusts) and a Flathub listing, each its own decision.
+
+## *Copy link and open the app* hands the link to whichever app holds `veyq:`
+
+A share page in the browser offers **Copy link and open the app**: the click puts the page's link — its key after
+`#k=` included — on the clipboard and then opens `veyq://link`, which the app answers with *Open a link*, where the
+person pastes it. The `veyq:` link itself carries nothing: no key, no token, no address, and the app reads nothing of
+it but which of two screens to show. But a custom scheme is owned by no one: any app on the device can declare `veyq:`,
+and which one opens is the system's choice (Apple's) or the person's in a chooser (Android, the desktops). An app that
+claimed the scheme and reads the clipboard when it is opened learns the link, and with it what the link shares.
+
+It is the exposure of the share dialog's own **Copy** plus the launch: the person chose to copy, and a phone's system
+shows the read (iOS asks before an app pastes, Android 13 and later shows a notice). The browser keeps the link as it
+keeps any page it opened — in its history, and on Android 16 the system's window log names the page's address with its
+key as the browser's task is left (`capturedLink`, measured on an emulator 2026-11-19); neither is veyq's to change.
+The pages a mailed link opens copy nothing: their banner only opens the app.
+
+**Decided in:** [ADR 0150](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md)
+§ O (decisions 1 and 4).
+
+**Closed by:** nothing recorded. Opening the app on its own and choosing *Open a link* there, with the link copied by
+hand, avoids the launch; universal and app links, which would name the app by its publisher's domain, need a domain a
+self-hosted server does not have and are not built.

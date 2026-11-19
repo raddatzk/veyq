@@ -9,6 +9,7 @@ sources:
   - docs/features/moderation/enablers/en.moderation.guest-write-record.md
   - docs/features/moderation/use-cases/uc.moderation.authority-order.md
   - docs/features/moderation/use-cases/uc.moderation.object-to-a-measure.md
+  - docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -65,6 +66,18 @@ Schlüssel eines Kontos, und die Adresse, unter der man danach fragt und an die 
 einverstanden ist. Eine Seite, die nur Uploads annimmt, zeigt jede solche Begründung, ob der Link noch funktioniert
 oder nicht. Niemand sonst sieht das, und nichts davon wird gezeigt, solange eine Behörde den Server gebeten hat
 zu warten.
+
+## In der App öffnen
+
+Oben auf der Seite ist **Link kopieren und App öffnen** für einen Gast, der die veyq-App installiert hat. Es kopiert
+den Link, wie er geteilt wurde, und öffnet die App bei **Link öffnen**, wo **Einfügen** ihn einträgt
+([Einen Link in der App öffnen](/de/sharing/open-a-link-in-the-app/)). Ein Passwort wird nicht kopiert: Die App fragt
+danach wie die Seite. Auf einem Gerät ohne die App öffnet sich nichts, oder der Browser sagt, dass er den Link nicht
+öffnen kann. Mit **×** geschlossen, kommt die Zeile in diesem Browser nicht wieder.
+
+Der kopierte Link enthält seinen Schlüssel, und es öffnet sich die App, die auf dem Gerät veyq-Links annimmt —
+normalerweise nur veyq: [Bekannte Grenzen](/de/security/known-limitations/#copy-link-and-open-the-app-hands-the-link-to-whichever-app-holds-veyq)
+(auf Englisch).
 
 Alles, was ein Gast sieht, wird in seinem eigenen Browser mit dem Schlüssel aus dem Link geöffnet:
 [Sind meine Daten sicher?](/de/privacy/is-my-data-safe/)
