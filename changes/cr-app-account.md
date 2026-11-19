@@ -349,6 +349,31 @@ key-touching flows after the vectors that hold them, erasure last.
   on the web (the web's `rotateKeys` driven from a script against the same throwaway) is finished by the core's
   unlock;
   (j) **erasure** (D8, D9); live: the preview, the erasure, sign-in refused, the device's records gone.
+  *3f–3j built 2026-11-19:* `session/ColdCredential` (the floor proof, STALE told apart), `PasswordChange`,
+  `AddressChange` (sent through the tenant's origin — `404 tenant_not_found` at the account's), `AccountErasure`, all over
+  one `CredentialDoor` (`AccountCredentialDoor`, `VeyqAccount.passwordChange()`/`addressChange()`/`erasure()`); after a
+  password change the saved key's record is forgotten and the store kept (`forgetSavedKeyKeepStore`), a sign-in with a new
+  address re-addresses the record (`VeyqAccount.readdress`, in `finish`), an erased account is forgotten without a request
+  (`forgetErased`); V1 zeroes the Argon2id input copies it builds. 3g: `account/KitWriter` (standard 14 fonts, no
+  logo image — the wordmark moves left —, no date in the Info dictionary, the visible date a parameter), `KitWords` over a
+  generated `CoreText` (`"core_text": true` keys), `EmergencyKit.write` held to `emergency_kit_token` in the writer's
+  direction, `kit-app.pdf` read by the web's three paths and PDFBox, re-written byte for byte; `account/KitStep` (the
+  save into the path, "I saved it" only after a write). 3i: `session/rotation/AccountRotation` (`rotateKeys.ts` ported:
+  staged self-grants, re-signed invites, endorsed join records, pins and register re-sealed inside the publish, the
+  outcome read back, `resumeCommitted`), `VeyqAccount.swapKeys` (the keys replaced in place, the store wiped and opened
+  anew), `KeyRotation` (the web's order as one model; a moderator sent to the web), `finishRotation`/`ScopeRotation`
+  (commitRotation and the scope-level re-key, at every unlock and every 45 s, `RotationFinisher`), Memories' item marks
+  through `AppKinds.masterKeyRotated` and `scopeRekeyParticipants`. Live as throwaways: the password changed, the old one
+  refused, the same spaces open, changed back; the address change's request accepted to the mail step, then `503`
+  (this Mac sends no mail) — the confirm, the old address refused and the re-address are **pending a mailing backend**
+  (`LiveCredentialFlowsTest` skips there, saying so; `ReaddressTest` holds the re-address); the rotation: both scopes
+  `secured`, the old Secret Key refused, the new kit signs in to the same spaces, the owner's verification still counts;
+  the member erased, refused at sign-in, forgotten by the device. Not run: a rotation begun on the web finished by the
+  core's unlock (the finish's unlock is held by `FinishRotationTest`). Bites seen red then green: (f) the PasswordChange's
+  Secret Key not zeroed → `CredentialFlowsTest`'s recording case; (g) a `/CreationDate` → the byte-for-byte case; (h) the
+  re-address skipped → `ReaddressTest`; (i) the kit gate skipped → `KeyRotationTest`; (j) the store kept across
+  `swapKeys` → `OfflineWipeWiredTest`; the rebuild bound and the unlock's finish → `FinishRotationTest`; (a), (b), (k)
+  were phases 2–3e's.
   · Done when: green on the JVM and `macosArm64` and every live case green as a throwaway; **bites**, each by snapshot
   and restore, each red at its own assertion: (a) the `change_password` proof statement's field order swapped → the
   `secret_key_proof` vector red; (b) `chainCodeDigits` taking 3 groups → the `chain_code` vector red; (c) the rename
@@ -359,11 +384,18 @@ key-touching flows after the vectors that hold them, erasure last.
   step's "saved" gate skipped → the model's publish-before-saved case red; (j) the store kept across a rotation → its
   case red; (k) the throwaway env file named the principal → the live tests fail, not skip.
 
-- [ ] **4 the bridge** — D11's models, calls, `Watched`/`Update`, `typedIn` entries, `Kit.Save` by path; `closeTenant()`
+- [x] **4 the bridge** — D11's models, calls, `Watched`/`Update`, `typedIn` entries, `Kit.Save` by path; `closeTenant()`
   and sign-out drop each model; `WireTest` samples, `DispatchTest` cases per model, `LiveBridgeTest` the profile and
   the password change as a throwaway. · Done when: `./gradlew :bridge:jvmTest` green; **bites**: (a) a `secretKey` field
   added to a `*Shown` → `SecretFreeSchemaTest` red; (b) `Kit.Save` given a `bytes` field → `SecretFreeSchemaTest` red
   (no byte array); (c) the rotation model left out of sign-out → a watch delivering after it, red.
+  *Built 2026-11-19:* `Settings.RenameFamily`, `Profile.*` (the picture a path and a pose; the host renders it square,
+  `HostRequest.PictureSquare`), `Trust.*` (`ScanKind.SAFETY`: a `veyqid:` code held in the core, found as its scheme),
+  `PasswordChange.*`, `AddressChange.*`, `Kit.*` (`Kit.Save(kit, path, language, createdEpochDay)`), `KeyRotation.*`,
+  `Erasure.*` (an erased account signed out here), each watched; `closeTenant` (and so a sign-out) drops every flow.
+  Deviation from D11: the Secret Key arrives typed only (#970). Bites red then green: (a) `KitStep.State.secretKey`,
+  (b) `Kit.Save.pdf: ByteArray` → `SecretFreeSchemaTest`; (c) the rotations left in `closeTenant` →
+  `AccountFlowsDispatchTest`. Live: `LiveAccountBridgeTest` (the profile and the password change, as a throwaway).
 
 - [ ] **5 Android** — D10's row; the words (`scripts/validate_mobile_words.py`). Two halves, each with its pass:
   **5a** rename, profile, picture, safety numbers; **5b** password, address, kit, rotation, erasure. · Done when:
