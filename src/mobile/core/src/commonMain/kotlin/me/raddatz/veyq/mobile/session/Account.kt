@@ -285,6 +285,8 @@ class VeyqAccount private constructor(
             authSeed = null
             answered()
             _reach.value = Reach.Online
+            // back online is an unlock too: the rotation's finish runs now, not 45 s later
+            rotations.nudge()
             true
         } catch (e: CancellationException) {
             throw e
@@ -409,6 +411,48 @@ class VeyqAccount private constructor(
             r.status == 404 || r.status == 403 -> null
             else -> throw SignInFailure(SignInFailure.Reason.PROTOCOL, "scope epochs ${r.status}")
         }
+    }
+
+    // ---- what an account rotation's finish reads (ADR 0148 decision 7, `session/rotation/`) ----
+
+    /** The origin a scope of [tenantId] is reached at: its tenant's, else the account's own (a tenant it no longer lists). */
+    internal fun originOfTenant(tenantId: String): String = tenants.firstOrNull { it.tenantId == tenantId }?.let(::originOf) ?: server
+
+    /** [s]'s own grant opened as at the tenant's opening ([GrantOpener]); [lagging] for a rotation built on a lagging grant. */
+    internal suspend fun openOwnGrant(s: ScopeSummary, view: TenantView?, lagging: Boolean): GrantOutcome =
+        grants(originOfTenant(s.tenantId)).open(s, view, lagging)
+
+    /** This device made epoch [epoch] of [scopeId] with [key] (a rotation it committed): the floor and the held key rise to it. */
+    internal suspend fun holdEpochKey(scopeId: String, epoch: Long, key: ByteArray) {
+        val (pk, seed) = trust.successionKeyPair(key)
+        seed.fill(0)
+        marks.hold(scopeId, epoch, b64(pk))
+    }
+
+    /** This account's identity public bundle, base64: what its own re-grant is sealed to. */
+    internal val identityPublicB64: String get() = b64(myPublic)
+
+    /**
+     * [scopeKey] sealed to [toUserId]'s identity bundle [toIdentityB64] at ([scopeId], [epoch]) and the grant statement
+     * signed by this account (the web's `sealGrant`): the wrapped grant, its signature and the recipient's digest, base64.
+     */
+    internal fun sealGrant(scopeKey: ByteArray, scopeId: String, scopeKind: String, epoch: Long, toUserId: String, toIdentityB64: String): SelfGrant {
+        val to = unb64(toIdentityB64)
+        val wrapped = suite.sealTo(Context("scope-grant", "scopeId" to scopeId, "epoch" to epoch), suite.deserializeIdentityPublic(to).kem, scopeKey)
+        val statement = suite.grantStatement(scopeId, scopeKind, epoch, toUserId, to, wrapped)
+        return SelfGrant(b64(wrapped), b64(primitives.ed25519Sign(identity.signSeed, statement)), b64(primitives.sha256(to)))
+    }
+
+    /** Whether this account is closed: its keys zeroed, nothing sent any more. */
+    internal val isClosed: Boolean get() = closed
+
+    /**
+     * The account rotation's finish (`finishRotation`): run once at every unlock — every path that hands out an account
+     * online ([finish]) and every reconnect after an offline unlock — and every [RotationFinisher.EVERY] while the account is
+     * open and online, in its own background scope, cancelled at close. A failed pass is silent: the next one retries.
+     */
+    internal val rotations = me.raddatz.veyq.mobile.session.rotation.RotationFinisher(background, { reach.value == Reach.Online && !sendsNothing && !closed }) {
+        me.raddatz.veyq.mobile.session.rotation.finishOnce(this)
     }
 
     /** One account per user per server: signing in to the same one twice is the same connection. */
@@ -1078,6 +1122,7 @@ class VeyqAccount private constructor(
             account.trusted?.let { device.touch(it.key) }
             account.ensureOffline()
             account.recordThisDevice(familyId, label)
+            account.rotations.start()
             return account
         }
 
@@ -1128,6 +1173,8 @@ class VeyqAccount private constructor(
                     runCatching { o.loaded() }
                     it._reach.value = Reach.Offline(tenantsAnswer.asOf)
                     it.startProbe()
+                    // its passes wait for the reconnect, which runs one at once ([reconnect])
+                    it.rotations.start()
                 }
             } catch (e: Exception) {
                 o.close()

@@ -43,6 +43,30 @@ object AppKinds {
     val rules = NodeRekey.Rules(rekeys, ::tokenInput)
 
     /**
+     * Each application's part of a scope rotation's scope-level move (the web's `registry.scopeRekeyParticipants()`, ADR
+     * 0115 decision 2): Memories' item marks' value-key wraps (`ItemMarksRotation.participant`). Core's `ScopeRotation`
+     * stages them after its own, under the same re-key id.
+     */
+    val scopeRekeyParticipants: List<me.raddatz.veyq.mobile.session.rotation.ScopeRekeyParticipant> =
+        listOf(me.raddatz.veyq.mobile.memories.ItemMarksRotation.participant)
+
+    /**
+     * The account's Master Key replaced (an account rotation's `afterCommit`, the web's lifecycle `onMasterKeyRotated`):
+     * each application's material derived from the Master Key carried from [oldMk] to [newMk] for the scopes [scopeIds] —
+     * Memories re-tags the account's own item marks (`ItemMarksRotation.retag`; rows of other scopes are left). Best
+     * effort: nothing here fails the rotation, and neither key is kept or zeroed (the caller owns both).
+     */
+    suspend fun masterKeyRotated(account: me.raddatz.veyq.mobile.session.VeyqAccount, oldMk: ByteArray, newMk: ByteArray, scopeIds: List<String>) {
+        try {
+            me.raddatz.veyq.mobile.memories.ItemMarksRotation.retag(account, oldMk, newMk, scopeIds)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // a mark whose tag the new key does not verify reads as someone else's set (ADR 0068 §9) until its next toggle
+        }
+    }
+
+    /**
      * How the build's kinds export into a download (the web's `exportContent` hooks, `NodeExport.walk`): a Pot its ledger and
      * receipts (`PotExport`, its erased people named [deletedName]), a Depot file its content streamed and a drop box a
      * directory of its guests' folders (`DepotExport`); every other kind but a folder is left out and said. One per run:

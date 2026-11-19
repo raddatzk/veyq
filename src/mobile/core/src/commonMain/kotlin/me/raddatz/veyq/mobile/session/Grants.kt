@@ -60,9 +60,14 @@ internal class GrantOpener(
     /** A scope's succession statements, or null when the server serves none to this account (`404` / `403`). */
     private val successions: suspend (scopeId: String) -> List<ScopeSuccession>?,
 ) {
-    suspend fun open(s: ScopeSummary, view: TenantView?): GrantOutcome {
+    /**
+     * [s]'s grant opened, or why not. A grant behind the scope's current epoch is refused unless [lagging]: only a rotation
+     * opens one (the web's `toOpenedScope(…, 'open')`), since the epoch it states is refused by the server unless it is the
+     * scope's next — never below this device's floor, which no caller passes.
+     */
+    suspend fun open(s: ScopeSummary, view: TenantView?, lagging: Boolean = false): GrantOutcome {
         val epoch = s.grantedEpoch.toLong()
-        if (s.grantedEpoch < s.currentEpoch || epoch < marks.floor(s.id)) return refused(GrantOutcome.Reason.AWAITING_CURRENT_KEY)
+        if ((!lagging && s.grantedEpoch < s.currentEpoch) || epoch < marks.floor(s.id)) return refused(GrantOutcome.Reason.AWAITING_CURRENT_KEY)
         val verdict = try {
             verify(s, epoch, view)
         } catch (e: TrustStateRefused) {
