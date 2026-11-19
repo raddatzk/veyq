@@ -149,6 +149,26 @@ internal abstract class FlowPage : IDisposable
     /// <summary>Back to the Settings page.</summary>
     protected void Back() => _back();
 
+    /// <summary>The panels of the last draw that hold a kept control (a page's own button or picture, made once).</summary>
+    private readonly List<Panel> _held = [];
+
+    /// <summary>A panel of this draw that a kept control goes into. Body's Clear leaves the control a child of the old
+    /// panel, and adding it to the next draw's threw 0x800F1000 — every draw after the first: the profile stopped drawing
+    /// once a picture was chosen (measured 2026-11-19, Windows pass). ClearBody empties them.</summary>
+    protected T Held<T>(T panel) where T : Panel
+    {
+        _held.Add(panel);
+        return panel;
+    }
+
+    /// <summary>Body emptied for a new draw, every kept control taken out of the panel it was last put in.</summary>
+    protected void ClearBody()
+    {
+        Body.Children.Clear();
+        foreach (var p in _held) p.Children.Clear();
+        _held.Clear();
+    }
+
     public void Dispose()
     {
         if (Closed) return;
@@ -478,7 +498,7 @@ internal sealed class PasswordChangePage : FlowPage
     private void Draw(PasswordChangeState? s)
     {
         _state = s;
-        Body.Children.Clear();
+        ClearBody();
         if (s is { done: true })
         {
             foreach (var box in new[] { _current, _next, _confirm, _key }) box.Password = "";
@@ -497,7 +517,7 @@ internal sealed class PasswordChangePage : FlowPage
         Body.Children.Add(_confirm);
         Body.Children.Add(_key);
         Body.Children.Add(Caption(Words.PasswordChangeSecretKeyHint()));
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        var row = Held(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 });
         row.Children.Add(_run);
         if (s is { working: true }) row.Children.Add(Ring());
         Body.Children.Add(row);
@@ -582,7 +602,7 @@ internal sealed class AddressChangePage : FlowPage
     private void Draw(AddressChangeState? s)
     {
         _state = s;
-        Body.Children.Clear();
+        ClearBody();
         if (s?.sentTo is { } sent)
         {
             _password.Password = "";
@@ -597,7 +617,7 @@ internal sealed class AddressChangePage : FlowPage
                 Body.Children.Add(Caption(Words.EmailChangeKitSub()));
                 Body.Children.Add(_kitPassword);
                 Body.Children.Add(_kitKey);
-                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+                var row = Held(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 });
                 row.Children.Add(_check);
                 if (s.working) row.Children.Add(Ring());
                 Body.Children.Add(row);
@@ -614,7 +634,7 @@ internal sealed class AddressChangePage : FlowPage
         Body.Children.Add(_password);
         Body.Children.Add(_key);
         Body.Children.Add(Caption(Words.RotationSecretKeyHint()));
-        var send = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        var send = Held(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 });
         send.Children.Add(_request);
         if (s is { working: true }) send.Children.Add(Ring());
         Body.Children.Add(send);
@@ -733,7 +753,7 @@ internal sealed class KeyRotationPage : FlowPage
     {
         _state = s;
         Log.Write($"rotation: step {s?.step}, done {s?.done}, resumed {s?.resumed}, {s?.scopes.Count ?? 0} scopes, refusal {s?.refusal ?? "none"}");
-        Body.Children.Clear();
+        ClearBody();
         switch (s?.step)
         {
             case null or Step.Loading or Step.Working:
@@ -925,7 +945,7 @@ internal sealed class ErasurePage : FlowPage
             TellErased();
             return;
         }
-        Body.Children.Clear();
+        ClearBody();
         if (s is not { loaded: true })
         {
             Body.Children.Add(Ring());
@@ -964,7 +984,7 @@ internal sealed class ErasurePage : FlowPage
             foreach (var t in sole) Body.Children.Add(Text(t.name, $"erasure-sole:{t.tenantId}"));
         }
         Body.Children.Add(_password);
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        var row = Held(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 });
         row.Children.Add(_erase);
         if (s.working) row.Children.Add(Ring());
         Body.Children.Add(row);

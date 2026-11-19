@@ -192,9 +192,18 @@ the branch the refine read (each claim's command is in the refine's record of it
   app (held by `MemoryRekeyLiveTest` in the core), a link guest's upload named in the app, a report seen in the
   moderation inbox, the copy opened on the web, a sub-bucket renamed and deleted, a screen reader's speech (TalkBack did
   not take the taps, #992; the Linux container has no accessibility bus, #998), German on Linux. On Apple: everything — a
-  macOS and an iOS-simulator build only, the Mac's screen locked, then its pass of 2026-11-19 without full-screen control (#994); on Windows: the UIA pass, blocked by the VM's
-  `hosts` file (#983, #1000). **The owner's:** an iPhone and an iPad — the tiles at a phone's and a tablet's width, the
+  macOS and an iOS-simulator build only, the Mac's screen locked, then its pass of 2026-11-19 without full-screen control (#994). **The owner's:** an iPhone and an iPad — the tiles at a phone's and a tablet's width, the
   badge's legibility, `.searchable`'s tokens, the lightbox's heart (no simulator boots here, #928).
+- **What the Windows pass proved** (2026-11-19, the VM through UI Automation, a throwaway with a member on the fixed
+  tenant `tw-win.localhost`; the marks' second session the core's `MarksLiveTest` as the member, then the member signed
+  in on the same app): a tile's badge counted two marks, each session calling only its own mark its own; the lightbox's
+  heart and a tile's right-click *Mark* (Shift+F10) flipped the caller's mark; the filter's `AutoSuggestBox` took a local
+  day chip by keys and dropped it, free text narrowed the grid, the marks' menu narrowed it to *Only mine* and
+  *Everyone's*; Contributions made, renamed, filled (a photo moved from its tile's menu) and deleted a sub-bucket, and the
+  bucket's lightbox paged the bucket; *Report* on a photo was received; a Memory's *Download* (its zip: both photos and
+  `.veyq/manifest.json`) and *Copy to…*; Home's, a folder's and a profile's tiles, the View's *List* kept across a
+  restart and the tiles' columns following the window (4, 5, 7). A bucket picked in the picker ended the app (its items
+  cleared inside the pick's own `SelectionChanged`); fixed in the pass.
 
 ## Alternatives considered
 

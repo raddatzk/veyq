@@ -631,8 +631,13 @@ A Gradle build of its own, run through its own wrapper.
   outside the repository: the scratchpad), and `--erase <file>` erases them after (the sole-member tenant along; its
   pending erasure listed). The core's such cases read `VEYQ_LIVE_THROWAWAY_ENV=<file>` (`Throwaway`, `core/src/liveTest`)
   and **fail**, not skip, on a file naming `.run/.env`'s principal or member; an app pass points `VEYQ_ENV_FILE` at the
-  file for `devlogin.py` / `run.py --devlogin`. A machine that resolves no `*.localhost` (the Windows VM) needs the
-  throwaway's host mapped first (inbox #983).
+  file for `devlogin.py` / `run.py --devlogin`. A machine that resolves no `*.localhost` (the Windows VM) maps one
+  fixed name instead, which `--tenant tw-<name>` gives the tenant (the VM's `hosts` maps `tw-win.localhost`, 2026-11-19).
+  A deleted tenant keeps its domain until its purge (`409 domain_taken` on a second `--tenant` of the same name,
+  measured 2026-11-19), so `--erase` first moves the still-active tenant to `tw-<stamp>-erased.localhost`, and the name
+  is free at once (measured: create, erase, create again under `tw-probe2`). A pass that erases in the app erases the
+  member there and leaves the owner to `--erase`: an owner erased in the app takes the tenant into its deletion, which no
+  move can leave, and the name stays taken until its purge.
   Dev helpers for a device pass (not checks): `VEYQ_DEV_KIT_OUT=<dir> --tests '*DevKitTest*'` writes `dev-kit.pdf` (the
   principal's token in its `Keywords`) and `dev-kit-qr.png`, for a pass to pick or show a camera — kept outside an
   indexed folder (GNOME's Tracker indexes all of `~`; `/tmp` is reached by the chooser's path) and removed after;
@@ -1302,7 +1307,10 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - UI Automation, as the driver sees it: a `NavigationViewItem` has no Invoke, only SelectionItem, so a pane item is
   chosen by its selection (`SelectionChanged`); a chosen Search hit arrives in `QuerySubmitted` as its row's content,
   not the `ListViewItem` (both carry the hit as `Tag`); a flyout, a menu and a suggestion list are top-level windows
-  of their own, which `Veyq.Drive` searches too.
+  of their own, which `Veyq.Drive` searches too. A tile's context menu opens without a right button: `type <tile id>`
+  (it focuses the tile) then `key shift+f10`. A `ComboBox`'s items are in the tree only while it is open: `invoke` it,
+  then `select` the item. A `PasswordBox`'s value reads as one `●` per character — count them (never `cut -c` the
+  line: a `●` is three bytes) to check what was typed before a secret is sent (2026-11-19).
 - A width-capped column straight in a `ScrollViewer` sits off centre and clips (the Pot's amounts were cut off, measured
   2026-11-11): a list fills the width, a capped column sits inside a stretching `Grid`. Under LeftMinimal the pane's
   button and back lie over the content's top left, so the title takes a left inset there (`DisplayModeChanged`). Two
