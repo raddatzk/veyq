@@ -751,6 +751,7 @@ struct ProfileSheet: View {
     @State private var item: PhotosPickerItem?
     @State private var cropping: CGImage?
     @State private var pictureNotImage = false
+    @State private var choosingFile = false
     @State private var savedOnce = 0
     @Environment(\.dismiss) private var dismiss
 
@@ -794,6 +795,19 @@ struct ProfileSheet: View {
                 cropping = picture
             }
         }
+        #if os(macOS)
+        .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image]) { result in
+            guard case .success(let url) = result else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let data = try? Data(contentsOf: url), let picture = CoverImages.image(data, maxPixels: 2048) else {
+                pictureNotImage = true
+                return
+            }
+            pictureNotImage = false
+            cropping = picture
+        }
+        #endif
         .onAppear {
             guard held == nil, let f = model.ownProfile() else { return }
             held = HeldFlow(f, current: { $0.current }, flow: { $0.state })
@@ -813,7 +827,13 @@ struct ProfileSheet: View {
                 picture(state)
                 VStack(alignment: .leading, spacing: 8) {
                     let choose = say(state.hasPicture ? .profilePictureChange : .profilePictureChoose)
+                    #if os(iOS)
                     PhotosPicker(selection: $item, matching: .images) { Text(choose) }
+                    #else
+                    // a Mac picks a picture from its files, as a Memory's banner does (`MemoryCuration`): the Photos
+                    // picker there reaches only the Photos library
+                    Button(choose) { choosingFile = true }
+                    #endif
                     if state.hasPicture {
                         Button(say(.profilePictureRemove), role: .destructive) { held?.model.removePicture(); held?.state.refresh() }
                             .buttonStyle(.borderless)
