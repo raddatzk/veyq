@@ -58,6 +58,10 @@ internal sealed class PotPage : IDisposable
     /// <summary>The model a received link's guest page handed in, opened by the core (null: Pot.Open opens it).</summary>
     private readonly long? _opened;
 
+    /// <summary>A received link's guest Pot holds its places itself (the shell's bar is a tenant's): Entries and Overview,
+    /// and Settings where the core offers them (PotView.settingsOffered: a guest who writes, #1035).</summary>
+    private bool OwnPlaces => _opened is not null;
+
     /// <summary>Told whether the Pot takes writes, each time its view is read (its header's facts).</summary>
     public Action<bool>? Read { get; set; }
 
@@ -178,6 +182,7 @@ internal sealed class PotPage : IDisposable
             _state = p.state;
             if (p.state?.view is { } view)
             {
+                if (OwnPlaces) GuestPlaces(view.settingsOffered);
                 Log.Write($"pot update: {view.entries.Count} entries, {view.deleted.Count} deleted, {view.settleUp.Count} to settle");
                 Read?.Invoke(view.canWrite);
                 if (view.canWrite != _canWrite)
@@ -375,7 +380,14 @@ internal sealed class PotPage : IDisposable
         var current = _selected?.key;
         bar.SelectionChanged += (b, _) =>
         {
-            if (b.SelectedItem?.Tag is string key && key != current) Act.Send(new Call.ShellSelect { tab = new BarTab { key = key } });
+            if (b.SelectedItem?.Tag is not string key || key == current) return;
+            if (!OwnPlaces) Act.Send(new Call.ShellSelect { tab = new BarTab { key = key } });
+            else
+            {
+                // a guest's place is the page's own
+                _selected = new BarTab { key = key };
+                Draw();
+            }
         };
         return bar;
     }
@@ -597,6 +609,19 @@ internal sealed class PotPage : IDisposable
     }
 
     /// <summary>The Settings place (PotSettingsView): opened in the core the first time it shows, kept across redraws.</summary>
+    /// <summary>A guest Pot's places (OwnPlaces), its Settings only where offered; a place no longer offered gives way to
+    /// the entries.</summary>
+    private void GuestPlaces(bool settings)
+    {
+        var keys = new List<string> { "expenses.entries", "expenses.overview" };
+        if (settings) keys.Add("expenses.settings");
+        var tabs = keys.Select(k => new ShownTab { tab = new BarTab { key = k }, word = "tab_" + k.Replace('.', '_') }).ToList();
+        var selected = _selected is { } s && keys.Contains(s.key) ? s : new BarTab { key = "expenses.entries" };
+        if (Same(tabs, _tabs) && selected.key == _selected?.key) return;
+        _tabs = tabs;
+        _selected = selected;
+    }
+
     private void Settings(StackPanel content)
     {
         if (_id is not { } pot) return;

@@ -461,15 +461,6 @@ internal sealed class ShellView
         };
         trash.IsEnabled = space is not null;
         menu.Items.Add(trash);
-        // *Open a link* (ADR 0150 decision 4): the account menu's, beside Manage servers (cr-app-received-links owner question 2)
-        var openLink = new MenuFlyoutItem { Text = Words.LinkOpen(), Icon = new SymbolIcon(Symbol.Link) };
-        AutomationProperties.SetAutomationId(openLink, "switcher-open-link");
-        openLink.Click += (_, _) =>
-        {
-            ReceivedView.OpenLink(_window);
-            ClosePaneIfOverlay();
-        };
-        menu.Items.Add(openLink);
         var manage = new MenuFlyoutItem { Text = Words.SwitcherManage() };
         AutomationProperties.SetAutomationId(manage, "switcher-manage");
         manage.Click += (_, _) =>
@@ -503,8 +494,9 @@ internal sealed class ShellView
         Add(Item(Words.DrawerHome(), "", "home", new Target.Home()), shown.isHome);
         foreach (var (title, refs, prefix) in new[] { (Words.DrawerFavorites(), state.lists.drawer.favorites, "favorite"), (Words.DrawerRecent(), state.lists.drawer.recent, "recent") })
         {
+            // an empty Favorites or Recent is not drawn (owner 2026-11-19)
+            if (refs.Count == 0) continue;
             items.Add(new NavigationViewItemHeader { Content = title });
-            if (refs.Count == 0) Add(Item(Words.DrawerNothingYet(), "", $"{prefix}-none", null), false);
             foreach (var r in refs) Add(Item(r.name, HomeView.KindGlyph(r.kind), $"{prefix}:{r.name}", new Target.Object(r)), Opened(r));
         }
         items.Add(new NavigationViewItemHeader { Content = Words.DrawerApplications() });

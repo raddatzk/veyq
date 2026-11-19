@@ -308,7 +308,7 @@ A Gradle build of its own, run through its own wrapper.
   `MusicRamp`'s steps; one SMTC for the window through `GetForWindow`; `MusicTest`), `RowCovers` (every list row's cover through `Shell.RowCover`), `Uploads` (New's Upload files and Upload folder through `FileOpenPicker`
   and `FolderPicker`, a file's Replace, the queue's `AppBarButton` with its `Flyout`, what it says in an `InfoBar`),
   `DropBoxPage` (a drop box's page), `ReceivedView` (a received link opened as its guest, ADR 0150: *Open a link* under the
-  sign-in, the unlock and in the switcher's menu; the screen above every face with its gates, the member's pages over the
+  sign-in and the unlock (not in the account menu, owner 2026-11-19); the screen above every face with its gates, the member's pages over the
   guest's models, a WRITE_ONLY guest's page, the guest-write record's `InfoBar`, Keep, the reports, Back with its question;
   its rules without a widget in `ReceivedText`, `ReceivedTextTest`), `BookmarkPage` (a kept link's page, in place or on its
   own, while the shell's state names it) and `BookmarkCreateDialog` (New → Bookmark), `ListScrolls` (where each list was

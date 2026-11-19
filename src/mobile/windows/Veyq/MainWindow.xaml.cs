@@ -38,7 +38,7 @@ public sealed partial class MainWindow : Window
         ScreenSecrets.Attach(this);
         Heading.Text = Words.AppName();
         Status.Text = Words.Starting();
-        // an opened link stands above whatever shows (*Open a link*: the sign-in, the switcher's menu, a kept link's page)
+        // an opened link stands above whatever shows (*Open a link*: the sign-in, the unlock, a kept link's page)
         ReceivedView.Presenter = PresentReceived;
         // the window closed lets go of a link still open
         Closed += (_, _) => _received?.Dispose();
