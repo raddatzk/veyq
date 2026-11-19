@@ -201,8 +201,8 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
         match update {
             Ok(Update::Lightbox { shown, .. }) => {
                 if let Some(s) = &shown {
-                    eprintln!("veyq: lightbox shown: {} of {}, {}, playing {}, slideshow {:?}, save {}, trash {}", s.index + 1, s.count,
-                        s.row.as_ref().map_or("-", |r| r.media_id.as_str()), s.playing, s.slideshow, s.download_name.is_some(), s.can_trash);
+                    eprintln!("veyq: lightbox shown: {} of {}, {}, playing {}, slideshow {:?}, save {}, trash {}, mark {} (marked {}), report {}", s.index + 1, s.count,
+                        s.row.as_ref().map_or("-", |r| r.media_id.as_str()), s.playing, s.slideshow, s.download_name.is_some(), s.can_trash, s.can_mark, s.marked, s.can_report);
                 }
                 let gone = shown.as_ref().is_none_or(|s| s.row.is_none());
                 *inner.shown.borrow_mut() = shown;
