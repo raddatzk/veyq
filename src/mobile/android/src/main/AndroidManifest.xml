@@ -79,6 +79,16 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="*/*" />
             </intent-filter>
+            <!-- A veyq: link (ADR 0150 § O): `veyq://link` opens *Open a link*, `veyq://open` (and any other host) the app where
+                 it is. The link carries nothing and the app reads nothing of it but its host (core's DeepLink.parse); it
+                 arrives at onCreate or, the app running (singleTask), at onNewIntent. No app link: a self-hosted domain has no
+                 association file. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="veyq" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>
