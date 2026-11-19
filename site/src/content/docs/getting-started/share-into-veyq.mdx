@@ -1,15 +1,16 @@
 ---
 title: "Share into veyq"
-description: In the veyq app on Android, an iPhone or an iPad, photos, videos and receipts another app shares go into a Memory, a Chapter or a Pot you choose; files dropped onto the app go there too.
+description: In the veyq app on Android, an iPhone or an iPad, any file another app shares goes into a folder, a Memory, a Chapter or a Pot you choose; files dropped onto the app go there too.
 sources:
   - docs/decisions/0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md
   - docs/crosscutting/native-apps.md
+  - docs/features/depot/use-cases/uc.depot.member-files.md
   - src/mobile/words/words.json
 ---
 
 The veyq [app](/getting-started/install-the-app/) on **Android**, an **iPhone** or an **iPad** appears in your
-device's share menu. Photos, videos and PDFs you share from another app, such as your gallery or your files, go into
-a place in veyq that you choose. The app locks them before it sends them, as with anything you upload.
+device's share menu, whatever you share. Files you share from another app, such as your gallery or your files, go
+into a place in veyq that you choose. The app locks them before it sends them, as with anything you upload.
 
 ## Share from another app
 
@@ -17,15 +18,21 @@ a place in veyq that you choose. The app locks them before it sends them, as wit
 2. veyq opens at your space's Home and says **Choose where these files go**. What cannot take the files is dimmed, and
    so is a place where you may not add anything.
 3. Choose the place:
+   - **A folder, or your space's Home**, takes any file. Open the folder, or stay on Home, and choose **Add here**. The
+     files upload into it as if you had [uploaded them](/depot/upload-files-and-folders/) there; if a file with the
+     same name is already there, veyq asks whether to replace it.
    - **A Memory or a Chapter** takes photos and videos. Open the Memory, or the Chapter inside it, and choose
      **Add here**. The files upload into it as if you had [added them](/memories/add-photos-and-videos/) there.
    - **A Pot** with people in it takes images and PDFs of up to 10 MB each. Choosing it opens a
      [new expense](/expenses/record-an-expense/) with the files as its receipts; saving the expense saves them.
 
-Nothing is stored until you choose **Add here** or save the expense. Leave the Memory, or close the expense without
-saving, and the files wait again: you can choose another place. **Cancel** ends the share. What a place does not
-take is left out, and veyq says how many files that were. A Memory or a Chapter can be chosen only while the app
-reaches your server.
+Nothing is stored until you choose **Add here** or save the expense. Leave the folder or the Memory, or close the
+expense without saving, and the files wait again: you can choose another place. **Cancel** ends the share. What a place does not
+take is left out, and veyq says how many files that were. A folder, a Memory or a Chapter can be chosen only while
+the app reaches your server.
+
+If you share a text or a web page's link, veyq says *None of the shared files could be read.*: only files go into
+veyq.
 
 A photo the other app offers as HEIC is sent as a JPEG, so every browser can show it.
 
@@ -42,17 +49,20 @@ Face ID, Touch ID or your passcode, or one that only asks for your password. Oth
 first. Then you can share to it.*
 
 - **Into a Pot**, you save the expense right there.
-- **Into a Memory or a Chapter**, **Add here** closes the share window at once. The upload starts the next time you
+- **Into a folder, a Memory or a Chapter**, **Add here** closes the share window at once. The upload starts the next time you
   open veyq. Until then the files wait on your device in veyq's own storage, not yet locked: they are the files the
   other app already holds there. Each one is removed once it is uploaded. **Cancel** removes them at once, and
   signing out of veyq removes what still waits.
 
 ## Drop files onto the app
 
-On Android, an iPad and a Mac you can also drag photos, videos and PDFs from another app onto veyq:
+On Android, an iPad and a Mac you can also drag files from another app onto veyq:
 
+- **Onto an open folder or your space's Home:** they upload there at once. On a Mac, a folder you drop uploads as a
+  folder.
 - **Onto a Memory's or a Chapter's gallery:** the photos and videos among them upload into it at once.
 - **Onto an open Pot** with people in it: a new expense opens with them as its receipts.
 - **Anywhere else:** veyq asks where they go, as for a share.
 
-On Linux and Windows the app has no place in the share menu; drop photos and videos onto a Memory instead.
+On Linux and Windows the app has no place in the share menu; drop files onto a folder, or photos and videos onto a
+Memory, instead.

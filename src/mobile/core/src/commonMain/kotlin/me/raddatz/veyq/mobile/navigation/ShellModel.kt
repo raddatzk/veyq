@@ -310,6 +310,24 @@ class ShellModel(
     )
 
     /**
+     * The page in [shell] that offers *Add here* for what waits in [inbox] (ADR 0138 decision 3, [AddHere.at]): [gallery],
+     * the open Memory's or chapter's page, or the level shown — a folder or a space's top, which asks as a folder — where
+     * this member may put files here. Null anywhere else. Every platform asks this; none branches on kinds.
+     */
+    fun addHere(inbox: ShareInbox, shell: Shell, gallery: me.raddatz.veyq.mobile.memories.GalleryModel?): AddHere? =
+        AddHere.at(inbox, shell, gallery, ::levelPlace)
+
+    /**
+     * The level [shell] shows where a file dropped onto it is uploaded at once (ADR 0138 decision 9, [AddHere.shown]): a
+     * folder or a space's top where this member may put files here; null elsewhere, where a drop waits in the pick mode.
+     */
+    fun dropLevel(shell: Shell): AddHere.Level? = AddHere.shown(shell, ::levelPlace)
+
+    /** Where a level stands for a share: a folder's place (a space's top asks as one, [folder] null). */
+    private fun levelPlace(folder: NodeAt?) =
+        ShareAnswer.Place(NodeRef.FOLDER, tenant.applicationsOff(), online, folder?.let(::inIdentityFolder) ?: false)
+
+    /**
      * Whether [shell] shows a space's top level on Home, where its share offers "Add files only" ([topLevelShareSheet], the
      * web's level share): no folder, object, application, person's page or Search open, and the tenant's links and drop
      * boxes on. Every platform asks this (the phones through their `AppModel`, the desktops through `ShellShown.topLevelShare`).

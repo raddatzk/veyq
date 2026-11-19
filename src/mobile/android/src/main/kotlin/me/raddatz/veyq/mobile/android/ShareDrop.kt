@@ -14,7 +14,8 @@ import me.raddatz.veyq.mobile.navigation.ShareInbox
 /**
  * Files dropped from another app onto this element (ADR 0138 decision 9: a drop is a share): the drag's read permission
  * asked of the activity, which holds it as a share's grant is held, and the clip's items read as a share's are
- * ([ShareIn.fromClip]) into [onDrop]. Offered for a drag that carries an image, a video or a PDF.
+ * ([ShareIn.fromClip]) into [onDrop]. Offered for a drag of any type (decision 1: a level takes any file); where it lands
+ * judges it, and a drag that carries no file (a text) is refused at the drop.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -33,7 +34,7 @@ internal fun Modifier.sharedFilesDrop(onDrop: (ShareInbox.Incoming) -> Unit): Mo
         }
     }
     return dragAndDropTarget(
-        shouldStartDragAndDrop = { event -> event.mimeTypes().any { it.startsWith("image/") || it.startsWith("video/") || it == "application/pdf" } },
+        shouldStartDragAndDrop = { event -> event.mimeTypes().isNotEmpty() },
         target = target,
     )
 }

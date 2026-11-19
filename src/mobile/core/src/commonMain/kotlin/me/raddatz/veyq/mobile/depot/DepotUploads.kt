@@ -31,7 +31,11 @@ import me.raddatz.veyq.mobile.words.Notices
  *   replace refused as stale "Replace anyway" — the item taken out of the tray, the offer said once ([State.said]) with its
  *   action ([take]);
  * - the **tray's acknowledge**: a batch all in, none failed, leaves by itself [UploadQueue.ACKNOWLEDGE_AFTER_MS] after it is
- *   ([UploadQueue.State.clean]), run here on the model's clock, never by a view; one with a failure waits for its close.
+ *   ([UploadQueue.State.clean]), run here on the model's clock, never by a view; one with a failure waits for its close;
+ * - a **shared file handed back**: files [upload]ed with a `left` (a share's, ADR 0138 decision 6) are handed to it once no
+ *   run reads them again — the upload done or cancelled, or gone from the queue after it failed, and a same-name file's
+ *   replace offer answered (its replace then followed the same way). A model closed hands nothing back: the queue may
+ *   carry its uploads on, and a copy left is the platform's sweep's at its next start.
  *
  * What it says is [State.said], one at a time: the app shows it (a snackbar, an alert, a toast) and answers it — [take]
  * for its action, [seen] otherwise. Each app draws [state] (or [watch]).
@@ -96,6 +100,16 @@ class DepotUploads(
     fun watch(listener: (State) -> Unit): Watch = Watch(scope.launch { state.collect { listener(it) } })
 
     private var said = 0L
+
+    /** The shared files queued with a `left`, each with it (touched on the lane only). */
+    private val held = HashMap<UploadSource, (UploadSource) -> Unit>()
+
+    /** Which held file each queued job reads, and the jobs the queue showed failed (one gone after it is abandoned). */
+    private val reading = HashMap<UploadQueue.Job, UploadSource>()
+    private val failed = HashSet<UploadQueue.Job>()
+
+    /** Held files an offer's action is taking: its replace not queued yet. */
+    private val taking = HashSet<UploadSource>()
     private var acknowledging: Job? = null
     private var acknowledgeKey: List<Pair<String, Boolean>>? = null
 
@@ -103,6 +117,7 @@ class DepotUploads(
         scope.launch {
             queue.state.collect { q ->
                 _state.update { it.copy(queue = q) }
+                follow(q)
                 // the tray's acknowledge, keyed by the batches and whether each is in: a change starts the moment anew
                 val key = q.batches.map { it.id to it.finished }
                 if (key != acknowledgeKey) {
@@ -129,10 +144,23 @@ class DepotUploads(
      * The picked [sources] queued as new files under [parentId] (null: the space's top) of [scopeId], one batch labelled
      * [label] (where they go): a name a file already holds offers its replace once it settles. The number queued.
      */
-    fun upload(scopeId: String, parentId: String?, label: String, sources: List<UploadSource>): Int {
-        if (!door.online()) return 0
-        val jobs = sources.mapNotNull { door.uploadJob(scopeId, parentId, it, it.name) }
-        enqueue(jobs, label, parentId ?: scopeId)
+    fun upload(scopeId: String, parentId: String?, label: String, sources: List<UploadSource>): Int = upload(scopeId, parentId, label, sources, null)
+
+    /**
+     * [upload] whose sources are handed to [left] once no run reads them again (a share's files, ADR 0138 decision 6) — at
+     * once for one not queued (offline, no tenant).
+     */
+    fun upload(scopeId: String, parentId: String?, label: String, sources: List<UploadSource>, left: ((UploadSource) -> Unit)?): Int {
+        val jobs = if (door.online()) sources.mapNotNull { s -> door.uploadJob(scopeId, parentId, s, s.name)?.let { it to s } } else emptyList()
+        if (left != null) {
+            val queued = jobs.map { it.second }.toSet()
+            sources.filterNot { it in queued }.forEach { runCatching { left(it) } }
+            if (jobs.isNotEmpty()) scope.launch {
+                jobs.forEach { (job, source) -> held[source] = left; reading[job] = source }
+                follow(queue.state.value)
+            }
+        }
+        enqueue(jobs.map { it.first }, label, parentId ?: scopeId)
         return jobs.size
     }
 
@@ -176,13 +204,25 @@ class DepotUploads(
         drop(said.id)
         if (offer == null) return
         scope.launch {
-            val file = withContext(work) { runCatching { door.file(offer.scopeId, offer.nodeId) }.getOrNull() } ?: return@launch
-            enqueue(listOf(door.replaceJob(file, offer.source, offer.expectedBlobId)), offer.source.name, file.nodeId)
+            taking += offer.source
+            val file = withContext(work) { runCatching { door.file(offer.scopeId, offer.nodeId) }.getOrNull() }
+            taking -= offer.source
+            if (file == null) {
+                letGo(offer.source)
+                return@launch
+            }
+            val job = door.replaceJob(file, offer.source, offer.expectedBlobId)
+            if (offer.source in held) reading[job] = offer.source
+            enqueue(listOf(job), offer.source.name, file.nodeId)
         }
     }
 
-    /** [id] was shown and answered without its action: the next waits. */
-    fun seen(id: Long) = drop(id)
+    /** [id] was shown and answered without its action: the next waits, and a held file it offered is let go. */
+    fun seen(id: Long) {
+        val source = _state.value.saying.firstOrNull { it.id == id }?.offer?.source
+        drop(id)
+        if (source != null) scope.launch { letGo(source) }
+    }
 
     private fun drop(id: Long) = _state.update { s -> s.copy(saying = s.saying.filterNot { it.id == id }) }
 
@@ -193,8 +233,37 @@ class DepotUploads(
     /** The tray closed batch [batchId] (one with a failure stays until this). */
     fun acknowledge(batchId: String) = queue.acknowledge(batchId)
 
-    /** The model goes (a sign-out, a switch of tenant): nothing more is watched or said. */
+    /** The model goes (a sign-out, a switch of tenant): nothing more is watched or said, nothing handed back. */
     fun close() = scope.cancel()
+
+    /** What the queue shows of each job reading a held file: done or cancelled lets it go, failed waits, failed and gone too. */
+    private fun follow(q: UploadQueue.State) {
+        if (reading.isEmpty()) return
+        val items = q.batches.flatMap { it.items }.associateBy { it.job }
+        for (job in reading.keys.toList()) {
+            val item = items[job]
+            when {
+                item == null -> if (job in failed) leave(job)
+                item.status == UploadQueue.Status.DONE || item.status == UploadQueue.Status.CANCELLED -> leave(job)
+                item.status == UploadQueue.Status.FAILED -> failed += job
+                else -> failed -= job // retried
+            }
+        }
+    }
+
+    private fun leave(job: UploadQueue.Job) {
+        failed -= job
+        val source = reading.remove(job) ?: return
+        letGo(source)
+    }
+
+    /** [source] handed back where it is held and nothing reads it again: no job, no offer said, no offer being taken. */
+    private fun letGo(source: UploadSource) {
+        if (source !in held || source in taking || reading.containsValue(source)) return
+        if (_state.value.saying.any { it.offer?.source === source }) return
+        val left = held.remove(source) ?: return
+        runCatching { left(source) }
+    }
 
     private fun enqueue(jobs: List<UploadQueue.Job>, label: String, key: String?) {
         if (jobs.isEmpty()) return

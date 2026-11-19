@@ -1,19 +1,26 @@
 import Foundation
 import VeyqCore
 
-/// A Memory's shared files handed from the share extension to the app (ADR 0138 decision 6, owner 2026-11-19): *Add here*
-/// in the extension moves its copies into the app group's container, `share-in/<id>/<n>/<file>`, with `target.json`
-/// naming the Memory or chapter they go into, and the extension closes. The app queues them the next time it has that
-/// space open ([pending]), and each copy is removed once the queue lets it go ([remove]); a sign-out removes what still
+/// A Memory's or a folder's shared files handed from the share extension to the app (ADR 0138 decision 6, owner
+/// 2026-11-19): *Add here* in the extension moves its copies into the app group's container, `share-in/<id>/<n>/<file>`,
+/// with `target.json` naming where they go — a Memory, a chapter, a folder or a space's top —, and the extension closes.
+/// The app queues them the next time it has that space open ([pending]) into Memories' queue or Depot's, and each copy is
+/// removed once the queue lets it go ([remove]); a sign-out removes what still
 /// waits ([clear]), and the app's start what was never finished ([sweep]). The files are the person's own plaintext,
 /// not uploaded yet — nothing veyq decrypted. macOS has no extension: there is no such directory.
 enum ShareHandoff {
     struct Target: Codable {
+        /// The place's kind (`FOLDER`, `MEMORY`, `CHAPTER`); a handoff written before it names none and is a Memory's.
+        let kind: String?
         let scopeId: String
-        let nodeId: String
-        /// The node's name: the upload's batch label.
+        /// The node the files go into; none for a space's top.
+        let nodeId: String?
+        /// The place's name: the upload's batch label.
         let label: String
         let files: [File]
+
+        /// Whether the files go into Depot's queue (a folder, a space's top), not Memories'.
+        var isLevel: Bool { kind == NodeRef.companion.FOLDER }
     }
 
     struct File: Codable {
@@ -39,7 +46,7 @@ enum ShareHandoff {
 
     nonisolated private static let targetName = "target.json"
 
-    /// The app group's `share-in/`, where the extension leaves a Memory's files; nil on macOS.
+    /// The app group's `share-in/`, where the extension leaves a Memory's or a folder's files; nil on macOS.
     nonisolated static var root: URL? {
         #if os(iOS)
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Shared.appGroup)?
@@ -50,8 +57,9 @@ enum ShareHandoff {
     }
 
     /// The extension's *Add here*: `sources` (copies the extension made, `IncomingFiles`) moved into a new handoff for
-    /// `node`; the number handed off. Written under a dot name and renamed when whole, so the app never reads half of one.
-    static func write(_ sources: [UploadSource], into node: NodeAt) -> Int {
+    /// node `nodeId` of `kind` in `scopeId` (none: the space's top), named `label`; the number handed off. Written under a
+    /// dot name and renamed when whole, so the app never reads half of one.
+    static func write(_ sources: [UploadSource], kind: String, scopeId: String, nodeId: String?, label: String) -> Int {
         guard let root else { return 0 }
         let id = UUID().uuidString
         let staging = root.appendingPathComponent("." + id, isDirectory: true)
@@ -67,7 +75,7 @@ enum ShareHandoff {
                 AppModel.removePicked(url) // the extension's own directory the copy left
                 files.append(File(path: path, name: source.name, type: source.type, size: source.size))
             }
-            let target = Target(scopeId: node.scopeId, nodeId: node.nodeId, label: node.name, files: files)
+            let target = Target(kind: kind, scopeId: scopeId, nodeId: nodeId, label: label, files: files)
             try JSONEncoder().encode(target).write(to: staging.appendingPathComponent(targetName), options: .atomic)
             try fm.moveItem(at: staging, to: root.appendingPathComponent(id, isDirectory: true))
             return files.count

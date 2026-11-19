@@ -369,11 +369,13 @@ object AppKinds {
 
     /**
      * The answer of [kind] to files shared to veyq (ADR 0138 decision 2): each application's own — a Pot's new expense
-     * (`PotShare`), a Memory's and a chapter's upload queue (`MemoryShare`); null for a kind that takes nothing.
+     * (`PotShare`), a Memory's and a chapter's upload queue (`MemoryShare`), a folder's — a space's top asks as one — Depot's
+     * upload queue (`FolderShare`); null for a kind that takes nothing.
      */
     fun share(kind: String): me.raddatz.veyq.mobile.navigation.ShareAnswer? = when (kind) {
         PotSession.KIND -> me.raddatz.veyq.mobile.expenses.PotShare.answer
         MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoryShare.answer
+        FOLDER -> me.raddatz.veyq.mobile.depot.FolderShare.answer
         else -> null
     }
 

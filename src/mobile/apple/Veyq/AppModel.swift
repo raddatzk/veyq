@@ -768,32 +768,78 @@ final class AppModel {
         return shellModel?.takesShare(inbox: inbox, ref: ref.at) ?? false
     }
 
-    /// The Memory's or chapter's page on screen, where the pick mode's banner offers *Add here* (ADR 0138 decision 3); nil
-    /// on any other page or where it takes nothing of what waits.
-    var addHereTarget: GalleryModel? {
-        guard incoming != nil, let shown = galleryShown, let g = openGallery?.model, g.node == shown.node,
-              shell.openObject?.nodeId == shown.node.nodeId, MemoryShare.shared.offered(inbox: inbox, gallery: g) else { return nil }
-        return g
+    /// Where the pick mode's banner offers *Add here* (ADR 0138 decision 3; core's `ShellModel.addHere`): the Memory's or
+    /// chapter's page on screen, or the level shown — a folder or a space's top — where this member may put files; nil on
+    /// any other page or where it takes nothing of what waits.
+    var addHereTarget: AddHere? {
+        guard incoming != nil, let m = shellModel else { return nil }
+        _ = spaces // observed: a level's rights move with the lists
+        var gallery: GalleryModel?
+        if let shown = galleryShown, let g = openGallery?.model, g.node == shown.node, shell.openObject?.nodeId == shown.node.nodeId {
+            gallery = g
+        }
+        return m.addHere(inbox: inbox, shell: shell, gallery: gallery)
     }
 
-    /// *Add here*: the waiting photos and videos go into `gallery`'s Memory or chapter and the share ends. In the app they
-    /// are queued at once; the share extension hands them to the app through the app group and closes (ADR 0138 decision
-    /// 6, owner 2026-11-19), the app queueing them the next time it has the space open (`pickUpHandoffs`).
-    func addHere(_ gallery: GalleryModel) {
+    /// The name a level's upload is labelled with (the folder's, else the space's); a gallery's is its node's.
+    private func label(_ target: AddHere) -> String {
+        if let g = target as? AddHere.Gallery { return g.gallery.node.name }
+        return levelLabel
+    }
+
+    /// *Add here*: what `target` takes of the waiting files goes there — a gallery's photos and videos, a level's files into
+    /// Depot's queue — and the share ends. In the app they are queued at once; the share extension hands them to the app
+    /// through the app group and closes (ADR 0138 decision 6, owner 2026-11-19), the app queueing them the next time it has
+    /// the space open (`pickUpHandoffs`).
+    func addHere(_ target: AddHere) {
         let taken: ShareInbox.Taken?
         if inExtension {
-            guard gallery.takesUploads else { return }
-            let node = gallery.node
-            taken = inbox.queue(answer: MemoryShare.shared.answer) { sources in
-                KotlinInt(int: Int32(ShareHandoff.write(sources, into: node)))
+            if let g = target as? AddHere.Gallery {
+                guard g.gallery.takesUploads else { return }
+                let node = g.gallery.node
+                taken = inbox.queue(answer: target.answer) { sources in
+                    KotlinInt(int: Int32(ShareHandoff.write(sources, kind: node.kind, scopeId: node.scopeId, nodeId: node.nodeId, label: node.name)))
+                }
+            } else if let l = target as? AddHere.Level {
+                guard l.answer.mayChoose(place: l.place) else { return }
+                let name = levelLabel
+                taken = inbox.queue(answer: target.answer) { sources in
+                    KotlinInt(int: Int32(ShareHandoff.write(sources, kind: l.place.kind, scopeId: l.scopeId, nodeId: l.parentId, label: name)))
+                }
+            } else {
+                return
             }
         } else {
-            taken = MemoryShare.shared.addHere(inbox: inbox, gallery: gallery)
+            taken = target.take(inbox: inbox, label: label(target), depot: depot) { source in
+                if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
+            }
         }
         syncInbox()
         guard let taken else { return }
         if let n = MediaUploads.companion.notTaken(count: taken.refused) { notice = Notice(text: say(notice: n)) }
         onShareDone?(true)
+    }
+
+    /// Files dropped onto the level shown (ADR 0138 decision 9): uploaded under it at once where Depot may put files there
+    /// (core's `ShellModel.dropLevel`) — on macOS a dropped folder as a folder, as Depot's *Upload folder…* —; anywhere else
+    /// they wait in the pick mode, as a share's do. What did not read is said.
+    func dropOntoLevel(_ providers: [NSItemProvider]) async {
+        guard let level = shellModel?.dropLevel(shell: shell) else {
+            receiveDrop(await IncomingFiles.read(providers))
+            return
+        }
+        #if os(macOS)
+        let (folders, files) = await IncomingFiles.folders(providers)
+        for url in folders { await uploadFolder(url) }
+        #else
+        let files = providers
+        #endif
+        guard !files.isEmpty else { return }
+        let incoming = await IncomingFiles.read(files)
+        _ = level.drop(files: incoming.files, label: levelLabel, depot: depot) { source in
+            if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
+        }
+        if incoming.refused > 0 { notice = Notice(text: say(.shareUnread, incoming.refused)) }
     }
 
     /// Files dropped onto `gallery`'s page (ADR 0138 decision 9): its photos and videos queued into it at once, as a pick's;
@@ -809,13 +855,21 @@ final class AppModel {
         if let n = MediaUploads.companion.notTaken(count: Int32(others.count) + incoming.refused) { notice = Notice(text: say(notice: n)) }
     }
 
-    /// What the share extension handed over for a space this tenant has open: queued into its Memory or chapter, each copy
-    /// removed once the queue lets it go (ADR 0138 decision 6).
+    /// What the share extension handed over for a space this tenant has open: queued into its Memory or chapter (Memories'
+    /// queue) or its folder or top (Depot's), each copy removed once the queue lets it go (ADR 0138 decision 6).
     func pickUpHandoffs() {
-        guard !inExtension, let uploads = media, !spaces.isEmpty else { return }
+        guard !inExtension, let uploads = media, let d = depot, !spaces.isEmpty else { return }
         for waiting in ShareHandoff.pending(in: Set(spaces.map(\.scopeId))) {
             let t = waiting.target
-            _ = uploads.upload(scopeId: t.scopeId, nodeId: t.nodeId, label: t.label, sources: waiting.sources)
+            if t.isLevel {
+                _ = d.upload(scopeId: t.scopeId, parentId: t.nodeId, label: t.label, sources: waiting.sources) { source in
+                    if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
+                }
+            } else if let nodeId = t.nodeId {
+                _ = uploads.upload(scopeId: t.scopeId, nodeId: nodeId, label: t.label, sources: waiting.sources)
+            } else {
+                for s in waiting.sources { if let url = AppleMemories.shared.urlOf(source: s) { AppModel.removePicked(url) } }
+            }
         }
     }
 

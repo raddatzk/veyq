@@ -368,6 +368,17 @@ group (`ShareHandoff.swift`) and closes. Passed on Android as a throwaway (a 303
 uploaded with the app left; a drop from a freeform window); Apple built, not clicked (§ Open). The Use page:
 [Share into veyq](../../site/src/content/docs/getting-started/share-into-veyq.mdx).
 
+**A share into a folder** (ADR 0138 decisions 1–3, 6, 8 and 9, built 2026-11-19 on Android and Apple): veyq is offered
+for every share (Android `*/*`, iOS's extension `public.data`; a text or a link says nothing could be taken, until
+#1015). Depot answers for a folder and a space's top (`depot/FolderShare`: any file, where Depot may upload); core's
+`navigation/AddHere` picks what *Add here* goes into — the open gallery or the level shown — and where a drop onto a
+level uploads at once, so no app branches on kinds; a share's file goes into Depot's queue as a picked one does (a
+same-name file offers its replace) and is handed back once the queue lets it go. iOS's handoff names its kind; a folder
+dropped on a Mac uploads as a folder. Passed on Android as a throwaway (a `.docx`, a ZIP, a photo, a PDF and a file of
+no known type into a folder and a space's top; a replace; a text; drops onto both levels; a HEIC's copy removed after
+its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq](../../site/src/content/docs/getting-started/share-into-veyq.mdx),
+[Upload files and folders](../../site/src/content/docs/depot/upload-files-and-folders.mdx).
+
 ## Open
 
 **Platforms and form factors**
@@ -592,10 +603,11 @@ agent's on the unlocked Mac (#994) and the owner's on an iPhone and an iPad (#92
 iPad and a Mac (#995); **Windows' UIA pass** (#1000, once the VM resolves a throwaway's tenant, #983). The fixes of
 #990, #991, #996, #997 and #1001 are in, checked by tests; #990's seen on Android, #996's on Android and Linux; #989's calendars are handed on every app,
 Apple's unclicked. A copy that a rotation interrupts fails (#988). The owner answered its four questions 2026-11-19 as built (ADR 0149's Consequences). Not built: import of an archive, for every
-kind (#985); a folder as a share target (#987); a guest's view of a received link
+kind (#985); a guest's view of a received link
 (#435, a source for the same model). The web's own heart in its lightbox (#986) and its Contributions' "You" (#1003) are
 built (2026-11-19).
-A share into a Memory (built above): Apple's passes — the iOS handoff, the iPad drop (#1005); an iOS handoff for a space the app does not list
+A share into a Memory and into a folder (built above): Apple's passes — the iOS handoff, which types a Safari page and a
+Files share offer the extension, the iPad drop and the macOS drop onto a level (#1005); an iOS handoff for a space the app does not list
 (#1007).
 
 **Music** ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md), built above): **Apple's passes are the owner's** — on a real iPhone the background play,

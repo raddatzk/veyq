@@ -280,7 +280,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                     )
                 }
                 s.banner?.let { OfflineBanner(it) }
-                incoming?.let { ShareBanner(it, model, snackbar, onCancel = model::cancelShare) }
+                incoming?.let { ShareBanner(it, s, model, snackbar, onCancel = model::cancelShare) }
                 }
             },
             bottomBar = {
@@ -442,7 +442,8 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
             })
         }
     }) { list, bottom ->
-    Column(Modifier.fillMaxSize()) {
+    // a file dropped onto the level is uploaded here at once where Depot may put files (ADR 0138 decision 9), else a share
+    Column(Modifier.fillMaxSize().sharedFilesDrop { incoming -> model.dropOntoLevel(s.shell, incoming, levelLabel) }) {
         if (s.filters.size > 1) {
             val selected = s.filters.indexOf(s.shell.filter).coerceAtLeast(0)
             androidx.compose.material3.PrimaryScrollableTabRow(
@@ -1024,19 +1025,20 @@ private fun OfflineBanner(banner: me.raddatz.veyq.mobile.words.Notice) {
 }
 
 /**
- * The pick mode's banner: what waits and where it can go, with its cancel — and on a Memory's or a chapter's page that
- * takes it, *Add here* (ADR 0138 decision 3), that page's own save.
+ * The pick mode's banner: what waits and where it can go, with its cancel — and on a Memory's or a chapter's page or a
+ * level that takes it, *Add here* (ADR 0138 decision 3), that place's own save (core's `AddHere`, which picks it).
  */
 @Composable
 private fun ShareBanner(
-    incoming: me.raddatz.veyq.mobile.navigation.ShareInbox.Incoming, model: AppModel, snackbar: androidx.compose.material3.SnackbarHostState,
-    onCancel: () -> Unit,
+    incoming: me.raddatz.veyq.mobile.navigation.ShareInbox.Incoming, s: Screen.Signed, model: AppModel,
+    snackbar: androidx.compose.material3.SnackbarHostState, onCancel: () -> Unit,
 ) {
     val palette = LocalPalette.current
-    val target by model.shareTarget.collectAsStateWithLifecycle()
-    // the page's rights and reach move with its state: read again on each
-    val targetState = target?.state?.collectAsStateWithLifecycle()?.value
-    val addHere = target?.takeIf { targetState != null && model.offersAddHere(it) }
+    val gallery by model.shareTarget.collectAsStateWithLifecycle()
+    // the page's rights and reach move with its state, the level's with the screen: asked again on each
+    gallery?.state?.collectAsStateWithLifecycle()?.value
+    val addHere = model.addHereTarget(s.shell, gallery)
+    val label = s.shell.folder?.name ?: spaceName(s.space)
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     Row(
@@ -1056,7 +1058,7 @@ private fun ShareBanner(
         TextButton(onClick = onCancel) { Text(stringResource(R.string.entry_cancel)) }
         if (addHere != null) {
             androidx.compose.material3.FilledTonalButton(onClick = {
-                model.addHere(addHere)?.let { n -> scope.launch { snackbar.showSnackbar(context.text(n)) } }
+                model.addHere(addHere, label)?.let { n -> scope.launch { snackbar.showSnackbar(context.text(n)) } }
             }) { Text(stringResource(R.string.share_add_here)) }
         }
     }
