@@ -31,7 +31,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.navigation.NodeAt
-import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.sharing.BookmarkPage
 
 /** The header's own action that opens a kept link on its own page (`AppKinds.headerOrder`'s `open-own-page`). */
@@ -67,8 +66,8 @@ internal fun bookmarkHeader(node: NodeAt, model: AppModel): HeaderContribution {
  * read says so; its delete is the header's.
  */
 @Composable
-internal fun BookmarkScreen(ref: ObjectRef, model: AppModel) {
-    val page = remember(ref.at) { model.bookmarkPage(ref.at) }
+internal fun BookmarkScreen(node: NodeAt, model: AppModel) {
+    val page = remember(node) { model.bookmarkPage(node) }
     if (page == null) {
         CircularProgressIndicator(Modifier.padding(16.dp))
         return
