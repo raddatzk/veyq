@@ -138,12 +138,21 @@ internal sealed class MemoryPage : IDisposable
     /// <summary>Told each state with the page's id (New's chapter, the header's own upload).</summary>
     public Action<GalleryShown, long>? Changed { get; set; }
 
+    /// <summary>Where a chapter's row opens it when not in the shell (a received link's guest opens it inside the link).</summary>
+    public Action<NodeAt>? ChapterOpens { get; set; }
+
+    /// <summary>The gallery a received link's guest page handed in, opened by the core (null: Gallery.Open opens it).</summary>
+    private readonly long? _opened;
+
     /// <summary>Opens Memory or chapter <paramref name="node"/>: what its actions do said through <paramref name="say"/>,
     /// the trash's Undo in <paramref name="undoBar"/>, a save of an original followed by <paramref name="saving"/>.</summary>
-    public MemoryPage(Window window, NodeAt node, Action<bool, string> say, InfoBar undoBar, Action<long> saving)
+    /// <remarks>With <paramref name="opened"/>, over the gallery the core already opened (a received link's guest page,
+    /// ReceivedPage.gallery): the member's page, the core's rights a guest's.</remarks>
+    public MemoryPage(Window window, NodeAt node, Action<bool, string> say, InfoBar undoBar, Action<long> saving, long? opened = null)
     {
         _window = window;
         Node = node;
+        _opened = opened;
         _say = say;
         _undoBar = undoBar;
         _saving = saving;
@@ -179,7 +188,9 @@ internal sealed class MemoryPage : IDisposable
         _chapterList.ItemClick += (_, e) =>
         {
             var row = e.ClickedItem as ListViewItem ?? (e.ClickedItem as FrameworkElement)?.Parent as ListViewItem;
-            if (row?.Tag is NodeAt chapter) OpenNode(chapter);
+            if (row?.Tag is not NodeAt chapter) return;
+            if (ChapterOpens is { } opens) opens(chapter);
+            else OpenNode(chapter);
         };
         _chapters.Children.Add(_chapterList);
         _column.Children.Add(_chapters);
@@ -215,7 +226,7 @@ internal sealed class MemoryPage : IDisposable
     {
         try
         {
-            var (answer, _) = await Core.CallAsync(new Call.GalleryOpen { node = Node });
+            var (answer, _) = _opened is { } opened ? ((Answer)new Answer.GalleryOpened { gallery = opened }, (byte[]?)null) : await Core.CallAsync(new Call.GalleryOpen { node = Node });
             if (answer is not Answer.GalleryOpened { gallery: var gallery })
             {
                 Log.Write($"the gallery did not open in the core ({answer.GetType().Name})");

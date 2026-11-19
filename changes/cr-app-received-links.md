@@ -287,11 +287,42 @@ question 2*).
   Android, Apple and Linux; `ShellModel.afterRename`/`afterTrash` follow `Shell.bookmark` (Linux's `Shell.Back`
   workaround dropped). Measured: `GuestDoorsTest`, `PotModelTest`, `ShellModelTest`, `ReceivedBridgeTest` (each new case
   bitten red); live `GuestRemainderLiveTest` as a throwaway.
-- [ ] **10 Windows** — the same; the credential locker. A guest's file Replace is `File.ChooseReplace` then `Received.Replace(received,
+- [x] **10 Windows** — the same; the credential locker. A guest's file Replace is `File.ChooseReplace` then `Received.Replace(received,
   path)` (signed in or out, never `Upload.Replace`); a guest Pot's places add Settings where `PotView.settingsOffered`
   (the Settings hide the currency and categories where `PotSettingsShown.metaShown` is false); a kept link's page is
   left by the core after its trash (no `Shell.Back` of the app's own) (#1035). · Done when: `python3 windows/run.py build` green on the VM;
   § Passes' Windows row (or #983's reason named open).
+  **Built 2026-11-19 (branch `claude/h-windows`):** core's `mingwMain` `sharing/WindowsGuestSessions` (a credential of WinRT's
+  `PasswordVault` — the Credential Locker — through `wincred/veyq_wincred.h`'s C helpers over the C ABI, its internals in
+  `veyq_wincred_vault.h`; resource the hashed name, user `veyq`), handed to `Bridge.live` by `platformGuestSessions` (#1019);
+  the app's `ReceivedView.cs` (*Open a link* under the sign-in and the unlock — first also in the switcher's menu, taken out on the owner's word the same day —, a `ContentDialog`
+  with Paste on the tap only; the screen above every face, its gates, a level's rows with a viewing link's row report, the
+  member's file, Memory and Pot pages over the guest's models, a WRITE_ONLY guest's page, a READ_WRITE guest's New folder
+  and upload, the record's notice as an `InfoBar` and in the naming question (#1018), *Keep*, *Report shared content*,
+  *Not you?*, Back with its question), `ReceivedText.cs` (its rules, `ReceivedTextTest`), `BookmarkPage.cs` (the kept link's
+  page while `Shell.bookmark` names it: in place or on its own, *Open on its own page*, *Report shared content*, the header's
+  report), `BookmarkCreateDialog.cs` (New → Bookmark, #1020). Measured: `run.py test --tests '*WindowsGuestSessionsTest*'`
+  green (bitten: a write that keeps nothing turns two cases red), `run.py build`, `bridge` and `test` green, the words and
+  guidelines guards OK. UIA pass on the VM, one throwaway with member on `tw-win.localhost` (`--tenant tw-win`), links
+  minted by the owner through the bridge (a folder with a file READ, a Memory READ_WRITE with a password and its uploader,
+  a Pot READ_WRITE, a drop box): signed out (over the unlock) — a non-link refused with the core's words; the password
+  gate (a wrong one asked again); the Memory's gallery with the notice "kept for 7 days", Add photos → the naming question
+  with the notice → a photo added through the picker; after an app restart the guest still named; *Not you?* removed its
+  Credential Locker entry; Back asked, Stay, Back, Leave → the unlock again; the uploader's and the drop box's pages (named,
+  the notice, a photo and a file sent, listed); the folder's level, the file's page, Back inside the link, *Report shared
+  content*'s sheet (not sent); the Pot (named on Add entry, an entry saved as the guest). Signed in as the member — the
+  switcher's *Open a link*, *Keep* into the tenant's space (said kept; the level lists it after a refresh, which Keep now
+  asks for), New → Bookmark (a bad link refused, a good one kept), the kept link's page in place (Back only inside the
+  link), *Open on its own page* (Back asked, back to the bookmark), *Report shared content* (the link's screen with its
+  sheet), the header's report (name). `%LOCALAPPDATA%\veyq`, `%TEMP%`, INetCache and Recent (982 files) hold none of the
+  links' keys (b64url, b64, hex), share ids or the password; the Credential Locker lists `veyq-guest:<hash>` / `veyq` only.
+  **#1035's Windows part (same day, after the core's):** a READ_WRITE guest's file Replace (`File.ChooseReplace`, then
+  `Received.Replace`) — seen signed out, revision 2; a guest Pot's own places, Settings where `settingsOffered`, its
+  currency and categories hidden where `metaShown` is false — seen as a named guest (its people renamed and added only); a
+  bookmark deleted from its header leaves its page by the core (Undo offered); an empty Favorites or Recent not drawn
+  (owner). A second no-key scan (1137 files) found none. **Open:** a guest file's Download on Windows; terms and a note (not
+  on the links); another instance; a row's report by its context menu (not driven: UIA has no context-menu step); the
+  bookmark's header report offers "It and everything in it" beside the name (#1036).
 - [ ] **11 the passes** — § Passes, each as a throwaway, erased after; results into ADR 0150's Consequences.
 - [ ] **12 harvest** — the Use pages (EN+DE): `keep-a-link.mdx` (a bookmark in the apps) and `what-guests-see.mdx`
   (a link opened in the app); `native-apps.md` § Built; #435's row narrowed to cr-open-in-the-app or deleted when both

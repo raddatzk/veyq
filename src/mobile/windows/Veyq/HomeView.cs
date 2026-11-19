@@ -51,6 +51,17 @@ internal static class HomeView
 
     public static FontIcon Glyph(string glyph) => new() { Glyph = glyph, FontSize = 16 };
 
+    /// <summary>A kept link's row (ADR 0150 decision 6, #1032: Home.level lists it): no application's object, so its page
+    /// opens over what is on screen (Shell.OpenBookmark), back returning there.</summary>
+    private static ListViewItem BookmarkRow(NodeRef n) =>
+        Row(KindGlyph(n.kind), n.name, $"bookmark:{n.name}", true, () => OpenBookmark(n));
+
+    private static LevelTiles.Item BookmarkTile(NodeRef n) =>
+        new(KindGlyph(n.kind), n.nodeId, n.name, null, $"bookmark:{n.name}", () => OpenBookmark(n));
+
+    private static void OpenBookmark(NodeRef n) =>
+        Act.Send(new Call.ShellOpenBookmark { node = new NodeAt { scopeId = n.scopeId, nodeId = n.nodeId, kind = n.kind, name = n.name } });
+
     /// <summary>A list row: the kind's glyph, the name, a chevron where it enters.</summary>
     private static ListViewItem Row(string glyph, string name, string automationId, bool enters, Action open, Func<FontIcon, UIElement>? prefix = null, string? subtitle = null)
     {
@@ -201,6 +212,7 @@ internal static class HomeView
                 {
                     if (g.folders) items.Add(FolderTile(n, drops));
                     else if (state.lists.objects.FirstOrDefault(o => o.scopeId == n.scopeId && o.nodeId == n.nodeId) is { } o) items.Add(ObjectTile(o));
+                    else if (n.kind == BookmarkPage.Kind) items.Add(BookmarkTile(n));
                 }
                 TileSection(content, heading, items, index++);
                 continue;
@@ -215,6 +227,7 @@ internal static class HomeView
                     rows.Add(row);
                 }
                 else if (state.lists.objects.FirstOrDefault(o => o.scopeId == n.scopeId && o.nodeId == n.nodeId) is { } o) rows.Add(ObjectRow(o));
+                else if (n.kind == BookmarkPage.Kind) rows.Add(BookmarkRow(n));
             }
             Section(content, heading, rows);
         }

@@ -201,7 +201,8 @@ internal sealed class PotSettingsView : IDisposable
                 }
             }
             _currencyShown = s.currency;
-            _currency.Visibility = Visibility.Visible;
+            // a link's guest sees its people alone (PotView.metaShown, #1035): no base currency, no categories
+            _currency.Visibility = s.metaShown ? Visibility.Visible : Visibility.Collapsed;
 
             // the own categories
             _categories.Children.Clear();

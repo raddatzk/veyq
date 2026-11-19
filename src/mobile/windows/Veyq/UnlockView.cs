@@ -3,6 +3,7 @@
 // with one (a password-trusted account), one accent button, and the way to another account as a link under it. For a
 // remembered account the button asks the core again, which raises Windows Hello's prompt itself ("" crosses, nothing
 // typed); without Hello (LOGIN) it says the resume failed and tries again (TrustWords.Unlock). Linux's sign_in::Unlock.
+// Under it *Open a link* (ADR 0150 decision 4), as under the sign-in: a received link needs no session (ReceivedView).
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -26,7 +27,7 @@ internal sealed class UnlockView
 
     public UIElement Page { get; }
 
-    public UnlockView()
+    public UnlockView(Window window)
     {
         var heading = new TextBlock { Text = Words.UnlockTitle(), Style = (Style)Application.Current.Resources["TitleTextBlockStyle"], HorizontalAlignment = HorizontalAlignment.Center };
         AutomationProperties.SetAutomationId(heading, "unlock-title");
@@ -64,13 +65,16 @@ internal sealed class UnlockView
         _other.Click += (_, _) => Act.Send(new Call.SessionOtherAccount());
         _working = new ProgressRing { IsActive = false, Visibility = Visibility.Collapsed, HorizontalAlignment = HorizontalAlignment.Center };
         AutomationProperties.SetAutomationId(_working, "unlock-working");
+        var openLink = new HyperlinkButton { Content = Words.LinkOpen(), HorizontalAlignment = HorizontalAlignment.Center };
+        AutomationProperties.SetAutomationId(openLink, "open-link");
+        openLink.Click += (_, _) => ReceivedView.OpenLink(window);
 
         var column = new StackPanel { Spacing = 16, MaxWidth = 420, Padding = new Thickness(24), VerticalAlignment = VerticalAlignment.Center };
         var account = new StackPanel { Spacing = 4 };
         account.Children.Add(_picture);
         account.Children.Add(_email);
         account.Children.Add(_server);
-        foreach (var child in new UIElement[] { heading, account, _hint, _password, _error, _submit, _other, _working }) column.Children.Add(child);
+        foreach (var child in new UIElement[] { heading, account, _hint, _password, _error, _submit, _other, openLink, _working }) column.Children.Add(child);
         // the sign-in's layout: the capped column centres in a stretching Grid (a trap of src/mobile/CLAUDE.md)
         var stretch = new Grid();
         stretch.Children.Add(column);

@@ -307,7 +307,11 @@ A Gradle build of its own, run through its own wrapper.
   music bar along the shell's bottom), `MusicHost` (the two decks, `MediaPlayer`s over `ReaderStream`, ramps in
   `MusicRamp`'s steps; one SMTC for the window through `GetForWindow`; `MusicTest`), `RowCovers` (every list row's cover through `Shell.RowCover`), `Uploads` (New's Upload files and Upload folder through `FileOpenPicker`
   and `FolderPicker`, a file's Replace, the queue's `AppBarButton` with its `Flyout`, what it says in an `InfoBar`),
-  `DropBoxPage` (a drop box's page), `ListScrolls` (where each list was
+  `DropBoxPage` (a drop box's page), `ReceivedView` (a received link opened as its guest, ADR 0150: *Open a link* under the
+  sign-in and the unlock (not in the account menu, owner 2026-11-19); the screen above every face with its gates, the member's pages over the
+  guest's models, a WRITE_ONLY guest's page, the guest-write record's `InfoBar`, Keep, the reports, Back with its question;
+  its rules without a widget in `ReceivedText`, `ReceivedTextTest`), `BookmarkPage` (a kept link's page, in place or on its
+  own, while the shell's state names it) and `BookmarkCreateDialog` (New → Bookmark), `ListScrolls` (where each list was
   scrolled to; `ListScrollsTest`), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with
   `ReceiptViewerDialog` and `PdfPages` (a receipt's PDF through `Windows.Data.Pdf`, from memory; `PdfPagesTest`), `TypedText`
   (when a text box is set from the state; `TypedTextTest`), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
@@ -852,7 +856,8 @@ decision 3): `K_share` lives only in the open link's model (`sharing/ShareGates`
 offline store, no recent use, no log, no bridge update. A write link's guest session (identity id, contributor token, an
 uploader's `K_up`; the web's `localStorage` entry) goes through core's `sharing/GuestSessions` port into the platform's
 credential store — the Keychain, the Keystore-wrapped store, the Secret Service (Linux's `sharing/LinuxGuestSessions`: an
-item of the device keys' schema whose `alias` is `guest/<name>`, `secret-tool search alias guest/…`), the credential locker — under
+item of the device keys' schema whose `alias` is `guest/<name>`, `secret-tool search alias guest/…`), the Credential Locker
+(Windows' `sharing/WindowsGuestSessions`: a WinRT `PasswordVault` credential whose resource is the name, user `veyq`) — under
 `GuestNames.of(origin, shareId)` (a truncated SHA-256, never the id); the terms' and the note's acceptances, no secret,
 are `DeviceStore` entries under the same kind of name. *Not you?* removes the session.
 
