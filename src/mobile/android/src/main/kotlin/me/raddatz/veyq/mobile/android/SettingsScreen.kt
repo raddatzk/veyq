@@ -298,9 +298,14 @@ fun SettingsScreen(
 
 /**
  * The list key a section starts at, by its id (core's `SettingsSection.id`, ADR 0146 decision 9): its header's; the
- * appearance section is its one row.
+ * appearance section is its one row, the address's change its row in the account section.
  */
-private fun sectionKey(id: String): String = if (id == "appearance") "appearance" else "header-$id"
+private fun sectionKey(id: String): String = when (id) {
+    "appearance" -> "appearance"
+    // the address's change is a row of the account section, beside the address (ADR 0148 decision 10)
+    "email" -> "email-change"
+    else -> "header-$id"
+}
 
 /** A section's title, as Android's Settings sets one: small, in the accent, above its rows. */
 private fun LazyListScope.header(key: String, title: @Composable () -> String, sub: (@Composable () -> String)? = null) {
