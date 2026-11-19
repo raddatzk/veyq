@@ -111,7 +111,7 @@ internal sealed class ProfilePage : FlowPage
     private void Draw(ProfileModelState? s)
     {
         _state = s;
-        Body.Children.Clear();
+        ClearBody();
         if (s is not { loaded: true })
         {
             var loading = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
@@ -148,10 +148,10 @@ internal sealed class ProfilePage : FlowPage
 
         // the picture
         Body.Children.Add(Heading(Words.ProfilePictureLabel()));
-        var pictureRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16 };
+        var pictureRow = Held(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 16 });
         _picture.DisplayName = s.firstName.Length > 0 ? $"{s.firstName} {s.lastName}".Trim() : s.username;
         pictureRow.Children.Add(_picture);
-        var pictureButtons = new StackPanel { Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        var pictureButtons = Held(new StackPanel { Spacing = 8, VerticalAlignment = VerticalAlignment.Center });
         _choose.Content = hasPicture ? Words.ProfilePictureChange() : Words.ProfilePictureChoose();
         _choose.IsEnabled = s.hasKey && !s.working;
         pictureButtons.Children.Add(_choose);
@@ -190,7 +190,7 @@ internal sealed class ProfilePage : FlowPage
         Body.Children.Add(_consent);
         Body.Children.Add(Caption(Words.ProfileConsentGroupAddHint()));
 
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        var row = Held(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 });
         _save.IsEnabled = !s.working && s.username.Trim().Length > 0;
         row.Children.Add(_save);
         if (s.working) row.Children.Add(Ring());
