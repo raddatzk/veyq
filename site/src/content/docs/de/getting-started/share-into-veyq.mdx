@@ -1,0 +1,63 @@
+---
+title: "In veyq teilen"
+description: In der veyq-App unter Android, auf dem iPhone oder dem iPad kommen Fotos, Videos und Belege, die eine andere App teilt, in eine Erinnerung, ein Kapitel oder eine Kasse, die du wählst; Dateien, die du auf die App ziehst, ebenso.
+sources:
+  - docs/decisions/0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md
+  - docs/crosscutting/native-apps.md
+  - src/mobile/words/words.json
+---
+
+Die veyq-[App](/de/getting-started/install-the-app/) unter **Android**, auf dem **iPhone** und dem **iPad** steht im
+Teilen-Menü deines Geräts. Fotos, Videos und PDFs, die du aus einer anderen App teilst, etwa aus deiner Galerie oder
+deinen Dateien, kommen an einen Ort in veyq, den du wählst. Die App verschließt sie, bevor sie sie verschickt, wie
+alles, was du hochlädst.
+
+## Aus einer anderen App teilen
+
+1. Wähle in der anderen App die Dateien aus, dann **Teilen** und **veyq**.
+2. veyq öffnet sich auf **Home** deines Bereichs und sagt **Wähle, wohin diese Dateien gehören**. Was die Dateien
+   nicht nehmen kann, ist ausgegraut, ebenso ein Ort, an dem du nichts hinzufügen darfst.
+3. Wähle den Ort:
+   - **Eine Erinnerung oder ein Kapitel** nimmt Fotos und Videos. Öffne die Erinnerung oder das Kapitel darin und
+     wähle **Hier hinzufügen**. Die Dateien werden hineingeladen, als hättest du sie dort
+     [hinzugefügt](/de/memories/add-photos-and-videos/).
+   - **Eine Kasse** mit Leuten darin nimmt Bilder und PDFs bis je 10 MB. Wählst du sie, öffnet sich eine
+     [neue Ausgabe](/de/expenses/record-an-expense/) mit den Dateien als Belegen; speicherst du die Ausgabe, sind sie
+     gespeichert.
+
+Gespeichert wird nichts, bevor du **Hier hinzufügen** wählst oder die Ausgabe speicherst. Verlässt du die Erinnerung
+oder schließt du die Ausgabe, ohne zu speichern, warten die Dateien wieder: Du kannst einen anderen Ort wählen.
+**Abbrechen** beendet das Teilen. Was ein Ort nicht nimmt, wird ausgelassen, und veyq sagt, wie viele Dateien das
+waren. Eine Erinnerung oder ein Kapitel kannst du nur wählen, solange die App deinen Server erreicht.
+
+Ein Foto, das die andere App als HEIC anbietet, wird als JPEG verschickt, damit jeder Browser es zeigen kann.
+
+### Unter Android
+
+Die App liest die geteilten Dateien dort, wo sie liegen, und legt keine Kopie an, außer dem JPEG eines HEIC-Fotos, das
+sie entfernt, sobald es verschickt ist. Nach **Hier hinzufügen** kannst du die App verlassen: Der Upload läuft weiter,
+und eine Mitteilung sagt, wie viele Dateien noch unterwegs sind.
+
+### Auf dem iPhone oder iPad
+
+Das Teilen-Fenster von veyq öffnet sich in der anderen App. Es funktioniert mit einem Konto, das auf diesem Gerät
+angemeldet bleibt, nach Face ID, Touch ID oder deinem Code, oder mit einem, das nur nach deinem Passwort fragt. Sonst
+sagt es *Öffne zuerst veyq und melde dich an. Dann kannst du dorthin teilen.*
+
+- **In eine Kasse** speicherst du die Ausgabe gleich dort.
+- **In eine Erinnerung oder ein Kapitel** schließt **Hier hinzufügen** das Teilen-Fenster sofort. Der Upload beginnt,
+  wenn du veyq das nächste Mal öffnest. Bis dahin warten die Dateien auf deinem Gerät im eigenen Speicher von veyq,
+  noch nicht verschlossen: Es sind die Dateien, die die andere App dort schon hat. Jede wird entfernt, sobald sie
+  hochgeladen ist. **Abbrechen** entfernt sie sofort, und wenn du dich von veyq abmeldest, wird entfernt, was noch
+  wartet.
+
+## Dateien auf die App ziehen
+
+Unter Android, auf dem iPad und auf dem Mac kannst du Fotos, Videos und PDFs auch aus einer anderen App auf veyq
+ziehen:
+
+- **Auf die Galerie einer Erinnerung oder eines Kapitels:** Die Fotos und Videos darunter werden sofort hineingeladen.
+- **Auf eine geöffnete Kasse** mit Leuten darin: Eine neue Ausgabe öffnet sich mit ihnen als Belegen.
+- **Irgendwo sonst:** veyq fragt, wohin sie gehören, wie beim Teilen.
+
+Unter Linux und Windows steht die App nicht im Teilen-Menü; zieh Fotos und Videos stattdessen auf eine Erinnerung.
