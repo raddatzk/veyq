@@ -777,6 +777,21 @@ a.lightbox-icon-button,
   background: var(--app-danger-soft);
 }
 
+/* The item mark (inbox #986): the tile's heart — filled in the favourite colour where the caller marked the item, the
+   count beside it wherever anyone did (the standing evidence that a mark is seen by the others, as on the tile). */
+.veyq-icon-button.lightbox-icon-button.lightbox-mark-button.has-count {
+  display: inline-flex;
+  gap: 0.3rem;
+  width: auto;
+  min-width: 44px;
+  padding: 0 0.6rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lightbox-mark-button.is-marked {
+  color: var(--app-favorite);
+}
+
 .veyq-icon-button.lightbox-delete-button:disabled {
   cursor: default;
   opacity: 0.5;

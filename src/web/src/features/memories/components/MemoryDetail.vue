@@ -86,6 +86,7 @@ import { useViewMode } from '../../../shared/state/useViewMode'
 import type { NodeMetaUpdate } from '../useMetaWriteFeedback'
 import type { MemoryRights } from '../rights'
 import { provideMemoryView, sourceRights, type MemorySource } from '../source'
+import type { LightboxMark } from '../lightboxMark'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import MemoryBanner from '../banner/MemoryBanner.vue'
@@ -256,6 +257,18 @@ async function onToggleMark(mediaId: string) {
     toast.error(t(e instanceof ItemMarksTooMany ? 'media.marks.tooMany' : 'media.marks.saveFailed'))
   }
 }
+
+/** The tile's heart in the lightbox's toolbar (uc.memory.gallery step 7, inbox #986): offered where the tile offers it,
+ *  its count shown where the tile's is. */
+const lightboxMark = computed<LightboxMark | undefined>(() =>
+  can.value.mark && props.scopeKey
+    ? {
+        mine: (item) => isMarkedByMe(item.mediaId),
+        count: (item) => (props.personalScope ? 0 : markCount(item.mediaId)),
+        toggle: (item) => { void onToggleMark(item.mediaId) },
+      }
+    : undefined,
+)
 
 watch(
   [() => props.node.id, () => props.scopeKey, () => can.value.mark] as const, // one by one (see `useMediaGalleryLive`'s)
@@ -1213,6 +1226,7 @@ watch(
       :blob-meta-resolver="blobMetaResolver"
       :exif-loader="exifLoader"
       :can-report="canReport"
+      :mark="lightboxMark"
       @close="onLightboxClose"
       @updated="onCapturedAtUpdated"
       @delete="onLightboxDelete"
