@@ -123,7 +123,12 @@ struct Inner {
     purge_asked: Cell<bool>,
     lightbox: RefCell<Option<Lightbox>>,
     ticking: RefCell<Option<gtk::TickCallbackId>>,
+    /// Where a chapter's row opens it: the shell's object ([open_node]), or a received link's own page ([MemoryPage::on_chapter]).
+    chapter_opens: RefCell<Option<ChapterOpens>>,
 }
+
+/// Where a chapter's row opens it, when not the shell's ([MemoryPage::on_chapter]).
+type ChapterOpens = Rc<dyn Fn(&NodeAt)>;
 
 /// The decoded tiles by their blob id, the least recently shown first out; and what waits for a tile being read.
 #[derive(Default)]
@@ -157,6 +162,16 @@ impl Tiles {
 impl MemoryPage {
     /// Opens Memory or chapter [node] on a page over [window]: its toasts in [toasts], its lightbox pushed onto [nav].
     pub fn open(node: &NodeAt, window: &gtk::Window, toasts: &adw::ToastOverlay, nav: &adw::NavigationView) -> Self {
+        Self::over(node, None, window, toasts, nav)
+    }
+
+    /// Memory or chapter [node]'s page over the gallery the core already opened as [gallery] (a received link's guest
+    /// page, `ReceivedPage.gallery`): the member's page, the core's rights a guest's.
+    pub fn opened(node: &NodeAt, gallery: i64, window: &gtk::Window, toasts: &adw::ToastOverlay, nav: &adw::NavigationView) -> Self {
+        Self::over(node, Some(gallery), window, toasts, nav)
+    }
+
+    fn over(node: &NodeAt, opened: Option<i64>, window: &gtk::Window, toasts: &adw::ToastOverlay, nav: &adw::NavigationView) -> Self {
         let column = gtk::Box::new(gtk::Orientation::Vertical, 18);
         column.set_margin_top(MARGIN);
         column.set_margin_bottom(MARGIN * 2);
@@ -250,15 +265,22 @@ impl MemoryPage {
             purge_asked: Cell::new(false),
             lightbox: RefCell::new(None),
             ticking: RefCell::new(None),
+            chapter_opens: RefCell::new(None),
         });
         inner.draw();
         Inner::connect(&inner);
         let weak = Rc::downgrade(&inner);
         let open = node.clone();
         glib::spawn_future_local(async move {
-            let Ok((Answer::GalleryOpened { gallery }, _)) = bridge::call(&Call::GalleryOpen { node: open }).await else {
-                eprintln!("veyq: the gallery did not open in the core");
-                return;
+            let gallery = match opened {
+                Some(gallery) => gallery,
+                None => {
+                    let Ok((Answer::GalleryOpened { gallery }, _)) = bridge::call(&Call::GalleryOpen { node: open }).await else {
+                        eprintln!("veyq: the gallery did not open in the core");
+                        return;
+                    };
+                    gallery
+                }
             };
             let Some(inner) = weak.upgrade() else {
                 bridge::send(Call::GalleryClose { gallery });
@@ -304,6 +326,12 @@ impl MemoryPage {
         {
             f(s, id);
         }
+    }
+
+    /// A chapter's row opens it through [f] instead of the shell (a received link's guest opens it inside the link); set
+    /// before the gallery's first state draws its chapters.
+    pub fn on_chapter(&self, f: impl Fn(&NodeAt) + 'static) {
+        *self.inner.chapter_opens.borrow_mut() = Some(Rc::new(f));
     }
 
     /// "Add photos": GTK's open dialog for photos and videos (several), their paths to the core (`Memory.Upload`).
@@ -879,7 +907,11 @@ impl Inner {
             row.add_prefix(&prefix);
             row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
             let open = chapter.clone();
-            row.connect_activated(move |_| open_node(&open));
+            let opens = self.chapter_opens.borrow().clone();
+            row.connect_activated(move |_| match &opens {
+                Some(f) => f(&open),
+                None => open_node(&open),
+            });
             self.chapters.add(&row);
             self.chapter_rows.borrow_mut().push(row);
             let (node_id, cover, prefix) = (chapter.node_id.clone(), cover.downgrade(), prefix.downgrade());

@@ -6231,5 +6231,26 @@
   "bookmark_embed_region": {
     "en": "Shared content from {1}",
     "de": "Geteilte Inhalte von {1}"
+  },
+  "share_guest_record_kept": {
+    "note": "The guest-write record's notice (ADR 0093 § 10, the web's share.guest.recordKept), shown before a link's guest writes; {1} the days the instance keeps it.",
+    "en": {
+      "one": "When you add something here, your IP address, your source port, the time and the website it came from are kept for one day, longer only if a report or an authority’s order concerns what you added.",
+      "other": "When you add something here, your IP address, your source port, the time and the website it came from are kept for {1:int} days, longer only if a report or an authority’s order concerns what you added."
+    },
+    "de": {
+      "one": "Wenn du hier etwas hinzufügst, werden deine IP-Adresse, dein Quellport, die Uhrzeit und die Website, von der es kam, einen Tag aufbewahrt, länger nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was du hinzugefügt hast.",
+      "other": "Wenn du hier etwas hinzufügst, werden deine IP-Adresse, dein Quellport, die Uhrzeit und die Website, von der es kam, {1:int} Tage aufbewahrt, länger nur, wenn eine Meldung oder eine behördliche Anordnung betrifft, was du hinzugefügt hast."
+    }
+  },
+  "share_guest_record_objection": {
+    "note": "The guest-write record's notice, its second sentence (GDPR Art. 21(4)); the web's share.guest.recordObjection.",
+    "en": "You can object to this at any time on grounds relating to your particular situation; if you do not want it, you can still look without adding anything.",
+    "de": "Du kannst dem jederzeit aus Gründen widersprechen, die sich aus deiner besonderen Situation ergeben; wenn du das nicht möchtest, kannst du weiterhin ansehen, ohne etwas hinzuzufügen."
+  },
+  "share_guest_record_more": {
+    "note": "The guest-write record's notice: opens the link's instance's privacy notice at its record passage; the web's share.guest.recordMore.",
+    "en": "Who keeps it, why, and your rights",
+    "de": "Wer es aufbewahrt, warum, und deine Rechte"
   }
 }
