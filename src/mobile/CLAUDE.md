@@ -849,7 +849,8 @@ decision 3): `K_share` lives only in the open link's model (`sharing/ShareGates`
 offline store, no recent use, no log, no bridge update. A write link's guest session (identity id, contributor token, an
 uploader's `K_up`; the web's `localStorage` entry) goes through core's `sharing/GuestSessions` port into the platform's
 credential store — the Keychain, the Keystore-wrapped store, the Secret Service (Linux's `sharing/LinuxGuestSessions`: an
-item of the device keys' schema whose `alias` is `guest/<name>`, `secret-tool search alias guest/…`), the credential locker — under
+item of the device keys' schema whose `alias` is `guest/<name>`, `secret-tool search alias guest/…`), the Credential Locker
+(Windows' `sharing/WindowsGuestSessions`: a WinRT `PasswordVault` credential whose resource is the name, user `veyq`) — under
 `GuestNames.of(origin, shareId)` (a truncated SHA-256, never the id); the terms' and the note's acceptances, no secret,
 are `DeviceStore` entries under the same kind of name. *Not you?* removes the session.
 

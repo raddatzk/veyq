@@ -51,7 +51,7 @@ internal expect fun platformDeviceKeys(config: Config, store: DeviceStore): Devi
 
 /**
  * Where a received link's guest sessions are kept (ADR 0150 decision 3), beside the device keys: the Secret Service
- * (`linuxMain`); in memory on Windows until its credential locker is wired (cr-app-received-links phase 10, inbox #1019).
+ * (`linuxMain`), the Credential Locker (`mingwMain`).
  */
 internal expect fun platformGuestSessions(): me.raddatz.veyq.mobile.sharing.GuestSessions
 
