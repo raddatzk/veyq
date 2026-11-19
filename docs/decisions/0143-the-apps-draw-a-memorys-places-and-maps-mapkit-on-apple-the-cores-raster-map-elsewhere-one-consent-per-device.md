@@ -268,7 +268,7 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
     same, back unasked once online; the app's files afterwards (`run-as me.raddatz.veyq find . -type f`) holding no tile,
     no geocoder answer and no viewport.
   - **Linux** — the container, under Broadway, driven from headless Chrome. A build has no request log, so a line in
-    `MapHttp.get` for the pass only (never committed) printed each request as Ktor sent it: **148 requests, all `200` —
+    `MapHttp.get` (now `session/OutsideHttp`, ADR 0151) for the pass only (never committed) printed each request as Ktor sent it: **148 requests, all `200` —
     140 tiles and 8 geocodes, each with `User-Agent: veyq/1 (+https://veyq.app; http://veyq.localhost:8080)`;
     `grep -ciE 'referer|cookie|authoriz|bearer'` over them 0; 0 before the consent.** Clicked: the consent in context;
     a place set by two bursts of arrow-key pans, which sent **two geocodes, each at its burst's final position**, none

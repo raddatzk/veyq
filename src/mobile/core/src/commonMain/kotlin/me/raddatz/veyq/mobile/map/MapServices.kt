@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.map
 
+import me.raddatz.veyq.mobile.session.OutsideHttp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -56,7 +57,7 @@ sealed interface MapState {
 class MapServices(
     private val offer: MapOffer,
     private val consent: MapConsent,
-    http: MapHttp,
+    http: OutsideHttp,
     val recipient: TileRecipient = TileRecipient.TILE_HOST,
     private val reach: StateFlow<Reach> = MutableStateFlow(Reach.Online),
     now: () -> Long = ::wallClockMs,
@@ -176,7 +177,7 @@ class MapServices(
         fun of(tenant: TenantSession, recipient: TileRecipient = TileRecipient.TILE_HOST): MapServices = MapServices(
             MapOffer(tenant.serviceUrl(MAP), tenant.serviceAttribution(MAP), tenant.serviceUrl(PLACES), tenant.servicesRead),
             MapConsent.of(tenant.account.deviceStore),
-            MapHttp(tenant.account.outside, tenant.origin),
+            OutsideHttp(tenant.account.outside, tenant.origin),
             recipient,
             tenant.account.reach,
             shelf = TileShelf.of({ tenant.account.offline }, tenant.tenant.tenantId),

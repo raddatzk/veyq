@@ -17,7 +17,7 @@ import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.map.LatLng
 import me.raddatz.veyq.mobile.map.MapConsent
-import me.raddatz.veyq.mobile.map.MapHttp
+import me.raddatz.veyq.mobile.session.OutsideHttp
 import me.raddatz.veyq.mobile.map.MapOffer
 import me.raddatz.veyq.mobile.map.MapServices
 import me.raddatz.veyq.mobile.memories.GalleryModel
@@ -108,7 +108,7 @@ class MapDispatchTest {
         }) { expectSuccess = false }
         val store = MemoryDeviceStore()
 
-        fun services() = MapServices(OFFER, MapConsent.of(store), MapHttp(client, "https://a.example"))
+        fun services() = MapServices(OFFER, MapConsent.of(store), OutsideHttp(client, "https://a.example"))
     }
 
     private val memory = NodeAt("s", "m", "MEMORY", "Berlin 2026")

@@ -157,7 +157,7 @@ controls reuse the sign-in's words. No owner question: the words are the web's.
   (`PASSWORD_CHANGE_ERROR_CREDENTIAL`), green after; `FlowKeyIntakeTest` the core's. Bite (a) as written cannot bite —
   reading `SecretKeyText` first still falls through to the token, which no bare-key reader accepts — so it was run as
   `typed` reading `SecretKeyText` **only** (the R4 defect): red; (b) red (and the kit-file case with it).
-- [ ] **3 core — the breach check** (D5, D6) — `Sha1`, `OutsideHttp` (`MapHttp`'s tests unchanged: the refactor's
+- [x] **3 core — the breach check** (D5, D6) — `Sha1`, `OutsideHttp` (`MapHttp`'s tests unchanged: the refactor's
   proof), `BreachCheck`, wired into `PasswordChange` and `KeyRotation`. Tests: the web test's cases one for one (a mock
   engine: nothing while typing, one padded request on leaving the field, no re-query, one in flight, a re-query at
   submit after an edit, nothing under the floor, a hit blocks until accepted, an edit clears the acceptance, unavailable
@@ -165,6 +165,12 @@ controls reuse the sign-in's words. No owner question: the words are the web's.
   engine records every request of a flow and the test asserts no request holds the password, its full SHA-1 or its
   suffix, and none carries `Authorization` or goes to the veyq server — bitten by sending the full hash, and by sending
   through the bearer `http` client; (c) `proceed()` passing a hit → red; (d) unavailable blocking → red.
+  **Built 2026-11-19 (branch `claude/acct-rest`):** `account/Sha1` (FIPS 180-4's examples, the padding edges, the web's
+  oracle), `session/OutsideHttp` (`MapHttp` renamed and moved, the map's tests unchanged but for the name),
+  `account/BreachCheck` (`BreachState`/`BreachKind`; the password it speaks about `@Transient`, never printed),
+  `BreachCheck.of(account)` wired into `passwordChange()` and `keyRotation()`; each flow's `check`, `edited`,
+  `useAnyway`. `BreachCheckTest` (the web test's cases), `BreachCanaryTest` (a signed-in account over `PlayedTenant`).
+  Bites (a)–(d) each red, (b) both ways.
 - [ ] **4 bridge** (D3, D7) — the calls, the updates, `ScanKind.FLOW_KIT`; the generated Rust and C# bindings.
   · Done when: `:bridge:jvmTest` green with `SecretFreeSchemaTest` holding the new `typedIn` entries. **Bite:** a
   flow's `Update` serialised with the held key or the new password → the test that scans every update of a flow session

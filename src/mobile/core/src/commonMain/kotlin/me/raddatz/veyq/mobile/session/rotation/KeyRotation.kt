@@ -48,6 +48,8 @@ class KeyRotation(
     private val primitives: Primitives,
     private val email: String,
     private val server: String,
+    /** A new password's breached-password check (ADR 0151 decision 5): the instance's, none in a test that plays none. */
+    val breach: me.raddatz.veyq.mobile.account.BreachCheck = me.raddatz.veyq.mobile.account.BreachCheck.none(),
 ) {
     /** What the model drives: [AccountRotation] over the signed-in account, a played one in the tests. */
     interface Engine {
@@ -162,6 +164,7 @@ class KeyRotation(
     val kit: KitStep? get() = kitStep
 
     suspend fun open() = acting.withLock {
+        if (current.newPassword) runCatching { breach.load() }.onFailure { if (it is CancellationException) throw it }
         val moderator = runCatching { engine.holdsModerationKey() }.getOrElse { if (it is CancellationException) throw it else false }
         _state.value = current.copy(step = if (moderator) Step.ON_THE_WEB else Step.GATE)
     }
@@ -187,6 +190,11 @@ class KeyRotation(
             if (current.newPassword) {
                 if (newPassword != confirm) return@withLock refuse(Msg.PASSWORD_CHANGE_MISMATCH)
                 if (newPassword.length < PasswordChange.MIN_PASSWORD_LENGTH) return@withLock refuse(Msg.PASSWORD_TOO_SHORT)
+                // the web's submit guard: a hit waits for *Use it anyway* (the check's own state says so)
+                if (!breach.proceed(newPassword)) {
+                    _state.value = current.copy(refusal = null)
+                    return@withLock
+                }
             }
             _state.value = current.copy(refusal = null, step = Step.WORKING)
             val refusal = try {
@@ -300,8 +308,20 @@ class KeyRotation(
         intake.clear()
     }
 
+    /** A new password's field was left with [newPassword] in it: the breached-password check runs ([BreachCheck.check]). */
+    suspend fun check(newPassword: String) = breach.check(newPassword)
+
+    /** The new password was edited: the check's verdict, and any acceptance of it, is gone. Sends nothing. */
+    fun edited() = breach.edited()
+
+    /** *Use it anyway* for a breached new password, or taken back. */
+    fun useAnyway(on: Boolean) = breach.useAnyway(on)
+
     /** Drops every secret the model holds. */
-    fun close() = forget()
+    fun close() {
+        forget()
+        breach.close()
+    }
 
     companion object {
         /** [link]'s space named as a status line's ([statuses]' order). */
@@ -348,5 +368,5 @@ fun VeyqAccount.keyRotation(open: me.raddatz.veyq.mobile.session.TenantSession?)
         AccountRotation(this, { open?.spaces().orEmpty() }) { scopeId, nodeId ->
             open?.node(scopeId, nodeId)?.let { me.raddatz.veyq.mobile.navigation.NodeAt(it.scopeId, it.id, it.kind, it.name) }
         },
-        primitives, email, server,
+        primitives, email, server, me.raddatz.veyq.mobile.account.BreachCheck.of(this),
     )

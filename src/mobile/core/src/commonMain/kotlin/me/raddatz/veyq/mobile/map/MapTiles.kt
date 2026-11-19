@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.map
 
+import me.raddatz.veyq.mobile.session.OutsideAnswer
+import me.raddatz.veyq.mobile.session.OutsideHttp
 import io.ktor.http.fromHttpToGmtDate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -17,7 +19,7 @@ import kotlin.coroutines.CoroutineContext
 /**
  * The raster tiles of one tenant's map service (ADR 0143 D2, D4), fetched for Android, Linux and Windows (Apple's MapKit
  * fetches its own): only while [gate] holds (the services are offered and this device's consent holds for the served
- * hosts, checked when a request is about to leave), only from the served [template] (`https` only, [MapHttp]), only tiles
+ * hosts, checked when a request is about to leave), only from the served [template] (`https` only, [OutsideHttp]), only tiles
  * a shown map has in view ([TileView]; no ring ahead — the tile policy forbids pre-emptive fetching), at most [parallel]
  * at once. A tile's bytes go to the platform as they came (PNG/JPEG); the core decodes nothing.
  *
@@ -31,7 +33,7 @@ import kotlin.coroutines.CoroutineContext
  * behind the [gate] (consent, the hosts served now, online), so a kept tile is never shown offline.
  */
 class MapTiles internal constructor(
-    private val http: MapHttp,
+    private val http: OutsideHttp,
     private val template: String,
     private val gate: () -> Boolean,
     private val now: () -> Long,
@@ -136,7 +138,7 @@ class MapTiles internal constructor(
     }
 
     /** [kept] in memory and on the [shelf] — neither for a `no-store` answer, nor once [drop] or [close] ran since. */
-    private suspend fun keep(key: TileKey, id: String, kept: Kept, gen: Long, a: MapAnswer) {
+    private suspend fun keep(key: TileKey, id: String, kept: Kept, gen: Long, a: OutsideAnswer) {
         if (noStore(a)) return
         if (!remember(key, kept, gen)) return
         shelf?.put(id, ShelvedTile(kept.bytes, kept.etag, kept.lastModified, kept.expires))
@@ -182,16 +184,16 @@ class MapTiles internal constructor(
         /** At most this many tile requests at once, as a browser's handful per host. */
         const val PARALLEL = 4
 
-        private fun directives(a: MapAnswer): List<String> =
+        private fun directives(a: OutsideAnswer): List<String> =
             a.header("Cache-Control")?.split(',')?.map { it.trim().lowercase() } ?: emptyList()
 
-        private fun noStore(a: MapAnswer) = "no-store" in directives(a)
+        private fun noStore(a: OutsideAnswer) = "no-store" in directives(a)
 
         /**
          * How long an answer is fresh, from its headers (RFC 9111): `no-cache` none, `max-age`, else `Expires` against
          * `Date`, else a tenth of the time since `Last-Modified`, else none — then it is revalidated whenever asked again.
          */
-        internal fun lifetimeMs(a: MapAnswer): Long {
+        internal fun lifetimeMs(a: OutsideAnswer): Long {
             val d = directives(a)
             if ("no-cache" in d) return 0
             d.firstOrNull { it.startsWith("max-age=") }?.substringAfter('=')?.trim('"')?.toLongOrNull()?.let { return maxOf(0, it) * 1000 }

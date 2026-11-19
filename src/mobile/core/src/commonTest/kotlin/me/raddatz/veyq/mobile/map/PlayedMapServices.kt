@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.map
 
+import me.raddatz.veyq.mobile.session.OutsideHttp
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -57,7 +58,7 @@ class PlayedMapServices(private val test: TestScope) {
         }
     }) { expectSuccess = false }
 
-    fun http(origin: String = ORIGIN) = MapHttp(client, origin)
+    fun http(origin: String = ORIGIN) = OutsideHttp(client, origin)
 
     val store = MemoryDeviceStore()
     val consent: MapConsent get() = MapConsent.of(store)
