@@ -188,10 +188,21 @@ the branch the refine read (each claim's command is in the refine's record of it
   `MarksLiveTest` (two marks counted, each mine only for itself; a member's sub-bucket under the owner's primary taken,
   the owner's photo moved into the member's own sub-bucket refused, across roots — #991's server answers). The web imports the core's download through its own
   importer (`app-memory-download.zip`, decision 7).
-- **What no pass has proved yet.** On Android and Linux: the re-key after a member's removal followed by an upload in the
+- **Android's second pass** (2026-11-19, a throwaway API 36 emulator, a throwaway owner and member, the web in headless
+  Chrome): a WRITE_ONLY link's guest uploaded through the share page and the app named them (the lightbox's Details
+  "Added by Gast Gina (guest)", their bucket in the Contributions); a sub-bucket made, renamed and deleted in the app,
+  each step read back on the web's bucket picker; the Memory copied into a folder and opened on the web (five media, the
+  original in its lightbox); a report sent from the lightbox and received (its reference shown); the member removed and the
+  space given a new lock on the web with its re-key held back — the app re-keyed the due nodes at its next open and an
+  upload went in, every medium of the Memory opening on the web after. TalkBack's speech was heard from its verbose log
+  over a keyboard's focus (`src/mobile/CLAUDE.md` § Traps): the marks' mode chip read its mode twice and the lightbox's
+  heart a bare "1" — both fixed to one reading ("Show marked photos: All, Drop down list"; "Remove your mark, Marked
+  once"); the badge reads "Marked by you, Marked once". Not proved: a report seen in the moderation inbox (no throwaway is
+  a moderator) and an upload pulling a due Memory's re-key forward, unreachable while an app open across another device's
+  rotation keeps the old key (#992, #1021).
+- **What no pass has proved yet.** On Linux: the re-key after a member's removal followed by an upload in the
   app (held by `MemoryRekeyLiveTest` in the core), a link guest's upload named in the app, a report seen in the
-  moderation inbox, the copy opened on the web, a sub-bucket renamed and deleted, a screen reader's speech (TalkBack did
-  not take the taps, #992; the Linux container has no accessibility bus, #998), German on Linux. On macOS: the marks
+  moderation inbox, the copy opened on the web, a sub-bucket renamed and deleted, a screen reader's speech (the Linux container has no accessibility bus, #998), German. On Android: a report seen in the moderation inbox, and an upload pulling a due Memory's re-key forward (#992, #1021). On macOS: the marks
   counted by two sessions, *Copy to…* and *Report* after their fixes, a sub-bucket renamed and deleted, the columns across
   a resized window, the gallery's filter field (#1029) — inbox #994. **The owner's:** an iPhone and an iPad — the tiles at a phone's and a tablet's width, the
   badge's legibility, `.searchable`'s tokens, the lightbox's heart (no simulator boots here, #928).

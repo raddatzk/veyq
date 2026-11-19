@@ -583,18 +583,19 @@ Apple's were built and their tests run, not clicked (a Linux pass under a load a
 server; Apple's is the owner's, #925). The Use page that says this to a person: [Open and look at a
 file](../../site/src/content/docs/depot/view-a-file.mdx) (§ In the app).
 
-**Memories** ([ADR 0149](../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), built above): the passes not run — on Android and Linux the re-key after a member's
-removal followed by an upload in the app, a link guest's upload named, a report seen in the moderation inbox, the copy
-opened on the web, a sub-bucket renamed and deleted, a screen reader's speech (#992, #993, #998); **Apple's pass**, the
+**Memories** ([ADR 0149](../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), built above): the passes not run — on Android a report seen in the moderation
+inbox and an upload pulling a due Memory's re-key forward (#992; an app open across another device's rotation keeps the
+old key, #1021); on Linux the re-key after a member's removal followed by an upload in the app, a link guest's upload
+named, a report seen in the moderation inbox, the copy opened on the web, a sub-bucket renamed and deleted, a screen
+reader's speech (#998); **Apple's pass**, the
 agent's on the unlocked Mac (#994) and the owner's on an iPhone and an iPad (#925, #928), with the filter's place on an
 iPad and a Mac (#995); **Windows' UIA pass** (#1000, once the VM resolves a throwaway's tenant, #983). The fixes of
-#990, #991, #996, #997 and #1001 are in, checked by tests, not by a pass yet; #989's calendars are handed on every app,
+#990, #991, #996, #997 and #1001 are in, checked by tests; #990's and #996's seen on Android only; #989's calendars are handed on every app,
 Apple's unclicked. A copy that a rotation interrupts fails (#988). The owner answered its four questions 2026-11-19 as built (ADR 0149's Consequences). Not built: import of an archive, for every
 kind (#985); a folder as a share target (#987); a guest's view of a received link
 (#435, a source for the same model); the web's own heart in its lightbox (#986) and its Contributions' "You" (#1003).
-A share into a Memory (built above): Apple's passes — the macOS drop, the iOS handoff, the iPad drop (#1005); Android's
-Pot share not clicked again since the inbox moved to sources (#1006); an iOS handoff for a space the app does not list
-(#1007); a drop's read grant over a long upload (#1008).
+A share into a Memory (built above): Apple's passes — the macOS drop, the iOS handoff, the iPad drop (#1005); an iOS handoff for a space the app does not list
+(#1007).
 
 **Music** ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md), built above): **Apple's passes are the owner's** — on a real iPhone the background play,
 the lock screen, Control Center and a call's interruption, and iOS's format matrix (no simulator boots on this Mac); on

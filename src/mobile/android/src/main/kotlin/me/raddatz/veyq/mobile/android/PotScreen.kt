@@ -192,14 +192,19 @@ private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMod
     val incoming by model.incoming.collectAsStateWithLifecycle()
     val notices = LocalShellNotices.current
     val context = androidx.compose.ui.platform.LocalContext.current
+    val taking = androidx.compose.runtime.rememberCoroutineScope()
     LaunchedEffect(incoming, view.canWrite) {
         // Only while the shell still shows this Pot: files given back (its editor closed unsaved) move the shell Home first.
         val open = (model.screen.value as? Screen.Signed)?.shell?.openObject == state.ref
         if (incoming == null || !open || !me.raddatz.veyq.mobile.expenses.PotShare.goesInto(view)) return@LaunchedEffect
-        val taken = model.takeShare() ?: return@LaunchedEffect
-        shared = taken.pending
-        // what the new expense left out, in Expenses' own words: no image or PDF, too large, too many
-        if (taken.refused > 0) notices?.let { n -> n.scope.launch { n.snackbar.showSnackbar(context.resources.getQuantityString(R.plurals.share_refused, taken.refused, taken.refused)) } }
+        // On the page's own scope, not this effect's: the take empties `incoming`, which restarts this effect and would
+        // cancel the read of the files it took — no editor opened and the share was lost (inbox #1006, 2026-11-19).
+        taking.launch {
+            val taken = model.takeShare() ?: return@launch
+            shared = taken.pending
+            // what the new expense left out, in Expenses' own words: no image or PDF, too large, too many
+            if (taken.refused > 0) notices?.let { n -> n.scope.launch { n.snackbar.showSnackbar(context.resources.getQuantityString(R.plurals.share_refused, taken.refused, taken.refused)) } }
+        }
     }
     // Its editor closed unsaved: the files wait again in the pick mode, for this Pot or another.
     shared?.let { files ->
