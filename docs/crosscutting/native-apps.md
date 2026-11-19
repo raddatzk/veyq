@@ -251,7 +251,8 @@ are still running*, *1 file*), *Keep uploading* kept it uploading and a close af
 two placeholders, closing asked (*Uploads laufen noch*, *2 Dateien*) and *Weiter hochladen* kept them going; Apple's built
 for macOS and the iOS Simulator SDK, never run (§ Open).
 
-**Out and in.** The ZIP of a Pot, a folder, a file or a drop box, as the web writes it — measured 2026-11-09.
+**Out and in.** The ZIP of a Pot, a folder, a file or a drop box, as the web writes it — measured 2026-11-09; a Memory's
+and a chapter's since 2026-11-19 (Memories' rest, below). No import in the apps (#985).
 
 **QR codes** ([ADR 0141](../decisions/0141-qr-codes-are-read-and-drawn-by-the-core.md)). One decoder and one encoder in
 the core, a scan model (`qr/QrScan`) and a camera on all four apps — CameraX, AVFoundation, the Camera portal over
@@ -321,7 +322,7 @@ wrap produced) and a person's profile (core's frame on `Shell.person`, Memories'
 and a person's page. Every app draws the people line under the facts line with its list and picker, *I was there* in New
 Memory, the capture-time editor in a medium's details, the banner above the header on every view (contained over its
 32 px surround, no blur API; a video's poster played on a tap) with its dialog and the trash's question, and the profile
-("Memories with {name}", List | Map, newest first, no tiles). A pin keeps the banner's blobs; offline the participants
+("Memories with {name}", newest first, List | Map; Tiles since ADR 0149, below). A pin keeps the banner's blobs; offline the participants
 are named from each scope's kept member list (`KeptRead.MEMBERS`, ADR 0140 decision 5), read-only — measured on Android
 2026-11-18: the app stopped, the emulator's network off, unlocked from the store, the line named *Kevin Raddatz* with
 the letter and no edit. New Memory offers *Determine location automatically* where the map services are shown (uc.memory.place
@@ -333,6 +334,29 @@ equal file's count read from the store's own request log, measured 2026-11-17/18
 open (below). The Use pages: [People in your Memories](../../site/src/content/docs/memories/people-in-your-memories.md),
 [Add a banner](../../site/src/content/docs/memories/add-a-banner.mdx),
 [Look through the gallery](../../site/src/content/docs/memories/the-gallery.mdx).
+
+**Memories' rest, on all four apps** ([ADR 0149](../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), built 2026-11-19): the web's rules ported into the core, each web test
+with a Kotlin twin. A Memory's and a chapter's **re-key** (`memories/MemoryRekey.kt`: the banner's wraps moved in the
+one meta core seals, every medium's sealed tiers live and trashed, the bucket names), so an apps-only member is no longer
+held behind a rotation; its **download** and **copy** (`MemoryExport.kt`, `MemoryCopy.kt`: the web's archive, held to
+the web's importer by the committed `app-memory-download.zip`; a folder's download carries its Memories; a copy reads
+every original and tier by frame and decodes nothing); **item marks** (`ItemMarks.kt`: a badge on the tile, the heart in
+the lightbox's toolbar and, on Windows and Apple, a tile's menu), the **gallery's filter** (`GalleryFilter.kt` over
+core search's chips, the day chip in the viewer's calendar, the marks' mode), the **Contributions** as the view
+switch's fourth segment (`Buckets.kt`, `Contributions.kt`: the uploader picker, sub-buckets made, renamed, deleted and
+filled as the server allows — any member, any root, never across roots), a guest named from its bucket, a photo's or
+video's **Report** from the lightbox; the marks and buckets kept reads offline. **Tiles** on Home, a folder, an
+application's list and a person's Memories (`navigation/ViewMode.kt`: List | Tiles, a profile's Map too; one choice per
+account on the device; `TileGrid`'s square covers, two columns on a phone). The bridge carries it to the desktops under
+`SecretFreeSchemaTest`. No permission, entitlement or dependency was added. Passed on Android (a throwaway API 36
+emulator) and Linux (Broadway) as throwaways, and by the core's live tests (`MemoryRekeyLiveTest`,
+`MemoryExportLiveTest`, `MarksLiveTest`); Apple and Windows built, their passes open (below; ADR 0149's Consequences say
+what each pass proved). The Use pages: [Mark the best photos](../../site/src/content/docs/memories/marked-photos.mdx),
+[See who added what](../../site/src/content/docs/memories/contributions.mdx),
+[Look through the gallery](../../site/src/content/docs/memories/the-gallery.mdx),
+[Views, tabs and favorites](../../site/src/content/docs/spaces/views-and-favorites.mdx),
+[Download and import](../../site/src/content/docs/spaces/download-and-import.md),
+[Copy things](../../site/src/content/docs/spaces/copy-things.mdx).
 
 ## Open
 
@@ -548,11 +572,15 @@ Apple's were built and their tests run, not clicked (a Linux pass under a load a
 server; Apple's is the owner's, #925). The Use page that says this to a person: [Open and look at a
 file](../../site/src/content/docs/depot/view-a-file.mdx) (§ In the app).
 
-**Memories**: decided by [ADR 0149](../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), the re-key of a Memory or
-chapter built (`MemoryRekey`, the meta handed to the kind before core seals it), its download and copy built (`MemoryExport`, `MemoryCopy`: the web's archive, a folder's download carrying its Memories, a copy reading every original and tier by frame and decoding nothing; a rotation mid-copy fails it, #988); the marks, the filter, the contributions and a medium's report built in the core (`ItemMarks`, `GalleryFilter`, `Buckets`, `Contributions`), not drawn by any platform yet; not built yet — item marks, uploader buckets with guests' names, the gallery's filter
-and a medium's report (#891), and tiles on every level and a person's Memories (#950); import of an archive, for every kind
-(#985); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a received link (#435, a
-source for the same model).
+**Memories** ([ADR 0149](../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), built above): the passes not run — on Android and Linux the re-key after a member's
+removal followed by an upload in the app, a link guest's upload named, a report seen in the moderation inbox, the copy
+opened on the web, a sub-bucket renamed and deleted, a screen reader's speech (#992, #993, #998); **Apple's pass**, the
+agent's on the unlocked Mac (#994) and the owner's on an iPhone and an iPad (#925, #928), with the filter's place on an
+iPad and a Mac (#995); **Windows' UIA pass** (#1000, once the VM resolves a throwaway's tenant, #983). The fixes of
+#990, #991, #996, #997 and #1001 are in, checked by tests, not by a pass yet; #989's calendars are handed on every app,
+Apple's unclicked. A copy that a rotation interrupts fails (#988). The owner answered its four questions 2026-11-19 as built (ADR 0149's Consequences). Not built: import of an archive, for every
+kind (#985); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a received link
+(#435, a source for the same model); the web's own heart in its lightbox (#986) and its Contributions' "You" (#1003).
 
 **Music** ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md), built above): **Apple's passes are the owner's** — on a real iPhone the background play,
 the lock screen, Control Center and a call's interruption, and iOS's format matrix (no simulator boots on this Mac); on
@@ -579,7 +607,7 @@ picker, a profile from a participant and from an uploader and its map, *I was th
 image and a video banner across a 720 pt window, the trash's question, Remove banner, and on an iPhone whether
 `PhotosPicker`'s copy of a gallery photo is still shared. Not run elsewhere: Windows offline (the standing tunnel).
 One's own profile and the safety numbers on a person's page are built by [ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md)
-(above). Not built: tiles drawn by a platform (#950; the core's view mode and tile grid built, decided by [ADR 0149](../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decision 8), a people search or overview, a guest's view (#435).
+(above), tiles by ADR 0149 (above). Not built: a people search or overview, a guest's view (#435).
 
 **Uploads** ([ADR 0145](../decisions/0145-the-apps-uploads-go-on-with-the-app-left-and-show-in-the-gallery-a-desktop-asks-before-a-quit-drops-them.md), built above): **iOS is the owner's** — on a real iPhone whether the
 continued-processing task is granted for an upload (`app.veyq.uploads.*`), how long `beginBackgroundTask` lasts and what

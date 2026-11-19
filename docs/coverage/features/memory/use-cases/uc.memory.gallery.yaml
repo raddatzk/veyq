@@ -4,6 +4,14 @@ title: Open a Memory & browse its gallery
 # The web gallery UI is built (cr-0049): MemoryDetail (grid + header) + MediaLightbox (preview, prev/next,
 # download) over the ready three-tier data layer (en.memory.derivatives). The data-path criteria carry refs on
 # every surface (the cr-0045/0047/0048 data layer) plus the web render tests.
+# The apps (ADR 0149, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named here, not
+# cited — core `ItemMarksTest` (two members' marks counted, each mine only for itself; a toggle before the own set is
+# read writes nothing; no count in a personal scope; a failed write put back and a rotation sealed once more; the 12,285th
+# mark refused), `GalleryFilterTest` (day ∧ place ∧ text, the marks' mode ignored in a personal scope),
+# `MarksAndBucketsOfflineTest` (a kept Memory's badges offline, no toggle), bridge
+# `MemoriesDispatchTest.theContributionsTheFilterAndTheTilesAnswerThroughCalls_andTheViewClosesWithItsTenant`,
+# `SecretFreeSchemaTest.theMarksTheFilterAndTheContributionsCrossAsIdsCountsAndLabelsAlone`, Windows' `GalleryTextTest`;
+# live as throwaways `MarksLiveTest`. The heart in the lightbox (step 7) is the apps'; the web's is #986.
 acceptanceCriteria:
   - id: thumbnail-grid
     text: Opening a Memory lists its media and renders a thumbnail grid (each thumbnail fetched as ciphertext and decrypted on device under K_node). The grid is the Gallery tab of a tabbed detail view (Gallery / Chapters, cr-0061).

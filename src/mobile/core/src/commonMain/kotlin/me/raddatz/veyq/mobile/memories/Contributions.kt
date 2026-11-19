@@ -11,7 +11,7 @@ import me.raddatz.veyq.mobile.session.TenantSession
  * A Memory's Contributions view (`uc.memory.buckets`, ADR 0149 decision 6; the web's `MemoryBuckets.vue`): the uploader
  * picker — every primary with the sub-buckets curated below it ([Buckets.rows]) — narrowing the gallery to the chosen
  * bucket's media, and its sub-buckets created, renamed, deleted and filled. Shown where `MemoryRights.buckets` holds (a
- * member's; **the fourth segment of the view switch, pending the owner**: [OFFERED]). A member curates any root, their own,
+ * member's; **the fourth segment of the view switch**, as the web offers it, owner 2026-11-19: [OFFERED]). A member curates any root, their own,
  * another member's or a guest's (ADR 0034 point 6, the server's gate is membership) — but the caller's own root is told apart
  * ([Buckets.Row.own], the virtual "You" until it exists, inbox #991), and only what the server takes is offered: a sub-bucket
  * under a primary ([State.createsSub]), a sub-bucket renamed or deleted ([State.renames]), a move within one root
@@ -19,7 +19,7 @@ import me.raddatz.veyq.mobile.session.TenantSession
  */
 class Contributions(private val gallery: GalleryModel, private val door: Door) {
     companion object {
-        /** Whether the Contributions view is offered beside Photos | Music | Map — pending the owner (ADR 0149 decision 6); recommended: yes. */
+        /** Whether the Contributions view is offered beside Photos | Music | Map — yes, exactly as the web offers it (ADR 0149 decision 6, owner 2026-11-19). */
         const val OFFERED = true
 
         /** The view over [tenant]'s server. */

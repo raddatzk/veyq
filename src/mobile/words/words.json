@@ -5396,7 +5396,7 @@
     "de": "Profil von {1} öffnen"
   },
   "node_view_tiles": {
-    "note": "the view switch's tiles (ADR 0149 decision 8; pending the owner, the recommendation: a short word beside node_view_list)",
+    "note": "the view switch's tiles (ADR 0149 decision 8, owner 2026-11-19: a short word beside node_view_list)",
     "en": "Tiles",
     "de": "Kacheln"
   },

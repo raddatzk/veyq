@@ -8,8 +8,8 @@ import me.raddatz.veyq.mobile.words.Msg
  * `useViewMode.ts`): as rows or as tiles — a person's Memories on a map too. **One choice per account on this device**, for
  * every level and a person's Memories, as the web keeps one value per account (`veyq:view-mode`): kept in the device's own
  * store under `view-mode:<accountId>`, as the map consent keeps its key. The levels offer no map (the apps' Memories map is
- * the bar's tab, ADR 0143). The first view before any choice is [FIRST] — **pending the owner**: Tiles recommended (the
- * web's default), List what the apps showed before.
+ * the bar's tab, ADR 0143). The first view before any choice is [FIRST] — Tiles, the web's default (owner 2026-11-19: the
+ * apps behave as the web).
  */
 enum class ViewMode(val word: Msg) {
     LIST(Msg.NODE_VIEW_LIST),
@@ -18,7 +18,7 @@ enum class ViewMode(val word: Msg) {
     ;
 
     companion object {
-        /** The view before any choice (ADR 0149 owner question 2, pending: Tiles recommended). One constant to flip. */
+        /** The view before any choice (ADR 0149 decision 8, owner 2026-11-19: the web's default). */
         val FIRST: ViewMode = TILES
 
         /** What a level offers: rows and tiles (no map: the bar's Map tab is the Memories map). */
@@ -56,8 +56,8 @@ class ViewModes(private val store: DeviceStore) {
 /**
  * The tiles' grid (ADR 0149 decision 8): at least [MIN_COLUMNS] columns on a phone, more as the window widens — each tile at
  * least [MIN_TILE] units wide with [GAP] between — every tile a square cover with the name and the row's second line below,
- * the platform's album grid. The minimum is **pending the owner** (two columns of square covers recommended over the web's
- * one column of 16:9 cards below 520 px): one constant to flip.
+ * the platform's album grid: two columns of square covers on a phone rather than the web's one column of 16:9 cards below
+ * 520 px — a tile's shape is the look, which follows the platform (owner 2026-11-19).
  */
 object TileGrid {
     /** The fewest columns at any width (a phone's two; one would be the web's narrow column). */

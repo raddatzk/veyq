@@ -15,6 +15,11 @@ title: Re-key a space after a rotation
 # build. The succession statement's bytes and verifySuccessionPath are pinned by the crypto package's
 # scopeSuccession.conformance.test.ts and inviteCheck.test.ts, on a surface no CI run has admitted yet; the web refs
 # below run the same checks through the real crypto.
+# The apps (ADR 0149 decision 2, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named
+# here, not cited — core `MemoryRekeyTest` (the web's `rekey.test.ts` twinned, and core's whole driver on the
+# cross-surface fixture's meta: every plaintext and `K_blob` kept, the banner's wraps moved in the one meta core seals),
+# `NodeRekeyRulesTest` (a Memory and a chapter re-keyed, not left); live as a throwaway with a member
+# `MemoryRekeyLiveTest` (a Memory left due, pulled forward by the member's upload, every medium and the banner opening).
 acceptanceCriteria:
   - id: scope-level-rows-replaced
     text: A rotation's commit swaps in, in one transaction, the re-wrap under the new key of every authored scope-level value's own key - a group's name and a space's icon, each link's recovery copy (its minted-at epoch kept), a tenant's member names, pictures, join records and verifications, and a Memory's item marks through the application's participant - and the re-seal of each scope-root node's entry live and trashed, the one exemption any member may write, and marks every node of the scope due; the stage carries wraps only and every value's ciphertext stays byte-identical, a stage that writes a value is refused 422 rekey_writes_value for an owner and a member rotator alike, and afterwards no wrap opens under the old key and each opens its unchanged value under the new one.

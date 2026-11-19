@@ -10,7 +10,7 @@ import me.raddatz.veyq.mobile.session.TenantSession
 
 /**
  * A Memory's medium reported to its server's moderators as an `ITEM` (the web's `media.ts` `mediumReportKeys`, ADR 0093,
- * ADR 0142 decision 11 — a music track's report; the lightbox's photo or video is #891's): the keys handed over are every
+ * ADR 0142 decision 11 — a music track's report; the lightbox's photo or video, ADR 0149 decision 6): the keys handed over are every
  * one of its blobs' `K_blob` by blob id, its listed tier's field key and — the apps' viewer is a member — its EXIF tier's.
  * Nothing else opens: not the node, not another medium.
  */

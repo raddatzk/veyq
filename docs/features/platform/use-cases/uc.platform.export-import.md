@@ -96,6 +96,7 @@ another veyq as your own content.
 
 ## Related
 
+- **The apps** (a Memory's and a chapter's download built 2026-11-19, [ADR 0149](../../../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decisions 3 and 7; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): the web's archive, read by the web's importer from the committed fixture. No import in the apps (inbox #985). Tests (no coverage surface, ADR 0040): `MemoryExportTest`, `MemoryDownloadFixtureTest`, live `MemoryExportLiveTest`.
 - Feature: [Platform](../_index.md)
 - End-user view (docs site): [Download and import](../../../../site/src/content/docs/spaces/download-and-import.md) · [Herunterladen und Importieren](../../../../site/src/content/docs/de/spaces/download-and-import.md)
 - Use-cases: [uc.platform.node-cover](uc.platform.node-cover.md), [uc.memory.participants](../../memory/use-cases/uc.memory.participants.md), [uc.memory.upload](../../memory/use-cases/uc.memory.upload.md)

@@ -108,6 +108,7 @@ person who shared it, and what they reported is kept for review even if it is de
   [ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md),
   [ADR 0097](../../../decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md) decision 3 (the
   receipt), [ADR 0051](../../../decisions/0051-declarative-rate-limit-posture.md) (the posture)
+- **The apps** (a photo's or video's report from the lightbox built 2026-11-19, [ADR 0149](../../../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decision 6; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): core's report sheet with `MediumReport.keys`, the path a music track takes.
 - [en.moderation.hold](../enablers/en.moderation.hold.md),
   [en.moderation.moderation-key](../enablers/en.moderation.moderation-key.md),
   [en.moderation.log](../enablers/en.moderation.log.md),

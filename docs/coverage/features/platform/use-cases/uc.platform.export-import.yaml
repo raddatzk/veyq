@@ -3,6 +3,12 @@ feature: platform
 title: Take a node and everything under it out as a file, and bring such a file back in
 # ADR 0082: the client walks the tree with the member's keys and writes a store-only ZIP; an import is a sequence of ordinary
 # node and blob writes. The one backend piece is the member's quota preflight, a yes/no under a rate limit.
+# The apps (ADR 0149 decision 3, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named
+# here, not cited — core `MemoryExportTest` (a member's download with every original, the names, the cover and the
+# banner; a guest's naming no one; a folder's carrying its Memory and chapter), `MemoryDownloadFixtureTest` (the core's
+# download is the committed `src/web/src/features/memories/fixtures/app-memory-download.zip`, which the web's
+# `exportImport.test.ts` "the app's download imports on the web" imports); live as a throwaway `MemoryExportLiveTest`.
+# The apps import nothing yet (inbox #985).
 acceptanceCriteria:
   - id: streaming-zip-with-zip64
     text: The archive is a store-only ZIP written and read as a stream, ZIP64 exactly where a field overflows, every entry checked by its CRC-32 and size; a half archive is aborted, never closed.

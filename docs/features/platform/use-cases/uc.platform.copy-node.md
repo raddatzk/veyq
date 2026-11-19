@@ -1,7 +1,8 @@
 # UC: Copy a node and everything under it to another place
 
 - **ID:** uc.platform.copy-node
-- **Status:** built 2026-10-14 (cr-copy-node), web only, for folders, files, drop boxes, Memories and chapters. A Memory's
+- **Status:** built 2026-10-14 (cr-copy-node) on the web, for folders, files, drop boxes, Memories and chapters; the apps copy
+  the same kinds and a Pot (a Memory and a chapter since 2026-11-19, § Related). A Memory's
   media copy with their existing tiers and sealed facts, nothing decoded (ADR 0082 decision 11). Seen in a real browser on
   2026-10-14: "Reisen (2)" (sub-folders, files, the Memory "Lissabon" and the drop box "Postfach" with two guests' folders
   both named "Dr. Anna") copied into "Archiv (4)" - the copy opened with its files readable (`a_b.txt` showed its text),
@@ -72,6 +73,7 @@ server learning that it is a copy.
 
 ## Related
 
+- **The apps** (a Memory's and a chapter's copy built 2026-11-19, [ADR 0149](../../../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decision 3; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): tiers by frame, nothing decoded; a rotation mid-copy fails it (inbox #988). Tests (no coverage surface, ADR 0040): `MemoryCopyTest`, live `MemoryExportLiveTest`.
 - Feature: [Platform](../_index.md)
 - Use-cases: [uc.platform.export-import](uc.platform.export-import.md) (the walk and hooks a copy reuses),
   [uc.memory.move-node](../../memory/use-cases/uc.memory.move-node.md) (the browser),

@@ -64,7 +64,7 @@ A Gradle build of its own, run through its own wrapper.
   `Shell.person` (opened over what was on screen, back returning there; `personSections` from the registry's
   `personSection`), Memories' section in `memories/people/` — `ParticipantIndex.kt` (over `TenantSession.trees()`, never
   the personal scope, held in memory only through `TenantSession.fromTree`, dropped by `forgetTree()` and `close()`) and
-  `PersonMemories.kt` (the rows newest first, List | Tiles | Map, the account's one view choice). The view mode and the tiles (ADR 0149 decision 8): core's `navigation/ViewMode.kt` — `ViewMode` (`FIRST`, pending the owner), `ViewModes` (one choice per account on the device, `view-mode:<accountId>`; `ShellModel.levelView`/`chooseView`), `TileGrid` (at least `MIN_COLUMNS` square covers, `MIN_TILE` and `GAP`), held by `ViewModeTest`; no platform draws tiles yet. Android draws them in `MemoryCuration.kt` (the people line, its
+  `PersonMemories.kt` (the rows newest first, List | Tiles | Map, the account's one view choice). The view mode and the tiles (ADR 0149 decision 8): core's `navigation/ViewMode.kt` — `ViewMode` (`FIRST`, pending the owner), `ViewModes` (one choice per account on the device, `view-mode:<accountId>`; `ShellModel.levelView`/`chooseView`), `TileGrid` (at least `MIN_COLUMNS` square covers, `MIN_TILE` and `GAP`), held by `ViewModeTest`; drawn by Android's `LevelTiles.kt`, Apple's `LevelTiles.swift`, Linux's `tiles.rs` and Windows' `LevelTiles.cs`. The rest of Memories (ADR 0149, built 2026-11-19): a Memory's and a chapter's re-key, `memories/MemoryRekey.kt` (handed the opened node meta by `RekeyContext` before `NodeRekey` seals it); their download and copy, `MemoryExport.kt` and `MemoryCopy.kt` (registered in `AppKinds.exports`/`copies`; the copy's banner through `BannerWrite`); the item marks, `ItemMarks.kt` (the open and seal `ItemMarksRotation` now uses); the filter, `GalleryFilter.kt` over `search/Query.kt`'s chips, its day in the platform's `GalleryFilter.Calendar`; the buckets, `Buckets.kt` (the caller's own root by `user:<self>`, inbox #991), and the Contributions view, `Contributions.kt` (offering only what the server takes: `createsSub`, `renames`, `moveTargets`; its lightbox over the bucket's media, `GalleryModel.lightboxOver`); a medium's report, `MediumReport` for every medium; the marks and buckets kept reads (`KeptRead`). The owner's answers (2026-11-19: behaviour the web's, the look the platform's) sit in `TileGrid.MIN_COLUMNS` (2, the platform's album grid), `ViewMode.FIRST` (Tiles, the web's default), `Contributions.OFFERED` (true, as the web) and the word `node_view_tiles`. Android draws them in `GalleryFilterBar.kt`, `MemoryContributions.kt` and `LevelTiles.kt`; Apple in `GalleryFilterViews.swift`, `ContributionsView.swift` and `LevelTiles.swift`. Android draws them in `MemoryCuration.kt` (the people line, its
   list and bottom-sheet picker, the banner with its surround and `ReaderPlayer`, its full-screen dialog, the trash's
   question, the capture-time editor; a banner's decoding `MediaDerive.bannerImage`/`bannerPoster`) and `PersonScreen.kt`;
   Apple in `MemoryCuration.swift` and `PersonScreen.swift`, `appleMain`'s `AppleMemories` adapting what Swift cannot call
@@ -899,7 +899,10 @@ as the Darwin one was: the app's container listed after a pass.
 ## Each platform's guidelines
 
 Apple's HIG and Material 3 win over a look shared with the web ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
-decision 9): before building a control, ask what the platform's own apps do, and do that. A view's creating action is
+decision 9): before building a control, ask what the platform's own apps do, and do that. **Behaviour is the web's
+exactly; the look is the platform's** (owner 2026-11-19): what a view offers, to whom, what it shows first and what it
+remembers follow the web; a control's shape, a tile's form and a grid's columns follow the platform (ADR 0149's
+answers: Tiles first and the Contributions as the web's, two square columns on a phone as the platform's). A view's creating action is
 `CreateAction(…)` (Android, `CreateAction.kt`; with `menu` where a level creates several kinds) and `.createAction(…)` /
 `.createMenu(…)` (Apple, `CreateAction.swift`), never a
 floating button built by hand; `scripts/validate_mobile_platform_guidelines.py` holds that. Row actions: an overflow menu on Android, swipe actions and a context
@@ -996,6 +999,11 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   A SwiftUI view must not take a core class's name either: a view `ShareSheet` shadowed core's, so the view is
   `NodeShareSheet`. The bridge's generated C# and Rust take a wire class's simple name too: `Action` clashed with
   `System.Action` (now `PlanAction`), so a wire class avoids the platforms' common type names.
+  **And a new wire class can rename an existing one's binding.** The bindings name a class by its simple name, or by its
+  last two parts where that simple name is taken twice (`Bindings.rustNames`, which the C# writer uses too): adding `Buckets.Outcome`
+  turned the existing `PersonTrust.Outcome`'s `Outcome` into `PersonTrustOutcome` in Rust and C#, and the Linux and
+  Windows apps that named `Outcome` broke at their next build (2026-11-19). A wire class whose simple name another
+  class already has is checked against both desktops' builds, not only `:bridge:jvmTest`.
 - A SwiftUI alert or confirmation dialog whose binding cancels on dismissal runs that cancel BEFORE the button's action:
   Apple's "Delete forever" in the space's trash sent nothing, its row already cleared (measured 2026-11-11). A question
   that is a core sheet's state is cancelled only by its Cancel button, and the action hands the row it confirmed

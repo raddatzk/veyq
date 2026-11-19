@@ -140,6 +140,7 @@ every name is read only on your own device, never by the server.
 
 ## Related
 
+- **The apps** (built 2026-11-19, [ADR 0149](../../../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decision 8; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): a level and a person's Memories as tiles or rows, one choice per account on the device; the levels have no map (the Memories map is the bar's tab). Tests (no coverage surface, ADR 0040): `ViewModeTest`, `PersonMemoriesTest`.
 - Feature: [Memory](../_index.md)
 - Enablers: [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) (the encrypted node tree this browses),
   [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) (`K_SC`, auto-birth),

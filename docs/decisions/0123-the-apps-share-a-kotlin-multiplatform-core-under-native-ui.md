@@ -496,8 +496,9 @@ implementation exists but what holds it to the first.
     launched signed in, never tapped** (native-apps § Open). Found by the passes, not by a test: a chapter that never
     opened from a phone, the Undo's race, and Android's pager crashing when a trash shrank its rows (its key and page now
     guard a gone index).
-  Not built yet: item marks, buckets, the re-key, export and copy (inbox #891–#893, decided by
-  [ADR 0149](0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md), its re-key, download and copy built); the participants, a capture-time
+  Item marks, the contributions, the gallery's filter, a medium's report, the re-key, download and copy since built by
+  [ADR 0149](0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md)
+  (a Memory as a share target is #893, import #985); the participants, a capture-time
   correction and the banner since built by
   [ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md),
   music by

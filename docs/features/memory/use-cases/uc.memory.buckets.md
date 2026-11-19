@@ -98,6 +98,7 @@ server learning anyone's name.
 ## Related
 
 - End-user view (docs site): [See who added what](../../../../site/src/content/docs/memories/contributions.mdx)
+- **The apps** (built 2026-11-19, [ADR 0149](../../../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decision 6; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): the Contributions as the view switch's fourth segment, sub-buckets curated by the server's rule ([en.memory.buckets](../enablers/en.memory.buckets.md) § Ownership; inbox #991), a guest named from its bucket. Tests (no coverage surface, ADR 0040): `BucketsTest`, `ContributionsTest`, live `MarksLiveTest`.
 - **Feature:** [memory](../_index.md)
 - **Enablers:** [en.memory.buckets](../enablers/en.memory.buckets.md) (the bucket data layer this reads),
   [en.memory.media](../enablers/en.memory.media.md) (the media rows a bucket groups).

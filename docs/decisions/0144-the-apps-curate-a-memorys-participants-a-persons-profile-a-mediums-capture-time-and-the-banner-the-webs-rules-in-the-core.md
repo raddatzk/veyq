@@ -208,7 +208,9 @@ What the apps have to build on (read 2026-11-17, the CR's refine):
   the web's wrap, held to a vector the web produces, so an app-made banner that shares a medium and a web-made one are
   the same rows.
 - **The profile's views differ from the web's** (decision 13): a list and a map, no tiles, no stored choice, opening on
-  the list each time. Tiles are their own change on every level of the apps (inbox #950).
+  the list each time. Tiles are their own change on every level of the apps (inbox #950) — since built by
+  [ADR 0149](0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md)
+  decision 8: List | Tiles | Map, the account's one choice kept on the device.
 - **A person's list is the one list of the apps ordered by date** (decision 13), not by last use; ADR 0122 decision 5
   says so.
 - **Three callers share one listed-tier loop** (decision 3): a rename, a place backfill and a capture-time correction

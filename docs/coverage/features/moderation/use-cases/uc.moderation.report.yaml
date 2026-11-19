@@ -6,6 +6,10 @@ title: Report what you see
 # MediaHoldSnapshot; core/report (the dialog, the bundle, the actions) on web, Memories' lightbox and mediumReportKeys;
 # packages/crypto's report.ts. Lane L1's browser pass is tests/e2e/tests/features/moderation/report.spec.ts, tagged per criterion; `stack`
 # waits under gaps until a run admits it.
+# The apps (ADR 0149 decision 6, built 2026-11-19): a photo's or video's Report from the lightbox takes the path a music
+# track's already takes (`MediumReport.keys`, core's `ReportSheet`); src/mobile is no coverage surface (ADR 0040) and the
+# lightbox's report has no test of its own beyond the bridge's wire shape (`WireTest`, `Lightbox.Report`) — it was sent
+# and its receipt read in the Linux pass of 2026-11-19; seen in the moderation inbox by no pass yet.
 acceptanceCriteria:
   - id: a-member-reports-what-their-space-holds
     text: >-

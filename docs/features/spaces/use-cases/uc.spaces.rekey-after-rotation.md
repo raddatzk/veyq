@@ -128,6 +128,7 @@ member's device finishes the rest in the background.
 ## Related
 
 - Model: [keys, grants and trust](../../../crosscutting/keys-grants-and-trust.md) (rotation and the node re-key)
+- **The apps** (a Memory's and a chapter's re-key built 2026-11-19, [ADR 0149](../../../decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decision 2; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): no longer left for a web device. Tests (no coverage surface, ADR 0040): `MemoryRekeyTest`, `NodeRekeyRulesTest`, live `MemoryRekeyLiveTest`.
 - Feature: [Spaces (scopes)](../_index.md)
 - Enabler: [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) (the epoch it follows)
 - Triggers: [uc.spaces.complete-queued-rotation](uc.spaces.complete-queued-rotation.md),

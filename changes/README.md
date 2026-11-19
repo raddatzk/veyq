@@ -2362,7 +2362,9 @@ Linux's into the ADR's Consequences; phase 6 left Android's and the Mac's in its
 the ADR said that a platform not listed there was not measured yet — for two that were. A phase whose done-when
 records a measurement writes it where it binds (the ADR's Consequences, the doc of state) in the same phase; the CR's
 note says only that it did. The maps CR (ADR 0143) did it again: its phase 8 measured both desktops' dashed strokes
-into its phase note only, and the harvest moved them.
+into its phase note only, and the harvest moved them. The Memories-rest CR (ADR 0149) did it a third time: the Android
+and Linux passes' outputs went into inbox rows (#992, #998) and the phase notes, and the harvest moved them into the
+ADR's Consequences.
 
 ### A permission a refine plans is put through the packager's own linter at refine
 
@@ -2412,6 +2414,11 @@ recorded a measurement from before the Android id moved to `app.veyq` two days e
 path) are read from the build file that sets them; a doc that records a measurement under an old identifier says the
 identifier was then.
 
+**And a done-when names only a tool or a section that exists.** The apps' Memories-rest CR (ADR 0149) closed its harvest
+on "the reuse sweep (`core-reuse-sweep` …, changes/README.md § Core first)" — neither the agent nor the section exists
+in the repository (`git grep -n 'core-reuse-sweep\|Core first'` names only that CR), so the step could not be run as
+written and was dropped at the harvest. A refine that names a skill, an agent or a section greps for it once.
+
 ### A flow whose last step reopens the session names where its last state survives
 
 The same CR's rotation ends on each space's new lock. On the desktops the bridge reopens the tenant after a rotation
@@ -2425,6 +2432,15 @@ The same CR's refine put the participants and the banner on the bridge's `Header
 core's, which names no application (ADR 0079's direction), so phase 5 put them on Memories' `GalleryShown` beside ADR
 0143's facts line and the ADR was corrected after the fact. A refine that adds a field to an existing type checks which
 side of the core/application line the type lives on before it names it.
+
+### A port of the web takes its rule from the server and the enabler, not from what the web displays
+
+The apps' Memories-rest CR (ADR 0149) twinned the web's contributions tests and wrote D6 as "a member's own
+sub-buckets curated". The server lets any member curate any owner root, never across roots (ADR 0034 point 6,
+`en.memory.buckets` § Ownership), and the web shows another member's primary as one's own — so the core ported the
+web's display mistake, and the Android pass found it as offers the server refused (inbox #991; the web's twin #1003).
+A refine that ports a web flow reads, for every action it offers, the enabler's rule and the server's gate
+(`MediaHandler`'s checks), and writes the offer from them; a web test is the list of cases to twin, not the rule.
 
 ### Every CR closes with a short, honest retrospective
 

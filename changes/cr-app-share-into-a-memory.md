@@ -15,7 +15,7 @@ invariants:
 
 ## Goal
 
-Inbox #893, the second CR of V2 block G, implemented after [cr-app-memories-rest](cr-app-memories-rest.md) (its D1). ADR
+Inbox #893, the second CR of V2 block G, implemented after cr-app-memories-rest (done 2026-11-19, [ADR 0149](../docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decision 1). ADR
 0138 decision 2 names a Memory's answer to a share — its photos — and decision 6 the extension's limit: a Memory's larger
 files sealed and uploaded in frames from disk out of iOS's share extension. Neither is built: only a Pot takes a share.
 Then a photo or a video shared from the phone's gallery (Android's share sheet, iOS's share extension) can be put into a
@@ -26,7 +26,9 @@ iPadOS; macOS shares the Apple shell) are uploaded into it — as the desktops a
 
 - **Read first:** ADR 0138 (all), ADR 0145 (uploads under way, a phone's process held), ADR 0137 (files by path),
   `src/mobile/CLAUDE.md` § Nothing on disk and § Each platform's guidelines.
-- **Where what runs** as in cr-app-memories-rest; the share extension builds with the iOS target. **No iOS simulator
+- **Where what runs** (from `src/mobile/`, as `src/mobile/CLAUDE.md` § Prove your work names it): `ANDROID_HOME=$HOME/Library/Android/sdk
+  ./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest :android:assembleDebug`; the Apple builds after
+  `./gradlew :core:assembleVeyqCoreDebugXCFramework`; live tests as a throwaway (`VEYQ_LIVE`); the share extension builds with the iOS target. **No iOS simulator
   boots on this Mac (#928)**: every iOS share and drop pass is the owner's on a device; the macOS drop runs here.
 - **Out of scope:** a folder as a share target (Depot's answer, ADR 0138 decision 2: #987, new — this CR's hook takes it
   in one function); a share target on the desktops (GNOME has none; Windows' needs the packaged app's Share Target

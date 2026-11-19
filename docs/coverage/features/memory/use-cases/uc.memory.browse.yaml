@@ -1,6 +1,9 @@
 useCase: uc.memory.browse
 feature: memory
 title: Browse & organize the Memory tree (shell)
+# The apps (ADR 0149 decision 8, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named
+# here, not cited — core `ViewModeTest` (each account's own choice, the first view before any; a level offers no map;
+# two columns on a phone, more as the window widens), `PersonMemoriesTest.theSwitchShowsTilesAndTheMapInPlaceOfTheListAndBack_theChoiceKeptAsTheAccounts`.
 acceptanceCriteria:
   - id: open-personal-scope
     text: After unlock the client opens (auto-births if absent) the personal scope → the scope content key K_SC.

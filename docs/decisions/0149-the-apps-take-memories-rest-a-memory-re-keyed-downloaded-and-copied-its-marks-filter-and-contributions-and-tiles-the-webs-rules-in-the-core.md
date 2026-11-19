@@ -1,6 +1,8 @@
 # ADR 0149 — The apps take Memories' rest: a Memory re-keyed, downloaded and copied as the web's, its marks, filter and contributions, and every level drawn as tiles — the web's rules in the core
 - Status: Accepted
-- Built: partly (decisions 4–6 and 8–10 in the core and the bridge only — no platform draws them yet; decision 11 holds until the platforms)
+- Built: yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android and Linux as throwaways
+  and by the core's live tests (§ Consequences, the passes); on Apple and Windows built and compiled, their passes open
+  (inbox #994, #1000); the four owner questions answered 2026-11-19 (§ Consequences)
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md) (the rights: [Memories](../apps/memories.md))
 
@@ -93,8 +95,8 @@ the branch the refine read (each claim's command is in the refine's record of it
    listing, create, rename, delete and a medium's move, a bucket's name sealed under the node's key (`bucket-name`, or the
    ancestor key a guest's identity folder uses, ADR 0080 decision 6). The **Contributions** view joins the Memory's view
    switch — Photos | Music | Map | Contributions — where `buckets` holds: the uploader picker narrowing the grid and a
-   member's own sub-buckets curated (**pending the owner**: the fourth segment on a phone; the recommendation is yes,
-   shown to a member only). **A guest is named** in the lightbox's details from its primary bucket's sealed name with
+   member's own sub-buckets curated (**owner 2026-11-19:** the fourth segment, exactly as the web offers it — to a
+   member only). **A guest is named** in the lightbox's details from its primary bucket's sealed name with
    "(guest)", as the web's; the buckets' listing is a kept read, so the names stay offline; nothing is curated offline.
    **A medium's report:** the lightbox offers *Report* for a photo or a video where the rights allow, through core's
    `ReportSheet` with `MediumReport.keys`, the path a track already takes.
@@ -113,16 +115,17 @@ the branch the refine read (each claim's command is in the refine's record of it
    - **The frame is core's:** `TileGrid.columns(width)` gives at least two columns on a phone (a 360-unit width two of
      about 160), more as the window widens (a 160-unit minimum, 12-unit gaps); a tile is its node's cover **square**,
      the name below and the row's second line under it — the platform's album grid. Every kind gets a tile; a folder's
-     shows its cover or the folder symbol. **Pending the owner:** two columns of square covers on a phone rather than the
-     web's one column of 16:9 cards (recommended), and the first view (**Tiles** recommended, as the web's default; List
-     is what the apps show today).
+     shows its cover or the folder symbol. **Owner 2026-11-19:** the first view is **Tiles**, the web's default (the
+     apps behave exactly as the web); the two columns of square covers on a phone stay rather than the web's one column
+     of 16:9 cards, since a tile's shape and columns are the look, and the look follows the platform's guidelines
+     (owner 2026-11-09).
    - **The switch:** Android a segmented button row on the profile and a view toggle in the level's top bar; Apple a
      *View as* menu in the toolbar and the profile's segmented picker; Linux a grid/list toggle in the header bar and the
      profile's toggle group; Windows a *View* drop-down in the level's command bar and the profile's selector bar.
    - **A tile's actions are the row's** (the overflow, the context menu, a desktop's right click); the pick mode's dimming
      (ADR 0138) applies to a tile as to a row.
-   - **Words (pending the owner):** everything from the web's EN and DE but the switch's own, where the apps' short
-     `node_view_list` "List" / "Liste" gains `node_view_tiles` "Tiles" / "Kacheln" (recommended).
+   - **Words (owner 2026-11-19, as recommended):** everything from the web's EN and DE but the switch's own, where the
+     apps' short `node_view_list` "List" / "Liste" gains `node_view_tiles` "Tiles" / "Kacheln".
 9. **Rights and the guest.** Every control follows `MemoryRights` as the core computes it: `mark` (a member, read-only
    included), `filterFacts`, `buckets`, the report's right, and copy and download from the doors and the session's role.
    A guest has none of the marks, the filter's marks mode or the contributions and sees the gallery as a member does
@@ -148,6 +151,50 @@ the branch the refine read (each claim's command is in the refine's record of it
 - **A download is held to the web's importer by a committed fixture**, not by a schema validator in the core's tests: a
   validator would be a new test dependency, and an archive the schema accepts can still be one the importer refuses.
 - **Import stays the web's** until #985; a person imports an app's download on the web.
+- **The owner's answers** (2026-11-19; each was built as recommended, so nothing changed): the rule is that the apps
+  **behave exactly as the web** and **look as their platform's guidelines** say (owner 2026-11-09). So the first view is
+  Tiles, the web's default (`ViewMode.FIRST`, decision 8); the Contributions are the fourth view exactly as the web
+  offers them (`Contributions.OFFERED`, decision 6); the switch's word is "Tiles" / "Kacheln" (`node_view_tiles`); and
+  a phone's tiles stay two columns of square covers (`TileGrid.MIN_COLUMNS` = 2), not the web's one column of 16:9
+  cards — a tile's shape and columns are the look, so the platform's album grid holds.
+- **Where it was built otherwise than decided** (2026-11-19). *Decision 6's curation is the server's rule, not "a member's
+  own":* the server lets any member curate any owner root — a sub-bucket under any primary, any sub-bucket renamed or
+  deleted, a medium moved within one root, never a primary renamed and never a move across roots (ADR 0034 point 6,
+  [en.memory.buckets](../features/memory/enablers/en.memory.buckets.md) § Ownership). The Android pass found the core
+  taking another member's primary for the caller's (inbox #991); the core now names "You" by the caller's own id and
+  offers only what the server takes (`Contributions.State`'s `createsSub`, `renames`, `moveTargets`). The web has the same
+  display mistake (#1003, open). *Decision 3's copy* writes at the epoch the new node was born at, so a rotation another
+  member makes mid-copy fails it and its node goes to the trash, where the web's copy pulls the node forward and re-sends
+  (#988). *A bucket's lightbox* pages that bucket's media, not the gallery (#996). *Decision 5's
+  places:* on Android the filter is the Photos view's own toolbar under the view switch (the shell's top bar is core's
+  node header) and the marks' mode a filter chip's menu; on an iPhone it is `.searchable` with tokens, on an iPad and a
+  Mac a field of the page's own above the grid, since the toolbar's one field is the shell's search (#995); a day chip
+  is the viewer's calendar day, handed by each platform (#989). *Decision 8's grid:* Windows places the tiles on a
+  `Canvas` at the core's `TileGrid` frames, as its gallery's grid, not an `ItemsRepeater` with a `UniformGridLayout`;
+  Linux draws a tile's badge with icons of the app's own (Adwaita has no heart); Android's view switch scrolls where four
+  segments do not fit. *Decision 10:* the bridge also carries `GalleryShown.marking` (where a toggle is taken, so a
+  personal space's tiles mark), a bucket's media as gallery rows, and `Marks.Seen` (#997, #1001).
+- **What the passes proved** (each as a throwaway owner and member, made and erased by the pass). *Android* (a throwaway
+  API 36 emulator): one photo marked by two sessions — the count 2, each filled only for itself; the filter's day chip
+  and the marks' mode; a sub-bucket made and media moved into it; a Memory downloaded into Downloads with its originals
+  byte-equal; a copy into a folder, opened in the app (four media, no marks); the report sheet opened from the lightbox;
+  tiles on Home, a folder, the Memories list and a profile, the choice kept across a restart and shared between the
+  levels and the profile; the badge's and the toggle's labels read from the accessibility tree. *Linux* (Broadway): marks
+  by two sessions; a photo reported and its receipt read; the local day chip; the mine mode; a sub-bucket made and a
+  medium moved in and out; a Memory's download with its manifest; a copy, its loss line said; tiles from two to six
+  columns as the window widened; the choice kept across a restart. *The core's live tests* as throwaways:
+  `MemoryRekeyLiveTest` (a Memory left due, pulled forward by the member's upload, every medium and the banner opening
+  after), `MemoryExportLiveTest` (a folder downloaded with its Memory, the Memory copied and read back to the byte),
+  `MarksLiveTest` (two marks counted, each mine only for itself; a member's sub-bucket under the owner's primary taken,
+  the owner's photo moved into the member's own sub-bucket refused, across roots — #991's server answers). The web imports the core's download through its own
+  importer (`app-memory-download.zip`, decision 7).
+- **What no pass has proved yet.** On Android and Linux: the re-key after a member's removal followed by an upload in the
+  app (held by `MemoryRekeyLiveTest` in the core), a link guest's upload named in the app, a report seen in the
+  moderation inbox, the copy opened on the web, a sub-bucket renamed and deleted, a screen reader's speech (TalkBack did
+  not take the taps, #992; the Linux container has no accessibility bus, #998), German on Linux. On Apple: everything — a
+  macOS and an iOS-simulator build only, the Mac's screen locked (#994); on Windows: the UIA pass, blocked by the VM's
+  `hosts` file (#983, #1000). **The owner's:** an iPhone and an iPad — the tiles at a phone's and a tablet's width, the
+  badge's legibility, `.searchable`'s tokens, the lightbox's heart (no simulator boots here, #928).
 
 ## Alternatives considered
 
@@ -162,3 +209,12 @@ the branch the refine read (each claim's command is in the refine's record of it
 - **One column of 16:9 cards on a phone** (the web's below 520 px) — a feed, not a grid; a phone's platform draws two
   columns. **A choice per level** — the web keeps one, and a person's sense of "how veyq shows things" is one.
 - **Validating the download against the JSON schema in the core's tests** — see the Consequences.
+
+Explained for users on the docs site (§ In the app on each): [Mark the best photos](../../site/src/content/docs/memories/marked-photos.mdx),
+[See who added what](../../site/src/content/docs/memories/contributions.mdx),
+[Look through the gallery](../../site/src/content/docs/memories/the-gallery.mdx) (the filter, a medium's report),
+[People in your Memories](../../site/src/content/docs/memories/people-in-your-memories.md) and
+[Views, tabs and favorites](../../site/src/content/docs/spaces/views-and-favorites.mdx) (the tiles),
+[Download and import](../../site/src/content/docs/spaces/download-and-import.md),
+[Copy things](../../site/src/content/docs/spaces/copy-things.mdx); what the app holds,
+[Install the app](../../site/src/content/docs/getting-started/install-the-app.mdx).

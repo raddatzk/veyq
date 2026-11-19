@@ -49,8 +49,8 @@ import kotlin.time.Duration.Companion.minutes
  * as every app opens a tenant: its size first, then the sync the door started fetches it. A third session — another
  * device — adds a photo; this account is closed and opened again online, and the sync the open starts keeps the new photo.
  * Then the folder's subtree is re-keyed (a link on it minted and switched off, `ShareLinks.switchOff` with the build's
- * kinds: the folder gets a fresh key, the Memory's entry is sealed under it anew, the tree's revision moves; the app leaves
- * the Memory's own re-key to a web device) and the next sync fetches no frame: every pinned frame counted before and
+ * kinds: the folder gets a fresh key, the Memory's entry is sealed under it anew, the tree's revision moves; the Memory's
+ * own re-key moves wraps and sealed fields and keeps every `K_blob`, ADR 0149 decision 2) and the next sync fetches no frame: every pinned frame counted before and
  * after is in place. Last, the account is closed, the network cut and the account unlocked again: the Memory opens from
  * the store with both photos, no request having left.
  *
@@ -167,7 +167,7 @@ class LivePinsTest {
             val o = assertNotNull(account.offline)
             val treeKey = o.key(KeptRead.NODES, tenant.tenant.tenantId, scopeId, scopeId)
             val revision = o.store.entry(treeKey)?.revision
-            // the folder re-keyed here; the Memory below it left due for a web device (its media rows are the web's re-key)
+            // the folder re-keyed here, and the Memory below it (ADR 0149 decision 2: its blobs and their K_blobs are kept)
             val closed = ShareLinks.switchOff(tenant, scopeId, folder, shareId, rules.kinds, rules.tokenInput) { java.util.UUID.randomUUID().toString() }
             assertTrue(closed == ShareLinks.Closed.CLOSED || closed == ShareLinks.Closed.CLOSED_REKEY_PENDING, "the link did not close: $closed")
             val fetched = ApplicationBlobs.fetchedFrames

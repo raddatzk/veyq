@@ -9,6 +9,12 @@ title: Buckets — group a Memory's media by who contributed it
 # root — never a primary, never across owners). The web ships the "Beiträge" tab with per-tile selection + an
 # explicit action bar (cr-0122). A camera filter is a later slice. A full live
 # "Beiträge"-tab click-through is pending a session with the dev backend up.
+# The apps (ADR 0149, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named here, not
+# cited — core `BucketsTest` (a sub-bucket under the node, a guest's under its link's root; the picker's rows; the
+# virtual "You"; a guest named from its bucket), `ContributionsTest` (another member's primary never taken for the
+# caller's, only what the server takes offered, a moved medium gone when the move answers, a bucket's lightbox paging
+# the bucket), `MarksAndBucketsOfflineTest` (a guest named offline); live as throwaways `MarksLiveTest` (a member's
+# sub-bucket under the owner's primary taken, a move across roots refused — inbox #991).
 acceptanceCriteria:
   - id: uploader-stamp-on-media
     text: Every uploaded medium carries an operator-visible uploader stamp — a member's created_by = owner_key "user:{id}" XOR a contributor's "share:{shareIdentityId}" — set at attach and returned by the per-node media list (ownerKey/bucketId), so a client can group. Attach is the only insert, so no medium lacks either (the list-time backfill for pre-cr0113 rows was deleted before V1, inbox #264).
