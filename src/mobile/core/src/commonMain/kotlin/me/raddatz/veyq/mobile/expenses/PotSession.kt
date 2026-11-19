@@ -58,6 +58,9 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
     /** Whether this member may change the Pot's settings, a Pot without any included: Expenses is on for the tenant. */
     val canChangeSettings: Boolean get() = door.changesSettings
 
+    /** Whether a member reads the Pot ([PotDoor.member]); false for a link's guest. */
+    val member: Boolean get() = door.member
+
     /** The waits before each retry while the Pot is not re-keyed since a rotation (`REKEY_RETRY_DELAYS_MS`). */
     internal var rekeyWaitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS
 

@@ -855,6 +855,15 @@ internal sealed class Call {
      */
     @Serializable @SerialName("Received.Upload") data class ReceivedUpload(val received: Long, val paths: List<String>) : Call()
 
+    /**
+     * The file on screen replaced by the file at [path] as the link's READ_WRITE guest (#1035; the web's share page), once
+     * Replace was chosen on its page ([FileChooseReplace]): queued on the link's own queue, never a tenant's, so a signed-out
+     * guest replaces too; the page reads the file anew once it settled. [Answer.Queued]; refused `NOT_OFFERED` where no file
+     * shows, on a READ link or before the guest named itself, `NOT_CHOSEN` where Replace was not chosen; a path that does
+     * not read is said by name.
+     */
+    @Serializable @SerialName("Received.Replace") data class ReceivedReplace(val received: Long, val path: String) : Call()
+
     /** The link's screen closed without asking (the app quits): as [ReceivedLeave]. */
     @Serializable @SerialName("Received.Close") data class ReceivedClose(val received: Long) : Call()
 
@@ -3170,6 +3179,8 @@ internal class PotSettingsShown(
     val settleFirst: Boolean,
     val members: List<PotMember>,
     val asking: ErasingPerson?,
+    /** The base currency and the categories show (`PotView.metaShown`): a member's; a link's guest sees its people alone. */
+    val metaShown: Boolean = true,
 )
 
 /** A member of the space: their user id and the name they read by. */

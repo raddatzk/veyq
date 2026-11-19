@@ -128,6 +128,21 @@ class GuestAccess internal constructor(
         return false
     }
 
+    /**
+     * A READ_WRITE guest's Replace of [file]'s content with [source] (the web's share page: `guestFileUploadJob` with a
+     * `replace` target), queued on this link's own [queue] — never a tenant's: signed out or in, the link writes as its
+     * guest (#1035). The page reads the file anew once it settled. False — nothing queued, [source] the caller's to close —
+     * on a READ link, before the guest named itself, without a queue, or where Replace was not chosen on [file]
+     * (`FileModel.chooseReplace`, the choice then left standing).
+     */
+    fun replace(file: me.raddatz.veyq.mobile.depot.FileModel, source: me.raddatz.veyq.mobile.blob.UploadSource): Boolean {
+        val q = queue ?: return false
+        if (role != READ_WRITE || session.value == null) return false
+        val job = file.replace(source) ?: return false
+        q.enqueue(listOf(job), source.name, file.node.nodeId, onSettled = { file.reload() }, onFinished = null)
+        return true
+    }
+
     /** What a guest's create came to. */
     sealed class Created {
         /** Made: its id and its fresh key (the caller's to zero), at its own epoch 0 under the parent's scope epoch. */

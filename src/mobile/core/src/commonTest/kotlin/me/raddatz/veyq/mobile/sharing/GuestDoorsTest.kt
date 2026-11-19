@@ -139,6 +139,51 @@ class GuestDoorsTest {
         f.share.assertNoKeyInAnyRequest()
     }
 
+    /**
+     * #1035: a file page's Replace queues on the link's own queue — no tenant's, so a signed-out guest replaces as on the
+     * web's share page —, only for a named READ_WRITE guest who chose Replace; the page reads the file anew after.
+     */
+    @Test
+    fun aGuestsReplaceQueuesOnTheLinksOwnQueueOnceNamedAndChosen() = runTest {
+        suspend fun opened(role: String, queue: me.raddatz.veyq.mobile.blob.UploadQueue?): Triple<Fixture, GuestView, FileModel> {
+            val f = fixture(role)
+            val v = GuestView.over((ReceivedLink.open(f.share.link) as ReceivedLink.Parsed.Ok).link, f.share.client(), MemoryDeviceStore(), MemoryGuestSessions(), queue = queue)
+            v.load()
+            v.open(f.file)
+            val model = assertIs<GuestPage.File>(v.page.value).model
+            withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(10_000) { model.state.first { it.header != null } } }
+            return Triple(f, v, model)
+        }
+        // a READ link's file takes no replace, nor does a READ_WRITE one without a queue
+        val (_, readView, readFile) = opened("READ", me.raddatz.veyq.mobile.blob.UploadQueue())
+        assertFalse(readFile.chooseReplace())
+        assertFalse(readView.access!!.replace(readFile, source("x.txt", "x")))
+        val (_, bare, bareFile) = opened("READ_WRITE", null)
+        bare.access!!.nameGuest("Ben")
+        assertTrue(bareFile.chooseReplace())
+        assertFalse(bare.access!!.replace(bareFile, source("x.txt", "x")), "a replace was queued without the link's queue")
+
+        val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
+        val (f, v, file) = opened("READ_WRITE", queue)
+        val access = assertNotNull(v.access)
+        // before the guest named itself nothing is queued (the web asks the name first)
+        assertTrue(file.chooseReplace())
+        assertFalse(access.replace(file, source("new.txt", "new content")), "an unnamed guest's replace was queued")
+        assertTrue(queue.state.value.batches.isEmpty())
+        access.nameGuest("Ben")
+        assertTrue(access.replace(file, source("new.txt", "new content")), "a named guest's chosen replace was not queued")
+        withContext(kotlinx.coroutines.Dispatchers.Default) {
+            withTimeout(10_000) { queue.state.first { s -> s.batches.isNotEmpty() && s.batches.all { b -> b.finished } } }
+        }
+        assertEquals(1, f.content.completed.size, "the replace's content was not completed")
+        assertFalse(access.replace(file, source("again.txt", "again")), "a choice was used twice")
+        // the settle's re-read of the file (the page following the replace) ends before the requests are searched
+        file.close()
+        v.close()
+        withContext(kotlinx.coroutines.Dispatchers.Default) { kotlinx.coroutines.delay(300) }
+        f.share.assertNoKeyInAnyRequest()
+    }
+
     @Test
     fun aReadGuestsPotOffersNoEntryAndAReadWriteGuestsOnlyOnceNamed() = runTest {
         for (role in listOf("READ", "READ_WRITE")) {

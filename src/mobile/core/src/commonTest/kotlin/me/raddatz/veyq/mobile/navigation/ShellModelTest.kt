@@ -152,4 +152,19 @@ class ShellModelTest {
         val open = home.openAtTop(pot)
         assertSame(open, ShellModel.afterRename(open, ObjectRef("t", "other", "EXPENSES_POT", ApplicationId.EXPENSES, "Rome")))
     }
+    /** #1035: a kept link's page heads its new name after a rename, and is left after its trash — as an open object's. */
+    @Test
+    fun a_kept_links_page_follows_its_rename_and_leaves_after_its_trash() {
+        val home = Shell(application = null, space = "s").enter(FolderRef("f", "Trips"))
+        val kept = NodeAt("s", "bm", "SHARE_BOOKMARK", "Kept")
+        val page = home.openBookmark(kept)
+        val renamed = ShellModel.afterRename(page, NodeAt("s", "bm", "SHARE_BOOKMARK", "Kept 2"))
+        assertEquals("Kept 2", renamed.bookmark?.name)
+        assertEquals("Kept 2", renamed.headed?.name)
+        assertSame(home, renamed.goBack(), "the rename lost where the page was opened from")
+        assertSame(page, ShellModel.afterRename(page, NodeAt("s", "other", "SHARE_BOOKMARK", "Other")))
+        // trashed: back to where it was opened from
+        assertSame(home, ShellModel.afterTrash(page, "bm"))
+        assertSame(page, ShellModel.afterTrash(page, "other"))
+    }
 }

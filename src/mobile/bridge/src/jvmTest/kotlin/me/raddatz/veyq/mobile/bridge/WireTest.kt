@@ -164,7 +164,7 @@ class WireTest {
             Call.LinkConfirm(70, "Büro-Laptop"), Call.LinkEnterCode(70, "042917"), Call.LinkClose(70),
             Call.ReceivedOpen("https://photos.example.org/s/x#k=y"), Call.ReceivedPassword(80, "pw"), Call.ReceivedAcceptTerms(80), Call.ReceivedAcceptNote(80),
             Call.ReceivedOpenNode(80, "n1"), Call.ReceivedBack(80), Call.ReceivedStay(80), Call.ReceivedLeave(80), Call.ReceivedName(80, "Ben"),
-            Call.ReceivedForgetGuest(80), Call.ReceivedKeep(80, "s1"), Call.ReceivedUpload(80, listOf("/tmp/a.jpg")), Call.ReceivedClose(80),
+            Call.ReceivedForgetGuest(80), Call.ReceivedKeep(80, "s1"), Call.ReceivedUpload(80, listOf("/tmp/a.jpg")), Call.ReceivedReplace(80, "/tmp/a.txt"), Call.ReceivedClose(80),
             Call.ReceivedKeepPlaces(80), Call.ReceivedReport(80), Call.ReceivedReportShown(80),
             Call.ReceivedReportNode(80, "n1"), Call.ReceivedNewFolder(80, "Neu"),
             Call.ShellOpenBookmark(me.raddatz.veyq.mobile.navigation.NodeAt("s1", "b1", "SHARE_BOOKMARK", "Ein Link")),

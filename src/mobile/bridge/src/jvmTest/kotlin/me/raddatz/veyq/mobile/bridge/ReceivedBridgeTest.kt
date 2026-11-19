@@ -206,6 +206,47 @@ class ReceivedBridgeTest {
         b.shutdown()
     }
 
+    /**
+     * #1035: a signed-out READ_WRITE guest replaces the file on screen by path (`Received.Replace`, the link's own queue —
+     * no tenant is open): refused before it named itself and before Replace was chosen, queued after; the content completed.
+     */
+    @Test
+    fun aSignedOutGuestReplacesTheFileOnScreen() = runBlocking {
+        val share = PlayedShare(p, role = "READ_WRITE")
+        val content = PlayedGuestContent(share)
+        val (file, _) = content.file(share.rootId, share.rootKey, "notes.txt", "hello guest".encodeToByteArray())
+        val b = bridge(share)
+        val opened = assertIs<Answer.ReceivedOpened>(b.ask(Call.ReceivedOpen(share.link)))
+        val w = b.watching(Watched.Received(opened.received))
+        val all = mutableListOf<String>()
+        suspend fun until(pick: (ReceivedShown) -> Boolean): ReceivedShown = w.untilJson { j ->
+            all += j.toString()
+            (wire.decodeFromJsonElement(Update.serializer(), j) as Update.Received).shown?.takeIf(pick)
+        }
+        until { it.page?.kind == ReceivedPageKind.LEVEL }
+        val path = kotlin.io.path.createTempFile("replaced", ".txt").toFile().apply { writeText("new content"); deleteOnExit() }.path
+        assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.ReceivedReplace(opened.received, path)), "a level took a replace")
+        b.ask(Call.ReceivedOpenNode(opened.received, file))
+        val page = assertNotNull(until { it.page?.kind == ReceivedPageKind.FILE }.page!!.file)
+        assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.ReceivedReplace(opened.received, path)), "an unnamed guest's replace was taken")
+        b.ask(Call.ReceivedName(opened.received, "Ben"))
+        until { it.guestName != null }
+        assertEquals(Answer.Refused(Answer.Why.NOT_CHOSEN), b.ask(Call.ReceivedReplace(opened.received, path)), "a replace not chosen was taken")
+        kotlinx.coroutines.withTimeout(10_000) { while (b.ask(Call.FileChooseReplace(page)) != Answer.Done) kotlinx.coroutines.delay(20) }
+        assertIs<Answer.Said>(b.ask(Call.ReceivedReplace(opened.received, "$path.missing")), "a path that does not read was not said")
+        kotlinx.coroutines.withTimeout(10_000) { while (b.ask(Call.FileChooseReplace(page)) != Answer.Done) kotlinx.coroutines.delay(20) }
+        assertEquals(Answer.Queued(1), b.ask(Call.ReceivedReplace(opened.received, path)))
+        kotlinx.coroutines.withTimeout(10_000) { while (content.completed.isEmpty()) kotlinx.coroutines.delay(20) }
+        assertEquals(1, content.completed.size)
+        b.ask(Call.ReceivedClose(opened.received))
+        kotlinx.coroutines.delay(300)
+        for (json in all) for (c in listOf(b64url(share.kShare), b64(share.kShare), hex(share.kShare), share.link, share.shareId)) {
+            if (json.contains(c)) fail("an update carried the link or its key: $json")
+        }
+        share.assertNoKeyInAnyRequest()
+        b.shutdown()
+    }
+
     @Test
     fun aTextThatIsNoLinkIsAnsweredWithWhyAndAReviewWithTheBrowser() = runBlocking {
         val share = PlayedShare(p)

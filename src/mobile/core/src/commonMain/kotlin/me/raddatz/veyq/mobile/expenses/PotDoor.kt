@@ -33,6 +33,13 @@ interface PotDoor {
     /** Whether the Pot's settings (base currency, own categories) and its people's standing are changed here: a member's. */
     val changesSettings: Boolean
 
+    /**
+     * Whether a member reads the Pot here: its Settings show the base currency and the categories, and its people's standing
+     * (deactivate, delete) is managed. A link's guest — a READ_WRITE one adds and renames people alone (the web's
+     * `rights.ts`: `addPeople` without `managePeople` or `settings`, ADR 0108 decision 6).
+     */
+    val member: Boolean get() = true
+
     /** The tenant a member id means a person in (a download's), "" for a guest. */
     val tenantId: String
 
