@@ -105,16 +105,40 @@ launch; the person chose to copy; a phone's system shows the paste (iOS asks, An
 
 ## Phases
 
-- [ ] **1 core and bridge** — `DeepLink.parse` and `Call.DeepLink(uri)` (a desktop hands the URI in; the bridge answers
+- [x] **1 core and bridge** — `DeepLink.parse` and `Call.DeepLink(uri)` (a desktop hands the URI in; the bridge answers
   the screen). Tests: the two forms; every other input `Open`. **Bites:** (a) a parser that keeps the fragment or the
   query → the test that a `veyq://link#k=<canary>` and a `?u=<canary>` leave no canary anywhere in the answer red;
   (b) an unknown host answered `Link` → red. · Done when: `:core:jvmTest :core:macosArm64Test :bridge:jvmTest` green.
-- [ ] **2 web — the banner** (O2) — `core/openInApp/` (a component and its pure rule: which page, which form, the
+  **Built 2026-11-19 (branch `claude/open-in-app`):** core's `sharing/DeepLink.kt` — `DeepLink.parse(uri)` answers the
+  field-less `DeepLink.Open` / `DeepLink.Link`: `Link` only for scheme `veyq` (case aside) whose authority's host (user info
+  and port cut off) is `link`; a path, query, fragment are never read. Bridge: `Call.DeepLink(uri)` (stateless, signed in
+  or not) → `Answer.DeepLinked(screen: DeepScreen.OPEN | LINK)`; **the platform phases call it with the URI the system
+  handed them and show *Open a link* on `LINK`** (sign-in/unlock screen, or signed in over the open tenant), on `OPEN`
+  nothing but the app in front; Android/Apple may call `DeepLink.parse` directly. Tests: `DeepLinkTest` (core, by type,
+  plus no canary in the answer), `DispatchTest.aDeepLinkAnswersItsScreenAndNothingOfTheLink` (the answer's raw JSON),
+  `WireTest` samples. Bites seen red, restored by `/bin/cp -f`: (a) `Link` grown a field keeping fragment and query →
+  `noCanaryReachesTheAnswer` red; the bridge answering the fragment beside the screen → the dispatch test red; (b) any
+  host but `open` answered `Link` → `everyOtherInputOpensTheAppWhereItIs` red.
+- [x] **2 web — the banner** (O2) — `core/openInApp/` (a component and its pure rule: which page, which form, the
   normalized link); the four mailed views show it after their step; `ShareView.vue` shows it but in a review. Tests:
   the hrefs are exactly `veyq://open` / `veyq://link` and hold no `#`, `?` or key; the clipboard gets the normalized
   link without `&report`; a dismissed banner stays dismissed and a throwing storage still renders. **Bite:** the href
   built from `location.href` → the no-key test red. · Done when: `pnpm run check` in `src/web/` green and the browser
   pass (§ Passes) clicked.
+  **Built 2026-11-19:** `src/web/src/core/openInApp/` — `openInApp.ts` (the rule: `bannerForm(routeName, hash,
+  stepDone)`, the constants `APP_OPEN`/`APP_LINK`, `linkToCopy` = `parseShareLink`'s normalized link, `afterTheStep` for
+  the mailed views), `openInAppDismissal.ts` (`veyq.openInAppDismissed`, the donation dismissal's guard), `smartAppBanner.ts`
+  (`APP_STORE_ID = null`: no `apple-itunes-app` tag — `vite.config.ts`'s `smartAppBannerPlugin` writes it into
+  `index.html` once set, `app-id` only, no `app-argument` —; with it, our banner hides where Safari on iOS/iPadOS draws
+  Apple's) and `OpenInAppBanner.vue`. Per the owner's answer it is on **every page**: `AppShell.vue` draws it on the
+  signed-in app's pages (waiting like the other notices while the address banner stands) and the public card's,
+  `ShareView.vue` on a link's page (`veyq://link`, the click starts `clipboard.writeText` of the normalized link and the
+  link's own default opens the app); none on `/moderation` or in a `#moderation` review; the four mailed views show it
+  once their step is done (`veyq://open`). Words `openInApp.*` EN+DE. Bite: the href built from `location.href` → three
+  banner tests red, restored. Browser check (own Vite on 8095 over the dev backend, nothing signed in by the agent; the
+  full pass is phase 7's): login and privacy pages `veyq://open`; a fabricated share link's page `veyq://link`, no key in
+  the banner, dismissed → gone after a reload; in headless Chrome with clipboard permission the click put the link
+  without `&report` on the clipboard and Chrome tried `veyq://link` ("no registered handler").
 - [ ] **3 Android** (O3). · Done when: `:android:assembleDebug` green; `adb shell am start -a
   android.intent.action.VIEW -d 'veyq://link#k=CANARY'` opens *Open a link* and `logcat` holds no `CANARY` from the app.
 - [ ] **4 Apple** (O3). · Done when: both Apple builds green; `open 'veyq://link'` on the Mac opens *Open a link* (screen
