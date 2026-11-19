@@ -579,7 +579,7 @@ agent's on the unlocked Mac (#994) and the owner's on an iPhone and an iPad (#92
 iPad and a Mac (#995); **Windows' UIA pass** (#1000, once the VM resolves a throwaway's tenant, #983). The fixes of
 #990, #991, #996, #997 and #1001 are in, checked by tests, not by a pass yet; #989's calendars are handed on every app,
 Apple's unclicked. A copy that a rotation interrupts fails (#988). The owner answered its four questions 2026-11-19 as built (ADR 0149's Consequences). Not built: import of an archive, for every
-kind (#985); a Memory as a share target and a drop onto a phone's gallery (#893); a guest's view of a received link
+kind (#985); a Memory as a share target and a drop onto a phone's gallery (#893, phases 1–4 built by [cr-app-share-into-a-memory](../../changes/cr-app-share-into-a-memory.md), its passes #1005–#1008); a guest's view of a received link
 (#435, a source for the same model); the web's own heart in its lightbox (#986) and its Contributions' "You" (#1003).
 
 **Music** ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md), built above): **Apple's passes are the owner's** — on a real iPhone the background play,

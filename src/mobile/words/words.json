@@ -1741,20 +1741,40 @@
     "de": "Umbenannt. Einige Links darauf konnten nicht aktualisiert werden und zeigen ihren Gästen noch den alten Namen."
   },
   "share_nothing": {
-    "en": "Nothing shared can go here: only images and PDFs up to 10 MB.",
-    "de": "Nichts davon kann hier abgelegt werden: nur Bilder und PDFs bis 10 MB."
+    "note": "The pick mode's banner when none of what was shared or dropped could be read (ADR 0138).",
+    "en": "None of the shared files could be read.",
+    "de": "Keine der geteilten Dateien konnte gelesen werden."
   },
-  "share_pick": {
+  "share_unread": {
+    "note": "The pick mode's banner: shared or dropped files that could not be read at all (ADR 0138).",
     "en": {
-      "one": "Choose a Pot for this file",
-      "other": "Choose a Pot for these {1:int} files"
+      "one": "{1:int} file could not be read.",
+      "other": "{1:int} files could not be read."
     },
     "de": {
-      "one": "Wähle eine Kasse für diese Datei",
-      "other": "Wähle eine Kasse für diese {1:int} Dateien"
+      "one": "{1:int} Datei konnte nicht gelesen werden.",
+      "other": "{1:int} Dateien konnten nicht gelesen werden."
     }
   },
+  "share_pick": {
+    "note": "The pick mode's banner (ADR 0138 decision 1; owner 2026-11-19): the place is a Pot, a Memory or a chapter.",
+    "en": {
+      "one": "Choose where this file goes",
+      "other": "Choose where these {1:int} files go"
+    },
+    "de": {
+      "one": "Wähle, wohin diese Datei gehört",
+      "other": "Wähle, wohin diese {1:int} Dateien gehören"
+    }
+  },
+  "share_add_here": {
+    "note": "A Memory's or a chapter's own save in the pick mode: the shared photos and videos queued into it (ADR 0138 decision 3; owner 2026-11-19).",
+    "en": "Add here",
+    "de": "Hier hinzufügen",
+    "apple_en": "Add Here"
+  },
   "share_refused": {
+    "note": "A Pot's reason when its new expense left shared files out (Expenses' answer, ADR 0138 decision 2).",
     "en": {
       "one": "{1:int} file was left out: only images and PDFs up to 10 MB.",
       "other": "{1:int} files were left out: only images and PDFs up to 10 MB."

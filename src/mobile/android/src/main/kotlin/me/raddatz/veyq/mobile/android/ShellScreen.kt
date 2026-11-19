@@ -185,7 +185,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     val covers by model.covers.collectAsStateWithLifecycle()
     // how every level is drawn: the account's one view choice on this device (ADR 0149 decision 8)
     val levelView by model.levelView.collectAsStateWithLifecycle()
-    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails, LocalAvatars provides avatars, LocalPicking provides (incoming != null), LocalCovers provides covers, LocalShellNotices provides ShellNotices(snackbar, scope), LocalLevelView provides levelView) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails, LocalAvatars provides avatars, LocalPicking provides (incoming != null), LocalTakesShare provides model::takesShare, LocalCovers provides covers, LocalShellNotices provides ShellNotices(snackbar, scope), LocalLevelView provides levelView) {
     val drawerContent: @Composable () -> Unit = {
         Drawer(
             s,
@@ -207,6 +207,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     } + Place(shell.searching, { model.search(true) }, Icons.Outlined.Search, stringResource(R.string.tab_search))
     val body: @Composable () -> Unit = {
         Scaffold(
+            // a drop onto the app is a share (ADR 0138 decision 9); a Memory's gallery takes its own
+            modifier = Modifier.sharedFilesDrop(model::receiveDrop),
             containerColor = MaterialTheme.colorScheme.background,
             snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
             topBar = {
@@ -275,7 +277,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                     )
                 }
                 s.banner?.let { OfflineBanner(it) }
-                incoming?.let { ShareBanner(it, onCancel = model::cancelShare) }
+                incoming?.let { ShareBanner(it, model, snackbar, onCancel = model::cancelShare) }
                 }
             },
             bottomBar = {
@@ -868,7 +870,7 @@ internal val LocalCovers = androidx.compose.runtime.staticCompositionLocalOf<Map
 private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit) {
     val details = LocalRowDetails.current[ref.nodeId].orEmpty()
     // Picking a place for what was shared: only a kind that takes it can be chosen (ADR 0138 decision 1).
-    val takes = !LocalPicking.current || me.raddatz.veyq.mobile.AppKinds.takesShared(ref.kind)
+    val takes = !LocalPicking.current || LocalTakesShare.current(ref)
     ListItem(
         headlineContent = { Text(ref.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
         // The application's facts about the object (a Pot: its currency), left out when it has none.
@@ -900,7 +902,7 @@ private fun LazyListScope.group(title: Int?, refs: List<ObjectRef>, onOpen: (Obj
 @Composable
 private fun ObjectTile(ref: ObjectRef, modifier: Modifier, onOpen: (ObjectRef) -> Unit) {
     val details = LocalRowDetails.current[ref.nodeId].orEmpty()
-    val takes = !LocalPicking.current || me.raddatz.veyq.mobile.AppKinds.takesShared(ref.kind)
+    val takes = !LocalPicking.current || LocalTakesShare.current(ref)
     LevelTile(
         ref.name, details.takeIf { it.isNotEmpty() }?.joinToString(" · "), LocalCovers.current[ref.nodeId]?.second, kindIcon(ref.kind),
         folder = false, modifier = modifier, enabled = takes, selected = LocalOpenObject.current == ref.nodeId,
@@ -966,6 +968,9 @@ internal val LocalShellNotices = androidx.compose.runtime.staticCompositionLocal
 /** Whether the shell is picking a place for what another app shared (ADR 0138). */
 internal val LocalPicking = androidx.compose.runtime.compositionLocalOf { false }
 
+/** Whether the pick mode lets an object be chosen (core's answer of its kind and this member's right there, `AppModel.takesShare`). */
+internal val LocalTakesShare = androidx.compose.runtime.compositionLocalOf<(ObjectRef) -> Boolean> { { false } }
+
 /**
  * The shell's banner while the server is out of reach (ADR 0140 decision 10, core's words: "Offline — content as of …"):
  * a strip under the top app bar, as Material shows a lasting state of the whole screen; every write is gone meanwhile.
@@ -982,10 +987,22 @@ private fun OfflineBanner(banner: me.raddatz.veyq.mobile.words.Notice) {
     }
 }
 
-/** The pick mode's banner: what waits and where it can go, with its cancel. */
+/**
+ * The pick mode's banner: what waits and where it can go, with its cancel — and on a Memory's or a chapter's page that
+ * takes it, *Add here* (ADR 0138 decision 3), that page's own save.
+ */
 @Composable
-private fun ShareBanner(incoming: me.raddatz.veyq.mobile.expenses.ShareInbox.Incoming, onCancel: () -> Unit) {
+private fun ShareBanner(
+    incoming: me.raddatz.veyq.mobile.navigation.ShareInbox.Incoming, model: AppModel, snackbar: androidx.compose.material3.SnackbarHostState,
+    onCancel: () -> Unit,
+) {
     val palette = LocalPalette.current
+    val target by model.shareTarget.collectAsStateWithLifecycle()
+    // the page's rights and reach move with its state: read again on each
+    val targetState = target?.state?.collectAsStateWithLifecycle()?.value
+    val addHere = target?.takeIf { targetState != null && model.offersAddHere(it) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     Row(
         Modifier.fillMaxWidth().background(role(palette.accentSoft)).padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -996,11 +1013,16 @@ private fun ShareBanner(incoming: me.raddatz.veyq.mobile.expenses.ShareInbox.Inc
                 else pluralStringResource(R.plurals.share_pick, incoming.files.size, incoming.files.size),
                 fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
             )
-            if (incoming.refused > 0) {
-                Text(pluralStringResource(R.plurals.share_refused, incoming.refused, incoming.refused), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+            if (incoming.refused > 0 && incoming.files.isNotEmpty()) {
+                Text(pluralStringResource(R.plurals.share_unread, incoming.refused, incoming.refused), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
             }
         }
         TextButton(onClick = onCancel) { Text(stringResource(R.string.entry_cancel)) }
+        if (addHere != null) {
+            androidx.compose.material3.FilledTonalButton(onClick = {
+                model.addHere(addHere)?.let { n -> scope.launch { snackbar.showSnackbar(context.text(n)) } }
+            }) { Text(stringResource(R.string.share_add_here)) }
+        }
     }
 }
 

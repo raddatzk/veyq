@@ -822,6 +822,16 @@ the folder that does hold the kit. The save dialogs' **recent-files records are 
 page on the kit says the file is where it was saved. Open: whether iOS's `fileExporter` stages the document in the
 container (#975).
 
+**A file shared into a Memory is read from disk, never held whole** ([ADR 0138](../../docs/decisions/0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md)
+decision 6): iOS's share extension copies each file inside `loadFileRepresentation`'s callback into the app group's
+container, `share-in/<random>/`, with *Add here*'s target beside them, and closes; the app queues them the next time it
+opens that tenant and removes each copy once the queue lets the file go (`MediaUploads`' `left`). A cancel in the
+extension removes them at once, a sign-out removes what still waits. The copies are the plaintext the person shared,
+unencrypted until their upload (owner 2026-11-19: not uploaded yet, and already the person's own on the device). Android
+reads a shared file where the system put it (the share's grant outlives the app being left, ADR 0138's Consequences);
+its one copy is a shared HEIC re-encoded as a JPEG, `no_backup/share-in/<random>`, removed once nothing reads it and
+swept at start.
+
 Per engine:
 - **Darwin (Apple, `appleHttpClient` in `Apple.kt`):** Ktor starts from `defaultSessionConfiguration`, whose shared
   `URLCache` wrote every answer to `Library/Caches/me.raddatz.veyq/Cache.db` (the bundle id then, `app.veyq` today) + `fsCachedData` — measured 2026-11-13 on

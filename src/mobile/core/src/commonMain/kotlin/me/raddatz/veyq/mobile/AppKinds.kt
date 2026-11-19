@@ -347,8 +347,15 @@ object AppKinds {
         )
     }
 
-    /** Whether an object of [kind] can be chosen as the place for files shared to veyq (ADR 0138 decision 1): a Pot. */
-    fun takesShared(kind: String): Boolean = kind == PotSession.KIND
+    /**
+     * The answer of [kind] to files shared to veyq (ADR 0138 decision 2): each application's own — a Pot's new expense
+     * (`PotShare`), a Memory's and a chapter's upload queue (`MemoryShare`); null for a kind that takes nothing.
+     */
+    fun share(kind: String): me.raddatz.veyq.mobile.navigation.ShareAnswer? = when (kind) {
+        PotSession.KIND -> me.raddatz.veyq.mobile.expenses.PotShare.answer
+        MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoryShare.answer
+        else -> null
+    }
 
     private const val FOLDER = "FOLDER"
     private const val FILE = "FILE"

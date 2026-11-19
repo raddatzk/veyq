@@ -295,6 +295,15 @@ class ShellModel(
     fun inIdentityFolder(ref: NodeAt): Boolean = tenant.inIdentityFolder(ref.scopeId, ref.nodeId)
 
     /**
+     * Whether the pick mode lets [ref] be chosen for what waits in [inbox] (ADR 0138 decisions 1 and 2): its kind's answer
+     * (`AppKinds.share`), where this member may put files into it here, takes one of them. Anything else is dimmed.
+     */
+    fun takesShare(inbox: ShareInbox, ref: NodeAt): Boolean = inbox.offers(
+        AppKinds.share(ref.kind),
+        ShareAnswer.Place(ref.kind, tenant.applicationsOff(), online, inIdentityFolder(ref)),
+    )
+
+    /**
      * Whether [shell] shows a space's top level on Home, where its share offers "Add files only" ([topLevelShareSheet], the
      * web's level share): no folder, object, application, person's page or Search open, and the tenant's links and drop
      * boxes on. Every platform asks this (the phones through their `AppModel`, the desktops through `ShellShown.topLevelShare`).

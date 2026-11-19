@@ -311,6 +311,12 @@ struct MemoryScreen: View {
         .task(id: GalleryLiveKey(node: node, active: phase == .active)) {
             if phase == .active { await model.liveGallery(node) }
         }
+        // photos and videos dropped onto the gallery go into it at once, as a pick's (ADR 0138 decision 9)
+        .onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
+            guard uploads, let gallery = model.galleryModel(node) else { return false }
+            Task { model.dropOnto(gallery, await IncomingFiles.read(providers)) }
+            return true
+        }
         .photosPicker(isPresented: $pickingPhotos, selection: $photos, matching: .any(of: [.images, .videos]), preferredItemEncoding: .current)
         .onChange(of: photos) {
             let picked = photos

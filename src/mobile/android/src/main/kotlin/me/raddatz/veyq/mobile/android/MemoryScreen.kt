@@ -174,6 +174,11 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
             }
         }
     }
+    // in the pick mode the banner offers Add here on this page (ADR 0138 decision 3)
+    androidx.compose.runtime.DisposableEffect(gallery) {
+        model.shareTarget(gallery, true)
+        onDispose { model.shareTarget(gallery, false) }
+    }
     // what the page adds: photos and videos where the rights let whoever looks upload, a chapter where it makes one (core's)
     val chapterHere = me.raddatz.veyq.mobile.memories.MemoryCreate.CHAPTER in gallery.creates
     var namingChapter by remember { mutableStateOf(false) }
@@ -188,7 +193,13 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     val music = if (musicOffered && view == MemoryView.MUSIC) remember(gallery) { model.musicModel(gallery) } else null
     val tracks = if (view == MemoryView.MAP) remember(gallery) { model.trackList(gallery) } else null
     val contributions = if (contributionsOffered && view == MemoryView.CONTRIBUTIONS) remember(gallery) { model.contributions(gallery) } else null
-    Box(Modifier.fillMaxSize()) {
+    // photos and videos dropped from another app onto the gallery go into it at once, as a pick's (ADR 0138 decision 9)
+    val dropScope = androidx.compose.runtime.rememberCoroutineScope()
+    val dropContext = LocalContext.current
+    val dropped = Modifier.sharedFilesDrop { incoming ->
+        model.dropOnto(gallery, incoming)?.let { n -> dropScope.launch { snackbar.showSnackbar(dropContext.text(n)) } }
+    }
+    Box(Modifier.fillMaxSize().then(if (state.rights.upload) dropped else Modifier)) {
     if (tracks != null) MemoryMapView(gallery, tracks, model, snackbar, viewSwitch) else
     if (music != null) MusicView(gallery, music, model, snackbar, viewSwitch) else
     if (contributions != null) ContributionsView(gallery, contributions, model, snackbar, viewSwitch) { id -> contributions.lightbox(id)?.let { open = it } } else

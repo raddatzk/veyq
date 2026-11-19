@@ -116,6 +116,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     init {
         // a copy sent to another app in an earlier run has been read by now (or never will be)
         clearSentCopies()
+        // a shared HEIC's JPEG copy an earlier process never placed (ShareIn's `no_backup/share-in/`)
+        ShareIn.sweep(app)
         // a viewed file's decrypted copy that builds before core's file page left in the cache (`view-…`)
         app.cacheDir.listFiles { f -> f.name.startsWith("view-") }?.forEach { runCatching { it.delete() } }
     }
@@ -920,8 +922,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         _maps.value = model.mapServices(me.raddatz.veyq.mobile.map.TileRecipient.TILE_HOST) { appLanguage() }
         _depot.value?.close()
         _depot.value = model.depotUploads(uploads) { viewModelScope.launch { refreshLists(t) } }
-        // Android reads a pick in place: a file the queue is done with leaves nothing to remove
-        val madeMedia = model.mediaUploads(uploads, deriver, left = {}) { viewModelScope.launch { refreshLists(t) } }
+        // Android reads a pick in place: a file the queue is done with leaves nothing to remove but a share's own copy
+        val madeMedia = model.mediaUploads(uploads, deriver, left = ShareIn::release) { viewModelScope.launch { refreshLists(t) } }
         // a new tenant's queue was emptied; the same tenant opened again carries its uploads on
         media?.let { if (switched) it.close() else it.handOver(madeMedia) }
         media = madeMedia
@@ -934,25 +936,73 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     // ---- what another app shared (ADR 0138) ----
 
-    /** Files shared to veyq, from their arrival to where they went (core's `ShareInbox`). */
-    val shareInbox = me.raddatz.veyq.mobile.expenses.ShareInbox()
+    /** Files shared to veyq, from their arrival to where they went (core's `ShareInbox`); one let go is closed, a copy removed. */
+    val shareInbox = me.raddatz.veyq.mobile.navigation.ShareInbox(ShareIn::release)
 
-    /** Files waiting for the Pot they go to (the pick mode); null when none waits. */
-    val incoming: StateFlow<me.raddatz.veyq.mobile.expenses.ShareInbox.Incoming?> = shareInbox.waiting
+    /** Files waiting for the place they go (the pick mode); null when none waits. */
+    val incoming: StateFlow<me.raddatz.veyq.mobile.navigation.ShareInbox.Incoming?> = shareInbox.waiting
+
+    /** Whether the pick mode lets [ref] be chosen for what waits (core's answer of its kind, and this member's right there). */
+    fun takesShare(ref: ObjectRef): Boolean = shellModel?.takesShare(shareInbox, ref.at) ?: false
+
+    /** The Memory's or chapter's page on screen, where the pick mode's banner offers *Add here*; null on any other page. */
+    private val _shareTarget = MutableStateFlow<me.raddatz.veyq.mobile.memories.GalleryModel?>(null)
+    val shareTarget: StateFlow<me.raddatz.veyq.mobile.memories.GalleryModel?> = _shareTarget.asStateFlow()
+
+    /** [gallery]'s page is on screen ([shown]) or gone. */
+    fun shareTarget(gallery: me.raddatz.veyq.mobile.memories.GalleryModel, shown: Boolean) {
+        if (shown) _shareTarget.value = gallery else _shareTarget.compareAndSet(gallery, null)
+    }
+
+    /** Whether [gallery]'s page offers *Add here* for what waits (Memories' `MemoryShare`). */
+    fun offersAddHere(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): Boolean =
+        me.raddatz.veyq.mobile.memories.MemoryShare.offered(shareInbox, gallery)
+
+    /** *Add here* on [gallery]'s page: the waiting photos and videos queued into it, the share ended; what was left out said. */
+    fun addHere(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.words.Notice? {
+        val taken = me.raddatz.veyq.mobile.memories.MemoryShare.addHere(shareInbox, gallery) ?: return null
+        return me.raddatz.veyq.mobile.memories.MediaUploads.notTaken(taken.refused)
+    }
+
+    /** Files dropped onto [gallery]'s page (ADR 0138 decision 9): its photos and videos queued into it at once, as a pick's. */
+    fun dropOnto(gallery: me.raddatz.veyq.mobile.memories.GalleryModel, incoming: me.raddatz.veyq.mobile.navigation.ShareInbox.Incoming): me.raddatz.veyq.mobile.words.Notice? {
+        val sorted = me.raddatz.veyq.mobile.memories.MemoryShare.answer.sort(incoming.files)
+        val media = sorted.taken
+        val others = sorted.left
+        others.forEach(ShareIn::release)
+        if (media.isNotEmpty() && gallery.upload(media) == 0) media.forEach(ShareIn::release)
+        return me.raddatz.veyq.mobile.memories.MediaUploads.notTaken(others.size + incoming.refused)
+    }
 
     /**
      * Files arrive: the pick mode starts at the space's Home, never in the object last open, so the person chooses where
      * they go (ADR 0138 decision 1) — the start does the same while the session is still opening.
      */
-    fun receiveShare(incoming: me.raddatz.veyq.mobile.expenses.ShareInbox.Incoming) {
+    fun receiveShare(incoming: me.raddatz.veyq.mobile.navigation.ShareInbox.Incoming) {
         updateShell { Shell.start(null, it.space) }
         shareInbox.receive(incoming)
     }
 
+    /**
+     * Files dropped onto the app (ADR 0138 decision 9): an open Pot that takes them opens its new expense with them at
+     * once; anywhere else they wait in the pick mode, as a share's do (a Memory's gallery takes its own drop, [dropOnto]).
+     */
+    fun receiveDrop(incoming: me.raddatz.veyq.mobile.navigation.ShareInbox.Incoming) {
+        val open = (screen.value as? Screen.Signed)?.shell?.openObject
+        val pot = _pot.value
+        if (open != null && open.kind == PotSession.KIND && pot?.ref == open && me.raddatz.veyq.mobile.expenses.PotShare.takesDropOn(pot.view, incoming)) {
+            shareInbox.receive(incoming)
+        } else {
+            receiveShare(incoming)
+        }
+    }
+
     fun cancelShare() = shareInbox.cancel()
 
-    /** The waiting files, taken by the Pot opened as their place: its new expense's receipts. */
-    fun takeShare(): List<PotSession.PendingReceipt>? = shareInbox.take()
+    /** The waiting files, taken by the Pot opened as their place: its new expense's receipts (each read whole, within its budget). */
+    suspend fun takeShare(): me.raddatz.veyq.mobile.expenses.PotShare.Taken? = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        me.raddatz.veyq.mobile.expenses.PotShare.take(shareInbox) { java.util.UUID.randomUUID().toString() }
+    }
 
     /** The new expense's editor closed unsaved: the files wait again, for this Pot or another (from Home). */
     fun returnShare() {
@@ -1658,7 +1708,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** Android's tiers of a picked medium ([MediaDerive]), for core's upload job. */
     private val deriver = object : me.raddatz.veyq.mobile.memories.MediaUpload.Deriver {
         override fun derive(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, done: (me.raddatz.veyq.mobile.memories.MediaUpload.Derived) -> Unit) {
-            val uri = (source as? ContentSource)?.uri
+            val uri = (source as? ContentSource)?.uri ?: (source as? ShareIn.Copy)?.let { android.net.Uri.fromFile(it.file) }
             done(uri?.let { MediaDerive.of(getApplication(), it, type) } ?: me.raddatz.veyq.mobile.memories.MediaUpload.Derived(null, null, null, null))
         }
     }

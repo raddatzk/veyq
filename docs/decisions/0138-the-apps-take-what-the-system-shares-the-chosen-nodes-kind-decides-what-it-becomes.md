@@ -1,7 +1,7 @@
 # ADR 0138 — The apps take what the system shares; the chosen node's kind decides what it becomes
 
 - Status: Accepted
-- Built: partly (Android's share target, iOS's share extension, the pick mode on both, a drop onto the Apple app, the app group and the shared keychain group; not built: a drop onto the Android app)
+- Built: partly (Android's share target, iOS's share extension, the pick mode on both, a drop onto the Apple app, the app group and the shared keychain group; being built: a Memory as a share target and a drop onto a phone's gallery, cr-app-share-into-a-memory)
 - Date: 2026-11-08
 
 ## Context
@@ -22,13 +22,27 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
    another, and only the pick mode's own cancel ends the share.
 
 2. **The chosen node's kind decides what the shared thing becomes** — each application's answer, as a kind's slug token
-   input is (core never knows an application's rules). **Expenses** (owner 2026-11-08): a Pot takes images and PDFs within
-   its receipts' rules (`receipts.ts`: at most 10 MiB each, 100 an entry) and opens the editor of a new expense with them
-   as its receipts — the app's one editor, nothing of its own. A folder (as Depot's files) and a Memory (as its photos)
-   take theirs when those applications are built in the apps; a kind with no answer takes nothing.
+   input is (core never knows an application's rules). Core asks `AppKinds.share(kind)`: null takes nothing; an answer
+   (`navigation/ShareAnswer`) names the files it takes, its bounds for one share, where a member may choose it, and **how
+   it takes them** — into its **editor** (bytes held in memory, within the bounds) or into its **upload queue** (each
+   file a source read a frame at a time). The pick mode dims a node whose kind has no answer or where the answer says
+   this member may not put anything. **Expenses** (owner 2026-11-08, `expenses/PotShare`): a Pot takes images and PDFs
+   within its receipts' rules (`receipts.ts`: at most 10 MiB each, 100 an entry) and opens the editor of a new expense
+   with them as its receipts — the app's one editor, nothing of its own. **Memories** (`memories/MemoryShare`): a Memory
+   and a chapter take photos and videos (`MediaUpload.isMedia`), with no bound beyond the upload's own, into the app's
+   one upload queue, where the member may upload there (`MemoryRights`' `upload`: Memories switched on for the
+   tenant) and the account is online. A folder (as Depot's files) takes its when Depot answers (inbox #987).
+   - Rejected: **a Memory branch beside the Pot's in core** — core would know two applications' rules.
 
 3. **Nothing is stored until the target's own save.** Choosing a node opens its flow; the editor's save uploads the
-   receipts and writes the entry as it does in the app; cancelling leaves nothing behind.
+   receipts and writes the entry as it does in the app; cancelling leaves nothing behind. A Memory can be entered in the
+   pick mode: its page, and each chapter's, shows the waiting files' count in the banner with **Add here**, the
+   Memory's own save, which queues them into that node (its gallery's placeholder tiles show them, ADR 0145) and ends
+   the share; leaving the page without it gives the files back to the pick mode. **Words** (owner 2026-11-19): the
+   banner says "Choose where these files go" / "Wähle, wohin diese Dateien gehören" and the action "Add here" / "Hier
+   hinzufügen".
+   - Rejected: **queueing on choosing a Memory's row** — a chapter could not be chosen (it lives inside the Memory's
+     page), and nothing would wait for the target's save.
 
 4. **iOS shares what the app keeps with its share extension, and nothing more.** The app group `group.app.veyq`
    holds the device's defaults (its trusted-device records and trust marks, the recent and hidden lists): on iOS the app
@@ -45,17 +59,39 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
 6. **What a share extension holds whole is bounded by its target.** A share extension has a fixed memory limit (on the
    order of 120 MB): a receipt is at most 10 MiB, so a Pot's flow holds its files in memory as the app does, at most
    64 MiB of them in one share — a file beyond that is left out, as a too large one is, and the banner counts it. A
-   target with larger files (a folder's, a Memory's) seals and uploads them in frames from disk.
+   target with larger files (a folder's, a Memory's) seals and uploads them in frames from disk: no file of a share is
+   held whole but a Pot's bounded receipts. **iOS's extension hands a Memory's files to the app through the app group
+   and closes** (owner 2026-11-19): it takes each file with `loadFileRepresentation`, copying it inside the callback
+   (the system's URL is valid only there) into the app group's container, `share-in/<random>/` — a JPEG where the sender
+   offers one, as decision 7 says —, and *Add here* writes beside the copies which Memory or chapter they go into and
+   completes the request at once. The app, the next time it opens that account's tenant, queues them into that node
+   through its one upload queue, and removes each copy once the queue lets it go (`MediaUploads`' `left`); a cancel in
+   the extension removes them at once, and a sign-out or a hand-off the account no longer has removes them unsent. The
+   owner's reason: the files are not uploaded yet, and they are the person's own plaintext already on the device —
+   a copy in the app's own container until the upload is no exposure the device does not already hold. The apps
+   behave as the web does: the place is chosen and *Add here* pressed in the extension, the upload runs in the app.
+   - Rejected: **the extension running the upload queue itself, open until the upload is done** — the person would
+     wait in the share sheet through a large video's upload, and closing it would cancel the upload (the owner's
+     no, 2026-11-19).
+   - Rejected: **a background `URLSession`** — the core's client is not one, and its presigned frame uploads would need
+     a second upload path.
 
 7. **An image is taken in a representation every client draws.** iOS offers a photo as HEIC and as JPEG; the share
    takes the JPEG, so a receipt reads in every browser, as the web's own uploads do.
 
 8. **Android's share target is an activity of the app**, in its process, for `ACTION_SEND` and `ACTION_SEND_MULTIPLE`
-   of `image/*` and `application/pdf`: the session, the navigation and the editor are the app's own.
+   of `image/*`, `video/*` and `application/pdf`: the session, the navigation and the editor are the app's own. A shared
+   file is read where the system put it, a frame at a time (`ContentSource`, a pick's): the share's read grant is the
+   receiving activity's and outlives the app being left, so the upload's worker reads it to its end (measured,
+   Consequences). The one copy the app writes is a HEIC re-encoded as a JPEG (decision 7), under
+   `no_backup/share-in/`, removed once nothing reads it and swept at start.
 
 9. **A drop onto the app is a share** (owner 2026-11-09: a screenshot's thumbnail dragged onto veyq). Where it lands
-   decides: an open Pot that takes it — writable, with people — opens its new expense with the files at once; anywhere
-   else they wait in the pick mode, as a share's do. The files are read as a share's are (decisions 6 and 7).
+   decides: an open Pot that takes it — writable, with people — opens its new expense with the files at once; a Memory's
+   or a chapter's gallery the member may upload into queues the photos and videos into it at once, as its picker's do
+   (Android's `dragAndDropTarget`, Apple's `dropDestination`: iPadOS, macOS, an iPhone where the system offers a drag
+   between apps); anywhere else they wait in the pick mode, as a share's do. The files are read as a share's are
+   (decisions 6 and 7).
 
 ## Consequences
 
@@ -79,8 +115,26 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   one reader the share extension uses too, re-encoding a HEIC through ImageIO so macOS reads the same way;
   `AppModel.receiveDrop`). The reader is measured through the extension; a drop itself is not, since the Simulator's one
   scripted finger cannot hold a thumbnail and switch apps. Android's drag and drop is not built.
-- **Decision 2's Memory is not built** (2026-11-15): Memories is in every app now (ADR 0136's and ADR 0123's
-  Consequences), but no app offers a Memory as a share target or takes a drop onto a phone's gallery; a Memory's larger
-  files sealed in frames from disk out of iOS's share extension (decision 6) wait with it (inbox #893).
+- **Built on Android, decisions 2, 3, 8 and 9 for a Memory** (cr-app-share-into-a-memory): `video/*` in both filters,
+  `ShareIn` handing sources read in place, the banner's *Add here* on a Memory's and a chapter's page, a drop onto the
+  gallery (`Modifier.dragAndDropTarget`, `ShareDrop.kt`) and onto the shell (a share). Measured 2026-11-19 on a throwaway
+  API 36 emulator as a throwaway account: a photo and a 303 MB video shared from the Files app into a chapter, *Add
+  here* pressed and the app left at once (Home) — the upload's worker read the video to its end in the background
+  (09:02:56 to 09:22:24, about 329 MB sent, no `SecurityException` in the app's log), and after the app was force-stopped
+  and opened anew the chapter listed both from the server; `run-as app.veyq find . -type f` then showed no share copy
+  (WorkManager's records, the offline store's opaque files and the known preferences only). A photo dragged from the
+  Files app in a second (freeform) window onto the chapter's gallery was uploaded into it.
+- **Built on Apple, decisions 2, 3, 6 and 9 for a Memory** (cr-app-share-into-a-memory): `public.movie` in the
+  extension's activation rule; `IncomingFiles` copying each file inside `loadFileRepresentation`'s callback (a HEIC
+  re-encoded file to file) and handing sources on; the banner's *Add here*; in the extension the handoff through the app
+  group (`apple/Veyq/ShareHandoff.swift`: `share-in/<id>/` with `target.json`, written under a dot name and renamed
+  whole, queued by the app on its next open, each copy removed by the queue's `left`, cleared at a sign-out, swept at
+  start); a drop onto a Memory's gallery (`MemoryScreen`'s `.onDrop`). Built for macOS and the iOS simulator SDK; not
+  clicked — the macOS drop and the device passes are the owner's (inbox #1005), and a handoff for a space the app does
+  not list waits until a sign-out (inbox #1007).
+- **Decision 2's Memory is being built** (cr-app-share-into-a-memory, inbox #893): a Memory and a chapter as a share
+  target, a Memory's files sealed in frames from disk out of iOS's share extension (decision 6), and a drop onto a
+  phone's gallery. A folder as a share target is Depot's answer (inbox #987); the desktops have no share target (GNOME
+  has none; Windows' needs the packaged app's Share Target contract).
 - App groups and keychain groups need the developer team's signing: a Simulator build is signed ad hoc with them; a device
   build needs the team's provisioning profile with the group.

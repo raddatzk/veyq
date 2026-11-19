@@ -182,7 +182,7 @@ final class AppModel {
         )
         session = AppleSessions.shared.sessionModel(device: device, hidden: hidden, recent: recent, signInElsewhere: inExtension)
         // a copy sent or a download handed to the save sheet in an earlier run has been read by now (or never will be)
-        if !inExtension { Self.sweepTemporary() }
+        if !inExtension { Self.sweepTemporary() } else { try? FileManager.default.removeItem(at: Self.pickedDir) }
         gateWatch = session.watch { @Sendable _ in
             Task { @MainActor [weak self] in self?.gateChanged() }
         }
@@ -503,6 +503,8 @@ final class AppModel {
     /// password trust stays (as on the web).
     func signOut(_ account: VeyqAccount) {
         if session.signedTo?.account == account { uploads.clear() }
+        // a share's files handed over and not queued yet go unsent (ADR 0138 decision 6)
+        ShareHandoff.clear()
         Task {
             guard let out = try? await session.signOut(account: account) else { return }
             if let next = out.next {
@@ -663,6 +665,8 @@ final class AppModel {
         let tenant = signed.tenant
         let l = state.lists
         spaces = l.spaces
+        // what the share extension handed over for one of these spaces (ADR 0138 decision 6)
+        pickUpHandoffs()
         nodes = l.nodes
         objects = l.objects
         favorites = l.favorites
@@ -694,14 +698,16 @@ final class AppModel {
 
     // MARK: What another app shared (ADR 0138)
 
-    /// Files shared to veyq, waiting for the Pot they go to, and how many were left out (core's `ShareInbox`).
+    /// Files shared to veyq, waiting for the place they go, and how many did not read (core's `ShareInbox`).
     typealias Incoming = ShareInbox.Incoming
 
-    /// The share's way from arrival to where its files went (core's `ShareInbox`).
-    let inbox = ShareInbox()
+    /// The share's way from arrival to where its files went (core's `ShareInbox`): a file let go is a copy removed.
+    let inbox = ShareInbox(release: { @Sendable source in
+        if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
+    })
     /// The files waiting (the pick mode is on); nil when none wait.
     private(set) var incoming: Incoming?
-    /// How the share ends: true once its files were saved where they went, false when it was cancelled.
+    /// How the share ends: true once its files were saved or handed to where they went, false when it was cancelled.
     var onShareDone: ((Bool) -> Void)?
 
     private func syncInbox() { incoming = inbox.waiting.value as? Incoming }
@@ -715,9 +721,9 @@ final class AppModel {
     }
 
     /// Files dropped onto the app (ADR 0138 decision 9): an open Pot that takes them opens its new expense with them at once;
-    /// anywhere else they wait in the pick mode, as a share's do.
+    /// anywhere else they wait in the pick mode, as a share's do (a Memory's gallery takes its own drop, `dropOnto`).
     func receiveDrop(_ incoming: Incoming) {
-        if let ref = shell.openObject, ref.kind == PotSession.companion.KIND, pot?.ref == ref, inbox.takesDropOn(view: pot?.view, incoming: incoming) {
+        if let ref = shell.openObject, ref.kind == PotSession.companion.KIND, pot?.ref == ref, PotShare.shared.takesDropOn(view: pot?.view, incoming: incoming) {
             inbox.receive(incoming: incoming)
             syncInbox()
         } else {
@@ -731,11 +737,70 @@ final class AppModel {
         onShareDone?(false)
     }
 
-    /// The waiting files, taken by the Pot opened as their place: its new expense's receipts.
-    func takeShare() -> [PotSession.PendingReceipt]? {
-        let files = inbox.take()
+    /// Whether the pick mode lets `ref` be chosen for what waits: its kind's answer, and this member's right there.
+    func takesShare(_ ref: ObjectRef) -> Bool {
+        _ = incoming // observed: asked again as the waiting files change
+        return shellModel?.takesShare(inbox: inbox, ref: ref.at) ?? false
+    }
+
+    /// The Memory's or chapter's page on screen, where the pick mode's banner offers *Add here* (ADR 0138 decision 3); nil
+    /// on any other page or where it takes nothing of what waits.
+    var addHereTarget: GalleryModel? {
+        guard incoming != nil, let shown = galleryShown, let g = openGallery?.model, g.node == shown.node,
+              shell.openObject?.nodeId == shown.node.nodeId, MemoryShare.shared.offered(inbox: inbox, gallery: g) else { return nil }
+        return g
+    }
+
+    /// *Add here*: the waiting photos and videos go into `gallery`'s Memory or chapter and the share ends. In the app they
+    /// are queued at once; the share extension hands them to the app through the app group and closes (ADR 0138 decision
+    /// 6, owner 2026-11-19), the app queueing them the next time it has the space open (`pickUpHandoffs`).
+    func addHere(_ gallery: GalleryModel) {
+        let taken: ShareInbox.Taken?
+        if inExtension {
+            guard gallery.takesUploads else { return }
+            let node = gallery.node
+            taken = inbox.queue(answer: MemoryShare.shared.answer) { sources in
+                KotlinInt(int: Int32(ShareHandoff.write(sources, into: node)))
+            }
+        } else {
+            taken = MemoryShare.shared.addHere(inbox: inbox, gallery: gallery)
+        }
         syncInbox()
-        return files
+        guard let taken else { return }
+        if let n = MediaUploads.companion.notTaken(count: taken.refused) { notice = Notice(text: say(notice: n)) }
+        onShareDone?(true)
+    }
+
+    /// Files dropped onto `gallery`'s page (ADR 0138 decision 9): its photos and videos queued into it at once, as a pick's;
+    /// what is no medium, or did not read, said.
+    func dropOnto(_ gallery: GalleryModel, _ incoming: Incoming) {
+        let sorted = MemoryShare.shared.answer.sort(files: incoming.files)
+        let media = sorted.taken
+        let others = sorted.left
+        for s in others { if let url = AppleMemories.shared.urlOf(source: s) { Self.removePicked(url) } }
+        if !media.isEmpty, gallery.upload(sources: media) == 0 {
+            for s in media { if let url = AppleMemories.shared.urlOf(source: s) { Self.removePicked(url) } }
+        }
+        if let n = MediaUploads.companion.notTaken(count: Int32(others.count) + incoming.refused) { notice = Notice(text: say(notice: n)) }
+    }
+
+    /// What the share extension handed over for a space this tenant has open: queued into its Memory or chapter, each copy
+    /// removed once the queue lets it go (ADR 0138 decision 6).
+    func pickUpHandoffs() {
+        guard !inExtension, let uploads = media, !spaces.isEmpty else { return }
+        for waiting in ShareHandoff.pending(in: Set(spaces.map(\.scopeId))) {
+            let t = waiting.target
+            _ = uploads.upload(scopeId: t.scopeId, nodeId: t.nodeId, label: t.label, sources: waiting.sources)
+        }
+    }
+
+    /// The waiting files, taken by the Pot opened as their place: its new expense's receipts (each read whole, within its
+    /// budget), and how many it left out.
+    func takeShare() async -> PotShare.Taken? {
+        let taken = try? await PotShare.shared.take(inbox: inbox, newId: { UUID().uuidString.lowercased() })
+        syncInbox()
+        if let taken, taken.refused > 0 { notice = Notice(text: say(.shareRefused, taken.refused)) }
+        return taken
     }
 
     /// The new expense's editor closed unsaved: the files wait again, for this Pot or another (from Home).
@@ -1029,6 +1094,7 @@ final class AppModel {
         }
         media = made
         openMaps(m)
+        pickUpHandoffs()
     }
 
     private func closeMedia() {
@@ -1602,6 +1668,7 @@ final class AppModel {
 
     /// Removes the copy at `url` with its own directory, where it is one of `pickedDir`'s; any other file is left alone.
     nonisolated static func removePicked(_ url: URL) {
+        ShareHandoff.remove(url) // a copy the share extension handed over (ADR 0138 decision 6)
         let dir = url.deletingLastPathComponent().standardizedFileURL.resolvingSymlinksInPath()
         let picked = FileManager.default.temporaryDirectory.appendingPathComponent("picked", isDirectory: true).standardizedFileURL.resolvingSymlinksInPath()
         guard dir.deletingLastPathComponent().path == picked.path else { return }
@@ -1625,6 +1692,8 @@ final class AppModel {
         try? FileManager.default.removeItem(at: downloadsDir)
         // the Photos picker's copies a crash left: not decrypted, but no upload reads them any more
         try? FileManager.default.removeItem(at: pickedDir)
+        // a share's handoff the extension never finished, or one queued in a process that ended (ADR 0138 decision 6)
+        ShareHandoff.sweep()
         // what builds before this rule left there: a viewed file's decrypted copy (`view-…`), a download's own directory
         let tmp = FileManager.default.temporaryDirectory
         for name in (try? FileManager.default.contentsOfDirectory(atPath: tmp.path)) ?? []

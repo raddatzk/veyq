@@ -4,7 +4,8 @@ import VeyqCore
 
 /// veyq's share extension (ADR 0138): what another app shares goes to the place picked in veyq's own navigation. The
 /// extension is the app's views on the app's model in the extension role: it signs in only from what the app left
-/// (decision 5), and the chosen Pot's new expense takes the files as its receipts (decision 2).
+/// (decision 5); the chosen Pot's new expense takes the files as its receipts, and a Memory's *Add here* hands them to the
+/// app through the app group, which uploads them (decisions 2 and 6).
 final class ShareViewController: UIViewController {
     private let model = AppModel(inExtension: true)
 

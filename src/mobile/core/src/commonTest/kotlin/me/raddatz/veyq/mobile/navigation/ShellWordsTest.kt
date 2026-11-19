@@ -7,6 +7,8 @@ import me.raddatz.veyq.mobile.words.Piece
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertSame
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** What the shell says, finds and creates, both apps' once (ADR 0136); the two had drifted on two tab words. */
@@ -41,8 +43,8 @@ class ShellWordsTest {
         assertTrue(AppKinds.Create.CHAPTER !in AppKinds.createsWhere(true) + AppKinds.createsWhere(false))
         assertEquals(me.raddatz.veyq.mobile.memories.MemoryCreate.offered(null), listOf(AppKinds.Create.MEMORY.name))
         assertEquals(me.raddatz.veyq.mobile.memories.MemoryCreate.offered("MEMORY"), listOf(AppKinds.Create.CHAPTER.name))
-        assertTrue(AppKinds.takesShared("EXPENSES_POT"))
-        assertFalse(AppKinds.takesShared("FILE"))
+        assertSame(me.raddatz.veyq.mobile.expenses.PotShare.answer, AppKinds.share("EXPENSES_POT"))
+        assertNull(AppKinds.share("FILE"))
     }
 
     @Test

@@ -241,10 +241,6 @@ object AppleSessions {
     /** The members' pictures [tenant] shows now (core's `AvatarsModel`, which decides when they are read), by user id. */
     fun pictures(tenant: TenantSession): Map<String, NSData> = tenant.pictures.state.value.mapValues { it.value.toNSData() }
 
-    /** A file picked as a receipt, to be uploaded when its entry is saved; [id] a fresh UUID. */
-    fun pendingReceipt(id: String, data: NSData, type: String, name: String?, modifiedAt: Long?): me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt =
-        me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt(id, data.toByteArray(), type, name, modifiedAt)
-
     /** A file picked as a receipt for core's entry editor to judge ([data] nil: it did not read). */
     fun picked(data: NSData?, type: String, name: String?, modifiedAt: Long?): me.raddatz.veyq.mobile.expenses.EntryEditor.Picked =
         me.raddatz.veyq.mobile.expenses.EntryEditor.Picked(data?.toByteArray(), type, name, modifiedAt)
