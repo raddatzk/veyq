@@ -143,7 +143,7 @@ The web's `export.*` import keys ported to `words.json` (EN+DE, each `note` nami
   `python3 contracts/export/import-cases/generate.py --check` reproduces the file byte for byte. **Bites:** (a) a case's
   expected code altered → the web's test red; (b) a `LIMITS` value changed in `manifest.ts` → the schema pin red
   (snapshot-and-restore).
-- [ ] **3 core — reader, source, manifest** (I2) — `ZipReader`, `ImportSource`, `Manifest`. Tests: every case of the
+- [x] **3 core — reader, source, manifest** (I2) — `ZipReader`, `ImportSource`, `Manifest`. Tests: every case of the
   file; the core's own download read back (`ZipWriter` → `ZipReader`); `web-download.zip` opened and planned; a 4 GiB+
   ZIP64 entry's header read without reading the entry (a sparse source). **Bites:** (a) the CRC check skipped → the
   `crc_mismatch` case red; (b) `..` let through `isArchivePath` → the `unsafe_path` case red; (c) **no whole-file read**:
