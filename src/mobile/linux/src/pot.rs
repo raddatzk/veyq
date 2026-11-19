@@ -319,7 +319,7 @@ impl Inner {
         let place = match own {
             Some(chosen) => {
                 // a guest's places: the chosen one while it is still offered, else Entries
-                let offered = guest_places();
+                let offered = guest_places(view.settings_offered);
                 let chosen = if offered.contains(&chosen.as_str()) { chosen } else { ENTRIES.to_string() };
                 self.root.prepend(&self.own_toggles(&offered, &chosen));
                 Some(chosen)
@@ -498,11 +498,18 @@ impl Inner {
 /// The Entries place's key (the shell's `BarTab`), the first a guest's page shows.
 const ENTRIES: &str = "expenses.entries";
 
-/// A guest's places ([PotPage::own_places]): Entries and Overview — never Settings, whose people actions core's
-/// `PotSettings` offers a guest as a member's.
-pub fn guest_places() -> Vec<&'static str> {
-    vec![ENTRIES, "expenses.overview"]
+/// A guest's places ([PotPage::own_places]): Entries and Overview, and Settings where the core offers them
+/// (`PotView.settingsOffered`: a guest who writes — its people added and renamed, #1035).
+pub fn guest_places(settings: bool) -> Vec<&'static str> {
+    let mut places = vec![ENTRIES, "expenses.overview"];
+    if settings {
+        places.push(SETTINGS);
+    }
+    places
 }
+
+/// The Settings place's key.
+const SETTINGS: &str = "expenses.settings";
 
 impl Inner {
     /// A guest's places as the toggle group the shell's are drawn as: [offered], [chosen] active, a choice kept here.
@@ -511,6 +518,7 @@ impl Inner {
         for key in offered {
             let word = match *key {
                 "expenses.overview" => words::tab_expenses_overview(),
+                SETTINGS => words::tab_expenses_settings(),
                 _ => words::tab_expenses_entries(),
             };
             group.add(adw::Toggle::builder().label(word).name(*key).build());
@@ -590,7 +598,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_guest_sees_entries_and_overview_never_the_settings() {
-        assert_eq!(guest_places(), vec!["expenses.entries", "expenses.overview"]);
+    fn a_guest_sees_the_settings_only_where_the_core_offers_them() {
+        assert_eq!(guest_places(false), vec!["expenses.entries", "expenses.overview"]);
+        assert_eq!(guest_places(true), vec!["expenses.entries", "expenses.overview", "expenses.settings"]);
     }
 }

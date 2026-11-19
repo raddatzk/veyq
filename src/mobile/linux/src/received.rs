@@ -201,11 +201,10 @@ pub fn record_notice(days: Option<i32>) -> Option<String> {
 /// A WRITE_ONLY link's role (`GuestAccess.WRITE_ONLY`): its guest sees no node, so no row is reported.
 const WRITE_ONLY: &str = "WRITE_ONLY";
 
-/// Whether a file's *Replace* is offered: where the file's rights let the guest ([can_write], a READ_WRITE guest's) — and
-/// only signed in, where the bridge queues it (`Upload.Replace` on the tenant's queue; a signed-out guest's replace has no
-/// call yet).
-pub fn replace_offered(can_write: bool, signed_in: bool) -> bool {
-    can_write && signed_in
+/// Whether a file's *Replace* is offered: where the file's rights let the guest ([can_write], a READ_WRITE guest's) —
+/// signed in or out: `Received.Replace` queues it on the link's own queue (#1035).
+pub fn replace_offered(can_write: bool) -> bool {
+    can_write
 }
 
 /// Whether a Pot's *Add entry* is offered: where it takes the guest's writes, or to a READ_WRITE guest not named yet, whose
@@ -474,7 +473,7 @@ impl Inner {
         add("replace", Rc::new(|i| {
             i.write(|i| {
                 if let Some(file) = i.held.borrow().as_ref().and_then(|h| if let Held::File(p) = h { p.id() } else { None }) {
-                    crate::uploads::replace(&i.window, file, &i.root);
+                    crate::uploads::guest_replace(&i.window, i.received, file, &i.root);
                 }
             })
         }));
@@ -680,13 +679,13 @@ impl Inner {
                 let page = FilePage::opened(&node, file);
                 // the file's own actions as its header offers them a member: Download where it holds content, Replace
                 // where the guest may (`FileModel`'s rights, a READ_WRITE guest's)
-                let (save, replace, signed_in) = (self.save.downgrade(), self.replace.downgrade(), s.keep_offered);
+                let (save, replace) = (self.save.downgrade(), self.replace.downgrade());
                 page.on_facts(move |facts, _| {
                     if let Some(save) = save.upgrade() {
                         save.set_visible(facts.has_content);
                     }
                     if let Some(replace) = replace.upgrade() {
-                        replace.set_visible(replace_offered(facts.can_write, signed_in));
+                        replace.set_visible(replace_offered(facts.can_write));
                     }
                 });
                 self.set_content(page.widget());
@@ -1087,10 +1086,9 @@ mod tests {
     }
 
     #[test]
-    fn a_files_replace_stands_where_the_guest_may_and_only_signed_in() {
-        assert!(replace_offered(true, true));
-        assert!(!replace_offered(false, true), "a READ guest replaces nothing");
-        assert!(!replace_offered(true, false), "signed out the bridge has no replace for a guest");
+    fn a_files_replace_stands_where_the_guest_may_signed_in_or_out() {
+        assert!(replace_offered(true), "a READ_WRITE guest is offered no replace");
+        assert!(!replace_offered(false), "a READ guest replaces nothing");
     }
 
     #[test]

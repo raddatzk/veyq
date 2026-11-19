@@ -237,7 +237,8 @@ impl Inner {
             self.currency_rows.append(&row);
         }
         self.currency.set_description(Some(&words::settings_currency_hint()));
-        self.currency.set_visible(true);
+        // a link's guest sees its people alone (`PotView.metaShown`, the web's guest Settings, #1035)
+        self.currency.set_visible(s.meta_shown);
 
         // the own categories
         clear(&self.category_rows, Some(self.add_category.upcast_ref()));

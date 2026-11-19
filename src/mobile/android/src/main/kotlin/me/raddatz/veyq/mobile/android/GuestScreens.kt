@@ -389,7 +389,8 @@ private fun GuestMusicAction(page: GuestPage.Gallery) {
 
 /**
  * A Pot of a link: the member's Pot page over the guest's Pot (the app model routes the page's reads and writes to it while
- * it is shown), its Entries and Overview as tabs of its own — the guest view has no bar.
+ * it is shown), its Entries, Overview and — where the core offers them (`PotView.settingsOffered`: a guest who writes,
+ * #1035) — Settings as tabs of its own; the guest view has no bar.
  */
 @Composable
 private fun GuestPot(page: GuestPage.Pot, model: AppModel) {
@@ -400,13 +401,19 @@ private fun GuestPot(page: GuestPage.Pot, model: AppModel) {
     val ref = remember(page.node) {
         ObjectRef(page.node.scopeId, page.node.nodeId, page.node.kind, me.raddatz.veyq.mobile.navigation.ApplicationId.EXPENSES, page.node.name)
     }
-    var overview by remember(page.node) { mutableStateOf(false) }
+    val pot by page.model.state.collectAsStateWithLifecycle()
+    val places = listOfNotNull(
+        "expenses.entries" to me.raddatz.veyq.mobile.words.Msg.TAB_EXPENSES_ENTRIES,
+        "expenses.overview" to me.raddatz.veyq.mobile.words.Msg.TAB_EXPENSES_OVERVIEW,
+        ("expenses.settings" to me.raddatz.veyq.mobile.words.Msg.TAB_EXPENSES_SETTINGS).takeIf { pot?.view?.settingsOffered == true },
+    )
+    var chosen by remember(page.node) { mutableStateOf("expenses.entries") }
+    val at = places.indexOfFirst { it.first == chosen }.coerceAtLeast(0)
     Column(Modifier.fillMaxSize()) {
-        PrimaryTabRow(selectedTabIndex = if (overview) 1 else 0, containerColor = MaterialTheme.colorScheme.background) {
-            Tab(selected = !overview, onClick = { overview = false }, text = { Text(say(me.raddatz.veyq.mobile.words.Msg.TAB_EXPENSES_ENTRIES)) })
-            Tab(selected = overview, onClick = { overview = true }, text = { Text(say(me.raddatz.veyq.mobile.words.Msg.TAB_EXPENSES_OVERVIEW)) })
+        PrimaryTabRow(selectedTabIndex = at, containerColor = MaterialTheme.colorScheme.background) {
+            places.forEachIndexed { i, (key, word) -> Tab(selected = i == at, onClick = { chosen = key }, text = { Text(say(word)) }) }
         }
-        Box(Modifier.weight(1f)) { PotScreen(ref, BarTab(if (overview) "expenses.overview" else "expenses.entries"), model) }
+        Box(Modifier.weight(1f)) { PotScreen(ref, BarTab(places[at].first), model) }
     }
 }
 
@@ -434,7 +441,8 @@ private fun GuestFileActions(page: GuestPage.File, access: GuestAccess?, model: 
         }
     }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { model.guestReplace(file, it) }
+        val a = access ?: return@rememberLauncherForActivityResult
+        uri?.let { model.guestReplace(a, file, it) }
     }
     IconButton(onClick = { save.launch(h.downloadName) }) { Icon(Icons.Outlined.Download, stringResource(R.string.node_download)) }
     val session = access?.session?.collectAsStateWithLifecycle()?.value

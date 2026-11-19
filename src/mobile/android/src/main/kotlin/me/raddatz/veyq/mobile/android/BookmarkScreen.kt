@@ -46,7 +46,7 @@ internal const val REPORT_SHARED = "report-shared"
  */
 @Composable
 internal fun bookmarkHeader(node: NodeAt, model: AppModel): HeaderContribution {
-    val page = remember(node) { model.bookmarkPage(node) } ?: return HeaderContribution()
+    val page = remember(node.scopeId, node.nodeId) { model.bookmarkPage(node) } ?: return HeaderContribution()
     val state by page.state.collectAsStateWithLifecycle()
     if (state is BookmarkPage.State.Loading || state is BookmarkPage.State.Unreadable) return HeaderContribution()
     return HeaderContribution(
@@ -67,7 +67,7 @@ internal fun bookmarkHeader(node: NodeAt, model: AppModel): HeaderContribution {
  */
 @Composable
 internal fun BookmarkScreen(node: NodeAt, model: AppModel) {
-    val page = remember(node) { model.bookmarkPage(node) }
+    val page = remember(node.scopeId, node.nodeId) { model.bookmarkPage(node) }
     if (page == null) {
         CircularProgressIndicator(Modifier.padding(16.dp))
         return
