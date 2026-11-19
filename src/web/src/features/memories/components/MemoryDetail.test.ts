@@ -46,6 +46,7 @@ import { galleryFakeStore } from './galleryFakeStore'
 import { realI18n, t } from '../../../test/i18n'
 import { treeNode, memberMemoryRights } from '../../../test/models'
 import { ItemMarksTooMany } from '../itemFavorites'
+import { itemFavoritesStore } from '../itemFavoritesStore'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -197,6 +198,63 @@ describe('MemoryDetail (gallery grid + header)', () => {
     await flushPromises()
     expect(toast.error).toHaveBeenLastCalledWith(t('media.marks.saveFailed'))
     expect(toast.error).toHaveBeenCalledTimes(2)
+  })
+
+  /**
+   * inbox #986 (uc.memory.gallery step 7): the tile's heart is in the lightbox's toolbar too — the caller's own mark toggled
+   * through the same door, the count shown as the tile's badge shows it (none in a personal scope), and none at all where
+   * the tile has none.
+   */
+  it("the lightbox carries the tile's heart: the caller's mark toggled through the marks door, the scope's count beside it", async () => {
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const memoryKey = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
+    const [{ mediaId }] = store.media
+    // Another member marked it; the caller has not. The toggle flips the caller's own set, as the store's optimistic write does.
+    const load = async () => {
+      Object.assign(itemFavoritesStore, { nodeId: NODE_ID, loaded: true, marks: [{ own: false, ids: new Set([mediaId]) }, { own: true, ids: new Set() }] })
+    }
+    const toggle = vi.fn(async (id: string) => {
+      const mine = itemFavoritesStore.marks.find((m) => m.own)!.ids
+      itemFavoritesStore.marks = [...itemFavoritesStore.marks.filter((m) => !m.own), { own: true, ids: new Set(mine.has(id) ? [] : [id]) }]
+    })
+    const source = { ...memberMemorySource({ scopeId: () => SCOPE_ID }), marks: { load, toggle } }
+    const opened = async (props: Record<string, unknown>) => {
+      const w = mountDetail(memoryKey, { source, scopeKey: v1.randomBytes(32), ...props })
+      await flushPromises()
+      await flushPromises()
+      await w.find('.media-tile-open').trigger('click')
+      await flushPromises()
+      return w
+    }
+
+    const group = await opened({ personalScope: false })
+    const heart = () => group.find('.media-lightbox [data-testid="lightbox-mark"]')
+    expect(heart().exists()).toBe(true)
+    expect(heart().attributes('aria-pressed')).toBe('false')
+    expect(heart().attributes('aria-label')).toBe(t('media.marks.mark'))
+    expect(heart().text()).toBe('1') // one member marked it — the tile's badge says the same
+    expect(heart().attributes('title')).toBe(t('media.marks.markedBy', { count: 1 }, 1))
+
+    await heart().trigger('click')
+    await flushPromises()
+    expect(toggle).toHaveBeenCalledWith(mediaId, NODE_ID, expect.anything())
+    expect(heart().attributes('aria-pressed')).toBe('true')
+    expect(heart().attributes('aria-label')).toBe(t('media.marks.unmark'))
+    expect(heart().text()).toBe('2')
+    group.unmount()
+
+    const personal = await opened({ personalScope: true }) // nobody to share a mark with: the heart, never a count
+    expect(personal.find('.media-lightbox [data-testid="lightbox-mark"]').exists()).toBe(true)
+    expect(personal.find('.media-lightbox [data-testid="lightbox-mark"]').text()).toBe('')
+    personal.unmount()
+
+    const unmarkable = await opened({ rights: { ...memberMemoryRights({ publicShares: false }), mark: false } })
+    expect(unmarkable.find('.media-lightbox').exists()).toBe(true) // control: the lightbox is open
+    expect(unmarkable.find('.media-lightbox [data-testid="lightbox-mark"]').exists()).toBe(false)
   })
 
   it('lists the Memory media → renders the decrypted title, item count and a thumbnail tile per item', async () => {

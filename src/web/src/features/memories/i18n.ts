@@ -392,6 +392,7 @@ const en = {
     marks: {
       mark: 'Mark this photo — everyone in this space sees it',
       unmark: 'Remove your mark',
+      markedBy: 'Marked by nobody | Marked by one member | Marked by {count} members',
       filterLabel: 'Show marked photos',
       filter: {
         all: 'All',
@@ -769,6 +770,7 @@ const de: typeof en = {
     marks: {
       mark: 'Dieses Foto markieren — alle in diesem Bereich sehen es',
       unmark: 'Deine Markierung entfernen',
+      markedBy: 'Von niemandem markiert | Von einem Mitglied markiert | Von {count} Mitgliedern markiert',
       filterLabel: 'Markierte Fotos anzeigen',
       filter: {
         all: 'Alle',

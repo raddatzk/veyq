@@ -895,6 +895,52 @@ describe('MediaLightbox — delete (cr-0110)', () => {
   })
 })
 
+describe('MediaLightbox — the item mark (inbox #986, uc.memory.gallery step 7)', () => {
+  /** A parent's mark over a reactive set of the caller's own marks and a count per item, as `MemoryDetail` hands it. */
+  function markOver(counts: Record<string, number>) {
+    const state = reactive({ mine: new Set<string>(), counts })
+    const toggle = vi.fn((it: MediaItem) => {
+      const had = state.mine.has(it.mediaId)
+      if (had) state.mine.delete(it.mediaId)
+      else state.mine.add(it.mediaId)
+      state.counts[it.mediaId] = (state.counts[it.mediaId] ?? 0) + (had ? -1 : 1)
+    })
+    return { toggle, mark: { mine: (it: MediaItem) => state.mine.has(it.mediaId), count: (it: MediaItem) => state.counts[it.mediaId] ?? 0, toggle } }
+  }
+  const heartOf = (w: ReturnType<typeof mountLightbox>) => w.find('.media-lightbox-actions [data-testid="lightbox-mark"]')
+
+  it('no heart where the parent hands no mark (a guest, a session without the marks door)', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const wrapper = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    expect(wrapper.find('.media-lightbox-actions').exists()).toBe(true) // control: the toolbar is drawn
+    expect(heartOf(wrapper).exists()).toBe(false)
+  })
+
+  it("shows the shown item's count and the caller's own mark, follows the item paged to, and toggles that item", async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const { mark, toggle } = markOver({ [items[0].mediaId]: 0, [items[1].mediaId]: 3 })
+    const wrapper = mountLightbox(memoryKey, items, 0, { mark })
+    await flushPromises()
+
+    expect(heartOf(wrapper).attributes('aria-pressed')).toBe('false')
+    expect(heartOf(wrapper).attributes('aria-label')).toBe(t('media.marks.mark'))
+    expect(heartOf(wrapper).text()).toBe('') // nobody marked it: no count, as on the tile
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    await flushPromises()
+    expect(heartOf(wrapper).text()).toBe('3') // the second item's count
+    await heartOf(wrapper).trigger('click')
+    expect(toggle).toHaveBeenCalledWith(items[1])
+    expect(heartOf(wrapper).attributes('aria-pressed')).toBe('true')
+    expect(heartOf(wrapper).attributes('aria-label')).toBe(t('media.marks.unmark'))
+    expect(heartOf(wrapper).text()).toBe('4')
+    expect(heartOf(wrapper).classes()).toContain('is-marked')
+  })
+})
+
 describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
   it('lazily loads the EXIF tier via getMediaExif and renders the decoded detail rows', async () => {
     const memoryKey = v1.randomBytes(32)

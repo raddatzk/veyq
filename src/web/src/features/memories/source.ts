@@ -29,6 +29,7 @@ import { useGuestSession, type GuestIdentity } from '../../core/sharing/guestIde
 import type { OpenedBlobMeta } from '../../core/blob/meta'
 import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
 import { activeEpochKeys } from '../../app/activeSpace'
+import { account } from '../../app/account'
 import { loadScopePeople, type Person } from '../../core/people/directory'
 import { ShareRole } from '../../api/generated/sharing'
 import type { ShareMediaListing } from '../../api/generated/share-media'
@@ -210,6 +211,9 @@ export interface MarksDoor {
 /** The contributions organizer (uc.memory.buckets): the buckets, the scope's members that name them, and the moves. */
 export interface BucketsDoor {
   list(nodeId: string): Promise<BucketItem[]>
+  /** The caller's own user id: whose primary is theirs (`user:<self>`), the virtual "You" until it exists (inbox #1003).
+   *  Empty before the account's key material has been read: then no member's primary is taken for the caller's. */
+  self(): string
   /** The scope's current members, named by the display rule (ADR 0083 decision 9): core's directory, the tenant's names. */
   people(): Promise<Person[]>
   /** The keys of `nodeId`'s ancestors, nearest first — a link's guest named itself under its root's key. */
@@ -383,6 +387,7 @@ export function memberMemorySource(from: { scopeId: () => string }): MemorySourc
     },
     buckets: {
       list: (nodeId) => listBuckets(scope(), nodeId),
+      self: () => account.userId,
       people: () => loadScopePeople(scope()),
       ancestorKeys(nodeId) {
         const epochs = activeEpochKeys()
