@@ -128,8 +128,26 @@ class PlayedGuestContent(private val share: PlayedShare) {
                 }
                 path == "$base/nodes" -> {
                     val o = rec.json()
-                    created += o
-                    answer("""{"nodeId":${o["nodeId"]}}""")
+                    val slug = o["slugToken"]!!.jsonPrimitive.content
+                    val parent = o["parentId"]!!.jsonPrimitive.content
+                    if (created.any { it["parentId"]!!.jsonPrimitive.content == parent && it["slugToken"]!!.jsonPrimitive.content == slug }) {
+                        answer("""{"code":"slug_taken"}""", HttpStatusCode.Conflict)
+                    } else {
+                        created += o
+                        // a node made as the guest is served by the next resolve, as the server places it
+                        share.children += buildJsonObject {
+                            put("id", o["nodeId"]!!)
+                            put("kind", o["kind"]!!)
+                            put("epoch", 0)
+                            put("scopeEpoch", o["scopeEpoch"]!!)
+                            put("blockedByOperator", false)
+                            put("parentId", o["parentId"]!!)
+                            put("placementRevision", 0)
+                            put("encryptedName", o["encryptedName"]!!)
+                            put("wrappedContentKey", o["wrappedContentKey"]!!)
+                        }
+                        answer("""{"nodeId":${o["nodeId"]}}""")
+                    }
                 }
                 else -> null
             }

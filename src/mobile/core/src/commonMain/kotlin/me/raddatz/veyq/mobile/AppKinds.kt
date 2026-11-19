@@ -399,6 +399,15 @@ object AppKinds {
         else -> null
     }
 
+    /**
+     * What a READ_WRITE guest's upload at a folder of the link creates (the web's level upload: an application's own level
+     * action, Depot's `guestFileUploadJob`): one job per source, each its own node created as the guest under [parent].
+     */
+    fun guestLevelUploads(
+        access: me.raddatz.veyq.mobile.sharing.GuestAccess, session: me.raddatz.veyq.mobile.sharing.GuestSession,
+        parent: me.raddatz.veyq.mobile.session.OpenNode, sources: List<me.raddatz.veyq.mobile.blob.UploadSource>,
+    ): List<me.raddatz.veyq.mobile.blob.UploadQueue.Job> = sources.map { me.raddatz.veyq.mobile.depot.DepotGuest.LevelUpload(access, session, parent, it) }
+
     private const val FOLDER = "FOLDER"
     private const val FILE = "FILE"
     private const val DROPBOX = "DEPOT_DROPBOX"

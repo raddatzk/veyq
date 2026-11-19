@@ -1,6 +1,7 @@
 package me.raddatz.veyq.mobile.sharing
 
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -202,6 +203,77 @@ class GuestDoorsTest {
         assertEquals(1, uploader.sent.value.size)
         assertEquals(1, content.completed.size)
         share.assertNoKeyInAnyRequest()
+    }
+
+    /** #1034: a READ_WRITE folder's guest adds a folder and files at the level, as the web's share page offers; a READ guest nothing. */
+    @Test
+    fun aReadWriteFoldersGuestAddsAFolderAndFilesAtTheLevel() = runTest {
+        val read = fixture("READ")
+        val r = view(read.share)
+        r.load()
+        val readLevel = assertIs<GuestPage.Level>(r.page.value).model
+        assertFalse(readLevel.writes, "a READ guest's level offers a write")
+        assertEquals(0, readLevel.upload(listOf(source("x.txt", "x"))))
+
+        val f = fixture("READ_WRITE")
+        val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
+        val v = GuestView.over((ReceivedLink.open(f.share.link) as ReceivedLink.Parsed.Ok).link, f.share.client(), MemoryDeviceStore(), MemoryGuestSessions(), queue = queue)
+        v.load()
+        val level = assertIs<GuestPage.Level>(v.page.value).model
+        assertTrue(level.writes, "a READ_WRITE guest's level offers no write")
+        // nothing is written before the guest named itself (the web's `requestGuest`)
+        assertNotNull(level.createFolder("Neu"))
+        assertEquals(0, level.upload(listOf(source("x.txt", "x"))))
+        assertTrue(f.content.created.isEmpty())
+        v.access!!.nameGuest("Ben")
+        assertNull(level.createFolder("Neu"), "the guest's new folder was refused")
+        val made = f.content.created.single()
+        assertEquals("FOLDER" to f.share.rootId, made["kind"]!!.jsonPrimitive.content to made["parentId"]!!.jsonPrimitive.content)
+        // the link read anew: the level on screen lists the folder, opened under the key the guest minted
+        val after = assertIs<GuestPage.Level>(v.page.value).model
+        assertTrue(after.rows.any { it.name == "Neu" && it.kind == "FOLDER" }, "the new folder is not listed after the write")
+        assertTrue(v.atRoot)
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.FOLDER_NAME_TAKEN, after.createFolder("Neu")?.msg, "a sibling's name was not said")
+        // inside it: a file uploaded as the guest, its node made under the folder's key and its content completed
+        val folder = after.rows.single { it.name == "Neu" }.nodeId
+        v.open(folder)
+        val inner = assertIs<GuestPage.Level>(v.page.value).model
+        assertEquals(1, inner.upload(listOf(source("notes2.txt", "guest text"))))
+        withContext(kotlinx.coroutines.Dispatchers.Default) {
+            withTimeout(10_000) { queue.state.first { s -> s.batches.isNotEmpty() && s.batches.all { b -> b.finished } } }
+            withTimeout(10_000) { v.page.first { p -> (p as? GuestPage.Level)?.model?.rows?.any { it.name == "notes2.txt" } == true } }
+        }
+        val file = f.content.created.last()
+        assertEquals("FILE" to folder, file["kind"]!!.jsonPrimitive.content to file["parentId"]!!.jsonPrimitive.content)
+        assertEquals(1, f.content.completed.size, "the file's content was not completed")
+        assertEquals(listOf(f.share.rootId, folder), v.stack.value.map { it.nodeId }, "the reload lost the guest's place")
+        f.share.assertNoKeyInAnyRequest()
+        v.close()
+    }
+
+    /** #1034: a guest's Memory plays its music with the player the host handed the link, as the member's. */
+    @Test
+    fun aGuestsMemoryHasTheHandedMusicPlayer() = runTest {
+        val f = fixture("READ")
+        val player = me.raddatz.veyq.mobile.audio.MusicPlayer({ _ -> NoDeck }, null, me.raddatz.veyq.mobile.audio.randomIntOf { p.randomBytes(it) })
+        val music = me.raddatz.veyq.mobile.memories.GalleryModel.Music(player) { "Track $it" }
+        val v = GuestView.over((ReceivedLink.open(f.share.link) as ReceivedLink.Parsed.Ok).link, f.share.client(), MemoryDeviceStore(), MemoryGuestSessions(), music = music)
+        v.load()
+        v.open(f.memory)
+        val gallery = assertIs<GuestPage.Gallery>(v.page.value).model
+        assertTrue(gallery.music === music, "the guest's Memory plays no music")
+        gallery.close()
+        player.stop()
+    }
+
+    private object NoDeck : me.raddatz.veyq.mobile.audio.Deck {
+        override suspend fun load(reader: me.raddatz.veyq.mobile.blob.RangeReader, mime: String) = 0L
+        override suspend fun play() {}
+        override fun pause() {}
+        override fun seek(positionMs: Long) {}
+        override suspend fun positionMs() = 0L
+        override fun ramp(to: Double, overMs: Long) {}
+        override fun clear() {}
     }
 
     private fun source(name: String, text: String): UploadSource {

@@ -255,6 +255,12 @@ class ShellModel(
      */
     fun openPerson(userId: String) = update { it.openPerson(userId) }
 
+    /**
+     * Kept link [node]'s page opened over what is on screen ([Shell.openBookmark], ADR 0150 decision 6): from its row on a
+     * level (`Home.level` lists it), a search's hit ([openFound]). No use is recorded: Recent lists applications' objects.
+     */
+    fun openBookmark(node: NodeAt) = update { it.openBookmark(node) }
+
     /** Person [userId]'s frame: named by the tenant's directory as read, with the sections of the applications on. */
     fun profile(userId: String): PersonProfile = PersonProfile.of(userId, tenant.people, tenant.applicationsOff())
 
@@ -843,24 +849,13 @@ class ShellModel(
 
     /**
      * Node [nodeId] of [scopeId] a search found, opened where it lives (ADR 0146 decision 8): an object in its application in
-     * its space (back returns to the search), a folder on Home at that folder; a node that is neither (a chapter, a kept
-     * link) by the nearest object or folder above it.
+     * its space (back returns to the search), a kept link as its page, a folder on Home at that folder; a node that is none
+     * of these (a chapter) by the nearest object or folder above it ([found]).
      */
     fun openFound(scopeId: String, nodeId: String) {
-        val nodes = current?.lists?.nodes.orEmpty().filter { it.scopeId == scopeId }
-        val byId = nodes.associateBy { it.nodeId }
-        val seen = HashSet<String>()
-        var n = byId[nodeId]
-        while (n != null && seen.add(n.nodeId)) {
-            val obj = n.asObject() ?: if (n.nodeId == nodeId) me.raddatz.veyq.mobile.memories.GalleryModel.rowPage(n) else null
-            if (obj != null) return opened(obj) { it.open(obj).copy(space = scopeId) }
-            if (n.isFolder) {
-                val folder = n.nodeId
-                return update { it.switchSpace(scopeId).at(nodes, folder) }
-            }
-            n = n.parentId?.let { byId[it] }
-        }
-        update { it.switchSpace(scopeId) }
+        val now = shell ?: return
+        val (moved, obj) = found(now, current?.lists?.nodes.orEmpty(), scopeId, nodeId)
+        if (obj != null) opened(obj) { moved } else update { moved }
     }
 
     /** Who looks at Memory or chapter [ref] from this shell: a member, as the tenant's switches and the folder say. */
@@ -1039,7 +1034,29 @@ class ShellModel(
 
         /** Whether [shell] stands on [space]'s top level on Home: no folder, object, application, person's page or Search open. */
         fun topLevelShared(shell: Shell, space: String): Boolean =
-            shell.openObject == null && shell.application == null && shell.person == null && !shell.searching && shell.folderAt(space) == null
+            shell.openObject == null && shell.application == null && shell.person == null && shell.bookmark == null && !shell.searching &&
+                shell.folderAt(space) == null
+
+        /**
+         * Where [shell] goes for node [nodeId] of [scopeId] a search found among [nodes] ([openFound]), and the object it
+         * opens (its use to record; null where none opens): an object in its application in its space, back to the search;
+         * a kept link as its page (ADR 0150 decision 6); a folder on Home at it; another node (a chapter) by the nearest
+         * object or folder above it.
+         */
+        fun found(shell: Shell, nodes: List<NodeRef>, scopeId: String, nodeId: String): Pair<Shell, ObjectRef?> {
+            val inSpace = nodes.filter { it.scopeId == scopeId }
+            val byId = inSpace.associateBy { it.nodeId }
+            byId[nodeId]?.asBookmark()?.let { return shell.openBookmark(it).copy(space = scopeId) to null }
+            val seen = HashSet<String>()
+            var n = byId[nodeId]
+            while (n != null && seen.add(n.nodeId)) {
+                val obj = n.asObject() ?: if (n.nodeId == nodeId) me.raddatz.veyq.mobile.memories.GalleryModel.rowPage(n) else null
+                if (obj != null) return shell.open(obj).copy(space = scopeId) to obj
+                if (n.isFolder) return shell.switchSpace(scopeId).at(inSpace, n.nodeId) to null
+                n = n.parentId?.let { byId[it] }
+            }
+            return shell.switchSpace(scopeId) to null
+        }
 
         /**
          * The shell where folder [nodeId] on Home's path changed: still in [tree] (its space's nodes), the path read anew to

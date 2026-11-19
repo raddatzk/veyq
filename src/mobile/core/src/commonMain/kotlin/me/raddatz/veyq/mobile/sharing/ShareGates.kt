@@ -133,6 +133,28 @@ class ShareGates(
         advance()
     }
 
+    /** Heads a [reresolve] replaced: still held by the pages opened before it, zeroed at [close]. */
+    private val retired = mutableListOf<ShareHead>()
+
+    /**
+     * The link resolved anew behind the gates it passed (a guest's write shown, the tree as it stands now; the web's
+     * `reresolve`): the open head replaced, the one before kept for the pages that still hold it until [close]. False where
+     * the gates are not passed or it no longer resolves (the state is then left as it was; the next [load] tells why).
+     */
+    internal suspend fun reresolve(): Boolean {
+        if (closed || _state.value !is State.Ready) return false
+        val resolved = try {
+            ShareResolve.resolve(client, link.shareId, kShare, pwToken)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return false
+        }
+        head?.let { retired += it }
+        head = resolved
+        return true
+    }
+
     /** The guest entered the password: its token derived here, then the link resolved again with it. */
     suspend fun submitPassword(password: String) {
         if (password.isEmpty() || _busy.value) return
@@ -269,6 +291,8 @@ class ShareGates(
         closed = true
         kShare.fill(0)
         head?.kShare?.fill(0)
+        retired.forEach { it.kShare.fill(0) }
+        retired.clear()
         head = null
         enteredPassword = null
         client.close()

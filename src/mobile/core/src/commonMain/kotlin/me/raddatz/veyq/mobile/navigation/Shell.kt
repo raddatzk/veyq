@@ -36,10 +36,17 @@ data class Shell(
      * and each application that claims a section ([ApplicationShape.personSection]) adds what it knows of the person.
      */
     val person: String? = null,
+    /**
+     * A kept link's page is on screen (ADR 0150 decision 6, the web's `BookmarkDetail`): core's own page of a node no
+     * application owns, opened over what was on screen ([openBookmark]) — [back] leads there —, no bar shown on it. Its
+     * header is core's (`AppKinds.headerOrder`: *Open on its own page*, favorite, move), its body the platform's
+     * `BookmarkPage`.
+     */
+    val bookmark: NodeAt? = null,
 ) {
     val shape: ApplicationShape? get() = application?.let { a -> APPLICATION_SHAPES.first { it.id == a } }
 
-    val isHome: Boolean get() = application == null && openObject == null && person == null
+    val isHome: Boolean get() = application == null && openObject == null && person == null && bookmark == null
 
     /**
      * The bar's places before Search. Home has none (its filters sit at the top, owner 2026-11-08); an application
@@ -48,7 +55,7 @@ data class Shell(
     val barTabs: List<BarTab>
         get() {
             val s = shape ?: return emptyList()
-            if (person != null) return emptyList()
+            if (person != null || bookmark != null) return emptyList()
             return if (s.barLevel == BarLevel.OBJECT && openObject == null) emptyList() else s.tabs
         }
 
@@ -58,7 +65,20 @@ data class Shell(
     val folder: FolderRef? get() = path.lastOrNull()
 
     /** Whether back has somewhere to go inside the app: an open object not chosen at the top, or a folder below the root. */
-    val canGoBack: Boolean get() = person != null || (openObject != null && !top) || (isHome && path.isNotEmpty())
+    val canGoBack: Boolean get() = person != null || bookmark != null || (openObject != null && !top) || (isHome && path.isNotEmpty())
+
+    /**
+     * The node the screen heads (core's header for every kind): a kept link's page, an open object, or the folder Home
+     * shows (null: a space's root, a person's page, an application's list).
+     */
+    val headed: NodeAt?
+        get() = when {
+            person != null -> null
+            bookmark != null -> bookmark
+            openObject != null -> openObject.at
+            application == null && space != null -> folderAt(space)
+            else -> null
+        }
 
     /** The drawer chose an application (null: Home): its list, nothing open, the same space kept for Home. */
     fun choose(app: ApplicationId?): Shell = Shell(application = app, space = space)
@@ -121,7 +141,7 @@ data class Shell(
      * Back from an open object or a person's profile: to where it was opened from, or — opened on start — to its
      * application's list.
      */
-    fun close(): Shell = back ?: copy(openObject = null, tab = null, person = null)
+    fun close(): Shell = back ?: copy(openObject = null, tab = null, person = null, bookmark = null)
 
     /**
      * Person [userId]'s profile opened over what is on screen (ADR 0144 decision 11): from a Memory's participants or a
@@ -130,9 +150,15 @@ data class Shell(
      */
     fun openPerson(userId: String): Shell = Shell(application = application, space = space, back = this, person = userId)
 
+    /**
+     * Kept link [node]'s page opened over what is on screen (ADR 0150 decision 6): from a level's row, a search's hit or
+     * the move's result; back returns there. The application chosen stays chosen, nothing is open in it meanwhile.
+     */
+    fun openBookmark(node: NodeAt): Shell = Shell(application = application, space = space, back = this, bookmark = node)
+
     /** Back, whatever is shown: an object closes, a folder goes up to its parent. */
     fun goBack(): Shell = when {
-        person != null -> close()
+        person != null || bookmark != null -> close()
         openObject != null && !top -> close()
         isHome && path.isNotEmpty() -> copy(path = path.dropLast(1))
         else -> this

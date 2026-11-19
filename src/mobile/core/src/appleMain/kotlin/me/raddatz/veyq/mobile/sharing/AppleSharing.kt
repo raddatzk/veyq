@@ -39,11 +39,23 @@ object AppleSharing {
      */
     fun view(
         link: ReceivedLink.ShareLink, password: String?, store: DeviceStore, sessions: GuestSessions, language: () -> String,
-        queue: UploadQueue?, deriver: MediaUpload.Deriver?,
+        queue: UploadQueue?, deriver: MediaUpload.Deriver?, music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null,
     ): GuestView = GuestView.open(
         LibsodiumPrimitives, link, { block -> appleHttpClient(block) }, store, sessions, language, password, queue, deriver,
-        now = { (NSDate().timeIntervalSince1970 * 1000).toLong() },
+        now = { (NSDate().timeIntervalSince1970 * 1000).toLong() }, music = music,
     )
+
+    /**
+     * A music player for a guest's Memory while no tenant is open (#1034; the account's is `ShellModel.musicPlayer`): the
+     * same core player over the app's decks and the system's controls, its shuffle drawn from libsodium.
+     */
+    fun musicPlayer(
+        newDeck: (me.raddatz.veyq.mobile.audio.Deck.Events) -> me.raddatz.veyq.mobile.audio.Deck, controls: me.raddatz.veyq.mobile.audio.SystemControls?,
+    ): me.raddatz.veyq.mobile.audio.MusicPlayer =
+        me.raddatz.veyq.mobile.audio.MusicPlayer(newDeck, controls, me.raddatz.veyq.mobile.audio.randomIntOf { LibsodiumPrimitives.randomBytes(it) })
+
+    /** A READ_WRITE guest's new folder [name] at [level] (#1034), off the main thread: why not, or null once made. */
+    suspend fun createFolder(level: GuestLevel, name: String) = withContext(Dispatchers.Default) { level.createFolder(name) }
 
     /** The terms' and the note's acceptances in [defaults] (the app group's on iOS, as the trust marks). */
     fun store(defaults: NSUserDefaults): DeviceStore = UserDefaultsStore(defaults)
@@ -148,9 +160,12 @@ class GuestOpener internal constructor(
     private val queue: UploadQueue?,
     private val deriver: MediaUpload.Deriver?,
 ) {
+    /** The player a guest's Memory plays its music with (#1034): the app's one, set by the app as it changes. */
+    var music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null
+
     /** A guest view of [link], [password] handed in memory (a bookmark's). */
     fun view(link: ReceivedLink.ShareLink, password: String?): GuestView =
-        AppleSharing.view(link, password, store, sessions, { language }, queue, deriver)
+        AppleSharing.view(link, password, store, sessions, { language }, queue, deriver, music)
 
     /** *Open a link*'s field over this opener ([AppleOpenLink]). */
     fun field(): AppleOpenLink = AppleOpenLink(this)

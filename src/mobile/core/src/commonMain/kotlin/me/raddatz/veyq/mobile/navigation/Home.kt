@@ -16,10 +16,14 @@ object Home {
     /** The filters Home offers: everything, then each application the operator and the tenant owner left on. */
     fun filters(applicationsOff: Set<String>): List<ApplicationId?> = listOf<ApplicationId?>(null) + availableApplications(applicationsOff).map { it.id }
 
-    /** One level: the children of [parentId] (null: the space's root), folders first, each group by name. */
+    /**
+     * One level: the children of [parentId] (null: the space's root), folders first, each group by name. A kept link is
+     * core's and belongs to no application: listed with everything (the web's `All` tab, `levelTabs.kindVisible`), left out
+     * by an application's filter.
+     */
     fun level(nodes: List<NodeRef>, scopeId: String, parentId: String?, filter: ApplicationId?): List<NodeRef> =
         nodes.filter { it.scopeId == scopeId && it.parentId == parentId }
-            .filter { it.isFolder || (it.application != null && (filter == null || it.application == filter)) }
+            .filter { it.isFolder || (it.isBookmark && filter == null) || (it.application != null && (filter == null || it.application == filter)) }
             .sortedWith(compareBy<NodeRef> { !it.isFolder }.thenBy { it.name.lowercase() })
 
     /**
