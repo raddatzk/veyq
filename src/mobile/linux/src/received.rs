@@ -14,6 +14,12 @@
 //! (its files added by path, what it sent in this visit). A kept link's page shows the same view in place
 //! ([crate::bookmark_page]).
 //!
+//! What the member's pages take from the shell they take from this header here (#1035): a file's *Download* (Save a
+//! copy) and a READ_WRITE guest's *Replace* ([replace_offered]); a Pot's places held by its page ([PotPage::own_places]);
+//! a READ_WRITE level's *New* — a folder (`Received.NewFolder`) and files (`Received.Upload`) — where the core says the
+//! level writes (`ReceivedPage.writes`, #1034); each row's *Report* to the link's own operator (`Received.ReportNode`,
+//! #1033).
+//!
 //! Before any guest write the web's notice of the guest-write record stands under the header while the link writes
 //! (`ReceivedShown.recordDays`, ADR 0093 § 10, inbox #1018), its *more* opening the link's instance's privacy notice;
 //! a write that needs the guest's name asks it first (`share_guest_name_*`, the notice in the question too).
@@ -192,19 +198,34 @@ pub fn record_notice(days: Option<i32>) -> Option<String> {
     days.filter(|d| *d > 0).map(|d| format!("{} {}", words::share_guest_record_kept(d as i64), words::share_guest_record_objection()))
 }
 
+/// A WRITE_ONLY link's role (`GuestAccess.WRITE_ONLY`): its guest sees no node, so no row is reported.
+const WRITE_ONLY: &str = "WRITE_ONLY";
+
+/// Whether a file's *Replace* is offered: where the file's rights let the guest ([can_write], a READ_WRITE guest's) — and
+/// only signed in, where the bridge queues it (`Upload.Replace` on the tenant's queue; a signed-out guest's replace has no
+/// call yet).
+pub fn replace_offered(can_write: bool, signed_in: bool) -> bool {
+    can_write && signed_in
+}
+
+/// Whether a Pot's *Add entry* is offered: where it takes the guest's writes, or to a READ_WRITE guest not named yet, whose
+/// name is asked first (the web's `requestGuest`, then the write).
+pub fn pot_add_offered(can_write: bool, role: &str, named: bool) -> bool {
+    can_write || (role == "READ_WRITE" && !named)
+}
+
 /// What the content shows, as a key: drawn anew only when it changed (a level's rows, another page, another gate).
 pub fn drawn_key(s: &ReceivedShown) -> String {
     let page = s.page.as_ref().map(|p| {
         let rows: Vec<&str> = p.rows.iter().map(|r| r.id.as_str()).collect();
-        format!("{:?}|{:?}|{:?}|{:?}|{}|{}", p.kind, p.file, p.gallery, p.pot, rows.join(","), p.sent.join("\n"))
+        format!("{:?}|{:?}|{:?}|{:?}|{}|{}|{}", p.kind, p.file, p.gallery, p.pot, rows.join(","), p.sent.join("\n"), p.writes)
     });
     format!("{:?}|{:?}|{}|{}", s.gate, s.refusal, s.asked_again, page.unwrap_or_default())
 }
 
 /// The page a kind's own module draws, held while it shows.
 enum Held {
-    /// Held only so the file's page stays open (its model closes when it goes).
-    #[allow(dead_code)]
+    /// The file's page, open while it shows (its model closes when it goes); the header's Download and Replace act on it.
     File(FilePage),
     Memory(MemoryPage),
     Pot(PotPage),
@@ -227,6 +248,15 @@ struct Inner {
     back: gtk::Button,
     /// The page's own write: a Memory's *Add photos*, a Pot's *Add entry*, shown where the page takes one.
     add: gtk::Button,
+    /// A READ_WRITE level's *New*: a folder, files uploaded here.
+    new: gtk::MenuButton,
+    /// A file's *Download* (Save a copy) and its *Replace*, where the file offers them.
+    save: gtk::Button,
+    replace: gtk::Button,
+    /// A Pot's *Add entry* asked by a guest just named: the entry's editor opens once the Pot reads that it writes.
+    add_after_read: Cell<bool>,
+    /// Whether the Pot on screen takes the guest's writes, as its last read said.
+    pot_can_write: Cell<bool>,
     menu: gtk::MenuButton,
     actions: gio::SimpleActionGroup,
     notice: gtk::Box,
@@ -257,11 +287,23 @@ impl ReceivedView {
         let add = crate::create_action::create_action(&words::memory_add(), || {});
         add.set_visible(false);
         let menu = gtk::MenuButton::builder().icon_name("view-more-symbolic").tooltip_text(words::node_more()).visible(false).build();
+        let new_menu = gio::Menu::new();
+        new_menu.append(Some(&words::folder_new()), Some("received.new-folder"));
+        new_menu.append(Some(&words::depot_upload()), Some("received.upload-files"));
+        let new = crate::create_action::create_menu(&words::drawer_new(), new_menu.upcast_ref());
+        new.set_visible(false);
+        new.set_widget_name("guest-new");
+        let save = icon_button(crate::header::icon_of("download"), &words::node_download(), "received.save");
+        let replace = icon_button(crate::header::icon_of("replace"), &words::depot_replace(), "received.replace");
+        replace.set_widget_name("guest-replace");
         let header = adw::HeaderBar::new();
         header.set_title_widget(Some(&title));
         header.pack_start(&back);
         header.pack_start(&add);
+        header.pack_start(&new);
         header.pack_end(&menu);
+        header.pack_end(&replace);
+        header.pack_end(&save);
         if mode == Mode::InPlace {
             // in place the window's own buttons are the shell's header's
             header.set_show_end_title_buttons(false);
@@ -303,6 +345,11 @@ impl ReceivedView {
             title,
             back,
             add,
+            new,
+            save,
+            replace,
+            add_after_read: Cell::new(false),
+            pot_can_write: Cell::new(false),
             menu,
             actions,
             notice,
@@ -379,6 +426,11 @@ impl Inner {
             if let Some(i) = w.upgrade() {
                 i.write(|i| match i.held.borrow().as_ref() {
                     Some(Held::Memory(p)) => p.add(),
+                    // a guest just named: its Pot reads anew that it writes, then the entry's editor opens
+                    Some(Held::Pot(p)) if !i.pot_writes() => {
+                        i.add_after_read.set(true);
+                        p.refresh();
+                    }
                     Some(Held::Pot(p)) => p.add_entry(),
                     _ => {}
                 });
@@ -412,6 +464,29 @@ impl Inner {
         add("keep", Rc::new(|i| i.keep()));
         add("report", Rc::new(|i| i.report()));
         add("not-you", Rc::new(|i| i.ask_not_you()));
+        add("new-folder", Rc::new(|i| i.write(|i| i.new_folder())));
+        add("upload-files", Rc::new(|i| i.write(|i| i.pick_and_upload())));
+        add("save", Rc::new(|i| {
+            if let Some(Held::File(p)) = i.held.borrow().as_ref() {
+                p.save(&i.window, &i.root);
+            }
+        }));
+        add("replace", Rc::new(|i| {
+            i.write(|i| {
+                if let Some(file) = i.held.borrow().as_ref().and_then(|h| if let Held::File(p) = h { p.id() } else { None }) {
+                    crate::uploads::replace(&i.window, file, &i.root);
+                }
+            })
+        }));
+        // a row's report, by its node's id (`Received.ReportNode`)
+        let report_node = gio::SimpleAction::new("report-node", Some(glib::VariantTy::STRING));
+        let w = Rc::downgrade(self);
+        report_node.connect_activate(move |_, node| {
+            if let (Some(i), Some(node)) = (w.upgrade(), node.and_then(|v| v.str().map(str::to_owned))) {
+                i.report_node(node);
+            }
+        });
+        self.actions.add_action(&report_node);
     }
 
     fn draw(self: &Rc<Self>) {
@@ -487,7 +562,10 @@ impl Inner {
     fn draw_content(self: &Rc<Self>, s: &ReceivedShown) {
         self.held.borrow_mut().take();
         self.password.borrow_mut().take();
-        self.add.set_visible(false);
+        self.add_after_read.set(false);
+        for w in [self.add.upcast_ref::<gtk::Widget>(), self.new.upcast_ref(), self.save.upcast_ref(), self.replace.upcast_ref()] {
+            w.set_visible(false);
+        }
         match s.gate {
             ReceivedGate::Loading => self.set_content(&spinner()),
             ReceivedGate::Refused => {
@@ -567,14 +645,27 @@ impl Inner {
         let id = self.received;
         match p.kind {
             ReceivedPageKind::Level => {
+                // a READ_WRITE level's New (#1034): a folder and files, each the guest's write
+                self.new.set_visible(p.writes);
                 if p.rows.is_empty() {
                     self.set_content(&adw::StatusPage::builder().icon_name(kind_icon(&p.node_kind)).title(glib_escape(&p.name)).vexpand(true).build());
                     return;
                 }
+                let reports = offers(s, self.mode).report && s.role != WRITE_ONLY;
                 let group = adw::PreferencesGroup::new();
                 for r in &p.rows {
                     let row = adw::ActionRow::builder().title(glib_escape(&r.name)).activatable(true).build();
                     row.add_prefix(&gtk::Image::from_icon_name(kind_icon(&r.kind)));
+                    if reports {
+                        // the row's own menu: its report to the link's operator (#1033)
+                        let menu = gio::Menu::new();
+                        let item = gio::MenuItem::new(Some(&words::report_action()), None);
+                        item.set_action_and_target_value(Some("received.report-node"), Some(&r.id.to_variant()));
+                        menu.append_item(&item);
+                        let more = gtk::MenuButton::builder().icon_name("view-more-symbolic").tooltip_text(words::node_more()).menu_model(&menu).valign(gtk::Align::Center).build();
+                        more.add_css_class("flat");
+                        row.add_suffix(&more);
+                    }
                     row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
                     let node = r.id.clone();
                     row.connect_activated(move |_| bridge::send(Call::ReceivedOpenNode { received: id, node: node.clone() }));
@@ -587,6 +678,17 @@ impl Inner {
             ReceivedPageKind::File => {
                 let Some(file) = p.file else { return };
                 let page = FilePage::opened(&node, file);
+                // the file's own actions as its header offers them a member: Download where it holds content, Replace
+                // where the guest may (`FileModel`'s rights, a READ_WRITE guest's)
+                let (save, replace, signed_in) = (self.save.downgrade(), self.replace.downgrade(), s.keep_offered);
+                page.on_facts(move |facts, _| {
+                    if let Some(save) = save.upgrade() {
+                        save.set_visible(facts.has_content);
+                    }
+                    if let Some(replace) = replace.upgrade() {
+                        replace.set_visible(replace_offered(facts.can_write, signed_in));
+                    }
+                });
                 self.set_content(page.widget());
                 *self.held.borrow_mut() = Some(Held::File(page));
             }
@@ -609,12 +711,23 @@ impl Inner {
                 let Some(pot) = p.pot else { return };
                 let r = ObjectRef { scope_id: String::new(), node_id: String::new(), kind: p.node_kind.clone(), application: ApplicationId::Expenses, name: p.name.clone() };
                 let page = PotPage::opened(&r, pot, &self.window, &self.root);
-                let add = self.add.downgrade();
+                // no bar on a guest's screen: the page holds its places
+                page.own_places();
+                let w = Rc::downgrade(self);
                 page.on_read(move |can_write| {
-                    if let Some(add) = add.upgrade() {
-                        add.set_tooltip_text(Some(&words::pot_add()));
-                        add.update_property(&[gtk::accessible::Property::Label(&words::pot_add())]);
-                        add.set_visible(can_write);
+                    let Some(i) = w.upgrade() else { return };
+                    i.pot_can_write.set(can_write);
+                    let (role, named) = i.shown.borrow().as_ref().map(|s| (s.role.clone(), s.guest_name.is_some())).unwrap_or_default();
+                    i.add.set_tooltip_text(Some(&words::pot_add()));
+                    i.add.update_property(&[gtk::accessible::Property::Label(&words::pot_add())]);
+                    i.add.set_visible(pot_add_offered(can_write, &role, named));
+                    if can_write && i.add_after_read.replace(false) {
+                        // the entry's editor once this read's turn is over (the Pot's watch still draws)
+                        glib::idle_add_local_once(move || {
+                            if let Some(Held::Pot(p)) = i.held.borrow().as_ref() {
+                                p.add_entry();
+                            }
+                        });
                     }
                 });
                 self.set_content(page.widget());
@@ -663,8 +776,10 @@ impl Inner {
     /// GTK's open dialog (several files), their paths to the core (`Received.Upload`).
     fn pick_and_upload(self: &Rc<Self>) {
         let (id, parent, toasts) = (self.received, self.window.clone(), self.root.clone());
+        let level = self.shown.borrow().as_ref().and_then(|s| s.page.as_ref()).is_some_and(|p| p.kind == ReceivedPageKind::Level);
+        let title = if level { words::depot_upload() } else { words::memory_add() };
         glib::spawn_future_local(async move {
-            let dialog = gtk::FileDialog::builder().title(words::memory_add()).modal(true).build();
+            let dialog = gtk::FileDialog::builder().title(title).modal(true).build();
             let picked = match dialog.open_multiple_future(Some(&parent)).await {
                 Ok(picked) => picked,
                 Err(e) => {
@@ -730,6 +845,39 @@ impl Inner {
             });
         });
         ask.present(Some(&self.root));
+    }
+
+    /// *New folder* on a READ_WRITE level: its name asked, the core's refusal asked again with it (`Received.NewFolder`).
+    fn new_folder(self: &Rc<Self>) {
+        let (id, toasts) = (self.received, self.root.clone());
+        crate::header::ask_name(self.root.upcast_ref(), &words::folder_new(), &words::folder_name(), "", None, &words::folder_create(), move |name, again| {
+            let toasts = toasts.clone();
+            glib::spawn_future_local(async move {
+                match bridge::call(&Call::ReceivedNewFolder { received: id, name: name.clone() }).await.map(|(a, _)| a) {
+                    Ok(Answer::Said { notice: Some(n) }) => again(name, said::notice(&n)),
+                    Ok(Answer::Said { notice: None }) => eprintln!("veyq: a guest's new folder: made"),
+                    other => {
+                        eprintln!("veyq: a guest's new folder answered {}", answer_kind(&other));
+                        toasts.add_toast(adw::Toast::new(&words::share_failed()));
+                    }
+                }
+            });
+        });
+    }
+
+    /// A row's *Report*: core's sheet of that node to the link's own operator (`Received.ReportNode`).
+    fn report_node(self: &Rc<Self>, node_id: String) {
+        let name = self.shown.borrow().as_ref().and_then(|s| s.page.as_ref()).and_then(|p| p.rows.iter().find(|r| r.id == node_id).map(|r| (r.name.clone(), r.kind.clone())));
+        let Some((name, kind)) = name else { return };
+        let node = NodeAt { scope_id: String::new(), node_id: String::new(), kind, name };
+        crate::report::open_asked(&self.root, &node, Call::ReceivedReportNode { received: self.received, node: node_id }, |other| {
+            eprintln!("veyq: a row's report answered {}", answer_kind(&other));
+        });
+    }
+
+    /// Whether the Pot on screen takes the guest's writes, as its last read said.
+    fn pot_writes(&self) -> bool {
+        self.pot_can_write.get()
     }
 
     fn ask_not_you(self: &Rc<Self>) {
@@ -805,7 +953,11 @@ impl Inner {
                 let toasts = toasts.clone();
                 glib::spawn_future_local(async move {
                     let said = match bridge::call(&Call::ReceivedKeep { received: id, scope }).await.map(|(a, _)| a) {
-                        Ok(Answer::Done) => words::link_kept(&name),
+                        Ok(Answer::Done) => {
+                            // the kept link's row shows on its level once the shell's lists are read anew
+                            bridge::send(Call::ShellRefresh);
+                            words::link_kept(&name)
+                        }
                         other => {
                             eprintln!("veyq: Keep answered {}", answer_kind(&other));
                             words::bookmark_create_failed()
@@ -837,6 +989,13 @@ impl Inner {
             f();
         }
     }
+}
+
+/// A header bar's icon button firing [action], its tooltip and accessible name [label]; hidden until a page offers it.
+fn icon_button(icon: &str, label: &str, action: &str) -> gtk::Button {
+    let b = gtk::Button::builder().icon_name(icon).tooltip_text(label).action_name(action).visible(false).build();
+    b.update_property(&[gtk::accessible::Property::Label(label)]);
+    b
 }
 
 fn spinner() -> gtk::Widget {
@@ -925,6 +1084,21 @@ mod tests {
         let n = record_notice(Some(30)).expect("a notice for 30 days");
         assert!(n.contains("30"), "{n}");
         assert!(n.contains(&words::share_guest_record_objection()), "{n}");
+    }
+
+    #[test]
+    fn a_files_replace_stands_where_the_guest_may_and_only_signed_in() {
+        assert!(replace_offered(true, true));
+        assert!(!replace_offered(false, true), "a READ guest replaces nothing");
+        assert!(!replace_offered(true, false), "signed out the bridge has no replace for a guest");
+    }
+
+    #[test]
+    fn a_pots_add_entry_stands_for_a_writer_and_a_read_write_guest_not_named_yet() {
+        assert!(pot_add_offered(true, "READ_WRITE", true));
+        assert!(pot_add_offered(false, "READ_WRITE", false), "its name is asked first");
+        assert!(!pot_add_offered(false, "READ", false));
+        assert!(!pot_add_offered(false, "READ_WRITE", true), "named and still not writing: nothing to offer");
     }
 
     #[test]
