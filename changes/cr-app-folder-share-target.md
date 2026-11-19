@@ -1,7 +1,7 @@
 ---
 id: cr-app-folder-share-target
 title: A folder as a share target in the apps — Depot's answer, *Add here* on a level, and a drop onto a level on Android and Apple
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0138", "0079", "0122", "0136", "0145", "0148"]
 invariants:
@@ -108,7 +108,7 @@ folder.
 
 ## Phases
 
-- [ ] **1 docs** — ADR 0138 amended (decisions 2, 7, 8, 9 and the extension's rule; Built line: a folder built, its
+- [x] **1 docs** — ADR 0138 amended (decisions 2, 7, 8, 9 and the extension's rule; Built line: a folder built, its
   passes open); `native-apps.md` § Open's "a folder as a share target (#987)" narrowed; `uc.depot.member-files` gains an
   *In the apps: shared into a folder* alternate flow. · Done when: every guard but guard_gaps green
   (`/usr/bin/python3 scripts/validate_*.py`).

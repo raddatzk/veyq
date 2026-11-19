@@ -1,7 +1,7 @@
 # ADR 0138 — The apps take what the system shares; the chosen node's kind decides what it becomes
 
 - Status: Accepted
-- Built: yes on Android and Apple (the share target, the share extension, the pick mode, a Pot, a Memory and a chapter as targets, a drop onto the app and onto a Memory's gallery, the app group and the shared keychain group; 2026-11-19 for a Memory); the macOS drop onto a Memory's gallery passed 2026-11-19; open: a folder as a target (inbox #987), Apple's device passes of a Memory's share and the iPad's drop (#1005)
+- Built: yes on Android and Apple (the share target, the share extension, the pick mode, a Pot, a Memory and a chapter as targets, a drop onto the app and onto a Memory's gallery, the app group and the shared keychain group; 2026-11-19 for a Memory; a folder and a space's top as targets, every file type offered and a drop onto a level, 2026-11-19); the macOS drop onto a Memory's gallery passed 2026-11-19; open: Apple's device passes of a Memory's and a folder's share and the iPad's drop (#1005), the macOS drop onto a level
 - Date: 2026-11-08
 
 ## Context
@@ -19,7 +19,10 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
    takes what is shared and this member may write there; anything else is shown and cannot be chosen. The pick mode
    starts at the space's Home, never in the object last open (where the app otherwise opens, ADR 0122), so the person
    chooses the place; a target's flow closed without its save gives the files back to the pick mode, for this node or
-   another, and only the pick mode's own cancel ends the share.
+   another, and only the pick mode's own cancel ends the share. **veyq is offered for every share** (owner 2026-11-19):
+   a folder takes any file (decision 2), so the system offers veyq whatever is shared — on Android every type, on iOS
+   every attachment that is data. A share that carries no file (a text, a web page's link) waits in the pick mode
+   saying that nothing could be taken, until a shared link is given a meaning (inbox #1015).
 
 2. **The chosen node's kind decides what the shared thing becomes** — each application's answer, as a kind's slug token
    input is (core never knows an application's rules). Core asks `AppKinds.share(kind)`: null takes nothing; an answer
@@ -31,14 +34,26 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
    with them as its receipts — the app's one editor, nothing of its own. **Memories** (`memories/MemoryShare`): a Memory
    and a chapter take photos and videos (`MediaUpload.isMedia`), with no bound beyond the upload's own, into the app's
    one upload queue, where the member may upload there (`MemoryRights`' `upload`: Memories switched on for the
-   tenant) and the account is online. A folder (as Depot's files) takes its when Depot answers (inbox #987).
-   - Rejected: **a Memory branch beside the Pot's in core** — core would know two applications' rules.
+   tenant) and the account is online. **Depot** (`depot/FolderShare`): a folder and a space's top — which asks as a
+   folder, as the web treats a level without a node and a folder alike — take **any file**, with no type and no bound
+   but the upload's own and the quota (the web's level picker has no `accept`), into the upload queue, where the member
+   may upload there: online, not in a guest's identity folder, Depot not switched off for the tenant (the web's
+   `features/depot/rights.ts`). The folder stays core's kind; what it takes is Depot's, as on the web, where Depot
+   contributes the level's upload actions.
+   - Rejected: **a Memory branch beside the Pot's in core** — core would know two applications' rules; likewise a Depot
+     branch in `ShareInbox`.
 
 3. **Nothing is stored until the target's own save.** Choosing a node opens its flow; the editor's save uploads the
    receipts and writes the entry as it does in the app; cancelling leaves nothing behind. A Memory can be entered in the
    pick mode: its page, and each chapter's, shows the waiting files' count in the banner with **Add here**, the
    Memory's own save, which queues them into that node (its gallery's placeholder tiles show them, ADR 0145) and ends
-   the share; leaving the page without it gives the files back to the pick mode. **Words** (owner 2026-11-19): the
+   the share; leaving the page without it gives the files back to the pick mode. **A level** — a folder or a space's
+   top — likewise: a folder's row in the pick mode is navigation (it is how the person walks to the place), and the open
+   level shows *Add here* wherever Depot's answer may be chosen there, queueing the files into Depot's upload queue as
+   its picker does — a name a file already holds is offered that file's replace — and ending the share; a level where
+   Depot may put nothing keeps the banner without *Add here*. Core decides which open page offers *Add here*
+   (`navigation/AddHere`, asked through `ShellModel.addHere` over the open gallery or the level shown), so no app
+   branches on kinds. **Words** (owner 2026-11-19): the
    banner says "Choose where these files go" / "Wähle, wohin diese Dateien gehören" and the action "Add here" / "Hier
    hinzufügen".
    - Rejected: **queueing on choosing a Memory's row** — a chapter could not be chosen (it lives inside the Memory's
@@ -60,12 +75,14 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
    order of 120 MB): a receipt is at most 10 MiB, so a Pot's flow holds its files in memory as the app does, at most
    64 MiB of them in one share — a file beyond that is left out, as a too large one is, and the banner counts it. A
    target with larger files (a folder's, a Memory's) seals and uploads them in frames from disk: no file of a share is
-   held whole but a Pot's bounded receipts. **iOS's extension hands a Memory's files to the app through the app group
-   and closes** (owner 2026-11-19): it takes each file with `loadFileRepresentation`, copying it inside the callback
+   held whole but a Pot's bounded receipts. **iOS's extension hands a Memory's or a folder's files to the app through
+   the app group and closes** (owner 2026-11-19): it takes each file with `loadFileRepresentation`, copying it inside the callback
    (the system's URL is valid only there) into the app group's container, `share-in/<random>/` — a JPEG where the sender
-   offers one, as decision 7 says —, and *Add here* writes beside the copies which Memory or chapter they go into and
-   completes the request at once. The app, the next time it opens that account's tenant, queues them into that node
-   through its one upload queue, and removes each copy once the queue lets it go (`MediaUploads`' `left`); a cancel in
+   offers one, as decision 7 says —, and *Add here* writes beside the copies where they go — the target's kind (a Memory, a chapter, a
+   folder) and node, none for a space's top; a handoff without a kind is a Memory's — and completes the request at once.
+   The app, the next time it opens that account's tenant, queues them into that place through its one upload queue —
+   Memories' or Depot's —, and removes each copy once the queue lets it go (`MediaUploads`' `left`, `DepotUploads`'
+   `left`: an upload done or cancelled, or abandoned failed, and a same-name file's replace offer answered); a cancel in
    the extension removes them at once, and a sign-out or a hand-off the account no longer has removes them unsent. The
    owner's reason: the files are not uploaded yet, and they are the person's own plaintext already on the device —
    a copy in the app's own container until the upload is no exposure the device does not already hold. The apps
@@ -77,10 +94,12 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
      a second upload path.
 
 7. **An image is taken in a representation every client draws.** iOS offers a photo as HEIC and as JPEG; the share
-   takes the JPEG, so a receipt reads in every browser, as the web's own uploads do.
+   takes the JPEG, so a receipt reads in every browser, as the web's own uploads do — a photo shared into a folder too:
+   the share is read before its place is chosen, and one read for every target beats holding two copies until the
+   choice.
 
 8. **Android's share target is an activity of the app**, in its process, for `ACTION_SEND` and `ACTION_SEND_MULTIPLE`
-   of `image/*`, `video/*` and `application/pdf`: the session, the navigation and the editor are the app's own. A shared
+   of any type (`*/*`, decision 1; each target still takes only what its answer takes): the session, the navigation and the editor are the app's own. A shared
    file is read where the system put it, a frame at a time (`ContentSource`, a pick's): the share's read grant is the
    receiving activity's and outlives the app being left, so the upload's worker reads it to its end (measured,
    Consequences). The one copy the app writes is a HEIC re-encoded as a JPEG (decision 7), under
@@ -90,8 +109,10 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
    decides: an open Pot that takes it — writable, with people — opens its new expense with the files at once; a Memory's
    or a chapter's gallery the member may upload into queues the photos and videos into it at once, as its picker's do
    (Android's `dragAndDropTarget`, Apple's `dropDestination`: iPadOS, macOS, an iPhone where the system offers a drag
-   between apps); anywhere else they wait in the pick mode, as a share's do. The files are read as a share's are
-   (decisions 6 and 7).
+   between apps); an open level — a folder or a space's top — where Depot may put files uploads any file dropped onto
+   it there at once, as the web's level and the desktops' take a drop, and on macOS a dropped folder uploads as a folder
+   (`DepotUploads.uploadFolder`, as the desktops' do); anywhere else they wait in the pick mode, as a share's do. The
+   files are read as a share's are (decisions 6 and 7).
 
 ## Consequences
 

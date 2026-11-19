@@ -592,7 +592,7 @@ agent's on the unlocked Mac (#994) and the owner's on an iPhone and an iPad (#92
 iPad and a Mac (#995); **Windows' UIA pass** (#1000, once the VM resolves a throwaway's tenant, #983). The fixes of
 #990, #991, #996, #997 and #1001 are in, checked by tests; #990's seen on Android, #996's on Android and Linux; #989's calendars are handed on every app,
 Apple's unclicked. A copy that a rotation interrupts fails (#988). The owner answered its four questions 2026-11-19 as built (ADR 0149's Consequences). Not built: import of an archive, for every
-kind (#985); a folder as a share target (#987); a guest's view of a received link
+kind (#985); a folder as a share target on Android and Apple (#987, [cr-app-folder-share-target](../../changes/cr-app-folder-share-target.md): Depot's answer, *Add here* on a level, every file type offered, a drop onto a level); a guest's view of a received link
 (#435, a source for the same model). The web's own heart in its lightbox (#986) and its Contributions' "You" (#1003) are
 built (2026-11-19).
 A share into a Memory (built above): Apple's passes — the iOS handoff, the iPad drop (#1005); an iOS handoff for a space the app does not list

@@ -44,6 +44,12 @@
 - **E5 — the node is not a live file of this scope** (a folder, a Memory, a trashed file, another scope's node) or
   the caller cannot write the scope: the completion is refused and nothing is attached.
 - **A6 — the scope is being deleted:** the level is read-only; download only.
+- **A7 — in the apps, shared into a folder** ([ADR 0138](../../../decisions/0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md)
+  decisions 2, 3 and 9): another app shares any file to veyq (Android, iOS); the pick mode walks to a folder or a
+  space's top, whose open level offers *Add here* where the member may upload there (online, not in a guest's identity
+  folder, Depot not switched off); the files go into the upload queue as picked ones do (steps 1–4, a taken name
+  offering step 6's replace). A file dropped onto an open level on Android, an iPad or a Mac is uploaded there at once;
+  a folder dropped on a Mac uploads as a folder, as Depot's *Upload folder* does.
 
 ## Quality notes
 
