@@ -107,10 +107,13 @@ private struct NodeTile: View {
 
 extension NodeTileItem {
     /// An object's tile, as `ObjectRow` draws its row: its cover, its kind's symbol, the application's facts about it.
-    init(ref: ObjectRef, details: [String: [String]], covers: [String: CGImage], picking: Bool, onOpen: @escaping (ObjectRef) -> Void) {
+    init(
+        ref: ObjectRef, details: [String: [String]], covers: [String: CGImage], picking: Bool, takesShare: (ObjectRef) -> Bool,
+        onOpen: @escaping (ObjectRef) -> Void
+    ) {
         self.init(
             id: ref.nodeId, name: ref.name, details: details[ref.nodeId]?.joined(separator: " · "), cover: covers[ref.nodeId],
-            symbol: Names.kindSymbol(ref.kind), enabled: !picking || AppKinds.shared.takesShared(kind: ref.kind)
+            symbol: Names.kindSymbol(ref.kind), enabled: !picking || takesShare(ref)
         ) { onOpen(ref) }
     }
 }

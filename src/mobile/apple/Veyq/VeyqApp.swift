@@ -32,7 +32,11 @@ struct VeyqApp: App {
         }
         // a pin's fetch or an upload under way when the app is left asks the system for the time to go on (ADR 0140
         // decision 9, ADR 0145 decision 1)
-        .onChange(of: scenePhase) { _, phase in ContinuedWork.phase(phase) }
+        .onChange(of: scenePhase) { _, phase in
+            ContinuedWork.phase(phase)
+            // what the share extension handed over while the app was away (ADR 0138 decision 6)
+            if phase == .active { model.pickUpHandoffs() }
+        }
         #if os(macOS)
         .commands {
             LightboxCommands()

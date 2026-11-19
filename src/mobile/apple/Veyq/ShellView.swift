@@ -27,7 +27,8 @@ struct ShellView: View {
         .environment(\.covers, model.covers.mapValues(\.image))
         .environment(\.avatars, model.avatars)
         .environment(\.picking, model.incoming != nil)
-        // An image or a PDF dragged onto the app — a screenshot's thumbnail, a photo from another app (ADR 0138 decision 9).
+        .environment(\.takesShare, model.takesShare)
+        // An image, a video or a PDF dragged onto the app — a screenshot's thumbnail, a photo from another app (ADR 0138 decision 9).
         .onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
             Task { model.receiveDrop(await IncomingFiles.read(providers)) }
             return true
@@ -542,6 +543,7 @@ struct HomeView: View {
     @Environment(\.rowDetails) private var details
     @Environment(\.covers) private var covers
     @Environment(\.picking) private var picking
+    @Environment(\.takesShare) private var takesShare
     /// The tiles' width between the page's margins, as last measured.
     @State private var tilesWidth: CGFloat = 0
     @State private var naming = false
@@ -650,7 +652,7 @@ struct HomeView: View {
             return NodeTileItem(id: node.nodeId, name: node.name, cover: model.covers[node.nodeId]?.image, symbol: "folder", folder: true) { model.enter(folder) }
         }
         guard let ref = node.asObject() else { return nil }
-        return NodeTileItem(ref: ref, details: details, covers: covers, picking: picking, onOpen: model.open)
+        return NodeTileItem(ref: ref, details: details, covers: covers, picking: picking, takesShare: takesShare, onOpen: model.open)
     }
 
     private var level: some View {
@@ -749,10 +751,11 @@ struct ObjectRow: View {
     let onOpen: (ObjectRef) -> Void
     @Environment(\.rowDetails) private var details
     @Environment(\.picking) private var picking
+    @Environment(\.takesShare) private var takesShare
     @Environment(\.covers) private var covers
 
     /// Picking a place for what was shared: only a kind that takes it can be chosen (ADR 0138 decision 1).
-    private var takes: Bool { !picking || AppKinds.shared.takesShared(kind: ref.kind) }
+    private var takes: Bool { !picking || takesShare(ref) }
 
     var body: some View {
         Button { onOpen(ref) } label: {
@@ -783,6 +786,8 @@ struct ObjectRow: View {
 extension EnvironmentValues {
     /// Whether the shell is picking a place for what another app shared (ADR 0138).
     @Entry var picking = false
+    /// Whether the pick mode lets an object be chosen: its kind's answer and this member's right there (`AppModel.takesShare`).
+    @Entry var takesShare: (ObjectRef) -> Bool = { _ in false }
 }
 
 /// A space whose trash is open.
@@ -800,7 +805,7 @@ struct Picking: ViewModifier {
         content.safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 if let banner = model.offlineBanner { OfflineBanner(banner: banner) }
-                if let incoming = model.incoming { ShareBanner(incoming: incoming, onCancel: model.cancelShare) }
+                if let incoming = model.incoming { ShareBanner(model: model, incoming: incoming, onCancel: model.cancelShare) }
             }
         }
     }
@@ -822,8 +827,10 @@ struct OfflineBanner: View {
     }
 }
 
-/// The pick mode's banner: what waits and where it can go, with its cancel.
+/// The pick mode's banner: what waits and where it can go, with its cancel — and on a Memory's or a chapter's page that
+/// takes it, *Add here* (ADR 0138 decision 3), that page's own save.
 struct ShareBanner: View {
+    let model: AppModel
     let incoming: AppModel.Incoming
     let onCancel: () -> Void
 
@@ -833,12 +840,16 @@ struct ShareBanner: View {
                 Text(incoming.files.isEmpty ? say(.shareNothing)
                      : say(.sharePick, incoming.files.count))
                     .fontWeight(.semibold)
-                if incoming.refused > 0 {
-                    Text(say(.shareRefused, incoming.refused)).font(.caption).foregroundStyle(Role.muted)
+                if incoming.refused > 0 && !incoming.files.isEmpty {
+                    Text(say(.shareUnread, incoming.refused)).font(.caption).foregroundStyle(Role.muted)
                 }
             }
             Spacer()
             Button(say(.signinCancel), action: onCancel)
+            if let gallery = model.addHereTarget {
+                Button(say(.shareAddHere)) { model.addHere(gallery) }
+                    .buttonStyle(.borderedProminent)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -857,6 +868,7 @@ struct ArrangedListView: View {
     @Environment(\.rowDetails) private var details
     @Environment(\.covers) private var covers
     @Environment(\.picking) private var picking
+    @Environment(\.takesShare) private var takesShare
     @State private var tilesWidth: CGFloat = 0
 
     var body: some View {
@@ -890,7 +902,7 @@ struct ArrangedListView: View {
 
     @ViewBuilder private func tiles(_ refs: [ObjectRef], heading: String?) -> some View {
         if let heading { SectionLabel(title: heading).padding(.horizontal) }
-        NodeTiles(items: refs.map { NodeTileItem(ref: $0, details: details, covers: covers, picking: picking, onOpen: onOpen) }, width: tilesWidth)
+        NodeTiles(items: refs.map { NodeTileItem(ref: $0, details: details, covers: covers, picking: picking, takesShare: takesShare, onOpen: onOpen) }, width: tilesWidth)
             .padding(.horizontal)
     }
 

@@ -119,8 +119,10 @@ upload.
   takes; a read-only member's Memory dimmed; *Add here* queues once. **Bites:** (a) `share` returning the Pot's answer
   for a Memory → red; (b) *Add here* queuing twice → red.
 - [x] **3 Android** — S3 (the grant measured first, its result into ADR 0138), the drop. · Done when:
-  `:android:assembleDebug`, the guidelines and words guards green; § Passes' Android rows.
-- [ ] **4 Apple** — S4, S5. · Done when: both Apple builds green; the macOS drop clicked here; iOS the owner's.
+  `:android:assembleDebug`, the guidelines and words guards green; § Passes' Android rows. *Status 2026-11-19:* the grant outlives the app being left (ADR 0138's Consequences); the chapter share and a
+  drop passed on a throwaway emulator; the Pot's share not re-clicked (#1006), a drop's grant over a long upload not measured (#1008).
+- [x] **4 Apple** — S4, S5. · Done when: both Apple builds green; the macOS drop clicked here; iOS the owner's. *Status 2026-11-19:* S4 as the owner decided (the app group's handoff); both builds green; the
+  macOS drop not clicked (full-screen control interrupted) — owner's with iOS, #1005.
 - [ ] **5 the passes and harvest** — § Passes into ADR 0138's Consequences; a Use page "Share into veyq" (EN+DE) and
   `add-photos-and-videos.mdx`'s phone lines; the reuse sweep; #893 deleted; this CR deleted. · Done when: `pnpm run check`
   in `site/` and every guard but guard_gaps green.

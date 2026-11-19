@@ -124,6 +124,14 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   and opened anew the chapter listed both from the server; `run-as app.veyq find . -type f` then showed no share copy
   (WorkManager's records, the offline store's opaque files and the known preferences only). A photo dragged from the
   Files app in a second (freeform) window onto the chapter's gallery was uploaded into it.
+- **Built on Apple, decisions 2, 3, 6 and 9 for a Memory** (cr-app-share-into-a-memory): `public.movie` in the
+  extension's activation rule; `IncomingFiles` copying each file inside `loadFileRepresentation`'s callback (a HEIC
+  re-encoded file to file) and handing sources on; the banner's *Add here*; in the extension the handoff through the app
+  group (`apple/Veyq/ShareHandoff.swift`: `share-in/<id>/` with `target.json`, written under a dot name and renamed
+  whole, queued by the app on its next open, each copy removed by the queue's `left`, cleared at a sign-out, swept at
+  start); a drop onto a Memory's gallery (`MemoryScreen`'s `.onDrop`). Built for macOS and the iOS simulator SDK; not
+  clicked — the macOS drop and the device passes are the owner's (inbox #1005), and a handoff for a space the app does
+  not list waits until a sign-out (inbox #1007).
 - **Decision 2's Memory is being built** (cr-app-share-into-a-memory, inbox #893): a Memory and a chapter as a share
   target, a Memory's files sealed in frames from disk out of iOS's share extension (decision 6), and a drop onto a
   phone's gallery. A folder as a share target is Depot's answer (inbox #987); the desktops have no share target (GNOME
