@@ -278,7 +278,9 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         },
                     )
                 }
-                s.banner?.let { OfflineBanner(it) }
+                // on an open Pot shown offline, as of its own kept ledger (core's `PotModel.State.offline`), else the shell's lists'
+                val potAsOf = potState?.takeIf { it.ref == shell.openObject }?.offline?.takeIf { it.asOf != null }
+                (potAsOf?.let { me.raddatz.veyq.mobile.offline.OfflineShown.banner(it) } ?: s.banner)?.let { OfflineBanner(it) }
                 incoming?.let { ShareBanner(it, s, model, snackbar, onCancel = model::cancelShare) }
                 }
             },

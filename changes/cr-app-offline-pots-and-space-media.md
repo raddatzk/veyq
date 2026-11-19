@@ -112,8 +112,21 @@ ADR 0153 decisions 6 and 7 hold them; here only what the work needs beside them.
   list and "named like a secret"), restored with `/bin/cp -f`. `./gradlew :bridge:jvmTest :bridge:generateBindings` green
   (the generated `bridge.rs`/`Bridge.g.cs` are not committed; Linux matches `Update::Pot { state, .. }` and Windows
   `is Update.Pot`, so neither breaks — not built here).
-- [ ] **4 Android** — the Pot's header *Available offline*, its offline banner and disabled writes. · Done when:
+- [x] **4 Android** — the Pot's header *Available offline*, its offline banner and disabled writes. · Done when:
   `:android:assembleDebug`, the guidelines and words guards green.
+  **Built** (2026-11-20): the header's *Available offline* needed no Android code (core's plan offers it for a Pot now,
+  `NodeHeader.kt` draws it); `PotScreen.kt` says `PotModel.State.failure` where no Pot opened (`offline_not_kept` muted,
+  `pot_open_failed` as a failure), `EntryReceipts.kt`'s viewer `AppModel.receiptFailure()` (core's `receiptFailure`);
+  the write controls were already core's (`canWrite`, `canChangeSettings`, `restorable`, the editor's `editable`).
+  Deviation: one banner, not two — `ShellScreen.kt`'s banner on an open Pot shown offline names the Pot's own kept time
+  (`PotModel.State.offline`, where it has one), else the shell's lists' (a gallery's own `offline` is drawn by no
+  platform; the shell's time alone mis-dated the Pot). `:android:assembleDebug`, `validate_mobile_platform_guidelines.py`,
+  `validate_mobile_words.py` green. Pass (throwaway with a member, AVD API 36 deleted after, airplane mode, the app
+  restarted and unlocked offline): Pot *J1 Trip* (two entries, one receipt viewed) and *J1 Flat* pinned ("On this device")
+  → offline both open read-only (no *Add entry*, no Record, Settings without changes, the menu only *Available offline*),
+  each banner its own time (12:27 / 12:29); the shown receipt opens, the unshown says "Not available offline"; search
+  finds *Lighthouse.jpg* of a Memory never opened; after Clear cache and a restart *J1 Trip* says "Not available
+  offline", the pinned *J1 Flat* opens; the app's data pulled and grepped for every title, receipt marker and name: no hit.
 - [ ] **5 Apple** — the same. · Done when: both Apple builds green.
 - [ ] **6 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green.
 - [ ] **7 Windows** — the same. · Done when: `python3 windows/run.py build` green on the VM.
