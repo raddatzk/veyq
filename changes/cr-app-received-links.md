@@ -245,6 +245,10 @@ question 2*).
    apps behave as the web: both clients get it. Phase 1 writes it into ADR 0150 and the phases that build bookmarks
    (core, web, each platform) take it; the web's share page has no session, so how it reaches the signed-in tab's
    keys is decided in phase 1 and recorded.
+   **Narrowed (owner 2026-11-19): *Keep* is the apps' only, as a first step** — the web's share page gets none in this
+   CR (#1013 keeps the web's half). **And leaving a share:** an opened share has, at its root, a *Back* that asks for
+   confirmation (the key lives only in memory, H3 — leaving drops it unless the link was kept) and then returns to
+   where the person was before opening it (the sign-in screen or the shell's place).
 2. **Where *Open a link* sits, and its words (H4, H9).** *Recommendation:* on the sign-in screen under the sign-in, and
    in the account menu (the drawer's foot on the phones, the account menu on the desktops); "Open a link" / "Link
    öffnen", "Paste the link you received" / "Füge den Link ein, den du bekommen hast", "Open in the browser" / "Im
