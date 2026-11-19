@@ -1284,7 +1284,10 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - UI Automation, as the driver sees it: a `NavigationViewItem` has no Invoke, only SelectionItem, so a pane item is
   chosen by its selection (`SelectionChanged`); a chosen Search hit arrives in `QuerySubmitted` as its row's content,
   not the `ListViewItem` (both carry the hit as `Tag`); a flyout, a menu and a suggestion list are top-level windows
-  of their own, which `Veyq.Drive` searches too.
+  of their own, which `Veyq.Drive` searches too. A tile's context menu opens without a right button: `type <tile id>`
+  (it focuses the tile) then `key shift+f10`. A `ComboBox`'s items are in the tree only while it is open: `invoke` it,
+  then `select` the item. A `PasswordBox`'s value reads as one `●` per character — count them (never `cut -c` the
+  line: a `●` is three bytes) to check what was typed before a secret is sent (2026-11-19).
 - A width-capped column straight in a `ScrollViewer` sits off centre and clips (the Pot's amounts were cut off, measured
   2026-11-11): a list fills the width, a capped column sits inside a stretching `Grid`. Under LeftMinimal the pane's
   button and back lie over the content's top left, so the title takes a left inset there (`DisplayModeChanged`). Two
