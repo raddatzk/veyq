@@ -1673,6 +1673,17 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - **`gtk_accessible_announce` crashes under Broadway**: the container's test accessibility context (`GtkTestATContext`)
   jumped to NULL once realized (SIGSEGV, 2026-11-18), so the Linux app announces only through a screen reader's context
   (AT-SPI, AccessKit). An announcement is proven on X11 with `dbus-monitor` watching for `Object.Announcement`.
+- **Hearing Orca on Linux** (2026-11-19, #998's pass): GTK creates no AT-SPI context under Broadway, so a screen reader
+  pass runs the debug binary `run.py run` built under X11 in the same image — a `docker run` of `veyq-linux-dev` with
+  the target volume, the bridge's `debugShared`, the pass's home volume and a socat forward of 8080/8081 as `run.py`
+  does, which first `dnf install`s `xorg-x11-server-Xvfb at-spi2-core python3-pyatspi xdotool orca` (about a minute),
+  then starts `Xvfb :9`, and under `dbus-run-session` gnome-keyring, `/usr/libexec/at-spi-bus-launcher
+  --launch-immediately`, the app with `GDK_BACKEND=x11 DISPLAY=:9`, and, once the app is up, `orca --debug
+  --debug-file=/tmp/orca.log`. Keys go in by `xdotool key` (`docker exec` with the bus address the session wrote to a
+  file); what Orca says is the log's `SPEECH OUTPUT: '…'` lines, a beat after each key. pyatspi reads the tree
+  (`Registry.getDesktop(0)`, the app named `veyq`). The `Hidden` accessible state hid nothing there (neither on a box
+  nor on its children): a widget drawn for the eye only is built with `accessible_role(Presentation)`; and
+  `update_state` on an `adw::ActionRow` needs `upcast_ref::<gtk::Widget>()`.
 - **Driving the search on Windows** (2026-11-18): `Veyq.Drive` registers for notification events per process, so `listen`
   and `heard` go in the same `drive` call, the steps that raise the event between them. UIA's `select` on an
   `AutoSuggestBox` item only highlights it — the box takes no chosen suggestion from it; choose with the keys (Down,

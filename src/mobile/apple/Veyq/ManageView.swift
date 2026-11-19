@@ -36,23 +36,24 @@ struct ManageView: View {
                         Button(role: .destructive) { model.signOut(server.account) } label: {
                             Label(say(.manageSignOut), systemImage: "rectangle.portrait.and.arrow.right")
                         }
-                        if let trusted = server.trusted {
-                            // the changes to the trust (ADR 0123 decision 8): the other level, back to the password
-                            ForEach(Array(TrustWords.changes(trusted, server.level, server.levels).enumerated()), id: \.offset) { _, change in
-                                if let change {
-                                    Button { model.stayAt(server.account, change) } label: {
-                                        Label(TrustWords.level(change).title, systemImage: TrustWords.symbol(change))
-                                    }
-                                } else {
-                                    Button {
-                                        password = model.takeDevPasswordTrust() ?? ""
-                                        askPassword = server.account
-                                    } label: {
-                                        Label(say(.managePasswordTrust), systemImage: "key")
-                                    }
+                        // the changes to the trust (ADR 0123 decision 8): the other level, back to the password; trusted not at
+                        // all (a password change took the saved key, inbox #1009), each level and the password trust
+                        ForEach(Array(TrustWords.changes(server.trusted, server.level, server.levels).enumerated()), id: \.offset) { _, change in
+                            if let change {
+                                Button { model.stayAt(server.account, change) } label: {
+                                    Label(TrustWords.level(change).title, systemImage: TrustWords.symbol(change))
+                                }
+                            } else {
+                                Button {
+                                    password = model.takeDevPasswordTrust() ?? ""
+                                    askPassword = server.account
+                                } label: {
+                                    Label(say(.managePasswordTrust), systemImage: "key")
                                 }
                             }
-                            .disabled(model.trustWorking)
+                        }
+                        .disabled(model.trustWorking)
+                        if server.trusted != nil {
                             Button(role: .destructive) { model.forgetDevice(server.account) } label: {
                                 Label(say(.manageForgetDevice), systemImage: "lock.slash")
                             }

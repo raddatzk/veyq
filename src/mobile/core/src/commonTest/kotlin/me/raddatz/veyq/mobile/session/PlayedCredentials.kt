@@ -63,6 +63,11 @@ internal class PlayedCredentials(
     override suspend fun changePassword(body: ChangePasswordRequest): FlowReply = answer.also { changes += body }
     override suspend fun passwordChanged() { passwordChangedCalls++ }
     override suspend fun requestEmailChange(body: EmailChangeRequest): FlowReply = answer.also { emailChanges += body }
+    /** Whether the played sign-in took a new address ([CredentialDoor.addressTaken]), and the address the server holds. */
+    var taken = false
+    var held: String? = null
+    override val addressTaken: Boolean get() = taken
+    override suspend fun heldEmail(): String = held ?: email
     override suspend fun erasurePreview() = preview
     override suspend fun memberNames(tenantId: String, userIds: List<String>) = names.filterKeys { it in userIds }
     override suspend fun holdsModerationKey() = moderator

@@ -90,11 +90,15 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
    `proveColdCredential` and `checkColdCredential` over the core's unlock; the Secret Key comes through the sign-in's
    existing control (typed, pasted, a kit file, a scan) and is kept no longer than the call. `PasswordChange` ports
    `changePassword` step for step; after it this device's saved key is gone on the server, so the core forgets its local
-   wrap as *Stop trusting* does and the trust row offers *Trust with password*; the offline store survives (the same
+   wrap as *Stop trusting* does, the Settings page open reads anew, and its trust row offers each level and the password
+   trust (core's `trustChanges`, inbox #1009); the offline store survives (the same
    Master Key). `AddressChange` ports `emailChange`'s request; the confirm is the web's alone (owner 2026-11-18): the
    mail keeps its ordinary web link and the web's page confirms as today, and the app takes the new address from its next
    account read — the next sign-in where the confirm ended its session (a confirm revokes the account's other families) —
-   and then offers a new kit with the new address. A web page's *Open in the app* (a deep link that carries no token and
+   and then offers a new kit with the address the server holds — never before the confirm, when the account's address is
+   still the old one (the web's order, its confirm page; inbox #1010). Which sign-in took it is told by the record this
+   device keeps, or by the request this device remembers (`veyq.address-change.<account>`, forgotten with an erased
+   account). A web page's *Open in the app* (a deep link that carries no token and
    only opens the app) is block H's (inbox #435).
 
 7. **Replace the keys: the core ports the whole rotation and finishes rotations at every unlock.** `KeyRotation` (core,
@@ -161,9 +165,9 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
   (breadcrumb Settings › the flow, Back), Fluent's sub-page, not a `ContentDialog` per step — so the danger step can be
   a dialog of its own (`Dialogs.Confirm`, accent-free, Cancel the default) — decision 10. The Secret Key of the
   password change, the address change and the rotation's gate is typed or pasted only; the sign-in's kit file and scan
-  are not offered there yet (inbox #970) — decision 6. The rotation's end shows each scope's state but no *Links to
-  renew* (inbox #977), and on the desktops the bridge reopens the tenant after a rotation, which closes the flow, so
-  Linux and Windows tell the outcome in a dialog (inbox #984) — decision 7. The new password is held to the length
+  are not offered there yet (inbox #970) — decision 6. On the desktops the bridge reopens the tenant after a rotation;
+  the done rotation outlives that reopen, so its last step (each scope's state, the *Links to renew*) stays drawn in
+  place — decision 7. The new password is held to the length
   policy only; the web's breached-password check is not in the apps (inbox #969). An iOS kit is written through
   `fileExporter` with an in-memory document made only when the exporter asks; whether UIKit stages it in the
   container first is unmeasured (inbox #975).

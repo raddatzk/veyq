@@ -111,7 +111,10 @@ class AccountSettings<A : Connection, T : Any>(
 
     /** How this device trusts the account ([method] null: not at all), and the levels it may move to. */
     @Serializable
-    data class Trust(val method: TrustedDevice.Method?, val level: StaySignedIn?, val levels: List<StaySignedIn>)
+    data class Trust(val method: TrustedDevice.Method?, val level: StaySignedIn?, val levels: List<StaySignedIn>) {
+        /** The changes the trust row offers ([trustChanges]): null is the password trust. */
+        val changes: List<StaySignedIn?> get() = trustChanges(method, level, levels)
+    }
 
     /** This device on the page: its name, the family it is signed in with (once the server marked it), its trust. */
     @Serializable

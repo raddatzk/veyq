@@ -29,9 +29,12 @@ import me.raddatz.veyq.mobile.words.MsgKey
  * opens the web's page, which confirms; the confirm revokes every other session family, this app's included, and the
  * app takes the new address at its next sign-in, re-addressing the record it keeps ([VeyqAccount]'s sign-in).
  *
- * Afterwards the app offers a new Emergency Kit with the new address ([kit]): the password and the Secret Key checked
- * against the floor ([ColdCredential.prove]) — a kit made from a mistyped key fails exactly on the day it is needed —,
- * then [KitStep] with the account's address and the same Secret Key.
+ * The new Emergency Kit follows the confirm, as on the web (its confirm page offers it once the server holds the new
+ * address, inbox #1010): before the link is opened the account's address is still the old one, so a kit made then would
+ * print it. The app offers the kit once its sign-in took the new address ([State.kitOffered], [CredentialDoor.addressTaken]
+ * — the record this device keeps, or the request it remembered, named the old one); [kit] checks the password and the Secret Key against the floor
+ * ([ColdCredential.prove]) — a kit made from a mistyped key fails exactly on the day it is needed —, then makes [KitStep]
+ * with the address the server holds now ([CredentialDoor.heldEmail]) and the same Secret Key.
  */
 class AddressChange(
     private val door: CredentialDoor,
@@ -46,9 +49,12 @@ class AddressChange(
         /** The request went through: [Msg.EMAIL_CHANGE_SENT] with this address. */
         val sentTo: String? = null,
         @Serializable(with = MsgKey::class) val refusal: Msg? = null,
+        /** "Print a new Emergency Kit" is offered: this session's sign-in took the new address (a change confirmed on the
+         *  web). Never right after a request — the confirm is still to come, and the account's address the old one. */
+        val kitOffered: Boolean = false,
     )
 
-    private val _state = MutableStateFlow(State())
+    private val _state = MutableStateFlow(State(kitOffered = door.addressTaken))
     val state: StateFlow<State> = _state.asStateFlow()
     val current: State get() = _state.value
     private val acting = Mutex()
@@ -64,12 +70,14 @@ class AddressChange(
         try {
             val address = newEmail.trim()
             if (address.isEmpty()) return@withLock
+            val offered = current.kitOffered
             if (address.lowercase() == door.email.trim().lowercase()) {
-                _state.value = State(refusal = Msg.EMAIL_CHANGE_UNCHANGED)
+                _state.value = State(refusal = Msg.EMAIL_CHANGE_UNCHANGED, kitOffered = offered)
                 return@withLock
             }
-            _state.value = State(working = true)
-            _state.value = send(address, password, secretKey)?.let { State(refusal = it) } ?: State(sentTo = address)
+            _state.value = State(working = true, kitOffered = offered)
+            _state.value = send(address, password, secretKey)?.let { State(refusal = it, kitOffered = offered) } ?: State(sentTo = address, kitOffered = offered)
+            if (current.sentTo != null) runCatching { door.addressChangeRequested() }
         } finally {
             secretKey.fill(0)
         }
@@ -119,14 +127,16 @@ class AddressChange(
     }
 
     /**
-     * A new kit with the account's (new) address, after [password] and [secretKey] (zeroed by this call) passed the floor:
-     * the step to save it, or null and [State.refusal] ([Msg.EMAIL_CHANGE_KIT_REFUSED], [Msg.EMAIL_CHANGE_KIT_FAILED]).
-     * The caller closes the step.
+     * A new kit with the account's new address — the server's ([CredentialDoor.heldEmail]) —, after [password] and
+     * [secretKey] (zeroed by this call) passed the floor: the step to save it, or null and [State.refusal]
+     * ([Msg.EMAIL_CHANGE_KIT_REFUSED], [Msg.EMAIL_CHANGE_KIT_FAILED]). Null and nothing said where it is not offered
+     * ([State.kitOffered]). The caller closes the step.
      */
     suspend fun kit(password: String, secretKey: ByteArray): KitStep? = acting.withLock {
         try {
+            if (!current.kitOffered) return@withLock null
             ColdCredential.prove(suite, door.masterKey(), door.keyMaterial(), password, secretKey).fill(0)
-            KitStep(primitives, door.email, door.server, secretKey)
+            KitStep(primitives, door.heldEmail(), door.server, secretKey)
         } catch (e: ColdCredential.Refused) {
             _state.value = current.copy(refusal = Msg.EMAIL_CHANGE_KIT_REFUSED)
             null

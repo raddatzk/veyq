@@ -384,7 +384,6 @@ struct AddressChangeSheet: View {
         ) {
             if let sent = state?.sentTo {
                 Section { Label(say(.emailChangeSent, sent), systemImage: "envelope.badge") }
-                kitSection
             } else {
                 Section {
                     TextField(say(.emailChangeNewEmail), text: $newEmail)
@@ -405,6 +404,8 @@ struct AddressChangeSheet: View {
                 }
                 Section { Refusal(msg: state?.refusal) }
             }
+            // the new kit follows the confirm (inbox #1010): offered once this sign-in took the new address
+            if state?.kitOffered == true { kitSection }
         }
         .secretOnScreen()
         .onAppear {
@@ -479,6 +480,8 @@ struct KeyRotationSheet: View {
     @State private var kitReady = false
     @State private var asking = false
     @State private var reopened = false
+    /// A link's node whose share dialog *Links to renew* opened (inbox #977); its links are read anew once it closes.
+    @State private var renewing: NodeAt?
 
     private var state: KeyRotation.State? { held?.value }
 
@@ -500,6 +503,9 @@ struct KeyRotationSheet: View {
         }
         .secretOnScreen()
         .dangerConfirm($asking, title: say(.rotationConfirmTitle), message: say(.rotationConfirmBody), action: say(.rotationAction)) { publish() }
+        .sheet(isPresented: Binding(get: { renewing != nil }, set: { if !$0 { renewed() } })) {
+            if let renewing { NodeShareSheet(model: model, ref: renewing) }
+        }
         .onAppear {
             guard held == nil, let f = model.keyRotationFlow() else { return }
             held = HeldFlow(f, current: { $0.current }, flow: { $0.state })
@@ -580,6 +586,33 @@ struct KeyRotationSheet: View {
                     }
                 }
             }
+            // the links made before, which stay open until renewed (the web's decision 13): the person's own
+            if !state.links.isEmpty {
+                Section(say(.rotationLinksTitle)) {
+                    ForEach(state.links, id: \.shareId) { l in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(l.node?.name ?? say(.rotationLinkNameUnavailable))
+                            Text(l.scopeName ?? say(l.scopeWord ?? .rotationScopeNameUnavailable)).font(.footnote).foregroundStyle(Role.muted)
+                            if let node = l.node {
+                                Button(say(l.upload ? .rotationLinkOpen : .rotationRenew)) { renewing = node }
+                                if l.upload { Text(say(.rotationLinkUpload)).font(.footnote).foregroundStyle(Role.muted) }
+                            } else if let tenant = l.tenant {
+                                Text(say(.rotationLinkElsewhere, tenant)).font(.footnote).foregroundStyle(Role.muted)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// The share dialog *Renew* opened closed: the links are read anew (a renewed one drops out).
+    private func renewed() {
+        renewing = nil
+        guard let f = held?.model else { return }
+        Task {
+            _ = try? await f.refreshLinks()
+            held?.state.refresh()
         }
     }
 

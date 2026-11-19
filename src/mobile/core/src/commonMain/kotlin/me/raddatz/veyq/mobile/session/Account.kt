@@ -888,7 +888,8 @@ class VeyqAccount private constructor(
     /**
      * After a password change: the server deleted every wrap but PASSWORD and RECOVERY, this device's with them. Its
      * record, keys and kept wrap go as *Stop trusting* forgets them — but the offline store stays (the Master Key is the
-     * same) and nothing is deleted on the server (it is gone already). The trust row then offers *Trust with password*.
+     * same) and nothing is deleted on the server (it is gone already). The trust row then offers the levels and the password
+     * trust ([trustChanges]).
      */
     internal fun forgetSavedKeyKeepStore() {
         val record = trusted ?: return
@@ -902,7 +903,9 @@ class VeyqAccount private constructor(
     /**
      * The account was erased (ADR 0101 decision 4, the web's `forgetThisBrowser`): every session of it ended, so nothing
      * more is sent — no logout, no wrap deleted (the server's go with the purge). This device's records of it go: the
-     * offline store wiped, the saved key and its record, the "Not now", the trust marks; then the keys are zeroed.
+     * offline store wiped, the saved key and its record, the "Not now", the trust marks; then the keys are zeroed. The
+     * server's instance salt kept by its host goes too where no other account this device keeps names that host: public,
+     * but it would still name the erased account's tenant host (inbox #971).
      */
     internal suspend fun forgetErased() {
         sendsNothing = true
@@ -912,6 +915,9 @@ class VeyqAccount private constructor(
         }
         device.forget(key)
         device.setDeclined(key, false)
+        device.forgetAddressChange(key)
+        val host = Url(server).host
+        if (device.trusted().none { Url(it.server).host == host }) device.dropInstanceSalt(host)
         trusted = null
         releaseUnlockKeys()
         runCatching { marks.forget() }
@@ -919,14 +925,29 @@ class VeyqAccount private constructor(
         close()
     }
 
+    /** The address this account signed in with before [readdress] found this session's other one — the record this
+     *  device keeps, or a change this device requested ([ThisDevice.rememberAddressChange]): set once a change confirmed
+     *  on the web reached this device, which then offers the new kit (ADR 0148 decision 6). */
+    internal var readdressedFrom: String? = null
+        private set
+
+    /** A change of the address was requested from this one: remembered for the sign-in that takes the new one. */
+    internal fun addressChangeRequested() = device.rememberAddressChange(key, email)
+
     /**
      * The record this device keeps of the account, re-addressed where the account signed in with another address than
      * the record names (an address change confirmed on the web, ADR 0148 decision 6): the record is the account's by its
      * id, so the sign-in with the new address finds it, and from then on it names the new one.
      */
     internal fun readdress() {
+        // a change this device requested, now confirmed: this sign-in took another address than it was asked from
+        device.addressChangeFrom(key)?.takeIf { !it.equals(email.trim(), ignoreCase = true) }?.let { from ->
+            readdressedFrom = from
+            device.forgetAddressChange(key)
+        }
         val record = trusted ?: return
         if (record.email == email) return
+        readdressedFrom = readdressedFrom ?: record.email
         val moved = record.copy(email = email)
         device.remember(moved)
         trusted = moved

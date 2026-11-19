@@ -390,11 +390,13 @@ enum TrustWords {
         }
     }
 
-    /// The changes "Manage servers" lists for a server trusted by `method` at `level`, the device offering `levels`:
-    /// each offered level it is not at, then the way back to the password (nil) from staying signed in.
-    static func changes(_ method: TrustedDevice.Method, _ level: StaySignedIn?, _ levels: [StaySignedIn]) -> [StaySignedIn?] {
+    /// The changes "Manage servers" and Settings list for a server trusted by `method` at `level`, the device offering
+    /// `levels` — core's `trustChanges` rule for rule: each offered level it is not at, then the way back to the password
+    /// (nil) from staying signed in; trusted not at all (a password change took the saved key, inbox #1009), each level
+    /// and the password trust.
+    static func changes(_ method: TrustedDevice.Method?, _ level: StaySignedIn?, _ levels: [StaySignedIn]) -> [StaySignedIn?] {
         let remembered = method == .deviceKey
-        return levels.filter { !(remembered && $0 == level) }.map { Optional($0) } + (remembered ? [nil] : [])
+        return levels.filter { !(remembered && $0 == level) }.map { Optional($0) } + (method != .device ? [nil] : [])
     }
 }
 

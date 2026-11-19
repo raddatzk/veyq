@@ -126,4 +126,47 @@ class KeyRotationTest {
         assertTrue(unnamed.current.done)
         assertEquals(listOf(Msg.ROTATION_SCOPE_NAME_UNAVAILABLE), unnamed.current.scopes.map { it.nameWord })
     }
+
+    /**
+     * Inbox #977: the done rotation lists the person's *Links to renew* (the web's `listLinksToRenew`), each space named as
+     * a status line is, a link the open tenant holds carrying its node (its share dialog opens from there); read anew by
+     * [KeyRotation.refreshLinks] once a dialog closed; none before the rotation is done; a read that fails lists none.
+     */
+    @Test
+    fun theDoneRotationListsTheLinksToRenew() = runTest {
+        val names = KeyRotation.ScopeNames(named = mapOf("group" to "Urlaub"))
+        val node = me.raddatz.veyq.mobile.navigation.NodeAt("group", "n1", "memories.memory", "Lisbon")
+        var listed = listOf(
+            KeyRotation.RenewLink("share-1", "group", node),
+            KeyRotation.RenewLink("share-2", "elsewhere", upload = true, tenant = "Familie"),
+        )
+        var asked = 0
+        val engine = object : KeyRotation.Engine by Played(ColdCredential.Refusal.STALE) {
+            override suspend fun names() = names
+            override suspend fun linksToRenew(names: KeyRotation.ScopeNames): List<KeyRotation.RenewLink> {
+                asked++
+                return listed.map { KeyRotation.named(it, names) }
+            }
+        }
+        val model = KeyRotation(engine, p, "p@a.example", "http://a.example").also { it.open() }
+        model.refreshLinks()
+        assertEquals(0, asked, "links read before the rotation was done")
+        model.prove("pw", p.randomBytes(32), "a much better password", "a much better password")
+        assertTrue(model.current.done)
+        val links = model.current.links.associateBy { it.shareId }
+        assertEquals(node, links.getValue("share-1").node)
+        assertEquals("Urlaub" to null, links.getValue("share-1").let { it.scopeName to it.scopeWord })
+        assertEquals(Triple(true, "Familie", Msg.ROTATION_SCOPE_NAME_UNAVAILABLE), links.getValue("share-2").let { Triple(it.upload, it.tenant, it.scopeWord) })
+        // renewed in its dialog: read anew, it drops out
+        listed = listed.drop(1)
+        model.refreshLinks()
+        assertEquals(listOf("share-2"), model.current.links.map { it.shareId })
+
+        val failing = object : KeyRotation.Engine by Played(ColdCredential.Refusal.STALE) {
+            override suspend fun linksToRenew(names: KeyRotation.ScopeNames): List<KeyRotation.RenewLink> = error("listShares did not answer")
+        }
+        val unlisted = KeyRotation(failing, p, "p@a.example", "http://a.example").also { it.open() }
+        unlisted.prove("pw", p.randomBytes(32), "a much better password", "a much better password")
+        assertTrue(unlisted.current.done && unlisted.current.links.isEmpty())
+    }
 }

@@ -31,12 +31,16 @@ object NodeEpochWrite {
 
     val REKEY_WAITS_MS: List<Long> = listOf(2_000, 5_000, 10_000)
 
+    /** [run]'s waits: a value, not a default lambda — a suspend lambda as the default broke the JVM backend's lowering
+     *  once a second caller in this package ([MemberNodeWriter]) called [run]. */
+    private val WAIT: suspend (Long) -> Unit = { delay(it) }
+
     suspend fun <T> run(
         waitsMs: List<Long> = REKEY_WAITS_MS,
         belowFloor: () -> Boolean,
         reread: suspend () -> Boolean,
         attempt: suspend () -> Pair<Answer, T>,
-        sleep: suspend (Long) -> Unit = { delay(it) },
+        sleep: suspend (Long) -> Unit = WAIT,
         /** A member's write pulls its own path forward (the web's `pullRekeyPath`): re-keys the written node and its lagging
          *  ancestors on this device, true when it did — then the write is tried again at once; false, or a second lag, waits. */
         pull: (suspend () -> Boolean)? = null,

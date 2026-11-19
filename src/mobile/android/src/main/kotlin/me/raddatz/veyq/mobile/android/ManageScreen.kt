@@ -122,13 +122,17 @@ fun ManageScreen(servers: List<ManagedServer>, model: AppModel) {
                         }
                         // How this device trusts the account, the changes to it (ADR 0123 decision 8: the other level, back to the
                         // password), and the way to end it (the next sign-in asks for the Secret Key).
+                        // An account the device trusts not (a password change took its saved key) is offered each level and
+                        // the password trust: the core's pick, as Settings' row.
                         server.trusted?.let { method ->
                             Text(
                                 stringResource(trustedLine(method, server.level)),
                                 style = MaterialTheme.typography.bodySmall, color = role(palette.muted),
                                 modifier = Modifier.padding(horizontal = 16.dp),
                             )
-                            for (change in trustChanges(method, server.level, server.levels)) {
+                        }
+                        run {
+                            for (change in me.raddatz.veyq.mobile.session.trustChanges(server.trusted, server.level, server.levels)) {
                                 androidx.compose.material3.TextButton(
                                     onClick = { if (change == null) askPassword = server.account else model.stayAt(server.account, change) },
                                     enabled = !trustWorking,
@@ -141,7 +145,7 @@ fun ManageScreen(servers: List<ManagedServer>, model: AppModel) {
                                     }))
                                 }
                             }
-                            androidx.compose.material3.TextButton(
+                            if (server.trusted != null) androidx.compose.material3.TextButton(
                                 onClick = { model.forgetDevice(server.account) },
                                 enabled = !trustWorking,
                                 modifier = Modifier.padding(horizontal = 8.dp),
@@ -173,20 +177,6 @@ internal fun trustedLine(method: me.raddatz.veyq.mobile.session.TrustedDevice.Me
     method != me.raddatz.veyq.mobile.session.TrustedDevice.Method.DEVICE_KEY -> R.string.manage_trusted_password
     level == me.raddatz.veyq.mobile.session.StaySignedIn.LOGIN -> R.string.manage_trusted_remembered
     else -> R.string.manage_trusted_presence
-}
-
-/**
- * The changes "Manage servers" lists for a server trusted by [method] at [level], the device offering [levels]: each
- * offered level it is not at, then the way back to the password (null) from staying signed in — the desktops' pick
- * (Windows' `TrustWords.Changes`, Linux's `manage::changes`). No rule: the levels are the core's.
- */
-internal fun trustChanges(
-    method: me.raddatz.veyq.mobile.session.TrustedDevice.Method,
-    level: me.raddatz.veyq.mobile.session.StaySignedIn?,
-    levels: List<me.raddatz.veyq.mobile.session.StaySignedIn>,
-): List<me.raddatz.veyq.mobile.session.StaySignedIn?> {
-    val remembered = method == me.raddatz.veyq.mobile.session.TrustedDevice.Method.DEVICE_KEY
-    return levels.filter { !(remembered && it == level) } + if (remembered) listOf(null) else emptyList()
 }
 
 /**

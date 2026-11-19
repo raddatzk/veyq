@@ -393,20 +393,21 @@ struct SettingsView: View {
                 .help(say(.accountSettingsRename))
                 .disabled(state.working)
             }
-            // how it stays signed in: the changes "Manage Servers" offers, the same core state (D2)
-            if let method = trust.method {
-                ForEach(Array(TrustWords.changes(method, trust.level, trust.levels).enumerated()), id: \.offset) { _, change in
-                    if let change {
-                        Button {
-                            Task { trustSaid = await actions.settingsStay(change) == .failed ? say(.trustFailed) : nil }
-                        } label: {
-                            Label(TrustWords.level(change).title, systemImage: TrustWords.symbol(change))
-                        }
-                    } else {
-                        Button { askPassword = true } label: { Label(say(.managePasswordTrust), systemImage: "key") }
+            // how it stays signed in: the changes "Manage Servers" offers, the same core state (D2); a device a password
+            // change left without trust is offered each level and the password trust (inbox #1009)
+            ForEach(Array(TrustWords.changes(trust.method, trust.level, trust.levels).enumerated()), id: \.offset) { _, change in
+                if let change {
+                    Button {
+                        Task { trustSaid = await actions.settingsStay(change) == .failed ? say(.trustFailed) : nil }
+                    } label: {
+                        Label(TrustWords.level(change).title, systemImage: TrustWords.symbol(change))
                     }
+                } else {
+                    Button { askPassword = true } label: { Label(say(.managePasswordTrust), systemImage: "key") }
                 }
-                .disabled(state.working)
+            }
+            .disabled(state.working)
+            if trust.method != nil {
                 Button(role: .destructive) {
                     confirm = Confirm(
                         title: say(.accountSettingsUntrustConfirmTitle), message: say(.accountSettingsUntrustConfirm),

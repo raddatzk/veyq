@@ -160,7 +160,8 @@ internal sealed class AccountSettingsPage : IDisposable
         _host.Children.Add(_flow.View);
     }
 
-    /// <summary>The flow open closed, the sections shown again.</summary>
+    /// <summary>The flow open closed, the sections shown again — read anew where the core closed them under a done
+    /// rotation (<see cref="_reopen"/>).</summary>
     private void CloseFlow()
     {
         if (_flow is null) return;
@@ -169,7 +170,15 @@ internal sealed class AccountSettingsPage : IDisposable
         _host.Children.Clear();
         _host.Children.Add(_scroll);
         Log.Write("settings: back from a flow");
+        if (!_reopen || _connection is not { } connection) return;
+        _reopen = false;
+        _watch?.Dispose();
+        _storageWatch?.Dispose();
+        OpenIn(connection);
     }
+
+    /// <summary>The core closed this page under a done rotation (its tenant opened anew): it is opened again on Back.</summary>
+    private bool _reopen;
 
     /// <summary>Opens <paramref name="connection"/>'s Settings in the core; <paramref name="closedByCore"/> runs once the
     /// core closed it (its tenant closed, its account signed out here). <paramref name="at"/>: the section it scrolls to
@@ -251,6 +260,13 @@ internal sealed class AccountSettingsPage : IDisposable
                     if (s is null)
                     {
                         _id = null;
+                        // a done rotation stays on screen across the tenant the bridge opened anew on the new keys (inbox
+                        // #984): this page reads anew on its Back; anything else closes with the core's page
+                        if (_flow is KeyRotationPage { KeptAcrossReopen: true })
+                        {
+                            _reopen = true;
+                            return;
+                        }
                         _closedByCore();
                     }
                     else Draw(s);

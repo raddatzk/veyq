@@ -141,10 +141,11 @@ internal class Composition<A : Connection, T : Any>(
     val webp: (ByteArray) -> ByteArray? = { null },
     /**
      * The account's flows over a signed-in account (ADR 0148 decision 11): the real account's in the library; a test plays
-     * its own, or has none (each `*.Open` of a flow is then refused for the connection). [spaces] reads the open tenant's
-     * spaces (none where the connection's tenant is not open): the rotation names its status lines by them (inbox #979).
+     * its own, or has none (each `*.Open` of a flow is then refused for the connection). [open] is the connection's tenant
+     * session where it is the one open (null otherwise): the rotation names its status lines by its spaces (inbox #979) and
+     * its *Links to renew* by its nodes (inbox #977).
      */
-    val accountFlows: (account: A, tenant: TenantRef?, spaces: suspend () -> List<me.raddatz.veyq.mobile.navigation.SpaceRef>) -> AccountFlows? = { _, _, _ -> null },
+    val accountFlows: (account: A, tenant: TenantRef?, open: me.raddatz.veyq.mobile.session.TenantSession?) -> AccountFlows? = { _, _, _ -> null },
     /**
      * One's own profile picture cropped and drawn square by the host ([HostRequest.PictureSquare]): RGBA of `edge` × `edge`,
      * or null where the host could not; a test plays one, or has none.
@@ -1680,7 +1681,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.TrustPerson, is Call.TrustCompareDigits, is Call.TrustCompareScanned, is Call.PasswordChangeOpen,
             is Call.PasswordChangeRun, is Call.PasswordChangeClose, is Call.AddressChangeOpen, is Call.AddressChangeRequest,
             is Call.AddressChangeKit, is Call.AddressChangeClose, is Call.KitSave, is Call.KitConfirm, is Call.KitClose,
-            is Call.KeyRotationOpen, is Call.KeyRotationChooseNewPassword, is Call.KeyRotationProve, is Call.KeyRotationRun,
+            is Call.KeyRotationOpen, is Call.KeyRotationChooseNewPassword, is Call.KeyRotationProve, is Call.KeyRotationRun, is Call.KeyRotationRefreshLinks,
             is Call.KeyRotationClose, is Call.ErasureOpen, is Call.ErasureChoose, is Call.ErasureRun, is Call.ErasureClose,
             -> accountFlow(call, parts, payload)
         }
@@ -1702,7 +1703,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         fun flows(connection: String): AccountFlows? {
             val account = session.accounts.firstOrNull { it.key == connection } ?: return null
             val open = tenant.value?.takeIf { it.account.key == connection }
-            return parts.accountFlows(account, open?.tenant, open?.models?.spaces ?: { emptyList() })
+            return parts.accountFlows(account, open?.tenant, open?.models?.session)
         }
         fun <M : Any> held(registry: Registry<HeldFlow<M>>, flow: HeldFlow<M>): Long = ids.incrementAndFetch().also { registry.put(it, flow) }
         return when (call) {
@@ -1760,8 +1761,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 val f = flows(call.connection) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
                 Answer.FlowOpened(held(passwordChanges, HeldFlow(f.passwordChange(), call.connection)))
             }
-            is Call.PasswordChangeRun -> passwordChanges[call.flow]?.model?.let {
-                it.run(call.currentPassword, call.newPassword, call.confirmPassword, typedKey(parts, call.secretKey))
+            is Call.PasswordChangeRun -> passwordChanges[call.flow]?.let { held ->
+                held.model.run(call.currentPassword, call.newPassword, call.confirmPassword, typedKey(parts, call.secretKey))
+                // the change took this device's saved key: the account's Settings pages read anew, so their trust row
+                // offers the levels and the password trust instead of the trust that is gone (inbox #1009)
+                if (held.model.current.done) accountPages.values().filter { it.connection == held.connection }.forEach { it.model.refresh() }
                 managed(parts)
                 Answer.Done
             } ?: noFlow
@@ -1801,13 +1805,23 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noFlow
             is Call.KeyRotationRun -> keyRotations[call.flow]?.let { held ->
                 held.model.run()
-                // the account holds the new keys: the tenant open on it is opened anew (its keys were the old identity's)
+                // the account holds the new keys: the tenant open on it is opened anew (its keys were the old identity's).
+                // The done rotation outlives that reopen (inbox #984): it holds no secret any more, and its last step — each
+                // space's new lock, the links to renew — stays on the host's screen until `KeyRotation.Close` or a sign-out.
                 if (held.model.current.done) {
                     val open = tenant.value
-                    if (open != null && open.account.key == held.connection) return opened(session.switchTo(open.account, open.tenant)).also { managed(parts) }
+                    if (open != null && open.account.key == held.connection) {
+                        keyRotations.remove(call.flow)
+                        try {
+                            return opened(session.switchTo(open.account, open.tenant)).also { managed(parts) }
+                        } finally {
+                            keyRotations.put(call.flow, held)
+                        }
+                    }
                 }
                 Answer.Done
             } ?: noFlow
+            is Call.KeyRotationRefreshLinks -> keyRotations[call.flow]?.model?.refreshLinks().done(Answer.Why.NO_SUCH_FLOW)
             is Call.KeyRotationClose -> keyRotations.remove(call.flow)?.close().done(Answer.Why.NO_SUCH_FLOW)
             is Call.ErasureOpen -> {
                 val f = flows(call.connection) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
@@ -3061,10 +3075,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                         else -> null
                     }
                 },
-                accountFlows = { account, on, spaces ->
+                accountFlows = { account, on, open ->
                     AccountFlows(
                         { account.passwordChange() }, { account.addressChange(on ?: account.defaultTenant) },
-                        { account.keyRotation(spaces = spaces) }, { account.erasure() },
+                        { account.keyRotation(open = open) }, { account.erasure() },
                     )
                 },
                 squarePicture = squarePicture,

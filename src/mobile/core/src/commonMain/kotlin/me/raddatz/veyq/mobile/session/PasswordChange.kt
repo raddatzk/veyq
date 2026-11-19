@@ -49,6 +49,16 @@ interface CredentialDoor {
 
     suspend fun requestEmailChange(body: me.raddatz.veyq.mobile.api.models.EmailChangeRequest): FlowReply
 
+    /** After a change was requested: this device remembers it, so the sign-in that takes the new address offers the kit. */
+    fun addressChangeRequested() {}
+
+    /** Whether this session's sign-in took a new address — a change confirmed on the web since this device last signed
+     *  in (ADR 0148 decision 6): what offers the new kit ([AddressChange.State.kitOffered]). */
+    val addressTaken: Boolean get() = false
+
+    /** `getAccountEmail`: the address the server holds now — what a new kit prints (the web's confirm page reads it). */
+    suspend fun heldEmail(): String = email
+
     /** `getOwnAccountErasurePreview`: its answer, or the refusal's status and code (`409 server_owner_account`). */
     suspend fun erasurePreview(): Pair<FlowReply, me.raddatz.veyq.mobile.api.models.AccountErasurePreview?>
 
@@ -73,7 +83,8 @@ interface CredentialDoor {
  * the vault's Master Key is wrapped anew under Argon2id(lp(Secret Key) ‖ lp(new password), fresh salt), and the
  * Secret-Key proof signs the change (`passwordChangeProofStatement`). The server checks both signatures and, on `204`,
  * deletes every other wrap and revokes every other session family: this device's saved key with them, so the trust row
- * offers *Trust with password* again afterwards.
+ * offers each level and the password trust again ([trustChanges]) — once the Settings page shown reads anew (its host's
+ * `refresh` after [State.done]; the bridge's for the desktops, inbox #1009).
  *
  * The new password passes the web's length policy ([MIN_PASSWORD_LENGTH]); the apps make no breached-password check
  * (none on their sign-in either — inbox #969). The Secret Key, the passwords and every key derived here live for the call
@@ -90,8 +101,8 @@ class PasswordChange(
     @Serializable
     data class State(
         val working: Boolean = false,
-        /** The change went through: [Msg.PASSWORD_CHANGE_DONE] with [Msg.PASSWORD_CHANGE_DONE_NOTE], and the trust row
-         *  offers *Trust with password*. */
+        /** The change went through: [Msg.PASSWORD_CHANGE_DONE] with [Msg.PASSWORD_CHANGE_DONE_NOTE]; this device is no
+         *  longer trusted, and Settings' trust row, read anew, offers the levels and the password trust ([trustChanges]). */
         val done: Boolean = false,
         @Serializable(with = MsgKey::class) val refusal: Msg? = null,
     )

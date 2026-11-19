@@ -26,6 +26,7 @@ import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.AccountErasure
+import me.raddatz.veyq.mobile.session.AccountSettings
 import me.raddatz.veyq.mobile.session.AddressChange
 import me.raddatz.veyq.mobile.session.ColdCredential
 import me.raddatz.veyq.mobile.session.CredentialDoor
@@ -61,6 +62,8 @@ class AccountFlowsDispatchTest {
 
     private class Door : SessionModel.Door<Acc, String> {
         val account = Acc("a.example#u1", listOf(TenantRef("ta", "A", "a.example")))
+        /** This device's trust in [account]: none, unless a test sets one (a password change takes it, [Played.trustTaken]). */
+        @Volatile var record: TrustedDevice? = null
         override val primitives = BouncyCastlePrimitives
         override fun trusted() = emptyList<TrustedDevice>()
         override suspend fun signIn(server: String, email: String, password: String, secretKey: String) = account
@@ -71,12 +74,13 @@ class AccountFlowsDispatchTest {
         override suspend fun stay(account: Acc, level: StaySignedIn) = TrustChange.FAILED
         override suspend fun trustWithPassword(account: Acc, password: String) = TrustChange.FAILED
         override fun defaultTenant(account: Acc) = account.tenants.firstOrNull()
-        override fun trustedBy(account: Acc): TrustedDevice? = null
+        override fun trustedBy(account: Acc): TrustedDevice? = record
         override suspend fun open(account: Acc, tenant: TenantRef) = "${account.key}/${tenant.tenantId}"
         override suspend fun spaces(session: String) = listOf(SpaceRef(session, "SHARED", session))
         override suspend fun signOut(account: Acc) {}
         override suspend fun forgetDevice(account: Acc) {}
-        override fun staySignedIn() = emptySet<StaySignedIn>()
+        override fun staySignedIn() = levels
+        var levels = emptySet<StaySignedIn>()
         override fun declined(account: Acc) = false
         override fun setDeclined(account: Acc, declined: Boolean) {}
     }
@@ -97,12 +101,17 @@ class AccountFlowsDispatchTest {
         }
         val changes = mutableListOf<ChangePasswordRequest>()
         var erased = 0
+        /** What the account's own `passwordChanged` does on this device: its saved key forgotten. */
+        var trustTaken: () -> Unit = {}
         override fun masterKey() = mk.copyOf()
         override suspend fun keyMaterial() = material
         override suspend fun challenge(email: String) = LoginChallenge(b64(ByteArray(32)), b64(ByteArray(16)))
         override suspend fun changePassword(body: ChangePasswordRequest) = FlowReply(204).also { changes += body }
-        override suspend fun passwordChanged() {}
+        override suspend fun passwordChanged() = trustTaken()
         override suspend fun requestEmailChange(body: EmailChangeRequest) = FlowReply(202)
+        /** Whether the played sign-in took a new address: the address flow offers the kit only then (inbox #1010). */
+        var taken = false
+        override val addressTaken get() = taken
         override suspend fun erasurePreview() = FlowReply(200) to AccountErasurePreview(listOf(ErasureTenant("ta", "A", emptyList())))
         override suspend fun memberNames(tenantId: String, userIds: List<String>) = emptyMap<String, String>()
         override suspend fun holdsModerationKey() = false
@@ -121,6 +130,7 @@ class AccountFlowsDispatchTest {
             published++
             return KeyRotation.Published(false, listOf(RotationScopeState("s1", RotationScopeState.State.secured)), emptyList())
         }
+        override suspend fun linksToRenew(names: KeyRotation.ScopeNames) = listOf(KeyRotation.RenewLink("share-1", "s1"))
     }
 
     /** One's own profile as the test plays it: a username, no tenant key (the name and picture disabled). */
@@ -137,10 +147,13 @@ class AccountFlowsDispatchTest {
         override fun picture(): ByteArray? = null
     }
 
-    private fun bridge(played: Played, engine: Engine, profile: Profile) = Bridge {
+    private fun bridge(played: Played, engine: Engine, profile: Profile, door: Door = Door(), settings: Boolean = false) = Bridge {
         val hidden = Hidden({}, emptySet())
         Composition(
-            SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles,
+            SessionModel(door, hidden, RecentUses({}, emptyList())), hidden, JvmFiles,
+            settings = { session, account, separator ->
+                if (settings) AccountSettings(Page(), HeldBy(session, account), played.email, separator) { 0L } else null
+            },
             accountFlows = { _, _, _ ->
                 AccountFlows(
                     { PasswordChange(played, p) }, { AddressChange(played, p) },
@@ -191,7 +204,12 @@ class AccountFlowsDispatchTest {
         pwWatch.until(kotlin.time.Duration.parse("60s")) { u -> (u as Update.PasswordChange).shown?.takeIf { it.done } }
         assertEquals(1, played.changes.size)
 
-        // the address's kit: written by the core at the path the dialog gave, "I saved it" only after
+        // the address's kit: none before the sign-in took the new address (inbox #1010)
+        val early = (b.ask(Call.AddressChangeOpen(connection)) as Answer.FlowOpened).flow
+        assertEquals(Answer.Done, b.ask(Call.AddressChangeKit(early, played.password, played.typedKey()), kotlin.time.Duration.parse("60s")))
+        assertEquals(Answer.Done, b.ask(Call.AddressChangeClose(early)))
+        // then written by the core at the path the dialog gave, "I saved it" only after
+        played.taken = true
         val address = (b.ask(Call.AddressChangeOpen(connection)) as Answer.FlowOpened).flow
         val kit = (b.ask(Call.AddressChangeKit(address, played.password, played.typedKey()), kotlin.time.Duration.parse("60s")) as Answer.KitOpened).kit
         val kitWatch = b.watching(Watched.Kit(kit))
@@ -216,6 +234,11 @@ class AccountFlowsDispatchTest {
         b.ask(Call.KeyRotationRun(rot))
         rotWatch.until { u -> (u as Update.KeyRotation).shown?.takeIf { it.done } }
         assertEquals(1, engine.published)
+        // the done rotation outlived the tenant the bridge opened anew on the new keys (inbox #984): a new watch still
+        // shows its done step, and its links are read anew through it (inbox #977)
+        assertEquals(true, (b.watching(Watched.KeyRotation(rot)).next() as Update.KeyRotation).shown?.done, "the done rotation closed with the tenant")
+        assertEquals(Answer.Done, b.ask(Call.KeyRotationRefreshLinks(rot)))
+        assertEquals(listOf("share-1"), rotWatch.until { u -> (u as Update.KeyRotation).shown?.links?.takeIf { it.isNotEmpty() } }.map { it.shareId })
 
         // the erasure, opened but not run: its preview read
         val erase = (b.ask(Call.ErasureOpen(connection)) as Answer.FlowOpened).flow
@@ -238,6 +261,57 @@ class AccountFlowsDispatchTest {
         assertEquals(gone, b.ask(Call.ProfileSave(prof)))
         assertEquals(Update.KeyRotation(rot, null), b.watching(Watched.KeyRotation(rot)).next())
         dir.toFile().deleteRecursively()
+        b.shutdown()
+    }
+
+    /** A Settings page's server: one family, this device's; no wraps, no register. */
+    private class Page : AccountSettings.Door() {
+        override val deviceId = "dev-here"
+        override val fallbackLabel = "Windows 11"
+        override fun myWrapId() = null
+        override suspend fun email() = "p@a.example" to true
+        override suspend fun families() = listOf(me.raddatz.veyq.mobile.api.models.SessionFamily("f-here", "2026-11-01T10:00:00Z", "2026-11-12T09:30:00Z", true))
+        override suspend fun revoke(family: String) {}
+        override suspend fun revokeOthers() {}
+        override suspend fun savedKeys() = emptyList<String>()
+        override suspend fun removeSavedKey(wrap: String) {}
+        override suspend fun capabilities() = emptySet<String>()
+    }
+
+    /** This device's trust as the session holds it, as the core's own `AccountSettings.Held`. */
+    private class HeldBy(private val session: SessionModel<Acc, String>, private val account: Acc) : AccountSettings.Here<Acc, String> {
+        override fun trust() = session.managed().first { it.account == account }.let { AccountSettings.Trust(it.trusted, it.level, it.levels) }
+        override suspend fun stay(level: StaySignedIn) = session.stay(account, level)
+        override suspend fun trustWithPassword(password: String) = session.trustWithPassword(account, password)
+        override suspend fun stopTrusting() = session.forgetDevice(account)
+        override suspend fun signOut() = session.signOut(account)
+    }
+
+    /**
+     * Inbox #1009: a password change takes this device's saved key, and the account's Settings page open beside it reads
+     * anew — its trust row no longer says the device stays signed in, and offers each level and the password trust.
+     */
+    @Test
+    fun aPasswordChangeRereadsTheAccountsSettingsPage() = runBlocking {
+        val played = Played()
+        val door = Door().apply {
+            levels = setOf(StaySignedIn.LOGIN)
+            record = TrustedDevice("http://a.example", played.email, "u1", TrustedDevice.Method.DEVICE_KEY, "w0", "alias", StaySignedIn.LOGIN)
+        }
+        played.trustTaken = { door.record = null }
+        val b = bridge(played, Engine(played.secretKey), Profile(), door, settings = true)
+        b.signedIn()
+        val id = (b.ask(Call.SettingsOpen("a.example#u1")) as Answer.SettingsOpened).settings
+        val page = b.watching(Watched.Settings(id))
+        val before = page.until { (it as Update.Settings).shown?.takeIf { s -> s.families != null && !s.working } }
+        assertEquals(TrustedDevice.Method.DEVICE_KEY, before.trusted)
+
+        val pw = (b.ask(Call.PasswordChangeOpen("a.example#u1")) as Answer.FlowOpened).flow
+        val to = "a much better one"
+        assertEquals(Answer.Done, b.ask(Call.PasswordChangeRun(pw, played.password, to, to, played.typedKey()), kotlin.time.Duration.parse("60s")))
+        val after = page.until { (it as Update.Settings).shown?.takeIf { s -> s.trusted == null && !s.working } }
+        assertEquals(null, after.level)
+        assertEquals(listOf(StaySignedIn.LOGIN, null), AccountSettings.Trust(after.trusted, after.level, after.levels).changes)
         b.shutdown()
     }
 

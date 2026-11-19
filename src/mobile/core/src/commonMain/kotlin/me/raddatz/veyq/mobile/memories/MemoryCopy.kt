@@ -20,7 +20,9 @@ import me.raddatz.veyq.mobile.memories.banner.Banner
 import me.raddatz.veyq.mobile.memories.banner.BannerWrite
 import me.raddatz.veyq.mobile.memories.place.MemoryDate
 import me.raddatz.veyq.mobile.memories.place.MemoryLocation
+import me.raddatz.veyq.mobile.session.MemberNodeWriter
 import me.raddatz.veyq.mobile.session.NodeCover
+import me.raddatz.veyq.mobile.session.NodeEpochWrite
 import me.raddatz.veyq.mobile.session.NodeCreate
 import me.raddatz.veyq.mobile.session.NodeMetaWrite
 import me.raddatz.veyq.mobile.session.NodeTrash
@@ -39,8 +41,10 @@ import me.raddatz.veyq.mobile.session.TenantSession
  * banner that shared a medium's object, ADR 0102, is copied as its own). Chapters are the copy's children in core's replay
  * (`SubtreeCopy`). What a copy leaves behind is said by `copy_loss_memory`: who was there (ids mean nothing in a copy) and
  * who added each photo (the copier uploads every medium); a medium the operator blocked serves no bytes and is not copied.
- * A failure part-way trashes the node it made (the web's rollback), so nothing half-copied stays; a rotation landing
- * mid-copy fails it the same way (inbox #988).
+ * Every write into the node it made — each medium, the cover, the banner — goes through core's [MemberNodeWriter], as the
+ * web's through `memberNodeWriter`: a rotation another member makes mid-copy (`node_rekey_pending`, `stale_epoch`) pulls
+ * the new node forward and re-sends that one write under its key now, the next write starting there (inbox #988). A failure
+ * part-way trashes the node it made (the web's rollback), so nothing half-copied stays.
  */
 object MemoryCopy {
     /** One medium as the copy hands it on: its blobs read by frame (the original first), its listed tier and EXIF raw. */
@@ -163,30 +167,62 @@ object MemoryCopy {
             }
         }
 
-        override suspend fun medium(made: Created.Made, medium: Medium) {
+        /** The node this copy made, written through one writer: what a re-key moved, the next write starts at. */
+        private var writer: Pair<String, MemberNodeWriter>? = null
+
+        private fun writer(made: Created.Made): MemberNodeWriter = writer?.takeIf { it.first == made.nodeId }?.second
+            ?: MemberNodeWriter.of(tenant, scopeId, made.nodeId, made.key, made.epoch).also { writer = made.nodeId to it }
+
+        /** [attempt] under the made node's key now; throws with the code of a write that did not go through. */
+        private suspend fun written(made: Created.Made, attempt: suspend (MemberNodeWriter.At) -> String?) {
+            when (val r = writer(made).write(attempt)) {
+                is NodeEpochWrite.Result.Answered -> r.value?.let { throw ApplicationBlobs.UploadRefused(it) }
+                NodeEpochWrite.Result.Busy -> throw ApplicationBlobs.UploadRefused("node_rekey_pending")
+                NodeEpochWrite.Result.Gone -> throw ApplicationBlobs.UploadRefused("node_unreadable")
+                NodeEpochWrite.Result.StaleAgain -> throw ApplicationBlobs.UploadRefused("stale_epoch")
+            }
+        }
+
+        override suspend fun medium(made: Created.Made, medium: Medium) = written(made) { at ->
             val suite = tenant.account.suite
             val mediaId = NodeCreate.uuid(tenant.account)
-            val sent = ApplicationBlobs(tenant).reserveAndPumpAll(scopeId, mediaId, made.key, medium.blobs)
-            MediaUpload.complete(
-                tenant, scopeId,
-                MediaRequestItem(
-                    mediaId = mediaId, nodeId = made.nodeId, nodeEpoch = made.epoch, originalUploadId = sent[0].first,
-                    derivatives = medium.blobs.drop(1).mapIndexed { i, b ->
-                        MediaDerivativeUpload(if (b.role == MemoryMedia.THUMBNAIL) MediaDerivativeKind.THUMBNAIL else MediaDerivativeKind.PREVIEW, sent[i + 1].first)
-                    },
-                    wrappedMeta = medium.tier?.let { MediaMetadata.sealMeta(suite, made.key, scopeId, mediaId, it) },
-                    wrappedExif = medium.exif?.let { MediaMetadata.sealExif(suite, made.key, scopeId, mediaId, it) },
-                ),
-                sent[0].second.blobId,
-            )
+            try {
+                val sent = ApplicationBlobs(tenant).reserveAndPumpAll(scopeId, mediaId, at.key, medium.blobs)
+                MediaUpload.complete(
+                    tenant, scopeId,
+                    MediaRequestItem(
+                        mediaId = mediaId, nodeId = made.nodeId, nodeEpoch = at.epoch, originalUploadId = sent[0].first,
+                        derivatives = medium.blobs.drop(1).mapIndexed { i, b ->
+                            MediaDerivativeUpload(if (b.role == MemoryMedia.THUMBNAIL) MediaDerivativeKind.THUMBNAIL else MediaDerivativeKind.PREVIEW, sent[i + 1].first)
+                        },
+                        wrappedMeta = medium.tier?.let { MediaMetadata.sealMeta(suite, at.key, scopeId, mediaId, it) },
+                        wrappedExif = medium.exif?.let { MediaMetadata.sealExif(suite, at.key, scopeId, mediaId, it) },
+                    ),
+                    sent[0].second.blobId,
+                )
+                null
+            } catch (e: ApplicationBlobs.UploadRefused) {
+                e.code
+            }
         }
 
-        override suspend fun cover(made: Created.Made, jpeg: ByteArray, crop: NodeCover.Crop) {
-            check(NodeCover.set(tenant, scopeId, made.nodeId, jpeg, crop) == NodeCover.Outcome.DONE) { "cover_not_copied" }
+        // the cover's and the banner's writes re-read the node themselves; an epoch refusal they end on pulls it forward here
+        override suspend fun cover(made: Created.Made, jpeg: ByteArray, crop: NodeCover.Crop) = written(made) {
+            when (NodeCover.set(tenant, scopeId, made.nodeId, jpeg, crop)) {
+                NodeCover.Outcome.DONE -> null
+                NodeCover.Outcome.BUSY -> "node_rekey_pending"
+                NodeCover.Outcome.STALE -> "stale_epoch"
+                else -> "cover_not_copied"
+            }
         }
 
-        override suspend fun banner(made: Created.Made, prepared: BannerWrite.Prepared, frame: Banner.Frame, focal: Banner.Focal) {
-            check(BannerWrite.copy(tenant, scopeId, made.nodeId, prepared, frame, focal) == BannerWrite.Outcome.Done) { "banner_not_copied" }
+        override suspend fun banner(made: Created.Made, prepared: BannerWrite.Prepared, frame: Banner.Frame, focal: Banner.Focal) = written(made) {
+            when (val out = BannerWrite.copy(tenant, scopeId, made.nodeId, prepared, frame, focal)) {
+                BannerWrite.Outcome.Done -> null
+                BannerWrite.Outcome.Busy -> "node_rekey_pending"
+                is BannerWrite.Outcome.Refused -> out.code ?: "banner_not_copied"
+                BannerWrite.Outcome.Stale -> "banner_not_copied"
+            }
         }
 
         override suspend fun trash(made: Created.Made) {
