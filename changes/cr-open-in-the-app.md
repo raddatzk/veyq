@@ -136,6 +136,11 @@ launch; the person chose to copy; a phone's system shows the paste (iOS asks, An
 1. **The banner's pages and words (O2).** *Recommendation:* the share page and the four mailed pages after their step;
    every browser; "Open in the veyq app" / "In der veyq-App öffnen", on the share page "Copy link and open the app" /
    "Link kopieren und App öffnen", the line "For the installed veyq app" / "Für die installierte veyq-App".
+   **Answered (owner 2026-11-19): the banner on every page** (the app is the safer client — it is not served by the
+   operator, ADR 0026), dismissable, the dismissal kept per device; on a page other than the share page and the mailed
+   pages it opens `veyq://open`. **Plus Apple's Smart App Banner** (`<meta name="apple-itunes-app">`) on iOS Safari
+   once the app has an App Store id (the owner's publishing step): where Safari shows it, our banner stays hidden so
+   two never stack; it carries no `#k=` (an `app-argument`, if any, is token-free). Words as recommended.
 
 ## Definition of done
 

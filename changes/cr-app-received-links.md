@@ -41,7 +41,7 @@ major the app speaks. A bookmark is created, opened, shown in place and reported
   throwaway AVD. The Windows VM maps `tw-win.localhost` only: a throwaway for it is created with a fixed tenant name —
   `--tenant tw-win` is on branch `claude/win-passes` (`89107e8e8`), **planned** here, not on this branch; re-read it when
   it lands, else the Windows pass stays open as #983's did.
-- **Out of scope:** the `veyq:` scheme and the web banner (cr-open-in-the-app); *Keep* from the share page (#1013, new);
+- **Out of scope:** the `veyq:` scheme and the web banner (cr-open-in-the-app); ~~*Keep* from the share page (#1013)~~ — in scope since the owner's answer to question 1;
   a moderator's review link (`#moderation`) in the apps (#1014, new); a link shared into veyq from another app's share
   sheet (#1015, new); a guest's upload going on with the app left (#1016, new); several instances *signed in* across
   majors (#436 — this CR opens a foreign instance as a guest only, at a major the app speaks).
@@ -239,6 +239,12 @@ question 2*).
 1. **No separate list (H1).** A link kept privately is a bookmark in one's own space (the personal one), reachable from
    every client; the Master-Key list #435 first asked for is not built. *Recommendation:* yes — same privacy, one
    format, nothing new on the server; #435 then closes with block H.
+   **Answered (owner 2026-11-19): no separate list — but a button to keep the link somewhere for good.** So #1013's
+   *Keep* comes into this CR: the guest view (apps) and the share page (web, for someone signed in on that device)
+   offer *Keep*, which creates the `SHARE_BOOKMARK` node in a place the person picks (the personal space first). The
+   apps behave as the web: both clients get it. Phase 1 writes it into ADR 0150 and the phases that build bookmarks
+   (core, web, each platform) take it; the web's share page has no session, so how it reaches the signed-in tab's
+   keys is decided in phase 1 and recorded.
 2. **Where *Open a link* sits, and its words (H4, H9).** *Recommendation:* on the sign-in screen under the sign-in, and
    in the account menu (the drawer's foot on the phones, the account menu on the desktops); "Open a link" / "Link
    öffnen", "Paste the link you received" / "Füge den Link ein, den du bekommen hast", "Open in the browser" / "Im
