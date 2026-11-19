@@ -997,7 +997,7 @@ internal sealed class ShellView
     private Drops? LevelDrops()
     {
         if (_shown is not { } shown || !shown.canCreateHere || !shown.creates.Any(c => c.create == Create.UploadFiles)) return null;
-        return Level() is { } level ? new Drops(level, Say) : null;
+        return Level() is { } level ? new Drops(_window, level, Say) : null;
     }
 
     /// <summary>The Memory's page let go (closed in the core), its hero handed back.</summary>

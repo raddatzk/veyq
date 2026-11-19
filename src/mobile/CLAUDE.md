@@ -337,7 +337,10 @@ A Gradle build of its own, run through its own wrapper.
   a clip refuses the file (an Ogg track); both JPEGs encoded in memory; `MediaTiersTest`), `MusicBar` (the account's
   music bar along the shell's bottom), `MusicHost` (the two decks, `MediaPlayer`s over `ReaderStream`, ramps in
   `MusicRamp`'s steps; one SMTC for the window through `GetForWindow`; `MusicTest`), `RowCovers` (every list row's cover through `Shell.RowCover`), `Uploads` (New's Upload files and Upload folder through `FileOpenPicker`
-  and `FolderPicker`, a file's Replace, the queue's `AppBarButton` with its `Flyout`, what it says in an `InfoBar`),
+  and `FolderPicker`, a file's Replace, the queue's `AppBarButton` with its `Flyout`, what it says in an `InfoBar`; every pick and
+  drop screened by `Import.Screen`/`Import.ScreenFolder` first, ADR 0152), `ImportDialog` (a veyq download offered as an import:
+  one `ContentDialog` through reading, the summary, running and done — Import, Upload as a file, Cancel rolling back — its
+  face without a widget in `ImportText`, `ImportTextTest`),
   `DropBoxPage` (a drop box's page), `ReceivedView` (a received link opened as its guest, ADR 0150: *Open a link* under the
   sign-in and the unlock (not in the account menu, owner 2026-11-19); the screen above every face with its gates, the member's pages over the
   guest's models, a WRITE_ONLY guest's page, the guest-write record's `InfoBar`, Keep, the reports, Back with its question;

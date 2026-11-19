@@ -1,6 +1,7 @@
 // What a drop onto a level or a folder's row is sorted into (ADR 0123's Consequences, the Windows app's Depot whole), the one rule the Windows side holds about a
 // drop (Linux's drop.rs, rule for rule): each dropped storage item with a local path goes to the core as a picked one does —
-// the files as one batch (Upload.Files), each folder walked by the core (Upload.Folder) —, and an item with no path (a
+// the files as one batch, each folder walked by the core, both screened for a veyq download first (Import.Screen,
+// Import.ScreenFolder; ADR 0152 decision 1), one import per drop as on the web —, and an item with no path (a
 // phone's or a cloud's virtual item) is refused under its name. Where a drop is taken at all is the core's: a level takes
 // one where its New offers Upload files (ShellShown.creates). The events that feed it are HomeView's (Drops.Attach).
 using System.Collections.Generic;
@@ -59,21 +60,33 @@ internal static class DropSort
         }
     }
 
-    /// <summary>The calls a sorted drop onto <paramref name="level"/> makes: the files as one batch, then one folder upload
-    /// per folder.</summary>
+    /// <summary>The calls a sorted drop onto <paramref name="level"/> makes: the files as one batch, then one per folder,
+    /// each screened for a download (<see cref="Plain"/> once the drop offered one).</summary>
     public static IReadOnlyList<Call> Calls(UploadLevel level, Sorted sorted)
     {
         var calls = new List<Call>();
-        if (sorted.Files.Count > 0)
-        {
-            calls.Add(new Call.UploadFiles { scopeId = level.ScopeId, parentId = level.ParentId, label = level.Label, paths = sorted.Files.ToList() });
-        }
-        foreach (var path in sorted.Folders)
-        {
-            calls.Add(new Call.UploadFolder { scopeId = level.ScopeId, parentId = level.ParentId, path = path });
-        }
+        if (sorted.Files.Count > 0) calls.Add(Screen(level, sorted.Files));
+        foreach (var path in sorted.Folders) calls.Add(ScreenFolder(level, path));
         return calls;
     }
+
+    /// <summary>Picked or dropped files screened into <paramref name="level"/> (Import.Screen); an imported Pot's erased
+    /// person named by the host's word.</summary>
+    public static Call Screen(UploadLevel level, IReadOnlyList<string> files) =>
+        new Call.ImportScreen { scopeId = level.ScopeId, parentId = level.ParentId, label = level.Label, paths = files.ToList(), deletedName = Words.PotDeletedPerson() };
+
+    /// <summary>A picked or dropped directory screened into <paramref name="level"/> (Import.ScreenFolder).</summary>
+    public static Call ScreenFolder(UploadLevel level, string path) =>
+        new Call.ImportScreenFolder { scopeId = level.ScopeId, parentId = level.ParentId, label = level.Label, path = path, deletedName = Words.PotDeletedPerson() };
+
+    /// <summary>A screened call as the ordinary upload it would be: what a drop sends after it offered one import (the web
+    /// offers one per drop, the rest is the ordinary upload).</summary>
+    public static Call Plain(Call call) => call switch
+    {
+        Call.ImportScreen s => new Call.UploadFiles { scopeId = s.scopeId, parentId = s.parentId, label = s.label, paths = s.paths },
+        Call.ImportScreenFolder f => new Call.UploadFolder { scopeId = f.scopeId, parentId = f.parentId, path = f.path },
+        _ => call,
+    };
 
     /// <summary>What a drop or a pick onto gallery <paramref name="gallery"/> sends (Linux's memory_page::calls): the files as
     /// one Memory.Upload — the core leaves out what is no photo or video and says so —, nothing for a folder (owner question

@@ -11,22 +11,28 @@ public sealed class DropSortTest
     private static readonly UploadLevel Trip = new("s1", "f1", "Trip");
 
     [TestMethod]
-    public void TwoFilesAndAFolderReachUploadFilesAndUploadFolderWithTheirPaths()
+    public void TwoFilesAndAFolderAreScreenedWithTheirPathsAndTheOrdinaryUploadIsWhatFollowsAnOffer()
     {
         var sorted = DropSort.Sort([
             new DroppedItem("a.txt", @"C:\up\a.txt", false),
             new DroppedItem("Reise ü", @"C:\up\Reise ü", true),
-            new DroppedItem("b.jpg", @"C:\up\b.jpg", false),
+            new DroppedItem("b.zip", @"C:\up\b.zip", false),
         ]);
         var calls = DropSort.Calls(Trip, sorted);
         Assert.AreEqual(2, calls.Count, "the files as one batch, the folder walked by the core");
-        var files = (Call.UploadFiles)calls[0];
-        Assert.AreEqual("s1", files.scopeId);
-        Assert.AreEqual("f1", files.parentId);
-        Assert.AreEqual("Trip", files.label);
-        CollectionAssert.AreEqual(new[] { @"C:\up\a.txt", @"C:\up\b.jpg" }, files.paths.ToArray());
-        var folder = (Call.UploadFolder)calls[1];
-        Assert.AreEqual(("s1", "f1", @"C:\up\Reise ü"), (folder.scopeId, folder.parentId, folder.path));
+        // screened first (ADR 0152 decision 1): a veyq download among them is the core's to recognise, by its content
+        var files = (Call.ImportScreen)calls[0];
+        Assert.AreEqual(("s1", "f1", "Trip"), (files.scopeId, files.parentId, files.label));
+        CollectionAssert.AreEqual(new[] { @"C:\up\a.txt", @"C:\up\b.zip" }, files.paths.ToArray());
+        Assert.AreEqual(Words.PotDeletedPerson(), files.deletedName, "an imported Pot's erased person is named by the host's word");
+        var folder = (Call.ImportScreenFolder)calls[1];
+        Assert.AreEqual(("s1", "f1", "Trip", @"C:\up\Reise ü"), (folder.scopeId, folder.parentId, folder.label, folder.path));
+        // one import per drop, as on the web: once one is offered, the rest goes the ordinary way
+        var plainFiles = (Call.UploadFiles)DropSort.Plain(files);
+        Assert.AreEqual(("s1", "f1", "Trip"), (plainFiles.scopeId, plainFiles.parentId, plainFiles.label));
+        CollectionAssert.AreEqual(files.paths.ToArray(), plainFiles.paths.ToArray());
+        var plainFolder = (Call.UploadFolder)DropSort.Plain(folder);
+        Assert.AreEqual(("s1", "f1", @"C:\up\Reise ü"), (plainFolder.scopeId, plainFolder.parentId, plainFolder.path));
     }
 
     [TestMethod]
