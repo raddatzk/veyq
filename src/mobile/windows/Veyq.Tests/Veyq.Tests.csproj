@@ -29,6 +29,7 @@
     <Compile Include="../Veyq/Words.cs" Link="App/Words.cs" />
     <Compile Include="../Veyq/MrtWords.cs" Link="App/MrtWords.cs" />
     <Compile Include="../Veyq/Said.cs" Link="App/Said.cs" />
+    <Compile Include="../Veyq/SaidNotice.cs" Link="App/SaidNotice.cs" />
     <Compile Include="../Veyq/AvatarsHeld.cs" Link="App/AvatarsHeld.cs" />
     <Compile Include="../Veyq/PictureDecode.cs" Link="App/PictureDecode.cs" />
     <Compile Include="../Veyq/TrustWords.cs" Link="App/TrustWords.cs" />
@@ -43,6 +44,7 @@
     <Compile Include="../Veyq/ListScrolls.cs" Link="App/ListScrolls.cs" />
     <Compile Include="../Veyq/ReaderStream.cs" Link="App/ReaderStream.cs" />
     <Compile Include="../Veyq/DropSort.cs" Link="App/DropSort.cs" />
+    <Compile Include="../Veyq/ImportText.cs" Link="App/ImportText.cs" />
     <Compile Include="../Veyq/Recent.cs" Link="App/Recent.cs" />
     <Compile Include="../Veyq/MediaTiers.cs" Link="App/MediaTiers.cs" />
     <Compile Include="../Veyq/MusicRamp.cs" Link="App/MusicRamp.cs" />

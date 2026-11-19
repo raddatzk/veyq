@@ -1,7 +1,9 @@
 // The uploads (ADR 0123's Consequences, the Windows app's Depot whole), Fluent's way: files and a folder picked through Windows' own pickers
 // (FileOpenPicker, FolderPicker, owned by the window as the save picker is) and handed to the core by their paths — the
-// core opens and reads each at offsets a frame at a time (Upload.Files, Upload.Folder; ADR 0137 decision 3), so nothing of
-// a file crosses and none is held whole —, a file's Replace chosen before its picker opens (File.ChooseReplace,
+// core opens and reads each at offsets a frame at a time (ADR 0137 decision 3), so nothing of a file crosses and none is
+// held whole —, screened first as the web's upload screens (Import.Screen, Import.ScreenFolder; ADR 0152 decision 1): a
+// veyq download among them is offered as an import in ImportDialog, everything else queued as Upload.Files and
+// Upload.Folder queue it; a file's Replace chosen before its picker opens (File.ChooseReplace,
 // Upload.Replace), and the queue as an AppBarButton in the content's CommandBar while it lists anything: its label the
 // core's one line, its Flyout each batch with its items, their progress, Cancel and Retry, Cancel all and a finished
 // batch's Close. What the uploads say once — a folder's outcome, a replace offered — is an InfoBar under the bar, its
@@ -225,7 +227,8 @@ internal sealed class Uploads : IDisposable
         }
     }
 
-    /// <summary>New's "Upload files": the open picker picks several, their paths go to the core (Upload.Files).</summary>
+    /// <summary>New's "Upload files": the open picker picks several, their paths go to the core, screened (Import.Screen):
+    /// the first veyq download among them offered as an import, the rest queued.</summary>
     public async void PickFiles(UploadLevel level, Action<bool, string> say)
     {
         try
@@ -240,8 +243,8 @@ internal sealed class Uploads : IDisposable
             Log.Write($"upload files: {sorted.Files.Count} picked, {sorted.Refused.Count} refused");
             foreach (var name in sorted.Refused) say(false, Words.DepotDropNotLocal(name));
             if (sorted.Files.Count == 0) return;
-            var (answer, _) = await Core.CallAsync(new Call.UploadFiles { scopeId = level.ScopeId, parentId = level.ParentId, label = level.Label, paths = sorted.Files.ToList() });
-            Queued(answer, "Upload.Files", say);
+            var (answer, _) = await Core.CallAsync(DropSort.Screen(level, sorted.Files));
+            Screened(_window, answer, "Import.Screen", say);
         }
         catch (Exception e)
         {
@@ -250,8 +253,8 @@ internal sealed class Uploads : IDisposable
         }
     }
 
-    /// <summary>New's "Upload folder…": the folder picker picks one directory, which the core walks and uploads
-    /// (Upload.Folder).</summary>
+    /// <summary>New's "Upload folder…": the folder picker picks one directory, which the core walks: a download unpacked
+    /// is offered as an import, any other uploaded (Import.ScreenFolder).</summary>
     public async void PickFolder(UploadLevel level, Action<bool, string> say)
     {
         try
@@ -262,8 +265,8 @@ internal sealed class Uploads : IDisposable
             var folder = await picker.PickSingleFolderAsync();
             if (folder is null || string.IsNullOrEmpty(folder.Path)) return;
             Log.Write("upload folder: picked");
-            var (answer, _) = await Core.CallAsync(new Call.UploadFolder { scopeId = level.ScopeId, parentId = level.ParentId, path = folder.Path });
-            Queued(answer, "Upload.Folder", say);
+            var (answer, _) = await Core.CallAsync(DropSort.ScreenFolder(level, folder.Path));
+            Screened(_window, answer, "Import.ScreenFolder", say);
         }
         catch (Exception e)
         {
@@ -296,6 +299,21 @@ internal sealed class Uploads : IDisposable
         {
             Log.Write($"replace failed: {e.GetType().Name}: {e.Message}");
         }
+    }
+
+    /// <summary>A screened upload's answer: an import offered opens its dialog over <paramref name="window"/> (what was
+    /// queued beside it said in the log); anything else as <see cref="Queued"/>. Whether one was offered.</summary>
+    internal static bool Screened(Window window, Answer answer, string what, Action<bool, string> say)
+    {
+        if (answer is not Answer.ImportOffered offered)
+        {
+            Queued(answer, what, say);
+            return false;
+        }
+        Log.Write($"{what}: import {offered.import} offered, {offered.queued} queued{(offered.notice is null ? "" : $", said {offered.notice.msg}")}");
+        if (offered.notice is { } n) say(false, Said.Notice(n));
+        ImportDialog.Open(window, offered.import, say);
+        return true;
     }
 
     internal static void Queued(Answer answer, string what, Action<bool, string> say)
