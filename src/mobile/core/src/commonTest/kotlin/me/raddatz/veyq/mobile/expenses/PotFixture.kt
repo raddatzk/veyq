@@ -17,13 +17,15 @@ internal object PotFixture {
     fun view(
         entries: List<Rev> = emptyList(), canWrite: Boolean = true, rates: Boolean = true,
         members: List<me.raddatz.veyq.mobile.session.Person>? = null, categories: List<Pair<String, String>> = emptyList(),
+        /** A link's guest reads it (a `GuestPotDoor`'s rights: no settings, no member's people steps). */
+        guest: Boolean = false,
     ): PotView {
         val held = (people + entries).mapIndexed { i, r -> HeldRevision(r.id, r.revision, 1_000L * (i + 1), "", r.content?.let { RevisionBody(emptyList(), it) }, null, purgeAfter = r.purgeAfter) }
         val fixed = held.any { it.body?.content is MoneyContent }
         return PotView(
             PotView.Source(
                 "Trip", PotMeta(BASE, categories), Ledger.build(held, BASE), LedgerCheck.of(held), members, emptySet(), canWrite,
-                currencyFixed = fixed, held = held, ratesOffered = rates,
+                canChangeSettings = canWrite && !guest, currencyFixed = fixed, held = held, ratesOffered = rates, member = !guest,
             ),
         )
     }

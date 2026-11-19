@@ -1215,7 +1215,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.LinkConfirm -> links[call.link]?.let { taken(it.model.confirm(call.label)) } ?: noLink
             is Call.LinkEnterCode -> links[call.link]?.let { taken(it.model.enterCode(call.code)) } ?: noLink
             is Call.LinkClose -> links.remove(call.link)?.let { closeLink(it); Answer.Done } ?: noLink
-            is Call.ReceivedOpen, is Call.ReceivedPassword, is Call.ReceivedAcceptTerms, is Call.ReceivedAcceptNote, is Call.ReceivedOpenNode, is Call.ReceivedBack, is Call.ReceivedStay, is Call.ReceivedLeave, is Call.ReceivedClose, is Call.ReceivedName, is Call.ReceivedForgetGuest, is Call.ReceivedKeep, is Call.ReceivedUpload, is Call.ReceivedNewFolder, is Call.ReceivedReportNode, is Call.ReceivedReport, is Call.ReceivedKeepPlaces, is Call.ReceivedReportShown -> receivedCall(parts, call)
+            is Call.ReceivedOpen, is Call.ReceivedPassword, is Call.ReceivedAcceptTerms, is Call.ReceivedAcceptNote, is Call.ReceivedOpenNode, is Call.ReceivedBack, is Call.ReceivedStay, is Call.ReceivedLeave, is Call.ReceivedClose, is Call.ReceivedName, is Call.ReceivedForgetGuest, is Call.ReceivedKeep, is Call.ReceivedUpload, is Call.ReceivedReplace, is Call.ReceivedNewFolder, is Call.ReceivedReportNode, is Call.ReceivedReport, is Call.ReceivedKeepPlaces, is Call.ReceivedReportShown -> receivedCall(parts, call)
             is Call.BookmarkOpen -> openBookmark(parts, call.node)
             is Call.BookmarkOwnPage -> bookmarks[call.bookmark]?.let { b ->
                 heldReceived(b.page.openOwnPage(tenant.value?.models?.session))
@@ -2183,6 +2183,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             if (sent == 0) sources.forEach { it.close() }
             taken(sent > 0)
         } ?: noReceived
+        is Call.ReceivedReplace -> received[call.received]?.let { h ->
+            val page = h.screen.view.page.value as? me.raddatz.veyq.mobile.sharing.GuestPage.File ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+            val access = h.screen.view.access ?: return noReceived
+            if (access.role != me.raddatz.veyq.mobile.sharing.GuestAccess.READ_WRITE || access.session.value == null) return Answer.Refused(Answer.Why.NOT_OFFERED)
+            val source = parts.files.source(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
+            if (access.replace(page.model, source)) Answer.Queued(1) else Answer.Refused(Answer.Why.NOT_CHOSEN).also { source.close() }
+        } ?: noReceived
         is Call.ReceivedNewFolder -> received[call.received]?.let { h ->
             val level = h.screen.view.page.value as? me.raddatz.veyq.mobile.sharing.GuestPage.Level ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
             if (!level.model.writes) return Answer.Refused(Answer.Why.NOT_OFFERED)
@@ -2824,7 +2831,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         categoriesShown = view.categoriesShown, canAddCategory = view.canAddCategory,
         categories = view.ownCategories.map { EditorChoice(it.first, view.categoryLabel(it.first)) },
         people = view.personEntries.map { me.raddatz.veyq.mobile.expenses.PotView.ShownPerson(it, view.personFacts(it)) },
-        deletedPeople = view.deletedPeople, settleFirst = view.canWrite && view.anyUnsettled,
+        deletedPeople = view.deletedPeople, settleFirst = view.settleFirst, metaShown = view.metaShown,
         members = view.addableMembers.map { PotMember(it.userId, it.name) },
         asking = s.asking?.let { ErasingPerson(it.personId, it.name, it.named) },
     )

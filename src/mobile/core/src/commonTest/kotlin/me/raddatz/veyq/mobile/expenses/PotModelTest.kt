@@ -13,6 +13,7 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.session.LocalDays
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -266,5 +267,42 @@ class PotModelTest {
         m.clearMessage()
         assertEquals(false, m.record(emptyList()))
         assertEquals(me.raddatz.veyq.mobile.words.Msg.PEOPLE_FAILED, m.refusal().msg)
+    }
+    /**
+     * #1035: a writing guest's Settings are the web's guest tab (`rights.ts`: `addPeople` alone) — people added by name
+     * and renamed; nobody's standing changed, no currency, no category, no member added. A READ guest is offered none.
+     */
+    @Test
+    fun aGuestsSettingsAddAndRenamePeopleAlone() = runTest {
+        val ada = me.raddatz.veyq.mobile.session.Person("u-ada", "ada", "Ada")
+        val pot = Played(PotFixture.view(members = listOf(ada), guest = true))
+        val m = model(pot)
+        m.open(rome)
+        val view = pot.view
+        assertTrue(view.settingsOffered, "a writing guest is offered no Settings")
+        assertFalse(view.metaShown, "a guest's Settings show the currency and categories")
+        assertFalse(view.categoriesShown)
+        assertFalse(view.managesPeople)
+        assertFalse(PotFixture.view(owing, guest = true).settleFirst, "a guest is told to settle up before a step it may not take")
+        assertTrue(view.personEntries.none { it.canToggle || it.canErase }, "a guest is offered a member's people step")
+        assertTrue(view.personEntries.all { it.renamable })
+        val s = assertNotNull(m.settings())
+        assertFalse(s.toggleActive(PotFixture.BEN))
+        s.askErase(PotFixture.ANNA)
+        assertNull(s.current.asking)
+        assertFalse(s.erase())
+        assertFalse(s.setBaseCurrency("USD"))
+        assertFalse(s.addCategory("Fuel"))
+        assertFalse(s.addMember(ada.userId), "a guest added a member of the space")
+        assertTrue(pot.ops.isEmpty(), "a guest's Settings sent ${pot.ops}")
+        assertTrue(s.addPerson("Cleo"))
+        assertTrue(s.rename(PotFixture.BEN, "Benno"))
+        assertEquals(listOf<PotModel.Op>(PotModel.Op.AddPerson("Cleo"), PotModel.Op.Rename(PotFixture.BEN, "Benno")), pot.ops)
+
+        assertFalse(PotFixture.view(canWrite = false, guest = true).settingsOffered, "a READ guest is offered Settings")
+        val member = PotFixture.view()
+        assertTrue(member.settingsOffered && member.metaShown && member.managesPeople)
+        assertTrue(member.personEntries.all { it.canToggle && it.canErase })
+        assertTrue(PotFixture.view(owing).settleFirst)
     }
 }

@@ -37,7 +37,8 @@ struct PotSettingsTab: View {
                         .listRowBackground(Role.surface)
                 }
             }
-            currency
+            // a link's guest sees its people alone (`PotView.metaShown`, the web's guest Settings, #1035)
+            if view.metaShown { currency }
             if view.ready {
                 people
                 categories
@@ -151,7 +152,7 @@ struct PotSettingsTab: View {
         } footer: {
             VStack(alignment: .leading, spacing: 4) {
                 if view.deletedPeople > 0 { Text(say(.peopleDeletedSummary, view.deletedPeople)) }
-                if view.canWrite && view.anyUnsettled { Text(say(.peopleSettleFirst)) }
+                if view.settleFirst { Text(say(.peopleSettleFirst)) }
                 if let notice = model.settingsState?.notice { Text(say(notice: notice)).foregroundStyle(Role.danger) }
             }
         }

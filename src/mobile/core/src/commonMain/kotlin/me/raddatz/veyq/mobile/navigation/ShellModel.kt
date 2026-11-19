@@ -465,8 +465,12 @@ class ShellModel(
             .getOrDefault(NodeRename.Result(NodeRename.Outcome.FAILED))
         if (r.outcome == NodeRename.Outcome.RENAMED) {
             refresh()
-            val renamed = _state.value?.lists?.objects?.firstOrNull { it.scopeId == ref.scopeId && it.nodeId == ref.nodeId }
+            val lists = _state.value?.lists
+            val renamed = lists?.objects?.firstOrNull { it.scopeId == ref.scopeId && it.nodeId == ref.nodeId }
             if (renamed != null) update { afterRename(it, renamed) }
+            // a kept link's page heads its node under the new name too (#1035)
+            val kept = lists?.nodes?.firstOrNull { it.scopeId == ref.scopeId && it.nodeId == ref.nodeId }?.asBookmark()
+            if (kept != null) update { afterRename(it, kept) }
             relocate(ref)
         }
         return Renamed(r, Notices.renameRefused(r))
@@ -1089,9 +1093,11 @@ class ShellModel(
 
         /**
          * The shell once node [nodeId] went to the trash: an open object of it leaves ([Shell.leave]) — one opened at the
-         * top for its application's list, since back does not leave it (its undo brings it back to that list, not open).
+         * top for its application's list, since back does not leave it (its undo brings it back to that list, not open) —,
+         * and so does a kept link's page of it (#1035), back to where it was opened from.
          */
-        fun afterTrash(shell: Shell, nodeId: String): Shell = if (shell.openObject?.nodeId == nodeId) shell.leave() else shell
+        fun afterTrash(shell: Shell, nodeId: String): Shell =
+            if (shell.openObject?.nodeId == nodeId || shell.bookmark?.nodeId == nodeId) shell.leave() else shell
 
         /**
          * The shell once object [renamed] has its new name: an open page of it shows it under that name, where it was —
@@ -1099,6 +1105,10 @@ class ShellModel(
          */
         fun afterRename(shell: Shell, renamed: ObjectRef): Shell =
             if (shell.openObject?.let { it.nodeId == renamed.nodeId && it.scopeId == renamed.scopeId } == true) shell.copy(openObject = renamed) else shell
+
+        /** The shell once kept link [renamed] has its new name: its page, where it is open, heads it under that name (#1035). */
+        fun afterRename(shell: Shell, renamed: NodeAt): Shell =
+            if (shell.bookmark?.let { it.nodeId == renamed.nodeId && it.scopeId == renamed.scopeId } == true) shell.copy(bookmark = renamed) else shell
 
         /** How long a trash's undo is offered (the web's `TRASH_UNDO_MS`). */
         const val TRASH_UNDO_MS = 6_000L

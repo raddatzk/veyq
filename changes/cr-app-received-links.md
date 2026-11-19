@@ -279,7 +279,17 @@ question 2*).
   folder, deleted (the page left, Undo offered); the app's stderr holds none of the links' share ids or keys. **Open
   (#1035, the core's and the bridge's):** a signed-out guest's Replace; a guest Pot's Settings; a kept link's page title
   after its rename.
-- [x] **10 Windows** — the same; the credential locker. · Done when: `python3 windows/run.py build` green on the VM;
+  **#1035's core and bridge half (2026-11-19, branch `claude/core-1035`):** a guest's Replace is core's
+  `GuestAccess.replace` on the link's own queue (signed in or out; the bridge's `Received.Replace`, Android's and Apple's
+  pickers through it); a guest Pot's Settings are the web's guest tab (`PotView.settingsOffered`, `metaShown`,
+  `managesPeople`, `settleFirst`; people added and renamed, nothing else), shown as a place for a writing guest on
+  Android, Apple and Linux; `ShellModel.afterRename`/`afterTrash` follow `Shell.bookmark` (Linux's `Shell.Back`
+  workaround dropped). Measured: `GuestDoorsTest`, `PotModelTest`, `ShellModelTest`, `ReceivedBridgeTest` (each new case
+  bitten red); live `GuestRemainderLiveTest` as a throwaway.
+- [x] **10 Windows** — the same; the credential locker. A guest's file Replace is `File.ChooseReplace` then `Received.Replace(received,
+  path)` (signed in or out, never `Upload.Replace`); a guest Pot's places add Settings where `PotView.settingsOffered`
+  (the Settings hide the currency and categories where `PotSettingsShown.metaShown` is false); a kept link's page is
+  left by the core after its trash (no `Shell.Back` of the app's own) (#1035). · Done when: `python3 windows/run.py build` green on the VM;
   § Passes' Windows row (or #983's reason named open).
   **Built 2026-11-19 (branch `claude/h-windows`):** core's `mingwMain` `sharing/WindowsGuestSessions` (a credential of WinRT's
   `PasswordVault` — the Credential Locker — through `wincred/veyq_wincred.h`'s C helpers over the C ABI, its internals in

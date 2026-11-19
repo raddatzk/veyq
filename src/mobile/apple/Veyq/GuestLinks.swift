@@ -500,22 +500,37 @@ private struct GuestLevelView: View {
 }
 
 /// A Pot of a link: the member's Pot page over the guest's Pot (the app model reads and writes through it while it shows),
-/// its Entries and Overview as a segmented control of its own — the guest's screen has no bar.
+/// its Entries, Overview and — where the core offers them (`PotView.settingsOffered`: a guest who writes, #1035) —
+/// Settings as a segmented control of its own; the guest's screen has no bar.
 private struct GuestPotView: View {
     @Bindable var model: AppModel
     let ref: ObjectRef
-    @State private var overview = false
+    @State private var chosen = "expenses.entries"
+
+    /// The places offered now: Settings once the core offers them.
+    private var places: [String] {
+        let settings = model.pot.map { $0.ref == ref && $0.view?.settingsOffered == true } ?? false
+        return ["expenses.entries", "expenses.overview"] + (settings ? ["expenses.settings"] : [])
+    }
+
+    private func word(_ key: String) -> String {
+        switch key {
+        case "expenses.overview": say(.tabExpensesOverview)
+        case "expenses.settings": say(.tabExpensesSettings)
+        default: say(.tabExpensesEntries)
+        }
+    }
 
     var body: some View {
+        let place = places.contains(chosen) ? chosen : "expenses.entries"
         VStack(spacing: 0) {
-            Picker(say(.tabExpensesEntries), selection: $overview) {
-                Text(say(.tabExpensesEntries)).tag(false)
-                Text(say(.tabExpensesOverview)).tag(true)
+            Picker(say(.tabExpensesEntries), selection: $chosen) {
+                ForEach(places, id: \.self) { Text(word($0)).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             .padding()
-            PotScreen(model: model, ref: ref, tab: overview ? "expenses.overview" : "expenses.entries")
+            PotScreen(model: model, ref: ref, tab: place)
         }
     }
 }
@@ -544,7 +559,7 @@ private struct GuestFileActions: View {
                     Label(h.label(id: FileModel.companion.REPLACE).map { say($0) } ?? "", systemImage: "square.and.arrow.down.on.square")
                 }
                 .fileImporter(isPresented: $replacing, allowedContentTypes: [.item]) { result in
-                    if case .success(let url) = result { model.guestReplace(file, url: url) }
+                    if case .success(let url) = result, let access = held.screen.view.access { model.guestReplace(access, file: file, url: url) }
                 }
             }
         }

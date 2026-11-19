@@ -2429,9 +2429,10 @@ final class AppModel {
 
     /// A READ_WRITE guest's replace of `file`'s content with the picked file (ADR 0150 decision 5): the job the guest's file
     /// door makes, in the app's one queue; the page reads the file anew once it settled.
-    func guestReplace(_ file: FileModel, url: URL) {
+    func guestReplace(_ access: GuestAccess, file: FileModel, url: URL) {
         guard let source = guestSource(url) else { return }
-        _ = AppleSharing.shared.replace(queue: uploads, file: file, source: source)
+        // core's `GuestAccess.replace`: the link's own queue (the app's one, handed to the link), signed in or out (#1035)
+        if !access.replace(file: file, source: source) { source.close() }
     }
 
     /// A picked file as a guest's upload source (a drop box's, a replace's), read in place where it lies.

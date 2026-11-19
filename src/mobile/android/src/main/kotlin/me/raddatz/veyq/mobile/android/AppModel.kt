@@ -2343,7 +2343,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** The page of bookmark [node], loading (its meta opened, the share shown in place where the tenant embeds). */
     fun bookmarkPage(node: me.raddatz.veyq.mobile.navigation.NodeAt): me.raddatz.veyq.mobile.sharing.BookmarkPage? {
-        openBookmark?.takeIf { it.node == node }?.let { return it }
+        // by its node, not its name: a rename heads the page anew (#1035) without opening the link again
+        openBookmark?.takeIf { it.node.scopeId == node.scopeId && it.node.nodeId == node.nodeId }?.let { return it }
         val t = shellModel?.tenant ?: return null
         openBookmark?.close()
         val page = me.raddatz.veyq.mobile.sharing.BookmarkPage.of(t, node) { link, password -> guests.view(link, password) }
@@ -2377,14 +2378,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * A READ_WRITE guest's replace of [file]'s content with the picked document (ADR 0150 decision 5): the job the guest's
-     * file door makes, in the app's one queue; the page reads the file anew once it settled.
+     * A READ_WRITE guest's replace of [file]'s content with the picked document (ADR 0150 decision 5, #1035): core's
+     * `GuestAccess.replace`, on the link's own queue (the app's one, handed to the link) — signed in or out; the page reads
+     * the file anew once it settled.
      */
-    fun guestReplace(file: me.raddatz.veyq.mobile.depot.FileModel, uri: android.net.Uri) {
+    fun guestReplace(access: me.raddatz.veyq.mobile.sharing.GuestAccess, file: me.raddatz.veyq.mobile.depot.FileModel, uri: android.net.Uri) {
         viewModelScope.launch {
             val p = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { picked(uri) } ?: return@launch
-            val job = file.replace(source(p)) ?: return@launch
-            uploads.enqueue(listOf(job), p.name, file.node.nodeId, onSettled = { file.reload() }, onFinished = null)
+            val source = source(p)
+            if (!access.replace(file, source)) source.close()
         }
     }
 

@@ -61,7 +61,8 @@ internal fun PotSettings(view: PotView, state: me.raddatz.veyq.mobile.expenses.P
         if (!view.ready) {
             Text(stringResource(if (view.canChangeSettings) R.string.settings_missing else R.string.settings_missing_read_only))
         }
-        BaseCurrency(view, ui)
+        // a link's guest sees its people alone (`PotView.metaShown`, the web's guest Settings, #1035)
+        if (view.metaShown) BaseCurrency(view, ui)
         if (view.ready) {
             People(view, ui)
             Categories(view, ui)
@@ -195,7 +196,7 @@ private fun People(view: PotView, ui: SettingsUi) {
     if (view.deletedPeople > 0) {
         Text(pluralStringResource(R.plurals.people_deleted_summary, view.deletedPeople, view.deletedPeople), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
     }
-    if (view.canWrite && view.anyUnsettled) {
+    if (view.settleFirst) {
         Text(stringResource(R.string.people_settle_first), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
     }
     if (view.canWrite) {

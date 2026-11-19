@@ -17,7 +17,8 @@ import me.raddatz.veyq.mobile.words.Notices
  * name or as a member, renamed, (de)activated, and erased only once asked. Each change is one write of the open Pot
  * ([PotModel], saving shown on its state) whose refusal this model says ([State.notice]); the typed text arrives with the
  * call, so no draft lives here. What may be done to whom is [PotView]'s (`PersonEntry`); a call it does not allow sends
- * nothing. Every action answers whether it was stored, so a host clears its field on the answer.
+ * nothing. Every action answers whether it was stored, so a host clears its field on the answer. Over a link's guest's Pot
+ * it is the web's guest Settings: people added by name and renamed, nothing else (`PotView.managesPeople`, `metaShown`).
  *
  * Opened by [PotModel.settings].
  */
@@ -78,7 +79,7 @@ class PotSettings internal constructor(private val pot: PotModel, private val sc
     /** Member [userId] of the space added as a person, where they are one to add. */
     suspend fun addMember(userId: String): Boolean {
         val view = pot.view() ?: return false
-        if (!view.canWrite || view.addableMembers.none { it.userId == userId }) return false
+        if (!view.canWrite || !view.member || view.addableMembers.none { it.userId == userId }) return false
         return send(PotModel.Op.AddMember(userId))
     }
 

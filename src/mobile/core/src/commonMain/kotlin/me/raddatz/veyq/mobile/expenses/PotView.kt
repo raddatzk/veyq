@@ -28,13 +28,15 @@ class PotView(session: Source) {
         val canChangeSettings: Boolean = canWrite, val currencyFixed: Boolean = false,
         val held: List<HeldRevision> = emptyList(), val directory: Map<String, String> = emptyMap(),
         val ratesOffered: Boolean = false, val receipts: List<Receipts.Receipt> = emptyList(),
+        /** A member reads the Pot ([PotDoor.member]); false for a link's guest. */
+        val member: Boolean = true,
     )
 
     constructor(session: PotSession) : this(
         Source(
             session.name, session.meta, session.ledger, session.check, session.members, session.named, session.canWrite,
             session.canChangeSettings, session.currencyFixed, session.heldRevisions(), session.directory, session.ratesOffered,
-            session.receipts,
+            session.receipts, session.member,
         ),
     )
 
@@ -76,11 +78,29 @@ class PotView(session: Source) {
     /** The base currency is fixed once the Pot holds any money entry, live or deleted. */
     val currencyFixed: Boolean = session.currencyFixed
 
+    /** A member reads the Pot; false for a link's guest, whose Settings hold its people alone (the web's `potSettings`). */
+    val member: Boolean = session.member
+
+    /**
+     * The Settings place is offered (the web's `settingsTab`): to a member — and to a link's guest who writes (a named
+     * READ_WRITE one, who adds and renames people), never to a READ guest.
+     */
+    val settingsOffered: Boolean get() = member || canWrite
+
+    /** The base currency and the categories show in the Settings (the web's `potSettings`): a member's, never a guest's. */
+    val metaShown: Boolean get() = member
+
+    /**
+     * The people's standing is managed here — deactivated, activated, deleted, removed (the web's `managePeople`): by a
+     * member who writes. A guest adds and renames people alone.
+     */
+    val managesPeople: Boolean get() = canWrite && canChangeSettings && member
+
     /** The base currency is chosen here: by a member who may change the settings, while it is not fixed. */
     val currencyEditable: Boolean get() = canChangeSettings && !currencyFixed
 
     /** The categories section shows: to a member who may change them, or where the Pot has own ones to read. */
-    val categoriesShown: Boolean get() = canChangeSettings || ownCategories.isNotEmpty()
+    val categoriesShown: Boolean get() = metaShown && (canChangeSettings || ownCategories.isNotEmpty())
 
     /** A category may be added: by a member who may change the settings, below the format's cap. */
     val canAddCategory: Boolean get() = canChangeSettings && ownCategories.size < PotMeta.MAX_OWN
@@ -298,9 +318,9 @@ class PotView(session: Source) {
             PersonEntry(
                 p.id, shownName(p) ?: "", standing, p.active, balance,
                 renamable = canWrite && p.member == null,
-                // An unsettled person may be activated again, never deactivated.
-                canToggle = canWrite && (settled || !p.active),
-                canErase = canWrite && settled,
+                // An unsettled person may be activated again, never deactivated; a guest manages nobody's standing.
+                canToggle = managesPeople && (settled || !p.active),
+                canErase = managesPeople && settled,
                 named = p.id in named,
                 userId = listedMember(p),
             )
@@ -312,6 +332,9 @@ class PotView(session: Source) {
 
     /** Whether someone still has a balance, so deactivating or deleting them waits for the settle-up. */
     val anyUnsettled: Boolean = personEntries.any { !it.settled }
+
+    /** "Settle up first" is said under the people (the web's): where their standing is managed and someone is unsettled. */
+    val settleFirst: Boolean get() = managesPeople && anyUnsettled
 
     /** A member of the space who may be added: the space's current members not yet a participant (an erased participant
      *  names nobody any more), in the directory's order. */
@@ -483,6 +506,8 @@ class PotView(session: Source) {
         val people: List<ShownPerson>,
         val deletedPeople: Int,
         val missing: List<Piece>,
+        /** The Settings place is offered ([settingsOffered]): to a member, and to a link's guest who writes. */
+        val settingsOffered: Boolean = true,
     )
 
     /** What this view shows ([Shown]). */
@@ -498,6 +523,7 @@ class PotView(session: Source) {
         personEntries.map { ShownPerson(it, personFacts(it)) },
         deletedPeople,
         missing.map(::missingName),
+        settingsOffered,
     )
 
     /** A view on the wire: its [Shown], under the view's own name; there is no view to read back from it. */

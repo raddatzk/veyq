@@ -43,6 +43,7 @@ internal class GuestPotDoor(private val access: GuestAccess) : PotDoor {
     /** A READ_WRITE guest writes entries and people once it named itself (the web's `requestGuest` first). */
     override val writesEntries: Boolean get() = access.role == GuestAccess.READ_WRITE && access.session.value != null
     override val changesSettings: Boolean get() = false
+    override val member: Boolean get() = false
     override val tenantId: String get() = ""
     override val directory: Map<String, String> get() = emptyMap()
 

@@ -126,16 +126,6 @@ object AppleSharing {
     suspend fun save(create: BookmarkCreate): Boolean = withContext(Dispatchers.Default) { create.save() }
 
     /**
-     * A READ_WRITE guest's replace of [file]'s content with [source] (the job the guest's file door makes) in [queue]; the
-     * page reads the file anew once it settled. False where the file takes no replace now.
-     */
-    fun replace(queue: UploadQueue, file: FileModel, source: me.raddatz.veyq.mobile.blob.UploadSource): Boolean {
-        val job = file.replace(source) ?: return false
-        queue.enqueue(listOf(job), source.name, file.node.nodeId, onSettled = { file.reload() }, onFinished = null)
-        return true
-    }
-
-    /**
      * A guest's file saved at [path] (`FileModel.save` into core's [FileSink], which leaves nothing at [path] when it did not
      * finish), awaited to its end; null where there is nothing to save.
      */
