@@ -149,7 +149,7 @@ The web's `export.*` import keys ported to `words.json` (EN+DE, each `note` nami
   `crc_mismatch` case red; (b) `..` let through `isArchivePath` → the `unsafe_path` case red; (c) **no whole-file read**:
   a counting `UploadSource` asserts the screen and the open read only the tail and the directory — bitten by reading
   the source whole.
-- [ ] **4 core — the walk and the hooks** (I3) — `SubtreeImport`, `AppKinds.imports`, `DepotImport`, `PotImport`,
+- [x] **4 core — the walk and the hooks** (I3) — `SubtreeImport`, `AppKinds.imports`, `DepotImport`, `PotImport`,
   `MemoryImport`. Tests: `web-download.zip` imported into a fake tenant, every kind made with the importer's keys; name
   freeing; a payload's SHA-256 mismatch rolls back every top-level node; *Import the rest*; quota refused before any
   write. Live (throwaway): the web's archive imported and opened. **Bites:** (a) the rollback removed → the mismatch test
