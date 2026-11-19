@@ -135,10 +135,18 @@ internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
     MemoryGallery(gallery, model)
 }
 
-/** [gallery]'s page as [MemoryScreen] draws it (a debug build's `DevMemory` draws it over a played gallery). */
+/**
+ * [gallery]'s page as [MemoryScreen] draws it (a debug build's `DevMemory` draws it over a played gallery). A link's guest
+ * ([guest], ADR 0150 decision 5) sees the member's page with a guest's rights: its chapters open inside the link
+ * ([onChapter]), it adds once it named itself ([canAdd]), and what is the account's — the map's tracks, the music player,
+ * the pick mode of a share from another app — is not offered.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
+internal fun MemoryGallery(
+    gallery: GalleryModel, model: AppModel, guest: Boolean = false, canAdd: Boolean = true,
+    onChapter: ((me.raddatz.veyq.mobile.navigation.NodeRef) -> Unit)? = null,
+) {
     val palette = LocalPalette.current
     val state by gallery.state.collectAsStateWithLifecycle()
     // the lightbox is the gallery's (core's, held by the app model): an activity a rotation recreated shows it again (#934)
@@ -175,7 +183,7 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
         }
     }
     // in the pick mode the banner offers Add here on this page (ADR 0138 decision 3)
-    androidx.compose.runtime.DisposableEffect(gallery) {
+    if (!guest) androidx.compose.runtime.DisposableEffect(gallery) {
         model.shareTarget(gallery, true)
         onDispose { model.shareTarget(gallery, false) }
     }
@@ -185,11 +193,11 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     val snackbar = remember { SnackbarHostState() }
     // photos or music (ADR 0142 decision 6): the switch shows where the node has music or whoever looks may add some
     var view by androidx.compose.runtime.saveable.rememberSaveable(gallery) { mutableStateOf(MemoryView.PHOTOS) }
-    val musicOffered = me.raddatz.veyq.mobile.memories.music.MusicModel.shown(state)
+    val musicOffered = !guest && me.raddatz.veyq.mobile.memories.music.MusicModel.shown(state)
     // Photos | Music | Map: Map always, as the web's tab is (ADR 0143 D8)
     // Photos | Music | Map | Contributions: the contributions where core offers them to whoever looks (ADR 0149 decision 6)
     val contributionsOffered = state.rights.buckets && me.raddatz.veyq.mobile.memories.Contributions.OFFERED
-    val viewSwitch: @Composable () -> Unit = { MemoryViewSwitch(view, musicOffered, contributionsOffered) { view = it } }
+    val viewSwitch: @Composable () -> Unit = { MemoryViewSwitch(view, musicOffered, contributionsOffered, map = !guest) { view = it } }
     val music = if (musicOffered && view == MemoryView.MUSIC) remember(gallery) { model.musicModel(gallery) } else null
     val tracks = if (view == MemoryView.MAP) remember(gallery) { model.trackList(gallery) } else null
     val contributions = if (contributionsOffered && view == MemoryView.CONTRIBUTIONS) remember(gallery) { model.contributions(gallery) } else null
@@ -199,15 +207,16 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     val dropped = Modifier.sharedFilesDrop { incoming ->
         model.dropOnto(gallery, incoming)?.let { n -> dropScope.launch { snackbar.showSnackbar(dropContext.text(n)) } }
     }
-    Box(Modifier.fillMaxSize().then(if (state.rights.upload) dropped else Modifier)) {
+    val adds = state.rights.upload && canAdd
+    Box(Modifier.fillMaxSize().then(if (adds && !guest) dropped else Modifier)) {
     if (tracks != null) MemoryMapView(gallery, tracks, model, snackbar, viewSwitch) else
     if (music != null) MusicView(gallery, music, model, snackbar, viewSwitch) else
     if (contributions != null) ContributionsView(gallery, contributions, model, snackbar, viewSwitch) { id -> contributions.lightbox(id)?.let { open = it } } else
     CreateAction(
-        stringResource(if (state.rights.upload) R.string.memory_add else R.string.memory_add_chapter),
-        shown = state.rights.upload || chapterHere,
-        onClick = { if (state.rights.upload) add() else namingChapter = true },
-        menu = if (state.rights.upload && chapterHere) { close ->
+        stringResource(if (adds) R.string.memory_add else R.string.memory_add_chapter),
+        shown = adds || chapterHere,
+        onClick = { if (adds) add() else namingChapter = true },
+        menu = if (adds && chapterHere) { close ->
             androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.memory_add)) }, onClick = { close(); add() })
             androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.memory_add_chapter)) }, onClick = { close(); namingChapter = true })
         } else null,
@@ -246,7 +255,7 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
                     headlineContent = { Text(c.name) },
                     leadingContent = { ChapterCover(gallery, c) },
                     colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
-                    modifier = Modifier.clickableRow { GalleryModel.rowPage(c)?.let(model::open) },
+                    modifier = Modifier.clickableRow { if (onChapter != null) onChapter(c) else GalleryModel.rowPage(c)?.let(model::open) },
                 )
             }
         }

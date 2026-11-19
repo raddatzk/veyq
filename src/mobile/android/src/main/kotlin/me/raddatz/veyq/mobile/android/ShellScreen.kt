@@ -198,6 +198,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
             onAddServer = { closeDrawerThen { model.openManage() } },
             onNew = { kind -> closeDrawerThen { model.requestNew(kind) } },
             onSettings = { closeDrawerThen { model.openSettings() } },
+            onOpenLink = { closeDrawerThen { model.guests.ask() } },
             permanent = wide,
         )
     }
@@ -393,6 +394,7 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
     var naming by remember { mutableStateOf(false) }
     var creatingPot by remember { mutableStateOf(false) }
     var namingMemory by remember { mutableStateOf(false) }
+    var keepingLink by remember { mutableStateOf(false) }
     // what the drawer's "New" asked for
     val asked by model.newRequest.collectAsStateWithLifecycle()
     androidx.compose.runtime.LaunchedEffect(asked) {
@@ -400,6 +402,7 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
             "folder" -> naming = true
             "pot" -> creatingPot = true
             "memory" -> namingMemory = true
+            "bookmark" -> keepingLink = true
         }
         if (asked != null) model.newRequestTaken()
     }
@@ -418,7 +421,7 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
     // `AppKinds.createsWhere`: a Memory's placement allows every level New makes into).
     // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
     CreateAction(stringResource(R.string.create_new), shown = model.canCreateHere, onClick = {}, state = LocalListStates.current.of("home:${s.shell.space}/${s.shell.folder?.nodeId}"), menu = { close ->
-        me.raddatz.veyq.mobile.AppKinds.createsWhere(isHome = true).forEach { c ->
+        me.raddatz.veyq.mobile.AppKinds.createsWhere(isHome = true, bookmarks = true).forEach { c ->
             androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = {
                 close()
                 when (c) {
@@ -429,8 +432,8 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                     me.raddatz.veyq.mobile.AppKinds.Create.MEMORY -> namingMemory = true
                     // a Memory's page's own New, never a level's (`createsWhere` holds none)
                     me.raddatz.veyq.mobile.AppKinds.Create.CHAPTER -> {}
-                    // the bookmark's dialog is drawn by cr-app-received-links phase 7 (`createsWhere` offers it then)
-                    me.raddatz.veyq.mobile.AppKinds.Create.BOOKMARK -> {}
+                    // a link kept here (ADR 0150 decision 6): the web's bookmark dialog
+                    me.raddatz.veyq.mobile.AppKinds.Create.BOOKMARK -> keepingLink = true
                 }
             })
         }
@@ -503,6 +506,11 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
     val space = s.shell.space
     if (namingMemory && space != null) MemoryNameDialog(space, model, onClose = { namingMemory = false }) { name, wasThere, autoPlace ->
         model.createMemory(space, s.shell.folder?.nodeId, name, wasThere, autoPlace)
+    }
+    if (keepingLink && space != null) {
+        val create = remember(space, s.shell.folder?.nodeId) { model.bookmarkCreate(space, s.shell.folder?.nodeId) }
+        if (create == null) keepingLink = false
+        else BookmarkCreateDialog(create, onClose = { keepingLink = false }, onMade = model::bookmarkMade)
     }
 }
 
@@ -675,6 +683,8 @@ private fun Drawer(
     onNew: (String) -> Unit,
     /** The drawer's Settings: the account's page (`uc.account.sessions`). */
     onSettings: () -> Unit,
+    /** *Open a link* (ADR 0150 decision 4): a received link opened as its guest, above the shell. */
+    onOpenLink: () -> Unit = {},
     /** Open for good beside the content (an expanded window), not over it. */
     permanent: Boolean = false,
 ) {
@@ -705,13 +715,14 @@ private fun Drawer(
                         Text(stringResource(R.string.drawer_new))
                     }
                     androidx.compose.material3.DropdownMenu(newMenu, { newMenu = false }) {
-                        me.raddatz.veyq.mobile.AppKinds.createsWhere(isHome = false).forEach { c ->
+                        me.raddatz.veyq.mobile.AppKinds.createsWhere(isHome = false, bookmarks = true).forEach { c ->
                             androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = {
                                 newMenu = false
                                 onNew(
                                     when (c) {
                                         me.raddatz.veyq.mobile.AppKinds.Create.POT -> "pot"
                                         me.raddatz.veyq.mobile.AppKinds.Create.MEMORY -> "memory"
+                                        me.raddatz.veyq.mobile.AppKinds.Create.BOOKMARK -> "bookmark"
                                         else -> "folder"
                                     },
                                 )
@@ -733,6 +744,8 @@ private fun Drawer(
             }
             Column(Modifier.padding(horizontal = 14.dp)) {
                 HorizontalDivider(Modifier.padding(bottom = 8.dp), color = role(palette.line))
+                // the account menu's *Open a link* (owner 2026-11-19: the drawer's foot on the phones)
+                Row(app = Icons.Outlined.Link, label = stringResource(R.string.link_open), selected = false, onClick = onOpenLink)
                 Row(app = Icons.Outlined.Settings, label = stringResource(R.string.drawer_settings), selected = false, onClick = onSettings)
                 Spacer(Modifier.height(12.dp))
             }

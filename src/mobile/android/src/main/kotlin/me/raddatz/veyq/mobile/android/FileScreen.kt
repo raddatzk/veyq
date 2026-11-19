@@ -63,13 +63,19 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
  */
 @Composable
 internal fun FileScreen(ref: ObjectRef, model: AppModel) {
-    val palette = LocalPalette.current
     val node = ref.at
     val file = remember(node) { model.fileModel(node) }
     if (file == null) {
         CircularProgressIndicator(Modifier.padding(16.dp))
         return
     }
+    FilePage(file, ref.name)
+}
+
+/** [file]'s page as [FileScreen] draws it — a link's guest's too (ADR 0150 decision 5: the member's page, a guest's viewer). */
+@Composable
+internal fun FilePage(file: FileModel, name: String) {
+    val palette = LocalPalette.current
     val state by file.state.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // the facts (Depot's `detail`): size, the sealed type (a claim, shown as such), modified; who uploaded it
@@ -86,9 +92,9 @@ internal fun FileScreen(ref: ObjectRef, model: AppModel) {
                 FileModel.Shown.Failed -> Note(stringResource(R.string.file_open_failed))
                 FileModel.Shown.NotUploaded -> Note(stringResource(R.string.depot_not_uploaded))
                 is FileModel.Shown.Message -> Note(say(s.words))
-                is FileModel.Shown.Image -> ShownImage(s, ref.name)
+                is FileModel.Shown.Image -> ShownImage(s, name)
                 is FileModel.Shown.Text -> ShownText(s)
-                is FileModel.Shown.Pdf -> ShownPdf(s, ref.name)
+                is FileModel.Shown.Pdf -> ShownPdf(s, name)
                 is FileModel.Shown.Media -> ReaderPlayer(s.reader, s, 16f / 9f, Modifier.fillMaxWidth().heightIn(min = 240.dp)) {
                     Note(say(FileView.message(FileView.Kind.UNSUPPORTED)))
                 }

@@ -41,6 +41,10 @@ class ShellWordsTest {
         assertEquals(AppKinds.homeCreates + AppKinds.Create.MEMORY, AppKinds.createsWhere(isHome = true))
         assertEquals(AppKinds.drawerCreates + AppKinds.Create.MEMORY, AppKinds.createsWhere(isHome = false))
         assertTrue(AppKinds.Create.CHAPTER !in AppKinds.createsWhere(true) + AppKinds.createsWhere(false))
+        // a kept link only where the platform draws its dialog (#1020), last, on every level
+        assertTrue(AppKinds.Create.BOOKMARK !in AppKinds.createsWhere(true) + AppKinds.createsWhere(false))
+        assertEquals(AppKinds.Create.BOOKMARK, AppKinds.createsWhere(isHome = true, bookmarks = true).last())
+        assertEquals(AppKinds.Create.BOOKMARK, AppKinds.createsWhere(isHome = false, bookmarks = true).last())
         assertEquals(me.raddatz.veyq.mobile.memories.MemoryCreate.offered(null), listOf(AppKinds.Create.MEMORY.name))
         assertEquals(me.raddatz.veyq.mobile.memories.MemoryCreate.offered("MEMORY"), listOf(AppKinds.Create.CHAPTER.name))
         assertSame(me.raddatz.veyq.mobile.expenses.PotShare.answer, AppKinds.share("EXPENSES_POT"))
@@ -57,7 +61,12 @@ class ShellWordsTest {
         assertTrue(AppKinds.header("MEMORY")!!.shareable)
         assertTrue(AppKinds.header("CHAPTER")!!.shareable)
         assertEquals(Msg.MEMORY_DELETE_CHAPTER, AppKinds.header("CHAPTER")!!.deleteTitle)
-        kotlin.test.assertNull(AppKinds.header("SHARE_BOOKMARK"))
+        // a kept link: never shared on, no cover, its delete in its own words (never a folder's)
+        val bookmark = AppKinds.header("SHARE_BOOKMARK")!!
+        assertFalse(bookmark.shareable)
+        assertFalse(bookmark.takesCover)
+        assertEquals(Msg.BOOKMARK_DELETE, bookmark.deleteTitle)
+        assertEquals(Notice(Msg.BOOKMARK_DELETE_CONFIRM, "Link"), bookmark.deleteQuestion("Link"))
         // each loss said once, the kinds in one order on both platforms
         assertEquals(
             listOf(Msg.COPY_LOSS_DROPBOX, Msg.COPY_LOSS_POT, Msg.COPY_LOSS_COVER, Msg.COPY_LOSS_FOLDER_COVER),
