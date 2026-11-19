@@ -27,6 +27,7 @@ import SecretKeyField from '../shared/ui/SecretKeyField.vue'
 import { HttpStatus, isHttpStatus } from '../shared/httpError'
 import { KdfProfileRefused } from '@veyq/crypto/v1'
 import type { RecoveryMaterial } from '../api/generated/auth'
+import { afterTheStep } from '../core/openInApp/openInApp'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -42,6 +43,8 @@ const busy = ref(false)
 const error = ref('')
 const sent = ref(false)
 const done = ref(false)
+// The *Open in the app* banner appears once this page's step is done (ADR 0150 § O2), never before.
+afterTheStep(done)
 const material = ref<RecoveryMaterial | null>(null)
 const opened = ref<OpenedRecovery | null>(null)
 

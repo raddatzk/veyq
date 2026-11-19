@@ -39,6 +39,7 @@ const Page = { template: '<div class="page" />' }
 const BANNER = '[data-testid="unconfirmed-email-banner"]'
 const DONATION = '[data-testid="donation-banner"]'
 const FINISH = '[data-testid="finish-profile"]'
+const OPEN_IN_APP = '[data-testid="open-in-app"]'
 const mounted: { unmount: () => void }[] = []
 
 async function mountAt(path: string) {
@@ -97,6 +98,7 @@ describe('AppShell — the other notices wait while the address is unconfirmed',
     expect(w.find(BANNER).exists()).toBe(true)
     expect(w.find(DONATION).exists()).toBe(false)
     expect(w.find(FINISH).exists()).toBe(false)
+    expect(w.find(OPEN_IN_APP).exists()).toBe(false)
   })
 
   it('a confirmed address shows both, and no banner (the positive control)', async () => {
@@ -105,6 +107,7 @@ describe('AppShell — the other notices wait while the address is unconfirmed',
     expect(w.find(BANNER).exists()).toBe(false)
     expect(w.findAll(DONATION)).toHaveLength(1)
     expect(w.findAll(FINISH)).toHaveLength(1)
+    expect(w.findAll(OPEN_IN_APP)).toHaveLength(1)
   })
 
   it('an address that cannot be read holds nothing back, as the banner shows nothing', async () => {
