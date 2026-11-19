@@ -6,7 +6,11 @@
 //
 // Every step where a password or the Secret Key is typed is a PasswordBox kept by ScreenSecrets.Guard (its peek shows the
 // secret in clear: the window is out of capture while the page shows one, § Secrets on screen). The typed secrets cross
-// once, inward, and each box is emptied once sent. A kit is never on screen: it is saved through FileSavePicker, the core
+// inward only, and each box is emptied once the core took it — the password change's and the rotation gate's boxes stay
+// until then (a breached new password stops the submit until *Use it anyway*, and the web keeps the form as typed), the
+// address change's are emptied once sent. Each Secret Key is the sign-in's control (FlowKeyControl, ADR 0151 decision 4:
+// typed or pasted, a kit file through FileOpenPicker, a scan where there is a camera) and each new password is checked
+// against known breaches (NewPasswordField, decision 5). A kit is never on screen: it is saved through FileSavePicker, the core
 // writing the PDF straight into the file chosen (Kit.Save by path, KitSection). The danger step is its own ContentDialog
 // whose primary is accent-free and whose default is Cancel (Dialogs.Confirm), as Windows asks before an action that
 // cannot be undone. Linux draws the same over the same bridge.
@@ -179,16 +183,16 @@ internal abstract class FlowPage : IDisposable
     /// <summary>The flow's model closed in the core and its watches ended.</summary>
     protected abstract void Close();
 
-    protected static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
+    internal static Brush Brush(string key) => (Brush)Application.Current.Resources[key];
 
-    protected static TextBlock Text(string text, string? id = null)
+    internal static TextBlock Text(string text, string? id = null)
     {
         var t = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap };
         if (id is not null) AutomationProperties.SetAutomationId(t, id);
         return t;
     }
 
-    protected static TextBlock Caption(string text, string? id = null)
+    internal static TextBlock Caption(string text, string? id = null)
     {
         var t = Text(text, id);
         t.Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"];
@@ -214,7 +218,7 @@ internal abstract class FlowPage : IDisposable
     }
 
     /// <summary>A secret's box: masked, kept out of capture while it is loaded (its peek shows it in clear).</summary>
-    protected static PasswordBox Secret(string header, string id)
+    internal static PasswordBox Secret(string header, string id)
     {
         var box = ScreenSecrets.Guard(new PasswordBox { Header = header, MaxWidth = 420, HorizontalAlignment = HorizontalAlignment.Left });
         AutomationProperties.SetAutomationId(box, id);
@@ -452,6 +456,297 @@ internal static class FlowText
         AutomationProperties.SetLiveSetting(t, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Assertive);
         return t;
     }
+
+    /// <summary>A notice under a field, hidden until said: the caption's size, read out as it changes.</summary>
+    public static TextBlock Notice(string id)
+    {
+        var t = FlowPage.Caption("", id);
+        t.Visibility = Visibility.Collapsed;
+        AutomationProperties.SetLiveSetting(t, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
+        return t;
+    }
+
+    /// <summary>Shows <paramref name="t"/> with <paramref name="text"/> in <paramref name="brush"/>, or hides it for none.</summary>
+    public static void Say(TextBlock t, string? text, string brush = "TextFillColorSecondaryBrush")
+    {
+        t.Text = text ?? "";
+        t.Foreground = (Brush)Application.Current.Resources[brush];
+        t.Visibility = text is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+}
+
+// ---- The Secret Key's control (ADR 0151 decision 4): the sign-in's, in each flow that asks for the key ----
+
+/// <summary>A flow's Secret Key as the sign-in takes it: typed or pasted into its box (a <c>veyqkit:</c> token too: the
+/// core reads it first), or an Emergency Kit read from a file FileOpenPicker picked (Kit.Read, the core reading the path
+/// and asking KitDrawing for its pages) or scanned where there is a camera (Scan.Open of kind FLOW_KIT, the flow its link).
+/// A kit's key stays in the flow's intake in the core: this side draws only what the flow's update says it holds — "From
+/// your Emergency Kit" with *Enter it instead* (Kit.Clear), a kit of another account's warning (it never blocks: only the
+/// wrap can judge a key), a kit of another server's note — and sends the field empty while a kit is held. Linux's
+/// KeyControl draws the same.</summary>
+internal sealed class FlowKeyControl
+{
+    private readonly Window _window;
+    private readonly Func<long?> _flow;
+    private readonly string _prefix;
+    private readonly StackPanel _panel = new() { Spacing = 8 };
+    private readonly StackPanel _held = new() { Spacing = 4, Visibility = Visibility.Collapsed };
+    private readonly Button _open;
+    private readonly Button _scan;
+    private readonly ContentControl _problem = new();
+    private readonly TextBlock _otherAccount;
+    private readonly TextBlock _otherServer;
+    private HeldKit? _shown;
+
+    /// <summary>The typed field (shown while no kit is held).</summary>
+    public PasswordBox Box { get; }
+
+    /// <summary>Heard when <see cref="Ready"/> may have changed.</summary>
+    public Action? Changed { get; set; }
+
+    public UIElement View => _panel;
+
+    /// <summary>Whether the flow has a Secret Key to send: a kit's held, or one typed.</summary>
+    public bool Ready => _shown is not null || Box.Password.Length > 0;
+
+    /// <param name="flow">the flow's id once it opened</param>
+    /// <param name="header">the field's words (the flow's)</param>
+    /// <param name="id">the field's automation id</param>
+    /// <param name="prefix">the controls' automation ids' (<c>password</c> → <c>password-kit-open</c>)</param>
+    public FlowKeyControl(Window window, Func<long?> flow, string header, string id, string prefix)
+    {
+        _window = window;
+        _flow = flow;
+        _prefix = prefix;
+        Box = FlowPage.Secret(header, id);
+        Box.PasswordChanged += (_, _) => Changed?.Invoke();
+        var clear = new HyperlinkButton { Content = Words.SigninKitClear(), Padding = new Thickness(0) };
+        AutomationProperties.SetAutomationId(clear, $"{prefix}-kit-clear");
+        clear.Click += (_, _) =>
+        {
+            if (_flow() is { } f) Act.Send(new Call.KitClear { flow = f });
+        };
+        AutomationProperties.SetAutomationId(_held, $"{prefix}-kit-held");
+        _held.Children.Add(new TextBlock { Text = header });
+        var heldText = FlowPage.Text(Words.SigninKitHeld(), $"{prefix}-kit-held-text");
+        heldText.Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"];
+        _held.Children.Add(heldText);
+        _held.Children.Add(clear);
+        // the file first on a desktop, as the sign-in; the scan only where there is a camera
+        _open = new Button { Content = Words.SigninKitOpen() };
+        AutomationProperties.SetAutomationId(_open, $"{prefix}-kit-open");
+        _open.Click += (_, _) => Pick();
+        _scan = new Button { Content = Words.SigninKitScan(), Visibility = Visibility.Collapsed };
+        AutomationProperties.SetAutomationId(_scan, $"{prefix}-kit-scan");
+        _scan.Click += (_, _) => Scan();
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        buttons.Children.Add(_open);
+        buttons.Children.Add(_scan);
+        AutomationProperties.SetAutomationId(_problem, $"{prefix}-kit-problem");
+        _otherAccount = FlowText.Notice($"{prefix}-kit-other-account");
+        _otherServer = FlowText.Notice($"{prefix}-kit-other-server");
+        foreach (var c in new UIElement[] { Box, _held, buttons, _problem, _otherAccount, _otherServer }) _panel.Children.Add(c);
+        OfferScan();
+    }
+
+    /// <summary>The Secret Key as the field holds it, the box kept (the flow may stop for a breached password and go on):
+    /// empty while a kit's key is held, so the core takes the intake's.</summary>
+    public string Typed() => _shown is null ? Box.Password : "";
+
+    /// <summary>As <see cref="Typed"/>, the box emptied: a typed secret is sent and not kept.</summary>
+    public string Take()
+    {
+        var typed = Typed();
+        Box.Password = "";
+        return typed;
+    }
+
+    /// <summary>Draws the intake's <paramref name="state"/> (none: nothing held).</summary>
+    public void Draw(IntakeState? state)
+    {
+        var kit = state?.kit;
+        var newKit = kit is not null && !Equals(_shown, kit);
+        _shown = kit;
+        if (newKit) Box.Password = "";
+        Box.Visibility = kit is null ? Visibility.Visible : Visibility.Collapsed;
+        _held.Visibility = kit is null ? Visibility.Collapsed : Visibility.Visible;
+        var reading = state?.reading == true;
+        Box.IsEnabled = !reading;
+        _open.IsEnabled = !reading;
+        _scan.IsEnabled = !reading;
+        _problem.Content = state?.problem is { } p ? FlowText.Critical(Said.Key(p), $"{_prefix}-kit-problem-text") : null;
+        FlowText.Say(_otherAccount, kit is { otherAccount: { } expected } ? Words.KitEmailMismatch(kit.email, expected) : null, "SystemFillColorCautionBrush");
+        FlowText.Say(_otherServer, kit is { otherServer: { } before } ? Words.SigninKitOtherServer(kit.server ?? "", before) : null);
+        Changed?.Invoke();
+    }
+
+    /// <summary>The scan's entry only where there is a camera (no camera, no entry).</summary>
+    private async void OfferScan()
+    {
+        try
+        {
+            var present = await QrCamera.PresentAsync();
+            Log.Write(present ? "a flow's kit scan offered" : "a flow's kit scan not offered: no camera");
+            _scan.Visibility = present ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch (Exception e)
+        {
+            Log.Write($"the camera's check failed: {e.GetType().Name}");
+        }
+    }
+
+    /// <summary>"Open Emergency Kit": the open picker for a PDF or a picture; the core reads the file at the path picked
+    /// into the flow's intake.</summary>
+    private async void Pick()
+    {
+        try
+        {
+            if (_flow() is not { } flow) return;
+            var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.DocumentsLibrary };
+            foreach (var ext in SignInView.KitFileTypes) picker.FileTypeFilter.Add(ext);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
+            var file = await picker.PickSingleFileAsync();
+            if (file is null || string.IsNullOrEmpty(file.Path)) return;
+            var (answer, _) = await Core.CallAsync(new Call.KitRead { flow = flow, path = file.Path });
+            // the outcome alone: never the path or anything of the kit
+            Log.Write($"a flow's kit picked: {(answer is Answer.Refused r ? $"Refused {r.why}" : answer.GetType().Name)}");
+        }
+        catch (Exception e)
+        {
+            Log.Write($"a flow's kit pick failed: {e.GetType().Name}");
+        }
+    }
+
+    /// <summary>"Scan Emergency Kit": the camera in a dialog over a scan of kind FLOW_KIT; the kit it finds goes to the
+    /// flow's intake in the core, and the dialog closes on it.</summary>
+    private async void Scan()
+    {
+        try
+        {
+            if (_flow() is not { } flow) return;
+            var dialog = new ContentDialog { Title = Words.SigninKitScan(), CloseButtonText = Words.SigninCancel() };
+            AutomationProperties.SetAutomationId(dialog, "flow-kit-scan");
+            var found = false;
+            var camera = QrCamera.OpenFlowKit(flow, SignInView.ScanSaid, shown =>
+            {
+                Log.Write($"a flow's kit scan {shown.state}");
+                if (shown.state == ScanState.Found && !found)
+                {
+                    found = true;
+                    dialog.Hide();
+                }
+            });
+            camera.View.Width = 480;
+            camera.View.Height = 360;
+            // the camera's picture is the kit: out of capture while it shows, as the sign-in's
+            var body = ScreenSecrets.Guard(new StackPanel { Spacing = 12 });
+            body.Children.Add(camera.View);
+            body.Children.Add(new TextBlock { Text = Words.SigninKitScanHint(), TextWrapping = TextWrapping.Wrap, HorizontalAlignment = HorizontalAlignment.Center });
+            dialog.Content = body;
+            try
+            {
+                await Dialogs.Show(_window, dialog);
+            }
+            finally
+            {
+                // the scan and its camera end with the dialog, however it closes
+                camera.Dispose();
+            }
+        }
+        catch (Exception e)
+        {
+            Log.Write($"a flow's kit scan failed: {e.GetType().Name}");
+        }
+    }
+}
+
+// ---- The new password's breached-password check (ADR 0151 decision 5): the web's ----
+
+/// <summary>The new password's box with the web's breached-password check: checked when the box is left (*.Check),
+/// never while typing; each edit drops the verdict (*.Edited, no text); a hit says so under the box with its count and
+/// *Use it anyway* (*.UseAnyway); a check that could not run says that and stops nothing. No range service configured:
+/// the core sends no state, and nothing is drawn. Linux's NewPassword draws the same.</summary>
+internal sealed class NewPasswordField
+{
+    private readonly Func<long?> _flow;
+    private readonly StackPanel _panel = new() { Spacing = 4 };
+    private readonly TextBlock _notice;
+    private readonly CheckBox _anyway = new() { Content = Words.PasswordPwnedAnyway(), Visibility = Visibility.Collapsed };
+    private bool _drawing;
+    /// <summary>Set while this side empties the box: the edit that makes is no person's, and sends no Edited.</summary>
+    private bool _forgetting;
+
+    public PasswordBox Box { get; }
+
+    public UIElement View => _panel;
+
+    public NewPasswordField(Func<long?> flow, string id, Func<long, string, Call> check, Func<long, Call> edited, Func<long, bool, Call> anyway)
+    {
+        _flow = flow;
+        Box = FlowPage.Secret(Words.PasswordChangeNew(), id);
+        _notice = FlowText.Notice($"{id}-breach");
+        AutomationProperties.SetAutomationId(_anyway, $"{id}-anyway");
+        Box.PasswordChanged += (_, _) =>
+        {
+            if (_forgetting)
+            {
+                if (Box.Password.Length == 0) return;
+                _forgetting = false;
+            }
+            if (_flow() is { } f) Act.Send(edited(f));
+        };
+        // the check when the box is left, never while typing (the web's blur)
+        Box.LostFocus += (_, _) =>
+        {
+            var typed = Box.Password;
+            if (typed.Length > 0 && _flow() is { } f) Act.Send(check(f, typed));
+        };
+        _anyway.Checked += (_, _) => UseAnyway(anyway, true);
+        _anyway.Unchecked += (_, _) => UseAnyway(anyway, false);
+        _panel.Children.Add(Box);
+        _panel.Children.Add(_notice);
+        _panel.Children.Add(_anyway);
+    }
+
+    private void UseAnyway(Func<long, bool, Call> anyway, bool on)
+    {
+        if (_drawing || _flow() is not { } f) return;
+        Act.Send(anyway(f, on));
+    }
+
+    /// <summary>Draws the check's <paramref name="state"/> (none: no check).</summary>
+    public void Draw(BreachState? state)
+    {
+        var kind = state?.kind ?? BreachKind.Idle;
+        var count = state?.count ?? 0;
+        switch (kind)
+        {
+            case BreachKind.Hit:
+                FlowText.Say(_notice, Words.PasswordPwnedWarning(count), "SystemFillColorCautionBrush");
+                break;
+            case BreachKind.Accepted:
+                FlowText.Say(_notice, Words.PasswordPwnedWarning(count), "TextFillColorPrimaryBrush");
+                break;
+            case BreachKind.Unavailable:
+                FlowText.Say(_notice, Words.PasswordPwnedUnavailable());
+                break;
+            default:
+                FlowText.Say(_notice, null);
+                break;
+        }
+        _anyway.Visibility = kind is BreachKind.Hit or BreachKind.Accepted ? Visibility.Visible : Visibility.Collapsed;
+        _drawing = true;
+        _anyway.IsChecked = kind == BreachKind.Accepted;
+        _drawing = false;
+    }
+
+    /// <summary>The box emptied once the core took the password, sending nothing.</summary>
+    public void Forget()
+    {
+        if (Box.Password.Length == 0) return;
+        _forgetting = true;
+        Box.Password = "";
+    }
 }
 
 // ---- Change password (D6) ----
@@ -459,19 +754,32 @@ internal static class FlowText
 internal sealed class PasswordChangePage : FlowPage
 {
     private readonly PasswordBox _current = Secret(Words.PasswordChangeCurrent(), "password-current");
-    private readonly PasswordBox _next = Secret(Words.PasswordChangeNew(), "password-new");
+    private readonly NewPasswordField _next;
     private readonly PasswordBox _confirm = Secret(Words.PasswordChangeConfirm(), "password-confirm");
-    private readonly PasswordBox _key = Secret(Words.PasswordChangeSecretKey(), "password-secret-key");
+    private readonly FlowKeyControl _key;
     private readonly Button _run = Accent(Words.PasswordChangeSubmit(), "password-submit");
+    /// <summary>The form, built once and drawn in place: an update (a check's verdict, a kit read) never takes the focus
+    /// out of the box being typed in.</summary>
+    private readonly StackPanel _form = new() { Spacing = 12 };
+    private readonly ProgressRing _ring = Ring();
+    private readonly ContentControl _refusal = new();
     private long? _id;
     private Watch? _watch;
     private PasswordChangeState? _state;
 
     public PasswordChangePage(Window window, string connection, Action back) : base(window, connection, back, AccountFlow.Password)
     {
-        foreach (var box in new[] { _current, _next, _confirm, _key }) box.PasswordChanged += (_, _) => Enable();
+        _next = new NewPasswordField(() => _id, "password-new", (flow, typed) => new Call.PasswordChangeCheck { flow = flow, newPassword = typed },
+            flow => new Call.PasswordChangeEdited { flow = flow }, (flow, on) => new Call.PasswordChangeUseAnyway { flow = flow, on = on });
+        _key = new FlowKeyControl(window, () => _id, Words.PasswordChangeSecretKey(), "password-secret-key", "password") { Changed = Enable };
+        foreach (var box in new[] { _current, _next.Box, _confirm }) box.PasswordChanged += (_, _) => Enable();
         _run.Click += (_, _) => Run();
-        Draw(null);
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 };
+        row.Children.Add(_run);
+        row.Children.Add(_ring);
+        foreach (var c in new UIElement[] { Caption(Words.PasswordChangeSub()), _current, _next.View, _confirm, _key.View, Caption(Words.PasswordChangeSecretKeyHint()), row, _refusal })
+            _form.Children.Add(c);
+        Draw(null, null, null);
         Start();
     }
 
@@ -487,21 +795,26 @@ internal sealed class PasswordChangePage : FlowPage
         _id = flow;
         _watch = Core.Watch(new Watched.PasswordChange { flow = flow }, update =>
         {
-            if (Closed || update is not Update.PasswordChange { shown: var s }) return;
-            Guarded("the password change", () => Draw(s));
+            if (Closed || update is not Update.PasswordChange { shown: var s } u) return;
+            Guarded("the password change", () => Draw(s, u.kit, u.breach));
         }, e => Log.Write($"a password change update: {e.Message}"));
     }
 
-    private void Enable() => _run.IsEnabled = _state is not { working: true } && _current.Password.Length > 0 && _next.Password.Length > 0
-        && _confirm.Password.Length > 0 && _key.Password.Length > 0;
+    private void Enable() => _run.IsEnabled = _state is not { working: true } && _current.Password.Length > 0 && _next.Box.Password.Length > 0
+        && _confirm.Password.Length > 0 && _key.Ready;
 
-    private void Draw(PasswordChangeState? s)
+    private void Draw(PasswordChangeState? s, IntakeState? kit, BreachState? breach)
     {
         _state = s;
-        ClearBody();
+        Log.Write($"password change: working {s?.working}, done {s?.done}, refusal {s?.refusal ?? "none"}, kit held {kit?.kit is not null}, breach {breach?.kind}");
         if (s is { done: true })
         {
-            foreach (var box in new[] { _current, _next, _confirm, _key }) box.Password = "";
+            ClearBody();
+            // the core took them: the boxes emptied
+            _current.Password = "";
+            _confirm.Password = "";
+            _next.Forget();
+            _key.Take();
             var done = new StackPanel { Spacing = 6 };
             done.Children.Add(Text(Words.PasswordChangeDone(), "password-done"));
             done.Children.Add(Caption(Words.PasswordChangeDoneNote()));
@@ -511,29 +824,27 @@ internal sealed class PasswordChangePage : FlowPage
             Body.Children.Add(close);
             return;
         }
-        Body.Children.Add(Caption(Words.PasswordChangeSub()));
-        Body.Children.Add(_current);
-        Body.Children.Add(_next);
-        Body.Children.Add(_confirm);
-        Body.Children.Add(_key);
-        Body.Children.Add(Caption(Words.PasswordChangeSecretKeyHint()));
-        var row = Held(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 });
-        row.Children.Add(_run);
-        if (s is { working: true }) row.Children.Add(Ring());
-        Body.Children.Add(row);
-        if (Refusal(s?.refusal) is { } refused) Body.Children.Add(refused);
+        if (!Body.Children.Contains(_form))
+        {
+            ClearBody();
+            Body.Children.Add(_form);
+        }
+        _key.Draw(kit);
+        _next.Draw(breach);
+        _ring.Visibility = s is { working: true } ? Visibility.Visible : Visibility.Collapsed;
+        _refusal.Content = Refusal(s?.refusal);
         Enable();
     }
 
+    /// <summary>The form as typed: the boxes stay until the core took them (a breached new password stops here until
+    /// *Use it anyway*, as the web keeps its form).</summary>
     private async void Run()
     {
         if (_id is not { } flow) return;
         var call = new Call.PasswordChangeRun
         {
-            flow = flow, currentPassword = _current.Password, newPassword = _next.Password, confirmPassword = _confirm.Password, secretKey = _key.Password,
+            flow = flow, currentPassword = _current.Password, newPassword = _next.Box.Password, confirmPassword = _confirm.Password, secretKey = _key.Typed(),
         };
-        // the Secret Key crosses once; typed again after a refusal
-        _key.Password = "";
         _run.IsEnabled = false;
         await Ask("PasswordChange.Run", call);
     }
@@ -554,10 +865,11 @@ internal sealed class AddressChangePage : FlowPage
 {
     private readonly TextBox _email = new() { Header = Words.EmailChangeNewEmail(), MaxWidth = 420, HorizontalAlignment = HorizontalAlignment.Left, InputScope = new Microsoft.UI.Xaml.Input.InputScope { Names = { new Microsoft.UI.Xaml.Input.InputScopeName(Microsoft.UI.Xaml.Input.InputScopeNameValue.EmailSmtpAddress) } } };
     private readonly PasswordBox _password = Secret(Words.EmailChangePassword(), "email-password");
-    private readonly PasswordBox _key = Secret(Words.EmailChangeSecretKey(), "email-secret-key");
+    /// <summary>One intake for both halves (the request, the new kit's check): each control draws the flow's kit.</summary>
+    private readonly FlowKeyControl _key;
     private readonly Button _request = Accent(Words.EmailChangeSubmit(), "email-submit");
     private readonly PasswordBox _kitPassword = Secret(Words.EmailChangePassword(), "email-kit-password");
-    private readonly PasswordBox _kitKey = Secret(Words.EmailChangeSecretKey(), "email-kit-secret-key");
+    private readonly FlowKeyControl _kitKey;
     private readonly Button _check = Plain(Words.EmailChangeKitCheck(), "email-kit-check");
     private long? _id;
     private Watch? _watch;
@@ -570,7 +882,9 @@ internal sealed class AddressChangePage : FlowPage
     {
         AutomationProperties.SetAutomationId(_email, "email-new");
         _email.TextChanged += (_, _) => Enable();
-        foreach (var box in new[] { _password, _key, _kitPassword, _kitKey }) box.PasswordChanged += (_, _) => Enable();
+        _key = new FlowKeyControl(window, () => _id, Words.EmailChangeSecretKey(), "email-secret-key", "email") { Changed = Enable };
+        _kitKey = new FlowKeyControl(window, () => _id, Words.EmailChangeSecretKey(), "email-kit-secret-key", "email-kit") { Changed = Enable };
+        foreach (var box in new[] { _password, _kitPassword }) box.PasswordChanged += (_, _) => Enable();
         _request.Click += (_, _) => Request();
         _check.Click += (_, _) => MakeKit();
         Draw(null);
@@ -589,16 +903,21 @@ internal sealed class AddressChangePage : FlowPage
         _id = flow;
         _watch = Core.Watch(new Watched.AddressChange { flow = flow }, update =>
         {
-            if (Closed || update is not Update.AddressChange { shown: var s }) return;
-            Guarded("the address change", () => Draw(s));
+            if (Closed || update is not Update.AddressChange { shown: var s } u) return;
+            Guarded("the address change", () =>
+            {
+                _key.Draw(u.kit);
+                _kitKey.Draw(u.kit);
+                Draw(s);
+            });
         }, e => Log.Write($"an address change update: {e.Message}"));
     }
 
     private void Enable()
     {
         var working = _state is { working: true };
-        _request.IsEnabled = !working && _email.Text.Trim().Length > 0 && _password.Password.Length > 0 && _key.Password.Length > 0;
-        _check.IsEnabled = !working && _kitPassword.Password.Length > 0 && _kitKey.Password.Length > 0;
+        _request.IsEnabled = !working && _email.Text.Trim().Length > 0 && _password.Password.Length > 0 && _key.Ready;
+        _check.IsEnabled = !working && _kitPassword.Password.Length > 0 && _kitKey.Ready;
     }
 
     private void Draw(AddressChangeState? s)
@@ -619,7 +938,7 @@ internal sealed class AddressChangePage : FlowPage
         Body.Children.Add(Caption(Words.EmailChangeFormSub()));
         Body.Children.Add(_email);
         Body.Children.Add(_password);
-        Body.Children.Add(_key);
+        Body.Children.Add(_key.View);
         Body.Children.Add(Caption(Words.RotationSecretKeyHint()));
         var send = Held(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 });
         send.Children.Add(_request);
@@ -643,7 +962,7 @@ internal sealed class AddressChangePage : FlowPage
         }
         Body.Children.Add(Caption(Words.EmailChangeKitSub()));
         Body.Children.Add(_kitPassword);
-        Body.Children.Add(_kitKey);
+        Body.Children.Add(_kitKey.View);
         var row = Held(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 });
         row.Children.Add(_check);
         if (s.working) row.Children.Add(Ring());
@@ -655,8 +974,7 @@ internal sealed class AddressChangePage : FlowPage
     {
         if (_id is not { } flow) return;
         _kitAsked = false;
-        var call = new Call.AddressChangeRequest { flow = flow, newEmail = _email.Text.Trim(), password = _password.Password, secretKey = _key.Password };
-        _key.Password = "";
+        var call = new Call.AddressChangeRequest { flow = flow, newEmail = _email.Text.Trim(), password = _password.Password, secretKey = _key.Take() };
         _request.IsEnabled = false;
         await Ask("AddressChange.Request", call);
     }
@@ -666,8 +984,7 @@ internal sealed class AddressChangePage : FlowPage
     {
         if (_id is not { } flow) return;
         _kitAsked = true;
-        var call = new Call.AddressChangeKit { flow = flow, password = _kitPassword.Password, secretKey = _kitKey.Password };
-        _kitKey.Password = "";
+        var call = new Call.AddressChangeKit { flow = flow, password = _kitPassword.Password, secretKey = _kitKey.Take() };
         _kitPassword.Password = "";
         _check.IsEnabled = false;
         if (await Ask("AddressChange.Kit", call) is Answer.KitOpened { kit: var kit })
@@ -701,11 +1018,15 @@ internal sealed class AddressChangePage : FlowPage
 internal sealed class KeyRotationPage : FlowPage
 {
     private readonly PasswordBox _password = Secret(Words.RotationPassword(), "rotation-password");
-    private readonly PasswordBox _key = Secret(Words.RotationSecretKey(), "rotation-secret-key");
+    private readonly FlowKeyControl _key;
     private readonly ToggleSwitch _choose = new() { Header = Words.RotationNewPassword() };
-    private readonly PasswordBox _next = Secret(Words.PasswordChangeNew(), "rotation-new-password");
+    private readonly NewPasswordField _next;
     private readonly PasswordBox _confirm = Secret(Words.PasswordChangeConfirm(), "rotation-confirm-password");
     private readonly Button _continue = Accent(Words.RotationNext(), "rotation-next");
+    /// <summary>The gate, built once and drawn in place: an update (a check's verdict, a kit read) never takes the focus
+    /// out of the box being typed in.</summary>
+    private readonly StackPanel _gate = new() { Spacing = 12 };
+    private readonly ContentControl _gateRefusal = new();
     private readonly Button _publish = Plain(Words.RotationAction(), "rotation-publish");
     private long? _id;
     private Watch? _watch;
@@ -722,10 +1043,21 @@ internal sealed class KeyRotationPage : FlowPage
             if (_drawing || _id is not { } flow) return;
             Act.Send(new Call.KeyRotationChooseNewPassword { flow = flow, on = _choose.IsOn });
         };
-        foreach (var box in new[] { _password, _key, _next, _confirm }) box.PasswordChanged += (_, _) => Enable();
+        _key = new FlowKeyControl(window, () => _id, Words.RotationSecretKey(), "rotation-secret-key", "rotation") { Changed = Enable };
+        _next = new NewPasswordField(() => _id, "rotation-new-password", (flow, typed) => new Call.KeyRotationCheck { flow = flow, newPassword = typed },
+            flow => new Call.KeyRotationEdited { flow = flow }, (flow, on) => new Call.KeyRotationUseAnyway { flow = flow, on = on });
+        foreach (var box in new[] { _password, _next.Box, _confirm }) box.PasswordChanged += (_, _) => Enable();
         _continue.Click += (_, _) => Prove();
+        foreach (var c in new UIElement[]
+                 {
+                     Caption(Words.RotationSub()), Heading(Words.RotationAfterTitle()),
+                     Facts([Words.RotationFactSharedSpaces(), Words.RotationFactSignsOut(), Words.RotationFactNewKit(), Words.RotationFactPassword(),
+                         Words.RotationFactNotRepair(), Words.RotationStoreWiped()], "rotation-facts"),
+                     _password, _key.View, Caption(Words.RotationSecretKeyHint()), _choose, _next.View, _confirm, _continue, _gateRefusal,
+                 })
+            _gate.Children.Add(c);
         _publish.Click += (_, _) => Publish();
-        Draw(null);
+        Draw(null, null, null);
         Start();
     }
 
@@ -741,7 +1073,7 @@ internal sealed class KeyRotationPage : FlowPage
         _id = flow;
         _watch = Core.Watch(new Watched.KeyRotation { flow = flow }, update =>
         {
-            if (update is not Update.KeyRotation { shown: var s }) return;
+            if (update is not Update.KeyRotation { shown: var s } u) return;
             if (s is null)
             {
                 // closed with the tenant the bridge opened anew after the publish: what it came to is told once
@@ -749,22 +1081,35 @@ internal sealed class KeyRotationPage : FlowPage
                 return;
             }
             if (Closed) return;
-            Guarded("the rotation", () => Draw(s));
+            Guarded("the rotation", () => Draw(s, u.kit, u.breach));
         }, e => Log.Write($"a rotation update: {e.Message}"));
     }
 
     private void Enable()
     {
         var newPassword = _state?.newPassword ?? true;
-        _continue.IsEnabled = _state is { step: Step.Gate } && _password.Password.Length > 0 && _key.Password.Length > 0
-            && (!newPassword || (_next.Password.Length > 0 && _confirm.Password.Length > 0));
+        _continue.IsEnabled = _state is { step: Step.Gate } && _password.Password.Length > 0 && _key.Ready
+            && (!newPassword || (_next.Box.Password.Length > 0 && _confirm.Password.Length > 0));
         _publish.IsEnabled = _state is { step: Step.Kit } && _kit is { Ready: true };
     }
 
-    private void Draw(KeyRotationState? s)
+    private void Draw(KeyRotationState? s, IntakeState? kit, BreachState? breach)
     {
         _state = s;
-        Log.Write($"rotation: step {s?.step}, done {s?.done}, resumed {s?.resumed}, {s?.scopes.Count ?? 0} scopes, refusal {s?.refusal ?? "none"}");
+        Log.Write($"rotation: step {s?.step}, done {s?.done}, resumed {s?.resumed}, {s?.scopes.Count ?? 0} scopes, refusal {s?.refusal ?? "none"}, kit held {kit?.kit is not null}, breach {breach?.kind}");
+        _key.Draw(kit);
+        _next.Draw(s is { newPassword: true } ? breach : null);
+        if (s is { step: Step.Gate })
+        {
+            if (!Body.Children.Contains(_gate))
+            {
+                ClearBody();
+                Body.Children.Add(_gate);
+            }
+            Gate(s);
+            Enable();
+            return;
+        }
         ClearBody();
         switch (s?.step)
         {
@@ -776,9 +1121,6 @@ internal sealed class KeyRotationPage : FlowPage
                 web.Children.Add(Text(Words.RotationModeratorWeb(), "rotation-on-the-web"));
                 web.Children.Add(Caption(Words.AccountOnTheWeb(s.server)));
                 Body.Children.Add(Card(web, "rotation-on-the-web-card"));
-                break;
-            case Step.Gate:
-                Gate(s);
                 break;
             case Step.Kit:
                 KitStep(s);
@@ -792,24 +1134,12 @@ internal sealed class KeyRotationPage : FlowPage
 
     private void Gate(KeyRotationState s)
     {
-        Body.Children.Add(Caption(Words.RotationSub()));
-        Body.Children.Add(Heading(Words.RotationAfterTitle()));
-        Body.Children.Add(Facts([Words.RotationFactSharedSpaces(), Words.RotationFactSignsOut(), Words.RotationFactNewKit(), Words.RotationFactPassword(),
-            Words.RotationFactNotRepair(), Words.RotationStoreWiped()], "rotation-facts"));
-        Body.Children.Add(_password);
-        Body.Children.Add(_key);
-        Body.Children.Add(Caption(Words.RotationSecretKeyHint()));
         _drawing = true;
         _choose.IsOn = s.newPassword;
         _drawing = false;
-        Body.Children.Add(_choose);
-        if (s.newPassword)
-        {
-            Body.Children.Add(_next);
-            Body.Children.Add(_confirm);
-        }
-        Body.Children.Add(_continue);
-        if (Refusal(s.refusal) is { } r) Body.Children.Add(r);
+        _next.View.Visibility = s.newPassword ? Visibility.Visible : Visibility.Collapsed;
+        _confirm.Visibility = s.newPassword ? Visibility.Visible : Visibility.Collapsed;
+        _gateRefusal.Content = Refusal(s.refusal);
     }
 
     private void KitStep(KeyRotationState s)
@@ -874,21 +1204,23 @@ internal sealed class KeyRotationPage : FlowPage
     private async void Prove()
     {
         if (_id is not { } flow) return;
+        // the gate as typed: its boxes stay until the kit step opened (a breached new password stops here until *Use it anyway*)
         var call = new Call.KeyRotationProve
         {
-            flow = flow, password = _password.Password, secretKey = _key.Password,
-            newPassword = _state?.newPassword == true ? _next.Password : "", confirmPassword = _state?.newPassword == true ? _confirm.Password : "",
+            flow = flow, password = _password.Password, secretKey = _key.Typed(),
+            newPassword = _state?.newPassword == true ? _next.Box.Password : "", confirmPassword = _state?.newPassword == true ? _confirm.Password : "",
         };
-        _key.Password = "";
         _continue.IsEnabled = false;
         var answer = await Ask("KeyRotation.Prove", call);
         if (answer is Answer.KitOpened { kit: var kit } && !Closed)
         {
+            // the core took them: the gate's boxes emptied
             _password.Password = "";
-            _next.Password = "";
+            _key.Take();
+            _next.Forget();
             _confirm.Password = "";
             _kit = new KitSection(Window, kit, ownsClose: false) { Changed = Enable };
-            if (_state is { } s) Draw(s);
+            if (_state is { } s) Draw(s, null, null);
         }
     }
 
