@@ -24,6 +24,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.ui.platform.testTag
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.List
+import androidx.compose.material.icons.automirrored.outlined.ViewList
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -181,7 +183,9 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     }
 
     val covers by model.covers.collectAsStateWithLifecycle()
-    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails, LocalAvatars provides avatars, LocalPicking provides (incoming != null), LocalCovers provides covers, LocalShellNotices provides ShellNotices(snackbar, scope)) {
+    // how every level is drawn: the account's one view choice on this device (ADR 0149 decision 8)
+    val levelView by model.levelView.collectAsStateWithLifecycle()
+    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails, LocalAvatars provides avatars, LocalPicking provides (incoming != null), LocalCovers provides covers, LocalShellNotices provides ShellNotices(snackbar, scope), LocalLevelView provides levelView) {
     val drawerContent: @Composable () -> Unit = {
         Drawer(
             s,
@@ -231,6 +235,17 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                         actions = {
+                            // a level's view toggle (Files' grid / list, ADR 0149 decision 8): Home and a folder, an
+                            // application's list — one choice for every level and a person's Memories
+                            val atLevel = !shell.searching && shell.person == null && shell.openObject == null &&
+                                (shell.application != null || space != null) && shell.selectedTab?.key != "memories.map" && !(wide && shell.showsListBeside)
+                            if (atLevel) {
+                                val tiles = levelView == me.raddatz.veyq.mobile.navigation.ViewMode.TILES
+                                IconButton(onClick = { model.chooseLevelView(if (tiles) me.raddatz.veyq.mobile.navigation.ViewMode.LIST else me.raddatz.veyq.mobile.navigation.ViewMode.TILES) }) {
+                                    if (tiles) Icon(Icons.AutoMirrored.Outlined.ViewList, stringResource(R.string.node_view_list_label))
+                                    else Icon(Icons.Outlined.GridView, stringResource(R.string.node_view_grid_label))
+                                }
+                            }
                             // one's own profile: *Edit profile* opens the same model as Settings' *Your profile* (ADR 0084 decision 6)
                             if (shell.person != null && shell.person == model.ownUserId()) {
                                 IconButton(onClick = model::openProfile, modifier = Modifier.testTag("person-edit-profile")) {
@@ -439,7 +454,9 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
         }
         val groups = s.levelGroups
         val hero = LocalNodeHero.current
-        run {
+        val tiles = LocalLevelView.current == me.raddatz.veyq.mobile.navigation.ViewMode.TILES
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+            val columns = tileColumns(maxWidth)
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
                 item(key = "hero") { hero(8.dp) }
                 if (groups.isEmpty()) item(key = "empty") { Empty() }
@@ -447,7 +464,14 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                 for (group in groups) {
                     val heading = group.heading
                     if (heading != null) item(key = "group-${group.folders}") { Box(Modifier.padding(horizontal = 8.dp)) { Section(say(heading)) } }
-                    items(group.nodes, key = { it.scopeId + it.nodeId }) { node ->
+                    // as tiles: every kind a square tile, a folder its cover or the folder symbol (ADR 0149 decision 8)
+                    if (tiles) tileRows(group.nodes, columns, key = { it.scopeId + it.nodeId }, inset = 8.dp) { node, modifier ->
+                        val folder = node.asFolder()
+                        val obj = node.asObject()
+                        if (folder != null) {
+                            LevelTile(node.name, null, LocalCovers.current[node.nodeId]?.second, Icons.Outlined.Folder, folder = true, modifier = modifier) { onEnter(folder) }
+                        } else if (obj != null) ObjectTile(obj, modifier, onOpen)
+                    } else items(group.nodes, key = { it.scopeId + it.nodeId }) { node ->
                         val folder = node.asFolder()
                         if (folder != null) {
                             ListItem(
@@ -809,14 +833,19 @@ private fun ArrangedListScreen(
         Empty()
         return
     }
+    // as tiles where the account chose them (ADR 0149 decision 8)
+    val tiles = LocalLevelView.current == me.raddatz.veyq.mobile.navigation.ViewMode.TILES
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
+    val columns = if (tiles) tileColumns(maxWidth) else 0
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), state = state, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
-        group(R.string.drawer_favorites, list.favorites, onOpen)
-        group(R.string.drawer_recent, list.recent, onOpen)
+        group(R.string.drawer_favorites, list.favorites, onOpen, columns)
+        group(R.string.drawer_recent, list.recent, onOpen, columns)
         // the rest has no heading: under Favorites or Recent a divider sets it apart, else its rows ran on as theirs
         if (list.all.isNotEmpty() && (list.favorites.isNotEmpty() || list.recent.isNotEmpty())) {
             item { androidx.compose.material3.HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
         }
-        group(null, list.all, onOpen)
+        group(null, list.all, onOpen, columns)
+    }
     }
 }
 
@@ -859,10 +888,23 @@ private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit) {
     )
 }
 
-private fun LazyListScope.group(title: Int?, refs: List<ObjectRef>, onOpen: (ObjectRef) -> Unit) {
+/** One group of an arranged list: its heading, then its objects as rows — or as [columns] tiles a row where above zero. */
+private fun LazyListScope.group(title: Int?, refs: List<ObjectRef>, onOpen: (ObjectRef) -> Unit, columns: Int = 0) {
     if (refs.isEmpty()) return
     if (title != null) item { Section(stringResource(title)) }
-    items(refs, key = { "${title}-${it.scopeId}-${it.nodeId}" }) { ref -> ObjectRow(ref, onOpen) }
+    if (columns > 0) tileRows(refs, columns, key = { "${title}-${it.scopeId}-${it.nodeId}" }, inset = 8.dp) { ref, modifier -> ObjectTile(ref, modifier, onOpen) }
+    else items(refs, key = { "${title}-${it.scopeId}-${it.nodeId}" }) { ref -> ObjectRow(ref, onOpen) }
+}
+
+/** An object as a level's tile ([LevelTile]): its cover, its name, the application's facts; a pick dims what does not take it. */
+@Composable
+private fun ObjectTile(ref: ObjectRef, modifier: Modifier, onOpen: (ObjectRef) -> Unit) {
+    val details = LocalRowDetails.current[ref.nodeId].orEmpty()
+    val takes = !LocalPicking.current || me.raddatz.veyq.mobile.AppKinds.takesShared(ref.kind)
+    LevelTile(
+        ref.name, details.takeIf { it.isNotEmpty() }?.joinToString(" · "), LocalCovers.current[ref.nodeId]?.second, kindIcon(ref.kind),
+        folder = false, modifier = modifier, enabled = takes, selected = LocalOpenObject.current == ref.nodeId,
+    ) { onOpen(ref) }
 }
 
 @Composable
@@ -998,7 +1040,8 @@ private fun ListBeside(s: Screen.Signed, model: AppModel) {
     val palette = LocalPalette.current
     androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
         Box(Modifier.width(LIST_PANE_WIDTH).fillMaxSize()) {
-            androidx.compose.runtime.CompositionLocalProvider(LocalOpenObject provides shell.openObject?.nodeId) {
+            // the list pane beside an open object stays rows (a 360 dp pane of tiles would be a strip)
+            androidx.compose.runtime.CompositionLocalProvider(LocalOpenObject provides shell.openObject?.nodeId, LocalLevelView provides me.raddatz.veyq.mobile.navigation.ViewMode.LIST) {
                 if (app == ApplicationId.EXPENSES) ExpensesList(s, model, onOpen = model::openBeside)
                 else if (app == ApplicationId.MEMORIES) MemoriesList(s, model, onOpen = model::openBeside)
                 else ArrangedListScreen(s.applicationList(app), onOpen = model::openBeside)
