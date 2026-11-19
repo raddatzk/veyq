@@ -7,7 +7,7 @@ import me.raddatz.veyq.mobile.crypto.nfc
  * NFC; `/`, `\`, control characters and `<>:"|?*` become `_`; no leading or trailing white space, no trailing dot; a name of
  * dots or nothing becomes `_`; Windows' device names gain a leading `_`; at most [MAX_BYTES] of UTF-8, cut on a character, the
  * extension kept; and two names of one directory that fold to one ignoring case are numbered, `img (2).JPG`. The same tree
- * yields the same paths in either client.
+ * yields the same paths in either client. A reader accepts a segment only where these rules give it back unchanged ([isName]).
  */
 object ArchiveName {
     /** The longest name before a clash suffix, in UTF-8 bytes: 255 less room for ` (99999)`. */
@@ -58,6 +58,18 @@ object ArchiveName {
         }
         val cut = out.toString().replace(TRAILING, "")
         return (cut.ifEmpty { "_" }) + ext
+    }
+
+    /** The longest segment a reader accepts: the per-name limit of APFS and ext4 (the web's `ARCHIVE_SEGMENT_MAX_BYTES`). */
+    const val SEGMENT_MAX_BYTES = 255
+
+    /** Whether [segment] is one path segment these rules could have produced: what a reader accepts and nothing else. */
+    fun isName(segment: String): Boolean = segment.isNotEmpty() && utf8(segment) <= SEGMENT_MAX_BYTES && clean(segment) == segment
+
+    /** Whether [path] is a relative path of safe segments that does not reach into the manifest's directory (`isArchivePath`). */
+    fun isPath(path: String): Boolean {
+        val segments = path.split('/')
+        return fold(segments[0]) != MANIFEST_DIR && segments.all(::isName)
     }
 
     /** How two names of one directory are compared: NFC, ignoring case. */

@@ -30,8 +30,8 @@ class AndroidGuestSessions(private val keys: DeviceKeys) : GuestSessions {
 }
 
 /**
- * The app's received links (ADR 0150 decisions 4 and 6): *Open a link*'s field ([asking]) on the sign-in screen and in
- * the drawer's foot, and the one link open as its guest ([screen]), a screen above whatever was on screen — the sign-in or
+ * The app's received links (ADR 0150 decisions 4 and 6): *Open a link*'s field ([asking]) on the sign-in and the unlock
+ * screen (owner 2026-11-19: not in the shell), and the one link open as its guest ([screen]), a screen above whatever was on screen — the sign-in or
  * the shell, which stay where they were and are shown again once the link is left. Every guest view of the app — opened
  * here, from a bookmark's page or its *Open on its own page* — is made by [view] over the app's HTTP client, its device
  * store (the terms' and the note's acceptances), the Keystore-wrapped [sessions] and its one upload queue. Nothing of a

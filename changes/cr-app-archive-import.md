@@ -135,29 +135,29 @@ The web's `export.*` import keys ported to `words.json` (EN+DE, each `note` nami
 
 ## Phases
 
-- [ ] **1 ADR 0152 and the docs it binds** — ADR 0152 (I1–I8), its row in `docs/decisions/README.md`; ADR 0149's and
+- [x] **1 ADR 0152 and the docs it binds** — ADR 0152 (I1–I8), its row in `docs/decisions/README.md`; ADR 0149's and
   ADR 0082's mentions of the apps' missing import pointed at it; `uc.platform.export-import` gains *In the apps*;
   `native-apps.md` § Open's line narrowed. · Done when: every guard but guard_gaps green.
-- [ ] **2 contracts — the cases** (I4) — `generate.py`, `cases.v1.json`, `web-download.zip` written by a web test; the
+- [x] **2 contracts — the cases** (I4) — `generate.py`, `cases.v1.json`, `web-download.zip` written by a web test; the
   web's `importHardening.test.ts` reads the cases. · Done when: `pnpm run check` in `src/web/` green and
   `python3 contracts/export/import-cases/generate.py --check` reproduces the file byte for byte. **Bites:** (a) a case's
   expected code altered → the web's test red; (b) a `LIMITS` value changed in `manifest.ts` → the schema pin red
   (snapshot-and-restore).
-- [ ] **3 core — reader, source, manifest** (I2) — `ZipReader`, `ImportSource`, `Manifest`. Tests: every case of the
+- [x] **3 core — reader, source, manifest** (I2) — `ZipReader`, `ImportSource`, `Manifest`. Tests: every case of the
   file; the core's own download read back (`ZipWriter` → `ZipReader`); `web-download.zip` opened and planned; a 4 GiB+
   ZIP64 entry's header read without reading the entry (a sparse source). **Bites:** (a) the CRC check skipped → the
   `crc_mismatch` case red; (b) `..` let through `isArchivePath` → the `unsafe_path` case red; (c) **no whole-file read**:
   a counting `UploadSource` asserts the screen and the open read only the tail and the directory — bitten by reading
   the source whole.
-- [ ] **4 core — the walk and the hooks** (I3) — `SubtreeImport`, `AppKinds.imports`, `DepotImport`, `PotImport`,
+- [x] **4 core — the walk and the hooks** (I3) — `SubtreeImport`, `AppKinds.imports`, `DepotImport`, `PotImport`,
   `MemoryImport`. Tests: `web-download.zip` imported into a fake tenant, every kind made with the importer's keys; name
   freeing; a payload's SHA-256 mismatch rolls back every top-level node; *Import the rest*; quota refused before any
   write. Live (throwaway): the web's archive imported and opened. **Bites:** (a) the rollback removed → the mismatch test
   red; (b) `AppKinds.imports` routing a MEMORY to Depot's hook → the per-kind test red.
-- [ ] **5 core — the entries** (I1) — `DepotUploads` screens before queueing; the share into a folder screens.
+- [x] **5 core — the entries** (I1) — `DepotUploads` screens before queueing; the share into a folder screens.
   Tests: a pick of three files with one download offers one import and queues two; a guest's download queues as a file;
   a folder without a manifest uploads as a folder. **Bite:** the member check dropped → the guest test red.
-- [ ] **6 bridge** (I6) — the calls and updates; the generated Rust and C# bindings. · Done when: `:bridge:jvmTest`
+- [x] **6 bridge** (I6) — the calls and updates; the generated Rust and C# bindings. · Done when: `:bridge:jvmTest`
   green. **Bite:** an `Update.Import` carrying a payload's bytes or a sealed key → the schema test red.
 - [ ] **7 Android** — the offer from *Upload files*, *Upload folder*, a level drop and a share; the dialog (M3 full-screen
   dialog). · Done when: `:android:assembleDebug`, the guidelines and words guards green; § Passes' Android row.

@@ -97,19 +97,6 @@ struct DrawerList: View {
         VStack(spacing: 0) {
             list
             Divider()
-            // the account menu's *Open a link* (ADR 0150 decision 4; owner 2026-11-19: the drawer's foot), above Settings
-            Button { model.guests.ask(model) } label: {
-                HStack(spacing: 12) {
-                    Tile(symbol: "link")
-                    Text(say(.linkOpen)).foregroundStyle(Role.controlText)
-                    Spacer(minLength: 0)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-            .accessibilityIdentifier("drawer-open-link")
             Button {
                 // the account's Settings: the app's Settings window on a Mac (⌘,), a sheet on iOS
                 #if os(macOS)
@@ -168,22 +155,26 @@ struct DrawerList: View {
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
 
-            Section { refs(model.drawer.favorites) } header: { SectionLabel(title: say(.drawerFavorites)) }
-            Section { refs(model.drawer.recent) } header: { SectionLabel(title: say(.drawerRecent)) }
-            Section {
-                ForEach(model.applications, id: \.self) { app in
-                    row(Names.application(app), symbol: Names.appSymbol(app), selected: model.shell.application == app && model.shell.openObject == nil) { model.choose(app) }
-                }
-            } header: { SectionLabel(title: say(.drawerApplications)) }
+            // only the sections with something in them (core's `Lists.drawerSections`; owner 2026-11-19)
+            if model.drawerSections.contains(.favorites) {
+                Section { refs(model.drawer.favorites) } header: { SectionLabel(title: say(.drawerFavorites)) }
+            }
+            if model.drawerSections.contains(.recent) {
+                Section { refs(model.drawer.recent) } header: { SectionLabel(title: say(.drawerRecent)) }
+            }
+            if model.drawerSections.contains(.applications) {
+                Section {
+                    ForEach(model.applications, id: \.self) { app in
+                        row(Names.application(app), symbol: Names.appSymbol(app), selected: model.shell.application == app && model.shell.openObject == nil) { model.choose(app) }
+                    }
+                } header: { SectionLabel(title: say(.drawerApplications)) }
+            }
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
     }
 
     @ViewBuilder private func refs(_ list: [ObjectRef]) -> some View {
-        if list.isEmpty {
-            Text(say(.drawerNothingYet)).font(.subheadline).foregroundStyle(Role.muted).listRowBackground(Color.clear)
-        }
         ForEach(list, id: \.nodeId) { ref in
             row(ref.name, symbol: Names.kindSymbol(ref.kind),
                 selected: model.shell.openObject?.nodeId == ref.nodeId) { if atTop { model.openAtTop(ref) } else { model.open(ref) } }
@@ -233,18 +224,19 @@ struct TenantSwitcher: View {
                     }
                 }
             }
-            ForEach(model.servers) { server in
-                Section(server.label) {
-                    ForEach(server.tenants, id: \.tenantId) { tenant in
-                        Button {
-                            model.switchTo(server.account, tenant)
-                        } label: {
-                            if tenant.tenantId == model.tenant?.tenantId && server.label == model.server {
-                                Label(tenant.name, systemImage: "checkmark")
-                            } else {
-                                Text(tenant.name)
-                            }
+            // every signed-in account's tenants, each row saying where it is (core's `ShellWords.switcher`: its domain, and
+            // the account's address where two accounts list the same tenant; owner 2026-11-19) — a menu item's subtitle
+            Section {
+                ForEach(model.servers) { row in
+                    Button {
+                        model.switchTo(row.account, row.entry.tenant)
+                    } label: {
+                        if row.entry.current {
+                            Label(row.entry.name, systemImage: "checkmark")
+                        } else {
+                            Text(row.entry.name)
                         }
+                        Text(row.entry.detail)
                     }
                 }
             }

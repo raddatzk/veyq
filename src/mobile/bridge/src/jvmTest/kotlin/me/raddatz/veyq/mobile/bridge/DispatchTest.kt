@@ -1717,6 +1717,71 @@ class DispatchTest {
     }
 
     @Test
+    fun aDownloadAmongPickedFilesIsOfferedAsAnImport_watchedAndCancelled_theOthersQueued() = runBlocking {
+        // ADR 0152 decisions 1 and 6: Import.Screen screens the paths it is handed; the download is offered, the rest queued
+        val dir = java.nio.file.Files.createTempDirectory("veyq-import").toFile()
+        val zip = java.io.File(dir, "Trip.zip").apply { writeBytes(java.io.File(System.getProperty("veyq.repoRoot"), "contracts/export/import-cases/web-download.zip").readBytes()) }
+        val note = java.io.File(dir, "note.txt").apply { writeText("a note") }
+        val unpacked = java.io.File(dir, "Unpacked").apply { mkdirs() }
+        java.util.zip.ZipFile(zip).use { z ->
+            z.entries().toList().filter { !it.isDirectory }.forEach { e ->
+                java.io.File(unpacked, e.name).apply { parentFile.mkdirs(); writeBytes(z.getInputStream(e).readBytes()) }
+            }
+        }
+        val level = PlayedLevel()
+        val room = object : me.raddatz.veyq.mobile.export.SubtreeImport.Target {
+            override val tenant = null
+            override suspend fun siblings(parentId: String?) = emptyList<Pair<String, String>>()
+            override suspend fun folder(parentId: String?, name: String) = me.raddatz.veyq.mobile.export.NodeImport.Made(null, failure = "played")
+            override suspend fun trash(nodeId: String) = true
+            override suspend fun fits(bytes: Long) = true
+        }
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+                Tenant(
+                    shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
+                    uploads = { queue, deriver, changed ->
+                        me.raddatz.veyq.mobile.depot.DepotUploads(queue, object : me.raddatz.veyq.mobile.depot.DepotUploads.Door by level {
+                            override fun changed() { level.changed(); changed() }
+                            override fun mayImport(scopeId: String, parentId: String?) = true
+                            override fun importDialog(
+                                scopeId: String, parentId: String?, target: String, input: me.raddatz.veyq.mobile.export.ImportInput,
+                                asFile: (() -> Unit)?, closed: () -> Unit, deletedName: String,
+                            ) = me.raddatz.veyq.mobile.export.ImportDialog(
+                                input, target, scopeId, parentId, room, AppKinds.imports(deletedName, { "u" }, deriver) { 0L }, AppKinds::tokenInput, asFile, closed,
+                            ).also { it.start() }
+                        }, importOffered = true)
+                    },
+                )
+            }
+        }
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.ImportScreen("s", null, "Home", listOf(zip.path), "Deleted")))
+        b.signedIn()
+        val offered = b.ask(Call.ImportScreen("s", null, "Home", listOf(note.path, zip.path, java.io.File(dir, "gone.txt").path), "Deleted"))
+        assertTrue(offered is Answer.ImportOffered, "$offered")
+        assertEquals(1, offered.queued, "the other file queued")
+        assertEquals(Notice(Msg.DEPOT_FOLDER_UNREADABLE, "gone.txt"), offered.notice)
+        val shown = b.watching(Watched.Import(offered.import)).until { u -> (u as Update.Import).shown?.takeIf { it.step == ImportStep.READY } }
+        assertEquals("Trip", shown.root)
+        assertEquals(Notice(Msg.IMPORT_SUMMARY, 7, me.raddatz.veyq.mobile.words.Bytes(shown.summary!!.args[1].let { (it as me.raddatz.veyq.mobile.words.Bytes).count }), "Home"), shown.summary)
+        assertTrue(shown.canImport && shown.canAsFile)
+        assertEquals(Msg.IMPORT_SUBMIT, shown.importWord)
+        assertEquals(Answer.Done, b.ask(Call.ImportCancel(offered.import)))
+        b.watching(Watched.Import(offered.import)).until { u -> (u as Update.Import).takeIf { it.shown == null || it.shown!!.closed } }
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_IMPORT), b.ask(Call.ImportRun(offered.import + 99)))
+
+        // an unpacked download is offered as an import (no Upload as a file); a plain file alone is queued
+        val folder = b.ask(Call.ImportScreenFolder("s", null, "Home", unpacked.path, "Deleted"))
+        assertTrue(folder is Answer.ImportOffered, "$folder")
+        val shownFolder = b.watching(Watched.Import(folder.import)).until { u -> (u as Update.Import).shown?.takeIf { it.step == ImportStep.READY } }
+        assertTrue(!shownFolder.canAsFile, "a folder offers no Upload as a file")
+        assertEquals(Answer.Queued(1), b.ask(Call.ImportScreen("s", null, "Home", listOf(note.path), "Deleted")))
+        dir.deleteRecursively()
+        Unit
+    }
+
+    @Test
     fun filesAFolderAndAReplaceAreUploadedByPathAndTheQueueIsDrivenThroughCalls() = runBlocking {
         val dir = java.nio.file.Files.createTempDirectory("veyq-up").toFile()
         val a = java.io.File(dir, "a.txt").apply { writeBytes(ByteArray(3 * V1.FRAME_PLAINTEXT + 5) { (it % 97).toByte() }) }
@@ -1740,7 +1805,7 @@ class DispatchTest {
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     header = { node, facts, _ -> me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, Played()) },
                     file = { node -> me.raddatz.veyq.mobile.depot.FileModel(node, level, shares = false) },
-                    uploads = { queue, changed -> me.raddatz.veyq.mobile.depot.DepotUploads(queue, object : me.raddatz.veyq.mobile.depot.DepotUploads.Door by level {
+                    uploads = { queue, _, changed -> me.raddatz.veyq.mobile.depot.DepotUploads(queue, object : me.raddatz.veyq.mobile.depot.DepotUploads.Door by level {
                         override fun changed() { level.changed(); changed() }
                     }) },
                 )

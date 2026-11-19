@@ -12,6 +12,9 @@ interface Connection {
     val key: String
     val label: String
     val tenants: List<TenantRef>
+
+    /** The address the account signed in with: the switcher names it where two accounts list the same tenant. */
+    val address: String get() = ""
 }
 
 /**
