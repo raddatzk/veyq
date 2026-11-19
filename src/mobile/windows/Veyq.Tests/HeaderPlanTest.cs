@@ -20,6 +20,8 @@ public sealed class HeaderPlanTest
         Assert.IsTrue(HeaderPlan.IsDrawn("music", "MEMORY") && HeaderPlan.IsDrawn("music", "CHAPTER"), "a Memory's music play or stop is drawn (its page does it)");
         Assert.IsTrue(HeaderPlan.IsDrawn("offline", "MEMORY") && HeaderPlan.IsDrawn("offline", "FOLDER"), "Available offline is drawn, a toggle among the secondary commands");
         Assert.IsFalse(HeaderPlan.ByPage("offline", "FILE"), "Available offline is the header's own");
+        // a Pot pins (ADR 0153 decision 6): its header's toggle, never its page's
+        Assert.IsTrue(HeaderPlan.IsDrawn("offline", "EXPENSES_POT") && !HeaderPlan.ByPage("offline", "EXPENSES_POT"), "a Pot's Available offline is drawn by its header");
         Assert.IsTrue(HeaderPlan.ByPage("download", "EXPENSES_POT"));
         Assert.IsFalse(HeaderPlan.ByPage("download", "FOLDER"), "a folder's download is the header's ZIP");
         Assert.IsFalse(HeaderPlan.IsDrawn("an-applications-own", "FOLDER"), "an application's own action is its page's");

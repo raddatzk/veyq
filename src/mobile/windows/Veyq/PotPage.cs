@@ -12,6 +12,11 @@
 // (AddEntry). Its download
 // (Pot.Download) goes where the system's save picker says, under the name the core gives (Pot.ArchiveName); the core
 // writes the file (ADR 0137 decision 3).
+//
+// Offline (ADR 0153 decision 6) the Pot reads as of its kept ledger: the shell's InfoBar says "Offline — content as of …",
+// as over a gallery; the view's canWrite is off, so New, Record, Restore, the editor's Save and the settings' edits are not
+// offered (the core's). Where it did not open, the page says the core's failure word (Update.Pot's failure): offline,
+// that this device does not keep it; else that it did not open.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -32,6 +37,8 @@ internal sealed class PotPage : IDisposable
     private long? _id;
     private Watch? _watch;
     private PotModelState? _state;
+    /// <summary>What the page says where the Pot did not open (Update.Pot's failure, a word's key); null where it opened.</summary>
+    private string? _failure;
     private IReadOnlyList<ShownTab> _tabs = [];
     private BarTab? _selected;
     private bool _closed;
@@ -180,6 +187,8 @@ internal sealed class PotPage : IDisposable
         {
             if (_closed || update is not Update.Pot p) return;
             _state = p.state;
+            _failure = p.failure;
+            if (p.state?.offline is { } offline) Log.Write($"pot offline: as of {offline.asOf?.ToString() ?? "unknown"}, failure {p.failure ?? "-"}");
             if (p.state?.view is { } view)
             {
                 if (OwnPlaces) GuestPlaces(view.settingsOffered);
@@ -315,7 +324,8 @@ internal sealed class PotPage : IDisposable
             var status = new StackPanel { Spacing = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             if (_state is { failed: true })
             {
-                status.Children.Add(Text(Words.PotOpenFailed(), "pot-failed", "SubtitleTextBlockStyle"));
+                // offline, that this device does not keep it (not a failed load); else that it did not open
+                status.Children.Add(Text(_failure is { } failure ? Said.Key(failure) : Words.PotOpenFailed(), "pot-failed", "SubtitleTextBlockStyle"));
             }
             else
             {
