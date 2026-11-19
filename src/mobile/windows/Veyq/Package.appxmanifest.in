@@ -5,7 +5,9 @@
      the package build reads; this file is never built as it is. Capabilities: what the app needs and nothing more —
      the network (internetClient), a desktop app's full trust (runFullTrust) and the QR scan's camera (webcam); no file
      system capability: files come and go through the system's pickers and a drop. The images are generate_theme.py's
-     (its Windows output, `msix/`). -->
+     (its Windows output, `msix/`). The one extension is the `veyq:` scheme (ADR 0150 § O3): a veyq: link opens the app
+     (Program.cs hands a second activation to the running instance), and the app reads nothing of it but which of two
+     screens to show. -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
@@ -32,6 +34,13 @@
     <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
       <uap:VisualElements DisplayName="veyq" Description="veyq" BackgroundColor="transparent"
                           Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png" />
+      <Extensions>
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="veyq">
+            <uap:DisplayName>veyq</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+      </Extensions>
     </Application>
   </Applications>
 

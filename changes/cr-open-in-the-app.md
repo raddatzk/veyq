@@ -186,9 +186,35 @@ launch; the person chose to copy; a phone's system shows the paste (iOS asks, An
   **red, not by this phase:** 26 of the import's tests (`SubtreeImportTest`, `ImportScreenTest`, `ImportCasesTest`,
   `ZipReaderTest`) throw "cannot read contracts/export/import-cases/web-download.zip" in the container (no core file
   changed here). **Open:** the bundle in a GNOME session, `xdg-open veyq://link` from Firefox, twice — phase 7's pass.
-- [ ] **6 Windows** (O3) — first measured: how the unsigned MSIX installs on the VM (developer mode's
+- [x] **6 Windows** (O3) — first measured: how the unsigned MSIX installs on the VM (developer mode's
   `Add-AppxPackage -Register` of the layout, or the package), its result into ADR 0150. · Done when: `run.py package`
   green; `start veyq://link` on the VM opens *Open a link*, a second time in the running window.
+  **Built 2026-11-19 (branch `claude/open-in-app-win`):** `Package.appxmanifest.in` — the `<Application>`'s one
+  extension, `windows.protocol` with `uap:Protocol Name="veyq"`; `Program.cs` — the entry in place of WinUI's generated
+  Main (`DISABLE_XAML_GENERATED_MAIN` in `Veyq.csproj`): **with package identity only**, `AppInstance.FindOrRegisterForKey
+  ("main")`; a second process hands its activation on (`RedirectActivationToAsync`, waited by `CoWaitForMultipleObjects`),
+  allows and sets the running window's foreground and exits; the unpackaged development loop keeps one process per start
+  (parallel passes on the VM stay apart). `DeepLinks.cs` — the first activation from `App.OnLaunched`, later ones from
+  `AppInstance.Activated` on the UI thread; the URI waits in memory until the core started, then `Call.DeepLink`; on
+  `LINK` `ReceivedView.OpenLink` over whatever stands (sign-in, unlock, shell, a received link's screen) unless it already
+  shows (`ReceivedView.LinkAsked`, what was typed stays) or another `ContentDialog` stands (WinUI's one at a time: logged,
+  not shown); every activation restores a minimized window and activates it. The log says the screen alone (`veyq: link
+  opened Open a link` | `… the app where it is`). **The MSIX measured on the VM:** developer mode is off
+  (`AppModelUnlock` has no `AllowDevelopmentWithoutDevLicense`), so a layout's `Add-AppxPackage -Register` is out, and the
+  unsigned MSIX is refused (`0x800B0100`, no signature); `run.py package --sign`'s copy, signed with the development
+  certificate the host already trusts (made 2026-11-13, reused: nothing new in a store), installs in the logged-on session
+  with no system change. The pass installed it under a pass-only identity name (`app.veyq.VeyqOiaw`, the same publisher
+  and certificate) so the leftover `app.veyq.Veyq` 1.815 install on the VM stayed untouched, and uninstalled it after
+  (no data left). Measured: `run.py build` and `bridge` green; the package (`app.veyq.VeyqOiaw 1.1496.0.0`) built,
+  signed (block map byte-identical) and installed, `Get-AppxPackageManifest` lists `windows.protocol veyq`. Pass (own
+  directory and tasks `*-oiaw`, a throwaway on `--tenant tw-win`, erased after): app not running, `Start-Process
+  'veyq://link#k=CANARY'` started it to the sign-in with *Open a link* over it (UIA tree: `#open-link`); a second
+  `veyq://LINK?u=https://…#k=CANARY` went to the same process (one `Veyq.App`), the one dialog kept the text typed into it;
+  minimized, `veyq://open?x=CANARY` restored it in front (`GetForegroundWindow` → `Veyq.App`) with no dialog; signed in as
+  the member (Not now), minimized, `veyq://link#k=CANARY` showed *Open a link* over the shell in front, and `veyq://open`
+  then none. Canary: the package's data folder and install directory `Select-String CANARY` → 0 files (bit with a planted
+  file → 1). Not run: the link from Edge (phase 7's), and the foreground when the system grants none (here the starter
+  allowed it).
 - [ ] **7 passes and harvest** — § Passes; ADR 0150's Consequences (the passes, the residual); a Use page section
   "Open in the app" in `sharing/what-guests-see.mdx` (EN+DE) and the known limitation; `native-apps.md` § Built; #435
   deleted (cr-app-received-links is done) and #438's handover clause removed; this CR deleted. · Done when: `pnpm run

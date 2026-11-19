@@ -306,8 +306,10 @@ A Gradle build of its own, run through its own wrapper.
   app's data folder (`DataFolder`: the package's own `LocalState` when packaged, `%LOCALAPPDATA%\veyq\` unpackaged; the
   app's `AppData` asks for package identity), and the hand-off to the UI thread; `Veyq.Bridge.Tests` its round trip,
   `DataFolderTest` and the real DLL.
-  `Veyq` is the app (WinUI 3, unpackaged, self-contained, `win-x64`; its assembly `Veyq.App`): `App.xaml.cs`,
-  `MainWindow`, one class per screen (`SignInView`, `ShellView` with Search, `HomeView`, `PotPage` with its download;
+  `Veyq` is the app (WinUI 3, unpackaged, self-contained, `win-x64`; its assembly `Veyq.App`): `Program.cs` (the entry in
+  place of WinUI's generated one: with package identity one instance, a second activation handed to the running one by
+  `AppInstance`), `App.xaml.cs`, `DeepLinks` (a `veyq:` link the MSIX's `windows.protocol` hands in, through
+  `Call.DeepLink`: *Open a link* or the window in front, ADR 0150 § O), `MainWindow`, one class per screen (`SignInView`, `ShellView` with Search, `HomeView`, `PotPage` with its download;
   a node's header `NodeHeader` with `HeaderPlan`, and its sheets `TrashDialog`, `MoveDialog`, `ShareDialog` with
   `ShareDays`, `ReportDialog`, `CoverDialog`, every `ContentDialog` shown through `Dialogs.Show`),
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes

@@ -253,6 +253,11 @@ den du bekommen hast*, *Open in the browser* / *Im Browser öffnen*, *Keep* / *B
   #1032–#1036 not re-passed (a bookmark in place and on its own page, its reports, a viewing guest's report). *Linux:* a
   signed-out guest's Replace and a guest Pot's Settings (built after its passes). *Windows:* a guest file's Download, a
   row's report through its context menu (UI Automation has no context-menu step).
+- **§ O on Windows: how the MSIX installs** (measured on the test VM 2026-11-19, cr-open-in-the-app phase 6): developer
+  mode is off, so neither a layout's `Add-AppxPackage -Register` nor the unsigned MSIX installs (`0x800B0100`); the copy
+  `run.py package --sign` signs with the host's development certificate installs in the logged-on session with no system
+  change once that certificate is trusted (a one-time step the host's owner took, 2026-11-13). `veyq:` therefore exists
+  only in a signed, installed package; the unpackaged development loop claims nothing and keeps one process per start.
 
 ## Alternatives considered
 

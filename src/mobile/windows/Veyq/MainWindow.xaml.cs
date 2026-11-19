@@ -165,6 +165,8 @@ public sealed partial class MainWindow : Window
         {
             Log.Write($"the start: {e.Message}");
         }
+        // a veyq: link that started the app (or came while it started) is answered over the face the start showed
+        DeepLinks.Ready(this);
     }
 
     private void Face(UIElement? face)
