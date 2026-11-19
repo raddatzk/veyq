@@ -72,6 +72,9 @@ struct Page {
     maps: MapServices,
     /// The section a search's result asked for (`SettingsSection.id`), scrolled to once the page first drew.
     at: RefCell<Option<String>>,
+    /// The page's own `GtkScrolledWindow`, held once found (inbox #957: the page's first child is not it, so a redraw
+    /// read no position and the page jumped to its top at every storage update).
+    scroll: RefCell<Option<gtk::ScrolledWindow>>,
 }
 
 /// Opens [connection]'s Settings over [window]; the core reads and delivers what it shows. [at]: the section it scrolls to
@@ -199,6 +202,7 @@ impl Page {
             remove_all_ask: RefCell::new(None),
             maps: MapServices::new(),
             at: RefCell::new(None),
+            scroll: RefCell::new(None),
         });
         // the limit typed, set in the unit chosen (the core parses it and says why where it is no size)
         let weak = Rc::downgrade(&p);
@@ -310,7 +314,7 @@ impl Page {
     /// Draws [s]: every group anew, the name's row kept, the page left where it was scrolled to (the storage section
     /// redraws it at each change of a pin's fetch).
     fn draw(self: &Rc<Self>, s: &SettingsShown) {
-        let scroll = self.page.first_child().and_downcast::<gtk::ScrolledWindow>().map(|w| w.vadjustment());
+        let scroll = self.scrolled().map(|w| w.vadjustment());
         let at = scroll.as_ref().map(|a| a.value());
         self.draw_groups(s);
         if let Some(section) = self.at.borrow_mut().take() {
@@ -324,6 +328,17 @@ impl Page {
             glib::idle_add_local_once(move || again.set_value(at));
             glib::timeout_add_local_once(std::time::Duration::from_millis(250), move || a.set_value(at));
         }
+    }
+
+    /// The `GtkScrolledWindow` inside the page's template, found once among its descendants and held: libadwaita does
+    /// not hand it out, and which child of the page it is changed between its versions (a banner's box came first).
+    fn scrolled(&self) -> Option<gtk::ScrolledWindow> {
+        if let Some(held) = self.scroll.borrow().as_ref() {
+            return Some(held.clone());
+        }
+        let found = find_scrolled(self.page.upcast_ref());
+        self.scroll.replace(found.clone());
+        found
     }
 
     /// Scrolls the page to [section]'s group once it is laid out; a section this page does not show leaves it at its top.
@@ -342,7 +357,7 @@ impl Page {
                 eprintln!("veyq: settings shows no section {section}");
                 return glib::ControlFlow::Break;
             };
-            let scroll = group.ancestor(gtk::ScrolledWindow::static_type()).and_downcast::<gtk::ScrolledWindow>();
+            let scroll = page.scrolled();
             let a = scroll.as_ref().map(gtk::ScrolledWindow::vadjustment);
             // the group's top in the view, plus where the view stands: its place in what scrolls
             let at = scroll.as_ref().and_then(|s| s.child()).and_then(|view| group.compute_point(&view, &gtk::graphene::Point::new(0.0, 0.0)));
@@ -378,9 +393,13 @@ impl Page {
         }
         let add_device = s.add_device.then(|| self.add_device.clone());
         let maps = Some(self.maps.group().clone());
-        let groups = vec![self.account(s), self.device(s), add_device, self.sessions(s), self.saved_keys(s), self.storage(s), self.offline_items(s), maps, self.sign_out()];
-        // each section named by its `SettingsSection.id`, where a search's result scrolls to it
-        let sections = ["account", "device", "add-device", "sessions", "saved-keys", "storage", "", "maps", ""];
+        let groups = vec![
+            self.account(s), self.profile(), self.password(), self.email(), self.device(s), add_device, self.sessions(s), self.saved_keys(s), self.storage(s),
+            self.offline_items(s), maps, self.security(), self.erase(), self.sign_out(),
+        ];
+        // each section named by its `SettingsSection.id`, where a search's result scrolls to it (the account's flows by the
+        // web's section names, ADR 0148 decision 10)
+        let sections = ["account", "profile", "password", "email", "device", "add-device", "sessions", "saved-keys", "storage", "", "maps", "security", "erase", ""];
         for (g, section) in groups.iter().zip(sections) {
             if let (Some(g), false) = (g, section.is_empty()) {
                 g.set_widget_name(&format!("settings-{section}"));
@@ -407,7 +426,7 @@ impl Page {
         }
     }
 
-    fn account(&self, s: &SettingsShown) -> Option<adw::PreferencesGroup> {
+    fn account(self: &Rc<Self>, s: &SettingsShown) -> Option<adw::PreferencesGroup> {
         let group = adw::PreferencesGroup::builder().title(words::account_settings_account()).build();
         let email = adw::ActionRow::builder().title(words::account_settings_email()).subtitle(s.email.as_str()).use_markup(false).subtitle_selectable(true).build();
         email.add_css_class("property");
@@ -418,6 +437,100 @@ impl Page {
             None => {}
         }
         Some(group)
+    }
+
+    /// *Email address*: the address changed (ADR 0148 decision 6: the request here, the confirm on the web).
+    fn email(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {
+        let group = adw::PreferencesGroup::builder().title(words::account_settings_email()).build();
+        group.add(&self.opens("settings-email-change", &words::email_change_action(), crate::account_flows::address));
+        Some(group)
+    }
+
+    /// A row that opens one of the account's flows ([open]) for this page's account, over the window: the flow outlives
+    /// this dialog (a finished rotation re-opens the tenant, which closes Settings).
+    fn opens(self: &Rc<Self>, name: &str, title: &str, open: fn(&gtk::Widget, String)) -> adw::ActionRow {
+        let row = adw::ActionRow::builder().title(title).activatable(true).build();
+        row.set_widget_name(name);
+        row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        let (weak, what) = (Rc::downgrade(self), name.to_owned());
+        row.connect_activated(move |_| {
+            let Some(p) = weak.upgrade() else { return };
+            let Some(connection) = p.connection.borrow().clone() else {
+                return eprintln!("veyq: settings {what}: no account in the core");
+            };
+            open(&p.window_or_dialog(), connection);
+        });
+        row
+    }
+
+    fn window_or_dialog(&self) -> gtk::Widget {
+        self.dialog.root().map(|r| r.upcast::<gtk::Widget>()).unwrap_or_else(|| self.dialog.clone().upcast())
+    }
+
+    /// *Your profile* (the web's rubric): one's own profile in the space open now, the same model as one's own page's.
+    fn profile(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {
+        let group = adw::PreferencesGroup::builder().title(words::profile_title()).description(words::profile_sub()).build();
+        let row = adw::ActionRow::builder().title(words::profile_edit()).activatable(true).build();
+        row.set_widget_name("settings-profile-edit");
+        row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        let weak = Rc::downgrade(self);
+        row.connect_activated(move |_| {
+            if let Some(p) = weak.upgrade() {
+                crate::profile_edit::open(&p.window_or_dialog());
+            }
+        });
+        group.add(&row);
+        Some(group)
+    }
+
+    fn password(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {
+        let group = adw::PreferencesGroup::new();
+        group.add(&self.opens("settings-password-change", &words::password_change_title(), crate::account_flows::password));
+        Some(group)
+    }
+
+    /// *Secure your account*: the keys replaced with a new Emergency Kit.
+    fn security(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {
+        let group = adw::PreferencesGroup::builder().title(words::rotation_title()).description(words::rotation_sub()).build();
+        group.add(&self.opens("settings-rotation", &words::rotation_action(), crate::account_flows::rotation));
+        Some(group)
+    }
+
+    /// *Erase your account*.
+    fn erase(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {
+        let group = adw::PreferencesGroup::builder().title(words::erasure_title()).build();
+        let row = self.opens("settings-erasure", &words::erasure_action(), crate::account_flows::erasure);
+        row.add_css_class("error");
+        group.add(&row);
+        Some(group)
+    }
+
+    /// Renames [family]'s device (the web's `renameDeviceOfFamily`: every session of that device shows the name), asked in
+    /// an `AdwAlertDialog` with the name as it stands.
+    fn ask_rename(self: &Rc<Self>, family: String, label: &str) {
+        let entry = adw::EntryRow::builder().title(words::account_settings_rename()).build();
+        entry.set_text(label);
+        let rows = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
+        rows.add_css_class("boxed-list");
+        rows.append(&entry);
+        let ask = adw::AlertDialog::builder().heading(words::account_settings_rename()).body(words::account_settings_rename_hint()).extra_child(&rows).build();
+        ask.add_responses(&[("cancel", &words::signin_cancel()), ("rename", &words::node_rename())]);
+        ask.set_response_appearance("rename", adw::ResponseAppearance::Suggested);
+        ask.set_default_response(Some("rename"));
+        ask.set_close_response("cancel");
+        entry.set_activates_default(true);
+        let weak = Rc::downgrade(self);
+        ask.connect_response(None, move |_, response| {
+            if response != "rename" {
+                return;
+            }
+            let label = entry.text().trim().to_string();
+            if let (Some(p), false) = (weak.upgrade(), label.is_empty()) {
+                let family = family.clone();
+                p.act("rename a device", move |settings| Call::SettingsRenameFamily { settings, family, label });
+            }
+        });
+        ask.present(Some(&self.dialog));
     }
 
     fn device(self: &Rc<Self>, s: &SettingsShown) -> Option<adw::PreferencesGroup> {
@@ -545,6 +658,18 @@ impl Page {
             p.ask_then(heading.clone(), body, heading, "sign out", move |settings| Call::SettingsSignOut { settings, family });
         });
         actions.add_action(&revoke);
+        // any device the register names is renamed here (ADR 0148 decision 1); this device's own name is the row above
+        if let (false, Some(label)) = (f.current, f.label.clone()) {
+            let rename = gio::SimpleAction::new("rename", None);
+            let (weak, id) = (Rc::downgrade(self), f.id.clone());
+            rename.connect_activate(move |_, _| {
+                if let Some(p) = weak.upgrade() {
+                    p.ask_rename(id.clone(), &label);
+                }
+            });
+            actions.add_action(&rename);
+            menu.append(Some(&words::account_settings_rename()), Some("family.rename"));
+        }
         menu.append(Some(&if f.current { words::account_settings_revoke_self() } else { words::account_settings_revoke() }), Some("family.revoke"));
         if f.removes_key {
             let escalate = gio::SimpleAction::new("escalate", None);
@@ -769,6 +894,21 @@ impl Page {
         group.add(&row);
         Some(group)
     }
+}
+
+/// The first `GtkScrolledWindow` under [widget], depth first.
+fn find_scrolled(widget: &gtk::Widget) -> Option<gtk::ScrolledWindow> {
+    let mut child = widget.first_child();
+    while let Some(c) = child {
+        if let Ok(s) = c.clone().downcast::<gtk::ScrolledWindow>() {
+            return Some(s);
+        }
+        if let Some(s) = find_scrolled(&c) {
+            return Some(s);
+        }
+        child = c.next_sibling();
+    }
+    None
 }
 
 /// A family's dates as its row says them: when it signed in and when it was last used, the ones the server sent.

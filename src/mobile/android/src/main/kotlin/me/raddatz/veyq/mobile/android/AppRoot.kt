@@ -53,6 +53,8 @@ fun AppRoot(model: AppModel) {
     val kitScan by model.kitScan.collectAsStateWithLifecycle()
     val maps by model.maps.collectAsStateWithLifecycle()
     val settingsAt by model.settingsAt.collectAsStateWithLifecycle()
+    val accountFlow by model.accountFlow.collectAsStateWithLifecycle()
+    val ended by model.ended.collectAsStateWithLifecycle()
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (val s = screen) {
             Screen.Starting -> StartingScreen()
@@ -68,6 +70,16 @@ fun AppRoot(model: AppModel) {
         }
         // a device-linking ceremony, over the sign-in or Settings (ADR 0059): a secure dialog of its own
         link?.let { DeviceLinkScreen(it, onAgain = model::linkAgain, onClose = model::closeLink) }
+        // one of the account's flows (ADR 0148), over Settings or one's own person page: a dialog of its own
+        if (screen is Screen.Signed) accountFlow?.let { AccountFlowDialog(it, model) }
+        // the account was erased here: the sign-in says so once (the web's `explainEnding('erased')`)
+        ended?.let { msg ->
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = model::endedSeen,
+                text = { androidx.compose.material3.Text(say(msg), modifier = Modifier.testTag("erasure-ended")) },
+                confirmButton = { androidx.compose.material3.TextButton(onClick = model::endedSeen) { androidx.compose.material3.Text(stringResource(R.string.ok)) } },
+            )
+        }
     }
 }
 

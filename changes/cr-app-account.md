@@ -397,11 +397,30 @@ key-touching flows after the vectors that hold them, erasure last.
   (b) `Kit.Save.pdf: ByteArray` → `SecretFreeSchemaTest`; (c) the rotations left in `closeTenant` →
   `AccountFlowsDispatchTest`. Live: `LiveAccountBridgeTest` (the profile and the password change, as a throwaway).
 
-- [ ] **5 Android** — D10's row; the words (`scripts/validate_mobile_words.py`). Two halves, each with its pass:
+- [x] **5 Android** — D10's row; the words (`scripts/validate_mobile_words.py`). Two halves, each with its pass:
   **5a** rename, profile, picture, safety numbers; **5b** password, address, kit, rotation, erasure. · Done when:
   `./gradlew :android:assembleDebug` and the words guard green; the emulator passes (agent, as a throwaway, § Passes);
   the no-copy check after a kit save (`run-as me.raddatz.veyq find . -type f` and a grep of every file for the Secret
   Key's canary) empty; the Recents snapshot during the password and Secret Key steps blank.
+  *Built 2026-11-19:* `AccountFlows.kt` (the flows' full-screen dialog, the profile with its square crop rendered to
+  256 × 256 RGBA by `AppModel.avatarPixels`), `AccountSecretFlows.kt` (password, address, kit, rotation, erasure, each
+  `SecureFlagPolicy.SecureOn`; the kit written by `KitStep.saveInto` into `CreateDocument`'s stream, the document deleted
+  when the write fails), `SafetyNumber.kt` (own: digits, chain code, the core's QR; another's: state, *Compare* by scan
+  or digits), Settings' sections and every named session's *Rename*, *Edit profile* in the person page's bar. A device
+  a password change left without a saved unlock is offered the password trust and each level in Settings (it offered
+  nothing). Pass on a throwaway API 36 emulator, as a throwaway with a member (made and erased, both pending erasures
+  listed): the session renamed and read back; the name and a picture saved and read back after an unlock (the person
+  page, *Change picture* from the server's revision); own safety number shown; the member compared by digits →
+  *Verified by you.* read back; the address change to the `503` mail step (this Mac sends no mail — confirm pending a
+  mailing backend); a kit saved into Downloads through the system's dialog; the password changed, the old one refused,
+  the new one signs in, the fingerprint re-trust (`adb emu finger touch 1`) DONE; the rotation with a new password, both
+  scopes *New lock*, the old Secret Key refused, the rotation's kit read by the sign-in's *Open Emergency Kit* and
+  signing in; the erasure refused without the last owner's choice, then erased, the device's offline store and record
+  gone, the sign-in told once. No-copy: the app's files after each kit save hold none of the canaries (the Secret Key's
+  text, folded, `veyqkit:`); bitten by grepping Downloads, which held the kit. Recents: the address, password, rotation
+  and erasure steps' snapshots blank (10 KB) where Settings' held the page (166 KB). The package is `app.veyq` (#972);
+  left: #971. Not run: a scan of a safety code (the emulator's camera shows no member's code; Android ↔ Linux is § Passes'
+  own row), the rename of another device than this one (the throwaway had one session).
 
 - [ ] **6 Apple (iOS, iPadOS, macOS)** — first #917 (the rename alert's field bound at presenting), since D1 reuses
   the alert; then D10's rows, the kit through `fileExporter` (iOS) and `NSSavePanel` (macOS). · Done when: the macOS
@@ -418,9 +437,28 @@ key-touching flows after the vectors that hold them, erasure last.
   and iOS-simulator SDK builds green. **Not run:** the macOS pass and the no-copy check — the screen was locked all
   phase (#976); *Links to renew* has no core state yet (#977).
 
-- [ ] **7 Linux** — first #957 (hold the `ScrolledWindow` itself), since D10 grows that page; then D10's row over the
+- [x] **7 Linux** — first #957 (hold the `ScrolledWindow` itself), since D10 grows that page; then D10's row over the
   bridge. · Done when: `run.py test`, `bridge`, `build` green; the Broadway pass (agent); the no-copy check of the
   app's data and cache directories after a kit save.
+  *Built 2026-11-19:* #957 (the page's `ScrolledWindow` found once among its descendants and held, `scroll_to` on the
+  same); `account_flows.rs` — an `AdwDialog` with an `AdwNavigationView` per flow, `AdwPasswordEntryRow`s emptied once
+  sent, the danger steps an `AdwAlertDialog` with a destructive response, the kit through `gtk::FileDialog` into
+  `Kit.Save` by path; `profile_edit.rs` — *Your profile* with the square cropper over `Cover.Pose` and the host's
+  `Picture.Square` (256 × 256 RGBA, its drawing held by a test bitten by dropping the pose's x); `safety.rs` — the person
+  page's section (own: digits, chain code, the core's code; another's: state, *Compare* by scan where a camera is, or
+  by digits); Settings' five sections by `SettingsSection`'s ids, *Rename* for every device the register names, *Edit
+  profile* in the header of one's own page. `run.py bridge`, `test` (967 + the probes) and `build` green. Broadway pass
+  (headless Chrome, a throwaway with a member, made and erased, both pending erasures listed): this device renamed on a
+  scrolled page and the page stayed put (#957); the name and a cropped picture saved; own safety number shown; the
+  member's number as the owner's app shows it equal to the member's own (a second Linux app as the member), compared by
+  digits → *Verified*; the password changed and changed back; the address request to the `503` mail step (this Mac
+  sends no mail); a kit for the address and the rotation's kit saved into `~/Documents` through GTK's dialog; the
+  rotation without a new password, both scopes *New lock*; the erasure with *Delete the space*, the device's record and
+  offline store gone. No-copy after each kit save: no file under `~/.local`, `~/.cache`, `~/.config`, `/tmp` or the
+  runtime directory holds the Secret Key (as typed, without dashes), `veyqkit:` or a PDF; GTK's recent files name the
+  kit's path (#981). Left: #979 (the rotation's lines name no space), #980 (a saved picture shows after the tenant is
+  read again). Not run: a safety code scanned (the container has no camera; Android ↔ Linux is § Passes' own row), the
+  rename of another device (the throwaway's other session has no register name).
 
 - [ ] **8 Windows** — D10's row over the bridge; `ScreenSecrets.Guard` on every step with a `PasswordBox`. · Done
   when: `run.py test`, `bridge`, `build` green on the VM; the UIA pass (agent); the no-copy check of the package's

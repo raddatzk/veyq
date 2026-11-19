@@ -161,8 +161,8 @@ unsafe extern "C" fn updated(ctx: *mut c_void, json: *const c_char, _bytes: *con
 
 /// The host function: the core's request, answered at once from this (core) thread — a music deck's or the system
 /// controls' request excepted, answered from GTK's main loop ([crate::music_host], [reply]) —; the store answers, an Emergency
-/// Kit's page or picture is drawn ([crate::kit_drawing]) and a picked medium's tiers are made ([crate::media_tiers], on the
-/// upload queue's thread the core asks from), without waiting for the core, as bridge.h asks. A drawing's pixels and the
+/// Kit's page or picture is drawn ([crate::kit_drawing]), a picked medium's tiers are made ([crate::media_tiers], on the
+/// upload queue's thread the core asks from) and one's own profile picture is drawn square ([crate::profile_edit]), without waiting for the core, as bridge.h asks. A drawing's pixels and the
 /// tiers go beside the reply's JSON and are zeroed once the core copied them.
 unsafe extern "C" fn host(ctx: *mut c_void, token: u64, json: *const c_char, _bytes: *const u8, _len: usize) {
     // SAFETY: ctx is the DeviceStore [start] handed the core, alive for the process.
@@ -181,6 +181,7 @@ unsafe extern "C" fn host(ctx: *mut c_void, token: u64, json: *const c_char, _by
             Some(Some(reply)) => (reply, None),
             None => crate::kit_drawing::answer(&request)
             .or_else(|| crate::media_tiers::answer(&request))
+            .or_else(|| crate::profile_edit::answer(&request))
             .unwrap_or_else(|| (store.answer(request), None)),
         },
         Err(_) => (HostReply::Failed { error: "the host could not read the request".into() }, None),

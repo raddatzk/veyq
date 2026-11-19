@@ -310,6 +310,11 @@ impl ScanView {
         Ok(())
     }
 
+    /// The scan's id in the core once it opened: what a found safety code is compared by (`Trust.CompareScanned`).
+    pub fn scan_id(&self) -> Option<i64> {
+        self.scan.get()
+    }
+
     /// Ends the scan and its camera; the view shows nothing more.
     pub fn close(&self) {
         if self.closed.swap(true, Ordering::SeqCst) {

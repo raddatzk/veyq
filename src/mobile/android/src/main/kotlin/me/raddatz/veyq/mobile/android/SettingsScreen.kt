@@ -24,7 +24,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.AlternateEmail
+import androidx.compose.material.icons.outlined.Password
+import androidx.compose.material.icons.outlined.PersonRemove
+import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Edit
@@ -128,6 +132,16 @@ interface SettingsActions {
     fun askRemoveAllOffline() {}
     fun cancelRemoveAllOffline() {}
     fun removeAllOffline() {}
+
+    /** Renames the device of session family [familyId] (the web's `renameDeviceOfFamily`, ADR 0148 decision 1). */
+    fun renameFamily(familyId: String, label: String) {}
+
+    /** The account's flows (ADR 0148 decision 10), each its own full-screen dialog over the page. */
+    fun openProfile() {}
+    fun openPasswordChange() {}
+    fun openAddressChange() {}
+    fun openKeyRotation() {}
+    fun openErasure() {}
 }
 
 /** A step the page asks to be confirmed first, as the web's `SessionsPanel` does: what it says and what it does. */
@@ -177,6 +191,7 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     var confirm by remember { mutableStateOf<Confirm?>(null) }
     var renaming by remember { mutableStateOf(false) }
+    var renamingFamily by remember { mutableStateOf<AccountSettings.Family?>(null) }
     var askPassword by remember { mutableStateOf(false) }
     BackHandler { actions.close() }
     val trustFailed = stringResource(R.string.trust_failed)
@@ -196,6 +211,9 @@ fun SettingsScreen(
         )
     }
     if (renaming) RenameDialog(state.device.label, onRename = { renaming = false; actions.rename(it) }, onClose = { renaming = false })
+    renamingFamily?.let { f ->
+        RenameDialog(f.label.orEmpty(), onRename = { renamingFamily = null; actions.renameFamily(f.id, it) }, onClose = { renamingFamily = null })
+    }
     if (askPassword) PasswordDialog(state.working, actions) { askPassword = false }
     var limiting by remember { mutableStateOf(false) }
     state.storage?.let { storage -> if (limiting) LimitDialog(storage.field, actions) { limiting = false } }
@@ -235,22 +253,26 @@ fun SettingsScreen(
                     )
                 }
             }
-            account(state)
+            account(state, actions)
+            profile(state, actions)
+            password(state, actions)
             thisDevice(state, onRename = { renaming = true }, onStay = { actions.stay(it, trustDone) }, onPassword = { askPassword = true }) {
                 confirm = Confirm(
                     context.getString(R.string.account_settings_untrust_confirm_title), context.getString(R.string.account_settings_untrust_confirm),
                     context.getString(R.string.manage_forget_device), actions::stopTrusting,
                 )
             }
-            sessions(state, context, ask = { confirm = it }, actions)
+            sessions(state, context, ask = { confirm = it }, actions, onRename = { renamingFamily = it })
             savedKeys(state, context, ask = { confirm = it }, actions)
             if (state.addDevice) {
                 val camera = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)
                 addDevice(camera, !state.working, actions)
             }
+            security(state, actions)
             storage(state, context, onLimit = { limiting = true }, actions)
             maps?.let { mapServices(it) }
             appearance(context)
+            erase(state, actions)
             item(key = "sign-out") {
                 Column(Modifier.padding(16.dp)) {
                     OutlinedButton(
@@ -276,9 +298,14 @@ fun SettingsScreen(
 
 /**
  * The list key a section starts at, by its id (core's `SettingsSection.id`, ADR 0146 decision 9): its header's; the
- * appearance section is its one row.
+ * appearance section is its one row, the address's change its row in the account section.
  */
-private fun sectionKey(id: String): String = if (id == "appearance") "appearance" else "header-$id"
+private fun sectionKey(id: String): String = when (id) {
+    "appearance" -> "appearance"
+    // the address's change is a row of the account section, beside the address (ADR 0148 decision 10)
+    "email" -> "email-change"
+    else -> "header-$id"
+}
 
 /** A section's title, as Android's Settings sets one: small, in the accent, above its rows. */
 private fun LazyListScope.header(key: String, title: @Composable () -> String, sub: (@Composable () -> String)? = null) {
@@ -293,7 +320,7 @@ private fun LazyListScope.header(key: String, title: @Composable () -> String, s
 @Composable
 private fun listColors() = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background)
 
-private fun LazyListScope.account(state: AccountSettings.State) {
+private fun LazyListScope.account(state: AccountSettings.State, actions: SettingsActions) {
     header("account", { stringResource(R.string.account_settings_account) })
     item(key = "email") {
         ListItem(
@@ -305,6 +332,69 @@ private fun LazyListScope.account(state: AccountSettings.State) {
             },
             leadingContent = { Icon(Icons.Outlined.AlternateEmail, null) },
             colors = listColors(),
+        )
+    }
+    // the address changed beside the address shown (ADR 0148 decision 10); the mailed link confirms it on the web
+    item(key = "email-change") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.email_change_action)) },
+            leadingContent = { Icon(Icons.Outlined.Edit, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openAddressChange).testTag("settings-email-change"),
+        )
+    }
+}
+
+/** *Your profile* (the web's rubric): one's username, name, picture and the group-add consent in this space. */
+private fun LazyListScope.profile(state: AccountSettings.State, actions: SettingsActions) {
+    header("profile", { stringResource(R.string.profile_title) }, { stringResource(R.string.profile_sub) })
+    item(key = "profile") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.profile_title)) },
+            leadingContent = { Icon(Icons.Outlined.AccountCircle, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openProfile).testTag("settings-profile"),
+        )
+    }
+}
+
+/** *Change password*: the current password and the Secret Key prove the account, the new one replaces it. */
+private fun LazyListScope.password(state: AccountSettings.State, actions: SettingsActions) {
+    header("password", { stringResource(R.string.password_change_title) }, { stringResource(R.string.password_change_sub) })
+    item(key = "password") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.password_change_title)) },
+            leadingContent = { Icon(Icons.Outlined.Password, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openPasswordChange).testTag("settings-password"),
+        )
+    }
+}
+
+/** *Secure your account*: the keys replaced, a new Emergency Kit saved first (ADR 0148 decision 7). */
+private fun LazyListScope.security(state: AccountSettings.State, actions: SettingsActions) {
+    item(key = "security-divider") { HorizontalDivider(Modifier.padding(top = 16.dp)) }
+    header("security", { stringResource(R.string.rotation_title) }, { stringResource(R.string.rotation_sub) })
+    item(key = "security") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.rotation_action)) },
+            leadingContent = { Icon(Icons.Outlined.Shield, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openKeyRotation).testTag("settings-security"),
+        )
+    }
+}
+
+/** *Erase your account*: what goes and what stays, then the password (ADR 0148 decision 8). */
+private fun LazyListScope.erase(state: AccountSettings.State, actions: SettingsActions) {
+    item(key = "erase-divider") { HorizontalDivider(Modifier.padding(top = 8.dp)) }
+    header("erase", { stringResource(R.string.erasure_title) }, { stringResource(R.string.erasure_sub) })
+    item(key = "erase") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.erasure_action), color = MaterialTheme.colorScheme.error) },
+            leadingContent = { Icon(Icons.Outlined.PersonRemove, null, tint = MaterialTheme.colorScheme.error) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openErasure).testTag("settings-erase"),
         )
     }
 }
@@ -333,9 +423,11 @@ private fun LazyListScope.thisDevice(
             colors = listColors(),
         )
     }
-    // how it stays signed in: the changes "Manage servers" offers, the same core state (D2)
-    trust.method?.let { method ->
-        for (change in trustChanges(method, trust.level, trust.levels)) {
+    // how it stays signed in: the changes "Manage servers" offers, the same core state (D2); a device with no saved unlock
+    // (a password change took its saved key, ADR 0148 decision 6) is offered the password trust and each level again
+    val changes = trust.method?.let { trustChanges(it, trust.level, trust.levels) } ?: (trust.levels + listOf(null))
+    run {
+        for (change in changes) {
             item(key = "trust-$change") {
                 ListItem(
                     headlineContent = {
@@ -353,11 +445,11 @@ private fun LazyListScope.thisDevice(
                         }, null)
                     },
                     colors = listColors(),
-                    modifier = Modifier.clickable(enabled = !state.working) { if (change == null) onPassword() else onStay(change) },
+                    modifier = Modifier.clickable(enabled = !state.working) { if (change == null) onPassword() else onStay(change) }.testTag("settings-trust-${change ?: "password"}"),
                 )
             }
         }
-        item(key = "stop-trusting") {
+        if (trust.method != null) item(key = "stop-trusting") {
             ListItem(
                 headlineContent = { Text(stringResource(R.string.manage_forget_device), color = MaterialTheme.colorScheme.error) },
                 leadingContent = { Icon(Icons.Outlined.NoEncryption, null, tint = MaterialTheme.colorScheme.error) },
@@ -368,7 +460,7 @@ private fun LazyListScope.thisDevice(
     }
 }
 
-private fun LazyListScope.sessions(state: AccountSettings.State, context: Context, ask: (Confirm) -> Unit, actions: SettingsActions) {
+private fun LazyListScope.sessions(state: AccountSettings.State, context: Context, ask: (Confirm) -> Unit, actions: SettingsActions, onRename: (AccountSettings.Family) -> Unit) {
     header("sessions", { stringResource(R.string.account_settings_sessions) }, { stringResource(R.string.account_settings_sessions_sub) })
     state.registerRefusal?.let { why ->
         item(key = "register-refusal") {
@@ -386,7 +478,7 @@ private fun LazyListScope.sessions(state: AccountSettings.State, context: Contex
         families.isEmpty() -> item(key = "sessions-empty") {
             Text(stringResource(R.string.account_settings_sessions_empty), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         }
-        else -> items(families, key = { "family-${it.id}" }) { f -> FamilyRow(f, state.working, context, ask, actions) }
+        else -> items(families, key = { "family-${it.id}" }) { f -> FamilyRow(f, state.working, context, ask, actions, onRename) }
     }
     if (state.hasOthers) item(key = "sign-out-others") {
         TextButton(
@@ -405,7 +497,7 @@ private fun LazyListScope.sessions(state: AccountSettings.State, context: Contex
 
 /** One session: its device's name (or what it is, where the register names none), its dates, its actions in an overflow menu. */
 @Composable
-private fun FamilyRow(f: AccountSettings.Family, working: Boolean, context: Context, ask: (Confirm) -> Unit, actions: SettingsActions) {
+private fun FamilyRow(f: AccountSettings.Family, working: Boolean, context: Context, ask: (Confirm) -> Unit, actions: SettingsActions, onRename: (AccountSettings.Family) -> Unit) {
     var menu by remember { mutableStateOf(false) }
     val name = f.label ?: stringResource(if (f.current) R.string.account_settings_this_device else R.string.account_settings_other_device)
     ListItem(
@@ -432,6 +524,16 @@ private fun FamilyRow(f: AccountSettings.Family, working: Boolean, context: Cont
                     Icon(Icons.Outlined.MoreVert, stringResource(if (f.current) R.string.account_settings_revoke_self else R.string.account_settings_revoke))
                 }
                 DropdownMenu(menu, { menu = false }) {
+                    // the device a register names is renamed, every session of it (the web's rename); one it cannot name offers none
+                    if (f.label != null) DropdownMenuItem(
+                        text = { Text(stringResource(R.string.account_settings_rename)) },
+                        leadingIcon = { Icon(Icons.Outlined.Edit, null) },
+                        onClick = {
+                            menu = false
+                            onRename(f)
+                        },
+                        modifier = Modifier.testTag("settings-family-rename-${f.id}"),
+                    )
                     if (f.current) DropdownMenuItem(
                         text = { Text(stringResource(R.string.account_settings_revoke_self)) },
                         leadingIcon = { Icon(Icons.AutoMirrored.Outlined.Logout, null) },

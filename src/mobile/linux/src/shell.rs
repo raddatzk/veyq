@@ -791,10 +791,18 @@ impl Shell {
         if shell.person.is_none() {
             self.draw_header(shown);
         } else {
-            // the profile is no node: no node's actions on it
+            // the profile is no node: no node's actions on it; one's own has *Edit profile* (ADR 0148 decision 10)
             self.header.borrow_mut().take();
             while let Some(child) = self.header_bar.first_child() {
                 self.header_bar.remove(&child);
+            }
+            if shell.person.is_some() && shell.person == shown.me {
+                let edit = gtk::Button::builder().icon_name("document-edit-symbolic").tooltip_text(words::profile_edit()).build();
+                edit.update_property(&[gtk::accessible::Property::Label(&words::profile_edit())]);
+                edit.set_widget_name("edit-profile");
+                let window = self.window.clone();
+                edit.connect_clicked(move |_| crate::profile_edit::open(window.upcast_ref()));
+                self.header_bar.append(&edit);
             }
         }
         // the Memories bar's Map tab stands while it is chosen and nothing is open; a page closing back onto the list asks
@@ -817,7 +825,7 @@ impl Shell {
             let mut page = self.person.borrow_mut();
             if page.as_ref().is_none_or(|p| p.user_id != *user) {
                 *page = None;
-                *page = Some(PersonPage::open(user, self.window.upcast_ref()));
+                *page = Some(PersonPage::open(user, shown.me.as_ref() == Some(user), self.window.upcast_ref()));
             }
             page.as_ref().expect("set above").widget().clone().upcast()
         } else { match &shell.open_object {
