@@ -15,7 +15,13 @@
 // MemoryFacts, ADR 0143 decision 5), then a SelectorBar switching between its photos, its Music view where the node has
 // music or whoever looks may add some (GalleryShown.musicView; MusicView, ADR 0142 decision 6: Fluent's SelectorBar, Linux's
 // AdwToggleGroup) and its Map view, always (MemoryMapView, ADR 0143 decision 8); the header's own music action plays or
-// stops the node's music (Gallery.Music).
+// stops the node's music (Gallery.Music); and, where GalleryShown.contributions holds (a member's), its Contributions view
+// (ContributionsView, ADR 0149 decision 6), the fourth item.
+//
+// Above the photos the filter (GalleryFilterBar, ADR 0149 decision 5) where GalleryShown.filter is offered: the grid and the
+// lightbox page the rows it shows. A tile carries its marks' badge (ADR 0149 decision 4: the heart, filled where the caller
+// marked it, with the count where anyone did) — a badge, not a button: the mark is toggled in the lightbox and, where the
+// marks' mode is offered (a member's, in a shared space, online), from the tile's right-click menu (Marks.Toggle).
 //
 // Every state is the core's GalleryModel (Gallery.Open, Watched.Gallery): the rows, the chapters, what it offers (rights
 // only remove functions: share view = member view). Nothing decrypted is written to show it (ADR 0047).
@@ -102,6 +108,13 @@ internal sealed class MemoryPage : IDisposable
     private readonly SelectorBarItem _mapItem = new() { Text = Words.MemoryViewMap() };
     private readonly Border _mapSlot = new() { Visibility = Visibility.Collapsed };
     private MemoryMapView? _mapView;
+    /// <summary>The Contributions view's place (where GalleryShown.contributions holds) and the view while it shows.</summary>
+    private readonly SelectorBarItem _bucketsItem = new() { Text = Words.MemoryBucketsTitle(), Visibility = Visibility.Collapsed };
+    private readonly Border _bucketsSlot = new() { Visibility = Visibility.Collapsed };
+    private ContributionsView? _buckets;
+    /// <summary>The filter above the photos, made once the page's id is known, while GalleryShown.filter is offered.</summary>
+    private readonly Border _filterSlot = new() { Visibility = Visibility.Collapsed };
+    private GalleryFilterBar? _filter;
     /// <summary>The facts line under the head (its date and place, ADR 0143 decision 5) and what it was drawn from.</summary>
     private readonly Border _factsSlot = new();
     private (MemoryDateShown?, string?, bool)? _factsDrawn;
@@ -149,10 +162,14 @@ internal sealed class MemoryPage : IDisposable
         _views.Items.Add(_musicItem);
         AutomationProperties.SetAutomationId(_mapItem, "memory-view-map");
         _views.Items.Add(_mapItem);
+        AutomationProperties.SetAutomationId(_bucketsItem, "memory-view-contributions");
+        _views.Items.Add(_bucketsItem);
         _views.SelectionChanged += (_, _) => ShowView();
         _column.Children.Add(_views);
         _column.Children.Add(_musicSlot);
         _column.Children.Add(_mapSlot);
+        _column.Children.Add(_bucketsSlot);
+        _column.Children.Add(_filterSlot);
         AutomationProperties.SetAutomationId(_count, "memory-count");
         _column.Children.Add(_count);
         var heading = new TextBlock { Text = Words.MemoryChapters(), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] };
@@ -226,7 +243,7 @@ internal sealed class MemoryPage : IDisposable
         if (_closed || update is not Update.Gallery g) return;
         if (g.shown is { } s)
         {
-            Log.Write($"gallery shown: {s.rows?.Count ?? -1} rows, {s.chapters.Count} chapters, failed {s.failed}, undo {s.undo is not null}, upload {s.canUpload}, save {s.canSave}, creates {string.Join(",", s.creates.Select(c => c.create))}");
+            Log.Write($"gallery shown: {s.rows?.Count ?? -1} rows, {s.chapters.Count} chapters, failed {s.failed}, filter {(s.filter is { } fs ? $"{fs.shown}/{fs.total} {fs.mode} chips {fs.chips.Count} suggestions {fs.suggestions.Count}" : "-")}, contributions {s.contributions}, marks {s.rows?.Count(r => r.mine || r.marks > 0) ?? 0}, undo {s.undo is not null}, upload {s.canUpload}, save {s.canSave}, creates {string.Join(",", s.creates.Select(c => c.create))}");
         }
         var chaptersChanged = !(_shown?.chapters ?? []).SequenceEqual(g.shown?.chapters ?? []);
         _shown = g.shown;
@@ -329,6 +346,21 @@ internal sealed class MemoryPage : IDisposable
     {
         var music = _views.Visibility == Visibility.Visible && ReferenceEquals(_views.SelectedItem, _musicItem);
         var map = _views.Visibility == Visibility.Visible && ReferenceEquals(_views.SelectedItem, _mapItem);
+        var buckets = _views.Visibility == Visibility.Visible && ReferenceEquals(_views.SelectedItem, _bucketsItem);
+        if (buckets && _buckets is null && _id is { } of)
+        {
+            _buckets = new ContributionsView(_window, of, _say, RowOf, OpenLightbox, () => _shown?.offline is not null);
+            _bucketsSlot.Child = _buckets.View;
+            Log.Write("memory page: the Contributions view");
+        }
+        else if (!buckets && _buckets is not null)
+        {
+            _bucketsSlot.Child = null;
+            _buckets.Dispose();
+            _buckets = null;
+            Log.Write("memory page: the Contributions view left");
+        }
+        _bucketsSlot.Visibility = buckets ? Visibility.Visible : Visibility.Collapsed;
         if (map && _mapView is null && _id is { } at)
         {
             _mapView = new MemoryMapView(_window, at, _say, _saving);
@@ -357,9 +389,10 @@ internal sealed class MemoryPage : IDisposable
             Log.Write("memory page: the photos");
         }
         _musicSlot.Visibility = music ? Visibility.Visible : Visibility.Collapsed;
-        var other = music || map;
+        var other = music || map || buckets;
         var photos = other ? Visibility.Collapsed : Visibility.Visible;
         _count.Visibility = photos;
+        _filterSlot.Visibility = !other && _filter is not null ? Visibility.Visible : Visibility.Collapsed;
         _status.Visibility = photos;
         _grid.Visibility = photos;
         _chapters.Visibility = other ? Visibility.Collapsed : _shown?.chapters.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -409,6 +442,18 @@ internal sealed class MemoryPage : IDisposable
     public static void OpenNode(NodeAt node) =>
         Act.Send(new Call.ShellOpen { Ref = new ObjectRef { scopeId = node.scopeId, nodeId = node.nodeId, kind = node.kind, application = ApplicationId.Memories, name = node.name } });
 
+    /// <summary>Medium <paramref name="mediaId"/>'s row and its place in the rows the page shows; null where it shows none.</summary>
+    private (GalleryRow Row, int Index)? RowOf(string mediaId)
+    {
+        if (_shown?.rows is not { } rows) return null;
+        for (var i = 0; i < rows.Count; i++) if (rows[i].mediaId == mediaId) return (rows[i], i);
+        return null;
+    }
+
+    /// <summary>Whether a tile's menu marks (Marks.Toggle): where the marks' mode is offered (a member's, in a shared
+    /// space) and the page is online.</summary>
+    private bool Marking => _shown is { filter.modeOffered: true, offline: null };
+
     /// <summary>The grid's width: the scroll's view, less the page's margins.</summary>
     private double Width => _scroll.ViewportWidth - 2 * Margin;
 
@@ -416,7 +461,7 @@ internal sealed class MemoryPage : IDisposable
     /// wanted asked once the one in flight answered.</summary>
     private async void Relayout()
     {
-        if (_id is not { } gallery || _closed || _music is not null) return;
+        if (_id is not { } gallery || _closed || _music is not null || _buckets is not null) return;
         var width = Width;
         if (width <= 0 || _shown?.rows is null) return;
         if (_asking)
@@ -478,7 +523,7 @@ internal sealed class MemoryPage : IDisposable
         {
             // a row is built from its frames and its media's tiles: the same row moves, another is made
             // a placeholder is built anew when it starts sending or fails, never for a step of its progress
-            var key = string.Join(" ", r.tiles.Select(t => $"{t.mediaId}:{(uploading.TryGetValue(t.mediaId, out var u) ? Stage(u) : byId.TryGetValue(t.mediaId, out var m) ? m.Row.tile ?? "-" : "-")}:{t.left:0.0}:{t.width:0.0}")) + $" h{r.height:0.0}";
+            var key = string.Join(" ", r.tiles.Select(t => $"{t.mediaId}:{(uploading.TryGetValue(t.mediaId, out var u) ? Stage(u) : byId.TryGetValue(t.mediaId, out var m) ? m.Row.tile ?? "-" : "-")}:{(byId.TryGetValue(t.mediaId, out var b) ? $"{b.Row.marks}/{b.Row.mine}" : "")}:{t.left:0.0}:{t.width:0.0}")) + $" h{r.height:0.0} m{Marking}";
             if (_mounted.TryGetValue(r.index, out var placed))
             {
                 if (placed.Key == key)
@@ -548,6 +593,24 @@ internal sealed class MemoryPage : IDisposable
             };
             face.Children.Add(badge);
         }
+        // the marks' badge: the heart, filled where the caller marked it, the count where anyone did
+        var marked = GalleryText.MarkWords(row);
+        if (marked is not null)
+        {
+            var badge = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+            badge.Children.Add(new FontIcon { Glyph = row.mine ? "\uEB52" : "\uEB51", FontSize = 12, Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) });
+            if (row.marks is int n && n > 0) badge.Children.Add(new TextBlock { Text = n.ToString(System.Globalization.CultureInfo.CurrentCulture), FontSize = 12, Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) });
+            face.Children.Add(new Border
+            {
+                Background = new SolidColorBrush(Windows.UI.Color.FromArgb(160, 0, 0, 0)),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(6, 3, 6, 3),
+                Margin = new Thickness(6),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top,
+                Child = badge,
+            });
+        }
         var tile = new Button
         {
             Content = face,
@@ -561,10 +624,37 @@ internal sealed class MemoryPage : IDisposable
             Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
         };
         AutomationProperties.SetAutomationId(tile, $"tile:{index}");
-        AutomationProperties.SetName(tile, name);
+        AutomationProperties.SetName(tile, marked is null ? name : $"{name}, {marked}");
         ToolTipService.SetToolTip(tile, name);
         tile.Click += (_, _) => OpenLightbox(index);
+        if (Marking)
+        {
+            // the right-click menu marks, as Explorer's menu acts on the item under the pointer
+            var item = new MenuFlyoutItem { Text = row.mine ? Words.MediaMarksUnmark() : Words.MediaMarksMark(), Icon = new FontIcon { Glyph = row.mine ? "\uEB51" : "\uEB52" } };
+            AutomationProperties.SetAutomationId(item, "tile-mark");
+            var id = row.mediaId;
+            item.Click += (_, _) => ToggleMark(id);
+            var menu = new MenuFlyout();
+            menu.Items.Add(item);
+            tile.ContextFlyout = menu;
+        }
         return tile;
+    }
+
+    /// <summary>Medium <paramref name="mediaId"/>'s mark flipped from its tile's menu (Marks.Toggle); what did not land is said.</summary>
+    private async void ToggleMark(string mediaId)
+    {
+        if (_id is not { } gallery) return;
+        try
+        {
+            var (answer, _) = await Core.CallAsync(new Call.MarksToggle { gallery = gallery, mediaId = mediaId });
+            Log.Write($"tile mark: {(answer is Answer.Refused r ? $"Refused {r.why}" : answer.GetType().Name)}");
+            if (answer is Answer.Said { notice: { } n }) _say(false, Said.Notice(n));
+        }
+        catch (Exception e)
+        {
+            Log.Write($"Marks.Toggle failed ({e.GetType().Name})");
+        }
     }
 
     /// <summary>A placeholder's stage, what its tile is built from: preparing, sending, failed.</summary>
@@ -729,7 +819,7 @@ internal sealed class MemoryPage : IDisposable
     {
         _chapterList.Items.Clear();
         var chapters = _shown?.chapters ?? [];
-        _chapters.Visibility = chapters.Count > 0 && _music is null ? Visibility.Visible : Visibility.Collapsed;
+        _chapters.Visibility = chapters.Count > 0 && _music is null && _mapView is null && _buckets is null ? Visibility.Visible : Visibility.Collapsed;
         if (_id is not { } gallery) return;
         foreach (var chapter in chapters)
         {
@@ -785,6 +875,8 @@ internal sealed class MemoryPage : IDisposable
             null or { rows: null, failure: null } => new ProgressRing { IsActive = true, Margin = new Thickness(24), HorizontalAlignment = HorizontalAlignment.Center },
             // offline, what the store does not hold says so, else the load failed (the core's words)
             { rows: null, failure: { } failure } => Status(Said.Key(failure), ""),
+            // the filter leaves nothing of what there is: its own words (the web's media.filter.empty)
+            { rows.Count: 0, filter: { total: > 0 } f } when GalleryText.Narrows(f) => Status(GalleryText.Empty(f), "\uE71C"),
             { rows.Count: 0, uploading.Count: 0 } => Status(Words.MemoryGalleryEmpty(), HomeView.KindGlyph(Node.kind)),
             _ => null,
         };
@@ -792,6 +884,7 @@ internal sealed class MemoryPage : IDisposable
         if (s is null) return;
         DrawFacts(s);
         DrawPeople(s);
+        DrawFilter(s);
         if (_id is { } shownAt)
         {
             _banner.Show(shownAt, s.banner);
@@ -805,15 +898,21 @@ internal sealed class MemoryPage : IDisposable
             Log.Write("gallery asks before trashing the banner's picture");
             BannerStage.Ask(_window, asking, _say);
         }
-        // Photos | Music | Map: the Map view always (the web's tab), Music where the node offers it
+        // Photos | Music | Map | Contributions: the Map view always (the web's tab), Music where the node offers it, the
+        // Contributions where GalleryShown.contributions holds (a member's)
         var music = s.musicView ? Visibility.Visible : Visibility.Collapsed;
-        if (_views.Visibility != Visibility.Visible || _musicItem.Visibility != music)
+        var buckets = s.contributions ? Visibility.Visible : Visibility.Collapsed;
+        if (_views.Visibility != Visibility.Visible || _musicItem.Visibility != music || _bucketsItem.Visibility != buckets)
         {
             _views.Visibility = Visibility.Visible;
             _musicItem.Visibility = music;
+            _bucketsItem.Visibility = buckets;
             if (!s.musicView && ReferenceEquals(_views.SelectedItem, _musicItem)) _views.SelectedItem = _photosItem;
+            if (!s.contributions && ReferenceEquals(_views.SelectedItem, _bucketsItem)) _views.SelectedItem = _photosItem;
             ShowView();
         }
+        // the Contributions' bucket and tiles follow the page's rows, which this state may have changed
+        _buckets?.RowsChanged();
         // the offer ended (its window, or the undo): the Undo goes with it — once a state showed the offer, so an update
         // from before the trash that arrives after its answer ends nothing (src/mobile/CLAUDE.md § Traps)
         if (s.undo is { } undo)
@@ -856,6 +955,25 @@ internal sealed class MemoryPage : IDisposable
             _purgeAsked = true;
             AskPurge(p, Said.Notice(question));
         }
+    }
+
+    /// <summary>The filter above the photos where the page offers it (GalleryShown.filter): made once, then shown each state.</summary>
+    private void DrawFilter(GalleryShown s)
+    {
+        if (s.filter is not { offered: true } f || _id is not { } gallery || s.rows is null)
+        {
+            _filterSlot.Visibility = Visibility.Collapsed;
+            return;
+        }
+        if (_filter is null)
+        {
+            _filter = new GalleryFilterBar(gallery);
+            _filterSlot.Child = _filter.View;
+            Log.Write($"memory filter offered: marks mode {f.modeOffered}");
+        }
+        _filter.Show(f);
+        var photos = _music is null && _mapView is null && _buckets is null;
+        _filterSlot.Visibility = photos ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>The facts line under the head, drawn anew only when its date, place or rights changed.</summary>
@@ -931,6 +1049,8 @@ internal sealed class MemoryPage : IDisposable
         _music = null;
         _mapView?.Dispose();
         _mapView = null;
+        _buckets?.Dispose();
+        _buckets = null;
         _watch?.Dispose();
         _live?.Dispose();
         if (_seenUndo)

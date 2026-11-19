@@ -1,6 +1,7 @@
 // Home and an application's list (ADR 0122): Home's level as the core groups it — the folders, then the contents — under
 // the filters the core offers (a SelectorBar), and an application's own list in its Favorites, Recent and the rest.
-// Drawn as Explorer's Home draws its sections: a heading over each group's list. Linux's home.rs, in Fluent.
+// Drawn as Explorer's Home draws its sections: a heading over each group's list — or, where the account chose Tiles
+// (ShellShown.view, ADR 0149 decision 8), over each group's tiles (LevelTiles). Linux's home.rs, in Fluent.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -96,13 +97,42 @@ internal static class HomeView
             glyph => RowCovers.Prefix(glyph, r.nodeId),
             r.kind is "MEMORY" or "CHAPTER" ? RowDates.Line(r.nodeId) : null);
 
+    /// <summary><paramref name="r"/> as a tile: what its row shows and does (LevelTiles).</summary>
+    private static LevelTiles.Item ObjectTile(ObjectRef r) =>
+        new(KindGlyph(r.kind), r.nodeId, r.name, r.kind is "MEMORY" or "CHAPTER" ? RowDates.Line(r.nodeId) : null, $"object:{r.name}",
+            () => Act.Send(new Call.ShellOpen { Ref = r }));
+
+    private static LevelTiles.Item FolderTile(NodeRef n, Drops? drops) =>
+        new(KindGlyph(n.kind), n.nodeId, n.name, null, $"folder:{n.name}",
+            () => Act.Send(new Call.ShellEnter { folder = new FolderRef { nodeId = n.nodeId, name = n.name } }),
+            drops is not null && n.kind == "FOLDER" ? tile => drops.OntoFolder(tile, n.nodeId, n.name) : null);
+
     private static ListViewItem FolderRow(NodeRef n) =>
         Row(KindGlyph(n.kind), n.name, $"folder:{n.name}", true,
             () => Act.Send(new Call.ShellEnter { folder = new FolderRef { nodeId = n.nodeId, name = n.name } }),
             glyph => RowCovers.Prefix(glyph, n.nodeId));
 
     /// <summary>A section: its heading (if any), then its rows as one list whose item click opens the row.</summary>
-    private static void Section(StackPanel content, string? heading, IEnumerable<ListViewItem> rows, bool apart = false)
+    private static void Section(StackPanel content, string? heading, IEnumerable<ListViewItem> rows, bool apart = false) =>
+        SectionOf(content, heading, apart, () =>
+        {
+            var list = new ListView { SelectionMode = ListViewSelectionMode.None, IsItemClickEnabled = true };
+            foreach (var row in rows) list.Items.Add(row);
+            list.ItemClick += (_, e) =>
+            {
+                // the clicked item is the row itself (a ListViewItem is its own container), or its content
+                var row = e.ClickedItem as ListViewItem ?? (e.ClickedItem as FrameworkElement)?.Parent as ListViewItem;
+                if (row?.Tag is Action open) open();
+                else Log.Write($"a row's click reached no row ({e.ClickedItem?.GetType().Name})");
+            };
+            return list;
+        });
+
+    /// <summary>A section of tiles: its heading (if any), then its tiles at the core's frames.</summary>
+    private static void TileSection(StackPanel content, string? heading, IReadOnlyList<LevelTiles.Item> tiles, int index, bool apart = false) =>
+        SectionOf(content, heading, apart, () => LevelTiles.Grid(tiles, $"tiles:{index}"));
+
+    private static void SectionOf(StackPanel content, string? heading, bool apart, Func<UIElement> body)
     {
         if (heading is null && apart)
         {
@@ -121,16 +151,7 @@ internal static class HomeView
             AutomationProperties.SetHeadingLevel(title, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
             content.Children.Add(title);
         }
-        var list = new ListView { SelectionMode = ListViewSelectionMode.None, IsItemClickEnabled = true };
-        foreach (var row in rows) list.Items.Add(row);
-        list.ItemClick += (_, e) =>
-        {
-            // the clicked item is the row itself (a ListViewItem is its own container), or its content
-            var row = e.ClickedItem as ListViewItem ?? (e.ClickedItem as FrameworkElement)?.Parent as ListViewItem;
-            if (row?.Tag is Action open) open();
-            else Log.Write($"a row's click reached no row ({e.ClickedItem?.GetType().Name})");
-        };
-        content.Children.Add(list);
+        content.Children.Add(body());
     }
 
     private static (ScrollViewer Scroll, StackPanel Content) Column()
@@ -151,9 +172,10 @@ internal static class HomeView
     /// cover: the folder's header's, as the Pot's and the Memory's pages place it), then the level's groups
     /// (Home.groups): a folder enters, an object opens in its application. With <paramref name="drops"/>, files and folders
     /// dropped onto the level upload there, and onto a folder's row into that folder (ADR 0123's Consequences, the Windows
-    /// app's Depot whole).</summary>
+    /// app's Depot whole). Drawn as tiles where the account chose them (ShellShown.view).</summary>
     public static UIElement Home(ShellModelState state, ShellShown shown, Drops? drops = null, UIElement? hero = null)
     {
+        var tiles = shown.view == ViewModeShown.Tiles;
         var (scroll, content) = Column();
         // the scroller holds only the column's height: the level takes a drop under its last row too
         scroll.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
@@ -168,8 +190,21 @@ internal static class HomeView
             content.Children.Add(hero);
         }
         if (shown.groups.Count == 0) content.Children.Add(Empty());
+        var index = 0;
         foreach (var g in shown.groups)
         {
+            var heading = g.heading is { } h ? Said.Key(h) : null;
+            if (tiles)
+            {
+                var items = new List<LevelTiles.Item>();
+                foreach (var n in g.nodes)
+                {
+                    if (g.folders) items.Add(FolderTile(n, drops));
+                    else if (state.lists.objects.FirstOrDefault(o => o.scopeId == n.scopeId && o.nodeId == n.nodeId) is { } o) items.Add(ObjectTile(o));
+                }
+                TileSection(content, heading, items, index++);
+                continue;
+            }
             var rows = new List<ListViewItem>();
             foreach (var n in g.nodes)
             {
@@ -181,7 +216,7 @@ internal static class HomeView
                 }
                 else if (state.lists.objects.FirstOrDefault(o => o.scopeId == n.scopeId && o.nodeId == n.nodeId) is { } o) rows.Add(ObjectRow(o));
             }
-            Section(content, g.heading is { } h ? Said.Key(h) : null, rows);
+            Section(content, heading, rows);
         }
         return scroll;
     }
@@ -208,8 +243,9 @@ internal static class HomeView
         return bar;
     }
 
-    /// <summary>An application's own list: Favorites, Recent, then the rest, each where it holds something.</summary>
-    public static UIElement List(ArrangedList? list)
+    /// <summary>An application's own list: Favorites, Recent, then the rest, each where it holds something — as rows, or as
+    /// tiles where the account chose them (<paramref name="tiles"/>).</summary>
+    public static UIElement List(ArrangedList? list, bool tiles = false)
     {
         var (scroll, content) = Column();
         if (list is null || (list.favorites.Count == 0 && list.recent.Count == 0 && list.all.Count == 0))
@@ -218,10 +254,12 @@ internal static class HomeView
             return scroll;
         }
         var drawn = false;
+        var index = 0;
         foreach (var (title, refs) in new (string?, IReadOnlyList<ObjectRef>)[] { (Words.DrawerFavorites(), list.favorites), (Words.DrawerRecent(), list.recent), (null, list.all) })
         {
             if (refs.Count == 0) continue;
-            Section(content, title, refs.Select(ObjectRow), apart: drawn);
+            if (tiles) TileSection(content, title, refs.Select(ObjectTile).ToList(), index++, apart: drawn);
+            else Section(content, title, refs.Select(ObjectRow), apart: drawn);
             drawn = true;
         }
         return scroll;

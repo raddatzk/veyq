@@ -287,7 +287,11 @@ A Gradle build of its own, run through its own wrapper.
   `Polyline`, the pins hit-tested and no `Button`, the consent's offer in its place, the attribution always at its foot;
   the Memories bar's Map tab in `ShellView`, a row's date `RowDates`, Settings → Map services `MapServicesSection`) with `LightboxView` (in
   the page's place over black: zoom, the slideshow, a video through `MediumPlayer`, the details (a photo's small map and its place's name), Save, the music's compact
-  controls, `Lightbox.Video` from its player) and `MediaTiers` (the host's answer to `Media.Tiers`/`Media.Duration`: WIC
+  controls, `Lightbox.Video` from its player, the mark's heart and Report), the page's filter `GalleryFilterBar` (an `AutoSuggestBox`
+  with the core's chips, the marks' mode as a `DropDownButton`), its Contributions view `ContributionsView` (the
+  `SelectorBar`'s fourth item), their words without a widget `GalleryText` (`GalleryTextTest`), and a level's, an
+  application list's and a person's Memories as tiles `LevelTiles` (core's `View.Tiles` frames on a `Canvas`, the
+  `CommandBar`'s View) and `MediaTiers` (the host's answer to `Media.Tiers`/`Media.Duration`: WIC
   for a photo, turned by its EXIF; `Windows.Media.Editing` for a video's poster and length, `MediaSource.OpenAsync` where
   a clip refuses the file (an Ogg track); both JPEGs encoded in memory; `MediaTiersTest`), `MusicBar` (the account's
   music bar along the shell's bottom), `MusicHost` (the two decks, `MediaPlayer`s over `ReaderStream`, ramps in

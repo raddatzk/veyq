@@ -322,6 +322,17 @@ Each phase ends with every platform building.
 - [ ] **10 Linux and Windows** — as phase 8 over the bridge (`gtk::SearchBar` / `AutoSuggestBox`, the header bar's
   toggle / the `CommandBar`'s *View*, a `gtk::GridView`/`FlowBox` / `ItemsRepeater` with a `UniformGridLayout` for the
   tiles). · Done when: `run.py build`/`test` green on both; clicked as phase 8, a window resized across the columns.
+  *Windows status 2026-11-19:* built — `GalleryFilterBar.cs` (the filter's `AutoSuggestBox` with the core's chips, the
+  chips as removable buttons, the marks' mode as a `DropDownButton`, Clear filter), `GalleryText.cs` (its words and a badge's,
+  `GalleryTextTest`), `ContributionsView.cs` (the `SelectorBar`'s fourth item: the bucket picker, New sub-bucket, Rename,
+  Delete bucket with its name typed, a medium moved from its tile's right-click menu, square tiles at `View.Tiles`' frames),
+  `LevelTiles.cs` (Home, a folder, an application's list and a profile as tiles on a `Canvas` at core's frames; the
+  `CommandBar`'s View with List | Tiles; a profile's `SelectorBar` List | Tiles | Map, Tiles selected when the core says so);
+  the tile's badge and right-click Mark, the lightbox's heart and *Report*; a Memory's header download and copy are the
+  plan's, unchanged. Not done: the UIA pass (a throwaway's tenant does not resolve on the VM, #983 → #1000); the local
+  calendar for the day chips — the bridge carries none (#989, #1001), so Windows keeps UTC's; what the bridge lacks for the
+  tile's mark in a personal space, `markSeen` and a filtered bucket's tiles is #1001. The CR's `ItemsRepeater` with a
+  `UniformGridLayout` became a `Canvas` at core's `TileGrid` frames, as the gallery's grid is (the core decides the columns).
 
 - [ ] **11 the passes** — § Passes; their outputs into ADR 0149's Consequences in this phase, what could not run named.
 

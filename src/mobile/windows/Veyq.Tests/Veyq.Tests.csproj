@@ -47,6 +47,7 @@
     <Compile Include="../Veyq/MediaTiers.cs" Link="App/MediaTiers.cs" />
     <Compile Include="../Veyq/MusicRamp.cs" Link="App/MusicRamp.cs" />
     <Compile Include="../Veyq/CurationText.cs" Link="App/CurationText.cs" />
+    <Compile Include="../Veyq/GalleryText.cs" Link="App/GalleryText.cs" />
     <Compile Include="../Veyq/MapPins.cs" Link="App/MapPins.cs" />
     <Compile Include="../Veyq/SearchPlan.cs" Link="App/SearchPlan.cs" />
     <Compile Include="$(VeyqGenerated)bridge/Bridge.g.cs" Link="App/Bridge.g.cs" />

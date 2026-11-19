@@ -4,7 +4,8 @@
 // decision 3, SafetyNumberSection: one's own to show, another member's state and Compare; one's own page has Edit profile
 // in the shell's CommandBar) — then Memories' section, "Memories with
 // {name}": the person's Memories as the level's rows (cover, name, date, place, the group), newest start day first, a row
-// opening its Memory (Shell.Open); a SelectorBar List | Map once something is listed (not stored: it opens on the list),
+// opening its Memory (Shell.Open); a SelectorBar List | Tiles | Map once something is listed — the account's one view
+// choice on this device (ADR 0149 decision 8: Person.View keeps it, Tiles before any) —, the tiles the level's (LevelTiles),
 // the map ADR 0143's Memories map over the person's located Memories (Person.Map, RasterMap); loading, Try again, empty and
 // partial in the web's words. Every state is the core's (Person.*, Watched.Person). Nothing about it is written to disk.
 using System;
@@ -32,7 +33,10 @@ internal sealed class PersonPage : IDisposable
     private readonly TextBlock _heading = new() { Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"], TextWrapping = TextWrapping.Wrap };
     private readonly SelectorBar _views = new() { Visibility = Visibility.Collapsed };
     private readonly SelectorBarItem _listItem = new() { Text = Words.NodeViewList(), IsSelected = true };
+    private readonly SelectorBarItem _tilesItem = new() { Text = Words.NodeViewTiles() };
     private readonly SelectorBarItem _mapItem = new() { Text = Words.MemoryViewMap() };
+    /// <summary>The Memories as tiles, while the Tiles view shows.</summary>
+    private readonly ContentControl _tiles = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, Visibility = Visibility.Collapsed };
     private readonly TextBlock _partial = new() { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
     private readonly ContentControl _status = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
     private readonly ListView _rows = new() { SelectionMode = ListViewSelectionMode.None, IsItemClickEnabled = true };
@@ -81,13 +85,16 @@ internal sealed class PersonPage : IDisposable
         _section.Children.Add(_heading);
         AutomationProperties.SetAutomationId(_views, "person-views");
         AutomationProperties.SetAutomationId(_listItem, "person-view-list");
+        AutomationProperties.SetAutomationId(_tilesItem, "person-view-tiles");
         AutomationProperties.SetAutomationId(_mapItem, "person-view-map");
         _views.Items.Add(_listItem);
+        _views.Items.Add(_tilesItem);
         _views.Items.Add(_mapItem);
         _views.SelectionChanged += (_, _) =>
         {
             if (_drawing || _id is not { } person) return;
-            var view = ReferenceEquals(_views.SelectedItem, _mapItem) ? MemoriesView.Map : MemoriesView.List;
+            var view = ReferenceEquals(_views.SelectedItem, _mapItem) ? MemoriesView.Map
+                : ReferenceEquals(_views.SelectedItem, _tilesItem) ? MemoriesView.Tiles : MemoriesView.List;
             Log.Write($"person page: view {view}");
             Act.Send(new Call.PersonView { person = person, view = view });
         };
@@ -108,6 +115,8 @@ internal sealed class PersonPage : IDisposable
             }
         };
         _section.Children.Add(_rows);
+        AutomationProperties.SetAutomationId(_tiles, "person-tiles");
+        _section.Children.Add(_tiles);
         AutomationProperties.SetAutomationId(_mapHolder, "person-map");
         AutomationProperties.SetAutomationId(_mapEmpty, "person-map-empty");
         _mapEmpty.Background = (Brush)Application.Current.Resources["AcrylicInAppFillColorDefaultBrush"];
@@ -174,7 +183,8 @@ internal sealed class PersonPage : IDisposable
             if (m is null) return;
             _heading.Text = CurationText.MemoriesWith(s);
             _views.Visibility = m.offersViews ? Visibility.Visible : Visibility.Collapsed;
-            _views.SelectedItem = m.view == MemoriesView.Map ? _mapItem : _listItem;
+            // every view the core names has its item: Tiles, the first view before any choice, too
+            _views.SelectedItem = m.view switch { MemoriesView.Map => _mapItem, MemoriesView.Tiles => _tilesItem, _ => _listItem };
             _partial.Visibility = m.partial ? Visibility.Visible : Visibility.Collapsed;
             _status.Content = m switch
             {
@@ -184,7 +194,9 @@ internal sealed class PersonPage : IDisposable
                 _ => null,
             };
             var map = m.view == MemoriesView.Map && m.offersViews;
-            _rows.Visibility = map ? Visibility.Collapsed : Visibility.Visible;
+            var tiles = m.view == MemoriesView.Tiles && m.offersViews;
+            _rows.Visibility = map || tiles ? Visibility.Collapsed : Visibility.Visible;
+            _tiles.Visibility = tiles ? Visibility.Visible : Visibility.Collapsed;
             _mapHolder.Visibility = map ? Visibility.Visible : Visibility.Collapsed;
             if (map) OpenMap();
             else CloseMap();
@@ -219,6 +231,7 @@ internal sealed class PersonPage : IDisposable
         if (key == _rowsDrawn) return;
         _rowsDrawn = key;
         _rows.Items.Clear();
+        var tiles = new List<LevelTiles.Item>();
         foreach (var r in rows)
         {
             var line = new Grid { ColumnSpacing = 12 };
@@ -244,7 +257,14 @@ internal sealed class PersonPage : IDisposable
             AutomationProperties.SetAutomationId(row, $"person-memory:{r.Ref.name}");
             AutomationProperties.SetName(row, under.Length > 0 ? $"{r.Ref.name}, {under}" : r.Ref.name);
             _rows.Items.Add(row);
+            var opened = r.Ref;
+            tiles.Add(new LevelTiles.Item(HomeView.KindGlyph(r.Ref.kind), r.Ref.nodeId, r.Ref.name, under, $"person-memory:{r.Ref.name}", () =>
+            {
+                Log.Write("person page: a Memory opened");
+                Act.Send(new Call.ShellOpen { Ref = opened });
+            }));
         }
+        _tiles.Content = tiles.Count > 0 ? LevelTiles.Grid(tiles, "person-memories-tiles") : null;
     }
 
     private async void OpenMap()
