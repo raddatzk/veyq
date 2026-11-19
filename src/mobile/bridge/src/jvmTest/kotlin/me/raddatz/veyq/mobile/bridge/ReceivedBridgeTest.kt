@@ -68,7 +68,7 @@ class ReceivedBridgeTest {
     private fun bridge(share: PlayedShare) = Bridge {
         val hidden = Hidden({}, emptySet())
         Composition(
-            SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden,
+            SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, files = JvmFiles,
             received = { link, queue, password ->
                 GuestView.open(p, link, { block -> HttpClient(MockEngine(share.handler), block) }, MemoryDeviceStore(), MemoryGuestSessions(), { "en" }, handedPassword = password, queue = queue)
             },
@@ -146,6 +146,25 @@ class ReceivedBridgeTest {
         assertEquals(30, writing.recordDays)
         assertEquals("https://photos.example.org/privacy#guest-write-record", writing.privacy)
         assertNull(ready("READ", null).recordDays)
+    }
+
+    /** A drop box's guest names itself and adds a file by path; the page's update names it once it was sent (#1018's write). */
+    @Test
+    fun aDropBoxsGuestAddsAFileAndThePageSaysItWasSent() = runBlocking {
+        val share = PlayedShare(p, role = "WRITE_ONLY", rootKind = "DEPOT_DROPBOX")
+        PlayedGuestContent(share).dropKey()
+        val b = bridge(share)
+        val opened = assertIs<Answer.ReceivedOpened>(b.ask(Call.ReceivedOpen(share.link)))
+        val w = b.watching(Watched.Received(opened.received))
+        fun shown(j: kotlinx.serialization.json.JsonElement) = (wire.decodeFromJsonElement(Update.serializer(), j) as Update.Received).shown
+        w.untilJson { j -> shown(j)?.takeIf { it.page?.kind == ReceivedPageKind.DROP_BOX } }
+        assertEquals(Answer.Done, b.ask(Call.ReceivedName(opened.received, "Ben")))
+        val file = kotlin.io.path.createTempFile("dropped", ".txt").toFile().apply { writeText("dropped"); deleteOnExit() }
+        assertEquals(Answer.Done, b.ask(Call.ReceivedUpload(opened.received, listOf(file.path))))
+        val sent = w.untilJson { j -> shown(j)?.takeIf { it.page?.sent?.isNotEmpty() == true } }
+        assertEquals(listOf(file.name), sent.page!!.sent)
+        share.assertNoKeyInAnyRequest()
+        b.shutdown()
     }
 
     @Test

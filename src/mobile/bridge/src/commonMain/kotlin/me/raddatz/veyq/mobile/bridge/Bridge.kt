@@ -174,6 +174,9 @@ internal class HeldBookmark(val page: me.raddatz.veyq.mobile.sharing.BookmarkPag
 internal class HeldReceived(val screen: me.raddatz.veyq.mobile.sharing.GuestScreen) {
     val open = MutableStateFlow(true)
     val page = MutableStateFlow<ReceivedPage?>(null)
+
+    /** A WRITE_ONLY page's sent files followed into [page] while it shows (cancelled when the page changes or closes). */
+    var sending: kotlinx.coroutines.Job? = null
 }
 
 /** The account's flows the bridge opens over one account (ADR 0148 decisions 6–8): each a core model, made on `*.Open`. */
@@ -2182,6 +2185,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * under the existing calls' registries, so `File.*`, `Gallery.*` and `Pot.*` drive it as they drive a member's.
      */
     private suspend fun pageOf(h: HeldReceived) {
+        h.sending?.cancel()
+        h.sending = null
         val page = h.screen.view.page.value ?: return run { h.page.value = null }
         val node = page.node
         fun shown(kind: ReceivedPageKind, rows: List<ReceivedRow> = emptyList(), file: Long? = null, gallery: Long? = null, pot: Long? = null, sent: List<String> = emptyList()) =
@@ -2196,14 +2201,20 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 h.screen.view.access?.tree?.node(node.nodeId)?.asObject()?.let { ref -> scope.launch { page.model.open(ref) } }
                 shown(ReceivedPageKind.POT, pot = id)
             }
-            is me.raddatz.veyq.mobile.sharing.GuestPage.DropBox -> shown(ReceivedPageKind.DROP_BOX, sent = page.model.sent.value)
-            is me.raddatz.veyq.mobile.sharing.GuestPage.Uploader -> shown(ReceivedPageKind.UPLOADER, sent = page.model.sent.value.map { it.name })
+            // what a WRITE_ONLY guest sent shows as it settles: the page follows the model's list while it stands
+            is me.raddatz.veyq.mobile.sharing.GuestPage.DropBox -> shown(ReceivedPageKind.DROP_BOX, sent = page.model.sent.value).also { first ->
+                h.sending = scope.launch { page.model.sent.collect { sent -> h.page.value = ReceivedPage(first.kind, first.name, first.nodeKind, first.rows, null, null, null, sent) } }
+            }
+            is me.raddatz.veyq.mobile.sharing.GuestPage.Uploader -> shown(ReceivedPageKind.UPLOADER, sent = page.model.sent.value.map { it.name }).also { first ->
+                h.sending = scope.launch { page.model.sent.collect { sent -> h.page.value = ReceivedPage(first.kind, first.name, first.nodeKind, first.rows, null, null, null, sent.map { it.name }) } }
+            }
             is me.raddatz.veyq.mobile.sharing.GuestPage.NotShown -> shown(ReceivedPageKind.NOT_SHOWN)
         }
     }
 
     /** A received link let go: its key zeroed, its page's models dropped from the registries. */
     private fun closeReceived(h: HeldReceived) {
+        h.sending?.cancel()
         h.page.value?.let { p ->
             p.file?.let { filePages.remove(it)?.close() }
             p.gallery?.let { galleries.remove(it) }

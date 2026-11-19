@@ -98,8 +98,8 @@ pub struct Shell {
     file: RefCell<Option<FilePage>>,
     drop_box: RefCell<Option<DropBoxPage>>,
     memory: RefCell<Option<MemoryPage>>,
-    /// A kept link's page while one is open ([BookmarkPage]).
-    bookmark: RefCell<Option<BookmarkPage>>,
+    /// A kept link's page while it is pushed over the content ([BookmarkPage]); dropped when it is popped.
+    bookmark: Rc<RefCell<Option<BookmarkPage>>>,
     /// The Memories bar's Map tab while it is chosen ([MemoriesMap]); its map closes when it goes.
     memories_map: RefCell<Option<MemoriesMap>>,
     /// A person's profile while the shell's state names one (`Shell.person`, ADR 0144 decision 11).
@@ -268,7 +268,7 @@ impl Shell {
             file: RefCell::new(None),
             drop_box: RefCell::new(None),
             memory: RefCell::new(None),
-            bookmark: RefCell::new(None),
+            bookmark: Rc::new(RefCell::new(None)),
             memories_map: RefCell::new(None),
             person: RefCell::new(None),
             nav,
@@ -529,6 +529,20 @@ impl Shell {
             crate::bookmark_create::open(&s.window, level.scope_id, level.parent_id, |_| bridge::send(Call::ShellRefresh));
         });
         window.add_action(&create_bookmark);
+        // a kept link's row opens its page over the content (its own header, back pops it), as a lightbox is pushed
+        let weak = Rc::downgrade(self);
+        crate::bookmark_page::set_opener(move |node| {
+            let Some(s) = weak.upgrade() else { return };
+            let page = BookmarkPage::open(node, s.window.upcast_ref());
+            s.nav.push(&page.navigation_page());
+            *s.bookmark.borrow_mut() = Some(page);
+        });
+        let held = self.bookmark.clone();
+        self.nav.connect_popped(move |_, popped| {
+            if held.borrow().as_ref().is_some_and(|p| p.is(popped)) {
+                held.borrow_mut().take();
+            }
+        });
         // the space's trash, from the switcher's menu (`trash`)
         let open_trash = gio::SimpleAction::new("trash", None);
         let weak = Rc::downgrade(self);
@@ -848,10 +862,6 @@ impl Shell {
         if shell.person.is_none() {
             self.person.borrow_mut().take();
         }
-        // a kept link's page goes with its object (its in-place link let go with it)
-        if shell.person.is_some() || !shell.open_object.as_ref().is_some_and(|o| o.kind == "SHARE_BOOKMARK") {
-            self.bookmark.borrow_mut().take();
-        }
         let body: gtk::Widget = if let Some(user) = &shell.person {
             self.pot.borrow_mut().take();
             self.file.borrow_mut().take();
@@ -959,19 +969,6 @@ impl Shell {
                 let page = page.as_ref().expect("set above");
                 page.hero(self.header.borrow().as_ref().map(Header::hero));
                 page.widget().clone().upcast()
-            }
-            Some(o) if o.kind == "SHARE_BOOKMARK" => {
-                self.pot.borrow_mut().take();
-                self.file.borrow_mut().take();
-                self.drop_box.borrow_mut().take();
-                self.memory.borrow_mut().take();
-                let mut page = self.bookmark.borrow_mut();
-                let node = NodeAt { scope_id: o.scope_id.clone(), node_id: o.node_id.clone(), kind: o.kind.clone(), name: o.name.clone() };
-                if page.as_ref().is_none_or(|p| p.node != node) {
-                    *page = None;
-                    *page = Some(BookmarkPage::open(&node, self.window.upcast_ref()));
-                }
-                page.as_ref().expect("set above").widget().clone().upcast()
             }
             Some(o) => {
                 self.pot.borrow_mut().take();

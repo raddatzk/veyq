@@ -19,11 +19,15 @@ pub fn open(parent: &impl IsA<gtk::Widget>, scope_id: String, parent_id: Option<
     link.set_widget_name("bookmark-link");
     let password = adw::PasswordEntryRow::builder().title(words::bookmark_password_label()).build();
     let name = adw::EntryRow::builder().title(words::node_name()).build();
-    let fields = adw::PreferencesGroup::builder().description(words::bookmark_password_hint()).build();
+    let fields = adw::PreferencesGroup::new();
     fields.add(&link);
     fields.add(&password);
     fields.add(&name);
     let intro = gtk::Label::builder().label(words::bookmark_create_intro()).wrap(true).xalign(0.0).build();
+    // the password's hint under the fields, where GNOME puts a row's explanation
+    let hint = gtk::Label::builder().label(words::bookmark_password_hint()).wrap(true).xalign(0.0).build();
+    hint.add_css_class("dim-label");
+    hint.add_css_class("caption");
     let problem = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
     problem.add_css_class("error");
     let group_line = gtk::Label::builder().label(words::bookmark_who_can_open()).wrap(true).xalign(0.0).visible(false).build();
@@ -34,7 +38,7 @@ pub fn open(parent: &impl IsA<gtk::Widget>, scope_id: String, parent_id: Option<
     save.add_css_class("suggested-action");
     save.add_css_class("pill");
     let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(18).margin_top(12).margin_bottom(24).margin_start(12).margin_end(12).build();
-    for w in [intro.upcast_ref::<gtk::Widget>(), fields.upcast_ref(), problem.upcast_ref(), group_line.upcast_ref(), failed.upcast_ref(), save.upcast_ref()] {
+    for w in [intro.upcast_ref::<gtk::Widget>(), fields.upcast_ref(), hint.upcast_ref(), problem.upcast_ref(), group_line.upcast_ref(), failed.upcast_ref(), save.upcast_ref()] {
         column.append(w);
     }
     let view = adw::ToolbarView::new();

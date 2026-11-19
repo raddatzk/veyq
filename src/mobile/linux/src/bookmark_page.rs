@@ -1,11 +1,11 @@
 //! A kept link's page (ADR 0150 decision 6; the web's `BookmarkDetail.vue` and `BookmarkEmbed.vue`; cr-app-received-links
-//! phase 9), GNOME's way: core's `BookmarkPage` (`Bookmark.Open`, `Watched.Bookmark`). While the tenant has
+//! phase 9), GNOME's way: core's `BookmarkPage` (`Bookmark.Open`, `Watched.Bookmark`), pushed over the shell's content
+//! with its own header ([open_kept]: a kept link is no application's object, so the shell opens none). While the tenant has
 //! `core.share-embedding` on, the share shows in place under the shell's header — a [ReceivedView] in place, titled
 //! "Shared content from …" —; otherwise an `AdwStatusPage` naming the link's host. Either way the page offers *Open on its
 //! own page* (the link's screen above the shell, its password handed in memory by the core) and *Report shared content*
-//! (that screen with its report asked, to the share's own operator). *Report name* is the header's report, which the core
-//! makes a name's report for a bookmark (`AppKinds.reportsNameOnly`). A meta that does not read says so; its removal is
-//! the header's delete.
+//! (that screen with its report asked, to the share's own operator) and *Report name* (core's report sheet of the node,
+//! a name's report for a bookmark, `AppKinds.reportsNameOnly`). A meta that does not read says so.
 //!
 //! The page never holds the link, its password or its key: the core opens the meta and hands the host ids alone.
 use std::cell::{Cell, RefCell};
@@ -18,6 +18,28 @@ use crate::bridge::{self, Watch, wire::Answer, wire::BookmarkShown, wire::Bookma
 use crate::received::{self, Mode, ReceivedView};
 use crate::words;
 
+/// The kind of a kept link (core's `AppKinds.BOOKMARK_KIND`).
+pub const KIND: &str = "SHARE_BOOKMARK";
+
+/// How a kept link's page is opened: the shell pushes it over its content.
+type Opener = Rc<dyn Fn(&NodeAt)>;
+
+thread_local! {
+    static OPENER: RefCell<Option<Opener>> = const { RefCell::new(None) };
+}
+
+/// Sets how a kept link's row opens its page (the shell's, once).
+pub fn set_opener(f: impl Fn(&NodeAt) + 'static) {
+    OPENER.with(|o| *o.borrow_mut() = Some(Rc::new(f)));
+}
+
+/// Opens kept link [node]'s page (a row's or a tile's activation).
+pub fn open_kept(node: &NodeAt) {
+    if let Some(f) = OPENER.with(|o| o.borrow().clone()) {
+        f(node);
+    }
+}
+
 /// A kept link on screen: opened in the core when made, closed when dropped.
 pub struct BookmarkPage {
     pub node: NodeAt,
@@ -25,7 +47,10 @@ pub struct BookmarkPage {
 }
 
 struct Inner {
+    node: NodeAt,
     root: gtk::Box,
+    /// The page pushed over the content: its header (the bookmark's name, back) over [root].
+    page: adw::NavigationPage,
     window: gtk::Window,
     id: Cell<Option<i64>>,
     watch: RefCell<Option<Watch>>,
@@ -38,7 +63,11 @@ impl BookmarkPage {
     /// Opens kept link [node] on a page inside [window].
     pub fn open(node: &NodeAt, window: &gtk::Window) -> Self {
         let root = gtk::Box::builder().orientation(gtk::Orientation::Vertical).vexpand(true).build();
-        let inner = Rc::new(Inner { root, window: window.clone(), id: Cell::new(None), watch: RefCell::new(None), shown: RefCell::new(None), in_place: RefCell::new(None) });
+        let view = adw::ToolbarView::new();
+        view.add_top_bar(&adw::HeaderBar::new());
+        view.set_content(Some(&root));
+        let page = adw::NavigationPage::new(&view, &node.name);
+        let inner = Rc::new(Inner { node: node.clone(), root, page, window: window.clone(), id: Cell::new(None), watch: RefCell::new(None), shown: RefCell::new(None), in_place: RefCell::new(None) });
         inner.draw();
         let weak = Rc::downgrade(&inner);
         let open = node.clone();
@@ -60,8 +89,14 @@ impl BookmarkPage {
         Self { node: node.clone(), inner }
     }
 
-    pub fn widget(&self) -> &gtk::Box {
-        &self.inner.root
+    /// The page to push over the content.
+    pub fn navigation_page(&self) -> adw::NavigationPage {
+        self.inner.page.clone()
+    }
+
+    /// Whether [page] is this bookmark's (it was popped).
+    pub fn is(&self, page: &adw::NavigationPage) -> bool {
+        self.inner.page == *page
     }
 }
 
@@ -140,9 +175,14 @@ impl Inner {
         }
     }
 
-    /// *Open on its own page* and *Report shared content*, a row of buttons above the content.
+    /// *Open on its own page*, *Report shared content* and *Report name*, a row of buttons above the content.
     fn actions(self: &Rc<Self>) -> gtk::Box {
         let row = gtk::Box::builder().spacing(6).margin_start(12).margin_end(12).margin_top(6).margin_bottom(6).halign(gtk::Align::End).build();
+        let name = gtk::Button::with_label(&words::bookmark_report_name());
+        name.add_css_class("flat");
+        name.set_widget_name("bookmark-report-name");
+        let node = self.node.clone();
+        name.connect_clicked(move |b| crate::report::open(b, &node));
         for (label, report) in [(words::bookmark_open_own_page(), false), (words::bookmark_report_share(), true)] {
             let button = gtk::Button::with_label(&label);
             button.add_css_class("flat");
@@ -161,6 +201,7 @@ impl Inner {
             });
             row.append(&button);
         }
+        row.append(&name);
         row
     }
 }

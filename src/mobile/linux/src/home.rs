@@ -330,6 +330,8 @@ pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, 
                 list.add(&row);
             } else if let Some(o) = state.lists.objects.iter().find(|o| o.scope_id == n.scope_id && o.node_id == n.node_id) {
                 list.add(&object_row(o));
+            } else if n.kind == crate::bookmark_page::KIND {
+                list.add(&bookmark_row(n));
             }
         }
         content.append(&list);
@@ -350,6 +352,11 @@ fn level_tiles(state: &ShellModelState, nodes: &[NodeRef], folders: bool, drops:
         } else if let Some(o) = state.lists.objects.iter().find(|o| o.scope_id == n.scope_id && o.node_id == n.node_id) {
             tiles.push(object_tile(o));
             dropping.push(None);
+        } else if n.kind == crate::bookmark_page::KIND {
+            let node = node_at(n);
+            tiles.push(Tile { name: n.name.clone(), subtitle: None, dated: false, icon: kind_icon(&n.kind), node_id: n.node_id.clone(),
+                open: Box::new(move || crate::bookmark_page::open_kept(&node)) });
+            dropping.push(None);
         }
     }
     let grid = tiles::grid(tiles);
@@ -366,6 +373,20 @@ fn object_tile(r: &ObjectRef) -> Tile {
     let open = r.clone();
     Tile { name: r.name.clone(), subtitle: None, dated: r.kind == "MEMORY", icon: kind_icon(&r.kind), node_id: r.node_id.clone(),
         open: Box::new(move || bridge::send(Call::ShellOpen { r#ref: open.clone() })) }
+}
+
+/// A kept link's row (ADR 0150 decision 6): no application's object, so the shell opens no object for it — its page is
+/// pushed over the content ([crate::bookmark_page::open_kept]).
+fn bookmark_row(n: &NodeRef) -> adw::ActionRow {
+    let row = adw::ActionRow::builder().title(glib_escape(&n.name)).activatable(true).build();
+    row.add_prefix(&gtk::Image::from_icon_name(kind_icon(&n.kind)));
+    let node = node_at(n);
+    row.connect_activated(move |_| crate::bookmark_page::open_kept(&node));
+    row
+}
+
+fn node_at(n: &NodeRef) -> crate::bridge::wire::NodeAt {
+    crate::bridge::wire::NodeAt { scope_id: n.scope_id.clone(), node_id: n.node_id.clone(), kind: n.kind.clone(), name: n.name.clone() }
 }
 
 fn folder_row(n: &NodeRef) -> adw::ActionRow {
