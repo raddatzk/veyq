@@ -165,8 +165,8 @@ internal static class LevelTiles
     /// <summary>A view's Segoe Fluent Icons glyph: List, GridView, Map.</summary>
     public static string ModeGlyph(ViewModeShown mode) => mode switch
     {
-        ViewModeShown.List => "",
-        ViewModeShown.Tiles => "",
-        _ => "",
+        ViewModeShown.List => "\uE8FD",
+        ViewModeShown.Tiles => "\uF0E2",
+        _ => "\uE707",
     };
 }

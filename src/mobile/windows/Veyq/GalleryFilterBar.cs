@@ -132,7 +132,7 @@ internal sealed class GalleryFilterBar
         {
             var content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
             content.Children.Add(new TextBlock { Text = chip.label, VerticalAlignment = VerticalAlignment.Center });
-            content.Children.Add(new FontIcon { Glyph = "", FontSize = 10 });
+            content.Children.Add(new FontIcon { Glyph = "\uE711", FontSize = 10 });
             var button = new Button { Content = content, Padding = new Thickness(8, 3, 8, 4), CornerRadius = new CornerRadius(12) };
             // the button takes the chip back: its name says so (the shell search's words, the web's ui.removeTag)
             AutomationProperties.SetName(button, Words.SearchRemoveChip(chip.label));

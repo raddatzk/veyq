@@ -37,7 +37,7 @@ internal sealed class ContributionsView : IDisposable
     private readonly Func<bool> _offline;
     private readonly StackPanel _view = new() { Spacing = 8 };
     private readonly ComboBox _picker = new() { MinWidth = 240 };
-    private readonly DropDownButton _more = new() { Content = new FontIcon { Glyph = "", FontSize = 14 } };
+    private readonly DropDownButton _more = new() { Content = new FontIcon { Glyph = "\uE712", FontSize = 14 } };
     private readonly ContentControl _status = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
     private readonly Canvas _canvas = new();
     private readonly Grid _grid = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -75,8 +75,8 @@ internal sealed class ContributionsView : IDisposable
             Act.Send(new Call.BucketsPick { buckets = buckets, bucketId = bucket });
         };
         AutomationProperties.SetAutomationId(_more, "memory-buckets-more");
-        AutomationProperties.SetName(_more, Words.NodeMore());
-        ToolTipService.SetToolTip(_more, Words.NodeMore());
+        AutomationProperties.SetName(_more, Words.MemoryBucketsOptions());
+        ToolTipService.SetToolTip(_more, Words.MemoryBucketsOptions());
         var head = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         head.Children.Add(_picker);
         head.Children.Add(_more);
@@ -216,12 +216,12 @@ internal sealed class ContributionsView : IDisposable
             };
             return item;
         }
-        menu.Items.Add(Item(Words.MemoryBucketsCreateBucket(), "", "memory-buckets-create", Create));
+        menu.Items.Add(Item(Words.MemoryBucketsCreateBucket(), "\uE8F4", "memory-buckets-create", Create));
         if (row is { isPrimary: false })
         {
             var name = Said.Piece(row.label);
-            menu.Items.Add(Item(Words.NodeRename(), "", "memory-buckets-rename", () => Rename(name)));
-            menu.Items.Add(Item(Words.MemoryBucketsDeleteBucketConfirm(), "", "memory-buckets-delete", () => Delete(name)));
+            menu.Items.Add(Item(Words.MemoryBucketsRename(), "\uE8AC", "memory-buckets-rename", () => Rename(name)));
+            menu.Items.Add(Item(Words.MemoryBucketsDelete(), "\uE74D", "memory-buckets-delete", () => Delete(name)));
         }
         return menu;
     }
@@ -229,7 +229,7 @@ internal sealed class ContributionsView : IDisposable
     private async Task Create()
     {
         if (_id is not { } buckets) return;
-        var typed = await Dialogs.AskName(_window, "bucket-create", Words.MemoryBucketsCreateBucket(), Words.NodeName(), "", null, Words.FolderCreate());
+        var typed = await Dialogs.AskName(_window, "bucket-create", Words.MemoryBucketsCreateBucket(), Words.MemoryBucketsName(), "", null, Words.FolderCreate());
         if (typed is null) return;
         await Write(new Call.BucketsCreate { buckets = buckets, name = typed }, moving: false);
     }
@@ -237,7 +237,7 @@ internal sealed class ContributionsView : IDisposable
     private async Task Rename(string name)
     {
         if (_id is not { } buckets) return;
-        var typed = await Dialogs.AskName(_window, "bucket-rename", Words.MemoryBucketsBucketDialogRename(), Words.NodeName(), name, null, Words.NodeRename());
+        var typed = await Dialogs.AskName(_window, "bucket-rename", Words.MemoryBucketsBucketDialogRename(), Words.MemoryBucketsName(), name, null, Words.MemoryBucketsRename());
         if (typed is null) return;
         await Write(new Call.BucketsRename { buckets = buckets, name = typed }, moving: false);
     }
@@ -314,7 +314,7 @@ internal sealed class ContributionsView : IDisposable
     {
         var name = row.name ?? Words.MemoryUnnamed(index + 1);
         var face = new Grid();
-        var glyph = HomeView.Glyph(row.blocked ? "" : row.video ? "" : "");
+        var glyph = HomeView.Glyph(row.blocked ? "\uE733" : row.video ? "\uE714" : "\uE91B");
         glyph.FontSize = 32;
         glyph.HorizontalAlignment = HorizontalAlignment.Center;
         glyph.VerticalAlignment = VerticalAlignment.Center;
@@ -350,7 +350,7 @@ internal sealed class ContributionsView : IDisposable
             if (targets.Count == 0) menu.Items.Add(new MenuFlyoutItem { Text = Words.MemoryBucketsMoveEmpty(), IsEnabled = false });
             else
             {
-                var move = new MenuFlyoutSubItem { Text = Words.MemoryBucketsMoveMedia(), Icon = new FontIcon { Glyph = "" } };
+                var move = new MenuFlyoutSubItem { Text = Words.MemoryBucketsMoveMedia(), Icon = new FontIcon { Glyph = "\uE8DE" } };
                 AutomationProperties.SetAutomationId(move, "bucket-move");
                 foreach (var target in targets)
                 {
