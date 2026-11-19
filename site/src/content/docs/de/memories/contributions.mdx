@@ -2,6 +2,7 @@
 title: "Sehen, wer was beigetragen hat"
 sources:
   - docs/features/memory/use-cases/uc.memory.buckets.md
+  - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -33,3 +34,19 @@ In deiner eigenen Gruppe kannst du aufräumen:
    **In den Papierkorb** steht im selben Menü.
 3. **Umbenennen** und **Löschen** findest du im Menü des Buckets. Löschst du ein Bucket, wandern seine Fotos zurück in
    deine Hauptgruppe; es wird nichts gelöscht.
+
+## In der App
+
+In der veyq-[App](/de/getting-started/install-the-app/) ist **Beiträge** die vierte Wahl neben **Fotos**, **Musik** und
+**Karte**, für die Mitglieder des Bereichs. Wähle die Gruppe einer Person; ein Foto, das du daraus öffnest, blättert nur
+durch diese Gruppe.
+
+- **Neues Unter-Bucket** legt ein Unter-Bucket in der gewählten Gruppe an. Jedes Mitglied des Bereichs darf in der
+  Gruppe jeder Person aufräumen, nicht nur in seiner eigenen. Ein Unter-Bucket hat **Umbenennen** und **Löschen**; zum
+  Löschen tippst du seinen Namen ein.
+- **Um ein Foto zu verschieben**, halte es gedrückt (am Computer: Rechtsklick) und wähle **Medium verschieben**. Ein
+  Foto wandert nur zwischen der Hauptgruppe einer Person und deren Unter-Buckets.
+- **Wer über einen Link beigesteuert hat**, steht in den Details eines Fotos mit dem eingetippten Namen, als Gast
+  gekennzeichnet.
+- **Offline** bleiben die Gruppen und Namen so, wie die App sie zuletzt gesehen hat, und es lässt sich nichts
+  sortieren.

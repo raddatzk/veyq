@@ -4,6 +4,7 @@ sources:
   - docs/features/memory/use-cases/uc.memory.participants.md
   - docs/features/spaces/use-cases/uc.spaces.set-profile-picture.md
   - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
+  - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
 ---
 
 In a Memory you can
@@ -74,8 +75,8 @@ differences:
   listed, opens the space's members with a search field.
 - **I was there** is in the app's dialog for a new Memory too, ticked, wherever the browser offers it.
 - **A person's profile** shows their name and picture and, under **Memories with …**, the Memories with them that you may
-  open: as a **List**, newest first, or on a **Map**. There are no tiles, and the app does not remember your choice: a
-  profile always opens on the list. You reach a profile from a Memory's people, or from **Added by** in a photo's details,
+  open: as a **List**, newest first, as **Tiles**, or on a **Map**. The app remembers your choice on this device, for
+  your account, together with how you see your folders ([Views, tabs and favorites](/spaces/views-and-favorites/#in-the-app)). You reach a profile from a Memory's people, or from **Added by** in a photo's details,
   while that person is still a member. The app has no search for people and no list of everyone.
 - **Your own profile page** has **Edit profile** for your name and picture ([Your profile](/account/your-profile/)), and
   a member's profile shows their [safety number](/account/verify-a-person/) below their name.

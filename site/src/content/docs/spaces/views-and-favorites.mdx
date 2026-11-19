@@ -3,6 +3,7 @@ title: "Views, tabs and favorites"
 sources:
   - docs/features/memory/use-cases/uc.memory.browse.md
   - docs/features/spaces/use-cases/uc.spaces.switch-spaces.md
+  - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -34,6 +35,15 @@ shows Memories. This browser remembers your choice.
 In the list, each entry is one line with a small picture in front. In the grid, the folders are small tiles; everything
 else is a card: its picture on top, its name below it inside the card. The heart and the **⋯** of a card appear on its
 picture when you point at it or move to it with the keyboard; on a phone they are always there.
+
+## In the app
+
+The veyq [app](/getting-started/install-the-app/) shows a space's top level, a folder and an application's list as
+**Tiles** or as a **List**: switch with the view button at the top of the page, or its **View** menu. A tile is the
+entry's picture as a square, its name and its type line below; a folder without a picture shows the folder symbol. On a
+phone the tiles stand two to a row, more as the window gets wider. Everything an entry's menu offers in the list, its
+tile offers too. The app remembers your choice on this device, for your account: for every folder and for a person's
+Memories. It shows tiles until you choose. A folder has no map view in the app; the Memories' **Map** tab is the map.
 
 ## Favorites
 

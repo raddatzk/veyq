@@ -4,6 +4,7 @@ sources:
   - docs/features/memory/use-cases/uc.memory.participants.md
   - docs/features/spaces/use-cases/uc.spaces.set-profile-picture.md
   - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
+  - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
 ---
 
 In einer
@@ -85,8 +86,9 @@ Unterschieden:
 - **Ich war dabei** steht auch im Dialog der App für eine neue Erinnerung, angehakt, überall dort, wo der Browser es
   anbietet.
 - **Das Profil einer Person** zeigt Namen und Bild und unter **Erinnerungen mit …** die Erinnerungen mit ihr, die du
-  öffnen darfst: als **Liste**, die neueste zuerst, oder auf einer **Karte**. Kacheln gibt es nicht, und die App merkt
-  sich deine Wahl nicht: Ein Profil öffnet immer mit der Liste. Du erreichst ein Profil über die Personen einer
+  öffnen darfst: als **Liste**, die neueste zuerst, als **Kacheln** oder auf einer **Karte**. Die App merkt sich deine
+  Wahl auf diesem Gerät für dein Konto, zusammen mit der Ansicht deiner Ordner
+  ([Ansichten, Reiter und Favoriten](/de/spaces/views-and-favorites/#in-der-app)). Du erreichst ein Profil über die Personen einer
   Erinnerung oder über **Hinzugefügt von** in den Details eines Fotos, solange die Person noch Mitglied ist. Eine Suche
   nach Personen und eine Liste aller gibt es in der App nicht.
 - **Deine eigene Profilseite** hat **Profil bearbeiten** für deinen Namen und dein Bild

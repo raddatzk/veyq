@@ -2,6 +2,7 @@
 title: "Herunterladen und Importieren"
 sources:
   - docs/features/platform/use-cases/uc.platform.export-import.md
+  - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
 ---
 
 Du kannst einen Ordner, eine Datei,
@@ -54,3 +55,10 @@ ZIP-Datei** — und ein solches ZIP wieder hineinladen, in dasselbe veyq oder in
 - **Bricht ein Import ab** (zum Beispiel weil dein Speicher voll ist), liegt das Angelegte im Papierkorb, und du erfährst,
   wie weit er kam. Ein hochgeladener Ordner ist dagegen ein gewöhnliches Hochladen: Eine Datei, die scheitert, wird als
   gescheitert gezeigt, der Rest kommt an.
+
+## In der App
+
+Die veyq-[App](/de/getting-started/install-the-app/) lädt einen Ordner, eine Datei, eine Erinnerung, ein Kapitel, eine
+Kasse und einen Briefkasten herunter wie der Browser, an den Ort, den du im Speichern-Dialog deines Geräts wählst; das
+ZIP ist dasselbe, und der Browser importiert es. **Importieren** kann die App noch nicht: Einen Download bringst du mit
+dem Browser wieder hinein. Über einen Link lädt niemand in der App herunter, denn die App öffnet noch keine Links.

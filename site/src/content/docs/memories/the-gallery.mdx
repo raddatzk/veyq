@@ -4,6 +4,7 @@ sources:
   - docs/features/memory/use-cases/uc.memory.gallery.md
   - docs/features/memory/use-cases/uc.memory.live-updates.md
   - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
+  - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -71,3 +72,12 @@ In a Memory that others can add to, you see their photos appear, and their remov
 The same holds for someone who opened it through a link: their gallery stays current as yours does. What the link
 tells them changes only when what it shows changes — not when something elsewhere in the space does. A change to the
 Memory's date, place, people or banner shows the same way; in the app it can take up to half a minute.
+
+## In the app
+
+- **Narrow the grid:** in the veyq [app](/getting-started/install-the-app/) the filter field stands above the photos
+  (on an iPhone, it is the search field at the top of the Memory). Its suggestions, chips and typed text work as above,
+  and **Show marked photos** is a menu beside it. A day is a day in your device's calendar.
+- **Report** a photo or a video once it is open: **Report** is in its toolbar or its menu
+  ([Report something](/help/report-something/)).
+- A photo's **Details** name someone who added it through a link by the name they typed, marked as a guest.

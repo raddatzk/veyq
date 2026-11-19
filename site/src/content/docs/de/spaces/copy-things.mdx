@@ -2,6 +2,7 @@
 title: "Dinge kopieren"
 sources:
   - docs/features/platform/use-cases/uc.platform.copy-node.md
+  - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -30,3 +31,10 @@ Der Server sieht nur, dass Neues gespeichert wird, nicht, dass es eine Kopie ist
 Originals, wie bei jedem Upload derselben Dateien.
 
 Nur Mitglieder des Bereichs können kopieren. Wem ein Ordner geteilt wurde, kann es nicht.
+
+## In der App
+
+Die veyq-[App](/de/getting-started/install-the-app/) kopiert einen Ordner, eine Datei, einen Briefkasten, eine Erinnerung,
+ein Kapitel und eine Kasse auf dieselbe Weise, mit derselben Übersicht, was nicht mitkommt. Ändert jemand das Schloss des Bereichs (etwa,
+indem ein Mitglied entfernt wird), während eine Erinnerung kopiert wird, bricht die Kopie der App ab und kommt in den
+Papierkorb; kopiere sie dann noch einmal.

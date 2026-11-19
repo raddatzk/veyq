@@ -2,6 +2,7 @@
 title: "Mark the best photos"
 sources:
   - docs/features/memory/use-cases/uc.memory.gallery.md
+  - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -22,3 +23,11 @@ front of the group. In your personal space there is nobody to share with, so the
 
 The heart on the **Memory itself** (in the folder list and on its page) is the other way round: that is your favorite,
 and nobody else can see it.
+
+## In the app
+
+In the veyq [app](/getting-started/install-the-app/) the heart on a photo's tile only **shows** the marks: filled when
+you marked the photo, with the number of people who marked it. To mark a photo, open it and choose the heart in its
+toolbar (**Mark this photo — everyone in this space sees it**; again, **Remove your mark**). On Windows and on an iPhone,
+iPad or Mac, a photo's menu in the grid has it too. **Show marked photos** is a menu beside the gallery's filter field.
+A Memory you keep offline shows its marks as they were when the app last had a connection; nothing can be marked offline.

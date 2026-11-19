@@ -4,6 +4,7 @@ sources:
   - docs/features/memory/use-cases/uc.memory.gallery.md
   - docs/features/memory/use-cases/uc.memory.live-updates.md
   - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
+  - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -76,3 +77,13 @@ ohne neu zu laden. Das gilt auch für Personen, die sie über einen Link geöffn
 wie deine. Was der Link ihnen meldet, ändert sich nur, wenn sich ändert, was er zeigt – nicht, wenn anderswo im Bereich
 etwas passiert. Ebenso zeigt sich, wenn jemand Datum, Ort, Beteiligte oder Banner der Erinnerung ändert; in der
 App kann das bis zu einer halben Minute dauern.
+
+## In der App
+
+- **Das Raster eingrenzen:** In der veyq-[App](/de/getting-started/install-the-app/) steht das Filterfeld über den
+  Fotos (auf einem iPhone ist es das Suchfeld oben in der Erinnerung). Vorschläge, Chips und getippter Text wirken wie
+  oben beschrieben, und **Markierte Fotos anzeigen** ist ein Menü daneben. Ein Tag ist ein Tag im Kalender deines Geräts.
+- **Melden** kannst du ein geöffnetes Foto oder Video: **Melden** steht in seiner Werkzeugleiste oder seinem Menü
+  ([Etwas melden](/de/help/report-something/)).
+- Die **Details** eines Fotos nennen jemanden, der es über einen Link hinzugefügt hat, mit dem eingetippten Namen, als
+  Gast gekennzeichnet.

@@ -2,6 +2,7 @@
 title: "Die besten Fotos markieren"
 sources:
   - docs/features/memory/use-cases/uc.memory.gallery.md
+  - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -24,3 +25,13 @@ niemanden, mit dem du teilst, deshalb wird der Filter dort nicht angezeigt.
 
 Das Herz an der **Erinnerung selbst** (in der Ordnerliste und auf ihrer Seite) ist umgekehrt: Das ist dein Favorit, und
 niemand sonst sieht ihn.
+
+## In der App
+
+In der veyq-[App](/de/getting-started/install-the-app/) **zeigt** das Herz an der Kachel eines Fotos die Markierungen nur
+an: ausgefüllt, wenn du das Foto markiert hast, mit der Zahl der Leute, die es markiert haben. Um ein Foto zu markieren,
+öffne es und wähle das Herz in seiner Werkzeugleiste (**Dieses Foto markieren — alle in diesem Bereich sehen es**; noch
+einmal: **Deine Markierung entfernen**). Unter Windows und auf einem iPhone, iPad oder Mac steht es auch im Menü eines
+Fotos im Raster. **Markierte Fotos anzeigen** ist ein Menü neben dem Filterfeld der Galerie. Eine Erinnerung, die du
+offline behältst, zeigt ihre Markierungen so, wie die App sie zuletzt mit Verbindung gesehen hat; offline lässt sich
+nichts markieren.

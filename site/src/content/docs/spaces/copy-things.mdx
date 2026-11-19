@@ -2,6 +2,7 @@
 title: "Copy things"
 sources:
   - docs/features/platform/use-cases/uc.platform.copy-node.md
+  - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -30,3 +31,9 @@ The server sees only new things being stored, not that they are a copy; their si
 any upload of the same files.
 
 Only members of the space can copy. Somebody you shared a folder with cannot.
+
+## In the app
+
+The veyq [app](/getting-started/install-the-app/) copies a folder, a file, a drop box, a Memory, a chapter and a Pot the same way,
+with the same summary of what does not come along. If someone changes the space's lock (for example by removing a
+member) while a Memory is being copied, the app's copy stops and goes to the trash; copy it again.

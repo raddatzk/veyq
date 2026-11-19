@@ -3,6 +3,7 @@ title: "Ansichten, Reiter und Favoriten"
 sources:
   - docs/features/memory/use-cases/uc.memory.browse.md
   - docs/features/spaces/use-cases/uc.spaces.switch-spaces.md
+  - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
 ---
 
 import Screenshot from '../../../../components/Screenshot.astro';
@@ -34,6 +35,16 @@ Mit **Rasteransicht** und **Listenansicht** rechts in der Zeile über der Liste 
 In der Liste ist jeder Eintrag eine Zeile mit einem kleinen Bild davor. Im Raster sind die Ordner kleine Kacheln; alles
 andere ist eine Karte: oben ihr Bild, darunter in der Karte der Name. Herz und **⋯** einer Karte erscheinen auf ihrem
 Bild, wenn du darauf zeigst oder mit der Tastatur hingehst; auf einem Handy sind sie immer da.
+
+## In der App
+
+Die veyq-[App](/de/getting-started/install-the-app/) zeigt die oberste Ebene eines Bereichs, einen Ordner und die Liste
+einer Anwendung als **Kacheln** oder als **Liste**: Du wechselst mit der Schaltfläche für die Ansicht oben auf der Seite
+oder ihrem Menü **Ansicht**. Eine Kachel ist das Bild des Eintrags als Quadrat, darunter sein Name und seine Typzeile; ein
+Ordner ohne Bild zeigt das Ordnersymbol. Auf einem Handy stehen zwei Kacheln nebeneinander, mehr, je breiter das Fenster
+wird. Was das Menü eines Eintrags in der Liste anbietet, bietet auch seine Kachel. Die App merkt sich deine Wahl auf
+diesem Gerät für dein Konto: für jeden Ordner und für die Erinnerungen einer Person. Bis du wählst, zeigt sie Kacheln.
+Eine Kartenansicht für Ordner gibt es in der App nicht; die Karte ist der Reiter **Karte** der Erinnerungen.
 
 ## Favoriten
 

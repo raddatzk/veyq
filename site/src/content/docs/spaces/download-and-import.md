@@ -2,6 +2,7 @@
 title: "Download and import"
 sources:
   - docs/features/platform/use-cases/uc.platform.export-import.md
+  - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
 ---
 
 You can download a folder, a file, a Memory or a drop
@@ -48,3 +49,10 @@ another one.
 - **Enough room?** Before importing, and before uploading a folder, veyq asks the server whether it still fits your space's storage. If it does not, it tells you and does not start. The answer is only yes or no — nobody learns how much space is left.
 - **If an import stops** (for example because your storage is full), what it created is moved to the trash and you are told
   how far it got. A folder upload is an ordinary upload instead: a file that fails is shown as failed, the rest arrives.
+
+## In the app
+
+The veyq [app](/getting-started/install-the-app/) downloads a folder, a file, a Memory, a chapter, a Pot and a drop box
+as the browser does, into the place you choose in your device's own save dialog; the ZIP is the same, and the browser
+imports it. **Importing** is not in the app yet: bring a download back in with the browser. Someone who opened a link
+cannot download in the app, because the app opens no link yet.
