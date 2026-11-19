@@ -1,10 +1,11 @@
 // A Memory's Contributions view (ADR 0149 decision 6; the web's MemoryBuckets.vue; Apple's ContributionsView), the fourth
 // item of the page's SelectorBar where GalleryShown.contributions holds (a member's): the uploader picker — a ComboBox of
 // every contributor's primary bucket with the sub-buckets curated below it, each with its count — narrowing to the chosen
-// bucket's media, drawn as square tiles at the core's frames (View.Tiles), a tile opening the lightbox; on the caller's own
-// bucket a More menu with New sub-bucket, and a sub-bucket's Rename and Delete bucket (its name typed to confirm, as the
-// web's); a medium of one's own moved into another of one's buckets from its tile's right-click menu. Writes are online
-// only (the core refuses them offline); what it refused is said once, then told seen (Buckets.Seen).
+// bucket's media, drawn as square tiles at the core's frames (View.Tiles), a tile opening the lightbox over that bucket
+// (Buckets.Lightbox, inbox #996); what the server takes on the chosen bucket, as the core says it: a More menu with New
+// sub-bucket under a primary, and a sub-bucket's Rename and Delete bucket (its name typed to confirm, as the web's); a
+// medium moved into another bucket of its root from its tile's right-click menu (BucketsShown.moveTargets, #991). Writes are
+// online only (the core refuses them offline); what it refused is said once, then told seen (Buckets.Seen).
 //
 // Every state is the core's (Buckets.Open, Watched.Buckets: BucketsShown), every action one call (Buckets.*). Nothing is
 // decided here; nothing decrypted is written to show it (ADR 0047).
@@ -29,10 +30,8 @@ internal sealed class ContributionsView : IDisposable
     private readonly Window _window;
     private readonly long _gallery;
     private readonly Action<bool, string> _say;
-    /// <summary>A medium's row on the page (its name and tile) and its place in the page's rows; null where the page does
-    /// not show it now.</summary>
-    private readonly Func<string, (GalleryRow Row, int Index)?> _row;
-    private readonly Action<int> _open;
+    /// <summary>Opens the lightbox the core opens by the call it is given (Buckets.Lightbox).</summary>
+    private readonly Action<Call> _open;
     /// <summary>Whether the page reads from the offline store: nothing is curated then.</summary>
     private readonly Func<bool> _offline;
     private readonly StackPanel _view = new() { Spacing = 8 };
@@ -57,12 +56,11 @@ internal sealed class ContributionsView : IDisposable
 
     public UIElement View => _view;
 
-    public ContributionsView(Window window, long gallery, Action<bool, string> say, Func<string, (GalleryRow Row, int Index)?> row, Action<int> open, Func<bool> offline)
+    public ContributionsView(Window window, long gallery, Action<bool, string> say, Action<Call> open, Func<bool> offline)
     {
         _window = window;
         _gallery = gallery;
         _say = say;
-        _row = row;
         _open = open;
         _offline = offline;
         AutomationProperties.SetAutomationId(_view, "memory-buckets");
@@ -119,17 +117,16 @@ internal sealed class ContributionsView : IDisposable
         if (_closed || update is not Update.Buckets { shown: var s }) return;
         _shown = s;
         if (s is null) return;
-        Log.Write($"contributions shown: {s.rows.Count} buckets, selected {s.selected is not null}, {s.media.Count} media, curates {s.curates}, loading {s.loading}, failed {s.failed}, refused {s.refused?.ToString() ?? "-"}");
+        Log.Write($"contributions shown: {s.rows.Count} buckets, selected {s.selected is not null}, {s.media.Count} media, creates {s.createsSub}, renames {s.renames}, {s.moveTargets.Count} targets, loading {s.loading}, failed {s.failed}, refused {s.refused?.ToString() ?? "-"}");
         Draw(s);
     }
 
     /// <summary>The page's rows changed: the chosen bucket's media are derived anew from them (Buckets.Pick of the same
-    /// bucket — a curation's own re-read runs before the gallery's reload lands, inbox #990, so a moved medium shows gone
-    /// only once the rows did; Android re-reads on the rows too), and the tiles drawn anew.</summary>
+    /// bucket) — an upload or another device's move; a curation here needs none of it, the core reads the buckets after the
+    /// gallery (#990).</summary>
     public void RowsChanged()
     {
         if (_id is { } buckets && _shown?.selected is { } selected) Act.Send(new Call.BucketsPick { buckets = buckets, bucketId = selected });
-        if (_shown is { } s) Draw(s);
     }
 
     private void Draw(BucketsShown s)
@@ -157,9 +154,10 @@ internal sealed class ContributionsView : IDisposable
             _drawing = false;
         }
         var row = s.rows.FirstOrDefault(r => r.bucketId == s.selected);
-        var curates = s.curates && !_offline();
+        var online = !_offline();
+        var curates = online && (s.createsSub || s.renames);
         _more.Visibility = curates ? Visibility.Visible : Visibility.Collapsed;
-        if (curates) _more.Flyout = More(row);
+        if (curates) _more.Flyout = More(row, s);
         _status.Content = s switch
         {
             { loading: true, rows.Count: 0 } => new ProgressRing { IsActive = true, Margin = new Thickness(24), HorizontalAlignment = HorizontalAlignment.Center },
@@ -167,7 +165,7 @@ internal sealed class ContributionsView : IDisposable
             { media.Count: 0, rows.Count: > 0 } => Line(Words.MemoryBucketsEmptyBucket(), "memory-buckets-empty"),
             _ => null,
         };
-        var grid = string.Join(",", s.media.Select(m => $"{m}:{_row(m)?.Index}")) + $"#{curates}#{string.Join(",", s.rows.Where(r => r.canManage).Select(r => r.bucketId))}#{s.selected}";
+        var grid = string.Join(",", s.media.Select(m => $"{m.mediaId}:{m.tile}")) + $"#{online}#{string.Join(",", s.moveTargets)}#{s.selected}";
         if (grid != _gridDrawn)
         {
             _gridDrawn = grid;
@@ -195,8 +193,8 @@ internal sealed class ContributionsView : IDisposable
         return line;
     }
 
-    /// <summary>The More menu on the caller's own bucket: New sub-bucket; a sub-bucket's Rename and Delete bucket.</summary>
-    private MenuFlyout More(BucketRowShown? row)
+    /// <summary>The More menu: New sub-bucket under a primary; a sub-bucket's Rename and Delete bucket (as the core offers them).</summary>
+    private MenuFlyout More(BucketRowShown? row, BucketsShown s)
     {
         var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
         MenuFlyoutItem Item(string text, string glyph, string id, Func<Task> act)
@@ -216,8 +214,8 @@ internal sealed class ContributionsView : IDisposable
             };
             return item;
         }
-        menu.Items.Add(Item(Words.MemoryBucketsCreateBucket(), "\uE8F4", "memory-buckets-create", Create));
-        if (row is { isPrimary: false })
+        if (s.createsSub) menu.Items.Add(Item(Words.MemoryBucketsCreateBucket(), "\uE8F4", "memory-buckets-create", Create));
+        if (s.renames && row is not null)
         {
             var name = Said.Piece(row.label);
             menu.Items.Add(Item(Words.MemoryBucketsRename(), "\uE8AC", "memory-buckets-rename", () => Rename(name)));
@@ -242,7 +240,7 @@ internal sealed class ContributionsView : IDisposable
         await Write(new Call.BucketsRename { buckets = buckets, name = typed }, moving: false);
     }
 
-    /// <summary>Delete bucket: the web's question, its name typed to confirm; its media go back to the primary.</summary>
+    /// <summary>Delete bucket: the web's question, its name typed to confirm; its media go back to its root's primary.</summary>
     private async Task Delete(string name)
     {
         if (_id is not { } buckets) return;
@@ -279,7 +277,7 @@ internal sealed class ContributionsView : IDisposable
     {
         if (_closed || _shown is not { } s || width <= 0 || Math.Abs(width - _laid) < 0.5) return;
         _laid = width;
-        var shown = s.media.Select(m => (Id: m, At: _row(m))).Where(m => m.At is not null).Select(m => (m.Id, At: m.At!.Value)).ToList();
+        var shown = s.media;
         var ask = ++_asked;
         try
         {
@@ -296,7 +294,7 @@ internal sealed class ContributionsView : IDisposable
             {
                 var f = t.frames[i];
                 // the tile's frame at the core's place: a grid's cell in a Border, nothing laid over a view
-                var cell = new Border { Width = f.size, Height = f.size, CornerRadius = new CornerRadius(4), Child = Tile(shown[i].At.Row, shown[i].At.Index, f.size, s) };
+                var cell = new Border { Width = f.size, Height = f.size, CornerRadius = new CornerRadius(4), Child = Tile(shown[i], i, f.size, s) };
                 Canvas.SetLeft(cell, f.x);
                 Canvas.SetTop(cell, f.y);
                 _canvas.Children.Add(cell);
@@ -341,12 +339,14 @@ internal sealed class ContributionsView : IDisposable
         AutomationProperties.SetAutomationId(tile, $"bucket-tile:{index}");
         AutomationProperties.SetName(tile, name);
         ToolTipService.SetToolTip(tile, name);
-        tile.Click += (_, _) => _open(index);
-        // a medium of the caller's own bucket moved into another of theirs (online): the right-click menu, as Explorer's
-        if (s.curates && !_offline())
+        var media = row.mediaId;
+        // the lightbox over the chosen bucket's media, not the gallery's (#996)
+        tile.Click += (_, _) => { if (_id is { } buckets) _open(new Call.BucketsLightbox { buckets = buckets, mediaId = media }); };
+        // a medium moved into another bucket of its root (online; never across roots: the server's): the right-click menu, as Explorer's
+        if (s.selected is not null && !_offline())
         {
             var menu = new MenuFlyout();
-            var targets = s.rows.Where(r => r.canManage && r.bucketId != s.selected).ToList();
+            var targets = s.rows.Where(r => s.moveTargets.Contains(r.bucketId)).ToList();
             if (targets.Count == 0) menu.Items.Add(new MenuFlyoutItem { Text = Words.MemoryBucketsMoveEmpty(), IsEnabled = false });
             else
             {

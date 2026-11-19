@@ -349,7 +349,7 @@ internal sealed class MemoryPage : IDisposable
         var buckets = _views.Visibility == Visibility.Visible && ReferenceEquals(_views.SelectedItem, _bucketsItem);
         if (buckets && _buckets is null && _id is { } of)
         {
-            _buckets = new ContributionsView(_window, of, _say, RowOf, OpenLightbox, () => _shown?.offline is not null);
+            _buckets = new ContributionsView(_window, of, _say, OpenLightboxBy, () => _shown?.offline is not null);
             _bucketsSlot.Child = _buckets.View;
             Log.Write("memory page: the Contributions view");
         }
@@ -442,17 +442,9 @@ internal sealed class MemoryPage : IDisposable
     public static void OpenNode(NodeAt node) =>
         Act.Send(new Call.ShellOpen { Ref = new ObjectRef { scopeId = node.scopeId, nodeId = node.nodeId, kind = node.kind, application = ApplicationId.Memories, name = node.name } });
 
-    /// <summary>Medium <paramref name="mediaId"/>'s row and its place in the rows the page shows; null where it shows none.</summary>
-    private (GalleryRow Row, int Index)? RowOf(string mediaId)
-    {
-        if (_shown?.rows is not { } rows) return null;
-        for (var i = 0; i < rows.Count; i++) if (rows[i].mediaId == mediaId) return (rows[i], i);
-        return null;
-    }
-
-    /// <summary>Whether a tile's menu marks (Marks.Toggle): where the marks' mode is offered (a member's, in a shared
-    /// space) and the page is online.</summary>
-    private bool Marking => _shown is { filter.modeOffered: true, offline: null };
+    /// <summary>Whether a tile's menu marks (Marks.Toggle): where the core says a mark may be flipped
+    /// (GalleryShown.marking, #1001: a member's, the own set read — a personal space's too) and the page is online.</summary>
+    private bool Marking => _shown is { marking: true, offline: null };
 
     /// <summary>The grid's width: the scroll's view, less the page's margins.</summary>
     private double Width => _scroll.ViewportWidth - 2 * Margin;
@@ -795,10 +787,18 @@ internal sealed class MemoryPage : IDisposable
 
     private void OpenLightbox(int index)
     {
-        if (_id is not { } gallery || _closed) return;
+        if (_id is not { } gallery) return;
         Log.Write($"lightbox asked at {index}");
+        OpenLightboxBy(new Call.LightboxOpen { gallery = gallery, index = index });
+    }
+
+    /// <summary>The lightbox the core opens by <paramref name="open"/>: Lightbox.Open at a row, or Buckets.Lightbox over a
+    /// bucket's media (#996).</summary>
+    private void OpenLightboxBy(Call open)
+    {
+        if (_id is not { } gallery || _closed) return;
         CloseLightbox();
-        _lightbox = new LightboxView(_window, gallery, index, _say, _saving, CloseLightbox);
+        _lightbox = new LightboxView(_window, gallery, open, _say, _saving, CloseLightbox);
         _scroll.Visibility = Visibility.Collapsed;
         _root.Children.Add(_lightbox.View);
         _lightbox.Focus();
@@ -911,7 +911,7 @@ internal sealed class MemoryPage : IDisposable
             if (!s.contributions && ReferenceEquals(_views.SelectedItem, _bucketsItem)) _views.SelectedItem = _photosItem;
             ShowView();
         }
-        // the Contributions' bucket and tiles follow the page's rows, which this state may have changed
+        // the Contributions' bucket follows the page's rows, which an upload or another device's move may have changed
         _buckets?.RowsChanged();
         // the offer ended (its window, or the undo): the Undo goes with it — once a state showed the offer, so an update
         // from before the trash that arrives after its answer ends nothing (src/mobile/CLAUDE.md § Traps)

@@ -83,6 +83,11 @@ internal sealed class LightboxView : IDisposable
     /// <summary>The lightbox over gallery <paramref name="gallery"/> at row <paramref name="index"/>; <paramref name="close"/>
     /// takes it away (Close, Escape, the core closing it).</summary>
     public LightboxView(Window window, long gallery, int index, Action<bool, string> say, Action<long> saving, Action close)
+        : this(window, gallery, new Call.LightboxOpen { gallery = gallery, index = index }, say, saving, close) { }
+
+    /// <summary>The lightbox the core opens by <paramref name="open"/> (Lightbox.Open, or Buckets.Lightbox over a bucket's media,
+    /// inbox #996) over gallery <paramref name="gallery"/>.</summary>
+    public LightboxView(Window window, long gallery, Call open, Action<bool, string> say, Action<long> saving, Action close)
     {
         _window = window;
         _gallery = gallery;
@@ -163,7 +168,7 @@ internal sealed class LightboxView : IDisposable
         };
         _keyHost.AddHandler(UIElement.PreviewKeyDownEvent, _arrows, true);
         Keys();
-        Open(index);
+        Open(open);
     }
 
     /// <summary>The keyboard's focus in the lightbox, so its keys reach it.</summary>
@@ -173,11 +178,11 @@ internal sealed class LightboxView : IDisposable
         _view.Loaded += (_, _) => _view.Focus(FocusState.Programmatic);
     }
 
-    private async void Open(int index)
+    private async void Open(Call open)
     {
         try
         {
-            var (answer, _) = await Core.CallAsync(new Call.LightboxOpen { gallery = _gallery, index = index });
+            var (answer, _) = await Core.CallAsync(open);
             if (answer is not Answer.LightboxOpened { lightbox: var lightbox })
             {
                 Log.Write($"the lightbox did not open in the core ({answer.GetType().Name})");
