@@ -58,6 +58,9 @@ internal sealed class FilePage : IDisposable
 
     public NodeAt Node { get; }
 
+    /// <summary>The model a received link's guest page handed in, opened by the core (null: File.Open opens it).</summary>
+    private readonly long? _opened;
+
     public UIElement Page => _root;
 
     /// <summary>Told the header's facts each time the file is read (FileShown.headerFacts), with the page's id.</summary>
@@ -66,9 +69,12 @@ internal sealed class FilePage : IDisposable
     /// <summary>The page's id in the core, once it opened (File.Open).</summary>
     public long? Id => _id;
 
-    public FilePage(NodeAt node)
+    /// <summary>File <paramref name="node"/>'s page; with <paramref name="opened"/>, over the model the core already opened
+    /// (a received link's guest page, ReceivedPage.file), watched and closed with the page as a member's is.</summary>
+    public FilePage(NodeAt node, long? opened = null)
     {
         Node = node;
+        _opened = opened;
         _root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetRow(_content, 0);
@@ -89,7 +95,7 @@ internal sealed class FilePage : IDisposable
         Answer answer;
         try
         {
-            (answer, _) = await Core.CallAsync(new Call.FileOpen { node = Node });
+            (answer, _) = _opened is { } opened ? ((Answer)new Answer.FileOpened { file = opened }, (byte[]?)null) : await Core.CallAsync(new Call.FileOpen { node = Node });
         }
         catch (Exception e)
         {

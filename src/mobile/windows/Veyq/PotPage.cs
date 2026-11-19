@@ -55,6 +55,9 @@ internal sealed class PotPage : IDisposable
 
     public ObjectRef Ref { get; }
 
+    /// <summary>The model a received link's guest page handed in, opened by the core (null: Pot.Open opens it).</summary>
+    private readonly long? _opened;
+
     /// <summary>Told whether the Pot takes writes, each time its view is read (its header's facts).</summary>
     public Action<bool>? Read { get; set; }
 
@@ -85,9 +88,12 @@ internal sealed class PotPage : IDisposable
 
     /// <summary>Opens Pot <paramref name="r"/> on a page of <paramref name="window"/>; <paramref name="say"/> says what
     /// its actions did.</summary>
-    public PotPage(ObjectRef r, Window window, Action<bool, string> say)
+    /// <summary>With <paramref name="opened"/>, over the model the core already opened (a received link's guest page,
+    /// ReceivedPage.pot), watched and closed with the page as a member's is.</summary>
+    public PotPage(ObjectRef r, Window window, Action<bool, string> say, long? opened = null)
     {
         Ref = r;
+        _opened = opened;
         _window = window;
         _say = say;
         _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -147,7 +153,7 @@ internal sealed class PotPage : IDisposable
         Answer answer;
         try
         {
-            (answer, _) = await Core.CallAsync(new Call.PotOpen { Ref = Ref });
+            (answer, _) = _opened is { } opened ? ((Answer)new Answer.PotOpened { pot = opened }, (byte[]?)null) : await Core.CallAsync(new Call.PotOpen { Ref = Ref });
         }
         catch (Exception e)
         {

@@ -4,7 +4,9 @@
 // Search as its AutoSuggestBox (Ctrl+E, Ctrl+F; SearchBox, its chips a row at the top of the content), Home, Favorites, Recent and the applications as its items, and Settings
 // at its foot, which opens the account's Settings (AccountSettingsPage) in the content. The content shows what the core's
 // shell says is open — Home, an application's list, a Pot, a file
-// (FilePage), a drop box (DropBoxPage), a Memory or a chapter (MemoryPage, its lightbox LightboxView), or an object this app does not draw yet — under its title and a CommandBar whose first command is New; an
+// (FilePage), a drop box (DropBoxPage), a Memory or a chapter (MemoryPage, its lightbox LightboxView), or an object this app does not draw yet — under its title and a CommandBar whose first command is New; a
+// kept link's page (BookmarkPage, ADR 0150 decision 6; the shell's state names it, Shell.bookmark) shows there too under
+// its header (Open on its own page among its commands), opened by its row and left by Back; an
 // open Pot's Download is among its secondary commands (the bar's own More), an InfoBar under the bar says how a download
 // went, and another follows a file's Save a copy with its progress and Cancel. A list keeps where it was scrolled to when
 // the shell draws it anew — after an object opened from it closed, after an update — by its place (ListScrolls).
@@ -58,6 +60,8 @@ internal sealed class ShellView
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _sayTimer;
     private readonly ListScrolls _scrolls = new();
     private FilePage? _file;
+    /// <summary>A kept link's page while the shell's state names one (Shell.bookmark, its row opened it; back leaves it).</summary>
+    private BookmarkPage? _bookmark;
     private DropBoxPage? _dropBox;
     private MemoryPage? _memory;
     /// <summary>A person's profile while the shell's state names one (Shell.person, ADR 0144 decision 11).</summary>
@@ -338,6 +342,13 @@ internal sealed class ShellView
         Redraw();
     }
 
+    /// <summary>The kept link's page let go (closed in the core, its in-place link with it).</summary>
+    private void DropBookmark()
+    {
+        _bookmark?.Dispose();
+        _bookmark = null;
+    }
+
     private void Redraw()
     {
         if (_state is not { } state || _shown is not { } shown) return;
@@ -432,7 +443,8 @@ internal sealed class ShellView
                 var (connection, tenant) = (server.connection, t.tenantId);
                 item.Click += (_, _) =>
                 {
-                    if (!current) Act.Send(new Call.SessionSwitchTo { connection = connection, tenantId = tenant });
+                    if (current) return;
+                    Act.Send(new Call.SessionSwitchTo { connection = connection, tenantId = tenant });
                 };
                 menu.Items.Add(item);
             }
@@ -449,6 +461,15 @@ internal sealed class ShellView
         };
         trash.IsEnabled = space is not null;
         menu.Items.Add(trash);
+        // *Open a link* (ADR 0150 decision 4): the account menu's, beside Manage servers (cr-app-received-links owner question 2)
+        var openLink = new MenuFlyoutItem { Text = Words.LinkOpen(), Icon = new SymbolIcon(Symbol.Link) };
+        AutomationProperties.SetAutomationId(openLink, "switcher-open-link");
+        openLink.Click += (_, _) =>
+        {
+            ReceivedView.OpenLink(_window);
+            ClosePaneIfOverlay();
+        };
+        menu.Items.Add(openLink);
         var manage = new MenuFlyoutItem { Text = Words.SwitcherManage() };
         AutomationProperties.SetAutomationId(manage, "switcher-manage");
         manage.Click += (_, _) =>
@@ -540,6 +561,7 @@ internal sealed class ShellView
             _dropBox?.Dispose();
             _dropBox = null;
             DropMemory();
+            DropBookmark();
             if (_person is null || _person.UserId != person)
             {
                 _person?.Dispose();
@@ -557,6 +579,30 @@ internal sealed class ShellView
             _person.Dispose();
             _person = null;
         }
+        if (shell.bookmark is { } kept)
+        {
+            // a kept link's page over what was on screen (ADR 0150 decision 6, #1032): back returns there
+            _title.Text = kept.name;
+            if (_pot is not null) _said.IsOpen = false;
+            _pot?.Dispose();
+            _pot = null;
+            _file?.Dispose();
+            _file = null;
+            _dropBox?.Dispose();
+            _dropBox = null;
+            DropMemory();
+            if (_bookmark is null || _bookmark.Node.nodeId != kept.nodeId || _bookmark.Node.scopeId != kept.scopeId)
+            {
+                DropBookmark();
+                _bookmark = new BookmarkPage(_window, kept) { Changed = DrawCommands };
+                Log.Write("shell: a kept link's page");
+            }
+            CloseMemoriesMap();
+            if (!ReferenceEquals(_body.Content, _bookmark.Page)) _body.Content = _bookmark.Page;
+            DrawCommands();
+            return;
+        }
+        DropBookmark();
         if (shell.openObject is { kind: "EXPENSES_POT" } pot)
         {
             if (_pot is null || _pot.Ref != pot)
@@ -815,16 +861,17 @@ internal sealed class ShellView
         var memory = _memory;
         // a Memory's page creates one thing too, a chapter (its "Add chapter", where its gallery offers one): New is not
         // offered beside it, as on a Pot's page
-        if (page is null && memory is null && shown.canCreateHere && shown.creates.Count > 0)
+        if (page is null && memory is null && _bookmark is null && shown.canCreateHere && shown.creates.Count > 0)
         {
             // what the core offers here (AppKinds.createsWhere): a folder, a Pot and a Memory, on Home files and a folder uploaded too
             _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "new",
-                // a chapter is a Memory's page's own, never a level's; the bookmark's dialog is drawn by
-                // cr-app-received-links phase 10 (inbox #1020)
-                shown.creates.Where(c => c.create is not Create.Chapter and not Create.Bookmark).Select(c => (Said.Key(c.word), $"new:{c.create}", c.create switch
+                // a chapter is a Memory's page's own, never a level's
+                shown.creates.Where(c => c.create is not Create.Chapter).Select(c => (Said.Key(c.word), $"new:{c.create}", c.create switch
                 {
                     Create.Folder => (Action?)NewFolder,
                     Create.Memory => NewMemory,
+                    // New → Bookmark (ADR 0150 decision 6, inbox #1020): the made bookmark shows in the level read anew
+                    Create.Bookmark => () => { if (Level() is { } l) BookmarkCreateDialog.Open(_window, l.ScopeId, l.ParentId, _ => RefreshLists()); },
                     Create.Pot => () => PotCreateDialog.Open(_window, Say),
                     Create.UploadFiles => () => { if (Level() is { } l) _uploads.PickFiles(l, Say); },
                     Create.UploadFolder => () => { if (Level() is { } l) _uploads.PickFolder(l, Say); },
@@ -849,7 +896,7 @@ internal sealed class ShellView
         }
         // a level's View (Explorer's): List or Tiles, the account's one choice (ADR 0149 decision 8) — a level only, never an
         // object's page nor the Memories map
-        var view = page is null && memory is null && _file is null && _dropBox is null && _state?.shell.openObject is null
+        var view = page is null && memory is null && _file is null && _dropBox is null && _bookmark is null && _state?.shell.openObject is null
             && shown.selectedTab?.key != "memories.map" ? LevelTiles.ViewCommand(shown) : null;
         if (_header is null)
         {
@@ -857,6 +904,7 @@ internal sealed class ShellView
             return;
         }
         var file = _file;
+        var kept = _bookmark;
         var (primary, secondary) = _header.Commands(() =>
         {
             var window = WinRT.Interop.WindowNative.GetWindowHandle(_window);
@@ -865,7 +913,13 @@ internal sealed class ShellView
         }, () =>
         {
             if (file?.Id is { } id) _uploads.Replace(id, Say);
-        }, () => memory?.Add(), () => memory?.Music());
+        }, () => memory?.Add(), () => memory?.Music(), () => kept?.OwnPage(false));
+        // a kept link's page: Open on its own page first, once its meta read (the header's where its plan names it)
+        bool Offered(string id) => primary.Concat(secondary).OfType<FrameworkElement>().Any(e => AutomationProperties.GetAutomationId(e) == id);
+        if (kept is { OffersActions: true } && !Offered("header:open-own-page"))
+        {
+            _commands.PrimaryCommands.Add(Command(Words.BookmarkOpenOwnPage(), "bookmark-own-page", Symbol.NewWindow, () => kept.OwnPage(false)));
+        }
         foreach (var c in primary) _commands.PrimaryCommands.Add(c);
         if (view is not null) _commands.PrimaryCommands.Add(view);
         if (page is not null)
@@ -893,6 +947,13 @@ internal sealed class ShellView
             _commands.PrimaryCommands.Add(refresh);
         }
         foreach (var c in secondary) _commands.SecondaryCommands.Add(c);
+        if (kept is not null)
+        {
+            // a kept link's page: Report shared content (to the share's own operator) once its meta read; Report name
+            // where the header offers no report of its own (the name alone: AppKinds.reportsNameOnly)
+            if (kept.OffersActions) _commands.SecondaryCommands.Add(Command(Words.BookmarkReportShare(), "bookmark-report-share", Symbol.Flag, () => kept.OwnPage(true)));
+            if (!Offered("header:report")) _commands.SecondaryCommands.Add(Command(Words.BookmarkReportName(), "bookmark-report-name", Symbol.Flag, kept.ReportName));
+        }
         // a Memory's banner (ADR 0144 decision 5): "Add banner" or "Change banner", where its gallery offers the dialog
         if (memory?.Shown is { editsBanner: true } offers)
         {
@@ -901,6 +962,14 @@ internal sealed class ShellView
             banner.Click += (_, _) => memory.EditBanner();
             _commands.SecondaryCommands.Add(banner);
         }
+    }
+
+    private static AppBarButton Command(string label, string automationId, Symbol symbol, Action act)
+    {
+        var button = new AppBarButton { Label = label, Icon = new SymbolIcon(symbol) };
+        AutomationProperties.SetAutomationId(button, automationId);
+        button.Click += (_, _) => act();
+        return button;
     }
 
     /// <summary>The shell's lists read anew from the server (Shell.Refresh): a drop box's page, Home's level and every list follow.</summary>

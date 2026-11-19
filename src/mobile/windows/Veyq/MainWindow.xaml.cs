@@ -1,6 +1,8 @@
 // The window and its faces (ADR 0123's Consequences, the Windows app): what shows while the core opens or
 // refuses, the sign-in, the unlock, or the shell (with "Manage servers" over it) — the screen the core's session says. Each screen draws the core's state and calls
-// its actions; nothing else. Linux's main.rs, in WinUI.
+// its actions; nothing else. Linux's main.rs, in WinUI. A received link opened by *Open a link* (ReceivedView, ADR 0150
+// decision 4) stands above whichever face shows until it is let go; the face the session's gate gives meanwhile comes back
+// then.
 using System;
 using System.IO;
 using System.Linq;
@@ -20,6 +22,10 @@ public sealed partial class MainWindow : Window
     private OfferView? _offer;
     private ManageDialog? _manage;
     private ShellView? _shell;
+    /// <summary>A received link's screen while one stands above the faces, and the face it covers (what the session's gate
+    /// shows meanwhile), put back once the link is let go.</summary>
+    private ReceivedView? _received;
+    private UIElement? _behind;
 
     public MainWindow()
     {
@@ -32,6 +38,35 @@ public sealed partial class MainWindow : Window
         ScreenSecrets.Attach(this);
         Heading.Text = Words.AppName();
         Status.Text = Words.Starting();
+        // an opened link stands above whatever shows (*Open a link*: the sign-in, the switcher's menu, a kept link's page)
+        ReceivedView.Presenter = PresentReceived;
+        // the window closed lets go of a link still open
+        Closed += (_, _) => _received?.Dispose();
+    }
+
+    /// <summary>Received link <paramref name="received"/> as the window's face until it is let go; another link opened over
+    /// it replaces it (the old one let go).</summary>
+    private void PresentReceived(long received, string? browser)
+    {
+        if (_received is { } old) old.Dispose();
+        else _behind = Faces.Visibility == Visibility.Visible ? Faces.Content as UIElement : null;
+        ReceivedView? view = null;
+        view = new ReceivedView(this, received, ReceivedMode.OnItsOwn, browser, () =>
+        {
+            // on a later turn: not inside the view's own update
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!ReferenceEquals(_received, view)) return;
+                _received = null;
+                view?.Dispose();
+                Log.Write("received link left");
+                Show(_behind);
+                _behind = null;
+            });
+        });
+        _received = view;
+        Log.Write("received link shown");
+        Show(view.Page);
     }
 
     /// <summary>Starts the core with this user's device store and shows its session from then on.</summary>
@@ -134,6 +169,17 @@ public sealed partial class MainWindow : Window
 
     private void Face(UIElement? face)
     {
+        // a received link stands above: the face waits behind it
+        if (_received is not null)
+        {
+            _behind = face;
+            return;
+        }
+        Show(face);
+    }
+
+    private void Show(UIElement? face)
+    {
         Opening.Visibility = face is null ? Visibility.Visible : Visibility.Collapsed;
         Faces.Visibility = face is null ? Visibility.Collapsed : Visibility.Visible;
         if (!ReferenceEquals(Faces.Content, face)) Faces.Content = face;
@@ -167,7 +213,7 @@ public sealed partial class MainWindow : Window
                 if (!signIn.working && signIn.error is null && DevLogin.Take() is { } dev) _signIn.Dev(dev);
                 break;
             case Gate.Unlock unlock:
-                _unlock ??= new UnlockView();
+                _unlock ??= new UnlockView(this);
                 _unlock.Show(unlock);
                 Face(_unlock.Page);
                 if (unlock.record.method == Method.Device && !unlock.working && unlock.error is null && DevLogin.TakeUnlock() is { } password)
