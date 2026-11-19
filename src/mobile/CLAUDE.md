@@ -626,8 +626,13 @@ A Gradle build of its own, run through its own wrapper.
   outside the repository: the scratchpad), and `--erase <file>` erases them after (the sole-member tenant along; its
   pending erasure listed). The core's such cases read `VEYQ_LIVE_THROWAWAY_ENV=<file>` (`Throwaway`, `core/src/liveTest`)
   and **fail**, not skip, on a file naming `.run/.env`'s principal or member; an app pass points `VEYQ_ENV_FILE` at the
-  file for `devlogin.py` / `run.py --devlogin`. A machine that resolves no `*.localhost` (the Windows VM) needs the
-  throwaway's host mapped first (inbox #983).
+  file for `devlogin.py` / `run.py --devlogin`. A machine that resolves no `*.localhost` (the Windows VM) maps one
+  fixed name instead, which `--tenant tw-<name>` gives the tenant (the VM's `hosts` maps `tw-win.localhost`, 2026-11-19).
+  A deleted tenant keeps its domain until its purge (`409 domain_taken` on a second `--tenant` of the same name,
+  measured 2026-11-19), so `--erase` first moves the still-active tenant to `tw-<stamp>-erased.localhost`, and the name
+  is free at once (measured: create, erase, create again under `tw-probe2`). A pass that erases in the app erases the
+  member there and leaves the owner to `--erase`: an owner erased in the app takes the tenant into its deletion, which no
+  move can leave, and the name stays taken until its purge.
   Dev helpers for a device pass (not checks): `VEYQ_DEV_KIT_OUT=<dir> --tests '*DevKitTest*'` writes `dev-kit.pdf` (the
   principal's token in its `Keywords`) and `dev-kit-qr.png`, for a pass to pick or show a camera — kept outside an
   indexed folder (GNOME's Tracker indexes all of `~`; `/tmp` is reached by the chooser's path) and removed after;

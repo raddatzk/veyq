@@ -2,12 +2,21 @@
 // test that changes, rotates or erases an account (ADR 0148 decision 12). The seeded principal and member are the shared
 // test accounts; no such pass signs in as either.
 //
-//   pnpm run throwaway:account -- --out <file> [--with-member]   create; writes the throwaway's credentials to <file>
+//   pnpm run throwaway:account -- --out <file> [--with-member] [--tenant tw-<name>]
+//                                                                create; writes the throwaway's credentials to <file>
 //   pnpm run throwaway:account -- --erase <file>                 erase the throwaway (its sole-member tenant along)
+//
+// `--tenant tw-<name>` names the tenant `tw-<name>.localhost` instead of today's `tw-<stamp>.localhost`: for a machine
+// that resolves no `*.localhost` and maps one fixed name in its `hosts` file (the Windows VM's `tw-win`). The accounts'
+// addresses keep their stamp (an erased account's address stays taken until its purge). A deleted tenant keeps its
+// domain until its purge too (`PENDING_DELETION`, ADR 0101 decision 10), so `--erase` first moves a still-active
+// tenant off its domain onto `tw-<stamp>-erased.localhost` (`changeTenantDomain`, as the principal): the fixed name is
+// free again at once. A tenant whose owner was erased in the app is no longer active and cannot be moved: its name
+// stays taken until the purge `--erase` lists — so a pass erases the member in the app and leaves the owner to `--erase`.
 //
 // The principal's credentials (`VEYQ_ENV_FILE`, else the repository's `.run/.env`; never printed) are used for one thing:
 // `createTenant` on the admin listener for `tw-<stamp>.localhost` with owner `tw-<stamp>@veyq.localhost`, and — at the
-// erase — to list the pending erasures. The owner then registers from the returned owner invite with its own cold birth
+// erase — to move the tenant off its domain and to list the pending erasures. The owner then registers from the returned owner invite with its own cold birth
 // (`registerAndAcceptTenantInvite` with the TENANT birth grant, the same real client crypto the seeder runs), creates its
 // personal scope and points its tenant's mail at Mailpit; `--with-member` invites a second throwaway by a link invite
 // (its token answered to the owner, so no mailbox is read). <file> gets `VEYQ_EMAIL`, `VEYQ_PASSWORD`, `VEYQ_SECRET_KEY`,
@@ -75,7 +84,11 @@ const args = process.argv.slice(2).filter((a) => a !== '--')
 const outAt = args.indexOf('--out')
 const eraseAt = args.indexOf('--erase')
 const withMember = args.includes('--with-member')
-if ((outAt < 0) === (eraseAt < 0)) fail('usage: --out <file> [--with-member] | --erase <file>')
+const tenantAt = args.indexOf('--tenant')
+const fixedTenant = tenantAt >= 0 ? (args[tenantAt + 1] ?? fail('--tenant needs a name (tw-<name>)')) : null
+if (fixedTenant !== null && !/^tw-[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/.test(fixedTenant)) fail(`--tenant ${fixedTenant}: a name tw-<name> of a-z, 0-9 and inner hyphens`)
+if (fixedTenant !== null && eraseAt >= 0) fail('--tenant is a create option; --erase reads the tenant from <file>')
+if ((outAt < 0) === (eraseAt < 0)) fail('usage: --out <file> [--with-member] [--tenant tw-<name>] | --erase <file>')
 const file = args[(outAt >= 0 ? outAt : eraseAt) + 1] ?? fail('no <file> given')
 if (!existsSync(PRINCIPAL_ENV)) fail(`no principal env file at ${PRINCIPAL_ENV} — set VEYQ_ENV_FILE`)
 const principal = readEnv(PRINCIPAL_ENV)
@@ -87,7 +100,7 @@ type Born = { email: string; password: string; userId: string; username: string;
 
 /** One cold-born owner of a fresh tenant, registered from the owner invite `createTenant` handed back. */
 async function createOwner(principalToken: string, stamp: string, salt: Uint8Array) {
-  const domain = `tw-${stamp}.localhost`
+  const domain = `${fixedTenant ?? `tw-${stamp}`}.localhost`
   const email = `tw-${stamp}@veyq.localhost`
   const tenantName = `Throwaway ${stamp}`
   const { tenantId, bootstrapSecret } = await orThrow('createTenant', new TenantsApi(new TenantsConfiguration(adminChannel(principalToken)))
@@ -241,10 +254,17 @@ async function erase(): Promise<void> {
   if (!existsSync(file)) fail(`no ${file}`)
   const t = readEnv(file)
   if (!t.VEYQ_EMAIL?.startsWith('tw-')) fail(`${file} names no throwaway (an address starting tw-) — refused`)
+  const principalToken = await signIn(principal.VEYQ_EMAIL, principal.VEYQ_PASSWORD)
+  // Its domain freed first, while the tenant is still active (a fixed `--tenant` name is reused by the next pass).
+  if (t.VEYQ_TENANT_ID && t.VEYQ_TENANT_DOMAIN?.startsWith('tw-')) {
+    const away = `tw-${Date.now().toString(36)}-erased.localhost`
+    const moved = await adminCall(principalToken, 'POST', `/api/tenants/${encodeURIComponent(t.VEYQ_TENANT_ID)}/change-domain`, { domain: away })
+    if (moved.status === 204) console.log(`${t.VEYQ_TENANT_DOMAIN}: freed (the tenant moved to ${away})`)
+    else console.warn(`${t.VEYQ_TENANT_DOMAIN}: not moved (${moved.status} ${JSON.stringify(moved.json)}) — it stays taken until the tenant's purge`)
+  }
   // The member first: the owner's erasure then finds its tenant with no other member and deletes it along.
   if (t.VEYQ_USER2_EMAIL) await eraseOne(t.VEYQ_USER2_EMAIL, t.VEYQ_USER2_PASSWORD)
   await eraseOne(t.VEYQ_EMAIL, t.VEYQ_PASSWORD)
-  const principalToken = await signIn(principal.VEYQ_EMAIL, principal.VEYQ_PASSWORD)
   const pending = await adminCall<{ erasures: { address: string; dueAt: string }[] }>(principalToken, 'GET', '/api/instance/accounts/erasures')
   const mine = pending.json.erasures.filter((e) => e.address === t.VEYQ_EMAIL || e.address === t.VEYQ_USER2_EMAIL)
   for (const e of mine) console.log(`pending erasure: ${e.address}, purged at ${e.dueAt}`)
