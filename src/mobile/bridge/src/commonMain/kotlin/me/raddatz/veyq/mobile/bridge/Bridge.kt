@@ -2734,6 +2734,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             servers = parts.session.accounts.map { c ->
                 ShellShown.ShownServer(c.key, c.label, parts.hidden.visibleTenants(c.key, c.tenants, if (c == open.account) open.tenant else null))
             },
+            switcher = ShellWords.switcher(parts.session.accounts, parts.hidden, open.account, open.tenant).map {
+                ShellShown.ShownSwitcherEntry(it.connection, it.tenant, it.name, it.detail, it.line, it.current)
+            },
+            drawerSections = lists.drawerSections,
             space = space,
             spaceName = ShellWords.space(space),
             switcherSubtitle = ShellWords.switcherSubtitle(space, open.tenant.name, open.account.label),

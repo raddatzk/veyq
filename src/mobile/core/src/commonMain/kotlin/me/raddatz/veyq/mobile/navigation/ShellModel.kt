@@ -77,6 +77,9 @@ class ShellModel(
         fun groups(shell: Shell): List<Home.Group> = Home.groups(level(shell))
 
         fun space(shell: Shell): SpaceRef? = spaces.firstOrNull { it.scopeId == shell.space }
+
+        /** The drawer's sections that have something in them ([DrawerSection.shown]); an empty one is not drawn. */
+        val drawerSections: List<DrawerSection> get() = DrawerSection.shown(drawer, applications)
     }
 
     /**

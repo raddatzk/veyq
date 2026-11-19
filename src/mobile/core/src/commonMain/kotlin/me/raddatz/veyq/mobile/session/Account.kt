@@ -512,6 +512,8 @@ class VeyqAccount private constructor(
     /** One account per user per server: signing in to the same one twice is the same connection. */
     override val key: String get() = "${Url(server).host}#$userId"
 
+    override val address: String get() = email
+
     /** The server's name as the switcher shows it: its host, without a scheme or a port. */
     override val label: String get() = Url(server).host
 

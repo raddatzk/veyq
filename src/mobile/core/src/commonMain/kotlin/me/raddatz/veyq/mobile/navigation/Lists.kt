@@ -36,6 +36,23 @@ data class ArrangedList(
 )
 
 /**
+ * A drawer section that lists nodes or applications. One with nothing in it is not shown at all — no heading, no
+ * "Nothing yet" (owner 2026-11-19, on every app).
+ */
+enum class DrawerSection {
+    FAVORITES, RECENT, APPLICATIONS;
+
+    companion object {
+        /** The sections the drawer shows, in its order: only those with something in them. */
+        fun shown(drawer: ArrangedList, applications: List<ApplicationId>): List<DrawerSection> = buildList {
+            if (drawer.favorites.isNotEmpty()) add(FAVORITES)
+            if (drawer.recent.isNotEmpty()) add(RECENT)
+            if (applications.isNotEmpty()) add(APPLICATIONS)
+        }
+    }
+}
+
+/**
  * Every list follows one rule: Favorites, then Recent, then All, each ordered by last use, an object listed once
  * (ADR 0122 decision 5). An object never used on this device sorts after every used one, by name.
  *
