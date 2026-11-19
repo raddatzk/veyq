@@ -73,8 +73,10 @@ same kind of name. *Not you?* forgets the session as the web does.
 
 The app gains **Open a link** — a text field with the platform's paste control (iOS `PasteButton`, so no paste prompt;
 elsewhere a Paste button that reads the clipboard on the tap only, never on its own) — **on the sign-in screen under the
-sign-in** (the share page needs no session) and **in the account menu** (the drawer's foot on the phones, the account
-menu on the desktops) — the owner's question 2 taken as recommended. The guest view is **a screen above the shell**: its
+sign-in** (the share page needs no session) — **and nowhere else** (owner 2026-11-19, after seeing it in the account
+menu, the drawer's foot and the Mac's File menu, where the owner's question 2 had first placed it: a signed-out person
+has no other way in; a signed-in one does not need it there). The unlock screen of a trusted device keeps it, as the
+sign-in's own. The guest view is **a screen above the shell**: its
 own header (the share's root name), its own back stack, no drawer and no bar (ADR 0122's are a tenant's). **At the
 share's root a *Back* asks to confirm** — the key lives only in memory, so leaving drops the link unless it was kept —
 **and then returns to where the person was** before opening it: the sign-in screen, or the shell's place (owner

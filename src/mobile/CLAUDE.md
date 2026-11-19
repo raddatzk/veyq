@@ -953,6 +953,15 @@ whatever the app's words are, as on every Windows app, so a switch carries no wo
 turns on; a built-in item that shows a word of its own (`NavigationView`'s Settings) is replaced
 by one carrying the catalog's.
 
+The drawer and the switcher, the owner's rules (2026-11-19), on every app: **a section with nothing in it is not shown**
+— no heading, no "Nothing yet" — by core's `Lists.drawerSections` (`DrawerSection.shown`; the bridge's
+`ShellShown.drawerSections`), never a platform's own emptiness test. **Every switcher row says which server and account it
+is**: core's `ShellWords.switcher` (the bridge's `ShellShown.switcher`) gives each tenant row its name and its detail —
+the tenant's domain, as the web's switcher shows it, and the account's address where two signed-in accounts list the same
+tenant —, and which one is current; a platform draws them, never a server heading of its own over identical rows.
+**_Open a link_ is the sign-in's alone** (and the unlock's), where a signed-out person has no other way in — never in
+the account menu, the drawer's foot or a menu bar (ADR 0150 decision 4).
+
 A node's header is core's, for every kind (ADR 0123, the web's `NodePage` + `NodeHeader`): core's `navigation/NodeHeader.kt`
 plans it (`NodeHeaderTest`), each app's `NodeHeaderActions` draws it and owns every dialog behind it, and a kind only
 registers its page — `KindPages` (Android) / `KindPage` (Apple): it brings a share sheet, takes a cover, contributes a

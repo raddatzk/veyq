@@ -2,7 +2,7 @@
 //! GNOME's way. *Open a link* ([open_link]) is an `AdwDialog` with the link's field, a Paste button that reads the
 //! clipboard on the tap only, and the core's reason where the text is no link the app opens — with *Open in the browser*
 //! for a moderator's review (`Received.Open` answers `ReceivedProblem`). It stands on the sign-in page under the sign-in
-//! and in the switcher's menu (owner 2026-11-19).
+//! alone (owner 2026-11-19: not in the switcher's menu).
 //!
 //! An opened link is a [ReceivedView]: a screen above the shell (the window's content while it stands, [present]) with its
 //! own header — *Back* inside the link, at its root a question first (`link_leave_*`: the key lives only in memory), the

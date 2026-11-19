@@ -45,8 +45,8 @@ import me.raddatz.veyq.mobile.session.erasure
 import me.raddatz.veyq.mobile.session.passwordChange
 import me.raddatz.veyq.mobile.session.rotation.keyRotation
 
-/** One server in the switcher: its account and the tenants the switcher lists there. */
-data class ServerEntry(val account: VeyqAccount, val label: String, val tenants: List<TenantRef>)
+/** One tenant row of the switcher (core's `ShellWords.SwitcherEntry`) and the account it switches to. */
+data class ServerEntry(val account: VeyqAccount, val entry: me.raddatz.veyq.mobile.navigation.ShellWords.SwitcherEntry)
 
 /** "Manage servers"' rows are core's (`SessionModel.managed`). */
 typealias ManagedSpace = me.raddatz.veyq.mobile.session.SessionModel.ManagedSpace
@@ -76,10 +76,13 @@ sealed interface Screen {
         val shell: Shell,
         val tenant: TenantRef,
         val server: String,
+        /** The switcher's tenant rows (core's `ShellWords.switcher`), each with the account it switches to. */
         val servers: List<ServerEntry>,
         val applications: List<ApplicationId>,
         val filters: List<ApplicationId?>,
         val drawer: ArrangedList,
+        /** The drawer's sections with something in them (core's `Lists.drawerSections`): an empty one is not drawn. */
+        val drawerSections: List<me.raddatz.veyq.mobile.navigation.DrawerSection> = emptyList(),
         val spaces: List<SpaceRef>,
         val nodes: List<NodeRef>,
         val objects: List<ObjectRef>,
@@ -2216,7 +2219,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             shell = state.shell,
             tenant = tenant,
             server = account.label,
-            servers = session.accounts.map { c -> ServerEntry(c, c.label, hidden.visibleTenants(c.key, c.tenants, if (c == account) tenant else null)) },
+            servers = me.raddatz.veyq.mobile.navigation.ShellWords.switcher(session.accounts, hidden, account, tenant).mapNotNull { e ->
+                session.accounts.firstOrNull { it.key == e.connection }?.let { ServerEntry(it, e) }
+            },
+            drawerSections = l.drawerSections,
             applications = l.applications,
             filters = l.filters,
             drawer = l.drawer,

@@ -21,6 +21,38 @@ class ShellWordsTest {
     }
 
     @Test
+    fun every_switcher_row_says_its_domain_and_two_accounts_of_one_tenant_their_address() {
+        val shared = TenantRef("t", "Throwaway", "tw.veyq.localhost")
+        val other = TenantRef("o", "Verein", "")
+        val owner = ShellWords.SwitcherAccount("veyq.localhost#u1", "veyq.localhost", "owner@example.test", listOf(shared, other))
+        val member = ShellWords.SwitcherAccount("veyq.localhost#u2", "veyq.localhost", "member@example.test", listOf(shared))
+        val rows = ShellWords.switcherEntries(listOf(owner, member), "veyq.localhost#u2", "t")
+        assertEquals(
+            listOf("tw.veyq.localhost · owner@example.test", "veyq.localhost", "tw.veyq.localhost · member@example.test"),
+            rows.map { it.detail },
+        )
+        // only the member's row of the shared tenant is the one open, not the owner's of the same tenant
+        assertEquals(listOf(false, false, true), rows.map { it.current })
+        assertEquals("Throwaway · tw.veyq.localhost · member@example.test", rows[2].line)
+        // one account alone: every row its domain, no address
+        assertEquals(listOf("tw.veyq.localhost", "veyq.localhost"), ShellWords.switcherEntries(listOf(owner), null, null).map { it.detail })
+    }
+
+    @Test
+    fun a_drawer_section_with_nothing_in_it_is_not_shown() {
+        val ref = ObjectRef("s", "n", "MEMORY", ApplicationId.entries.first(), "Sommer")
+        assertEquals(emptyList(), DrawerSection.shown(ArrangedList(emptyList(), emptyList(), emptyList()), emptyList()))
+        assertEquals(
+            listOf(DrawerSection.RECENT, DrawerSection.APPLICATIONS),
+            DrawerSection.shown(ArrangedList(emptyList(), listOf(ref), emptyList()), ApplicationId.entries.toList()),
+        )
+        assertEquals(
+            listOf(DrawerSection.FAVORITES, DrawerSection.APPLICATIONS),
+            DrawerSection.shown(ArrangedList(listOf(ref), emptyList(), emptyList()), ApplicationId.entries.toList()),
+        )
+    }
+
+    @Test
     fun a_space_is_named_by_its_kind_else_its_name_and_none_is_home() {
         assertEquals(Piece.Said(Notice(Msg.DRAWER_HOME)), ShellWords.space(null))
         assertEquals(Piece.Said(Notice(Msg.SPACE_PERSONAL)), ShellWords.space(SpaceRef("s", "PERSONAL", "x")))

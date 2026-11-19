@@ -1,5 +1,5 @@
 //! The shell (ADR 0122; ADR 0123's Consequences, the Linux app), GNOME's way: an `AdwNavigationSplitView` whose sidebar is an
-//! `AdwSidebar` — Home, Favorites, Recent, the applications — under a header bar whose title is the one switcher (the
+//! `AdwSidebar` — Home, Favorites, Recent, the applications, each only when it lists something — under a header bar whose title is the one switcher (the
 //! space shown, its tenant and server; spaces and tenants in its menu), with New beside it and Search under it (Ctrl+F,
 //! [crate::search]: while something is asked, its list is the sidebar's place), and Settings pinned at its foot; the switcher shows the signed-in member's picture beside the tenant. The content
 //! side shows what the core's shell says is open: Home, an application's list, a Pot (its menu at the header's end:
@@ -23,7 +23,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::Facts, wire::NodeAt, wire::ObjectRef, wire::ShellModelState, wire::ShellShown, wire::ViewModeShown};
+use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::DrawerSection, wire::Facts, wire::NodeAt, wire::ObjectRef, wire::ShellModelState, wire::ShellShown, wire::ViewModeShown};
 use crate::bookmark_page::BookmarkPage;
 use crate::drop_box::DropBoxPage;
 use crate::file_page::FilePage;
@@ -683,23 +683,21 @@ impl Shell {
             spaces.append_item(&item);
         }
         menu.append_section(Some(&shown.tenant.name), &spaces);
-        for server in &shown.servers {
-            let tenants = gio::Menu::new();
-            for t in &server.tenants {
-                let item = gio::MenuItem::new(Some(&t.name), None);
-                item.set_action_and_target_value(Some("win.tenant"), Some(&format!("{}\n{}", server.connection, t.tenant_id).to_variant()));
-                tenants.append_item(&item);
-            }
-            menu.append_section(Some(&server.label), &tenants);
+        // every signed-in account's tenants, each row saying where it is (core's `ShellWords.switcher`: its domain, and the
+        // account's address where two accounts list the same tenant; owner 2026-11-19)
+        let tenants = gio::Menu::new();
+        for e in &shown.switcher {
+            let item = gio::MenuItem::new(Some(&e.line), None);
+            item.set_action_and_target_value(Some("win.tenant"), Some(&format!("{}\n{}", e.connection, e.tenant.tenant_id).to_variant()));
+            tenants.append_item(&item);
         }
+        menu.append_section(None, &tenants);
         // the space's trash (`trash.rs`)
         let space_menu = gio::Menu::new();
         space_menu.append(Some(&words::trash_title()), Some("win.trash"));
         menu.append_section(None, &space_menu);
-        // "Manage servers" (the window's `win.manage`, `manage.rs`) and *Open a link* (`win.open-link`, `received.rs`), the
-        // account's menu (cr-app-received-links owner question 2)
+        // "Manage servers" (the window's `win.manage`, `manage.rs`); *Open a link* is the sign-in's alone (owner 2026-11-19)
         let manage = gio::Menu::new();
-        manage.append(Some(&words::link_open()), Some("win.open-link"));
         manage.append(Some(&words::switcher_manage()), Some("win.manage"));
         menu.append_section(None, &manage);
         self.switcher.set_menu_model(Some(&menu));
@@ -753,24 +751,30 @@ impl Shell {
         let top = adw::SidebarSection::new();
         add(&top, &words::drawer_home(), "user-home-symbolic", Some(Target::Home), shown.is_home);
         self.sidebar.append(top);
-        for (title, refs) in [(words::drawer_favorites(), &state.lists.drawer.favorites), (words::drawer_recent(), &state.lists.drawer.recent)] {
+        // only the sections with something in them (core's `Lists.drawerSections`; owner 2026-11-19)
+        for kind in &shown.drawer_sections {
             let section = adw::SidebarSection::new();
-            section.set_title(Some(&title));
-            if refs.is_empty() {
-                add(&section, &words::drawer_nothing_yet(), "view-list-symbolic", None, false);
-            }
-            for r in refs {
-                add(&section, &r.name, kind_icon(&r.kind), Some(Target::Object(r.clone())), opened(r));
+            match kind {
+                DrawerSection::Favorites | DrawerSection::Recent => {
+                    let (title, refs) = match kind {
+                        DrawerSection::Favorites => (words::drawer_favorites(), &state.lists.drawer.favorites),
+                        _ => (words::drawer_recent(), &state.lists.drawer.recent),
+                    };
+                    section.set_title(Some(&title));
+                    for r in refs {
+                        add(&section, &r.name, kind_icon(&r.kind), Some(Target::Object(r.clone())), opened(r));
+                    }
+                }
+                DrawerSection::Applications => {
+                    section.set_title(Some(&words::drawer_applications()));
+                    for app in &state.lists.applications {
+                        let chosen = shell.application == Some(*app) && shell.open_object.is_none();
+                        add(&section, &app_name(shown, *app), app_icon(*app), Some(Target::Application(*app)), chosen);
+                    }
+                }
             }
             self.sidebar.append(section);
         }
-        let apps = adw::SidebarSection::new();
-        apps.set_title(Some(&words::drawer_applications()));
-        for app in &state.lists.applications {
-            let chosen = shell.application == Some(*app) && shell.open_object.is_none();
-            add(&apps, &app_name(shown, *app), app_icon(*app), Some(Target::Application(*app)), chosen);
-        }
-        self.sidebar.append(apps);
         *self.targets.borrow_mut() = targets;
         self.sidebar.set_selected(selected);
     }

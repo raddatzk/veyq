@@ -3695,8 +3695,15 @@ internal class ShellShown(
     val tenant: TenantRef,
     val server: String,
     val connection: String,
-    /** The switcher's servers, each with the tenants it lists (`Hidden.visibleTenants`). */
+    /** The switcher's servers, each with the tenants it lists (`Hidden.visibleTenants`). Superseded by [switcher]. */
     val servers: List<ShownServer>,
+    /**
+     * The switcher's tenant rows (`ShellWords.switcher`): every row its tenant's name and the line that says where it is —
+     * its domain, and the account's address where two signed-in accounts list the same tenant (owner 2026-11-19).
+     */
+    val switcher: List<ShownSwitcherEntry> = emptyList(),
+    /** The drawer's sections that have something in them (`Lists.drawerSections`): an empty one is not drawn (owner 2026-11-19). */
+    val drawerSections: List<me.raddatz.veyq.mobile.navigation.DrawerSection> = emptyList(),
     /** The space Home shows (`Lists.space`), its name (`ShellWords.space`) and the line under it (`switcherSubtitle`). */
     val space: SpaceRef?,
     val spaceName: Piece,
@@ -3746,6 +3753,8 @@ internal class ShellShown(
     val views: List<ViewModeShown> = CoreViewMode.LEVEL.map { ViewModeShown.valueOf(it.name) },
 ) {
     @Serializable class ShownServer(val connection: String, val label: String, val tenants: List<TenantRef>)
+    /** A switcher row ([me.raddatz.veyq.mobile.navigation.ShellWords.SwitcherEntry]); [line] its name and detail for a one-label menu item. */
+    @Serializable class ShownSwitcherEntry(val connection: String, val tenant: TenantRef, val name: String, val detail: String, val line: String, val current: Boolean)
     @Serializable class ShownSpace(val space: SpaceRef, val name: Piece)
     @Serializable class ShownApplication(val application: ApplicationId, @Serializable(with = MsgKey::class) val word: Msg)
     @Serializable class ShownTab(val tab: BarTab, @Serializable(with = MsgKey::class) val word: Msg)

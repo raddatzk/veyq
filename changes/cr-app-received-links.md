@@ -121,7 +121,8 @@ acceptances, no secret, in `DeviceStore` under the same name. *Not you?* forgets
 
 The app gains **Open a link** — a text field with the platform's paste control (iOS `PasteButton`, so no paste prompt;
 elsewhere a Paste button that reads the clipboard on the tap only, never on its own) — on the sign-in screen (the web's
-share page needs no session) and in the shell (*owner question 2* places it). The guest view is **a screen above the
+share page needs no session) — **only there** (owner 2026-11-19: taken out of the account menu, the drawer's foot and
+the File menu again; *owner question 2* below). The guest view is **a screen above the
 shell**: its own header (the share's root name, a close), its own back stack, no drawer and no bar (ADR 0122's are a
 tenant's); closing it returns where the person was. The password of a link opened from a bookmark is handed in memory
 (ADR 0120 decision 5's same-origin path — the app has no tabs, so every origin takes it).
@@ -326,6 +327,9 @@ question 2*).
    in the account menu (the drawer's foot on the phones, the account menu on the desktops); "Open a link" / "Link
    öffnen", "Paste the link you received" / "Füge den Link ein, den du bekommen hast", "Open in the browser" / "Im
    Browser öffnen".
+   **Changed (owner 2026-11-19), on the built apps:** the sign-in screen (and a trusted device's unlock) only — no
+   *Open a link* in the account menu, the drawer's foot or the Mac's File menu (removed on Android, Apple and Linux,
+   branch `claude/shell-feedback`; Windows' phase draws it on the sign-in alone). The words stand.
 
 ## Definition of done
 
