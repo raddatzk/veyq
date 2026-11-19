@@ -394,7 +394,7 @@ internal sealed class KitSection : IDisposable
         try
         {
             var picker = new FileSavePicker { SuggestedStartLocation = PickerLocationId.DocumentsLibrary, SuggestedFileName = Path.GetFileNameWithoutExtension(s.fileName) };
-            picker.FileTypeChoices.Add("PDF", [".pdf"]);
+            picker.FileTypeChoices.Add(Words.TabDepotFile(), [".pdf"]);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
             var chosen = await picker.PickSaveFileAsync();
             if (chosen is null || _closed) return;

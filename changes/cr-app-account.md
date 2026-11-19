@@ -463,6 +463,17 @@ key-touching flows after the vectors that hold them, erasure last.
 - [ ] **8 Windows** — D10's row over the bridge; `ScreenSecrets.Guard` on every step with a `PasswordBox`. · Done
   when: `run.py test`, `bridge`, `build` green on the VM; the UIA pass (agent); the no-copy check of the package's
   `LocalState`, `LocalCache` and `TempState` after a kit save.
+  *Built 2026-11-19 (pass open):* each flow a page in the settings frame (`AccountFlows.cs`: breadcrumb Settings › the
+  flow, Back; Fluent's sub-page rather than a `ContentDialog` per step, so the danger step can be its own dialog —
+  `Dialogs.Confirm`, accent-free, Cancel the default), every `PasswordBox` under `ScreenSecrets.Guard`; `KitSection`
+  (`FileSavePicker` → `Kit.Save` by path, "I saved it" enabled once the core says saved); `ProfileFlow.cs` with the
+  square cropper (`Cover.Pose`, frame = `EDGE`) and `ProfilePicture` answering `Picture.Square` (WIC upright, the pose's
+  window as RGBA over white; `ProfilePictureTest`, bitten: the base scale taken as `min` → red); `SafetyNumber.cs` below
+  the person's name (own: *Show* with the core's QR; another's: state, *Compare* by a `SAFETY` scan or digits); *Edit
+  profile* a `CommandBar` button opening Settings at *Your profile*; D1's rename in a family's More. After a rotation or
+  an erasure the bridge closes the tenant, so the outcome is told in a dialog (#984). `run.py test` (968), `bridge`, `build` green on the VM
+  (Veyq.Tests 66/66). **Not run:** the UIA pass and the no-copy check — the VM resolves no throwaway tenant
+  (`tw-<stamp>.localhost` is not in its `hosts`, the owner's to change; #983).
 
 - [ ] **9 harvest** — the site's `account/` pages (EN+DE: `your-profile`, `verify-a-person`, `devices-and-sessions`,
   `change-password`, `change-email`, `replace-your-keys`, `erase-your-account`) tell the apps (where each is, the kit
