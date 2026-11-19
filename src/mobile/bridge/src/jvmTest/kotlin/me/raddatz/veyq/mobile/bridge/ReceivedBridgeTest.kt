@@ -69,8 +69,11 @@ class ReceivedBridgeTest {
         val hidden = Hidden({}, emptySet())
         Composition(
             SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, files = JvmFiles,
-            received = { link, queue, password ->
-                GuestView.open(p, link, { block -> HttpClient(MockEngine(share.handler), block) }, MemoryDeviceStore(), MemoryGuestSessions(), { "en" }, handedPassword = password, queue = queue)
+            received = { link, queue, password, music ->
+                GuestView.open(
+                    p, link, { block -> HttpClient(MockEngine(share.handler), block) }, MemoryDeviceStore(), MemoryGuestSessions(), { "en" },
+                    handedPassword = password, queue = queue, music = music,
+                )
             },
         ) { null }
     }
@@ -163,6 +166,42 @@ class ReceivedBridgeTest {
         assertEquals(Answer.Done, b.ask(Call.ReceivedUpload(opened.received, listOf(file.path))))
         val sent = w.untilJson { j -> shown(j)?.takeIf { it.page?.sent?.isNotEmpty() == true } }
         assertEquals(listOf(file.name), sent.page!!.sent)
+        share.assertNoKeyInAnyRequest()
+        b.shutdown()
+    }
+
+    /**
+     * #1034 and #1033 over the bridge: a READ_WRITE folder's guest is offered the level's writes, adds a folder (the page
+     * read anew by itself), and reports a row and the page to the link's operator — every update scanned for the key.
+     */
+    @Test
+    fun aReadWriteGuestAddsAFolderAndReportsThroughTheBridge() = runBlocking {
+        val share = PlayedShare(p, role = "READ_WRITE")
+        val content = PlayedGuestContent(share)
+        val (memory, _) = content.memory(share.rootId, share.rootKey, "Trip", "bytes".encodeToByteArray())
+        val b = bridge(share)
+        val opened = assertIs<Answer.ReceivedOpened>(b.ask(Call.ReceivedOpen(share.link)))
+        val w = b.watching(Watched.Received(opened.received))
+        val all = mutableListOf<String>()
+        suspend fun until(pick: (ReceivedShown) -> Boolean): ReceivedShown = w.untilJson { j ->
+            all += j.toString()
+            (wire.decodeFromJsonElement(Update.serializer(), j) as Update.Received).shown?.takeIf(pick)
+        }
+        val level = until { it.page?.kind == ReceivedPageKind.LEVEL }
+        assertTrue(level.page!!.writes, "a READ_WRITE guest's level offers no write")
+        assertNotNull(assertIs<Answer.Said>(b.ask(Call.ReceivedNewFolder(opened.received, "Neu"))).notice, "a folder was made before the guest named itself")
+        b.ask(Call.ReceivedName(opened.received, "Ben"))
+        assertEquals(Answer.Said(null), b.ask(Call.ReceivedNewFolder(opened.received, "Neu")))
+        assertTrue(until { s -> s.page?.rows?.any { it.name == "Neu" } == true }.page!!.writes, "the new folder was not drawn after the reload")
+        // the reports: a row's (the Memory) and the page's (the root), never the link's
+        assertIs<Answer.ReportOpened>(b.ask(Call.ReceivedReportNode(opened.received, memory)))
+        assertIs<Answer.ReportOpened>(b.ask(Call.ReceivedReport(opened.received)))
+        assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.ReceivedReportNode(opened.received, "no-such-node")))
+        b.ask(Call.ReceivedClose(opened.received))
+        val key = share.kShare
+        for (json in all) for (c in listOf(b64url(key), b64(key), b64(key).trimEnd('='), hex(key), share.link, share.shareId)) {
+            if (json.contains(c)) fail("an update carried the link or its key: $json")
+        }
         share.assertNoKeyInAnyRequest()
         b.shutdown()
     }

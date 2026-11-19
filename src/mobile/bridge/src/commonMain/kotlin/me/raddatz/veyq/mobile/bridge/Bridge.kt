@@ -157,7 +157,11 @@ internal class Composition<A : Connection, T : Any>(
      * kept link's [password] handed in memory (null: none, or a pasted link). The real one in the library; a test plays a
      * link's instance, or has none (`Received.Open` then opens nothing, nor does a bookmark).
      */
-    val received: (link: me.raddatz.veyq.mobile.sharing.ReceivedLink.ShareLink, queue: me.raddatz.veyq.mobile.blob.UploadQueue, password: String?) -> me.raddatz.veyq.mobile.sharing.GuestView? = { _, _, _ -> null },
+    val received: (
+        link: me.raddatz.veyq.mobile.sharing.ReceivedLink.ShareLink, queue: me.raddatz.veyq.mobile.blob.UploadQueue, password: String?,
+        /** The player a guest's Memory plays its music with (#1034): the open tenant's, where one plays. */
+        music: me.raddatz.veyq.mobile.memories.GalleryModel.Music?,
+    ) -> me.raddatz.veyq.mobile.sharing.GuestView? = { _, _, _, _ -> null },
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
@@ -175,6 +179,12 @@ internal class HeldReceived(val screen: me.raddatz.veyq.mobile.sharing.GuestScre
 
     /** A WRITE_ONLY page's sent files followed into [page] while it shows (cancelled when the page changes or closes). */
     var sending: kotlinx.coroutines.Job? = null
+
+    /** The core's page [page] was drawn from: one page is registered once, whichever of a call or a reload showed it. */
+    var drawn: me.raddatz.veyq.mobile.sharing.GuestPage? = null
+
+    /** Follows the view's page (a reload after a READ_WRITE guest's write shows a new one by itself, #1034); cancelled as it closes. */
+    var follow: kotlinx.coroutines.Job? = null
 }
 
 /** The account's flows the bridge opens over one account (ADR 0148 decisions 6–8): each a core model, made on `*.Open`. */
@@ -825,6 +835,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShellOpen -> shell?.open(call.ref).done()
             is Call.ShellOpenAtTop -> shell?.openAtTop(call.ref).done()
             is Call.ShellOpenPerson -> shell?.openPerson(call.userId).done()
+            is Call.ShellOpenBookmark -> shell?.openBookmark(call.node).done()
             is Call.ShellSearch -> shell?.search(call.on).done()
             // a person's refresh (F5): the members too, a picture replaced since among them
             Call.ShellRefresh -> shell?.refresh(people = true).done()
@@ -1204,51 +1215,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.LinkConfirm -> links[call.link]?.let { taken(it.model.confirm(call.label)) } ?: noLink
             is Call.LinkEnterCode -> links[call.link]?.let { taken(it.model.enterCode(call.code)) } ?: noLink
             is Call.LinkClose -> links.remove(call.link)?.let { closeLink(it); Answer.Done } ?: noLink
-            is Call.ReceivedOpen -> openReceived(parts, call.text)
-            is Call.ReceivedPassword -> received[call.received]?.let { h -> h.screen.view.gates.submitPassword(call.password); enterReceived(h) } ?: noReceived
-            is Call.ReceivedAcceptTerms -> received[call.received]?.let { h -> h.screen.view.gates.acceptTerms(); enterReceived(h) } ?: noReceived
-            is Call.ReceivedAcceptNote -> received[call.received]?.let { h -> h.screen.view.gates.acceptNote(); enterReceived(h) } ?: noReceived
-            is Call.ReceivedOpenNode -> received[call.received]?.let { h -> h.screen.view.open(call.node); pageOf(h); Answer.Done } ?: noReceived
-            is Call.ReceivedBack -> received[call.received]?.let { h -> h.screen.back(); pageOf(h); Answer.Done } ?: noReceived
-            is Call.ReceivedStay -> received[call.received]?.let { h -> h.screen.stay(); Answer.Done } ?: noReceived
-            is Call.ReceivedLeave, is Call.ReceivedClose -> {
-                val id = (call as? Call.ReceivedLeave)?.received ?: (call as Call.ReceivedClose).received
-                received.remove(id)?.let { h -> closeReceived(h); Answer.Done } ?: noReceived
-            }
-            is Call.ReceivedName -> received[call.received]?.let { h ->
-                val access = h.screen.view.access ?: return noReceived
-                val named = runCatching {
-                    if (access.role == me.raddatz.veyq.mobile.sharing.GuestAccess.WRITE_ONLY) access.nameUploader(call.name.trim()) else access.nameGuest(call.name.trim())
-                }.isSuccess
-                taken(named)
-            } ?: noReceived
-            is Call.ReceivedForgetGuest -> received[call.received]?.let { h -> h.screen.view.gates.forgetGuest(); Answer.Done } ?: noReceived
-            is Call.ReceivedKeep -> received[call.received]?.let { h ->
-                val space = h.screen.keepPlaces().firstOrNull { it.scopeId == call.scope } ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
-                val dialog = h.screen.keep(space) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
-                taken(dialog.save())
-            } ?: noReceived
-            is Call.ReceivedUpload -> received[call.received]?.let { h ->
-                val sources = call.paths.mapNotNull { parts.files.source(it) }
-                if (sources.isEmpty()) return Answer.Refused(Answer.Why.NO_SUCH_PATH)
-                val sent = when (val page = h.screen.view.page.value) {
-                    is me.raddatz.veyq.mobile.sharing.GuestPage.DropBox -> page.model.upload(sources)
-                    is me.raddatz.veyq.mobile.sharing.GuestPage.Uploader -> page.model.upload(sources)
-                    else -> 0
-                }
-                if (sent == 0) sources.forEach { it.close() }
-                taken(sent > 0)
-            } ?: noReceived
-            is Call.ReceivedReport -> received[call.received]?.let { h ->
-                val sheet = h.screen.reportSheet() ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
-                val id = ids.incrementAndFetch()
-                reports.put(id, sheet)
-                Answer.ReportOpened(id)
-            } ?: noReceived
-            is Call.ReceivedKeepPlaces -> received[call.received]?.let { h ->
-                Answer.KeepPlaces(h.screen.keepPlaces().map { ShellShown.ShownSpace(it, ShellWords.space(it)) })
-            } ?: noReceived
-            is Call.ReceivedReportShown -> received[call.received]?.let { h -> h.screen.reportShown(); Answer.Done } ?: noReceived
+            is Call.ReceivedOpen, is Call.ReceivedPassword, is Call.ReceivedAcceptTerms, is Call.ReceivedAcceptNote, is Call.ReceivedOpenNode, is Call.ReceivedBack, is Call.ReceivedStay, is Call.ReceivedLeave, is Call.ReceivedClose, is Call.ReceivedName, is Call.ReceivedForgetGuest, is Call.ReceivedKeep, is Call.ReceivedUpload, is Call.ReceivedNewFolder, is Call.ReceivedReportNode, is Call.ReceivedReport, is Call.ReceivedKeepPlaces, is Call.ReceivedReportShown -> receivedCall(parts, call)
             is Call.BookmarkOpen -> openBookmark(parts, call.node)
             is Call.BookmarkOwnPage -> bookmarks[call.bookmark]?.let { b ->
                 heldReceived(b.page.openOwnPage(tenant.value?.models?.session))
@@ -2126,6 +2093,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noReceived = Answer.Refused(Answer.Why.NO_SUCH_RECEIVED)
     private val noBookmark = Answer.Refused(Answer.Why.NO_SUCH_BOOKMARK)
 
+    /** The player a guest's Memory plays its music with: the open tenant's, where one plays (the members' galleries' own). */
+    private fun music(parts: Composition<A, T>): me.raddatz.veyq.mobile.memories.GalleryModel.Music? =
+        player.value?.let { p -> parts.audio?.let { a -> me.raddatz.veyq.mobile.memories.GalleryModel.Music(p, a::untitled) } }
+
     /** Whether space [scopeId] of the open tenant is a group space's (its bookmark dialog says who else opens the link). */
     private suspend fun groupSpace(scopeId: String): Boolean =
         tenant.value?.models?.session?.let { t -> runCatching { t.spaces() }.getOrNull()?.firstOrNull { it.scopeId == scopeId }?.kind != "PERSONAL" } ?: false
@@ -2138,7 +2109,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         val t = tenant.value?.models?.session ?: return noTenant
         // a composition without guest views (a test's) opens no link: the page then reads as its meta alone
         val page = me.raddatz.veyq.mobile.sharing.BookmarkPage.of(t, node) { link, password ->
-            parts.received(link, queue, password) ?: error("no guest views in this composition")
+            parts.received(link, queue, password, music(parts)) ?: error("no guest views in this composition")
         }
         val held = HeldBookmark(page)
         val id = ids.incrementAndFetch()
@@ -2172,6 +2143,70 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         b.open.value = false
     }
 
+    /** A received link's calls (`Received.*`, ADR 0150 decisions 2–6), apart from [dispatch] to keep its method within the JVM's size.
+     */
+    private suspend fun receivedCall(parts: Composition<A, T>, call: Call): Answer = when (call) {
+        is Call.ReceivedOpen -> openReceived(parts, call.text)
+        is Call.ReceivedPassword -> received[call.received]?.let { h -> h.screen.view.gates.submitPassword(call.password); enterReceived(h) } ?: noReceived
+        is Call.ReceivedAcceptTerms -> received[call.received]?.let { h -> h.screen.view.gates.acceptTerms(); enterReceived(h) } ?: noReceived
+        is Call.ReceivedAcceptNote -> received[call.received]?.let { h -> h.screen.view.gates.acceptNote(); enterReceived(h) } ?: noReceived
+        is Call.ReceivedOpenNode -> received[call.received]?.let { h -> h.screen.view.open(call.node); pageOf(h); Answer.Done } ?: noReceived
+        is Call.ReceivedBack -> received[call.received]?.let { h -> h.screen.back(); pageOf(h); Answer.Done } ?: noReceived
+        is Call.ReceivedStay -> received[call.received]?.let { h -> h.screen.stay(); Answer.Done } ?: noReceived
+        is Call.ReceivedLeave, is Call.ReceivedClose -> {
+            val id = (call as? Call.ReceivedLeave)?.received ?: (call as Call.ReceivedClose).received
+            received.remove(id)?.let { h -> closeReceived(h); Answer.Done } ?: noReceived
+        }
+        is Call.ReceivedName -> received[call.received]?.let { h ->
+            val access = h.screen.view.access ?: return noReceived
+            val named = runCatching {
+                if (access.role == me.raddatz.veyq.mobile.sharing.GuestAccess.WRITE_ONLY) access.nameUploader(call.name.trim()) else access.nameGuest(call.name.trim())
+            }.isSuccess
+            taken(named)
+        } ?: noReceived
+        is Call.ReceivedForgetGuest -> received[call.received]?.let { h -> h.screen.view.gates.forgetGuest(); Answer.Done } ?: noReceived
+        is Call.ReceivedKeep -> received[call.received]?.let { h ->
+            val space = h.screen.keepPlaces().firstOrNull { it.scopeId == call.scope } ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+            val dialog = h.screen.keep(space) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+            taken(dialog.save())
+        } ?: noReceived
+        is Call.ReceivedUpload -> received[call.received]?.let { h ->
+            val sources = call.paths.mapNotNull { parts.files.source(it) }
+            if (sources.isEmpty()) return Answer.Refused(Answer.Why.NO_SUCH_PATH)
+            val sent = when (val page = h.screen.view.page.value) {
+                is me.raddatz.veyq.mobile.sharing.GuestPage.DropBox -> page.model.upload(sources)
+                is me.raddatz.veyq.mobile.sharing.GuestPage.Uploader -> page.model.upload(sources)
+                // a READ_WRITE guest's files into the folder on screen (#1034), each its own file
+                is me.raddatz.veyq.mobile.sharing.GuestPage.Level -> page.model.upload(sources)
+                else -> 0
+            }
+            if (sent == 0) sources.forEach { it.close() }
+            taken(sent > 0)
+        } ?: noReceived
+        is Call.ReceivedNewFolder -> received[call.received]?.let { h ->
+            val level = h.screen.view.page.value as? me.raddatz.veyq.mobile.sharing.GuestPage.Level ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+            if (!level.model.writes) return Answer.Refused(Answer.Why.NOT_OFFERED)
+            Answer.Said(level.model.createFolder(call.name))
+        } ?: noReceived
+        is Call.ReceivedReportNode -> received[call.received]?.let { h ->
+            val sheet = me.raddatz.veyq.mobile.sharing.GuestReport.nodeSheet(h.screen.view, call.node) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+            val id = ids.incrementAndFetch()
+            reports.put(id, sheet)
+            Answer.ReportOpened(id)
+        } ?: noReceived
+        is Call.ReceivedReport -> received[call.received]?.let { h ->
+            val sheet = h.screen.reportSheet() ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+            val id = ids.incrementAndFetch()
+            reports.put(id, sheet)
+            Answer.ReportOpened(id)
+        } ?: noReceived
+        is Call.ReceivedKeepPlaces -> received[call.received]?.let { h ->
+            Answer.KeepPlaces(h.screen.keepPlaces().map { ShellShown.ShownSpace(it, ShellWords.space(it)) })
+        } ?: noReceived
+        is Call.ReceivedReportShown -> received[call.received]?.let { h -> h.screen.reportShown(); Answer.Done } ?: noReceived
+        else -> Answer.Refused(Answer.Why.NOT_A_CALL)
+    }
+
     /**
      * *Open a link* (ADR 0150 decisions 4, 8): the pasted text parsed by the core; a link opened as its guest — signed in or
      * not; *Keep* offered with the open tenant — and loaded at once; a text that is none answered with why. The text, which
@@ -2184,7 +2219,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             return Answer.ReceivedProblem(word, browser = r.problem == me.raddatz.veyq.mobile.sharing.ReceivedLink.Problem.MODERATION)
         }
         val ok = r as me.raddatz.veyq.mobile.sharing.ReceivedLink.Parsed.Ok
-        val view = parts.received(ok.link, queue, null) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+        val view = parts.received(ok.link, queue, null, music(parts)) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
         val held = HeldReceived(me.raddatz.veyq.mobile.sharing.GuestScreen(view, tenant.value?.models?.session, ok.report))
         val id = ids.incrementAndFetch()
         received.put(id, held)
@@ -2205,14 +2240,22 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * under the existing calls' registries, so `File.*`, `Gallery.*` and `Pot.*` drive it as they drive a member's.
      */
     private suspend fun pageOf(h: HeldReceived) {
+        val page = h.screen.view.page.value
+        if (page != null && page === h.drawn) return
+        h.drawn = page
+        // the view's page followed from here on: a reload after a guest's write draws the level anew by itself
+        if (h.follow == null) h.follow = scope.launch { h.screen.view.page.collect { if (it !== h.drawn) pageOf(h) } }
         h.sending?.cancel()
         h.sending = null
-        val page = h.screen.view.page.value ?: return run { h.page.value = null }
+        if (page == null) return run { h.page.value = null }
         val node = page.node
         fun shown(kind: ReceivedPageKind, rows: List<ReceivedRow> = emptyList(), file: Long? = null, gallery: Long? = null, pot: Long? = null, sent: List<String> = emptyList()) =
             ReceivedPage(kind, node.name, node.kind, rows, file, gallery, pot, sent)
         h.page.value = when (page) {
-            is me.raddatz.veyq.mobile.sharing.GuestPage.Level -> shown(ReceivedPageKind.LEVEL, page.model.rows.map { ReceivedRow(it.nodeId, it.kind, it.name, it.identity) })
+            is me.raddatz.veyq.mobile.sharing.GuestPage.Level -> ReceivedPage(
+                ReceivedPageKind.LEVEL, node.name, node.kind, page.model.rows.map { ReceivedRow(it.nodeId, it.kind, it.name, it.identity) },
+                null, null, null, emptyList(), writes = page.model.writes,
+            )
             is me.raddatz.veyq.mobile.sharing.GuestPage.File -> shown(ReceivedPageKind.FILE, file = ids.incrementAndFetch().also { filePages.put(it, page.model) })
             is me.raddatz.veyq.mobile.sharing.GuestPage.Gallery -> shown(ReceivedPageKind.GALLERY, gallery = ids.incrementAndFetch().also { galleries.put(it, page.model) })
             is me.raddatz.veyq.mobile.sharing.GuestPage.Pot -> {
@@ -2234,6 +2277,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     /** A received link let go: its key zeroed, its page's models dropped from the registries. */
     private fun closeReceived(h: HeldReceived) {
+        h.follow?.cancel()
         h.sending?.cancel()
         h.page.value?.let { p ->
             p.file?.let { filePages.remove(it)?.close() }
@@ -2698,7 +2742,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             creates = AppKinds.createsWhere(shell.isHome, bookmarks = true).map { ShellShown.ShownCreate(it, it.word) },
             canCreateHere = open.models.shell?.canCreateHere == true,
             topLevelShare = open.models.shell?.offersTopLevelShare(shell) == true,
-            headed = shell.openObject?.at ?: shell.space?.let(shell::folderAt),
+            headed = shell.bookmark ?: shell.openObject?.at ?: shell.space?.let(shell::folderAt),
             me = open.models.me,
             pictures = pictures.sorted(),
             picturesRound = round,
@@ -3237,10 +3281,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     )
                 },
                 squarePicture = squarePicture,
-                received = { link, queue, password ->
+                received = { link, queue, password, music ->
                     me.raddatz.veyq.mobile.sharing.GuestView.open(
                         primitives, link, client, store, guestSessions, { config.language }, handedPassword = password, queue = queue,
-                        deriver = tiers, now = now,
+                        deriver = tiers, now = now, music = music,
                     )
                 },
             ) { t ->
