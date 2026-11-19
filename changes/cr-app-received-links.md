@@ -265,6 +265,20 @@ question 2*).
   #1032's (reverted: the core agent's). **Open:** a guest's file Replace and a Pot's places on Linux (#1035); a
   bookmark's rename, move and delete (#1035); a viewing link's report (#1033); terms and a note (not on the links);
   another instance; Orca not run.
+  **#1035 and the core's gaps switched on (2026-11-19, branch `claude/linux-1035`):** a kept link's row opens through
+  `Shell.OpenBookmark`; its page is the shell's content under core's header (`ShellShown.headed`: favourite, rename, move,
+  report of its name, delete — the page left by `Shell.Back` once the header says it is gone), the shell's back leaves it;
+  the guest's header offers a file's Download and, signed in, its Replace, a READ_WRITE level's New (`Received.NewFolder`,
+  `Received.Upload`, the guest named first with #1018's notice in the question), each row's Report
+  (`Received.ReportNode`); a guest's Pot holds its Entries and Overview itself and asks an unnamed READ_WRITE guest's name
+  before *Add entry*; *Keep* reads the lists anew. Measured: `run.py build` (clippy, tests; the new tests bitten red),
+  `run.py bridge`, `run.py test` green. Broadway pass, one throwaway with member (erased; its home volume removed), links
+  minted by the owner through the core, opened signed in as the member: a READ_WRITE folder (named, a folder and a file
+  added, `seed.txt` replaced — the owner lists all three; a row's report sheet), a READ_WRITE Pot (Entries, Overview, the
+  name asked, then the entry's editor), a READ folder kept, its bookmark listed, opened in place, renamed, moved into a
+  folder, deleted (the page left, Undo offered); the app's stderr holds none of the links' share ids or keys. **Open
+  (#1035, the core's and the bridge's):** a signed-out guest's Replace; a guest Pot's Settings; a kept link's page title
+  after its rename.
 - [x] **10 Windows** — the same; the credential locker. · Done when: `python3 windows/run.py build` green on the VM;
   § Passes' Windows row (or #983's reason named open).
   **Built 2026-11-19 (branch `claude/h-windows`):** core's `mingwMain` `sharing/WindowsGuestSessions` (a credential of WinRT's

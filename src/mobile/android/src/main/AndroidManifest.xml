@@ -66,21 +66,18 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- What another app shares to veyq (ADR 0138): images, videos and PDFs, to the app's own task (singleTask), so the
-                 session, the navigation and the editor are the app's. -->
+            <!-- What another app shares to veyq (ADR 0138): any type (decision 1: a folder takes any file; each target still
+                 takes only what its answer takes, and a share with no file says so), to the app's own task (singleTask), so
+                 the session, the navigation and the editor are the app's. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="image/*" />
-                <data android:mimeType="video/*" />
-                <data android:mimeType="application/pdf" />
+                <data android:mimeType="*/*" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="image/*" />
-                <data android:mimeType="video/*" />
-                <data android:mimeType="application/pdf" />
+                <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
     </application>

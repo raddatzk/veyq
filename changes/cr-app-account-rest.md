@@ -214,8 +214,28 @@ controls reuse the sign-in's words. No owner question: the words are the web's.
   The phase-2 edits compiled unchanged. The fields touched carry a `prompt:` (#1030, still unproven). Both builds green
   (`xcodebuild -sdk macosx` and `-sdk iphonesimulator`, `CODE_SIGNING_ALLOWED=NO`, fresh derived data). **Open:** the
   macOS row (no full-screen control from a background agent — nothing clicked) and iOS, the owner's.
-- [ ] **7 Linux** — the same over the bridge (`gtk::FileDialog`, `ScanView`, the entry's focus-leave controller, an
+- [x] **7 Linux** — the same over the bridge (`gtk::FileDialog`, `ScanView`, the entry's focus-leave controller, an
   `adw::SwitchRow`/check row). · Done when: `python3 linux/run.py test` and `build` green; § Passes' Linux row.
+  **Built 2026-11-19 (branch `claude/acct-rest-linux`):** `account_flows.rs`: `KeyControl` (the sign-in's rows — the
+  Secret Key, "From your Emergency Kit" with *Enter it instead* (`Kit.Clear`), *Open Emergency Kit* through
+  `gtk::FileDialog` (`Kit.Read` by path), *Scan Emergency Kit* where the Camera portal names a camera
+  (`ScanView::open_flow_kit`, `FLOW_KIT` with the flow as `link`) — and under them the problem, the other-account warning
+  and the other-server note) in the password change, both halves of the address change (one intake, each control drawing
+  the flow's `kit`) and the rotation's gate; `NewPassword` (`EventControllerFocus` leave → `*.Check`, each edit →
+  `*.Edited`, the notice under the rows, *Use it anyway* a `gtk::CheckButton` → `*.UseAnyway`). The password change and
+  the rotation's gate keep their rows until the core took them (the web's form; a hit stops the submit, and emptying a row
+  would have sent `Edited` and dropped the acceptance before `Run`); the address change still empties its rows.
+  `run.py run` takes `VEYQ_UNREACHABLE=<host>,…` (each mapped to the container's loopback). `run.py bridge`, `build`
+  (clippy `-D warnings`, `cargo test`) and `test` (1073 + 1 + 1 passed) green; words and guidelines guards green.
+  Pass (measured, Broadway in the Fedora 44 container from headless Chrome, a throwaway, erased after;
+  `VEYQ_UNREACHABLE=api.pwnedpasswords.com`, so no live query): the password changed with the kit **file** picked in GTK's
+  dialog and no key typed, then again with the `veyqkit:` token typed into the Secret Key row; leaving the new password
+  showed *could not be checked* (`Checking` → `Unavailable` on stderr) and the change went through (the rotation's gate
+  showed the same notice; not run); another account's kit in the address change warned with both addresses, and *Enter it instead* went back to the
+  typed row. Afterwards the app's stderr and its home volume (19 files) held no password (old, both new), no Secret Key
+  (printed or compact), no token, no SHA-1 (upper, lower) nor suffix. Not run: the scan (no camera in the container; a
+  `VEYQ_DEV_CAMERA` scan is open), the rotation run with a kit, the Flatpak build's pass (the container's debug build
+  instead), the hit and its *Use it anyway* (`BreachCheckTest`'s).
 - [ ] **8 Windows** — the same (`FileOpenPicker`, `QrCamera`, `LostFocus`, a `CheckBox`). · Done when:
   `python3 windows/run.py build` green on the VM; § Passes' Windows row.
 - [ ] **9 the passes** — § Passes, each a throwaway, erased after; results into ADR 0151's Consequences.

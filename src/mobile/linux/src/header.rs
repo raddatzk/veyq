@@ -54,6 +54,12 @@ pub fn action_of(id: &str, kind: &str) -> String {
     }
 }
 
+/// Whether the page of a node of [kind] gone to the trash is left by the shell's back (a kept link's: the core's shell
+/// closes an open object after its trash, never a kept link's page, `Shell.bookmark`).
+pub fn leaves_when_gone(kind: &str) -> bool {
+    kind == crate::bookmark_page::KIND
+}
+
 /// What a page told before the core answered the open: its facts, a file page's id, a gallery's id.
 type Later = (Option<Facts>, Option<i64>, Option<i64>);
 
@@ -85,6 +91,8 @@ struct Inner {
     hero_asked: Cell<u64>,
     /// The pin's question while it shows (the core's `offline.asking`): presented once, closed when the state drops it.
     offline_ask: RefCell<Option<adw::AlertDialog>>,
+    /// The shell was asked once to leave the page of a node gone to the trash ([leaves_when_gone]).
+    left: Cell<bool>,
 }
 
 impl Header {
@@ -105,6 +113,7 @@ impl Header {
             hero_crop: RefCell::new(None),
             hero_asked: Cell::new(0),
             offline_ask: RefCell::new(None),
+            left: Cell::new(false),
         });
         inner.hero.set_overflow(gtk::Overflow::Hidden);
         inner.hero.add_css_class("card");
@@ -460,6 +469,11 @@ impl Inner {
             t.dismiss();
         }
         let Some(s) = shown.as_ref() else { return };
+        // a kept link's page has no object the core closes after its trash: the shell's back leaves it, once
+        if s.gone && self.on_bar.get() && leaves_when_gone(&s.node.kind) && !self.left.replace(true) {
+            eprintln!("veyq: header: a kept link went to the trash, its page left");
+            bridge::send(Call::ShellBack);
+        }
         if s.gone || !self.on_bar.get() {
             return;
         }
@@ -679,5 +693,13 @@ mod tests {
         assert_eq!(action_of("move", "EXPENSES_POT"), "win.header-move");
         assert_eq!(action_of("rename", "FOLDER"), "win.header-rename");
         assert_eq!(action_of("offline", "MEMORY"), "win.header-offline", "Available offline is the window's stateful check item");
+    }
+
+    #[test]
+    fn a_kept_links_page_is_left_once_it_went_to_the_trash_an_objects_is_closed_by_the_core() {
+        assert!(leaves_when_gone("SHARE_BOOKMARK"));
+        for kind in ["FOLDER", "FILE", "EXPENSES_POT", "MEMORY", "DEPOT_DROPBOX"] {
+            assert!(!leaves_when_gone(kind), "{kind}");
+        }
     }
 }

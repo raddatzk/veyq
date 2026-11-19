@@ -341,7 +341,7 @@ impl SignIn {
 
 /// What the kit's scan shows but its camera: no camera or a refused one says to open the file or type the key instead
 /// (the web's `scanError`); a found kit closes the dialog, so it shows nothing.
-fn scan_said(shown: &ScanShown) -> Option<gtk::Widget> {
+pub(crate) fn scan_said(shown: &ScanShown) -> Option<gtk::Widget> {
     match shown.state {
         ScanState::NoCamera | ScanState::Denied => Some(
             adw::StatusPage::builder()

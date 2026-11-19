@@ -44,6 +44,12 @@
 - **E5 — the node is not a live file of this scope** (a folder, a Memory, a trashed file, another scope's node) or
   the caller cannot write the scope: the completion is refused and nothing is attached.
 - **A6 — the scope is being deleted:** the level is read-only; download only.
+- **A7 — in the apps, shared into a folder** ([ADR 0138](../../../decisions/0138-the-apps-take-what-the-system-shares-the-chosen-nodes-kind-decides-what-it-becomes.md)
+  decisions 2, 3 and 9): another app shares any file to veyq (Android, iOS); the pick mode walks to a folder or a
+  space's top, whose open level offers *Add here* where the member may upload there (online, not in a guest's identity
+  folder, Depot not switched off); the files go into the upload queue as picked ones do (steps 1–4, a taken name
+  offering step 6's replace). A file dropped onto an open level on Android, an iPad or a Mac is uploaded there at once;
+  a folder dropped on a Mac uploads as a folder, as Depot's *Upload folder* does.
 
 ## Quality notes
 
@@ -69,6 +75,7 @@ their contents or their names.
 - End-user view (docs site): [Replace a file with a newer one](../../../../site/src/content/docs/depot/replace-a-file.mdx)
 - End-user view (docs site): [Upload files and folders](../../../../site/src/content/docs/depot/upload-files-and-folders.mdx)
 - End-user view (docs site): [Open and look at a file](../../../../site/src/content/docs/depot/view-a-file.mdx)
+- End-user view (docs site): [Share into veyq](../../../../site/src/content/docs/getting-started/share-into-veyq.mdx) (A7)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
 - **Use-cases:** [uc.depot.share-folder-files](uc.depot.share-folder-files.md) (the same files through a folder
   link), [uc.depot.drop-box](uc.depot.drop-box.md).

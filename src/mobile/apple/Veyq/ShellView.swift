@@ -28,7 +28,7 @@ struct ShellView: View {
         .environment(\.avatars, model.avatars)
         .environment(\.picking, model.incoming != nil)
         .environment(\.takesShare, model.takesShare)
-        // An image, a video or a PDF dragged onto the app — a screenshot's thumbnail, a photo from another app (ADR 0138 decision 9).
+        // A file dragged onto the app — a screenshot's thumbnail, a photo, any file from another app (ADR 0138 decision 9).
         .onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
             Task { model.receiveDrop(await IncomingFiles.read(providers)) }
             return true
@@ -689,6 +689,12 @@ struct HomeView: View {
 
     private var level: some View {
         levelBody
+        // a file dropped onto the level is uploaded here at once where Depot may put files, a folder on macOS as a folder
+        // (ADR 0138 decision 9); anywhere else it waits in the pick mode, as a share's does
+        .onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
+            Task { await model.dropOntoLevel(providers) }
+            return true
+        }
         // the level's "New" (the web's menu): a folder here, or a Pot here
         // a folder Home shows: core's actions on it, as the web's level header has them
         .toolbar {
@@ -889,8 +895,8 @@ struct OfflineBanner: View {
     }
 }
 
-/// The pick mode's banner: what waits and where it can go, with its cancel — and on a Memory's or a chapter's page that
-/// takes it, *Add here* (ADR 0138 decision 3), that page's own save.
+/// The pick mode's banner: what waits and where it can go, with its cancel — and on a Memory's or a chapter's page or a
+/// level that takes it, *Add here* (ADR 0138 decision 3), that place's own save (core's `AddHere`, which picks it).
 struct ShareBanner: View {
     let model: AppModel
     let incoming: AppModel.Incoming
@@ -908,8 +914,8 @@ struct ShareBanner: View {
             }
             Spacer()
             Button(say(.signinCancel), action: onCancel)
-            if let gallery = model.addHereTarget {
-                Button(say(.shareAddHere)) { model.addHere(gallery) }
+            if let target = model.addHereTarget {
+                Button(say(.shareAddHere)) { model.addHere(target) }
                     .buttonStyle(.borderedProminent)
             }
         }

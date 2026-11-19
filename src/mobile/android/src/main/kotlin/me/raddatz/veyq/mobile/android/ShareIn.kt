@@ -11,10 +11,12 @@ import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.navigation.ShareInbox
 
 /**
- * What another app shared to veyq (ADR 0138 decision 8) — `ACTION_SEND` / `ACTION_SEND_MULTIPLE` of images, videos and
- * PDFs — or dropped onto it (decision 9), as sources read a frame at a time where the system put them (`ContentSource`):
+ * What another app shared to veyq (ADR 0138 decision 8) — `ACTION_SEND` / `ACTION_SEND_MULTIPLE` of any type — or
+ * dropped onto it (decision 9), as sources read a frame at a time where the system put them (`ContentSource`):
  * the share's read grant is the receiving activity's and outlives its leaving for the upload's worker (measured, ADR 0138's
- * Consequences). Nothing is read whole here; the kind chosen judges the files (core's `ShareAnswer`).
+ * Consequences). Nothing is read whole here; the kind chosen judges the files (core's `ShareAnswer`). A share that carries
+ * no file (a text, a link: `EXTRA_TEXT` only) waits with none, so the pick mode says nothing could be taken (decision 1,
+ * until a shared link has a meaning, inbox #1015).
  *
  * A HEIC photo is taken as a JPEG (decision 7), so a receipt and a photo read in every browser: the one file the app
  * writes, its copy under `no_backup/share-in/` ([dir]), removed once nothing reads it again ([release]) and swept at
@@ -28,6 +30,8 @@ object ShareIn {
             Intent.ACTION_SEND_MULTIPLE -> IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
             else -> return null
         }
+        // a text or a link shared, no stream: nothing to take, said so
+        if (uris.isEmpty()) return ShareInbox.Incoming(emptyList(), 0)
         return of(context, uris)
     }
 

@@ -129,6 +129,16 @@ impl ScanView {
         Self::open_with(Call::ScanOpen { kind: ScanKind::Link, server: None, link: Some(link) }, other, changed)
     }
 
+    /// Opens a scan of an Emergency Kit for flow [flow]'s Secret Key (kind `FLOW_KIT`, ADR 0151 decision 3): the kit it
+    /// reads goes to that flow's intake in the core, never back here; the flow's update says what it holds.
+    pub fn open_flow_kit(
+        flow: i64,
+        other: impl Fn(&ScanShown) -> Option<gtk::Widget> + 'static,
+        changed: impl Fn(&ScanShown) + 'static,
+    ) -> Rc<ScanView> {
+        Self::open_with(Call::ScanOpen { kind: ScanKind::FlowKit, server: None, link: Some(flow) }, other, changed)
+    }
+
     fn open_with(
         opening: Call,
         other: impl Fn(&ScanShown) -> Option<gtk::Widget> + 'static,
