@@ -630,8 +630,14 @@ impl Inner {
     /// A WRITE_ONLY guest's page (a drop box's, a Memory's uploader): its files added by path, what it sent in this visit.
     fn draw_upload_page(self: &Rc<Self>, _s: &ReceivedShown, p: &ReceivedPage) {
         let column = column();
-        column.append(&adw::StatusPage::builder().icon_name(kind_icon(&p.node_kind)).title(glib_escape(&p.name)).build());
-        let add = gtk::Button::builder().label(words::memory_add()).halign(gtk::Align::Center).build();
+        // the web's words of each WRITE_ONLY page: a drop box's, a Memory's uploader's
+        let (intro, pick) = if p.kind == ReceivedPageKind::DropBox {
+            (words::share_dropbox_hint(&p.name), words::share_dropbox_pick())
+        } else {
+            (words::share_uploader_intro(), words::share_add_photos())
+        };
+        column.append(&adw::StatusPage::builder().icon_name(kind_icon(&p.node_kind)).title(glib_escape(&p.name)).description(glib_escape(&intro)).build());
+        let add = gtk::Button::builder().label(pick).halign(gtk::Align::Center).build();
         add.add_css_class("suggested-action");
         add.add_css_class("pill");
         add.set_widget_name("guest-upload");

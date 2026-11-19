@@ -347,7 +347,7 @@ struct PasswordChangeSheet: View {
 
     private func run() {
         guard let f = held?.model else { return }
-        let key = AppleAccount.shared.typedKey(text: secretKey)
+        let key = secretKey
         let (c, n, k) = (current, next, confirm)
         secretKey = ""
         Task {
@@ -441,7 +441,7 @@ struct AddressChangeSheet: View {
 
     private func request() {
         guard let f = held?.model else { return }
-        let key = AppleAccount.shared.typedKey(text: secretKey)
+        let key = secretKey
         let (e, p) = (newEmail, password)
         secretKey = ""
         Task {
@@ -453,7 +453,7 @@ struct AddressChangeSheet: View {
 
     private func makeKit() {
         guard let f = held?.model else { return }
-        let key = AppleAccount.shared.typedKey(text: kitSecretKey)
+        let key = kitSecretKey
         let p = kitPassword
         kitSecretKey = ""
         kitPassword = ""
@@ -624,7 +624,7 @@ struct KeyRotationSheet: View {
 
     private func prove() {
         guard let f = held?.model else { return }
-        let key = AppleAccount.shared.typedKey(text: secretKey)
+        let key = secretKey
         let (p, n, c) = (password, newPassword, confirmPassword)
         secretKey = ""
         Task {

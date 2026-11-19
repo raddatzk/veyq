@@ -18,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Fingerprint
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Password
 import androidx.compose.material.icons.outlined.QrCode2
@@ -61,9 +62,9 @@ fun AppRoot(model: AppModel) {
             is Screen.SignIn -> SignInScreen(
                 s, { server, email, password, secretKey -> model.signIn(server, email, password, secretKey) }, model::cancelAdd,
                 onKit = model::readKit, onClearKit = model::clearKit, onScanKit = model::scanKit, kitScan = kitScan, onCloseKitScan = model::closeKitScan,
-                onScanFromTrusted = model::scanFromTrusted, onShowForSignIn = model::showForSignIn,
+                onScanFromTrusted = model::scanFromTrusted, onShowForSignIn = model::showForSignIn, onOpenLink = model.guests::ask,
             )
-            is Screen.Unlock -> UnlockScreen(s, model::unlock, model::otherAccount)
+            is Screen.Unlock -> UnlockScreen(s, model::unlock, model::otherAccount, onOpenLink = model.guests::ask)
             is Screen.Signed -> offer?.let { OfferScreen(it, trustWorking, model::answerOffer) }
                 ?: settings?.let { SettingsScreen(it, model.settingsActions, maps, at = settingsAt, onAt = model::settingsAtSeen) }
                 ?: s.managing?.let { ManageScreen(it, model) } ?: ShellScreen(s, model)
@@ -80,6 +81,12 @@ fun AppRoot(model: AppModel) {
                 confirmButton = { androidx.compose.material3.TextButton(onClick = model::endedSeen) { androidx.compose.material3.Text(stringResource(R.string.ok)) } },
             )
         }
+        // a received link open as its guest (ADR 0150 decision 4): a screen above the sign-in or the shell, which stay
+        // where they were; *Open a link*'s field over either
+        val guest by model.guests.screen.collectAsStateWithLifecycle()
+        guest?.let { GuestLinkScreen(it, model) }
+        val asking by model.guests.asking.collectAsStateWithLifecycle()
+        asking?.let { OpenLinkDialog(it, onOpen = model.guests::openAsked, onCancel = model.guests::cancelAsk) }
     }
 }
 
@@ -96,6 +103,8 @@ fun SignInScreen(
     onCloseKitScan: () -> Unit = {},
     onScanFromTrusted: ((String) -> Unit)? = null,
     onShowForSignIn: ((String) -> Unit)? = null,
+    /** *Open a link* (ADR 0150 decision 4): a received link opened as its guest, no session needed. */
+    onOpenLink: (() -> Unit)? = null,
 ) {
     var server by rememberSaveable { mutableStateOf(state.server ?: BuildDefaults.SERVER) }
     var email by rememberSaveable { mutableStateOf(state.email.orEmpty()) }
@@ -216,6 +225,17 @@ fun SignInScreen(
                 Text(stringResource(R.string.signin_cancel))
             }
         }
+        onOpenLink?.let { OpenLinkButton(it) }
+    }
+}
+
+/** *Open a link* under the sign-in (ADR 0150 decision 4; owner 2026-11-19): a received link needs no session. */
+@Composable
+private fun OpenLinkButton(onClick: () -> Unit) {
+    androidx.compose.material3.HorizontalDivider(Modifier.padding(vertical = 8.dp), color = role(LocalPalette.current.line))
+    androidx.compose.material3.OutlinedButton(onClick = onClick, modifier = Modifier.fillMaxWidth().testTag("signin-open-link")) {
+        androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Link, null, Modifier.padding(end = 8.dp))
+        Text(stringResource(R.string.link_open))
     }
 }
 
@@ -237,7 +257,7 @@ private fun StartingScreen() {
  * asks for the person's authentication again for a remembered one; and the way to another account.
  */
 @Composable
-fun UnlockScreen(state: Screen.Unlock, onUnlock: (String) -> Unit, onOther: () -> Unit) {
+fun UnlockScreen(state: Screen.Unlock, onUnlock: (String) -> Unit, onOther: () -> Unit, onOpenLink: (() -> Unit)? = null) {
     var password by rememberSaveable { mutableStateOf("") }
     val remembered = state.record.method == me.raddatz.veyq.mobile.session.TrustedDevice.Method.DEVICE_KEY
     // a remembered account's words follow its record's level: the presence level asks again; at LOGIN nothing asks, so
@@ -281,6 +301,7 @@ fun UnlockScreen(state: Screen.Unlock, onUnlock: (String) -> Unit, onOther: () -
         androidx.compose.material3.TextButton(onClick = onOther, enabled = !state.working, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.unlock_other))
         }
+        onOpenLink?.let { OpenLinkButton(it) }
     }
 }
 

@@ -189,6 +189,9 @@ sequenceDiagram
   against it, nor do the re-signed invites and the endorsements: they are staged before the publish.
 - **E11 — the new Emergency Kit.** It is shown before the publish, and the publish waits until it is downloaded and
   confirmed. Until the result screen says the account is secured, the old kit is the one that works.
+- **A — in the apps** ([ADR 0151](../../../decisions/0151-the-apps-account-rest-the-sign-ins-secret-key-control-in-every-flow-that-asks-for-the-key-and-the-breached-password-check-straight-from-the-device.md), being built): the gate's Secret Key section is the app's sign-in control — typed, a
+  pasted kit token, a kit file or a scan; a kit of another account warns, never blocks —, and a new password chosen is
+  checked against known breaches straight from the device, as the web's gate checks it.
 
 ## Quality notes
 

@@ -10,5 +10,7 @@ object DevLogin {
 
     fun kitPassword(@Suppress("UNUSED_PARAMETER") intent: Intent?): String? = null
 
+    fun openLink(@Suppress("UNUSED_PARAMETER") intent: Intent?): String? = null
+
     class Credentials(val server: String, val email: String, val password: String, val secretKey: String, val remember: Boolean)
 }

@@ -164,11 +164,12 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
 - **Where it was built otherwise than decided** (2026-11-19): on Windows each flow is a page in the settings frame
   (breadcrumb Settings › the flow, Back), Fluent's sub-page, not a `ContentDialog` per step — so the danger step can be
   a dialog of its own (`Dialogs.Confirm`, accent-free, Cancel the default) — decision 10. The Secret Key of the
-  password change, the address change and the rotation's gate is typed or pasted only; the sign-in's kit file and scan
-  are not offered there yet (inbox #970) — decision 6. On the desktops the bridge reopens the tenant after a rotation;
+  password change, the address change and the rotation's gate is typed, or pasted as a bare key, only; the sign-in's control — a pasted kit
+  token, the kit file and the scan — comes to them with [ADR 0151](0151-the-apps-account-rest-the-sign-ins-secret-key-control-in-every-flow-that-asks-for-the-key-and-the-breached-password-check-straight-from-the-device.md) decisions 1–4 (inbox #970) — decision 6. On the desktops the bridge reopens the tenant after a rotation;
   the done rotation outlives that reopen, so its last step (each scope's state, the *Links to renew*) stays drawn in
   place — decision 7. The new password is held to the length
-  policy only; the web's breached-password check is not in the apps (inbox #969). An iOS kit is written through
+  policy only; the web's breached-password check comes to the apps with [ADR 0151](0151-the-apps-account-rest-the-sign-ins-secret-key-control-in-every-flow-that-asks-for-the-key-and-the-breached-password-check-straight-from-the-device.md) decisions 5–7
+  (inbox #969). An iOS kit is written through
   `fileExporter` with an in-memory document made only when the exporter asks; whether UIKit stages it in the
   container first is unmeasured (inbox #975).
 - **The save dialogs' recent-files records are accepted** (2026-11-19, inbox #981). After a kit saved through GTK's

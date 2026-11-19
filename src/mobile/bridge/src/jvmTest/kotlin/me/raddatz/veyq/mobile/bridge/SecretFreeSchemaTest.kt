@@ -50,6 +50,8 @@ class SecretFreeSchemaTest {
         "KeyRotation.Prove.secretKey" to "the Secret Key the person typed at the rotation's gate, on its way to the core's cold proof",
         "KeyRotation.Prove.newPassword" to "the new password the person chose to install with the new keys, on its way to the core",
         "KeyRotation.Prove.confirmPassword" to "the new password typed again, on its way to the core's check that both match",
+        "PasswordChange.Check.newPassword" to "the new password as the person left its field, on its way to the core's breached-password check (only a 5-hex prefix of its SHA-1 leaves the device)",
+        "KeyRotation.Check.newPassword" to "the rotation's new password as the person left its field, on its way to the core's breached-password check",
         "Received.Password.password" to "the password a received link asks for, as the person typed it, on its way to the core",
         "Bookmark.Create.password" to "a kept link's password as the person typed it into the bookmark dialog, on its way to the core, which seals it",
         "Erasure.Run.password" to "the password the person typed to erase the account, on its way to the core's proof",

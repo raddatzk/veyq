@@ -1,0 +1,781 @@
+package me.raddatz.veyq.mobile.android
+
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.BookmarkAdd
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.OpenInBrowser
+import androidx.compose.material.icons.outlined.Upload
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.SecureFlagPolicy
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import me.raddatz.veyq.mobile.navigation.BarTab
+import me.raddatz.veyq.mobile.navigation.ObjectRef
+import me.raddatz.veyq.mobile.navigation.SpaceRef
+import me.raddatz.veyq.mobile.sharing.BookmarkCreate
+import me.raddatz.veyq.mobile.sharing.GuestAccess
+import me.raddatz.veyq.mobile.sharing.GuestPage
+import me.raddatz.veyq.mobile.sharing.GuestScreen
+import me.raddatz.veyq.mobile.sharing.OpenLink
+import me.raddatz.veyq.mobile.sharing.ShareGates
+import me.raddatz.veyq.mobile.sharing.ShareInstance
+
+/**
+ * *Open a link* (ADR 0150 decisions 4 and 8): the received link pasted — Material's text field with a Paste button that
+ * reads the clipboard on its tap only, never on its own —, checked as it is typed (core's `OpenLink`), opened as its
+ * guest, or refused with its reason and, for a moderator's review, *Open in the browser* (the link as received, handed to
+ * the system's browser). A window of its own flagged secure: the pasted link holds its key, and Recents' snapshot keeps
+ * no frame of it (`src/mobile/CLAUDE.md` § Secrets on screen).
+ */
+@Composable
+internal fun OpenLinkDialog(field: OpenLink, onOpen: () -> Unit, onCancel: () -> Unit) {
+    val state by field.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val clipboard = remember { context.getSystemService(android.content.ClipboardManager::class.java) }
+    AlertDialog(
+        onDismissRequest = onCancel,
+        properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
+        icon = { Icon(Icons.Outlined.Link, null) },
+        title = { Text(stringResource(R.string.link_open)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    state.text, field::text, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("open-link-field"),
+                    label = { Text(stringResource(R.string.link_paste_hint)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    isError = state.problem != null,
+                    supportingText = state.problem?.let { p -> { Text(say(p)) } },
+                    trailingIcon = {
+                        TextButton(onClick = {
+                            // the clipboard read on this tap only (Android 12+ says so with its own notice)
+                            val text = clipboard?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString()
+                            if (text != null) field.text(text)
+                        }) { Text(stringResource(R.string.link_paste)) }
+                    },
+                )
+                state.browser?.let { link ->
+                    OutlinedButton(onClick = { openInBrowser(context, link) }, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Outlined.OpenInBrowser, null, Modifier.padding(end = 8.dp))
+                        Text(stringResource(R.string.link_open_in_browser))
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onOpen, enabled = state.canOpen, modifier = Modifier.testTag("open-link-open")) { Text(stringResource(R.string.link_open)) } },
+        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.entry_cancel)) } },
+    )
+}
+
+/** [link] handed to the system's browser, as a tap on it in a chat would have (ADR 0150 decision 8). */
+internal fun openInBrowser(context: android.content.Context, link: String) {
+    runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link))) }
+}
+
+/**
+ * The link open as its guest, above the sign-in or the shell (ADR 0150 decision 4): its own top app bar — the page's name,
+ * the link's host under it, *Back* inside the link —, no drawer and no bar. *Back* at its root asks first (the key lives
+ * only in memory: leaving drops the link unless it was kept) and then returns where the person was. Its actions: *Keep*
+ * for a signed-in person, the file's download and a READ_WRITE guest's replace, and, on an upload link, *Report* to the share's own operator.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun GuestLinkScreen(screen: GuestScreen, model: AppModel) {
+    val view = screen.view
+    val s by screen.state.collectAsStateWithLifecycle()
+    val gate by view.gates.state.collectAsStateWithLifecycle()
+    val page by view.page.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(s.left) { if (s.left) model.guests.closed(screen) }
+    BackHandler { scope.launch { screen.back() } }
+    var keeping by remember(screen) { mutableStateOf(false) }
+    var reporting by remember(screen) { mutableStateOf(false) }
+    val ready = gate is ShareGates.State.Ready
+    Surface(Modifier.fillMaxSize().testTag("guest-screen"), color = MaterialTheme.colorScheme.background) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            snackbarHost = { SnackbarHost(snackbar) },
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(page?.node?.name?.takeIf { ready } ?: screen.host, fontWeight = FontWeight.Bold, maxLines = 1)
+                            if (ready) Text(screen.host, style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { scope.launch { screen.back() } }, modifier = Modifier.testTag("guest-back")) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back))
+                        }
+                    },
+                    actions = {
+                        (page as? GuestPage.File)?.let { GuestFileActions(it, view.access, model, snackbar) }
+                        if (screen.keepOffered) {
+                            IconButton(onClick = { keeping = true }, modifier = Modifier.testTag("guest-keep")) { Icon(Icons.Outlined.BookmarkAdd, stringResource(R.string.link_keep)) }
+                        }
+                        // an upload link's guest sees no node, so it reports the link itself; a viewing guest reports
+                        // from the views (the web's `ShareView` `reportsLink`; the backend refuses a LINK item of a
+                        // READ or READ_WRITE link, `report_item_not_found`)
+                        if (ready && view.access?.role == GuestAccess.WRITE_ONLY) {
+                            IconButton(onClick = { reporting = true }, modifier = Modifier.testTag("guest-report")) { Icon(Icons.Outlined.Flag, stringResource(R.string.report_action)) }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                )
+            },
+        ) { padding ->
+            Box(Modifier.padding(padding).fillMaxSize()) {
+                GuestContent(screen, model, snackbar)
+            }
+        }
+    }
+    if (s.leaving) AlertDialog(
+        onDismissRequest = screen::stay,
+        title = { Text(stringResource(R.string.link_leave_title)) },
+        text = { Text(stringResource(R.string.link_leave_body)) },
+        confirmButton = { TextButton(onClick = screen::leave, modifier = Modifier.testTag("guest-leave")) { Text(stringResource(R.string.link_leave_accept)) } },
+        dismissButton = { TextButton(onClick = screen::stay) { Text(stringResource(R.string.entry_cancel)) } },
+    )
+    // the report to the share's own operator: asked by the link (`&report`, a bookmark's) or by its action
+    if (s.reporting || reporting) {
+        val sheet = remember(screen, s.reporting, reporting) { screen.reportSheet() }
+        if (sheet != null) ReportSheet(sheet) {
+            reporting = false
+            screen.reportShown()
+        }
+    }
+    if (keeping) KeepFlow(screen, model, snackbar) { keeping = false }
+}
+
+/**
+ * The link behind its gates (ADR 0150 decision 2; the web's share page): the instance, the password, the terms, the note,
+ * each before any content, then the page of the node on screen as its kind's member page with a guest's rights. Drawn on
+ * the link's own screen and inside a bookmark's page (in place).
+ */
+@Composable
+internal fun GuestContent(screen: GuestScreen, model: AppModel, snackbar: SnackbarHostState) {
+    val view = screen.view
+    val gate by view.gates.state.collectAsStateWithLifecycle()
+    val page by view.page.collectAsStateWithLifecycle()
+    val busy by view.gates.busy.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    when (val g = gate) {
+        ShareGates.State.Loading -> Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            CircularProgressIndicator()
+            Text(stringResource(R.string.share_loading), color = role(LocalPalette.current.muted), modifier = Modifier.padding(top = 12.dp))
+        }
+        is ShareGates.State.Refused -> GateColumn {
+            Text(
+                stringResource(
+                    when (g.refusal) {
+                        ShareInstance.Refusal.UNREACHABLE -> R.string.link_refused_unreachable
+                        ShareInstance.Refusal.OTHER_VERSION -> R.string.link_refused_other_version
+                        ShareInstance.Refusal.NO_LINKS -> R.string.link_refused_no_links
+                    },
+                    screen.host,
+                ),
+                modifier = Modifier.testTag("guest-refused"),
+            )
+            screen.browserLink?.let { link ->
+                OutlinedButton(onClick = { openInBrowser(context, link) }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Outlined.OpenInBrowser, null, Modifier.padding(end = 8.dp))
+                    Text(stringResource(R.string.link_open_in_browser))
+                }
+            }
+        }
+        is ShareGates.State.Locked -> PasswordGate(g.wrong, busy) { password ->
+            scope.launch(Dispatchers.IO) {
+                view.gates.submitPassword(password)
+                screen.enter()
+            }
+        }
+        is ShareGates.State.Terms -> GateColumn {
+            Text(stringResource(R.string.share_terms_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.share_terms_intro), color = role(LocalPalette.current.muted))
+            if (g.markdown.isNotBlank()) MarkdownText(g.markdown)
+            if (g.operatorSection.isNotBlank()) {
+                HorizontalDivider()
+                MarkdownText(g.operatorSection)
+            }
+            if (g.record.isNotBlank()) MarkdownText(g.record)
+            PrimaryButton(stringResource(R.string.share_accept_continue), Modifier.testTag("guest-accept-terms")) {
+                view.gates.acceptTerms()
+                scope.launch(Dispatchers.IO) { screen.enter() }
+            }
+        }
+        is ShareGates.State.Note -> GateColumn {
+            Text(stringResource(R.string.share_note_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text(stringResource(R.string.share_note_intro), color = role(LocalPalette.current.muted))
+            MarkdownText(g.markdown)
+            PrimaryButton(stringResource(R.string.share_accept_continue), Modifier.testTag("guest-accept-note")) {
+                view.gates.acceptNote()
+                scope.launch(Dispatchers.IO) { screen.enter() }
+            }
+        }
+        is ShareGates.State.Unavailable -> GateColumn {
+            Text(stringResource(R.string.share_unavailable), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("guest-unavailable"))
+            Text(stringResource(R.string.share_unavailable_hint), color = role(LocalPalette.current.muted))
+        }
+        is ShareGates.State.Ready -> Column(Modifier.fillMaxSize()) {
+            if (g.note.isNotBlank()) Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { MarkdownText(g.note) }
+            val access = view.access
+            // a READ_WRITE link's guest: who this device is here as, or the way to name itself before its first write
+            if (access != null && access.role == GuestAccess.READ_WRITE) GuestLine(access) {
+                // a Pot's page reads its write right anew: a named guest adds entries (the web's `requestGuest`, then the write)
+                if (view.page.value is GuestPage.Pot) model.refreshPot {}
+            }
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                page?.let { GuestPageBody(it, screen, model, snackbar) } ?: Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            }
+        }
+    }
+}
+
+/** One node's page behind the gates: the member's page of its kind (share view = member view), a guest's rights. */
+@Composable
+private fun GuestPageBody(page: GuestPage, screen: GuestScreen, model: AppModel, snackbar: SnackbarHostState) {
+    val scope = rememberCoroutineScope()
+    val view = screen.view
+    val session = view.access?.session?.collectAsStateWithLifecycle()?.value
+    when (page) {
+        is GuestPage.Level -> {
+            val rows = page.model.rows
+            if (rows.isEmpty()) Text(stringResource(R.string.list_empty), color = role(LocalPalette.current.muted), modifier = Modifier.padding(16.dp))
+            else LazyColumn(Modifier.fillMaxSize().testTag("guest-level")) {
+                items(rows, key = { it.nodeId }) { r ->
+                    ListItem(
+                        headlineContent = { Text(r.name) },
+                        leadingContent = { Icon(kindIcon(r.kind), null, tint = role(LocalPalette.current.accent)) },
+                        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
+                        modifier = Modifier.clickableRow { scope.launch(Dispatchers.IO) { view.open(r.nodeId) } },
+                    )
+                }
+            }
+        }
+        is GuestPage.File -> {
+            DisposableEffect(page.model) { onDispose { page.model.close() } }
+            FilePage(page.model, page.node.name)
+        }
+        is GuestPage.Gallery -> {
+            DisposableEffect(page.model) { onDispose { page.model.close() } }
+            MemoryGallery(page.model, model, guest = true, canAdd = session != null, onChapter = { c -> scope.launch(Dispatchers.IO) { view.open(c.nodeId) } })
+        }
+        is GuestPage.Pot -> GuestPot(page, model)
+        is GuestPage.DropBox -> GuestDropBoxPage(page.model, view.access, model)
+        is GuestPage.Uploader -> GuestUploaderPage(page.model, view.access, model, snackbar)
+        is GuestPage.NotShown -> Text(stringResource(R.string.share_not_shown), color = role(LocalPalette.current.muted), modifier = Modifier.padding(16.dp).testTag("guest-not-shown"))
+    }
+}
+
+/**
+ * A Pot of a link: the member's Pot page over the guest's Pot (the app model routes the page's reads and writes to it while
+ * it is shown), its Entries and Overview as tabs of its own — the guest view has no bar.
+ */
+@Composable
+private fun GuestPot(page: GuestPage.Pot, model: AppModel) {
+    DisposableEffect(page.model) {
+        model.showGuestPot(page.model)
+        onDispose { model.showGuestPot(null) }
+    }
+    val ref = remember(page.node) {
+        ObjectRef(page.node.scopeId, page.node.nodeId, page.node.kind, me.raddatz.veyq.mobile.navigation.ApplicationId.EXPENSES, page.node.name)
+    }
+    var overview by remember(page.node) { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize()) {
+        PrimaryTabRow(selectedTabIndex = if (overview) 1 else 0, containerColor = MaterialTheme.colorScheme.background) {
+            Tab(selected = !overview, onClick = { overview = false }, text = { Text(say(me.raddatz.veyq.mobile.words.Msg.TAB_EXPENSES_ENTRIES)) })
+            Tab(selected = overview, onClick = { overview = true }, text = { Text(say(me.raddatz.veyq.mobile.words.Msg.TAB_EXPENSES_OVERVIEW)) })
+        }
+        Box(Modifier.weight(1f)) { PotScreen(ref, BarTab(if (overview) "expenses.overview" else "expenses.entries"), model) }
+    }
+}
+
+/** A file's own actions on the link's bar: its download (a copy where the person picks) and a named READ_WRITE guest's replace. */
+@Composable
+private fun GuestFileActions(page: GuestPage.File, access: GuestAccess?, model: AppModel, snackbar: SnackbarHostState) {
+    val file = page.model
+    val state by file.state.collectAsStateWithLifecycle()
+    val h = state.header ?: return
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val resolver = context.contentResolver
+        val run = file.save { produce ->
+            val out = withContext(Dispatchers.IO) { resolver.openOutputStream(uri) } ?: return@save false
+            out.use { o -> produce { o.write(it) } }
+        } ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val ended = run.state.first { it.end != null }
+            if (ended.end != me.raddatz.veyq.mobile.depot.FileSave.End.SAVED) {
+                withContext(Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) } }
+            }
+            snackbar.showSnackbar(context.text(ended.notice))
+        }
+    }
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { model.guestReplace(file, it) }
+    }
+    IconButton(onClick = { save.launch(h.downloadName) }) { Icon(Icons.Outlined.Download, stringResource(R.string.node_download)) }
+    val session = access?.session?.collectAsStateWithLifecycle()?.value
+    if (session != null && h.own.any { it.id == me.raddatz.veyq.mobile.depot.FileModel.REPLACE }) {
+        IconButton(onClick = { if (file.chooseReplace()) pick.launch(arrayOf("*/*")) }) {
+            Icon(Icons.Outlined.Upload, say(h.label(me.raddatz.veyq.mobile.depot.FileModel.REPLACE)!!))
+        }
+    }
+}
+
+/**
+ * Whose session this device holds on a READ_WRITE link (the web's `GuestNaming`): "You are here as …" with *Not you?*, or
+ * the way to name itself, which a guest's first write needs; the record kept of a guest's writes said in both (#1018).
+ */
+@Composable
+private fun GuestLine(access: GuestAccess, onNamed: () -> Unit) {
+    val session by access.session.collectAsStateWithLifecycle()
+    var naming by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        val named = session
+        if (named == null) {
+            TextButton(onClick = { naming = true }, modifier = Modifier.testTag("guest-name-ask")) { Text(stringResource(R.string.share_guest_name_title)) }
+        } else {
+            NotYou(named) { access.forgetGuest(); onNamed() }
+        }
+        RecordNotice(access.guestWriteRecordDays, access.origin, named?.identityId)
+    }
+    if (naming) NamingDialog(
+        title = stringResource(R.string.share_guest_name_title), hint = stringResource(R.string.share_guest_name_hint),
+        days = access.guestWriteRecordDays, origin = access.origin, onClose = { naming = false },
+    ) { name -> runCatching { access.nameGuest(name.trim()) }.isSuccess.also { if (it) onNamed() } }
+}
+
+/** "You are here as …" and *Not you?*, which asks first and then forgets this device's session (the web's words). */
+@Composable
+private fun NotYou(session: me.raddatz.veyq.mobile.sharing.GuestSession, onForget: () -> Unit) {
+    var asking by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        val name = session.displayName
+        Text(
+            if (name != null) stringResource(R.string.share_guest_as, name) else stringResource(R.string.share_guest_as_unnamed),
+            style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f, fill = false).testTag("guest-as"),
+        )
+        TextButton(onClick = { asking = true }) { Text(stringResource(R.string.share_guest_not_you)) }
+    }
+    if (asking) AlertDialog(
+        onDismissRequest = { asking = false },
+        title = { Text(stringResource(R.string.share_guest_not_you_title)) },
+        text = {
+            val name = session.displayName
+            Text(if (name != null) stringResource(R.string.share_guest_not_you_confirm, name) else stringResource(R.string.share_guest_not_you_confirm_unnamed))
+        },
+        confirmButton = { TextButton(onClick = { asking = false; onForget() }) { Text(stringResource(R.string.share_guest_not_you_accept)) } },
+        dismissButton = { TextButton(onClick = { asking = false }) { Text(stringResource(R.string.entry_cancel)) } },
+    )
+}
+
+/**
+ * The guest-write record's notice (ADR 0093 § 10, GDPR Art. 13; the web's `GuestWriteRecordNotice`): before a guest's
+ * first write and beside its session, what the share's instance keeps of each write and for how long ([days], the N its
+ * resolve served), the right to object, and its privacy notice's passage, opened in the browser; with a session, the
+ * guest id to name in an objection. [days] null (nothing recorded) shows nothing.
+ */
+@Composable
+internal fun RecordNotice(days: Int?, origin: String, guestId: String? = null) {
+    if (days == null) return
+    val context = LocalContext.current
+    val muted = role(LocalPalette.current.muted)
+    Column(Modifier.fillMaxWidth().testTag("guest-record-notice"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            pluralStringResource(R.plurals.share_guest_record_kept, days, days) + " " + stringResource(R.string.share_guest_record_objection),
+            style = MaterialTheme.typography.bodySmall, color = muted,
+        )
+        TextButton(onClick = { openInBrowser(context, "$origin/privacy#guest-write-record") }, contentPadding = ButtonDefaults.TextButtonContentPadding) {
+            Text(stringResource(R.string.share_guest_record_more), style = MaterialTheme.typography.bodySmall)
+        }
+        if (guestId != null) {
+            SelectionContainer { Text(stringResource(R.string.share_guest_id) + " " + guestId, style = MaterialTheme.typography.bodySmall, color = muted) }
+        }
+    }
+}
+
+/** A guest naming itself (the web's naming dialog and drop forms): its name, who sees it, the record's notice, *Continue*. */
+@Composable
+private fun NamingDialog(
+    title: String, hint: String, days: Int?, origin: String, onClose: () -> Unit, onName: suspend (String) -> Boolean,
+) {
+    var name by remember { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = { if (!working) onClose() },
+        title = { Text(title) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(hint)
+                NameField(name) { name = it; failed = false }
+                Text(stringResource(R.string.share_name_visibility), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
+                RecordNotice(days, origin)
+                if (failed) Text(stringResource(R.string.share_join_failed), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = name.isNotBlank() && !working, modifier = Modifier.testTag("guest-name-continue"), onClick = {
+                working = true
+                scope.launch {
+                    val ok = withContext(Dispatchers.IO) { onName(name) }
+                    working = false
+                    if (ok) onClose() else failed = true
+                }
+            }) { Text(stringResource(R.string.share_join)) }
+        },
+        dismissButton = { TextButton(onClick = onClose, enabled = !working) { Text(stringResource(R.string.entry_cancel)) } },
+    )
+}
+
+@Composable
+private fun NameField(name: String, onName: (String) -> Unit) {
+    OutlinedTextField(
+        name, onName, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("guest-name-field"),
+        label = { Text(stringResource(R.string.share_your_name)) },
+        placeholder = { Text(stringResource(R.string.share_your_name_placeholder)) },
+    )
+}
+
+/**
+ * A drop box's WRITE_ONLY link (the web's `DropBoxShareBody`): the guest names itself — the record's notice before —, then
+ * sends files, each into its own folder; what it sent while the link is open here is listed, nothing else of the drop box.
+ */
+@Composable
+private fun GuestDropBoxPage(drop: me.raddatz.veyq.mobile.depot.GuestDropBox, access: GuestAccess?, model: AppModel) {
+    val session by drop.session.collectAsStateWithLifecycle()
+    val sent by drop.sent.collectAsStateWithLifecycle()
+    val queue by model.uploads.state.collectAsStateWithLifecycle()
+    val days = access?.guestWriteRecordDays
+    val origin = access?.origin.orEmpty()
+    val scope = rememberCoroutineScope()
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) scope.launch {
+            val sources = withContext(Dispatchers.IO) { uris.mapNotNull { model.picked(it) }.map { model.source(it) } }
+            drop.upload(sources)
+        }
+    }
+    GuestWriteColumn {
+        Text(stringResource(R.string.share_dropbox_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.share_dropbox_hint, drop.node.name), color = role(LocalPalette.current.muted))
+        val named = session
+        if (named == null) {
+            InlineNaming(stringResource(R.string.share_dropbox_name_hint), days, origin) { drop.name(it) }
+        } else {
+            NotYou(named, drop::forget)
+            RecordNotice(days, origin, named.identityId)
+            PrimaryButton(stringResource(R.string.share_dropbox_pick), Modifier.testTag("guest-drop-pick")) { pick.launch(arrayOf("*/*")) }
+            val mine = queue.batches.filter { it.label == drop.node.name }.flatMap { it.items }
+            if (sent.isNotEmpty() || mine.isNotEmpty()) {
+                Text(stringResource(R.string.share_dropbox_session), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+                for (item in mine) Text(
+                    item.name + " · " + stringResource(
+                        when {
+                            item.active -> R.string.share_dropbox_sending
+                            item.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.FAILED -> R.string.share_dropbox_failed
+                            else -> R.string.share_dropbox_sent
+                        },
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                for (name in sent.filter { n -> mine.none { it.name == n } }) Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("guest-drop-sent"))
+            }
+        }
+    }
+}
+
+/**
+ * A Memory's or a chapter's WRITE_ONLY link (the web's `MemoryShareBody`): the guest names itself — the record's notice
+ * before —, then adds photos and videos; it sees only what it sent while the link is open here, and removes its own.
+ */
+@Composable
+private fun GuestUploaderPage(up: me.raddatz.veyq.mobile.memories.GuestUploader, access: GuestAccess?, model: AppModel, snackbar: SnackbarHostState) {
+    val session by up.session.collectAsStateWithLifecycle()
+    val sent by up.sent.collectAsStateWithLifecycle()
+    val days = access?.guestWriteRecordDays
+    val origin = access?.origin.orEmpty()
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+        if (uris.isNotEmpty()) scope.launch {
+            val sources = withContext(Dispatchers.IO) { uris.mapNotNull { model.picked(it) }.map { model.source(it) } }
+            up.upload(sources)
+        }
+    }
+    GuestWriteColumn {
+        Text(stringResource(R.string.share_uploader_intro), color = role(LocalPalette.current.muted))
+        val named = session
+        if (named == null) {
+            InlineNaming(stringResource(R.string.share_name_visibility), days, origin) { up.name(it) }
+        } else if (up.offered) {
+            NotYou(named, up::forget)
+            RecordNotice(days, origin, named.identityId)
+            PrimaryButton(stringResource(R.string.share_add_photos), Modifier.testTag("guest-uploader-pick")) {
+                pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+            }
+            Text(stringResource(R.string.share_uploader_session), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
+            for (s in sent) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(s.name, modifier = Modifier.weight(1f).testTag("guest-uploader-sent"))
+                TextButton(onClick = {
+                    scope.launch {
+                        val ok = withContext(Dispatchers.IO) { up.remove(s.mediaId) }
+                        if (!ok) snackbar.showSnackbar(context.getString(R.string.share_delete_failed))
+                    }
+                }) { Text(stringResource(R.string.entry_delete)) }
+            }
+        }
+    }
+}
+
+/** A drop page's naming in its body (the web's drop forms): the field, its hint, the record's notice, *Continue*. */
+@Composable
+private fun InlineNaming(hint: String, days: Int?, origin: String, onName: suspend (String) -> Boolean) {
+    var name by remember { mutableStateOf("") }
+    var working by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    NameField(name) { name = it; failed = false }
+    Text(hint, style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
+    RecordNotice(days, origin)
+    if (failed) Text(stringResource(R.string.share_join_failed), color = MaterialTheme.colorScheme.error)
+    PrimaryButton(stringResource(R.string.share_join), Modifier.testTag("guest-name-continue"), enabled = name.isNotBlank() && !working) {
+        working = true
+        scope.launch {
+            failed = !withContext(Dispatchers.IO) { onName(name.trim()) }
+            working = false
+        }
+    }
+}
+
+/** *Keep*: the places the link may be kept — the personal space first —, then the bookmark's dialog filled with the link. */
+@Composable
+private fun KeepFlow(screen: GuestScreen, model: AppModel, snackbar: SnackbarHostState, onClose: () -> Unit) {
+    val places by produceState<List<SpaceRef>?>(null, screen) { value = withContext(Dispatchers.IO) { runCatching { screen.keepPlaces() }.getOrDefault(emptyList()) } }
+    var chosen by remember { mutableStateOf<SpaceRef?>(null) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val space = chosen
+    if (space == null) {
+        AlertDialog(
+            onDismissRequest = onClose,
+            title = { Text(stringResource(R.string.link_keep_where)) },
+            text = {
+                val list = places
+                if (list == null) CircularProgressIndicator()
+                else Column(Modifier.verticalScroll(rememberScrollState())) {
+                    for (p in list) ListItem(
+                        headlineContent = { Text(spaceName(p)) },
+                        colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
+                        modifier = Modifier.clickableRow { chosen = p }.testTag("guest-keep-place"),
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.entry_cancel)) } },
+        )
+    } else {
+        val create = remember(space) { screen.keep(space) }
+        if (create == null) {
+            onClose()
+            return
+        }
+        val name = spaceName(space)
+        BookmarkCreateDialog(create, onClose = onClose) {
+            model.bookmarkMade()
+            scope.launch { snackbar.showSnackbar(context.getString(R.string.link_kept, name)) }
+        }
+    }
+}
+
+/**
+ * The bookmark's dialog (ADR 0150 decision 6; the web's `BookmarkCreateDialog`): the link checked as it is typed, its
+ * password, its name (the host until one is typed), the group space's line that everyone who opens the place opens the
+ * link. A window of its own flagged secure: it shows the link, which holds its key.
+ */
+@Composable
+internal fun BookmarkCreateDialog(create: BookmarkCreate, onClose: () -> Unit, onMade: () -> Unit) {
+    val state by create.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = { if (!state.saving) onClose() },
+        properties = DialogProperties(securePolicy = SecureFlagPolicy.SecureOn),
+        title = { Text(stringResource(R.string.bookmark_create_title)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(R.string.bookmark_create_intro), style = MaterialTheme.typography.bodyMedium)
+                OutlinedTextField(
+                    state.text, create::link, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("bookmark-link"),
+                    label = { Text(stringResource(R.string.bookmark_link_label)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    isError = state.problem != null,
+                    supportingText = state.problem?.let { p -> { Text(say(p)) } },
+                )
+                OutlinedTextField(
+                    state.password, create::password, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.bookmark_password_label)) },
+                    supportingText = { Text(stringResource(R.string.bookmark_password_hint)) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                )
+                OutlinedTextField(
+                    state.name, create::name, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("bookmark-name"),
+                    label = { Text(stringResource(R.string.node_name)) },
+                    placeholder = state.host?.let { h -> { Text(h) } },
+                )
+                if (create.groupSpace) Text(stringResource(R.string.bookmark_who_can_open), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
+                if (state.failed) Text(stringResource(R.string.bookmark_create_failed), color = MaterialTheme.colorScheme.error)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = state.canSave, modifier = Modifier.testTag("bookmark-save"), onClick = {
+                scope.launch {
+                    if (withContext(Dispatchers.IO) { create.save() }) {
+                        onMade()
+                        onClose()
+                    }
+                }
+            }) { Text(stringResource(R.string.bookmark_save)) }
+        },
+        dismissButton = { TextButton(onClick = onClose, enabled = !state.saving) { Text(stringResource(R.string.entry_cancel)) } },
+    )
+}
+
+/** A gate's column: a form's width, centred, scrolled (the sign-in's measure). */
+@Composable
+private fun GateColumn(content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(
+            Modifier.widthIn(max = 560.dp).fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) { content() }
+    }
+}
+
+/** A writing page's column (a drop box's, an uploader's): scrolled, at a form's width. */
+@Composable
+private fun GuestWriteColumn(content: @Composable () -> Unit) = GateColumn(content)
+
+@Composable
+private fun PasswordGate(wrong: Boolean, busy: Boolean, onUnlock: (String) -> Unit) {
+    var password by remember { mutableStateOf("") }
+    GateColumn {
+        Text(stringResource(R.string.share_password_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(stringResource(R.string.share_password_intro), color = role(LocalPalette.current.muted))
+        OutlinedTextField(
+            password, { password = it }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("guest-password"),
+            label = { Text(stringResource(R.string.share_password_label)) },
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            isError = wrong,
+            supportingText = if (wrong) ({ Text(stringResource(R.string.share_password_wrong)) }) else null,
+        )
+        PrimaryButton(stringResource(R.string.share_password_unlock), Modifier.testTag("guest-unlock"), enabled = password.isNotEmpty() && !busy, working = busy) {
+            onUnlock(password)
+        }
+    }
+}
+
+/** A gate's or a page's one confirming action: the web's green role (`--app-primary`). */
+@Composable
+private fun PrimaryButton(label: String, modifier: Modifier = Modifier, enabled: Boolean = true, working: Boolean = false, onClick: () -> Unit) {
+    val palette = LocalPalette.current
+    Button(
+        onClick = onClick, enabled = enabled, shape = MaterialTheme.shapes.small,
+        colors = ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        if (working) CircularProgressIndicator(Modifier.padding(2.dp)) else Text(label)
+    }
+}
+
+/**
+ * A text the share's owner or its operator wrote in Markdown (the terms, the note): its paragraphs, a heading's line bold,
+ * a list's items with a bullet — the platform draws no Markdown of its own, and the text is shown, never followed.
+ */
+@Composable
+private fun MarkdownText(markdown: String) {
+    SelectionContainer {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (block in markdown.trim().split(Regex("\\n\\s*\\n"))) {
+                val line = block.trim()
+                when {
+                    line.startsWith("#") -> Text(line.trimStart('#').trim(), fontWeight = FontWeight.Bold)
+                    else -> Text(line.lines().joinToString("\n") { l -> l.trim().replace(Regex("^[-*] "), "• ") }.replace("**", ""))
+                }
+            }
+        }
+    }
+}

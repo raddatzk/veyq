@@ -1495,6 +1495,30 @@ internal sealed class Call {
     ) : Call()
     @Serializable @SerialName("PasswordChange.Close") data class PasswordChangeClose(val flow: Long) : Call()
 
+    /**
+     * The new password's field was left (ADR 0151 decision 7): the breached-password check runs on [newPassword], typed
+     * on its way to the core (it crosses once, never back) — the check's state arrives in [Update.PasswordChange]'s
+     * `breach`. Never sent while typing.
+     */
+    @Serializable @SerialName("PasswordChange.Check") data class PasswordChangeCheck(val flow: Long, val newPassword: String) : Call()
+
+    /** The new password was edited — no text: the check's verdict, and any acceptance of it, is gone. */
+    @Serializable @SerialName("PasswordChange.Edited") data class PasswordChangeEdited(val flow: Long) : Call()
+
+    /** *Use it anyway* for a breached new password ([on]), or taken back. */
+    @Serializable @SerialName("PasswordChange.UseAnyway") data class PasswordChangeUseAnyway(val flow: Long, val on: Boolean) : Call()
+
+    /**
+     * A kit file the host's dialog picked for flow [flow]'s Secret Key (ADR 0151 decision 3: the password change, the
+     * address change or the rotation): the core reads [path] — never more than a kit file may hold — and draws its pages
+     * through the host's `PdfPages`/`PdfPage`/`PictureLuma` requests, as at [SessionSignInKit]; the key is held by the
+     * flow's intake, the flow's update says what it shows (`kit`). [Answer.Done], `NO_KIT` where no kit was read.
+     */
+    @Serializable @SerialName("Kit.Read") data class KitRead(val flow: Long, val path: String) : Call()
+
+    /** *Use another*: flow [flow]'s held kit ends, its key zeroed. */
+    @Serializable @SerialName("Kit.Clear") data class KitClear(val flow: Long) : Call()
+
     /** Change the address (core's `AddressChange`), its request mailed through the tenant open now: [Answer.FlowOpened]. */
     @Serializable @SerialName("AddressChange.Open") data class AddressChangeOpen(val connection: String) : Call()
     @Serializable @SerialName("AddressChange.Request") data class AddressChangeRequest(val flow: Long, val newEmail: String, val password: String, val secretKey: String) : Call()
@@ -1531,6 +1555,15 @@ internal sealed class Call {
     /** *Links to renew* read anew — after a link's share dialog ([ShareOpen] with the link's node) closed (inbox #977). */
     @Serializable @SerialName("KeyRotation.RefreshLinks") data class KeyRotationRefreshLinks(val flow: Long) : Call()
     @Serializable @SerialName("KeyRotation.Close") data class KeyRotationClose(val flow: Long) : Call()
+
+    /** The rotation's new password's field was left: the breached-password check runs on [newPassword] (as [PasswordChangeCheck]). */
+    @Serializable @SerialName("KeyRotation.Check") data class KeyRotationCheck(val flow: Long, val newPassword: String) : Call()
+
+    /** The rotation's new password was edited — no text. */
+    @Serializable @SerialName("KeyRotation.Edited") data class KeyRotationEdited(val flow: Long) : Call()
+
+    /** *Use it anyway* for the rotation's breached new password ([on]), or taken back. */
+    @Serializable @SerialName("KeyRotation.UseAnyway") data class KeyRotationUseAnyway(val flow: Long, val on: Boolean) : Call()
 
     /** Erase the account (core's `AccountErasure`, its preview read at once): [Answer.FlowOpened] for [Watched.Erasure]. */
     @Serializable @SerialName("Erasure.Open") data class ErasureOpen(val connection: String) : Call()
@@ -1586,6 +1619,13 @@ internal enum class ScanKind {
      * `veyqid`; the host then compares it with [Call.TrustCompareScanned]. A safety number is no secret.
      */
     SAFETY,
+
+    /**
+     * An Emergency Kit's code scanned for a flow's Secret Key ([Call.ScanOpen]'s `link` is the flow: the password change,
+     * the address change or the rotation; ADR 0151 decision 3): a v3 `veyqkit:` token, found as `veyqkit`; the kit goes
+     * to that flow's intake, its key never across the bridge.
+     */
+    FLOW_KIT,
 }
 
 /** A call's one answer; what the call changed arrives as the watched states' updates. */
@@ -2185,11 +2225,30 @@ internal sealed class Update {
     /** A person's page; null once it closed (or its tenant did). */
     @Serializable @SerialName("Person") data class Person(val person: Long, val shown: PersonShown?) : Update()
 
-    /** Each of the account's flows: its core model's state, null once it closed (or its tenant did, or the account signed out). */
+    /**
+     * Each of the account's flows: its core model's state, null once it closed (or its tenant did, or the account signed out).
+     * A flow that asks for the Secret Key carries its intake's state ([kit]: the held kit's address and server, the
+     * notices, a file in which no kit was read — never the key), one that chooses a password its breached-password check's
+     * ([breach]: the verdict and the count — never the password), each null once the flow closed (ADR 0151 decisions 3, 7).
+     */
     @Serializable @SerialName("Profile") data class Profile(val profile: Long, val shown: me.raddatz.veyq.mobile.session.ProfileModel.State?) : Update()
-    @Serializable @SerialName("PasswordChange") data class PasswordChange(val flow: Long, val shown: me.raddatz.veyq.mobile.session.PasswordChange.State?) : Update()
-    @Serializable @SerialName("AddressChange") data class AddressChange(val flow: Long, val shown: me.raddatz.veyq.mobile.session.AddressChange.State?) : Update()
-    @Serializable @SerialName("KeyRotation") data class KeyRotation(val flow: Long, val shown: me.raddatz.veyq.mobile.session.rotation.KeyRotation.State?) : Update()
+    @Serializable @SerialName("PasswordChange") data class PasswordChange(
+        val flow: Long,
+        val shown: me.raddatz.veyq.mobile.session.PasswordChange.State?,
+        val kit: me.raddatz.veyq.mobile.account.KeyIntake.IntakeState? = null,
+        val breach: me.raddatz.veyq.mobile.account.BreachCheck.BreachState? = null,
+    ) : Update()
+    @Serializable @SerialName("AddressChange") data class AddressChange(
+        val flow: Long,
+        val shown: me.raddatz.veyq.mobile.session.AddressChange.State?,
+        val kit: me.raddatz.veyq.mobile.account.KeyIntake.IntakeState? = null,
+    ) : Update()
+    @Serializable @SerialName("KeyRotation") data class KeyRotation(
+        val flow: Long,
+        val shown: me.raddatz.veyq.mobile.session.rotation.KeyRotation.State?,
+        val kit: me.raddatz.veyq.mobile.account.KeyIntake.IntakeState? = null,
+        val breach: me.raddatz.veyq.mobile.account.BreachCheck.BreachState? = null,
+    ) : Update()
     @Serializable @SerialName("Erasure") data class Erasure(val flow: Long, val shown: me.raddatz.veyq.mobile.session.AccountErasure.State?) : Update()
     @Serializable @SerialName("Kit") data class Kit(val kit: Long, val shown: me.raddatz.veyq.mobile.account.KitStep.State?) : Update()
 

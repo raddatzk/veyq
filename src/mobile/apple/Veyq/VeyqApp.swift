@@ -41,6 +41,11 @@ struct VeyqApp: App {
         .commands {
             LightboxCommands()
             SearchCommands()
+            // *Open a link* in the File menu too, as a Mac app's every action is (ADR 0150 decision 4)
+            CommandGroup(after: .newItem) {
+                Button(say(.linkOpen)) { model.guests.ask(model) }
+                    .disabled(model.guests.screen != nil)
+            }
         }
         #endif
         #if os(macOS)

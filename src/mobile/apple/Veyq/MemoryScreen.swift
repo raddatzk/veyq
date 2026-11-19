@@ -36,6 +36,8 @@ struct MemoryScreen: View {
     @State private var contributions: ContributionsHeld?
     /// The filter's text as typed (core's follows a moment later: a field never reads core right after its edit).
     @State private var filterText = ""
+    /// A link's guest looks (ADR 0150 decision 5): the member's page with a guest's rights, nothing of the account's.
+    @Environment(\.guestGallery) private var guest
     @Environment(\.scenePhase) private var phase
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
@@ -49,22 +51,22 @@ struct MemoryScreen: View {
     private var rows: [GalleryModel.Row] { state?.shown ?? [] }
     private var uploading: [UploadTile] { state?.uploading ?? [] }
     /// What the page adds (core's: the rights' upload, a chapter where it makes one).
-    private var uploads: Bool { state?.rights.upload ?? false }
+    private var uploads: Bool { (state?.rights.upload ?? false) && (guest?.canAdd ?? true) }
     private var chapterHere: Bool { model.galleryModel(node)?.creates.contains(MemoryCreate.shared.CHAPTER) ?? false }
     /// The room between the grid and the page's edges: the grid's own gap, so every side of a tile breathes alike.
     private static let margin = CGFloat(MediaGridLayout.shared.GAP)
 
     /// Whether the page offers its Music view: it has music, or whoever looks may add some (core's).
-    private var musicOffered: Bool { state.map { MusicModel.companion.shown(gallery: $0) } ?? false }
+    private var musicOffered: Bool { guest == nil && (state.map { MusicModel.companion.shown(gallery: $0) } ?? false) }
     private var showsMusic: Bool { view == .music && musicOffered }
     private var musicAdds: Bool { showsMusic && (model.musicShown?.rights.add ?? false) }
-    private var showsMap: Bool { view == .map }
+    private var showsMap: Bool { view == .map && guest == nil }
     private var tracksAdd: Bool { showsMap && (model.tracksShown?.rights.add ?? false) }
     /// The Contributions view, the fourth segment: a member's (core's `buckets` right), where offered (ADR 0149 decision 6).
     private var contributionsOffered: Bool { (state?.rights.buckets ?? false) && Contributions.companion.OFFERED }
     private var showsContributions: Bool { view == .contributions && contributionsOffered }
     private var showsPhotos: Bool { !showsMusic && !showsMap && !showsContributions }
-    private var viewSwitch: MemoryViewSwitch { MemoryViewSwitch(view: $view, music: musicOffered, contributions: contributionsOffered) }
+    private var viewSwitch: MemoryViewSwitch { MemoryViewSwitch(view: $view, music: musicOffered, contributions: contributionsOffered, map: guest == nil) }
 
     /// Whether the gallery's filter is offered (core's `filterFacts`): the Photos view, online or offline.
     private var filters: Bool { showsPhotos && (state?.rights.filterFacts ?? false) }
@@ -198,7 +200,8 @@ struct MemoryScreen: View {
                     Text(say(.memoryChapters)).font(.headline).padding(.horizontal)
                     ForEach(chapters, id: \.nodeId) { c in
                         Button {
-                            if let o = GalleryModel.companion.rowPage(row: c) { model.open(o) }
+                            // a guest's chapter opens inside the link, a member's in the shell
+                            if let guest { guest.onChapter(c) } else if let o = GalleryModel.companion.rowPage(row: c) { model.open(o) }
                         } label: {
                             HStack(spacing: 12) {
                                 ChapterCover(model: model, node: node, chapter: c)
@@ -317,7 +320,7 @@ struct MemoryScreen: View {
         }
         // photos and videos dropped onto the gallery go into it at once, as a pick's (ADR 0138 decision 9)
         .onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
-            guard uploads, let gallery = model.galleryModel(node) else { return false }
+            guard uploads, guest == nil, let gallery = model.galleryModel(node) else { return false }
             Task { model.dropOnto(gallery, await IncomingFiles.read(providers)) }
             return true
         }
@@ -361,11 +364,13 @@ struct MemoryScreen: View {
         #if os(iOS)
         .fullScreenCover(item: $open, onDismiss: { open = nil }) { start in
             Lightbox(model: model, gallery: start.gallery, box: start.box, mode: .cover) { open = nil }
+                .environment(\.guestGallery, guest)
         }
         #else
         // in the window's content, where the gallery was: its back (and Escape) return to the gallery
         .navigationDestination(item: $open) { start in
             Lightbox(model: model, gallery: start.gallery, box: start.box, mode: .inline) { open = nil }
+                .environment(\.guestGallery, guest)
         }
         #endif
     }
@@ -375,7 +380,7 @@ struct MemoryScreen: View {
     private func tile(_ row: GalleryModel.Row, index: Int, frame: MediaGridLayout.Tile) -> some View {
         Button {
             #if os(macOS)
-            if NSEvent.modifierFlags.contains(.command) { return openInWindow(row.mediaId) }
+            if guest == nil, NSEvent.modifierFlags.contains(.command) { return openInWindow(row.mediaId) }
             #endif
             if let gallery = model.galleryModel(node) { open = LightboxStart(gallery: gallery, box: gallery.lightbox(index: Int32(index))) }
         } label: {
@@ -390,7 +395,9 @@ struct MemoryScreen: View {
                 MarkButton(gallery: gallery, mediaId: row.mediaId, mine: state.marks[row.mediaId]?.mine ?? false)
             }
             #if os(macOS)
-            Button { openInWindow(row.mediaId) } label: { Label(say(.memoryOpenInWindow), systemImage: "macwindow.badge.plus") }
+            if guest == nil {
+                Button { openInWindow(row.mediaId) } label: { Label(say(.memoryOpenInWindow), systemImage: "macwindow.badge.plus") }
+            }
             #endif
         }
     }
@@ -634,6 +641,8 @@ private struct Lightbox: View {
     /// The report sheet shown, and how many were sent or closed (each makes a fresh sheet for the next).
     @State private var reporting: LightboxReport?
     @State private var reports = 0
+    /// A link's guest looks: no window of its own (its models are the shell's), no person's profile.
+    @Environment(\.guestGallery) private var guest
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     /// The window's own scheme, read above the lightbox's `.dark`: a Mac's sheet is a window of the window's appearance, so
@@ -706,7 +715,7 @@ private struct Lightbox: View {
                 HStack {
                     Button(say(.receiptsClose)) { onClose() }.keyboardShortcut(.cancelAction)
                     Spacer()
-                    if mode == .inline {
+                    if mode == .inline, guest == nil {
                         Button { openInWindow() } label: { Label(say(.memoryOpenInWindow), systemImage: "macwindow.badge.plus") }
                             .help(say(.memoryOpenInWindow))
                     }
@@ -745,7 +754,8 @@ private struct Lightbox: View {
             .sheet(isPresented: $details) {
                 if let row = current {
                     MediaDetailsView(model: model, box: held.box, row: row) { userId in
-                        // the profile opens over the Memory (ADR 0144 decision 11); back returns to its gallery
+                        // the profile opens over the Memory (ADR 0144 decision 11); back returns to its gallery — a member's only
+                        guard guest == nil else { return }
                         details = false
                         if mode != .window { onClose() }
                         model.openPerson(userId)
@@ -783,7 +793,7 @@ private struct Lightbox: View {
             #if os(macOS)
             // Escape returns to the gallery (inline), the File menu's "Open in New Window" detaches it
             .onExitCommand { if mode == .inline { onClose() } }
-            .focusedSceneValue(\.lightboxToWindow, mode == .inline ? LightboxToWindow(open: openInWindow) : nil)
+            .focusedSceneValue(\.lightboxToWindow, mode == .inline && guest == nil ? LightboxToWindow(open: openInWindow) : nil)
             .navigationSubtitle(mode == .window ? held.box.node.name : "")
             #endif
             .environment(\.colorScheme, .dark)
