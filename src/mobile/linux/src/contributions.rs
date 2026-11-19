@@ -264,7 +264,7 @@ impl Inner {
     /// offers *Move item* where the bucket is the caller's to curate.
     fn draw_media(self: &Rc<Self>, s: &BucketsShown) {
         self.media.remove_all();
-        for media_id in &s.media {
+        for media_id in s.media.iter().map(|m| &m.media_id) {
             let picture = gtk::Picture::builder().content_fit(gtk::ContentFit::Cover).can_shrink(true).width_request(THUMB).height_request(THUMB).build();
             let frame = gtk::Overlay::builder().child(&picture).width_request(THUMB).height_request(THUMB).build();
             frame.set_overflow(gtk::Overflow::Hidden);

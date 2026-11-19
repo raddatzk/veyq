@@ -497,11 +497,11 @@ class WireTest {
             Update.Music(80, MusicShown(memory, null, false, false, false, false, true, false, null)), Update.Music(81, null),
             Update.Buckets(120, BucketsShown(
                 listOf(BucketRowShown("self", me.raddatz.veyq.mobile.words.Piece.Said(Notice(Msg.MEMORY_BUCKETS_YOU)), 0, 2, true, true), BucketRowShown("b2", me.raddatz.veyq.mobile.words.Piece.Plain("Sunsets"), 1, 1, false, true)),
-                "self", listOf("m1", "m2"), true, false, listOf("b2"), false, false, me.raddatz.veyq.mobile.memories.Buckets.Outcome.FAILED,
+                "self", listOf(photo), true, false, listOf("b2"), false, false, me.raddatz.veyq.mobile.memories.Buckets.Outcome.FAILED,
             )), Update.Buckets(121, null),
             Update.Gallery(62, GalleryShown(memory, emptyList(), false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,
                 filter = FilterShown(true, MarkMode.EVERYONE, true, listOf(ChipShown("day:2025-05-03", "3. Mai")), "be", listOf(ChipShown("place:lisboa", "Lisboa", "")), 1, 4),
-                contributions = true, markSaid = Notice(Msg.MEDIA_MARKS_SAVE_FAILED))),
+                contributions = true, markSaid = Notice(Msg.MEDIA_MARKS_SAVE_FAILED), marking = true)),
             Update.Gallery(60, GalleryShown(memory, null, false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,
                 date = MemoryDateShown(DateMode.RANGE, "2026-07-01", "2026-07-14"), place = "Berlin", editsFacts = true, tracks = 2)),
             Update.Gallery(60, GalleryShown(memory, null, false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,

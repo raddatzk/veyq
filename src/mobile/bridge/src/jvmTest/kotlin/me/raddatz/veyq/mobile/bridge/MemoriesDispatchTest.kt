@@ -575,6 +575,7 @@ class MemoriesDispatchTest {
         val page = b.watching(Watched.Gallery(g))
         val shown = page.until { u -> (u as Update.Gallery).shown?.takeIf { it.rows != null } }
         assertTrue(shown.contributions, "a member's page offers its Contributions view")
+        assertEquals(false, shown.marking, "no marks read here: no tile marks")
 
         val id = (b.ask(Call.BucketsOpen(g)) as Answer.BucketsOpened).buckets
         val view = b.watching(Watched.Buckets(id)).until { u -> (u as Update.Buckets).shown?.takeIf { !it.loading } }
@@ -587,7 +588,7 @@ class MemoriesDispatchTest {
         assertEquals(listOf("Sunsets"), buckets.created)
 
         // a bucket's tile opens a lightbox over that bucket (#996): the gallery holds more
-        val b1 = view.media
+        val b1 = view.media.map { it.mediaId }
         val l = (b.ask(Call.BucketsLightbox(id, b1.last())) as Answer.LightboxOpened).lightbox
         val box = b.watching(Watched.Lightbox(l)).until { u -> (u as Update.Lightbox).shown?.takeIf { it.row != null } }
         assertEquals(b1.size to b1.last(), box.count to box.row?.mediaId)
@@ -597,8 +598,8 @@ class MemoriesDispatchTest {
         // a move answers once the moved medium has left the chosen bucket (#990): the state after it says so
         val watched = b.watching(Watched.Buckets(id))
         assertEquals(Answer.BucketsDone(me.raddatz.veyq.mobile.memories.Buckets.Outcome.DONE), b.ask(Call.BucketsMove(id, listOf("a"), "b2")))
-        val after = watched.until { u -> (u as Update.Buckets).shown?.takeIf { "a" !in it.media } }
-        assertEquals(b1 - "a", after.media)
+        val after = watched.until { u -> (u as Update.Buckets).shown?.takeIf { s -> s.media.none { it.mediaId == "a" } } }
+        assertEquals(b1 - "a", after.media.map { it.mediaId })
         assertEquals(me.raddatz.veyq.mobile.memories.Buckets.Outcome.REFUSED.let(Answer::BucketsDone), b.ask(Call.BucketsMove(id, listOf("clip"), "elsewhere")), "never outside its root")
 
         // the mark's notice told seen (#997)

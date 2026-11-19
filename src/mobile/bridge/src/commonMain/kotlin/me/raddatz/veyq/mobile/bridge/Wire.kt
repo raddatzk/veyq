@@ -2113,8 +2113,10 @@ internal class GalleryShown(
     val filter: FilterShown? = null,
     /** Whether the Contributions view is offered ([Call.BucketsOpen]; `rights.buckets` and `Contributions.OFFERED`). */
     val contributions: Boolean = false,
-    /** What the last mark toggle said (too many, not saved); null once seen. */
+    /** What the last mark toggle said (too many, not saved); null once seen ([Call.MarksSeen]). */
     val markSaid: Notice? = null,
+    /** Whether a medium's mark may be flipped here ([Call.MarksToggle]; `GalleryModel.State.marking` with the own set read): a tile's menu offers it (#1001). */
+    val marking: Boolean = false,
     /** Whether the page offers its Music view ([Call.MusicOpen]; `MusicModel.shown`: it has music, or whoever looks may add some). */
     val musicView: Boolean = false,
     /** This node's music is the player's queue now, playing or paused (the header's action then stops it). */
@@ -2413,7 +2415,7 @@ internal class ChipShown(val chip: String, val label: String, val rest: String? 
 
 /**
  * A Contributions view as the host draws it (`Contributions.State`): each bucket row at its depth with its label, its count,
- * whether it is in the caller's own root; the chosen one ([selected]) and its media's ids in the gallery's order; what the
+ * whether it is in the caller's own root; the chosen one ([selected]) and its media's rows in the gallery's order; what the
  * server takes on it — a sub-bucket under it ([createsSub]: a primary), its rename and delete ([renames]: a sub-bucket), the
  * buckets a medium of it may move into ([moveTargets]: its root's others, inbox #991); loading, failed, and the last
  * curation refused ([refused]).
@@ -2423,7 +2425,8 @@ internal class ChipShown(val chip: String, val label: String, val rest: String? 
 internal class BucketsShown(
     val rows: List<BucketRowShown>,
     val selected: String?,
-    val media: List<String>,
+    /** The chosen bucket's media as the page's rows draw them (its name, tile, badge), whatever the page's filter shows (#1001). */
+    val media: List<GalleryRow>,
     val createsSub: Boolean,
     val renames: Boolean,
     val moveTargets: List<String>,

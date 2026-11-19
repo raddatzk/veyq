@@ -2237,7 +2237,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         }
         is Watched.Music -> musics[w.music]?.let { held -> held.model.state.map { Update.Music(w.music, shownMusic(held, it)) } }
             ?: flowOf(Update.Music(w.music, null))
-        is Watched.Buckets -> buckets[w.buckets]?.let { held -> held.model.state.map { Update.Buckets(w.buckets, shownBuckets(it)) } }
+        is Watched.Buckets -> buckets[w.buckets]?.let { held ->
+            val page = galleries[held.gallery]
+            // the gallery's state too: a bucket's rows carry its badges and tiles as the page's do (#1001)
+            if (page == null) held.model.state.map { Update.Buckets(w.buckets, shownBuckets(null, it)) }
+            else kotlinx.coroutines.flow.combine(held.model.state, page.state) { s, _ -> Update.Buckets(w.buckets, shownBuckets(page, s)) }
+        }
             ?: flowOf(Update.Buckets(w.buckets, null))
         is Watched.Map -> maps[w.map]?.let { held -> held.shown().map { Update.Map(w.map, it) } } ?: flowOf(Update.Map(w.map, null))
         Watched.MapServices -> mapServices.flatMapLatest { services ->
@@ -2369,9 +2374,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     /** A Contributions view as the host draws it ([BucketsShown]), each field the model's own answer. */
-    private fun shownBuckets(s: me.raddatz.veyq.mobile.memories.Contributions.State) = BucketsShown(
+    private fun shownBuckets(g: me.raddatz.veyq.mobile.memories.GalleryModel?, s: me.raddatz.veyq.mobile.memories.Contributions.State) = BucketsShown(
         rows = s.rows.map { BucketRowShown(it.bucketId, it.label, it.depth, it.mediaCount, it.isPrimary, it.own) },
-        selected = s.selected, media = s.media.map { it.mediaId }, createsSub = s.createsSub, renames = s.renames,
+        selected = s.selected, media = g?.let { page -> s.media.map { galleryRow(page, it) } }.orEmpty(), createsSub = s.createsSub, renames = s.renames,
         moveTargets = s.moveTargets.map { it.bucketId }, loading = s.loading, failed = s.failed, refused = s.refused,
     )
 
@@ -2491,6 +2496,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         ),
         contributions = s.rights.buckets && me.raddatz.veyq.mobile.memories.Contributions.OFFERED && tenant.value?.models?.contributions != null,
         markSaid = s.markSaid,
+        marking = s.marking && s.marksLoaded,
         failed = s.failed,
         failure = s.failure,
         count = Notice(Msg.MEMORY_ITEMS, s.count),
