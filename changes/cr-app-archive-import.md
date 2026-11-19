@@ -36,9 +36,9 @@ folders, Depot's files and drop boxes, Expenses' Pots, Memories' Memories and ch
   `./gradlew :core:assembleVeyqCoreDebugXCFramework`; `python3 linux/run.py test|build`; `python3 windows/run.py build`
   over ssh to the VM; `pnpm run check` in `src/web/` for phase 2; live cases as a throwaway. **No iOS simulator boots on
   this Mac (#928)**; the macOS app runs here when the screen is unlocked (else named open).
-- **Order:** after [cr-app-folder-share-target](cr-app-folder-share-target.md) (#987), whose share into a folder and
-  drop onto a level on Android and Apple are two of this CR's entries; if this CR runs first, those two entries move to
-  that CR. Block H's [cr-app-received-links](cr-app-received-links.md) edits `AppKinds.kt` in parallel: re-read it
+- **Order:** after #987 (done 2026-11-19), whose share into a folder and drop onto a level on Android and Apple are two
+  of this CR's entries (core's `navigation/AddHere`: `Level.take` and `Level.drop`; iOS's handoff of kind `FOLDER`,
+  queued by `AppModel.pickUpHandoffs`). Block H's [cr-app-received-links](cr-app-received-links.md) edits `AppKinds.kt` in parallel: re-read it
   before editing.
 - **Out of scope:** a guest's import (never, ADR 0082 decision 7); an import that goes on with the app closed (Q1);
   the web's own import, unchanged but for phase 2's test reading the shared cases.
@@ -77,7 +77,7 @@ first picked, dropped or shared **file** that is a download (by content) becomes
 a picked or dropped **folder** holding `.veyq/manifest.json` becomes an import offer (no *Upload as a file*); every
 other file or folder is the ordinary upload. Only a member who may create a folder there (the level's create right),
 never a guest. Entries: *Upload files*, *Upload folder*, a drop onto a level or a folder's row, a share into a folder
-(cr-app-folder-share-target; on iOS the app screens a handed-over file when it queues it). The screen reads the end of
+(`AddHere.Level`; on iOS the app screens a handed-over file when it queues it, `pickUpHandoffs`). The screen reads the end of
 the file and the central directory only — never the whole file.
 
 ### I2 — The web's reader and walk, ported into the core

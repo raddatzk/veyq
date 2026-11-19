@@ -1663,6 +1663,12 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   the bridge's tests caught it as an NPE in a background thread and a gallery that never showed.
 - **A fresh worktree has no `Veyq.xcodeproj`**: it is generated and ignored (`src/mobile/.gitignore`), so `xcodebuild`
   there finds no project. Run `xcodegen` in `apple/` first.
+- **Dragging a file onto the app on the emulator** (2026-11-19, API 36 `google_apis`): `settings put global
+  enable_freeform_support 1` and `am start --windowingMode 5 …` put the Files app in a freeform window over the app.
+  `input draganddrop` there only selects rows; the drag starts from a row already selected (a long press first), as
+  `input motionevent DOWN <row>; sleep 1.2; MOVE …; UP <target>` in one `adb shell`, and carries every selected row —
+  the Files app keeps its selection across opens, so force-stop it first. `adb logcat -s WindowManager` names the clip
+  and `Sending DROP to …app.veyq…`.
 - **Driving the search on Android** (2026-11-18): `uiautomator events` holds the accessibility service, so a `uiautomator
   dump` beside it fails — end it first. What TalkBack speaks is read from its verbose log (its developer settings' log
   output level at verbose): `adb logcat -s talkback`, the lines `Speaking fragment text="…"` — not from the tree. An `adb shell input swipe` while the keyboard

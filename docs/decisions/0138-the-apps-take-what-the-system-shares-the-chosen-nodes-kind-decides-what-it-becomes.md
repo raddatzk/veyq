@@ -189,7 +189,8 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   core's tests hold it). **Apple built, not clicked** (macOS and the iOS simulator SDK): the macOS drop of a file and a
   folder onto a level is open (an agent cannot take the unlocked Mac's screen); which types a Safari page and a Files
   share offer the activation rule and `IncomingFiles.carriesFile`, a folder's handoff and the iPad's drop onto a level
-  are the owner's device passes (inbox #1005).
+  are the owner's device passes (inbox #1005). The Use pages: [Share into veyq](../../site/src/content/docs/getting-started/share-into-veyq.mdx),
+  [Upload files and folders](../../site/src/content/docs/depot/upload-files-and-folders.mdx).
 - **Android's Pot share after the move to sources** (measured 2026-11-19 on a throwaway API 36 emulator as a throwaway
   account): a PDF and a photo shared from the Files app, the pick mode's Pot chosen, its new expense opened with both as
   receipts, closed unsaved (the pick mode back), the Pot chosen again and the expense saved; opened anew in the app and

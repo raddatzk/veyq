@@ -75,6 +75,7 @@ their contents or their names.
 - End-user view (docs site): [Replace a file with a newer one](../../../../site/src/content/docs/depot/replace-a-file.mdx)
 - End-user view (docs site): [Upload files and folders](../../../../site/src/content/docs/depot/upload-files-and-folders.mdx)
 - End-user view (docs site): [Open and look at a file](../../../../site/src/content/docs/depot/view-a-file.mdx)
+- End-user view (docs site): [Share into veyq](../../../../site/src/content/docs/getting-started/share-into-veyq.mdx) (A7)
 - **Feature:** [files](../_index.md); the application's description [docs/apps/depot.md](../../../apps/depot.md).
 - **Use-cases:** [uc.depot.share-folder-files](uc.depot.share-folder-files.md) (the same files through a folder
   link), [uc.depot.drop-box](uc.depot.drop-box.md).
