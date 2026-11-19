@@ -1033,9 +1033,11 @@ fn mark_badge(row: &GalleryRow) -> Option<gtk::Box> {
     let badge = gtk::Box::builder().spacing(3).halign(gtk::Align::End).valign(gtk::Align::Start).margin_end(6).margin_top(6).can_target(false).build();
     badge.add_css_class("osd");
     badge.add_css_class("veyq-mark-badge");
-    badge.append(&gtk::Image::from_icon_name(heart));
+    // The tile's description says the badge ([mark_said]); its count label was read a second time as a bare "1" (AT-SPI,
+    // #998's pass). Each child is drawn for the eye only (`Presentation`); the `Hidden` state left them in the tree.
+    badge.append(&gtk::Image::builder().icon_name(heart).accessible_role(gtk::AccessibleRole::Presentation).build());
     if let Some(n) = count {
-        badge.append(&gtk::Label::new(Some(&n)));
+        badge.append(&gtk::Label::builder().label(n).accessible_role(gtk::AccessibleRole::Presentation).build());
     }
     Some(badge)
 }
