@@ -112,6 +112,9 @@ internal fun AccountFlowDialog(flow: AppModel.AccountFlow, model: AppModel) {
         is AppModel.AccountFlow.Rotation -> RotationFlow(flow.model, model)
         is AppModel.AccountFlow.Erasure -> ErasureFlow(flow.model, model)
     }
+    // a flow's kit scan, once over the flow (the address flow has two Secret Key sections, one intake)
+    val scan by model.flowKitScan.collectAsStateWithLifecycle()
+    scan?.let { KitScanner(it, onClose = model::closeFlowKitScan, onNoCamera = model::flowCameraMissing) }
 }
 
 /** A flow's window: full screen, edge to edge, secure where a secret is typed ([secure]), closed by its bar's ✕. */
