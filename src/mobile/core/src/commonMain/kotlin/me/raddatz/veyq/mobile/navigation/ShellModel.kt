@@ -264,6 +264,8 @@ class ShellModel(
      */
     fun personMemories(userId: String): me.raddatz.veyq.mobile.memories.people.PersonMemories =
         me.raddatz.veyq.mobile.memories.people.PersonMemories(userId, object : me.raddatz.veyq.mobile.memories.people.PersonMemories.Door {
+            override val chosen get() = me.raddatz.veyq.mobile.memories.people.PersonMemories.View.valueOf(viewModes.of(tenant.account.userId, ViewMode.PERSON).name)
+            override fun chose(view: me.raddatz.veyq.mobile.memories.people.PersonMemories.View) = viewModes.set(tenant.account.userId, ViewMode.valueOf(view.name))
             override suspend fun index() = me.raddatz.veyq.mobile.memories.people.ParticipantIndex.of(tenant)
             override fun open(ref: ObjectRef) = this@ShellModel.open(ref)
         })
@@ -695,6 +697,15 @@ class ShellModel(
      * Memory or chapter.
      */
     fun galleryAt(scopeId: String, nodeId: String): NodeAt? = galleryAt(current?.lists?.nodes.orEmpty(), scopeId, nodeId)
+
+    /** The account's view choice on this device (ADR 0149 decision 8): every level's and a person's Memories'. */
+    val viewModes: ViewModes get() = ViewModes(tenant.account.deviceStore)
+
+    /** How a level is drawn now: the account's choice among a level's views ([ViewMode.LEVEL]). */
+    val levelView: ViewMode get() = viewModes.of(tenant.account.userId, ViewMode.LEVEL)
+
+    /** A level's view chosen: kept for every level and a person's Memories. */
+    fun chooseView(mode: ViewMode) = viewModes.set(tenant.account.userId, mode)
 
     /**
      * Memory or chapter [ref]'s page over this tenant ([me.raddatz.veyq.mobile.memories.GalleryModel]), opened as a member:

@@ -296,7 +296,7 @@ Each phase ends with every platform building.
   written before the own set is read → the ADR 0077 case red; (b) `markedByMe` from the count instead of the self tag →
   red; (c) the filter's mode applied in a personal scope → red; (d) a guest named "a guest" again → red.
 
-- [ ] **6 core: the view mode and tiles** — D8: `ViewMode`, its store, `TileGrid`, `PersonMemories.View` gaining TILES.
+- [x] **6 core: the view mode and tiles** — D8: `ViewMode`, its store, `TileGrid`, `PersonMemories.View` gaining TILES.
   Tests: the store per account; the columns at 359, 360 and 1200 units; the profile's three views. · **Bite:** the store
   keyed without the account → the two-account case red.
 

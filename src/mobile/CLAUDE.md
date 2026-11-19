@@ -64,7 +64,7 @@ A Gradle build of its own, run through its own wrapper.
   `Shell.person` (opened over what was on screen, back returning there; `personSections` from the registry's
   `personSection`), Memories' section in `memories/people/` — `ParticipantIndex.kt` (over `TenantSession.trees()`, never
   the personal scope, held in memory only through `TenantSession.fromTree`, dropped by `forgetTree()` and `close()`) and
-  `PersonMemories.kt` (the rows newest first, List | Map). Android draws them in `MemoryCuration.kt` (the people line, its
+  `PersonMemories.kt` (the rows newest first, List | Tiles | Map, the account's one view choice). The view mode and the tiles (ADR 0149 decision 8): core's `navigation/ViewMode.kt` — `ViewMode` (`FIRST`, pending the owner), `ViewModes` (one choice per account on the device, `view-mode:<accountId>`; `ShellModel.levelView`/`chooseView`), `TileGrid` (at least `MIN_COLUMNS` square covers, `MIN_TILE` and `GAP`), held by `ViewModeTest`; no platform draws tiles yet. Android draws them in `MemoryCuration.kt` (the people line, its
   list and bottom-sheet picker, the banner with its surround and `ReaderPlayer`, its full-screen dialog, the trash's
   question, the capture-time editor; a banner's decoding `MediaDerive.bannerImage`/`bannerPoster`) and `PersonScreen.kt`;
   Apple in `MemoryCuration.swift` and `PersonScreen.swift`, `appleMain`'s `AppleMemories` adapting what Swift cannot call

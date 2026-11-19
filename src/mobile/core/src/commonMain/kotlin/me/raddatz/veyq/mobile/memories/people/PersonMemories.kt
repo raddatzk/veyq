@@ -16,9 +16,10 @@ import me.raddatz.veyq.mobile.navigation.SpaceRef
  * date range, place, the group's name), **newest start day first, undated last, then by name** ([order]) — the one list
  * of the apps ordered by date, not by last use (ADR 0122 decision 5) —, a row opening its Memory with its use recorded.
  *
- * A switch offers **List | Map** once there is something to list: the map is ADR 0143's Memories map fed the person's
- * located Memories (its consent, its clusters, its "No places yet", its "needs a connection" are the map's own); a pin
- * opens its Memory. The choice is **not stored**: the section opens on the list each time. No tiles (inbox #950). Four
+ * A switch offers **List | Tiles | Map** once there is something to list: the map is ADR 0143's Memories map fed the
+ * person's located Memories (its consent, its clusters, its "No places yet", its "needs a connection" are the map's own); a
+ * pin opens its Memory. The choice is the account's one view choice on this device (ADR 0149 decision 8, [Door.chosen],
+ * `navigation/ViewModes`), shared with every level. Four
  * states as the web's: loading, failed (with *Try again*: [load] again), empty, the list — [State.partial] where the index
  * is.
  */
@@ -29,9 +30,15 @@ class PersonMemories(val userId: String, private val door: Door) {
 
         /** Memory [ref] opened in its application, its use recorded (`ShellModel.open`). */
         fun open(ref: ObjectRef)
+
+        /** The account's view choice on this device as the section opens (`ViewModes.of`); a test's: the list. */
+        val chosen: View get() = View.LIST
+
+        /** [view] chosen: kept as the account's one choice (`ViewModes.set`). */
+        fun chose(view: View) {}
     }
 
-    enum class View { LIST, MAP }
+    enum class View { LIST, TILES, MAP }
 
     /** One row: the Memory, its date and place as sealed, and the group it lies in (null in the tenant's space). */
     data class Row(val ref: ObjectRef, val date: me.raddatz.veyq.mobile.memories.place.MemoryDate?, val placeName: String?, val group: SpaceRef?)
@@ -53,7 +60,7 @@ class PersonMemories(val userId: String, private val door: Door) {
         val offersViews: Boolean get() = !loading && !failed && rows.isNotEmpty()
     }
 
-    private val _state = MutableStateFlow(State())
+    private val _state = MutableStateFlow(State(view = door.chosen))
     val state: StateFlow<State> = _state.asStateFlow()
     val current: State get() = _state.value
 
@@ -78,14 +85,16 @@ class PersonMemories(val userId: String, private val door: Door) {
                 loading = false, failed = false, partial = index.partial,
                 rows = memories.map { m -> Row(ObjectRef(m.node.scopeId, m.node.nodeId, m.node.kind, ApplicationId.MEMORIES, m.node.name), m.date, m.placeName, m.space.takeIf { it.kind == GROUP }) },
                 map = MemoriesMap(memories.mapNotNull { it.pin }),
-                view = if (memories.isEmpty()) View.LIST else s.view,
+                view = if (memories.isEmpty() && s.view == View.MAP) View.LIST else s.view,
             )
         }
     }
 
-    /** List or Map, where offered; not stored. */
+    /** List, Tiles or Map, where offered; kept as the account's choice. */
     fun view(view: View) {
-        if (current.offersViews) _state.update { it.copy(view = view) }
+        if (!current.offersViews) return
+        _state.update { it.copy(view = view) }
+        door.chose(view)
     }
 
     /** A row's Memory opened. */

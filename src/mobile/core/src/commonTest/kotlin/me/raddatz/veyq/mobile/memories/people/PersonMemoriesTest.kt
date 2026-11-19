@@ -40,6 +40,10 @@ class PersonMemoriesTest {
         val opened = mutableListOf<ObjectRef>()
         override suspend fun index(): ParticipantIndex.Index { reads++; return answer() }
         override fun open(ref: ObjectRef) { opened += ref }
+        /** The account's view choice as the device keeps it (`ViewModes`, ADR 0149 decision 8). */
+        var kept = PersonMemories.View.LIST
+        override val chosen get() = kept
+        override fun chose(view: PersonMemories.View) { kept = view }
     }
 
     private val lisboa = MemoryLocation("Lisboa", MemoryLocation.NameSource.MANUAL, LatLng(38.7, -9.1), MemoryLocation.DerivedMode.FIXED)
@@ -124,7 +128,7 @@ class PersonMemoriesTest {
     }
 
     @Test
-    fun theSwitchShowsTheMapInPlaceOfTheListAndBack_theChoiceNotStored() = runTest {
+    fun theSwitchShowsTilesAndTheMapInPlaceOfTheListAndBack_theChoiceKeptAsTheAccounts() = runTest {
         val door = Door { index(false, memory("a", "Harz", "2026-05-01")) }
         val section = PersonMemories("ada", door)
         section.load()
@@ -134,13 +138,13 @@ class PersonMemoriesTest {
         assertEquals(PersonMemories.View.MAP, section.current.view)
         section.load()
         assertEquals(PersonMemories.View.MAP, section.current.view, "a retry keeps the view shown")
-        section.view(PersonMemories.View.LIST)
-        assertEquals(PersonMemories.View.LIST, section.current.view)
-        // a profile opened later opens on the list again: nothing is stored
+        section.view(PersonMemories.View.TILES)
+        assertEquals(PersonMemories.View.TILES, section.current.view)
+        // a profile opened later opens on the account's choice (ADR 0149 decision 8)
         section.view(PersonMemories.View.MAP)
         val again = PersonMemories("ada", door)
         again.load()
-        assertEquals(PersonMemories.View.LIST, again.current.view)
+        assertEquals(PersonMemories.View.MAP, again.current.view)
     }
 
     @Test
