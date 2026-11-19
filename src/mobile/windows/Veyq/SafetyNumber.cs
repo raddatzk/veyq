@@ -226,10 +226,10 @@ internal sealed class SafetyNumberSection
                     actions.Children.Add(Strong(Words.SafetyCompare()));
                     actions.Children.Add(Line(Words.SafetyCompareHint(name), "safety-compare-hint", secondary: true));
                     var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-                    void Tell(Outcome? o)
+                    void Tell(PersonTrustOutcome? o)
                     {
                         if (o is not { } got) return;
-                        var verified = got == Outcome.Verified;
+                        var verified = got == PersonTrustOutcome.Verified;
                         var line = Line(OutcomeWords(got, name), "safety-outcome");
                         if (!verified) line.Foreground = Brush("SystemFillColorCriticalBrush");
                         AutomationProperties.SetLiveSetting(line, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Assertive);
@@ -242,7 +242,7 @@ internal sealed class SafetyNumberSection
                         {
                             var (a, _) = await Core.CallAsync(new Call.TrustCompareDigits { userId = _userId, match = match });
                             Log.Write($"Trust.CompareDigits answered {(a is Answer.TrustOutcome t ? t.outcome.ToString() : a.GetType().Name)}");
-                            Tell((a as Answer.TrustOutcome)?.outcome ?? Outcome.Failed);
+                            Tell((a as Answer.TrustOutcome)?.outcome ?? PersonTrustOutcome.Failed);
                         }
                         catch (Exception e)
                         {
@@ -267,7 +267,7 @@ internal sealed class SafetyNumberSection
                                     {
                                         var (a, _) = await Core.CallAsync(new Call.TrustCompareScanned { userId = _userId, scan = id });
                                         Log.Write($"Trust.CompareScanned answered {(a is Answer.TrustOutcome t ? t.outcome.ToString() : a.GetType().Name)}");
-                                        Tell((a as Answer.TrustOutcome)?.outcome ?? Outcome.Failed);
+                                        Tell((a as Answer.TrustOutcome)?.outcome ?? PersonTrustOutcome.Failed);
                                     }
                                     catch (Exception e)
                                     {
@@ -320,14 +320,14 @@ internal sealed class SafetyNumberSection
     }
 
     /// <summary>What a compare came to, in the web's words.</summary>
-    private static string OutcomeWords(Outcome o, string name) => o switch
+    private static string OutcomeWords(PersonTrustOutcome o, string name) => o switch
     {
-        Outcome.Verified => Words.SafetyVerified(name),
-        Outcome.Mismatch => Words.SafetyMismatch(name),
-        Outcome.Foreign => Words.SafetyForeign(),
-        Outcome.Outdated => Words.SafetyOutdated(name),
-        Outcome.Moved => Words.SafetyMoved(name),
-        Outcome.Unanchored => Words.SafetyUnanchored(name),
+        PersonTrustOutcome.Verified => Words.SafetyVerified(name),
+        PersonTrustOutcome.Mismatch => Words.SafetyMismatch(name),
+        PersonTrustOutcome.Foreign => Words.SafetyForeign(),
+        PersonTrustOutcome.Outdated => Words.SafetyOutdated(name),
+        PersonTrustOutcome.Moved => Words.SafetyMoved(name),
+        PersonTrustOutcome.Unanchored => Words.SafetyUnanchored(name),
         _ => Words.SafetyFailed(),
     };
 }

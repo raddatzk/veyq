@@ -657,7 +657,7 @@ internal sealed class ShellView
             else
             {
                 // a folder's level starts with its head, as the Pot's and the Memory's pages (none on a space's root)
-                body = shell.application is not null ? HomeView.List(shown.list) : HomeView.Home(state, shown, LevelDrops(), _header?.Hero);
+                body = shell.application is not null ? HomeView.List(shown.list, shown.view == ViewModeShown.Tiles) : HomeView.Home(state, shown, LevelDrops(), _header?.Hero);
                 if (body is ScrollViewer list) Keep(list, ListScrolls.Place(shell.application, shell.space, shell.path.Count > 0 ? shell.path[^1].nodeId : null, shell.filter));
             }
         }
@@ -713,7 +713,7 @@ internal sealed class ShellView
         else
         {
             CloseMemoriesMap();
-            content = HomeView.List(shown.list);
+            content = HomeView.List(shown.list, shown.view == ViewModeShown.Tiles);
             if (content is ScrollViewer list) Keep(list, ListScrolls.Place(state.shell.application, state.shell.space, null, state.shell.filter));
         }
         foreach (var old in _places.Children.Where(c => Grid.GetRow((FrameworkElement)c) == 1 && !ReferenceEquals(c, content)).ToList()) _places.Children.Remove(old);
@@ -846,7 +846,15 @@ internal sealed class ShellView
             share.Click += (_, _) => ShareDialog.OpenTopLevel(_window, space);
             _commands.PrimaryCommands.Add(share);
         }
-        if (_header is null) return;
+        // a level's View (Explorer's): List or Tiles, the account's one choice (ADR 0149 decision 8) — a level only, never an
+        // object's page nor the Memories map
+        var view = page is null && memory is null && _file is null && _dropBox is null && _state?.shell.openObject is null
+            && shown.selectedTab?.key != "memories.map" ? LevelTiles.ViewCommand(shown) : null;
+        if (_header is null)
+        {
+            if (view is not null) _commands.PrimaryCommands.Add(view);
+            return;
+        }
         var file = _file;
         var (primary, secondary) = _header.Commands(() =>
         {
@@ -858,6 +866,7 @@ internal sealed class ShellView
             if (file?.Id is { } id) _uploads.Replace(id, Say);
         }, () => memory?.Add(), () => memory?.Music());
         foreach (var c in primary) _commands.PrimaryCommands.Add(c);
+        if (view is not null) _commands.PrimaryCommands.Add(view);
         if (page is not null)
         {
             // an open Pot's Refresh: desktops have no pull gesture (F5 and Ctrl+R, as Explorer and Edge refresh)

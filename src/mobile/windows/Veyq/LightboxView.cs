@@ -1,7 +1,8 @@
 // A Memory's lightbox (core's Lightbox; ADR 0123's Consequences, the Windows app; Linux's lightbox.rs, rule for rule),
 // Fluent's way, as Windows' Photos shows a picture: in the gallery's place over black, a CommandBar on top with Close,
-// Previous and Next, the position and the medium's name, then Slideshow, Details, Save and Move to trash — each only where
-// the core offers it. A picture zooms in its ScrollViewer (Ctrl+wheel, a pinch, +, -, 0); ← and → page; Escape closes. A
+// Previous and Next, the position and the medium's name, then the mark (a heart, filled when marked: ADR 0149 decision 4,
+// Lightbox.Mark), Slideshow, Details, Save, Report (a photo's or a video's, core's report sheet: ReportDialog over
+// Lightbox.Report) and Move to trash — each only where the core offers it. A picture zooms in its ScrollViewer (Ctrl+wheel, a pinch, +, -, 0); ← and → page; Escape closes. A
 // video shows its poster with Play — it never plays by itself — and plays through the core's reader (Medium.Reader,
 // MediumPlayer); what the system cannot decode says so, Save stays. The details are a ContentDialog of rows
 // (Lightbox.Details; one dialog at a time, Dialogs.Show); Save writes the original where the save picker says (Medium.Save,
@@ -52,6 +53,8 @@ internal sealed class LightboxView : IDisposable
     private readonly AppBarButton _details;
     private readonly AppBarButton _save;
     private readonly AppBarButton _trash;
+    private readonly AppBarToggleButton _mark;
+    private readonly AppBarButton _report;
     /// <summary>Where the medium shows: replaced when the medium or what it shows changes.</summary>
     private readonly ContentControl _stage = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
     private long? _id;
@@ -102,9 +105,16 @@ internal sealed class LightboxView : IDisposable
         _details.Icon = new FontIcon { Glyph = "\uE946" };
         _save = Button(Symbol.Download, Words.MemoryDownload(), "lightbox-save", Save);
         _trash = Button(Symbol.Delete, Words.MemoryTrash(), "lightbox-trash", Trash);
+        _report = Button(Symbol.Flag, Words.ReportAction(), "lightbox-report", Report);
+        _report.Icon = new FontIcon { Glyph = "\uE7C1" };
+        // the heart: a toggle whose state is the core's (LightboxShown.marked), set back from each state
+        _mark = new AppBarToggleButton { Icon = new FontIcon { Glyph = "\uEB51" }, Label = Words.MediaMarksMark() };
+        AutomationProperties.SetAutomationId(_mark, "lightbox-mark");
+        _mark.Click += (_, _) => Mark();
         foreach (var b in new[] { back, _previous, _next }) _bar.PrimaryCommands.Add(b);
         _bar.PrimaryCommands.Add(new AppBarSeparator());
-        foreach (var b in new[] { _slideshow, _details, _save, _trash }) _bar.PrimaryCommands.Add(b);
+        _bar.PrimaryCommands.Add(_mark);
+        foreach (var b in new[] { _slideshow, _details, _save, _report, _trash }) _bar.PrimaryCommands.Add(b);
         var heading = new StackPanel { Margin = new Thickness(12, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
         AutomationProperties.SetAutomationId(_title, "lightbox-position");
         AutomationProperties.SetAutomationId(_subtitle, "lightbox-name");
@@ -193,7 +203,7 @@ internal sealed class LightboxView : IDisposable
         if (l.shown is { } s)
         {
             // the state comes again as the music's position moves: said in the log when the rest changed
-            var line = $"lightbox shown: {s.index + 1} of {s.count}, {s.row?.mediaId ?? "-"}, playing {s.playing}, slideshow {s.slideshow?.ToString() ?? "-"}, save {s.downloadName is not null}, trash {s.canTrash}, music {(s.music is { } m ? m.playing ? "playing" : "paused" : "-")}";
+            var line = $"lightbox shown: {s.index + 1} of {s.count}, {s.row?.mediaId ?? "-"}, playing {s.playing}, slideshow {s.slideshow?.ToString() ?? "-"}, save {s.downloadName is not null}, trash {s.canTrash}, mark {(s.canMark ? s.marked ? "marked" : "offered" : "-")}, report {s.canReport}, music {(s.music is { } m ? m.playing ? "playing" : "paused" : "-")}";
             if (line != _logged) Log.Write(_logged = line);
         }
         _shown = l.shown;
@@ -250,6 +260,40 @@ internal sealed class LightboxView : IDisposable
         Act.Send(new Call.LightboxSlideshow { lightbox = lightbox, on = on });
     }
 
+    /// <summary>The heart: the current medium's mark flipped (Lightbox.Mark); what did not land is said (too many, not saved).</summary>
+    private async void Mark()
+    {
+        if (_id is not { } lightbox) return;
+        try
+        {
+            var (answer, _) = await Core.CallAsync(new Call.LightboxMark { lightbox = lightbox });
+            Log.Write($"lightbox mark: {answer.GetType().Name}");
+            if (answer is Answer.Said { notice: { } n }) _say(false, Said.Notice(n));
+        }
+        catch (Exception e)
+        {
+            Log.Write($"Lightbox.Mark failed ({e.GetType().Name})");
+        }
+        // the toggle shows what the core holds, never its own click
+        if (!_closed && _shown is { } s) DrawMark(s);
+    }
+
+    /// <summary>Report: the current photo's or video's report in core's sheet (ReportDialog over Lightbox.Report).</summary>
+    private void Report()
+    {
+        if (_id is { } lightbox) ReportDialog.Open(_window, new Call.LightboxReport { lightbox = lightbox });
+    }
+
+    /// <summary>The heart as the core holds it: offered (LightboxShown.canMark), filled where the caller marked the medium.</summary>
+    private void DrawMark(LightboxShown s)
+    {
+        _mark.Visibility = s.canMark ? Visibility.Visible : Visibility.Collapsed;
+        _mark.IsChecked = s.marked;
+        _mark.Icon = new FontIcon { Glyph = s.marked ? "\uEB52" : "\uEB51" };
+        _mark.Label = s.marked ? Words.MediaMarksUnmark() : Words.MediaMarksMark();
+        ToolTipService.SetToolTip(_mark, _mark.Label);
+    }
+
     private async void Trash()
     {
         if (_id is not { } lightbox) return;
@@ -283,6 +327,8 @@ internal sealed class LightboxView : IDisposable
         ToolTipService.SetToolTip(_slideshow, _slideshow.Label);
         _save.Visibility = s.downloadName is not null ? Visibility.Visible : Visibility.Collapsed;
         _trash.Visibility = s.canTrash ? Visibility.Visible : Visibility.Collapsed;
+        _report.Visibility = s.canReport ? Visibility.Visible : Visibility.Collapsed;
+        DrawMark(s);
         // the stage: drawn anew when the medium, its picture or its player changed
         if (_player is not null && !s.playing)
         {
