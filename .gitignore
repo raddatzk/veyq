@@ -131,6 +131,8 @@ fabric.properties
 *.zip
 # the app's download the web's import test reads (ADR 0149 decision 7): a fixture, committed
 !src/web/src/features/memories/fixtures/app-memory-download.zip
+# the web's download the core's import test reads (ADR 0152 decision 4): a fixture, committed
+!contracts/export/import-cases/web-download.zip
 *.tar.gz
 *.rar
 
