@@ -602,6 +602,9 @@ struct HomeView: View {
                 }
             }
             .pickerStyle(.segmented)
+            // its word for VoiceOver only: a Mac's List row drew "Filter" with the segments at the window's far edge (the
+            // macOS pass, 2026-11-19), as the other segmented switches (`MemoryViewSwitch`, a person's views)
+            .labelsHidden()
         }
     }
 

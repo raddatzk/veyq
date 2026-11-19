@@ -589,6 +589,9 @@ struct SettingsView: View {
 /// the app's Settings window (macOS, `Settings { }`, which opens it on ⌘, and the drawer's Settings).
 struct SettingsPage: View {
     @Bindable var model: AppModel
+    #if os(macOS)
+    @Environment(\.dismissWindow) private var dismissWindow
+    #endif
 
     var body: some View {
         Group {
@@ -615,6 +618,9 @@ struct SettingsPage: View {
         .frame(minWidth: 480, idealWidth: 560, minHeight: 520)
         .onAppear { model.openSettings() }
         .onDisappear { model.closeSettings() }
+        // the page went while the window shows (an erasure, a sign-out from it): the window goes with it, never an empty
+        // "Settings" left over the sign-in (the macOS pass, 2026-11-19); opened while signed out it shows the placeholder
+        .onChange(of: model.settings == nil) { was, gone in if gone && !was { dismissWindow() } }
         #endif
     }
 }

@@ -32,6 +32,11 @@ struct ReportSheet: View {
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { dismiss() }.disabled(sending) } }
         }
         .interactiveDismissDisabled(sending)
+        #if os(macOS)
+        // a Mac's sheet takes its content's ideal size, which a Form has none of (every caller's: a node's, a medium's,
+        // a track's)
+        .frame(minWidth: 460, minHeight: 520)
+        #endif
         .task {
             guard box.sheet == nil, let made = make.map({ $0() }) ?? model.reportSheet(ref) else { return }
             box.start(made)
@@ -48,6 +53,7 @@ struct ReportSheet: View {
             }
             Section { Button(say(.receiptsClose)) { dismiss() } }
         }
+        .formStyle(.grouped)
     }
 
     private func form(_ sheet: VeyqCore.ReportSheet, _ st: VeyqCore.ReportSheet.State) -> some View {
@@ -115,6 +121,9 @@ struct ReportSheet: View {
                 .disabled(!st.canSend)
             }
         }
+        // grouped on a Mac too: its default, the columns style, pushed every row into a trailing column and clipped it
+        // (the macOS pass, 2026-11-19); iOS's Form is grouped already
+        .formStyle(.grouped)
         .disabled(st.sending)
     }
 
