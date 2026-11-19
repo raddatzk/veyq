@@ -331,6 +331,16 @@ Each phase ends with every platform building.
 - [ ] **10 Linux and Windows** — as phase 8 over the bridge (`gtk::SearchBar` / `AutoSuggestBox`, the header bar's
   toggle / the `CommandBar`'s *View*, a `gtk::GridView`/`FlowBox` / `ItemsRepeater` with a `UniformGridLayout` for the
   tiles). · Done when: `run.py build`/`test` green on both; clicked as phase 8, a window resized across the columns.
+  *Linux status 2026-11-19 (Windows open):* built — `gallery_filter.rs` (a `gtk::SearchBar` over the photos, the core's
+  suggestions and chips, a day chip said the desktop's way, the marks' mode as a drop-down, an empty grid naming the
+  filters), a tile's badge (the app's own heart icons, `linux/icons/`: Adwaita draws none), the lightbox's heart and
+  *Report*, `contributions.rs` (the fourth toggle; a medium moved by its thumbnail's secondary press; read anew at the
+  gallery's next state after a curation, #990), `tiles.rs` (a `FlowBox` framed by `View.Tiles`) on Home, a folder, the
+  applications' lists and a profile (List | Tiles | Map), the header bar's view toggle (Files'). The bridge hands the
+  desktop's calendar (`LocalCalendar`, #989's desktop half), its lightbox follows the marks and `Gallery.Layout` lays out
+  the filtered rows (both found in the pass). `run.py build` (clippy, 90 + 5 tests), `test`, `bridge` and `:bridge:jvmTest`
+  green (measured); clicked in Broadway, 2 → 6 columns as the window widened — what was not clicked is #998; #996 holds
+  here too; #997.
 
 - [ ] **11 the passes** — § Passes; their outputs into ADR 0149's Consequences in this phase, what could not run named.
 
