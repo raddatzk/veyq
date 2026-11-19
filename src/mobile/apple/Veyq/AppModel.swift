@@ -289,6 +289,26 @@ final class AppModel {
     /// The Secret Key row's way back to typing: the kit's held key ends.
     func clearKit() { session.clearKit() }
 
+    /// A flow's Secret Key section took a kit file (ADR 0151 decision 4): read in place into memory as the sign-in's is
+    /// and handed to the flow's `intake`, which holds its key until the call or the flow ends.
+    func readFlowKit(_ intake: KeyIntake, _ url: URL) {
+        Task {
+            let bytes = await Task.detached { KitBytes.read(url) }.value
+            let drawer = KitDrawer(bytes)
+            _ = try? await intake.read(
+                bytes: AppleKit.shared.bytes(data: bytes.view), pictures: AppleKit.shared.pictures(drawing: drawer), typedServer: nil
+            )
+            drawer.close()
+            bytes.clear()
+        }
+    }
+
+    /// A flow's kit scan for `KitScannerView`'s camera: the kit found taken by the flow's `intake`; each decode's time is
+    /// logged, never a code's text.
+    func scanFlowKit(_ intake: KeyIntake) -> QrScan<AnyObject> {
+        AppleKit.shared.scan(intake: intake, timing: QrCamera.timing)
+    }
+
     /// The sign-in's kit scan for `KitScannerView`'s camera: core's scan with the kit's parser as its `accepts`, the found
     /// kit taken by core (the gate fills the form); `typedServer` is the form's server as typed now. Its `Found` carries
     /// only where the kit's server came from; each decode's time is logged, never a code's text.
