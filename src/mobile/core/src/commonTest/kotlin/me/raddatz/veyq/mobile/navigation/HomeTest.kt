@@ -2,6 +2,8 @@ package me.raddatz.veyq.mobile.navigation
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import me.raddatz.veyq.mobile.words.Msg
 
 class HomeTest {
@@ -18,8 +20,19 @@ class HomeTest {
 
     @Test
     fun aLevelIsItsChildren_foldersFirst_onlyThisSpace() {
-        assertEquals(listOf("Reisen", "angebot.pdf", "Ostsee 2026", "Sri Lanka"), Home.level(nodes, "s", null, null).map { it.name })
+        assertEquals(listOf("Reisen", "angebot.pdf", "Ein Link", "Ostsee 2026", "Sri Lanka"), Home.level(nodes, "s", null, null).map { it.name })
         assertEquals(listOf("Rom"), Home.level(nodes, "s", "f", null).map { it.name })
+    }
+
+    /** #1032: a kept link is core's — listed with everything, as the web's `All` tab lists it; no application's filter keeps it. */
+    @Test
+    fun aKeptLinkIsListedWithEverythingAndByNoApplicationsFilter() {
+        val all = Home.level(nodes, "s", null, null)
+        val link = all.single { it.nodeId == "b" }
+        assertEquals(NodeAt("s", "b", "SHARE_BOOKMARK", "Ein Link"), link.asBookmark(), "the row does not open as a bookmark's page")
+        assertNull(link.asObject(), "a kept link became an application's object (the drawer's lists)")
+        for (app in ApplicationId.entries) assertTrue(Home.level(nodes, "s", null, app).none { it.isBookmark }, "$app's filter kept the link")
+        assertNull(nodes.first().asBookmark())
     }
 
     @Test
@@ -32,7 +45,7 @@ class HomeTest {
     fun aLevelGroupsItsFoldersApart_headedOnlyWhereBothAreThere() {
         val groups = Home.groups(Home.level(nodes, "s", null, null))
         assertEquals(listOf(true, false), groups.map { it.folders })
-        assertEquals(listOf(listOf("Reisen"), listOf("angebot.pdf", "Ostsee 2026", "Sri Lanka")), groups.map { g -> g.nodes.map { it.name } })
+        assertEquals(listOf(listOf("Reisen"), listOf("angebot.pdf", "Ein Link", "Ostsee 2026", "Sri Lanka")), groups.map { g -> g.nodes.map { it.name } })
         assertEquals(listOf(Msg.HOME_GROUP_FOLDERS, Msg.HOME_GROUP_CONTENTS), groups.map { it.heading })
         // one group alone needs no heading
         val onlyContents = Home.groups(Home.level(nodes, "s", "f", null))

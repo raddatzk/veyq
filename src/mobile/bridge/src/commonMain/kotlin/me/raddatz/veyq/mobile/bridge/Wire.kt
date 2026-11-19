@@ -849,7 +849,10 @@ internal sealed class Call {
     /** Where *Keep* may keep the link (`GuestScreen.keepPlaces`: the personal space first), [Answer.KeepPlaces]. */
     @Serializable @SerialName("Received.KeepPlaces") data class ReceivedKeepPlaces(val received: Long) : Call()
 
-    /** Files at [paths] added by a WRITE_ONLY link's guest (a drop box's, a Memory's uploader). */
+    /**
+     * Files at [paths] added by a WRITE_ONLY link's guest (a drop box's, a Memory's uploader), or by a READ_WRITE guest into
+     * the folder on screen ([ReceivedPage.writes], #1034: each its own file, the link read anew as each settles).
+     */
     @Serializable @SerialName("Received.Upload") data class ReceivedUpload(val received: Long, val paths: List<String>) : Call()
 
     /** The link's screen closed without asking (the app quits): as [ReceivedLeave]. */
@@ -863,6 +866,16 @@ internal sealed class Call {
 
     /** The report the link asked for ([ReceivedShown.reportAsked]) opened by the host: not asked again. */
     @Serializable @SerialName("Received.ReportShown") data class ReceivedReportShown(val received: Long) : Call()
+
+    /**
+     * A viewing link's row [node] reported to the link's own operator (`GuestReport.nodeSheet`, #1033: whole, or by its name
+     * below the root) — [Received.Report] reports the page on screen. [Answer.ReportOpened]; refused `NOT_OFFERED` on an
+     * upload link or a node the link does not serve.
+     */
+    @Serializable @SerialName("Received.ReportNode") data class ReceivedReportNode(val received: Long, val node: String) : Call()
+
+    /** A READ_WRITE guest's new folder [name] in the folder on screen ([ReceivedPage.writes], #1034): [Answer.Said] — why not, or none once made. */
+    @Serializable @SerialName("Received.NewFolder") data class ReceivedNewFolder(val received: Long, val name: String) : Call()
 
     /**
      * Kept link [node]'s page (core's `BookmarkPage`, ADR 0150 decision 6): its meta opened, the share shown in place while
@@ -1437,6 +1450,13 @@ internal sealed class Call {
      * way in the core names ([ParticipantShown.opensProfile], [Answer.MediumDetails.profile]).
      */
     @Serializable @SerialName("Shell.OpenPerson") data class ShellOpenPerson(val userId: String) : Call()
+
+    /**
+     * Kept link [node]'s page opened over what is on screen (`ShellModel.openBookmark`, ADR 0150 decision 6, #1032): a
+     * level's row of kind `SHARE_BOOKMARK` (`Home.level` lists it), a search's hit. The shell's state then names it
+     * (`Shell.bookmark`, [ShellShown.headed]), and the host opens its page's model with [BookmarkOpen].
+     */
+    @Serializable @SerialName("Shell.OpenBookmark") data class ShellOpenBookmark(val node: NodeAt) : Call()
 
     /**
      * Person [userId]'s page (`ShellModel.profile`, core's frame, and each application's section — Memories'
@@ -3860,6 +3880,8 @@ internal class ReceivedRow(val id: String, val kind: String, val name: String, v
 internal class ReceivedPage(
     val kind: ReceivedPageKind, val name: String, val nodeKind: String, val rows: List<ReceivedRow>,
     val file: Long?, val gallery: Long?, val pot: Long?, val sent: List<String>,
+    /** A READ_WRITE guest's level: New folder ([Call.ReceivedNewFolder]) and the upload ([Call.ReceivedUpload]) offered (`GuestLevel.writes`, #1034). */
+    val writes: Boolean = false,
 )
 
 /**

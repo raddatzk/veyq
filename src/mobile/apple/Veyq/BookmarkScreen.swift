@@ -53,7 +53,7 @@ extension KindPage {
             OwnAction(id: openOwnPage, label: say(.bookmarkOpenOwnPage), systemImage: "arrow.up.forward.square") { model.bookmarkOwnPage(page) },
             OwnAction(id: reportShared, label: say(.bookmarkReportShare), systemImage: "flag", slot: .last) { model.bookmarkReportShared(page) },
         ])
-    }, body: { ref, _, model in AnyView(BookmarkScreen(model: model, ref: ref)) })
+    }, body: { ref, _, model in AnyView(BookmarkScreen(model: model, node: ref.at)) })
 }
 
 /// A kept link's page (ADR 0150 decision 6, ADR 0121 decision 1): while the tenant embeds, the share in place under the
@@ -62,11 +62,12 @@ extension KindPage {
 /// says so; its delete is the header's.
 struct BookmarkScreen: View {
     @Bindable var model: AppModel
-    let ref: ObjectRef
+    /// The kept link (core's `Shell.bookmark`, #1032: a node of core's, no application's object).
+    let node: NodeAt
 
     var body: some View {
         Group {
-            if let held = model.bookmarkPage(ref.at) {
+            if let held = model.bookmarkPage(node) {
                 switch held.state.value {
                 case is BookmarkPage.StateUnreadable:
                     Text(say(.bookmarkUnreadable)).foregroundStyle(Role.muted).padding()
@@ -98,7 +99,7 @@ struct BookmarkScreen: View {
                     .padding()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     // embedding off: the row opens the link directly (the web's), the shell back at the list behind it
-                    .task(id: ref.nodeId) {
+                    .task(id: node.nodeId) {
                         model.bookmarkOwnPage(held.page)
                         model.goBack()
                     }
@@ -109,7 +110,7 @@ struct BookmarkScreen: View {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .navigationTitle(ref.name)
+        .navigationTitle(node.name)
         .onDisappear { model.closeBookmark() }
     }
 }

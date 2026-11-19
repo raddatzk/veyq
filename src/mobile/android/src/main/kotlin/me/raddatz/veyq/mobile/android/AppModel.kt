@@ -2215,6 +2215,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun filter(app: ApplicationId?) = updateShell { it.filter(app) }
     fun goBack() = updateShell { it.goBack() }
 
+    /** Kept link [node]'s page opened over what is on screen (core's `ShellModel.openBookmark`, #1032). */
+    fun openBookmark(node: me.raddatz.veyq.mobile.navigation.NodeAt) {
+        shellModel?.openBookmark(node)
+    }
+
     fun open(ref: ObjectRef) {
         shellModel?.open(ref)
     }
@@ -2283,7 +2288,31 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * guest's session in the Keystore-wrapped store, its uploads in the app's one queue.
      */
     val guests: GuestLinks by lazy {
-        GuestLinks(viewModelScope, PreferencesStore(getApplication()), AndroidGuestSessions(deviceKeys), uploads, deriver, { shellModel?.tenant }, ::appLanguage)
+        GuestLinks(viewModelScope, PreferencesStore(getApplication()), AndroidGuestSessions(deviceKeys), uploads, deriver, { shellModel?.tenant }, ::appLanguage, ::guestMusic)
+    }
+
+    /**
+     * The player a guest's Memory plays its music with (#1034; the member's, ADR 0142 decision 1): the tenant's one, or —
+     * signed out — one made for the links, which the music bar draws as it draws the tenant's.
+     */
+    private fun guestMusic(): me.raddatz.veyq.mobile.memories.GalleryModel.Music {
+        val app = getApplication<Application>()
+        val player = _music.value ?: me.raddatz.veyq.mobile.audio.MusicPlayer(
+            { events -> MediaDeck(app, events) }, musicControls,
+            me.raddatz.veyq.mobile.audio.randomIntOf { n -> ByteArray(n).also { java.security.SecureRandom().nextBytes(it) } },
+        ).also { _music.value = it }
+        return me.raddatz.veyq.mobile.memories.GalleryModel.Music(player) { n -> app.words(me.raddatz.veyq.mobile.words.Msg.MUSIC_UNTITLED, n) }
+    }
+
+    /**
+     * A READ_WRITE guest's files picked for the folder on screen ([level], #1034; the web's level upload): each its own file
+     * made as the guest, on the app's one queue; the level reads the link anew as each settles.
+     */
+    fun guestLevelUpload(level: me.raddatz.veyq.mobile.sharing.GuestLevel, uris: List<android.net.Uri>) {
+        viewModelScope.launch {
+            val sources = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { uris.mapNotNull { picked(it)?.let(::source) } }
+            if (level.upload(sources) == 0) sources.forEach { it.close() }
+        }
     }
 
     /** The bookmark page on screen (core's `BookmarkPage`): one at a time; an in-place link let go with it. */

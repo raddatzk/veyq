@@ -218,7 +218,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                     // The node on screen — an open object, or the folder Home shows — headed by core for every kind (the
                     // web's `NodePage` + `NodeHeader`): its name, what its kind's page contributes, core's actions.
                     val space = shell.space
-                    val headed = if (shell.person != null) null else shell.openObject?.at
+                    // a kept link's page is core's own (#1032): headed as every node, its body the bookmark's page
+                    val headed = if (shell.person != null) null else shell.bookmark ?: shell.openObject?.at
                         ?: if (shell.application == null && space != null) shell.folderAt(space) else null
                     val contribution = headed?.let { KindPages.of(it.kind)?.header?.invoke(it, model) }
                     TopAppBar(
@@ -226,6 +227,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                             when {
                                 // a person's profile (ADR 0144 decision 11): their name, as core's frame names them
                                 shell.person != null -> Text(personTitle(model, shell.person!!), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                shell.bookmark != null -> Text(shell.bookmark!!.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                                 shell.openObject != null -> Column {
                                     Text(shell.openObject!!.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                                     contribution?.subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted)) }
@@ -240,7 +242,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         actions = {
                             // a level's view toggle (Files' grid / list, ADR 0149 decision 8): Home and a folder, an
                             // application's list — one choice for every level and a person's Memories
-                            val atLevel = !shell.searching && shell.person == null && shell.openObject == null &&
+                            val atLevel = !shell.searching && shell.person == null && shell.bookmark == null && shell.openObject == null &&
                                 (shell.application != null || space != null) && shell.selectedTab?.key != "memories.map" && !(wide && shell.showsListBeside)
                             if (atLevel) {
                                 val tiles = levelView == me.raddatz.veyq.mobile.navigation.ViewMode.TILES
@@ -260,7 +262,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                             }
                             // The space's trash, from its Home (the web's level toolbar): every application's nodes.
                             val open = shell.openObject
-                            if (open == null && shell.person == null && shell.application == null && !shell.searching && space != null) {
+                            if (open == null && shell.person == null && shell.bookmark == null && shell.application == null && !shell.searching && space != null) {
                                 // the top level is no link's root: its share offers "Add files only" alone (the web's level share), where core says
                                 if (model.offersTopLevelShare(shell)) {
                                     IconButton(onClick = { uploadShareAt = space }) { Icon(Icons.Outlined.Share, stringResource(R.string.share_role_uploader)) }
@@ -303,7 +305,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
         ) { padding ->
             // the node on screen's head, which its body places first (core's, for every kind)
             val paged = shell.openObject?.at
-                ?: shell.space?.takeIf { shell.application == null && !shell.searching }?.let { shell.folderAt(it) }
+                ?: shell.space?.takeIf { shell.application == null && shell.bookmark == null && !shell.searching }?.let { shell.folderAt(it) }
             val pagedContribution = paged?.let { KindPages.of(it.kind)?.header?.invoke(it, model) }
             val hero: @Composable (androidx.compose.ui.unit.Dp) -> Unit = { inset ->
                 if (paged != null) NodeCoverHero(paged, model, canSet = me.raddatz.veyq.mobile.AppKinds.coverSettable(paged.kind, pagedContribution?.facts), inset = inset)
@@ -325,7 +327,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
             }
             // a pull to refresh reads the lists anew (#953): on a list, and on a page drawn from the tree — a Memory's, a
             // chapter's, a drop box's (a guest's new folder) —; a Pot has its own, a file's page none
-            val refreshable = !shell.searching && shell.person == null && shell.openObject?.kind.let { it == null || it in TREE_PAGES }
+            val refreshable = !shell.searching && shell.person == null && shell.bookmark == null && shell.openObject?.kind.let { it == null || it in TREE_PAGES }
             var refreshing by remember { mutableStateOf(false) }
             val pull = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState()
             Box(
@@ -339,6 +341,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                     // a wide window: the application's list and its open object side by side (Material 3's list-detail)
                     shell.searching -> SearchScreen(model, onClose = { model.search(false) })
                     shell.person != null -> PersonScreen(shell.person!!, model)
+                    // a kept link's page (ADR 0150 decision 6, #1032): the share in place, or the link on its own page
+                    shell.bookmark != null -> BookmarkScreen(shell.bookmark!!, model)
                     wide && shell.showsListBeside -> ListBeside(s, model)
                     shell.openObject != null -> KindPages.of(shell.openObject!!.kind)?.body?.invoke(shell.openObject!!, shell.selectedTab, model)
                         ?: ObjectScreen(shell.openObject!!, shell.selectedTab)
@@ -475,9 +479,11 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                     if (tiles) tileRows(group.nodes, columns, key = { it.scopeId + it.nodeId }, inset = 8.dp) { node, modifier ->
                         val folder = node.asFolder()
                         val obj = node.asObject()
+                        val bookmark = node.asBookmark()
                         if (folder != null) {
                             LevelTile(node.name, null, LocalCovers.current[node.nodeId]?.second, Icons.Outlined.Folder, folder = true, modifier = modifier) { onEnter(folder) }
                         } else if (obj != null) ObjectTile(obj, modifier, onOpen)
+                        else if (bookmark != null) LevelTile(bookmark.name, null, null, kindIcon(bookmark.kind), folder = false, modifier = modifier) { model.openBookmark(bookmark) }
                     } else items(group.nodes, key = { it.scopeId + it.nodeId }) { node ->
                         val folder = node.asFolder()
                         if (folder != null) {
@@ -494,6 +500,8 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                             )
                         } else {
                             node.asObject()?.let { ObjectRow(it, onOpen) }
+                            // a kept link (core's, #1032): its row opens the bookmark's page
+                            node.asBookmark()?.let { b -> BookmarkRow(b) { model.openBookmark(b) } }
                         }
                     }
                 }
@@ -914,6 +922,19 @@ private fun LazyListScope.group(title: Int?, refs: List<ObjectRef>, onOpen: (Obj
 }
 
 /** An object as a level's tile ([LevelTile]): its cover, its name, the application's facts; a pick dims what does not take it. */
+/** A kept link's row on a level (ADR 0150 decision 6): its name and the bookmark's tile; a tap opens its page. */
+@Composable
+private fun BookmarkRow(node: me.raddatz.veyq.mobile.navigation.NodeAt, onOpen: () -> Unit) {
+    // picking a place for what was shared: a kept link takes nothing (ADR 0138 decision 1)
+    val takes = !LocalPicking.current
+    ListItem(
+        headlineContent = { Text(node.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+        leadingContent = { Tile(kindIcon(node.kind)) },
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
+        modifier = Modifier.clip(MaterialTheme.shapes.medium).alpha(if (takes) 1f else 0.38f).testTag("bookmark-row").let { if (takes) it.clickableRow { onOpen() } else it },
+    )
+}
+
 @Composable
 private fun ObjectTile(ref: ObjectRef, modifier: Modifier, onOpen: (ObjectRef) -> Unit) {
     val details = LocalRowDetails.current[ref.nodeId].orEmpty()

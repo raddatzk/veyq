@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.sharing
 
+import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.flow.StateFlow
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.crypto.Context
@@ -27,6 +28,8 @@ class GuestAccess internal constructor(
     val now: () -> Long,
     /** Whether the platform hands a copy on through a share sheet (a file's "Send a copy"). */
     val sharesCopies: Boolean = false,
+    /** The player a guest's Memory plays its music with (the account's one, or the app's while signed out); null: none. */
+    val music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null,
 ) {
     val role: String get() = head.role
     val shareId: String get() = head.shareId
@@ -112,6 +115,62 @@ class GuestAccess internal constructor(
 
     /** A fresh client id (a UUID v4). */
     internal fun uuid(): String = client.uuid()
+
+    /** Whether [nodeId] is a guest's identity folder or lies in one: nothing is placed there but by its identity (ADR 0080 decision 11). */
+    fun inIdentityFolder(nodeId: String): Boolean {
+        val t = tree ?: return false
+        var at = t.node(nodeId)
+        val seen = HashSet<String>()
+        while (at != null && seen.add(at.id)) {
+            if (at.shareIdentityId != null) return true
+            at = at.parentId?.let { t.node(it) }
+        }
+        return false
+    }
+
+    /** What a guest's create came to. */
+    sealed class Created {
+        /** Made: its id and its fresh key (the caller's to zero), at its own epoch 0 under the parent's scope epoch. */
+        class Done(val nodeId: String, val key: ByteArray, val scopeEpoch: Int) : Created()
+        /** A sibling of the kind holds the name already (`slug_taken`). */
+        object Taken : Created()
+        /** The server refused it (an illegal place or kind, an epoch moved on, …): its code where it named one. */
+        class Refused(val code: String?) : Created()
+    }
+
+    /**
+     * A [kind] node named [name] created as the guest of [session] under [parent] (the web's `createShareNodeAsGuest`): a
+     * fresh key wrapped under the parent's, its name and slug token sealed under it, the scope epoch the parent's key was
+     * minted under stated. Never under a key the guest does not hold; the server checks the place and the kind
+     * (`GuestCreatableKinds`).
+     */
+    internal suspend fun createNode(session: GuestSession, parent: me.raddatz.veyq.mobile.session.OpenNode, kind: String, name: String): Created {
+        val input = me.raddatz.veyq.mobile.AppKinds.tokenInput(kind, name) ?: return Created.Refused("unknown_kind")
+        val nodeId = uuid()
+        val scopeEpoch = parent.scopeEpoch
+        val binding = arrayOf<Pair<String, Any?>>("scopeId" to scopeId, "nodeId" to nodeId, "epoch" to scopeEpoch.toLong(), "placementRevision" to 0L)
+        val key = suite.p.randomBytes(32)
+        val r = me.raddatz.veyq.mobile.api.apis.SharingApi(client.origin, client.http).createShareNode(
+            shareId, session.contributorToken,
+            me.raddatz.veyq.mobile.api.models.CreateShareNodeRequest(
+                parentEpoch = parent.epoch, nodeId = nodeId, parentId = parent.id, kind = kind,
+                encryptedName = me.raddatz.veyq.mobile.crypto.b64(suite.sealField(Context("node-name", *binding), parent.key, me.raddatz.veyq.mobile.crypto.utf8(name))),
+                slugToken = me.raddatz.veyq.mobile.crypto.b64(suite.slugToken(parent.key, parent.id, input)),
+                scopeEpoch = scopeEpoch,
+                wrappedContentKey = me.raddatz.veyq.mobile.crypto.b64(suite.seal(Context("content-key", *binding), parent.key, key)),
+            ),
+            pwToken,
+        )
+        if (r.success && r.body().nodeId == nodeId) return Created.Done(nodeId, key, scopeEpoch)
+        key.fill(0)
+        val code = GuestBlobs.codeOf(runCatching { r.response.bodyAsText() }.getOrDefault(""))
+        return if (code == "slug_taken" || (r.status == 409 && code == null)) Created.Taken else Created.Refused(code ?: "status_${r.status}")
+    }
+
+    /** Take back node [nodeId] this guest created for an upload that never filled it (`abandonShareNode`); best effort. */
+    internal suspend fun abandonNode(session: GuestSession, nodeId: String) {
+        runCatching { me.raddatz.veyq.mobile.api.apis.SharingApi(client.origin, client.http).abandonShareNode(shareId, nodeId, session.contributorToken, pwToken) }
+    }
 
     companion object {
         const val READ = "READ"

@@ -1193,6 +1193,12 @@ final class AppModel {
         applyShell(start: false)
     }
 
+    /// Kept link [node]'s page opened over what is on screen (core's `ShellModel.openBookmark`, #1032).
+    func openBookmark(_ node: NodeAt) {
+        shellModel?.openBookmark(node: node)
+        applyShell(start: false)
+    }
+
     /// Person `userId`'s frame as the tenant's directory names them; nil while no tenant is open.
     func profile(_ userId: String) -> PersonProfile? { shellModel?.profile(userId: userId) }
 
@@ -1378,7 +1384,17 @@ final class AppModel {
     private func openMusic(_ m: ShellModel, switched: Bool) {
         if musicPlayer != nil, !switched { return }
         closeMusic()
-        let player = m.musicPlayer(newDeck: { AVDeck.make($0) }, controls: SystemMusicControls())
+        holdMusic(m.musicPlayer(newDeck: { AVDeck.make($0) }, controls: SystemMusicControls()))
+    }
+
+    /// What a guest's Memory plays its music with (#1034): the account's player, or — signed out — one made for the links,
+    /// which the music bar draws as it draws the account's.
+    func guestMusic() -> GalleryModel.Music? {
+        if musicPlayer == nil { holdMusic(AppleSharing.shared.musicPlayer(newDeck: { AVDeck.make($0) }, controls: SystemMusicControls())) }
+        return galleryMusic
+    }
+
+    private func holdMusic(_ player: MusicPlayer) {
         musicPlayer = player
         let id = ObjectIdentifier(player)
         musicPlayerWatch = player.watch { @Sendable state in

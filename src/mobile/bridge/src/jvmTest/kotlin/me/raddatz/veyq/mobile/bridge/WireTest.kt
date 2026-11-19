@@ -166,6 +166,8 @@ class WireTest {
             Call.ReceivedOpenNode(80, "n1"), Call.ReceivedBack(80), Call.ReceivedStay(80), Call.ReceivedLeave(80), Call.ReceivedName(80, "Ben"),
             Call.ReceivedForgetGuest(80), Call.ReceivedKeep(80, "s1"), Call.ReceivedUpload(80, listOf("/tmp/a.jpg")), Call.ReceivedClose(80),
             Call.ReceivedKeepPlaces(80), Call.ReceivedReport(80), Call.ReceivedReportShown(80),
+            Call.ReceivedReportNode(80, "n1"), Call.ReceivedNewFolder(80, "Neu"),
+            Call.ShellOpenBookmark(me.raddatz.veyq.mobile.navigation.NodeAt("s1", "b1", "SHARE_BOOKMARK", "Ein Link")),
             Call.BookmarkOpen(me.raddatz.veyq.mobile.navigation.NodeAt("s1", "b1", "SHARE_BOOKMARK", "photos.example.org")), Call.BookmarkOwnPage(90), Call.BookmarkReportShared(90),
             Call.BookmarkClose(90), Call.BookmarkCheck("s1", "https://photos.example.org/s/x#k=y"),
             Call.BookmarkCreate("s1", null, "https://photos.example.org/s/x#k=y", "pw", ""), Call.BookmarkCreate("s1", "f1", "t", "", "Trip"),
@@ -464,7 +466,7 @@ class WireTest {
                 80,
                 ReceivedShown(
                     "photos.example.org", ReceivedGate.READY, null, false, false, "", "", "", "Be kind", "Summer", "READ_WRITE",
-                    ReceivedPage(ReceivedPageKind.LEVEL, "Summer", "FOLDER", listOf(ReceivedRow("n1", "MEMORY", "Trip", false)), null, null, null, emptyList()),
+                    ReceivedPage(ReceivedPageKind.LEVEL, "Summer", "FOLDER", listOf(ReceivedRow("n1", "MEMORY", "Trip", false)), null, null, null, emptyList(), writes = true),
                     true, "Ben", false, false, true, false,
                 ),
             ),

@@ -5,6 +5,9 @@ import io.ktor.client.HttpClientConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.crypto.Primitives
@@ -14,19 +17,76 @@ import me.raddatz.veyq.mobile.session.DeviceStore
 
 /**
  * A folder of a link as its guest sees it (ADR 0150 decision 5: core's level over the guest's tree): its children by
- * their order, each opened as its kind's page by the [GuestView]. The member's level, without a member's functions.
+ * their order, each opened as its kind's page by the [GuestView]. The member's level, without a member's functions — and
+ * a READ_WRITE guest's writes as the web's share page grants them at a folder (`ShareTreePage`, #1034): a new folder
+ * (`createShareNodeAsGuest`) and what an application's level action offers (Depot: files uploaded into it), once the
+ * guest named itself; never in a guest's identity folder. After a write the link is read anew ([GuestView.reload]).
  */
-class GuestLevel internal constructor(val node: NodeAt, private val tree: GuestTree) {
+class GuestLevel internal constructor(
+    val node: NodeAt,
+    private val tree: GuestTree,
+    private val access: GuestAccess? = null,
+    private val view: GuestView? = null,
+) {
     /** One row: a child's id, kind and name (a guest's identity folder is marked, as the member's). */
     data class Row(val nodeId: String, val kind: String, val name: String, val identity: Boolean)
 
     val rows: List<Row> get() = tree.children(node.nodeId).map { Row(it.id, it.kind, it.name, it.shareIdentityId != null) }
 
+    /**
+     * Whether the guest adds here — a READ_WRITE link, outside a guest's identity folder (the server refuses it there,
+     * `illegal_structure`): New folder and the upload are offered. A READ guest's level offers nothing.
+     */
+    val writes: Boolean get() = access != null && access.role == GuestAccess.READ_WRITE && !access.inIdentityFolder(node.nodeId)
+
+    /** The guest's session: a write asks the guest's name first ([GuestAccess.nameGuest]) while it is null. */
+    val guest: StateFlow<GuestSession?>? get() = access?.session
+
+    /**
+     * New folder [name] here as the guest; null once made (the link read anew), else why not: an empty name, a sibling's
+     * name, a refusal. Nothing before the guest named itself.
+     */
+    suspend fun createFolder(name: String): me.raddatz.veyq.mobile.words.Notice? {
+        val a = access ?: return me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_FAILED)
+        val n = name.trim()
+        if (n.isEmpty()) return me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_NAME_EMPTY)
+        val session = a.session.value
+        val parent = tree.node(node.nodeId)
+        if (!writes || session == null || parent == null) return me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_FAILED)
+        val made = runCatching { a.createNode(session, parent, NodeRef.FOLDER, n) }.getOrNull()
+        return when (made) {
+            is GuestAccess.Created.Done -> {
+                made.key.fill(0)
+                view?.reload()
+                null
+            }
+            GuestAccess.Created.Taken -> me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_NAME_TAKEN)
+            else -> me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_FAILED)
+        }
+    }
+
+    /**
+     * [sources] uploaded into this folder as the guest (the application's level action, `AppKinds.guestLevelUploads`:
+     * Depot's files), on the guest view's queue; how many were queued — none before the guest named itself, on a READ
+     * link, without a queue. Each one settled reads the link anew, so its row shows.
+     */
+    fun upload(sources: List<me.raddatz.veyq.mobile.blob.UploadSource>): Int {
+        val a = access ?: return 0
+        val queue = a.queue ?: return 0
+        val session = a.session.value ?: return 0
+        val parent = tree.node(node.nodeId) ?: return 0
+        if (!writes || sources.isEmpty()) return 0
+        val jobs = AppKinds.guestLevelUploads(a, session, parent, sources)
+        if (jobs.isEmpty()) return 0
+        queue.enqueue(jobs, node.name, null, { view?.reloadSoon() }, null)
+        return jobs.size
+    }
+
     companion object {
         /** Core's answer for a folder of a READ or READ_WRITE link. */
-        val door = GuestDoor { access, node, _ ->
+        val door = GuestDoor { access, node, view ->
             val tree = access.tree ?: return@GuestDoor GuestPage.NotShown(node)
-            GuestPage.Level(node, GuestLevel(node, tree))
+            GuestPage.Level(node, GuestLevel(node, tree, access, view))
         }
     }
 }
@@ -44,7 +104,14 @@ class GuestView internal constructor(
     private val deriver: MediaUpload.Deriver?,
     private val now: () -> Long,
     private val sharesCopies: Boolean = false,
+    private val music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null,
 ) {
+    /** Where a write's settle reads the link anew ([reloadSoon]); cancelled at [close]. */
+    private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+
+    /** Trees a [reload] replaced: their keys are still held by pages opened before it (an upload under way), zeroed at [close]. */
+    private val retired = mutableListOf<GuestTree>()
+
     private val _page = MutableStateFlow<GuestPage?>(null)
 
     /** The page on screen, once the gates are passed; null before. */
@@ -70,10 +137,35 @@ class GuestView internal constructor(
         if (gates.state.value !is ShareGates.State.Ready || access != null) return
         val head = gates.head ?: return
         val tree = if (head.role == GuestAccess.WRITE_ONLY) null else runCatching { GuestTree.open(gates.guestClient.suite, head) }.getOrNull()
-        val a = GuestAccess(gates, head, tree, queue, deriver, now, sharesCopies)
+        val a = GuestAccess(gates, head, tree, queue, deriver, now, sharesCopies, music)
         access = a
         _stack.value = emptyList()
         show(a.root)
+    }
+
+    /**
+     * The link read anew behind its passed gates (after a guest's write; the web's share page re-resolves): a fresh tree,
+     * the nodes on the back stack that are still served kept, the page on top opened again (a node gone: the deepest one
+     * left). The tree before is kept for what still holds its keys until [close]. Nothing where it does not resolve now.
+     */
+    suspend fun reload() {
+        val old = access ?: return
+        if (old.tree == null || !gates.reresolve()) return
+        val head = gates.head ?: return
+        val tree = runCatching { GuestTree.open(gates.guestClient.suite, head) }.getOrNull() ?: return
+        val a = GuestAccess(gates, head, tree, queue, deriver, now, sharesCopies, music)
+        access = a
+        retired += old.tree
+        val kept = _stack.value.mapNotNull { at ->
+            if (at.nodeId == old.root.nodeId) a.root else tree.node(at.nodeId)?.let { NodeAt(it.scopeId, it.id, it.kind, it.name) }
+        }.ifEmpty { listOf(a.root) }
+        _stack.value = kept.dropLast(1)
+        show(kept.last())
+    }
+
+    /** [reload] off the caller's thread (an upload's settle). */
+    internal fun reloadSoon() {
+        scope.launch { runCatching { reload() } }
     }
 
     /** Child [nodeId] of the node on screen opened as its kind's guest page. */
@@ -109,7 +201,10 @@ class GuestView internal constructor(
 
     /** The link let go: its key and the tree's keys zeroed, its client closed. */
     fun close() {
+        scope.cancel()
         access?.tree?.close()
+        retired.forEach { it.close() }
+        retired.clear()
         access = null
         _page.value = null
         gates.close()
@@ -126,10 +221,11 @@ class GuestView internal constructor(
             store: DeviceStore, sessions: GuestSessions, locale: () -> String, handedPassword: String? = null,
             queue: UploadQueue? = null, deriver: MediaUpload.Deriver? = null, now: () -> Long = { 0L }, sharesCopies: Boolean = false,
             doors: (kind: String, role: String) -> GuestDoor? = AppKinds::guestDoor,
+            music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null,
         ): GuestView {
             val guest = GuestClient.of(primitives, link.origin, client)
             val gates = ShareGates(link, guest, store, sessions, locale, handedPassword) { h -> h.rootKind?.let { doors(it, h.role) } != null }
-            return GuestView(gates, doors, queue, deriver, now, sharesCopies)
+            return GuestView(gates, doors, queue, deriver, now, sharesCopies, music)
         }
 
         /** Over an existing guest client (a test's played instance). */
@@ -137,9 +233,10 @@ class GuestView internal constructor(
             link: ReceivedLink.ShareLink, guest: GuestClient, store: DeviceStore, sessions: GuestSessions, locale: () -> String = { "en" },
             handedPassword: String? = null, queue: UploadQueue? = null, deriver: MediaUpload.Deriver? = null, now: () -> Long = { 0L },
             doors: (kind: String, role: String) -> GuestDoor? = AppKinds::guestDoor,
+            music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null,
         ): GuestView {
             val gates = ShareGates(link, guest, store, sessions, locale, handedPassword) { h -> h.rootKind?.let { doors(it, h.role) } != null }
-            return GuestView(gates, doors, queue, deriver, now)
+            return GuestView(gates, doors, queue, deriver, now, music = music)
         }
     }
 }
