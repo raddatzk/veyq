@@ -846,11 +846,54 @@ internal sealed class Call {
     /** *Keep*: the link kept as a bookmark at the top of space [scope] (signed in only), named by its host. */
     @Serializable @SerialName("Received.Keep") data class ReceivedKeep(val received: Long, val scope: String) : Call()
 
+    /** Where *Keep* may keep the link (`GuestScreen.keepPlaces`: the personal space first), [Answer.KeepPlaces]. */
+    @Serializable @SerialName("Received.KeepPlaces") data class ReceivedKeepPlaces(val received: Long) : Call()
+
     /** Files at [paths] added by a WRITE_ONLY link's guest (a drop box's, a Memory's uploader). */
     @Serializable @SerialName("Received.Upload") data class ReceivedUpload(val received: Long, val paths: List<String>) : Call()
 
     /** The link's screen closed without asking (the app quits): as [ReceivedLeave]. */
     @Serializable @SerialName("Received.Close") data class ReceivedClose(val received: Long) : Call()
+
+    /**
+     * The link reported to its own operator (`GuestScreen.reportSheet`, ADR 0150 decision 6): a report sheet for the
+     * `Report.*` calls ([Answer.ReportOpened]); refused before the gates passed.
+     */
+    @Serializable @SerialName("Received.Report") data class ReceivedReport(val received: Long) : Call()
+
+    /** The report the link asked for ([ReceivedShown.reportAsked]) opened by the host: not asked again. */
+    @Serializable @SerialName("Received.ReportShown") data class ReceivedReportShown(val received: Long) : Call()
+
+    /**
+     * Kept link [node]'s page (core's `BookmarkPage`, ADR 0150 decision 6): its meta opened, the share shown in place while
+     * the tenant has `core.share-embedding` on, else opened on its own page. Answered with its id
+     * ([Answer.BookmarkOpened]) for [Watched.Bookmark] and the `Bookmark.*` calls. Loaded at once.
+     */
+    @Serializable @SerialName("Bookmark.Open") data class BookmarkOpen(val node: NodeAt) : Call()
+
+    /** *Open on its own page* (the header's `open-own-page`): the link's screen above the shell ([Answer.ReceivedOpened]). */
+    @Serializable @SerialName("Bookmark.OwnPage") data class BookmarkOwnPage(val bookmark: Long) : Call()
+
+    /** *Report shared content*: the link's screen with its report asked ([Answer.ReceivedOpened]), to the share's own operator. */
+    @Serializable @SerialName("Bookmark.ReportShared") data class BookmarkReportShared(val bookmark: Long) : Call()
+
+    /** The bookmark's page left: an in-place link let go with it. */
+    @Serializable @SerialName("Bookmark.Close") data class BookmarkClose(val bookmark: Long) : Call()
+
+    /**
+     * The bookmark dialog's link as typed (core's `BookmarkCreate.link`): why it is none to keep, the host its name defaults
+     * to, and whether space [scopeId] is a group space's ([Answer.BookmarkChecked]). Inward only: the link never comes back.
+     */
+    @Serializable @SerialName("Bookmark.Check") data class BookmarkCheck(val scopeId: String, val text: String) : Call()
+
+    /**
+     * New → Bookmark saved (core's `BookmarkCreate.save`): link [text] with its [password] (empty: none), named [name]
+     * (empty: its host), in [scopeId] under [parentId] (null: the space's top). [Answer.Created], or refused
+     * ([Answer.Why.NOT_TAKEN]: [me.raddatz.veyq.mobile.words.Msg.BOOKMARK_CREATE_FAILED], the form kept).
+     */
+    @Serializable @SerialName("Bookmark.Create") data class BookmarkCreate(
+        val scopeId: String, val parentId: String?, val text: String, val password: String, val name: String,
+    ) : Call()
 
     /**
      * A Memory [name] made where New makes it (`ShellModel.createMemory`: in [scopeId] under [parentId], null the space's
@@ -1707,6 +1750,18 @@ internal sealed class Answer {
      */
     @Serializable @SerialName("ReceivedProblem") data class ReceivedProblem(val problem: Msg, val browser: Boolean) : Answer()
 
+    /** A kept link's page opened ([Call.BookmarkOpen]): its id, for [Watched.Bookmark] and the `Bookmark.*` calls. */
+    @Serializable @SerialName("BookmarkOpened") data class BookmarkOpened(val bookmark: Long) : Answer()
+
+    /** The spaces *Keep* offers ([Call.ReceivedKeepPlaces]), the personal space first, each with its words. */
+    @Serializable @SerialName("KeepPlaces") data class KeepPlaces(val places: List<ShellShown.ShownSpace>) : Answer()
+
+    /**
+     * The bookmark dialog's link checked ([Call.BookmarkCheck]): why it is none to keep (null: fine, or empty), the host the
+     * name defaults to once it reads, whether the place is a group space's ([Msg.BOOKMARK_WHO_CAN_OPEN]).
+     */
+    @Serializable @SerialName("BookmarkChecked") data class BookmarkChecked(val problem: Msg?, val host: String?, val groupSpace: Boolean) : Answer()
+
     /** A scan opened ([Call.ScanOpen]): its id, for [Watched.Scan] and the scan's calls. */
     @Serializable @SerialName("ScanOpened") data class ScanOpened(val scan: Long) : Answer()
 
@@ -1887,6 +1942,9 @@ internal sealed class Answer {
         /** A received link: none by that id (left or closed). */
         NO_SUCH_RECEIVED,
 
+        /** A kept link's page: none by that id (closed). */
+        NO_SUCH_BOOKMARK,
+
         /** The music: no player (no tenant open, or a composition without decks); no Music view by that id; no deck by that id. */
         NO_PLAYER, NO_SUCH_MUSIC, NO_SUCH_DECK,
 
@@ -2047,6 +2105,9 @@ internal sealed class Watched {
 
     /** A received link opened by [Call.ReceivedOpen]. */
     @Serializable @SerialName("Received") data class Received(val received: Long) : Watched()
+
+    /** A kept link's page opened by [Call.BookmarkOpen]. */
+    @Serializable @SerialName("Bookmark") data class Bookmark(val bookmark: Long) : Watched()
 }
 
 /** One state a watch delivers: the first at once, then each change. */
@@ -2115,6 +2176,9 @@ internal sealed class Update {
 
     /** A received link's screen ([Watched.Received]); null once it was left or closed. Never its link nor its key. */
     @Serializable @SerialName("Received") data class Received(val received: Long, val shown: ReceivedShown?) : Update()
+
+    /** A kept link's page ([Watched.Bookmark]); null once it was closed. Never its link, its password nor its key. */
+    @Serializable @SerialName("Bookmark") data class Bookmark(val bookmark: Long, val shown: BookmarkShown?) : Update()
 
     /** An account's Settings; null once it was closed (or an id the bridge does not hold). */
     @Serializable @SerialName("Settings") data class Settings(val settings: Long, val shown: SettingsShown?) : Update()
@@ -3826,4 +3890,25 @@ internal class ReceivedShown(
     val left: Boolean,
     val keepOffered: Boolean,
     val reportAsked: Boolean,
+    /**
+     * The days the link's instance keeps a writing guest's address, port, time and `Origin` (ADR 0093 § 10,
+     * `PublicShare.guestWriteRecordDays`): the host shows the web's notice (`share_guest_record_*`) before any write while
+     * it is set; null for a link that does not write, or before the gates passed.
+     */
+    val recordDays: Int? = null,
+    /** The link's instance's privacy notice at its guest-write record passage (the notice's *more*): its origin's, no share id. */
+    val privacy: String? = null,
 )
+
+/** Where a kept link's page stands (core's `BookmarkPage.State`). */
+@Serializable
+internal enum class BookmarkState { LOADING, UNREADABLE, IN_PLACE, ON_ITS_OWN }
+
+/**
+ * A kept link's page as the host draws it (ADR 0150 decision 6): where it stands, the link's host once the meta read
+ * ([Msg.BOOKMARK_EMBED_REGION]) and, shown in place, the received link's id for [Watched.Received] and the `Received.*`
+ * calls. **Never the link, its password or its key.**
+ */
+@Serializable
+@SerialName("BookmarkShown")
+internal class BookmarkShown(val state: BookmarkState, val host: String, val received: Long?)

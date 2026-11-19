@@ -819,8 +819,9 @@ internal sealed class ShellView
         {
             // what the core offers here (AppKinds.createsWhere): a folder, a Pot and a Memory, on Home files and a folder uploaded too
             _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "new",
-                // a chapter is a Memory's page's own, never a level's
-                shown.creates.Where(c => c.create is not Create.Chapter).Select(c => (Said.Key(c.word), $"new:{c.create}", c.create switch
+                // a chapter is a Memory's page's own, never a level's; the bookmark's dialog is drawn by
+                // cr-app-received-links phase 10 (inbox #1020)
+                shown.creates.Where(c => c.create is not Create.Chapter and not Create.Bookmark).Select(c => (Said.Key(c.word), $"new:{c.create}", c.create switch
                 {
                     Create.Folder => (Action?)NewFolder,
                     Create.Memory => NewMemory,

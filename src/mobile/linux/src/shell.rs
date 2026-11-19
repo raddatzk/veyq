@@ -24,6 +24,7 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 
 use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::Facts, wire::NodeAt, wire::ObjectRef, wire::ShellModelState, wire::ShellShown, wire::ViewModeShown};
+use crate::bookmark_page::BookmarkPage;
 use crate::drop_box::DropBoxPage;
 use crate::file_page::FilePage;
 use crate::memories_map::MemoriesMap;
@@ -97,6 +98,8 @@ pub struct Shell {
     file: RefCell<Option<FilePage>>,
     drop_box: RefCell<Option<DropBoxPage>>,
     memory: RefCell<Option<MemoryPage>>,
+    /// A kept link's page while it is pushed over the content ([BookmarkPage]); dropped when it is popped.
+    bookmark: Rc<RefCell<Option<BookmarkPage>>>,
     /// The Memories bar's Map tab while it is chosen ([MemoriesMap]); its map closes when it goes.
     memories_map: RefCell<Option<MemoriesMap>>,
     /// A person's profile while the shell's state names one (`Shell.person`, ADR 0144 decision 11).
@@ -265,6 +268,7 @@ impl Shell {
             file: RefCell::new(None),
             drop_box: RefCell::new(None),
             memory: RefCell::new(None),
+            bookmark: Rc::new(RefCell::new(None)),
             memories_map: RefCell::new(None),
             person: RefCell::new(None),
             nav,
@@ -515,6 +519,30 @@ impl Shell {
             });
         });
         window.add_action(&create_memory);
+        // New → Bookmark (ADR 0150 decision 6): its dialog keeps the link where New is
+        let create_bookmark = gio::SimpleAction::new("create-bookmark", None);
+        let weak = Rc::downgrade(self);
+        create_bookmark.connect_activate(move |_, _| {
+            let Some(s) = weak.upgrade() else { return };
+            let Some(level) = s.level() else { return };
+            // the bookmark made shows in the level read anew (the core forgot its tree)
+            crate::bookmark_create::open(&s.window, level.scope_id, level.parent_id, |_| bridge::send(Call::ShellRefresh));
+        });
+        window.add_action(&create_bookmark);
+        // a kept link's row opens its page over the content (its own header, back pops it), as a lightbox is pushed
+        let weak = Rc::downgrade(self);
+        crate::bookmark_page::set_opener(move |node| {
+            let Some(s) = weak.upgrade() else { return };
+            let page = BookmarkPage::open(node, s.window.upcast_ref());
+            s.nav.push(&page.navigation_page());
+            *s.bookmark.borrow_mut() = Some(page);
+        });
+        let held = self.bookmark.clone();
+        self.nav.connect_popped(move |_, popped| {
+            if held.borrow().as_ref().is_some_and(|p| p.is(popped)) {
+                held.borrow_mut().take();
+            }
+        });
         // the space's trash, from the switcher's menu (`trash`)
         let open_trash = gio::SimpleAction::new("trash", None);
         let weak = Rc::downgrade(self);
@@ -682,8 +710,10 @@ impl Shell {
         let space_menu = gio::Menu::new();
         space_menu.append(Some(&words::trash_title()), Some("win.trash"));
         menu.append_section(None, &space_menu);
-        // "Manage servers" (the window's `win.manage`, `manage.rs`)
+        // "Manage servers" (the window's `win.manage`, `manage.rs`) and *Open a link* (`win.open-link`, `received.rs`), the
+        // account's menu (cr-app-received-links owner question 2)
         let manage = gio::Menu::new();
+        manage.append(Some(&words::link_open()), Some("win.open-link"));
         manage.append(Some(&words::switcher_manage()), Some("win.manage"));
         menu.append_section(None, &manage);
         self.switcher.set_menu_model(Some(&menu));
@@ -706,8 +736,7 @@ impl Shell {
                 Create::Memory => "win.create-memory",
                 // a chapter is a Memory's page's own (its "Add chapter"), never a level's
                 Create::Chapter => continue,
-                // the bookmark's dialog is drawn by cr-app-received-links phase 9 (`createsWhere` offers it then)
-                Create::Bookmark => continue,
+                Create::Bookmark => "win.create-bookmark",
             };
             menu.append(Some(&said::key(&c.word)), Some(action));
         }

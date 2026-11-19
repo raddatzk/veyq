@@ -59,6 +59,15 @@ struct Inner {
 impl PotPage {
     /// Opens Pot [r] on a page inside [window], saying what its actions did in [toasts].
     pub fn open(r: &ObjectRef, window: &gtk::Window, toasts: &adw::ToastOverlay) -> Self {
+        Self::over(r, None, window, toasts)
+    }
+
+    /// Pot [r]'s page over the model the core already opened as [pot] (a received link's guest page, `ReceivedPage.pot`).
+    pub fn opened(r: &ObjectRef, pot: i64, window: &gtk::Window, toasts: &adw::ToastOverlay) -> Self {
+        Self::over(r, Some(pot), window, toasts)
+    }
+
+    fn over(r: &ObjectRef, opened: Option<i64>, window: &gtk::Window, toasts: &adw::ToastOverlay) -> Self {
         let inner = Rc::new(Inner {
             root: gtk::Box::new(gtk::Orientation::Vertical, 0),
             id: Cell::new(None),
@@ -101,9 +110,15 @@ impl PotPage {
         let weak = Rc::downgrade(&inner);
         let open = r.clone();
         glib::spawn_future_local(async move {
-            let Ok((Answer::PotOpened { pot }, _)) = bridge::call(&Call::PotOpen { r#ref: open }).await else {
-                eprintln!("veyq: the Pot did not open in the core");
-                return;
+            let pot = match opened {
+                Some(pot) => pot,
+                None => {
+                    let Ok((Answer::PotOpened { pot }, _)) = bridge::call(&Call::PotOpen { r#ref: open }).await else {
+                        eprintln!("veyq: the Pot did not open in the core");
+                        return;
+                    };
+                    pot
+                }
             };
             let Some(inner) = weak.upgrade() else {
                 bridge::send(Call::PotClose { pot });

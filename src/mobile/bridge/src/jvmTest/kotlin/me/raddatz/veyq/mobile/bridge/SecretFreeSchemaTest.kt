@@ -53,6 +53,7 @@ class SecretFreeSchemaTest {
         "PasswordChange.Check.newPassword" to "the new password as the person left its field, on its way to the core's breached-password check (only a 5-hex prefix of its SHA-1 leaves the device)",
         "KeyRotation.Check.newPassword" to "the rotation's new password as the person left its field, on its way to the core's breached-password check",
         "Received.Password.password" to "the password a received link asks for, as the person typed it, on its way to the core",
+        "Bookmark.Create.password" to "a kept link's password as the person typed it into the bookmark dialog, on its way to the core, which seals it",
         "Erasure.Run.password" to "the password the person typed to erase the account, on its way to the core's proof",
     )
     /** The outward fields that carry a guest link's address, its key in the fragment, each with why. */

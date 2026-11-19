@@ -1,6 +1,7 @@
 //! The veyq app on Linux: the window, the core started behind it, and the screen the core's session says — opening,
 //! the sign-in, or the shell (ADR 0123's Consequences, the Linux app). Each screen draws the core's state and calls its
 //! actions; nothing else.
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use adw::prelude::*;
@@ -9,6 +10,7 @@ use veyq::bridge::wire::{Answer, Call, Config, Gate, Method, Update, Watched};
 use veyq::bridge::{self, DeviceStore, Start};
 use veyq::shell::Shell;
 use veyq::manage::Manage;
+use veyq::received::{Mode, ReceivedView};
 use veyq::sign_in::{Offer, SignIn, Unlock};
 use veyq::theme::APP_ID;
 use veyq::{dev_login, dev_scan, dev_settings, words};
@@ -33,13 +35,42 @@ struct Screens {
     offer: Offer,
     shell: Rc<Shell>,
     manage: Rc<Manage>,
+    /// A received link's screen while one stands above everything else (ADR 0150 decision 4), and the face it covers —
+    /// what the session's gate shows meanwhile, put back once the link is let go.
+    received: RefCell<Option<ReceivedView>>,
+    behind: RefCell<Option<gtk::Widget>>,
 }
 
 impl Screens {
     fn face(&self, w: &impl IsA<gtk::Widget>) {
+        if self.received.borrow().is_some() {
+            *self.behind.borrow_mut() = Some(w.clone().upcast());
+            return;
+        }
         if self.window.content().as_ref() != Some(w.upcast_ref()) {
             self.window.set_content(Some(w));
         }
+    }
+
+    /// Received link [received] as the window's screen until it is let go; then the face it covered comes back.
+    fn present_received(self: &Rc<Self>, received: i64, browser: Option<String>) {
+        if self.received.borrow().is_none() {
+            *self.behind.borrow_mut() = self.window.content();
+        }
+        let weak = Rc::downgrade(self);
+        let view = ReceivedView::new(received, Mode::OnItsOwn, self.window.upcast_ref(), browser, move || {
+            let Some(s) = weak.upgrade() else { return };
+            // the view is dropped once this returns: on a later turn of the loop, not inside its own update
+            glib::idle_add_local_once(move || {
+                s.received.borrow_mut().take();
+                if let Some(w) = s.behind.borrow_mut().take() {
+                    s.window.set_content(Some(&w));
+                }
+            });
+        });
+        self.window.set_content(Some(view.widget()));
+        // another link opened over one already open replaces it (the old one let go as the window would)
+        *self.received.borrow_mut() = Some(view);
     }
 
     fn gate(&self, gate: &Gate) {
@@ -123,7 +154,30 @@ fn activate(app: &adw::Application) {
     window.add_action(&open_settings);
     let said = shell.clone();
     let offer = Offer::new(Rc::new(move |text: String| said.say(&text)));
-    let screens = Rc::new(Screens { window: window.clone(), status, status_page, sign_in: SignIn::new(), unlock: Unlock::new(), offer, shell, manage });
+    let screens = Rc::new(Screens {
+        window: window.clone(),
+        status,
+        status_page,
+        sign_in: SignIn::new(),
+        unlock: Unlock::new(),
+        offer,
+        shell,
+        manage,
+        received: RefCell::new(None),
+        behind: RefCell::new(None),
+    });
+    // *Open a link* (ADR 0150 decision 4): on the sign-in page and in the switcher's menu; an opened link stands above
+    // whatever shows until it is let go
+    let open_link = gtk::gio::SimpleAction::new("open-link", None);
+    let w = window.clone();
+    open_link.connect_activate(move |_, _| veyq::received::open_link(&w));
+    window.add_action(&open_link);
+    let s = Rc::downgrade(&screens);
+    veyq::received::set_presenter(move |received, browser| {
+        if let Some(s) = s.upgrade() {
+            s.present_received(received, browser);
+        }
+    });
     window.present();
 
     let store = DeviceStore::open(glib::user_data_dir().join("veyq").join("device-store.json")).unwrap_or_else(|e| {

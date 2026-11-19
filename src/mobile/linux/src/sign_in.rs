@@ -128,9 +128,13 @@ impl SignIn {
         }
         let link_scan = adw::ButtonRow::builder().title(words::signin_link_scan()).start_icon_name("camera-photo-symbolic").visible(false).build();
         let link_show = adw::ButtonRow::builder().title(words::signin_link_show()).build();
+        // *Open a link* under the sign-in (ADR 0150 decision 4): a received link needs no session (`win.open-link`)
+        let open_link = adw::ButtonRow::builder().title(words::link_open()).start_icon_name("insert-link-symbolic").action_name("win.open-link").build();
+        open_link.set_widget_name("open-link");
         let links = adw::PreferencesGroup::new();
         links.add(&link_scan);
         links.add(&link_show);
+        links.add(&open_link);
         let other_server = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
         other_server.add_css_class("dim-label");
         // Staying signed in is no longer chosen here: the core offers it after the sign-in (ADR 0123 decision 8), drawn by `Offer`
