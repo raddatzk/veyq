@@ -455,9 +455,6 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
                 inner.relayout();
                 inner.step_uploads();
                 inner.open_searched();
-                if let Some(c) = inner.contributions.borrow().as_ref() {
-                    c.gallery_changed();
-                }
                 if let (Some(s), Some(id), Some(f)) = (inner.shown.borrow().as_ref(), inner.id.get(), inner.on_shown.borrow().as_ref()) {
                     f(s, id);
                 }
@@ -541,13 +538,12 @@ impl Inner {
             *self.contributions.borrow_mut() = None;
             if let (true, Some(gallery)) = (contributions, self.id.get()) {
                 let weak = Rc::downgrade(self);
-                let view = ContributionsView::open(gallery, &self.window, &self.toasts, move |media_id| {
+                // a bucket's tile opens the lightbox over that bucket's media (#996)
+                let view = ContributionsView::open(gallery, &self.window, &self.toasts, move |open| {
                     let Some(inner) = weak.upgrade() else { return };
-                    let at = inner.shown.borrow().as_ref().and_then(|s| s.rows.as_ref()?.iter().position(|r| r.media_id == media_id));
-                    match at {
-                        Some(at) => inner.open_lightbox(at),
-                        None => eprintln!("veyq: contributions: the medium is not in the gallery's filtered rows"),
-                    }
+                    eprintln!("veyq: lightbox asked over a bucket");
+                    let lightbox = Lightbox::open_by(open, &inner.node, &inner.window, &inner.toasts, &inner.nav);
+                    *inner.lightbox.borrow_mut() = Some(lightbox);
                 });
                 self.contributions_slot.append(view.widget());
                 *self.contributions.borrow_mut() = Some(view);

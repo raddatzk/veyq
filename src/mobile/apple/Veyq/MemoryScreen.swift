@@ -120,7 +120,8 @@ struct MemoryScreen: View {
                 MemoryMapView(model: model, tracks: tracks, gallery: state, banner: listBanner, facts: listFacts, viewSwitch: viewSwitch)
             } else if showsContributions, let contributions, let gallery = model.galleryModel(node) {
                 ContributionsView(model: model, gallery: gallery, held: contributions, marks: state?.marks ?? [:], head: AnyView(pageHead)) { mediaId in
-                    open = LightboxStart(gallery: gallery, box: gallery.lightboxOn(mediaId: mediaId))
+                    // the lightbox over the chosen bucket, not the gallery (#996)
+                    if let box = contributions.model.lightbox(mediaId: mediaId) { open = LightboxStart(gallery: gallery, box: box) }
                 }
             } else {
                 photoGrid

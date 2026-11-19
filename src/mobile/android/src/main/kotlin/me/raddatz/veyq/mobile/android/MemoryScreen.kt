@@ -191,7 +191,7 @@ internal fun MemoryGallery(gallery: GalleryModel, model: AppModel) {
     Box(Modifier.fillMaxSize()) {
     if (tracks != null) MemoryMapView(gallery, tracks, model, snackbar, viewSwitch) else
     if (music != null) MusicView(gallery, music, model, snackbar, viewSwitch) else
-    if (contributions != null) ContributionsView(gallery, contributions, model, snackbar, viewSwitch) { id -> open = gallery.lightboxOn(id) } else
+    if (contributions != null) ContributionsView(gallery, contributions, model, snackbar, viewSwitch) { id -> contributions.lightbox(id)?.let { open = it } } else
     CreateAction(
         stringResource(if (state.rights.upload) R.string.memory_add else R.string.memory_add_chapter),
         shown = state.rights.upload || chapterHere,

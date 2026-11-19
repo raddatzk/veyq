@@ -83,6 +83,11 @@ struct Inner {
 impl Lightbox {
     /// The lightbox over gallery [gallery] at row [index], pushed onto [nav] over [window].
     pub fn open(gallery: i64, index: i32, node: &NodeAt, window: &gtk::Window, toasts: &adw::ToastOverlay, nav: &adw::NavigationView) -> Self {
+        Self::open_by(Call::LightboxOpen { gallery, index }, node, window, toasts, nav)
+    }
+
+    /// The lightbox [open] opens in the core (`Lightbox.Open`, or `Buckets.Lightbox` over a bucket's media), pushed onto [nav].
+    pub fn open_by(open: Call, node: &NodeAt, window: &gtk::Window, toasts: &adw::ToastOverlay, nav: &adw::NavigationView) -> Self {
         style_once();
         let title = adw::WindowTitle::new("", "");
         let icon = |name: &str, label: &str| {
@@ -164,7 +169,7 @@ impl Lightbox {
         nav.push(&inner.page);
         let weak = Rc::downgrade(&inner);
         glib::spawn_future_local(async move {
-            let Ok((Answer::LightboxOpened { lightbox }, _)) = bridge::call(&Call::LightboxOpen { gallery, index }).await else {
+            let Ok((Answer::LightboxOpened { lightbox }, _)) = bridge::call(&open).await else {
                 eprintln!("veyq: the lightbox did not open in the core");
                 return;
             };

@@ -34,9 +34,9 @@ struct ContributionsKey: Equatable {
 
 /// A Memory's Contributions view (the web's `MemoryBuckets.vue`, ADR 0149 decision 6): the uploader picker — every
 /// contributor's primary bucket with the sub-buckets curated below it, each with its count — narrowing the grid to the
-/// chosen bucket's media; on the caller's own bucket a new sub-bucket, and a sub-bucket's rename and delete; a medium of
-/// one's own moved into another of one's buckets from its tile's context menu. A tile opens the lightbox on it. Writes are
-/// online only (core refuses them offline); what core refused is said once.
+/// chosen bucket's media; what the server takes on it (core's `Contributions.State`): a new sub-bucket under a primary, a
+/// sub-bucket's rename and delete, a medium moved into another bucket of its root from its tile's context menu. A tile opens
+/// the lightbox over the bucket on it. Writes are online only (core refuses them offline); what core refused is said once.
 struct ContributionsView: View {
     let model: AppModel
     let gallery: GalleryModel
@@ -116,10 +116,12 @@ struct ContributionsView: View {
             .labelsHidden()
             .fixedSize()
             Spacer(minLength: 0)
-            if s.curates, gallery.current.offline == nil {
+            if s.createsSub || s.renames, gallery.current.offline == nil {
                 Menu {
-                    Button { name = ""; naming = true } label: { Label(say(.memoryBucketsCreateBucket), systemImage: "folder.badge.plus") }
-                    if let row = s.row, !row.isPrimary {
+                    if s.createsSub {
+                        Button { name = ""; naming = true } label: { Label(say(.memoryBucketsCreateBucket), systemImage: "folder.badge.plus") }
+                    }
+                    if let row = s.row, s.renames {
                         Button { name = say(piece: row.label); renaming = true } label: { Label(say(.nodeRename), systemImage: "pencil") }
                         Button(role: .destructive) { confirm = ""; deleting = true } label: { Label(say(.memoryBucketsDeleteBucketConfirm), systemImage: "trash") }
                     }
@@ -160,9 +162,9 @@ struct ContributionsView: View {
         .buttonStyle(.plain)
         .offset(x: CGFloat(frame.left))
         .contextMenu {
-            // a medium of the caller's own bucket moved into another of theirs (online)
-            if s.curates, gallery.current.offline == nil {
-                let targets = s.rows.filter { $0.canManage && $0.bucketId != s.selected }
+            // a medium moved into another bucket of its root (online; never across roots: the server's)
+            if s.row != nil, gallery.current.offline == nil {
+                let targets = s.moveTargets
                 if targets.isEmpty {
                     Text(say(.memoryBucketsMoveEmpty))
                 } else {

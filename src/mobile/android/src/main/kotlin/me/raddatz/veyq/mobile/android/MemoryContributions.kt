@@ -57,9 +57,10 @@ import me.raddatz.veyq.mobile.memories.MediaGridLayout
 /**
  * A Memory's Contributions view (`uc.memory.buckets`, ADR 0149 decision 6; the web's `MemoryBuckets.vue`), drawn from core's
  * `Contributions`: the uploader picker — every contributor's bucket with the sub-buckets curated below it, each with its
- * count — and the chosen bucket's media in the justified grid; a tile opens the lightbox ([onOpen]). Where the chosen
- * bucket is the caller's to curate, online: *New sub-bucket* is the view's creating action, a sub-bucket's options rename and
- * delete it, and a long press moves a medium into another bucket of the caller's. What a curation refused is said once.
+ * count — and the chosen bucket's media in the justified grid; a tile opens the lightbox over that bucket ([onOpen]). Online,
+ * what the server takes on the chosen bucket (core's `Contributions.State`): *New sub-bucket* under a primary as the view's
+ * creating action, a sub-bucket's options rename and delete it, and a long press moves a medium into another bucket of the
+ * same root. What a curation refused is said once.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -73,9 +74,8 @@ internal fun ContributionsView(
     val palette = LocalPalette.current
     val context = LocalContext.current
     val online = galleryState.offline == null
-    // read anew whenever the gallery's rows are read anew (an upload landed, a medium moved here or on another device): the
-    // counts and the chosen bucket's media follow. A curation's own `read()` runs before the gallery's reload lands (core's
-    // `GalleryModel.reload` is launched, not awaited — inbox #990), so this second read is what shows a moved medium gone.
+    // read anew whenever the gallery's rows are read anew (an upload landed, a medium moved on another device): the counts and
+    // the chosen bucket's media follow. A curation here needs none of it: core reads the buckets after the gallery (#990).
     val listed = galleryState.rows
     LaunchedEffect(listed) { if (listed != null) withContext(Dispatchers.Default) { contributions.read() } }
     var moved by remember { mutableStateOf(false) }
@@ -89,10 +89,10 @@ internal fun ContributionsView(
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf<String?>(null) }
-    val curates = state.curates && online
     val row = state.row
-    val subBucket = row != null && !row.isPrimary && curates
-    CreateAction(stringResource(R.string.memory_buckets_create_bucket), shown = curates, onClick = { naming = true }) { list, bottom ->
+    val curates = row != null && online
+    val subBucket = state.renames && online
+    CreateAction(stringResource(R.string.memory_buckets_create_bucket), shown = state.createsSub && online, onClick = { naming = true }) { list, bottom ->
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val gridWidth = (maxWidth - GRID_MARGIN * 2).value.toDouble()
             val media = state.media
@@ -158,8 +158,7 @@ internal fun ContributionsView(
         model.curate { contributions.delete() }
     }
     moving?.let { id ->
-        val targets = state.rows.filter { it.canManage && it.bucketId != state.selected }
-        MoveDialog(targets, onClose = { moving = null }) { target ->
+        MoveDialog(state.moveTargets, onClose = { moving = null }) { target ->
             moved = true
             model.curate { contributions.move(listOf(id), target) }
         }
@@ -251,7 +250,7 @@ private fun DeleteBucketDialog(name: String, onClose: () -> Unit, onDelete: () -
     )
 }
 
-/** A medium moved into another bucket of the caller's: the targets as radio rows, none said so. */
+/** A medium moved into another bucket of its root: the targets as radio rows, none said so. */
 @Composable
 private fun MoveDialog(targets: List<Buckets.Row>, onClose: () -> Unit, onMove: (String) -> Unit) {
     var chosen by remember { mutableStateOf<String?>(null) }
