@@ -78,12 +78,69 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
 
 ## Phases
 
-- [ ] **1 core** — L4: `FileSave` to `blob/`, R6's files resolved; the guard with rule (c). · Done when: `:core:jvmTest
+- [x] **1 core** — L4: `FileSave` to `blob/`, R6's files resolved; the guard with rule (c). · Done when: `:core:jvmTest
   :core:macosArm64Test`, `:bridge:jvmTest` green; the guard green. **Bite:** an `import …mobile.depot.*` planted in a
   `memories/` file → red.
-- [ ] **2 Android** — L1–L3, rules (a) and (b) on for Android. · Done when: `:android:assembleDebug`, its unit tests,
+  **Built** (2026-11-20): `depot/FileSave.kt` → `blob/FileSave.kt` (`git mv`, the package and its imports — core, bridge,
+  Android; Swift sees the same exported name); `scripts/validate_mobile_ui_direction.py` with rule (c): (c1) no application
+  package names another's package or generated client (`api.<app>`), no exception; (c2) core outside the application
+  packages names one only in `CORE_ROOTS`, each entry with its reason — `AppKinds.kt` the composition root, and R6's
+  sixteen other files plus `offline/KeptRead.kt` (its serializers are the applications' generated models; R6's grep missed
+  `api.<app>`) **handed back**: each one's hook behind `AppKinds` is a design of its own (ShellModel's open screen models,
+  the one drop and Add here, GuestPage's per-kind models, the notices, the tray, the row details, the link form, the
+  folder walk, the four Swift adapters in `appleMain`), not a move; an entry that is missing or names no application any
+  more is red, so the list only shrinks; and every core file's `package` is its directory's. `offline/Queued.kt` names
+  an application only in a KDoc (masked), so it is no root. Bites, each red then restored green: `blob.FileSave` →
+  `depot.FileSave` in `memories/GalleryModel.kt` (c1); `api.expenses.models.PotRevisionPage` in `memories/MemoryShare.kt`
+  (c1, the client); `import …memories.GalleryModel` in `navigation/Home.kt` (c2); `session/LinkForm.kt` emptied of its
+  application names (a stale root); a CORE_ROOTS path that does not exist; `memories/MemoryShare.kt` declaring the
+  package `…depot` (the package rule). Checks: `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest
+  :android:assembleDebug -Pkotlin.incremental=false` BUILD SUCCESSFUL; every `scripts/validate_*.py` but guard_gaps green.
+- [x] **2 Android** — L1–L3, rules (a) and (b) on for Android. · Done when: `:android:assembleDebug`, its unit tests,
   the words, guidelines and direction guards green. **Bites:** a Memories file using a Pot composable → red; the shell
   naming `MemoryScreen` → red.
+  **Built** (2026-11-20). Layout (`src/mobile/android/src/<set>/kotlin/me/raddatz/veyq/mobile/android/`): the root
+  package keeps only what the system names by class — `MainActivity`, `MusicService` (`MusicPlayback.kt`), the
+  WorkManager workers (`UploadWork`, `OfflineWork`, `BackgroundWork`: a persisted job names its class, so moving them
+  would break a queued one across an update) —, the debug/release `Dev*` doors and the composition root
+  `Applications.kt`; `core/` (package `…android.core`) the core UI, 46 files; `apps/memories/` (the gallery, curation,
+  places, map views, music view, filter bar, contributions, `MemoriesUi.kt`, `PersonMemoriesSection.kt`, and the
+  debug/release `DevMemory`), `apps/expenses/` (Pot page, settings, create sheet, entry editor, history, receipts,
+  `ExpensesUi.kt`), `apps/depot/` (file page, drop box page, `DepotUi.kt`). Moved with `git mv`; what two applications or
+  core used left an application's file for core: the music bar (`core/MusicBar.kt`, the core `MusicPlayer`'s), the
+  formats (`core/Formats.kt`: `separator`, `money`, `localDate`, `memoryDateText` — the shell's rows and the person
+  section use the last), the PDF opener (`core/PdfDocument.kt`, `OpenPdf`: a file's page, a receipt, the kit).
+  The registry (`core/Registry.kt`, the web's `registry.ts`): per kind a `KindPage(header, body, guest)` —
+  `header: @Composable (NodeAt, AppModel) -> HeaderContribution?` (what the page contributes to core's header),
+  `body: @Composable (ObjectRef, BarTab?, AppModel) -> Unit`, `guest: @Composable (GuestPage, GuestScreen, AppModel,
+  SnackbarHostState) -> Unit` (a link's page of the kind) —, and per application an `ApplicationUi(id, list, creates,
+  personSection)` — its own drawer list (null: core's arranged list), `creates: Map<AppKinds.Create, CreateDialog>`
+  (`CreateDialog = @Composable (Screen.Signed, AppModel, space, folder, onClose) -> Unit`), its section of a person's
+  profile drawn under core's frame. `Registry.kind(page, vararg kind)` and `.application(ui)` refuse a second
+  registration; `seal()` ends registering, and a lookup before it fails. Each application has one
+  `XxxUi.register(registry)`; `Applications.register()` (called first in `MainActivity.onCreate`) registers core's
+  kinds (`KindPages.register`: folder, bookmark), then Memories, Depot, Expenses, then seals; `Applications.devPage`
+  hands MainActivity the debug Memory harness. The shell's object page and both list panes, Home's New (`creating:
+  AppKinds.Create?` → `Registry.create`), a link's page (`GuestPageBody`: Level and NotShown core's, every other
+  variant the kind's `guest`) and the person screen ask the registry; KindPages names no kind of an application.
+  Left in core, named here: the guest bar's file actions and music action (`GuestFileActions`, `GuestMusicAction`:
+  header actions, the header being core's, over core-Kotlin models only — the structure CR's header plan takes them),
+  the kind icons and `TREE_PAGES` (kind literals; no rule reads literals yet), `AppModel`'s per-application methods
+  (it names the Kotlin core's application packages, not `apps/`). Rules (a) and (b) on for Android
+  (`PLATFORMS["android"]`). Bites, each red then restored green: `import …android.apps.expenses.PotScreen` in
+  `apps/memories/MemoryScreen.kt` (b); `import …android.apps.memories.MemoryScreen` in `core/ShellScreen.kt` (a); a
+  qualified `…android.apps.depot.DepotUi` in `core/AppRoot.kt` (a); `Applications.kt` without `ExpensesUi` (the root
+  registers every application); an `apps/music/` file (no application); `apps/depot/DropBoxScreen.kt` declaring `…core`
+  (the package rule); `apps/depot/` emptied (an application without UI files). Checks: `./gradlew :core:jvmTest
+  :core:macosArm64Test :bridge:jvmTest :android:assembleDebug :android:testDebugUnitTest -Pkotlin.incremental=false`
+  BUILD SUCCESSFUL (the app has no unit-test sources); every `scripts/validate_*.py` but guard_gaps green
+  (`validate_mobile_words.py`, `validate_mobile_platform_guidelines.py` read `rglob`, so the subdirectories stay read).
+  Smoke on a throwaway API 36 AVD (`veyq_coreui`, deleted after) with a throwaway account (erased after): signed in
+  (devlogin), Home; New → New pot (Expenses' registered sheet) → the Pot's page (header "In USD", Entries/Overview/
+  Settings); New → New Memory (Memories' registered dialog) → the Memory's page (facts, Photos/Music/Map/Contributions);
+  New folder → the folder's level; after a relaunch and an unlock the drawer's Expenses and Memories lists (registered)
+  and Memories' Map tab. Not run: a received link's guest pages (the registry's `guest`), a Depot file's page (no file
+  uploaded: the system picker), and the CR's before/after screenshots (phase 6).
 - [ ] **3 Apple** — the same. · Done when: both Apple builds green, the guards green. **Bite:** a Memories view using
   `PotScreen` → red.
 - [ ] **4 Linux** — the same; `raster_map.rs`' and `memory_page.rs`' crossings resolved through the registry or core

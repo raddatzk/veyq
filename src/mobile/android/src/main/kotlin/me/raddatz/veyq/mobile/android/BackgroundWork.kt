@@ -9,12 +9,15 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import me.raddatz.veyq.mobile.android.core.KeystoreDeviceKeys
+import me.raddatz.veyq.mobile.android.core.Network
+import me.raddatz.veyq.mobile.android.core.PreferencesStore
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.session.BackgroundRun
 import me.raddatz.veyq.mobile.session.ThisDevice
-import java.util.concurrent.TimeUnit
 
 /**
  * This installation's one [ThisDevice] in the process: the app's model and the background sync's worker read the same

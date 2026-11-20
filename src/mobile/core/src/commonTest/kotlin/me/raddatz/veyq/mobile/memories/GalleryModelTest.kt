@@ -9,7 +9,7 @@ import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.crypto.V1
-import me.raddatz.veyq.mobile.depot.FileSave
+import me.raddatz.veyq.mobile.blob.FileSave
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.words.Msg

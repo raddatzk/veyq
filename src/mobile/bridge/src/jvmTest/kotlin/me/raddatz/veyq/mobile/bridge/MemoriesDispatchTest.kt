@@ -13,7 +13,7 @@ import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.crypto.V1
-import me.raddatz.veyq.mobile.depot.FileSave
+import me.raddatz.veyq.mobile.blob.FileSave
 import me.raddatz.veyq.mobile.memories.GalleryModel
 import me.raddatz.veyq.mobile.memories.MediaDetails
 import me.raddatz.veyq.mobile.memories.MediaUpload

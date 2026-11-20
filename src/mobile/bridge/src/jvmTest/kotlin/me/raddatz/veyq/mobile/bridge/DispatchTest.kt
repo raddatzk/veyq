@@ -1601,7 +1601,7 @@ class DispatchTest {
         val saving = (b.ask(Call.FileSave(zipId, path.path)) as Answer.Saving).save
         assertTrue((b.watching(Watched.Save(saving)).next() as Update.Save).shown != null, "the save answered before it ran")
         val saved = b.watching(Watched.Save(saving)).until { u -> (u as Update.Save).shown?.takeIf { it.end != null } }
-        assertEquals(me.raddatz.veyq.mobile.depot.FileSave.End.SAVED, saved.end)
+        assertEquals(me.raddatz.veyq.mobile.blob.FileSave.End.SAVED, saved.end)
         assertEquals(me.raddatz.veyq.mobile.words.Notice(Msg.DOWNLOAD_DONE, "a.zip"), saved.notice)
         assertEquals(zip.size.toLong(), saved.written)
         assertEquals(zip.toList(), path.readBytes().toList(), "the copy is not the file")
@@ -1617,7 +1617,7 @@ class DispatchTest {
         assertEquals(Answer.Done, b.ask(Call.SaveCancel(heldSave)))
         assertTrue(!heldPath.exists(), "a cancelled save left its file")
         val cancelled = (b.watching(Watched.Save(heldSave)).next() as Update.Save).shown!!
-        assertEquals(me.raddatz.veyq.mobile.depot.FileSave.End.CANCELLED, cancelled.end)
+        assertEquals(me.raddatz.veyq.mobile.blob.FileSave.End.CANCELLED, cancelled.end)
         assertEquals(me.raddatz.veyq.mobile.words.Notice(Msg.DOWNLOAD_CANCELLED, "Held.zip"), cancelled.notice)
         // a path that does not open: failed, said
         val nowhere = (b.ask(Call.FileSave(zipId, "/nonexistent-dir/veyq/a.zip")) as Answer.Saving).save

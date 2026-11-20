@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.blob.UploadSource
-import me.raddatz.veyq.mobile.depot.FileSave
+import me.raddatz.veyq.mobile.blob.FileSave
 import me.raddatz.veyq.mobile.map.LatLng
 import me.raddatz.veyq.mobile.memories.GalleryModel
 import me.raddatz.veyq.mobile.memories.MemoryMedia

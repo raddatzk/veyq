@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.blob.UploadSource
-import me.raddatz.veyq.mobile.depot.FileSave
+import me.raddatz.veyq.mobile.blob.FileSave
 import me.raddatz.veyq.mobile.memories.GalleryModel
 import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.ReportSheet

@@ -24,15 +24,16 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.suspendCancellableCoroutine
+import me.raddatz.veyq.mobile.android.core.ReaderSource
 import me.raddatz.veyq.mobile.audio.Deck
 import me.raddatz.veyq.mobile.audio.NowPlaying
 import me.raddatz.veyq.mobile.audio.PlayerCommands
 import me.raddatz.veyq.mobile.audio.SystemControls
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.words.Msg
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 /** What the music's lines in logcat are tagged (a pass reads its decks and controls there). */
 internal const val MUSIC_LOG = "veyq-music"

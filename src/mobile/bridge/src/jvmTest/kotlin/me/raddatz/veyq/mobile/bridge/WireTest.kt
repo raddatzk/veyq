@@ -418,7 +418,7 @@ class WireTest {
             )),
             Update.File(22, null),
             Update.Save(21, SaveShown("Plan März.pdf", 262_144, 314_572_800, 262_144.0 / 314_572_800, null, Notice(Msg.DOWNLOAD_SAVING, listOf("Plan März.pdf", me.raddatz.veyq.mobile.words.Bytes(262_144), me.raddatz.veyq.mobile.words.Bytes(314_572_800))))),
-            Update.Save(21, SaveShown("a.zip", 10, 10, 1.0, me.raddatz.veyq.mobile.depot.FileSave.End.SAVED, Notice(Msg.DOWNLOAD_DONE, listOf("a.zip")))),
+            Update.Save(21, SaveShown("a.zip", 10, 10, 1.0, me.raddatz.veyq.mobile.blob.FileSave.End.SAVED, Notice(Msg.DOWNLOAD_DONE, listOf("a.zip")))),
             Update.Save(23, null),
             Update.Uploads(null),
             Update.QueuedTray(null), Update.QueuedTray(emptyList()),

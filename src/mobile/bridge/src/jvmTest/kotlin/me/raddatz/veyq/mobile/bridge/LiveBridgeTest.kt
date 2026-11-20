@@ -1373,7 +1373,7 @@ class LiveBridgeTest {
             val started = System.currentTimeMillis()
             val save = (b.ask(Call.FileSave(bigId, target.path)) as Answer.Saving).save
             val saved = b.watching(Watched.Save(save)).until(15.minutes) { u -> (u as Update.Save).shown?.takeIf { it.end != null } }
-            assertEquals(me.raddatz.veyq.mobile.depot.FileSave.End.SAVED, saved.end, "${saved.notice}")
+            assertEquals(me.raddatz.veyq.mobile.blob.FileSave.End.SAVED, saved.end, "${saved.notice}")
             val savedSha = java.security.MessageDigest.getInstance("SHA-256").let { d ->
                 target.inputStream().use { input -> val buf = ByteArray(1 shl 20); while (true) { val n = input.read(buf); if (n < 0) break; d.update(buf, 0, n) } }
                 d.digest().joinToString("") { "%02x".format(it) }
@@ -1609,7 +1609,7 @@ class LiveBridgeTest {
             val saveStarted = System.currentTimeMillis()
             val save = (b.ask(Call.FileSave(bigPage, back.path)) as Answer.Saving).save
             val saved = b.watching(Watched.Save(save)).until(60.minutes) { u -> (u as Update.Save).shown?.takeIf { it.end != null } }
-            assertEquals(me.raddatz.veyq.mobile.depot.FileSave.End.SAVED, saved.end, "${saved.notice}")
+            assertEquals(me.raddatz.veyq.mobile.blob.FileSave.End.SAVED, saved.end, "${saved.notice}")
             assertEquals(bigSize, back.length())
             assertEquals(bigSha, digest(back), "the 2 GiB + 1 copy is not the file")
             println("big.bin saved back in ${System.currentTimeMillis() - saveStarted} ms at $bigSha")
@@ -2471,7 +2471,7 @@ class LiveBridgeTest {
             val saved = File(dir, "saved.webm")
             val save = (b.ask(Call.MediumSave(l, saved.path)) as Answer.Saving).save
             val end = b.watching(Watched.Save(save)).until(20.minutes) { u -> (u as Update.Save).shown?.takeIf { it.end != null } }
-            assertEquals(me.raddatz.veyq.mobile.depot.FileSave.End.SAVED, end.end)
+            assertEquals(me.raddatz.veyq.mobile.blob.FileSave.End.SAVED, end.end)
             val fileSha = java.security.MessageDigest.getInstance("SHA-256").let { d ->
                 webm.inputStream().use { s -> val buf = ByteArray(1 shl 20); while (true) { val n = s.read(buf); if (n < 0) break; d.update(buf, 0, n) } }
                 d.digest().joinToString("") { "%02x".format(it) }

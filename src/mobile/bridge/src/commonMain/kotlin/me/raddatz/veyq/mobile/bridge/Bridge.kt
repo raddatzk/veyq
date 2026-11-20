@@ -617,7 +617,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val filePages = Registry<me.raddatz.veyq.mobile.depot.FileModel>()
     /** Each reader a file's page opened ([Call.FileReader]), by the reader's id: the page's id, so it closes with it. */
     private val pageReaders = Registry<Long>()
-    private val saves = Registry<me.raddatz.veyq.mobile.depot.FileSave>()
+    private val saves = Registry<me.raddatz.veyq.mobile.blob.FileSave>()
     private val imports = Registry<me.raddatz.veyq.mobile.export.ImportDialog>()
 
     /** The QR scans the host opened ([Call.ScanOpen]): no tenant's, each until [Call.ScanClose] or [shutdown]. */

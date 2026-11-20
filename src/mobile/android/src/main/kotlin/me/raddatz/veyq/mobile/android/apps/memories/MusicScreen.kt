@@ -1,0 +1,255 @@
+package me.raddatz.veyq.mobile.android.apps.memories
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.outlined.GraphicEq
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import me.raddatz.veyq.mobile.android.R
+import me.raddatz.veyq.mobile.android.core.AppModel
+import me.raddatz.veyq.mobile.android.core.CreateAction
+import me.raddatz.veyq.mobile.android.core.LocalNodeHero
+import me.raddatz.veyq.mobile.android.core.LocalPalette
+import me.raddatz.veyq.mobile.android.core.ReportSheet
+import me.raddatz.veyq.mobile.android.core.role
+import me.raddatz.veyq.mobile.android.core.say
+import me.raddatz.veyq.mobile.android.core.text
+import me.raddatz.veyq.mobile.android.words
+import me.raddatz.veyq.mobile.audio.NowPlaying
+import me.raddatz.veyq.mobile.audio.PlayerCommands
+import me.raddatz.veyq.mobile.audio.PlayerNotice
+import me.raddatz.veyq.mobile.memories.GalleryModel
+import me.raddatz.veyq.mobile.memories.music.MusicModel
+import me.raddatz.veyq.mobile.memories.music.MusicQueue
+import me.raddatz.veyq.mobile.words.Msg
+
+/**
+ * Which of a Memory's views shows: its photos and videos, its music (ADR 0142 decision 6), its map (ADR 0143 D8), its
+ * contributions (ADR 0149 decision 6).
+ */
+internal enum class MemoryView { PHOTOS, MUSIC, MAP, CONTRIBUTIONS }
+
+/**
+ * The view switch inside a Memory's screen (Material's primary tabs): Photos | Music | Map | Contributions — Music where the
+ * node has music or the viewer may add some ([music]), Map always, as the web's tab is, Contributions where core offers them
+ * to whoever looks ([contributions]: a member's, `MemoryRights.buckets` and `Contributions.OFFERED`).
+ */
+@Composable
+internal fun MemoryViewSwitch(view: MemoryView, music: Boolean, contributions: Boolean, map: Boolean = true, onView: (MemoryView) -> Unit) {
+    val views = MemoryView.entries.filter { (it != MemoryView.MUSIC || music) && (it != MemoryView.CONTRIBUTIONS || contributions) && (it != MemoryView.MAP || map) }
+    val selected = views.indexOf(view).coerceAtLeast(0)
+    // four views' words do not fit a phone's fixed tabs ("Contributions" broke mid-word, 2026-11-19): Material's scrollable tabs then
+    val tabs: @Composable (@Composable () -> Unit) -> Unit = { content ->
+        if (views.size > 3) PrimaryScrollableTabRow(selectedTabIndex = selected, containerColor = MaterialTheme.colorScheme.background, edgePadding = 0.dp) { content() }
+        else PrimaryTabRow(selectedTabIndex = selected, containerColor = MaterialTheme.colorScheme.background) { content() }
+    }
+    tabs {
+        for (v in views) {
+            val words = when (v) {
+                MemoryView.PHOTOS -> Msg.MUSIC_VIEW_PHOTOS
+                MemoryView.MUSIC -> Msg.MUSIC_VIEW_MUSIC
+                MemoryView.MAP -> Msg.MEMORY_VIEW_MAP
+                MemoryView.CONTRIBUTIONS -> Msg.MEMORY_BUCKETS_TITLE
+            }
+            Tab(selected = view == v, onClick = { onView(v) }, text = { Text(say(words)) })
+        }
+    }
+}
+
+/**
+ * A Memory's or a chapter's Music view (the web's `MemoryMusic.vue`, ADR 0142 decisions 6–11), drawn from core's
+ * `MusicModel`: the tracks with their title and length, the one playing marked, one that did not play on this device said
+ * so; a press plays it first, then the rest shuffled. Each track's overflow menu (Material's row actions): rename, download,
+ * remove (the gallery's trash with its Undo, said by the page's snackbar), report (an ITEM). "Add music" is the view's one
+ * creating action, the system's document picker filtered to audio (no media permission: the picker grants each file).
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun MusicView(gallery: GalleryModel, music: MusicModel, model: AppModel, snackbar: SnackbarHostState, viewSwitch: @Composable () -> Unit) {
+    val state by music.state.collectAsStateWithLifecycle()
+    val hero = LocalNodeHero.current
+    val palette = LocalPalette.current
+    val context = LocalContext.current
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) model.addMusic(music, uris)
+    }
+    // what an add or a rename left to say, once
+    val said = state.said
+    LaunchedEffect(said) {
+        if (said == null) return@LaunchedEffect
+        snackbar.showSnackbar(context.text(said))
+        music.seen()
+    }
+    var renaming by remember { mutableStateOf<MusicModel.Shown?>(null) }
+    var reporting by remember { mutableStateOf<me.raddatz.veyq.mobile.navigation.ReportSheet?>(null) }
+    var saving by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val saveTo = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val id = saving
+        saving = null
+        if (uri == null || id == null) return@rememberLauncherForActivityResult
+        val save = model.saveTrack(music, id, uri) ?: return@rememberLauncherForActivityResult
+        scope.launch { snackbar.showSnackbar(context.text(save.state.first { it.end != null }.notice)) }
+    }
+    CreateAction(say(Msg.MUSIC_ADD), shown = state.rights.add, onClick = { pick.launch(arrayOf("audio/*")) }) { list, bottom ->
+        LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = bottom)) {
+            // the banner above the header, on every view (ADR 0144 decision 4)
+            item(key = "banner") { MemoryBannerFrame(gallery, model) }
+            item(key = "hero") { hero(16.dp) }
+            item(key = "facts") { MemoryFactsLine(gallery, model) }
+            item(key = "people") { MemoryPeopleLine(gallery, model) }
+            stickyHeader(key = "views") { viewSwitch() }
+            if (state.checking) item(key = "checking") { LinearProgressIndicator(Modifier.fillMaxWidth()) }
+            val tracks = state.tracks
+            when {
+                tracks == null -> item(key = "loading") {
+                    Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                }
+                tracks.isEmpty() -> item(key = "empty") {
+                    Text(say(Msg.MUSIC_EMPTY_HINT), color = role(palette.muted), modifier = Modifier.padding(16.dp))
+                }
+                else -> items(tracks, key = { "track:" + it.mediaId }) { t ->
+                    TrackRow(
+                        t, music,
+                        onRename = { renaming = t },
+                        onSave = {
+                            saving = t.mediaId
+                            saveTo.launch(t.track.fileName ?: t.title ?: context.words(Msg.MUSIC_UNTITLED, t.number))
+                        },
+                        onRemove = { model.galleryAct { music.remove(t.mediaId)?.let { snackbar.showSnackbar(context.text(it)) } } },
+                        onReport = { reporting = music.reportSheet(t.mediaId) },
+                    )
+                }
+            }
+        }
+    }
+    renaming?.let { t -> TrackRenameDialog(t, music) { renaming = null } }
+    reporting?.let { sheet -> ReportSheet(sheet) { reporting = null } }
+}
+
+/** One track: its title (or "Track n"), its length, the playing one marked, one that does not play here said so; its menu. */
+@Composable
+private fun TrackRow(t: MusicModel.Shown, music: MusicModel, onRename: () -> Unit, onSave: () -> Unit, onRemove: () -> Unit, onReport: () -> Unit) {
+    val palette = LocalPalette.current
+    val state by music.state.collectAsStateWithLifecycle()
+    val title = t.title ?: say(Msg.MUSIC_UNTITLED, t.number)
+    var menu by remember { mutableStateOf(false) }
+    val rights = state.rights
+    val removes = music.removes(t.mediaId)
+    val hasMenu = rights.rename || (rights.download && !t.blocked) || removes || rights.report
+    ListItem(
+        headlineContent = {
+            Text(title, fontWeight = if (t.playing) FontWeight.Bold else null, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        },
+        supportingContent = when {
+            t.blocked -> { { Text(stringResource(R.string.memory_blocked), color = role(palette.muted)) } }
+            t.unplayable -> { { Text(say(Msg.MUSIC_TRACK_UNPLAYABLE), color = role(palette.danger)) } }
+            else -> null
+        },
+        leadingContent = {
+            Icon(if (t.playing) Icons.Outlined.GraphicEq else Icons.Outlined.MusicNote, null, tint = role(if (t.playing) palette.accent else palette.muted))
+        },
+        trailingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                t.length?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = role(palette.muted)) }
+                if (hasMenu) Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, say(Msg.MUSIC_ACTIONS, title)) }
+                    DropdownMenu(menu, { menu = false }) {
+                        if (rights.rename) DropdownMenuItem(text = { Text(say(Msg.MUSIC_RENAME)) }, onClick = { menu = false; onRename() })
+                        if (rights.download && !t.blocked) DropdownMenuItem(text = { Text(say(Msg.MUSIC_DOWNLOAD)) }, onClick = { menu = false; onSave() })
+                        if (removes) DropdownMenuItem(text = { Text(say(Msg.MUSIC_REMOVE)) }, onClick = { menu = false; onRemove() })
+                        if (rights.report) DropdownMenuItem(text = { Text(stringResource(R.string.report_action)) }, onClick = { menu = false; onReport() })
+                    }
+                }
+            }
+        },
+        colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
+        modifier = if (t.blocked) Modifier else Modifier.clickable(onClickLabel = say(Msg.MUSIC_PLAY_FROM, title)) { music.play(t.mediaId) },
+    )
+}
+
+/** A track's rename (the web's): its own name, or empty to name it by its file again; what a conflict said, the view says. */
+@Composable
+private fun TrackRenameDialog(t: MusicModel.Shown, music: MusicModel, onClose: () -> Unit) {
+    var name by remember(t.mediaId) { mutableStateOf(t.track.ownName.orEmpty()) }
+    var saving by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = { if (!saving) onClose() },
+        title = { Text(say(Msg.MUSIC_RENAME_TITLE)) },
+        text = {
+            OutlinedTextField(
+                name, { name = it }, singleLine = true, label = { Text(say(Msg.MUSIC_NAME_LABEL)) },
+                supportingText = { Text(say(Msg.MUSIC_NAME_HINT)) }, enabled = !saving,
+            )
+        },
+        confirmButton = {
+            TextButton(enabled = !saving, onClick = {
+                saving = true
+                scope.launch {
+                    music.rename(t.mediaId, name.trim().ifEmpty { null })
+                    onClose()
+                }
+            }) { Text(say(Msg.MUSIC_RENAME)) }
+        },
+        dismissButton = { TextButton(onClick = onClose, enabled = !saving) { Text(stringResource(R.string.trash_cancel)) } },
+    )
+}

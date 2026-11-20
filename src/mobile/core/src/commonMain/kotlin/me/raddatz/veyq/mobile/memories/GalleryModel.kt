@@ -23,7 +23,7 @@ import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.memories.music.MusicQueue
 import me.raddatz.veyq.mobile.memories.music.MusicTrack
 import me.raddatz.veyq.mobile.blob.UploadSource
-import me.raddatz.veyq.mobile.depot.FileSave
+import me.raddatz.veyq.mobile.blob.FileSave
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeHeader
 import me.raddatz.veyq.mobile.navigation.NodeRef
