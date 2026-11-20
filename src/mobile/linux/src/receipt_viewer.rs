@@ -4,11 +4,13 @@
 //! loaders), a PDF by GNOME's own PDF stack (poppler-glib through poppler-rs, from the bytes; each page rendered onto a
 //! cairo surface at the dialog's width and shown as a `gdk::MemoryTexture`) — as many pages as the core says
 //! (`Receipt.Pages`), and what it says when that is not all. Any other file is offered for saving only. Save a copy asks
-//! GTK's save dialog for a path and the core writes the receipt there (`Receipt.Save`).
+//! GTK's save dialog for a path and the core writes the receipt there (`Receipt.Save`). Offline (ADR 0153 decision 6) a
+//! receipt this device does not keep — never shown here, nor fetched by the Pot's pin — is refused `NotKeptOffline` and
+//! says so, not that it is unreadable; one shown before opens from the store.
 use adw::prelude::*;
 use gtk::{cairo, gdk, glib};
 
-use crate::bridge::{self, wire::Answer, wire::Call};
+use crate::bridge::{self, wire::Answer, wire::Call, wire::Why};
 use crate::home::glib_escape;
 use crate::{said, words};
 
@@ -54,6 +56,10 @@ pub fn open(parent: &impl IsA<gtk::Widget>, pot: i64, receipt: &str, name: &str)
                     Some(t) if t.starts_with("image/") => show_picture(&b, bytes),
                     _ => b.append(&only_saved()),
                 }
+            }
+            Ok((Answer::Refused { why: Why::NotKeptOffline }, _)) => {
+                eprintln!("veyq: Receipt.Open: not kept offline");
+                b.append(&status(&words::offline_not_kept(), None));
             }
             other => {
                 eprintln!("veyq: Receipt.Open answered {other:?}");
