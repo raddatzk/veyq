@@ -908,8 +908,29 @@ internal sealed class AccountSettingsPage : IDisposable
         var revoke = new MenuFlyoutItem { Text = revokeWords };
         AutomationProperties.SetAutomationId(revoke, $"settings-revoke:{f.id}");
         var family = f.id;
-        revoke.Click += (_, _) => AskThen("settings-revoke-ask", revokeWords, f.current ? Words.AccountSettingsRevokeSelfConfirm() : Words.AccountSettingsRevokeConfirm(),
-            revokeWords, "sign out", id => new Call.SettingsSignOut { settings = id, family = family });
+        var current = f.current;
+        revoke.Click += async (_, _) =>
+        {
+            try
+            {
+                // this device's own family is a sign-out here: the core's question first while writes made offline wait
+                // (ADR 0153 decision 2), in place of the plain one (they go with the session)
+                switch (current ? await Dialogs.AskLoss(_window, QueuedLoss.SignOut, revokeWords) : null)
+                {
+                    case null:
+                        AskThen("settings-revoke-ask", revokeWords, current ? Words.AccountSettingsRevokeSelfConfirm() : Words.AccountSettingsRevokeConfirm(),
+                            revokeWords, "sign out", id => new Call.SettingsSignOut { settings = id, family = family });
+                        break;
+                    case true:
+                        Do("sign out", id => new Call.SettingsSignOut { settings = id, family = family });
+                        break;
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Write($"settings sign out failed: {e.GetType().Name}");
+            }
+        };
         menu.Items.Add(revoke);
         if (f.removesKey)
         {

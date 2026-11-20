@@ -665,12 +665,21 @@ impl Page {
         revoke.connect_activate(move |_, _| {
             let Some(p) = weak.upgrade() else { return };
             let family = id.clone();
-            let (heading, body) = if current {
-                (words::account_settings_revoke_self(), words::account_settings_revoke_self_confirm())
-            } else {
-                (words::account_settings_revoke(), words::account_settings_revoke_confirm())
-            };
-            p.ask_then(heading.clone(), body, heading, "sign out", move |settings| Call::SettingsSignOut { settings, family });
+            if !current {
+                let heading = words::account_settings_revoke();
+                p.ask_then(heading.clone(), words::account_settings_revoke_confirm(), heading, "sign out", move |settings| Call::SettingsSignOut { settings, family });
+                return;
+            }
+            // this device's own family is a sign-out here: while writes made offline wait, the core's question in place
+            // of the plain one (ADR 0153 decision 2)
+            glib::spawn_future_local(async move {
+                let heading = words::account_settings_revoke_self();
+                let (body, accept) = match Self::queued_ask(QueuedLoss::SignOut).await {
+                    Some(q) => (said::notice(&q.question), said::key(&q.confirm)),
+                    None => (words::account_settings_revoke_self_confirm(), heading.clone()),
+                };
+                p.ask_then(heading, body, accept, "sign out", move |settings| Call::SettingsSignOut { settings, family });
+            });
         });
         actions.add_action(&revoke);
         // any device the register names is renamed here (ADR 0148 decision 1); this device's own name is the row above
