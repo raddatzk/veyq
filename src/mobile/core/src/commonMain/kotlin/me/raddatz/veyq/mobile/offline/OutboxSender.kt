@@ -5,7 +5,7 @@ import me.raddatz.veyq.mobile.session.TenantSession
 import me.raddatz.veyq.mobile.session.Unreachable
 
 /**
- * One run of the outbox (ADR 0153 decision 4, the CR's W3): after a reconnect, and when an account opened online finds
+ * One run of the outbox (ADR 0153 decision 4): after a reconnect, and when an account opened online finds
  * writes waiting ([me.raddatz.veyq.mobile.session.VeyqAccount.sendQueued]). Oldest first, one at a time, each through
  * its [Queued] value's sender — the online path, never a copy of it; a write that waits for another ([QueuedWrite.after])
  * goes once that one is sent, and stays while it is held or refused, so a held write holds only what depends on it.

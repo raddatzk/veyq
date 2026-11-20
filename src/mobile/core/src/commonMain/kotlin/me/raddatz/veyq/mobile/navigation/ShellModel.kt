@@ -254,7 +254,7 @@ class ShellModel(
         get() = tenant.account.queuedReports.map { me.raddatz.veyq.mobile.offline.QueuedShown.report(it) }
 
     /**
-     * What a level shows in place of its nodes not sent yet (ADR 0153 decision 5, the CR's W4): the folders, Memories,
+     * What a level shows in place of its nodes not sent yet (ADR 0153 decision 5): the folders, Memories,
      * chapters and files made offline under [parentId] (null: the space's top) of [scopeId], each a tray item marked
      * *Waiting to send* (or held, refused), at once and at each change.
      */

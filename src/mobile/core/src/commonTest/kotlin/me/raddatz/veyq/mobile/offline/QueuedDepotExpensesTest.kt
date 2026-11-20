@@ -40,7 +40,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Depot's and Expenses' writes queued offline and sent (ADR 0153 decisions 1, 3 and 4; the CR's phase 4), over a played
+ * Depot's and Expenses' writes queued offline and sent (ADR 0153 decisions 1, 3 and 4), over a played
  * server with real seals: a new Pot entry with a receipt sent, the receipt first and its `K_blob` wrapped under the Pot's
  * key at the send; the revision naming the heads the person read, not the ones the send found; an edit and a delete
  * meeting a newer revision held, the person's values kept beside the newer version; a receipt the storage has no room for

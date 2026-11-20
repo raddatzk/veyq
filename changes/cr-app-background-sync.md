@@ -24,7 +24,7 @@ queue and closes. The web has nothing like it. **Waits on owner question 1**: no
 
 - **Read first:** ADR 0153 decision 8 and its § Context's platform lines, ADR 0123 decision 8 (the levels), ADR 0140
   decisions 4 and 9, `src/mobile/CLAUDE.md` § Nothing on disk (WorkManager's own records), § Prove your work.
-- **Order:** after [cr-app-offline-writes](cr-app-offline-writes.md) (its sender is what a run calls).
+- **Order:** after ADR 0153 decisions 1–5 (built 2026-11-20: `OutboxSender`, what a run calls).
 - **Out of scope:** the desktops (ADR 0153 decision 8); the presence level and the password trust.
 
 ## Measured at refine (2026-11-19)

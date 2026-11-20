@@ -1,7 +1,7 @@
 # ADR 0153 — The apps queue a person's own additions and edits made offline, sealed to the device, and send them through the online write path; Expenses joins the store; a login-level device syncs in the background
 - Status: Accepted (owner 2026-11-19, the CRs' owner questions answered as recommended)
-- Built: partly — decisions 6 and 7 on every app, passed on Android, Linux and Windows (§ Consequences); the Mac's
-  click pass and the iPhone's are open ([native-apps](../crosscutting/native-apps.md) § Open). Decisions 1–5 and 8 not built
+- Built: decisions 1–7 on every app (2026-11-20), passed on Android, Linux and Windows (§ Consequences); the Mac's and
+  the iPhone's passes are open ([native-apps](../crosscutting/native-apps.md) § Open). Decision 8 not built (#896)
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -114,7 +114,7 @@ Measured 2026-11-19 on `claude/offline-refine` at `4f3b57ecd` (commands from `sr
      the person never saw: a Pot record edited or deleted meanwhile (`stale_revision`), a rename meeting a moved
      placement (`stale_placement`; online rebuilds and re-applies), a capture time changed by someone else in the same
      field (`stale_revision` on that field; a different field merges as online). The person opens it and decides with the
-     online conflict's own screen: the Pot editor with the newer version named beside theirs (the owner's to confirm), the rename dialog
+     online conflict's own screen: the Pot editor with the newer version named beside theirs, the rename dialog
      with the current name.
    - **Refused** — the target is gone or no longer the person's to write (`403`, `404`, a trashed node, a lost
      membership or right, `quota_exceeded`, an application switched off): held with the reason, offered *Discard* and,
@@ -125,7 +125,7 @@ Measured 2026-11-19 on `claude/offline-refine` at `4f3b57ecd` (commands from `sr
    send* —; the banner says "Offline — content as of {time}" and, while writes wait, their count; **the uploads tray
    (`UploadQueue`'s, every app) lists the queue**, each item with *Discard*, a conflict with *Open*, a refused one with
    its reason, *Discard* and *Save a copy*. After a reconnect, a notice names how many were sent and how many need the
-   person. A queued Pot entry counts in the Pot's balances marked as not sent (the owner's to confirm). The words are the owner's, in
+   person. A queued Pot entry counts in the Pot's balances marked as not sent. The words are the owner's, in
    `src/mobile/words/words.json`.
 6. **Expenses joins the store** (#898). The ledger becomes a kept read, `KeptRead.POT_REVISIONS`, the whole ledger read
    without `since`, conditional on its `ledgerRevision`, kept and replaced as `MemoryMedia` keeps `listNodeMedia`
@@ -165,7 +165,9 @@ Measured 2026-11-19 on `claude/offline-refine` at `4f3b57ecd` (commands from `sr
   were made (a Pot entry carries its own date sealed); with decision 8, requests at times the person did not open the
   app. [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md) says both.
 - **What a thief of the device learns beyond ADR 0140's window:** the person's unsent writes, at the same trust level
-  that opens the store — the same residual, now covering what the person made offline as well as what they viewed.
+  that opens the store — the same residual, now covering what the person made offline as well as what they viewed
+  ([Known limitations](../../site/src/content/docs/security/known-limitations.md#the-apps-offline-store),
+  [Threat model](../../site/src/content/docs/security/threat-model.md)).
 - **The window of decision 8:** the Master Key is in memory in a process the person did not start, for the length of a
   run. It holds no key a login-level start would not hold, and nothing outside the process can start a run.
 - **No contract, backend or web change:** every write and read exists. The core gains `Queued`, the outbox, the sender
@@ -208,6 +210,45 @@ Measured 2026-11-19 on `claude/offline-refine` at `4f3b57ecd` (commands from `sr
   each space's photo list kept for search; [Search all your spaces](../../site/src/content/docs/spaces/search.mdx): offline
   search over every space whose list was read; [Expenses](../../site/src/content/docs/expenses/index.mdx): a Pot offline;
   [Offline or unreachable](../../site/src/content/docs/help/offline.mdx): a Pot's entries among what is shown.
+
+- **As built, decisions 1–5** (2026-11-20). The core's `offline/`: `Outbox` (kinds `OUTBOX` and `OUTBOX_FRAMES` in the
+  store's protected set, an order entry, the floor whatever the limit), `Queued` (the closed list, each value naming its
+  operations — a test derives them from the senders and fails on one of the never column), `OutboxSender` (oldest first,
+  a dependent after its parent, held and refused writes kept and skipped) after each reconnect and at an online open with
+  writes waiting, each application's queue side and sender (`QueuedNodes`, `QueuedMemories`, `QueuedDepot`,
+  `QueuedExpenses`), and `QueuedTray`/`QueuedShown` (the tray, its *Open* as a typed `QueuedOpen`, the banner's count, the
+  reconnect's notices, the ask before a loss, for any account); the models' overlays (`ShellModel.queuedHere` and
+  `createsHere` offline, `GalleryModel`'s waiting tiles, `PotView`'s *Not sent* and `balancesUnsent`, the held entry's
+  editor `PotModel.heldEditor`). The online paths gained only what a queued write states: the id minted at queue time on
+  every attempt, the placement or heads seen, a medium's frames sealed ahead. The bridge carries items and states alone
+  (`Watched.QueuedTray`, `Queued.*`, `Editor.OpenHeld`/`DiscardMine`; `SecretFreeSchemaTest`). Where it differs from the
+  text above: a Master Key rotation — this device's own, or one met at `resume` — carries the outbox under a **fresh**
+  `K_off` and lets the reopen's sweep drop every file of the old key, instead of re-wrapping the old header (ADR 0148's
+  Alternatives rejected keeping an old `K_off`); a refused receipt refuses its whole entry, so the person decides with
+  *Save a copy* or *Discard*; a sibling's name met at the send holds a create or rename (`name_taken`), and a re-key still
+  pending leaves a write waiting; the outbox's keys name no tenant or scope, so a suspended tenant's sweep leaves its
+  writes to be refused on send rather than lost unsaid. Not shown in place before they are sent (#1040): a capture time
+  (the grid keeps its order), a rename, and a Memory or chapter made offline, which opens nothing until sent; a trash
+  offline offers no Undo (the tray's *Discard* is it). Tests: [`src/mobile/CLAUDE.md`](../../src/mobile/CLAUDE.md) § Prove
+  your work names them.
+- **The passes (decisions 1–5).** Each a throwaway with a member, erased after. **Android** (2026-11-20, a throwaway API 36
+  AVD in airplane mode, deleted after; the member on the web): offline a folder and a Memory made, an entry with a receipt
+  added and another edited, two photos added to a kept Memory — rows, tiles and entries *Waiting to send* / *Not sent*,
+  the balances' line, the banner and the tray counting; the app's data (60 files) grepped for the titles and the note: no
+  hit; back online all sent, the receipt and the photos opening on the web; the edited entry, changed by the member
+  meanwhile, held, its *Open* naming who and when with *Discard mine*; sign-out with a write waiting asked first.
+  **Linux** (Broadway, the server cut by its own forwarder): offline New offered only New folder, Upload files and New
+  Memory; a folder, a Memory and an entry with a receipt queued — banner, row, tray, *Not sent*, the balances' line; Stop
+  trusting asked first; reconnected, all three sent; a second run's queued Memory dropped by the tray's *Discard*.
+  **Windows** (the VM, an unpackaged debug build): a folder queued — banner, row, tray —, Manage's sign-out asked first,
+  sent at the reconnect. **Live** (`LiveQueuedTest` against the dev backend): a chapter, two photos and an entry with a
+  receipt queued offline and sent; it found that `VeyqAccount.retire` logged out the family a device later unlocked
+  offline would resume with (fixed: a remembered account's kept session stays). **Not run on any app:** a medium's capture
+  time, a node re-keyed while offline (`QueuedTest`, `QueuedMemoriesTest` hold the re-seal), *Save a copy* of a refused
+  write and a held rename's *Open* (tests only); on the desktops a photo queued, the held entry's editor and the store's
+  grep; on Windows a Pot entry. **Apple:** both builds green, nothing clicked — an ad-hoc build keeps no Keychain trust,
+  so no store and nothing queues; the Mac's pass waits for the owner's signed build and the iPhone's is the owner's
+  ([native-apps](../crosscutting/native-apps.md) § Open holds the list); `AppleQueuedTest` holds what Swift reads.
 
 ## Alternatives considered
 

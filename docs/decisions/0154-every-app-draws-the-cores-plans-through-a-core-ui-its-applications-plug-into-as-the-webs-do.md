@@ -1,7 +1,8 @@
 # ADR 0154 — Every app draws the core's gates, plans, notices and formats through a core UI its applications plug into, as the web's do
 - Status: Accepted (owner 2026-11-20: the CRs' owner questions answered as recommended)
-- Built: no — the CRs `cr-apps-gates-in-the-core`, `cr-apps-words-guard-reads-every-ui`, `cr-apps-core-ui-layer`,
-  `cr-apps-structure-from-core-plans` and `cr-apps-notices-and-formats-from-the-core` build it
+- Built: decision 1 on every app (2026-11-20, § Consequences); decisions 2–6 not yet — the CRs
+  `cr-apps-words-guard-reads-every-ui`, `cr-apps-core-ui-layer`, `cr-apps-structure-from-core-plans` and
+  `cr-apps-notices-and-formats-from-the-core` build them
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -104,6 +105,30 @@ held for the screens' models but not around them:
   is listed in its CR and follows the web unless the owner decides otherwise.
 - The words guard grows a Kotlin and manifest reader; the structure and direction guards are new, each bitten before
   trusted.
+
+- **As built, decision 1** (2026-11-20). One drop in the core: `ShellModel.drop(target, items)` (`navigation/Drop.kt`)
+  judges the target — a level by `AddHere`, a folder row by `ShellModel.dropTarget`, never by its kind, a gallery by its
+  rights —, sorts once (one import offer per drop, a folder without a local path refused by name) and answers `Uploaded`,
+  `Offered` or `Refused`; Windows' `DropSort.cs`, Linux's sort and the four gallery sorts are gone. Every upload, folder
+  upload and import screen through the bridge is judged again by `ShellModel.takesUpload` before a path is opened
+  (`Refused(DROP_NOT_HERE)`; it takes files offline where a Depot file queues, ADR 0153). New Folder, a rename and a
+  guest's folder answer `NameAnswer` (a `problem` keeps the dialog open, a `notice` closes it, `queued`); a guest's Replace
+  is offered by `FileRights.replace`, *Add entry* by `PotView.offersEntries`, and a guest not named yet is asked at the
+  write by the core's one naming (`GuestAccess.naming`). The core follows a reach's end (`SessionModel.followed`), the
+  bridge for the desktops; a release build of Android and Apple prefills no server. Where a platform still decides: a
+  phone puts a level's refused drop into its pick mode (a refused drop hands nothing back); a level's batch label is its
+  drawn title; a Memory's *Add photos* and a WRITE_ONLY page still name a guest first through `Received.Name` (#1042), and
+  the phones' guest gallery offers *Add* only once named (#1044). Tests: `GatesInTheCoreTest`, `SessionModelTest`,
+  `GuestDoorsTest`, the bridge's `DispatchTest` and `ReceivedBridgeTest`; the bridge's `ShellShown.dropsHere`/`dropRows`
+  are held by no bridge test (the bridge's played tenants have no shell; the core's gates are).
+- **The passes (decision 1).** Each a throwaway, erased after. New Folder with a taken name kept the dialog open with the
+  word under the field on Android, Linux and Windows. Android: a READ_WRITE link opened unnamed offered *Replace…* on a
+  file and asked the name at the write, then uploaded. **Not run:** every drop on every app — Android needs a window to
+  drag from another app (#1045), Broadway carries no file drop from the browser, the Windows VM's WinUI takes none from
+  Explorer with UAC off; a guest's Replace on the desktops; *Add entry* asking at the save; the release builds' empty
+  server field (compiled only). **Apple:** both builds green, nothing clicked; the Mac's drops (a ZIP and a folder onto a
+  level, onto a folder row and a guest's identity folder, onto a gallery; #1039's folder from Finder), its dialogs and a
+  guest's link are the coordinator's pass, the iPhone's the owner's.
 
 ## Alternatives considered
 

@@ -286,7 +286,7 @@ dialog. Callers: the kit's scan at sign-in, device linking.
 within a limit they set on the account's Settings page ("Storage on this device"; 2 GB on the phones, 10 GB on the
 desktops by default, any size, Off), and what they made "Available offline" from a Memory's, a chapter's, a folder's or a
 file's header menu, kept until undone and synced at each online open and on a moved revision. An account on a trusted
-device unlocks offline at its trust level; offline the shell says "Offline — content as of …", every write is refused,
+device unlocks offline at its trust level; offline the shell says "Offline — content as of …", every write ADR 0153 does not queue is refused,
 and what is not kept says "Not available offline". Sign-out, Stop trusting, removing the device, a refused refresh and a
 wrap the server no longer serves wipe the store; Android fetches a pin in a WorkManager worker promoted to a `dataSync`
 foreground service, iOS in the time `beginBackgroundTask` and `BGContinuedProcessingTask` grant. Measured 2026-11-15 on
@@ -301,7 +301,18 @@ after each own write (#1038), its receipts' frames kept when shown; a Pot is pin
 cover) and opens offline read-only under the banner with its own kept time, a receipt never shown saying "Not available
 offline". Each space's `listScopeMedia` is a kept read in the automatic tier (`KeptRead.SCOPE_MEDIA`, never pinned,
 swept with its scope), so search offline finds the photos of a Memory never opened. Passed on Android, Linux and Windows
-(ADR 0153's Consequences).
+(ADR 0153's Consequences). **Writes made offline** ([ADR 0153](../decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md) decisions 1–5): on a
+trusted device the person's own additions and edits of the decision's list queue as intent sealed in the account's
+store (`offline/Outbox`), show where they were made as *Waiting to send*, are listed in the uploads tray (*Discard*,
+*Open* of a held one, *Save a copy* of a refused one's file) and are sent through the online write paths at the
+reconnect, what changed meanwhile held for the person; a sign-out, Stop trusting and Remove all offline content ask
+first while any wait. Passed on Android, Linux and Windows (ADR 0153's Consequences).
+
+**The gates are the core's** ([ADR 0154](../decisions/0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md) decision 1, every app): one drop
+(`ShellModel.drop`, a folder row a target only where `dropTarget` says), every upload call judged again in the bridge,
+a name dialog's typed answer (`NameAnswer`), a link guest's Replace and *Add entry* by `FileRights`/`PotView` with the
+name asked at the write, the shell following a reach's end (`SessionModel.followed`), no development server in a
+release build (ADR 0154's Consequences).
 
 **Music, on all four apps** ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md)). The web's player ported into the core's
 `audio/` (`MusicPlayer`, its order, fades and the lightbox video's interruption) and Memories' music into
@@ -719,5 +730,13 @@ the presence level's offline unlock (a PIN or Windows Hello typed), the Flatpak'
 pinned Depot file or folder (built, run by no test). **Pots and search offline** (ADR 0153 decisions 6 and 7): the Mac's
 click pass is the coordinator's and the iPhone's the owner's (ADR 0153's Consequences hold the click list); not run on
 any app: the Flatpak's and the MSIX's, sign-out offline on Linux, a never-kept Pot opened offline on Linux and Windows.
-Not built: writes made offline and sent later, a sync of pins while the app is not running
-([ADR 0153](../decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md) decisions 1–5 and 8; #897, #896).
+**Writes made offline** (ADR 0153 decisions 1–5): the Mac's pass waits for the owner's signed build (an ad-hoc build
+keeps no trust, so nothing queues) and the iPhone's is the owner's — offline New, a folder, a Memory, a photo and a Pot
+entry with a receipt queued and sent with the notice, a held entry's and a held rename's *Open*, *Save a copy*, each
+loss's ask; not run on any app: a capture time, a re-key while offline, *Save a copy*; not shown in place before they
+are sent: a capture time, a rename, a new Memory (#1040); Windows' and Linux's Manage ask nothing before signing out an
+account that is not open (#1043). Not built: a sync of pins while the app is not running (decision 8, #896).
+**The gates** (ADR 0154 decision 1): no drop passed on any app — the phones need a window to drag from (#1045),
+Broadway carries no file drop, the Windows VM's WinUI takes none with UAC off; the Mac's drops and dialogs are the
+coordinator's pass (#1039), a guest's link on the iPhone the owner's; a Memory's *Add photos* and a WRITE_ONLY page still
+name a guest first (#1042), the phones' guest gallery offers *Add* only once named (#1044).

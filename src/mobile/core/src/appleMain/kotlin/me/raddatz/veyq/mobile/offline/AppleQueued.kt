@@ -17,7 +17,7 @@ import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.words.Notice
 
 /**
- * The writes made offline as the Swift app observes them (ADR 0153 decision 5; cr-app-offline-writes phase 8): each of
+ * The writes made offline as the Swift app observes them (ADR 0153 decision 5): each of
  * the shell's flows held as a state Swift reads by `value` (`AppleMemories.watch` takes a `StateFlow`), as the bridge's
  * `QueuedDoor` hands the desktops the same core functions — nothing decided here. [said] keeps the reconnect's notices
  * until the app said them ([saidSeen]); [saveCopy] writes a refused write's file into the path the save panel gave
