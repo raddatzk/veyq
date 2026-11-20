@@ -41,6 +41,15 @@ folder; a gallery is the web's justified grid on every app, its uploaders read o
 web's and a medium's Undo the node trash's 6 s; nothing decrypted is written to show or play a file ([ADR 0047](../decisions/0047-inline-video-playback-range-streaming.md)'s
 Consequences).
 
+Inside each platform the drawing splits once more, as the web's does (owner 2026-11-20, [ADR 0154](../decisions/0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md)
+decision 3, built 2026-11-20 on all four): a **core UI** — the shell and drawer, the page frame and node header, the
+level, the shared sheets, the notices, New, the uploads and drops, the tray — and one directory per **application**
+(Memories, Depot, Expenses), each registering its kinds' page bodies, its link pages, its New dialogs, its list and its
+part of a person's profile into the platform's one registry through one composition root. The core UI reaches an
+application only through that registry, an application never reaches another, and the Kotlin core keeps the same
+direction but for `AppKinds` and a shrinking list of roots (inbox #1048); `scripts/validate_mobile_ui_direction.py`
+holds all four platforms and the core. The paths per platform are [src/mobile/CLAUDE.md](../../src/mobile/CLAUDE.md)'s.
+
 ## Platforms
 
 | Platform | Builds | UI | Large-screen layout | Seen running |
