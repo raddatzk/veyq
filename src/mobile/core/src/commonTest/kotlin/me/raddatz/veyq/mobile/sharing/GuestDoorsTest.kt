@@ -214,13 +214,16 @@ class GuestDoorsTest {
      */
     @Test
     fun aReadWriteUnnamedGuestIsOfferedAddEntryAndAskedItsNameAtTheWrite() = runTest {
-        assertFalse(PotGuest.offersEntries(assertNotNull(view(fixture("READ").share).also { it.load() }.access)), "a READ guest is offered Add entry")
+        val read = assertNotNull(view(fixture("READ").share).also { it.load() }.access)
+        assertFalse(PotGuest.offersEntries(read), "a READ guest is offered Add entry")
+        assertFalse(read.naming.offered, "a READ guest is offered to name itself")
         val f = fixture("READ_WRITE")
         val v = view(f.share)
         v.load()
         val access = assertNotNull(v.access)
         val door = GuestPotDoor(access)
         assertTrue(door.offersEntries, "an unnamed READ_WRITE guest is not offered Add entry")
+        assertTrue(access.naming.offered, "a READ_WRITE guest is not offered to name itself")
         assertFalse(door.writesEntries)
         val session = PotSession.open(door, access.tree!!.node(f.pot)!!)
         val requests = f.share.requests.size
