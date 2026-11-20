@@ -43,6 +43,7 @@ struct NodeShareSheet: View {
             try? await made.load()
         }
         .onDisappear { box.stop() }
+        .sheetFrame(minHeight: 480)
         // the question is the sheet's state: a binding that cancelled on dismissal would run before the button's action (the
         // trash's purge once sent nothing so, ADR 0136), so only Cancel cancels
         .alert(say(.shareRenew), isPresented: Binding(get: { box.state?.renewing != nil }, set: { _ in })) {
@@ -202,6 +203,7 @@ struct TopLevelUploadSheet: View {
             box.start(made)
         }
         .onDisappear { box.stop() }
+        .sheetFrame(minHeight: 480)
     }
 }
 

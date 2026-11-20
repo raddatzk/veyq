@@ -734,18 +734,7 @@ struct HomeView: View {
             guard case .success(let url) = result else { return }
             Task { await model.uploadFolder(url) }
         })
-        .alert(say(.folderNew), isPresented: $naming) {
-            TextField(say(.peopleName), text: $newName)
-            Button(say(.createPotCreate)) {
-                let name = newName
-                Task {
-                    if let problem = await model.createFolder(name: name) { nameProblem = problem; naming = true }
-                }
-            }
-            Button(say(.signinCancel), role: .cancel) {}
-        } message: {
-            if let nameProblem { Text(nameProblem) }
-        }
+        .folderNaming($naming, name: $newName, problem: $nameProblem) { name in await model.createFolder(name: name) }
         // New Memory: made at this level and opened (the web's `MemoryNodeDialog`)
         .sheet(isPresented: $namingMemory) {
             if let space = model.shell.space { NewMemorySheet(model: model, scopeId: space, parentId: model.shell.folder?.nodeId) }
@@ -1216,6 +1205,86 @@ struct NewMemorySheet: View {
         }
     }
 }
+
+extension View {
+    /// New Folder's name (a level's, a guest folder's): `create` makes it and says why not. iOS asks in an alert with its
+    /// field, a refusal opening it again; a Mac in a sheet that keeps the refusal under the field (`NewFolderSheet`).
+    func folderNaming(_ shown: Binding<Bool>, name: Binding<String>, problem: Binding<String?>, create: @escaping (String) async -> String?) -> some View {
+        modifier(FolderNaming(shown: shown, name: name, problem: problem, create: create))
+    }
+}
+
+private struct FolderNaming: ViewModifier {
+    @Binding var shown: Bool
+    @Binding var name: String
+    @Binding var problem: String?
+    let create: (String) async -> String?
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.sheet(isPresented: $shown) { NewFolderSheet(name: $name, problem: $problem, create: create) }
+        #else
+        content.alert(say(.folderNew), isPresented: $shown) {
+            TextField(say(.peopleName), text: $name)
+            Button(say(.createPotCreate)) {
+                let typed = name
+                Task { if let refused = await create(typed) { problem = refused; shown = true } }
+            }
+            Button(say(.signinCancel), role: .cancel) {}
+        } message: {
+            if let problem { Text(problem) }
+        }
+        #endif
+    }
+}
+
+#if os(macOS)
+/// New Folder on a Mac: its name, *Create* (Return too) while one is typed, a refusal kept under the field. An alert asked
+/// here before: the macOS pass of 2026-11-20 saw a click on *Erstellen* do nothing where Return made the folder — its
+/// refusal reopened the alert it had just answered, which SwiftUI does not present again (§ Traps), so a name the click
+/// sent blank (not measured why: the alert's field likely not committed before the click's action) vanished unsaid.
+private struct NewFolderSheet: View {
+    @Binding var name: String
+    @Binding var problem: String?
+    let create: (String) async -> String?
+    @State private var saving = false
+    @Environment(\.dismiss) private var dismiss
+
+    private var blank: Bool { name.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(say(.peopleName), text: $name).onSubmit(submit)
+                } footer: {
+                    if let problem { Text(problem).foregroundStyle(Role.danger) }
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle(say(.folderNew))
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { dismiss() }.disabled(saving) }
+                ToolbarItem(placement: .confirmationAction) { Button(say(.createPotCreate), action: submit).disabled(saving || blank) }
+            }
+        }
+        .interactiveDismissDisabled(saving)
+        .sheetFrame(minWidth: 380, minHeight: 200)
+    }
+
+    private func submit() {
+        guard !saving, !blank else { return }
+        saving = true
+        problem = nil
+        let typed = name
+        Task {
+            let refused = await create(typed)
+            saving = false
+            if let refused { problem = refused } else { dismiss() }
+        }
+    }
+}
+#endif
 
 /// The web's motifs (src/web/src/shared/ui/icons.ts) in SF Symbols: images, file, inbox, wallet, folder, link.
 enum Names {

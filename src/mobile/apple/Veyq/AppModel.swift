@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import Observation
+import os
 import VeyqCore
 #if os(iOS)
 import UIKit
@@ -848,7 +849,9 @@ final class AppModel {
             return
         }
         #if os(macOS)
+        Self.dropLog("drop onto a level: \(providers.map(\.registeredTypeIdentifiers))")
         let (folders, files) = await IncomingFiles.folders(providers)
+        Self.dropLog("\(folders.count) folder(s), \(files.count) other item(s)")
         for url in folders { await uploadFolder(url) }
         #else
         let files = providers
@@ -867,6 +870,14 @@ final class AppModel {
         }
         #endif
         if incoming.refused > 0 { notice = Notice(text: say(.shareUnread, incoming.refused)) }
+    }
+
+    /// A drop's path in a debug build's unified log (`log stream --level debug --predicate 'subsystem == "app.veyq" AND
+    /// category == "drop"'`): the types each item registered and the branch it took — no name, no content.
+    nonisolated static func dropLog(_ line: String) {
+        #if DEBUG
+        Logger(subsystem: "app.veyq", category: "drop").debug("\(line, privacy: .public)")
+        #endif
     }
 
     /// Files dropped onto `gallery`'s page (ADR 0138 decision 9): its photos and videos queued into it at once, as a pick's;
@@ -1980,12 +1991,19 @@ final class AppModel {
         if scoped { url.stopAccessingSecurityScopedResource() }
         let found = AppleDepot.shared.found(root: url, files: files)
         #if os(macOS)
-        // a folder holding `.veyq/manifest.json` is a download unpacked, offered as an import (ADR 0152 decision 1)
-        let screened = try? await d.screenFolder(
-            scopeId: scopeId, parentId: shell.folder?.nodeId, label: levelLabel, shownName: nil, path: url.path, found: found,
-            deletedName: say(.potDeletedPerson)
-        )
-        offerImport(screened?.offer)
+        // a folder holding `.veyq/manifest.json` is a download unpacked, offered as an import (ADR 0152 decision 1); a screen
+        // that threw says so, never nothing (the macOS pass of 2026-11-20 saw a dropped folder do nothing)
+        do {
+            let screened = try await d.screenFolder(
+                scopeId: scopeId, parentId: shell.folder?.nodeId, label: levelLabel, shownName: nil, path: url.path, found: found,
+                deletedName: say(.potDeletedPerson)
+            )
+            Self.dropLog("folder screened: \(files.count) entries, import offered \(screened.offer != nil), queued \(screened.queued)")
+            offerImport(screened.offer)
+        } catch {
+            Self.dropLog("folder screen failed: \(type(of: error))")
+            notice = Notice(text: say(.depotFolderFailed, url.lastPathComponent))
+        }
         #else
         try? await d.uploadFolder(scopeId: scopeId, parentId: shell.folder?.nodeId, shownName: nil, path: url.path, found: found)
         #endif
