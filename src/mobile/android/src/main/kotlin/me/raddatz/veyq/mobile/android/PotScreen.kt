@@ -263,7 +263,7 @@ private fun Overview(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMo
                 Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(say(view.pays(t)), Modifier.weight(1f))
                     Text(money(t.amount, view.currency, view.minorUnits), fontWeight = FontWeight.SemiBold)
-                    if (view.canWrite) {
+                    if (view.canRecord) {
                         TextButton(onClick = { model.recordSettleUp(listOf(t)) }, enabled = !state.saving) {
                             Text(stringResource(R.string.balances_record))
                         }

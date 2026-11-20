@@ -142,8 +142,10 @@ Branch `claude/core-owns-refine` at `a75188eb8` (= `claude/windows-cr-f6c73c`). 
   write, named, the upload worker ran (logcat `UploadWorker` SUCCESS). **Not clicked:** the four drops (a drag from
   another app needs split screen, not drivable headless over adb), a guest's *Add entry* asking at the save, New Folder
   refused offline (offline it now queues), the release build's empty server field (compiled, not installed).
-  **Deviations:** a guest's level New and a guest's gallery *Add* still show only once named (`GuestLevel.writes &&
-  named`, `canAdd = session != null`): their core writes need a session, not the naming flow — inbox row.
+  After merging Linux's phase (`4eb8eb277`) a guest's level New shows where `GuestLevel.writes` and its folder and upload
+  ask the name at the write (`createFolder`, `uploadAsking`); a settle-up's *Record* reads `PotView.canRecord`.
+  **Deviation:** a guest's gallery *Add* still shows only once named (`canAdd = session != null`): `GalleryModel`'s guest
+  upload takes no naming flow yet — inbox #1044.
 - [ ] **4 Apple** — the same; `try?` gone; the prefill under `#if DEBUG`. · Done when: both Apple builds green.
 - [x] **5 Linux** — the drop through the bridge's `Drop`, `drop.rs`' sort gone, the folder row's drop from
   `dropTarget`, the dialogs and guest gates likewise, `file_page`/`header::say`'s log-only paths replaced by said

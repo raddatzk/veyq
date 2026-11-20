@@ -319,7 +319,7 @@ private fun GuestPageBody(page: GuestPage, screen: GuestScreen, model: AppModel,
     val view = screen.view
     val session = view.access?.session?.collectAsStateWithLifecycle()?.value
     when (page) {
-        is GuestPage.Level -> GuestLevelPage(page.model, view, model, session != null, snackbar)
+        is GuestPage.Level -> GuestLevelPage(page.model, view, model, snackbar)
         is GuestPage.File -> {
             DisposableEffect(page.model) { onDispose { page.model.close() } }
             FilePage(page.model, page.node.name)
@@ -336,12 +336,12 @@ private fun GuestPageBody(page: GuestPage, screen: GuestScreen, model: AppModel,
 }
 
 /**
- * A folder of the link (core's level over the guest's tree): its rows, each opened as its kind's page, and — for a named
+ * A folder of the link (core's level over the guest's tree): its rows, each opened as its kind's page, and — for a
  * READ_WRITE guest outside an identity folder (`GuestLevel.writes`, #1034; the web's `ShareTreePage`) — the level's New:
  * a folder, files uploaded here. The link is read anew after each write, so what was added is listed.
  */
 @Composable
-private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, view: me.raddatz.veyq.mobile.sharing.GuestView, model: AppModel, named: Boolean, snackbar: SnackbarHostState) {
+private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, view: me.raddatz.veyq.mobile.sharing.GuestView, model: AppModel, snackbar: SnackbarHostState) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var naming by remember(level) { mutableStateOf(false) }
@@ -351,7 +351,8 @@ private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, vie
     val rows = level.rows
     // what a guest adds here: a folder and files (Depot's level action); a guest makes no Memory, Pot or drop box
     val creates = listOf(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES)
-    CreateAction(stringResource(R.string.create_new), shown = level.writes && named, onClick = {}, menu = { close ->
+    // offered where core's level writes; a guest not named yet is asked its name at the write (core's naming flow)
+    CreateAction(stringResource(R.string.create_new), shown = level.writes, onClick = {}, menu = { close ->
         creates.forEach { c ->
             androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, modifier = Modifier.testTag("guest-create-${c.name.lowercase()}"), onClick = {
                 close()

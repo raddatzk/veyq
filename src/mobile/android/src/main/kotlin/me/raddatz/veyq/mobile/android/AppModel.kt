@@ -2488,7 +2488,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun guestLevelUpload(level: me.raddatz.veyq.mobile.sharing.GuestLevel, uris: List<android.net.Uri>) {
         viewModelScope.launch {
             val sources = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { uris.mapNotNull { picked(it)?.let(::source) } }
-            if (level.upload(sources) == 0) sources.forEach { it.close() }
+            // a guest not named yet is asked its name first (core's `uploadAsking`); declined, nothing is queued
+            if (level.uploadAsking(sources) == 0) sources.forEach { it.close() }
         }
     }
 
