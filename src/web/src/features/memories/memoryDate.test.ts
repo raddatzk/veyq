@@ -11,13 +11,12 @@ import {
   sealMemoryDate,
   unsealMemoryDate,
   setMemoryDate,
-  reconcileMemoryDate,
-  computeAutoRange,
   sameMemoryDate,
   unsealNodeDate,
   sortNodesByDate,
   type MemoryDate,
 } from './memoryDate'
+import { computeAutoRange, reconcileMemoryDate } from './memoryFromMedia'
 import type { MediaItem, MediaMeta } from './media'
 import type { TreeNode } from '../../core/node/tree'
 import type { ContentApi } from '../../api/generated/content'

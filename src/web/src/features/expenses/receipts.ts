@@ -32,8 +32,8 @@ import type { PotTarget, PotWriteKey } from './domain/potApi'
 /** The role a receipt's blob is declared and wrapped in (the backend's `EXPENSES_RECEIPT`, 16 characters). */
 export const RECEIPT_ROLE = 'EXPENSES_RECEIPT'
 
-/** The largest receipt, in plaintext bytes (the backend's role cap, `MemberBlobRoles.maxBytes`): 10 MiB. */
-export const RECEIPT_MAX_BYTES = 10 * 1024 * 1024
+/** The largest receipt (`domain/receiptRules.ts`, where the content's check reads it without this module's network). */
+export { RECEIPT_MAX_BYTES } from './domain/receiptRules'
 
 export { readAll }
 

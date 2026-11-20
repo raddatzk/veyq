@@ -24,8 +24,7 @@
 // tenant. The importer could link a participant to any member through the People tab as well, so an archive that claims
 // the tenant can do no more than that; a user id the tenant does not list shows as a former member.
 import type { ExportContentHook, ExportNodeContext, ImportContentHook } from '../../core/export/hooks'
-import type { ContentProblem } from '../../core/applications/registry'
-import type { ManifestContent, ManifestPayload } from '../../core/export/manifest'
+import type { ManifestPayload } from '../../core/export/manifest'
 import { unsealNodeMeta } from '../../core/node/nodeMeta'
 import { deleteNode } from '../../core/node/tree'
 import { iterateBlob } from '../../core/blob/stream'
@@ -33,28 +32,22 @@ import { CHUNK_SIZE } from '../../core/blob/transport'
 import { i18n } from '../../i18n'
 import { applyPotChange, readGuestPot, readMemberPot, type PotWrite } from './domain/potApi'
 import { buildLedger, namedParticipants } from './domain/ledger'
-import { CURRENCY, MAX_RECEIPTS, readRevisionBody, UUID, RevisionFormatInvalid, type Allocation, type MoneyContent, type RevisionBody, type Split } from './domain/format'
-import { potMetaOf, MAX_CATEGORY_NAME, MAX_OWN_CATEGORIES } from './domain/potMeta'
-import { claimsReceipt } from './domain/receiptRules'
+import { readRevisionBody, UUID, type Allocation, type MoneyContent, type RevisionBody, type Split } from './domain/format'
+import { potMetaOf } from './domain/potMeta'
 import type { HeldRevision } from './domain/revisions'
 import { appendInBatches, createPotNode } from './createPot'
 import { memberNodeWriter } from '../../core/node/rereadNode'
 import {
-  RECEIPT_MAX_BYTES, readGuestReceipts, readMemberReceipts, receiptChunks, receiptName, receiptPresign, receiptSize, uploadReceipt, type HeldReceipt,
+  readGuestReceipts, readMemberReceipts, receiptChunks, receiptName, receiptPresign, receiptSize, uploadReceipt, type HeldReceipt,
 } from './receipts'
 import { decimalOf } from './amounts'
 import { activeSpace } from '../../app/activeSpace'
+import { baseName, EXPENSES_CONTENT_VERSION, EXPENSES_POT_CONTENT, MAX_RECEIPT_NAME, validatePotContent } from './contentSchema'
 
-export const EXPENSES_POT_CONTENT = 'expenses.pot'
-/** The version of the content schema this build writes and reads; its application is Expenses' registered id (`register.ts`), the
- *  `<application>` part of the content type above. */
-export const EXPENSES_CONTENT_VERSION = 1
+// The content's type, version and check live in `contentSchema.ts`: the check is a synchronous answer the registry holds
+// eagerly, this module is loaded on a download's, an import's or a copy's first call (`register.ts`).
+export { EXPENSES_POT_CONTENT, EXPENSES_CONTENT_VERSION, MAX_RECEIPT_NAME, validatePotContent } from './contentSchema'
 const SCHEMA = EXPENSES_CONTENT_VERSION
-
-const MAX_PARTICIPANTS = 1000
-const MAX_ENTRIES = 100_000
-/** The longest receipt name the content carries (the content schema's `receipt.name` maxLength). */
-export const MAX_RECEIPT_NAME = 1024
 
 type ExportedParticipant = { id: string; joined: number; name?: string; active?: boolean; deleted?: true; memberId?: string }
 /** One receipt as the content carries it (`receipt` in Expenses' content schema): the id its entry lists, its sealed name, its bytes. */
@@ -191,95 +184,6 @@ export const exportPot: ExportContentHook = async (ctx) => {
     entries,
     table,
   }
-}
-
-const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
-const bad = (message: string): ContentProblem => ({ code: 'invalid_manifest', message })
-const tooLarge = (message: string): ContentProblem => ({ code: 'too_large', message })
-
-/** The last segment of an archive path: a receipt's name where its content names none. */
-const baseName = (path: string) => path.slice(path.lastIndexOf('/') + 1)
-
-/** An `expenses.pot` content from a download held to its contract (decision 10: the archive is untrusted input). */
-export function validatePotContent(content: ManifestContent): ContentProblem | null {
-  if (content.type !== EXPENSES_POT_CONTENT) return bad(`not an Expenses Pot: ${content.type}`)
-  if (typeof content.baseCurrency !== 'string' || !CURRENCY.test(content.baseCurrency)) return bad('a Pot without a base currency')
-  const mu = content.baseMinorUnits
-  if (typeof mu !== 'number' || !Number.isInteger(mu) || mu < 0 || mu > 4) return bad('a Pot without its minor units')
-  if (content.categories !== undefined) {
-    if (!Array.isArray(content.categories)) return bad('categories that are no list')
-    if (content.categories.length > MAX_OWN_CATEGORIES) return tooLarge('too many categories')
-    for (const c of content.categories) {
-      if (!isObj(c) || typeof c.id !== 'string' || !UUID.test(c.id)) return bad('a category without an id')
-      if (typeof c.name !== 'string' || c.name.length < 1) return bad('a category without a name')
-      if ([...c.name].length > MAX_CATEGORY_NAME) return tooLarge('a category name too long')
-    }
-  }
-  if (content.tenantId !== undefined && (typeof content.tenantId !== 'string' || !UUID.test(content.tenantId))) return bad('a tenant that is no id')
-  if (!Array.isArray(content.participants)) return bad('a Pot without its people')
-  if (content.participants.length > MAX_PARTICIPANTS) return tooLarge('too many people')
-  const ids = new Set<string>()
-  const members = new Set<string>()
-  for (const p of content.participants) {
-    if (!isObj(p) || typeof p.id !== 'string' || !UUID.test(p.id) || ids.has(p.id)) return bad('a person without an id of its own')
-    ids.add(p.id)
-    if (typeof p.joined !== 'number' || !Number.isInteger(p.joined) || p.joined < 0) return bad('a person without a join time')
-    if (p.deleted !== undefined && p.deleted !== true) return bad('a person deleted in another way')
-    if (p.deleted !== true && (typeof p.name !== 'string' || p.name.length < 1)) return bad('a person without a name')
-    if (typeof p.name === 'string' && [...p.name].length > 100) return tooLarge('a name too long')
-    if (p.active !== undefined && typeof p.active !== 'boolean') return bad('a person whose state is no switch')
-    if (p.memberId !== undefined) {
-      if (typeof p.memberId !== 'string' || !UUID.test(p.memberId)) return bad('a member that is no id')
-      if (p.deleted === true) return bad('a deleted person who is a member')
-      if (members.has(p.memberId)) return bad('a member who is two people')
-      members.add(p.memberId)
-    }
-  }
-  if (members.size > 0 && content.tenantId === undefined) return bad('members without their tenant')
-  if (!Array.isArray(content.entries)) return bad('a Pot without its entries')
-  if (content.entries.length > MAX_ENTRIES) return tooLarge('too many entries')
-  const receiptIds = new Set<string>()
-  for (const e of content.entries) {
-    if (!isObj(e) || typeof e.id !== 'string' || !UUID.test(e.id)) return bad('an entry without an id')
-    let body: RevisionBody
-    try {
-      body = readRevisionBody({ ...(isObj(e.entry) ? e.entry : {}), v: 1, heads: [] })
-    } catch (x) {
-      if (x instanceof RevisionFormatInvalid) return bad(`an entry not in the format: ${x.path}`)
-      throw x
-    }
-    if (body.kind !== 'expense' && body.kind !== 'refund' && body.kind !== 'transfer') return bad('an entry that is no money entry')
-    if (namedParticipants(body).some((id) => !ids.has(id))) return bad('an entry naming someone the Pot does not have')
-    const problem = receiptsProblem(e.receipts, body.receipts, receiptIds)
-    if (problem) return problem
-  }
-  return null
-}
-
-/** What is wrong with an entry's carried receipts [carried] against the ids its revision lists [listed], or null: each a
- *  payload of at most 10 MiB that claims an image or a PDF (the picker's rule, `claimsReceipt`), exactly the listed ids,
- *  none carried twice in the Pot ([seen]). */
-function receiptsProblem(carried: unknown, listed: readonly string[], seen: Set<string>): ContentProblem | null {
-  if (carried !== undefined && !Array.isArray(carried)) return bad('receipts that are no list')
-  const items = (carried ?? []) as unknown[]
-  if (items.length > MAX_RECEIPTS) return tooLarge('too many receipts on one entry')
-  const own = new Set<string>()
-  for (const r of items) {
-    if (!isObj(r) || typeof r.id !== 'string' || !UUID.test(r.id)) return bad('a receipt without an id')
-    if (seen.has(r.id)) return bad('a receipt carried twice')
-    own.add(r.id)
-    seen.add(r.id)
-    const f = r.file
-    if (!isObj(f) || typeof f.path !== 'string' || typeof f.mediaType !== 'string' || typeof f.size !== 'number' || !Number.isInteger(f.size) || f.size < 0) {
-      return bad('a receipt without its file')
-    }
-    if (r.name !== undefined && (typeof r.name !== 'string' || r.name.length < 1)) return bad('a receipt whose name is no name')
-    if (typeof r.name === 'string' && [...r.name].length > MAX_RECEIPT_NAME) return tooLarge('a receipt name too long')
-    if (f.size > RECEIPT_MAX_BYTES) return tooLarge('a receipt above 10 MB')
-    if (!claimsReceipt({ type: f.mediaType, name: typeof r.name === 'string' ? r.name : baseName(f.path) })) return bad('a receipt that is no image or PDF')
-  }
-  if (own.size !== listed.length || listed.some((id) => !own.has(id))) return bad('an entry whose receipts are not the ones it lists')
-  return null
 }
 
 /** The entry with every reference mapped through [id] (a person, the expense a refund refunds) and each receipt it lists

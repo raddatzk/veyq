@@ -10,7 +10,6 @@ vi.mock('../../api/client', () => ({
 import {
   computeMedoid,
   isLocationPending,
-  mediaGpsPoints,
   normalizeLocation,
   MAX_PLACE_NAME,
   boundPlaceName,
@@ -21,6 +20,7 @@ import {
   type LatLng,
   type MemoryLocation,
 } from './memoryLocation'
+import { mediaGpsPoints } from './memoryFromMedia'
 import { unsealMemoryDate, type MemoryDate } from './memoryDate'
 import { sealNodeMeta, unsealNodeMeta } from '../../core/node/nodeMeta'
 import type { MediaItem, MediaMeta } from './media'

@@ -9,9 +9,8 @@
 //
 // A location is **never auto-created from GPS presence** — it is a deliberate per-Memory "set location" choice.
 // This module is the pure model + seal; the map editor (Leaflet) and the medoid-over-media self-heal live in the
-// UI layer (uc.memory.place), reusing `computeMedoid` here.
-import type { MediaItem } from './media'
-import { openedMeta } from './openedListing'
+// UI layer (uc.memory.place), reusing `computeMedoid` here; the GPS points read from the Memory's own media are
+// `memoryFromMedia.ts` (they open the gallery's listing, which this module - read by the level's rows - does not load).
 import { editField, unsealNodeMeta } from '../../core/node/nodeMeta'
 import { writeNodeMeta, type WriteNodeMetaOptions } from '../../core/node/nodeMetaWrite'
 import type { NodeMetaState } from '../../core/node/nodeMeta'
@@ -199,20 +198,4 @@ export function computeMedoid(points: LatLng[]): LatLng | null {
     }
   }
   return { lat: points[best].lat, lng: points[best].lng }
-}
-
-/**
- * Collect the GPS points from a Memory's **own** media (its listed `wrappedMeta` tier, cr-0068) under `nodeKey`
- * (`K_node`) — the raw input to [computeMedoid] for the `auto` position. Items without a GPS tier are skipped;
- * reads only the already-listed metadata, no per-item fetch.
- */
-export function mediaGpsPoints(scopeId: string, items: MediaItem[], nodeKey: Uint8Array): LatLng[] {
-  const points: LatLng[] = []
-  for (const item of items) {
-    const tier = openedMeta(scopeId, nodeKey, item)
-    if (tier && tier.gpsLat !== undefined && tier.gpsLng !== undefined) {
-      points.push({ lat: tier.gpsLat, lng: tier.gpsLng })
-    }
-  }
-  return points
 }
