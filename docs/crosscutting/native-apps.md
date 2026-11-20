@@ -566,7 +566,7 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
 **Expenses**: reading a receipt's text on the device (#549); what [expenses.md](../apps/expenses.md) keeps out of the
 first cut.
 
-**Depot**: a READ_WRITE guest's own name as uploader; importing a download on the desktops (cr-app-archive-import: the core and the bridge built, the dialogs not; the
+**Depot**: a READ_WRITE guest's own name as uploader; importing a download on the desktops (cr-app-archive-import: the core, the bridge and the macOS and Linux dialogs built, Windows' not; the
 phones upload one as a file, owner 2026-11-19); multi-select and dragging a node onto a folder to move
 it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built). A password-protected PDF's text
 selected and copied on Windows (drawn by `Windows.Data.Pdf`, which has no text API). Built 2026-11-18 (inbox #955): on
@@ -602,7 +602,7 @@ bucket (#1031); **Apple's pass**, the
 agent's on the unlocked Mac (#994) and the owner's on an iPhone and an iPad (#925, #928), with the filter's place on an
 iPad and a Mac (#995); **Windows' UIA pass** (#1000, once the VM resolves a throwaway's tenant, #983). The fixes of
 #990, #991, #996, #997 and #1001 are in, checked by tests; #990's seen on Android, #996's on Android and Linux; #989's calendars are handed on every app,
-Apple's unclicked. A copy that a rotation interrupts fails (#988). The owner answered its four questions 2026-11-19 as built (ADR 0149's Consequences). Not built: import of an archive on the desktops
+Apple's unclicked. A copy that a rotation interrupts fails (#988). The owner answered its four questions 2026-11-19 as built (ADR 0149's Consequences). Not built: import of an archive on Windows
 (#985, cr-app-archive-import); a guest's view of a received link
 (#435, a source for the same model). The web's own heart in its lightbox (#986) and its Contributions' "You" (#1003) are
 built (2026-11-19).

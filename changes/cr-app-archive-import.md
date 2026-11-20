@@ -161,10 +161,28 @@ The web's `export.*` import keys ported to `words.json` (EN+DE, each `note` nami
   green. **Bite:** an `Update.Import` carrying a payload's bytes or a sealed key → the schema test red.
 - [ ] **7 Android** — the offer from *Upload files*, *Upload folder*, a level drop and a share; the dialog (M3 full-screen
   dialog). · Done when: `:android:assembleDebug`, the guidelines and words guards green; § Passes' Android row.
-- [ ] **8 Apple** — the same (a sheet); iOS's handed-over share screened on queueing. · Done when: both Apple builds
+  **Not built by owner decision** (2026-11-19, Owner question 1: no import on the phones): Android keeps
+  `ShellModel.depotUploads`, a download uploads as a file; nothing of this phase is built until the owner asks.
+- [x] **8 Apple** — the same (a sheet); iOS's handed-over share screened on queueing. · Done when: both Apple builds
   green; the macOS row run here or named open; iOS the owner's.
-- [ ] **9 Linux** — the same over the bridge (`AdwDialog` with an `AdwNavigationView`); its drops screened. · Done when:
+  **Status (2026-11-20):** the Mac half built — macOS opens `ShellModel.depotUploadsImporting` (with `MediaDeriver`);
+  *Upload files*, *Upload folder*, a drop onto the level and *Add here* screen first (`DepotUploads.screen`/`screenFolder`,
+  `AddHere.Level.dropOrOffer`/`takeOrOffer`), an offer drawn by `ImportSheet.swift`, the imported line said once the
+  sheet is gone; every change behind `#if os(macOS)`. **The iOS/iPadOS half is not built by owner decision** (Owner
+  question 1: no import on the phones): iOS keeps `depotUploads`, `pickUpHandoffs` unscreened. Measured: `xcodebuild …
+  -sdk macosx` and `-sdk iphonesimulator` with `CODE_SIGNING_ALLOWED=NO` green. **The macOS row is open**: built only,
+  nothing clicked (a background agent has no full-screen control, src/mobile/CLAUDE.md § Traps) — the coordinator's.
+- [x] **9 Linux** — the same over the bridge (`AdwDialog` with an `AdwNavigationView`); its drops screened. · Done when:
   `python3 linux/run.py test` and `build` green; § Passes' Linux row.
+  **Status (2026-11-20):** `import_dialog.rs`; *Upload files*, *Upload folder* and a drop onto a level or a folder's row
+  go through `Import.Screen`/`Import.ScreenFolder` (`deletedName` the `pot_deleted_person` word). A run is left only by
+  Cancel (rolls back). `run.py test` now mounts `contracts/export` — phases 3–6's core tests read it and were red in the
+  container (26, "cannot read contracts/export/…"). Measured: `run.py bridge`, `build` (clippy, cargo test incl. the two
+  new tests, each bitten red once), `test` (1123 passed) green. Broadway pass (a throwaway, erased; 2026-11-20): the web's
+  `web-download.zip` picked by *Upload files* into a folder → offered (7 items, 3.5 kB) → imported, each kind read back
+  (`notes.txt` 44 characters, the Pot's Dinner €42.00, the Memory's medium and chapter, the drop box as a folder);
+  *Upload as a file* left the ZIP as a file; Cancel at 4 of 7 left nothing. Not run here: the drop from Files (Broadway
+  has none) and a version-3 manifest (the core's `ImportCasesTest` holds `newer_version`).
 - [ ] **10 Windows** — the same (the settings frame's sub-page form or a `ContentDialog`, as ADR 0148's Windows
   flows); its drops screened. · Done when: `python3 windows/run.py build` green on the VM; § Passes' Windows row.
 - [ ] **11 the passes** — § Passes, each a throwaway, erased after; results into ADR 0152's Consequences.
