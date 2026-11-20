@@ -1,7 +1,8 @@
 # ADR 0152 — The apps import a download as the web does: the web's reader and walk in the core, each kind's import its application's, recognised by every Depot upload
 - Status: Accepted
-- Built: partly — the cases, the core and the bridge (cr-app-archive-import phases 2–6, 2026-11-19); the desktops'
-  dialogs and the passes follow in that CR
+- Built: yes on the desktops — the cases, the core and the bridge 2026-11-19, the dialogs of macOS, Linux and Windows
+  2026-11-20; passed on Linux and Windows as throwaways, the macOS click pass open (§ Consequences); the phones' entry
+  off by the owner's decision (decision 1)
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md) (the format: [ADR 0082](0082-a-node-and-everything-under-it-exports-as-a-plaintext-zip-and-imports-under-the-importer.md), [uc.platform.export-import](../features/platform/use-cases/uc.platform.export-import.md))
 
@@ -102,8 +103,37 @@ copy.
 - **Two readers answer to one file.** A refusal one client adds without a case is a drift the other does not see; a case
   added to `generate.py` reaches both.
 - **The phones upload a veyq download as a file** until the owner switches their entry on; a person imports it on a
-  desktop app or on the web.
+  desktop app or on the web. Android's and iOS/iPadOS's dialogs are not built (owner 2026-11-19), so their passes —
+  a ZIP picked by *Upload files*, the unpacked download by *Upload folder*, a ZIP shared from Mail into a folder — wait
+  with them.
+- **One known difference from the web: *Cancel* during a run.** The apps' *Cancel* (and Escape, and closing the dialog)
+  stops a running import and trashes what it made (`ImportDialog.cancel`); the web disables *Cancel* and the dialog's
+  close while a run goes (`ImportSubtreeDialog.vue`), so there a run ends only by finishing or failing. Left as built
+  (2026-11-20); which one both follow is the owner's.
+- **The passes (throwaways, erased after).** *Linux* (Broadway, 2026-11-20): the web's `web-download.zip` picked by
+  *Upload files* into a folder → offered (7 items, 3.5 kB) → imported, each kind read back (`notes.txt` 44 characters,
+  the Pot's *Dinner* €42.00, the Memory's medium and chapter, the drop box as a folder); *Upload as a file* left the ZIP
+  as a file; *Cancel* at 4 of 7 left nothing. *Windows* (`tw-win.localhost`, UI Automation, 2026-11-19): the same ZIP
+  offered with the web's summary, *Cancel* wrote nothing; *Upload as a file* uploaded it (9778 B); *Cancel* while
+  running left only the ZIP, *Trip* in the trash; *Import* → `Done, 7 of 7`, each kind read back (the receipt's JPEG
+  opened, the Memory's chapter and its photo's tile); the unpacked download by *Upload folder…* → offered without
+  *Upload as a file* → imported as *Trip (2)*. A version-3 manifest's refusal is the core's (`ImportCasesTest`, and
+  `ImportScreenTest` for the dialog's words), not driven in an app.
+- **Open:** a drop from the system's file manager — Linux's from Files (Broadway has none; a GNOME session's), Windows'
+  from Explorer (the driven press landed on the app's window, which the host kept above Explorer; the drop's rule is
+  `DropSortTest`'s) — and **the macOS click pass**, the coordinator's from the main session (a background agent has no
+  full-screen control). On macOS, as a throwaway (`pnpm run throwaway:account -- --out <f> --with-member` in `src/web/`,
+  the app signed in by `DevLogin.swift`'s `VEYQ_DEV_*`, `--erase <f>` after): in a folder, *New → Upload files…*, pick
+  `contracts/export/import-cases/web-download.zip` → the sheet offers 7 items with *Upload as a file* → *Import* →
+  *Imported “Trip”* once the sheet is gone; open `notes.txt`, the Pot's *Dinner* and its receipt, the Memory's photo and
+  chapter, the drop box as a folder. The same ZIP again → *Upload as a file* → the ZIP lies as a file. Again → *Import*,
+  then *Cancel* while it runs → nothing left but the ZIP, *Trip* in the trash. Unpack the ZIP in Finder and drag the
+  folder from Finder onto the level → offered without *Upload as a file* → *Import* → *Trip (2)*. Drop the ZIP from
+  Finder onto the level → offered as from the picker.
 - **Out of scope:** a guest's import (never, ADR 0082 decision 7); an import that goes on with the app closed.
+
+Explained for users on the docs site (§ In the app on each): [Download and import](../../site/src/content/docs/spaces/download-and-import.md),
+[Upload files and folders](../../site/src/content/docs/depot/upload-files-and-folders.mdx).
 
 ## Alternatives considered
 
