@@ -41,7 +41,10 @@ struct PotScreen: View {
                     }
                 }
             } else if let state = model.pot, state.ref == ref, state.failed {
-                ContentUnavailableView(say(.potOpenFailed), systemImage: "exclamationmark.triangle")
+                // offline, a Pot this device does not keep says so (no failure: the cloud crossed out), else the open
+                // failed (core's words)
+                let why = state.failure ?? .potOpenFailed
+                ContentUnavailableView(say(why), systemImage: why == .offlineNotKept ? "icloud.slash" : "exclamationmark.triangle")
             } else {
                 ProgressView()
             }

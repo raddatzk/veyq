@@ -136,7 +136,20 @@ ADR 0153 decisions 6 and 7 hold them; here only what the work needs beside them.
   each banner its own time (12:27 / 12:29); the shown receipt opens, the unshown says "Not available offline"; search
   finds *Lighthouse.jpg* of a Memory never opened; after Clear cache and a restart *J1 Trip* says "Not available
   offline", the pinned *J1 Flat* opens; the app's data pulled and grepped for every title, receipt marker and name: no hit.
-- [ ] **5 Apple** — the same. · Done when: both Apple builds green.
+- [x] **5 Apple** — the same. · Done when: both Apple builds green.
+  **Built** (2026-11-20): `PotScreen.swift` says `PotModel.State.failure` where no Pot opened (`offline_not_kept` under
+  `icloud.slash`, no failure; else `pot_open_failed`), carried by `AppModel.PotState.failure`; `EntryReceipts.swift`'s
+  viewer says `AppModel.receiptFailure()` (core's `receiptFailure`) the same way, not "unreadable". Needed no Apple code:
+  the header's *Available offline* (`NodeHeaderActions` draws core's plan for every kind, the Pot's included), the "as
+  of" line (`Picking`'s `OfflineBanner` over `ShellModel.State.banner`, the open page's own time — no Pot-own banner),
+  the write controls (`canWrite`, `canChangeSettings`, `canRecordAll`, `restorable`, the editor's `editable`), search's
+  "searched once online" line (`SearchResults` draws every `SearchShown.status`). `validate_mobile_platform_guidelines.py`,
+  `validate_mobile_words.py` green; after `:core:assembleVeyqCoreDebugXCFramework` and `xcodegen`, `xcodebuild -project
+  apple/Veyq.xcodeproj -target Veyq -sdk macosx build CODE_SIGNING_ALLOWED=NO` and the same with `-sdk iphonesimulator`
+  green. *Pass* not run (a background agent has no full-screen control; no iOS simulator boots here, #928): unclicked on a
+  Mac — a Pot viewed and one pinned through the header's toggle, offline both open under the shell's banner with its
+  time, no *Add entry*, no Record, Settings without edits; a shown receipt opens, an unshown one and a never-kept Pot say
+  "Not available offline"; search finds a never-opened Memory's photo; the store grepped.
 - [ ] **6 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green.
 - [x] **7 Windows** — the same. · Done when: `python3 windows/run.py build` green on the VM.
   **Built** (2026-11-20): `PotPage` says `Update.Pot`'s `failure` word where the Pot did not open (offline

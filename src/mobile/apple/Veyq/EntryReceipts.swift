@@ -120,7 +120,9 @@ struct ReceiptViewer: View {
         NavigationStack {
             Group {
                 if failed {
-                    ContentUnavailableView(say(.receiptsUnreadable), systemImage: "exclamationmark.triangle")
+                    // offline, a receipt this device did not keep says so (no failure), else it is unreadable (core's words)
+                    let why = model.receiptFailure()
+                    ContentUnavailableView(say(why), systemImage: why == .offlineNotKept ? "icloud.slash" : "exclamationmark.triangle")
                 } else if let data {
                     switch AppleSessions.shared.receiptKind(data: data) {
                     case .image:
