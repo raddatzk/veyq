@@ -172,6 +172,38 @@ class ReceivedBridgeTest {
     }
 
     /**
+     * ADR 0154 decision 1 on a guest's gallery: a signed-out READ_WRITE guest's drop onto the Memory on screen goes through
+     * the one `Shell.Drop` with no tenant open — judged by the gallery's rights alone, a folder said by name, never answered
+     * "no tenant".
+     */
+    @Test
+    fun aSignedOutGuestsDropOntoAGalleryIsTheCoresDropWithNoTenant() = runBlocking {
+        val share = PlayedShare(p, role = "READ_WRITE")
+        val content = PlayedGuestContent(share)
+        val (memory, _) = content.memory(share.rootId, share.rootKey, "Trip", "bytes".encodeToByteArray())
+        val b = bridge(share)
+        val opened = assertIs<Answer.ReceivedOpened>(b.ask(Call.ReceivedOpen(share.link)))
+        val w = b.watching(Watched.Received(opened.received))
+        fun shown(j: kotlinx.serialization.json.JsonElement) = (wire.decodeFromJsonElement(Update.serializer(), j) as Update.Received).shown
+        w.untilJson { j -> shown(j)?.takeIf { it.page?.kind == ReceivedPageKind.LEVEL } }
+        b.ask(Call.ReceivedName(opened.received, "Ben"))
+        b.ask(Call.ReceivedOpenNode(opened.received, memory))
+        val gallery = w.untilJson { j -> shown(j)?.page?.gallery }
+        val folder = kotlin.io.path.createTempDirectory("Reise").toFile().apply { deleteOnExit() }
+        val dropped = assertIs<Answer.Dropped>(
+            b.ask(Call.Drop(DropOn.Gallery(gallery), listOf(DropItem.Folder(folder.path), DropItem.NotLocal("away.jpg")), "")),
+        )
+        assertFalse(dropped.refused, "the guest's gallery refused a drop its rights take")
+        assertEquals(
+            listOf(Msg.MEMORY_DROP_FOLDER, Msg.DEPOT_DROP_NOT_LOCAL), dropped.notices.map { it.msg },
+            "the folder and the item with no path were not said",
+        )
+        b.ask(Call.ReceivedClose(opened.received))
+        share.assertNoKeyInAnyRequest()
+        b.shutdown()
+    }
+
+    /**
      * #1034 and #1033 over the bridge: a READ_WRITE folder's guest is offered the level's writes, adds a folder (the page
      * read anew by itself), and reports a row and the page to the link's operator — every update scanned for the key.
      */

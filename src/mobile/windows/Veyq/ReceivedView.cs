@@ -232,8 +232,10 @@ internal sealed class ReceivedView : IDisposable
     private PasswordBox? _password;
     private Button? _unlock;
     private bool _leaveAsked;
-    /// <summary>A guest's Add entry waits for the Pot read anew after the naming.</summary>
-    private bool _potAddWaits;
+    /// <summary>The file on screen's Replace is offered (FileShown.headerFacts.canWrite: core's FileRights.replace).</summary>
+    private bool _fileReplaces;
+    /// <summary>The core's naming dialog stands (ReceivedShown.naming, ADR 0154 decision 1).</summary>
+    private bool _namingAsked;
     private bool _reportOpened;
     private bool _left;
     private bool _disposed;
@@ -400,6 +402,13 @@ internal sealed class ReceivedView : IDisposable
         if (_password is not null) _password.IsEnabled = !s.busy;
         if (_unlock is not null) _unlock.IsEnabled = !s.busy;
         DrawCommands(s);
+        // a write waits for the guest's name (Replace, Add entry): the core asks it at the write, the app draws its dialog
+        if (s.naming && !_namingAsked)
+        {
+            _namingAsked = true;
+            AskNaming();
+        }
+        else if (!s.naming) _namingAsked = false;
         if (s.leaving && !_leaveAsked)
         {
             _leaveAsked = true;
@@ -425,33 +434,26 @@ internal sealed class ReceivedView : IDisposable
         {
             _commands.PrimaryCommands.Add(CreateAction.Button(Words.MemoryAdd(), "received-add", () => Write(memory.Add)));
         }
-        else if (_pot is { } pot && (pot.CanAdd || (s.role == "READ_WRITE" && s.guestName is null)))
+        else if (_pot is { OffersAdd: true } pot)
         {
-            // a READ_WRITE guest's Pot: an unnamed guest names itself first, then the Pot is read anew and takes its entry
-            // (its write right is the named guest's, as the web's requestGuest then the write)
-            _commands.PrimaryCommands.Add(CreateAction.Button(Words.PotAdd(), "received-add", () => Write(() =>
-            {
-                if (pot.CanAdd) pot.AddEntry();
-                else
-                {
-                    _potAddWaits = true;
-                    pot.Refresh();
-                }
-            })));
+            // Add entry where the core offers it (PotView.offersEntries: a READ_WRITE link, named or not); an unnamed
+            // guest's save asks its name through the core's naming (AskNaming), as the web's requestGuest at the write
+            _commands.PrimaryCommands.Add(CreateAction.Button(Words.PotAdd(), "received-add", pot.AddEntry));
         }
         else if (s.gate == ReceivedGate.Ready && s.page is { kind: ReceivedPageKind.Level, writes: true })
         {
             // a READ_WRITE guest's folder (#1034): New folder and Upload files, the name asked first
             _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "received-new",
             [
-                (Words.FolderNew(), "received-new-folder", () => Write(() => NewFolder("", null))),
+                (Words.FolderNew(), "received-new-folder", () => Write(NewFolder)),
                 (Words.DepotUpload(), "received-upload", () => Write(PickAndUpload)),
             ]));
         }
-        if (_file?.Id is { } file && s.gate == ReceivedGate.Ready && s.role == "READ_WRITE")
+        if (_file?.Id is { } file && s.gate == ReceivedGate.Ready && _fileReplaces)
         {
-            // a READ_WRITE guest's Replace (#1035): on the link's own queue, signed in or out, the name asked first
-            _commands.PrimaryCommands.Add(Command(Words.DepotReplace(), "received-replace", Symbol.Upload, () => Write(() => Replace(file))));
+            // a guest's Replace (#1035) where the core's FileRights offer it: on the link's own queue, signed in or out; an
+            // unnamed guest is asked its name by the core at the write (Received.Replace waits on AskNaming's answer)
+            _commands.PrimaryCommands.Add(Command(Words.DepotReplace(), "received-replace", Symbol.Upload, () => Replace(file)));
         }
         var offers = ReceivedText.Offers(s, _mode);
         if (offers.Keep) _commands.SecondaryCommands.Add(Command(Words.LinkKeep(), "received-keep", Symbol.SaveLocal, Keep));
@@ -562,7 +564,17 @@ internal sealed class ReceivedView : IDisposable
                 _content.Content = p.rows.Count == 0 ? Scrolled(Empty(p.name, null)) : Rows(p.rows);
                 break;
             case ReceivedPageKind.File when p.file is { } file:
-                _file = new FilePage(node, file);
+                _fileReplaces = false;
+                _file = new FilePage(node, file)
+                {
+                    // Replace where the core's FileRights offer it to this guest, named or not
+                    Read = (facts, _) =>
+                    {
+                        if (facts.canWrite == _fileReplaces) return;
+                        _fileReplaces = facts.canWrite;
+                        DrawCommands(_shown);
+                    },
+                };
                 _content.Content = _file.Page;
                 break;
             case ReceivedPageKind.Gallery when p.gallery is { } gallery:
@@ -578,16 +590,7 @@ internal sealed class ReceivedView : IDisposable
             {
                 var r = new ObjectRef { scopeId = "", nodeId = "", kind = p.nodeKind, application = ApplicationId.Expenses, name = p.name };
                 _pot = new PotPage(r, _window, Say, pot);
-                _pot.Changed = () =>
-                {
-                    // the entry asked for before the guest was named, once the Pot takes writes
-                    if (_potAddWaits && _pot is { CanAdd: true } named)
-                    {
-                        _potAddWaits = false;
-                        named.AddEntry();
-                    }
-                    DrawCommands(_shown);
-                };
+                _pot.Changed = () => DrawCommands(_shown);
                 _content.Content = _pot.Page;
                 break;
             }
@@ -691,11 +694,12 @@ internal sealed class ReceivedView : IDisposable
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
             var picked = await picker.PickMultipleFilesAsync();
             if (picked is null || picked.Count == 0) return;
-            var sorted = DropSort.Sort(picked.Select(f => new DroppedItem(f.Name, f.Path, false)));
-            foreach (var name in sorted.Refused) Say(false, Words.DepotDropNotLocal(name));
-            if (sorted.Files.Count == 0) return;
-            Log.Write($"guest upload: {sorted.Files.Count} picked");
-            var (answer, _) = await Core.CallAsync(new Call.ReceivedUpload { received = Received, paths = sorted.Files.ToList() });
+            // Received.Upload takes paths alone: a picked item with none (a phone's, a cloud's) is said by its name
+            foreach (var f in picked.Where(f => string.IsNullOrEmpty(f.Path))) Say(false, Words.DepotDropNotLocal(f.Name));
+            var paths = picked.Select(f => f.Path).Where(p => !string.IsNullOrEmpty(p)).ToList();
+            if (paths.Count == 0) return;
+            Log.Write($"guest upload: {paths.Count} picked");
+            var (answer, _) = await Core.CallAsync(new Call.ReceivedUpload { received = Received, paths = paths });
             if (answer is not Answer.Done)
             {
                 Log.Write($"a guest's upload answered {answer.GetType().Name}");
@@ -735,22 +739,51 @@ internal sealed class ReceivedView : IDisposable
         }
     }
 
-    /// <summary>A READ_WRITE guest's new folder in the folder on screen (#1034): its name asked, asked again with the core's
-    /// reason where it refused one.</summary>
-    private async void NewFolder(string name, string? problem)
+    /// <summary>A READ_WRITE guest's new folder in the folder on screen (#1034), named in a dialog the core's answer keeps
+    /// open with its problem (ADR 0154 decision 1); its notice said as it closes.</summary>
+    private async void NewFolder()
     {
         try
         {
-            var typed = await Dialogs.AskName(_window, "received-new-folder-dialog", Words.FolderNew(), Words.FolderName(), name, problem, Words.FolderCreate());
-            if (typed is null || typed.Trim().Length == 0) return;
-            var (answer, _) = await Core.CallAsync(new Call.ReceivedNewFolder { received = Received, name = typed.Trim() });
-            if (answer is Answer.Named { problem: { } p }) NewFolder(typed, Veyq.Said.Notice(p));
-            else if (answer is Answer.Named { notice: { } n }) Say(false, Veyq.Said.Notice(n));
-            else if (answer is not Answer.Named) Log.Write($"a guest's new folder answered {answer.GetType().Name}");
+            var named = await Dialogs.AskNamed(_window, "received-new-folder-dialog", Words.FolderNew(), Words.FolderName(), "", Words.FolderCreate(),
+                typed => Dialogs.Named(new Call.ReceivedNewFolder { received = Received, name = typed.Trim() }, "Received.NewFolder"));
+            if (named?.notice is { } n) Say(false, Veyq.Said.Notice(n));
         }
         catch (Exception e)
         {
             Log.Write($"a guest's new folder failed ({e.GetType().Name})");
+        }
+    }
+
+    /// <summary>The core's naming at a write (GuestAccess.naming, ADR 0154 decision 1): the guest's name asked while a
+    /// write waits on it — the web's hint and the guest-write record's notice (#1018) above the field —, the dialog kept
+    /// open with the core's problem; Cancel declines, and the waiting write is not made.</summary>
+    private async void AskNaming()
+    {
+        try
+        {
+            var body = new StackPanel { Spacing = 12 };
+            body.Children.Add(new TextBlock { Text = Words.ShareGuestNameHint(), TextWrapping = TextWrapping.Wrap });
+            if (ReceivedText.RecordNotice(_shown?.recordDays) is { } notice)
+            {
+                var said = new TextBlock { Text = notice, TextWrapping = TextWrapping.Wrap, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"] };
+                AutomationProperties.SetAutomationId(said, "guest-name-record-notice");
+                body.Children.Add(said);
+            }
+            var named = await Dialogs.AskNamed(_window, "guest-name-dialog", Words.ShareGuestNameTitle(), Words.ShareYourName(), "", Words.ShareSave(),
+                typed => Dialogs.Named(new Call.ReceivedNamingSave { received = Received, name = typed }, "Received.NamingSave"),
+                body, Words.ShareYourNamePlaceholder());
+            if (named is null)
+            {
+                Act.Send(new Call.ReceivedNamingDecline { received = Received });
+                return;
+            }
+            if (named.notice is { } n) Say(false, Veyq.Said.Notice(n));
+        }
+        catch (Exception e)
+        {
+            Log.Write($"the guest's naming failed ({e.GetType().Name})");
+            Act.Send(new Call.ReceivedNamingDecline { received = Received });
         }
     }
 

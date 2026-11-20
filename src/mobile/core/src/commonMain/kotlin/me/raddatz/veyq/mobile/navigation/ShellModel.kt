@@ -463,8 +463,7 @@ class ShellModel(
         target: DropTarget, items: List<Dropped>, depot: me.raddatz.veyq.mobile.depot.DepotUploads?,
         left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit = {}, deletedName: String = "",
     ): DropOutcome = when (target) {
-        is DropTarget.Gallery ->
-            if (!target.gallery.takesUploads) DropOutcome.notHere else Drops.ontoGallery(target.gallery, items, left)
+        is DropTarget.Gallery -> target.drop(items, left)
         is DropTarget.Level -> {
             val level = shell?.let(::dropLevel)
             if (level == null || depot == null) DropOutcome.notHere

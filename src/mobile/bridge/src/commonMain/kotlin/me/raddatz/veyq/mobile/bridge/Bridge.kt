@@ -3298,12 +3298,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * one drop judges, sorts and uploads. Nothing is judged here.
      */
     private suspend fun drop(parts: Composition<A, T>, call: Call.Drop): Answer {
-        val t = tenant.value?.models ?: return noTenant
-        val drop = t.drop ?: return noTenant
+        // a gallery's drop needs no tenant (a signed-out link's guest has none): judged by the gallery's rights alone
+        val gallery = (call.on as? DropOn.Gallery)?.let { on -> me.raddatz.veyq.mobile.navigation.DropTarget.Gallery(galleries[on.gallery] ?: return noGallery) }
+        val drop = if (gallery != null) null else tenant.value?.models?.drop ?: return noTenant
         val target = when (val on = call.on) {
             is DropOn.Level -> me.raddatz.veyq.mobile.navigation.DropTarget.Level(on.label)
             is DropOn.Row -> me.raddatz.veyq.mobile.navigation.DropTarget.Row(on.folder)
-            is DropOn.Gallery -> me.raddatz.veyq.mobile.navigation.DropTarget.Gallery(galleries[on.gallery] ?: return noGallery)
+            is DropOn.Gallery -> gallery!!
         }
         val items = call.items.map { item ->
             when (item) {
@@ -3315,7 +3316,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         }
         // a desktop reads each file in place at its path: one the drop does not keep is closed, nothing else to hand back
         val left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit = { runCatching { it.close() } }
-        return when (val outcome = drop(target, items, uploads.value, left, call.deletedName)) {
+        val outcome = if (drop == null) gallery!!.drop(items, left) else drop(target, items, uploads.value, left, call.deletedName)
+        return when (outcome) {
             is me.raddatz.veyq.mobile.navigation.DropOutcome.Uploaded -> Answer.Dropped(outcome.queued, outcome.notices)
             is me.raddatz.veyq.mobile.navigation.DropOutcome.Offered -> Answer.Dropped(outcome.queued, outcome.notices, holdImport(outcome.offer))
             is me.raddatz.veyq.mobile.navigation.DropOutcome.Refused -> {

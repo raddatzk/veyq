@@ -878,7 +878,7 @@ internal sealed class ShellView
                 }))));
         }
         // an open Pot's "Add entry" is the content's creating action, first, where its places show and it takes writes
-        if (page is { CanAdd: true }) _commands.PrimaryCommands.Add(CreateAction.Button(Words.PotAdd(), "pot-add", page.AddEntry));
+        if (page is { OffersAdd: true }) _commands.PrimaryCommands.Add(CreateAction.Button(Words.PotAdd(), "pot-add", page.AddEntry));
         if (memory?.Shown is { } gallery && gallery.creates.Any(c => c.create == Create.Chapter))
         {
             _commands.PrimaryCommands.Add(CreateAction.Button(Words.MemoryAddChapter(), "memory-add-chapter", memory.CreateChapter));
@@ -993,11 +993,12 @@ internal sealed class ShellView
         return new UploadLevel(space, folder?.nodeId, folder?.name ?? Said.Piece(shown.spaceName));
     }
 
-    /// <summary>Where a drop onto the level shown goes: only where its New offers Upload files (the core's creates).</summary>
+    /// <summary>Where a drop onto the level shown goes: the level where the core offers one (ShellShown.dropsHere), each
+    /// folder's row it names (ShellShown.dropRows); none where it offers neither.</summary>
     private Drops? LevelDrops()
     {
-        if (_shown is not { } shown || !shown.canCreateHere || !shown.creates.Any(c => c.create == Create.UploadFiles)) return null;
-        return Level() is { } level ? new Drops(_window, level, Say) : null;
+        if (_shown is not { } shown || (!shown.dropsHere && shown.dropRows.Count == 0)) return null;
+        return Level() is { } level ? new Drops(_window, level.Label, shown.dropsHere, shown.dropRows.ToHashSet(), Say) : null;
     }
 
     /// <summary>The Memory's page let go (closed in the core), its hero handed back.</summary>
@@ -1078,30 +1079,20 @@ internal sealed class ShellView
         }
     }
 
-    /// <summary>New's folder (Shell.CreateFolder), named in a dialog that asks again with the core's problem.</summary>
-    private async void NewFolder() => await NewFolder("", null);
-
-    private async System.Threading.Tasks.Task NewFolder(string name, string? problem)
+    /// <summary>New's folder (Shell.CreateFolder), named in a dialog the core's answer keeps open with its problem
+    /// (ADR 0154 decision 1); a notice is said as it closes, a folder made offline (queued) reads as made.</summary>
+    private async void NewFolder()
     {
-        var typed = await Dialogs.AskName(_window, "new-folder", Words.FolderNew(), Words.FolderName(), name, problem, Words.FolderCreate());
-        if (typed is null) return;
-        Answer answer;
         try
         {
-            (answer, _) = await Core.CallAsync(new Call.ShellCreateFolder { name = typed });
+            var named = await Dialogs.AskNamed(_window, "new-folder", Words.FolderNew(), Words.FolderName(), "", Words.FolderCreate(),
+                typed => Dialogs.Named(new Call.ShellCreateFolder { name = typed }, "Shell.CreateFolder"));
+            if (named?.notice is { } n) Say(false, Said.Notice(n));
         }
         catch (Exception e)
         {
-            Log.Write($"Shell.CreateFolder failed ({e.GetType().Name})");
-            return;
+            Log.Write($"new folder failed ({e.GetType().Name})");
         }
-        if (answer is Answer.Named { problem: { } p })
-        {
-            Log.Write($"new folder: {p.msg}");
-            await NewFolder(typed, Said.Notice(p));
-        }
-        else if (answer is Answer.Named { notice: { } n }) Say(false, Said.Notice(n));
-        else Log.Write($"Shell.CreateFolder: {(answer is Answer.Named ? "Done" : answer.GetType().Name)}");
     }
 
     /// <summary>How an action went, under the bar until it is closed or the object leaves.</summary>

@@ -12,6 +12,7 @@ import me.raddatz.veyq.mobile.expenses.GuestPotDoor
 import me.raddatz.veyq.mobile.expenses.PotGuest
 import kotlinx.coroutines.async
 import me.raddatz.veyq.mobile.expenses.PotSession
+import me.raddatz.veyq.mobile.expenses.PotView
 import me.raddatz.veyq.mobile.media.ByteSource
 import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.memories.MemoriesGuest
@@ -223,6 +224,8 @@ class GuestDoorsTest {
         assertTrue(door.offersEntries, "an unnamed READ_WRITE guest is not offered Add entry")
         assertFalse(door.writesEntries)
         val session = PotSession.open(door, access.tree!!.node(f.pot)!!)
+        // what crosses to the desktops (PotView.Shown, the bridge's Pot update) carries the same offer
+        assertEquals(session.offersEntries, PotView(session).shown().offersEntries, "the Pot's shown view offers otherwise than its session")
         val requests = f.share.requests.size
         // the write asks the name; declined, it is not made
         val declined = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { session.write(emptyList()) }

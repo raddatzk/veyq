@@ -277,7 +277,8 @@ internal sealed class MemoryPage : IDisposable
         _heroSlot.Child = hero;
     }
 
-    /// <summary>"Add photos": the open picker for photos and videos (several), their paths to the core (Memory.Upload).</summary>
+    /// <summary>"Add photos": the open picker for photos and videos (several), handed to the core's one drop onto this
+    /// gallery (Shell.Drop, ADR 0154 decision 1), which keeps its photos and videos and says the rest.</summary>
     public async void Add()
     {
         if (_id is not { } gallery) return;
@@ -288,7 +289,7 @@ internal sealed class MemoryPage : IDisposable
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
             var picked = await picker.PickMultipleFilesAsync();
             if (picked is null || picked.Count == 0) return;
-            await Upload(gallery, DropSort.Sort(picked.Select(f => new DroppedItem(f.Name, f.Path, false))));
+            await Drops.Send(_window, new DropOn.DropOnGallery { gallery = gallery }, Drops.Items(picked), _say);
         }
         catch (Exception e)
         {
@@ -296,53 +297,12 @@ internal sealed class MemoryPage : IDisposable
         }
     }
 
-    /// <summary>Sends <paramref name="sorted"/>'s files to gallery <paramref name="gallery"/> and says what was not taken.</summary>
-    private async Task Upload(long gallery, DropSort.Sorted sorted)
-    {
-        Log.Write($"memory upload: {sorted.Files.Count} files, {sorted.Folders.Count} folders, {sorted.Refused.Count} refused");
-        foreach (var text in DropSort.GallerySaid(sorted)) _say(false, text);
-        if (DropSort.GalleryCall(gallery, sorted) is not { } call) return;
-        var (answer, _) = await Core.CallAsync(call);
-        Uploads.Queued(answer, "Memory.Upload", _say);
-    }
-
-    /// <summary>A drop of files onto the page adds them, where the rights add anything.</summary>
+    /// <summary>A drop of files onto the page goes to the core's one drop onto this gallery, where its rights upload
+    /// (GalleryShown.canUpload; the core judges it again).</summary>
     private void Droppable()
     {
-        _scroll.AllowDrop = true;
-        _scroll.DragEnter += (_, e) => Log.Write($"a drag entered the gallery: files {e.DataView.Contains(StandardDataFormats.StorageItems)}");
-        _scroll.DragOver += (_, e) =>
-        {
-            if (!e.DataView.Contains(StandardDataFormats.StorageItems) || _shown is not { canUpload: true }) return;
-            e.AcceptedOperation = DataPackageOperation.Copy;
-            e.DragUIOverride.Caption = Words.MemoryAdd();
-            e.Handled = true;
-        };
-        _scroll.Drop += async (_, e) =>
-        {
-            if (!e.DataView.Contains(StandardDataFormats.StorageItems) || _id is not { } gallery || _shown is not { canUpload: true }) return;
-            e.Handled = true;
-            try
-            {
-                DropSort.Sorted sorted;
-                var deferral = e.GetDeferral();
-                try
-                {
-                    var items = await e.DataView.GetStorageItemsAsync();
-                    sorted = DropSort.Sort(items.Select(i => new DroppedItem(i.Name, i.Path, i.IsOfType(StorageItemTypes.Folder))));
-                }
-                finally
-                {
-                    deferral.Complete();
-                }
-                await Upload(gallery, sorted);
-            }
-            catch (Exception ex)
-            {
-                // an exception out of an async handler would end the app in combase, with nothing in the log
-                Log.Write($"a drop onto the gallery failed: {ex.GetType().Name}: {ex.Message}");
-            }
-        };
+        Drops.Attach(_scroll, () => _id is { } gallery && _shown is { canUpload: true } ? new DropOn.DropOnGallery { gallery = gallery } : null,
+            Words.MemoryAdd(), null, _window, _say);
     }
 
     /// <summary>The header's music action: the node's music started shuffled, or stopped where it plays (Gallery.Music).</summary>

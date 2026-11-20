@@ -127,8 +127,25 @@ Branch `claude/core-owns-refine` at `a75188eb8` (= `claude/windows-cr-f6c73c`). 
 - [ ] **5 Linux** — the drop through the bridge's `Drop`, `drop.rs`' sort gone, the folder row's drop from
   `dropTarget`, the dialogs and guest gates likewise, `file_page`/`header::say`'s log-only paths replaced by said
   notices. · Done when: `python3 linux/run.py test` and `build` green.
-- [ ] **6 Windows** — the same; `DropSort.cs` gone; `ReceivedView`'s role checks gone. · Done when: `python3
+- [x] **6 Windows** — the same; `DropSort.cs` gone; `ReceivedView`'s role checks gone. · Done when: `python3
   windows/run.py build` green on the VM.
+  **Built** 2026-11-20 (`claude/k-win`; measured: `VEYQ_WINDOWS_DIR='F:\veyq-kw' VEYQ_WINDOWS_TASKS=kw python3
+  windows/run.py build` exit 0 — the deprecation gate, `Veyq.Bridge.Tests` here and there, the app, `Veyq.Drive`,
+  `Veyq.Tests`, `PdfWebTest` —, run over this phase together with offline-writes phase 10). `DropSort.cs` and its test
+  gone; `Drops.cs` hands every drop and pick — a level's (`ShellShown.dropsHere`), a folder row's (`dropRows`, never by
+  its kind), a gallery's — to `Shell.Drop` as `DroppedFile`/`DroppedFolder`/`DroppedNotLocal` by the file system and says
+  `Answer.Dropped`'s notices, an offered import opened. New Folder, rename and a guest's folder through
+  `Dialogs.AskNamed`: the dialog stays open on a `problem` (the word under the field), a thrown save keeps it open,
+  a `notice` is said as it closes. `ReceivedView`: Replace where the file's `headerFacts.canWrite` (`FileRights.replace`),
+  *Add entry* where `PotView.offersEntries`, both without asking a name first; the core's naming (`ReceivedShown.naming`)
+  drawn as one dialog with the record's notice (#1018) → `Received.NamingSave`/`NamingDecline`. G5 is the bridge's
+  (`SessionModel.followed`), G6 held already (`DevLogin`/`DevSettings` under `#if DEBUG`). **Core/bridge additions**
+  (each with a test seen red): `DropTarget.Gallery.drop` and the bridge's `Shell.Drop` onto a gallery without a tenant (a
+  signed-out guest's gallery answered `NO_TENANT`; `ReceivedBridgeTest.aSignedOutGuestsDropOntoAGalleryIsTheCoresDropWithNoTenant`);
+  `PotView.Shown.offersEntries` (the desktops had only `canWrite`; `GuestDoorsTest`). **Deviations:** a READ_WRITE
+  guest's level writes (New folder, Upload) and a WRITE_ONLY page still name the guest first through `Received.Name`
+  (the core asks no name at those writes — the CR left `Received.Name` to later); `Received.Upload` takes paths only,
+  so a picked guest file without one is said by name in `ReceivedView`. Passes: phase 7's.
 - [ ] **7 the passes** — § Passes; results into ADR 0154's Consequences.
 - [ ] **8 harvest** — ADR 0154's `Built:` (decision 1); `native-apps.md`; `src/mobile/CLAUDE.md` § Traps loses any line
   this removes; inbox #1039 measured again on the Mac and closed or narrowed. · Done when: every guard but guard_gaps green.

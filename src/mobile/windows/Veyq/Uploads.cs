@@ -1,9 +1,9 @@
 // The uploads (ADR 0123's Consequences, the Windows app's Depot whole), Fluent's way: files and a folder picked through Windows' own pickers
 // (FileOpenPicker, FolderPicker, owned by the window as the save picker is) and handed to the core by their paths — the
 // core opens and reads each at offsets a frame at a time (ADR 0137 decision 3), so nothing of a file crosses and none is
-// held whole —, screened first as the web's upload screens (Import.Screen, Import.ScreenFolder; ADR 0152 decision 1): a
-// veyq download among them is offered as an import in ImportDialog, everything else queued as Upload.Files and
-// Upload.Folder queue it; a file's Replace chosen before its picker opens (File.ChooseReplace,
+// held whole —, through the core's one drop onto the level shown (Shell.Drop, ADR 0154 decision 1; Drops), which judges
+// the level, screens as the web's upload screens (ADR 0152 decision 1) — a veyq download among them offered as an import in
+// ImportDialog — and queues the rest; a file's Replace chosen before its picker opens (File.ChooseReplace,
 // Upload.Replace), and the queue as an AppBarButton in the content's CommandBar while it lists anything: its label the
 // core's one line, its Flyout each batch with its items, their progress, Cancel and Retry, Cancel all and a finished
 // batch's Close. What the uploads say once — a folder's outcome, a replace offered — is an InfoBar under the bar, its
@@ -227,8 +227,9 @@ internal sealed class Uploads : IDisposable
         }
     }
 
-    /// <summary>New's "Upload files": the open picker picks several, their paths go to the core, screened (Import.Screen):
-    /// the first veyq download among them offered as an import, the rest queued.</summary>
+    /// <summary>New's "Upload files": the open picker picks several, handed to the core's one drop onto the level shown
+    /// (Shell.Drop, ADR 0154 decision 1) as a drop is: judged, screened — the first veyq download among them offered as an
+    /// import —, the rest queued; a picked item with no local path said by the core.</summary>
     public async void PickFiles(UploadLevel level, Action<bool, string> say)
     {
         try
@@ -238,13 +239,7 @@ internal sealed class Uploads : IDisposable
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
             var picked = await picker.PickMultipleFilesAsync();
             if (picked is null || picked.Count == 0) return;
-            // sorted as a drop is: a picked file with no local path (a phone's, a cloud's) said by name, never left out unsaid
-            var sorted = DropSort.Sort(picked.Select(f => new DroppedItem(f.Name, f.Path, false)));
-            Log.Write($"upload files: {sorted.Files.Count} picked, {sorted.Refused.Count} refused");
-            foreach (var name in sorted.Refused) say(false, Words.DepotDropNotLocal(name));
-            if (sorted.Files.Count == 0) return;
-            var (answer, _) = await Core.CallAsync(DropSort.Screen(level, sorted.Files));
-            Screened(_window, answer, "Import.Screen", say);
+            await Drops.Send(_window, new DropOn.DropOnLevel { label = level.Label }, Drops.Items(picked), say);
         }
         catch (Exception e)
         {
@@ -253,8 +248,8 @@ internal sealed class Uploads : IDisposable
         }
     }
 
-    /// <summary>New's "Upload folder…": the folder picker picks one directory, which the core walks: a download unpacked
-    /// is offered as an import, any other uploaded (Import.ScreenFolder).</summary>
+    /// <summary>New's "Upload folder…": the folder picker picks one directory, handed to the core's one drop onto the level
+    /// shown, which walks it: a download unpacked is offered as an import, any other uploaded.</summary>
     public async void PickFolder(UploadLevel level, Action<bool, string> say)
     {
         try
@@ -263,10 +258,9 @@ internal sealed class Uploads : IDisposable
             picker.FileTypeFilter.Add("*");
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
             var folder = await picker.PickSingleFolderAsync();
-            if (folder is null || string.IsNullOrEmpty(folder.Path)) return;
+            if (folder is null) return;
             Log.Write("upload folder: picked");
-            var (answer, _) = await Core.CallAsync(DropSort.ScreenFolder(level, folder.Path));
-            Screened(_window, answer, "Import.ScreenFolder", say);
+            await Drops.Send(_window, new DropOn.DropOnLevel { label = level.Label }, Drops.Items([folder]), say);
         }
         catch (Exception e)
         {
@@ -299,21 +293,6 @@ internal sealed class Uploads : IDisposable
         {
             Log.Write($"replace failed: {e.GetType().Name}: {e.Message}");
         }
-    }
-
-    /// <summary>A screened upload's answer: an import offered opens its dialog over <paramref name="window"/> (what was
-    /// queued beside it said in the log); anything else as <see cref="Queued"/>. Whether one was offered.</summary>
-    internal static bool Screened(Window window, Answer answer, string what, Action<bool, string> say)
-    {
-        if (answer is not Answer.ImportOffered offered)
-        {
-            Queued(answer, what, say);
-            return false;
-        }
-        Log.Write($"{what}: import {offered.import} offered, {offered.queued} queued{(offered.notice is null ? "" : $", said {offered.notice.msg}")}");
-        if (offered.notice is { } n) say(false, Said.Notice(n));
-        ImportDialog.Open(window, offered.import, say);
-        return true;
     }
 
     internal static void Queued(Answer answer, string what, Action<bool, string> say)

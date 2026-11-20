@@ -58,7 +58,7 @@ internal sealed class PotPage : IDisposable
     /// it was put in last (taken out of it before the next draw, as the head).</summary>
     private PotSettingsView? _settings;
     private Panel? _settingsHolder;
-    private bool _canWrite;
+    private bool _offersEntries;
 
     public ObjectRef Ref { get; }
 
@@ -75,8 +75,9 @@ internal sealed class PotPage : IDisposable
     /// <summary>Told when what the shell's CommandBar offers for this Pot changed: it was read, an editor opened or closed.</summary>
     public Action? Changed { get; set; }
 
-    /// <summary>Whether "Add entry" is offered: the Pot read, it takes writes, and no editor is open.</summary>
-    public bool CanAdd => _canWrite && _editor is null && _id is not null;
+    /// <summary>Whether "Add entry" is offered: the Pot read, the core offers it (PotView.offersEntries — a member who
+    /// writes, a READ_WRITE link's guest named or not, offline where an entry queues), and no editor is open.</summary>
+    public bool OffersAdd => _offersEntries && _editor is null && _id is not null;
 
     /// <summary>The entry editor of a new entry (the CommandBar's "Add entry").</summary>
     public void AddEntry() => OpenEditor(null);
@@ -194,9 +195,9 @@ internal sealed class PotPage : IDisposable
                 if (OwnPlaces) GuestPlaces(view.settingsOffered);
                 Log.Write($"pot update: {view.entries.Count} entries, {view.deleted.Count} deleted, {view.settleUp.Count} to settle");
                 Read?.Invoke(view.canWrite);
-                if (view.canWrite != _canWrite)
+                if (view.offersEntries != _offersEntries)
                 {
-                    _canWrite = view.canWrite;
+                    _offersEntries = view.offersEntries;
                     Changed?.Invoke();
                 }
             }
