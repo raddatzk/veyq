@@ -1,7 +1,7 @@
 # ADR 0154 — Every app draws the core's gates, plans, notices and formats through a core UI its applications plug into, as the web's do
 - Status: Accepted (owner 2026-11-20: the CRs' owner questions answered as recommended)
-- Built: decision 1 on every app (2026-11-20, § Consequences); decisions 2–6 not yet — the CRs
-  `cr-apps-words-guard-reads-every-ui`, `cr-apps-core-ui-layer`, `cr-apps-structure-from-core-plans` and
+- Built: decision 1 on every app and decision 6's words (2026-11-20, § Consequences); decisions 2–5 and the rest of 6
+  not yet — the CRs `cr-apps-core-ui-layer`, `cr-apps-structure-from-core-plans` and
   `cr-apps-notices-and-formats-from-the-core` build them
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
@@ -129,6 +129,21 @@ held for the screens' models but not around them:
   server field (compiled only). **Apple:** both builds green, nothing clicked; the Mac's drops (a ZIP and a folder onto a
   level, onto a folder row and a guest's identity folder, onto a gallery; #1039's folder from Finder), its dialogs and a
   guest's link are the coordinator's pass, the iPhone's the owner's.
+- **As built, decision 6's words** (2026-11-20). `scripts/validate_mobile_words.py` reads Android's Kotlin
+  (`android-literal`), Swift's accessibility hints and values and `Text(verbatim:`, C#'s and XAML's help texts and a
+  dialog's three button texts, GTK's alert responses and an entry row's text, and the two manifests that show text
+  (`manifest-literal`); its docstring is the rule list and its limits (a literal reaching a shown property through a
+  variable stays unseen). The new rules found no literal in any platform's source; the manifests' texts moved into
+  words.json (`usage_camera`, `usage_photos`, `metainfo_summary`, `metainfo_about`, `metainfo_preview`, the German
+  drafted, the owner's to change), and `generate_words.py` writes them — `--apple-infoplist` the usage descriptions'
+  `InfoPlist.xcstrings` and the `InfoPlist.xcconfig` their English stands in, `--metainfo` the Flatpak's summary and
+  description in English and German (`generate_words_selftest.py`). Each new rule was bitten on a planted literal.
+  **Passes:** the Flatpak's metainfo shown by `appstreamcli get app.veyq.Veyq --details` (AppStream 1.1.3, in
+  `veyq-flatpak-builder`, the generated metainfo installed into the container's `/usr/share/metainfo`) in German under
+  `LANG=de_DE.UTF-8` and in English under `en_US`; both Apple builds carry the German in `de.lproj/InfoPlist.strings`
+  (`plutil -p`). **Open:** a German device's camera and photo prompts — the Mac's and the iPhone's (Apple's usage
+  descriptions as shown), Android's and the desktops' (their prompts are the system's, no manifest word) — never opened;
+  the Mac's needs full-screen control, which a background agent has not.
 
 ## Alternatives considered
 

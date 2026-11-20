@@ -365,11 +365,14 @@ A Gradle build of its own, run through its own wrapper.
   `say(msg, …)`, `say(notice)`), the Linux app's gettext catalogs with `words.rs` (`--gettext`, which `run.py build`
   runs; `build.rs` compiles each `.po` with `msgfmt --check`) and the Windows app's `.resw` catalogs with `Words.g.cs`
   (`--resw`, which `windows/run.py build` runs; a plural is one entry per CLDR category, `key#one`, and each catalog
-  names its `_language`). A word is added there, never in a platform; what the
-  core raises is a `Notice` (`words/Notices.kt`). `apple_en` / `apple_de` give a key Apple's own form (Title Case on a
-  button or menu entry). `scripts/validate_mobile_words.py` holds it: no `strings.xml`, no `String(localized:`, no
-  English literal handed to a SwiftUI view, to a GTK widget's shown text or to a WinUI control's (C# or XAML), no `.po`
-  under `linux/`, no `.resw` under `windows/`. A test of the
+  names its `_language`). The two manifests that show text are generated too: `--apple-infoplist` writes the usage
+  descriptions' `InfoPlist.xcstrings` and the `InfoPlist.xcconfig` their English stands in (the project's
+  `preGenCommand`; a key's `"apple_infoplist"` names its Info.plist key), `--metainfo` fills the Flatpak's metainfo
+  template's summary and description in English and German (`run.py`'s `write_manifest`; a key's `"metainfo"`). The
+  generator's own test is `words/generate_words_selftest.py` (checks.yml `guards`). A word is added there, never in a
+  platform; what the core raises is a `Notice` (`words/Notices.kt`). `apple_en` / `apple_de` give a key Apple's own form
+  (Title Case on a button or menu entry). `scripts/validate_mobile_words.py` holds it; its docstring is the rule list
+  (every source a platform shows text from, and the manifests) and its limits. A test of the
   words asserts a language whose words differ from the fallback: English is gettext's `msgid`, so an English-only run
   passes over a catalog that never loaded.
 - `theme/generate_theme.py` — the web's colour roles and brand mark for every platform (ADR 0123 decision 7): the
