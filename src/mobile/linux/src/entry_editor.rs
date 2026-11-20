@@ -48,6 +48,28 @@ pub fn open(parent: &gtk::Window, pot: i64, entry: Option<&str>, said: &adw::Toa
     });
 }
 
+/// Opens the editor of held write [write] (a Pot entry changed offline that met a newer version, ADR 0153 decision 4) on
+/// Pot [pot] over [parent] (`Editor.OpenHeld`): the person's values in the form over the newer version, which a banner
+/// names (`EditorShown.newer`) with *Discard mine* (`Editor.DiscardMine`) where the core offers it.
+pub fn open_held(parent: &gtk::Window, pot: i64, write: &str, said: &adw::ToastOverlay, closed: impl Fn() + 'static) {
+    let (parent, said, write) = (parent.clone(), said.clone(), write.to_owned());
+    glib::spawn_future_local(async move {
+        let call = Call::EditorOpenHeld { pot, write, separator: said::decimal_separator() };
+        let editor = match bridge::call(&call).await.map(|(a, _)| a) {
+            Ok(Answer::EditorOpened { editor }) => editor,
+            other => {
+                eprintln!("veyq: Editor.OpenHeld answered {other:?}");
+                said.add_toast(adw::Toast::new(&words::ed_save_failed()));
+                closed();
+                return;
+            }
+        };
+        eprintln!("veyq: entry editor open (held)");
+        let dialog = Inner::show(&parent, pot, editor, Some(String::new()), &said);
+        dialog.connect_closed(move |_| closed());
+    });
+}
+
 /// One text field: its editable (an `AdwEntryRow` or a `gtk::Entry`), the row it is in, and what it sent ([Typed]).
 struct Field {
     editable: gtk::Editable,
@@ -183,6 +205,8 @@ struct Inner {
     said: adw::ToastOverlay,
     save: gtk::Button,
     cancel: gtk::Button,
+    /// A held change's newer version, named, with *Discard mine* (ADR 0153 decision 4); hidden otherwise.
+    newer: adw::Banner,
     holder: adw::Clamp,
     form: RefCell<Option<Form>>,
     split: RefCell<Option<SplitPage>>,
@@ -193,7 +217,7 @@ struct Inner {
 }
 
 impl Inner {
-    fn show(parent: &gtk::Window, pot: i64, editor: i64, entry: Option<String>, said: &adw::ToastOverlay) {
+    fn show(parent: &gtk::Window, pot: i64, editor: i64, entry: Option<String>, said: &adw::ToastOverlay) -> adw::Dialog {
         let header = adw::HeaderBar::new();
         header.set_show_start_title_buttons(false);
         header.set_show_end_title_buttons(false);
@@ -206,6 +230,8 @@ impl Inner {
         let scroll = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).vexpand(true).child(&holder).build();
         let view = adw::ToolbarView::new();
         view.add_top_bar(&header);
+        let newer = adw::Banner::builder().revealed(false).button_label(words::offline_discard_mine()).build();
+        view.add_top_bar(&newer);
         view.set_content(Some(&scroll));
         let title = if entry.is_some() { words::ed_edit_title() } else { words::ed_new_title() };
         let form_page = adw::NavigationPage::new(&view, &title);
@@ -225,6 +251,7 @@ impl Inner {
             said: said.clone(),
             save: save.clone(),
             cancel: cancel.clone(),
+            newer: newer.clone(),
             holder,
             form: RefCell::new(None),
             split: RefCell::new(None),
@@ -242,6 +269,13 @@ impl Inner {
         save.connect_clicked(move |_| {
             if let Some(i) = w.upgrade() {
                 i.save();
+            }
+        });
+        let w = Rc::downgrade(&inner);
+        newer.connect_button_clicked(move |_| {
+            if let Some(i) = w.upgrade() {
+                eprintln!("veyq: editor: discard mine pressed");
+                i.saved(Call::EditorDiscardMine { editor: i.editor });
             }
         });
         let w = Rc::downgrade(&inner);
@@ -263,10 +297,11 @@ impl Inner {
             }
         });
         dialog.present(Some(parent));
-        let Some((watch, updates)) = bridge::watch(&Watched::Editor { editor }) else { return };
+        let Some((watch, updates)) = bridge::watch(&Watched::Editor { editor }) else { return dialog };
         *inner.watch.borrow_mut() = Some(watch);
         let w = Rc::downgrade(&inner);
         glib::spawn_future_local(follow(w, updates));
+        dialog
     }
 
     /// One edit sent; the core applies it in the order sent.
@@ -275,9 +310,14 @@ impl Inner {
     }
 
     fn save(self: &Rc<Self>) {
+        self.saved(Call::EditorSave { editor: self.editor });
+    }
+
+    /// [call] (a save, or *Discard mine*) sent, its `EditorSaved` answer drawn: done closes the dialog and says its notice.
+    fn saved(self: &Rc<Self>, call: Call) {
         self.save.set_sensitive(false);
         let w = Rc::downgrade(self);
-        let answer = bridge::call(&Call::EditorSave { editor: self.editor });
+        let answer = bridge::call(&call);
         glib::spawn_future_local(async move {
             let answered = answer.await.map(|(a, _)| a);
             let Some(i) = w.upgrade() else { return };
@@ -343,6 +383,15 @@ impl Inner {
         self.dialog.set_title(&title);
         self.save.set_visible(s.editable);
         self.save.set_sensitive(!s.saving);
+        // a held change: the newer version named, *Discard mine* where the core offers it
+        match &s.newer {
+            Some(n) => {
+                self.newer.set_title(&glib_escape(&said::notice(n)));
+                self.newer.set_button_label(s.discards_mine.then(words::offline_discard_mine).as_deref());
+                self.newer.set_revealed(true);
+            }
+            None => self.newer.set_revealed(false),
+        }
         self.cancel.set_label(&if s.editable { words::entry_cancel() } else { words::receipts_close() });
         let shape = shape_of(s);
         let rebuild = self.form.borrow().as_ref().is_none_or(|f| f.shape != shape);

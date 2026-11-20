@@ -232,6 +232,12 @@ internal sealed class Call {
     @Serializable @SerialName("Shell.Select") data class ShellSelect(val tab: BarTab) : Call()
     @Serializable @SerialName("Shell.Open") data class ShellOpen(val ref: ObjectRef) : Call()
     @Serializable @SerialName("Shell.OpenAtTop") data class ShellOpenAtTop(val ref: ObjectRef) : Call()
+
+    /**
+     * Node [nodeId] of [scopeId] opened where it lives (`ShellModel.openFound`: an object in its application, a folder on
+     * Home at that folder); null: the space's top. What a held write's *Open* names as `QueuedOpen.Place` or `.Rename`.
+     */
+    @Serializable @SerialName("Shell.OpenAt") data class ShellOpenAt(val scopeId: String, val nodeId: String?) : Call()
     @Serializable @SerialName("Shell.Search") data class ShellSearch(val on: Boolean) : Call()
     /** A person's refresh (F5): the lists and the members read anew (`ShellModel.refresh(people = true)`). */
     @Serializable @SerialName("Shell.Refresh") data object ShellRefresh : Call()
@@ -1959,8 +1965,11 @@ internal sealed class Answer {
      */
     @Serializable @SerialName("RowCover") data class RowCover(val frame: String, val crop: NodeCover.Crop, val sent: Boolean, val mediaType: String?) : Answer()
 
-    /** A Memory or a chapter made ([Call.ShellCreateMemory], [Call.GalleryCreateChapter]): the node to open, or why not. */
-    @Serializable @SerialName("Created") data class Created(val node: NodeAt?, val notice: Notice?) : Answer()
+    /**
+     * A Memory or a chapter made ([Call.ShellCreateMemory], [Call.GalleryCreateChapter]): the node to open, or why not;
+     * [queued]: made offline, waiting to be sent ([notice] says so) — the dialog closes, nothing opens yet.
+     */
+    @Serializable @SerialName("Created") data class Created(val node: NodeAt?, val notice: Notice?, val queued: Boolean = false) : Answer()
 
     /**
      * A medium's details ([Call.LightboxDetails]), in the web's order: each row with its label and how it shows; who added

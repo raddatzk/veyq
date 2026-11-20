@@ -22,7 +22,9 @@
 //!
 //! Before any guest write the web's notice of the guest-write record stands under the header while the link writes
 //! (`ReceivedShown.recordDays`, ADR 0093 § 10, inbox #1018), its *more* opening the link's instance's privacy notice;
-//! a write that needs the guest's name asks it first (`share_guest_name_*`, the notice in the question too).
+//! a write that needs the guest's name asks it at the write, as the core's one naming flow says (`ReceivedShown.naming`,
+//! `Received.NamingSave`/`NamingDecline`, ADR 0154 decision 1: Replace, *Add entry*, a level's New), the notice in the
+//! question too. A Memory's *Add photos* and a WRITE_ONLY page still name the guest first (`Received.Name`).
 //!
 //! What the host keeps of the link: nothing but the text the person pasted, held by the view only to offer *Open in the
 //! browser* where the core refuses the link's instance; no update carries the link or its key (ADR 0150 decision 7), and
@@ -206,16 +208,11 @@ pub fn record_notice(days: Option<i32>) -> Option<String> {
 /// A WRITE_ONLY link's role (`GuestAccess.WRITE_ONLY`): its guest sees no node, so no row is reported.
 const WRITE_ONLY: &str = "WRITE_ONLY";
 
-/// Whether a file's *Replace* is offered: where the file's rights let the guest ([can_write], a READ_WRITE guest's) —
-/// signed in or out: `Received.Replace` queues it on the link's own queue (#1035).
+/// Whether a file's *Replace* is offered: where the file's rights let the guest ([can_write], core's `FileRights`, a
+/// READ_WRITE guest's named or not) — signed in or out: `Received.Replace` queues it on the link's own queue (#1035) once
+/// the core's naming did.
 pub fn replace_offered(can_write: bool) -> bool {
     can_write
-}
-
-/// Whether a Pot's *Add entry* is offered: where it takes the guest's writes, or to a READ_WRITE guest not named yet, whose
-/// name is asked first (the web's `requestGuest`, then the write).
-pub fn pot_add_offered(can_write: bool, role: &str, named: bool) -> bool {
-    can_write || (role == "READ_WRITE" && !named)
 }
 
 /// What the content shows, as a key: drawn anew only when it changed (a level's rows, another page, another gate).
@@ -257,10 +254,8 @@ struct Inner {
     /// A file's *Download* (Save a copy) and its *Replace*, where the file offers them.
     save: gtk::Button,
     replace: gtk::Button,
-    /// A Pot's *Add entry* asked by a guest just named: the entry's editor opens once the Pot reads that it writes.
-    add_after_read: Cell<bool>,
-    /// Whether the Pot on screen takes the guest's writes, as its last read said.
-    pot_can_write: Cell<bool>,
+    /// The core's name dialog while it asks the guest's name at a write (`ReceivedShown.naming`).
+    naming: RefCell<Option<adw::AlertDialog>>,
     menu: gtk::MenuButton,
     actions: gio::SimpleActionGroup,
     notice: gtk::Box,
@@ -352,8 +347,7 @@ impl ReceivedView {
             new,
             save,
             replace,
-            add_after_read: Cell::new(false),
-            pot_can_write: Cell::new(false),
+            naming: RefCell::new(None),
             menu,
             actions,
             notice,
@@ -428,16 +422,16 @@ impl Inner {
         let w = Rc::downgrade(self);
         self.add.connect_clicked(move |_| {
             if let Some(i) = w.upgrade() {
-                i.write(|i| match i.held.borrow().as_ref() {
-                    Some(Held::Memory(p)) => p.add(),
-                    // a guest just named: its Pot reads anew that it writes, then the entry's editor opens
-                    Some(Held::Pot(p)) if !i.pot_writes() => {
-                        i.add_after_read.set(true);
-                        p.refresh();
-                    }
+                match i.held.borrow().as_ref() {
+                    Some(Held::Memory(_)) => i.write(|i| {
+                        if let Some(Held::Memory(p)) = i.held.borrow().as_ref() {
+                            p.add();
+                        }
+                    }),
+                    // the editor's save asks the guest's name where the core says (`PotDoor.named`)
                     Some(Held::Pot(p)) => p.add_entry(),
                     _ => {}
-                });
+                }
             }
         });
         let w = Rc::downgrade(self);
@@ -468,19 +462,19 @@ impl Inner {
         add("keep", Rc::new(|i| i.keep()));
         add("report", Rc::new(|i| i.report()));
         add("not-you", Rc::new(|i| i.ask_not_you()));
-        add("new-folder", Rc::new(|i| i.write(|i| i.new_folder())));
-        add("upload-files", Rc::new(|i| i.write(|i| i.pick_and_upload())));
+        // a level's New: the core asks the guest's name at the write (`GuestLevel.createFolder`, `uploadAsking`)
+        add("new-folder", Rc::new(|i| i.new_folder()));
+        add("upload-files", Rc::new(|i| i.pick_and_upload()));
         add("save", Rc::new(|i| {
             if let Some(Held::File(p)) = i.held.borrow().as_ref() {
                 p.save(&i.window, &i.root);
             }
         }));
+        // the core asks the guest's name at the replace (`GuestAccess.replaceAsking`), never this side
         add("replace", Rc::new(|i| {
-            i.write(|i| {
-                if let Some(file) = i.held.borrow().as_ref().and_then(|h| if let Held::File(p) = h { p.id() } else { None }) {
-                    crate::uploads::guest_replace(&i.window, i.received, file, &i.root);
-                }
-            })
+            if let Some(file) = i.held.borrow().as_ref().and_then(|h| if let Held::File(p) = h { p.id() } else { None }) {
+                crate::uploads::guest_replace(&i.window, i.received, file, &i.root);
+            }
         }));
         // a row's report, by its node's id (`Received.ReportNode`)
         let report_node = gio::SimpleAction::new("report-node", Some(glib::VariantTy::STRING));
@@ -523,6 +517,7 @@ impl Inner {
             }
             None => self.guest_line.set_visible(false),
         }
+        self.draw_naming(&s);
         let key = drawn_key(&s);
         if *self.drawn.borrow() != key {
             *self.drawn.borrow_mut() = key;
@@ -566,7 +561,6 @@ impl Inner {
     fn draw_content(self: &Rc<Self>, s: &ReceivedShown) {
         self.held.borrow_mut().take();
         self.password.borrow_mut().take();
-        self.add_after_read.set(false);
         for w in [self.add.upcast_ref::<gtk::Widget>(), self.new.upcast_ref(), self.save.upcast_ref(), self.replace.upcast_ref()] {
             w.set_visible(false);
         }
@@ -718,21 +712,12 @@ impl Inner {
                 // no bar on a guest's screen: the page holds its places
                 page.own_places();
                 let w = Rc::downgrade(self);
-                page.on_read(move |can_write| {
+                page.on_read(move |_, offers_entries| {
                     let Some(i) = w.upgrade() else { return };
-                    i.pot_can_write.set(can_write);
-                    let (role, named) = i.shown.borrow().as_ref().map(|s| (s.role.clone(), s.guest_name.is_some())).unwrap_or_default();
                     i.add.set_tooltip_text(Some(&words::pot_add()));
                     i.add.update_property(&[gtk::accessible::Property::Label(&words::pot_add())]);
-                    i.add.set_visible(pot_add_offered(can_write, &role, named));
-                    if can_write && i.add_after_read.replace(false) {
-                        // the entry's editor once this read's turn is over (the Pot's watch still draws)
-                        glib::idle_add_local_once(move || {
-                            if let Some(Held::Pot(p)) = i.held.borrow().as_ref() {
-                                p.add_entry();
-                            }
-                        });
-                    }
+                    // the core's `offersEntries`: a writer's, and a READ_WRITE guest's not named yet (asked at the save)
+                    i.add.set_visible(offers_entries);
                 });
                 self.set_content(page.widget());
                 *self.held.borrow_mut() = Some(Held::Pot(page));
@@ -851,6 +836,73 @@ impl Inner {
         ask.present(Some(&self.root));
     }
 
+    /// The core's name dialog while a write waits for the guest's name ([ReceivedShown::naming]): its save answered as a
+    /// name dialog's (`Answer.Named`: a problem keeps it open with the word under the field, a notice is said), its cancel
+    /// declines the write; gone with the asking.
+    fn draw_naming(self: &Rc<Self>, s: &ReceivedShown) {
+        if !s.naming {
+            if let Some(ask) = self.naming.borrow_mut().take() {
+                ask.force_close();
+            }
+            return;
+        }
+        if self.naming.borrow().is_some() {
+            return;
+        }
+        self.ask_naming(None);
+    }
+
+    fn ask_naming(self: &Rc<Self>, problem: Option<String>) {
+        let entry = gtk::Entry::builder().activates_default(true).build();
+        let hint = match record_notice(self.shown.borrow().as_ref().and_then(|s| s.record_days)) {
+            Some(n) => format!("{}\n\n{}", words::share_guest_name_hint(), n),
+            None => words::share_guest_name_hint(),
+        };
+        let body = match &problem {
+            Some(p) => format!("{p}\n\n{hint}"),
+            None => hint,
+        };
+        let ask = adw::AlertDialog::builder().heading(words::share_guest_name_title()).body(body).extra_child(&entry).build();
+        ask.add_responses(&[("cancel", &words::entry_cancel()), ("name", &words::share_save())]);
+        ask.set_response_appearance("name", adw::ResponseAppearance::Suggested);
+        ask.set_default_response(Some("name"));
+        ask.set_close_response("cancel");
+        let w = Rc::downgrade(self);
+        ask.connect_response(None, move |_, response| {
+            let Some(i) = w.upgrade() else { return };
+            i.naming.borrow_mut().take();
+            let id = i.received;
+            if response != "name" {
+                eprintln!("veyq: the guest's naming declined");
+                bridge::send(Call::ReceivedNamingDecline { received: id });
+                return;
+            }
+            let (name, w) = (entry.text().to_string(), Rc::downgrade(&i));
+            glib::spawn_future_local(async move {
+                let answer = bridge::call(&Call::ReceivedNamingSave { received: id, name }).await.map(|(a, _)| a);
+                let Some(i) = w.upgrade() else { return };
+                match answer {
+                    Ok(Answer::Named { problem: Some(p), .. }) => {
+                        eprintln!("veyq: the guest's naming: {}", p.msg);
+                        i.ask_naming(Some(said::notice(&p)));
+                    }
+                    Ok(Answer::Named { notice, .. }) => {
+                        eprintln!("veyq: the guest's naming: named");
+                        if let Some(n) = notice {
+                            i.root.add_toast(adw::Toast::new(&said::notice(&n)));
+                        }
+                    }
+                    other => {
+                        eprintln!("veyq: the guest's naming answered {}", answer_kind(&other));
+                        i.root.add_toast(adw::Toast::new(&words::share_failed()));
+                    }
+                }
+            });
+        });
+        ask.present(Some(&self.root));
+        *self.naming.borrow_mut() = Some(ask);
+    }
+
     /// *New folder* on a READ_WRITE level: its name asked, the core's refusal asked again with it (`Received.NewFolder`).
     fn new_folder(self: &Rc<Self>) {
         let (id, toasts) = (self.received, self.root.clone());
@@ -878,11 +930,6 @@ impl Inner {
         crate::report::open_asked(&self.root, &node, Call::ReceivedReportNode { received: self.received, node: node_id }, |other| {
             eprintln!("veyq: a row's report answered {}", answer_kind(&other));
         });
-    }
-
-    /// Whether the Pot on screen takes the guest's writes, as its last read said.
-    fn pot_writes(&self) -> bool {
-        self.pot_can_write.get()
     }
 
     fn ask_not_you(self: &Rc<Self>) {
@@ -1095,14 +1142,6 @@ mod tests {
     fn a_files_replace_stands_where_the_guest_may_signed_in_or_out() {
         assert!(replace_offered(true), "a READ_WRITE guest is offered no replace");
         assert!(!replace_offered(false), "a READ guest replaces nothing");
-    }
-
-    #[test]
-    fn a_pots_add_entry_stands_for_a_writer_and_a_read_write_guest_not_named_yet() {
-        assert!(pot_add_offered(true, "READ_WRITE", true));
-        assert!(pot_add_offered(false, "READ_WRITE", false), "its name is asked first");
-        assert!(!pot_add_offered(false, "READ", false));
-        assert!(!pot_add_offered(false, "READ_WRITE", true), "named and still not writing: nothing to offer");
     }
 
     #[test]
