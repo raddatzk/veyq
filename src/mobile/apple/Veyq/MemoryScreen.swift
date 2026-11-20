@@ -318,10 +318,11 @@ struct MemoryScreen: View {
         .task(id: GalleryLiveKey(node: node, active: phase == .active)) {
             if phase == .active { await model.liveGallery(node) }
         }
-        // photos and videos dropped onto the gallery go into it at once, as a pick's (ADR 0138 decision 9)
+        // photos and videos dropped onto the gallery go into it at once, as a pick's (ADR 0138 decision 9) — judged, sorted
+        // and said by core's one drop (`ShellModel.drop`, ADR 0154 decision 1); a guest's gallery is the link's, not the shell's
         .onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
-            guard uploads, guest == nil, let gallery = model.galleryModel(node) else { return false }
-            Task { model.dropOnto(gallery, await IncomingFiles.read(providers)) }
+            guard guest == nil, let gallery = model.galleryModel(node) else { return false }
+            Task { await model.drop(providers, onto: DropTarget.Gallery(gallery: gallery)) }
             return true
         }
         .photosPicker(isPresented: $pickingPhotos, selection: $photos, matching: .any(of: [.images, .videos]), preferredItemEncoding: .current)

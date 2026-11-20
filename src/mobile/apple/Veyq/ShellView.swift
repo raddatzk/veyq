@@ -597,6 +597,8 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(Role.surface)
+                // a drop onto a folder's row only where the core offers it (`ShellModel.dropTarget`), never by its kind
+                .modifier(DropsOnto(model: model, target: model.dropTarget(node)))
             } else if let ref = node.asObject() {
                 ObjectRow(ref: ref, onOpen: model.open).listRowBackground(Role.surface)
             } else if let bookmark = node.asBookmark() {
@@ -677,7 +679,9 @@ struct HomeView: View {
     /// A node of the level as a tile: a folder enters, an object opens.
     private func tile(_ node: NodeRef) -> NodeTileItem? {
         if let folder = node.asFolder() {
-            return NodeTileItem(id: node.nodeId, name: node.name, cover: model.covers[node.nodeId]?.image, symbol: "folder", folder: true) { model.enter(folder) }
+            let target = model.dropTarget(node)
+            return NodeTileItem(id: node.nodeId, name: node.name, cover: model.covers[node.nodeId]?.image, symbol: "folder", folder: true,
+                                drop: target.map { t in { providers in Task { await model.drop(providers, onto: t) } } }) { model.enter(folder) }
         }
         if let bookmark = node.asBookmark() {
             return NodeTileItem(id: node.nodeId, name: node.name, symbol: Names.kindSymbol(bookmark.kind), enabled: !picking) { model.openBookmark(bookmark) }
@@ -688,10 +692,10 @@ struct HomeView: View {
 
     private var level: some View {
         levelBody
-        // a file dropped onto the level is uploaded here at once where Depot may put files, a folder on macOS as a folder
-        // (ADR 0138 decision 9); anywhere else it waits in the pick mode, as a share's does
+        // what is dropped onto the level goes through core's one drop (ADR 0154 decision 1; ADR 0138 decision 9): uploaded
+        // here where the core offers it, a folder on macOS as a folder; where it does not, it waits in the pick mode
         .onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
-            Task { await model.dropOntoLevel(providers) }
+            Task { await model.drop(providers, onto: model.levelDropTarget) }
             return true
         }
         // the level's "New" (the web's menu): a folder here, or a Pot here
@@ -1206,6 +1210,17 @@ struct NewMemorySheet: View {
     }
 }
 
+/// A name dialog's save as core answered it (`NameAnswer`, ADR 0154 decision 1): the problem's words while the dialog stays
+/// open (nil: it closes), its notice handed to `said` once it closed; queued offline it closes (it shows where it was made).
+/// A save that answered nothing (its task cancelled) is never taken as made: the dialog stays open saying it was not saved.
+@MainActor
+func nameAnswered(_ answer: NameAnswer?, said: (String) -> Void) -> String? {
+    guard let answer else { return say(.nodeSaveFailed) }
+    if let problem = answer.problem { return say(notice: problem) }
+    if let n = answer.notice { said(say(notice: n)) }
+    return nil
+}
+
 extension View {
     /// New Folder's name (a level's, a guest folder's): `create` makes it and says why not. iOS asks in an alert with its
     /// field, a refusal opening it again; a Mac in a sheet that keeps the refusal under the field (`NewFolderSheet`).
@@ -1366,3 +1381,20 @@ struct ActivitySheet: UIViewControllerRepresentable {
     func updateUIViewController(_ vc: UIActivityViewController, context: UIViewControllerRepresentableContext<ActivitySheet>) {}
 }
 #endif
+
+/// A drop onto `target` (core's one drop) where the core offers one; no drop target otherwise.
+struct DropsOnto: ViewModifier {
+    let model: AppModel
+    let target: DropTarget?
+
+    func body(content: Content) -> some View {
+        if let target {
+            content.onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
+                Task { await model.drop(providers, onto: target) }
+                return true
+            }
+        } else {
+            content
+        }
+    }
+}

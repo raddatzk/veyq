@@ -51,6 +51,8 @@ struct NodeTileItem: Identifiable {
     let symbol: String
     var folder = false
     var enabled = true
+    /// What a drop onto the tile does, where the core offers one (a folder's, `ShellModel.dropTarget`); nil: no drop target.
+    var drop: (([NSItemProvider]) -> Void)?
     let open: () -> Void
 }
 
@@ -102,6 +104,23 @@ private struct NodeTile: View {
         .disabled(!item.enabled)
         .opacity(item.enabled ? 1 : 0.38)
         .accessibilityElement(children: .combine)
+        .modifier(TileDrop(drop: item.drop))
+    }
+}
+
+/// A tile's drop where it has one (`NodeTileItem.drop`).
+private struct TileDrop: ViewModifier {
+    let drop: (([NSItemProvider]) -> Void)?
+
+    func body(content: Content) -> some View {
+        if let drop {
+            content.onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
+                drop(providers)
+                return true
+            }
+        } else {
+            content
+        }
     }
 }
 

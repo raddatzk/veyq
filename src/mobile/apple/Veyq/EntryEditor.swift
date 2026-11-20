@@ -53,6 +53,8 @@ struct EntryEditorSheet: View {
         }
         .tint(Role.accent)
         .sheetFrame(minWidth: 480, minHeight: 560)
+        // a link's guest not named yet is asked its name at the save (core's `GuestAccess.naming`), above this sheet
+        .modifier(OptionalNaming(access: model.guests.screen?.access))
     }
 
     private func shown(_ s: EntryEditor.State, _ at: String, _ item: Int? = nil) -> String? {

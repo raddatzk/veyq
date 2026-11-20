@@ -199,7 +199,9 @@ private struct EntriesList: View {
         }
         .scrollContentBackground(.hidden)
         // beside the Pot's heart, share and menu
-        .createAction(say(.potAdd), shown: view.canWrite && !view.people.isEmpty, action: onAdd)
+        // *Add entry* where the core offers it (`PotView.offersEntries`: a writer, or a READ_WRITE guest not named yet, asked
+        // its name at the save), never by `canWrite`
+        .createAction(say(.potAdd), shown: view.offersEntries, action: onAdd)
     }
 
     private func subtitle(_ e: PotView.EntryRow) -> String {
