@@ -4,7 +4,7 @@
 - Built: yes
 - Date: 2026-09-07
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
-- Replaced in part: the split rule (what stays in `src/web/`) by ADR 0099 (built)
+- Replaced in part: the split rule (what stays in `src/web/`) by ADR 0099 (built); the workspace's one package by ADR 0155 (not built)
 
 ## Context
 
