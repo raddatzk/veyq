@@ -77,14 +77,15 @@ Branch `claude/kjs-refine` at `ff410c6c9`. `C=src/mobile/core/src`.
 
 ## Phases
 
-- [ ] **1 the measurement** — first, and a stop: on a scratch branch, `js()` added as J1 and every compile run
+- [x] **1 the measurement** — first, and a stop: on a scratch branch, `js()` added as J1 and every compile run
   (`:core:compileKotlinJs`, `:core:compileTestKotlinJs`). Recorded in this CR: every error that is not one of R1's
   `expect`s (a JVM- or native-only API in common code is handed back with its list, not worked around); the task
   graph of the package's Gradle task (`--dry-run`) with no `kotlinNodeJsSetup`, `kotlinYarnSetup`, `kotlinNpmInstall`
   or `kotlinStoreYarnLock`, and the switch that keeps them off; whether `src/mobile/` configures with no Android SDK
   present (`ANDROID_HOME` unset, in a JDK container) and on JDK 25 as on 21; two clean builds of the module compared
   byte for byte (`shasum -a 256` over `dist/`). · Done when: the four answers are in § Measured at implement; any
-  "no" is handed back before phase 2.
+  "no" is handed back before phase 2. **Built** 2026-11-20: M1–M4, four yeses with their switches; the bites seen red
+  were the task-graph check (`:kotlinNpmInstall --dry-run`) and the reproducibility itself (4 variants in 4 builds).
 - [ ] **2 the target** — J1, J2, J6. · Done when: `:core:jvmTest :core:macosArm64Test`, `:core:compileKotlinJs
   :core:compileTestKotlinJs` and `:bridge:jvmTest` green; `--warning-mode all` clean; `git diff --stat` shows only
   `jsMain`, `jsTest`, the build file and the metadata under `src/mobile/`. **Bite:** a common-code call to a JVM-only
@@ -105,7 +106,19 @@ Branch `claude/kjs-refine` at `ff410c6c9`. `C=src/mobile/core/src`.
 
 ## Measured at implement
 
-_(phase 1 fills this)_
+Phase 1, 2026-11-20, on `claude/kjs-p0` (from `claude/windows-cr-f6c73c` at `3a05be7fe`), Kotlin 2.4.21, Gradle 9.8.2,
+macOS arm64. Every row `measured` by the command named; `C=src/mobile/core/src`.
+
+| # | Question | Answer |
+|---|---|---|
+| M1 | Does the common code compile for JavaScript? | **`commonMain`: yes** — `:core:compileKotlinJs` failed on R1's eight `expect`s and nothing else; with J2's actuals it is green. **`commonTest`: 44 errors in 3 files, none an `expect`** — `search/SearchModelTest.kt` (26), `search/SearchVolumeMeasure.kt` (9), `session/DeviceLinkTest.kt` (9): `runBlocking` (17 references) and `newFixedThreadPoolContext` (2), the rest their follow-on suspend/inference errors. Both are kotlinx.coroutines' JVM-and-native API (no JavaScript form: no thread to block). Answer: the three files move, unchanged, into a source set between `commonTest` and the JVM and native targets, `threadedTest` (the hierarchy's `threaded` group: `withJvm()` + `native`); the JVM and native test compilations compile exactly what they did. (`./gradlew :core:compileTestKotlinJs`, the errors in the scratchpad's `p0/testcompile.txt`.) |
+| M2 | Does the package's task reach Kotlin's Node, Yarn or npm? | **Not without an environment; always with one.** With `js { nodejs() }` even the link (`compileProductionLibraryKotlinJs --dry-run`) depends on `:kotlinNodeJsSetup`, `:kotlinYarnSetup`, `:kotlinNpmInstall`, `:rootPackageJson` and each compilation's `*PackageJson`, and configuring it fails on the settings' `FAIL_ON_PROJECT_REPOS` ("repository 'Distributions at https://nodejs.org/dist' was added"). With no environment, `:core:jsPackage --dry-run` lists only the core's generate tasks, `compileKotlinJs`, `compileConformanceKotlinJs`, the two production links and their `.d.ts` validations (whose `tsc` runs under Kotlin's Node; ignored by default, disabled here). **The switch:** no environment (the plugin's "JS Environment Not Selected" warning suppressed by its id, `kotlin.suppressGradlePluginWarnings=JsEnvironmentNotChosenExplicitly`: "will be an error in the future releases" — a Kotlin upgrade that makes it one is handed back); the root plugin an environment would have applied (`NodeJsRootPlugin`, whose extension the link's sync task reads — without it `tasks --all` fails) applied in `src/mobile/build.gradle.kts` with `download = false` for Node and Yarn; and a task-graph check there that fails a build reaching any of Kotlin's Node/Yarn/npm tasks (`./gradlew :kotlinNpmInstall --dry-run` → red, naming seven). No `kotlin-js-store/` was written. |
+| M3 | Does `src/mobile/` configure with no Android SDK, on JDK 21 as on 25? | **Yes.** `env -i HOME=… PATH=/usr/bin:/bin:/usr/sbin:/sbin JAVA_HOME=<temurin-21.0.13 \| 25.0.5> ./gradlew --no-daemon :core:jsPackage` green on both; in the same environment `:android:assembleDebug --dry-run` fails "SDK location not found" — no SDK was found, and `:core` needed none. Not in a container: no JDK image is on this host, and a pull is the Docker credential-helper stall this machine has (remembered); the emptied environment stands in. |
+| M4 | Are two clean builds byte-identical? | **Only without the JavaScript incremental caches.** Default (`kotlin.incremental.js.ir` on), clean `core/build` and `dist/`, fresh in-process compiler each time: the conformance's `kotlin-kotlin-stdlib.mjs` came out in **4 variants in 4 builds** (the interfaces' order in `initMetadataForClass`, e.g. `[Collection, KtList]` against `[KtList, Collection]`); whole-program granularity 3 in 4. With `kotlin.incremental.js.ir=false`: **4 in 4 identical** (`find dist -type f \| sort \| xargs shasum -a 256`, digest `55c98c7b…`). A warm rebuild after a one-line edit took the same with and without the caches (16–17 s against 17–18 s, `:core:jsPackage`, under a load of ~9). So `src/mobile/gradle.properties` turns them off. The shipped module itself (`veyq-mobile-core.mjs`, a few hundred bytes while it exports nothing) was identical in every build. Not measured: a build at another checkout path — the source maps of the third-party klibs name their sources relative to `dist/` (`../../…/Users/admin/Projects/KotlinCrypto/…`), so their bytes depend on the checkout's depth; that is the attested tier's question, not this CR's. |
+
+Each answer is a yes with its switch, so phase 2 went on (the coordinator's stop conditions: `commonMain`, Kotlin's Node/Yarn,
+reproducibility, the Android SDK). M1's move of three common tests is a deviation from phase 2's "only `jsMain`,
+`jsTest`, the build file and the metadata"; M2 and M4 add `src/mobile/build.gradle.kts` and `gradle.properties` to it.
 
 ## Owner questions
 
