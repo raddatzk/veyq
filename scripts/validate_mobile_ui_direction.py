@@ -30,6 +30,17 @@ or a qualified name —, which in Kotlin is the only way to reach another packag
     a composition root that is missing or does not name every application's package, and a `package` that is not
     its directory's are each red. Kotlin's packages make the import the whole edge: a symbol of another package is
     unreachable without its name spelled.
+  Apple: the Swift sources of `src/mobile/apple/Veyq/` and the share extension's `src/mobile/apple/VeyqShare/`; an
+  application's UI is the group `Veyq/Apps/<Application>/` (the id capitalized, `memories` → `Memories`), everything
+  else the core UI. Swift is one module without imports, so a reference is a name: the guard indexes what each
+  application declares at its files' top level and is not `private`/`fileprivate` (a type, a function, a global) and
+  the members its top-level `extension`s add (a `.member` reference), and reads every other file for them, its own
+  declarations aside:
+  - **(a)** no core UI file names an application's declaration — but the composition root, `Veyq/Applications.swift`.
+  - **(b)** no application names another's.
+  - fail closed: a directory under `Apps/` that is no application, an application without a file, a composition root
+    that is missing or names nothing of an application, and a top-level name declared by two sides (an overload of a
+    core function in an application, which the index cannot tell from core's) are each red.
 
   Linux: the crate's sources under `src/mobile/linux/src/` (read with comments and literals blanked, `rust_lexer.mask`);
   an application's UI is the module `apps::<application>` (directory `src/apps/<application>/`), everything else —
@@ -59,6 +70,10 @@ held from growing only by review: a new file added there with a reason is green.
 by its nature. A platform whose rules are not switched on (`PLATFORMS`) is not read at all. On Linux a `#[path]`
 attribute that mounts another directory's file, an item re-exported by core under another name (`pub use`) and a
 macro that expands to a path are not seen; a kind literal (`"EXPENSES_POT"`, blanked) is not either.
+by its nature. A platform whose rules are not switched on (`PLATFORMS`) is not read at all. Apple's index sees names,
+not Swift's resolution: a member an application adds inside a type it declares is reached only through that type
+(seen), but a protocol conformance's requirement or a name read inside a string interpolation's nested literal is not,
+and an application's extension member that core also declares by name is not counted (it would be every `.body`).
 """
 from __future__ import annotations
 
@@ -118,7 +133,7 @@ CORE_ROOTS: dict[str, str] = {
 }
 
 # The platforms whose UI rules (a) and (b) are on; each is switched on in its phase of cr-apps-core-ui-layer.
-PLATFORMS: dict[str, bool] = {"android": True, "linux": True}
+PLATFORMS: dict[str, bool] = {"android": True, "apple": True, "linux": True}
 
 ANDROID_SRC = MOBILE / "android" / "src"
 ANDROID_PACKAGE = "me.raddatz.veyq.mobile.android"
@@ -128,6 +143,10 @@ ANDROID_ROOT = pathlib.Path("main") / ANDROID_BASE / "Applications.kt"
 LINUX_SRC = repo_layout.MOBILE_LINUX / "src"
 LINUX_ROOT = pathlib.Path("applications.rs")
 RUST_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|::|[{},;]|\S")
+APPLE_DIR = MOBILE / "apple"
+APPLE_SOURCES = ("Veyq", "VeyqShare")
+APPLE_APPS = pathlib.Path("Veyq") / "Apps"
+APPLE_ROOT = pathlib.Path("Veyq") / "Applications.swift"
 
 
 def applications(source: str) -> list[str]:
@@ -384,6 +403,225 @@ def check_linux(linux_src: pathlib.Path, apps: list[str]) -> list[str]:
     return errors
 
 
+# ---------------------------------------------------------------------------------------------------------------- Apple
+
+_SWIFT_CODE = re.compile(r'//|/\*|#+"|"""|["`{}()]')
+_SWIFT_BLOCK = re.compile(r"/\*|\*/")
+
+
+def swift_mask(src: str) -> str:
+    """`src` with comments and string contents blanked at unchanged length — but a string's `\\(…)` interpolation, which
+    is code, kept (nested literals in it blanked in turn). Knows `//`, nested `/* */`, `"…"`, `\"\"\"…\"\"\"`, raw
+    `#"…"#` (no interpolation read) and backticked names; Swift has no character literal."""
+    out = list(src)
+    n = len(src)
+
+    def blank(a: int, b: int) -> None:
+        for k in range(a, b):
+            if out[k] != "\n":
+                out[k] = " "
+
+    def string(i: int, close: str, raw: bool) -> int:
+        """From just inside the opening quote: blanks the contents, returns the index past the closing delimiter."""
+        start = i
+        while i < n:
+            if src.startswith(close, i):
+                blank(start, i)
+                return i + len(close)
+            c = src[i]
+            if c == "\n" and close == '"':  # a one-line string never spans a line: malformed, stop here
+                blank(start, i)
+                return i
+            if c == "\\" and not raw:
+                if src.startswith("(", i + 1):
+                    blank(start, i + 2)
+                    i = code(i + 2, until_paren=True)  # at the `)` closing the interpolation
+                    start = i + 1
+                    i += 1
+                    continue
+                i += 2
+                continue
+            i += 1
+        blank(start, n)
+        return n
+
+    def code(i: int, until_paren: bool) -> int:
+        depth = 0
+        while True:
+            m = _SWIFT_CODE.search(src, i)
+            if not m:
+                return n
+            t, s = m.group(), m.start()
+            if t == "//":
+                e = src.find("\n", s)
+                i = n if e == -1 else e
+                blank(s, i)
+            elif t == "/*":
+                d, i = 0, n
+                for b in _SWIFT_BLOCK.finditer(src, s):
+                    d += 1 if b.group() == "/*" else -1
+                    if d == 0:
+                        i = b.end()
+                        break
+                blank(s, i)
+            elif t.startswith("#"):
+                hashes = t[:-1]
+                multi = src.startswith('""', m.end())
+                close = ('"""' if multi else '"') + hashes
+                i = string(m.end() + (2 if multi else 0), close, raw=True)
+            elif t == '"""':
+                i = string(m.end(), '"""', raw=False)
+            elif t == '"':
+                i = string(m.end(), '"', raw=False)
+            elif t == "`":
+                e = src.find("`", s + 1)
+                i = n if e == -1 else e + 1
+            elif t == "(":
+                depth += 1
+                i = m.end()
+            elif t == ")":
+                if until_paren and depth == 0:
+                    return s
+                depth -= 1
+                i = m.end()
+            else:
+                i = m.end()
+
+    code(0, until_paren=False)
+    return "".join(out)
+
+
+_SWIFT_MODS = r"(?:@\w+(?:\([^)\n]*\))?\s+|(?:public|internal|private|fileprivate|final|nonisolated|static|indirect|open)\s+)*"
+_SWIFT_DECL = re.compile(
+    r"^[ \t]*" + _SWIFT_MODS + r"(struct|class|enum|protocol|actor|typealias|func|let|var|extension)\s+([A-Za-z_]\w*)",
+    re.MULTILINE,
+)
+_SWIFT_PRIVATE = re.compile(r"\b(?:private|fileprivate)\b")
+
+
+def _depths(masked: str) -> list[int]:
+    """The brace depth at the start of each line (index 0 = line 1)."""
+    out, depth = [], 0
+    for line in masked.split("\n"):
+        out.append(depth)
+        depth += line.count("{") - line.count("}")
+    return out
+
+
+class SwiftFile:
+    def __init__(self, path: pathlib.Path):
+        self.path = path
+        self.masked = swift_mask(path.read_text(encoding="utf-8"))
+        depths = _depths(self.masked)
+        self.top: set[str] = set()       # non-private top-level names: types, functions, globals
+        self.members: set[str] = set()   # non-private members a top-level extension adds
+        self.declared: set[str] = set()  # every name declared anywhere in the file, any depth or visibility
+        in_extension: int | None = None  # the line where the open top-level extension began
+        for m in _SWIFT_DECL.finditer(self.masked):
+            kind, name = m.group(1), m.group(2)
+            line = _line(self.masked, m.start())
+            depth = depths[line - 1]
+            private = _SWIFT_PRIVATE.search(m.group(0)) is not None
+            if kind != "extension":
+                self.declared.add(name)
+            if depth == 0:
+                in_extension = line if kind == "extension" else None
+                if kind != "extension" and not private:
+                    self.top.add(name)
+            elif depth == 1 and in_extension is not None and kind in ("func", "var", "let") and not private:
+                self.members.add(name)
+
+
+def apple_sources(apple_dir: pathlib.Path) -> list[pathlib.Path]:
+    out: list[pathlib.Path] = []
+    for d in APPLE_SOURCES:
+        if (apple_dir / d).is_dir():
+            out += sorted((apple_dir / d).rglob("*.swift"))
+    return out
+
+
+def check_apple(apple_dir: pathlib.Path, apps: list[str]) -> list[str]:
+    errors: list[str] = []
+    paths = apple_sources(apple_dir)
+    if not paths:
+        return [f"{_rel(apple_dir)}: no Swift file under {'/ '.join(APPLE_SOURCES)} — the guard would check nothing"]
+    groups = {app[:1].upper() + app[1:]: app for app in apps}
+    files: list[tuple[str | None, SwiftFile]] = []
+    for f in paths:
+        under = f.relative_to(apple_dir)
+        own: str | None = None
+        if under.parts[: len(APPLE_APPS.parts)] == APPLE_APPS.parts:
+            rest = under.parts[len(APPLE_APPS.parts):]
+            if len(rest) < 2 or rest[0] not in groups:
+                errors.append(f"{_rel(f)}: under `{APPLE_APPS}/` but in no application's group (`{APPLE_APPS}/<{'|'.join(groups)}>/`)")
+                continue
+            own = groups[rest[0]]
+        files.append((own, SwiftFile(f)))
+    root = apple_dir / APPLE_ROOT
+    owners: dict[str, list[str]] = {}
+    for own, sf in files:
+        for name in sf.top:
+            owners.setdefault(name, []).append(own or "core")
+    index: dict[str, dict[str, set[str]]] = {app: {"top": set(), "members": set()} for app in apps}
+    core_declared: set[str] = set()
+    for own, sf in files:
+        if own is None:
+            core_declared |= sf.declared
+        else:
+            index[own]["top"] |= sf.top
+            index[own]["members"] |= sf.members
+    for name, sides in sorted(owners.items()):
+        if len(set(sides)) > 1 and any(s != "core" for s in sides):
+            errors.append(
+                f"{_rel(apple_dir)}: `{name}` is declared at the top level by {', '.join(sorted(set(sides)))} — the index "
+                f"cannot tell them apart; what two sides use belongs to the core UI, an application's own takes its own name",
+            )
+    for app in apps:
+        index[app]["members"] -= core_declared
+    for app in apps:
+        if not any(own == app for own, _ in files):
+            errors.append(f"{_rel(apple_dir / APPLE_APPS / app.capitalize())}: the application `{app}` has no UI file under {APPLE_APPS}/")
+    patterns = {
+        app: (
+            re.compile(r"(?<![\w.])(" + "|".join(sorted(map(re.escape, index[app]["top"]))) + r")\b") if index[app]["top"] else None,
+            re.compile(r"\.(" + "|".join(sorted(map(re.escape, index[app]["members"]))) + r")\b") if index[app]["members"] else None,
+        )
+        for app in apps
+    }
+    for own, sf in files:
+        if sf.path == root:
+            continue
+        for app in apps:
+            if app == own:
+                continue
+            for pattern in patterns[app]:
+                if pattern is None:
+                    continue
+                for m in pattern.finditer(sf.masked):
+                    if m.group(1) in sf.declared:
+                        continue
+                    where = f"{_rel(sf.path)}:{_line(sf.masked, m.start())}"
+                    if own is None:
+                        errors.append(
+                            f"{where}: (a) the core UI names `{m.group(1)}`, {app}'s — it reaches an application only "
+                            f"through the registry its composition root `{APPLE_ROOT.name}` fills",
+                        )
+                    else:
+                        errors.append(
+                            f"{where}: (b) the application `{own}` names `{m.group(1)}`, {app}'s — what two applications "
+                            f"draw belongs to the core UI",
+                        )
+    if not root.is_file():
+        errors.append(f"{_rel(root)}: the composition root is missing — each application registers there")
+    else:
+        masked = swift_mask(root.read_text(encoding="utf-8"))
+        for app in apps:
+            top = patterns[app][0]
+            if top is None or not top.search(masked):
+                errors.append(f"{_rel(root)}: the composition root names nothing of `{app}` — it is not registered")
+    return errors
+
+
 def check(
     core_src: pathlib.Path = CORE_SRC,
     applications_file: pathlib.Path = APPLICATIONS,
@@ -391,6 +629,7 @@ def check(
     platforms: dict[str, bool] | None = None,
     android_src: pathlib.Path = ANDROID_SRC,
     linux_src: pathlib.Path = LINUX_SRC,
+    apple_dir: pathlib.Path = APPLE_DIR,
 ) -> list[str]:
     if not applications_file.is_file():
         return [f"{_rel(applications_file)}: not found — the applications are derived from ApplicationId's entries"]
@@ -403,6 +642,8 @@ def check(
         errors += check_android(android_src, apps)
     if on.get("linux"):
         errors += check_linux(linux_src, apps)
+    if on.get("apple"):
+        errors += check_apple(apple_dir, apps)
     return errors
 
 
@@ -415,6 +656,8 @@ def main() -> int:
         return 1
     read = len(core_sources(CORE_SRC)) + (len(android_sources(ANDROID_SRC)) if PLATFORMS.get("android") else 0) \
         + (len(linux_sources(LINUX_SRC)) if PLATFORMS.get("linux") else 0)
+    read = len(core_sources(CORE_SRC)) + (len(android_sources(ANDROID_SRC)) if PLATFORMS.get("android") else 0)
+    read += len(apple_sources(APPLE_DIR)) if PLATFORMS.get("apple") else 0
     on = ", ".join(p for p, v in PLATFORMS.items() if v) or "none"
     print(f"validate_mobile_ui_direction: OK ({read} files; the Kotlin core, platforms on: {on})")
     return 0

@@ -116,8 +116,8 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
 
 ## Consequences
 
-- **Built:** decision 4 — the app group's defaults (`apple/Veyq/Shared.swift`, the move of an earlier installation's)
-  and the shared keychain group (`apple/Veyq/KeychainStore.swift`, the move of an item read from the app's own group;
+- **Built:** decision 4 — the app group's defaults (`apple/Veyq/Core/Shared.swift`, the move of an earlier installation's)
+  and the shared keychain group (`apple/Veyq/Core/KeychainStore.swift`, the move of an item read from the app's own group;
   `apple/Veyq/Veyq-iOS.entitlements`); core's `UserDefaultsStore` takes the defaults it is handed. An installation from
   before keeps its trusted account across the move (measured 2026-11-08 in the iOS Simulator).
 - **Built on Android:** decisions 1–3, 7 and 8 — the share target (`MainActivity`, `singleTask`, so a share reaches the
@@ -132,7 +132,7 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
   shared from the Photos app was placed in a Pot after Face ID, saved as a new expense's receipt, and opened on the web
   (measured 2026-11-08 in the iOS Simulator); the editor closed unsaved returned to the pick mode, and the pick mode's
   cancel ended the request — on Android likewise (measured the same day on the emulator).
-- **Built on Apple, decision 9:** the shell takes any file dropped onto it (`apple/Veyq/IncomingFiles.swift`, the
+- **Built on Apple, decision 9:** the shell takes any file dropped onto it (`apple/Veyq/Core/IncomingFiles.swift`, the
   one reader the share extension uses too, re-encoding a HEIC through ImageIO so macOS reads the same way;
   `AppModel.receiveDrop`). The reader is measured through the extension; a drop itself is not, since the Simulator's one
   scripted finger cannot hold a thumbnail and switch apps.
@@ -149,7 +149,7 @@ and [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.m
 - **Built on Apple, decisions 2, 3, 6 and 9 for a Memory** (cr-app-share-into-a-memory): `public.movie` in the
   extension's activation rule (`public.data` since a folder's answer); `IncomingFiles` copying each file inside `loadFileRepresentation`'s callback (a HEIC
   re-encoded file to file) and handing sources on; the banner's *Add here*; in the extension the handoff through the app
-  group (`apple/Veyq/ShareHandoff.swift`: `share-in/<id>/` with `target.json`, written under a dot name and renamed
+  group (`apple/Veyq/Core/ShareHandoff.swift`: `share-in/<id>/` with `target.json`, written under a dot name and renamed
   whole, queued by the app on its next open, each copy removed by the queue's `left`, cleared at a sign-out, swept at
   start); a drop onto a Memory's gallery (`MemoryScreen`'s `.onDrop`). Built for macOS and the iOS simulator SDK. **The
   macOS pass proved the drop** (2026-11-19, the coordinator's main session with full-screen control, a throwaway): three

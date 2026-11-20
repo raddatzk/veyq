@@ -7,7 +7,7 @@ import platform.Foundation.NSData
 import platform.posix.memcpy
 
 /**
- * The scan as the Apple app's camera reaches it (`apple/Veyq/QrCamera.swift`): Swift sees neither Kotlin's default
+ * The scan as the Apple app's camera reaches it (`apple/Veyq/Core/QrCamera.swift`): Swift sees neither Kotlin's default
  * arguments nor a suspending decoder, so the scan is made here, and a frame is made from the camera's luminance plane
  * with one copy, never byte by byte across the language boundary.
  */

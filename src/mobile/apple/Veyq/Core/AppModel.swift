@@ -1335,11 +1335,6 @@ final class AppModel {
     /// Person `userId`'s frame as the tenant's directory names them; nil while no tenant is open.
     func profile(_ userId: String) -> PersonProfile? { shellModel?.profile(userId: userId) }
 
-    /// Memories' section of person `userId`'s profile (core's `PersonMemories`), read on its open.
-    func personMemories(_ userId: String) -> PersonSection? {
-        shellModel.map { PersonSection($0.personMemories(userId: userId)) }
-    }
-
     // MARK: The gallery's filter, the contributions and the view mode (ADR 0149 decisions 5, 6 and 8)
 
     /// The viewer's calendar for a gallery filter's day chips (inbox #989): an instant's day and its words in this device's

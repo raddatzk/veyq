@@ -1,87 +1,57 @@
 import SwiftUI
 import VeyqCore
 
-/// A person's profile (ADR 0144 decision 11; the web's `PersonProfile.vue`), core's frame — their picture at its largest,
-/// their name, `~username` under a real name, a former member said so — and then each application's section, Memories'
-/// "Memories with {name}" (`PersonMemoriesSection`). Drawn where the shell's place is (core's `Shell.person`, over what was
-/// on screen: back returns there), its title the person's name; no bar of its own.
-struct PersonScreen: View {
-    @Bindable var model: AppModel
-    let userId: String
-    /// Memories' section while the profile shows (core's `PersonMemories`, read off the main thread); its List | Tiles | Map
-    /// choice is the account's one view choice on this device (ADR 0149 decision 8), Tiles before any.
+/// Memories' section of a person's profile (ADR 0144 decision 11; the web's `PersonProfile.vue`'s Memories part) as it
+/// registers (`MemoriesUi`'s `personSection`): the page under core's frame — "Memories with {name}", the person's Memories
+/// as List | Tiles, or the Map taking the page below the frame. Its section (core's `PersonMemories`, read off the main
+/// thread) is held while the profile shows; its List | Tiles | Map choice is the account's one view choice on this device
+/// (ADR 0149 decision 8), Tiles before any.
+struct PersonMemoriesPage: View {
+    let model: AppModel
+    let profile: PersonProfile
+    let frame: PersonFrame
     @State private var section: PersonSection?
-    /// *Edit profile* on one's own page (ADR 0148 decision 2): the same sheet as Settings' *Your profile*.
-    @State private var editing = false
-
-    private var mine: Bool { model.myUserId == userId }
-
-    private var profile: PersonProfile? { model.profile(userId) }
 
     var body: some View {
         Group {
-            if let profile {
-                if let section, section.state.value.view == .map {
-                    // the map takes the page below the frame; the list scrolls with it
-                    VStack(spacing: 0) {
-                        frame(profile).padding(.bottom, 8)
-                        PersonMemoriesHead(model: model, profile: profile, section: section).padding(.horizontal)
-                        MemoriesPinMap(model: model, pins: section.state.value.map) { section.memories.open(pin: $0) }
-                    }
-                } else {
-                    List {
-                        frame(profile)
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                        // the safety number below the name (ADR 0148 decision 3): one's own to show, another's to compare
-                        if !profile.former {
-                            SafetyNumberSection(model: model, userId: userId, name: Self.name(profile), mine: mine)
-                        }
-                        if let section {
-                            Section {
-                                PersonMemoriesRows(model: model, section: section)
-                            } header: {
-                                PersonMemoriesHead(model: model, profile: profile, section: section)
-                            }
+            if let section, section.state.value.view == .map {
+                // the map takes the page below the frame; the list scrolls with it
+                VStack(spacing: 0) {
+                    frame.frame.padding(.bottom, 8)
+                    PersonMemoriesHead(model: model, profile: profile, section: section).padding(.horizontal)
+                    MemoriesPinMap(model: model, pins: section.state.value.map) { section.memories.open(pin: $0) }
+                }
+            } else {
+                List {
+                    frame.frame
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    if let safety = frame.safety { safety }
+                    if let section {
+                        Section {
+                            PersonMemoriesRows(model: model, section: section)
+                        } header: {
+                            PersonMemoriesHead(model: model, profile: profile, section: section)
                         }
                     }
                 }
             }
         }
-        .navigationTitle(profile.map(Self.name) ?? "")
-        .toolbar {
-            if mine {
-                ToolbarItem(placement: .automatic) {
-                    Button(say(.profileEdit)) { editing = true }
-                }
-            }
-        }
-        .sheet(isPresented: $editing) { ProfileSheet(model: model) }
-        .task(id: userId) {
+        .task(id: profile.userId) {
             section?.close()
-            section = profile.flatMap { $0.sections.contains(.memories) ? model.personMemories(userId) : nil }
+            section = model.personMemories(profile.userId)
         }
         .onDisappear {
             section?.close()
             section = nil
         }
     }
+}
 
-    /// The name a profile carries: the directory's, else the former or the unknown member's words.
-    static func name(_ profile: PersonProfile) -> String {
-        profile.name ?? say(profile.former ? .memoryParticipantsFormer : .peopleUnknownMember)
-    }
-
-    /// Core's frame: the picture at its largest, the name, `~username` under a real name, a former member's hint.
-    private func frame(_ profile: PersonProfile) -> some View {
-        VStack(spacing: 6) {
-            PersonAvatar(name: Self.name(profile), userId: profile.former ? nil : profile.userId, size: 112)
-            Text(Self.name(profile)).font(.title2.weight(.bold)).multilineTextAlignment(.center).padding(.top, 6)
-            if let handle = profile.handle { Text(handle).font(.subheadline).foregroundStyle(Role.muted) }
-            if profile.former { Text(say(.peopleFormerMemberHint)).font(.subheadline).foregroundStyle(Role.muted) }
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
+extension AppModel {
+    /// Memories' section of person `userId`'s profile (core's `PersonMemories`), read on its open.
+    func personMemories(_ userId: String) -> PersonSection? {
+        shellModel.map { PersonSection($0.personMemories(userId: userId)) }
     }
 }
 

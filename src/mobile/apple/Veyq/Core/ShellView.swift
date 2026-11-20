@@ -499,10 +499,10 @@ struct Bar: View {
             if model.shell.person != nil {
                 // a person's profile carries no node's header (ADR 0144 decision 11)
                 EmptyView()
-            } else if let bookmark = model.shell.bookmark, let contribution = KindPage.of(bookmark.kind)?.header(bookmark, model) {
+            } else if let bookmark = model.shell.bookmark, let contribution = Registry.page(bookmark.kind)?.header(bookmark, model) {
                 // a kept link's page (core's, #1032): its header as every node's
                 NodeHeaderActions(model: model, node: bookmark, contribution: contribution).id(bookmark.nodeId)
-            } else if let ref = model.shell.openObject, let contribution = KindPage.of(ref.kind)?.header(ref.at, model) {
+            } else if let ref = model.shell.openObject, let contribution = Registry.page(ref.kind)?.header(ref.at, model) {
                 NodeHeaderActions(model: model, node: ref.at, contribution: contribution).id(ref.nodeId)
             } else if model.shell.openObject == nil, model.shell.application == nil, !model.shell.searching, let space = model.shell.space {
                 HStack {
@@ -521,7 +521,7 @@ struct Bar: View {
 
     /// The head of the node on screen (core's, for every kind): its body places it first in its list.
     private func hero(_ node: NodeAt) -> NodeHero {
-        NodeHero(model: model, node: node, canSet: AppKinds.shared.coverSettable(kind: node.kind, facts: KindPage.of(node.kind)?.header(node, model)?.facts))
+        NodeHero(model: model, node: node, canSet: AppKinds.shared.coverSettable(kind: node.kind, facts: Registry.page(node.kind)?.header(node, model)?.facts))
     }
 
     /// The page on screen; on a phone or tablet a pull to refresh reads the lists anew (#953), which an open Memory's page
@@ -541,17 +541,13 @@ struct Bar: View {
         } else if let bookmark = model.shell.bookmark {
             // a kept link's page over what was on screen (ADR 0150 decision 6, #1032): back returns there
             BookmarkScreen(model: model, node: bookmark)
-        } else if let ref = model.shell.openObject, let body = KindPage.of(ref.kind)?.body {
+        } else if let ref = model.shell.openObject, let body = Registry.page(ref.kind)?.body {
             body(ref, key, model).environment(\.nodeHero, hero(ref.at))
         } else if let ref = model.shell.openObject {
             ObjectPlaceholder(ref: ref, tab: key)
-        } else if let app = model.shell.application, app == .expenses {
-            ExpensesList(model: model)
-        } else if let app = model.shell.application, app == .memories, key == "memories.map" {
-            // the bar's Map tab: every Memory of the list with a place, on MapKit's map (ADR 0143 D6)
-            MemoriesMapTab(model: model)
-        } else if let app = model.shell.application, app == .memories {
-            MemoriesList(model: model)
+        } else if let app = model.shell.application, let list = Registry.application(app)?.list {
+            // the application's own list on its bar tab, as it registered it (Expenses' Pots, Memories' with its Map tab)
+            list(model, key)
         } else if let app = model.shell.application {
             ArrangedListView(model: model, list: model.applicationList(app), onOpen: model.open, key: "app:\(app)")
                 .navigationTitle(Names.application(app))
@@ -575,10 +571,10 @@ struct HomeView: View {
     @State private var naming = false
     @State private var newName = ""
     @State private var nameProblem: String?
-    @State private var creatingPot = false
+    /// What New is creating through its application's registered dialog (a Pot, a Memory), while its sheet shows.
+    @State private var creating: Creating?
     @State private var pickingFiles = false
     @State private var pickingFolder = false
-    @State private var namingMemory = false
     @State private var keepingLink = false
 
     /// A group's rows: a folder enters, an object opens.
@@ -718,7 +714,7 @@ struct HomeView: View {
             // List or Tiles (Files' View menu)
             ToolbarItem(placement: ViewModeMenu.placement) { ViewModeMenu(model: model) }
             // one "More" menu (as Files' folder menu): a level's bar keeps its room for its title
-            if let space = model.shell.space, let folder = model.shell.folderAt(scopeId: space), let contribution = KindPage.of(folder.kind)?.header(folder, model) {
+            if let space = model.shell.space, let folder = model.shell.folderAt(scopeId: space), let contribution = Registry.page(folder.kind)?.header(folder, model) {
                 ToolbarItem(placement: .primaryAction) {
                     NodeHeaderActions(model: model, node: folder, contribution: contribution, maxButtons: 0).id(folder.nodeId)
                 }
@@ -731,10 +727,10 @@ struct HomeView: View {
             ForEach(model.createsHere(isHome: true), id: \.self) { c in
                 Button(say(c.word), systemImage: Names.createSymbol(c)) {
                     switch c {
-                    case .pot: creatingPot = true
+                    case .pot: creating = Creating(create: c)
                     case .uploadFiles: pickingFiles = true
                     case .uploadFolder: pickingFolder = true
-                    case .memory: newName = ""; nameProblem = nil; namingMemory = true
+                    case .memory: newName = ""; nameProblem = nil; creating = Creating(create: c)
                     // a link kept here (ADR 0150 decision 6): the web's bookmark dialog
                     case .bookmark: keepingLink = true
                     default: newName = ""; nameProblem = nil; naming = true
@@ -754,11 +750,10 @@ struct HomeView: View {
             Task { await model.uploadFolder(url) }
         })
         .folderNaming($naming, name: $newName, problem: $nameProblem) { name in await model.createFolder(name: name) }
-        // New Memory: made at this level and opened (the web's `MemoryNodeDialog`)
-        .sheet(isPresented: $namingMemory) {
-            if let space = model.shell.space { NewMemorySheet(model: model, scopeId: space, parentId: model.shell.folder?.nodeId) }
+        // New Pot, New Memory (made at this level and opened): the dialog the application registered for it (`Registry.create`)
+        .sheet(item: $creating) { c in
+            Registry.create(c.create)?(model, model.shell.space, model.shell.folder?.nodeId)
         }
-        .sheet(isPresented: $creatingPot) { NewPotSheet(model: model) }
         .sheet(isPresented: $keepingLink) {
             if let space = model.shell.space { NewBookmarkSheet(model: model, scopeId: space, parentId: model.shell.folder?.nodeId) }
         }
@@ -766,8 +761,8 @@ struct HomeView: View {
         .onChange(of: model.newRequest, initial: true) { _, asked in
             switch asked {
             case .folder: newName = ""; nameProblem = nil; naming = true
-            case .memory: namingMemory = true
-            case .pot: creatingPot = true
+            case .memory: creating = Creating(create: .memory)
+            case .pot: creating = Creating(create: .pot)
             case .bookmark: keepingLink = true
             case nil: return
             }
@@ -869,6 +864,12 @@ extension EnvironmentValues {
 struct TrashOf: Identifiable {
     let scopeId: String
     var id: String { scopeId }
+}
+
+/// What New creates through an application's registered dialog, as a sheet's item.
+struct Creating: Identifiable {
+    let create: AppKinds.Create
+    var id: AppKinds.Create { create }
 }
 
 /// The shell's banners below a page's navigation bar, which an inset on the shell would slide under: offline, "Offline —
@@ -1123,109 +1124,6 @@ struct ObjectPlaceholder: View {
             Text(say(.notBuilt))
         }
         .navigationTitle(ref.name)
-    }
-}
-
-/// Expenses' own list (its Pots), with "New pot" (uc.expenses.create-pot).
-struct ExpensesList: View {
-    @Bindable var model: AppModel
-    @State private var creating = false
-
-    var body: some View {
-        ArrangedListView(model: model, list: model.applicationList(.expenses), onOpen: model.open, key: "app:\(ApplicationId.expenses)")
-            .navigationTitle(Names.application(.expenses))
-            // offline only where the core queues one (`createsHere`): a Pot never does
-            .createAction(say(.createPot), shown: !model.spaces.isEmpty && model.createsHere(isHome: false).contains(.pot)) { creating = true }
-            .sheet(isPresented: $creating) { NewPotSheet(model: model) }
-    }
-}
-
-/// Memories' own list (its Memories), with "New Memory" (made at the top of the space shown, then opened).
-struct MemoriesList: View {
-    @Bindable var model: AppModel
-    @State private var naming = false
-
-    private var space: String? { model.shell.space ?? model.spaces.first?.scopeId }
-
-    var body: some View {
-        ArrangedListView(model: model, list: model.applicationList(.memories), onOpen: model.open, key: "app:\(ApplicationId.memories)")
-            .navigationTitle(Names.application(.memories))
-            // offline only where the core queues one (`createsHere`, ADR 0153 decision 3)
-            .createAction(say(.memoryNew), shown: space != nil && model.createsHere(isHome: false).contains(.memory)) { naming = true }
-            .sheet(isPresented: $naming) {
-                if let space { NewMemorySheet(model: model, scopeId: space, parentId: nil) }
-            }
-    }
-}
-
-/// New Memory (the web's `MemoryNodeDialog`) as a sheet: its name and, in a tenant or group space, **I was there** — on
-/// each time it opens, never remembered (ADR 0144 decision 2); on, the Memory is born listing its maker among its
-/// participants. Made in space `scopeId` under `parentId` and opened; a refusal says why and stays.
-struct NewMemorySheet: View {
-    let model: AppModel
-    let scopeId: String
-    let parentId: String?
-    @State private var name = ""
-    @State private var wasThere = true
-    @State private var autoPlace = false
-    @State private var problem: String?
-    @State private var saving = false
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        let offers = model.offersWasThere(scopeId)
-        // the place armed to come from the photos (uc.memory.place A1, the web's opt-in): where the map services are shown, off
-        let offersPlace = model.offersAutoPlace()
-        NavigationStack {
-            Form {
-                Section {
-                    TextField(say(.nodeName), text: $name)
-                        .onSubmit { create(offers, offersPlace) }
-                } footer: {
-                    if let problem { Text(problem).foregroundStyle(Role.danger) }
-                }
-                if offersPlace {
-                    Toggle(isOn: $autoPlace) {
-                        Text(say(.memoryPlaceAuto))
-                        Text(say(.memoryPlaceAutoHint))
-                    }
-                }
-                if offers {
-                    Toggle(isOn: $wasThere) {
-                        Text(say(.memoryParticipantsWasThere))
-                        Text(say(.memoryParticipantsWasThereHint))
-                    }
-                }
-            }
-            .formStyle(.grouped)
-            .navigationTitle(say(.memoryCreateMemoryTitle))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { dismiss() }.disabled(saving) }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(say(.folderCreate)) { create(offers, offersPlace) }
-                        .disabled(saving || name.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-        }
-        .interactiveDismissDisabled(saving)
-        #if os(macOS)
-        .frame(minWidth: 380, minHeight: 220)
-        #endif
-    }
-
-    private func create(_ offers: Bool, _ offersPlace: Bool) {
-        guard !saving, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-        saving = true
-        problem = nil
-        let typed = name
-        Task {
-            let refused = await model.createMemory(scopeId: scopeId, parentId: parentId, name: typed, wasThere: offers && wasThere, autoPlace: offersPlace && autoPlace)
-            saving = false
-            if let refused { problem = refused } else { dismiss() }
-        }
     }
 }
 
