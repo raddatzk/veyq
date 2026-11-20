@@ -1,8 +1,10 @@
-# The pnpm workspace (root package.json `//` says why it exists: one @veyq/crypto on disk, ADR 0065). Members are
+# The pnpm workspace (root package.json `//` says why it exists: one @veyq/crypto on disk, ADR 0065, and the Kotlin
+# core compiled for JavaScript, @veyq/core-js, ADR 0155). Members are
 # listed, never globbed, so a new package is a decision. site/ is deliberately NOT a member (ADR 0087): it has its
 # own pnpm-workspace.yaml and lockfile.
 packages:
   - src/packages/crypto
+  - src/packages/core-js
   - src/web
   - src/admin-web
   - tests/e2e

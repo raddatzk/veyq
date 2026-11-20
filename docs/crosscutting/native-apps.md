@@ -67,6 +67,7 @@ rates, a receipt's PDF uploaded, drawn and saved at document-portal paths, a Dep
 and VP9 played and heard, the account's Settings from the sidebar (rename, another session signed out, sign-out) in
 English/light and German/dark — 2026-11-13; Memories (as Windows', a drop from Files and the sound in the VM's session),
 2026-11-13/14 |
+| Web (JavaScript) | the core's common code, as `@veyq/core-js` (`js()`: IR, ES modules, es2015, `.d.mts`; primitives the web's own `@noble/*`), [ADR 0155](../decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md) decision 3 | none: the web draws in Vue, and ships nothing of the core yet (`cr-web-expenses-on-the-core` is the pilot) | — | its conformance over `contracts/crypto/vectors/v1.json` under Node, in `frontend` |
 
 Windows and Linux are wanted (owner 2026-11-09), each with its own native UI over the same core
 ([ADR 0136](../decisions/0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): Linux GTK 4 and

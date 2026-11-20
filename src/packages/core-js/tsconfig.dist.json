@@ -1,0 +1,14 @@
+{
+  "//": "The compiled core's TypeScript definitions, checked whole (skipLibCheck off): the check Kotlin's own .d.ts validation would run under its Node, which never runs here (src/mobile/core/build.gradle.kts).",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "strict": true,
+    "skipLibCheck": false,
+    "noEmit": true,
+    "types": []
+  },
+  "include": ["dist/*.d.mts", "dist/conformance/*.d.mts"]
+}

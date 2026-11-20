@@ -181,12 +181,24 @@ jobs:
         run: python3 scripts/run_backend_races_on_mariadb.py
 
   frontend:
-    name: Frontend checks (crypto, web, admin-web)
+    name: Frontend checks (crypto, core-js, web, admin-web)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # `@veyq/core-js` is the Kotlin core compiled for JavaScript (ADR 0155 decision 6): its build runs src/mobile's
+      # Gradle, whose JVM side compiles for 21 (`jvmToolchain(21)`) and which provisions no JDK itself — as `app-inputs`.
+      - name: Set up Java
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Validate the Gradle wrapper JAR
+        uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -214,6 +226,12 @@ jobs:
       - name: Run shared crypto checks
         working-directory: src/packages/crypto
         run: pnpm run check
+
+      # The core's suite over the web's own @noble/* (its conformance over contracts/crypto/vectors/v1.json under Node),
+      # before the web: the build writes `dist/` (Gradle's `:core:jsPackage`), the check runs it.
+      - name: Build and check the core compiled for JavaScript
+        working-directory: src/packages/core-js
+        run: pnpm run build && pnpm run check
 
       - name: Run frontend checks
         working-directory: src/web

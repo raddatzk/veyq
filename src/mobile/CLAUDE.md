@@ -386,6 +386,12 @@ A Gradle build of its own, run through its own wrapper.
 
 ## Prove your work
 
+- `./gradlew :core:compileKotlinJs :core:compileTestKotlinJs` with the JVM tests, on every change to the core: its
+  common code compiles for JavaScript as for every other target (ADR 0155 decision 3), so a JVM- or native-only API in
+  `commonMain` is red here (a test that blocks a thread lives in `threadedTest`, the JVM's and native's). A change under
+  `crypto/` or `jsMain` also runs `@veyq/core-js`'s check (`cd src/packages/core-js && pnpm run build && pnpm run
+  check`): the suite's conformance over the web's `@noble/*` under Node, with its bite. No Kotlin/JS test task exists, and
+  none of Kotlin's Node, Yarn or npm tasks may run (`src/mobile/build.gradle.kts` fails a build that reaches one).
 - `./gradlew :core:jvmTest :core:macosArm64Test` — the suite against `contracts/crypto/vectors/v1.json` (with its
   bite) over BouncyCastle and over libsodium, the navigation model, and the grant check (`GrantTrustTest`: the web's
   `openOwnGrant`/`verifyOwnGrant` rules against a server the test plays). Any change under
