@@ -16,7 +16,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, wire::Answer, wire::Call, wire::Update, wire::UploadBatch, wire::UploadItem, wire::UploadStatus, wire::UploadsShown, wire::Watched};
+use crate::bridge::{self, wire::Answer, wire::Call, wire::Why, wire::Update, wire::UploadBatch, wire::UploadItem, wire::UploadStatus, wire::UploadsShown, wire::Watched};
 use crate::home::glib_escape;
 use crate::{header, said, words};
 
@@ -481,6 +481,10 @@ pub fn guest_replace(parent: &gtk::Window, received: i64, file: i64, toasts: &ad
         };
         let Some(path) = local_path(&picked) else { return };
         let answer = bridge::call(&Call::ReceivedReplace { received, path }).await.map(|(a, _)| a);
+        // the guest declined the core's naming at the write: nothing to say, it chose so
+        if let Ok(Answer::Refused { why: Why::NotChosen }) = answer {
+            return eprintln!("veyq: Received.Replace: not chosen");
+        }
         queued(&toasts, answer, "Received.Replace");
     });
 }

@@ -33,7 +33,7 @@ use crate::home::glib_escape;
 use crate::{avatars, said, words};
 
 /// What a Pot page tells of each read: whether it takes writes.
-type OnRead = Box<dyn Fn(bool)>;
+type OnRead = Box<dyn Fn(bool, bool)>;
 
 /// The Pot on screen: opened in the core when made, closed when dropped.
 pub struct PotPage {
@@ -217,8 +217,9 @@ impl PotPage {
         self.inner.draw();
     }
 
-    /// [f] is told whether the Pot takes writes, each time its view is read.
-    pub fn on_read(&self, f: impl Fn(bool) + 'static) {
+    /// [f] is told whether the Pot takes writes and whether *Add entry* is offered (the core's `canWrite`,
+    /// `offersEntries`), each time its view is read.
+    pub fn on_read(&self, f: impl Fn(bool, bool) + 'static) {
         *self.inner.read.borrow_mut() = Some(Box::new(f));
     }
 
@@ -266,7 +267,7 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
                 }
                 *inner.failure.borrow_mut() = failure;
                 if let (Some(view), Some(read)) = (state.as_ref().and_then(|s| s.view.as_ref()), inner.read.borrow().as_ref()) {
-                    read(view.can_write);
+                    read(view.can_write, view.offers_entries);
                 }
                 *inner.state.borrow_mut() = state;
                 inner.draw();

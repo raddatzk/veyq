@@ -584,7 +584,16 @@ pub fn say(toasts: &adw::ToastOverlay, answered: Result<Answer, bridge::Unreadab
             eprintln!("veyq: {what}: {}", n.msg);
             toasts.add_toast(adw::Toast::new(&said::notice(&n)));
         }
-        other => eprintln!("veyq: {what} answered {other:?}"),
+        // a refusal or an answer that did not read is said, never only logged (ADR 0154 decision 1)
+        Ok(Answer::Refused { why }) => {
+            eprintln!("veyq: {what}: Refused {why:?}");
+            toasts.add_toast(adw::Toast::new(&words::node_save_failed()));
+        }
+        Err(e) => {
+            eprintln!("veyq: {what}: did not read: {:?}", e.0);
+            toasts.add_toast(adw::Toast::new(&words::node_save_failed()));
+        }
+        Ok(other) => eprintln!("veyq: {what} answered {other:?}"),
     }
 }
 

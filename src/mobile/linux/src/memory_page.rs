@@ -30,8 +30,7 @@ use adw::prelude::*;
 use gtk::{gdk, gio, glib};
 
 use crate::bridge::{self, Watch, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::GalleryRow, wire::GalleryShown, wire::UploadTileShown,
-    wire::GridRow, wire::NodeAt, wire::ObjectRef, wire::Update, wire::Watched};
-use crate::drop::Sorted;
+    wire::DropOn, wire::GridRow, wire::NodeAt, wire::ObjectRef, wire::Update, wire::Watched};
 use crate::home::{glib_escape, kind_icon};
 use crate::banner::BannerView;
 use crate::contributions::ContributionsView;
@@ -359,7 +358,8 @@ impl MemoryPage {
                 }
             };
             let files: Vec<gio::File> = (0..picked.n_items()).filter_map(|i| picked.item(i).and_downcast::<gio::File>()).collect();
-            upload(gallery, crate::drop::sort(&files), &toasts);
+            // what is picked is dropped onto the gallery: the core's one drop takes it
+            crate::drop::send(parent.upcast_ref(), DropOn::DropOnGallery { gallery }, crate::drop::items(&files), &toasts);
         });
     }
 
@@ -429,41 +429,6 @@ pub fn open_node(node: &NodeAt) {
     bridge::send(Call::ShellOpen { r#ref: r });
 }
 
-/// What a drop or a pick onto a gallery sends (the drop's one rule here): the files as one `Memory.Upload`, nothing for a
-/// folder (each said by its name, not taken) or for what has no local path (said as Depot's drop says it).
-pub fn calls(gallery: i64, sorted: &Sorted) -> Option<Call> {
-    (!sorted.files.is_empty()).then(|| Call::MemoryUpload { gallery, paths: sorted.files.clone() })
-}
-
-/// What a drop or a pick onto a gallery says at once, before the core answers: each folder not taken, each item that is
-/// not on this computer.
-pub fn said_at_once(sorted: &Sorted) -> Vec<String> {
-    let name = |path: &String| std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| path.clone());
-    sorted.folders.iter().map(|f| words::memory_drop_folder(&name(f))).chain(sorted.refused.iter().map(|r| words::depot_drop_not_local(r))).collect()
-}
-
-/// Sends [sorted]'s files to gallery [gallery] and says what was not taken.
-fn upload(gallery: i64, sorted: Sorted, toasts: &adw::ToastOverlay) {
-    eprintln!("veyq: memory upload: {} files, {} folders, {} refused", sorted.files.len(), sorted.folders.len(), sorted.refused.len());
-    for text in said_at_once(&sorted) {
-        toasts.add_toast(adw::Toast::new(&glib_escape(&text)));
-    }
-    let Some(call) = calls(gallery, &sorted) else { return };
-    let answer = bridge::call(&call);
-    let toasts = toasts.clone();
-    glib::spawn_future_local(async move {
-        match answer.await.map(|(a, _)| a) {
-            Ok(Answer::Queued { count, notice }) => {
-                eprintln!("veyq: Memory.Upload: {count} queued");
-                if let Some(n) = notice {
-                    toasts.add_toast(adw::Toast::new(&glib_escape(&said::notice(&n))));
-                }
-            }
-            other => header::say(&toasts, other, "Memory.Upload"),
-        }
-    });
-}
-
 async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Update, bridge::Unreadable>>) {
     while let Ok(update) = updates.recv().await {
         let Some(inner) = weak.upgrade() else { return };
@@ -518,17 +483,15 @@ impl Inner {
                 None
             });
         }
-        // a drop of files onto the page adds them (where the rights add anything)
+        // a drop of files onto the page goes to the core's one drop, which judges the gallery's rights and sorts it
         let target = gtk::DropTarget::new(gdk::FileList::static_type(), gdk::DragAction::COPY);
         let weak = Rc::downgrade(this);
         target.connect_drop(move |_, value, _, _| {
             let Some(inner) = weak.upgrade() else { return false };
-            let (Some(gallery), true) = (inner.id.get(), inner.shown.borrow().as_ref().is_some_and(|s| s.can_upload)) else { return false };
+            let Some(gallery) = inner.id.get() else { return false };
             let Ok(list) = value.get::<gdk::FileList>() else { return false };
-            let sorted = crate::drop::sort(&list.files());
-            let took = !sorted.files.is_empty();
-            upload(gallery, sorted, &inner.toasts);
-            took
+            crate::drop::send(inner.window.upcast_ref(), DropOn::DropOnGallery { gallery }, crate::drop::items(&list.files()), &inner.toasts);
+            true
         });
         this.root.add_controller(target);
         // *Add banner*: the banner's dialog
@@ -1106,28 +1069,6 @@ pub fn offers_chapter(shown: &GalleryShown) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn sorted() -> Sorted {
-        Sorted {
-            files: vec!["/home/p/Bilder/a.jpg".into(), "/home/p/Bilder/clip.webm".into()],
-            folders: vec!["/home/p/Bilder/Reise ü".into()],
-            refused: vec!["away.jpg".into()],
-        }
-    }
-
-    /// A drop onto a gallery: its files in one `Memory.Upload` (the core leaves out what is no medium and says so), a
-    /// folder said and not taken (owner question 3), what is not on this computer said as Depot's drop says it.
-    #[test]
-    fn a_drop_onto_a_gallery_sends_its_files_and_says_each_folder_not_taken() {
-        let call = serde_json::to_value(calls(7, &sorted())).unwrap();
-        let files = serde_json::to_value(Some(Call::MemoryUpload { gallery: 7, paths: vec!["/home/p/Bilder/a.jpg".into(), "/home/p/Bilder/clip.webm".into()] })).unwrap();
-        assert_eq!(call, files, "the files, one batch, no folder");
-        let said = said_at_once(&sorted());
-        assert_eq!(said, vec![words::memory_drop_folder("Reise ü"), words::depot_drop_not_local("away.jpg")]);
-        let only_folder = Sorted { folders: vec!["/x/y".into()], ..Sorted::default() };
-        assert!(calls(7, &only_folder).is_none(), "a folder alone sends nothing");
-        assert_eq!(said_at_once(&only_folder), vec![words::memory_drop_folder("y")]);
-    }
 
     fn row(marks: Option<i32>, mine: bool) -> GalleryRow {
         GalleryRow { media_id: "m".into(), name: None, media_type: None, video: false, blocked: false, tile: None, picture: None, captured_at: None,

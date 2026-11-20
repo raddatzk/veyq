@@ -607,13 +607,11 @@ impl Shell {
         Some(uploads::Level { scope_id, parent_id: folder.map(|f| f.node_id.clone()), label })
     }
 
-    /// Where a drop onto the level shown goes: only where its New offers Upload files (the core's `creates`).
-    fn drops(&self) -> Option<Drops> {
-        let takes = self.now.borrow().as_ref().is_some_and(|(_, shown)| shown.can_create_here && shown.creates.iter().any(|c| c.create == Create::UploadFiles));
-        if !takes {
-            return None;
-        }
-        Some(Drops { level: self.level()?, toasts: self.toasts.clone() })
+    /// Where a drop onto the level shown goes, as the core says: the level where it takes one (`dropsHere`), the folders'
+    /// rows it names (`dropRows`).
+    fn drops(&self) -> Drops {
+        let (here, rows) = self.now.borrow().as_ref().map(|(_, shown)| (shown.drops_here, shown.drop_rows.clone())).unwrap_or_default();
+        Drops { level: here.then(|| self.level().map(|l| l.label)).flatten(), rows, toasts: self.toasts.clone() }
     }
 
     /// Says [text] as a toast over the content.
@@ -896,9 +894,10 @@ impl Shell {
                     // the Pot read: the header learns whether it takes writes (`AppKinds.Facts`)
                     let held = Rc::downgrade(&self.header);
                     let add = self.add_entry.downgrade();
-                    page.on_read(move |can_write| {
+                    page.on_read(move |can_write, offers_entries| {
+                        // *Add entry* where the core offers it (offline too, where an entry queues), never by `canWrite`
                         if let Some(add) = add.upgrade() {
-                            add.set_visible(can_write);
+                            add.set_visible(offers_entries);
                         }
                         if let Some(held) = held.upgrade()
                             && let Some(h) = held.borrow().as_ref()
@@ -1003,7 +1002,7 @@ impl Shell {
                         home::list(shown.list.as_ref(), shown.view)
                     } else {
                         // a folder's level starts with its head, as the Pot's and the Memory's pages (none on a space's root)
-                        home::home(state, shown, self.drops().as_ref(), self.header.borrow().as_ref().map(Header::hero))
+                        home::home(state, shown, Some(&self.drops()), self.header.borrow().as_ref().map(Header::hero))
                     };
                     if let Some(scroll) = list.downcast_ref::<gtk::ScrolledWindow>() {
                         self.scrolls.keep(scroll, ListScrolls::place(state));

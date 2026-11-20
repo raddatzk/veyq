@@ -290,13 +290,13 @@ fn filter_name(f: Option<ApplicationId>) -> String {
 
 /// Home: the filters (where the core offers more than "all"), a folder's head ([hero], its cover: the folder's header's,
 /// as the Pot's and the Memory's pages place it), then the level's groups (`Home.groups`): a folder enters, an object
-/// opens in its application. With [drops], files and folders dropped onto the level upload there, and onto a folder's row
-/// into that folder (ADR 0123's Consequences, the Linux app's Depot whole).
+/// opens in its application. With [drops], files and folders dropped onto the level go to the core's one drop where it
+/// offers the level, and onto a folder's row where it offers that row (ADR 0154 decision 1).
 pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, hero: Option<gtk::Widget>) -> gtk::Widget {
     let as_tiles = shown.view == ViewModeShown::Tiles;
     let (scroll, content) = column(as_tiles);
-    if let Some(d) = drops {
-        scroll.add_controller(d.onto_level());
+    if let Some(t) = drops.and_then(Drops::onto_level) {
+        scroll.add_controller(t);
     }
     if state.lists.filters.len() > 1 {
         content.append(&filter_group(state, shown));
@@ -324,8 +324,8 @@ pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, 
         for n in &g.nodes {
             if g.folders {
                 let row = folder_row(n);
-                if let Some(d) = drops.filter(|_| n.kind == "FOLDER") {
-                    row.add_controller(d.onto_folder(&n.node_id, &n.name));
+                if let Some(t) = drops.and_then(|d| d.onto_row(n)) {
+                    row.add_controller(t);
                 }
                 list.add(&row);
             } else if let Some(o) = state.lists.objects.iter().find(|o| o.scope_id == n.scope_id && o.node_id == n.node_id) {
@@ -348,7 +348,7 @@ fn level_tiles(state: &ShellModelState, nodes: &[NodeRef], folders: bool, drops:
             let folder = FolderRef { node_id: n.node_id.clone(), name: n.name.clone() };
             tiles.push(Tile { name: n.name.clone(), subtitle: None, dated: false, icon: kind_icon(&n.kind), node_id: n.node_id.clone(),
                 open: Box::new(move || bridge::send(Call::ShellEnter { folder: folder.clone() })) });
-            dropping.push(drops.filter(|_| n.kind == "FOLDER").map(|d| d.onto_folder(&n.node_id, &n.name)));
+            dropping.push(drops.and_then(|d| d.onto_row(n)));
         } else if let Some(o) = state.lists.objects.iter().find(|o| o.scope_id == n.scope_id && o.node_id == n.node_id) {
             tiles.push(object_tile(o));
             dropping.push(None);
