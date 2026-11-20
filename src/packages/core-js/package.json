@@ -4,8 +4,14 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
-  "//": "The Kotlin core (src/mobile/core) compiled for JavaScript, ADR 0155 decisions 3 and 6: Gradle compiles (`build`, which runs the core's `:core:jsPackage` and writes `dist/`, never committed), pnpm installs, bundles and tests. Its primitives are the web's own @noble/*, at @veyq/crypto's ranges so the lockfile holds one version of each. Its check runs the suite's conformance over contracts/crypto/vectors/v1.json under Node, from a binary of its own (`dist/conformance/`), never an export of the shipped module. Nothing is exported yet: each application's façade becomes one entry when it moves (ADR 0155 decision 5), and nothing under src/web/ imports this package before cr-web-expenses-on-the-core.",
-  "exports": {},
+  "//": "The Kotlin core (src/mobile/core) compiled for JavaScript, ADR 0155 decisions 3 and 6: Gradle compiles (`build`, which runs the core's `:core:jsPackage` and writes `dist/`, never committed), pnpm installs, bundles and tests. Its primitives are the web's own @noble/*, at @veyq/crypto's ranges so the lockfile holds one version of each. Its check runs the suite's conformance over contracts/crypto/vectors/v1.json under Node, from a binary of its own (`dist/conformance/`), never an export of the shipped module; each façade's vectors through the shipped module; and the slice check (`src/slice.test.ts`): the bundle an entry ships carries no kotlinx.serialization, coroutines, Ktor or NotOnTheWeb source, within ADR 0155's budget. One entry per façade (ADR 0155 decision 5): `./search`, the core's search. `sideEffects: false`: the compiled module imports Ktor's client for its engine's registration (an eager initializer) though no façade reaches Ktor, so a bundler may drop what nothing uses.",
+  "exports": {
+    "./search": {
+      "types": "./dist/veyq-mobile-core.d.mts",
+      "default": "./dist/veyq-mobile-core.mjs"
+    }
+  },
+  "sideEffects": false,
   "scripts": {
     "build": "python3 scripts/build.py",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.dist.json",
@@ -21,6 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
+    "esbuild": "^0.28.2",
     "eslint": "^10.14.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.1",
