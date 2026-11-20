@@ -12,5 +12,5 @@ object DevLogin {
 
     fun openLink(@Suppress("UNUSED_PARAMETER") intent: Intent?): String? = null
 
-    class Credentials(val server: String, val email: String, val password: String, val secretKey: String, val remember: Boolean)
+    class Credentials(val server: String, val email: String, val password: String, val secretKey: String, val remember: me.raddatz.veyq.mobile.session.StaySignedIn?)
 }

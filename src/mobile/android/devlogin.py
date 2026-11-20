@@ -5,8 +5,9 @@ Reads VEYQ_EMAIL, VEYQ_PASSWORD, VEYQ_SECRET_KEY and VEYQ_TENANT_DOMAIN from the
 `./gradlew backend:seed`; `VEYQ_ENV_FILE` names another, e.g. the main checkout's from a worktree) and hands them to the debug build as launch extras; nothing is printed. The debug build
 resolves the `*.localhost` tenant to the developer's machine (DevDns), so the server is `<tenant domain>:<port>`.
 
-Usage: devlogin.py [port] [--remember] [--unlock] [--kit]   (port default 8080, the dev backend)
+Usage: devlogin.py [port] [--remember | --remember-login] [--unlock] [--kit]   (port default 8080, the dev backend)
   --remember  answer the offer after the sign-in with the presence level (the emulator asks for its screen lock)
+  --remember-login  answer it with the login level (opens without asking: what a background sync runs at)
   --unlock    hand only the password, for the unlock screen of a password-trusted account; it also fills "Manage
               servers"' password field once (the way back to the password trust), for the pass to press
   --kit       hand only the password, for a sign-in that holds an Emergency Kit: it waits for the kit the pass picks or
@@ -49,7 +50,7 @@ def main() -> None:
             "veyq.devEmail": e["VEYQ_EMAIL"],
             "veyq.devPassword": e["VEYQ_PASSWORD"],
             "veyq.devSecretKey": e["VEYQ_SECRET_KEY"],
-            "veyq.devRemember": "1" if "--remember" in flags else "0",
+            "veyq.devRemember": "login" if "--remember-login" in flags else "1" if "--remember" in flags else "0",
         }
     args = ["am", "start", "-n", "app.veyq/me.raddatz.veyq.mobile.android.MainActivity"]
     for k, v in extras.items():

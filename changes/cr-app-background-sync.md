@@ -60,17 +60,63 @@ ADR 0153 decision 8 holds them; beside it:
 
 ## Phases
 
-- [ ] **1 core — `BackgroundRun`** (B1, B2) — Tests: a login-level account runs, a presence-level and a password-trusted
+- [x] **1 core — `BackgroundRun`** (B1, B2) — Tests: a login-level account runs, a presence-level and a password-trusted
   one are skipped without a prompt (`SoftwareDeviceKeys.prompts` stays 0); a refused refresh ends the record and wipes;
   the deadline stops the run between writes; the keys are zeroed after (the account's `closed` state). · Done when:
   `:core:jvmTest :core:macosArm64Test` green. **Bites:** (a) the level check dropped → the presence test red (a prompt
   counted); (b) the offline resume used → the "no server, nothing done" test red.
-- [ ] **2 bridge** — the switch on the wire (the desktops draw nothing; it is absent there). · Done when: `:bridge:jvmTest`
+  **Built** 2026-11-20 (`claude/bgsync`): `session/BackgroundRun.kt` — `run(deadline)` over `ThisDevice.backgroundAccounts()`
+  (`BackgroundRun.runs`: DEVICE_KEY at LOGIN; `ThisDevice.backgroundRuns` false on the desktops), each through
+  `VeyqAccount.resumeOnline` (now internal, `send = false`) or the account `OpenAccounts` holds open in the process (used,
+  left open, an offline one reconnected first); before any request the kept wrap is tried under the **login** key
+  (`keyOpens`: a closed key — a locked iPhone, B4 — ends as `KEY_CLOSED` with nothing sent, and is a second guard behind
+  the level check); then the queue (`sendQueued(go)`, `OutboxSender`'s `go` asked between writes), **then** the pins
+  (`withTimeoutOrNull` to the deadline) — the order reversed from B1 so a long pin fetch never holds the person's writes
+  to the next run; the run's own account closed under `NonCancellable` (`retire`: no logout, the kept family stays). The
+  account's close now zeroes every scope key it opened (`openedScopeKeys`) beside the Master Key and the identity. B2:
+  `ThisDevice.backgroundSync`/`setBackgroundSync` (on by default, an off-list per account, cleared when the record is
+  forgotten), `backgroundWanted` (a flow the hosts schedule by); `AccountSettings.State.backgroundSync` and
+  `backgroundSyncMissing` (`account_settings_background_sync_missing` at the presence level or the password trust on a
+  phone; nothing on a desktop). Words `account_settings_background_sync`, `_hint`, `_missing` (drafts, the owner's to
+  change). `BackgroundRunTest` (7). Bites, each seen red then restored: (a) `runs` without the level → the presence test
+  red ("a presence-level account has a switch"; no prompt is reached even so: the login-key probe refuses a presence
+  wrap); (b) `VeyqAccount.resume` in place of `resumeOnline` → the no-server test red (an account opened offline);
+  (c) no `retire` → the login test red (the account still open); (d) `go` not asked → the deadline test red (both
+  writes sent).
+- [x] **2 bridge** — the switch on the wire (the desktops draw nothing; it is absent there). · Done when: `:bridge:jvmTest`
   green.
-- [ ] **3 Android** — B3; the switch. First the measurement named in B3, stop-and-ask if the key does not open. · Done
+  **Built** 2026-11-20 (`claude/bgsync`): the wire does not change — `SettingsShown` carries neither `backgroundSync` nor
+  its reason and no call sets it; the bridge's `ThisDevice` says `backgroundRuns = false` outright, so the core gives the
+  desktops no switch and no reason. `BackgroundSyncWireTest` holds it over the whole schema (every type, variant and
+  field) against the core's page state, which has both; bite: `backgroundSync` added to `SettingsShown` → red. No Rust
+  or C# change (nothing on the wire moved).
+- [x] **3 Android** — B3; the switch. First the measurement named in B3, stop-and-ask if the key does not open. · Done
   when: `:android:assembleDebug`, the guidelines and words guards green; a throwaway AVD run: the app force-stopped,
   `adb shell cmd jobscheduler run -f app.veyq <job id>` (or WorkManager's test driver) runs the work, a pin changed on the
   web arrives and a queued write is sent, the screen locked after a reboot and one unlock.
+  **Built** 2026-11-20 (`claude/bgsync`): `BackgroundWork.kt` — `AndroidDevice` (the process's one `ThisDevice`, now the
+  app model's too, `backgroundRuns = true`, so a run finds the account the app holds), `BackgroundWork.watch` schedules
+  `enqueueUniquePeriodicWork("veyq-background-sync", UPDATE, 15 min, CONNECTED + battery not low)` while the core's
+  `backgroundWanted` is true and cancels it at false (also after a run that ended the last account), `SyncWorker` runs
+  `BackgroundRun` with 9 of the worker's 10 minutes, no `setForeground`, and logs only the outcomes and the count
+  (`veyq-sync`). Settings' storage section draws the core's switch as Material 3's switch list item and its missing
+  reason. Debug: `devlogin.py --remember-login` (`veyq.devRemember=login`). WorkManager 2.12.0 is the latest stable
+  (Google Maven metadata, 2026-09-23), AndroidX, not deprecated; already a dependency. **Measured** (a throwaway API 36
+  AVD `veyq_bgsync`, PIN lock, deleted after; a throwaway account with a member, erased after): rebooted, unlocked once,
+  locked (`dumpsys trust`: `deviceLocked=1`), the app's process started by WorkManager's own boot receiver and no
+  activity — the forced job logged `background run: DONE`: the Keystore login key opens after a reboot and the first
+  unlock with the screen locked. **The pass:** a Memory pinned in the app; offline, a Memory queued ("One change waiting
+  to send"); a second session of the owner (a scratch JVM case, deleted) added a photo to the pinned Memory; the device
+  rebooted, unlocked once, locked, the network back; the job forced (`cmd jobscheduler run -f -n
+  androidx.work.systemjobscheduler app.veyq <id>`): `background run: DONE, sent 1` with the screen locked, the queued
+  Memory on the server; an earlier forced run the same way kept the added photo — opened afterwards in airplane mode,
+  the pinned Memory showed both photos "as of" the run's time. Found on the way (measured): a forced run of a periodic
+  work before its period ends is deferred by WorkManager ("Delaying execution … before schedule"), so a pass forces it
+  15 minutes after the last run; `am force-stop` cancels the app's jobs until its next start (job count 1 → 0), so the
+  pass let reboots end the process instead; after a reboot the emulator put the app in standby bucket 50 and JobScheduler
+  held the job for `WITHIN_QUOTA` — the pass set `am set-standby-bucket app.veyq working_set`, as an app in use is.
+  Not run: a run on low battery or with no network (the constraints are WorkManager's), a run that ends an account
+  (`BackgroundRunTest` holds it).
 - [ ] **4 Apple** — B4; the switch. · Done when: both Apple builds green; the run on a real iPhone (the debugger's
   `_simulateLaunchForTaskWithIdentifier`) is the owner's, named open.
 - [ ] **5 harvest** — ADR 0153's `Built:`; `native-apps.md`; `src/mobile/CLAUDE.md` § Nothing on disk (the periodic work's

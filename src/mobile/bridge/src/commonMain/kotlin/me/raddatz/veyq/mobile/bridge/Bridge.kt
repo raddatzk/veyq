@@ -3532,6 +3532,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             val device = ThisDevice(
                 store, keys(store), config.device, primitives,
                 offlineRoot = config.offlineRoot, offlineLimit = me.raddatz.veyq.mobile.offline.AccountOffline.DESKTOP_LIMIT,
+                // a desktop syncs while it runs and schedules nothing (ADR 0153 decision 8): no switch, no reason for one
+                backgroundRuns = false,
             )
             Composition(
                 SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files, pictures = pictures,

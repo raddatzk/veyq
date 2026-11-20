@@ -34,7 +34,14 @@ import me.raddatz.veyq.mobile.session.testPrimitives
  * ([reachable]). Every listing answers its revision as the server does: `listNodes` an `ETag`, `listNodeMedia` its
  * `mediaRevision`, each `304` on a matching `If-None-Match`.
  */
-internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () -> Long = { 0L }) {
+internal class PlayedTenant(
+    files: DeviceFiles = SizedVolume(),
+    val clock: () -> Long = { 0L },
+    /** The level this device stays signed in at ([remember]). */
+    level: StaySignedIn = StaySignedIn.LOGIN,
+    /** Whether this device runs scheduled syncs (a phone, `BackgroundRun`). */
+    backgroundRuns: Boolean = false,
+) {
     val p = testPrimitives
     val suite = V1(p)
     val server = "http://a.example"
@@ -356,12 +363,12 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
     val prefs = MemoryDeviceStore()
     val keys = SoftwareDeviceKeys(p)
     val root: String = freshTestDirectory()
-    val device = ThisDevice(prefs, keys, "test device", p, offlineRoot = root).also { it.offlineFiles = files; it.offlineClock = clock }
-    val record = TrustedDevice(server, "u1@a.example", userId, TrustedDevice.Method.DEVICE_KEY, "w-1", "veyq.device.1", StaySignedIn.LOGIN)
+    val device = ThisDevice(prefs, keys, "test device", p, offlineRoot = root, backgroundRuns = backgroundRuns).also { it.offlineFiles = files; it.offlineClock = clock }
+    val record = TrustedDevice(server, "u1@a.example", userId, TrustedDevice.Method.DEVICE_KEY, "w-1", "veyq.device.1", level)
     private lateinit var sealed: Pair<ByteArray, ByteArray>
 
     suspend fun remember() {
-        sealed = keys.sealUnlockable(masterKey, "veyq/v1/device-key-wrap".encodeToByteArray(), StaySignedIn.LOGIN)
+        sealed = keys.sealUnlockable(masterKey, "veyq/v1/device-key-wrap".encodeToByteArray(), record.level!!)
         device.remember(record)
         keys.putSecret(record.refreshAlias, "refresh-0")
     }

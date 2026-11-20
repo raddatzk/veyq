@@ -5375,6 +5375,21 @@
     "en": "Content is kept for offline use only on a device that stays signed in to this account.",
     "de": "Inhalte werden nur auf einem Gerät offline gespeichert, das bei diesem Konto angemeldet bleibt."
   },
+  "account_settings_background_sync": {
+    "note": "the switch in Storage on this device, shown at the login level of staying signed in on a phone (ADR 0153 decision 8; on by default, owner 2026-11-19)",
+    "en": "Sync in the background",
+    "de": "Im Hintergrund synchronisieren"
+  },
+  "account_settings_background_sync_hint": {
+    "note": "under the background sync switch: what a run does while the app is closed",
+    "en": "While the app is closed, the system starts it now and then to send what you made offline and to update the items available offline.",
+    "de": "Während die App geschlossen ist, startet das System sie ab und zu, um zu senden, was du offline gemacht hast, und die offline verfügbaren Inhalte zu aktualisieren."
+  },
+  "account_settings_background_sync_missing": {
+    "note": "where the switch is missing: the account asks for a fingerprint, the screen lock or the password, and a run in the background has nobody to ask",
+    "en": "Syncing in the background is offered only where you stay signed in without confirming it is you: while the app is closed, nobody is there to confirm.",
+    "de": "Im Hintergrund synchronisieren gibt es nur, wo du angemeldet bleibst, ohne zu bestätigen, dass du es bist: Während die App geschlossen ist, kann niemand bestätigen."
+  },
   "storage_unit_mb": {
     "note": "a size unit of the storage limit field",
     "en": "MB",

@@ -95,6 +95,17 @@ class AccountSettings<A : Connection, T : Any>(
         /** The pin of [node] taken off. */
         open suspend fun unpin(node: String) {}
 
+        /**
+         * *Sync in the background* for the account on this device ([ThisDevice.backgroundSync], ADR 0153 decision 8): on or
+         * off where a scheduled run may open it, null where it has no switch.
+         */
+        open fun backgroundSync(): Boolean? = null
+
+        /** Why the switch is missing where this device runs scheduled syncs but the account's trust asks the person; else null. */
+        open fun backgroundSyncMissing(): Msg? = null
+
+        open suspend fun setBackgroundSync(on: Boolean) {}
+
         /** Each change of the pins or their fetches: what the section reads anew while it is shown ([followStorage]). */
         open val storageChanges: kotlinx.coroutines.flow.Flow<Unit> get() = kotlinx.coroutines.flow.emptyFlow()
         internal open fun register(): DeviceRegisterStore = throw UnsupportedOperationException("this door keeps no device register")
@@ -179,6 +190,13 @@ class AccountSettings<A : Connection, T : Any>(
         @Serializable(with = MsgKey::class) val storageUnavailable: Msg? = null,
         /** "Remove all offline content" asked ([askRemoveAllOffline]): its question shows until confirmed or cancelled. */
         val askingRemoveAll: Boolean = false,
+        /**
+         * *Sync in the background* (ADR 0153 decision 8), drawn in the storage section: on or off at the login level on a
+         * phone; null where there is no switch — a desktop, or an account whose trust asks the person.
+         */
+        val backgroundSync: Boolean? = null,
+        /** Why the switch is missing on a phone ([Msg.ACCOUNT_SETTINGS_BACKGROUND_SYNC_MISSING]); null where it shows or nothing is to say. */
+        @Serializable(with = MsgKey::class) val backgroundSyncMissing: Msg? = null,
     ) {
         /** Whether "Sign out every other" has anything to end. */
         val hasOthers: Boolean get() = families.orEmpty().any { !it.current }
@@ -334,6 +352,13 @@ class AccountSettings<A : Connection, T : Any>(
         loadStorage()
     }
 
+    /** *Sync in the background* turned [on] or off for this account on this device; nothing where it has no switch. */
+    suspend fun setBackgroundSync(on: Boolean) = act {
+        if (current.backgroundSync == null) return@act
+        attempt { door.setBackgroundSync(on) }.onFailure { refuse(Msg.ACCOUNT_SETTINGS_LOAD_FAILED) }
+        loadStorage()
+    }
+
     /**
      * The section read anew at each change of the pins or their fetches, while the page is shown (a host runs it as the
      * page's own job, as a gallery's live poll; it ends when that is cancelled).
@@ -353,6 +378,11 @@ class AccountSettings<A : Connection, T : Any>(
             val storage = it?.copy(field = me.raddatz.veyq.mobile.offline.OfflineShown.field(it.limit, separator))
             _state.value = current.copy(storage = storage, storageUnavailable = if (it == null) door.storageUnavailable() else null)
         }
+        val background = attempt { door.backgroundSync() }.getOrNull()
+        _state.value = current.copy(
+            backgroundSync = background.takeIf { current.storage != null },
+            backgroundSyncMissing = if (background == null && current.storage != null) attempt { door.backgroundSyncMissing() }.getOrNull() else null,
+        )
     }
 
     /** Staying signed in at [level], as "Manage servers" changes it ([SessionModel.stay]). */
@@ -514,6 +544,12 @@ class AccountSettings<A : Connection, T : Any>(
         override suspend fun removeAllOffline() { account.offline?.removeAll() }
         override suspend fun unpin(node: String) { account.offlinePins?.unpin(node) }
         override val storageChanges get() = account.offlinePins?.changes ?: kotlinx.coroutines.flow.emptyFlow()
+        override fun backgroundSync() = account.thisDevice.backgroundSync(account.key)
+
+        // a phone that runs scheduled syncs, and this account's trust asks the person (the presence level, the password)
+        override fun backgroundSyncMissing() =
+            Msg.ACCOUNT_SETTINGS_BACKGROUND_SYNC_MISSING.takeIf { account.thisDevice.backgroundRuns && account.thisDevice.backgroundSync(account.key) == null }
+        override suspend fun setBackgroundSync(on: Boolean) = account.thisDevice.setBackgroundSync(account.key, on)
 
         /** A call answered with no body: anything but a success throws. */
         private suspend fun done(f: suspend () -> HttpResponse<Unit>) {
