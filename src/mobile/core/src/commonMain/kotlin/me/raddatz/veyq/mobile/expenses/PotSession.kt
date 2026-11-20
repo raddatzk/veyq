@@ -111,6 +111,16 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
     }
 
 
+    /**
+     * The ledger read whole after an own write (#1038): the whole read is the kept one (ADR 0153 decision 6), so it
+     * replaces the kept copy — never merged — and what the person just wrote is there when the device goes offline. A
+     * delta read would show it here but keep nothing. A guest's door reads whole anyway.
+     */
+    private suspend fun readWhole(): Boolean = reading.withLock {
+        cursor = null
+        read()
+    }
+
     private val reading = Mutex()
     private val receiptsReading = Mutex()
     private var receiptsDue = false
@@ -219,7 +229,7 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
                 val (status, code) = result.value
                 when {
                     status in 200..299 -> {
-                        refresh()
+                        readWhole()
                         WriteOutcome.WRITTEN
                     }
                     status == 409 && code == STALE_REVISION -> {

@@ -26,14 +26,17 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * A Pot's ledger and receipts in the offline store (ADR 0153 decision 6; cr-app-offline-pots-and-space-media phase 1)
+ * A Pot's ledger and receipts in the offline store (ADR 0153 decision 6)
  * over a server the test plays ([PlayedTenant]), real seals throughout: a Pot read online opens offline with the same
  * entries, as of when, read-only, the receipt that was shown opening and the one that was not saying so; a newer ledger
  * replaces the kept one (an erased record gone); a refused ledger drops it; a download keeps no receipt's frame.
  *
+ * An entry written in the open Pot is in the kept ledger offline: a write's re-read is the whole, kept one (#1038).
+ *
  * Bites (each one edit, seen red, then restored): merge the kept ledger with the newer answer in `TenantPotDoor.whole`
  * instead of replacing it → the erased record comes back offline; `PotExport` reading its receipts with `keep = true` →
- * a download keeps their frames.
+ * a download keeps their frames; a write re-reading by delta (`refresh()`) instead of whole → the written entry is
+ * missing offline.
  */
 class OfflinePotTest {
     private val played = mutableListOf<PlayedTenant>()
@@ -182,10 +185,45 @@ class OfflinePotTest {
         a.retire()
     }
 
+    @Test
+    fun an_entry_written_online_after_the_open_is_in_the_kept_ledger_offline() = runTest {
+        val pot = pot()
+        val t = pot.t
+        // the server takes an append as `appendPotRevisions` does: each revision as its writer sealed it, the ledger moved
+        t.route = route@{ r ->
+            if (r.method != io.ktor.http.HttpMethod.Post || !r.url.encodedPath.endsWith("/pots/${pot.node.id}/revisions")) return@route null
+            val body = (r.body as io.ktor.http.content.OutgoingContent.ByteArrayContent).bytes().decodeToString()
+            val request = VeyqAccount.KEPT_JSON.decodeFromString(me.raddatz.veyq.mobile.api.expenses.models.PotAppendRequest.serializer(), body)
+            request.revisions.forEach {
+                pot.node.revisions += PlayedTenant.PotRevision(
+                    it.entryId, it.revision,
+                    me.raddatz.veyq.mobile.expenses.SealedRevision(me.raddatz.veyq.mobile.crypto.unb64(it.sealedBody), me.raddatz.veyq.mobile.crypto.unb64(it.wrappedRevisionKey)),
+                    it.tombstone == true,
+                )
+            }
+            pot.node.ledgerRevision++
+            200 to "{}"
+        }
+        val a = t.resume()
+        val tenant = tenantOf(a)
+        val session = assertNotNull(PotSession.open(tenant, pot.node.scope.id, pot.node.id))
+        // written in the open Pot, after the open's whole read; the Pot not opened again before the network goes
+        assertEquals(PotSession.WriteOutcome.WRITTEN, session.write(listOf(me.raddatz.veyq.mobile.expenses.PotWrite(TAXI, expense("Taxi", 900)))))
+        assertTrue("Taxi" in titles(session))
+
+        t.reachable = false
+        tenant.forgetTree()
+        val offline = assertNotNull(PotSession.open(tenant, pot.node.scope.id, pot.node.id))
+        assertNotNull(offline.offline)
+        assertEquals(listOf("Dinner", "Lunch", "Taxi"), titles(offline).sorted(), "an entry written online is missing from the kept ledger")
+        a.retire()
+    }
+
     private companion object {
         const val ANNA = "0e000000-0000-4000-8000-000000000001"
         const val BEN = "0e000000-0000-4000-8000-000000000002"
         const val DINNER = "0e000000-0000-4000-9000-000000000001"
         const val LUNCH = "0e000000-0000-4000-9000-000000000002"
+        const val TAXI = "0e000000-0000-4000-9000-000000000003"
     }
 }
