@@ -190,7 +190,8 @@ private struct QueuedTrayRow: View {
     let model: AppModel
     let item: QueuedItem
     @State private var copies: [URL] = []
-    @State private var failed = false
+    /// What the last copy came to (core's `QueuedShown.copySaved`), said once.
+    @State private var said: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -211,26 +212,34 @@ private struct QueuedTrayRow: View {
         #if os(iOS)
         .fileMover(isPresented: Binding(get: { !copies.isEmpty }, set: { if !$0 { cleanUp() } }), files: copies) { _ in cleanUp() }
         #endif
-        .alert(say(.offlineRefusedOther), isPresented: $failed) { Button(say(.ok), role: .cancel) {} }
+        .alert(said ?? "", isPresented: Binding(get: { said != nil }, set: { if !$0 { said = nil } })) { Button(say(.ok), role: .cancel) {} }
     }
 
     /// Each file the refused write carries, saved where the person picks: a Mac asks in its save panel per file, iOS writes
     /// them into the app's downloads directory and hands them to the system's save sheet (as a download's).
     private func saveCopies() async {
         #if os(macOS)
+        var lines: [String] = []
         for i in 0..<item.copies {
+            let name = await model.queuedCopyName(item.id, index: i)
             let panel = NSSavePanel()
-            panel.nameFieldStringValue = await model.queuedCopyName(item.id, index: i) ?? ""
-            guard panel.runModal() == .OK, let url = panel.url else { return }
-            if !(await model.saveQueuedCopy(item.id, index: i, to: url.path)) { failed = true }
+            panel.nameFieldStringValue = name ?? ""
+            guard panel.runModal() == .OK, let url = panel.url else { break }
+            let saved = await model.saveQueuedCopy(item.id, index: i, to: url.path)
+            lines.append(say(notice: QueuedShown.shared.doCopySaved(name: url.lastPathComponent, saved: saved)))
         }
+        if !lines.isEmpty { said = lines.joined(separator: "\n") }
         #else
         guard let dir = AppModel.downloadDir() else { return }
         var saved: [URL] = []
         for i in 0..<item.copies {
             let name = await model.queuedCopyName(item.id, index: i) ?? "\(i + 1)"
             let url = dir.appendingPathComponent(name)
-            if await model.saveQueuedCopy(item.id, index: i, to: url.path) { saved.append(url) } else { failed = true }
+            if await model.saveQueuedCopy(item.id, index: i, to: url.path) {
+                saved.append(url)
+            } else {
+                said = say(notice: QueuedShown.shared.doCopySaved(name: name, saved: false))
+            }
         }
         if saved.isEmpty { try? FileManager.default.removeItem(at: dir) } else { copies = saved }
         #endif

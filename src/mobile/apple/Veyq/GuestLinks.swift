@@ -372,7 +372,8 @@ struct GuestContent: View {
                 VStack(alignment: .leading, spacing: 0) {
                     if !g.note.isEmpty { MarkdownText(markdown: g.note).padding(.horizontal).padding(.vertical, 8) }
                     // a READ_WRITE link's guest: who this device is here as, or the way to name itself before its first write
-                    if let access = held.access, access.role == GuestAccess.companion.READ_WRITE {
+                    // (where the core offers its naming, `GuestNaming.offered`; no role read here)
+                    if let access = held.access, access.naming.offered {
                         GuestLine(held: held, access: access).padding(.horizontal).padding(.vertical, 4)
                     }
                     if let page = held.page {

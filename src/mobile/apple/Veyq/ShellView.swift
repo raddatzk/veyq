@@ -1134,7 +1134,8 @@ struct ExpensesList: View {
     var body: some View {
         ArrangedListView(model: model, list: model.applicationList(.expenses), onOpen: model.open, key: "app:\(ApplicationId.expenses)")
             .navigationTitle(Names.application(.expenses))
-            .createAction(say(.createPot), shown: !model.spaces.isEmpty && model.online) { creating = true }
+            // offline only where the core queues one (`createsHere`): a Pot never does
+            .createAction(say(.createPot), shown: !model.spaces.isEmpty && model.createsHere(isHome: false).contains(.pot)) { creating = true }
             .sheet(isPresented: $creating) { NewPotSheet(model: model) }
     }
 }
@@ -1149,7 +1150,8 @@ struct MemoriesList: View {
     var body: some View {
         ArrangedListView(model: model, list: model.applicationList(.memories), onOpen: model.open, key: "app:\(ApplicationId.memories)")
             .navigationTitle(Names.application(.memories))
-            .createAction(say(.memoryNew), shown: space != nil && model.online) { naming = true }
+            // offline only where the core queues one (`createsHere`, ADR 0153 decision 3)
+            .createAction(say(.memoryNew), shown: space != nil && model.createsHere(isHome: false).contains(.memory)) { naming = true }
             .sheet(isPresented: $naming) {
                 if let space { NewMemorySheet(model: model, scopeId: space, parentId: nil) }
             }
