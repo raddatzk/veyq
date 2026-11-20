@@ -8,6 +8,11 @@
 //! outcome, a replace offered — is an `AdwToast`, its button the offer's action (`Upload.TakeOffer`), dismissed
 //! otherwise (`Upload.Seen`).
 //!
+//! The writes made offline (ADR 0153, the CR's W5) are a list of their own in the same popover (`Watched.QueuedTray`),
+//! grouped under the place each was made in: each with what it is and *Waiting to send* or why it is held or refused, and
+//! its actions as the core offers them — *Open* (a held one: where it is decided, [Uploads::on_open]), *Save a copy* (a
+//! refused one's files, each through GTK's save dialog into the path it gives, `Queued.SaveCopy`) and *Discard*.
+//!
 //! Every state is the core's `DepotUploads` (`Watched.Uploads`); every action one call. The popover's rows are kept by the
 //! batch's and the item's id and updated in place, so a click is never taken by a row that an update replaced.
 use std::cell::{Cell, RefCell};
@@ -16,7 +21,8 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, wire::Answer, wire::Call, wire::Why, wire::Update, wire::UploadBatch, wire::UploadItem, wire::UploadStatus, wire::UploadsShown, wire::Watched};
+use crate::bridge::{self, wire::Answer, wire::Call, wire::QueuedItem, wire::QueuedOpen, wire::QueuedWriteState, wire::Update, wire::UploadBatch,
+    wire::UploadItem, wire::UploadStatus, wire::UploadsShown, wire::Watched, wire::Why};
 use crate::home::glib_escape;
 use crate::{header, said, words};
 
@@ -73,7 +79,18 @@ pub struct Uploads {
     /// Each item's status and progress last logged, so stderr says a change once (a pass reads it).
     logged: RefCell<std::collections::HashMap<String, (UploadStatus, i32)>>,
     _watch: RefCell<Option<bridge::Watch>>,
+    /// The writes made offline, as the tray lists them (`Watched.QueuedTray`), and their rows' box.
+    queued: RefCell<Vec<QueuedItem>>,
+    queued_box: gtk::Box,
+    queued_watch: RefCell<Option<bridge::Watch>>,
+    /// Whether the uploads alone would show the button (the queued writes show it too).
+    uploads_shown: Cell<bool>,
+    /// Where a held write's *Open* goes: the shell's ([Uploads::on_open]).
+    on_open: RefCell<Option<OnOpen>>,
 }
+
+/// Where a held write's *Open* goes.
+type OnOpen = Rc<dyn Fn(QueuedOpen)>;
 
 /// A batch drawn: its label and Close over its items' list.
 struct BatchRows {
@@ -226,6 +243,8 @@ impl Uploads {
         list.append(&preparing);
         let batches_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).build();
         list.append(&batches_box);
+        let queued_box = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).build();
+        list.append(&queued_box);
         let scroll = gtk::ScrolledWindow::builder()
             .hscrollbar_policy(gtk::PolicyType::Never)
             .propagate_natural_height(true)
@@ -249,7 +268,111 @@ impl Uploads {
             said: Cell::new(None),
             logged: RefCell::new(std::collections::HashMap::new()),
             _watch: RefCell::new(None),
+            queued: RefCell::new(Vec::new()),
+            queued_box,
+            queued_watch: RefCell::new(None),
+            uploads_shown: Cell::new(false),
+            on_open: RefCell::new(None),
         })
+    }
+
+    /// [f] takes a held write's *Open* (`Answer.QueuedOpens`): the shell goes where it says.
+    pub fn on_open(&self, f: impl Fn(QueuedOpen) + 'static) {
+        *self.on_open.borrow_mut() = Some(Rc::new(f));
+    }
+
+    /// The button shows while the uploads list anything or a write made offline waits.
+    fn show_button(&self) {
+        self.button.set_visible(self.uploads_shown.get() || !self.queued.borrow().is_empty());
+    }
+
+    /// The writes made offline drawn anew (`Update.QueuedTray`): under each place's name, its rows in the tray's order.
+    fn draw_queued(self: &Rc<Self>, items: Vec<QueuedItem>) {
+        if *self.queued.borrow() == items {
+            return;
+        }
+        eprintln!("veyq: queued tray: {} ({})", items.len(), items.iter().map(|i| format!("{:?}", i.state)).collect::<Vec<_>>().join(","));
+        while let Some(child) = self.queued_box.first_child() {
+            self.queued_box.remove(&child);
+        }
+        let mut place: Option<Option<String>> = None;
+        let mut rows: Option<gtk::ListBox> = None;
+        for item in &items {
+            if place.as_ref() != Some(&item.r#where) || rows.is_none() {
+                place = Some(item.r#where.clone());
+                if let Some(w) = &item.r#where {
+                    let label = gtk::Label::builder().label(w.as_str()).xalign(0.0).ellipsize(gtk::pango::EllipsizeMode::End).build();
+                    label.add_css_class("caption-heading");
+                    self.queued_box.append(&label);
+                }
+                let list = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
+                list.add_css_class("boxed-list");
+                self.queued_box.append(&list);
+                rows = Some(list);
+            }
+            if let Some(list) = &rows {
+                list.append(&self.queued_row(item));
+            }
+        }
+        *self.queued.borrow_mut() = items;
+        self.show_button();
+    }
+
+    /// One write made offline: what it is, its state's line, and the actions the core offers it.
+    fn queued_row(self: &Rc<Self>, item: &QueuedItem) -> adw::ActionRow {
+        let row = adw::ActionRow::builder().title(glib_escape(&said::notice(&item.title))).subtitle(glib_escape(&said::notice(&item.said))).title_lines(1).subtitle_lines(2).build();
+        if item.state != QueuedWriteState::Waiting {
+            row.add_css_class("error");
+        }
+        let button = |label: String| {
+            let b = gtk::Button::builder().label(label).valign(gtk::Align::Center).build();
+            b.add_css_class("flat");
+            row.add_suffix(&b);
+            b
+        };
+        if item.opens {
+            let (write, weak) = (item.id.clone(), Rc::downgrade(self));
+            button(words::offline_open()).connect_clicked(move |_| {
+                let (write, weak) = (write.clone(), weak.clone());
+                glib::spawn_future_local(async move {
+                    let answer = bridge::call(&Call::QueuedOpen { write }).await.map(|(a, _)| a);
+                    let Some(u) = weak.upgrade() else { return };
+                    match answer {
+                        Ok(Answer::QueuedOpens { open }) => {
+                            u.button.popdown();
+                            let f = u.on_open.borrow().clone();
+                            if let Some(f) = f {
+                                f(open);
+                            }
+                        }
+                        other => header::say(&u.toasts, other, "Queued.Open"),
+                    }
+                });
+            });
+        }
+        if item.state == QueuedWriteState::Refused && item.copies > 0 {
+            let (write, copies, weak) = (item.id.clone(), item.copies, Rc::downgrade(self));
+            button(words::offline_save_copy()).connect_clicked(move |b| {
+                let (write, weak) = (write.clone(), weak.clone());
+                let Some(parent) = b.root().and_downcast::<gtk::Window>() else { return };
+                glib::spawn_future_local(async move {
+                    for index in 0..copies {
+                        let Some(u) = weak.upgrade() else { return };
+                        save_copy(&parent, &write, index, &u.toasts).await;
+                    }
+                });
+            });
+        }
+        let (write, toasts) = (item.id.clone(), self.toasts.clone());
+        button(words::offline_discard()).connect_clicked(move |_| {
+            eprintln!("veyq: queued: discard pressed");
+            let (write, toasts) = (write.clone(), toasts.clone());
+            glib::spawn_future_local(async move {
+                let answer = bridge::call(&Call::QueuedDiscard { write }).await.map(|(a, _)| a);
+                header::say(&toasts, answer, "Queued.Discard");
+            });
+        });
+        row
     }
 
     /// Follows the uploads (`Watched.Uploads`), once the core runs: the shell is made before it starts, and a watch asked
@@ -263,6 +386,20 @@ impl Uploads {
             return;
         };
         *self._watch.borrow_mut() = Some(watch);
+        // the writes made offline, the tray's list of its own
+        if let Some((watch, queued)) = bridge::watch(&Watched::QueuedTray) {
+            *self.queued_watch.borrow_mut() = Some(watch);
+            let weak = Rc::downgrade(self);
+            glib::spawn_future_local(async move {
+                while let Ok(update) = queued.recv().await {
+                    let Some(u) = weak.upgrade() else { return };
+                    match update {
+                        Ok(Update::QueuedTray { items }) => u.draw_queued(items.unwrap_or_default()),
+                        other => eprintln!("veyq: a queued tray update did not read: {other:?}"),
+                    }
+                }
+            });
+        }
         let weak = Rc::downgrade(self);
         glib::spawn_future_local(async move {
             while let Ok(update) = updates.recv().await {
@@ -285,12 +422,14 @@ impl Uploads {
         ACTIVE.with(|a| a.set(shown.map_or(0, |s| i64::from(s.active))));
         self.draw_batches(batches);
         let Some(s) = shown else {
-            self.button.set_visible(false);
+            self.uploads_shown.set(false);
+            self.show_button();
             return;
         };
         self.log(s);
         let summary = s.summary.as_ref().map(said::notice);
-        self.button.set_visible(summary.is_some() || s.preparing.is_some());
+        self.uploads_shown.set(summary.is_some() || s.preparing.is_some());
+        self.show_button();
         let tip = summary.clone().or_else(|| s.preparing.as_ref().map(said::notice)).unwrap_or_else(words::upload_title);
         self.button.set_tooltip_text(Some(&tip));
         self.line.set_visible(summary.is_some());
@@ -377,6 +516,31 @@ impl Uploads {
                 logged.insert(item.id.clone(), now);
                 eprintln!("veyq: upload {}: {:?} {}% of {} B", item.name, item.status, tenth * 10, item.size_bytes);
             }
+        }
+    }
+}
+
+/// A refused write's file [index] saved as a copy (*Save a copy*): GTK's save dialog suggests the core's name, the core
+/// writes the plaintext into the path it gives (`Queued.SaveCopy`) — the only plaintext a queued write ever becomes.
+async fn save_copy(parent: &gtk::Window, write: &str, index: i32, toasts: &adw::ToastOverlay) {
+    let name = match bridge::call(&Call::QueuedCopyName { write: write.to_owned(), index }).await.map(|(a, _)| a) {
+        Ok(Answer::QueuedCopyName { name, .. }) => name.unwrap_or_default(),
+        other => return header::say(toasts, other, "Queued.CopyName"),
+    };
+    let dialog = gtk::FileDialog::builder().title(words::offline_save_copy()).initial_name(name.as_str()).modal(true).build();
+    let chosen = match dialog.save_future(Some(parent)).await {
+        Ok(chosen) => chosen,
+        Err(e) => return dismissed(&e, "save a copy"),
+    };
+    let Some(path) = local_path(&chosen) else {
+        toasts.add_toast(adw::Toast::new(&words::download_failed(&name)));
+        return;
+    };
+    match bridge::call(&Call::QueuedSaveCopy { write: write.to_owned(), index, path }).await.map(|(a, _)| a) {
+        Ok(Answer::Done) => eprintln!("veyq: queued: a copy saved"),
+        other => {
+            eprintln!("veyq: Queued.SaveCopy answered {other:?}");
+            toasts.add_toast(adw::Toast::new(&words::download_failed(&name)));
         }
     }
 }

@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use adw::prelude::*;
 use gtk::{gdk, glib};
 
-use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::ArrangedList, wire::Call, wire::Crop, wire::MemoryDateShown, wire::NodeRef, wire::ObjectRef,
+use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::ArrangedList, wire::Call, wire::Crop, wire::MemoryDateShown, wire::NodeRef, wire::ObjectRef, wire::QueuedItem,
     wire::ShellModelState, wire::ShellShown, wire::FolderRef, wire::ViewModeShown};
 use crate::tiles::{self, Tile};
 use crate::drop::Drops;
@@ -308,7 +308,7 @@ pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, 
         }
         content.append(&h);
     }
-    if shown.groups.is_empty() {
+    if shown.groups.is_empty() && shown.queued_here.is_empty() {
         content.append(&empty());
     }
     for g in &shown.groups {
@@ -336,7 +336,23 @@ pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, 
         }
         content.append(&list);
     }
+    // what was made here offline and is not sent yet, in place, marked as the core says it (ADR 0153 decision 5)
+    if !shown.queued_here.is_empty() {
+        let list = adw::PreferencesGroup::new();
+        for q in &shown.queued_here {
+            list.add(&queued_row(q));
+        }
+        content.append(&list);
+    }
     scroll.upcast()
+}
+
+/// A write made offline as its level lists it: what it is, and *Waiting to send* (or why it is held) under it.
+fn queued_row(q: &QueuedItem) -> adw::ActionRow {
+    let row = adw::ActionRow::builder().title(glib_escape(&said::notice(&q.title))).subtitle(glib_escape(&said::notice(&q.said))).build();
+    row.add_prefix(&gtk::Image::from_icon_name("document-send-symbolic"));
+    row.add_css_class("dim-label");
+    row
 }
 
 /// A group of Home's level as tiles: a folder's enters it (and takes a drop as its row does), an object's opens it.

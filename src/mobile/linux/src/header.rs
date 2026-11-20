@@ -207,11 +207,21 @@ impl Header {
 
     /// Rename: the name asked for in an alert dialog over [parent], asked again with the core's problem.
     pub fn rename(&self, parent: &impl IsA<gtk::Widget>) {
-        let Some(header) = self.inner.id.get() else { return };
+        if self.inner.id.get().is_none() {
+            return;
+        }
+        self.rename_as(parent, &self.node.name);
+    }
+
+    /// Rename with [name] in the field (a held rename's *Open*, ADR 0153 decision 4: the name the person gave offline); the
+    /// header is the core's by the time the dialog is confirmed.
+    pub fn rename_as(&self, parent: &impl IsA<gtk::Widget>, name: &str) {
         let toasts = self.inner.toasts.clone();
         let parent = parent.clone().upcast::<gtk::Widget>();
-        ask_name(&parent, &words::node_rename(), &words::node_name(), &self.node.name, None, &words::node_rename(), move |name, again| {
+        let weak = Rc::downgrade(&self.inner);
+        ask_name(&parent, &words::node_rename(), &words::node_name(), name, None, &words::node_rename(), move |name, again| {
             let toasts = toasts.clone();
+            let Some(header) = weak.upgrade().and_then(|i| i.id.get()) else { return };
             glib::spawn_future_local(async move {
                 match bridge::call(&Call::HeaderRename { header, name: name.clone() }).await.map(|(a, _)| a) {
                     Ok(Answer::Named { problem: Some(p), .. }) => again(name, said::notice(&p)),

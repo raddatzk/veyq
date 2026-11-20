@@ -401,6 +401,11 @@ impl Inner {
         } else if let Some(b) = &e.badge {
             row.add_suffix(&suffix(&said::notice(&b.notice), if b.danger { &["caption", "error"] } else { &["caption", "dim-label"] }));
         }
+        // made offline and not sent yet (ADR 0153 decision 5): the core's *Not sent* mark
+        if let Some(m) = &e.unsent_mark {
+            row.add_prefix(&gtk::Image::from_icon_name("document-send-symbolic"));
+            row.add_suffix(&suffix(&said::notice(m), &["caption", "dim-label"]));
+        }
         if let Some(amount) = e.row.amount {
             row.add_suffix(&suffix(&money(view, amount), &["numeric"]));
         }
@@ -420,6 +425,10 @@ impl Inner {
 
     fn overview(self: &Rc<Self>, content: &gtk::Box, view: &PotView) {
         let balances = adw::PreferencesGroup::builder().title(words::pot_balances()).build();
+        // the balances count entries not sent yet: the core's line says so
+        if let Some(n) = &view.balances_unsent {
+            balances.set_description(Some(&glib_escape(&said::notice(n))));
+        }
         for b in &view.balances {
             let name = said::piece(&b.name);
             let row = adw::ActionRow::builder().title(glib_escape(&name)).subtitle(glib_escape(&said::line(&b.facts))).build();

@@ -763,7 +763,21 @@ impl Inner {
         image.add_css_class(if upload.failed { "error" } else { "dim-label" });
         tile.set_child(Some(&gtk::Box::new(gtk::Orientation::Vertical, 0)));
         tile.add_overlay(&image);
-        if upload.preparing {
+        if upload.waiting {
+            // sealed on this device, waiting to be sent: the send icon and the core's line at the tile's foot
+            let waiting = gtk::Box::builder().spacing(4).halign(gtk::Align::Center).valign(gtk::Align::End).margin_bottom(6).margin_start(6).margin_end(6).build();
+            waiting.add_css_class("osd");
+            waiting.append(&gtk::Image::from_icon_name("document-send-symbolic"));
+            if let Some(w) = &upload.said {
+                let text = gtk::Label::builder().label(said::notice(w)).ellipsize(gtk::pango::EllipsizeMode::End).build();
+                text.add_css_class("caption");
+                waiting.append(&text);
+            }
+            tile.add_overlay(&waiting);
+            if let Some(w) = &upload.said {
+                tile.update_property(&[gtk::accessible::Property::Description(&said::notice(w))]);
+            }
+        } else if upload.preparing {
             let spinner = adw::Spinner::builder().width_request(16).height_request(16).halign(gtk::Align::End).valign(gtk::Align::End)
                 .margin_end(6).margin_bottom(6).build();
             tile.add_overlay(&spinner);
