@@ -137,7 +137,30 @@ ADR 0153 decisions 6 and 7 hold them; here only what the work needs beside them.
   finds *Lighthouse.jpg* of a Memory never opened; after Clear cache and a restart *J1 Trip* says "Not available
   offline", the pinned *J1 Flat* opens; the app's data pulled and grepped for every title, receipt marker and name: no hit.
 - [ ] **5 Apple** — the same. · Done when: both Apple builds green.
-- [ ] **6 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green.
+- [x] **6 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green.
+  **Built** (2026-11-20): `pot.rs` says `Update::Pot`'s `failure` word where the Pot did not open (`offline_not_kept` under
+  `network-offline-symbolic`, else `pot_open_failed`); `receipt_viewer.rs` says `offline_not_kept` for `Receipt.Open`'s
+  `Refused { why: Why::NotKeptOffline }`, not "unreadable"; the header's *Available offline* is the generic `header.rs`
+  check item, now in a Pot's plan (its test pins `win.header-offline` for `EXPENSES_POT`); the "as of" line is the shell's
+  `AdwBanner` with the page's own kept time (core's), writes off through the core. Deviation: `run.py test` now mounts
+  `contracts/export` — 26 import tests (cr-app-archive-import's `ImportCasesTest`, `ImportScreenTest`, `SubtreeImportTest`,
+  `ZipReaderTest`) were red on Linux reading it, untouched by this CR. `python3 linux/run.py build` green (clippy, cargo
+  test 100 + 5); `python3 linux/run.py test` green (1143, both Secret Service probes). Bite: `action_of` sending a Pot's
+  `offline` to `win.pot-offline` → the header test red; restored with `/bin/cp -f`. *Pass* (`run.py run` under Broadway,
+  driven by headless Chrome, its own home volume, removed after; a `--with-member` throwaway, erased; English): Pot
+  *J1L Trip* (Taxi with a receipt shown, Dinner with one never shown) and *J1L Flat* (Rent with a receipt never shown)
+  made in the app, Flat pinned (586 bytes asked, "Kept"); a Memory *J1L Coast* with one photo, found by search online. The
+  server cut as ADR 0140's Linux pass: the window closed and the app started again with `VEYQ_LIVE` on a port nothing
+  serves (its own `socat` leads nowhere; the container's `/dev/tcp/127.0.0.1/8080` refused). Offline: Flat opened read-only
+  under "Offline — content as of …" with its pin's time, no Add entry, the editor "Entry" without Save, its pin-fetched
+  receipt opened; Trip at first showed "No entries yet." as of its first open — its entries were written after that open
+  and never re-read whole (#1038); after one more open online and the second cut, Trip showed both entries as of that
+  open, Taxi's shown receipt opened, Dinner's said "Not available offline", Overview without Record, Settings without
+  edits; from Home (no gallery opened in that run) search found `j1l-lighthouse.png` with no "searched once online" line.
+  The store (`~/.local/share/veyq`, 41 files, 228 KiB) copied out and grepped for the five titles, the file names, the PNGs'
+  `VEYQJ1LMARK` markers and `IHDR`: no hit (the same grep finds the marker in the plain file); outside it only gnome-keyring,
+  `run.py`'s keyring password and GTK's `recently-used.xbel` naming the picked paths (as ADR 0148's pass). Not run: the
+  Flatpak, sign-out offline, a Pot opened offline that was never kept (`pot.rs`'s offline failure word).
 - [x] **7 Windows** — the same. · Done when: `python3 windows/run.py build` green on the VM.
   **Built** (2026-11-20): `PotPage` says `Update.Pot`'s `failure` word where the Pot did not open (offline
   `offline_not_kept`, else `pot_open_failed`); `ReceiptViewerDialog` says `offline_not_kept` for `Receipt.Open`'s
