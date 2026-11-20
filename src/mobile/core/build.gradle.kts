@@ -206,7 +206,8 @@ kotlin {
         }
         // The tests that block a thread or run on a pool of them (`runBlocking`, `newFixedThreadPoolContext`: the JVM's and
         // native's coroutines API, none on JavaScript) live in `threadedTest`, between `commonTest` and the JVM and native
-        // targets (cr-core-js-target phase 1).
+        // targets: in `commonTest` they would fail `compileTestKotlinJs` (44 errors in three files, measured 2026-11-20).
+        // A new test that blocks a thread goes here, never into `commonTest` behind a platform `expect`.
         common {
             group("threaded") {
                 withJvm()

@@ -7,6 +7,7 @@ sources:
   - docs/decisions/0090-end-to-end-tests-boot-the-release-candidate.md
   - docs/decisions/0040-coverage-gaps-and-http-not-a-surface.md
   - docs/decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md
+  - docs/decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md
   - docs/ai/README.md
   - docs/architecture/README.md
 ---

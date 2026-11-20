@@ -8,7 +8,7 @@ plugins {
 
 // The core's JavaScript target (ADR 0155 decisions 3 and 6) is a library with no JavaScript environment: Gradle compiles,
 // pnpm installs, bundles and tests (`src/packages/core-js/`). A `nodejs()` or `browser()` environment would make even
-// the link task depend on Kotlin's own Node, Yarn and npm install (measured 2026-11-20, cr-core-js-target phase 1), so
+// the link task depend on Kotlin's own Node, Yarn and npm install (measured 2026-11-20 on Kotlin 2.4.21), so
 // none is chosen, and the root plugin the environment would have applied — whose extension the link's sync task reads —
 // is applied here. Its setup tasks never download (the settings refuse the repository a download adds,
 // `FAIL_ON_PROJECT_REPOS`), and a task graph that reaches any of Kotlin's Node, Yarn or npm tasks fails before it runs.

@@ -1,7 +1,9 @@
 # ADR 0155 — The web draws over the Kotlin core, application by application, after a measured pilot
 - Status: Accepted
-- Built: no — `cr-core-js-target` builds decision 3, `cr-web-search-on-the-core` decisions 4 (but its JSON seam, which
-  comes with Expenses) to 6 and the gate (decision 2); decisions 7 and 8 wait for a go
+- Built: partly — decision 3 (2026-11-20: `:core`'s `js()` target over `@noble/*`, the refusals in `jsMain`'s two
+  `NotOnTheWeb.kt`) and decision 6 but the web's half (`@veyq/core-js` with its conformance check in CI's `frontend`
+  job; nothing under `src/web/` builds or imports it yet). `cr-web-search-on-the-core` builds decisions 4 (but its JSON
+  seam, which comes with Expenses) to 6 and the gate (decision 2); decisions 7 and 8 wait for a go
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -145,6 +147,8 @@ Measured before the decision (2026-11-20):
 - **After a go**, a CR touching a moved application orders its phases contracts → backend → core → clients, and
   ADR 0154's vectors "from the web's own formatters" turn around for what moved: the core's output is the one source.
   The root `CLAUDE.md`, `docs/ai/README.md` and `src/web/CLAUDE.md` are edited by the pilot's harvest, not before.
+- **CI's `frontend` job checks the package** with crypto, web and admin-web: published in the stage map of
+  [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 - **The pnpm workspace holds a second package.** ADR 0065's "one package" was a rule against general code sharing;
   `@veyq/core-js` is no shared UI, router or state but the core's logic, compiled.
 
