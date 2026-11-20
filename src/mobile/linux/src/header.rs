@@ -679,5 +679,7 @@ mod tests {
         assert_eq!(action_of("move", "EXPENSES_POT"), "win.header-move");
         assert_eq!(action_of("rename", "FOLDER"), "win.header-rename");
         assert_eq!(action_of("offline", "MEMORY"), "win.header-offline", "Available offline is the window's stateful check item");
+        // a Pot pins (ADR 0153 decision 6): its header's toggle, never its page's
+        assert_eq!(action_of("offline", "EXPENSES_POT"), "win.header-offline", "a Pot's Available offline is its header's");
     }
 }

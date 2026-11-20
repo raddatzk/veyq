@@ -436,7 +436,12 @@ A Gradle build of its own, run through its own wrapper.
   blocked node's and a suspended tenant's kept without content, one store per account in the process; live,
   `LiveOfflineTest` (`VEYQ_LIVE`: a gallery viewed online, a medium trashed from another session, the account unlocked
   again with the network cut) and `LivePinsTest` (a Memory pinned through the session's door, a photo added from another
-  session kept after the next online open, its folder's subtree re-keyed with no frame fetched again, opened offline).
+  session kept after the next online open, its folder's subtree re-keyed with no frame fetched again, opened offline);
+  a Pot and a space's media (ADR 0153 decisions 6 and 7): `OfflinePotTest` (a Pot opened offline read-only as of its
+  read, a newer ledger replacing the kept one — an erased record gone —, an entry written after the open kept by the
+  write's whole re-read, #1038, a download keeping no receipt), `OfflinePotPinsTest` (a pinned Pot surviving Clear cache,
+  search offline over a never-opened Memory's kept `SCOPE_MEDIA`) and `OfflineBannerTest` (the banner's time the open
+  page's own).
   The QR reader (`qr/`, a port of ZXing's QR path; its `NOTICE` beside it) changes only with ZXing's corpus still at
   upstream's thresholds: `QrCorpusTest` (JVM; `:core:fetchQrCorpus` fetches the images into `build/qr-corpus`, each held to
   its SHA-256 in `core/qr/zxing-corpus.sha256`, so the first run needs the network) and `QrDecoderTest` (every target, over

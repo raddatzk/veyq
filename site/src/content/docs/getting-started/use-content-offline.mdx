@@ -3,6 +3,7 @@ title: "Use content offline"
 description: In the veyq app, what you viewed stays on your device within a limit you set, and what you make available offline stays until you undo it. Both open without a connection.
 sources:
   - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
+  - docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md
   - docs/crosscutting/native-apps.md
   - docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md
   - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
@@ -11,14 +12,15 @@ sources:
 The veyq [app](/getting-started/install-the-app/) can keep content on your device, so you can open it without a
 connection. It keeps two kinds:
 
-- **What you viewed recently:** pictures, previews, the part of a video you played and the files you opened, up to a
-  storage limit you set — on Android, Windows and Linux also the map pictures you looked at, which are never shown
+- **What you viewed recently:** pictures, previews, the part of a video you played, the files you opened, and a Pot's
+  entries with the receipts you looked at, up to a storage limit you set — on Android, Windows and Linux also the map pictures you looked at, which are never shown
   offline ([Is my data safe?](/privacy/is-my-data-safe/#maps-only-when-you-turn-them-on)). When the limit is reached,
   what you have not looked at for the longest goes first.
-- **What you make available offline:** a Memory, a Chapter, a folder or a file, downloaded whole and kept until you
-  turn it off.
+- **What you make available offline:** a Memory, a Chapter, a folder, a file or a Pot, downloaded whole and kept until
+  you turn it off.
 
-Beside them it keeps your spaces' member lists, so the people of a Memory are named offline too.
+Beside them it keeps your spaces' member lists, so the people of a Memory are named offline too, and the list of each
+space's photos and videos, so [search](/spaces/search/) finds them offline.
 
 Everything stays locked. The app keeps it exactly as your server stores it and locks it once more for this device, so
 whoever copies the files learns nothing from them. The browser keeps nothing.
@@ -31,7 +33,7 @@ in to this account.* How a device stays signed in: [Devices and sessions](/accou
 
 ## Make something available offline
 
-1. Open the Memory, Chapter, folder or file.
+1. Open the Memory, Chapter, folder, file or Pot.
 2. Open the menu in its header (**More**) and choose **Available offline**.
 3. The app says how much it keeps: **Make available offline?** Choose **Make available**.
 
@@ -39,7 +41,8 @@ While it downloads, the header says how far it is (**Downloading … of …**), 
 app asks the first time whether it may show notifications: the download's progress shows there. If your device runs out of space, it says **Paused: not enough space on this device**.
 
 A photo is kept as its preview, the way the app shows it; its original is not. A video, a Memory's song, a GPX track and a file are kept whole, and
-so are the covers and a Memory's banner inside. What others add or change while you are online is downloaded too.
+so are the covers and a Memory's banner inside. A Pot is kept with its entries and every receipt. What others add or
+change while you are online is downloaded too.
 
 To undo it, choose **Available offline** again. It is turned off at once, without a question.
 
@@ -65,8 +68,9 @@ keeps nothing new.
 
 The app shows **Offline — content as of** and the time your server last confirmed what it shows. You can look at
 everything that is kept and play its videos and music; anything else says **Not available offline**. No map is shown
-offline (*The map needs a connection.*); a Memory's map view still lists its tracks. A Memory's people are not shown offline. Nothing can be changed
-offline: *You're offline. Changes are possible again once you're back online.*
+offline (*The map needs a connection.*); a Memory's map view still lists its tracks. A Memory's people are not shown offline. A Pot
+opens with its entries and balances as of the time named; a receipt you never looked at says **Not available offline**.
+Nothing can be changed offline: *You're offline. Changes are possible again once you're back online.*
 
 You can also start the app without a connection: unlock it as you always do. Once the server can be reached again,
 the app notices it by itself within about a minute.

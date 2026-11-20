@@ -27,7 +27,7 @@ import kotlin.test.assertNotNull
 /**
  * The shell's offline banner — the one banner every platform draws (ADR 0140 decision 10) — dates an open page by that
  * page's own kept answer where it has one (a Pot's ledger, a gallery's listing), else by the shell's lists: a Pot whose
- * ledger was kept at 12:27 said 12:29, the lists' time (the Android pass of cr-app-offline-pots-and-space-media).
+ * ledger was kept at 12:27 said 12:29, the lists' time (ADR 0153's Android pass).
  *
  * Bite (seen red, then restored): `ShellModel.State.banner` without the open page's time → both pages' banners name the
  * lists' time.

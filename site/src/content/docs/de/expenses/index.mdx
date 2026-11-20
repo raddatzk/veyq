@@ -3,6 +3,7 @@ title: "Ausgaben"
 sources:
   - docs/features/expenses/_index.md
   - docs/apps/expenses.md
+  - docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md
   - docs/features/expenses/use-cases/uc.expenses.create-pot.md
   - docs/features/expenses/use-cases/uc.expenses.manage-participants.md
   - docs/features/expenses/use-cases/uc.expenses.verify-ledger.md
@@ -85,6 +86,10 @@ Kopie nehmen die Belege mit ihren Einträgen mit. Wer einen Eintrag sehen kann, 
 
 Ist Ausgaben [abgeschaltet](/de/applications/), sagt ein Hinweis das, und in einer Kasse kann nichts dazukommen
 und nichts geändert werden.
+
+In der veyq-App öffnet sich eine Kasse, die du geöffnet oder **Offline verfügbar** gemacht hast, ohne Verbindung, mit dem
+Stand ihres letzten Lesens, und in ihr lässt sich nichts ändern, bis du wieder online bist:
+[Inhalte offline nutzen](/de/getting-started/use-content-offline/).
 
 ## Ist das privat?
 

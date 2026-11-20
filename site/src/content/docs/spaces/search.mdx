@@ -3,6 +3,7 @@ title: "Search all your spaces"
 sources:
   - docs/features/platform/use-cases/uc.platform.search.md
   - docs/decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md
+  - docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md
 ---
 
 The search field at the top of the page searches every space you belong to here: your personal space, the shared
@@ -95,5 +96,5 @@ The veyq [app](/getting-started/install-the-app/) searches as the browser does, 
   **Manage servers**) is not searched. A settings result opens the app's settings at that part; the app's settings have
   fewer parts than the browser's, so it finds only those.
 - **Offline** the app searches what it keeps on the device: the names, a Memory's dates, place and people, and the
-  members. The photos and videos of every space are searched once you are online again — until then, only those it
-  already read while online, and those of the Memory you have open.
+  members, and the photos and videos of every space whose list it read while online. For a space it has not read yet
+  it says *Photos are searched once you are online.*
