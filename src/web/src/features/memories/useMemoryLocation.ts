@@ -11,12 +11,12 @@ import { useI18n } from 'vue-i18n'
 import {
   unsealMemoryLocation,
   computeMedoid,
-  mediaGpsPoints,
   sameMemoryLocation,
   isLocationPending,
   normalizeLocation,
   type MemoryLocation,
 } from './memoryLocation'
+import { mediaGpsPoints } from './memoryFromMedia'
 import { nodeMetaState } from '../../core/node/nodeMeta'
 import { useMetaWriteFeedback, type NodeMetaUpdate } from './useMetaWriteFeedback'
 import { reverseGeocode, defaultLevel, nameAtLevel } from './geocode'

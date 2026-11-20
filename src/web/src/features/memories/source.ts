@@ -65,7 +65,8 @@ import {
   type MediaMetaWrite,
 } from './media'
 import { gridFrameOpener, openedBlobMeta, openedMeta } from './openedListing'
-import { setMemoryDate, reconcileMemoryDate, type MemoryDate } from './memoryDate'
+import { setMemoryDate, type MemoryDate } from './memoryDate'
+import { reconcileMemoryDate } from './memoryFromMedia'
 import { setMemoryLocation, type MemoryLocation } from './memoryLocation'
 import { setMemoryParticipants } from './memoryParticipants'
 import { writeNodeMeta } from '../../core/node/nodeMetaWrite'

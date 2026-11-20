@@ -8,9 +8,9 @@
 // swaps in only the `date`, and re-seals — so writing a date never clobbers a sibling `location` (and vice-versa,
 // via `setMemoryLocation`). It is version-checked, so the sibling a PEER wrote since our tree loaded survives too
 // (ADR 0077). The shared envelope and the write loop live in `nodeMeta.ts`.
-import { epochMsToIsoDate } from '../../shared/isoDate'
-import { effectiveCapturedAt, type MediaItem } from './media'
-import { openedMeta } from './openedListing'
+//
+// The `auto` range read from the Memory's own media (`computeAutoRange`, `reconcileMemoryDate`) is `memoryDateAuto.ts`: it
+// opens the gallery's listing, and this module is read by the level's rows and the search facets in the entry chunk.
 import { openContentKey, type TreeNode } from '../../core/node/tree'
 import { editField, sealNodeMeta, unsealNodeMeta, type NodeMetaAddress } from '../../core/node/nodeMeta'
 import { writeNodeMeta, type WriteNodeMetaOptions } from '../../core/node/nodeMetaWrite'
@@ -73,51 +73,6 @@ export async function setMemoryDate(
   const openedWith = unsealNodeMeta(nodeKey, { scopeId, nodeId }, current.wrappedMeta).date
   const { state } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, editField('date', date, openedWith), undefined, opts)
   return state
-}
-
-/**
- * The `auto`-range SELF-HEAL: materialize the range from the Memory's own `items` and re-seal it only when it
- * changed. The whole decision runs on the blob being written — on a `409` again on the fresh one — so a manual date
- * a peer set meanwhile is never overwritten, and a range already right is never re-sent (ADR 0077 point 3).
- * Returns the newest state the server confirmed or handed back, and whether this call wrote.
- */
-export async function reconcileMemoryDate(
-  scopeId: string,
-  nodeId: string,
-  nodeKey: Uint8Array,
-  items: MediaItem[],
-  current: NodeMetaState,
-  opts: WriteNodeMetaOptions = {},
-): Promise<{ state: SealedMetaState; wrote: boolean }> {
-  const next = computeAutoRange(scopeId, items, nodeKey)
-  const { state, wrote } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, (meta) => {
-    const stored = normalizeDate(meta.date)
-    if (stored && stored.mode !== 'auto') return null // a manual date is the user's — never overwritten
-    if (sameMemoryDate(stored ?? { mode: 'auto' }, next)) return null
-    if (!stored && next.from === undefined) return null // absent meta already == the empty `auto` state
-    meta.date = next
-    return meta
-  }, undefined, opts)
-  return { state, wrote }
-}
-
-/**
- * Materialize a Memory's `auto` range from its **own** media, day-truncated (local `YYYY-MM-DD`). Counts only
- * **trustworthy** capture times — a user `capturedAtOverride`, or a `capturedAt` from EXIF or a video's container — so a
- * file-modification-date fallback can't stretch the range (cr-0067). An empty result ⇒ `{ mode: 'auto' }` (the
- * "no date yet" state). `nodeKey` = the Memory's `K_node` (each media's capture-time tier is sealed under it).
- */
-export function computeAutoRange(scopeId: string, items: MediaItem[], nodeKey: Uint8Array): MemoryDate {
-  const days: number[] = []
-  for (const item of items) {
-    const tier = openedMeta(scopeId, nodeKey, item)
-    if (!tier) continue
-    const trustworthy = tier.capturedAtOverride !== undefined || tier.capturedAtSource === 'exif' || tier.capturedAtSource === 'container'
-    const ms = effectiveCapturedAt(tier)
-    if (trustworthy && ms !== undefined) days.push(ms)
-  }
-  if (days.length === 0) return { mode: 'auto' }
-  return { mode: 'auto', from: epochMsToIsoDate(Math.min(...days)), to: epochMsToIsoDate(Math.max(...days)) }
 }
 
 /** Whether two date ranges are equal (mode + both ends) — the reconcile re-seals only when this is false. */

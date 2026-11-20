@@ -32,6 +32,9 @@ beforeAll(async () => {
   if (typeof window === 'undefined') return
   const { registerApplications } = await import('../applications')
   registerApplications()
+  // Their pages and dialogs are lazy chunks in the build: loaded here, where the static imports ran (`lazyApplications.ts`).
+  const [{ registry }, { loadRegisteredComponents }] = await Promise.all([import('../core/applications/registry'), import('./lazyApplications')])
+  await loadRegisteredComponents(registry)
 })
 
 // Unmount every wrapper after each test. A component left mounted keeps its library timers alive past the file's

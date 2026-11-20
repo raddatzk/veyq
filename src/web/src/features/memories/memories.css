@@ -16,7 +16,15 @@
    `.veyq-create-card`'s columns, gap, height, padding and alignment); the lightbox's are listed in its section. Every
    other rule here styles an element no core sheet's rule of equal specificity reaches. The sheets after it (the PDF
    renderer's `shared/pdf/pdf.css`, reached through Depot, then `settings`, `dark`) were after it before too. Keep it so: a
-   new rule here that styles a core class's element compounds with that class. */
+   new rule here that styles a core class's element compounds with that class.
+
+   **Its components' own styles come AFTER every eager sheet** since the applications' pages load lazily (ADR 0079
+   Consequences): a page's scoped `<style>` (and Leaflet's, `pdf.css`) arrives with its chunk, after this sheet, `style.css`
+   and `dark.css`, where it used to sit before them all. So a scoped rule now wins a tie it used to lose. Measured at that
+   move (every lazy rule against every eager one of equal specificity on a class, tag or template element they share):
+   one tie changed - in the dark theme, the lightbox's delete button keeps its danger colour on hover
+   (`.lightbox-delete-button:hover`), which `.veyq-dark .veyq-icon-button:hover` used to override. A scoped rule that must
+   yield to a core one compounds less, not more. */
 
 .media-grid {
   position: relative;

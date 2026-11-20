@@ -29,6 +29,7 @@ import { memoriesSearch, memorySearchFacets, PHOTO_DOCUMENT } from '../search'
 import { requestOpenItem, searchOpenRequest } from '../../../core/search/openRequest'
 import { registry } from '../../../core/applications/registry'
 import { CHAPTER_KIND } from '../kinds'
+import { loaded } from '../../../test/lazyApplications'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -82,8 +83,11 @@ describe('Memories in the registry', () => {
     }
   })
 
-  it('adds every photo and video of every space to the search', () => {
-    expect(registry.searches()).toContainEqual({ application: 'memories', search: memoriesSearch })
+  it('adds every photo and video of every space to the search', async () => {
+    // its listing loads on the search's first call (`core/applications/lazy.ts`): what it loads is the module's own
+    const own = registry.searches().filter((s) => s.application === 'memories')
+    expect(own).toHaveLength(1)
+    expect(await loaded(own[0].search.scopeDocuments)).toBe(memoriesSearch.scopeDocuments)
   })
 })
 

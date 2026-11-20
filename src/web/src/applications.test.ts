@@ -22,38 +22,39 @@ import MemoryNodeDialog from './features/memories/components/MemoryNodeDialog.vu
 import ShareDialog from './features/memories/components/ShareDialog.vue'
 import { FOLDER_KIND, SHARE_BOOKMARK_KIND } from './core/node/kind'
 import { bookmarkRows } from './core/bookmark/bookmarkRows'
+import { loaded, loadedKind } from './test/lazyApplications'
 
 // `src/test/setup.ts` has already called registerApplications() once for this file, exactly as main.ts does.
 describe('composition root', () => {
   // Both Memories kinds are share roots (ADR 0080 Decision 13, the backend's `MemoryShareRoots`): a chapter is shareable
   // on its own and its public page is the same Memories body as a Memory's. A kind is shareable by bringing its share dialog.
-  it('registers the Memories kinds into the real registry, both shareable', () => {
-    expect(registry.kind(MEMORY_KIND)).toMatchObject({ supported: true, shareDialog: ShareDialog })
-    expect(registry.kind(CHAPTER_KIND)).toMatchObject({ supported: true, shareDialog: ShareDialog })
+  it('registers the Memories kinds into the real registry, both shareable', async () => {
+    expect(await loadedKind(registry, MEMORY_KIND)).toMatchObject({ supported: true, shareDialog: ShareDialog })
+    expect(await loadedKind(registry, CHAPTER_KIND)).toMatchObject({ supported: true, shareDialog: ShareDialog })
   })
 
   // Depot, the second application (cr-files-application F0): its file kind, a READ / READ_WRITE share root with its own
   // page and link dialog (inbox #378), its names folded as file names.
-  it('registers the Depot kind into the same registry, shareable, with the file-name folding', () => {
-    expect(registry.kind(FILE_KIND)).toMatchObject({ supported: true, slug: fileNameSlug, detail: FileDetail, shareDialog: FileShareDialog })
+  it('registers the Depot kind into the same registry, shareable, with the file-name folding', async () => {
+    expect(await loadedKind(registry, FILE_KIND)).toMatchObject({ supported: true, slug: fileNameSlug, detail: FileDetail, shareDialog: FileShareDialog })
     expect(registry.shareBodyFor(FILE_KIND)).toBeNull()
   })
 
   // The dialogs are per kind (P4c): Memories' one create dialog and one share dialog serve both its kinds; FOLDER keeps
   // core's pre-registered share dialog; FILE brings its own share dialog and no create dialog (a file is created by uploading it).
-  it('gives both Memories kinds the Memories create and share dialogs, and leaves FOLDER and FILE alone', () => {
+  it('gives both Memories kinds the Memories create and share dialogs, and leaves FOLDER and FILE alone', async () => {
     for (const kind of [MEMORY_KIND, CHAPTER_KIND]) {
-      expect(registry.kind(kind)).toMatchObject({ createDialog: MemoryNodeDialog, shareDialog: ShareDialog })
+      expect(await loadedKind(registry, kind)).toMatchObject({ createDialog: MemoryNodeDialog, shareDialog: ShareDialog })
     }
     // Core's delete dialog names no application (inbox #375): Memories brings each kind's own title with it.
     expect(registry.kind(MEMORY_KIND)).toMatchObject({ deleteTitle: 'memory.deleteMemoryTitle' })
     expect(registry.kind(CHAPTER_KIND)).toMatchObject({ deleteTitle: 'memory.deleteChapterTitle' })
     const folder = registry.kind(FOLDER_KIND)
     expect(folder.supported && folder.shareDialog).toBeTruthy()
-    expect(folder.supported && folder.shareDialog).not.toBe(ShareDialog)
+    expect(await loaded(folder.supported && folder.shareDialog)).not.toBe(ShareDialog)
     expect(registry.kind(FILE_KIND)).not.toHaveProperty('createDialog')
-    expect(registry.kind(FILE_KIND)).toMatchObject({ shareDialog: FileShareDialog })
-    expect(registry.kind(FILE_KIND)).not.toMatchObject({ shareDialog: ShareDialog })
+    expect(await loadedKind(registry, FILE_KIND)).toMatchObject({ shareDialog: FileShareDialog })
+    expect(await loadedKind(registry, FILE_KIND)).not.toMatchObject({ shareDialog: ShareDialog })
   })
 
   it('claims the one Memories share body for both root kinds', () => {

@@ -10,30 +10,36 @@
 // serves a member and a share guest (inbox #401): the host picks the data source by `access.mode`. Memories adds nothing to the shell: the sidebar's
 // Favorites section is core's (`core/favorites/PinnedNodes.vue`, inbox #409), and so is the top bar's upload status
 // (`core/blob/UploadStatusMenu.vue`, cr-files-application B3), which lists Memories' batches with every other application's.
-import { rekeyMemoryContent } from './rekey'
+import { defineAsyncComponent } from 'vue'
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import { MEMORIES } from '../platform/capabilities'
 import { FOLDER_KIND } from '../../core/node/kind'
-import type { LevelActionContext, LevelMenuEntry, Registry } from '../../core/applications/registry'
+import type { ApplicationSearch, KindCover, LevelActionContext, LevelMenuEntry, Registry } from '../../core/applications/registry'
 import { MEMORY_VIEWS } from './memoryViews'
-import MemoryDetailHost from './components/MemoryDetailHost.vue'
 import { memoryRows } from './levelRows'
-import { findStoredCover } from './storedMatch'
-import MemoryNodeDialog from './components/MemoryNodeDialog.vue'
-import ShareDialog from './components/ShareDialog.vue'
-import MemoryShareBody from './components/MemoryShareBody.vue'
-import PersonMemories from './components/PersonMemories.vue'
-import MediumReview from './components/MediumReview.vue'
 import { memoriesLifecycle } from './lifecycle'
-import { memoriesSearch, memorySearch } from './search'
+import { memorySearch } from './searchFacets'
 import { MEMORIES_SHORTCUTS } from './shortcuts'
-import { stageItemMarksRekey } from './itemFavorites'
 import { memoryRights } from './rights'
 import { targetOf } from '../../core/access'
-import { exportMemoryContent, importMemoryContent, validateMemoryContent, MEMORIES_CONTENT_VERSION } from './exportImport'
-// Memories' global stylesheet (inbox #513) — LAST, after the components above, as `memory.css` came after their scoped
-// styles; what its place before core's `style.css` means for its rules is that sheet's header.
+import { lazyHook } from '../../core/applications/lazy'
+import type { ExportContentHook, ImportContentHook } from '../../core/export/hooks'
+import type { RekeyContentHook, ScopeRekeyParticipant } from '../../core/node/rekey/hooks'
+import { validateMemoryContent, MEMORIES_CONTENT_VERSION } from './contentSchema'
+// Memories' global stylesheet (inbox #513), eager with the descriptor - the level's rows draw its classes; what its place
+// before core's `style.css`, and before its lazy components' own styles, means for its rules is that sheet's header.
 import './memories.css'
+
+// Every component below is LAZY (its own chunk, fetched on first use), so the entry chunk carries what the shell asks of
+// this application eagerly - its kinds, labels, rights, rows and hooks - and not its pages and dialogs (ADR 0079
+// Consequences, the measurement there). `.default` explicitly: a test's `vi.mock` of the module is no ES-module namespace
+// Vue would unwrap on its own (core's registry does the same for its folder share dialog).
+const MemoryDetailHost = defineAsyncComponent(() => import('./components/MemoryDetailHost.vue').then((m) => m.default))
+const MemoryNodeDialog = defineAsyncComponent(() => import('./components/MemoryNodeDialog.vue').then((m) => m.default))
+const ShareDialog = defineAsyncComponent(() => import('./components/ShareDialog.vue').then((m) => m.default))
+const MemoryShareBody = defineAsyncComponent(() => import('./components/MemoryShareBody.vue').then((m) => m.default))
+const PersonMemories = defineAsyncComponent(() => import('./components/PersonMemories.vue').then((m) => m.default))
+const MediumReview = defineAsyncComponent(() => import('./components/MediumReview.vue').then((m) => m.default))
 
 /** Memories' URL route slug (inbox #328): the segment before the name of a Memory in the fragment path. */
 export const MEMORIES_ROUTE_SLUG = 'memories'
@@ -63,8 +69,8 @@ export function registerMemories(registry: Registry): void {
     header: { order: ['favorite', 'upload', 'share', 'music', 'download', 'banner', 'move', 'copy'] },
     // Both carry a cover (inbox #411: core's action, dialog, upload and display), set only by an upload in core's dialog. A
     // picked image equal to a gallery medium's original shares that medium's PREVIEW instead of being stored again.
-    cover: { findStored: findStoredCover },
-    exportContent: exportMemoryContent,
+    cover: { findStored: lazyHook<NonNullable<KindCover['findStored']>>(() => import('./storedMatch').then((m) => m.findStoredCover)) },
+    exportContent: lazyHook<ExportContentHook>(() => import('./exportImport').then((m) => m.exportMemoryContent)),
     contentSchema: { version: MEMORIES_CONTENT_VERSION },
     validateContent: validateMemoryContent,
     // What a copy or an import does not carry of a Memory (core's copy dialog lists it). `importStreams`: a copy hands each
@@ -77,6 +83,7 @@ export function registerMemories(registry: Registry): void {
   // root or in a folder, a chapter only directly in a Memory.
   // Only a Memory is created from a level (core's "New" menu, inbox #406): the entry shows where Memories' rights
   // matrix lets a Memory be created, and is greyed while the scope's keys are locked. A chapter is created inside its Memory.
+  const rekeyContent = lazyHook<RekeyContentHook>(() => import('./rekey').then((m) => m.rekeyMemoryContent))
   const newMemory: LevelMenuEntry = {
     label: 'memory.create', icon: 'images', order: 10,
     allowed: (ctx: LevelActionContext) => memoryRights(ctx.access, targetOf(ctx.tree, ctx.folder)).createMemory,
@@ -85,11 +92,11 @@ export function registerMemories(registry: Registry): void {
   // Core's search (ADR 0125 decision 6): each kind's noun is its kind chip's word; its facets - the date range, the place, who
   // was there - come from its sealed meta; its page contributes the open Memory's photos and videos (`search.ts`).
   app.kind(MEMORY_KIND, {
-    ...memories, importContent: importMemoryContent(MEMORY_KIND), rekeyContent: rekeyMemoryContent, createEntry: newMemory, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory',
+    ...memories, importContent: lazyHook<ImportContentHook>(() => import('./exportImport').then((m) => m.importMemoryContent(MEMORY_KIND))), rekeyContent, createEntry: newMemory, deleteTitle: 'memory.deleteMemoryTitle', nounWithArticle: 'memory.aMemory',
     placement: { root: true, parents: [FOLDER_KIND] }, search: memorySearch('memory.kindMemory'),
   })
   app.kind(CHAPTER_KIND, {
-    ...memories, importContent: importMemoryContent(CHAPTER_KIND), rekeyContent: rekeyMemoryContent, deleteTitle: 'memory.deleteChapterTitle', nounWithArticle: 'memory.aChapter',
+    ...memories, importContent: lazyHook<ImportContentHook>(() => import('./exportImport').then((m) => m.importMemoryContent(CHAPTER_KIND))), rekeyContent, deleteTitle: 'memory.deleteChapterTitle', nounWithArticle: 'memory.aChapter',
     placement: { root: false, parents: [MEMORY_KIND] }, search: memorySearch('memory.kindChapter'),
   })
   // Its nodes' URLs carry the application's segment: a Memory `rom` in `reisen` is `#reisen/memories/rom`, its chapters
@@ -106,12 +113,12 @@ export function registerMemories(registry: Registry): void {
   // A reported medium's review (uc.moderation.review-a-case A5): a medium is Memories' record, core cannot draw it.
   app.itemReview(MediumReview)
   // Core's search of every space (ADR 0125 decision 8a): every photo and video of every Memory, read by the space's listing.
-  app.search(memoriesSearch)
+  app.search({ scopeDocuments: lazyHook<ApplicationSearch['scopeDocuments']>(() => import('./search').then((m) => m.scopeMediaDocuments)) })
   // Core's keyboard shortcut overview (uc.platform.keyboard-shortcuts): the gallery's keys and the large view's.
   app.shortcuts(MEMORIES_SHORTCUTS)
   app.lifecycle(memoriesLifecycle)
   // the item marks' value keys are wrapped under the scope key: a rotation re-wraps them through this, never
   // rewriting a set (ADR 0115 decision 2)
-  app.scopeRekey(stageItemMarksRekey)
+  app.scopeRekey(lazyHook<ScopeRekeyParticipant>(() => import('./itemFavorites').then((m) => m.stageItemMarksRekey)))
 }
 

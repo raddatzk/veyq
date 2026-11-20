@@ -30,7 +30,8 @@ vi.mock('./media', async (orig) => {
   ] as const
   return { ...real, ...Object.fromEntries(names.map((n) => [n, vi.fn(async () => ({ notModified: true }))])) }
 })
-vi.mock('./memoryDate', async (orig) => ({ ...(await orig<object>()), setMemoryDate: vi.fn(), reconcileMemoryDate: vi.fn() }))
+vi.mock('./memoryDate', async (orig) => ({ ...(await orig<object>()), setMemoryDate: vi.fn() }))
+vi.mock('./memoryFromMedia', async (orig) => ({ ...(await orig<object>()), reconcileMemoryDate: vi.fn() }))
 vi.mock('./memoryLocation', async (orig) => ({ ...(await orig<object>()), setMemoryLocation: vi.fn() }))
 vi.mock('../../core/node/nodeMetaWrite', () => ({ writeNodeMeta: vi.fn() }))
 vi.mock('./itemFavoritesStore', async (orig) => ({ ...(await orig<object>()), loadItemFavoritesFor: vi.fn(), toggleItemFavorite: vi.fn() }))
@@ -45,7 +46,8 @@ import {
 import { NO_MEMORY_RIGHTS, type MemoryRights } from './rights'
 import * as share from './share'
 import * as media from './media'
-import { setMemoryDate, reconcileMemoryDate } from './memoryDate'
+import { setMemoryDate } from './memoryDate'
+import { reconcileMemoryDate } from './memoryFromMedia'
 import { setMemoryLocation } from './memoryLocation'
 import { writeNodeMeta } from '../../core/node/nodeMetaWrite'
 import { loadItemFavoritesFor, toggleItemFavorite } from './itemFavoritesStore'

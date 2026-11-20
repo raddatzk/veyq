@@ -21,22 +21,28 @@
 // 2026-11-04): it is the folder's upload-only link - core's folder share dialog offers "Add files only" beside its READ and
 // READ_WRITE links, the space's top level that alone, and Depot fills that seam (`app.folderUploadShare`) with the drop box
 // named by the link and its first link, in one flow. No `createDialog` either.
+import { defineAsyncComponent } from 'vue'
 import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 import { DROPBOX_KIND, FILE_KIND } from './kinds'
 import { DEPOT } from '../platform/capabilities'
 import { FOLDER_KIND } from '../../core/node/kind'
-import type { LevelActionContext, Registry } from '../../core/applications/registry'
+import type { FolderUploadShare, LevelActionContext, Registry } from '../../core/applications/registry'
 import { fileNameSlug } from '../../shared/naming'
-import DropBoxDetail from './components/DropBoxDetail.vue'
-import DropBoxShareDialog from './components/DropBoxShareDialog.vue'
-import DropBoxShareBody from './components/DropBoxShareBody.vue'
-import FileDetail from './components/FileDetail.vue'
-import FileShareDialog from './components/FileShareDialog.vue'
 import { canUploadFolder, depotRights } from './rights'
 import { depotRows, UPLOAD_ACTION, UPLOAD_FOLDER_ACTION } from './levelRows'
 import { targetOf } from '../../core/access'
-import { createDropBoxWithLink } from './dropBox'
+import { lazyHook } from '../../core/applications/lazy'
 import { exportDropBox, exportFile, importFile, validateDropBoxContent, validateFileContent, DEPOT_CONTENT_VERSION } from './exportImport'
+
+// Every component below is LAZY (its own chunk, fetched on first use), so the entry chunk carries what the shell asks of
+// this application eagerly - its kinds, labels, rights, rows and hooks - and not its pages and dialogs (ADR 0079
+// Consequences, the measurement there). `.default` explicitly: a test's `vi.mock` of the module is no ES-module namespace
+// Vue would unwrap on its own (core's registry does the same for its folder share dialog).
+const DropBoxDetail = defineAsyncComponent(() => import('./components/DropBoxDetail.vue').then((m) => m.default))
+const DropBoxShareDialog = defineAsyncComponent(() => import('./components/DropBoxShareDialog.vue').then((m) => m.default))
+const DropBoxShareBody = defineAsyncComponent(() => import('./components/DropBoxShareBody.vue').then((m) => m.default))
+const FileDetail = defineAsyncComponent(() => import('./components/FileDetail.vue').then((m) => m.default))
+const FileShareDialog = defineAsyncComponent(() => import('./components/FileShareDialog.vue').then((m) => m.default))
 
 /** What a rename selects of a file's name (core's rename dialog, inbox #385): the name without its extension — up to
  *  the last dot, unless the name starts with its only dot (`.env` stays whole). */
@@ -149,7 +155,8 @@ export function registerDepot(registry: Registry): void {
   app.folderUploadShare(DROPBOX_KIND, {
     allowed: (ctx: LevelActionContext) => depotRights(ctx.access, targetOf(ctx.tree, ctx.folder)).createDropBox,
     hint: 'depot.dropBox.uploadShareHint',
-    create: ({ scopeId, epochs, parent, name, password, expiresAt }) => createDropBoxWithLink(scopeId, epochs, parent, name, password, expiresAt),
+    create: lazyHook<FolderUploadShare['create']>(() => import('./dropBox').then((m) => ({ scopeId, epochs, parent, name, password, expiresAt }) =>
+      m.createDropBoxWithLink(scopeId, epochs, parent, name, password, expiresAt))),
   })
   // Depot is the one application with NO route segment (inbox #328, ADR 0015, the grammar of a node's path): a file or
   // a drop box is its plain name in the path (`#reisen/report`), a folder of the same name needs the trailing slash

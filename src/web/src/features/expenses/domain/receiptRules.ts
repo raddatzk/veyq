@@ -4,6 +4,9 @@
 import { sniffImage, sniffPdf, type ImageType } from '../../../core/blob/sniff'
 import type { HeldRevision } from './revisions'
 
+/** The largest receipt, in plaintext bytes (the backend's role cap, `MemberBlobRoles.maxBytes`): 10 MiB. */
+export const RECEIPT_MAX_BYTES = 10 * 1024 * 1024
+
 /** What an added file may claim to be: an image or a PDF. Only the client can keep a receipt to these — its type is
  *  sealed — so the claim (the browser's type, else the name's extension) is checked when it is added; what an opened one
  *  is, is decided by its bytes ({@link receiptView}). */

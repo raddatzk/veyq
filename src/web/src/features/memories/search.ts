@@ -14,71 +14,25 @@
 //   medium's document from the space's listing, and open the lightbox in place.
 //
 // A blocked medium (a moderator's measure) becomes no document: what it shows is the operator's placeholder, not its own.
-import { unsealNodeMeta } from '../../core/node/nodeMeta'
-import type { ApplicationSearch, KindSearch, ScopeDocumentsAnswer, ScopeDocumentsContext, SearchFacetContext } from '../../core/applications/registry'
-import type { ContributedDocument, MonthSpan, ScopeDocument, SearchFacets, YearSpan } from '../../core/search/model'
+//
+// The first part lives in `searchFacets.ts`: a kind's facets are a synchronous answer the registry holds eagerly, while this
+// module - the space's listing and its opener - is fetched on the search's first call (`register.ts`).
+import type { ApplicationSearch, ScopeDocumentsAnswer, ScopeDocumentsContext } from '../../core/applications/registry'
+import type { ContributedDocument, ScopeDocument } from '../../core/search/model'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { withRefresh } from '../../app/sessionRefresh'
 import { i18n } from '../../i18n'
 import type { ScopeMediaPage, ScopeMedium } from '../../api/generated/media'
 import { mediaApi } from './api'
-import { normalizeDate, type MemoryDate } from './memoryDate'
-import { normalizeLocation } from './memoryLocation'
-import { normalizeParticipants } from './memoryParticipants'
 import { effectiveCapturedAt, isVideoMediaType, mediaTypeOf, type MediaItem } from './media'
 import { uploaderOriginOf } from './mediaKey'
 import { closeListing, openedBlobMeta, openedMeta, openListing } from './openedListing'
 import { isGalleryMedium } from './galleryMedium'
-
-/** The kind token of a photo's and a video's document. */
-export const PHOTO_DOCUMENT = 'memories.photo'
-export const VIDEO_DOCUMENT = 'memories.video'
+import { PHOTO_DOCUMENT, VIDEO_DOCUMENT } from './searchFacets'
+export { PHOTO_DOCUMENT, VIDEO_DOCUMENT, memorySearch, memorySearchFacets, monthsOfDate, yearsOfDate } from './searchFacets'
 
 /** How many media one page of a space's listing carries: the contract's cap. */
 export const SCOPE_MEDIA_PAGE = 1000
-
-/** Memories' part of a MEMORY's or a CHAPTER's descriptor: the kind's noun (`label`, its own namespace). */
-export function memorySearch(label: string): KindSearch {
-  return {
-    label,
-    facets: memorySearchFacets,
-    documents: [
-      { kind: PHOTO_DOCUMENT, label: 'memory.search.photo', icon: 'image' },
-      { kind: VIDEO_DOCUMENT, label: 'memory.search.video', icon: 'play' },
-    ],
-  }
-}
-
-/** The years a Memory's date spans: `from`'s to `to`'s, an ongoing one's up to this year; none without a start day. */
-export function yearsOfDate(date: MemoryDate | null, now: Date = new Date()): YearSpan | null {
-  const from = date?.from ? Number(date.from.slice(0, 4)) : NaN
-  if (!Number.isFinite(from)) return null
-  const to = date?.to ? Number(date.to.slice(0, 4)) : date?.mode === 'ongoing' ? Math.max(from, now.getFullYear()) : from
-  return { from, to: Number.isFinite(to) && to >= from ? to : from }
-}
-
-/** The months a Memory's date spans (`YYYY-MM`): `from`'s to `to`'s, an ongoing one's up to this month; none without a
- *  start day - an undated Memory matches no month chip. */
-export function monthsOfDate(date: MemoryDate | null, now: Date = new Date()): MonthSpan | null {
-  const from = date?.from?.slice(0, 7)
-  if (!from) return null
-  const thisMonth = `${String(now.getFullYear()).padStart(4, '0')}-${String(now.getMonth() + 1).padStart(2, '0')}`
-  const to = date?.to ? date.to.slice(0, 7) : date?.mode === 'ongoing' && thisMonth > from ? thisMonth : from
-  return { from, to: to >= from ? to : from }
-}
-
-/** A Memory's or a chapter's facets from its sealed meta (see the header). */
-export function memorySearchFacets(ctx: SearchFacetContext): SearchFacets {
-  const meta = unsealNodeMeta(ctx.nodeKey, { scopeId: ctx.scopeId, nodeId: ctx.node.id }, ctx.node.wrappedMeta)
-  const date = normalizeDate(meta.date)
-  const years = yearsOfDate(date)
-  const months = monthsOfDate(date)
-  const place = normalizeLocation(meta.location)?.name?.trim()
-  const people = normalizeParticipants(meta.participants)
-  return {
-    ...(years ? { years } : {}), ...(months ? { months } : {}), ...(place ? { places: [place] } : {}), ...(people.length ? { people } : {}),
-  }
-}
 
 /** The seals a medium's document is read from: a meta edit or a replaced original is a new document. */
 const revisionOf = (item: MediaItem) => `${item.metaRevision ?? 0}:${item.original.blobId}`

@@ -6,6 +6,8 @@
 // computed `import()`, no plugin loading: what runs is what was reviewed. The guard
 // (`scripts/validate_web_core_imports_no_applications.py`) keeps core from importing an application and from
 // discovering one by glob.
+// What a registration holds is filled at once, but the code behind its components and async hooks may be fetched on first
+// use: an application names its own chunks by a literal `import('./…')` in its `register.ts` (`lazy.ts`), never core.
 //
 // **One door per application: its registrar (owner 2026-11-01).** `registerApplication({ id, name })` names the
 // application and answers its SCOPED registrar (`ApplicationRegistrar`), through which it registers everything else:

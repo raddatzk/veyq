@@ -2,7 +2,6 @@
 // the registry at the three moments an application holds state it must keep in step with the platform: a scope is
 // reset, a scope is entered, the Master Key rotates.
 import type { LifecycleHooks } from '../../core/applications/registry'
-import { retagItemMarksUnderNewMasterKey } from './itemFavorites'
 import { resetParticipantIndex } from './participantIndex'
 
 export const memoriesLifecycle: LifecycleHooks = {
@@ -19,6 +18,8 @@ export const memoriesLifecycle: LifecycleHooks = {
   // the rotation. The member's node pins (ADR 0068) are core's and re-sealed by `rotateKeys` itself.
   async onMasterKeyRotated(oldMk, newMk) {
     try {
+      // fetched here, not imported: the item marks' module is loaded with the gallery, not with the entry chunk (`register.ts`)
+      const { retagItemMarksUnderNewMasterKey } = await import('./itemFavorites')
       await retagItemMarksUnderNewMasterKey(oldMk, newMk)
     } catch {
       /* see above */
