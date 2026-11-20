@@ -110,19 +110,46 @@ Branch `claude/kjs-refine` at `ff410c6c9`. `C=src/mobile/core/src`.
   `src/mobile/` names more than the plan said: `build.gradle.kts` (root), `gradle.properties` and the three moved tests
   (M1, M2, M4).
 
-- [ ] **3 the package** — J3, J4, J5. · Done when: from the repo root, `python3 scripts/pnpm_install_no_deprecated.py`
+- [x] **3 the package** — J3, J4, J5. · Done when: from the repo root, `python3 scripts/pnpm_install_no_deprecated.py`
   green; in `src/packages/core-js`, `pnpm run build` and `pnpm run check` green; `src/packages/crypto`, `src/web`,
   `src/admin-web` and `tests/e2e` checks green unchanged; `ls src/mobile/core/kotlin-js-store src/mobile/kotlin-js-store`
   finds nothing; `python3 scripts/run_pipeline.py` runs the new steps. **Bites:** `JsPrimitives`' AES-GCM tag off by
   one byte → the package's check red; `Conformance` exported from the shipped binary → the package's test that the
   shipped `.d.ts` names no conformance symbol red.
-- [ ] **4 harvest** — the root `CLAUDE.md` § Repository shape (the workspace holds `@veyq/crypto` and `@veyq/core-js`,
+  **Built** 2026-11-20: `src/packages/core-js/` (`package.json` with the four `@noble/*` at `@veyq/crypto`'s ranges —
+  the lockfile resolves each to the one version already there; `exports` `{}`; `scripts/build.py` runs
+  `src/mobile/gradlew :core:jsPackage`; `src/conformance.test.ts`; a second `tsconfig.dist.json` checks the compiled
+  `.d.mts` with `skipLibCheck` off, the check Kotlin's own `.d.ts` validation would have run under its Node). The
+  conformance under Node: 303 cases, 0 failures, 0.76 s at the production Argon2id cost. Deviation from J4: the
+  conformance binary exports two functions, not one — `runConformance` and `runConformanceWithBrokenHkdf`, the JVM
+  test's bite run on the JavaScript primitives. Checks: `pnpm_install_no_deprecated.py` green (679 locked packages asked
+  of the registry); `core-js` build and check green (4 tests); `crypto` 599, `web` 7340 (+38 skipped), `admin-web` 959
+  and `tests/e2e` green and unchanged; no `kotlin-js-store/` under `src/mobile/` or `src/mobile/core/`.
+  `run_pipeline.py --job frontend` runs the new steps: red once on the web's `FileViewer.pdf.test.ts` timing out at
+  5000 ms under a load of 30–50 (the core-js step green in it), then `green, partial` in **5.2 min** of its 15 (load
+  35 → 11; the wrapper validation is a step it never runs locally). Before: 5.0 min (the site's stage map, remembered,
+  another day's load) — no rerun of the old tree was made to compare under one load. Bites: `JsPrimitives`' AES-GCM
+  seal with its tag's last byte +1 → the conformance red (53 failures), restored green; a `@JsExport` of `Conformance`
+  in `jsMain` → both shipped-module tests red (its `.d.mts` names it), removed green. Vitest prints "Sourcemap … points
+  to missing source files" per module: the maps name the Kotlin sources of the stdlib and libraries, which are not
+  on disk; harmless, left.
+
+- [x] **4 harvest** — the root `CLAUDE.md` § Repository shape (the workspace holds `@veyq/crypto` and `@veyq/core-js`,
   and why each), `pnpm-workspace.yaml`'s and the root `package.json`'s comments, `scripts/repo_layout.py` (`CORE_JS`),
   `src/mobile/CLAUDE.md` § Prove your work (`:core:compileKotlinJs :core:compileTestKotlinJs` with the JVM tests; the
   package's check for a change under `crypto/` or `jsMain`), the site's stage map (R6: `frontend` checks crypto,
   core-js, web, admin-web), `native-apps.md` § Platforms (the JavaScript target, what it ships: nothing yet), ADR
   0155's `Built:` (decision 3; decision 6 but the web's half). · Done when: every guard but guard_gaps green
   (`/usr/bin/python3`), the site's `pnpm run check` green.
+  **Built** 2026-11-20: the root `CLAUDE.md` (the workspace for two packages, and why each), `pnpm-workspace.yaml`'s
+  and the root `package.json`'s comments, `repo_layout.CORE_JS` (not in `SURFACES`: nothing ships it), `src/mobile/
+  CLAUDE.md` § Prove your work, the site's stage map (`frontend` checks crypto, core-js, web, admin-web), and
+  `native-apps.md` § Platforms (a Web row: what it compiles, that it ships nothing yet). **Not done here: ADR 0155's
+  `Built:`** — the pilot's re-plan edits ADR 0155 in parallel (the coordinator's instruction), so its line for decision
+  3 (and 6 but the web's half) is the coordinator's to set; the site page cites no ADR 0155 for the same reason (a
+  `sources:` entry needs the ADR's back-link, `validate_wiki_sources.py`). Every guard but guard_gaps green
+  (`/usr/bin/python3`; no validator changed), the site's `pnpm run check` green.
+
 
 ## Measured at implement
 
