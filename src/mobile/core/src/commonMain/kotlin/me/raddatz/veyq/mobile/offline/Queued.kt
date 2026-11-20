@@ -41,6 +41,17 @@ enum class Queued(internal val operations: Set<String>) {
     /** Memories: a mark set or taken away (`ItemMarks`, the person's own set written whole). */
     MEDIA_MARK(setOf("putItemFavorites")),
 
+    /**
+     * Depot: a new file (`DepotFiles.upload`, its node's id the write's): the node made, its frames sealed at queue time
+     * reserved, PUT and completed; a node left empty by a refusal given up (to the trash).
+     */
+    DEPOT_FILE_ADD(setOf("createNode", "startBlobUploads", "presignBlobUploadWindows", "completeFile", "deleteNode")),
+
+    /**
+     * Expenses: an entry added, edited or deleted (`PotSession.sendQueued`): its receipts reserved, PUT and completed, then
+     * its revision appended naming the heads the person read.
+     */
+    POT_ENTRY(setOf("startBlobUploads", "presignBlobUploadWindows", "completeApplicationBlob", "appendPotRevisions")),
     ;
 
     internal companion object {

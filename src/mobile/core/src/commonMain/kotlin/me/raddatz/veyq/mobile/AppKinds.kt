@@ -28,6 +28,8 @@ object AppKinds {
         me.raddatz.veyq.mobile.offline.Queued.MEDIA_TRASH,
         me.raddatz.veyq.mobile.offline.Queued.MEDIA_MARK,
         -> me.raddatz.veyq.mobile.memories.QueuedMemories.sender(q)
+        me.raddatz.veyq.mobile.offline.Queued.DEPOT_FILE_ADD -> me.raddatz.veyq.mobile.depot.QueuedDepot.fileSender
+        me.raddatz.veyq.mobile.offline.Queued.POT_ENTRY -> me.raddatz.veyq.mobile.expenses.QueuedExpenses.entrySender
     }
 
     /**

@@ -150,7 +150,7 @@ object QueuedNodes {
     }
 
     /** The queued writes that create a node the person may rename or trash before it is sent: its intent's `name` is its name. */
-    internal val CREATES = setOf(Queued.FOLDER_CREATE.name, Queued.MEMORY_CREATE.name)
+    internal val CREATES = setOf(Queued.FOLDER_CREATE.name, Queued.MEMORY_CREATE.name, Queued.DEPOT_FILE_ADD.name)
 
     private const val RENAME = "rename:"
     private const val TRASH = "trash:"

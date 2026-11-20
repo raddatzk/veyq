@@ -48,6 +48,8 @@ class QueuedTest {
         /** A Memory with one medium (whose tier carries a capture time), for Memories' rows. */
         val memory: PlayedTenant.Node = t.node(scope, "mem", kind = "MEMORY", name = "Memory")
         val medium: PlayedTenant.Medium = t.medium(memory, "med").also { it.tier = """{"v":1,"capturedAt":1000}""" }
+        /** A Pot, for Expenses' row. */
+        val pot: PlayedTenant.Node = t.pot(scope, "pot")
     }
 
     /** A personal space with one folder at its top ("Old"), remembered on this device and resumed online. */
@@ -303,6 +305,13 @@ class QueuedTest {
         }
         Queued.MEDIA_CAPTURE_TIME -> QueuedWrite("c", q.name, "t1", x.scope.id, node = x.memory.id, intent = QueuedNodes.encode(me.raddatz.veyq.mobile.memories.QueuedMemories.TimeIntent.serializer(), me.raddatz.veyq.mobile.memories.QueuedMemories.TimeIntent(x.medium.id, 60_000L, null)), at = 0)
         Queued.MEDIA_TRASH -> QueuedWrite("m", q.name, "t1", x.scope.id, node = x.memory.id, intent = QueuedNodes.encode(me.raddatz.veyq.mobile.memories.QueuedMemories.MediaIntent.serializer(), me.raddatz.veyq.mobile.memories.QueuedMemories.MediaIntent(x.medium.id)), at = 0)
+        Queued.DEPOT_FILE_ADD -> me.raddatz.veyq.mobile.depot.QueuedDepot.file(
+            x.a, "t1", x.scope.id, x.folder.id, me.raddatz.veyq.mobile.blob.UploadSource.of("n.txt", 4, "text/plain", null) { from, length -> "text".encodeToByteArray().copyOfRange(from.toInt(), from.toInt() + length) }, 0, {},
+        )!!
+        Queued.POT_ENTRY -> {
+            val body = me.raddatz.veyq.mobile.expenses.RevisionFormat.toJson(me.raddatz.veyq.mobile.expenses.RevisionBody(emptyList(), me.raddatz.veyq.mobile.expenses.ParticipantBody("Cleo", true, 3)))
+            QueuedWrite("entry:p", q.name, "t1", x.scope.id, node = x.pot.id, intent = QueuedNodes.encode(me.raddatz.veyq.mobile.expenses.QueuedExpenses.EntryIntent.serializer(), me.raddatz.veyq.mobile.expenses.QueuedExpenses.EntryIntent("0e000000-0000-4000-8000-000000000003", null, body)), at = 0)
+        }
         Queued.MEDIA_MARK -> QueuedWrite("k", q.name, "t1", x.scope.id, node = x.memory.id, intent = QueuedNodes.encode(me.raddatz.veyq.mobile.memories.QueuedMemories.MarkIntent.serializer(), me.raddatz.veyq.mobile.memories.QueuedMemories.MarkIntent(x.medium.id, true)), at = 0)
     }
 

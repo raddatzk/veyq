@@ -137,11 +137,23 @@ ADR 0153 decisions 1–5 hold them; here only what the work needs beside them.
   time is checked against the person's seen value on the tier read at the send (not the revision they saw): a revision
   moved by another field merges as online, the own field moved holds. (4) A store PUT or window that fails leaves a medium
   waiting (the store's transport failure does not turn the account offline).
-- [ ] **4 core — Depot and Expenses** — a new file and trash; a Pot entry add/edit/delete with receipts (receipts
+- [x] **4 core — Depot and Expenses** — a new file and trash; a Pot entry add/edit/delete with receipts (receipts
   completed before the revision, as online; the heads the person saw). Tests: a new entry sent; an edit meeting a newer
   revision held with both versions; a delete meeting one held; `quota_exceeded` refused with *Save a copy*. · Done when:
   the same checks green; one live case of a queued entry with a receipt sent. **Bite:** the heads taken fresh at send →
   the heads test red.
+  **Built** 2026-11-20 (`claude/j2-core2`): `depot/QueuedDepot.kt` (`file`, its sender: a node an earlier run made is filled,
+  never made again), `expenses/QueuedExpenses.kt` (`saveEntry`, `deleteEntry`, `entry` — the person's values for the
+  conflict's editor —, the sender), `Queued.DEPOT_FILE_ADD`/`POT_ENTRY` (a file's trash is core's `NODE_TRASH`); the online
+  paths gained `DepotFiles.upload(nodeId, sealed)`, `PotSession.sendQueued` (its receipts first, one already listed not
+  again, then `write(…, seen)`), `PotWrites.seal(seen)`, `PotDoor.queueAccount` and the sealed receipt upload.
+  `QueuedDepotExpensesTest` (6), the derivation over both rows. Bite seen red (the revision named the heads found at the
+  send), restored with `/bin/cp -f`. **Deviations:** (1) the live case (`LiveQueuedTest`: a chapter, two photos, an entry
+  with a receipt queued offline and sent) is written and compiles but was **not run** — the throwaway could not be made
+  (the classifier refused reading the principal's env file); the coordinator runs it with `VEYQ_LIVE` and
+  `VEYQ_LIVE_THROWAWAY_ENV`. (2) A queued entry meeting `stale_revision` whose revision the server holds with the same
+  content (a send whose answer was lost) is sent, not held. (3) A receipt refused (`quota_exceeded` included) refuses the
+  whole entry, unlike the online save that leaves a receipt out: the person decides with *Save a copy*/*Discard*.
 - [ ] **5 core — the overlay, the tray, the notices** (W4, W5) — the models' queued rows, the tray's items and actions,
   the banner's count, the reconnect's notice, the asks before a wipe. Tests: each model's state with a queued write
   offline; the tray's actions. · Done when: the same checks green. **Bite:** the per-model offline checks left beside
