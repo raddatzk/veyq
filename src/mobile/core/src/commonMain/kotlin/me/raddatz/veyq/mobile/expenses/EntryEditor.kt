@@ -39,6 +39,8 @@ class EntryEditor internal constructor(
     parent: CoroutineScope,
     /** Where a save, a delete and the rate's request run: off the caller's thread, which may be a UI's. */
     private val work: CoroutineDispatcher,
+    /** A held write's *Discard mine* ([openHeld]): the person's change made offline deleted unsent; null for any other editor. */
+    private val discard: (suspend () -> Boolean)? = null,
 ) {
     /** What the editor reads and writes: the open Pot ([PotModel.editor]), or a test's. */
     interface Door {
@@ -107,6 +109,13 @@ class EntryEditor internal constructor(
         val asking: Boolean = false,
         /** Saved or deleted: the editor has nothing more to do. */
         val done: Boolean = false,
+        /**
+         * A held entry's editor (ADR 0153 decision 4, [openHeld]): who saved the newer version and when, the person's
+         * values in the form (`offline_newer_version`); null for any other editor.
+         */
+        val newer: Notice? = null,
+        /** *Discard mine* is offered ([discardMine]): the editor of a change made offline and held for the person. */
+        val discardsMine: Boolean = false,
     )
 
     /** What [save] answers: whether the editor is done (the host closes it at once), and what to say. */
@@ -328,6 +337,19 @@ class EntryEditor internal constructor(
         }
     }
 
+    /**
+     * *Discard mine* (a held entry's editor, [State.discardsMine]): the person's change made offline deleted unsent, the
+     * newer version stays; whether it was (the host closes the editor then).
+     */
+    suspend fun discardMine(): Boolean {
+        val d = discard ?: return false
+        val s = _state.value
+        if (s.saving || s.done) return false
+        val gone = runCatching { withContext(work) { d() } }.getOrDefault(false)
+        if (gone) set { it.copy(done = true, asking = false) }
+        return gone
+    }
+
     /** The editor is gone: a rate still being asked is forgotten. */
     fun close() {
         scope.cancel()
@@ -352,6 +374,26 @@ class EntryEditor internal constructor(
                 val first = State(false, e.form, e.people, v.canWrite, invalid = e.status == Ledger.Status.INVALID)
                 EntryEditor(door, entryId, false, e.basedOn, separator, first, pending, parent, work)
             }
+        }
+
+        /**
+         * The editor of a change made offline and held for the person (ADR 0153 decision 4, owner 2026-11-19 Q3): entry
+         * [entryId] with [mine], the person's values, in the form (`PotView.heldEditing`) on the newest revision held now,
+         * the newer version named ([State.newer]); a save puts theirs on top, [discard] is *Discard mine*. [pending] the
+         * receipts the change carried and the server has not seen. A delete held opens the newer version, its delete asked.
+         */
+        fun openHeld(
+            door: Door, entryId: String, mine: RevisionContent, separator: Char, pending: List<PotSession.PendingReceipt>,
+            parent: CoroutineScope, work: CoroutineDispatcher, discard: suspend () -> Boolean,
+        ): EntryEditor? {
+            val v = door.view() ?: return null
+            val e = v.heldEditing(entryId, mine, separator, door.today()) ?: return null
+            val form = e.form.copy(receipts = e.form.receipts.filter { id -> pending.none { it.id == id } })
+            val first = State(
+                false, form, e.people, v.canWrite, invalid = e.status == Ledger.Status.INVALID,
+                asking = mine == Deleted && e.status != Ledger.Status.DELETED, newer = v.newerVersion(entryId), discardsMine = true,
+            )
+            return EntryEditor(door, entryId, false, e.basedOn, separator, first, pending, parent, work, discard)
         }
     }
 }

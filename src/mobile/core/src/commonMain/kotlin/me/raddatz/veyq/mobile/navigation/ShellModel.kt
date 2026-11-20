@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -263,6 +264,16 @@ class ShellModel(
     }
 
     /**
+     * [queuedAt] the level the shell shows (a space's top or a folder of Home's), at once and as the shell moves and the
+     * outbox changes; empty anywhere else (an application's list, an object's page).
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val queuedHere: kotlinx.coroutines.flow.Flow<List<me.raddatz.veyq.mobile.offline.QueuedItem>>
+        get() = state.map { st -> st?.shell?.takeIf { it.isHome }?.let { sh -> sh.space?.let { it to sh.folder?.nodeId } } }
+            .distinctUntilChanged()
+            .flatMapLatest { at -> at?.let { (space, folder) -> queuedAt(space, folder) } ?: kotlinx.coroutines.flow.flowOf(emptyList()) }
+
+    /**
      * What a sign-out, "Stop trusting" or "Remove all offline content" asks first while writes made offline wait (ADR 0153
      * decision 2, owner 2026-11-19): the question naming how many are deleted; null where none waits (nothing to ask).
      */
@@ -433,14 +444,28 @@ class ShellModel(
         return topLevelShared(shell, space) && rules.on && rules.dropBox
     }
 
-    /** Whether "New" is offered where the shell is: in a space, never in a guest's folder (the web's `folderRights`). */
+    /**
+     * Whether "New" is offered where the shell is: in a space, never in a guest's folder (the web's `folderRights`); offline
+     * only where something it offers is queued ([createsHere], ADR 0153 decision 3).
+     */
     val canCreateHere: Boolean
         get() {
             val s = shell ?: return false
             val space = s.space ?: return false
-            if (!online) return false
+            if (!online && createsHere(isHome = true).isEmpty()) return false
             return s.folderAt(space)?.let { !inIdentityFolder(it) } ?: true
         }
+
+    /**
+     * What "New" offers where the shell is (`AppKinds.createsWhere`, [isHome] a level of Home): online all of it; offline
+     * only what is queued there (ADR 0153 decision 3: a folder, a Memory, files — never a Pot, a folder uploaded whole or a
+     * kept link), none where this device keeps no store. Every platform draws this list, never `createsWhere` beside it.
+     */
+    fun createsHere(isHome: Boolean, bookmarks: Boolean = false): List<AppKinds.Create> {
+        val all = AppKinds.createsWhere(isHome, bookmarks)
+        if (online) return all
+        return all.filter { c -> QUEUED_CREATES[c]?.let { tenant.account.queues(it) } == true }
+    }
 
     /** Pins or unpins [ref], then the lists are read anew; false when it was not stored (the heart goes back). */
     suspend fun toggleFavorite(ref: NodeAt): Boolean {
@@ -572,6 +597,8 @@ class ShellModel(
         val r = runCatching { NodeRename.rename(tenant, ref.scopeId, ref.nodeId, name, AppKinds::tokenInput, now()) }
             .getOrDefault(NodeRename.Result(NodeRename.Outcome.FAILED))
         if (r.outcome == NodeRename.Outcome.RENAMED) {
+            // a rename made offline and held for the person is decided by this one (its *Open*, `QueuedOpen.Rename`)
+            runCatching { me.raddatz.veyq.mobile.offline.QueuedNodes.renameDecided(tenant.account, ref.nodeId) }
             refresh()
             val lists = _state.value?.lists
             val renamed = lists?.objects?.firstOrNull { it.scopeId == ref.scopeId && it.nodeId == ref.nodeId }
@@ -1196,6 +1223,13 @@ class ShellModel(
         })
 
     companion object {
+        /** What each "New" that is queued offline writes ([createsHere]); one not here is never queued. */
+        private val QUEUED_CREATES = mapOf(
+            AppKinds.Create.FOLDER to me.raddatz.veyq.mobile.offline.Queued.FOLDER_CREATE,
+            AppKinds.Create.MEMORY to me.raddatz.veyq.mobile.offline.Queued.MEMORY_CREATE,
+            AppKinds.Create.UPLOAD_FILES to me.raddatz.veyq.mobile.offline.Queued.DEPOT_FILE_ADD,
+        )
+
         /** Memory or chapter [nodeId] of space [scopeId] among [nodes]; null where it is not among them or is another kind. */
         fun galleryAt(nodes: List<NodeRef>, scopeId: String, nodeId: String): NodeAt? =
             nodes.firstOrNull { it.scopeId == scopeId && it.nodeId == nodeId }

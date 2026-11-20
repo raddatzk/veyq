@@ -275,6 +275,25 @@ class PotView(session: Source) {
         return Editing(form, e.revision, offered, e.status)
     }
 
+    /**
+     * A held entry's editing (ADR 0153 decision 4, owner 2026-11-19 Q3): the person's [mine] values in the form — the newer
+     * version's where theirs was a delete —, on the entry's newest revision held now (whatever its status), so a save puts
+     * theirs on top of what they were shown. Null where the Pot has no base, or neither version forms an entry.
+     */
+    fun heldEditing(entryId: String, mine: RevisionContent, separator: Char = '.', today: String = ""): Editing? {
+        val b = base ?: return null
+        val e = ledger?.entries?.firstOrNull { it.id == entryId }
+        val values = (mine as? MoneyContent) ?: e?.content
+        val offered = offered(values?.let(Ledger::namedParticipants).orEmpty())
+        val form = values?.let { EntryForm.of(it, b, offered.map { p -> p.id }, separator) } ?: EntryForm.empty(b, offered.map { it.id }, today)
+        return Editing(form, e?.revision ?: 0, offered, e?.status ?: Ledger.Status.LIVE)
+    }
+
+    /** Who saved entry [entryId]'s newest revision and when, as a held entry's editor names it; null where none is held. */
+    fun newerVersion(entryId: String): Notice? = history(entryId).firstOrNull()?.let {
+        Notice(me.raddatz.veyq.mobile.words.Msg.OFFLINE_NEWER_VERSION, it.writer.orEmpty(), me.raddatz.veyq.mobile.words.Moment(it.at))
+    }
+
     /** Why [form] cannot be saved, at which field; null when it can. */
     fun check(form: EntryForm): EntryForm.Refusal? = form.contentOf(isParticipant).refusal
 
@@ -488,7 +507,7 @@ class PotView(session: Source) {
 
     /** An entry row with its line and badge. */
     @Serializable
-    class ShownEntry(val row: EntryRow, val line: List<Piece>, val badge: Badge?)
+    class ShownEntry(val row: EntryRow, val line: List<Piece>, val badge: Badge?, val unsentMark: Notice? = null)
 
     /** A balance row with its person's name as a row shows it ([person]), its words and what makes it. */
     @Serializable
@@ -530,12 +549,14 @@ class PotView(session: Source) {
         val missing: List<Piece>,
         /** The Settings place is offered ([settingsOffered]): to a member, and to a link's guest who writes. */
         val settingsOffered: Boolean = true,
+        /** Under the balances while they count entries made offline and not sent yet ([balancesUnsent]); null otherwise. */
+        val balancesUnsent: Notice? = null,
     )
 
     /** What this view shows ([Shown]). */
     fun shown(): Shown = Shown(
         name, subtitle, currency, minorUnits, ready, canWrite,
-        entries.map { ShownEntry(it, line(it), badge(it)) },
+        entries.map { ShownEntry(it, line(it), badge(it), unsentMark(it)) },
         deletedEntries.map { ShownEntry(it, line(it), null) },
         balances.map { ShownBalance(it, person(it.name), balance(it), balanceFacts(it)) },
         settleUp.map { ShownSettle(it, pays(it)) },
@@ -546,6 +567,7 @@ class PotView(session: Source) {
         deletedPeople,
         missing.map(::missingName),
         settingsOffered,
+        balancesUnsent,
     )
 
     /** A view on the wire: its [Shown], under the view's own name; there is no view to read back from it. */

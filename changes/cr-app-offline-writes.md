@@ -184,9 +184,37 @@ ADR 0153 decisions 1–5 hold them; here only what the work needs beside them.
   it is sent (#1040). (3) A trash offline offers no Undo (a restore never queues); the tray's *Discard* undoes it. (4) The
   held conflict's *Open* is the platforms' (phase 6 on): `QueuedExpenses.entry(write)` holds the person's values, the
   Pot's session the newer version; *Discard mine* is `QueuedTray.discard`.
-- [ ] **6 bridge** — the queue's items, states and actions on the wire; the save dialog's path for *Save a copy*. · Done
+- [x] **6 bridge** — the queue's items, states and actions on the wire; the save dialog's path for *Save a copy*. · Done
   when: `:bridge:jvmTest` green. **Bite:** an item carrying a queued note's text beyond its label, or a key →
   `SecretFreeSchemaTest` red.
+  **Built** 2026-11-20 (`claude/j2-bridge`). The wire: `Watched.QueuedTray` → `Update.QueuedTray(items: List<QueuedItem>?)`
+  (core's `QueuedItem` as it is, `Queued` serialized as `QueuedOp`); calls `Queued.Discard(write)`, `Queued.Open(write)` →
+  `Answer.QueuedOpens(QueuedOpen)`, `Queued.CopyName(write, index)` → `Answer.QueuedCopyName(name, mediaType)`,
+  `Queued.SaveCopy(write, index, path)` (the host's save dialog's path, core's `FileSink`; only a refused write's carried
+  file, `NO_SUCH_QUEUED` else, `NOT_WRITTEN` with nothing left), `Queued.Ask(QueuedLoss)` → `Answer.QueuedAsked(QueuedAsk?)`
+  (the sign-out / Stop trusting / Remove all ask with its own confirm), `Editor.OpenHeld(pot, write, separator)` and
+  `Editor.DiscardMine(editor)`; `ShellShown.queuedBanner`, `queuedHere` (the level's queued creates), `queuedSaid` (the
+  reconnect's notices, held until `Shell.QueuedSaidSeen`), `creates` from `ShellModel.createsHere`; `GalleryShown.queues`,
+  `UploadTileShown.waiting`/`said`; `EditorShown.newer`/`discardsMine`; a Pot's `ShownEntry.unsentMark` and
+  `Shown.balancesUnsent` (`EntryRow.unsent` rode already). The bridge's `QueuedDoor` (one core function per field) is what a
+  test plays. **Core gained what *Open* and New offline needed** (ADR 0154 decisions 1–2: typed, nothing a platform decides):
+  `QueuedOpen` (`Entry`, `Rename`, `Place`) from `QueuedTray.opens`; `QueuedLoss`/`QueuedAsk`, `QueuedTray.ask`;
+  `PotModel.heldEditor` over `EntryEditor.openHeld` (the person's values and their sealed receipts, opened into memory, over
+  the newest revision held, `offline_newer_version` naming who and when; a save lands on top and drops the held write,
+  *Discard mine* drops it unsent; `PotView.heldEditing`/`newerVersion`); an online rename drops a held rename of its node
+  (`QueuedNodes.renameDecided`); `ShellModel.createsHere` (offline: folder, Memory, files) with `canCreateHere` offline
+  where any is queued (it said false offline, so New offered nothing to queue); `ShellModel.queuedHere`. Tests:
+  `DispatchTest.theWritesMadeOfflineAreListed…`, `SecretFreeSchemaTest.theWritesMadeOfflineCrossAsItemsAndStatesAlone`,
+  `WireTest`'s samples, `QueuedDepotExpensesTest`'s two held-editor cases, `QueuedOverlayTest`'s `createsHere`/`ask`/`opens`.
+  Bites seen red, restored with `/bin/cp -f`: (a) `QueuedItem` with an `intent: JsonObject` and (b) with
+  `blobs: List<QueuedBlob>` (its `K_blob`) → `SecretFreeSchemaTest` red; (c) *Save a copy* dispatched without the refused
+  check → `DispatchTest` red; (d) the held door never dropping the write → the held-editor test red; (e) `createsHere`
+  unfiltered offline → `QueuedOverlayTest` red. **Deviations:** (1) the core grew beyond the bridge (above): a platform
+  would otherwise decide the held editor and New offline itself. (2) *Open* of a held create or capture time is
+  `QueuedOpen.Place` (the page it was made on; the person discards there): no core flow re-sends a create under another
+  name. (3) `Queued.Ask` covers the open tenant's account only; another signed-in account's outbox is not asked about.
+  (4) `ShellShown.queuedSaid` and `queuedHere` are carried but held by no bridge test (no `ShellModel` opens over the
+  dispatch's played tenant; the live walk is phase 9's/10's).
 - [ ] **7 Android** — the enabled controls offline, the waiting marks, the tray's list and actions, the wipe asks.
   · Done when: `:android:assembleDebug`, the guidelines and words guards green.
 - [ ] **8 Apple** — the same. · Done when: both Apple builds green.
