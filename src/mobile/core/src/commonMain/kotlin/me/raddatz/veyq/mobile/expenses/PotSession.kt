@@ -63,8 +63,42 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
     /** When the server last answered a read of the ledger (the device's clock), what [wentOffline] says it is as of. */
     private var readAt: Long? = null
 
-    /** Whether this member may write here: Expenses is on for the tenant (a space pending deletion is not opened), online. */
-    val canWrite: Boolean get() = meta != null && door.writesEntries && offline == null
+    /**
+     * Whether this member may write entries here: Expenses is on for the tenant (a space pending deletion is not opened),
+     * online — or offline where an entry is queued (ADR 0153: [queuesEntries]); every other write still refuses offline.
+     */
+    val canWrite: Boolean get() = meta != null && door.writesEntries && (offline == null || queuesEntries)
+
+    /** Whether an entry added, edited or deleted offline is queued (this device keeps the account's store, ADR 0153). */
+    val queuesEntries: Boolean get() = door.queueAccount?.queues(me.raddatz.veyq.mobile.offline.Queued.POT_ENTRY) == true
+
+    /**
+     * The entries counted here that are not sent yet (ADR 0153 decision 5, owner 2026-11-19): added, edited or deleted
+     * offline and waiting; the list marks each *Not sent*, the balances say they include them.
+     */
+    var unsent: Set<String> = emptySet()
+        private set
+
+    /** The waiting entries as revisions on top of what is held: counted in [ledger], never in what is sent or checked. */
+    private var queuedOverlay: List<HeldRevision> = emptyList()
+
+    /** [ledger] made anew from what is held and the waiting entries ([queuedOverlay]); the check over what is held only. */
+    private suspend fun rebuild() {
+        val writes = runCatching { door.queueAccount?.outbox?.writes() }.getOrNull().orEmpty().filter {
+            it.op == me.raddatz.veyq.mobile.offline.Queued.POT_ENTRY.name && it.node == node.id && it.state == me.raddatz.veyq.mobile.offline.QueuedWrite.State.WAITING
+        }
+        queuedOverlay = writes.mapNotNull { w ->
+            val e = QueuedExpenses.entry(w) ?: return@mapNotNull null
+            val latest = held.values.filter { it.entryId == e.entryId }.maxOfOrNull { it.revision } ?: 0
+            // a revision past the one it was made on is held: this one is sent already, or meets a newer one (a conflict)
+            if (latest > (e.basedOn ?: 0)) return@mapNotNull null
+            HeldRevision(e.entryId, latest + 1, w.at, UNSENT, RevisionBody(emptyList(), e.content), null)
+        }
+        unsent = queuedOverlay.map { it.entryId }.toSet()
+        val all = held.values.toList()
+        ledger = meta?.let { Ledger.build(all + queuedOverlay, it.base) }
+        check = LedgerCheck.of(all)
+    }
 
     /** Whether this member may change the Pot's settings, a Pot without any included: Expenses is on for the tenant, online. */
     val canChangeSettings: Boolean get() = door.changesSettings && offline == null
@@ -141,9 +175,7 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
         ledgerTag = r.tag
         deleteRevision = r.deleteRevision
         cursor = r.cursor
-        val all = held.values.toList()
-        ledger = meta?.let { Ledger.build(all, it.base) }
-        check = LedgerCheck.of(all)
+        rebuild()
         return true
     }
 
@@ -164,6 +196,8 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
         OFFLINE,
         /** The server refused it otherwise (switched off, removed, an id taken): nothing was stored. */
         REFUSED,
+        /** Offline, queued to be sent at the reconnect (ADR 0153): shown at once, marked *Not sent* ([unsent]). */
+        QUEUED,
     }
 
     /**
@@ -171,11 +205,14 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
      * stale_revision` re-reads and answers [WriteOutcome.STALE]; the rest is [atNodeEpoch]'s.
      */
     @Throws(Exception::class)
-    suspend fun write(writes: List<PotWrite>): WriteOutcome {
+    suspend fun write(writes: List<PotWrite>): WriteOutcome = write(writes, null)
+
+    /** [write] naming the heads [seen] where the writer read them before what is held now (a write queued offline). */
+    internal suspend fun write(writes: List<PotWrite>, seen: List<Head>?): WriteOutcome {
         if (offline != null) return WriteOutcome.OFFLINE
         val base = meta?.base ?: return WriteOutcome.INVALID
         return atNodeEpoch { n ->
-            val revisions = PotWrites.seal(codec, n.scopeId, n.id, n.key, held.values.toList(), writes, base)
+            val revisions = PotWrites.seal(codec, n.scopeId, n.id, n.key, held.values.toList(), writes, base, seen)
             suspend { door.append(n, revisions) }
         }
     }
@@ -300,7 +337,14 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
     suspend fun saveEntry(entryId: String?, form: EntryForm, basedOn: Long?, pending: List<PendingReceipt> = emptyList(), own: Set<String> = emptySet()): WriteOutcome {
         skippedReceipts = emptyList()
         uploadedReceipts = emptyList()
-        if (offline != null) return WriteOutcome.OFFLINE
+        if (offline != null) {
+            if (!queuesEntries) return WriteOutcome.OFFLINE
+            val people = ledger?.participants?.map { it.id }?.toSet() ?: return WriteOutcome.INVALID
+            if (form.contentOf { it in people }.content == null) return WriteOutcome.INVALID
+            QueuedExpenses.saveEntry(this, entryId, form, basedOn, pending, nowMs()) ?: return WriteOutcome.REFUSED
+            rebuild()
+            return WriteOutcome.QUEUED
+        }
         val known = ledger?.participants?.map { it.id }?.toSet() ?: return WriteOutcome.INVALID
         if (form.contentOf { it in known }.content == null) return WriteOutcome.INVALID
         if (pending.any { it.bytes.size > Receipts.MAX_BYTES }) return WriteOutcome.INVALID
@@ -328,6 +372,52 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
     }
 
     private var receiptsTag: String? = null
+
+    /** The account a write made offline here queues in; null for a link's guest. */
+    internal val queueAccount: me.raddatz.veyq.mobile.session.VeyqAccount? get() = door.queueAccount
+
+    /** The Pot's space and node: what a write queued offline names (`QueuedExpenses`). */
+    internal val scopeId: String get() = node.scopeId
+    internal val nodeId: String get() = node.id
+
+    /** One receipt of an entry queued offline: sealed then ([sealed]), its id minted then. */
+    internal class QueuedReceipt(val id: String, val type: String, val name: String?, val modifiedAt: Long?, val sealed: ApplicationBlobs.Sealed)
+
+    /**
+     * An entry queued offline sent through the online save (ADR 0153 decisions 1 and 4): its receipts first — one the
+     * listing already holds (a send cut after it) not again —, then revision [basedOn] + 1 of [entryId] holding [content],
+     * naming the heads the person [seen] and dropping what the online save drops. A refused receipt stops it (the storage
+     * full included: [skippedReceipts] names it, and nothing is written — the person decides). Then read whole, as online.
+     */
+    internal suspend fun sendQueued(entryId: String, content: RevisionContent, basedOn: Long?, seen: List<Head>, queued: List<QueuedReceipt>): WriteOutcome {
+        skippedReceipts = emptyList()
+        uploadedReceipts = emptyList()
+        if (offline != null) return WriteOutcome.OFFLINE
+        readReceipts()
+        val uploaded = ArrayList<String>()
+        for (r in queued) {
+            if (receipts.any { it.receiptId == r.id }) { uploaded += r.id; continue }
+            try {
+                door.receipts.upload({ node }, ::reopen, r.id, entryId, r.type, r.name, r.modifiedAt, r.sealed)
+                uploaded += r.id
+                uploadedReceipts = uploaded.toList()
+            } catch (e: ApplicationBlobs.UploadRefused) {
+                skippedReceipts = listOf(r.name ?: Receipts.downloadName(null, r.type))
+                lastRefusal = e.code
+                return WriteOutcome.REFUSED
+            }
+        }
+        if (uploaded.isNotEmpty()) readReceipts()
+        val kept = (content as? MoneyContent)?.receipts.orEmpty()
+        val shown = basedOn?.let { b -> held.values.firstOrNull { it.entryId == entryId && it.revision == b } }
+        val on = shown?.let { s -> ((s.body?.content as? MoneyContent)?.receipts.orEmpty()) to s.createdAt }
+        val dropped = if (content == Deleted) emptyList() else Receipts.toDrop(receipts, entryId, kept, on, uploaded.toSet())
+        return write(listOf(PotWrite(entryId, content, basedOn = basedOn, droppedReceipts = dropped)), seen).also { if (it == WriteOutcome.WRITTEN) readReceipts() }
+    }
+
+    /** The code the last queued send's refused receipt was refused with (`quota_exceeded`, …). */
+    internal var lastRefusal: String? = null
+        private set
 
     /** Uploads [bytes] as receipt [receiptId] of entry [entryId], which a write then lists (a copy's receipts, written ahead
      *  of the batch holding their entry). Throws `ApplicationBlobs.UploadRefused` with the server's code. */
@@ -379,8 +469,14 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
     /** Deletes entry [entryId] on [basedOn], the revision shown: a tombstone revision; it counts nowhere and stays in the
      *  Pot's list of deleted entries, restorable until its receipts are erased. */
     @Throws(Exception::class)
-    suspend fun deleteEntry(entryId: String, basedOn: Long): WriteOutcome =
-        write(listOf(PotWrite(entryId, Deleted, basedOn = basedOn)))
+    suspend fun deleteEntry(entryId: String, basedOn: Long): WriteOutcome {
+        if (offline != null && queuesEntries) {
+            if (!QueuedExpenses.deleteEntry(this, entryId, basedOn, nowMs())) return WriteOutcome.REFUSED
+            rebuild()
+            return WriteOutcome.QUEUED
+        }
+        return write(listOf(PotWrite(entryId, Deleted, basedOn = basedOn)))
+    }
 
     /** Restores deleted entry [entryId] on [basedOn]: its last content written again as the next revision, while it is
      *  still restorable ([PotView.restorable]). */
@@ -580,6 +676,9 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
         private const val NODE_REKEY_PENDING = "node_rekey_pending"
         private const val STALE_EPOCH = "stale_epoch"
         private const val STALE_REVISION = "stale_revision"
+
+        /** A waiting entry's digest in the overlay: no revision held has it. */
+        private const val UNSENT = "unsent"
 
         /** Opens the Pot [nodeId] of [scopeId] in [tenant] and reads it; null when the tenant holds no such open Pot. */
         suspend fun open(tenant: TenantSession, scopeId: String, nodeId: String): PotSession? {

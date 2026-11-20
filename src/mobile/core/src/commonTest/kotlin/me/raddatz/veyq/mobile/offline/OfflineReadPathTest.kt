@@ -249,7 +249,7 @@ class OfflineReadPathTest {
     }
 
     @Test
-    fun offline_the_shell_says_as_of_when_and_refuses_every_write() = runTest {
+    fun offline_the_shell_says_as_of_when_queues_what_queues_and_refuses_the_rest() = runTest {
         val (t, node, _) = gallery()
         val a = t.resume()
         val tenant = tenantOf(a)
@@ -264,10 +264,13 @@ class OfflineReadPathTest {
         val state = assertNotNull(shellOffline.current)
         assertNotNull(state.offline, "the shell offline does not say so")
         assertEquals(listOf("n1"), state.lists.nodes.map { t.nameOf(it.nodeId) })
-        assertEquals(Msg.OFFLINE_READ_ONLY, shellOffline.createFolder(node.scope.id, null, "New")?.msg)
-        assertEquals(Msg.OFFLINE_READ_ONLY, shellOffline.createMemory(node.scope.id, null, "New").notice?.msg)
         val requests = t.requests.size
-        assertEquals(Msg.OFFLINE_READ_ONLY, shellOffline.rename(me.raddatz.veyq.mobile.navigation.NodeAt(node.scope.id, node.id, "MEMORY", node.name), "Other").notice?.msg)
+        // what ADR 0153 decision 3 queues waits to be sent (the device keeps the store); what it does not is refused
+        assertNull(shellOffline.createFolder(node.scope.id, null, "New"), "a folder made offline was not queued")
+        assertEquals(Msg.OFFLINE_WAITING, shellOffline.createMemory(node.scope.id, null, "New").notice?.msg)
+        assertEquals(Msg.OFFLINE_WAITING, shellOffline.rename(me.raddatz.veyq.mobile.navigation.NodeAt(node.scope.id, node.id, "MEMORY", node.name), "Other").notice?.msg)
+        assertEquals(Msg.OFFLINE_READ_ONLY, shellOffline.move(me.raddatz.veyq.mobile.navigation.NodeAt(node.scope.id, node.id, "MEMORY", node.name), null).notice?.msg)
+        assertEquals(3, assertNotNull(offline.outbox).count())
         assertEquals(requests, t.requests.size, "a write offline was sent")
         offline.retire()
     }

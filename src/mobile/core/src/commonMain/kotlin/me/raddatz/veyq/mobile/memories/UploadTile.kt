@@ -18,8 +18,13 @@ class UploadTile(
     val progress: Double,
     /** The medium it became, once in: the gallery drops the tile where its listing names it. */
     internal val mediaId: String?,
+    /** Added offline, sealed on this device, waiting to be sent (ADR 0153 decision 5: *Waiting to send*). */
+    val waiting: Boolean = false,
 ) {
     val tileId: String get() = PREFIX + id
+
+    /** What the tile says under its glyph while it waits ([waiting]); null otherwise. */
+    val said: me.raddatz.veyq.mobile.words.Notice? get() = if (waiting) me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.OFFLINE_WAITING) else null
 
     val failed: Boolean get() = status == UploadQueue.Status.FAILED
 

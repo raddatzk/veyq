@@ -348,19 +348,30 @@ object DepotFiles {
         into: String? = null,
         /** Whether a failure gives up the node it made itself; a queue job gives it up itself ([UploadJob.abandon]). */
         giveUpOwn: Boolean = true,
+    ): Uploaded = upload(tenant, scopeId, parentId, name, size, type, modifiedAt, tokenInput, read, progress, onCreated, into, giveUpOwn, null, null)
+
+    /**
+     * [upload] of a file queued offline (ADR 0153): its node made with [nodeId], the id minted then, and its content
+     * [sealed] then — its frames sent as they are, [read] unread.
+     */
+    internal suspend fun upload(
+        tenant: TenantSession, scopeId: String, parentId: String?, name: String, size: Long, type: String, modifiedAt: Long?,
+        tokenInput: (String, String) -> String?, read: suspend (from: Long, length: Int) -> ByteArray,
+        progress: (Double) -> Unit, onCreated: (String) -> Unit, into: String?, giveUpOwn: Boolean,
+        nodeId: String?, sealed: ApplicationBlobs.Sealed?,
     ): Uploaded {
         val n = name.trim()
-        if (into != null) return attach(tenant, scopeId, into, size, type, n, modifiedAt, null, read, progress)
+        if (into != null) return attach(tenant, scopeId, into, size, type, n, modifiedAt, null, read, progress, sealed)
         collision(tenant, scopeId, parentId, n, tokenInput)?.let { other ->
             return if (other.kind == FILE) Uploaded(Outcome.EXISTS, existing = other.id) else Uploaded(Outcome.TAKEN_BY_OTHER)
         }
-        val created = when (val r = NodeCreate.create(tenant, scopeId, parentId, FILE, n, me.raddatz.veyq.mobile.crypto.Naming.fileNameSlug(n))) {
+        val created = when (val r = NodeCreate.create(tenant, scopeId, parentId, FILE, n, me.raddatz.veyq.mobile.crypto.Naming.fileNameSlug(n), nodeId = nodeId)) {
             is NodeCreate.Result.Done -> r.created
             is NodeCreate.Result.Refused -> return Uploaded(if (r.reason == NodeCreate.Reason.NAME_TAKEN) Outcome.TAKEN_BY_OTHER else Outcome.FAILED)
         }
         tenant.forgetTree()
         onCreated(created.nodeId)
-        val done = attach(tenant, scopeId, created.nodeId, size, type, n, modifiedAt, null, read, progress)
+        val done = attach(tenant, scopeId, created.nodeId, size, type, n, modifiedAt, null, read, progress, sealed)
         // a cancel ends the upload as a failure: its node is given up all the same, past the cancel (the calls of a
         // cancelled coroutine fail at once, so the file stayed "not uploaded yet", measured on the emulator)
         if (done.outcome != Outcome.DONE && giveUpOwn) kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { abandon(tenant, scopeId, parentId, created.nodeId) }
@@ -381,6 +392,7 @@ object DepotFiles {
     private suspend fun attach(
         tenant: TenantSession, scopeId: String, nodeId: String, size: Long, type: String, name: String?, modifiedAt: Long?,
         expectedBlobId: String?, read: suspend (from: Long, length: Int) -> ByteArray, progress: (Double) -> Unit,
+        sealed: ApplicationBlobs.Sealed? = null,
     ): Uploaded {
         val (_, scopeEpoch) = tenant.scopeKey(scopeId) ?: return Uploaded(Outcome.FAILED)
         var node: OpenNode? = tenant.node(scopeId, nodeId) ?: return Uploaded(Outcome.FAILED)
@@ -398,7 +410,7 @@ object DepotFiles {
                 val n = node!!
                 val code = try {
                     progress(0.0)
-                    val (uploadId, plan) = ApplicationBlobs(tenant).reserveAndPumpFrames(scopeId, n, ROLE, size, type, name, modifiedAt, read) {
+                    val (uploadId, plan) = ApplicationBlobs(tenant).reserveAndPumpFrames(scopeId, n, ROLE, size, type, name, modifiedAt, read, sealed) {
                         progress(it.toDouble() / size.coerceAtLeast(1))
                     }
                     val r = tenant.account.respond {

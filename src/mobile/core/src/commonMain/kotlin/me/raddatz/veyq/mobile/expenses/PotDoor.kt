@@ -96,6 +96,9 @@ interface PotDoor {
     /** The Pot's receipts, as this door reaches them. */
     val receipts: Receipts
 
+    /** The account whose outbox a write made offline here queues in (ADR 0153); null where none does (a link's guest). */
+    val queueAccount: me.raddatz.veyq.mobile.session.VeyqAccount? get() = null
+
     interface Receipts {
         suspend fun list(node: OpenNode, ifNoneMatch: String?): ApplicationBlobs.Listing?
         fun metaOf(node: OpenNode, b: ApplicationBlobs.Listed): BlobMeta.Opened?
@@ -107,12 +110,19 @@ interface PotDoor {
             node: () -> OpenNode, reopen: suspend () -> Boolean, id: String, entryId: String, bytes: ByteArray, type: String,
             name: String?, modifiedAt: Long?,
         )
+
+        /** A receipt [sealed] ahead (queued offline, ADR 0153): its frames sent as they are. A member's door only. */
+        suspend fun upload(
+            node: () -> OpenNode, reopen: suspend () -> Boolean, id: String, entryId: String, type: String, name: String?,
+            modifiedAt: Long?, sealed: ApplicationBlobs.Sealed,
+        ): Unit = throw ApplicationBlobs.UploadRefused("not_queued_here")
     }
 }
 
 /** A member's Pot door: the tenant's API, its switch, its members and rates (the behaviour `PotSession` always had). */
 internal class TenantPotDoor(private val tenant: TenantSession) : PotDoor {
     private val account = tenant.account
+    override val queueAccount get() = account
     private val api get() = ExpensesApi(tenant.base, account.http)
     override val suite: V1 get() = account.suite
     override val writesEntries: Boolean get() = "expenses" !in tenant.applicationsOff()
@@ -263,6 +273,16 @@ internal class TenantPotDoor(private val tenant: TenantSession) : PotDoor {
             blobs.upload(
                 node().scopeId, node, reopen, { belowFloor(node()) }, id, entryId, Receipts.ROLE, bytes, type, name, modifiedAt,
                 pull = { pull(node()) },
+            )
+        }
+
+        override suspend fun upload(
+            node: () -> OpenNode, reopen: suspend () -> Boolean, id: String, entryId: String, type: String, name: String?,
+            modifiedAt: Long?, sealed: ApplicationBlobs.Sealed,
+        ) {
+            blobs.upload(
+                node().scopeId, node, reopen, { belowFloor(node()) }, id, entryId, Receipts.ROLE, ByteArray(0), type, name, modifiedAt,
+                pull = { pull(node()) }, sealed = sealed,
             )
         }
     }

@@ -37,6 +37,13 @@ class Outbox internal constructor(
     private val lock = Mutex()
     private var tidied = false
 
+    private val _changes = kotlinx.coroutines.flow.MutableStateFlow(0L)
+
+    /** Moves at every write queued, changed or gone: what the models' overlays and the tray read the outbox again on. */
+    val changes: kotlinx.coroutines.flow.StateFlow<Long> = _changes
+
+    private fun changed() { _changes.value = _changes.value + 1 }
+
     private val orderKey get() = EntryKey(server, "", "", KeptRead.OUTBOX, ORDER)
 
     private fun writeKey(id: String) = EntryKey(server, "", "", KeptRead.OUTBOX, id)
@@ -52,12 +59,14 @@ class Outbox internal constructor(
         val order = order()
         if (!offline.putQueued(writeKey(write.id), encode(write), floor = write.id !in order)) return@withLock false
         if (write.id !in order) setOrder(order + write.id)
+        changed()
         true
     }
 
     /** [write] stored again as it now is (its state after a send's outcome): never refused by the floor; nothing if it is gone. */
     internal suspend fun update(write: QueuedWrite) = lock.withLock {
         if (write.id in order()) offline.putQueued(writeKey(write.id), encode(write), floor = false)
+        changed()
     }
 
     /** Every waiting write, oldest first. */
@@ -76,6 +85,7 @@ class Outbox internal constructor(
         val write = read(id)
         offline.store.removeAll(listOf(writeKey(id)) + write?.blobs.orEmpty().map { blobKey(it.id) })
         setOrder(order() - id)
+        changed()
     }
 
     /**
@@ -115,6 +125,19 @@ class Outbox internal constructor(
     /** Frame [index] of queued blob [blob] as it is sent: sealed under its `K_blob`, never plaintext. Null where it is not kept. */
     internal suspend fun frame(blob: QueuedBlob, index: Int): ByteArray? = offline.store.frame(blobKey(blob.id), index)
 
+    /** [bytes] sealed as a queued blob ([sealBlob]): a derived tier, a receipt read whole. */
+    suspend fun sealBlob(bytes: ByteArray): QueuedBlob? =
+        sealBlob(ByteSource(bytes.size.toLong()) { from, length -> bytes.copyOfRange(from.toInt(), (from + length).toInt()) })
+
+    /**
+     * Queued blob [blob] as its send takes it ([me.raddatz.veyq.mobile.blob.ApplicationBlobs.Sealed]): its frames as they
+     * were sealed, under its `K_blob`. A frame no longer kept fails the send (the write is refused, never sent short).
+     */
+    internal fun sealed(blob: QueuedBlob): me.raddatz.veyq.mobile.blob.ApplicationBlobs.Sealed =
+        me.raddatz.veyq.mobile.blob.ApplicationBlobs.Sealed(me.raddatz.veyq.mobile.crypto.unb64(blob.key), blob.chunkCount, blob.size) { i ->
+            frame(blob, i) ?: throw me.raddatz.veyq.mobile.blob.ApplicationBlobs.UploadRefused(FRAME_GONE)
+        }
+
     /** A blob sealed for a write that was never queued (a crash between the two), or a discarded one's: dropped. */
     internal suspend fun dropBlob(blob: QueuedBlob) = offline.store.remove(blobKey(blob.id))
 
@@ -150,6 +173,9 @@ class Outbox internal constructor(
     private fun encode(write: QueuedWrite) = JSON.encodeToString(QueuedWrite.serializer(), write).encodeToByteArray()
 
     internal companion object {
+        /** A queued blob's frame no longer kept: its write cannot be sent whole. */
+        const val FRAME_GONE = "queued_frame_gone"
+
         /** The order's id: no write has it. */
         const val ORDER = ""
 

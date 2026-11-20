@@ -54,6 +54,8 @@ object PotWrites {
     fun seal(
         codec: RevisionCodec, scopeId: String, nodeId: String, potKey: ByteArray,
         held: List<HeldRevision>, writes: List<PotWrite>, base: Ledger.BaseCurrency,
+        /** The heads the writer read, where they read them before what is held now (a write queued offline, ADR 0153). */
+        seen: List<Head>? = null,
     ): List<PotRevisionWrite> {
         fun refuse(r: PotWriteRefused.Reason): Nothing = throw PotWriteRefused(r)
         if (writes.isEmpty()) refuse(PotWriteRefused.Reason.EMPTY)
@@ -91,7 +93,7 @@ object PotWrites {
             if (!members.add(member)) refuse(PotWriteRefused.Reason.MEMBER_TWICE)
         }
         val latest = latestOf(held)
-        val heads = Revisions.headsToName(held)
+        val heads = seen ?: Revisions.headsToName(held)
         return writes.map { w ->
             val revision = (w.basedOn ?: latest[w.entryId] ?: 0) + 1
             val sealed = codec.seal(RevisionAddress(scopeId, nodeId, w.entryId, revision), potKey, RevisionBody(heads, w.content))

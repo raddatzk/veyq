@@ -213,11 +213,25 @@ class VeyqAccount private constructor(
         ).run()
     }
 
+    private val _queuedReports = kotlinx.coroutines.flow.MutableSharedFlow<me.raddatz.veyq.mobile.offline.OutboxSender.Report>(extraBufferCapacity = 8)
+
+    /**
+     * What each background run of the outbox came to (ADR 0153 decision 5: the reconnect's notice, `QueuedShown.report`):
+     * one per run that had writes to send.
+     */
+    val queuedReports: kotlinx.coroutines.flow.SharedFlow<me.raddatz.veyq.mobile.offline.OutboxSender.Report> = _queuedReports
+
+    /**
+     * How many writes made offline wait, are held or refused: what a sign-out, a "Stop trusting" and a "Remove all
+     * offline content" ask about first (`QueuedShown.lost`, ADR 0153 decision 2); 0 without a store.
+     */
+    suspend fun queuedCount(): Int = outbox?.count() ?: 0
+
     /** [sendQueued] in the background, where writes wait: after a reconnect and when an account opened online finds some. */
     private fun startSending() {
         if (closed) return
         sendJob = background.launch {
-            runCatching { if ((outbox?.count() ?: 0) > 0) sendQueued() }
+            runCatching { if ((outbox?.count() ?: 0) > 0) sendQueued()?.let { _queuedReports.tryEmit(it) } }
                 .onFailure { if (it is CancellationException) throw it else println("veyq: the outbox was not sent: $it") }
         }
     }

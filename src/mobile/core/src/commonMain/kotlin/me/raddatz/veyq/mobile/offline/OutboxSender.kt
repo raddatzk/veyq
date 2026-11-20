@@ -15,7 +15,7 @@ import me.raddatz.veyq.mobile.session.Unreachable
  * server not reached (a request that did not get there turns the account offline) ends the run with the write still
  * waiting, for the next reconnect; any other failure is refused.
  */
-internal class OutboxSender(
+class OutboxSender internal constructor(
     private val outbox: Outbox,
     /** The tenant a write is sent in, opened once per run; null where the account no longer belongs to it. */
     private val tenantOf: suspend (tenantId: String) -> TenantSession?,
@@ -25,7 +25,7 @@ internal class OutboxSender(
     /** What a run came to: how many were sent, held, refused, and still wait. */
     data class Report(val sent: Int, val held: Int, val refused: Int, val waiting: Int)
 
-    suspend fun run(): Report {
+    internal suspend fun run(): Report {
         var sent = 0
         var held = 0
         var refused = 0

@@ -95,8 +95,14 @@ object MemoryCreate {
     /** The place a Memory is armed with at birth: pending, its name and position to come from its media. */
     private val PENDING_PLACE = MemoryLocation("", MemoryLocation.NameSource.GEOCODED, null, MemoryLocation.DerivedMode.AUTO)
 
-    /** What a create came to: the node made (to open), or why not. */
-    class Made(val node: NodeAt?, val notice: Notice?)
+    /**
+     * What a create came to: the node made (to open), or why not — [refused] the server's answer where one was sent, [code]
+     * the reason as a code where nothing was ([NAME_TAKEN] a sibling the tree shows, [ILLEGAL] its placement, [PARENT_GONE]).
+     */
+    class Made(val node: NodeAt?, val notice: Notice?, internal val refused: NodeCreate.Result.Refused? = null, internal val code: String? = null)
+
+    internal const val NAME_TAKEN = "name_taken"
+    internal const val ILLEGAL = "illegal_structure"
 
     /**
      * Makes a [kind] named [name] in [scopeId] under [parentId] (null: the space's top) over [tenant]: checked against the
@@ -106,19 +112,23 @@ object MemoryCreate {
      */
     suspend fun create(
         tenant: TenantSession, scopeId: String, parentId: String?, kind: String, name: String, wasThere: Boolean = false, autoPlace: Boolean = false,
+        /** The id it is made with (a write queued offline minted it, ADR 0153); null: a fresh one. */
+        nodeId: String? = null,
     ): Made {
         val n = name.trim()
         val tree = runCatching { tenant.trees()[scopeId].orEmpty() }.getOrNull() ?: return Made(null, refused(null))
-        val parentKind = parentId?.let { p -> tree.firstOrNull { it.id == p }?.kind ?: return Made(null, refused(null)) }
-        check(kind, parentKind, n, tree.filter { it.parentId == parentId }.map { Sibling(it.kind, it.name) })?.let { return Made(null, it) }
+        val parentKind = parentId?.let { p -> tree.firstOrNull { it.id == p }?.kind ?: return Made(null, refused(null), code = NodeCreate.PARENT_GONE) }
+        check(kind, parentKind, n, tree.filter { it.parentId == parentId }.map { Sibling(it.kind, it.name) })?.let {
+            return Made(null, it, code = if (it.msg == Msg.NODE_NAME_TAKEN_BY) NAME_TAKEN else if (it.msg == Msg.NODE_ILLEGAL_STRUCTURE) ILLEGAL else null)
+        }
         val input = AppKinds.tokenInput(kind, n) ?: return Made(null, refused(null))
         val born = birthMeta(kind, tenant.scopeKind(scopeId), wasThere, tenant.account.userId, autoPlace)
         val sealMeta = born?.let { meta -> { key: ByteArray, nodeId: String -> NodeMetaWrite.seal(tenant.account.suite, scopeId, nodeId, key, meta) } }
-        val r = runCatching { NodeCreate.create(tenant, scopeId, parentId, kind, n, input, sealMeta) }.getOrNull()
+        val r = runCatching { NodeCreate.create(tenant, scopeId, parentId, kind, n, input, sealMeta, nodeId = nodeId) }.getOrNull()
         tenant.forgetTree()
         return when (r) {
             is NodeCreate.Result.Done -> Made(NodeAt(scopeId, r.created.nodeId, kind, n), null)
-            is NodeCreate.Result.Refused -> Made(null, refused(r.reason))
+            is NodeCreate.Result.Refused -> Made(null, refused(r.reason), refused = r)
             null -> Made(null, refused(null))
         }
     }

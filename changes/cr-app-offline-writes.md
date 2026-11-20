@@ -118,20 +118,65 @@ ADR 0153 decisions 1–5 hold them; here only what the work needs beside them.
   re-seal that can regress is the online path's); (c) as the trash sender also purging. **Deviations:** a re-key still
   pending after `NodeEpochWrite`'s waits (`BUSY`) leaves the write waiting for the next run rather than refusing it; a
   sibling's name met at send (`slug_taken`) is held as `name_taken` (the rename dialog decides), not refused.
-- [ ] **3 core — Memories** — Memory/Chapter create, media add (sealed at once, tiers derived at queue time), capture
+- [x] **3 core — Memories** — Memory/Chapter create, media add (sealed at once, tiers derived at queue time), capture
   time (a same-field change held, another field merged), media trash, a mark as add/remove. Tests: media into a Chapter
   made offline wait for it; a medium's `K_blob` wrapped at send under the node's key after a re-key while offline;
   the picked file let go once sealed. · Done when: the same checks green; one live case (throwaway) of a queued Chapter
   with two photos sent. **Bite:** the wrap made at queue time → the re-key test red.
-- [ ] **4 core — Depot and Expenses** — a new file and trash; a Pot entry add/edit/delete with receipts (receipts
+  **Built** 2026-11-20 (`claude/j2-core2`): `memories/QueuedMemories.kt` (queue side `create`/`media`/`captureTime`/`trash`/
+  `mark`, five senders), `Queued.MEMORY_CREATE`/`MEDIA_ADD`/`MEDIA_CAPTURE_TIME`/`MEDIA_TRASH`/`MEDIA_MARK`; the online paths
+  gained only what a queued write states: `ApplicationBlobs.Sealed` (frames sealed ahead go as they are, only `K_blob`'s
+  wrap and meta made at the send), `MediaUpload.once(…, SealedMedium)` (the id minted offline), `MemoryCreate.create(nodeId)`
+  with `Made.refused`/`code`, `ItemMarks.set`; `Outbox.sealBlob(bytes)`/`sealed`; a queued create of any kind (folder,
+  Memory, chapter) renamed or trashed in place (`QueuedNodes.CREATES`). `QueuedMemoriesTest` (6), `QueuedTest`'s derivation
+  over the new rows (`PlayedUploads` plays the upload half). Bite seen red (the K_blob sent did not open under the node's
+  key now), restored with `/bin/cp -f`. **Deviations:** (1) the live case is written (`LiveQueuedTest`, phase 4's commit, one
+  case for both phases) but **not run**: creating the throwaway needs the principal's env file, which this session's
+  classifier refused — open for the coordinator. (2) The derivation test checks that every operation called is declared
+  (a subset), no longer equality: `presignBlobUploadWindows` is called only where the start's windows ran out. (3) A capture
+  time is checked against the person's seen value on the tier read at the send (not the revision they saw): a revision
+  moved by another field merges as online, the own field moved holds. (4) A store PUT or window that fails leaves a medium
+  waiting (the store's transport failure does not turn the account offline).
+- [x] **4 core — Depot and Expenses** — a new file and trash; a Pot entry add/edit/delete with receipts (receipts
   completed before the revision, as online; the heads the person saw). Tests: a new entry sent; an edit meeting a newer
   revision held with both versions; a delete meeting one held; `quota_exceeded` refused with *Save a copy*. · Done when:
   the same checks green; one live case of a queued entry with a receipt sent. **Bite:** the heads taken fresh at send →
   the heads test red.
-- [ ] **5 core — the overlay, the tray, the notices** (W4, W5) — the models' queued rows, the tray's items and actions,
+  **Built** 2026-11-20 (`claude/j2-core2`): `depot/QueuedDepot.kt` (`file`, its sender: a node an earlier run made is filled,
+  never made again), `expenses/QueuedExpenses.kt` (`saveEntry`, `deleteEntry`, `entry` — the person's values for the
+  conflict's editor —, the sender), `Queued.DEPOT_FILE_ADD`/`POT_ENTRY` (a file's trash is core's `NODE_TRASH`); the online
+  paths gained `DepotFiles.upload(nodeId, sealed)`, `PotSession.sendQueued` (its receipts first, one already listed not
+  again, then `write(…, seen)`), `PotWrites.seal(seen)`, `PotDoor.queueAccount` and the sealed receipt upload.
+  `QueuedDepotExpensesTest` (6), the derivation over both rows. Bite seen red (the revision named the heads found at the
+  send), restored with `/bin/cp -f`. **Deviations:** (1) the live case (`LiveQueuedTest`: a chapter, two photos, an entry
+  with a receipt queued offline and sent) is written and compiles but was **not run** — the throwaway could not be made
+  (the classifier refused reading the principal's env file); the coordinator runs it with `VEYQ_LIVE` and
+  `VEYQ_LIVE_THROWAWAY_ENV`. (2) A queued entry meeting `stale_revision` whose revision the server holds with the same
+  content (a send whose answer was lost) is sent, not held. (3) A receipt refused (`quota_exceeded` included) refuses the
+  whole entry, unlike the online save that leaves a receipt out: the person decides with *Save a copy*/*Discard*.
+- [x] **5 core — the overlay, the tray, the notices** (W4, W5) — the models' queued rows, the tray's items and actions,
   the banner's count, the reconnect's notice, the asks before a wipe. Tests: each model's state with a queued write
   offline; the tray's actions. · Done when: the same checks green. **Bite:** the per-model offline checks left beside
   `queues` → a model test that expects a queued medium offline red.
+  **Built** 2026-11-20 (`claude/j2-core2`): `offline/QueuedTray.kt` (`QueuedItem` — id, `Queued`, tenant/scope/node, `where`,
+  `title`, `state`, `said`, `opens`, `copies`, `at` —; `QueuedShown` — `banner(count)`, `report(r)`, `lost(count)`, `said`,
+  `title`, `item` —; `QueuedTray` — `list`, `items`, `count`, `discard`, `copyName`, `saveCopy(id, index, sink)`, the only
+  plaintext of a queued write, into the host's sink); `Outbox.changes`; `VeyqAccount.queuedReports`, `queuedCount`;
+  `ShellModel.queuedTray`, `queuedBanner`, `queuedSent`, `queuedAt(scope, parent)`, `queuedLost`, and offline its trash,
+  rename, folder and Memory/chapter create queued (the one `queues(q)` rule replacing their `!online` refusals);
+  `GalleryModel.Door.queues`/`queueMedia`/`queueMark`/`queuedHere` (offline: the rights kept, uploads, trash, marks, capture
+  time and a chapter queued; a queued medium a placeholder `UploadTile` with `waiting`/`said`, a queued trash hidden, a mark
+  shown set; the never-queue writes keep their own offline refusal); `MediaUploads.queue`, `DepotUploads.Door.queue`;
+  `PotSession.queuesEntries`, `unsent`, the overlay counted in the ledger (never in what is sent or checked),
+  `WriteOutcome.QUEUED` (the editor closes as on `WRITTEN`), `PotView.EntryRow.unsent`, `unsentMark`, `balancesUnsent`,
+  `canRecordAll` off offline. 34 words (`offline_waiting` … `queued_entry_deleted`, EN+DE, the owner's to change before
+  phase 7). `QueuedOverlayTest` (4). Bite seen red, restored with `/bin/cp -f`. **Deviations:** (1) a Memory or chapter made
+  offline answers `Made(null, offline_waiting)`, nothing to open until it is sent (it shows in its level through
+  `queuedAt`); a folder made offline answers `null` (made) and shows the same way. (2) A capture time set offline closes
+  its editor but the grid keeps the kept order until the reconnect; a rename offline is not shown in the level before
+  it is sent (#1040). (3) A trash offline offers no Undo (a restore never queues); the tray's *Discard* undoes it. (4) The
+  held conflict's *Open* is the platforms' (phase 6 on): `QueuedExpenses.entry(write)` holds the person's values, the
+  Pot's session the newer version; *Discard mine* is `QueuedTray.discard`.
 - [ ] **6 bridge** — the queue's items, states and actions on the wire; the save dialog's path for *Save a copy*. · Done
   when: `:bridge:jvmTest` green. **Bite:** an item carrying a queued note's text beyond its label, or a key →
   `SecretFreeSchemaTest` red.

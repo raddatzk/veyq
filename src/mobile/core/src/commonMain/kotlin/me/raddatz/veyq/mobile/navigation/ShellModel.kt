@@ -186,6 +186,88 @@ class ShellModel(
     /** The notice a write offline is refused with. */
     private val readOnly get() = Notice(Msg.OFFLINE_READ_ONLY)
 
+    // ---- writes made offline (ADR 0153) ----
+
+    private val tenantId: String get() = tenant.tenant.tenantId
+
+    /** Whether a write of [q] made now is queued rather than sent: offline, where this device keeps the account's store. */
+    private fun queues(q: me.raddatz.veyq.mobile.offline.Queued): Boolean = !online && tenant.account.queues(q)
+
+    /** A write not queued for want of room on this device (ADR 0140's floor). */
+    private val noRoom get() = Notice(Msg.OFFLINE_NO_ROOM_HERE)
+
+    /** The wall clock (epoch ms): when a write made offline was made, as the tray says it. */
+    private fun wallClock(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
+
+    /** The media added offline into [nodeId], as its gallery's placeholder tiles marked *Waiting to send* (failed: refused). */
+    private fun queuedTiles(nodeId: String): kotlinx.coroutines.flow.Flow<List<me.raddatz.veyq.mobile.memories.UploadTile>> {
+        val box = tenant.account.outbox ?: return kotlinx.coroutines.flow.flowOf(emptyList())
+        return box.changes.map {
+            box.writes().filter { it.op == me.raddatz.veyq.mobile.offline.Queued.MEDIA_ADD.name && it.node == nodeId }.map { w ->
+                val name = (w.intent["name"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
+                val type = (w.intent["type"] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                val status = if (w.state == me.raddatz.veyq.mobile.offline.QueuedWrite.State.WAITING) me.raddatz.veyq.mobile.blob.UploadQueue.Status.QUEUED
+                else me.raddatz.veyq.mobile.blob.UploadQueue.Status.FAILED
+                me.raddatz.veyq.mobile.memories.UploadTile(w.id, name, me.raddatz.veyq.mobile.memories.MediaUpload.claimsVideo(type, name), status, 0.0, w.id, waiting = true)
+            }
+        }
+    }
+
+    /** What the outbox holds for gallery [nodeId]: the media whose trash waits, the marks set offline. */
+    private suspend fun queuedHere(nodeId: String): me.raddatz.veyq.mobile.memories.GalleryModel.QueuedHere {
+        val writes = tenant.account.outbox?.writes().orEmpty().filter { it.node == nodeId && it.state == me.raddatz.veyq.mobile.offline.QueuedWrite.State.WAITING }
+        fun field(w: me.raddatz.veyq.mobile.offline.QueuedWrite, k: String) = (w.intent[k] as? kotlinx.serialization.json.JsonPrimitive)?.content
+        return me.raddatz.veyq.mobile.memories.GalleryModel.QueuedHere(
+            trashed = writes.filter { it.op == me.raddatz.veyq.mobile.offline.Queued.MEDIA_TRASH.name }.mapNotNull { field(it, "mediaId") }.toSet(),
+            marks = writes.filter { it.op == me.raddatz.veyq.mobile.offline.Queued.MEDIA_MARK.name }.mapNotNull { w -> field(w, "mediaId")?.let { it to (field(w, "marked") == "true") } }.toMap(),
+        )
+    }
+
+    /** The name of [nodeId] (null: the space) as the lists hold it: where a queued write goes, as the tray groups it. */
+    private fun placeName(scopeId: String, nodeId: String?): String? {
+        val lists = _state.value?.lists ?: return null
+        return if (nodeId == null) lists.spaces.firstOrNull { it.scopeId == scopeId }?.name else lists.nodes.firstOrNull { it.nodeId == nodeId }?.name
+    }
+
+    /**
+     * The uploads tray's list of writes made offline on this device ([me.raddatz.veyq.mobile.offline.QueuedTray]), each
+     * under the name of the place it writes into: its items, *Discard*, *Save a copy*.
+     */
+    fun queuedTray(): me.raddatz.veyq.mobile.offline.QueuedTray = me.raddatz.veyq.mobile.offline.QueuedTray(tenant.account, ::placeName)
+
+    /**
+     * Under the offline banner (ADR 0153 decision 5): how many writes wait, at once and at each change; null while none
+     * does (and without a store).
+     */
+    val queuedBanner: kotlinx.coroutines.flow.Flow<Notice?>
+        get() = tenant.account.outbox?.let { box -> box.changes.map { me.raddatz.veyq.mobile.offline.QueuedShown.banner(box.count()) } }
+            ?: kotlinx.coroutines.flow.flowOf(null)
+
+    /** After each reconnect that sent writes made offline: how many went and how many need the person (one notice each). */
+    val queuedSent: kotlinx.coroutines.flow.Flow<List<Notice>>
+        get() = tenant.account.queuedReports.map { me.raddatz.veyq.mobile.offline.QueuedShown.report(it) }
+
+    /**
+     * What a level shows in place of its nodes not sent yet (ADR 0153 decision 5, the CR's W4): the folders, Memories,
+     * chapters and files made offline under [parentId] (null: the space's top) of [scopeId], each a tray item marked
+     * *Waiting to send* (or held, refused), at once and at each change.
+     */
+    fun queuedAt(scopeId: String, parentId: String?): kotlinx.coroutines.flow.Flow<List<me.raddatz.veyq.mobile.offline.QueuedItem>> {
+        val box = tenant.account.outbox ?: return kotlinx.coroutines.flow.flowOf(emptyList())
+        return box.changes.map {
+            box.writes().filter { w ->
+                w.tenant == tenantId && w.scope == scopeId && w.op in me.raddatz.veyq.mobile.offline.QueuedNodes.CREATES &&
+                    (w.intent["parent"] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { p -> p !is kotlinx.serialization.json.JsonNull }?.content == parentId
+            }.map { me.raddatz.veyq.mobile.offline.QueuedShown.item(it, placeName(scopeId, parentId)) }
+        }
+    }
+
+    /**
+     * What a sign-out, "Stop trusting" or "Remove all offline content" asks first while writes made offline wait (ADR 0153
+     * decision 2, owner 2026-11-19): the question naming how many are deleted; null where none waits (nothing to ask).
+     */
+    suspend fun queuedLost(): Notice? = me.raddatz.veyq.mobile.offline.QueuedShown.lost(tenant.account.queuedCount())
+
     /** What the shell shows offline: as of when its lists were last confirmed by the server; null online. */
     private fun offlineNow(): me.raddatz.veyq.mobile.session.OfflineAsOf? = when (val r = tenant.account.reach.value) {
         Reach.Online -> null
@@ -379,6 +461,13 @@ class ShellModel(
 
     /** Moves [ref] with everything under it to its space's trash; a page of it leaves for its parent. */
     suspend fun trash(ref: NodeAt): Trashed {
+        if (queues(me.raddatz.veyq.mobile.offline.Queued.NODE_TRASH)) {
+            // offline it waits to be sent (ADR 0153): out of the lists at once, no Undo (a restore never queues)
+            if (!me.raddatz.veyq.mobile.offline.QueuedNodes.trash(tenant.account, tenantId, ref.scopeId, ref.nodeId, wallClock())) return Trashed(NodeTrash.Deleted.FAILED, noRoom, null)
+            update { afterTrash(it, ref.nodeId) }
+            relocate(ref)
+            return Trashed(NodeTrash.Deleted.TRASHED, Notice(Msg.OFFLINE_WAITING), null)
+        }
         if (!online) return Trashed(NodeTrash.Deleted.FAILED, readOnly, null)
         val before = runCatching { tenant.node(ref.scopeId, ref.nodeId) }.getOrNull()
         val outcome = runCatching { NodeTrash.delete(tenant, ref.scopeId, ref.nodeId) }.getOrDefault(NodeTrash.Deleted.FAILED)
@@ -473,6 +562,12 @@ class ShellModel(
 
     /** Renames [ref] to [name] (its placement, then its open links' names); an open page follows it under its new name. */
     suspend fun rename(ref: NodeAt, name: String): Renamed {
+        if (queues(me.raddatz.veyq.mobile.offline.Queued.NODE_RENAME)) {
+            // offline the rename states the placement the person saw (ADR 0153 decision 4) and waits to be sent
+            val seen = runCatching { tenant.node(ref.scopeId, ref.nodeId)?.placementRevision }.getOrNull() ?: 0
+            if (!me.raddatz.veyq.mobile.offline.QueuedNodes.rename(tenant.account, tenantId, ref.scopeId, ref.nodeId, seen, name, wallClock())) return Renamed(NodeRename.Result(NodeRename.Outcome.FAILED), noRoom)
+            return Renamed(NodeRename.Result(NodeRename.Outcome.RENAMED), Notice(Msg.OFFLINE_WAITING))
+        }
         if (!online) return Renamed(NodeRename.Result(NodeRename.Outcome.FAILED), readOnly)
         val r = runCatching { NodeRename.rename(tenant, ref.scopeId, ref.nodeId, name, AppKinds::tokenInput, now()) }
             .getOrDefault(NodeRename.Result(NodeRename.Outcome.FAILED))
@@ -508,8 +603,13 @@ class ShellModel(
 
     /** A new folder [name] in [scopeId] under [parentId] (null: the space's root); why not, or null once made. */
     suspend fun createFolder(scopeId: String, parentId: String?, name: String): Notice? {
-        if (!online) return readOnly
         val n = name.trim()
+        if (queues(me.raddatz.veyq.mobile.offline.Queued.FOLDER_CREATE)) {
+            if (n.isEmpty()) return Notice(Msg.FOLDER_NAME_EMPTY)
+            // offline it waits to be sent and shows at once where it was made ([queuedAt]): made, as far as the dialog goes
+            return if (me.raddatz.veyq.mobile.offline.QueuedNodes.folder(tenant.account, tenantId, scopeId, parentId, n, wallClock()) != null) null else noRoom
+        }
+        if (!online) return readOnly
         if (n.isEmpty()) return Notice(Msg.FOLDER_NAME_EMPTY)
         val r = runCatching { FolderCreate.create(tenant, scopeId, parentId, n) }.getOrNull()
         refresh()
@@ -678,6 +778,12 @@ class ShellModel(
                 me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob(tenant, file, source, expectedBlobId, source.name)
             override fun changed() = changed()
             override fun online() = this@ShellModel.online
+            override val queues get() = tenant.account.queues(me.raddatz.veyq.mobile.offline.Queued.DEPOT_FILE_ADD)
+            override suspend fun queue(
+                scopeId: String, parentId: String?, source: me.raddatz.veyq.mobile.blob.UploadSource, name: String,
+                left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit,
+            ) = queues(me.raddatz.veyq.mobile.offline.Queued.DEPOT_FILE_ADD) &&
+                me.raddatz.veyq.mobile.depot.QueuedDepot.file(tenant.account, tenantId, scopeId, parentId, source, wallClock(), left, name) != null
             // a member's level: a space's top, or a folder that is no guest's (the web's `folderRights` createFolder)
             override fun mayImport(scopeId: String, parentId: String?) =
                 this@ShellModel.online && (parentId == null || !tenant.inIdentityFolder(scopeId, parentId))
@@ -720,6 +826,10 @@ class ShellModel(
             }
             override fun changed() = changed()
             override fun left(source: me.raddatz.veyq.mobile.blob.UploadSource) = left(source)
+            override suspend fun queue(scopeId: String, nodeId: String, sources: List<me.raddatz.veyq.mobile.blob.UploadSource>): Int {
+                if (!queues(me.raddatz.veyq.mobile.offline.Queued.MEDIA_ADD)) return 0
+                return me.raddatz.veyq.mobile.memories.QueuedMemories.media(tenant.account, tenantId, scopeId, nodeId, sources, deriver, now, left).size
+            }
         })
 
     /**
@@ -731,6 +841,12 @@ class ShellModel(
     suspend fun createMemoryNode(
         scopeId: String, parentId: String?, kind: String, name: String, wasThere: Boolean = false, autoPlace: Boolean = false,
     ): me.raddatz.veyq.mobile.memories.MemoryCreate.Made {
+        if (queues(me.raddatz.veyq.mobile.offline.Queued.MEMORY_CREATE)) {
+            // offline it waits to be sent: nothing to open yet, it shows where it was made ([queuedAt])
+            if (name.isBlank()) return me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, Notice(Msg.FOLDER_NAME_EMPTY))
+            val queued = me.raddatz.veyq.mobile.memories.QueuedMemories.create(tenant.account, tenantId, scopeId, parentId, kind, name, wallClock(), wasThere, autoPlace && offersAutoPlace())
+            return me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, if (queued != null) Notice(Msg.OFFLINE_WAITING) else noRoom)
+        }
         if (!online) return me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, readOnly)
         val armed = autoPlace && offersAutoPlace()
         val made = me.raddatz.veyq.mobile.memories.MemoryCreate.create(tenant, scopeId, parentId, kind, name, wasThere, armed)
@@ -814,11 +930,21 @@ class ShellModel(
             // each read of the lists is a new one (a rebuild after a refresh); a move of the shell alone keeps them
             override val revisions = state.map { it?.lists }.distinctUntilChanged { a, b -> a === b }
             override val uploaded = uploads.uploaded
-            override val uploading = uploads.tiles(ref.nodeId)
+            override val uploading = kotlinx.coroutines.flow.combine(uploads.tiles(ref.nodeId), queuedTiles(ref.nodeId)) { a, b -> b + a }
+            override val queues get() = tenant.account.queues(me.raddatz.veyq.mobile.offline.Queued.MEDIA_ADD)
+            override suspend fun queueMedia(sources: List<me.raddatz.veyq.mobile.blob.UploadSource>) = uploads.queue(ref.scopeId, ref.nodeId, sources)
+            override suspend fun queueMark(mediaId: String, marked: Boolean) =
+                queues(me.raddatz.veyq.mobile.offline.Queued.MEDIA_MARK) &&
+                    me.raddatz.veyq.mobile.memories.QueuedMemories.mark(tenant.account, tenantId, ref.scopeId, ref.nodeId, mediaId, marked, wallClock())
+            override suspend fun queuedHere() = this@ShellModel.queuedHere(ref.nodeId)
             override suspend fun moved(since: me.raddatz.veyq.mobile.memories.MemoryMedia.Gallery) =
                 me.raddatz.veyq.mobile.memories.MemoryMedia.moved(tenant, ref.scopeId, ref.nodeId, since)
             override suspend fun treeMoved() = tenant.treeMoved(ref.scopeId).also { if (it) refresh() }
-            override suspend fun trash(mediaId: String) = me.raddatz.veyq.mobile.memories.MemoryMedia.trash(tenant, ref.scopeId, mediaId)
+            override suspend fun trash(mediaId: String) =
+                if (queues(me.raddatz.veyq.mobile.offline.Queued.MEDIA_TRASH)) {
+                    if (me.raddatz.veyq.mobile.memories.QueuedMemories.trash(tenant.account, tenantId, ref.scopeId, ref.nodeId, mediaId, wallClock())) me.raddatz.veyq.mobile.memories.GalleryModel.Removal.DONE
+                    else me.raddatz.veyq.mobile.memories.GalleryModel.Removal.FAILED
+                } else me.raddatz.veyq.mobile.memories.MemoryMedia.trash(tenant, ref.scopeId, mediaId)
             override suspend fun restore(mediaId: String) = me.raddatz.veyq.mobile.memories.MemoryMedia.restore(tenant, ref.scopeId, mediaId)
             override suspend fun createChapter(name: String) =
                 createMemoryNode(ref.scopeId, ref.nodeId, me.raddatz.veyq.mobile.memories.MemoryCreate.CHAPTER, name)
@@ -839,7 +965,12 @@ class ShellModel(
             override suspend fun setParticipants(wanted: List<String>, openedWith: List<String>) =
                 me.raddatz.veyq.mobile.memories.Participants.set(tenant, ref.scopeId, ref.nodeId, wanted, openedWith).also { runCatching { refresh() } }
             override suspend fun captureTime(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, overrideMs: Long?) =
-                if (overrideMs == null) me.raddatz.veyq.mobile.memories.CaptureTime.reset(tenant, item)
+                if (queues(me.raddatz.veyq.mobile.offline.Queued.MEDIA_CAPTURE_TIME)) {
+                    // offline it waits to be sent, the field the person saw stated (ADR 0153 decision 4)
+                    if (me.raddatz.veyq.mobile.memories.QueuedMemories.captureTime(tenant.account, tenantId, item, overrideMs, wallClock()))
+                        me.raddatz.veyq.mobile.memories.CaptureTime.Outcome.Done(overrideMs?.let(me.raddatz.veyq.mobile.memories.CaptureTime::minute))
+                    else me.raddatz.veyq.mobile.memories.CaptureTime.Outcome.Failed("no_room")
+                } else if (overrideMs == null) me.raddatz.veyq.mobile.memories.CaptureTime.reset(tenant, item)
                 else me.raddatz.veyq.mobile.memories.CaptureTime.set(tenant, item, overrideMs)
             override suspend fun bannerPicture() =
                 tenant.node(ref.scopeId, ref.nodeId)?.let { me.raddatz.veyq.mobile.memories.banner.Banner.picture(tenant, it) }

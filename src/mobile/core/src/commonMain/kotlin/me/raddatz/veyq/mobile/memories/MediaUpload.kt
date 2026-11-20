@@ -163,8 +163,21 @@ object MediaUpload {
         }
     }
 
+    /**
+     * A medium queued offline (ADR 0153 decision 1): its id minted then, its original and tiers sealed then under their own
+     * `K_blob`s — sent as they are, only the wraps under the node's key made by the send ([once]).
+     */
+    internal class SealedMedium(
+        val mediaId: String, val original: ApplicationBlobs.Sealed, val thumbnail: ApplicationBlobs.Sealed?, val preview: ApplicationBlobs.Sealed?,
+    )
+
     internal suspend fun once(
         tenant: TenantSession, scopeId: String, nodeId: String, original: Original, prepared: Prepared, progress: (Double) -> Unit,
+    ): Result = once(tenant, scopeId, nodeId, original, prepared, null, progress)
+
+    /** [once] of a medium [sealed] ahead (queued offline): its frames sent as they are, only the wraps made now. */
+    internal suspend fun once(
+        tenant: TenantSession, scopeId: String, nodeId: String, original: Original, prepared: Prepared, sealed: SealedMedium?, progress: (Double) -> Unit,
     ): Result {
         val type = prepared.type
         val sha256 = prepared.sha256
@@ -186,7 +199,7 @@ object MediaUpload {
             attempt = {
                 val n = node
                 val code = try {
-                    ended = attach(tenant, suite, scopeId, n, original, type, sha256, derived, metaTier, exif, progress)
+                    ended = attach(tenant, suite, scopeId, n, original, type, sha256, derived, metaTier, exif, progress, sealed)
                     null
                 } catch (e: ApplicationBlobs.UploadRefused) {
                     when (e.code) {
@@ -214,24 +227,32 @@ object MediaUpload {
     /** One medium sealed under [node]'s key, sent and completed; throws [ApplicationBlobs.UploadRefused] with a refusal's code. */
     private suspend fun attach(
         tenant: TenantSession, suite: V1, scopeId: String, node: OpenNode, original: Original, type: String, sha256: String,
-        derived: Derived, metaTier: JsonObject?, exif: JsonObject?, progress: (Double) -> Unit,
+        derived: Derived, metaTier: JsonObject?, exif: JsonObject?, progress: (Double) -> Unit, sealed: SealedMedium? = null,
     ): Result {
-        val mediaId = NodeCreate.uuid(tenant.account)
+        val mediaId = sealed?.mediaId ?: NodeCreate.uuid(tenant.account)
         val wrappedMeta = metaTier?.let { MediaMetadata.sealMeta(suite, node.key, scopeId, mediaId, it) }
         val wrappedExif = exif?.let { MediaMetadata.sealExif(suite, node.key, scopeId, mediaId, it) }
         // A1 of ADR 0144 decision 5: the node's video banner is this very file — the original is a new row on its object
         val shared = sharedOriginal(suite, scopeId, node, mediaId, NodeCreate.uuid(tenant.account), original, type, sha256)
         val blobs = ArrayList<ApplicationBlobs.Outgoing>()
-        if (shared == null) blobs += ApplicationBlobs.Outgoing(MemoryMedia.ORIGINAL, original.source.size, type, original.name, original.modifiedAt, sha256, original.source.read)
-        val tiers = listOfNotNull(
-            derived.thumbnail?.let { MemoryMedia.THUMBNAIL to it },
-            derived.preview?.let { MemoryMedia.PREVIEW to it },
-        ).takeIf { derived.thumbnail != null && derived.preview != null }.orEmpty()
-        for ((role, bytes) in tiers) {
-            blobs += ApplicationBlobs.Outgoing(role, bytes.size.toLong(), "image/jpeg", null, null, null) { from, length ->
-                bytes.copyOfRange(from.toInt(), (from + length).toInt())
+        if (shared == null) blobs += if (sealed != null) ApplicationBlobs.Outgoing(MemoryMedia.ORIGINAL, sealed.original.size, type, original.name, original.modifiedAt, sha256, sealed.original)
+        else ApplicationBlobs.Outgoing(MemoryMedia.ORIGINAL, original.source.size, type, original.name, original.modifiedAt, sha256, original.source.read)
+        val tiers: List<Pair<String, ApplicationBlobs.Outgoing>> = if (sealed != null) {
+            listOfNotNull(
+                sealed.thumbnail?.let { MemoryMedia.THUMBNAIL to ApplicationBlobs.Outgoing(MemoryMedia.THUMBNAIL, it.size, "image/jpeg", null, null, null, it) },
+                sealed.preview?.let { MemoryMedia.PREVIEW to ApplicationBlobs.Outgoing(MemoryMedia.PREVIEW, it.size, "image/jpeg", null, null, null, it) },
+            ).takeIf { it.size == 2 }.orEmpty()
+        } else {
+            listOfNotNull(
+                derived.thumbnail?.let { MemoryMedia.THUMBNAIL to it },
+                derived.preview?.let { MemoryMedia.PREVIEW to it },
+            ).takeIf { derived.thumbnail != null && derived.preview != null }.orEmpty().map { (role, bytes) ->
+                role to ApplicationBlobs.Outgoing(role, bytes.size.toLong(), "image/jpeg", null, null, null, { from, length ->
+                    bytes.copyOfRange(from.toInt(), (from + length).toInt())
+                })
             }
         }
+        blobs += tiers.map { it.second }
         val total = blobs.sumOf { it.size }.coerceAtLeast(1).toDouble()
         progress(0.0)
         val sent = if (blobs.isEmpty()) emptyList() else ApplicationBlobs(tenant).reserveAndPumpAll(scopeId, mediaId, node.key, blobs) { progress(it / total) }

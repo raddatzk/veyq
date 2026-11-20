@@ -53,17 +53,16 @@ object QueuedNodes {
     }
 
     /**
-     * Node [node] of [scope] renamed to [name], stating [placementRevision], the revision the person saw it at. A folder
-     * made offline has its queued create renamed instead; a second rename replaces the first and keeps the revision the
+     * Node [node] of [scope] renamed to [name], stating [placementRevision], the revision the person saw it at. A node
+     * made offline (a folder, a Memory, a chapter) has its queued create renamed instead; a second rename replaces the first and keeps the revision the
      * first saw. False where nothing was queued.
      */
     suspend fun rename(account: VeyqAccount, tenant: String, scope: String, node: String, placementRevision: Long, name: String, nowMs: Long): Boolean {
         val box = account.outbox ?: return false
         val n = name.trim()
         if (n.isEmpty()) return false
-        box.write(node)?.takeIf { it.op == Queued.FOLDER_CREATE.name }?.let { made ->
-            val intent = decode(FolderIntent.serializer(), made)
-            return box.put(made.copy(intent = encode(FolderIntent.serializer(), intent.copy(name = n))))
+        box.write(node)?.takeIf { it.op in CREATES }?.let { made ->
+            return box.put(made.copy(intent = JsonObject(made.intent + ("name" to kotlinx.serialization.json.JsonPrimitive(n)))))
         }
         val id = RENAME + node
         val seen = box.write(id)?.let { decode(RenameIntent.serializer(), it).placementRevision } ?: placementRevision
@@ -71,12 +70,12 @@ object QueuedNodes {
     }
 
     /**
-     * Node [node] of [scope] to the trash. A folder made offline is dropped from the queue instead, with every write
-     * waiting for it; a queued rename of the node goes with it. False where nothing was queued.
+     * Node [node] of [scope] to the trash. A node made offline is dropped from the queue instead, with every write
+     * waiting for it (its media, its marks); a queued rename of the node goes with it. False where nothing was queued.
      */
     suspend fun trash(account: VeyqAccount, tenant: String, scope: String, node: String, nowMs: Long): Boolean {
         val box = account.outbox ?: return false
-        if (box.write(node)?.op == Queued.FOLDER_CREATE.name) {
+        if (box.write(node)?.op in CREATES) {
             dropWithDependents(box, node)
             return true
         }
@@ -147,7 +146,11 @@ object QueuedNodes {
         Queued.FOLDER_CREATE -> folderSender
         Queued.NODE_RENAME -> renameSender
         Queued.NODE_TRASH -> trashSender
+        else -> throw IllegalArgumentException("not core's: $q")
     }
+
+    /** The queued writes that create a node the person may rename or trash before it is sent: its intent's `name` is its name. */
+    internal val CREATES = setOf(Queued.FOLDER_CREATE.name, Queued.MEMORY_CREATE.name, Queued.DEPOT_FILE_ADD.name)
 
     private const val RENAME = "rename:"
     private const val TRASH = "trash:"

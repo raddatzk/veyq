@@ -44,7 +44,13 @@ class QueuedTest {
     @AfterTest
     fun cleanUp() = played.forEach { removeAll(it.root) }
 
-    private class Setup(val t: PlayedTenant, val a: VeyqAccount, val scope: PlayedTenant.Scope, val folder: PlayedTenant.Node)
+    private class Setup(val t: PlayedTenant, val a: VeyqAccount, val scope: PlayedTenant.Scope, val folder: PlayedTenant.Node) {
+        /** A Memory with one medium (whose tier carries a capture time), for Memories' rows. */
+        val memory: PlayedTenant.Node = t.node(scope, "mem", kind = "MEMORY", name = "Memory")
+        val medium: PlayedTenant.Medium = t.medium(memory, "med").also { it.tier = """{"v":1,"capturedAt":1000}""" }
+        /** A Pot, for Expenses' row. */
+        val pot: PlayedTenant.Node = t.pot(scope, "pot")
+    }
 
     /** A personal space with one folder at its top ("Old"), remembered on this device and resumed online. */
     private suspend fun setup(): Setup {
@@ -252,7 +258,13 @@ class QueuedTest {
     // ---- the closed list, derived
 
     /** The operations of ADR 0153 decision 3's never-queue column that a node write could reach. */
-    private val never = setOf("restoreNode", "purgeNode", "moveNode", "rekeyNode", "createShareLink", "putScopeGrant")
+    private val never = setOf(
+        "restoreNode", "purgeNode", "moveNode", "rekeyNode", "createShareLink", "putScopeGrant",
+        // Memories' never column: a banner or cover, a medium's restore or purge, a re-key of a node or of the marks
+        "setNodeCover", "removeNodeCover", "restoreMedia", "purgeMedia", "stageNodeRekey", "commitNodeRekey", "stageScopeItemFavoritesRekey",
+        // Expenses': a record erased, a Pot re-keyed (a Pot's settings are `updateNode`'s meta, which no Expenses row declares)
+        "erasePotRecord", "stagePotRekey",
+    )
 
     /** Each write request's operation, read off its method and path; anything this table does not know is named as unknown. */
     private fun operationOf(r: HttpRequestData): String {
@@ -263,14 +275,44 @@ class QueuedTest {
             isDelete(r) -> "deleteNode"
             r.method == HttpMethod.Post && p.matches(Regex("/api/scopes/[^/]+/nodes/[^/]+/restore")) -> "restoreNode"
             r.method == HttpMethod.Post && p.matches(Regex("/api/scopes/[^/]+/nodes/[^/]+/purge")) -> "purgeNode"
+            r.method == HttpMethod.Post && p.matches(Regex("/api/scopes/[^/]+/blob-uploads-batch")) -> "startBlobUploads"
+            r.method == HttpMethod.Post && p.matches(Regex("/api/scopes/[^/]+/blob-upload-windows")) -> "presignBlobUploadWindows"
+            r.method == HttpMethod.Post && p.matches(Regex("/api/scopes/[^/]+/media-batch")) -> "completeMedia"
+            r.method == HttpMethod.Put && p.matches(Regex("/api/scopes/[^/]+/media/[^/]+/meta")) -> "updateMediaMeta"
+            r.method == HttpMethod.Delete && p.matches(Regex("/api/scopes/[^/]+/media/[^/]+")) -> "deleteMedia"
+            r.method == HttpMethod.Post && p.matches(Regex("/api/scopes/[^/]+/media/[^/]+/restore")) -> "restoreMedia"
+            r.method == HttpMethod.Put && p.matches(Regex("/api/scopes/[^/]+/nodes/[^/]+/item-favorites")) -> "putItemFavorites"
+            r.method == HttpMethod.Post && p.matches(Regex("/api/scopes/[^/]+/files/[^/]+/content")) -> "completeFile"
+            r.method == HttpMethod.Post && p.matches(Regex("/api/scopes/[^/]+/nodes/[^/]+/application-blobs")) -> "completeApplicationBlob"
+            r.method == HttpMethod.Post && p.matches(Regex("/api/scopes/[^/]+/pots/[^/]+/revisions")) -> "appendPotRevisions"
+            r.method == HttpMethod.Post && p.matches(Regex("/api/scopes/[^/]+/pots/[^/]+/erasures")) -> "erasePotRecord"
             else -> "unknown ${r.method.value} $p"
         }
     }
 
-    private fun sample(q: Queued, x: Setup): QueuedWrite = when (q) {
+    private suspend fun sample(q: Queued, x: Setup): QueuedWrite = when (q) {
         Queued.FOLDER_CREATE -> QueuedWrite(x.t.id("sample"), q.name, "t1", x.scope.id, node = x.t.id("sample"), intent = QueuedNodes.encode(QueuedNodes.FolderIntent.serializer(), QueuedNodes.FolderIntent(x.folder.id, "Sample")), at = 0)
         Queued.NODE_RENAME -> QueuedWrite("r", q.name, "t1", x.scope.id, node = x.folder.id, intent = QueuedNodes.encode(QueuedNodes.RenameIntent.serializer(), QueuedNodes.RenameIntent("Renamed", 0)), at = 0)
         Queued.NODE_TRASH -> QueuedWrite("t", q.name, "t1", x.scope.id, node = x.folder.id, at = 0)
+        Queued.MEMORY_CREATE -> QueuedWrite(x.t.id("m-sample"), q.name, "t1", x.scope.id, node = x.t.id("m-sample"), intent = QueuedNodes.encode(me.raddatz.veyq.mobile.memories.QueuedMemories.CreateIntent.serializer(), me.raddatz.veyq.mobile.memories.QueuedMemories.CreateIntent(null, "MEMORY", "Sample")), at = 0)
+        Queued.MEDIA_ADD -> {
+            val photo = me.raddatz.veyq.mobile.blob.UploadSource.of("a.png", 8, "image/png", null) { from, length -> "PNGBYTES".encodeToByteArray().copyOfRange(from.toInt(), from.toInt() + length) }
+            val deriver = object : me.raddatz.veyq.mobile.memories.MediaUpload.Deriver {
+                override fun derive(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, done: (me.raddatz.veyq.mobile.memories.MediaUpload.Derived) -> Unit) =
+                    done(me.raddatz.veyq.mobile.memories.MediaUpload.Derived(null, null, null, null))
+            }
+            me.raddatz.veyq.mobile.memories.QueuedMemories.media(x.a, "t1", x.scope.id, x.memory.id, listOf(photo), deriver, { 0L }, {}).single()
+        }
+        Queued.MEDIA_CAPTURE_TIME -> QueuedWrite("c", q.name, "t1", x.scope.id, node = x.memory.id, intent = QueuedNodes.encode(me.raddatz.veyq.mobile.memories.QueuedMemories.TimeIntent.serializer(), me.raddatz.veyq.mobile.memories.QueuedMemories.TimeIntent(x.medium.id, 60_000L, null)), at = 0)
+        Queued.MEDIA_TRASH -> QueuedWrite("m", q.name, "t1", x.scope.id, node = x.memory.id, intent = QueuedNodes.encode(me.raddatz.veyq.mobile.memories.QueuedMemories.MediaIntent.serializer(), me.raddatz.veyq.mobile.memories.QueuedMemories.MediaIntent(x.medium.id)), at = 0)
+        Queued.DEPOT_FILE_ADD -> me.raddatz.veyq.mobile.depot.QueuedDepot.file(
+            x.a, "t1", x.scope.id, x.folder.id, me.raddatz.veyq.mobile.blob.UploadSource.of("n.txt", 4, "text/plain", null) { from, length -> "text".encodeToByteArray().copyOfRange(from.toInt(), from.toInt() + length) }, 0, {},
+        )!!
+        Queued.POT_ENTRY -> {
+            val body = me.raddatz.veyq.mobile.expenses.RevisionFormat.toJson(me.raddatz.veyq.mobile.expenses.RevisionBody(emptyList(), me.raddatz.veyq.mobile.expenses.ParticipantBody("Cleo", true, 3)))
+            QueuedWrite("entry:p", q.name, "t1", x.scope.id, node = x.pot.id, intent = QueuedNodes.encode(me.raddatz.veyq.mobile.expenses.QueuedExpenses.EntryIntent.serializer(), me.raddatz.veyq.mobile.expenses.QueuedExpenses.EntryIntent("0e000000-0000-4000-8000-000000000003", null, body)), at = 0)
+        }
+        Queued.MEDIA_MARK -> QueuedWrite("k", q.name, "t1", x.scope.id, node = x.memory.id, intent = QueuedNodes.encode(me.raddatz.veyq.mobile.memories.QueuedMemories.MarkIntent.serializer(), me.raddatz.veyq.mobile.memories.QueuedMemories.MarkIntent(x.medium.id, true)), at = 0)
     }
 
     @Test
@@ -281,13 +323,21 @@ class QueuedTest {
             assertTrue(q.operations.none { it in never }, "$q declares a never-queue operation")
             val calls = mutableListOf<Pair<String, String>>()
             // every write answered as refused: what matters is what was asked
-            x.t.route = { r -> if (r.method != HttpMethod.Get) { calls += operationOf(r) to r.body(); 404 to """{"code":"node_not_found"}""" } else null }
+            x.t.route = { r ->
+                when {
+                    r.method != HttpMethod.Get -> { calls += operationOf(r) to r.body(); 404 to """{"code":"node_not_found"}""" }
+                    // a mark reads the own set before it writes it
+                    r.url.encodedPath.endsWith("/item-favorites") -> 200 to "[]"
+                    else -> null
+                }
+            }
             tenant.forgetTree()
             AppKinds.queuedSender(q).send(tenant, sample(q, x))
             val ops = calls.map { it.first }.toSet()
             assertTrue(ops.isNotEmpty(), "$q's sender sent nothing")
             assertTrue(ops.none { it in never || it.startsWith("unknown") }, "$q's sender called $ops")
-            assertEquals(q.operations, ops, "$q declares ${q.operations}, its sender called $ops")
+            // every operation called is declared (a window is signed only where the start's ran out, so a declared one may go uncalled)
+            assertTrue(q.operations.containsAll(ops), "$q declares ${q.operations}, its sender called $ops")
             // a rename is a placement under the parent the node is under: never a move
             if (q == Queued.NODE_RENAME) for ((_, body) in calls) {
                 val parent = Json.parseToJsonElement(body).jsonObject["parentId"]

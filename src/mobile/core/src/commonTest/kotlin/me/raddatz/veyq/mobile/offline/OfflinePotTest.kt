@@ -97,9 +97,11 @@ class OfflinePotTest {
         assertNotNull(s.offline, "a Pot from the store says as of when")
         val view = assertNotNull(s.view)
         assertEquals(entries, view.entries.map { it.title to it.amount })
-        assertFalse(view.canWrite, "offline a Pot offers no write")
+        // an entry is queued offline (ADR 0153 decision 3); its settings and people are not
+        assertTrue(view.canWrite, "offline a Pot takes no entry although entries are queued")
+        assertFalse(view.canRecordAll)
         assertFalse(view.canChangeSettings)
-        // a write is refused with the one notice, nothing sent
+        // a write that does not queue is refused with the one notice, nothing sent
         val before = t.requests.size
         assertEquals(PotSession.WriteOutcome.OFFLINE, m.written(PotModel.Op.AddPerson("Cleo"), said = true))
         assertEquals(Notice(Msg.OFFLINE_READ_ONLY), m.refusal())

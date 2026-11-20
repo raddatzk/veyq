@@ -5096,6 +5096,200 @@
     "en": "An item",
     "de": "Ein Eintrag"
   },
+  "offline_waiting": {
+    "note": "a tile, row or entry made offline, not sent yet (ADR 0153 decision 5; drafted in cr-app-offline-writes phase 5, the owner's to change)",
+    "en": "Waiting to send",
+    "de": "Wartet auf Versand"
+  },
+  "offline_banner_waiting": {
+    "note": "under the offline banner while changes made offline wait: {1} how many",
+    "en": {
+      "one": "One change waiting to send",
+      "other": "{1:int} changes waiting to send"
+    },
+    "de": {
+      "one": "Eine Änderung wartet auf Versand",
+      "other": "{1:int} Änderungen warten auf Versand"
+    }
+  },
+  "offline_sent": {
+    "note": "the notice after a reconnect sent changes made offline: {1} how many were sent",
+    "en": {
+      "one": "One change made offline was sent",
+      "other": "{1:int} changes made offline were sent"
+    },
+    "de": {
+      "one": "Eine offline gemachte Änderung wurde gesendet",
+      "other": "{1:int} offline gemachte Änderungen wurden gesendet"
+    }
+  },
+  "offline_need_you": {
+    "note": "the notice after a reconnect where changes made offline could not be sent as they are: {1} how many need the person (the uploads tray lists them)",
+    "en": {
+      "one": "One change made offline needs you",
+      "other": "{1:int} changes made offline need you"
+    },
+    "de": {
+      "one": "Eine offline gemachte Änderung braucht dich",
+      "other": "{1:int} offline gemachte Änderungen brauchen dich"
+    }
+  },
+  "offline_held_changed": {
+    "note": "why a change made offline was held: what it changes was changed by someone else meanwhile (a conflict; Open decides)",
+    "en": "Changed by someone else meanwhile",
+    "de": "Inzwischen von jemand anderem geändert"
+  },
+  "offline_held_name": {
+    "note": "why a change made offline was held: its name is taken meanwhile, or the item was moved",
+    "en": "The name is taken, or it was moved meanwhile",
+    "de": "Der Name ist inzwischen vergeben, oder es wurde verschoben"
+  },
+  "offline_refused_gone": {
+    "note": "why a change made offline could not be sent: what it changes is gone (deleted, moved to the trash, a space left)",
+    "en": "No longer there",
+    "de": "Nicht mehr vorhanden"
+  },
+  "offline_refused_no_room": {
+    "note": "why a change made offline could not be sent: the storage is full",
+    "en": "No storage left",
+    "de": "Kein Speicherplatz mehr"
+  },
+  "offline_refused_not_allowed": {
+    "note": "why a change made offline could not be sent: no longer the person's to make (rights, an application switched off, blocked)",
+    "en": "No longer allowed",
+    "de": "Nicht mehr erlaubt"
+  },
+  "offline_refused_other": {
+    "note": "why a change made offline could not be sent, otherwise",
+    "en": "Could not be sent",
+    "de": "Konnte nicht gesendet werden"
+  },
+  "offline_discard": {
+    "note": "the uploads tray's action on a change made offline: deletes it unsent",
+    "en": "Discard",
+    "de": "Verwerfen"
+  },
+  "offline_discard_mine": {
+    "note": "beside a held Pot entry's editor: deletes the person's change made offline, the newer version stays",
+    "en": "Discard mine",
+    "de": "Meine verwerfen"
+  },
+  "offline_open": {
+    "note": "the uploads tray's action on a held change: opens where it is decided (the entry's editor, the rename dialog)",
+    "en": "Open",
+    "de": "Öffnen"
+  },
+  "offline_save_copy": {
+    "note": "the uploads tray's action on a refused change carrying a file: saves the file where the person chooses",
+    "en": "Save a copy",
+    "de": "Kopie speichern"
+  },
+  "offline_newer_version": {
+    "note": "a held Pot entry's editor: the newer version someone else saved; {1} who, {2} when",
+    "en": "{1} changed this entry on {2}. Your values are in the form.",
+    "de": "{1} hat diesen Eintrag am {2} geändert. Deine Werte stehen im Formular."
+  },
+  "offline_not_sent": {
+    "note": "a Pot entry made offline, counted but not sent yet",
+    "en": "Not sent",
+    "de": "Nicht gesendet"
+  },
+  "offline_balances_unsent": {
+    "note": "under a Pot's balances while they count entries made offline and not sent yet (owner 2026-11-19)",
+    "en": "Includes entries not sent yet",
+    "de": "Enthält noch nicht gesendete Einträge"
+  },
+  "offline_no_room_here": {
+    "note": "a change made offline not kept: this device's storage is almost full (ADR 0140's 5 % floor)",
+    "en": "Not enough space on this device to keep this change",
+    "de": "Zu wenig Speicher auf diesem Gerät, um diese Änderung aufzubewahren"
+  },
+  "offline_writes_lost": {
+    "note": "asked before signing out, stopping to trust this device or removing all offline content while changes made offline wait: {1} how many are deleted",
+    "en": {
+      "one": "One change made offline has not been sent yet. It will be deleted.",
+      "other": "{1:int} changes made offline have not been sent yet. They will be deleted."
+    },
+    "de": {
+      "one": "Eine offline gemachte Änderung ist noch nicht gesendet. Sie wird gelöscht.",
+      "other": "{1:int} offline gemachte Änderungen sind noch nicht gesendet. Sie werden gelöscht."
+    }
+  },
+  "offline_sign_out_anyway": {
+    "note": "the sign-out ask's confirm while changes made offline wait (Cancel keeps them to send first)",
+    "en": "Sign out anyway",
+    "de": "Trotzdem abmelden"
+  },
+  "offline_stop_trusting_anyway": {
+    "note": "the same ask's confirm for Stop trusting this device",
+    "en": "Stop trusting anyway",
+    "de": "Trotzdem nicht mehr vertrauen"
+  },
+  "offline_remove_anyway": {
+    "note": "the same ask's confirm for Remove all offline content",
+    "en": "Remove anyway",
+    "de": "Trotzdem entfernen"
+  },
+  "queued_folder": {
+    "note": "an uploads tray row: a folder made offline; {1} its name",
+    "en": "New folder “{1}”",
+    "de": "Neuer Ordner „{1}“"
+  },
+  "queued_memory": {
+    "note": "an uploads tray row: a Memory made offline; {1} its name",
+    "en": "New Memory “{1}”",
+    "de": "Neue Erinnerung „{1}“"
+  },
+  "queued_chapter": {
+    "note": "an uploads tray row: a chapter made offline; {1} its name",
+    "en": "New chapter “{1}”",
+    "de": "Neues Kapitel „{1}“"
+  },
+  "queued_rename": {
+    "note": "an uploads tray row: a rename made offline; {1} the new name",
+    "en": "Renamed to “{1}”",
+    "de": "Umbenannt in „{1}“"
+  },
+  "queued_trash": {
+    "note": "an uploads tray row: an item moved to the trash offline",
+    "en": "Moved to the trash",
+    "de": "In den Papierkorb verschoben"
+  },
+  "queued_medium": {
+    "note": "an uploads tray row: a photo or video added offline; {1} its file name",
+    "en": "{1}",
+    "de": "{1}"
+  },
+  "queued_capture_time": {
+    "note": "an uploads tray row: a photo's capture time changed offline",
+    "en": "Capture time changed",
+    "de": "Aufnahmezeit geändert"
+  },
+  "queued_medium_trash": {
+    "note": "an uploads tray row: a photo or video moved to the trash offline",
+    "en": "Photo moved to the trash",
+    "de": "Foto in den Papierkorb verschoben"
+  },
+  "queued_mark": {
+    "note": "an uploads tray row: a mark set or taken away offline",
+    "en": "Mark changed",
+    "de": "Markierung geändert"
+  },
+  "queued_file": {
+    "note": "an uploads tray row: a Depot file added offline; {1} its name",
+    "en": "{1}",
+    "de": "{1}"
+  },
+  "queued_entry": {
+    "note": "an uploads tray row: a Pot entry added or edited offline; {1} its title",
+    "en": "Entry “{1}”",
+    "de": "Eintrag „{1}“"
+  },
+  "queued_entry_deleted": {
+    "note": "an uploads tray row: a Pot entry deleted offline",
+    "en": "Entry deleted",
+    "de": "Eintrag gelöscht"
+  },
   "account_settings_storage": {
     "note": "the account Settings section of what the app keeps on this device (ADR 0140 decision 10; owner's copy 2026-11-15)",
     "en": "Storage on this device",

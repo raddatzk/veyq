@@ -131,8 +131,8 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
         s.rekeying = true
         s.revision++
     }
-    inner class Node(val scope: Scope, val label: String, val parent: Node?, val kind: String, val name: String) {
-        val id = id(label)
+    inner class Node(val scope: Scope, val label: String, val parent: Node?, val kind: String, val name: String, fixedId: String? = null) {
+        val id = fixedId ?: id(label)
         /** The node's key: a re-key ([rekey]) replaces it, and every wrap under it is sealed anew. */
         var key: ByteArray = p.randomBytes(32)
         var blocked = false
@@ -245,6 +245,10 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
 
     fun node(scope: Scope, label: String, kind: String = "MEMORY", parent: Node? = null, name: String = "Node $label"): Node =
         Node(scope, label, parent, kind, name).also { scope.nodes += it; scope.revision++ }
+
+    /** A node the client minted [id] for (a create the played server took): the tree lists it from now on. */
+    fun adopt(scope: Scope, id: String, kind: String, parent: Node?, name: String): Node =
+        Node(scope, "adopted-$id", parent, kind, name, fixedId = id).also { scope.nodes += it; scope.revision++ }
 
     /**
      * A medium of [node] whose original is [frames] frames, whose thumbnail (where [thumbnail]) one and whose preview (where
