@@ -68,15 +68,58 @@ Branch `claude/core-owns-refine` at `a75188eb8` (= `claude/windows-cr-f6c73c`). 
 
 ## Phases
 
-- [ ] **1 core** — G1, G3, G4, G5. Tests: a drop on a folder the core does not offer (a guest's identity folder) refused;
+- [x] **1 core** — G1, G3, G4, G5. Tests: a drop on a folder the core does not offer (a guest's identity folder) refused;
   one import offer per drop with a ZIP and a folder in it; the gallery drop keeping media and naming the rest; a name
   problem vs a refusal vs a thrown error; a READ_WRITE unnamed guest offered *Add entry* and asked its name at the
   write; a reach ended for the shown tenant moves the shell. · Done when: `:core:jvmTest :core:macosArm64Test` green.
   **Bites:** (a) `dropTarget` true for every FOLDER → the identity-folder case red; (b) `Named` collapsed back to one
   notice → the dialog-stays-open case red; (c) the reach's follow removed → the moved-shell case red.
-- [ ] **2 bridge** — G1's call (`Drop`), G2's re-judgement on every upload call, G3's answer, G5's watch. Tests: an
+  **Built** 2026-11-20 (`claude/gates-core`): G1 `navigation/Drop.kt` (`Dropped` File/Folder/NotLocal/Unread,
+  `DropTarget` Level(label)/Row(folder)/Gallery, `DropOutcome` Uploaded/Offered/Refused, the one sort `Drops`) behind
+  `ShellModel.drop(target, items, depot, left, deletedName)`, its gate `ShellModel.takesUpload(scopeId, parentId)` (G2's
+  re-judgement for the bridge) and `ShellModel.dropTarget(row)`; word `drop_not_here`. G3 `navigation/NameAnswer.kt`
+  (`problem`, `notice`, `queued`, `keepsOpen`) answered by `ShellModel.createFolder`/`createFolderHere`,
+  `NodeHeaderModel.rename` (its `Renamed` gone) and `GuestLevel.createFolder`. G4 `sharing/GuestNaming.kt`
+  (`GuestAccess.naming`: `asking`, `request`, `name` → `NameAnswer`, `decline`; word `share_guest_name_empty`),
+  `GuestAccess.replaceAsking`, `PotGuest.offersEntries`, `PotDoor.offersEntries`/`named()`, `PotSession`/`PotView.offersEntries`,
+  `WriteOutcome.UNNAMED` (the editor stays open). G5 `SessionModel.followed`/`watchFollowed`. Tests:
+  `GatesInTheCoreTest` (4), `SessionModelTest` (+2), `GuestDoorsTest` (+1); the offline createFolder cases read
+  `.queued`. Bites (a)–(c) seen red, plus one per further new test (`GuestPotDoor.offersEntries` back to
+  `writesEntries`; every dropped folder screened; the gallery's folder notices dropped), each restored with `/bin/cp -f`.
+  **Deviations:** (1) no `LevelRow` type exists — a row's gate is `ShellModel.dropTarget(row: NodeAt)`. (2) A level's
+  batch label stays the platform's drawn title (`DropTarget.Level(label)`); a row's is its folder's name. (3) A refused
+  drop hands nothing back, so a phone may still put a level's refused drop into the pick mode. (4) The phones' unread
+  items come as `Dropped.Unread(name)` (said by `Notices.notRead`), not a count. (5) A thrown create error also takes the
+  account offline (the reach's own rule), so the next create queues. **For phase 2 (bridge does not compile):**
+  `Bridge.kt` `createFolder` (line ~237) and `ReceivedNewFolder` (~2221) now get a `NameAnswer` — answer it as
+  `Answer.Renamed(problem, notice)`-shaped (keep `queued`); `ReceivedReplace`/`ReceivedNewFolder` read role and session
+  themselves — the replace goes through `access.replaceAsking` and `access.naming` needs a wire.
+- [x] **2 bridge** — G1's call (`Drop`), G2's re-judgement on every upload call, G3's answer, G5's watch. Tests: an
   `UploadFiles` into a scope the core does not offer refused before any read. · Done when: `:bridge:jvmTest` green.
   **Bite:** the re-judgement removed → that test red.
+  **Built** 2026-11-20 (`claude/gates-core`). The wire phases 3–6 use: G1 `Call.Drop(on, items, deletedName)` — `DropOn`
+  `Level(label)`/`Row(folder: NodeAt)`/`Gallery(gallery)`, `DropItem` `File(path)`/`Folder(path)`/`NotLocal(name)` (the
+  host tells a file from a folder by its file system, nothing more) → `Answer.Dropped(queued, notices, import?, refused)`
+  (an offered import held for `Watched.Import`); the shell's gates `ShellShown.dropsHere` (`dropLevel`) and `dropRows`
+  (the level's folder ids `dropTarget` offers). G2 `Upload.Files`, `Upload.Folder`, `Import.Screen`,
+  `Import.ScreenFolder` judge `(scopeId, parentId)` through `Tenant.takesUpload` (`ShellModel.takesUpload`; fail-closed
+  for a tenant without a shell) before a path is opened or walked → `Refused(DROP_NOT_HERE)`. G3 `Answer.Renamed` became
+  `Answer.Named(problem, notice, queued, keepsOpen)`, answered by `Header.Rename`, `Shell.CreateFolder` and
+  `Received.NewFolder`. G4 `Received.Replace` goes through `GuestAccess.replaceAsking` (no role or session read in the
+  bridge; it answers once the naming did), `ReceivedShown.naming` (`GuestNaming.asking`) with `Received.NamingSave(name)`
+  → `Answer.Named` and `Received.NamingDecline`. G5 the bridge collects `SessionModel.followed` and opens that tenant as
+  a sign-in's. The upload calls moved into `Bridge.uploadCall` (the dispatch's method hit the JVM's size). Tests
+  (`DispatchTest`): `anUploadCallIntoATargetTheCoreDoesNotOfferIsRefusedBeforeAnyRead`,
+  `aDropHandsTheItemsAndTheTargetToTheCoresOneDrop`, `aReachThatEndedForTheShownAccountMovesTheBridgesTenantToTheNextOne`;
+  `ReceivedBridgeTest.aSignedOutGuestReplacesTheFileOnScreen` rewritten for the naming at the write (declined, empty name
+  kept open, named). Bites seen red, each restored with `/bin/cp -f`: the re-judgement removed; the `followed` watch
+  removed; `replaceAsking` back to a session check + `replace`; `naming` not carried; a dropped folder not walked; a file
+  the drop did not keep not closed. **Platform code** changed only to compile with the renamed answer: Linux `header.rs`,
+  `shell.rs`, `received.rs` and Windows `NodeHeader.cs`, `ShellView.cs`, `ReceivedView.cs` read `Answer.Named` where they
+  read `Renamed`/`Said` (problem → ask again, notice → said). **Left to phases 3–6:** nothing calls `Drop`, the naming
+  dialog or `dropRows` yet; `Received.Name` (the explicit naming, WRITE_ONLY's uploader name among it) still branches on
+  the role in the bridge; `dropsHere`/`dropRows` are held by no bridge test (no played tenant has a shell) — the
+  platform phases' passes show them.
 - [ ] **3 Android** — the gallery and level drops through G1, the name dialogs through G3, the guest gates through G4,
   `followEnded` gone, `BuildDefaults` into `src/debug`. · Done when: `:android:assembleDebug` and
   `:android:compileReleaseKotlin` (the release variant, `src/release` exists; remembered, not run at refine), the words and guidelines guards green; `grep -rn "veyq.localhost" android/src/main` empty.

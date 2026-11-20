@@ -398,11 +398,11 @@ internal sealed class NodeHeader : IDisposable
         if (typed is null) return;
         switch (await Ask(new Call.HeaderRename { header = header, name = typed }))
         {
-            case Answer.Renamed { problem: { } p }:
+            case Answer.Named { problem: { } p }:
                 Rename(typed, Veyq.Said.Notice(p)); // asked again, with the core's problem (the dialog closed first)
                 break;
-            case Answer.Renamed { notice: var n }:
-                Log.Write("header rename: Renamed");
+            case Answer.Named { notice: var n }:
+                Log.Write("header rename: Named");
                 if (n is not null) _say(true, Veyq.Said.Notice(n));
                 break;
             case var other:

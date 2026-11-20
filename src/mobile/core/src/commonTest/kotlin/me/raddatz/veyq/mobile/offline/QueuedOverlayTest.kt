@@ -163,7 +163,7 @@ class QueuedOverlayTest {
         assertNull(shell.queuedBanner.first())
         assertNull(shell.queuedLost())
         // a folder made offline shows where it was made
-        assertNull(shell.createFolder(s.id, null, "Trip"))
+        assertTrue(shell.createFolder(s.id, null, "Trip").queued)
         val here = shell.queuedAt(s.id, null).first()
         assertEquals(listOf(Notice(Msg.QUEUED_FOLDER, "Trip")), here.map { it.title })
         assertEquals(Notice(Msg.OFFLINE_WAITING), here.single().said)
@@ -207,8 +207,8 @@ class QueuedOverlayTest {
         val (t, a, sm) = offlineMemory()
         val (s, _) = sm
         val shell = shellOf(tenantOf(a))
-        assertNull(shell.createFolder(s.id, null, "Sent"))
-        assertNull(shell.createFolder(s.id, null, "Taken"))
+        assertTrue(shell.createFolder(s.id, null, "Sent").queued)
+        assertTrue(shell.createFolder(s.id, null, "Taken").queued)
         var creates = 0
         t.route = { r ->
             if (r.method == io.ktor.http.HttpMethod.Post && r.url.encodedPath.matches(Regex("/api/scopes/[^/]+/nodes"))) {

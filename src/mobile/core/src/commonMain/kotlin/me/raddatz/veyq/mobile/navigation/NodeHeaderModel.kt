@@ -246,15 +246,16 @@ class NodeHeaderModel(
         return failed
     }
 
-    /** What a rename came to: why it did not land ([problem], the dialog asks again), or what to say once it did ([notice]). */
-    class Renamed(val problem: Notice?, val notice: Notice?)
-
-    /** Renames the node to [name] (its placement, then its open links' names); an open page follows it. */
-    suspend fun rename(name: String): Renamed {
+    /**
+     * Renames the node to [name] (its placement, then its open links' names); an open page follows it. What it came to as
+     * the name dialog answers it ([NameAnswer]): why it did not land ([NameAnswer.problem], the dialog asks again), or what
+     * to say once it did ([NameAnswer.notice]: a link that kept the old name).
+     */
+    suspend fun rename(name: String): NameAnswer {
         val r = door.rename(node, name)
         door.changed()
         // renamed; a link that kept the old name is said (the rename stands)
-        return Renamed(r.notice, if (r.linksFailed) Notice(Msg.SHARE_NAME_RESEAL_FAILED) else null)
+        return NameAnswer(r.notice, if (r.linksFailed) Notice(Msg.SHARE_NAME_RESEAL_FAILED) else null)
     }
 
     /**

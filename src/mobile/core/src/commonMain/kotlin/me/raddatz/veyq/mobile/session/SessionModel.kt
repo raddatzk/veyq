@@ -221,6 +221,19 @@ class SessionModel<A : Connection, T : Any>(
     /** The account and tenant the shell is over, if any. */
     val signedTo: Opened<A, T>? get() = opened
 
+    private val _followed = MutableStateFlow<Opened<A, T>?>(null)
+
+    /**
+     * What the shell follows that no call of the platform opened (ADR 0154 decision 1): the shown account ended on its own
+     * ([Reach.Ended], a reconnect found this device's trust gone) and the next one opened in its place — the platforms
+     * observe it ([watchFollowed]) and show it where their shell is over another; none compares accounts itself. Each end
+     * is a new value; null until one. Where no account is left the [gate] says so (the unlock or the sign-in).
+     */
+    val followed: StateFlow<Opened<A, T>?> = _followed.asStateFlow()
+
+    /** [followed] for a platform that observes by callback (Swift, the bridge): each opened account the shell follows. */
+    fun watchFollowed(listener: (Opened<A, T>) -> Unit): Watch = Watch(scope.launch { followed.collect { o -> o?.let(listener) } })
+
     private var opened: Opened<A, T>? = null
     private var started = false
     private var pendingUnlock: String? = null
@@ -678,7 +691,7 @@ class SessionModel<A : Connection, T : Any>(
         val next = connections.current
         when {
             next == null -> locked(error = words(reason))
-            wasCurrent -> openOrLock(next.first, next.second)
+            wasCurrent -> openOrLock(next.first, next.second)?.let { _followed.value = it }
         }
     }
 

@@ -2,6 +2,7 @@ package me.raddatz.veyq.mobile.bridge
 
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.crypto.b64
@@ -189,9 +190,9 @@ class ReceivedBridgeTest {
         }
         val level = until { it.page?.kind == ReceivedPageKind.LEVEL }
         assertTrue(level.page!!.writes, "a READ_WRITE guest's level offers no write")
-        assertNotNull(assertIs<Answer.Said>(b.ask(Call.ReceivedNewFolder(opened.received, "Neu"))).notice, "a folder was made before the guest named itself")
+        assertNotNull(assertIs<Answer.Named>(b.ask(Call.ReceivedNewFolder(opened.received, "Neu"))).notice, "a folder was made before the guest named itself")
         b.ask(Call.ReceivedName(opened.received, "Ben"))
-        assertEquals(Answer.Said(null), b.ask(Call.ReceivedNewFolder(opened.received, "Neu")))
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ReceivedNewFolder(opened.received, "Neu")))
         assertTrue(until { s -> s.page?.rows?.any { it.name == "Neu" } == true }.page!!.writes, "the new folder was not drawn after the reload")
         // the reports: a row's (the Memory) and the page's (the root), never the link's
         assertIs<Answer.ReportOpened>(b.ask(Call.ReceivedReportNode(opened.received, memory)))
@@ -208,7 +209,9 @@ class ReceivedBridgeTest {
 
     /**
      * #1035: a signed-out READ_WRITE guest replaces the file on screen by path (`Received.Replace`, the link's own queue —
-     * no tenant is open): refused before it named itself and before Replace was chosen, queued after; the content completed.
+     * no tenant is open); ADR 0154 decision 1: a guest not named yet is asked its name at the write by the core's naming
+     * flow ([ReceivedShown.naming]) — declined, nothing queued; an empty name keeps the dialog open; named, the replace
+     * waiting on it goes up. Refused before Replace was chosen; the content completed.
      */
     @Test
     fun aSignedOutGuestReplacesTheFileOnScreen() = runBlocking {
@@ -228,14 +231,26 @@ class ReceivedBridgeTest {
         assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.ReceivedReplace(opened.received, path)), "a level took a replace")
         b.ask(Call.ReceivedOpenNode(opened.received, file))
         val page = assertNotNull(until { it.page?.kind == ReceivedPageKind.FILE }.page!!.file)
-        assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.ReceivedReplace(opened.received, path)), "an unnamed guest's replace was taken")
-        b.ask(Call.ReceivedName(opened.received, "Ben"))
-        until { it.guestName != null }
-        assertEquals(Answer.Refused(Answer.Why.NOT_CHOSEN), b.ask(Call.ReceivedReplace(opened.received, path)), "a replace not chosen was taken")
-        kotlinx.coroutines.withTimeout(10_000) { while (b.ask(Call.FileChooseReplace(page)) != Answer.Done) kotlinx.coroutines.delay(20) }
         assertIs<Answer.Said>(b.ask(Call.ReceivedReplace(opened.received, "$path.missing")), "a path that does not read was not said")
+        // not named yet: the replace asks the name and waits; declined, nothing is queued
         kotlinx.coroutines.withTimeout(10_000) { while (b.ask(Call.FileChooseReplace(page)) != Answer.Done) kotlinx.coroutines.delay(20) }
-        assertEquals(Answer.Queued(1), b.ask(Call.ReceivedReplace(opened.received, path)))
+        val declined = async { b.ask(Call.ReceivedReplace(opened.received, path)) }
+        until { it.naming }
+        assertEquals(Answer.Done, b.ask(Call.ReceivedNamingDecline(opened.received)))
+        assertEquals(Answer.Refused(Answer.Why.NOT_CHOSEN), declined.await(), "a declined naming's replace was taken")
+        assertFalse(until { !it.naming }.naming)
+        assertTrue(content.completed.isEmpty(), "a replace went up unnamed")
+        // asked again: an empty name keeps the dialog open, a name lets the waiting replace go up
+        kotlinx.coroutines.withTimeout(10_000) { while (b.ask(Call.FileChooseReplace(page)) != Answer.Done) kotlinx.coroutines.delay(20) }
+        val replaced = async { b.ask(Call.ReceivedReplace(opened.received, path)) }
+        until { it.naming }
+        val empty = assertIs<Answer.Named>(b.ask(Call.ReceivedNamingSave(opened.received, "  ")))
+        assertTrue(empty.keepsOpen && empty.problem != null, "an empty name closed the dialog")
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ReceivedNamingSave(opened.received, "Ben")))
+        assertEquals(Answer.Queued(1), replaced.await())
+        assertEquals("Ben", until { it.guestName != null && !it.naming }.guestName)
+        // named: a replace not chosen is refused at once, nothing asked
+        assertEquals(Answer.Refused(Answer.Why.NOT_CHOSEN), b.ask(Call.ReceivedReplace(opened.received, path)), "a replace not chosen was taken")
         kotlinx.coroutines.withTimeout(10_000) { while (content.completed.isEmpty()) kotlinx.coroutines.delay(20) }
         assertEquals(1, content.completed.size)
         b.ask(Call.ReceivedClose(opened.received))

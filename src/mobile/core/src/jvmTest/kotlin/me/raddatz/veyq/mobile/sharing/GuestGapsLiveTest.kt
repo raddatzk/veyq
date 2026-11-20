@@ -118,7 +118,7 @@ class GuestGapsLiveTest {
             val level = assertIs<GuestPage.Level>(rw.view.page.value).model
             assertTrue(level.writes)
             assertNotNull(rw.view.access).nameGuest("Gaps guest")
-            assertNull(level.createFolder("Guest folder"), "the guest's folder was refused")
+            assertEquals(me.raddatz.veyq.mobile.navigation.NameAnswer.DONE, level.createFolder("Guest folder"), "the guest's folder was refused")
             val after = assertIs<GuestPage.Level>(rw.view.page.value).model
             assertTrue(after.rows.any { it.name == "Guest folder" }, "the guest's folder is not listed after the write")
             val text = "a guest's file".encodeToByteArray()

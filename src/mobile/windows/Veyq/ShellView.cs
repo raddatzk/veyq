@@ -1095,12 +1095,13 @@ internal sealed class ShellView
             Log.Write($"Shell.CreateFolder failed ({e.GetType().Name})");
             return;
         }
-        if (answer is Answer.Said { notice: { } n })
+        if (answer is Answer.Named { problem: { } p })
         {
-            Log.Write($"new folder: {n.msg}");
-            await NewFolder(typed, Said.Notice(n));
+            Log.Write($"new folder: {p.msg}");
+            await NewFolder(typed, Said.Notice(p));
         }
-        else Log.Write($"Shell.CreateFolder: {(answer is Answer.Said ? "Done" : answer.GetType().Name)}");
+        else if (answer is Answer.Named { notice: { } n }) Say(false, Said.Notice(n));
+        else Log.Write($"Shell.CreateFolder: {(answer is Answer.Named ? "Done" : answer.GetType().Name)}");
     }
 
     /// <summary>How an action went, under the bar until it is closed or the object leaves.</summary>

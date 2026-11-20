@@ -43,25 +43,27 @@ class GuestLevel internal constructor(
     val guest: StateFlow<GuestSession?>? get() = access?.session
 
     /**
-     * New folder [name] here as the guest; null once made (the link read anew), else why not: an empty name, a sibling's
-     * name, a refusal. Nothing before the guest named itself.
+     * New folder [name] here as the guest, as New Folder's dialog answers it ([NameAnswer], ADR 0154 decision 1): an empty
+     * name or a sibling's is a problem (the dialog asks again); once made the link is read anew; a refusal, a thrown error
+     * and a write before the guest named itself are said.
      */
-    suspend fun createFolder(name: String): me.raddatz.veyq.mobile.words.Notice? {
-        val a = access ?: return me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_FAILED)
+    suspend fun createFolder(name: String): me.raddatz.veyq.mobile.navigation.NameAnswer {
+        val failed = me.raddatz.veyq.mobile.navigation.NameAnswer.said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_FAILED))
+        val a = access ?: return failed
         val n = name.trim()
-        if (n.isEmpty()) return me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_NAME_EMPTY)
+        if (n.isEmpty()) return me.raddatz.veyq.mobile.navigation.NameAnswer.problem(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_NAME_EMPTY))
         val session = a.session.value
         val parent = tree.node(node.nodeId)
-        if (!writes || session == null || parent == null) return me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_FAILED)
+        if (!writes || session == null || parent == null) return failed
         val made = runCatching { a.createNode(session, parent, NodeRef.FOLDER, n) }.getOrNull()
         return when (made) {
             is GuestAccess.Created.Done -> {
                 made.key.fill(0)
                 view?.reload()
-                null
+                me.raddatz.veyq.mobile.navigation.NameAnswer.DONE
             }
-            GuestAccess.Created.Taken -> me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_NAME_TAKEN)
-            else -> me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_FAILED)
+            GuestAccess.Created.Taken -> me.raddatz.veyq.mobile.navigation.NameAnswer.problem(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_NAME_TAKEN))
+            else -> failed
         }
     }
 

@@ -34,13 +34,15 @@ class PotView(session: Source) {
         val unsent: Set<String> = emptySet(),
         /** Shown offline: only an entry is written then (queued), never a payment recorded or a restore. */
         val offline: Boolean = false,
+        /** *Add entry* offered ([PotSession.offersEntries]): [canWrite], or a READ_WRITE guest not named yet. */
+        val offersEntries: Boolean = canWrite,
     )
 
     constructor(session: PotSession) : this(
         Source(
             session.name, session.meta, session.ledger, session.check, session.members, session.named, session.canWrite,
             session.canChangeSettings, session.currencyFixed, session.heldRevisions(), session.directory, session.ratesOffered,
-            session.receipts, session.member, session.unsent, session.offline != null,
+            session.receipts, session.member, session.unsent, session.offline != null, session.offersEntries,
         ),
     )
 
@@ -77,6 +79,12 @@ class PotView(session: Source) {
     val currency: String? = session.meta?.base?.currency
     val minorUnits: Int = session.meta?.base?.minorUnits ?: 2
     val canWrite: Boolean = session.canWrite
+
+    /**
+     * Whether *Add entry* is offered, and an entry's editor edits (ADR 0154 decision 1, the web's rule): where [canWrite] —
+     * and to a READ_WRITE link's guest not named yet, whose save asks its name first. Every platform asks this.
+     */
+    val offersEntries: Boolean = session.offersEntries
     /** Without settings the Pot shows no balance and takes no entry until a member sets a base currency. */
     val ready: Boolean = session.ledger != null
 
