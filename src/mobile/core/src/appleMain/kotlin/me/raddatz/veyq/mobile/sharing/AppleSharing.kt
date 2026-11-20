@@ -10,7 +10,7 @@ import me.raddatz.veyq.mobile.blob.FileSink
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.crypto.LibsodiumPrimitives
 import me.raddatz.veyq.mobile.depot.FileModel
-import me.raddatz.veyq.mobile.depot.FileSave
+import me.raddatz.veyq.mobile.blob.FileSave
 import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.SpaceRef

@@ -16,7 +16,7 @@ import me.raddatz.veyq.mobile.blob.FileSink
 import me.raddatz.veyq.mobile.blob.FileUploadSource
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.blob.UploadSource
-import me.raddatz.veyq.mobile.depot.FileSave
+import me.raddatz.veyq.mobile.blob.FileSave
 import me.raddatz.veyq.mobile.memories.banner.BannerEditor
 import me.raddatz.veyq.mobile.memories.banner.BannerWrite
 import me.raddatz.veyq.mobile.memories.people.PersonMemories

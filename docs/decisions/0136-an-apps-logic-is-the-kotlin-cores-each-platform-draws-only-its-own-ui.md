@@ -261,7 +261,7 @@ four times.
   - **A FILE's download is the file itself** under its own name (`AppKinds.downloadsItself`/`ownDownload`,
     `ShellModel.downloadAs`), any other node its ZIP, on every app — the desktops had written a file's ZIP. A phone's Send a
     copy is that download into the shared directory, swept at the next start.
-  - `depot/FileSave`: "Save a copy" written a frame at a time where the person chose, its progress and its cancel (which
+  - `blob/FileSave` (`depot/` until cr-apps-core-ui-layer, which Memories uses too): "Save a copy" written a frame at a time where the person chose, its progress and its cancel (which
     returns once the partial file is gone), in a scope of its own, so it outlives its page and stops with its tenant.
   - `depot/DepotUploads` (`ShellModel.depotUploads`, one per open tenant, over the app's one `UploadQueue`): files and a
     folder into a level, a replace **expected over the content shown when Replace was chosen** (`FileModel.chooseReplace`,

@@ -442,7 +442,7 @@ private fun GuestFileActions(page: GuestPage.File, access: GuestAccess?, model: 
         } ?: return@rememberLauncherForActivityResult
         scope.launch {
             val ended = run.state.first { it.end != null }
-            if (ended.end != me.raddatz.veyq.mobile.depot.FileSave.End.SAVED) {
+            if (ended.end != me.raddatz.veyq.mobile.blob.FileSave.End.SAVED) {
                 withContext(Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) } }
             }
             snackbar.showSnackbar(context.text(ended.notice))

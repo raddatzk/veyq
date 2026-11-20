@@ -78,9 +78,24 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
 
 ## Phases
 
-- [ ] **1 core** — L4: `FileSave` to `blob/`, R6's files resolved; the guard with rule (c). · Done when: `:core:jvmTest
+- [x] **1 core** — L4: `FileSave` to `blob/`, R6's files resolved; the guard with rule (c). · Done when: `:core:jvmTest
   :core:macosArm64Test`, `:bridge:jvmTest` green; the guard green. **Bite:** an `import …mobile.depot.*` planted in a
   `memories/` file → red.
+  **Built** (2026-11-20): `depot/FileSave.kt` → `blob/FileSave.kt` (`git mv`, the package and its imports — core, bridge,
+  Android; Swift sees the same exported name); `scripts/validate_mobile_ui_direction.py` with rule (c): (c1) no application
+  package names another's package or generated client (`api.<app>`), no exception; (c2) core outside the application
+  packages names one only in `CORE_ROOTS`, each entry with its reason — `AppKinds.kt` the composition root, and R6's
+  sixteen other files plus `offline/KeptRead.kt` (its serializers are the applications' generated models; R6's grep missed
+  `api.<app>`) **handed back**: each one's hook behind `AppKinds` is a design of its own (ShellModel's open screen models,
+  the one drop and Add here, GuestPage's per-kind models, the notices, the tray, the row details, the link form, the
+  folder walk, the four Swift adapters in `appleMain`), not a move; an entry that is missing or names no application any
+  more is red, so the list only shrinks; and every core file's `package` is its directory's. `offline/Queued.kt` names
+  an application only in a KDoc (masked), so it is no root. Bites, each red then restored green: `blob.FileSave` →
+  `depot.FileSave` in `memories/GalleryModel.kt` (c1); `api.expenses.models.PotRevisionPage` in `memories/MemoryShare.kt`
+  (c1, the client); `import …memories.GalleryModel` in `navigation/Home.kt` (c2); `session/LinkForm.kt` emptied of its
+  application names (a stale root); a CORE_ROOTS path that does not exist; `memories/MemoryShare.kt` declaring the
+  package `…depot` (the package rule). Checks: `./gradlew :core:jvmTest :core:macosArm64Test :bridge:jvmTest
+  :android:assembleDebug -Pkotlin.incremental=false` BUILD SUCCESSFUL; every `scripts/validate_*.py` but guard_gaps green.
 - [ ] **2 Android** — L1–L3, rules (a) and (b) on for Android. · Done when: `:android:assembleDebug`, its unit tests,
   the words, guidelines and direction guards green. **Bites:** a Memories file using a Pot composable → red; the shell
   naming `MemoryScreen` → red.

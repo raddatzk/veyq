@@ -1793,7 +1793,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Track [mediaId] of [tracks] saved to the document the person made at [uri] (the gallery's save); a document it did not fill goes again. */
-    fun saveGpx(tracks: me.raddatz.veyq.mobile.memories.tracks.TrackList, mediaId: String, uri: android.net.Uri): me.raddatz.veyq.mobile.depot.FileSave? {
+    fun saveGpx(tracks: me.raddatz.veyq.mobile.memories.tracks.TrackList, mediaId: String, uri: android.net.Uri): me.raddatz.veyq.mobile.blob.FileSave? {
         val resolver = getApplication<Application>().contentResolver
         val save = tracks.save(mediaId) { produce ->
             val out = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openOutputStream(uri) } ?: return@save false
@@ -1801,7 +1801,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         } ?: return null
         viewModelScope.launch {
             val ended = save.state.first { it.end != null }
-            if (ended.end != me.raddatz.veyq.mobile.depot.FileSave.End.SAVED) {
+            if (ended.end != me.raddatz.veyq.mobile.blob.FileSave.End.SAVED) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) } }
             }
         }
@@ -1861,7 +1861,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * Track [mediaId] of [music] saved to the document the person made at [uri] (core's `FileSave`, as a lightbox's
      * original is): a document it did not fill goes again. The save, whose end the view says; null where it is not offered.
      */
-    fun saveTrack(music: me.raddatz.veyq.mobile.memories.music.MusicModel, mediaId: String, uri: android.net.Uri): me.raddatz.veyq.mobile.depot.FileSave? {
+    fun saveTrack(music: me.raddatz.veyq.mobile.memories.music.MusicModel, mediaId: String, uri: android.net.Uri): me.raddatz.veyq.mobile.blob.FileSave? {
         val resolver = getApplication<Application>().contentResolver
         val save = music.save(mediaId) { produce ->
             val out = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { resolver.openOutputStream(uri) } ?: return@save false
@@ -1869,7 +1869,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         } ?: return null
         viewModelScope.launch {
             val ended = save.state.first { it.end != null }
-            if (ended.end != me.raddatz.veyq.mobile.depot.FileSave.End.SAVED) {
+            if (ended.end != me.raddatz.veyq.mobile.blob.FileSave.End.SAVED) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) } }
             }
         }
@@ -1914,7 +1914,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         } ?: return
         viewModelScope.launch {
             val ended = save.state.first { it.end != null }
-            if (ended.end != me.raddatz.veyq.mobile.depot.FileSave.End.SAVED) {
+            if (ended.end != me.raddatz.veyq.mobile.blob.FileSave.End.SAVED) {
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) } }
             }
         }

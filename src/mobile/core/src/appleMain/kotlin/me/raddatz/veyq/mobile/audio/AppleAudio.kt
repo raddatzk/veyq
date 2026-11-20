@@ -11,7 +11,7 @@ import me.raddatz.veyq.mobile.blob.FileSink
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.blob.Sniff
 import me.raddatz.veyq.mobile.crypto.V1
-import me.raddatz.veyq.mobile.depot.FileSave
+import me.raddatz.veyq.mobile.blob.FileSave
 import me.raddatz.veyq.mobile.memories.music.MusicModel
 import platform.Foundation.NSData
 import platform.posix.memcpy

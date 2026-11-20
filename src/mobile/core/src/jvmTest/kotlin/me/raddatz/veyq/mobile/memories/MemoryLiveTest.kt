@@ -87,7 +87,7 @@ class MemoryLiveTest {
         try {
             val save = box.save { produce -> saved.outputStream().use { out -> produce { out.write(it) } } }!!
             val ended = save.state.first { it.end != null }
-            assertTrue(ended.end == me.raddatz.veyq.mobile.depot.FileSave.End.SAVED, "the original was not saved: ${ended.end}")
+            assertTrue(ended.end == me.raddatz.veyq.mobile.blob.FileSave.End.SAVED, "the original was not saved: ${ended.end}")
             val whole = MemoryMedia.read(tenant, rows[0].item, rows[0].item.original)!!
             fun sha(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
             assertTrue(sha(saved.readBytes()) == sha(whole), "the saved original is not the original")

@@ -1,4 +1,4 @@
-package me.raddatz.veyq.mobile.depot
+package me.raddatz.veyq.mobile.blob
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope

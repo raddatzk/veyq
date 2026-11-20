@@ -3632,7 +3632,7 @@ internal class SaveShown(
     val written: Long,
     val total: Long,
     val fraction: Double,
-    val end: me.raddatz.veyq.mobile.depot.FileSave.End?,
+    val end: me.raddatz.veyq.mobile.blob.FileSave.End?,
     val notice: Notice,
 )
 
