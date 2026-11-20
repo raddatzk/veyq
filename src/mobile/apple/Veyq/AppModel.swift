@@ -165,6 +165,15 @@ final class AppModel {
     /// The way in (core's `SessionModel`): the start, the sign-in, the unlock, the switcher, the sign-out.
     @ObservationIgnored private let session: SessionModel<VeyqAccount, TenantSession>
     @ObservationIgnored private var gateWatch: SessionModelWatch?
+    @ObservationIgnored private var followWatch: SessionModelWatch?
+    /// The writes made offline of the shell open (core's, `QueuedHeld`); nil without a shell.
+    var queued: QueuedHeld?
+    /// The ask before a loss while writes made offline wait, until it is answered.
+    var lossAsk: LossAsk?
+    /// A held Pot entry the tray's *Open* asked for: its Pot's page opens its held editor once the Pot is read.
+    var heldOpen: QueuedOpen.Entry?
+    /// A held rename the tray's *Open* asked for: the node's header asks its name again with the person's.
+    var renameAsked: QueuedOpen.Rename?
     typealias Opened = SessionModelOpened<VeyqAccount, TenantSession>
 
     init(inExtension: Bool = false) {
@@ -187,6 +196,11 @@ final class AppModel {
         if !inExtension { Self.sweepTemporary() } else { try? FileManager.default.removeItem(at: Self.pickedDir) }
         gateWatch = session.watch { @Sendable _ in
             Task { @MainActor [weak self] in self?.gateChanged() }
+        }
+        // the shown account ended on its own (`Reach.Ended`: a reconnect found this device's trust gone) and the core
+        // opened the next one: the shell follows what the core says (`SessionModel.followed`, ADR 0154 decision 1)
+        followWatch = session.watchFollowed { @Sendable _ in
+            Task { @MainActor [weak self] in self?.follow() }
         }
     }
 
@@ -232,18 +246,14 @@ final class AppModel {
             switching = g.switching
             offer = g.offer
             if shellModel != nil, shellModel?.tenant === session.signedTo?.session { applyShell(start: false); screen = .signed }
-            followEnded(g)
         default:
             screen = .starting
         }
     }
 
-    /// The shown account ended on its own (`Reach.Ended`: a reconnect found this device's trust gone): core took it out of
-    /// the switcher and opened the next one, which no call of this model asked for — the shell follows it here. A switch
-    /// or a sign-out this model made shows its own opened account.
-    private func followEnded(_ g: SessionModelGate.Signed) {
-        guard !g.switching, let opened = session.signedTo, let shown = shellModel?.tenant, shown !== opened.session,
-              !session.accounts.contains(where: { $0 === shown.account }) else { return }
+    /// What the core opened in the shown account's place (`SessionModel.followed`): shown where the shell is over another.
+    private func follow() {
+        guard let opened = session.followed.value as? Opened else { return }
         trustLog("the shown account ended: the shell follows the next one")
         Task { if shellModel?.tenant !== opened.session { try? await show(opened) } }
     }
@@ -526,6 +536,11 @@ final class AppModel {
     /// this device still trusts with the password, or the sign-in. Staying signed in ends with the sign-out; the
     /// password trust stays (as on the web).
     func signOut(_ account: VeyqAccount) {
+        // asked first while writes made offline wait (they go with the sign-out)
+        askingLoss(.signOut, of: account) { [weak self] in self?.signOutNow(account) }
+    }
+
+    private func signOutNow(_ account: VeyqAccount) {
         if session.signedTo?.account == account { uploads.clear() }
         // a share's files handed over and not queued yet go unsent (ADR 0138 decision 6)
         ShareHandoff.clear()
@@ -541,6 +556,7 @@ final class AppModel {
                 closeSearch()
                 tenantSession?.close()
                 closeDepot()
+                closeQueued()
                 closeMedia()
                 dropHeaders()
                 closeFile()
@@ -552,6 +568,10 @@ final class AppModel {
 
     /// Ends this device's trust in `account`: the next sign-in here asks for the Secret Key again.
     func forgetDevice(_ account: VeyqAccount) {
+        askingLoss(.stopTrusting, of: account) { [weak self] in self?.forgetDeviceNow(account) }
+    }
+
+    private func forgetDeviceNow(_ account: VeyqAccount) {
         Task {
             try? await session.forgetDevice(account: account)
             trustLog("manage stop trusting")
@@ -614,6 +634,7 @@ final class AppModel {
                 closeSearch()
                 tenantSession?.close()
                 closeDepot()
+                closeQueued()
                 closeMedia()
                 dropHeaders()
                 closeFile()
@@ -661,6 +682,7 @@ final class AppModel {
         shellWatch?.stop()
         shellModel = model
         openDepot(model, t)
+        openQueued(model)
         closeGallery(windows: true)
         galleryShown = nil
         openMedia(model, switched: switched)
@@ -686,7 +708,7 @@ final class AppModel {
     }
 
     /// The shell as core's model holds it now, with this device's servers; on `start`, the drawer opens on Home.
-    private func applyShell(start: Bool) {
+    func applyShell(start: Bool) {
         guard let signed = session.signedTo, shellModel?.tenant === signed.session, let state = shellModel?.current else { return }
         let account = signed.account
         let tenant = signed.tenant
@@ -717,6 +739,13 @@ final class AppModel {
 
     /// Whether "New" is offered where the shell is (core's `ShellModel.canCreateHere`).
     var canCreateHere: Bool { _ = shell; return shellModel?.canCreateHere ?? false }
+
+    /// What "New" offers where the shell is (core's `ShellModel.createsHere`: online all of it, offline only what queues).
+    func createsHere(isHome: Bool) -> [AppKinds.Create] {
+        _ = shell
+        _ = offlineBanner // observed: what is offered moves with the reach
+        return shellModel?.createsHere(isHome: isHome, bookmarks: true) ?? []
+    }
 
     /// The shell moved by `change` (its transitions are `Shell`'s), at once.
     private func moveShell(_ change: @escaping (Shell) -> Shell) {
@@ -840,36 +869,54 @@ final class AppModel {
         onShareDone?(true)
     }
 
-    /// Files dropped onto the level shown (ADR 0138 decision 9): uploaded under it at once where Depot may put files there
-    /// (core's `ShellModel.dropLevel`) — on macOS a dropped folder as a folder, as Depot's *Upload folder…* —; anywhere else
-    /// they wait in the pick mode, as a share's do. What did not read is said.
-    func dropOntoLevel(_ providers: [NSItemProvider]) async {
-        guard let level = shellModel?.dropLevel(shell: shell) else {
-            receiveDrop(await IncomingFiles.read(providers))
+    /// Files and folders dropped onto `target` — the level shown, a folder's row, a Memory's or chapter's gallery — through
+    /// core's one drop (`ShellModel.drop`, ADR 0154 decision 1; ADR 0138 decision 9): the core judges the target, sorts,
+    /// uploads (or offers a download's import, a Mac's) and says; this draws its outcome. A level that takes no drop hands
+    /// its files to the pick mode, as a share's (an open Pot takes its own, `receiveDrop`); a row's or a gallery's refusal
+    /// is said.
+    func drop(_ providers: [NSItemProvider], onto target: DropTarget) async {
+        let items = await IncomingFiles.dropped(providers)
+        Self.dropLog("drop: \(items.map { "\(type(of: $0))" })")
+        let files = items.compactMap { ($0 as? Dropped.File)?.source }
+        guard let m = shellModel, let outcome = try? await m.drop(target: target, items: items, depot: depot, left: { @Sendable source in
+            if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
+        }, deletedName: say(.potDeletedPerson)) else {
+            for s in files { if let url = AppleMemories.shared.urlOf(source: s) { Self.removePicked(url) } }
             return
         }
-        #if os(macOS)
-        Self.dropLog("drop onto a level: \(providers.map(\.registeredTypeIdentifiers))")
-        let (folders, files) = await IncomingFiles.folders(providers)
-        Self.dropLog("\(folders.count) folder(s), \(files.count) other item(s)")
-        for url in folders { await uploadFolder(url) }
-        #else
-        let files = providers
-        #endif
-        guard !files.isEmpty else { return }
-        let incoming = await IncomingFiles.read(files)
-        #if os(macOS)
-        // a dropped veyq download is offered as an import (ADR 0152 decision 1), the rest uploaded at once
-        let screened = try? await level.dropOrOffer(files: incoming.files, label: levelLabel, depot: depot, left: { @Sendable source in
-            if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
-        }, deletedName: say(.potDeletedPerson))
-        offerImport(screened?.offer)
-        #else
-        _ = level.drop(files: incoming.files, label: levelLabel, depot: depot) { source in
-            if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
+        if let refused = outcome as? DropOutcome.Refused {
+            Self.dropLog("drop refused")
+            if target is DropTarget.Level, !files.isEmpty {
+                receiveDrop(Incoming(files: files, refused: Int32(items.filter { $0 is Dropped.Unread }.count)))
+                return
+            }
+            for s in files { if let url = AppleMemories.shared.urlOf(source: s) { Self.removePicked(url) } }
+            notice = Notice(text: say(notice: refused.notice))
+            return
         }
-        #endif
-        if incoming.refused > 0 { notice = Notice(text: say(.shareUnread, incoming.refused)) }
+        if let offered = outcome as? DropOutcome.Offered {
+            #if os(macOS)
+            offerImport(offered.offer)
+            #else
+            offered.offer.close()
+            #endif
+        }
+        tell(outcome.notices)
+    }
+
+    /// The core's notices of one outcome, said in order (one alert, each on its own line).
+    func tell(_ notices: [VeyqCore.Notice]) {
+        guard !notices.isEmpty else { return }
+        notice = Notice(text: notices.map { say(notice: $0) }.joined(separator: "\n"))
+    }
+
+    /// The drop target a folder's row of the level shown is, where the core offers one (`ShellModel.dropTarget`: a folder
+    /// this member may put files in — never a row by its kind, never a guest's identity folder); nil elsewhere.
+    func dropTarget(_ node: NodeRef) -> DropTarget.Row? {
+        _ = spaces // observed: a level's rights move with the lists
+        guard let m = shellModel else { return nil }
+        let at = NodeAt(scopeId: node.scopeId, nodeId: node.nodeId, kind: node.kind, name: node.name)
+        return m.dropTarget(row: at) ? DropTarget.Row(folder: at) : nil
     }
 
     /// A drop's path in a debug build's unified log (`log stream --level debug --predicate 'subsystem == "app.veyq" AND
@@ -878,19 +925,6 @@ final class AppModel {
         #if DEBUG
         Logger(subsystem: "app.veyq", category: "drop").debug("\(line, privacy: .public)")
         #endif
-    }
-
-    /// Files dropped onto `gallery`'s page (ADR 0138 decision 9): its photos and videos queued into it at once, as a pick's;
-    /// what is no medium, or did not read, said.
-    func dropOnto(_ gallery: GalleryModel, _ incoming: Incoming) {
-        let sorted = MemoryShare.shared.answer.sort(files: incoming.files)
-        let media = sorted.taken
-        let others = sorted.left
-        for s in others { if let url = AppleMemories.shared.urlOf(source: s) { Self.removePicked(url) } }
-        if !media.isEmpty, gallery.upload(sources: media) == 0 {
-            for s in media { if let url = AppleMemories.shared.urlOf(source: s) { Self.removePicked(url) } }
-        }
-        if let n = MediaUploads.companion.notTaken(count: Int32(others.count) + incoming.refused) { notice = Notice(text: say(notice: n)) }
     }
 
     /// What the share extension handed over for a space this tenant has open: queued into its Memory or chapter (Memories'
@@ -1670,9 +1704,9 @@ final class AppModel {
     // MARK: An open Pot (Expenses)
 
     /// The tenant the shell shows, opened: where an object's own view reads from.
-    private var tenantSession: TenantSession?
+    private(set) var tenantSession: TenantSession?
     /// The Pot open in the app (core's `PotModel`): its views, its live poll, its writes.
-    @ObservationIgnored private var potModel: PotModel?
+    @ObservationIgnored private(set) var potModel: PotModel?
     @ObservationIgnored private var potWatch: PotModel.Watch?
     private var potSession: PotSession? { potModel?.session }
 
@@ -1938,6 +1972,9 @@ final class AppModel {
         shell.folder?.name ?? Names.spaceName(spaces.first { $0.scopeId == shell.space })
     }
 
+    /// The level shown as a drop's target (core's `DropTarget.Level`), named as its title draws it.
+    var levelDropTarget: DropTarget { DropTarget.Level(label: levelLabel) }
+
     /// Queues the picked `urls` as new files under the level shown (core's `DepotUploads.upload`): a name a file already
     /// holds offers its replace.
     func uploadFiles(_ urls: [URL]) {
@@ -2012,7 +2049,7 @@ final class AppModel {
     /// The entries below the directory at `url`, each by its path below it and what it is (hidden ones included, as the
     /// web's directory input holds them; a link reported, never followed; one the enumerator could not read reported); a
     /// directory enumerator is not iterated in an async context, so this is its own synchronous walk.
-    nonisolated private static func folderFiles(_ url: URL) -> [AppleDepot.FolderFile] {
+    nonisolated static func folderFiles(_ url: URL) -> [AppleDepot.FolderFile] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey, .isReadableKey, .fileSizeKey, .contentModificationDateKey, .contentTypeKey]
         var files: [AppleDepot.FolderFile] = []
         let base = url.standardizedFileURL.path
@@ -2109,14 +2146,22 @@ final class AppModel {
         return outcome == .done
     }
 
-    /// Creates a folder named `name` where the shell is (core's `createFolderHere`) (the web's `FolderNameDialog`); the
-    /// lists are read anew. Why not, in the web's words, or nil once created.
+    /// Creates a folder named `name` where the shell is (core's `createFolderHere`, the web's `FolderNameDialog`); the lists
+    /// are read anew. Core's typed answer (`NameAnswer`) drawn by `asked`: its problem keeps the dialog open, its notice is
+    /// said once it closed, queued offline it closes (the folder shows where it was made).
     func createFolder(name: String) async -> String? {
         guard let m = shellModel else { return say(.folderFailed) }
-        let refused = try? await m.createFolderHere(name: name)
+        let answer = try? await m.createFolderHere(name: name)
         applyShell(start: false)
         await readDetails(m.tenant)
-        return refused.map { say(notice: $0) }
+        return asked(answer)
+    }
+
+    /// A name dialog's save as core answered it (`NameAnswer`, ADR 0154 decision 1): the problem's words while it stays open
+    /// (nil: it closes), its notice said here once it closed. A save that answered nothing (its task cancelled) is never
+    /// taken as made: the dialog stays open saying it was not saved.
+    func asked(_ answer: NameAnswer?) -> String? {
+        nameAnswered(answer) { notice = Notice(text: $0) }
     }
 
     /// A Memory `name` made in space `scopeId` under `parentId` (nil: the space's top) — New Memory, core's
@@ -2149,6 +2194,11 @@ final class AppModel {
 
     /// What a Memory's or a chapter's create came to: the node made opened (both are Memories'), or why not in words.
     private func opened(_ made: MemoryCreate.Made?) -> String? {
+        // made offline (ADR 0153): the dialog closes and says it waits to be sent; nothing to open until it is
+        if let made, made.queued {
+            if let n = made.notice { notice = Notice(text: say(notice: n)) }
+            return nil
+        }
         if let notice = made?.notice { return say(notice: notice) }
         guard let n = made?.node else { return say(notice: MemoryCreate.shared.refused(reason: nil)) }
         if let page = GalleryModel.companion.page(node: n) { open(page) }
@@ -2323,13 +2373,21 @@ final class AppModel {
     func openEditor(_ entryId: String?, pending: [PotSession.PendingReceipt] = []) -> Bool {
         closeEditor()
         guard let e = potModel?.editor(entryId: entryId, separator: decimalSeparator, pending: pending) else { return false }
+        adoptEditor(e)
+        return true
+    }
+
+    /// `e` as the editor open in the app, watched here.
+    func adoptEditor(_ e: EntryEditor) {
         editor = e
         editorState = e.current
         editorWatch = e.watch { @Sendable _ in
             Task { @MainActor [weak self] in self?.editorState = self?.editor?.current }
         }
-        return true
     }
+
+    /// The editor open in the app (a held entry's *Discard mine* calls it).
+    var editorModel: EntryEditor? { editor }
 
     func edit(_ change: EditorChange) {
         editor?.change(change: change)
@@ -2534,8 +2592,12 @@ final class AppModel {
     /// door makes, in the app's one queue; the page reads the file anew once it settled.
     func guestReplace(_ access: GuestAccess, file: FileModel, url: URL) {
         guard let source = guestSource(url) else { return }
-        // core's `GuestAccess.replace`: the link's own queue (the app's one, handed to the link), signed in or out (#1035)
-        if !access.replace(file: file, source: source) { source.close() }
+        // core's `GuestAccess.replaceAsking`: a guest not named yet is asked its name first (the core's one naming flow,
+        // ADR 0154 decision 1); then the link's own queue (the app's one, handed to the link), signed in or out (#1035)
+        Task {
+            let queued = (try? await access.replaceAsking(file: file, source: source))?.boolValue ?? false
+            if !queued { source.close() }
+        }
     }
 
     /// A picked file as a guest's upload source (a drop box's, a replace's), read in place where it lies.
@@ -2590,20 +2652,23 @@ extension AppModel: SettingsActions {
     func removeSavedKey(_ deviceId: String) { onSettings { try await $0.removeSavedKey(deviceId: deviceId); return nil } }
     func removeEveryOtherSavedKey() { onSettings { try await $0.removeEveryOtherSavedKey(); return nil } }
     func stopTrusting() {
-        onSettings { [weak self] m in
-            try await m.stopTrusting()
-            self?.trustLog("settings stop trusting")
-            return nil
+        // asked first while writes made offline wait (ADR 0153 decision 2): they go with the trust
+        askingLoss(.stopTrusting) { [weak self] in
+            self?.onSettings { [weak self] m in
+                try await m.stopTrusting()
+                self?.trustLog("settings stop trusting")
+                return nil
+            }
         }
     }
-    func signOutHere() { onSettings { try await $0.signOutHere() } }
+    func signOutHere() { askingLoss(.signOut) { [weak self] in self?.onSettings { try await $0.signOutHere() } } }
     func setOfflineLimit(_ amount: String, _ unit: LimitUnit) { onSettings { try await $0.setOfflineLimit(amount: amount, unit: unit); return nil } }
     func turnOfflineLimitOff() { onSettings { try await $0.turnOfflineLimitOff(); return nil } }
     func clearOfflineCache() { onSettings { try await $0.clearOfflineCache(); return nil } }
     func unpinOffline(_ node: String) { onSettings { try await $0.unpinOffline(node: node); return nil } }
     func askRemoveAllOffline() { settingsModel?.askRemoveAllOffline(); syncSettings() }
     func cancelRemoveAllOffline() { settingsModel?.cancelRemoveAllOffline(); syncSettings() }
-    func removeAllOffline() { onSettings { try await $0.removeAllOffline(); return nil } }
+    func removeAllOffline() { askingLoss(.removeAll) { [weak self] in self?.onSettings { try await $0.removeAllOffline(); return nil } } }
 
     func settingsStay(_ level: StaySignedIn) async -> TrustChange {
         guard let m = settingsModel else { return .failed }

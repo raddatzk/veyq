@@ -614,6 +614,8 @@ struct SettingsPage: View {
         }
         // "Add a Device"'s ceremony, over the page (ADR 0059)
         .deviceLinkSheet(model)
+        // Sign out, Stop trusting, Remove all offline content asked first while writes made offline wait
+        .modifier(LossAsking(model: model, here: model.settings != nil))
         .tint(Role.accent)
         #if os(macOS)
         .frame(minWidth: 480, idealWidth: 560, minHeight: 520)

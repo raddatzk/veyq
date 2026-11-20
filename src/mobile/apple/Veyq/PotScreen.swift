@@ -67,6 +67,12 @@ struct PotScreen: View {
             editing = Editing(entryId: nil, fromShare: true)
             sharing = true
         }
+        // the tray's *Open* of a held entry: its editor over the newer version, once this Pot is read
+        .task(id: HeldKey(write: model.heldOpen?.write, loaded: model.pot?.ref == ref && model.pot?.view != nil)) {
+            guard let held = model.heldOpen, held.pot == ref.nodeId, model.pot?.ref == ref, model.pot?.view != nil else { return }
+            model.heldOpen = nil
+            if await model.openHeldEditor(held.write) { editing = Editing(entryId: held.entry) }
+        }
         .sheet(item: $editing, onDismiss: {
             model.closeEditor()
             // A share's editor closed without its save: its files wait again in the pick mode (a save ended the share).
@@ -169,6 +175,8 @@ private struct EntriesList: View {
                         Text(e.title ?? say(.potTransfer)).fontWeight(.semibold)
                         Text(subtitle(e)).font(.caption).foregroundStyle(Role.muted)
                         if let badge = view.badge(e: e) { Text(say(notice: badge.notice)).font(.caption2).foregroundStyle(badge.danger ? Role.danger : Role.muted) }
+                        // made offline, not sent yet (core's `unsentMark`)
+                        if let unsent = view.unsentMark(row: e) { Text(say(notice: unsent)).font(.caption2).foregroundStyle(Role.muted) }
                     }
                     Spacer()
                     if let amount = e.amount { Text(money(amount.int64Value, view.currency, view.minorUnits)).fontWeight(.semibold) }
@@ -199,7 +207,9 @@ private struct EntriesList: View {
         }
         .scrollContentBackground(.hidden)
         // beside the Pot's heart, share and menu
-        .createAction(say(.potAdd), shown: view.canWrite && !view.people.isEmpty, action: onAdd)
+        // *Add entry* where the core offers it (`PotView.offersEntries`: a writer, or a READ_WRITE guest not named yet, asked
+        // its name at the save), never by `canWrite`
+        .createAction(say(.potAdd), shown: view.offersEntries, action: onAdd)
     }
 
     private func subtitle(_ e: PotView.EntryRow) -> String {
@@ -236,7 +246,12 @@ private struct OverviewList: View {
                     }
                     .listRowBackground(Role.surface)
                 }
-            } header: { SectionLabel(title: say(.potBalances)) }
+            } header: {
+                SectionLabel(title: say(.potBalances))
+            } footer: {
+                // the balances count entries made offline and not sent yet (core's `balancesUnsent`)
+                if let unsent = view.balancesUnsent { Text(say(notice: unsent)).foregroundStyle(Role.muted) }
+            }
             if !view.settleUp.isEmpty {
                 Section {
                     ForEach(Array(view.settleUp.enumerated()), id: \.offset) { _, t in
@@ -244,7 +259,8 @@ private struct OverviewList: View {
                             Text(say(notice: view.pays(t: t)))
                             Spacer()
                             Text(money(t.amount, view.currency, view.minorUnits)).fontWeight(.semibold)
-                            if view.canWrite {
+                            // a payment never queues: *Record* where the core offers it (`canRecord`), never by `canWrite`
+                            if view.canRecord {
                                 Button(say(.balancesRecord)) { record([t]) }.buttonStyle(.borderless).disabled(model.pot?.saving == true)
                             }
                         }
@@ -272,4 +288,10 @@ private struct OverviewList: View {
         }
         .scrollContentBackground(.hidden)
     }
+}
+
+/// What the held editor's opening waits on: the write asked for and whether the Pot is read.
+private struct HeldKey: Hashable {
+    let write: String?
+    let loaded: Bool
 }

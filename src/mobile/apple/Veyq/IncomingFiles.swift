@@ -29,6 +29,31 @@ enum IncomingFiles {
         return AppModel.Incoming(files: files, refused: Int32(refused))
     }
 
+    /// A drop's items as core's one drop takes them (`ShellModel.drop`, ADR 0154 decision 1): each told a file from a folder
+    /// by the file system and nothing more — a folder (macOS) walked in place as Depot's *Upload folder…* walks its pick, a
+    /// file copied as `read` copies it, one that did not read named by what the sender called it. An attachment carrying no
+    /// file is neither taken nor said, as `read`'s. Where it lands judges, sorts and says (the core).
+    static func dropped(_ providers: [NSItemProvider]) async -> [Dropped] {
+        var items: [Dropped] = []
+        #if os(macOS)
+        let (folders, rest) = await folders(providers)
+        for url in folders {
+            let files = AppModel.folderFiles(url)
+            items.append(Dropped.Folder(path: url.path, shownName: nil, found: AppleDepot.shared.found(root: url, files: files)))
+        }
+        #else
+        let rest = providers
+        #endif
+        for provider in rest where carriesFile(provider) {
+            if let (url, type) = await load(provider), let source = source(url, type: type, suggested: provider.suggestedName) {
+                items.append(Dropped.File(source: source))
+            } else {
+                items.append(Dropped.Unread(name: provider.suggestedName ?? ""))
+            }
+        }
+        return items
+    }
+
     private static func source(_ url: URL, type: String, suggested: String?) -> UploadSource? {
         guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize else {
             AppModel.removePicked(url)

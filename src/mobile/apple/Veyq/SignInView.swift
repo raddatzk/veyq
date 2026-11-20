@@ -55,9 +55,17 @@ struct SignInView: View {
         self.onShowForSignIn = onShowForSignIn
         self.onOpenLink = onOpenLink
         self.onSignIn = onSignIn
-        _server = State(initialValue: server.map(Self.shortServer) ?? "veyq.localhost:8080")
+        _server = State(initialValue: server.map(Self.shortServer) ?? Self.prefill)
         _email = State(initialValue: email ?? "")
     }
+
+    /// The server field's start where no record names one: the dev host in a debug build only, empty in a release
+    /// (ADR 0154 decision 1, as the desktops).
+    #if DEBUG
+    private static let prefill = "veyq.localhost:8080"
+    #else
+    private static let prefill = ""
+    #endif
 
     /// A record's origin as typed: without the scheme the sign-in adds back.
     private static func shortServer(_ origin: String) -> String {

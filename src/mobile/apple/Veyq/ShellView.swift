@@ -37,6 +37,10 @@ struct ShellView: View {
             ManageView(model: model)
         }
         // items made available offline that left this device (core's, named where the shell held their name): said once
+        // the reconnect's notices of writes made offline (sent, or needing the person), said once
+        .modifier(QueuedSaid(model: model))
+        // the ask before a sign-out or a wipe while writes made offline wait, here while nothing sits above the shell
+        .modifier(LossAsking(model: model, here: model.settings == nil && model.managing == nil))
         .alert(model.goneNotices.first.map { say(notice: $0) } ?? "", isPresented: Binding(get: { !model.goneNotices.isEmpty }, set: { _ in })) {
             Button(say(.ok), role: .cancel) { model.goneSeen() }
         } message: {
@@ -127,7 +131,8 @@ struct DrawerList: View {
                 // the web's sidebar "New": what a level creates, opened on Home
                 Menu {
                     // a kept link last (ADR 0150 decision 6): this platform draws the bookmark's dialog (#1020)
-                    ForEach(AppKinds.shared.createsWhere(isHome: false, bookmarks: true), id: \.self) { c in
+                    // core's `createsHere`: online all of it, offline only what is queued (ADR 0153 decision 3)
+                    ForEach(model.createsHere(isHome: false), id: \.self) { c in
                         Button(say(c.word), systemImage: Names.createSymbol(c)) {
                             model.requestNew(c == .pot ? .pot : c == .memory ? .memory : c == .bookmark ? .bookmark : .folder)
                         }
@@ -147,9 +152,9 @@ struct DrawerList: View {
                 .menuStyle(.button)
                 .buttonStyle(.plain)
                 .menuIndicator(.hidden)
-                // offline every write is gone (ADR 0140 decision 7)
-                .disabled(!model.online)
-                .opacity(model.online ? 1 : 0.38)
+                // offline only what queues is offered (ADR 0153 decision 3); nothing at all where none does
+                .disabled(model.createsHere(isHome: false).isEmpty)
+                .opacity(model.createsHere(isHome: false).isEmpty ? 0.38 : 1)
                 row(say(.drawerHome), symbol: "house", selected: model.shell.isHome) { model.choose(nil) }
             }
             .listRowBackground(Color.clear)
@@ -597,6 +602,8 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(Role.surface)
+                // a drop onto a folder's row only where the core offers it (`ShellModel.dropTarget`), never by its kind
+                .modifier(DropsOnto(model: model, target: model.dropTarget(node)))
             } else if let ref = node.asObject() {
                 ObjectRow(ref: ref, onOpen: model.open).listRowBackground(Role.surface)
             } else if let bookmark = node.asBookmark() {
@@ -605,6 +612,9 @@ struct HomeView: View {
             }
         }
     }
+
+    /// The level's writes made offline, not sent yet (core's `queuedHere`).
+    private var queuedHere: [QueuedItem] { model.queued?.here.value ?? [] }
 
     /// This level among the lists whose scroll is kept (`KeepsScroll`).
     private var levelKey: String { "home:\(model.shell.space ?? "")/\(model.shell.folder?.nodeId ?? "")" }
@@ -641,7 +651,7 @@ struct HomeView: View {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     NodeHeroRow().padding(.horizontal)
                     filterPicker.padding(.horizontal)
-                    if groups.isEmpty {
+                    if groups.isEmpty && queuedHere.isEmpty {
                         Text(say(.listEmpty)).foregroundStyle(Role.muted).padding(.horizontal)
                     }
                     // the folders apart from the rest, as the web's level view (core's `Home.groups`)
@@ -649,6 +659,8 @@ struct HomeView: View {
                         if let heading = group.heading { SectionLabel(title: say(heading)).padding(.horizontal) }
                         NodeTiles(items: group.nodes.compactMap(tile), width: tilesWidth).padding(.horizontal)
                     }
+                    // what was made here offline and waits to be sent, in place (core's `queuedHere`)
+                    ForEach(queuedHere, id: \.id) { QueuedRow(item: $0).padding(.horizontal) }
                 }
                 .padding(.vertical, 8)
             }
@@ -659,7 +671,7 @@ struct HomeView: View {
                 filterPicker
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                if groups.isEmpty {
+                if groups.isEmpty && queuedHere.isEmpty {
                     Text(say(.listEmpty)).foregroundStyle(Role.muted).listRowBackground(Color.clear)
                 }
                 // the folders apart from the rest, as the web's level view (core's `Home.groups`)
@@ -670,6 +682,10 @@ struct HomeView: View {
                         if let heading = group.heading { SectionLabel(title: say(heading)) }
                     }
                 }
+                // what was made here offline and waits to be sent, in place (core's `queuedHere`)
+                if !queuedHere.isEmpty {
+                    Section { ForEach(queuedHere, id: \.id) { QueuedRow(item: $0).listRowBackground(Role.surface) } }
+                }
             }
         }
     }
@@ -677,7 +693,9 @@ struct HomeView: View {
     /// A node of the level as a tile: a folder enters, an object opens.
     private func tile(_ node: NodeRef) -> NodeTileItem? {
         if let folder = node.asFolder() {
-            return NodeTileItem(id: node.nodeId, name: node.name, cover: model.covers[node.nodeId]?.image, symbol: "folder", folder: true) { model.enter(folder) }
+            let target = model.dropTarget(node)
+            return NodeTileItem(id: node.nodeId, name: node.name, cover: model.covers[node.nodeId]?.image, symbol: "folder", folder: true,
+                                drop: target.map { t in { providers in Task { await model.drop(providers, onto: t) } } }) { model.enter(folder) }
         }
         if let bookmark = node.asBookmark() {
             return NodeTileItem(id: node.nodeId, name: node.name, symbol: Names.kindSymbol(bookmark.kind), enabled: !picking) { model.openBookmark(bookmark) }
@@ -688,10 +706,10 @@ struct HomeView: View {
 
     private var level: some View {
         levelBody
-        // a file dropped onto the level is uploaded here at once where Depot may put files, a folder on macOS as a folder
-        // (ADR 0138 decision 9); anywhere else it waits in the pick mode, as a share's does
+        // what is dropped onto the level goes through core's one drop (ADR 0154 decision 1; ADR 0138 decision 9): uploaded
+        // here where the core offers it, a folder on macOS as a folder; where it does not, it waits in the pick mode
         .onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
-            Task { await model.dropOntoLevel(providers) }
+            Task { await model.drop(providers, onto: model.levelDropTarget) }
             return true
         }
         // the level's "New" (the web's menu): a folder here, or a Pot here
@@ -708,8 +726,9 @@ struct HomeView: View {
         }
         // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
         .createMenu(say(.drawerNew), shown: model.canCreateHere) {
-            // core's `createsWhere`: a folder, a Pot, files and a folder uploaded here, and a Memory here
-            ForEach(AppKinds.shared.createsWhere(isHome: true, bookmarks: true), id: \.self) { c in
+            // core's `createsHere`: a folder, a Pot, files and a folder uploaded here, and a Memory here — offline only what
+            // is queued (ADR 0153 decision 3)
+            ForEach(model.createsHere(isHome: true), id: \.self) { c in
                 Button(say(c.word), systemImage: Names.createSymbol(c)) {
                     switch c {
                     case .pot: creatingPot = true
@@ -861,6 +880,8 @@ struct Picking: ViewModifier {
         content.safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 if let banner = model.offlineBanner { OfflineBanner(banner: banner) }
+                // how many writes made offline wait to be sent (core's `queuedBanner`), online too until they went
+                if let waiting = model.queued?.banner.value { QueuedBanner(banner: waiting) }
                 if let incoming = model.incoming { ShareBanner(model: model, incoming: incoming, onCancel: model.cancelShare) }
             }
         }
@@ -1113,7 +1134,8 @@ struct ExpensesList: View {
     var body: some View {
         ArrangedListView(model: model, list: model.applicationList(.expenses), onOpen: model.open, key: "app:\(ApplicationId.expenses)")
             .navigationTitle(Names.application(.expenses))
-            .createAction(say(.createPot), shown: !model.spaces.isEmpty && model.online) { creating = true }
+            // offline only where the core queues one (`createsHere`): a Pot never does
+            .createAction(say(.createPot), shown: !model.spaces.isEmpty && model.createsHere(isHome: false).contains(.pot)) { creating = true }
             .sheet(isPresented: $creating) { NewPotSheet(model: model) }
     }
 }
@@ -1128,7 +1150,8 @@ struct MemoriesList: View {
     var body: some View {
         ArrangedListView(model: model, list: model.applicationList(.memories), onOpen: model.open, key: "app:\(ApplicationId.memories)")
             .navigationTitle(Names.application(.memories))
-            .createAction(say(.memoryNew), shown: space != nil && model.online) { naming = true }
+            // offline only where the core queues one (`createsHere`, ADR 0153 decision 3)
+            .createAction(say(.memoryNew), shown: space != nil && model.createsHere(isHome: false).contains(.memory)) { naming = true }
             .sheet(isPresented: $naming) {
                 if let space { NewMemorySheet(model: model, scopeId: space, parentId: nil) }
             }
@@ -1204,6 +1227,17 @@ struct NewMemorySheet: View {
             if let refused { problem = refused } else { dismiss() }
         }
     }
+}
+
+/// A name dialog's save as core answered it (`NameAnswer`, ADR 0154 decision 1): the problem's words while the dialog stays
+/// open (nil: it closes), its notice handed to `said` once it closed; queued offline it closes (it shows where it was made).
+/// A save that answered nothing (its task cancelled) is never taken as made: the dialog stays open saying it was not saved.
+@MainActor
+func nameAnswered(_ answer: NameAnswer?, said: (String) -> Void) -> String? {
+    guard let answer else { return say(.nodeSaveFailed) }
+    if let problem = answer.problem { return say(notice: problem) }
+    if let n = answer.notice { said(say(notice: n)) }
+    return nil
 }
 
 extension View {
@@ -1366,3 +1400,20 @@ struct ActivitySheet: UIViewControllerRepresentable {
     func updateUIViewController(_ vc: UIActivityViewController, context: UIViewControllerRepresentableContext<ActivitySheet>) {}
 }
 #endif
+
+/// A drop onto `target` (core's one drop) where the core offers one; no drop target otherwise.
+struct DropsOnto: ViewModifier {
+    let model: AppModel
+    let target: DropTarget?
+
+    func body(content: Content) -> some View {
+        if let target {
+            content.onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
+                Task { await model.drop(providers, onto: target) }
+                return true
+            }
+        } else {
+            content
+        }
+    }
+}

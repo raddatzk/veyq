@@ -244,7 +244,28 @@ ADR 0153 decisions 1–5 hold them; here only what the work needs beside them.
   sign-out's), a re-keyed node, a capture time. **Deviation:** a Memory made offline cannot be opened until sent (phase 5
   deviation 1), so the pass's photos went into a Memory kept online before; the tray row's word counts held writes as
   *waiting to send* (core's `QueuedShown.banner`).
-- [ ] **8 Apple** — the same. · Done when: both Apple builds green.
+- [x] **8 Apple** — the same. · Done when: both Apple builds green.
+  **Built** 2026-11-20 (`claude/k-apple`): `QueuedHeld` (over core's `AppleQueued`) follows the shell's
+  `queuedTray().items`, `queuedBanner`, `queuedHere` and `queuedSent`; `QueuedBanner` under the offline banner, a level's
+  `QueuedRow`s in place (rows and tiles), the reconnect's notices said once (`QueuedSaid`, then `saidSeen`); the uploads
+  popover lists the tray grouped by `where` with *Open* (`QueuedTray.opens`: `Entry` → the Pot opened, its
+  `PotModel.heldEditor` in the editor sheet with `State.newer` and *Discard mine*; `Rename` → `openFound`, the node's
+  header asks again with the person's name; `Place` → `openFound`/`switchSpace`), *Save a copy* (a Mac's `NSSavePanel` per
+  file, iOS's save sheet; said by `QueuedShown.copySaved`) and *Discard*; a Pot's `unsentMark`, `balancesUnsent`, *Record*
+  by `canRecord`; a gallery's waiting tile says `UploadTile.said`; every New (drawer, level, the Memories and Expenses
+  lists) from `ShellModel.createsHere`; a Memory made offline closes its dialog (`Made.queued`); sign-out (drawer, Manage,
+  Settings), Stop trusting (Manage, Settings) and Remove all offline content ask `QueuedTray.ask` first (`LossAsking`, on
+  the topmost of the shell, Manage and Settings). **Core added** (appleMain, no rule): `offline/AppleQueued.kt` — the
+  shell's flows as `StateFlow`s Swift reads by value (`AppleMemories.watch` takes only those) and `saveCopy` into the save
+  panel's path through `FileSink` (Swift cannot write a suspend sink), as the bridge's `QueuedDoor`; untested beyond the
+  builds (it decides nothing). Measured: as phase 4 of `cr-apps-gates-in-the-core`. **Not clicked** — the Mac and iPhone
+  pass waits for the owner's signed build: on an ad-hoc build the Keychain refuses, so no device is trusted and no
+  offline store exists, hence nothing queues there: offline New offering only folder, Memory, files; a folder, a Memory,
+  a photo into a kept Memory, a Pot entry with a receipt made offline (rows, tiles and entries *Waiting to send* / *Not
+  sent*, the banner's count, the tray); back online all sent with the notice; a held entry's *Open* → newer version and
+  *Discard mine*; a held rename's *Open*; *Save a copy* of a refused write; each loss ask. **Deviation:** Settings'
+  "sign out this device" from the sessions list (`signOutFamily` of its own family) is not asked first (the page does not
+  tell its own family apart; the sign-out button is).
 - [x] **9 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green.
   **Built** 2026-11-20 (`claude/k-linux`): a second `AdwBanner` under the offline one (`queuedBanner`); the level's
   `queuedHere` rows in place (`home::queued_row`); `queuedSaid` said once, then `Shell.QueuedSaidSeen`; the uploads

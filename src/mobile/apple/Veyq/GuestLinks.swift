@@ -372,11 +372,13 @@ struct GuestContent: View {
                 VStack(alignment: .leading, spacing: 0) {
                     if !g.note.isEmpty { MarkdownText(markdown: g.note).padding(.horizontal).padding(.vertical, 8) }
                     // a READ_WRITE link's guest: who this device is here as, or the way to name itself before its first write
-                    if let access = held.access, access.role == GuestAccess.companion.READ_WRITE {
+                    // (where the core offers its naming, `GuestNaming.offered`; no role read here)
+                    if let access = held.access, access.naming.offered {
                         GuestLine(held: held, access: access).padding(.horizontal).padding(.vertical, 4)
                     }
                     if let page = held.page {
                         GuestPageBody(model: model, held: held, page: page).id(ObjectIdentifier(page))
+                            .modifier(OptionalNaming(access: held.access, active: model.editorState == nil))
                     } else {
                         ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
@@ -449,6 +451,7 @@ private struct GuestLevelView: View {
     @State private var newName = ""
     @State private var nameProblem: String?
     @State private var pickingFiles = false
+    @State private var said: String?
 
     var body: some View {
         let rows = level.rows
@@ -473,7 +476,8 @@ private struct GuestLevelView: View {
             }
         }
         // what a guest adds here: a folder and files (Depot's level action); a guest makes no Memory, Pot or drop box
-        .createMenu(say(.drawerNew), shown: level.writes && held.guest.value != nil) {
+        // offered by the core alone (`GuestLevel.writes`): a guest not named yet is asked its name at the write (`naming`)
+        .createMenu(say(.drawerNew), shown: level.writes) {
             ForEach([AppKinds.Create.folder, AppKinds.Create.uploadFiles], id: \.self) { c in
                 Button(say(c.word), systemImage: Names.createSymbol(c)) {
                     if c == .folder { newName = ""; nameProblem = nil; naming = true } else { pickingFiles = true }
@@ -482,10 +486,18 @@ private struct GuestLevelView: View {
         }
         .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result, !urls.isEmpty else { return }
-            _ = level.upload(sources: urls.compactMap(model.guestSource))
+            let sources = urls.compactMap(model.guestSource)
+            Task {
+                // the core asks a guest not named yet its name first (`GuestLevel.uploadAsking`); declined, none is queued
+                let queued = (try? await level.uploadAsking(sources: sources))?.int32Value ?? 0
+                if queued == 0 { sources.forEach { $0.close() } }
+            }
         }
         .folderNaming($naming, name: $newName, problem: $nameProblem) { name in
-            (try? await AppleSharing.shared.createFolder(level: level, name: name)).map { say(notice: $0) }
+            nameAnswered(try? await AppleSharing.shared.createFolder(level: level, name: name)) { said = $0 }
+        }
+        .alert(said ?? "", isPresented: Binding(get: { said != nil }, set: { if !$0 { said = nil } })) {
+            Button(say(.ok), role: .cancel) {}
         }
     }
 }
@@ -545,7 +557,9 @@ private struct GuestFileActions: View {
                 .alert(failed ?? "", isPresented: Binding(get: { failed != nil }, set: { if !$0 { failed = nil } })) {
                     Button(say(.ok), role: .cancel) {}
                 }
-            if held.guest.value != nil, h.own.contains(where: { $0.id == FileModel.companion.REPLACE }) {
+            // Replace where the file's rights hold it (`FileRights`, the header's own): a guest not named yet is asked its
+            // name at the write by the core (`GuestAccess.replaceAsking`), never here
+            if h.own.contains(where: { $0.id == FileModel.companion.REPLACE }) {
                 Button { if file.chooseReplace() { replacing = true } } label: {
                     Label(h.label(id: FileModel.companion.REPLACE).map { say($0) } ?? "", systemImage: "square.and.arrow.down.on.square")
                 }
@@ -703,9 +717,53 @@ private struct GuestLine: View {
         }
         .sheet(isPresented: $naming) {
             NamingSheet(title: say(.shareGuestNameTitle), hint: say(.shareGuestNameHint), days: access.guestWriteRecordDays?.intValue, origin: access.origin) { name in
-                (try? await AppleSharing.shared.nameGuest(access: access, displayName: name))?.boolValue ?? false
+                ((try? await AppleSharing.shared.nameGuest(access: access, displayName: name))?.boolValue ?? false) ? nil : say(.shareJoinFailed)
             }
         }
+    }
+}
+
+/// The name a write asks of a READ_WRITE link's guest not named yet (core's one naming flow, `GuestAccess.naming`; the
+/// web's `requestGuest`): shown while the core asks (`asking`), its save core's (`name`: a problem keeps it open, a notice
+/// is said once it closed), its cancel the write declined (`decline`).
+struct AskedNaming: ViewModifier {
+    let access: GuestAccess
+    /// False while a sheet above this view asks instead (an entry editor's save, `EntryEditorSheet`).
+    var active = true
+    @State private var asking: CoreState<KotlinBoolean>?
+    @State private var said: String?
+
+    func body(content: Content) -> some View {
+        let naming = access.naming
+        content
+            .sheet(isPresented: Binding(get: { active && asking?.value.boolValue == true }, set: { if !$0 { Task { try? await naming.decline() } } })) {
+                NamingSheet(
+                    title: say(.shareGuestNameTitle), hint: say(.shareGuestNameHint), days: access.guestWriteRecordDays?.intValue,
+                    origin: access.origin, onCancel: { Task { try? await naming.decline() } }
+                ) { name in
+                    nameAnswered(try? await naming.name(displayName: name)) { said = $0 }
+                }
+            }
+            .alert(said ?? "", isPresented: Binding(get: { said != nil }, set: { if !$0 { said = nil } })) {
+                Button(say(.ok), role: .cancel) {}
+            }
+            .task(id: ObjectIdentifier(access)) {
+                asking?.stop()
+                asking = CoreState({ naming.asking.value as! KotlinBoolean }) { changed in
+                    AppleMemories.shared.watch(flow: naming.asking) { @Sendable _ in changed() }
+                }
+            }
+            .onDisappear { asking?.stop() }
+    }
+}
+
+/// `AskedNaming` where the link has a guest's access.
+struct OptionalNaming: ViewModifier {
+    let access: GuestAccess?
+    var active = true
+
+    func body(content: Content) -> some View {
+        if let access { content.modifier(AskedNaming(access: access, active: active)) } else { content }
     }
 }
 
@@ -761,11 +819,14 @@ private struct NamingSheet: View {
     let hint: String
     let days: Int?
     let origin: String
-    let onName: (String) async -> Bool
+    /// The sheet's cancel, beside its dismissal (a write that asked declines).
+    var onCancel: () -> Void = {}
+    /// The save: the problem's words to show under the field (the sheet stays), nil once it may close.
+    let onName: (String) async -> String?
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
     @State private var working = false
-    @State private var failed = false
+    @State private var failed: String?
 
     var body: some View {
         NavigationStack {
@@ -773,13 +834,13 @@ private struct NamingSheet: View {
                 Section {
                     Text(hint)
                     TextField(say(.shareYourName), text: $name, prompt: Text(say(.shareYourNamePlaceholder)))
-                        .onChange(of: name) { failed = false }
+                        .onChange(of: name) { failed = nil }
                         .accessibilityIdentifier("guest-name-field")
                 } footer: {
                     Text(say(.shareNameVisibility))
                 }
                 Section { RecordNotice(days: days, origin: origin) }
-                if failed { Section { Text(say(.shareJoinFailed)).foregroundStyle(Role.danger) } }
+                if let failed { Section { Text(failed).foregroundStyle(Role.danger) } }
             }
             .formStyle(.grouped)
             .navigationTitle(title)
@@ -787,15 +848,15 @@ private struct NamingSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(say(.entryCancel)) { dismiss() }.disabled(working) }
+                ToolbarItem(placement: .cancellationAction) { Button(say(.entryCancel)) { onCancel(); dismiss() }.disabled(working) }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(say(.shareJoin)) {
                         working = true
                         let typed = name
                         Task {
-                            let ok = await onName(typed)
+                            let problem = await onName(typed)
                             working = false
-                            if ok { dismiss() } else { failed = true }
+                            if let problem { failed = problem } else { dismiss() }
                         }
                     }
                     .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || working)
