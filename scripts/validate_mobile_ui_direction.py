@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Guard that the apps' dependencies run application → core, never back and never application → application
-(ADR 0154 decision 3, the apps' half of ADR 0079; cr-apps-core-ui-layer L4 and L5).
+(ADR 0154 decision 3, the apps' half of ADR 0079; built by cr-apps-core-ui-layer).
 
 **What it asserts.** The applications are not listed here: they are derived from the entries of the Kotlin core's
 `ApplicationId` (`core/…/navigation/Applications.kt`, `MEMORIES("memories")` names the package `…mobile.memories`), so
@@ -15,7 +15,7 @@ or a qualified name —, which in Kotlin is the only way to reach another packag
     what two applications share belongs to core (`blob/FileSave` moved there for this rule).
   - **(c2)** no file outside the application packages names one, except the files of `CORE_ROOTS`, each with the
     reason it still does: `AppKinds.kt`, the composition root, and the files whose hook behind `AppKinds` needs a
-    design of its own (cr-apps-core-ui-layer L4: handed back, not built in a move). A listed file that is missing
+    design of its own (handed back by the move, not built in it: inbox #1048). A listed file that is missing
     or names no application any more is red too, so the list only shrinks.
   - every file's `package` is its directory's: a file that declared an application's package outside its
     directory (or core's inside one) would reach it unqualified, past (c1) and (c2).

@@ -358,6 +358,21 @@ A Gradle build of its own, run through its own wrapper.
   nuget.org the only source (`nuget.config`), the SDK in `global.json`. A project must set no property that implies an
   SDK-versioned package (trimming, AOT, `IsAotCompatible`). `run.py` is its one entry point (§ Prove your work).
 
+- **Each app's layout: a core UI and one directory per application** ([ADR 0154](../../docs/decisions/0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md)
+  decision 3, the web's `core/` and `features/<owner>`; its Consequences hold the table). Every platform splits the same
+  way: the core UI — the shell and drawer, the frame and node header, the level with its rows and tiles, the sheets
+  every kind shares, the notice host, New, the upload, drop and import flow, the tray — in Android's `…android.core`
+  (`core/`), Apple's `Veyq/Core/`, Linux's `src/core_ui/` and Windows' `Core/` (`Veyq.Core`); each application in
+  `apps/<id>/` (`…android.apps.<id>`, `Veyq/Apps/<Id>/`, `src/apps/<id>/`, `Apps/<Id>/` with `Veyq.Apps.<Id>`), the ids
+  `ApplicationId`'s; at the root only the composition root (`Applications.kt`, `.swift`, `applications.rs`, `.cs`) and
+  what the system names by class or path (an activity, a service, a worker, the Apple targets' entry files, `App`,
+  `MainWindow`, `Program`, `lib.rs`, `main.rs`). An application exposes one `register(registry)` — per kind a
+  `KindPage` (the body the frame draws, the `guest` page of a received link) and one `ApplicationUi(id, list, creates,
+  personSection)` —; the root registers the core's kinds (folder, bookmark), each application, then `seal()`s, before
+  anything is drawn. A new kind's page goes into its application's `register`, never a `when`/`switch` in the shell; a
+  file two applications or the core use is core UI and names no application. `scripts/validate_mobile_ui_direction.py`
+  holds it: no core UI file names an application but the root, no application another's, and in the Kotlin core no
+  application package another's and no core file one but `AppKinds.kt` and the shrinking `CORE_ROOTS` (inbox #1048).
 - `words/` — every word the apps show (ADR 0136 decision 3): `words.json` (English and German, `{n}` / `{n:int}`
   placeholders, plurals by CLDR category) is the one source; `generate_words.py` writes the core's `Msg` keys
   (`:core:generateWords`), Android's resources and `Context.words` (`:android:generateWords`; the app has no
@@ -1065,6 +1080,17 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 
 ## Traps
 
+- The core UI's own name clashes with the language on two platforms. In Rust a crate module named `core` makes every
+  `core::…` path ambiguous with the language's `core` crate, so Linux's is `core_ui`. In C# the namespace `Veyq.Core`
+  makes `Core` inside any `Veyq.*` name resolve to that namespace before the bridge's `Core` class: a file under
+  `Veyq.*` that means the bridge writes its `using`s below its `namespace` line (a namespace-level `using Veyq.Bridge;`
+  is read first), and the root files, outside `Veyq.Core`, say `Bridge.Core.`.
+- Two passes from one working tree never run Gradle at once: `linux/run.py run` and `windows/run.py run` both build the
+  core in `src/mobile/build/`, and side by side one deleted what the other was compiling (`:core:buildLibsodium`
+  "Unable to delete directory", `:core:buildLibwebp` hashing a missing `CMakeLists.txt`; 2026-11-20). Run them one after
+  the other, or each from a worktree of its own. In a fresh worktree `:android:assembleDebug` needs `ANDROID_HOME`
+  (there is no `local.properties`), and a Linux pass as a throwaway gives `VEYQ_LIVE` the throwaway's own tenant
+  (`http://tw-<stamp>.localhost:8080`): the backend picks the tenant from the Host.
 - The Apple primitives are libsodium 1.0.22 through cinterop (`core/sodium/`): `build_libsodium.py` builds the three
   arm64 slices from the release tarball, refused unless it matches the pinned SHA-256. GitHub's release CDN answers a
   504 now and then; the script retries, and a tarball already in `build/libsodium/` is used as it is.
