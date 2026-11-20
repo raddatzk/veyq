@@ -18,7 +18,7 @@
 // gets the same row with the member-only functions removed. Its rename, move and delete are core's defaults
 // (`core/node/standardRowActions.ts`): this source only answers them (`standard`). A row's primary click OPENS the Memory
 // (its detail).
-import { computed, watch, type Ref } from 'vue'
+import { computed, defineAsyncComponent, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { LevelPresentation, LevelRow, LevelRowSource, LevelRowsContext, LevelRowsHost } from '../../core/node/levelRow'
 import { parentContentKey, type TreeNode } from '../../core/node/tree'
@@ -31,7 +31,9 @@ import { memoryRights } from './rights'
 import { memoryDetails, NO_FACTS, unsealRowFacts, type MemoryRowFacts } from './memoryRowDetails'
 import { MEMORY_KIND, CHAPTER_KIND } from './kinds'
 import MemoryRowCover from './components/MemoryRowCover.vue'
-import SpaceMap from './components/SpaceMap.vue'
+
+// The map (Leaflet, the largest dependency Memories has) is fetched when the map view is first chosen, not with the rows.
+const SpaceMap = defineAsyncComponent(() => import('./components/SpaceMap.vue').then((m) => m.default))
 
 /** Every node of `tree` in the subtree of `rootId`, `rootId`'s own included - what a guest's map spans. */
 function subtreeNodes(tree: TreeSource<TreeNode>, rootId: string | null): TreeNode[] {

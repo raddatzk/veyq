@@ -12,12 +12,14 @@ import FileDetail from './components/FileDetail.vue'
 import FileShareDialog from './components/FileShareDialog.vue'
 import { exportDropBox, exportFile, importFile, validateDropBoxContent, validateFileContent } from './exportImport'
 import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
+import { loaded, loadedKind } from '../../test/lazyApplications'
 
 describe('registerDepot', () => {
-  it('registers the FILE kind: shareable (READ / READ_WRITE, a single-file link), a file icon, its rows, its own page and link dialog', () => {
+  it('registers the FILE kind: shareable (READ / READ_WRITE, a single-file link), a file icon, its rows, its own page and link dialog', async () => {
     const registry = createRegistry()
     registerDepot(registry)
-    expect(registry.kind(FILE_KIND)).toEqual({
+    // its page and dialog load on first use (`core/applications/lazy.ts`): what they load is the module's own
+    expect(await loadedKind(registry, FILE_KIND)).toEqual({
       supported: true,
       kind: FILE_KIND,
       icon: 'file',
@@ -78,10 +80,10 @@ describe('registerDepot', () => {
     expect(registry.tokenInputFor(FOLDER_KIND, 'Foto.JPG')).not.toBe(fileNameSlug('Foto.JPG'))
   })
 
-  it('registers the DEPOT_DROPBOX kind: shareable, its rows in the files\' tab, its share dialog, detail and share body - no create dialog (F3)', () => {
+  it('registers the DEPOT_DROPBOX kind: shareable, its rows in the files\' tab, its share dialog, detail and share body - no create dialog (F3)', async () => {
     const registry = createRegistry()
     registerDepot(registry)
-    expect(registry.kind(DROPBOX_KIND)).toEqual({
+    expect(await loadedKind(registry, DROPBOX_KIND)).toEqual({
       supported: true,
       kind: DROPBOX_KIND,
       icon: 'inbox',
@@ -106,7 +108,7 @@ describe('registerDepot', () => {
       copyLosses: ['depot.dropBox.copyLoss'],
       rekeyContent: nothingOfItsOwnToRekey,
     })
-    expect(registry.shareBodyFor(DROPBOX_KIND)).toBe(DropBoxShareBody)
+    expect(await loaded(registry.shareBodyFor(DROPBOX_KIND))).toBe(DropBoxShareBody)
     expect(registry.tokenInputFor(DROPBOX_KIND, 'Foto.JPG')).toBe(slugify('Foto.JPG')) // a container's folding
   })
 

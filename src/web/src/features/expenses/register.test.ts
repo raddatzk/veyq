@@ -18,6 +18,7 @@ import { POT_KIND } from './kinds'
 import { potRows } from './levelRows'
 import { rekeyPotContent } from './rekey'
 import { exportPot, importPot, validatePotContent } from './exportImport'
+import { loaded, loadedKind } from '../../test/lazyApplications'
 import PotDetail from './components/PotDetail.vue'
 import PotCreateDialog from './components/PotCreateDialog.vue'
 import PotShareDialog from './components/PotShareDialog.vue'
@@ -26,10 +27,11 @@ import { POT_ID, SCOPE, potNode } from './potTestUtil'
 import { t } from '../../test/i18n'
 
 describe('registerExpenses', () => {
-  it('registers the Pot kind with its page, dialogs, rows, re-key, download and import', () => {
+  it('registers the Pot kind with its page, dialogs, rows, re-key, download and import', async () => {
     const r = createRegistry()
     registerExpenses(r)
-    expect(r.kind(POT_KIND)).toMatchObject({
+    // its page, dialogs and hooks load on first use (`core/applications/lazy.ts`): what they load is the module's own
+    expect(await loadedKind(r, POT_KIND)).toMatchObject({
       supported: true, kind: POT_KIND, icon: 'wallet', detail: PotDetail, shareDialog: PotShareDialog, createDialog: PotCreateDialog,
       deleteTitle: 'expenses.delete', deleteCopy: 'expenses.deleteConfirm', nounWithArticle: 'expenses.aPot',
       list: { rows: potRows, tabLabel: 'expenses.title' }, placement: { root: true, parents: [FOLDER_KIND] },
@@ -44,7 +46,8 @@ describe('registerExpenses', () => {
     expect(r.applicationOf(POT_KIND)).toBe(EXPENSES)
     expect(r.applications()).toEqual([{ id: EXPENSES, name: 'expenses.title' }])
     expect(r.routeOf(POT_KIND)).toEqual({ slug: 'expenses', group: 'application:expenses' })
-    expect(r.itemReviews()).toEqual([PotEntryReview])
+    expect(r.itemReviews()).toHaveLength(1)
+    expect(await loaded(r.itemReviews()[0])).toBe(PotEntryReview)
     expect(r.placementAllows(POT_KIND, FOLDER_KIND)).toBe(true)
     expect(r.placementAllows(POT_KIND, POT_KIND)).toBe(false)
   })

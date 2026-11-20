@@ -9,6 +9,7 @@
 // `K_rev` and every receipt's `K_blob` re-wrapped, no body touched) and the moderator's review of a reported entry or receipt
 // (`PotEntryReview`). No share body: a Pot is never a `WRITE_ONLY` root, so every guest gets core's page. A Pot carries a
 // cover (owner 2026-11-04): core's action, dialog, upload, header and row display - Expenses only opts in.
+import { defineAsyncComponent } from 'vue'
 import { FOLDER_KIND } from '../../core/node/kind'
 import type { LevelActionContext, Registry } from '../../core/applications/registry'
 import { targetOf } from '../../core/access'
@@ -16,14 +17,21 @@ import { EXPENSES } from '../platform/capabilities'
 import { POT_KIND } from './kinds'
 import { expensesRights } from './rights'
 import { potRows } from './levelRows'
-import { rekeyPotContent } from './rekey'
-import { EXPENSES_CONTENT_VERSION, exportPot, importPot, validatePotContent } from './exportImport'
-import PotCreateDialog from './components/PotCreateDialog.vue'
-import PotDetail from './components/PotDetail.vue'
-import PotShareDialog from './components/PotShareDialog.vue'
-import PotEntryReview from './components/PotEntryReview.vue'
-// Expenses' global stylesheet — LAST, after the components above (Memories' `memories.css` header has the reason).
+import { lazyHook } from '../../core/applications/lazy'
+import type { ExportContentHook, ImportContentHook } from '../../core/export/hooks'
+import type { RekeyContentHook } from '../../core/node/rekey/hooks'
+import { EXPENSES_CONTENT_VERSION, validatePotContent } from './contentSchema'
+// Expenses' global stylesheet, eager with the descriptor (Memories' `memories.css` header has what its place means).
 import './expenses.css'
+
+// Every component below is LAZY (its own chunk, fetched on first use), so the entry chunk carries what the shell asks of
+// this application eagerly - its kinds, labels, rights, rows and hooks - and not its pages and dialogs (ADR 0079
+// Consequences, the measurement there). `.default` explicitly: a test's `vi.mock` of the module is no ES-module namespace
+// Vue would unwrap on its own (core's registry does the same for its folder share dialog).
+const PotCreateDialog = defineAsyncComponent(() => import('./components/PotCreateDialog.vue').then((m) => m.default))
+const PotDetail = defineAsyncComponent(() => import('./components/PotDetail.vue').then((m) => m.default))
+const PotShareDialog = defineAsyncComponent(() => import('./components/PotShareDialog.vue').then((m) => m.default))
+const PotEntryReview = defineAsyncComponent(() => import('./components/PotEntryReview.vue').then((m) => m.default))
 
 /** Where "New Pot" sits in the level's "New" menu: after core's folder (0), Memories' Memory (10), Depot's drop box (20)
  *  and its uploads (30, 31). */
@@ -64,9 +72,9 @@ export function registerExpenses(registry: Registry): void {
       enabled: (ctx: LevelActionContext) => ctx.epochs !== null,
     },
     placement: POT_PLACEMENT,
-    rekeyContent: rekeyPotContent,
-    exportContent: exportPot,
-    importContent: importPot,
+    rekeyContent: lazyHook<RekeyContentHook>(() => import('./rekey').then((m) => m.rekeyPotContent)),
+    exportContent: lazyHook<ExportContentHook>(() => import('./exportImport').then((m) => m.exportPot)),
+    importContent: lazyHook<ImportContentHook>(() => import('./exportImport').then((m) => m.importPot)),
     contentSchema: { version: EXPENSES_CONTENT_VERSION },
     validateContent: validatePotContent,
     // The import reads a receipt's payload only through the upload pump's frame-sized slices (the CSV is for a spreadsheet

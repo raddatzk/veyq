@@ -173,7 +173,7 @@ describe('Memories rows', () => {
     expect(h.events.remove[0]!.remove).toBeUndefined()
   })
 
-  it('in map mode asks core to draw the subtree map in place of the list and pins located nodes', () => {
+  it('in map mode asks core to draw the subtree map in place of the list and pins located nodes', async () => {
     // folder fA holds a located memory; a second located memory sits at root - at root both are in scope.
     const memInA = locatedMemory('memInA', 'fA', located(1, 1))
     const memRoot = locatedMemory('memRoot', null, located(2, 2))
@@ -183,8 +183,9 @@ describe('Memories rows', () => {
 
     // the rows are gone, the map is shown
     expect(h.w.find('.veyq-level-item').exists()).toBe(false)
+    // the map is fetched when it is first shown (`levelRows.ts`): it is drawn once its chunk has loaded
+    await vi.waitFor(() => expect(h.w.findComponent(SpaceMapStub).exists()).toBe(true))
     const map = h.w.findComponent(SpaceMapStub)
-    expect(map.exists()).toBe(true)
     expect(pinNames(map).sort()).toEqual(['memInA', 'memRoot'])
   })
 
