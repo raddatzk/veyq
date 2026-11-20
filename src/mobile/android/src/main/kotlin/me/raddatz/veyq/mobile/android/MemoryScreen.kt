@@ -65,6 +65,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.platform.testTag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -442,12 +443,19 @@ private fun UploadPlaceholder(tile: me.raddatz.veyq.mobile.memories.UploadTile, 
         tile.preparing -> stringResource(R.string.memory_upload_tile_preparing, tile.name)
         else -> stringResource(R.string.memory_upload_tile, tile.name)
     }
-    Box(modifier.background(role(palette.line)).semantics(mergeDescendants = true) { contentDescription = label }, contentAlignment = Alignment.Center) {
+    // added offline, sealed on this device: core's *Waiting to send* under the glyph, no progress (ADR 0153 decision 5)
+    val waiting = tile.said?.let { say(it) }
+    Box(modifier.background(role(palette.line)).semantics(mergeDescendants = true) { contentDescription = waiting?.let { "$label. $it" } ?: label }, contentAlignment = Alignment.Center) {
         Icon(
             if (tile.failed) Icons.Outlined.ErrorOutline else if (tile.isVideo) Icons.Outlined.Movie else Icons.Outlined.Image, null,
             tint = role(if (tile.failed) palette.danger else palette.muted),
         )
-        if (!tile.failed) {
+        if (waiting != null) {
+            Text(
+                waiting, style = MaterialTheme.typography.labelSmall, color = role(palette.muted), maxLines = 2,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(6.dp).testTag("gallery-waiting"),
+            )
+        } else if (!tile.failed) {
             val bar = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(6.dp)
             if (tile.preparing) LinearProgressIndicator(bar) else LinearProgressIndicator({ tile.progress.toFloat() }, bar)
         }

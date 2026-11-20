@@ -563,7 +563,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * device still trusts with the password, or the sign-in. Staying signed in ends with the sign-out; the password trust
      * stays (as on the web).
      */
-    fun signOut(account: VeyqAccount) {
+    fun signOut(account: VeyqAccount) = beforeLoss(account, me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT) {
         if (session.signedTo?.account == account) uploads.clear()
         viewModelScope.launch { signedOut(session.signOut(account)) }
     }
@@ -576,6 +576,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 closeAccountFlow()
                 shellWatch?.cancel()
                 shellModel = null
+                _shell.value = null
                 stopMusic()
                 _depot.value?.close()
                 _depot.value = null
@@ -666,19 +667,23 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             done(change)
             null
         }
-        override fun stopTrusting() = onSettings { m ->
-            m.stopTrusting()
-            trustLog("settings stop trusting")
-            null
+        override fun stopTrusting() = beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.offline.QueuedLoss.STOP_TRUSTING) {
+            onSettings { m ->
+                m.stopTrusting()
+                trustLog("settings stop trusting")
+                null
+            }
         }
-        override fun signOutHere() = onSettings { it.signOutHere() }
+        override fun signOutHere() = beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT) { onSettings { it.signOutHere() } }
         override fun setOfflineLimit(amount: String, unit: me.raddatz.veyq.mobile.offline.LimitUnit) = onSettings { it.setOfflineLimit(amount, unit); null }
         override fun turnOfflineLimitOff() = onSettings { it.turnOfflineLimitOff(); null }
         override fun clearOfflineCache() = onSettings { it.clearOfflineCache(); null }
         override fun unpinOffline(node: String) = onSettings { it.unpinOffline(node); null }
         override fun askRemoveAllOffline() { settingsModel?.askRemoveAllOffline() }
         override fun cancelRemoveAllOffline() { settingsModel?.cancelRemoveAllOffline() }
-        override fun removeAllOffline() = onSettings { it.removeAllOffline(); null }
+        override fun removeAllOffline() = beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.offline.QueuedLoss.REMOVE_ALL, cancel = ::cancelRemoveAllOffline) {
+            onSettings { it.removeAllOffline(); null }
+        }
         override fun linkShow() = showForNewDevice()
         override fun linkScan() = scanSignInCode()
         override fun renameFamily(familyId: String, label: String) = onSettings { it.renameFamily(familyId, label); null }
@@ -951,6 +956,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val model = me.raddatz.veyq.mobile.navigation.ShellModel(t, hidden, recent, System::currentTimeMillis)
         shellWatch?.cancel()
         shellModel = model
+        _shell.value = model
         openContributions = null
         _levelView.value = model.levelView
         closeSearch()
@@ -1242,6 +1248,144 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** Core's [notice] said by the shell, in the words of the app's language. */
     fun said(notice: me.raddatz.veyq.mobile.words.Notice) = notify(Notice(getApplication<Application>().text(notice)))
+
+    // ---- the writes made offline (ADR 0153): core's outbox, its tray, its marks and its notices; the app only draws ----
+
+    /** The shell's model as it changes: the outbox's flows follow the tenant shown. */
+    private val _shell = MutableStateFlow<me.raddatz.veyq.mobile.navigation.ShellModel?>(null)
+
+    /** Under the offline banner: how many writes made offline wait (core's `ShellModel.queuedBanner`); null while none does. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val queuedBanner: StateFlow<me.raddatz.veyq.mobile.words.Notice?> = _shell
+        .flatMapLatest { it?.queuedBanner ?: kotlinx.coroutines.flow.flowOf(null) }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
+
+    /** The level shown's nodes made offline and not sent yet (core's `ShellModel.queuedHere`), each with its mark. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val queuedHere: StateFlow<List<me.raddatz.veyq.mobile.offline.QueuedItem>> = _shell
+        .flatMapLatest { it?.queuedHere ?: kotlinx.coroutines.flow.flowOf(emptyList()) }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
+
+    /** Every write made offline as the uploads tray lists it (core's `QueuedTray.items`), oldest first. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val queuedItems: StateFlow<List<me.raddatz.veyq.mobile.offline.QueuedItem>> = _shell
+        .flatMapLatest { it?.queuedTray()?.items ?: kotlinx.coroutines.flow.flowOf(emptyList()) }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
+
+    init {
+        // after a reconnect that sent writes made offline: how many went and how many need the person (core's notices)
+        @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+        viewModelScope.launch {
+            _shell.flatMapLatest { it?.queuedSent ?: kotlinx.coroutines.flow.emptyFlow() }.collect { it.forEach(::said) }
+        }
+    }
+
+    /** What "New" offers where the shell is (core's `ShellModel.createsHere`: offline only what is queued). */
+    fun createsHere(isHome: Boolean, bookmarks: Boolean = false): List<me.raddatz.veyq.mobile.AppKinds.Create> =
+        shellModel?.createsHere(isHome, bookmarks).orEmpty()
+
+    /** The tray's *Discard* of write [id] (core's `QueuedTray.discard`, with what waits for it). */
+    fun discardQueued(id: String) {
+        val m = shellModel ?: return
+        viewModelScope.launch { m.queuedTray().discard(id) }
+    }
+
+    /** The name a refused write's file [index] is saved under (core's `QueuedTray.copyName`), for the system's save dialog. */
+    suspend fun queuedCopyName(id: String, index: Int): String? = shellModel?.queuedTray()?.copyName(id, index)?.first
+
+    /**
+     * The tray's *Save a copy* (core's `QueuedTray.saveCopy`): refused write [id]'s file [index] written as plaintext only into
+     * [uri], the document the person chose in the system's save dialog; what it began removed where it did not complete.
+     */
+    fun saveQueuedCopy(id: String, index: Int, uri: android.net.Uri) {
+        val m = shellModel ?: return
+        viewModelScope.launch {
+            val tray = m.queuedTray()
+            val name = tray.copyName(id, index)?.first
+            val resolver = getApplication<Application>().contentResolver
+            val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { resolver.openOutputStream(uri)?.use { out -> tray.saveCopy(id, index) { out.write(it) } } ?: false }.getOrDefault(false)
+            }
+            if (!saved) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) } }
+            said(me.raddatz.veyq.mobile.offline.QueuedShown.copySaved(name, saved))
+        }
+    }
+
+    /** A held Pot entry's *Open*: the open Pot shows its held editor ([write] on entry [entry] of Pot [pot]). */
+    class HeldEntry(val pot: String, val entry: String, val write: String)
+
+    private val _heldEntry = MutableStateFlow<HeldEntry?>(null)
+    val heldEntry: StateFlow<HeldEntry?> = _heldEntry.asStateFlow()
+
+    fun heldEntrySeen() {
+        _heldEntry.value = null
+    }
+
+    /** A held rename's *Open*: the rename dialog with the person's name in it (core's `QueuedOpen.Rename`). */
+    private val _heldRename = MutableStateFlow<me.raddatz.veyq.mobile.offline.QueuedOpen.Rename?>(null)
+    val heldRename: StateFlow<me.raddatz.veyq.mobile.offline.QueuedOpen.Rename?> = _heldRename.asStateFlow()
+
+    fun heldRenameSeen() {
+        _heldRename.value = null
+    }
+
+    /**
+     * The tray's *Open* of held write [id] (core's `QueuedTray.opens`, ADR 0153 decision 4): where core says it is decided —
+     * the Pot's editor over the person's values, the node's rename dialog, or the page it was made on.
+     */
+    fun openQueued(id: String) {
+        val m = shellModel ?: return
+        viewModelScope.launch {
+            when (val o = m.queuedTray().opens(id)) {
+                is me.raddatz.veyq.mobile.offline.QueuedOpen.Entry -> {
+                    m.openFound(o.scope, o.pot)
+                    _heldEntry.value = HeldEntry(o.pot, o.entry, o.write)
+                }
+                is me.raddatz.veyq.mobile.offline.QueuedOpen.Rename -> _heldRename.value = o
+                is me.raddatz.veyq.mobile.offline.QueuedOpen.Place -> o.node?.let { m.openFound(o.scope, it) } ?: switchSpace(o.scope)
+                null -> {}
+            }
+        }
+    }
+
+    /** The held editor of write [writeId] in the open Pot (core's `PotModel.heldEditor`); null where it is no held entry of it. */
+    suspend fun heldEntryEditor(writeId: String, separator: Char): me.raddatz.veyq.mobile.expenses.EntryEditor? =
+        openPot?.heldEditor(writeId, separator)
+
+    /** A held rename decided in its dialog (core's rename of the node, which drops the held one once it lands). */
+    suspend fun renameHeld(open: me.raddatz.veyq.mobile.offline.QueuedOpen.Rename, name: String): me.raddatz.veyq.mobile.navigation.NameAnswer {
+        val m = shellModel ?: return me.raddatz.veyq.mobile.navigation.NameAnswer.DONE
+        val node = m.state.value?.lists?.nodes?.firstOrNull { it.scopeId == open.scope && it.nodeId == open.node }
+            ?: return me.raddatz.veyq.mobile.navigation.NameAnswer.DONE
+        val header = header(me.raddatz.veyq.mobile.navigation.NodeAt(node.scopeId, node.nodeId, node.kind, node.name), null)
+            ?: return me.raddatz.veyq.mobile.navigation.NameAnswer.DONE
+        return header.rename(name)
+    }
+
+    /** The ask before a loss of writes made offline (core's `QueuedAsk`), what its confirm runs and what its cancel does. */
+    class LossAsk(val ask: me.raddatz.veyq.mobile.offline.QueuedAsk, val run: () -> Unit, val cancel: () -> Unit)
+
+    private val _lossAsk = MutableStateFlow<LossAsk?>(null)
+    val lossAsk: StateFlow<LossAsk?> = _lossAsk.asStateFlow()
+
+    /**
+     * Before [loss] deletes the writes made offline [account] keeps (ADR 0153 decision 2, owner 2026-11-19): core's ask while
+     * any wait (`QueuedTray.ask`), [run] once confirmed, [cancel] otherwise; with none waiting [run] at once.
+     */
+    private fun beforeLoss(account: VeyqAccount?, loss: me.raddatz.veyq.mobile.offline.QueuedLoss, cancel: () -> Unit = {}, run: () -> Unit) {
+        if (account == null) return run()
+        viewModelScope.launch {
+            val ask = runCatching { me.raddatz.veyq.mobile.offline.QueuedTray(account).ask(loss) }.getOrNull()
+            if (ask == null) run() else _lossAsk.value = LossAsk(ask, run, cancel)
+        }
+    }
+
+    /** The loss's ask answered: its confirm ([confirmed]) or its cancel. */
+    fun answerLoss(confirmed: Boolean) {
+        val a = _lossAsk.value ?: return
+        _lossAsk.value = null
+        if (confirmed) a.run() else a.cancel()
+    }
 
     /**
      * The app's one upload queue (core's `UploadQueue`, the web's `core/blob/queue.ts`): every application's uploads, one
@@ -2054,6 +2198,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** What a Memory's or a chapter's create came to: the node made opened, or why not in words. */
     private fun opened(made: me.raddatz.veyq.mobile.memories.MemoryCreate.Made): String? {
+        // made offline: the dialog closes, *Waiting to send* is said, it shows where it was made (core's `Made.queued`)
+        if (made.queued) {
+            made.notice?.let(::said)
+            return null
+        }
         made.notice?.let { return getApplication<Application>().text(it) }
         val n = made.node ?: return getApplication<Application>().text(me.raddatz.veyq.mobile.memories.MemoryCreate.refused(null))
         me.raddatz.veyq.mobile.memories.GalleryModel.page(n)?.let(::open)

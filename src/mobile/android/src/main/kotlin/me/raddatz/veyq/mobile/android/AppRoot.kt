@@ -69,6 +69,8 @@ fun AppRoot(model: AppModel) {
                 ?: settings?.let { SettingsScreen(it, model.settingsActions, maps, at = settingsAt, onAt = model::settingsAtSeen) }
                 ?: s.managing?.let { ManageScreen(it, model) } ?: ShellScreen(s, model)
         }
+        // the ask before a sign-out, Stop trusting or Remove all offline content deletes writes made offline (ADR 0153)
+        QueuedLossDialog(model)
         // a device-linking ceremony, over the sign-in or Settings (ADR 0059): a secure dialog of its own
         link?.let { DeviceLinkScreen(it, onAgain = model::linkAgain, onClose = model::closeLink) }
         // one of the account's flows (ADR 0148), over Settings or one's own person page: a dialog of its own

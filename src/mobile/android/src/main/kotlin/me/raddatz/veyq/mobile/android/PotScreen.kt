@@ -49,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.platform.testTag
 import me.raddatz.veyq.mobile.expenses.Ledger
 import me.raddatz.veyq.mobile.expenses.PotView
 import me.raddatz.veyq.mobile.expenses.RevisionFormat
@@ -167,6 +168,8 @@ private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMod
                         Text(e.title ?: stringResource(R.string.pot_transfer), fontWeight = FontWeight.SemiBold)
                         Text(view.line(e).map { piece(it) }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
                         view.badge(e)?.let { b -> Text(say(b.notice), style = MaterialTheme.typography.labelSmall, color = role(if (b.danger) palette.danger else palette.muted)) }
+                        // made offline and not sent yet (core's `PotView.unsentMark`, ADR 0153 decision 5)
+                        view.unsentMark(e)?.let { Text(say(it), style = MaterialTheme.typography.labelSmall, color = role(palette.muted), modifier = Modifier.testTag("pot-unsent")) }
                     }
                     e.amount?.let { Text(money(it, view.currency, view.minorUnits), fontWeight = FontWeight.SemiBold) }
                 }
@@ -219,6 +222,11 @@ private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMod
         }
     }
     editing?.let { EntryEditorSheet(view, model, it) { editing = null } }
+    // a held entry's *Open* from the uploads tray: core's held editor over the person's values (ADR 0153 decision 4)
+    val held by model.heldEntry.collectAsStateWithLifecycle()
+    held?.takeIf { it.pot == state.ref.nodeId }?.let { h ->
+        EntryEditorSheet(view, model, h.entry, heldWrite = h.write) { model.heldEntrySeen() }
+    }
     viewing?.let { DeletedEntrySheet(view, state, model, it) { viewing = null } }
 }
 
@@ -244,6 +252,10 @@ private fun Overview(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMo
                     color = role(when (b.tone) { PotView.Tone.OWES -> palette.danger; PotView.Tone.OWED -> palette.primary; PotView.Tone.SETTLED -> palette.muted }),
                 )
             }
+        }
+        // the balances count entries made offline and not sent yet, and say so (core's `PotView.balancesUnsent`)
+        view.balancesUnsent?.let { n ->
+            item(key = "balances-unsent") { Text(say(n), style = MaterialTheme.typography.bodySmall, color = role(palette.muted), modifier = Modifier.testTag("pot-balances-unsent")) }
         }
         if (view.settleUp.isNotEmpty()) {
             item { Section(stringResource(R.string.pot_settle_up)) }

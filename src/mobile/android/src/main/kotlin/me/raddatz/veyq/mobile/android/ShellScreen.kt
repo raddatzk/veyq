@@ -196,6 +196,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
             onSpace = { closeDrawerThen { model.switchSpace(it) } },
             onAddServer = { closeDrawerThen { model.openManage() } },
             onNew = { kind -> closeDrawerThen { model.requestNew(kind) } },
+            creates = model.createsHere(isHome = false, bookmarks = true),
             onSettings = { closeDrawerThen { model.openSettings() } },
             permanent = wide,
         )
@@ -278,7 +279,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                     )
                 }
                 // core's banner: the open page's own kept time where it has one (a Pot's ledger), else the lists'
-                s.banner?.let { OfflineBanner(it) }
+                val waitingCount by model.queuedBanner.collectAsStateWithLifecycle()
+                s.banner?.let { OfflineBanner(it, waitingCount) }
                 incoming?.let { ShareBanner(it, s, model, snackbar, onCancel = model::cancelShare) }
                 }
             },
@@ -353,11 +355,17 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
               }
                 if (s.switching) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (refreshable) androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator(pull, refreshing, Modifier.align(Alignment.TopCenter))
-                UploadTray(model)
+                Column(Modifier.fillMaxWidth()) {
+                    UploadTray(model)
+                    // the writes made offline, each under where it goes (core's `QueuedTray`, ADR 0153 decision 5)
+                    QueuedTrayRow(model)
+                }
             }
             }
         }
         trashOf?.let { SpaceTrashSheet(it, model) { trashOf = null } }
+        // a held rename's *Open* from the tray (core's `QueuedOpen.Rename`)
+        HeldRenameDialog(model)
         uploadShareAt?.let { TopLevelUploadSheet(it, model) { uploadShareAt = null } }
     }
     if (wide) androidx.compose.material3.PermanentNavigationDrawer(drawerContent = drawerContent) { body() }
@@ -424,7 +432,8 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
     // `AppKinds.createsWhere`: a Memory's placement allows every level New makes into).
     // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
     CreateAction(stringResource(R.string.create_new), shown = model.canCreateHere, onClick = {}, state = LocalListStates.current.of("home:${s.shell.space}/${s.shell.folder?.nodeId}"), menu = { close ->
-        me.raddatz.veyq.mobile.AppKinds.createsWhere(isHome = true, bookmarks = true).forEach { c ->
+        // core's list: online all a level makes, offline only what is queued (`ShellModel.createsHere`, ADR 0153 decision 3)
+        model.createsHere(isHome = true, bookmarks = true).forEach { c ->
             androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = {
                 close()
                 when (c) {
@@ -464,13 +473,16 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
             }
         }
         val groups = s.levelGroups
+        val queuedHere by model.queuedHere.collectAsStateWithLifecycle()
         val hero = LocalNodeHero.current
         val tiles = LocalLevelView.current == me.raddatz.veyq.mobile.navigation.ViewMode.TILES
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
             val columns = tileColumns(maxWidth)
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
                 item(key = "hero") { hero(8.dp) }
-                if (groups.isEmpty()) item(key = "empty") { Empty() }
+                // what was made here offline and is not sent yet, marked (core's `ShellModel.queuedHere`, ADR 0153 decision 5)
+                items(queuedHere, key = { "queued:" + it.id }) { QueuedLevelRow(it) }
+                if (groups.isEmpty() && queuedHere.isEmpty()) item(key = "empty") { Empty() }
                 // the folders apart from the rest, as the web's level view (core's `Home.groups`)
                 for (group in groups) {
                     val heading = group.heading
@@ -721,6 +733,8 @@ private fun Drawer(
     onAddServer: () -> Unit,
     /** The sidebar's "New": what a level creates ("folder", "pot"), opened on Home. */
     onNew: (String) -> Unit,
+    /** What its "New" offers (core's `ShellModel.createsHere`: offline only what is queued). */
+    creates: List<me.raddatz.veyq.mobile.AppKinds.Create>,
     /** The drawer's Settings: the account's page (`uc.account.sessions`). */
     onSettings: () -> Unit,
     /** Open for good beside the content (an expanded window), not over it. */
@@ -742,8 +756,8 @@ private fun Drawer(
                 Box {
                     Button(
                         onClick = { newMenu = true },
-                        // offline every write is gone (ADR 0140 decision 7)
-                        enabled = s.online,
+                        // offline only what is queued is offered (core's `ShellModel.createsHere`, ADR 0153 decision 3)
+                        enabled = creates.isNotEmpty(),
                         colors = ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
                         shape = MaterialTheme.shapes.small,
                         modifier = Modifier.fillMaxWidth(),
@@ -753,7 +767,7 @@ private fun Drawer(
                         Text(stringResource(R.string.drawer_new))
                     }
                     androidx.compose.material3.DropdownMenu(newMenu, { newMenu = false }) {
-                        me.raddatz.veyq.mobile.AppKinds.createsWhere(isHome = false, bookmarks = true).forEach { c ->
+                        creates.forEach { c ->
                             androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = {
                                 newMenu = false
                                 onNew(
@@ -855,7 +869,7 @@ private fun ObjectItems(refs: List<ObjectRef>, open: ObjectRef?, onOpen: (Object
 @Composable
 private fun ExpensesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) -> Unit = model::open) {
     var creating by remember { mutableStateOf(false) }
-    CreateAction(stringResource(R.string.create_pot), shown = s.spaces.isNotEmpty() && s.online, onClick = { creating = true }, state = LocalListStates.current.of("app:EXPENSES")) { list, bottom ->
+    CreateAction(stringResource(R.string.create_pot), shown = s.spaces.isNotEmpty() && me.raddatz.veyq.mobile.AppKinds.Create.POT in model.createsHere(isHome = false), onClick = { creating = true }, state = LocalListStates.current.of("app:EXPENSES")) { list, bottom ->
         ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), onOpen = onOpen, state = list, bottom = bottom)
     }
     if (creating) PotCreateSheet(s, model) { creating = false }
@@ -871,7 +885,7 @@ private fun MemoriesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) 
         MemoriesMapTab(s, model)
         return
     }
-    CreateAction(stringResource(R.string.memory_new), shown = space != null && s.online, onClick = { creating = true }, state = LocalListStates.current.of("app:MEMORIES")) { list, bottom ->
+    CreateAction(stringResource(R.string.memory_new), shown = space != null && me.raddatz.veyq.mobile.AppKinds.Create.MEMORY in model.createsHere(isHome = false), onClick = { creating = true }, state = LocalListStates.current.of("app:MEMORIES")) { list, bottom ->
         ArrangedListScreen(s.applicationList(ApplicationId.MEMORIES), onOpen = onOpen, state = list, bottom = bottom)
     }
     if (creating && space != null) MemoryNameDialog(space, model, onClose = { creating = false }) { name, wasThere, autoPlace ->
@@ -1045,14 +1059,18 @@ internal val LocalTakesShare = androidx.compose.runtime.compositionLocalOf<(Obje
  * a strip under the top app bar, as Material shows a lasting state of the whole screen; every write is gone meanwhile.
  */
 @Composable
-private fun OfflineBanner(banner: me.raddatz.veyq.mobile.words.Notice) {
+private fun OfflineBanner(banner: me.raddatz.veyq.mobile.words.Notice, waiting: me.raddatz.veyq.mobile.words.Notice?) {
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Outlined.CloudOff, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.width(8.dp))
-        Text(say(banner), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column {
+            Text(say(banner), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // how many writes made offline wait to be sent (core's `ShellModel.queuedBanner`)
+            waiting?.let { Text(say(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("offline-waiting-count")) }
+        }
     }
 }
 
