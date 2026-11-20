@@ -95,7 +95,9 @@ class LiveQueuedTest {
             val chapter = assertNotNull(QueuedMemories.create(account, tenantRef.tenantId, scopeId, memory.nodeId, MemoryCreate.CHAPTER, "Day one", System.currentTimeMillis()))
             val photo = File(System.getProperty("veyq.repoRoot"), "src/web/src/features/memories/__fixtures__/exif-sample.jpg").readBytes()
             val deriver = object : MediaUpload.Deriver {
-                override fun derive(source: UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) = done(MediaUpload.Derived(photo, photo, null, null))
+                // copies: the core zeroes the tiers once sealed, and [photo] is what both picks read and what is compared
+                override fun derive(source: UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) =
+                    done(MediaUpload.Derived(photo.copyOf(), photo.copyOf(), null, null))
             }
             val media = QueuedMemories.media(account, tenantRef.tenantId, scopeId, chapter.id, listOf(picked("one.jpg", photo), picked("two.jpg", photo)), deriver, { System.currentTimeMillis() }) {}
             assertEquals(2, media.size)
