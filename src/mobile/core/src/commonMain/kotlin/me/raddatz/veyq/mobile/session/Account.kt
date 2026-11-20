@@ -1793,6 +1793,9 @@ class TenantSession internal constructor(
     /** One's own profile in this tenant (ADR 0148 decision 2): a new model each time a place opens it; the host closes it. Android, whose core target has no libwebp, hands its own [encoder]. */
     fun profile(encoder: me.raddatz.veyq.mobile.media.WebpEncoder? = me.raddatz.veyq.mobile.media.coreWebpEncoder): ProfileModel = ProfileModel(TenantProfileDoor(this), account.suite, encoder)
 
+    /** The kept time each of this tenant's pages shows offline (a Pot, a gallery): the shell's banner names the open page's. */
+    val pagesOffline: me.raddatz.veyq.mobile.offline.PagesOffline = me.raddatz.veyq.mobile.offline.PagesOffline()
+
     /** The members' profile pictures, synced from [people]'s revisions (`MemberAvatars`). */
     val avatars: MemberAvatars by lazy { MemberAvatars(this) }
 

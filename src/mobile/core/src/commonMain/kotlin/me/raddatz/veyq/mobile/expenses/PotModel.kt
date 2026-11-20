@@ -410,6 +410,18 @@ class PotModel internal constructor(
     private fun online(): Boolean = reach?.value?.let { it == Reach.Online } ?: true
 
     init {
+        // the open Pot's own kept time, for the shell's banner (`PagesOffline`); a Pot left or another opened leaves it
+        tenant?.let { t ->
+            scope.launch {
+                var shown: String? = null
+                state.collect { s ->
+                    val id = s?.ref?.nodeId
+                    shown?.takeIf { it != id }?.let { t.pagesOffline.shown(it, null) }
+                    if (id != null) t.pagesOffline.shown(id, s.offline)
+                    shown = id
+                }
+            }
+        }
         // going offline with a Pot open shows it read-only as of its last read; back online it reads anew — a Pot that
         // did not open offline (the store did not hold it) is opened again
         reach?.let { r ->

@@ -112,6 +112,15 @@ ADR 0153 decisions 6 and 7 hold them; here only what the work needs beside them.
   list and "named like a secret"), restored with `/bin/cp -f`. `./gradlew :bridge:jvmTest :bridge:generateBindings` green
   (the generated `bridge.rs`/`Bridge.g.cs` are not committed; Linux matches `Update::Pot { state, .. }` and Windows
   `is Update.Pot`, so neither breaks — not built here).
+  **Follow-up** (2026-11-20, from phase 4's pass): (1) the banner's time is core's — `TenantSession.pagesOffline`
+  (`PagesOffline`) holds each page's own kept time offline (`PotModel` and `GalleryModel` through its door report it), and
+  `ShellModel.State.banner` (the bridge's `ShellShown.offlineBanner`, meaning only, no wire change) names the open page's
+  where it has one, else the lists'; Android's own rule in `ShellScreen.kt` dropped. (2) Offline "Available offline" is
+  offered only where the node is kept already (turning it off): a pin cannot be sized and confirmed before its first byte
+  nor fetch (ADR 0140 decision 9) and nothing is queued (decision 7) — `NodeHeader.rights(offlineOn)`, `toggleOffline`
+  refuses `offline_read_only`, a size asked online is dropped. Tests `OfflineBannerTest` (3), `OfflineScreensTest`'s
+  `offline_a_pin_is_not_offered_nor_made_…`; bites: the banner without the page's time → both page tests red; the
+  toggle offered offline regardless → two header tests red; each restored with `/bin/cp -f`.
 - [x] **4 Android** — the Pot's header *Available offline*, its offline banner and disabled writes. · Done when:
   `:android:assembleDebug`, the guidelines and words guards green.
   **Built** (2026-11-20): the header's *Available offline* needed no Android code (core's plan offers it for a Pot now,

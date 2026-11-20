@@ -41,7 +41,8 @@ import kotlin.test.assertTrue
  * Bites (each one edit, seen red, then restored): (a) the toggle pins at once (`toggleOffline` without the ask) → the
  * node is pinned before the person confirmed; (b) the shell names no dropped pin (`heldNames` not read) → the notice is
  * nameless where the shell held the name; (c) "Remove all offline content" without its question (`removeAllOffline` not
- * checking `askingRemoveAll`) → the pins go on the first tap.
+ * checking `askingRemoveAll`) → the pins go on the first tap; (d) `NodeHeader.rights` offering "Available offline"
+ * offline whatever the toggle's state → a node not kept offers its pin offline.
  */
 class OfflineScreensTest {
     private val played = mutableListOf<PlayedTenant>()
@@ -183,10 +184,47 @@ class OfflineScreensTest {
         runCurrent()
         val r = assertNotNull(h.current.rights)
         assertEquals(listOf(false, false, false, false, false, false, false), listOf(r.favorite, r.share, r.rename, r.move, r.cover, r.report, r.delete), "offline the header still offers a write")
-        assertTrue(r.offline, "offline the toggle went (it is this device's own)")
+        assertFalse(r.offline, "offline a node not kept offered its pin")
         reach.value = true
         runCurrent()
         assertEquals(true, h.current.rights?.rename)
+    }
+
+    @Test
+    fun offline_a_pin_is_not_offered_nor_made_and_one_kept_can_still_be_turned_off() = runTest {
+        val nodes = Nodes()
+        val reach = MutableStateFlow(true)
+        val h = header(memory, Door(nodes, reach))
+        // a size asked online is no question once the network went: it could not fetch
+        assertNull(h.toggleOffline())
+        runCurrent()
+        assertEquals(12_000_000L, h.current.offline?.asking)
+        reach.value = false
+        runCurrent()
+        assertNull(h.current.offline?.asking, "offline a pin's size is still asked")
+        assertNull(h.confirmOffline(), "a confirm with nothing asked any more")
+        // not kept: not offered, and a call that comes anyway is refused before anything is asked of the server
+        assertEquals(false, h.current.rights?.offline, "offline the header offers a pin it cannot fetch")
+        assertFalse(NodeHeader.OFFLINE in assertNotNull(h.plan(9)).menu)
+        assertEquals(Notice(Msg.OFFLINE_READ_ONLY), h.toggleOffline())
+        runCurrent()
+        assertEquals(listOf("plan"), nodes.did, "offline a pin was planned or made")
+        assertEquals(false, h.current.offline?.on)
+
+        // kept already: offered offline, and turned off at once (this device's own, no server asked)
+        reach.value = true
+        runCurrent()
+        h.toggleOffline()
+        h.confirmOffline()
+        runCurrent()
+        assertEquals(true, h.current.offline?.on)
+        reach.value = false
+        runCurrent()
+        assertEquals(true, h.current.rights?.offline, "offline a kept node cannot be turned off")
+        assertNull(h.toggleOffline())
+        runCurrent()
+        assertEquals(listOf("plan", "plan", "pin", "unpin"), nodes.did)
+        assertEquals(false, h.current.rights?.offline, "unpinned offline, its toggle stays offered")
     }
 
     // ---- the shell's notice of a pin gone

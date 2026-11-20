@@ -107,8 +107,14 @@ object OfflineShown {
     /** What a pin asks before its first byte: the size it keeps on this device. */
     fun ask(bytes: Long): Notice = Notice(Msg.OFFLINE_PIN_ASK, Bytes(bytes))
 
-    /** The shell's banner offline: "Offline — content as of {time}" ([asOf] known), else "Offline"; null online. */
-    fun banner(offline: OfflineAsOf?): Notice? = offline?.let { o -> o.asOf?.let { Notice(Msg.OFFLINE_BANNER, Moment(it)) } ?: Notice(Msg.OFFLINE_BANNER_UNKNOWN) }
+    /**
+     * The shell's banner offline: "Offline — content as of {time}" ([asOf] known), else "Offline"; null online. [page]: the
+     * open page's own kept time (a Pot's ledger, a gallery's listing, [PagesOffline]), which dates it where there is one —
+     * the lists' time mis-dated an open Pot read before them.
+     */
+    fun banner(offline: OfflineAsOf?, page: Long? = null): Notice? = offline?.let { o ->
+        (page ?: o.asOf)?.let { Notice(Msg.OFFLINE_BANNER, Moment(it)) } ?: Notice(Msg.OFFLINE_BANNER_UNKNOWN)
+    }
 
     /** A pin dropped since its node is no longer available: named where the app still holds the name, else nameless. */
     fun gone(name: String?): Notice = name?.let { Notice(Msg.OFFLINE_GONE_NAMED, it) } ?: Notice(Msg.OFFLINE_GONE)

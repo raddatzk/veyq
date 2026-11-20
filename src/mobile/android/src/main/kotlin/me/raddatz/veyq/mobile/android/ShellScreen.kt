@@ -119,7 +119,6 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     val scope = rememberCoroutineScope()
     val snackbar = androidx.compose.runtime.remember { androidx.compose.material3.SnackbarHostState() }
     val shell = s.shell
-    val potState by model.pot.collectAsStateWithLifecycle()
     val rowDetails by model.rowDetails.collectAsStateWithLifecycle()
     val avatars by model.avatars.collectAsStateWithLifecycle()
     val incoming by model.incoming.collectAsStateWithLifecycle()
@@ -278,9 +277,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         },
                     )
                 }
-                // on an open Pot shown offline, as of its own kept ledger (core's `PotModel.State.offline`), else the shell's lists'
-                val potAsOf = potState?.takeIf { it.ref == shell.openObject }?.offline?.takeIf { it.asOf != null }
-                (potAsOf?.let { me.raddatz.veyq.mobile.offline.OfflineShown.banner(it) } ?: s.banner)?.let { OfflineBanner(it) }
+                // core's banner: the open page's own kept time where it has one (a Pot's ledger), else the lists'
+                s.banner?.let { OfflineBanner(it) }
                 incoming?.let { ShareBanner(it, s, model, snackbar, onCancel = model::cancelShare) }
                 }
             },
