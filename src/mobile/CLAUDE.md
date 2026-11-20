@@ -452,7 +452,13 @@ A Gradle build of its own, run through its own wrapper.
   `K_blob` wrapped at the send, a Pot entry's heads as the person saw them, the held editor), `QueuedOverlayTest` (each
   model's queued rows, the tray, the banner, the reconnect's notice, the loss's ask, New offline) and `AppleQueuedTest`
   (the Swift app's states by value, *Save a copy* into a path); live, `LiveQueuedTest` (a chapter, two photos and an
-  entry with a receipt queued offline and sent). The gates (ADR 0154 decision 1): `GatesInTheCoreTest` (the one drop, a
+  entry with a receipt queued offline and sent). The sync in the background (ADR 0153 decision 8): `BackgroundRunTest`
+  (a login-level account resumed with one refresh, its queue sent, then its pins, closed with its keys zeroed; a
+  presence-level and a password-trusted one never run and nobody asked; a refused refresh ends the record; no server,
+  nothing opened; the deadline between writes; an account open in the process used, never opened twice; the switch),
+  `BackgroundSyncWireTest` (the bridge: no switch on a desktop) and, on Apple, `AppleBackgroundTest` (the app-refresh
+  task's cancel stops the run between writes, the keys zeroed; a locked Keychain is a closed key, never a missing one).
+  The gates (ADR 0154 decision 1): `GatesInTheCoreTest` (the one drop, a
   row's target, a name dialog's typed answer), `SessionModelTest`'s follow after a reach ended, `GuestDoorsTest` (a guest
   named at the write); the bridge's re-judgement of every upload call in `DispatchTest`.
   The QR reader (`qr/`, a port of ZXing's QR path; its `NOTICE` beside it) changes only with ZXing's corpus still at
@@ -956,7 +962,12 @@ Per engine:
   `no_backup/`, not `databases/`: `no_backup/androidx.work.workdb` (with its `-wal`/`-shm`) and Room's lock file
   `cache/data/user/0/me.raddatz.veyq/no_backup/androidx.work.workdb.lck` (`app.veyq` today) (empty) — so `cache/` is no longer empty; its
   preferences (`last_force_stop_ms`, `next_job_scheduler_id`) are a table of that database, no
-  `shared_prefs/androidx.work.util.preferences.xml`. Measured 2026-11-15 on a throwaway API 36 emulator after a pin
+  `shared_prefs/androidx.work.util.preferences.xml`. The background sync (ADR 0153 decision 8, `BackgroundWork.kt`) adds
+  one row of the same kind: the periodic `SyncWorker` under the unique name `veyq-background-sync`, tagged `veyq-sync`,
+  its constraints and an empty input — no account, no key (remembered from the work's request, which sets no input). Its
+  switch is the core's off-list in `veyq.trust.xml` (`ThisDevice.backgroundSync`: the keys of the accounts turned off,
+  nothing else). On iOS the app-refresh request (`app.veyq.background-sync`) is the system's, carrying only its name and
+  earliest time. Measured 2026-11-15 on a throwaway API 36 emulator after a pin
   (ADR 0140's Android pass, `sqlite3` over the pulled database): one `workspec` row — `PinWorker`, its state, an empty
   input (`Data` of 8 bytes: no entries) —, its unique name `veyq-offline-pins` and its class as tag; no content, id or
   key. The pass's listing also showed `shared_prefs/veyq.memories.xml` (`mediaAccessAsked` only) and, by the pass's
@@ -1094,6 +1105,15 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   "N selected" from a screenshot and press Select by its place. A 220 MB upload from the swiftshader emulator took about
   20 minutes (2026-11-12): a pass with large files starts their upload first and works on beside it — an app install
   meanwhile kills the queue.
+- Forcing Android's background sync (`SyncWorker`, measured 2026-11-20 on a throwaway API 36 AVD): the job is
+  WorkManager's, so name its namespace — `adb shell cmd jobscheduler run -f -n androidx.work.systemjobscheduler app.veyq
+  <job id>` (the id from `dumpsys jobscheduler | grep -A3 app.veyq`); without `-n` no job is found. A periodic work
+  forced before its 15 minutes since the last run is deferred by WorkManager ("Delaying execution … before schedule"):
+  force it 15 minutes after the last. `am force-stop app.veyq` cancels the app's jobs until its next start (the job
+  count goes 1 → 0), so a pass ends the process with a reboot instead. After a reboot the emulator put the app in
+  standby bucket 50 (restricted) and JobScheduler held the job for `WITHIN_QUOTA`: `adb shell am set-standby-bucket
+  app.veyq working_set`, as an app in use is. The login level's Keystore key opens after a reboot and one unlock with
+  the screen locked (`dumpsys trust`: `deviceLocked=1`).
 - A tablet is tried on the phone emulator: `adb shell wm size 2560x1600` and `wm density 320` (1280 dp, expanded;
   `1600x2560` is 800 dp, medium), `wm size reset` and `wm density reset` after. While the size is changed
   `uiautomator dump` lists every Compose node as invisible (measured 2026-11-10): look with `adb exec-out screencap -p`.

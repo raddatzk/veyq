@@ -49,7 +49,7 @@ object AndroidDevice {
 }
 
 /**
- * *Sync in the background* (ADR 0153 decision 8, cr-app-background-sync B3): one unique periodic WorkManager work at the
+ * *Sync in the background* (ADR 0153 decision 8): one unique periodic WorkManager work at the
  * system's minimum of 15 minutes, on a network and not on low battery, scheduled while the core says a run is wanted
  * ([ThisDevice.backgroundWanted]: an account at the login level with its switch on) and cancelled when not. Its worker runs
  * core's [BackgroundRun] within the worker's own time — no foreground promotion, which Android refuses a worker started

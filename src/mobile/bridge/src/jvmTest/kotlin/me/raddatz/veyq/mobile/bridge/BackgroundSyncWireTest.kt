@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * *Sync in the background* is absent from the wire (ADR 0153 decision 8, cr-app-background-sync phase 2): the desktops
+ * *Sync in the background* is absent from the wire (ADR 0153 decision 8): the desktops
  * schedule no run, so the bridge — every host of which is a desktop — carries neither the switch nor its reason, and no
  * call sets it. The core's page state has both (the phones draw them), so the absence is the bridge's, not an accident.
  *

@@ -26,7 +26,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * A scheduled run without the person (ADR 0153 decision 8, cr-app-background-sync B1 and B2), over a server the test plays
+ * A scheduled run without the person (ADR 0153 decision 8), over a server the test plays
  * with real seals: a login-level account is opened as a start opens it, its queue sent, its pins synced, then closed with
  * its keys zeroed; a presence-level and a password-trusted account never run and nobody is asked; a refused refresh ends
  * the record and wipes the store; without the server nothing is opened; the deadline stops the run between writes; an
