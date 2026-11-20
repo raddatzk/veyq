@@ -154,6 +154,13 @@ ADR 0153 decisions 1–5 hold them; here only what the work needs beside them.
   `VEYQ_LIVE_THROWAWAY_ENV`. (2) A queued entry meeting `stale_revision` whose revision the server holds with the same
   content (a send whose answer was lost) is sent, not held. (3) A receipt refused (`quota_exceeded` included) refuses the
   whole entry, unlike the online save that leaves a receipt out: the person decides with *Save a copy*/*Discard*.
+  **Live case run** 2026-11-20 (`claude/j2-live`): green against the dev backend as a throwaway (measured:
+  `VEYQ_LIVE=… VEYQ_LIVE_THROWAWAY_ENV=… ./gradlew :core:jvmTest --tests '*LiveQueuedTest*'`, "a chapter, two photos and an
+  entry with a receipt made offline were sent at the reconnect"). It first found a core bug: `VeyqAccount.retire()` logged
+  the session out, which revokes the family whose refresh token the device keeps — an account then unlocked offline never
+  reconnected and its reconnect forgot the trust; `retire` now keeps a remembered account's kept session (the fakes had
+  answered logout on a path the API lacks, `PlayedTenant` now revokes at `/api/logout`; `QueuedTest` red before). And a test
+  error: its deriver handed the core the compared photo, which the core zeroes once sealed.
 - [x] **5 core — the overlay, the tray, the notices** (W4, W5) — the models' queued rows, the tray's items and actions,
   the banner's count, the reconnect's notice, the asks before a wipe. Tests: each model's state with a queued write
   offline; the tray's actions. · Done when: the same checks green. **Bite:** the per-model offline checks left beside
