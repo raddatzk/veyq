@@ -153,6 +153,13 @@ class ApplicationBlobs(private val tenant: TenantSession) {
         id: String, ownerId: String, role: String, bytes: ByteArray, type: String, name: String?, modifiedAt: Long?,
         /** A member's upload pulls the node's path forward where it lags ([NodeEpochWrite.run]'s `pull`). */
         pull: (suspend () -> Boolean)? = null,
+    ): Listed = upload(scopeId, node, reread, belowFloor, id, ownerId, role, bytes, type, name, modifiedAt, pull, null)
+
+    /** [upload] of a blob [sealed] ahead (a receipt queued offline, ADR 0153 decision 1): its frames sent as they are, [bytes] unread. */
+    internal suspend fun upload(
+        scopeId: String, node: () -> OpenNode, reread: suspend () -> Boolean, belowFloor: () -> Boolean,
+        id: String, ownerId: String, role: String, bytes: ByteArray, type: String, name: String?, modifiedAt: Long?,
+        pull: (suspend () -> Boolean)?, sealed: Sealed?,
     ): Listed {
         var done: Listed? = null
         val result = NodeEpochWrite.run(
@@ -161,7 +168,7 @@ class ApplicationBlobs(private val tenant: TenantSession) {
             pull = pull,
             attempt = {
                 val code = try {
-                    done = uploadOnce(scopeId, node(), id, ownerId, role, bytes, type, name, modifiedAt)
+                    done = uploadOnce(scopeId, node(), id, ownerId, role, bytes, type, name, modifiedAt, sealed)
                     null
                 } catch (e: UploadRefused) {
                     e.code
@@ -184,8 +191,10 @@ class ApplicationBlobs(private val tenant: TenantSession) {
 
     private suspend fun uploadOnce(
         scopeId: String, node: OpenNode, id: String, ownerId: String, role: String, bytes: ByteArray, type: String, name: String?, modifiedAt: Long?,
+        sealed: Sealed?,
     ): Listed {
-        val (uploadId, plan) = reserveAndPump(scopeId, node, role, bytes, type, name, modifiedAt)
+        val (uploadId, plan) = if (sealed == null) reserveAndPump(scopeId, node, role, bytes, type, name, modifiedAt)
+        else reserveAndPumpFrames(scopeId, node, role, sealed.size, type, name, modifiedAt, read = { _, _ -> ByteArray(0) }, sealed = sealed)
         val blobId = plan.blobId
         val r = account.respond {
             appApi.completeApplicationBlob(scopeId, node.id, ApplicationBlobCompleteRequest(node.epoch, id, ownerId, role, uploadId))
@@ -217,14 +226,36 @@ class ApplicationBlobs(private val tenant: TenantSession) {
      */
     internal suspend fun reserveAndPumpFrames(
         scopeId: String, node: OpenNode, role: String, size: Long, type: String, name: String?, modifiedAt: Long?,
-        read: suspend (from: Long, length: Int) -> ByteArray, sent: (Long) -> Unit = {},
-    ): Pair<String, Plan> = reserveAndPumpAll(scopeId, node.id, node.key, listOf(Outgoing(role, size, type, name, modifiedAt, null, read)), sent).single()
+        read: suspend (from: Long, length: Int) -> ByteArray, sealed: Sealed? = null, sent: (Long) -> Unit = {},
+    ): Pair<String, Plan> = reserveAndPumpAll(
+        scopeId, node.id, node.key, listOf(if (sealed != null) Outgoing(role, size, type, name, modifiedAt, null, sealed) else Outgoing(role, size, type, name, modifiedAt, null, read)), sent,
+    ).single()
 
-    /** One blob an upload sends: its role, its plaintext's size and bytes (a frame at a time), and what its meta seals. */
+    /**
+     * One blob an upload sends: its role, its plaintext's size and bytes (a frame at a time), and what its meta seals —
+     * or, for a blob sealed ahead ([sealed], a write queued offline), its frames as they were sealed.
+     */
     internal class Outgoing(
         val role: String, val size: Long, val type: String, val name: String?, val modifiedAt: Long?, val sha256: String?,
         val read: suspend (from: Long, length: Int) -> ByteArray,
-    )
+    ) {
+        var sealed: Sealed? = null
+            private set
+
+        /** A blob sealed ahead: [sealed]'s frames go as they are. */
+        constructor(role: String, size: Long, type: String, name: String?, modifiedAt: Long?, sha256: String?, sealed: Sealed?) :
+            this(role, size, type, name, modifiedAt, sha256, { _, _ -> throw IllegalStateException("a blob sealed ahead is not read") }) {
+            this.sealed = sealed
+        }
+    }
+
+    /**
+     * A blob sealed ahead under its own `K_blob` (a write queued offline, ADR 0153 decision 1): [chunkCount] frames of [size]
+     * plaintext bytes, each
+     * [frame] as it was sealed then. Sent as it is: only `K_blob`'s wrap under the node's key and its meta are made at the
+     * send, under the keys current then — so a re-key while it waited costs nothing.
+     */
+    class Sealed internal constructor(internal val key: ByteArray, internal val chunkCount: Int, internal val size: Long, internal val frame: suspend (index: Int) -> ByteArray)
 
     /**
      * [blobs] of the record [ownerId] (a node; a medium, whose original and tiers are one record), each sealed under a
@@ -236,10 +267,10 @@ class ApplicationBlobs(private val tenant: TenantSession) {
     internal suspend fun reserveAndPumpAll(
         scopeId: String, ownerId: String, wrapKey: ByteArray, blobs: List<Outgoing>, sent: (Long) -> Unit = {},
     ): List<Pair<String, Plan>> {
-        val keys = blobs.map { account.primitives.randomBytes(32) }
+        val keys = blobs.map { it.sealed?.key ?: account.primitives.randomBytes(32) }
         val items = blobs.mapIndexed { i, b ->
             val blobId = NodeCreate.uuid(account)
-            val count = V1.chunkCount(b.size)
+            val count = b.sealed?.chunkCount ?: V1.chunkCount(b.size)
             BlobUploadRequestItem(
                 blobId = blobId, ownerId = ownerId, role = b.role, chunkCount = count,
                 byteSize = b.size + V1.FRAME_OVERHEAD.toLong() * count,
@@ -257,7 +288,7 @@ class ApplicationBlobs(private val tenant: TenantSession) {
             val res = results[i]
             val uploadId = res.uploadId ?: throw UploadRefused("no upload id")
             val base = before
-            pump(scopeId, uploadId, keys[i], items[i].chunkCount, b.size, res.presignedPuts, b.read) { sent(base + it) }
+            pump(scopeId, uploadId, keys[i], items[i].chunkCount, b.size, res.presignedPuts, b.read, b.sealed) { sent(base + it) }
             before += b.size
             uploadId to Plan(items[i].blobId, items[i].chunkCount, items[i].byteSize, items[i].wrappedBlobKey, ownerId)
         }
@@ -266,7 +297,7 @@ class ApplicationBlobs(private val tenant: TenantSession) {
     /** Seals and PUTs the frames of one reserved upload, signing each window as it is reached (and once more on a 403). */
     private suspend fun pump(
         scopeId: String, uploadId: String, key: ByteArray, count: Int, size: Long, first: List<PresignedUrl>?,
-        read: suspend (from: Long, length: Int) -> ByteArray, sent: (Long) -> Unit,
+        read: suspend (from: Long, length: Int) -> ByteArray, sealed: Sealed?, sent: (Long) -> Unit,
     ) {
         val signed = HashMap<Int, String>()
         fun keep(urls: List<PresignedUrl>?) = urls.orEmpty().forEach { signed[it.index] = it.url }
@@ -282,13 +313,19 @@ class ApplicationBlobs(private val tenant: TenantSession) {
             if (i !in signed) sign(i)
             val from = i.toLong() * V1.FRAME_PLAINTEXT
             val length = minOf(size - from, V1.FRAME_PLAINTEXT.toLong()).toInt()
-            val chunk = read(from, length)
-            if (chunk.size != length) throw UploadRefused("source_changed")
-            var status = account.putToStore(signed.getValue(i), suite.sealFrame(key, i, count, chunk))
+            // a frame sealed ahead goes as it was sealed (the same bytes again after a lapse: no nonce is reused)
+            val frame: suspend () -> ByteArray = if (sealed != null) {
+                { sealed.frame(i) }
+            } else {
+                val chunk = read(from, length)
+                if (chunk.size != length) throw UploadRefused("source_changed");
+                { suite.sealFrame(key, i, count, chunk) }
+            }
+            var status = account.putToStore(signed.getValue(i), frame())
             if (status in LAPSED) {
                 // The window's signature expired: sign again from here, seal the frame again (a fresh nonce), once.
                 sign(i)
-                status = account.putToStore(signed.getValue(i), suite.sealFrame(key, i, count, chunk))
+                status = account.putToStore(signed.getValue(i), frame())
             }
             if (status !in 200..299) throw UploadRefused("chunk_put_failed:$status")
             sent(from + length)

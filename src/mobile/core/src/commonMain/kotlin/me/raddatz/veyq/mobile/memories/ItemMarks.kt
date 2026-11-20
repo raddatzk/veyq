@@ -136,6 +136,16 @@ class ItemMarks internal constructor(
         return out
     }
 
+    /**
+     * The caller's mark on [mediaId] set to [marked] (a mark queued offline, ADR 0153): written only where the own set as
+     * read now holds otherwise — so the person's choice stands over whatever their set held meanwhile.
+     */
+    internal suspend fun set(mediaId: String, marked: Boolean): Toggled {
+        if (!loaded) return Toggled.NOT_LOADED
+        if (markedByMe(mediaId) == marked) return Toggled.DONE
+        return toggle(mediaId)
+    }
+
     private suspend fun write(ids: List<String>): Toggled {
         val selfKey = store.selfKey() ?: return Toggled.SAVE_FAILED
         var key = store.key()

@@ -115,6 +115,19 @@ class Outbox internal constructor(
     /** Frame [index] of queued blob [blob] as it is sent: sealed under its `K_blob`, never plaintext. Null where it is not kept. */
     internal suspend fun frame(blob: QueuedBlob, index: Int): ByteArray? = offline.store.frame(blobKey(blob.id), index)
 
+    /** [bytes] sealed as a queued blob ([sealBlob]): a derived tier, a receipt read whole. */
+    suspend fun sealBlob(bytes: ByteArray): QueuedBlob? =
+        sealBlob(ByteSource(bytes.size.toLong()) { from, length -> bytes.copyOfRange(from.toInt(), (from + length).toInt()) })
+
+    /**
+     * Queued blob [blob] as its send takes it ([me.raddatz.veyq.mobile.blob.ApplicationBlobs.Sealed]): its frames as they
+     * were sealed, under its `K_blob`. A frame no longer kept fails the send (the write is refused, never sent short).
+     */
+    internal fun sealed(blob: QueuedBlob): me.raddatz.veyq.mobile.blob.ApplicationBlobs.Sealed =
+        me.raddatz.veyq.mobile.blob.ApplicationBlobs.Sealed(me.raddatz.veyq.mobile.crypto.unb64(blob.key), blob.chunkCount, blob.size) { i ->
+            frame(blob, i) ?: throw me.raddatz.veyq.mobile.blob.ApplicationBlobs.UploadRefused(FRAME_GONE)
+        }
+
     /** A blob sealed for a write that was never queued (a crash between the two), or a discarded one's: dropped. */
     internal suspend fun dropBlob(blob: QueuedBlob) = offline.store.remove(blobKey(blob.id))
 
@@ -150,6 +163,9 @@ class Outbox internal constructor(
     private fun encode(write: QueuedWrite) = JSON.encodeToString(QueuedWrite.serializer(), write).encodeToByteArray()
 
     internal companion object {
+        /** A queued blob's frame no longer kept: its write cannot be sent whole. */
+        const val FRAME_GONE = "queued_frame_gone"
+
         /** The order's id: no write has it. */
         const val ORDER = ""
 

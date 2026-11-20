@@ -10,8 +10,8 @@ import me.raddatz.veyq.mobile.session.TenantSession
  *
  * `QueuedTest` runs every value's sender over a played server and derives the operations it calls: one the value does not
  * declare, or one in the decision's never-queue column (sharing, rights, keys, account and device writes, a move, a
- * restore, a purge, …), fails it — the list is checked, not trusted. Phases 3 and 4 of `cr-app-offline-writes` add
- * Memories', Depot's and Expenses' rows; their senders reach core through [me.raddatz.veyq.mobile.AppKinds.queuedSender].
+ * restore, a purge, …), fails it — the list is checked, not trusted. An application's rows have their senders in the
+ * application ([me.raddatz.veyq.mobile.memories.QueuedMemories], …), reached through [me.raddatz.veyq.mobile.AppKinds.queuedSender].
  */
 enum class Queued(internal val operations: Set<String>) {
     /** Core: a folder created (`FolderCreate`, its id the write's). */
@@ -20,8 +20,27 @@ enum class Queued(internal val operations: Set<String>) {
     /** Core: a node renamed, stating the placement revision the person saw (`NodeRename`, never its rebuild). */
     NODE_RENAME(setOf("updateNode")),
 
-    /** Core: a node to its space's trash (`NodeTrash.delete`). */
+    /** Core: a node to its space's trash (`NodeTrash.delete`): a folder, a Memory, a chapter, a Depot file. */
     NODE_TRASH(setOf("deleteNode")),
+
+    /** Memories: a Memory or a chapter made (`MemoryCreate`, its id the write's). */
+    MEMORY_CREATE(setOf("createNode")),
+
+    /**
+     * Memories: a photo or video added (`MediaUpload`, its id the write's): its frames sealed at queue time, reserved,
+     * PUT to the store (no API operation) and completed; a window signed where the start's ran out.
+     */
+    MEDIA_ADD(setOf("startBlobUploads", "presignBlobUploadWindows", "completeMedia")),
+
+    /** Memories: a medium's capture time set or reset (`CaptureTime`, the person's own field held where it moved). */
+    MEDIA_CAPTURE_TIME(setOf("updateMediaMeta")),
+
+    /** Memories: a medium to its node's trash (`MemoryMedia.trash`). */
+    MEDIA_TRASH(setOf("deleteMedia")),
+
+    /** Memories: a mark set or taken away (`ItemMarks`, the person's own set written whole). */
+    MEDIA_MARK(setOf("putItemFavorites")),
+
     ;
 
     internal companion object {
