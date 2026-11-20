@@ -1727,7 +1727,9 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - **A Windows drag from Explorer did not reach the gallery** in the same pass (`drag memory-page …`: the release landed,
   no drop came), while the open dialog took both files typed by name: `type 1148 <folder>`, `press 1148 enter`, `type
   1148 "a.mp4" "b.jpg"`, `press 1 enter`. Whether the drop needs UAC on (the unpackaged app takes one there) was not
-  checked.
+  checked. The import's pass (2026-11-19) saw why once: the host kept the app's window above the `explorer` window, so
+  the driven press landed on the app and no drag began; a drop's calls are proved by `DropSortTest` until a pass places
+  Explorer where the press reaches it.
 - **A field a constructor's `init` collector writes is declared before that `init`** (`GalleryModel.queuedNow`): a
   model's scope runs on `Dispatchers.Default`, so the collector can run before a field declared below the block is set —
   the bridge's tests caught it as an NPE in a background thread and a gallery that never showed.
