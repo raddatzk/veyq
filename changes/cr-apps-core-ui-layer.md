@@ -143,9 +143,54 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   uploaded: the system picker), and the CR's before/after screenshots (phase 6).
 - [ ] **3 Apple** — the same. · Done when: both Apple builds green, the guards green. **Bite:** a Memories view using
   `PotScreen` → red.
-- [ ] **4 Linux** — the same; `raster_map.rs`' and `memory_page.rs`' crossings resolved through the registry or core
+- [x] **4 Linux** — the same; `raster_map.rs`' and `memory_page.rs`' crossings resolved through the registry or core
   UI. · Done when: `python3 linux/run.py test` and `build` green, the guards green. **Bite:** `crate::apps::depot::…`
   from `apps/memories` → red.
+  **Built** (2026-11-20). Layout (`src/mobile/linux/src/`): `lib.rs` (the module map: `applications`, `bridge`, `core_ui`,
+  and `apps { depot, expenses, memories }` inline, so nothing sits under `apps/` outside an application), `main.rs`,
+  `bridge/` (the host requests; a host, read as core), the composition root `applications.rs` (each application's
+  `register`, then `seal`; called first in `main`), `core_ui/` (48 files with `mod.rs` and the new `registry.rs`) —
+  not `core/`: a crate module named `core` makes `core::…` ambiguous with the language's `core` crate —,
+  `apps/memories/` (memory page, banner, curation, facts, filter, lightbox, Music and Map views, Contributions, the Map
+  tab, `memory_create.rs` — New Memory's dialog, out of `shell.rs` —, `person_memories.rs`), `apps/expenses/` (Pot,
+  settings, New pot, entry editor, history), `apps/depot/` (file page, PDF text, drop box); each `mod.rs` holds its
+  `register`. Moved with `git mv`; what two sides used left an application's file for core: `saving.rs` (a save's
+  banner and toast: a file's, a lightbox's, a track's, a GPX's), `picture.rs` (`within_edge`: a file, a row's cover, the
+  lightbox, Contributions), `places.rs` (the bar's places: the Pot, the Memories list, the Map tab), `said::date_text`
+  (Home's rows, a person's rows, the facts line); `media_tiers`, `player`, `reader_stream`, `receipt_viewer` (a file's
+  PDF, a receipt, the kit) and the uploads, drop and import are core's. `person_page.rs` split: core's frame (avatar,
+  name, safety number, the `Person` model) and Memories' section (`PersonSection`). The registry
+  (`core_ui/registry.rs`): per kind a `KindPage { body, guest, actions, refreshes, facts_later }` — `body:
+  fn(&ObjectRef, &Frame) -> Box<dyn Page>` inside core's `Frame` (window, toasts, the content's navigation, the header
+  bar's `start` slot for the page's own creating action — *Add entry*, *Add chapter* —, the header told its facts, the
+  title's subtitle), `guest: GuestPage { kind: ReceivedPageKind, body, add_names_first }`, the window actions the
+  header's own actions fire (`pot-download`, `file-save`, `file-replace`, `memory-upload`, `memory-music`), Refresh
+  standing on it, its header told its facts later —; per application an `ApplicationUi { id, list, creates,
+  person_section, queued_open }` (its own list around core's — Memories' places, row dates and Map tab —, New's dialogs
+  as `win.create-pot`/`win.create-memory`, its section of a person's page, a held write's *Open* — a Pot entry's
+  editor). `kind`/`application` refuse a second registration (a guest variant too); a lookup before `seal()` fails.
+  The shell's object page (one `page` slot instead of four), its list, New, Refresh, the header's facts, a queued
+  open, the received view's guest pages (Level, the WRITE_ONLY pages and NotShown core's, every other variant the
+  kind's `guest`) and the person page ask the registry; R5's crossings: `raster_map.rs` opens a pin through
+  `registry::open_node` (the kind's application), `memory_page.rs`' `file_page::within_edge` is `picture`'s, Memories'
+  `file_page::saving` `saving`'s, `memories_map.rs`' `pot::places` `places`'. Left in core, named here: the hero still
+  placed by each page inside its own scroll (`Page::hero`, the frame hands it; moving it out of the scroll changes what
+  is drawn — the structure CR's), `header::action_of`'s and `home`'s kind literals, `home::ask_dates` (`Memories.Dates`,
+  a bridge call). Rules (a) and (b) on for Linux (`PLATFORMS["linux"]`): Rust paths resolved per file module
+  (`crate`/`veyq`, `self`/`super` chains, `use` groups, a leading `apps`), comments and literals masked (`rust_lexer`).
+  Bites, each red then restored green (`/bin/cp -f`): `crate::apps::depot::file_page::FilePage` in
+  `apps/memories/memory_page.rs` (b); `use super::super::expenses::pot` there (b); `use crate::apps` in
+  `apps/expenses/pot.rs` (b, no own name); `use crate::apps::memories::memory_page::MemoryPage` in `core_ui/shell.rs`
+  (a); `use crate::{apps::depot::file_page, bridge}` there (a, a group); `super::super::apps::expenses::register` in
+  `core_ui/received.rs` (a); `veyq::apps::depot::register` in `main.rs` (a); `applications.rs` without
+  `expenses::register` (the root); `apps/music/x.rs` and `apps/stray.rs` (no application); a copy without
+  `apps/depot` (an application without UI files); a comment and a literal naming `crate::apps::…` in core stay green.
+  Checks: `python3 src/mobile/linux/run.py build` (clippy `-D warnings`, 105 tests in the SDK + the 5 sandbox skips in
+  Fedora, the build) and `run.py test` (1198 + 1 + 1 PASSED) green; every `scripts/validate_*.py` green, guard_gaps
+  included. Smoke: `run.py run --no-secret-service --port 8196` started to `session SignIn` with no panic (the
+  registry sealed before the shell read it). Not run: a signed-in pass — a Memory, a Pot and a Depot folder, a received
+  link — needs a throwaway account, and its creation through the principal's env file was refused in this session;
+  the before/after pages are phase 6's.
 - [ ] **5 Windows** — the same; one dispatch. · Done when: `python3 windows/run.py build` and its tests green on the VM,
   the guards green. **Bite:** `Veyq.Apps.Expenses` used under `Veyq.Apps.Memories` → red.
 - [ ] **6 the passes** — § Passes.

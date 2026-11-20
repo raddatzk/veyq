@@ -1031,7 +1031,7 @@ answers: Tiles first and the Contributions as the web's, two square columns on a
 `.createMenu(…)` (Apple, `CreateAction.swift`), never a
 floating button built by hand; `scripts/validate_mobile_platform_guidelines.py` holds that. Row actions: an overflow menu on Android, swipe actions and a context
 menu on iOS. On Linux the GNOME HIG's way, as libadwaita draws it: the creating action is `create_action(…)` /
-`create_menu(…)` (`linux/src/create_action.rs`) in a header bar or the sidebar, `list-add-symbolic`, never a button
+`create_menu(…)` (`linux/src/core_ui/create_action.rs`) in a header bar or the sidebar, `list-add-symbolic`, never a button
 overlaid on a view (GNOME has no floating action button); the same guard holds it. On Windows Fluent's way, as
 Windows' own Settings and Explorer draw it: the creating action is New, the first command of the content's
 `CommandBar`, built only in `windows/Veyq/CreateAction.cs`, never a button laid over a view; the same guard holds it.
@@ -1536,7 +1536,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   `PotCreate.Name`, `Share.Label`, `Share.Password` — a link's label once lost its last character to a Save sent 0.8 s after it,
   Linux 2026-11-12). No test sees the order of two trivial calls: `Dispatchers.Default` kept them in order in practice,
   so a `PotCreate.Name` launched instead of applied stayed green (2026-11-12); the order rests on `Bridge.call`'s path.
-- A text field is set from the state by D5's rule (`linux/src/typed.rs`, `windows/Veyq/TypedText.cs`, the same cases):
+- A text field is set from the state by D5's rule (`linux/src/core_ui/typed.rs`, `windows/Veyq/TypedText.cs`, the same cases):
   states lag the typing by a keystroke or two, so a focused field passes over a state that echoes a text it sent and
   takes any other (a stale save's version, a rate filled). "Differs from what it sent last" alone rewrote the field to an
   older text.
