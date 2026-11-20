@@ -147,7 +147,7 @@ class WireTest {
             Call.UploadFiles("s1", "f1", "Trip", emptyList()), Call.UploadFolder("s1", "f1", "/home/p/Trip"), Call.UploadReplace(20, "/tmp/b.bin"),
             Call.UploadCancel("i1"), Call.UploadRetry("i1"), Call.UploadCancelAll, Call.UploadAcknowledge("b1"), Call.UploadTakeOffer(3), Call.UploadSeen(4),
             Call.QueuedDiscard("w1"), Call.QueuedOpen("entry:e1"), Call.QueuedCopyName("m1", 0), Call.QueuedSaveCopy("m1", 0, "/home/p/Pictures/dune.png"),
-            Call.QueuedAsk(me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT),
+            Call.QueuedAsk(me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT), Call.QueuedAskFor("b.example#u2", me.raddatz.veyq.mobile.offline.QueuedLoss.STOP_TRUSTING),
             Call.ImportScreen("s1", null, "Home", listOf("/home/a/Trip.zip"), "Gelöschte Personen"), Call.ImportScreenFolder("s1", "f1", "Trip", "/home/a/Trip", "Deleted people"),
             Call.ImportRun(60), Call.ImportAsFile(60), Call.ImportCancel(60),
             Call.HeaderFacts(7, me.raddatz.veyq.mobile.AppKinds.Facts(canWrite = true, hasContent = true), 20),

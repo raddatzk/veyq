@@ -163,6 +163,11 @@ internal class Composition<A : Connection, T : Any>(
         /** The player a guest's Memory plays its music with (#1034): the open tenant's, where one plays. */
         music: me.raddatz.veyq.mobile.memories.GalleryModel.Music?,
     ) -> me.raddatz.veyq.mobile.sharing.GuestView? = { _, _, _, _ -> null },
+    /**
+     * What is asked before [loss] deletes account [account]'s writes made offline ([Call.QueuedAskFor]): `QueuedTray.ask`
+     * over that account in the library; a test plays one, or has none (nothing asked).
+     */
+    val queuedAsk: suspend (account: A, loss: me.raddatz.veyq.mobile.offline.QueuedLoss) -> me.raddatz.veyq.mobile.offline.QueuedAsk? = { _, _ -> null },
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
@@ -476,7 +481,7 @@ internal class HeldDropBox(val page: me.raddatz.veyq.mobile.depot.DropBoxPage) {
 }
 
 /**
- * What the bridge reaches of the writes made offline (ADR 0153; cr-app-offline-writes phase 6), each one core function:
+ * What the bridge reaches of the writes made offline (ADR 0153), each one core function:
  * the tray's [items] and its actions ([discard], [opens], [copyName], [saveCopy] — the file's plaintext handed only to the
  * host's file), the ask before a loss ([ask]), the banner's count ([banner]), the reconnect's notices ([sent]) and what
  * the level shown holds not sent yet ([here]). Over a shell ([of]); a test plays one.
@@ -1017,6 +1022,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 if (written) Answer.Done else Answer.Refused(Answer.Why.NOT_WRITTEN)
             } ?: noTenant
             is Call.QueuedAsk -> queuedDoor?.let { q -> Answer.QueuedAsked(q.ask(call.loss)) } ?: noTenant
+            is Call.QueuedAskFor -> {
+                val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+                Answer.QueuedAsked(parts.queuedAsk(account, call.loss))
+            }
             is Call.EditorAddReceipts -> editors[call.editor]?.model?.let { e ->
                 // each file read by the core at the path given, never more than a receipt may hold
                 val picked = call.paths.map { path ->
@@ -3542,6 +3551,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     )
                 },
                 squarePicture = squarePicture,
+                queuedAsk = { account, loss -> me.raddatz.veyq.mobile.offline.QueuedTray(account).ask(loss) },
                 received = { link, queue, password, music ->
                     me.raddatz.veyq.mobile.sharing.GuestView.open(
                         primitives, link, client, store, guestSessions, { config.language }, handedPassword = password, queue = queue,

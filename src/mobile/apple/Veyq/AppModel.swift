@@ -2646,7 +2646,14 @@ final class CGImageBox {
 extension AppModel: SettingsActions {
     func renameDevice(_ label: String) { onSettings { try await $0.rename(label: label); return nil } }
     func renameFamily(_ familyId: String, _ label: String) { onSettings { try await $0.renameFamily(familyId: familyId, label: label); return nil } }
-    func signOutFamily(_ familyId: String) { onSettings { try await $0.signOut(familyId: familyId) } }
+    func signOutFamily(_ familyId: String) {
+        // this device's own family is a sign-out here: asked first while writes made offline wait (ADR 0153 decision 2)
+        if settings?.families?.first(where: { $0.id == familyId })?.current == true {
+            askingLoss(.signOut) { [weak self] in self?.onSettings { try await $0.signOut(familyId: familyId) } }
+        } else {
+            onSettings { try await $0.signOut(familyId: familyId) }
+        }
+    }
     func signOutOthers() { onSettings { try await $0.signOutOthers(); return nil } }
     func signOutAndRemoveKey(_ familyId: String) { onSettings { try await $0.signOutAndRemoveKey(familyId: familyId); return nil } }
     func removeSavedKey(_ deviceId: String) { onSettings { try await $0.removeSavedKey(deviceId: deviceId); return nil } }
