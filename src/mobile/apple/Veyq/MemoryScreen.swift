@@ -578,7 +578,10 @@ private struct UploadPlaceholder: View {
                     .foregroundStyle(tile.failed ? Role.danger : Role.muted)
             }
             .overlay(alignment: .bottom) {
-                if !tile.failed {
+                if let said = tile.said {
+                    // added offline, sealed here, waiting to be sent (core's `UploadTile.said`)
+                    Text(say(notice: said)).font(.caption2).foregroundStyle(Role.muted).lineLimit(2).padding(6)
+                } else if !tile.failed {
                     Group {
                         if tile.preparing { ProgressView().progressViewStyle(.linear) } else { ProgressView(value: tile.progress).progressViewStyle(.linear) }
                     }
@@ -587,7 +590,8 @@ private struct UploadPlaceholder: View {
             }
             .clipped()
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(tile.failed ? say(.memoryUploadTileFailed, tile.name) : tile.preparing ? say(.memoryUploadTilePreparing, tile.name) : say(.memoryUploadTile, tile.name))
+            .accessibilityLabel(tile.said.map { say(.memoryUploadTile, tile.name) + ", " + say(notice: $0) }
+                ?? (tile.failed ? say(.memoryUploadTileFailed, tile.name) : tile.preparing ? say(.memoryUploadTilePreparing, tile.name) : say(.memoryUploadTile, tile.name)))
     }
 }
 

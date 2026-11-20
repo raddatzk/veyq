@@ -96,6 +96,8 @@ struct ManageView: View {
                 ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { model.managing = nil } }
             }
         }
+        // a sign-out or Stop trusting asked first while writes made offline wait
+        .modifier(LossAsking(model: model, here: model.settings == nil))
         .tint(Role.accent)
         #if os(macOS)
         .frame(minWidth: 420, minHeight: 480)

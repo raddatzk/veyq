@@ -9,8 +9,11 @@ struct UploadsButton: View {
     let model: AppModel
     @State private var open = false
 
+    /// The writes made offline the tray lists beside the batches (core's `QueuedTray`).
+    private var queued: [QueuedItem] { model.queued?.items.value ?? [] }
+
     var body: some View {
-        if let state = model.depotState?.queue, !state.batches.isEmpty {
+        if let state = model.depotState?.queue, !state.batches.isEmpty || !queued.isEmpty {
             Button { open = true } label: { glyph(state: state, failed: Int(state.failed)) }
                 .accessibilityLabel(say(.uploadTitle))
                 .accessibilityValue(state.active > 0 ? say(.uploadActive, state.active) : "")
@@ -34,6 +37,9 @@ struct UploadsButton: View {
             .frame(width: 22, height: 22)
         } else if failed > 0 {
             Image(systemName: "exclamationmark.circle").foregroundStyle(.red)
+        } else if !queued.isEmpty {
+            // writes made offline wait to be sent
+            Image(systemName: "arrow.up.circle")
         } else {
             Image(systemName: "checkmark.circle")
         }
@@ -45,9 +51,13 @@ private struct UploadsList: View {
     let model: AppModel
     @Environment(\.dismiss) private var dismiss
 
+    private var queued: [QueuedItem] { model.queued?.items.value ?? [] }
+
     var body: some View {
         NavigationStack {
             List {
+                // the writes made offline, each under the place it writes into (ADR 0153 decision 5)
+                QueuedTraySections(model: model, items: queued)
                 ForEach(model.depotState?.queue.batches ?? [], id: \.id) { batch in
                     Section {
                         ForEach(batch.items, id: \.id) { item in UploadRow(model: model, item: item) }
@@ -74,7 +84,7 @@ private struct UploadsList: View {
                 }
                 ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { dismiss() } }
             }
-            .onChange(of: model.depotState?.queue.batches.isEmpty ?? true) { _, empty in if empty { dismiss() } }
+            .onChange(of: (model.depotState?.queue.batches.isEmpty ?? true) && queued.isEmpty) { _, empty in if empty { dismiss() } }
         }
     }
 }

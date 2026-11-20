@@ -37,6 +37,10 @@ struct ShellView: View {
             ManageView(model: model)
         }
         // items made available offline that left this device (core's, named where the shell held their name): said once
+        // the reconnect's notices of writes made offline (sent, or needing the person), said once
+        .modifier(QueuedSaid(model: model))
+        // the ask before a sign-out or a wipe while writes made offline wait, here while nothing sits above the shell
+        .modifier(LossAsking(model: model, here: model.settings == nil && model.managing == nil))
         .alert(model.goneNotices.first.map { say(notice: $0) } ?? "", isPresented: Binding(get: { !model.goneNotices.isEmpty }, set: { _ in })) {
             Button(say(.ok), role: .cancel) { model.goneSeen() }
         } message: {
@@ -127,7 +131,8 @@ struct DrawerList: View {
                 // the web's sidebar "New": what a level creates, opened on Home
                 Menu {
                     // a kept link last (ADR 0150 decision 6): this platform draws the bookmark's dialog (#1020)
-                    ForEach(AppKinds.shared.createsWhere(isHome: false, bookmarks: true), id: \.self) { c in
+                    // core's `createsHere`: online all of it, offline only what is queued (ADR 0153 decision 3)
+                    ForEach(model.createsHere(isHome: false), id: \.self) { c in
                         Button(say(c.word), systemImage: Names.createSymbol(c)) {
                             model.requestNew(c == .pot ? .pot : c == .memory ? .memory : c == .bookmark ? .bookmark : .folder)
                         }
@@ -147,9 +152,9 @@ struct DrawerList: View {
                 .menuStyle(.button)
                 .buttonStyle(.plain)
                 .menuIndicator(.hidden)
-                // offline every write is gone (ADR 0140 decision 7)
-                .disabled(!model.online)
-                .opacity(model.online ? 1 : 0.38)
+                // offline only what queues is offered (ADR 0153 decision 3); nothing at all where none does
+                .disabled(model.createsHere(isHome: false).isEmpty)
+                .opacity(model.createsHere(isHome: false).isEmpty ? 0.38 : 1)
                 row(say(.drawerHome), symbol: "house", selected: model.shell.isHome) { model.choose(nil) }
             }
             .listRowBackground(Color.clear)
@@ -608,6 +613,9 @@ struct HomeView: View {
         }
     }
 
+    /// The level's writes made offline, not sent yet (core's `queuedHere`).
+    private var queuedHere: [QueuedItem] { model.queued?.here.value ?? [] }
+
     /// This level among the lists whose scroll is kept (`KeepsScroll`).
     private var levelKey: String { "home:\(model.shell.space ?? "")/\(model.shell.folder?.nodeId ?? "")" }
 
@@ -643,7 +651,7 @@ struct HomeView: View {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     NodeHeroRow().padding(.horizontal)
                     filterPicker.padding(.horizontal)
-                    if groups.isEmpty {
+                    if groups.isEmpty && queuedHere.isEmpty {
                         Text(say(.listEmpty)).foregroundStyle(Role.muted).padding(.horizontal)
                     }
                     // the folders apart from the rest, as the web's level view (core's `Home.groups`)
@@ -651,6 +659,8 @@ struct HomeView: View {
                         if let heading = group.heading { SectionLabel(title: say(heading)).padding(.horizontal) }
                         NodeTiles(items: group.nodes.compactMap(tile), width: tilesWidth).padding(.horizontal)
                     }
+                    // what was made here offline and waits to be sent, in place (core's `queuedHere`)
+                    ForEach(queuedHere, id: \.id) { QueuedRow(item: $0).padding(.horizontal) }
                 }
                 .padding(.vertical, 8)
             }
@@ -661,7 +671,7 @@ struct HomeView: View {
                 filterPicker
                     .listRowBackground(Color.clear)
                     .listRowInsets(EdgeInsets(top: 4, leading: 0, bottom: 4, trailing: 0))
-                if groups.isEmpty {
+                if groups.isEmpty && queuedHere.isEmpty {
                     Text(say(.listEmpty)).foregroundStyle(Role.muted).listRowBackground(Color.clear)
                 }
                 // the folders apart from the rest, as the web's level view (core's `Home.groups`)
@@ -671,6 +681,10 @@ struct HomeView: View {
                     } header: {
                         if let heading = group.heading { SectionLabel(title: say(heading)) }
                     }
+                }
+                // what was made here offline and waits to be sent, in place (core's `queuedHere`)
+                if !queuedHere.isEmpty {
+                    Section { ForEach(queuedHere, id: \.id) { QueuedRow(item: $0).listRowBackground(Role.surface) } }
                 }
             }
         }
@@ -712,8 +726,9 @@ struct HomeView: View {
         }
         // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
         .createMenu(say(.drawerNew), shown: model.canCreateHere) {
-            // core's `createsWhere`: a folder, a Pot, files and a folder uploaded here, and a Memory here
-            ForEach(AppKinds.shared.createsWhere(isHome: true, bookmarks: true), id: \.self) { c in
+            // core's `createsHere`: a folder, a Pot, files and a folder uploaded here, and a Memory here — offline only what
+            // is queued (ADR 0153 decision 3)
+            ForEach(model.createsHere(isHome: true), id: \.self) { c in
                 Button(say(c.word), systemImage: Names.createSymbol(c)) {
                     switch c {
                     case .pot: creatingPot = true
@@ -865,6 +880,8 @@ struct Picking: ViewModifier {
         content.safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 if let banner = model.offlineBanner { OfflineBanner(banner: banner) }
+                // how many writes made offline wait to be sent (core's `queuedBanner`), online too until they went
+                if let waiting = model.queued?.banner.value { QueuedBanner(banner: waiting) }
                 if let incoming = model.incoming { ShareBanner(model: model, incoming: incoming, onCancel: model.cancelShare) }
             }
         }

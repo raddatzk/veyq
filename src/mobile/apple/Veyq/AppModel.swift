@@ -166,6 +166,14 @@ final class AppModel {
     @ObservationIgnored private let session: SessionModel<VeyqAccount, TenantSession>
     @ObservationIgnored private var gateWatch: SessionModelWatch?
     @ObservationIgnored private var followWatch: SessionModelWatch?
+    /// The writes made offline of the shell open (core's, `QueuedHeld`); nil without a shell.
+    var queued: QueuedHeld?
+    /// The ask before a loss while writes made offline wait, until it is answered.
+    var lossAsk: LossAsk?
+    /// A held Pot entry the tray's *Open* asked for: its Pot's page opens its held editor once the Pot is read.
+    var heldOpen: QueuedOpen.Entry?
+    /// A held rename the tray's *Open* asked for: the node's header asks its name again with the person's.
+    var renameAsked: QueuedOpen.Rename?
     typealias Opened = SessionModelOpened<VeyqAccount, TenantSession>
 
     init(inExtension: Bool = false) {
@@ -528,6 +536,11 @@ final class AppModel {
     /// this device still trusts with the password, or the sign-in. Staying signed in ends with the sign-out; the
     /// password trust stays (as on the web).
     func signOut(_ account: VeyqAccount) {
+        // asked first while writes made offline wait (they go with the sign-out)
+        askingLoss(.signOut, of: account) { [weak self] in self?.signOutNow(account) }
+    }
+
+    private func signOutNow(_ account: VeyqAccount) {
         if session.signedTo?.account == account { uploads.clear() }
         // a share's files handed over and not queued yet go unsent (ADR 0138 decision 6)
         ShareHandoff.clear()
@@ -543,6 +556,7 @@ final class AppModel {
                 closeSearch()
                 tenantSession?.close()
                 closeDepot()
+                closeQueued()
                 closeMedia()
                 dropHeaders()
                 closeFile()
@@ -554,6 +568,10 @@ final class AppModel {
 
     /// Ends this device's trust in `account`: the next sign-in here asks for the Secret Key again.
     func forgetDevice(_ account: VeyqAccount) {
+        askingLoss(.stopTrusting, of: account) { [weak self] in self?.forgetDeviceNow(account) }
+    }
+
+    private func forgetDeviceNow(_ account: VeyqAccount) {
         Task {
             try? await session.forgetDevice(account: account)
             trustLog("manage stop trusting")
@@ -616,6 +634,7 @@ final class AppModel {
                 closeSearch()
                 tenantSession?.close()
                 closeDepot()
+                closeQueued()
                 closeMedia()
                 dropHeaders()
                 closeFile()
@@ -663,6 +682,7 @@ final class AppModel {
         shellWatch?.stop()
         shellModel = model
         openDepot(model, t)
+        openQueued(model)
         closeGallery(windows: true)
         galleryShown = nil
         openMedia(model, switched: switched)
@@ -688,7 +708,7 @@ final class AppModel {
     }
 
     /// The shell as core's model holds it now, with this device's servers; on `start`, the drawer opens on Home.
-    private func applyShell(start: Bool) {
+    func applyShell(start: Bool) {
         guard let signed = session.signedTo, shellModel?.tenant === signed.session, let state = shellModel?.current else { return }
         let account = signed.account
         let tenant = signed.tenant
@@ -719,6 +739,13 @@ final class AppModel {
 
     /// Whether "New" is offered where the shell is (core's `ShellModel.canCreateHere`).
     var canCreateHere: Bool { _ = shell; return shellModel?.canCreateHere ?? false }
+
+    /// What "New" offers where the shell is (core's `ShellModel.createsHere`: online all of it, offline only what queues).
+    func createsHere(isHome: Bool) -> [AppKinds.Create] {
+        _ = shell
+        _ = offlineBanner // observed: what is offered moves with the reach
+        return shellModel?.createsHere(isHome: isHome, bookmarks: true) ?? []
+    }
 
     /// The shell moved by `change` (its transitions are `Shell`'s), at once.
     private func moveShell(_ change: @escaping (Shell) -> Shell) {
@@ -1677,9 +1704,9 @@ final class AppModel {
     // MARK: An open Pot (Expenses)
 
     /// The tenant the shell shows, opened: where an object's own view reads from.
-    private var tenantSession: TenantSession?
+    private(set) var tenantSession: TenantSession?
     /// The Pot open in the app (core's `PotModel`): its views, its live poll, its writes.
-    @ObservationIgnored private var potModel: PotModel?
+    @ObservationIgnored private(set) var potModel: PotModel?
     @ObservationIgnored private var potWatch: PotModel.Watch?
     private var potSession: PotSession? { potModel?.session }
 
@@ -2167,6 +2194,11 @@ final class AppModel {
 
     /// What a Memory's or a chapter's create came to: the node made opened (both are Memories'), or why not in words.
     private func opened(_ made: MemoryCreate.Made?) -> String? {
+        // made offline (ADR 0153): the dialog closes and says it waits to be sent; nothing to open until it is
+        if let made, made.queued {
+            if let n = made.notice { notice = Notice(text: say(notice: n)) }
+            return nil
+        }
         if let notice = made?.notice { return say(notice: notice) }
         guard let n = made?.node else { return say(notice: MemoryCreate.shared.refused(reason: nil)) }
         if let page = GalleryModel.companion.page(node: n) { open(page) }
@@ -2341,13 +2373,21 @@ final class AppModel {
     func openEditor(_ entryId: String?, pending: [PotSession.PendingReceipt] = []) -> Bool {
         closeEditor()
         guard let e = potModel?.editor(entryId: entryId, separator: decimalSeparator, pending: pending) else { return false }
+        adoptEditor(e)
+        return true
+    }
+
+    /// `e` as the editor open in the app, watched here.
+    func adoptEditor(_ e: EntryEditor) {
         editor = e
         editorState = e.current
         editorWatch = e.watch { @Sendable _ in
             Task { @MainActor [weak self] in self?.editorState = self?.editor?.current }
         }
-        return true
     }
+
+    /// The editor open in the app (a held entry's *Discard mine* calls it).
+    var editorModel: EntryEditor? { editor }
 
     func edit(_ change: EditorChange) {
         editor?.change(change: change)
@@ -2612,20 +2652,23 @@ extension AppModel: SettingsActions {
     func removeSavedKey(_ deviceId: String) { onSettings { try await $0.removeSavedKey(deviceId: deviceId); return nil } }
     func removeEveryOtherSavedKey() { onSettings { try await $0.removeEveryOtherSavedKey(); return nil } }
     func stopTrusting() {
-        onSettings { [weak self] m in
-            try await m.stopTrusting()
-            self?.trustLog("settings stop trusting")
-            return nil
+        // asked first while writes made offline wait (ADR 0153 decision 2): they go with the trust
+        askingLoss(.stopTrusting) { [weak self] in
+            self?.onSettings { [weak self] m in
+                try await m.stopTrusting()
+                self?.trustLog("settings stop trusting")
+                return nil
+            }
         }
     }
-    func signOutHere() { onSettings { try await $0.signOutHere() } }
+    func signOutHere() { askingLoss(.signOut) { [weak self] in self?.onSettings { try await $0.signOutHere() } } }
     func setOfflineLimit(_ amount: String, _ unit: LimitUnit) { onSettings { try await $0.setOfflineLimit(amount: amount, unit: unit); return nil } }
     func turnOfflineLimitOff() { onSettings { try await $0.turnOfflineLimitOff(); return nil } }
     func clearOfflineCache() { onSettings { try await $0.clearOfflineCache(); return nil } }
     func unpinOffline(_ node: String) { onSettings { try await $0.unpinOffline(node: node); return nil } }
     func askRemoveAllOffline() { settingsModel?.askRemoveAllOffline(); syncSettings() }
     func cancelRemoveAllOffline() { settingsModel?.cancelRemoveAllOffline(); syncSettings() }
-    func removeAllOffline() { onSettings { try await $0.removeAllOffline(); return nil } }
+    func removeAllOffline() { askingLoss(.removeAll) { [weak self] in self?.onSettings { try await $0.removeAllOffline(); return nil } } }
 
     func settingsStay(_ level: StaySignedIn) async -> TrustChange {
         guard let m = settingsModel else { return .failed }
