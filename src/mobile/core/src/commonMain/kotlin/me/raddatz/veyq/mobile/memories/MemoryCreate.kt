@@ -101,10 +101,7 @@ object MemoryCreate {
      */
     class Made(
         val node: NodeAt?, val notice: Notice?, internal val refused: NodeCreate.Result.Refused? = null, internal val code: String? = null,
-        /**
-         * Made offline and waiting to be sent (ADR 0153; ADR 0154 decision 1: an outcome a UI must tell apart is typed): the
-         * name dialog closes and [notice] (*Waiting to send*) is said — nothing to open yet, it shows where it was made.
-         */
+        /** Made offline (ADR 0153): it waits to be sent, [notice] says so; the dialog closes as on a node made, nothing to open. */
         val queued: Boolean = false,
     )
 

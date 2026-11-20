@@ -45,16 +45,17 @@ class GuestLevel internal constructor(
     /**
      * New folder [name] here as the guest, as New Folder's dialog answers it ([NameAnswer], ADR 0154 decision 1): an empty
      * name or a sibling's is a problem (the dialog asks again); once made the link is read anew; a refusal, a thrown error
-     * and a write before the guest named itself are said.
+     * and a write the guest declined to name itself for are said. A guest not named yet is asked its name at the write
+     * ([GuestAccess.naming], the web's `requestGuest`), never by a platform's own rule.
      */
     suspend fun createFolder(name: String): me.raddatz.veyq.mobile.navigation.NameAnswer {
         val failed = me.raddatz.veyq.mobile.navigation.NameAnswer.said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_FAILED))
         val a = access ?: return failed
         val n = name.trim()
         if (n.isEmpty()) return me.raddatz.veyq.mobile.navigation.NameAnswer.problem(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.FOLDER_NAME_EMPTY))
-        val session = a.session.value
         val parent = tree.node(node.nodeId)
-        if (!writes || session == null || parent == null) return failed
+        if (!writes || parent == null) return failed
+        val session = a.naming.request() ?: return failed
         val made = runCatching { a.createNode(session, parent, NodeRef.FOLDER, n) }.getOrNull()
         return when (made) {
             is GuestAccess.Created.Done -> {
@@ -82,6 +83,17 @@ class GuestLevel internal constructor(
         if (jobs.isEmpty()) return 0
         queue.enqueue(jobs, node.name, null, { view?.reloadSoon() }, null)
         return jobs.size
+    }
+
+    /**
+     * [sources] uploaded here as [upload] does, a guest not named yet asked its name first through the core's one naming
+     * flow ([GuestAccess.naming], ADR 0154 decision 1); declined, none is queued (and each is the caller's to close).
+     */
+    suspend fun uploadAsking(sources: List<me.raddatz.veyq.mobile.blob.UploadSource>): Int {
+        val a = access ?: return 0
+        if (!writes || sources.isEmpty()) return 0
+        a.naming.request() ?: return 0
+        return upload(sources)
     }
 
     companion object {

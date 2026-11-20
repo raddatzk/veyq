@@ -13,6 +13,9 @@
 //! Offline (ADR 0140 decision 10) an `AdwBanner` under the content's header bar says so, as of when (`ShellShown.offlineBanner`):
 //! GNOME's banner for a state that lasts; New is not offered then and the header's writes are gone (the core's). An item
 //! no longer available offline (`ShellModelState.gone`) is said once as a toast, then told seen (`Shell.OfflineGoneSeen`).
+//! Writes made offline (ADR 0153): a second banner counts those waiting (`queuedBanner`), the level lists what it holds
+//! not sent yet in place (`queuedHere`), the reconnect's notices are said once (`queuedSaid`), New offers only what queues
+//! (`creates`), and a held write's *Open* from the uploads' tray goes where the core says ([Shell::open_queued]).
 //!
 //! Every state is the core's (`ShellModel.State` and `ShellShown`); every action one call. What the sidebar selects,
 //! which back the header shows and what the title says follow the state, as Android's and Apple's shells draw it.
@@ -23,7 +26,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::DrawerSection, wire::Facts, wire::NodeAt, wire::ObjectRef, wire::ShellModelState, wire::ShellShown, wire::ViewModeShown};
+use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::DrawerSection, wire::Facts, wire::NodeAt, wire::ObjectRef, wire::QueuedOpen, wire::ShellModelState, wire::ShellShown, wire::ViewModeShown};
 use crate::bookmark_page::BookmarkPage;
 use crate::drop_box::DropBoxPage;
 use crate::file_page::FilePage;
@@ -108,6 +111,12 @@ pub struct Shell {
     nav: adw::NavigationView,
     /// "Offline — content as of …", revealed while the core shows the lists from the offline store.
     banner: adw::Banner,
+    /// Under it, while writes made offline wait: their count (`ShellShown.queuedBanner`, ADR 0153 decision 5).
+    queued_banner: adw::Banner,
+    /// The reconnect's notices said last (`ShellShown.queuedSaid`), so an update that repeats them says nothing again.
+    queued_said: RefCell<Vec<bridge::wire::Notice>>,
+    /// A held rename's *Open* (`QueuedOpen.Rename`): the node whose header asks the person's name once it shows.
+    pending_rename: RefCell<Option<(String, String)>>,
     /// The `gone` notices said last, so an update that repeats them before the core drops them says nothing again.
     gone_said: RefCell<Vec<bridge::wire::Notice>>,
     /// The upload queue's button in the content's header bar, shown while it lists anything.
@@ -199,6 +208,8 @@ impl Shell {
         content_view.add_top_bar(&content_header);
         let banner = adw::Banner::new("");
         content_view.add_top_bar(&banner);
+        let queued_banner = adw::Banner::new("");
+        content_view.add_top_bar(&queued_banner);
         let toasts = adw::ToastOverlay::new();
         // the upload queue, GNOME Files' way: a header bar button while anything is listed, its popover the list
         let uploads = Uploads::new(&toasts);
@@ -273,6 +284,9 @@ impl Shell {
             person: RefCell::new(None),
             nav,
             banner,
+            queued_banner,
+            queued_said: RefCell::new(Vec::new()),
+            pending_rename: RefCell::new(None),
             gone_said: RefCell::new(Vec::new()),
             _uploads: uploads,
             scrolls: ListScrolls::default(),
@@ -285,6 +299,13 @@ impl Shell {
     }
 
     fn connect(self: &Rc<Self>, window: &adw::ApplicationWindow) {
+        // a held write's *Open* from the uploads' tray goes where the core says (`QueuedOpen`)
+        let weak = Rc::downgrade(self);
+        self._uploads.on_open(move |open| {
+            if let Some(s) = weak.upgrade() {
+                s.open_queued(open);
+            }
+        });
         let weak = Rc::downgrade(self);
         self.sidebar.connect_activated(move |_, index| {
             let Some(s) = weak.upgrade() else { return };
@@ -510,6 +531,13 @@ impl Shell {
                             eprintln!("veyq: new memory: made");
                             memory_page::open_node(&node);
                         }
+                        // made offline: it waits to be sent and shows where it was made; the dialog closes, the notice is said
+                        Ok(Answer::Created { queued: true, notice, .. }) => {
+                            eprintln!("veyq: new memory: queued");
+                            if let Some(n) = notice {
+                                toasts.add_toast(adw::Toast::new(&said::notice(&n)));
+                            }
+                        }
                         Ok(Answer::Created { notice: Some(n), .. }) => {
                             eprintln!("veyq: new memory: {}", n.msg);
                             again(name, said::notice(&n));
@@ -607,13 +635,11 @@ impl Shell {
         Some(uploads::Level { scope_id, parent_id: folder.map(|f| f.node_id.clone()), label })
     }
 
-    /// Where a drop onto the level shown goes: only where its New offers Upload files (the core's `creates`).
-    fn drops(&self) -> Option<Drops> {
-        let takes = self.now.borrow().as_ref().is_some_and(|(_, shown)| shown.can_create_here && shown.creates.iter().any(|c| c.create == Create::UploadFiles));
-        if !takes {
-            return None;
-        }
-        Some(Drops { level: self.level()?, toasts: self.toasts.clone() })
+    /// Where a drop onto the level shown goes, as the core says: the level where it takes one (`dropsHere`), the folders'
+    /// rows it names (`dropRows`).
+    fn drops(&self) -> Drops {
+        let (here, rows) = self.now.borrow().as_ref().map(|(_, shown)| (shown.drops_here, shown.drop_rows.clone())).unwrap_or_default();
+        Drops { level: here.then(|| self.level().map(|l| l.label)).flatten(), rows, toasts: self.toasts.clone() }
     }
 
     /// Says [text] as a toast over the content.
@@ -654,6 +680,24 @@ impl Shell {
                 self.banner.set_revealed(true);
             }
             None => self.banner.set_revealed(false),
+        }
+        match &shown.queued_banner {
+            Some(q) => {
+                self.queued_banner.set_title(&home::glib_escape(&said::notice(q)));
+                self.queued_banner.set_revealed(true);
+            }
+            None => self.queued_banner.set_revealed(false),
+        }
+        // after a reconnect: how many writes made offline were sent, how many need the person — said once, then told seen
+        if *self.queued_said.borrow() != shown.queued_said {
+            *self.queued_said.borrow_mut() = shown.queued_said.clone();
+            if !shown.queued_said.is_empty() {
+                for n in &shown.queued_said {
+                    eprintln!("veyq: queued said: {}", n.msg);
+                    self.toasts.add_toast(adw::Toast::new(&home::glib_escape(&said::notice(n))));
+                }
+                bridge::send(Call::ShellQueuedSaidSeen);
+            }
         }
         if *self.gone_said.borrow() == state.gone {
             return;
@@ -800,7 +844,46 @@ impl Shell {
         if let Some(node) = &shown.headed {
             // a folder's page knows all it needs; a Pot's and a file's tell once they are read
             let facts = (node.kind != "EXPENSES_POT" && node.kind != "FILE").then_some(Facts { can_write: true, has_content: true });
-            *self.header.borrow_mut() = Some(Header::open(node, facts, &self.header_bar, &self.toasts));
+            let header = Header::open(node, facts, &self.header_bar, &self.toasts);
+            // a held rename opened: its node's rename asks again with the name the person gave offline
+            let pending = self.pending_rename.borrow().as_ref().filter(|(id, _)| *id == node.node_id).map(|(_, name)| name.clone());
+            if let Some(name) = pending {
+                self.pending_rename.borrow_mut().take();
+                header.rename_as(&self.window, &name);
+            }
+            *self.header.borrow_mut() = Some(header);
+        }
+    }
+
+    /// Where a held write's *Open* goes, as the core types it (`Queued.Open`, ADR 0153 decision 4): a Pot entry's held
+    /// editor over the newer version, the node's rename with the person's name in it, or the page it was made on.
+    fn open_queued(self: &Rc<Self>, open: QueuedOpen) {
+        eprintln!("veyq: queued open: {}", match &open {
+            QueuedOpen::QueuedOpenEntry { .. } => "entry",
+            QueuedOpen::QueuedOpenRename { .. } => "rename",
+            QueuedOpen::QueuedOpenPlace { .. } => "place",
+        });
+        match open {
+            QueuedOpen::QueuedOpenEntry { scope, pot, write, .. } => {
+                // the Pot opened as a model of its own for the editor (`Pot.Open`), closed with it
+                let r = ObjectRef { scope_id: scope, node_id: pot, kind: "EXPENSES_POT".into(), application: ApplicationId::Expenses, name: String::new() };
+                let (window, toasts) = (self.window.clone(), self.toasts.clone());
+                glib::spawn_future_local(async move {
+                    match bridge::call(&Call::PotOpen { r#ref: r }).await.map(|(a, _)| a) {
+                        Ok(Answer::PotOpened { pot }) => crate::entry_editor::open_held(window.upcast_ref(), pot, &write, &toasts, move || bridge::send(Call::PotClose { pot })),
+                        other => header::say(&toasts, other, "Pot.Open"),
+                    }
+                });
+            }
+            QueuedOpen::QueuedOpenRename { scope, node, name, .. } => {
+                *self.pending_rename.borrow_mut() = Some((node.clone(), name));
+                bridge::send(Call::ShellOpenAt { scope_id: scope, node_id: Some(node) });
+                self.split.set_show_content(true);
+            }
+            QueuedOpen::QueuedOpenPlace { scope, node, .. } => {
+                bridge::send(Call::ShellOpenAt { scope_id: scope, node_id: node });
+                self.split.set_show_content(true);
+            }
         }
     }
 
@@ -896,9 +979,10 @@ impl Shell {
                     // the Pot read: the header learns whether it takes writes (`AppKinds.Facts`)
                     let held = Rc::downgrade(&self.header);
                     let add = self.add_entry.downgrade();
-                    page.on_read(move |can_write| {
+                    page.on_read(move |can_write, offers_entries| {
+                        // *Add entry* where the core offers it (offline too, where an entry queues), never by `canWrite`
                         if let Some(add) = add.upgrade() {
-                            add.set_visible(can_write);
+                            add.set_visible(offers_entries);
                         }
                         if let Some(held) = held.upgrade()
                             && let Some(h) = held.borrow().as_ref()
@@ -1003,7 +1087,7 @@ impl Shell {
                         home::list(shown.list.as_ref(), shown.view)
                     } else {
                         // a folder's level starts with its head, as the Pot's and the Memory's pages (none on a space's root)
-                        home::home(state, shown, self.drops().as_ref(), self.header.borrow().as_ref().map(Header::hero))
+                        home::home(state, shown, Some(&self.drops()), self.header.borrow().as_ref().map(Header::hero))
                     };
                     if let Some(scroll) = list.downcast_ref::<gtk::ScrolledWindow>() {
                         self.scrolls.keep(scroll, ListScrolls::place(state));

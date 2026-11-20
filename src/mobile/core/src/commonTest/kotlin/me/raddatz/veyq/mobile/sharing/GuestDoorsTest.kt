@@ -226,6 +226,11 @@ class GuestDoorsTest {
         assertTrue(access.naming.offered, "a READ_WRITE guest is not offered to name itself")
         assertFalse(door.writesEntries)
         val session = PotSession.open(door, access.tree!!.node(f.pot)!!)
+        assertEquals(session.offersEntries, me.raddatz.veyq.mobile.expenses.PotView(session).shown().offersEntries)
+        // what the wire carries is the core's offer, never `canWrite` (the desktops draw *Add entry* by it)
+        val shown = me.raddatz.veyq.mobile.expenses.PotFixture.view(canWrite = false, guest = true, offersEntries = true).shown()
+        assertTrue(shown.offersEntries, "the wire's view does not offer Add entry to an unnamed READ_WRITE guest")
+        assertFalse(shown.canWrite)
         val requests = f.share.requests.size
         // the write asks the name; declined, it is not made
         val declined = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { session.write(emptyList()) }
@@ -308,12 +313,25 @@ class GuestDoorsTest {
         v.load()
         val level = assertIs<GuestPage.Level>(v.page.value).model
         assertTrue(level.writes, "a READ_WRITE guest's level offers no write")
-        // nothing is written before the guest named itself (the web's `requestGuest`)
-        assertNotNull(level.createFolder("Neu").notice)
+        // nothing is written before the guest named itself (the web's `requestGuest`): the write asks the name through the
+        // core's one naming flow (ADR 0154 decision 1); declined, nothing is made or queued
+        val access = assertNotNull(v.access)
+        val declinedFolder = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { level.createFolder("Neu") }
+        withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(5_000) { access.naming.asking.first { it } } }
+        access.naming.decline()
+        assertNotNull(declinedFolder.await().notice, "a declined guest's folder was not said")
+        val declinedUpload = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { level.uploadAsking(listOf(source("x.txt", "x"))) }
+        withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(5_000) { access.naming.asking.first { it } } }
+        access.naming.decline()
+        assertEquals(0, declinedUpload.await())
         assertEquals(0, level.upload(listOf(source("x.txt", "x"))))
         assertTrue(f.content.created.isEmpty())
-        v.access!!.nameGuest("Ben")
-        assertEquals(me.raddatz.veyq.mobile.navigation.NameAnswer.DONE, level.createFolder("Neu"), "the guest's new folder was refused")
+        // named at the write: the folder the write asked for is made as the guest
+        val namedFolder = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { level.createFolder("Neu") }
+        withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(5_000) { access.naming.asking.first { it } } }
+        assertEquals(me.raddatz.veyq.mobile.navigation.NameAnswer.DONE, access.naming.name("Ben"))
+        assertEquals(me.raddatz.veyq.mobile.navigation.NameAnswer.DONE, namedFolder.await(), "the guest's new folder was refused")
+        assertFalse(access.naming.asking.value, "a named guest was asked again")
         val made = f.content.created.single()
         assertEquals("FOLDER" to f.share.rootId, made["kind"]!!.jsonPrimitive.content to made["parentId"]!!.jsonPrimitive.content)
         // the link read anew: the level on screen lists the folder, opened under the key the guest minted
