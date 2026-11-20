@@ -12,7 +12,7 @@ use adw::prelude::*;
 
 use gtk::glib;
 
-use crate::bridge::{self, wire::Answer, wire::Call, wire::ManagedShown, wire::Method, wire::StaySignedIn, wire::Why};
+use crate::bridge::{self, wire::Answer, wire::Call, wire::ManagedShown, wire::Method, wire::QueuedLoss, wire::StaySignedIn, wire::Why};
 use crate::{dev_login, said, sign_in, words};
 
 /// "Manage servers"' line for how this device trusts a server: the password, staying signed in (the level without a check
@@ -175,7 +175,11 @@ impl Manage {
         let sign_out = adw::ButtonRow::builder().title(words::manage_sign_out()).start_icon_name("system-log-out-symbolic").build();
         sign_out.add_css_class("destructive-action");
         let connection = server.connection.clone();
-        sign_out.connect_activated(move |_| bridge::send(Call::SessionSignOut { connection: connection.clone() }));
+        let dialog = self.dialog.clone();
+        sign_out.connect_activated(move |_| {
+            let connection = connection.clone();
+            lose(&dialog, connection.clone(), QueuedLoss::SignOut, words::manage_sign_out(), Call::SessionSignOut { connection });
+        });
         group.add(&sign_out);
         for change in changes(server.trusted, server.level, &server.levels) {
             let connection = server.connection.clone();
@@ -201,11 +205,51 @@ impl Manage {
             let forget = adw::ButtonRow::builder().title(words::manage_forget_device()).build();
             forget.add_css_class("destructive-action");
             let connection = server.connection.clone();
-            forget.connect_activated(move |_| bridge::send(Call::SessionForgetDevice { connection: connection.clone() }));
+            let dialog = self.dialog.clone();
+            forget.connect_activated(move |_| {
+                let connection = connection.clone();
+                lose(&dialog, connection.clone(), QueuedLoss::StopTrusting, words::manage_forget_device(), Call::SessionForgetDevice { connection });
+            });
             group.add(&forget);
         }
         group
     }
+}
+
+/// Sends [then] — [loss] for [connection]'s account — once the core's ask is answered: while writes made offline wait for
+/// that account, whichever tenant is open (`Queued.AskFor`, ADR 0153 decision 2), its question in an `AdwAlertDialog`
+/// over [dialog] under [heading], its confirm deleting them; where none waits, at once.
+fn lose(dialog: &adw::PreferencesDialog, connection: String, loss: QueuedLoss, heading: String, then: Call) {
+    let dialog = dialog.clone();
+    glib::spawn_future_local(async move {
+        let ask = match bridge::call(&Call::QueuedAskFor { connection, loss }).await.map(|(a, _)| a) {
+            Ok(Answer::QueuedAsked { ask }) => ask,
+            other => {
+                // unanswered, nothing is lost unasked: the step waits for the next try
+                eprintln!("veyq: Queued.AskFor answered {}", answer_kind(&other));
+                return;
+            }
+        };
+        let Some(q) = ask else {
+            bridge::send(then);
+            return;
+        };
+        eprintln!("veyq: queued ask before {loss:?}");
+        let alert = adw::AlertDialog::builder().heading(heading).body(said::notice(&q.question)).build();
+        alert.add_responses(&[("cancel", &words::signin_cancel()), ("confirm", &said::key(&q.confirm))]);
+        alert.set_response_appearance("confirm", adw::ResponseAppearance::Destructive);
+        alert.set_default_response(Some("cancel"));
+        alert.set_close_response("cancel");
+        let then = std::cell::RefCell::new(Some(then));
+        alert.connect_response(None, move |_, response| {
+            if response == "confirm"
+                && let Some(call) = then.borrow_mut().take()
+            {
+                bridge::send(call);
+            }
+        });
+        alert.present(Some(&dialog));
+    });
 }
 
 /// Says what a change of trust was answered, where it did not happen, as a toast over [dialog] (Settings' too).
