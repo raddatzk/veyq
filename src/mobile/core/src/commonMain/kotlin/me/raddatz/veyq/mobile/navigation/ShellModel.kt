@@ -146,6 +146,10 @@ class ShellModel(
         if (reaches == null) reaches = CoroutineScope(Dispatchers.Default).launch {
             tenant.account.reach.drop(1).collect { if (it == Reach.Online) refresh() else rebuild() }
         }
+        // writes made offline sent after a reconnect: the lists are read anew, so what was made shows as itself (ADR 0153)
+        if (sentWatch == null) sentWatch = CoroutineScope(Dispatchers.Default).launch {
+            tenant.account.queuedReports.collect { if (it.sent > 0) refresh() }
+        }
         watchGone()
         if (pagesWatch == null) pagesWatch = CoroutineScope(Dispatchers.Default).launch {
             tenant.pagesOffline.shown.collect { p -> _state.update { s -> s?.let { State(it.shell, it.lists, it.offline, it.gone, p) } } }
@@ -155,6 +159,7 @@ class ShellModel(
     private var pagesWatch: kotlinx.coroutines.Job? = null
 
     private var reaches: kotlinx.coroutines.Job? = null
+    private var sentWatch: kotlinx.coroutines.Job? = null
     private var goneWatch: kotlinx.coroutines.Job? = null
 
     /**

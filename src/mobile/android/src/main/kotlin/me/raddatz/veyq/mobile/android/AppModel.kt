@@ -241,6 +241,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { session.gate.collect(::gateChanged) }
+        // the shown account ended on its own and core opened the next one (core's `SessionModel.followed`): the shell follows it
+        viewModelScope.launch {
+            session.followed.collect { opened ->
+                if (opened != null && shellModel?.tenant !== opened.session) {
+                    trustLog("the shown account ended: the shell follows the next one")
+                    show(opened)
+                }
+            }
+        }
         // a pin's fetch keeps the process once the app is left: WorkManager's worker, a dataSync foreground service
         OfflineWork.watch(app, viewModelScope)
         // an upload goes on with the app left (ADR 0145 decision 1)
@@ -272,24 +281,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Unlock -> _screen.value = Screen.Unlock(g.record, g.working, g.error)
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> {
                 shellModel?.state?.value?.let(::publish)
-                followEnded(g)
             }
             else -> _screen.value = Screen.Starting
         }
-    }
-
-    /**
-     * The shown account ended on its own ([me.raddatz.veyq.mobile.session.Reach.Ended]: a reconnect found this device's
-     * trust gone): core took it out of the switcher and opened the next one, which no call of this model asked for — the
-     * shell follows it here. A switch or a sign-out this model made shows its own opened account.
-     */
-    private fun followEnded(g: me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) {
-        if (g.switching) return
-        val opened = session.signedTo ?: return
-        val shown = shellModel?.tenant ?: return
-        if (shown === opened.session || session.accounts.any { it === shown.account }) return
-        trustLog("the shown account ended: the shell follows the next one")
-        viewModelScope.launch { if (shellModel?.tenant !== opened.session) show(opened) }
     }
 
     /** The activity a prompt for the unlock key is shown over, while one is resumed. */
@@ -569,7 +563,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * device still trusts with the password, or the sign-in. Staying signed in ends with the sign-out; the password trust
      * stays (as on the web).
      */
-    fun signOut(account: VeyqAccount) {
+    fun signOut(account: VeyqAccount) = beforeLoss(account, me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT) {
         if (session.signedTo?.account == account) uploads.clear()
         viewModelScope.launch { signedOut(session.signOut(account)) }
     }
@@ -582,6 +576,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 closeAccountFlow()
                 shellWatch?.cancel()
                 shellModel = null
+                _shell.value = null
                 stopMusic()
                 _depot.value?.close()
                 _depot.value = null
@@ -672,19 +667,23 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             done(change)
             null
         }
-        override fun stopTrusting() = onSettings { m ->
-            m.stopTrusting()
-            trustLog("settings stop trusting")
-            null
+        override fun stopTrusting() = beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.offline.QueuedLoss.STOP_TRUSTING) {
+            onSettings { m ->
+                m.stopTrusting()
+                trustLog("settings stop trusting")
+                null
+            }
         }
-        override fun signOutHere() = onSettings { it.signOutHere() }
+        override fun signOutHere() = beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT) { onSettings { it.signOutHere() } }
         override fun setOfflineLimit(amount: String, unit: me.raddatz.veyq.mobile.offline.LimitUnit) = onSettings { it.setOfflineLimit(amount, unit); null }
         override fun turnOfflineLimitOff() = onSettings { it.turnOfflineLimitOff(); null }
         override fun clearOfflineCache() = onSettings { it.clearOfflineCache(); null }
         override fun unpinOffline(node: String) = onSettings { it.unpinOffline(node); null }
         override fun askRemoveAllOffline() { settingsModel?.askRemoveAllOffline() }
         override fun cancelRemoveAllOffline() { settingsModel?.cancelRemoveAllOffline() }
-        override fun removeAllOffline() = onSettings { it.removeAllOffline(); null }
+        override fun removeAllOffline() = beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.offline.QueuedLoss.REMOVE_ALL, cancel = ::cancelRemoveAllOffline) {
+            onSettings { it.removeAllOffline(); null }
+        }
         override fun linkShow() = showForNewDevice()
         override fun linkScan() = scanSignInCode()
         override fun renameFamily(familyId: String, label: String) = onSettings { it.renameFamily(familyId, label); null }
@@ -957,6 +956,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val model = me.raddatz.veyq.mobile.navigation.ShellModel(t, hidden, recent, System::currentTimeMillis)
         shellWatch?.cancel()
         shellModel = model
+        _shell.value = model
         openContributions = null
         _levelView.value = model.levelView
         closeSearch()
@@ -1021,31 +1021,31 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Files dropped onto the level [shell] shows (ADR 0138 decision 9): uploaded under it at once, named [label], where
-     * Depot may put files there (core's `ShellModel.dropLevel`); anywhere else they wait in the pick mode, as a share's do.
-     * What did not read is said.
+     * Files dropped onto [target] (ADR 0138 decision 9, ADR 0154 decision 1): core's one drop judges the target, sorts and
+     * uploads (`ShellModel.drop`), and says what it did not take. A level that takes none leaves the files waiting in the pick
+     * mode, as a share's do (the open Pot among the places, [receiveDrop]); a gallery's or a row's refusal is said.
      */
-    fun dropOntoLevel(shell: Shell, incoming: me.raddatz.veyq.mobile.navigation.ShareInbox.Incoming, label: String) {
-        val level = shellModel?.dropLevel(shell)
-        if (level == null) {
-            receiveDrop(incoming)
+    fun drop(target: me.raddatz.veyq.mobile.navigation.DropTarget, drop: ShareIn.Drop) {
+        val m = shellModel
+        if (m == null) {
+            if (target is me.raddatz.veyq.mobile.navigation.DropTarget.Level) receiveDrop(drop.incoming) else drop.release()
             return
         }
-        level.drop(incoming.files, label, _depot.value, ShareIn::release)
-        if (incoming.refused > 0) {
-            notify(Notice(getApplication<Application>().text(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.SHARE_UNREAD, incoming.refused))))
+        viewModelScope.launch {
+            val outcome = m.drop(target, drop.items, _depot.value, ShareIn::release)
+            if (outcome is me.raddatz.veyq.mobile.navigation.DropOutcome.Refused && target is me.raddatz.veyq.mobile.navigation.DropTarget.Level) {
+                receiveDrop(drop.incoming)
+                return@launch
+            }
+            if (outcome is me.raddatz.veyq.mobile.navigation.DropOutcome.Refused) drop.release()
+            // the phones' Depot offers no import (core's `DepotUploads` built so, owner 2026-11-19): never offered here
+            if (outcome is me.raddatz.veyq.mobile.navigation.DropOutcome.Offered) outcome.offer.uploadAsFile()
+            outcome.notices.forEach(::said)
         }
     }
 
-    /** Files dropped onto [gallery]'s page (ADR 0138 decision 9): its photos and videos queued into it at once, as a pick's. */
-    fun dropOnto(gallery: me.raddatz.veyq.mobile.memories.GalleryModel, incoming: me.raddatz.veyq.mobile.navigation.ShareInbox.Incoming): me.raddatz.veyq.mobile.words.Notice? {
-        val sorted = me.raddatz.veyq.mobile.memories.MemoryShare.answer.sort(incoming.files)
-        val media = sorted.taken
-        val others = sorted.left
-        others.forEach(ShareIn::release)
-        if (media.isNotEmpty() && gallery.upload(media) == 0) media.forEach(ShareIn::release)
-        return me.raddatz.veyq.mobile.memories.MediaUploads.notTaken(others.size + incoming.refused)
-    }
+    /** Whether [row] of the level shown takes a drop into it (core's `ShellModel.dropTarget`), never by its kind. */
+    fun dropTarget(row: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean = shellModel?.dropTarget(row) ?: false
 
     /**
      * Files arrive: the pick mode starts at the space's Home, never in the object last open, so the person chooses where
@@ -1244,6 +1244,147 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     fun notify(n: Notice) {
         _notices.trySend(n)
+    }
+
+    /** Core's [notice] said by the shell, in the words of the app's language. */
+    fun said(notice: me.raddatz.veyq.mobile.words.Notice) = notify(Notice(getApplication<Application>().text(notice)))
+
+    // ---- the writes made offline (ADR 0153): core's outbox, its tray, its marks and its notices; the app only draws ----
+
+    /** The shell's model as it changes: the outbox's flows follow the tenant shown. */
+    private val _shell = MutableStateFlow<me.raddatz.veyq.mobile.navigation.ShellModel?>(null)
+
+    /** Under the offline banner: how many writes made offline wait (core's `ShellModel.queuedBanner`); null while none does. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val queuedBanner: StateFlow<me.raddatz.veyq.mobile.words.Notice?> = _shell
+        .flatMapLatest { it?.queuedBanner ?: kotlinx.coroutines.flow.flowOf(null) }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
+
+    /** The level shown's nodes made offline and not sent yet (core's `ShellModel.queuedHere`), each with its mark. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val queuedHere: StateFlow<List<me.raddatz.veyq.mobile.offline.QueuedItem>> = _shell
+        .flatMapLatest { it?.queuedHere ?: kotlinx.coroutines.flow.flowOf(emptyList()) }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
+
+    /** Every write made offline as the uploads tray lists it (core's `QueuedTray.items`), oldest first. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val queuedItems: StateFlow<List<me.raddatz.veyq.mobile.offline.QueuedItem>> = _shell
+        .flatMapLatest { it?.queuedTray()?.items ?: kotlinx.coroutines.flow.flowOf(emptyList()) }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
+
+    init {
+        // after a reconnect that sent writes made offline: how many went and how many need the person (core's notices)
+        @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+        viewModelScope.launch {
+            _shell.flatMapLatest { it?.queuedSent ?: kotlinx.coroutines.flow.emptyFlow() }.collect { it.forEach(::said) }
+        }
+    }
+
+    /** What "New" offers where the shell is (core's `ShellModel.createsHere`: offline only what is queued). */
+    fun createsHere(isHome: Boolean, bookmarks: Boolean = false): List<me.raddatz.veyq.mobile.AppKinds.Create> =
+        shellModel?.createsHere(isHome, bookmarks).orEmpty()
+
+    /** The tray's *Discard* of write [id] (core's `QueuedTray.discard`, with what waits for it). */
+    fun discardQueued(id: String) {
+        val m = shellModel ?: return
+        viewModelScope.launch { m.queuedTray().discard(id) }
+    }
+
+    /** The name a refused write's file [index] is saved under (core's `QueuedTray.copyName`), for the system's save dialog. */
+    suspend fun queuedCopyName(id: String, index: Int): String? = shellModel?.queuedTray()?.copyName(id, index)?.first
+
+    /**
+     * The tray's *Save a copy* (core's `QueuedTray.saveCopy`): refused write [id]'s file [index] written as plaintext only into
+     * [uri], the document the person chose in the system's save dialog; what it began removed where it did not complete.
+     */
+    fun saveQueuedCopy(id: String, index: Int, uri: android.net.Uri) {
+        val m = shellModel ?: return
+        viewModelScope.launch {
+            val tray = m.queuedTray()
+            val name = tray.copyName(id, index)?.first
+            val resolver = getApplication<Application>().contentResolver
+            val saved = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { resolver.openOutputStream(uri)?.use { out -> tray.saveCopy(id, index) { out.write(it) } } ?: false }.getOrDefault(false)
+            }
+            if (!saved) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) } }
+            said(me.raddatz.veyq.mobile.offline.QueuedShown.copySaved(name, saved))
+        }
+    }
+
+    /** A held Pot entry's *Open*: the open Pot shows its held editor ([write] on entry [entry] of Pot [pot]). */
+    class HeldEntry(val pot: String, val entry: String, val write: String)
+
+    private val _heldEntry = MutableStateFlow<HeldEntry?>(null)
+    val heldEntry: StateFlow<HeldEntry?> = _heldEntry.asStateFlow()
+
+    fun heldEntrySeen() {
+        _heldEntry.value = null
+    }
+
+    /** A held rename's *Open*: the rename dialog with the person's name in it (core's `QueuedOpen.Rename`). */
+    private val _heldRename = MutableStateFlow<me.raddatz.veyq.mobile.offline.QueuedOpen.Rename?>(null)
+    val heldRename: StateFlow<me.raddatz.veyq.mobile.offline.QueuedOpen.Rename?> = _heldRename.asStateFlow()
+
+    fun heldRenameSeen() {
+        _heldRename.value = null
+    }
+
+    /**
+     * The tray's *Open* of held write [id] (core's `QueuedTray.opens`, ADR 0153 decision 4): where core says it is decided —
+     * the Pot's editor over the person's values, the node's rename dialog, or the page it was made on.
+     */
+    fun openQueued(id: String) {
+        val m = shellModel ?: return
+        viewModelScope.launch {
+            when (val o = m.queuedTray().opens(id)) {
+                is me.raddatz.veyq.mobile.offline.QueuedOpen.Entry -> {
+                    m.openFound(o.scope, o.pot)
+                    _heldEntry.value = HeldEntry(o.pot, o.entry, o.write)
+                }
+                is me.raddatz.veyq.mobile.offline.QueuedOpen.Rename -> _heldRename.value = o
+                is me.raddatz.veyq.mobile.offline.QueuedOpen.Place -> o.node?.let { m.openFound(o.scope, it) } ?: switchSpace(o.scope)
+                null -> {}
+            }
+        }
+    }
+
+    /** The held editor of write [writeId] in the open Pot (core's `PotModel.heldEditor`); null where it is no held entry of it. */
+    suspend fun heldEntryEditor(writeId: String, separator: Char): me.raddatz.veyq.mobile.expenses.EntryEditor? =
+        openPot?.heldEditor(writeId, separator)
+
+    /** A held rename decided in its dialog (core's rename of the node, which drops the held one once it lands). */
+    suspend fun renameHeld(open: me.raddatz.veyq.mobile.offline.QueuedOpen.Rename, name: String): me.raddatz.veyq.mobile.navigation.NameAnswer {
+        val m = shellModel ?: return me.raddatz.veyq.mobile.navigation.NameAnswer.DONE
+        val node = m.state.value?.lists?.nodes?.firstOrNull { it.scopeId == open.scope && it.nodeId == open.node }
+            ?: return me.raddatz.veyq.mobile.navigation.NameAnswer.DONE
+        val header = header(me.raddatz.veyq.mobile.navigation.NodeAt(node.scopeId, node.nodeId, node.kind, node.name), null)
+            ?: return me.raddatz.veyq.mobile.navigation.NameAnswer.DONE
+        return header.rename(name)
+    }
+
+    /** The ask before a loss of writes made offline (core's `QueuedAsk`), what its confirm runs and what its cancel does. */
+    class LossAsk(val ask: me.raddatz.veyq.mobile.offline.QueuedAsk, val run: () -> Unit, val cancel: () -> Unit)
+
+    private val _lossAsk = MutableStateFlow<LossAsk?>(null)
+    val lossAsk: StateFlow<LossAsk?> = _lossAsk.asStateFlow()
+
+    /**
+     * Before [loss] deletes the writes made offline [account] keeps (ADR 0153 decision 2, owner 2026-11-19): core's ask while
+     * any wait (`QueuedTray.ask`), [run] once confirmed, [cancel] otherwise; with none waiting [run] at once.
+     */
+    private fun beforeLoss(account: VeyqAccount?, loss: me.raddatz.veyq.mobile.offline.QueuedLoss, cancel: () -> Unit = {}, run: () -> Unit) {
+        if (account == null) return run()
+        viewModelScope.launch {
+            val ask = runCatching { me.raddatz.veyq.mobile.offline.QueuedTray(account).ask(loss) }.getOrNull()
+            if (ask == null) run() else _lossAsk.value = LossAsk(ask, run, cancel)
+        }
+    }
+
+    /** The loss's ask answered: its confirm ([confirmed]) or its cancel. */
+    fun answerLoss(confirmed: Boolean) {
+        val a = _lossAsk.value ?: return
+        _lossAsk.value = null
+        if (confirmed) a.run() else a.cancel()
     }
 
     /**
@@ -2022,12 +2163,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Creates a folder named [name] where the shell is (core's `createFolderHere`, the web's `FolderNameDialog`): the lists
-     * are read anew. Why not, in the web's words, or null once created.
+     * are read anew. Core's typed answer: a problem keeps the dialog open, a notice closes it and is said.
      */
-    suspend fun createFolder(name: String): String? {
-        val app = getApplication<Application>()
-        val m = shellModel ?: return app.text(me.raddatz.veyq.mobile.words.Notices.folderRefused(null))
-        return m.createFolderHere(name)?.let { app.text(it) }.also { readRowDetails(m.tenant) }
+    suspend fun createFolder(name: String): me.raddatz.veyq.mobile.navigation.NameAnswer {
+        val m = shellModel ?: return me.raddatz.veyq.mobile.navigation.NameAnswer.said(me.raddatz.veyq.mobile.words.Notices.folderRefused(null))
+        return m.createFolderHere(name).also { readRowDetails(m.tenant) }
     }
 
     /**
@@ -2058,6 +2198,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** What a Memory's or a chapter's create came to: the node made opened, or why not in words. */
     private fun opened(made: me.raddatz.veyq.mobile.memories.MemoryCreate.Made): String? {
+        // made offline: the dialog closes, *Waiting to send* is said, it shows where it was made (core's `Made.queued`)
+        if (made.queued) {
+            made.notice?.let(::said)
+            return null
+        }
         made.notice?.let { return getApplication<Application>().text(it) }
         val n = made.node ?: return getApplication<Application>().text(me.raddatz.veyq.mobile.memories.MemoryCreate.refused(null))
         me.raddatz.veyq.mobile.memories.GalleryModel.page(n)?.let(::open)
@@ -2343,7 +2488,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun guestLevelUpload(level: me.raddatz.veyq.mobile.sharing.GuestLevel, uris: List<android.net.Uri>) {
         viewModelScope.launch {
             val sources = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { uris.mapNotNull { picked(it)?.let(::source) } }
-            if (level.upload(sources) == 0) sources.forEach { it.close() }
+            // a guest not named yet is asked its name first (core's `uploadAsking`); declined, nothing is queued
+            if (level.uploadAsking(sources) == 0) sources.forEach { it.close() }
         }
     }
 
@@ -2388,14 +2534,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * A READ_WRITE guest's replace of [file]'s content with the picked document (ADR 0150 decision 5, #1035): core's
-     * `GuestAccess.replace`, on the link's own queue (the app's one, handed to the link) — signed in or out; the page reads
+     * `GuestAccess.replaceAsking`, on the link's own queue (the app's one, handed to the link) — signed in or out; the page reads
      * the file anew once it settled.
      */
     fun guestReplace(access: me.raddatz.veyq.mobile.sharing.GuestAccess, file: me.raddatz.veyq.mobile.depot.FileModel, uri: android.net.Uri) {
         viewModelScope.launch {
             val p = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { picked(uri) } ?: return@launch
             val source = source(p)
-            if (!access.replace(file, source)) source.close()
+            // a guest not named yet is asked its name first (core's naming flow), declined nothing is replaced
+            if (!access.replaceAsking(file, source)) source.close()
         }
     }
 

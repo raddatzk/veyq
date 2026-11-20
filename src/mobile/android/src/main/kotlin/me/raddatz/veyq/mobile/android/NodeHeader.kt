@@ -201,7 +201,7 @@ internal fun NodeHeaderActions(
         Plan.SHARE -> ShareSheet(node, model, close)
         Plan.REPORT -> ReportSheet(node, model, close)
         Plan.COVER -> CoverSheet(node, model, close)
-        Plan.RENAME -> RenameDialog(node.name, onRename = { name ->
+        Plan.RENAME -> NodeRenameDialog(node.name, onRename = { name ->
             val r = header.rename(name)
             // renamed; a link that kept the old name is said (the rename stands)
             r.notice?.let { scope.launch { snackbar.showSnackbar(context.text(it)) } }
@@ -461,7 +461,7 @@ internal fun CoverSheet(node: NodeAt, model: AppModel, onClose: () -> Unit) {
 
 /** Core's name dialog for a rename (`FolderNameDialog`): the name as it is, trimmed on save; unchanged or empty writes nothing. */
 @Composable
-private fun RenameDialog(current: String, onRename: suspend (String) -> String?, onClose: () -> Unit) {
+internal fun NodeRenameDialog(current: String, onRename: suspend (String) -> String?, onClose: () -> Unit) {
     var name by remember { mutableStateOf(current) }
     var problem by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
