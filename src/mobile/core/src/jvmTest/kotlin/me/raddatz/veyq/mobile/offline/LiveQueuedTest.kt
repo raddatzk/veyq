@@ -131,13 +131,16 @@ class LiveQueuedTest {
         } finally {
             reachable = true
             runCatching { account.retire() }
-            val again = VeyqAccount.resume(p, device.trusted().first(), device, client)
-            val t = again.open(tenantRef)
-            for (id in listOf(memory.nodeId, potId)) {
-                runCatching { NodeTrash.delete(t, scopeId, id) }
-                runCatching { NodeTrash.purge(t, scopeId, id) }
-            }
-            runCatching { again.signOut() }
+            // the cleanup never masks the case's own failure: a trust the case lost leaves nothing to resume with
+            runCatching {
+                val again = VeyqAccount.resume(p, device.trusted().first(), device, client)
+                val t = again.open(tenantRef)
+                for (id in listOf(memory.nodeId, potId)) {
+                    runCatching { NodeTrash.delete(t, scopeId, id) }
+                    runCatching { NodeTrash.purge(t, scopeId, id) }
+                }
+                runCatching { again.signOut() }
+            }.onFailure { println("veyq-live: the cleanup did not run: $it") }
             root.deleteRecursively()
         }
     }
