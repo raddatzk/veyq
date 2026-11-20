@@ -5,6 +5,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import me.raddatz.veyq.mobile.android.core.AppModel
+import me.raddatz.veyq.mobile.android.core.AppRoot
+import me.raddatz.veyq.mobile.android.core.ShareIn
+import me.raddatz.veyq.mobile.android.core.VeyqTheme
+import me.raddatz.veyq.mobile.android.core.scheme
+import me.raddatz.veyq.mobile.android.core.text
 import me.raddatz.veyq.mobile.sharing.DeepLink
 
 class MainActivity : ComponentActivity() {
@@ -12,6 +18,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Applications.register() // core's kinds and each application's UI into the core UI's registry, before anything is drawn
         enableEdgeToEdge()
         if (savedInstanceState == null) {
             devLogin(intent) // a recreation (rotation, dark mode) keeps its session
@@ -22,13 +29,13 @@ class MainActivity : ComponentActivity() {
         }
         val devScan = DevScan.requested(intent) // a debug build's QR camera harness, no sign-in (DevScan)
         val devSettings = DevSettings.requested(intent) // a debug build's Settings page over a played account (DevSettings)
-        val devMemory = DevMemory.requested(intent) // a debug build's Memory page over a played gallery (DevMemory)
+        val devPage = Applications.devPage(intent) // a debug build's Memory page over a played gallery (DevMemory)
         setContent {
             VeyqTheme {
                 when {
                     devScan -> DevScan.Screen()
                     devSettings != null -> DevSettings.Screen(devSettings)
-                    devMemory -> DevMemory.Screen(model)
+                    devPage != null -> devPage(model)
                     else -> AppRoot(model)
                 }
             }

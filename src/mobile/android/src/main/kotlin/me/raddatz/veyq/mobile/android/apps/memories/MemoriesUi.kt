@@ -1,0 +1,241 @@
+package me.raddatz.veyq.mobile.android.apps.memories
+
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.MusicNote
+import androidx.compose.material.icons.outlined.MusicOff
+import androidx.compose.material.icons.outlined.Panorama
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import me.raddatz.veyq.mobile.android.R
+import me.raddatz.veyq.mobile.android.core.AppModel
+import me.raddatz.veyq.mobile.android.core.ApplicationUi
+import me.raddatz.veyq.mobile.android.core.ArrangedListScreen
+import me.raddatz.veyq.mobile.android.core.CreateAction
+import me.raddatz.veyq.mobile.android.core.CreateDialog
+import me.raddatz.veyq.mobile.android.core.GuestWriteColumn
+import me.raddatz.veyq.mobile.android.core.HeaderContribution
+import me.raddatz.veyq.mobile.android.core.InlineNaming
+import me.raddatz.veyq.mobile.android.core.KindPage
+import me.raddatz.veyq.mobile.android.core.LocalListStates
+import me.raddatz.veyq.mobile.android.core.LocalPalette
+import me.raddatz.veyq.mobile.android.core.NameDialog
+import me.raddatz.veyq.mobile.android.core.NotYou
+import me.raddatz.veyq.mobile.android.core.OwnAction
+import me.raddatz.veyq.mobile.android.core.PrimaryButton
+import me.raddatz.veyq.mobile.android.core.RecordNotice
+import me.raddatz.veyq.mobile.android.core.Registry
+import me.raddatz.veyq.mobile.android.core.Screen
+import me.raddatz.veyq.mobile.android.core.role
+import me.raddatz.veyq.mobile.android.core.say
+import me.raddatz.veyq.mobile.navigation.ApplicationId
+import me.raddatz.veyq.mobile.navigation.NodeAt
+import me.raddatz.veyq.mobile.navigation.ObjectRef
+import me.raddatz.veyq.mobile.sharing.GuestAccess
+import me.raddatz.veyq.mobile.sharing.GuestPage
+import me.raddatz.veyq.mobile.sharing.GuestScreen
+
+/** The header's banner action: its id in the kind's order (`AppKinds.headerOrder`). */
+private const val BANNER_ACTION = "banner"
+
+/**
+ * A Memory's or a chapter's own header action: its music played or stopped (core's `GalleryModel.headerActions`' MUSIC,
+ * ADR 0142 decision 6). Adding photos is the page's creating action (`CreateAction`), not the header's.
+ */
+@Composable
+private fun memoryHeader(node: NodeAt, model: AppModel): HeaderContribution {
+    val gallery = androidx.compose.runtime.remember(node) { model.galleryModel(node) } ?: return HeaderContribution()
+    // read here, whatever is offered: the action appears once the gallery's first read finds music
+    val state = gallery.state.collectAsStateWithLifecycle().value
+    val musicHere = state.musicHere
+    // the banner's dialog where whoever looks may set it, online (ADR 0144 decision 5; the web's header `banner`)
+    val banner = if (!state.editsBanner) null else OwnAction(
+        BANNER_ACTION,
+        androidx.compose.ui.res.stringResource(if (state.banner != null) R.string.memory_banner_change else R.string.memory_banner_add),
+        androidx.compose.material.icons.Icons.Outlined.Panorama,
+    ) { model.openBanner(gallery) }
+    return HeaderContribution(
+        // a Memory's and a chapter's ZIP, the web's archive (ADR 0149 decision 3: core's `MemoryExport` behind `NodeExport`)
+        download = { out -> model.downloadNode(node, out) },
+        actions = gallery.headerActions.filter { it.id == me.raddatz.veyq.mobile.memories.GalleryModel.MUSIC }.map { a ->
+            OwnAction(
+                a.id, say(gallery.label(a.id)!!),
+                if (musicHere) androidx.compose.material.icons.Icons.Outlined.MusicOff else androidx.compose.material.icons.Icons.Outlined.MusicNote,
+                a.slot,
+            ) { gallery.toggleMusic() }
+        } + listOfNotNull(banner),
+    )
+}
+
+/**
+ * New Memory (the web's `MemoryNodeDialog`): its name and, in a tenant or group space, **I was there** — ticked each time it
+ * opens, never remembered (ADR 0144 decision 2); ticked, the Memory is born listing its maker among its participants.
+ */
+@Composable
+private fun MemoryNameDialog(space: String, model: AppModel, onClose: () -> Unit, onCreate: suspend (String, Boolean, Boolean) -> String?) {
+    val offers = remember(space) { model.offersWasThere(space) }
+    // the place armed to come from the photos (uc.memory.place A1, the web's opt-in): offered where the map services are shown, unticked
+    val offersPlace = remember(space) { model.offersAutoPlace() }
+    var wasThere by remember { mutableStateOf(true) }
+    var autoPlace by remember { mutableStateOf(false) }
+    NameDialog(
+        stringResource(R.string.memory_create_memory_title), onClose,
+        extra = if (!offers && !offersPlace) null else { {
+            Column {
+                if (offersPlace) CheckRow(autoPlace, { autoPlace = it }, stringResource(R.string.memory_place_auto), stringResource(R.string.memory_place_auto_hint))
+                if (offers) CheckRow(wasThere, { wasThere = it }, stringResource(R.string.memory_participants_was_there), stringResource(R.string.memory_participants_was_there_hint))
+            }
+        } },
+    ) { name -> onCreate(name, offers && wasThere, offersPlace && autoPlace) }
+}
+
+/** One of New Memory's checkboxes: the whole row toggles it, its hint under its label. */
+@Composable
+private fun CheckRow(checked: Boolean, onChange: (Boolean) -> Unit, label: String, hint: String) {
+    androidx.compose.foundation.layout.Row(
+        Modifier.fillMaxWidth().padding(top = 8.dp)
+            .toggleable(checked, role = androidx.compose.ui.semantics.Role.Checkbox, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.material3.Checkbox(checked = checked, onCheckedChange = null)
+        Column(Modifier.padding(start = 12.dp)) {
+            Text(label)
+            Text(hint, style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
+        }
+    }
+}
+
+/** Memories' own list (its Memories), with "New Memory" (made at the top of the space shown, then opened; core's `MemoryCreate`). */
+@Composable
+private fun MemoriesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) -> Unit = model::open) {
+    var creating by remember { mutableStateOf(false) }
+    val space = s.shell.space ?: s.spaces.firstOrNull()?.scopeId
+    // the bar's Map tab: every located Memory of the same list on a map (ADR 0143 D6)
+    if (s.shell.selectedTab?.key == "memories.map") {
+        MemoriesMapTab(s, model)
+        return
+    }
+    CreateAction(stringResource(R.string.memory_new), shown = space != null && me.raddatz.veyq.mobile.AppKinds.Create.MEMORY in model.createsHere(isHome = false), onClick = { creating = true }, state = LocalListStates.current.of("app:MEMORIES")) { list, bottom ->
+        ArrangedListScreen(s.applicationList(ApplicationId.MEMORIES), onOpen = onOpen, state = list, bottom = bottom)
+    }
+    if (creating && space != null) MemoryNameDialog(space, model, onClose = { creating = false }) { name, wasThere, autoPlace ->
+        model.createMemory(space, null, name, wasThere, autoPlace)
+    }
+}
+
+/**
+ * A Memory's or a chapter's WRITE_ONLY link (the web's `MemoryShareBody`): the guest names itself — the record's notice
+ * before —, then adds photos and videos; it sees only what it sent while the link is open here, and removes its own.
+ */
+@Composable
+private fun GuestUploaderPage(up: me.raddatz.veyq.mobile.memories.GuestUploader, access: GuestAccess?, model: AppModel, snackbar: SnackbarHostState) {
+    val session by up.session.collectAsStateWithLifecycle()
+    val sent by up.sent.collectAsStateWithLifecycle()
+    val days = access?.guestWriteRecordDays
+    val origin = access?.origin.orEmpty()
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+        if (uris.isNotEmpty()) scope.launch {
+            val sources = withContext(Dispatchers.IO) { uris.mapNotNull { model.picked(it) }.map { model.source(it) } }
+            up.upload(sources)
+        }
+    }
+    GuestWriteColumn {
+        Text(stringResource(R.string.share_uploader_intro), color = role(LocalPalette.current.muted))
+        val named = session
+        if (named == null) {
+            InlineNaming(stringResource(R.string.share_name_visibility), days, origin) { up.name(it) }
+        } else if (up.offered) {
+            NotYou(named, up::forget)
+            RecordNotice(days, origin, named.identityId)
+            PrimaryButton(stringResource(R.string.share_add_photos), Modifier.testTag("guest-uploader-pick")) {
+                pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
+            }
+            Text(stringResource(R.string.share_uploader_session), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
+            for (s in sent) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(s.name, modifier = Modifier.weight(1f).testTag("guest-uploader-sent"))
+                TextButton(onClick = {
+                    scope.launch {
+                        val ok = withContext(Dispatchers.IO) { up.remove(s.mediaId) }
+                        if (!ok) snackbar.showSnackbar(context.getString(R.string.share_delete_failed))
+                    }
+                }) { Text(stringResource(R.string.entry_delete)) }
+            }
+        }
+    }
+}
+
+/** A link's Memory or chapter: its gallery with a guest's access, or — on a WRITE_ONLY link — the uploader. */
+@Composable
+private fun MemoryGuestPage(page: GuestPage, screen: GuestScreen, model: AppModel, snackbar: SnackbarHostState) {
+    val scope = rememberCoroutineScope()
+    val view = screen.view
+    when (page) {
+        is GuestPage.Gallery -> {
+            val session = view.access?.session?.collectAsStateWithLifecycle()?.value
+            DisposableEffect(page.model) { onDispose { page.model.close() } }
+            MemoryGallery(page.model, model, guest = true, canAdd = session != null, onChapter = { c -> scope.launch(Dispatchers.IO) { view.open(c.nodeId) } })
+        }
+        is GuestPage.Uploader -> GuestUploaderPage(page.model, view.access, model, snackbar)
+        else -> {}
+    }
+}
+
+/** New Memory at the level shown (core's `MemoryCreate`), the web's `createDialog` of a Memory. */
+private val newMemory: CreateDialog = { _, model, space, folder, onClose ->
+    if (space != null) MemoryNameDialog(space, model, onClose = onClose) { name, wasThere, autoPlace ->
+        model.createMemory(space, folder, name, wasThere, autoPlace)
+    }
+}
+
+/**
+ * Memories' UI as it registers into the core UI (ADR 0154 decision 3; the web's `registerMemories`): the Memory's and the
+ * chapter's page — the music and the banner it contributes to core's header, its gallery (`MemoryScreen`), a link's
+ * gallery or uploader —, its own list with the bar's Map tab, New Memory, and its section of a person's profile.
+ */
+internal object MemoriesUi {
+    private val memory = KindPage(
+        header = { node, model -> memoryHeader(node, model) },
+        body = { ref, _, model -> MemoryScreen(ref, model) },
+        guest = { page, screen, model, snackbar -> MemoryGuestPage(page, screen, model, snackbar) },
+    )
+
+    fun register(registry: Registry) {
+        registry.kind(memory, "MEMORY", "CHAPTER")
+        registry.application(
+            ApplicationUi(
+                ApplicationId.MEMORIES,
+                list = { s, model, onOpen -> MemoriesList(s, model, onOpen) },
+                creates = mapOf(me.raddatz.veyq.mobile.AppKinds.Create.MEMORY to newMemory),
+                personSection = { profile, model, frame -> PersonMemoriesSection(profile, model, frame) },
+            ),
+        )
+    }
+}

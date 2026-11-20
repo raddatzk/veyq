@@ -2,6 +2,7 @@ package me.raddatz.veyq.mobile.android
 
 import android.content.Intent
 import androidx.compose.runtime.Composable
+import me.raddatz.veyq.mobile.android.core.Screen
 
 /** A release build has no Settings harness: the page is reached only from the drawer of a signed-in account. */
 object DevSettings {

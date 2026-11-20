@@ -18,6 +18,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import me.raddatz.veyq.mobile.android.core.QrCamera
+import me.raddatz.veyq.mobile.android.core.Screen
+import me.raddatz.veyq.mobile.android.core.qrDecodeTiming
+import me.raddatz.veyq.mobile.android.core.text
 import me.raddatz.veyq.mobile.qr.QrFrames
 import me.raddatz.veyq.mobile.qr.QrScan
 

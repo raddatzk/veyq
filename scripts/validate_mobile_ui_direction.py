@@ -102,7 +102,7 @@ CORE_ROOTS: dict[str, str] = {
 }
 
 # The platforms whose UI rules (a) and (b) are on; each is switched on in its phase of cr-apps-core-ui-layer.
-PLATFORMS: dict[str, bool] = {"android": False}
+PLATFORMS: dict[str, bool] = {"android": True}
 
 ANDROID_SRC = MOBILE / "android" / "src"
 ANDROID_PACKAGE = "me.raddatz.veyq.mobile.android"
