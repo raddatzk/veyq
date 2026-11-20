@@ -28,9 +28,9 @@ web's rules.
 
 - **Read first:** ADR 0153 (whole), ADR 0140 decisions 2, 4, 7, 8 and 11, ADR 0109, ADR 0108 decision 5, ADR 0145,
   `src/mobile/CLAUDE.md` § Nothing on disk the app did not choose, § Prove your work.
-- **Order:** after [cr-app-offline-pots-and-space-media](cr-app-offline-pots-and-space-media.md) (a Pot must open offline
-  before an entry can be added to it). [cr-app-background-sync](cr-app-background-sync.md) builds on this one's sender.
-- **Where what runs:** as cr-app-offline-pots-and-space-media § Context; live cases against the dev backend as a
+- **Order:** after ADR 0153 decisions 6 and 7 (built 2026-11-20: a Pot opens offline, so an entry can be added to
+  it). [cr-app-background-sync](cr-app-background-sync.md) builds on this one's sender.
+- **Where what runs:** as ADR 0153's passes ran them (its Consequences); live cases against the dev backend as a
   throwaway (`pnpm run throwaway:account` in `src/web/`).
 - **Out of scope:** an online upload cut by the network (stays ADR 0145's *Retry*); every write ADR 0153 decision 3 does
   not list; a background send (cr-app-background-sync).
