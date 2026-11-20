@@ -732,7 +732,7 @@ final class AppModel {
         servers = ShellWords.shared.switcher(accounts: session.accounts, hidden: hidden, current: account, tenant: tenant).compactMap { e in
             session.accounts.first { $0.key == e.connection }.map { ServerEntry(account: $0, entry: e) }
         }
-        drawerSections = l.drawerSections
+        drawerSections = shellModel?.drawerSections(lists: l) ?? []
         let wasSearching = shell.searching
         shell = state.shell
         // the search left for anything but what it opened (whose back returns to it): the field empties (core's `close`)

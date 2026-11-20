@@ -117,7 +117,7 @@ class GuestDoorsTest {
             v.open(f.file)
             val model = assertIs<GuestPage.File>(v.page.value).model
             val header = withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(10_000) { model.state.first { it.header != null }.header!! } }
-            assertEquals(replaces, header.own.any { it.id == FileModel.REPLACE }, "$role's file offers replace = ${!replaces}")
+            assertEquals(replaces, header.own.any { it == me.raddatz.veyq.mobile.navigation.HeaderAction.REPLACE }, "$role's file offers replace = ${!replaces}")
             assertTrue(header.facts.hasContent)
             model.close()
         }

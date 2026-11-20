@@ -273,9 +273,9 @@ struct GuestLinkView: View {
                         if let file = held.page as? GuestPage.File { GuestFileActions(model: model, held: held, file: file.model) }
                         // a Memory's music played or stopped, as the member's header offers it (#1034)
                         if let g = held.page as? GuestPage.Gallery, let gallery = model.galleryModel(g.node), let state = model.galleryState(g.node),
-                           gallery.headerActions.contains(where: { $0.id == GalleryModel.companion.MUSIC }) {
+                           gallery.headerActions.contains(HeaderAction.music) {
                             Button { gallery.toggleMusic() } label: {
-                                Label(gallery.label(id: GalleryModel.companion.MUSIC).map { say($0) } ?? "", systemImage: state.musicHere ? "stop.fill" : "music.note")
+                                Label(gallery.label(id: .music).map { say($0) } ?? "", systemImage: state.musicHere ? "stop.fill" : "music.note")
                             }
                             .accessibilityIdentifier("guest-music")
                         }
@@ -516,9 +516,9 @@ private struct GuestFileActions: View {
                 }
             // Replace where the file's rights hold it (`FileRights`, the header's own): a guest not named yet is asked its
             // name at the write by the core (`GuestAccess.replaceAsking`), never here
-            if h.own.contains(where: { $0.id == FileModel.companion.REPLACE }) {
+            if h.own.contains(HeaderAction.replace) {
                 Button { if file.chooseReplace() { replacing = true } } label: {
-                    Label(h.label(id: FileModel.companion.REPLACE).map { say($0) } ?? "", systemImage: "square.and.arrow.down.on.square")
+                    Label(h.label(id: .replace).map { say($0) } ?? "", systemImage: "square.and.arrow.down.on.square")
                 }
                 .fileImporter(isPresented: $replacing, allowedContentTypes: [.item]) { result in
                     if case .success(let url) = result, let access = held.screen.view.access { model.guestReplace(access, file: file, url: url) }

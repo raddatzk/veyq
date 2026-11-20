@@ -36,15 +36,21 @@ data class ArrangedList(
 )
 
 /**
- * A drawer section that lists nodes or applications. One with nothing in it is not shown at all — no heading, no
- * "Nothing yet" (owner 2026-11-19, on every app).
+ * A drawer section (ADR 0154 decision 2): the drawer's New below the switcher (ADR 0122 decision 2; owner 2026-11-20:
+ * on all four apps, beside the level's own), then the sections that list nodes or applications. One with nothing in it
+ * is not shown at all — no heading, no "Nothing yet" (owner 2026-11-19, on every app). Every platform draws each shown
+ * section, in this order.
  */
+@Plan
 enum class DrawerSection {
+    /** "New" (`ShellModel.drawerCreates`): what it makes lands at the shown space's top, wherever the shell is. */
+    NEW,
     FAVORITES, RECENT, APPLICATIONS;
 
     companion object {
-        /** The sections the drawer shows, in its order: only those with something in them. */
-        fun shown(drawer: ArrangedList, applications: List<ApplicationId>): List<DrawerSection> = buildList {
+        /** The sections the drawer shows, in its order: only those with something in them ([creates]: New offers any). */
+        fun shown(drawer: ArrangedList, applications: List<ApplicationId>, creates: Boolean = false): List<DrawerSection> = buildList {
+            if (creates) add(NEW)
             if (drawer.favorites.isNotEmpty()) add(FAVORITES)
             if (drawer.recent.isNotEmpty()) add(RECENT)
             if (applications.isNotEmpty()) add(APPLICATIONS)

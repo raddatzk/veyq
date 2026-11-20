@@ -2380,7 +2380,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             servers = me.raddatz.veyq.mobile.navigation.ShellWords.switcher(session.accounts, hidden, account, tenant).mapNotNull { e ->
                 session.accounts.firstOrNull { it.key == e.connection }?.let { ServerEntry(it, e) }
             },
-            drawerSections = l.drawerSections,
+            drawerSections = shellModel?.drawerSections(l).orEmpty(),
             applications = l.applications,
             filters = l.filters,
             drawer = l.drawer,

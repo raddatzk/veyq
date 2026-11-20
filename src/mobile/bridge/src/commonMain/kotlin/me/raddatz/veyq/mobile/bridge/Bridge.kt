@@ -2857,7 +2857,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             switcher = ShellWords.switcher(parts.session.accounts, parts.hidden, open.account, open.tenant).map {
                 ShellShown.ShownSwitcherEntry(it.connection, it.tenant, it.name, it.detail, it.line, it.current)
             },
-            drawerSections = lists.drawerSections,
+            drawerSections = open.models.shell?.drawerSections(lists).orEmpty(),
             space = space,
             spaceName = ShellWords.space(space),
             switcherSubtitle = ShellWords.switcherSubtitle(space, open.tenant.name, open.account.label),
@@ -2984,8 +2984,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         val s = m.current
         val page = h.file.value?.let { filePages[it] }?.current?.header
         val gallery = h.gallery.value?.let { galleries[it] }
-        fun word(id: String) = page?.label(id) ?: gallery?.label(id) ?: m.label(id, hasCover = s.cover != null)
-        fun actions(ids: List<String>) = ids.map { HeaderShown.PlanAction(it, word(it)) }
+        fun word(id: me.raddatz.veyq.mobile.navigation.HeaderAction) = page?.label(id) ?: gallery?.label(id) ?: m.label(id, hasCover = s.cover != null)
+        // the wire keeps the entry's serial name until the bridge carries the enum (cr-apps-structure-from-core-plans phase 2)
+        fun actions(ids: List<me.raddatz.veyq.mobile.navigation.HeaderAction>) = ids.map {
+            HeaderShown.PlanAction((kotlinx.serialization.json.Json.encodeToJsonElement(me.raddatz.veyq.mobile.navigation.HeaderAction.serializer(), it) as kotlinx.serialization.json.JsonPrimitive).content, word(it))
+        }
         val own = page?.own ?: gallery?.headerActions.orEmpty()
         return HeaderShown(
             node = m.node,

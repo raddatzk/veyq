@@ -25,7 +25,7 @@ import me.raddatz.veyq.mobile.memories.music.MusicTrack
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.blob.FileSave
 import me.raddatz.veyq.mobile.navigation.NodeAt
-import me.raddatz.veyq.mobile.navigation.NodeHeader
+import me.raddatz.veyq.mobile.navigation.HeaderAction
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.LivePoll
@@ -58,7 +58,7 @@ import me.raddatz.veyq.mobile.words.Notice
  *
  * **Its music** (ADR 0142 decisions 4–6 and 13, with [music]: the account's one player): the node's audio media are its
  * music, never rows — [State.music], listed and numbered as its Music view lists them ([MusicQueue.tracks]) —; the header's
- * music action plays or stops them ([MUSIC], [toggleMusic]), a track's delete is a medium's ([trash]), and a video the
+ * music action plays or stops them ([HeaderAction.MUSIC], [toggleMusic]), a track's delete is a medium's ([trash]), and a video the
  * lightbox plays interrupts what plays ([Lightbox.videoPlaying]).
  *
  * Each app draws [state] (or [watch]); [close] when the page goes (a lightbox on it closes with it).
@@ -403,22 +403,40 @@ class GalleryModel(
 
     /**
      * The page's own header actions, joining core's where the kind's order puts them (`AppKinds.headerOrder`): adding
-     * photos and videos where the rights let whoever looks upload.
+     * photos and videos where the rights let whoever looks upload, the music where it has some, the banner where it may be
+     * added or changed (the web's `MemoryDetail` header: `upload`, `music`, `banner`). Each is an entry of the header's
+     * plan every platform draws (ADR 0154 decision 2); none is the page body's.
      */
-    val headerActions: List<NodeHeader.Action> get() = listOfNotNull(
-        NodeHeader.Action(UPLOAD).takeIf { rights.upload },
+    val headerActions: List<HeaderAction> get() = listOfNotNull(
+        HeaderAction.UPLOAD.takeIf { rights.upload },
         // offline too: a pinned node's music plays (ADR 0142 decision 12)
-        NodeHeader.Action(MUSIC).takeIf { music != null && (current.hasMusic || current.musicHere) },
+        HeaderAction.MUSIC.takeIf { music != null && (current.hasMusic || current.musicHere) },
+        HeaderAction.BANNER.takeIf { current.editsBanner },
+    )
+
+    /**
+     * What a medium's tile offers beside opening it (ADR 0154 decision 2; the web's `MediaGrid` tile: open, and the mark
+     * toggle where the rights allow — nothing else): its mark, once the caller's own set is read. A platform draws it through
+     * its own gesture (a context menu, a long press); a Mac's *Open in New Window* is the platform's, beside it.
+     */
+    fun tileActions(row: Row): List<TileAction> = listOfNotNull(
+        TileAction.MARK.takeIf { current.marking && current.marksLoaded && !row.blocked },
     )
 
     /** What the page's own New makes here ([MemoryCreate.offered] on this node, where the rights allow): a chapter on a Memory. */
     val creates: List<String> get() = MemoryCreate.offered(node.kind).filter { it == MemoryCreate.CHAPTER && rights.createChapter }
 
-    /** An own header action's words ([headerActions]: adding photos and videos, the music's play or stop); null for another id. */
-    fun label(id: String): Msg? = when (id) {
-        UPLOAD -> Msg.MEMORY_ADD
-        MUSIC -> if (current.musicHere) Msg.MUSIC_STOP else Msg.MUSIC_PLAY
-        else -> null
+    /**
+     * An own header action's words ([headerActions]: adding photos and videos, the music's play or stop, the banner's add or
+     * change); null for one this page does not offer.
+     */
+    fun label(id: HeaderAction): Msg? = when (id) {
+        HeaderAction.UPLOAD -> Msg.MEMORY_ADD
+        HeaderAction.MUSIC -> if (current.musicHere) Msg.MUSIC_STOP else Msg.MUSIC_PLAY
+        HeaderAction.BANNER -> if (current.banner != null) Msg.MEMORY_BANNER_CHANGE else Msg.MEMORY_BANNER_ADD
+        HeaderAction.FAVORITE, HeaderAction.SHARE, HeaderAction.RENAME, HeaderAction.MOVE, HeaderAction.COPY, HeaderAction.COVER,
+        HeaderAction.DOWNLOAD, HeaderAction.OFFLINE, HeaderAction.REPORT, HeaderAction.DELETE, HeaderAction.REPLACE,
+        HeaderAction.SEND, HeaderAction.OPEN_OWN_PAGE, HeaderAction.REPORT_SHARED -> null
     }
 
     // ---- the music ----
@@ -1182,12 +1200,6 @@ class GalleryModel(
     companion object {
         const val MEMORY = "MEMORY"
         const val CHAPTER = "CHAPTER"
-
-        /** The page's own header action: photos and videos added ([upload]). */
-        const val UPLOAD = "upload"
-
-        /** The page's own header action: its music played or stopped ([toggleMusic], ADR 0142 decision 6). */
-        const val MUSIC = "music"
 
         /**
          * Memory or chapter [node] as the page an app opens (Memories' object): a chapter is no object of a list

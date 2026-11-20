@@ -17,7 +17,7 @@ import me.raddatz.veyq.mobile.blob.FileSave
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.navigation.NodeAt
-import me.raddatz.veyq.mobile.navigation.NodeHeader
+import me.raddatz.veyq.mobile.navigation.HeaderAction
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Piece
@@ -115,19 +115,21 @@ class FileModel(
     /** What the file contributes to its header: the doors' facts, its own actions in plan order, their words, its name. */
     data class Header(
         val facts: AppKinds.Facts,
-        /** The file's own actions, Replace and Send a copy where offered ([REPLACE], [SEND]). */
-        val own: List<NodeHeader.Action>,
+        /** The file's own actions, Replace and Send a copy where offered ([HeaderAction.REPLACE], [HeaderAction.SEND]). */
+        val own: List<HeaderAction>,
         val replaceWord: Msg,
         /** What its download (the file itself) is saved as. */
         val downloadName: String,
         /** The sealed type of its content (a claim), what a copy handed on is typed as. */
         val mediaType: String,
     ) {
-        /** An own action's words; null for another id. */
-        fun label(id: String): Msg? = when (id) {
-            REPLACE -> replaceWord
-            SEND -> Msg.FILE_SEND
-            else -> null
+        /** An own action's words; null for one the file does not offer. */
+        fun label(id: HeaderAction): Msg? = when (id) {
+            HeaderAction.REPLACE -> replaceWord
+            HeaderAction.SEND -> Msg.FILE_SEND
+            HeaderAction.FAVORITE, HeaderAction.SHARE, HeaderAction.RENAME, HeaderAction.MOVE, HeaderAction.COPY, HeaderAction.COVER,
+            HeaderAction.DOWNLOAD, HeaderAction.OFFLINE, HeaderAction.REPORT, HeaderAction.DELETE, HeaderAction.UPLOAD,
+            HeaderAction.MUSIC, HeaderAction.BANNER, HeaderAction.OPEN_OWN_PAGE, HeaderAction.REPORT_SHARED -> null
         }
     }
 
@@ -181,7 +183,7 @@ class FileModel(
     fun chooseReplace(): Boolean {
         if (!door.online()) return false
         val f = file ?: return false
-        if (current.header?.own?.any { it.id == REPLACE } != true) return false
+        if (current.header?.own?.any { it == HeaderAction.REPLACE } != true) return false
         chosen = f
         return true
     }
@@ -247,8 +249,8 @@ class FileModel(
         val header = Header(
             facts = AppKinds.Facts(canWrite = rights.replace, hasContent = f.hasContent && rights.download),
             own = listOfNotNull(
-                NodeHeader.Action(REPLACE).takeIf { rights.replace },
-                NodeHeader.Action(SEND, NodeHeader.Slot.MENU).takeIf { rights.send },
+                HeaderAction.REPLACE.takeIf { rights.replace },
+                HeaderAction.SEND.takeIf { rights.send },
             ),
             replaceWord = DepotFiles.replaceWord(f),
             downloadName = DepotFiles.downloadName(f, node.name),
@@ -300,10 +302,5 @@ class FileModel(
 
         /** What the page says above a text that was cut at [FileView.TEXT_CAP]; null for a whole one and any other content. */
         fun cut(shown: Shown): Notice? = (shown as? Shown.Text)?.takeIf { it.truncated }?.let { Notice(Msg.FILE_TEXT_TRUNCATED) }
-
-        /** The file's own header action: replace its content (or the first upload into an empty file). */
-        const val REPLACE = "replace"
-        /** The file's own header action on a phone: a copy handed to another app through the system's share sheet. */
-        const val SEND = "send"
     }
 }

@@ -3,6 +3,7 @@ package me.raddatz.veyq.mobile.sharing
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import me.raddatz.veyq.mobile.navigation.HeaderAction
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.ReportSheet
 import me.raddatz.veyq.mobile.session.NodeReport
@@ -59,6 +60,26 @@ class BookmarkPage(val node: NodeAt, private val door: Door) {
         } else {
             State.OnItsOwn(b.link.host)
         }
+    }
+
+    /**
+     * The kept link's own header actions, joining core's where its kind's order puts them (`AppKinds.headerOrder`; ADR 0150
+     * decision 6, the web's `BookmarkDetail` and `coreNodeActions.ts`' bookmark report): once its meta reads, *Open on its
+     * own page* ([openOwnPage]) and *Report shared content* ([reportShared]) beside core's report, which on a kept link
+     * reports its name only ([reportNameSheet]). Entries of the header's plan every platform draws (ADR 0154 decision 2).
+     */
+    fun headerActions(state: State = this.state.value): List<HeaderAction> = when (state) {
+        State.Loading, State.Unreadable -> emptyList()
+        is State.InPlace, is State.OnItsOwn -> listOf(HeaderAction.OPEN_OWN_PAGE, HeaderAction.REPORT_SHARED)
+    }
+
+    /** An own header action's words ([headerActions]); null for one the kept link does not offer. */
+    fun label(id: HeaderAction): me.raddatz.veyq.mobile.words.Msg? = when (id) {
+        HeaderAction.OPEN_OWN_PAGE -> me.raddatz.veyq.mobile.words.Msg.BOOKMARK_OPEN_OWN_PAGE
+        HeaderAction.REPORT_SHARED -> me.raddatz.veyq.mobile.words.Msg.BOOKMARK_REPORT_SHARE
+        HeaderAction.FAVORITE, HeaderAction.SHARE, HeaderAction.RENAME, HeaderAction.MOVE, HeaderAction.COPY, HeaderAction.COVER,
+        HeaderAction.DOWNLOAD, HeaderAction.OFFLINE, HeaderAction.REPORT, HeaderAction.DELETE, HeaderAction.UPLOAD,
+        HeaderAction.MUSIC, HeaderAction.BANNER, HeaderAction.REPLACE, HeaderAction.SEND -> null
     }
 
     /** *Open on its own page* (the header's `open-own-page`): the link's screen above the shell, its password handed. */

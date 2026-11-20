@@ -14,20 +14,17 @@ enum MemoriesUi {
     private static let memory = KindPage(header: { node, model in
         let download: (String) async -> [NodeExport.Skipped]? = { await model.downloadNode(node, to: $0) }
         guard let gallery = model.galleryModel(node), let state = model.galleryState(node) else { return HeaderContribution(download: download) }
-        let music = gallery.headerActions.filter { $0.id == GalleryModel.companion.MUSIC }.map { a in
-            OwnAction(id: a.id, label: gallery.label(id: a.id).map { say($0) } ?? a.id, systemImage: state.musicHere ? "stop.fill" : "music.note", slot: a.slot) {
+        let music = gallery.headerActions.filter { $0 == .music }.map { a in
+            OwnAction(id: a, label: gallery.label(id: a).map { say($0) } ?? a.name, systemImage: state.musicHere ? "stop.fill" : "music.note") {
                 gallery.toggleMusic()
             }
         }
-        let banner = state.editsBanner ? [OwnAction(id: bannerAction, label: say(state.banner != nil ? .memoryBannerChange : .memoryBannerAdd), systemImage: "photo.artframe") {
+        let banner = state.editsBanner ? [OwnAction(id: .banner, label: say(state.banner != nil ? .memoryBannerChange : .memoryBannerAdd), systemImage: "photo.artframe") {
             model.openBanner(gallery)
         }] : []
         // its download, the web's archive of the Memory (core's `MemoryExport`); its copy is core's door (ADR 0149 decision 3)
         return HeaderContribution(download: download, actions: music + banner)
     }, body: { ref, _, model in AnyView(MemoryScreen(model: model, ref: ref)) }, guest: { page, held, model in guest(page, held, model) })
-
-    /// The header's banner action: its id in the kind's order (`AppKinds.headerOrder`).
-    private static let bannerAction = "banner"
 
     static func register(_ registry: Registry.Type) {
         registry.kind(memory, "MEMORY", "CHAPTER")

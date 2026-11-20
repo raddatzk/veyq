@@ -686,6 +686,9 @@ impl Shell {
         for kind in &shown.drawer_sections {
             let section = adw::SidebarSection::new();
             match kind {
+                // the drawer's New stands in the sidebar's header until this app draws the plan whole
+                // (cr-apps-structure-from-core-plans phase 6)
+                DrawerSection::New => continue,
                 DrawerSection::Favorites | DrawerSection::Recent => {
                     let (title, refs) = match kind {
                         DrawerSection::Favorites => (words::drawer_favorites(), &state.lists.drawer.favorites),

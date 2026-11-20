@@ -5,6 +5,7 @@ import me.raddatz.veyq.mobile.expenses.PotCreate
 import me.raddatz.veyq.mobile.expenses.PotExport
 import me.raddatz.veyq.mobile.expenses.PotRekey
 import me.raddatz.veyq.mobile.expenses.PotSession
+import me.raddatz.veyq.mobile.navigation.HeaderAction as H
 import me.raddatz.veyq.mobile.session.NodeRekey
 
 /**
@@ -206,14 +207,15 @@ object AppKinds {
     }
 
     /**
-     * A kind's header priority (the web's `header.order` of its descriptor, `NodeHeader.plan`): the ids listed first, in
-     * this order. A kind not listed has none: core's merge order alone.
+     * A kind's header priority (the web's `header.order` of its descriptor, `NodeHeader.plan`): the actions listed first, in
+     * this order. A kind not listed has none: core's merge order alone. `HeaderOrderIsTheWebsTest` reads each kind's
+     * order from the web's own registration (`registry.ts`, each application's `register.ts`, `core/bookmark/kind.ts`).
      */
-    fun headerOrder(kind: String): List<String> = when (kind) {
-        FOLDER, DROPBOX, PotSession.KIND -> listOf("favorite", "share", "download", "move", "copy")
-        FILE -> listOf("favorite", "download", "share", "replace", "move", "copy")
-        MEMORY, CHAPTER -> listOf("favorite", "upload", "share", "music", "download", "banner", "move", "copy")
-        SHARE_BOOKMARK -> listOf("open-own-page", "favorite", "move")
+    fun headerOrder(kind: String): List<H> = when (kind) {
+        FOLDER, DROPBOX, PotSession.KIND -> listOf(H.FAVORITE, H.SHARE, H.DOWNLOAD, H.MOVE, H.COPY)
+        FILE -> listOf(H.FAVORITE, H.DOWNLOAD, H.SHARE, H.REPLACE, H.MOVE, H.COPY)
+        MEMORY, CHAPTER -> listOf(H.FAVORITE, H.UPLOAD, H.SHARE, H.MUSIC, H.DOWNLOAD, H.BANNER, H.MOVE, H.COPY)
+        SHARE_BOOKMARK -> listOf(H.OPEN_OWN_PAGE, H.FAVORITE, H.MOVE)
         else -> emptyList()
     }
 
@@ -235,7 +237,11 @@ object AppKinds {
         else -> me.raddatz.veyq.mobile.words.Msg.NOT_BUILT
     }
 
-    /** What "New" creates at a level (the web's menu); each app wires each to its own dialog or picker. */
+    /**
+     * What "New" creates at a level (the web's menu); each app wires each to its own dialog or picker. An entry of a plan
+     * (ADR 0154 decision 2: `LevelPlan.creates`, `ShellModel.drawerCreates`): every platform draws each one it is handed.
+     */
+    @me.raddatz.veyq.mobile.navigation.Plan
     @kotlinx.serialization.Serializable
     enum class Create(val word: me.raddatz.veyq.mobile.words.Msg) {
         FOLDER(me.raddatz.veyq.mobile.words.Msg.FOLDER_NEW),

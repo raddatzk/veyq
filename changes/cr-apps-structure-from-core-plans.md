@@ -75,9 +75,28 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
 
 ## Phases
 
-- [ ] **1 core** — S1–S5; the orders' tests reading the web; Q1–Q4's answers. · Done when: `:core:jvmTest
+- [x] **1 core** — S1–S5; the orders' tests reading the web; Q1–Q4's answers. · Done when: `:core:jvmTest
   :core:macosArm64Test` green. **Bites:** (a) Memory's `headerOrder` swapped against `register.ts` → the web-order test
   red; (b) Delete out of `last` → red; (c) `SettingsSection` order changed → its test red.
+  **Built** (2026-11-20). `@Plan` (`navigation/Plan.kt`) marks a plan's enum: `HeaderAction` (core's ten, the pages' own
+  `UPLOAD`, `MUSIC`, `BANNER`, `REPLACE`, `SEND`, `OPEN_OWN_PAGE`, `REPORT_SHARED`; serial names the web's ids, each its
+  `slot`), `LevelTool` (`TRASH`, `VIEW`), `DrawerSection` (`NEW` first), `SettingsSection`, `SignInEntry`, `LinkAction`,
+  `TileAction`, `AppKinds.Create`. S1: `NodeHeader.Plan` of `HeaderAction`, `headerOrder` of them; the pages hand their own
+  (`GalleryModel.headerActions` with the banner, `FileModel.Header.own`, `BookmarkPage.headerActions`, each with its
+  `label`); a kept link's report is its name's (`BOOKMARK_REPORT_NAME`), its share's right after it, the delete last. S2:
+  `ShellModel.levelPlan(shell)` → `LevelPlan(creates, tools)` (New where `canCreateHere`, the trash where
+  `trashOffered`, the view switch but on the Memories map), `drawerCreates()` and `drawerSections(lists)` (`Lists`' own
+  getter is internal now). S3: `SettingsSection` in the web's order with the app-only ones beside their kin and `SIGN_OUT`
+  last (`search_words_sign_out`), drawn from `AccountSettings.State.sections(maps, appearance)`. S4: `SignInPlan.entries`
+  (Submit, Cancel while adding, show a link, scan one with a camera, the kit's open and scan, *Open a link*). S5:
+  `LevelRow.plan(rights)` (`ShellModel.rowPlan(row)`), `GalleryModel.tileActions(row)`, `ShareSheet.rowActions(row)`.
+  Tests: `PlansAreTheWebsTest` (jvmTest: each kind's `header.order` from its registration, core's merge order from
+  `coreNodeActions.ts`, the Settings order from `sections.ts`), `NodeHeaderTest`, `PlansTest`, `QueuedOverlayTest`'s tile.
+  Each bite seen red (`eachKindsHeaderOrderIsItsRegistrations`; five `NodeHeaderTest` cases; `theSettingsSections…`).
+  Android and Apple compile on it with their behaviour kept (their own entries now `HeaderAction`s, a `NEW` arm drawing
+  nothing until phase 4). **Deviations:** no `SELECT` tool — no app level selects (#1049); a level's tabs stay
+  `Shell.barTabs` (the bar's, ADR 0122), no `LevelPlan` field; the account's address sits beside it as `ACCOUNT`, `EMAIL`,
+  `PASSWORD`.
 - [ ] **2 bridge** — the enums and plans on the wire, generated into C# and Rust. · Done when: `:bridge:jvmTest` green.
 - [ ] **3 the guard** — S6, on for the core and the bridge, each platform switched on in its phase. · Done when: the
   guard green; `validate_guard_gaps.py` run once. **Bites:** a `default:` planted over `HeaderAction` in a Swift file,

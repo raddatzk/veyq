@@ -34,12 +34,6 @@ import me.raddatz.veyq.mobile.android.R
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.sharing.BookmarkPage
 
-/** The header's own action that opens a kept link on its own page (`AppKinds.headerOrder`'s `open-own-page`). */
-internal const val OPEN_OWN_PAGE = "open-own-page"
-
-/** The header's own action that reports a kept link's content to the share's own operator (ADR 0150 decision 6). */
-internal const val REPORT_SHARED = "report-shared"
-
 /**
  * A kept link's header contribution (ADR 0150 decision 6; the web's `BookmarkDetail`): *Open on its own page* first, and
  * *Report shared content* beside core's report — which, on a bookmark, reports its name only to this instance (core's
@@ -52,8 +46,8 @@ internal fun bookmarkHeader(node: NodeAt, model: AppModel): HeaderContribution {
     if (state is BookmarkPage.State.Loading || state is BookmarkPage.State.Unreadable) return HeaderContribution()
     return HeaderContribution(
         actions = listOf(
-            OwnAction(OPEN_OWN_PAGE, stringResource(R.string.bookmark_open_own_page), Icons.AutoMirrored.Outlined.OpenInNew) { model.bookmarkOwnPage(page) },
-            OwnAction(REPORT_SHARED, stringResource(R.string.bookmark_report_share), Icons.Outlined.Flag, me.raddatz.veyq.mobile.navigation.NodeHeader.Slot.LAST) {
+            OwnAction(me.raddatz.veyq.mobile.navigation.HeaderAction.OPEN_OWN_PAGE, stringResource(R.string.bookmark_open_own_page), Icons.AutoMirrored.Outlined.OpenInNew) { model.bookmarkOwnPage(page) },
+            OwnAction(me.raddatz.veyq.mobile.navigation.HeaderAction.REPORT_SHARED, stringResource(R.string.bookmark_report_share), Icons.Outlined.Flag) {
                 model.bookmarkReportShared(page)
             },
         ),

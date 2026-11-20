@@ -140,6 +140,20 @@ class ShareSheet(
     fun row(shareId: String): LinkRow? = rows().firstOrNull { it.link.shareId == shareId }
 
     companion object {
+        /**
+         * What [row]'s menu offers, in the web's order (`FolderShareDialog`'s row: copy, edit, renew, switch on, switch off,
+         * delete; ADR 0154 decision 2): each where [LinkRow] grants it. A platform draws every entry through its own gesture or
+         * buttons; a system share sheet's own rows are the system's.
+         */
+        fun rowActions(row: LinkRow): List<LinkAction> = listOfNotNull(
+            LinkAction.COPY.takeIf { row.canCopy },
+            LinkAction.EDIT.takeIf { row.canEdit },
+            LinkAction.RENEW.takeIf { row.canRenew },
+            LinkAction.REACTIVATE.takeIf { row.canReactivate },
+            LinkAction.SWITCH_OFF.takeIf { row.canSwitchOff },
+            LinkAction.DELETE.takeIf { row.canDelete },
+        )
+
         /** The share of space [scopeId]'s top level: "Add files only" alone, its drop box made at the top ([Door.createDropBox]). */
         fun topLevel(scopeId: String, door: Door, now: () -> Long): ShareSheet =
             ShareSheet(NodeAt(scopeId, "", NodeRef.FOLDER, ""), door, now, atTopLevel = true)
@@ -301,4 +315,26 @@ class ShareSheet(
         reread()
         current
     }
+}
+
+/**
+ * What a share link's row offers (ADR 0154 decision 2, [ShareSheet.rowActions]). Their words: [COPY] `share_copy`,
+ * [EDIT] `share_edit`, [RENEW] `share_renew`, [REACTIVATE] `share_reactivate`, [SWITCH_OFF] `share_switch_off`, [DELETE]
+ * `share_delete` — each platform's catalog entry of that key.
+ */
+@Plan
+@kotlinx.serialization.Serializable
+enum class LinkAction {
+    /** The link's address copied, or handed to the system's share sheet ([LinkRow.canCopy]). */
+    @kotlinx.serialization.SerialName("copy") COPY,
+    /** The open link edited in place through the form ([ShareSheet.edit]). */
+    @kotlinx.serialization.SerialName("edit") EDIT,
+    /** A new address, the old closed, asked first ([ShareSheet.askRenew]). */
+    @kotlinx.serialization.SerialName("renew") RENEW,
+    /** Switched on again at its old address ([ShareSheet.reactivate]). */
+    @kotlinx.serialization.SerialName("reactivate") REACTIVATE,
+    /** Switched off at once ([ShareSheet.switchOff]). */
+    @kotlinx.serialization.SerialName("switch-off") SWITCH_OFF,
+    /** Deleted for good, asked first ([ShareSheet.askDelete]). */
+    @kotlinx.serialization.SerialName("delete") DELETE,
 }

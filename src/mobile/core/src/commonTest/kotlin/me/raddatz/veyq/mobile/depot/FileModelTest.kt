@@ -11,6 +11,7 @@ import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.crypto.V1
 import me.raddatz.veyq.mobile.export.NodeExport
 import me.raddatz.veyq.mobile.navigation.NodeAt
+import me.raddatz.veyq.mobile.navigation.HeaderAction
 import me.raddatz.veyq.mobile.navigation.NodeHeader
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.words.Msg
@@ -170,24 +171,24 @@ class FileModelTest {
     fun aFilesHeaderOffersReplaceSendAndItsOwnDownload() = runTest {
         val m = open(Door(Played("hello\n".encodeToByteArray(), "b1", type = "text/plain", uploaded = "notes")), NodeAt("s", "f", "FILE", "Notes"))
         val h = m.current.header!!
-        assertEquals(listOf(NodeHeader.Action(FileModel.REPLACE), NodeHeader.Action(FileModel.SEND, NodeHeader.Slot.MENU)), h.own)
-        assertEquals(Msg.DEPOT_REPLACE, h.label(FileModel.REPLACE))
-        assertEquals(Msg.FILE_SEND, h.label(FileModel.SEND))
+        assertEquals(listOf(HeaderAction.REPLACE, HeaderAction.SEND), h.own)
+        assertEquals(Msg.DEPOT_REPLACE, h.label(HeaderAction.REPLACE))
+        assertEquals(Msg.FILE_SEND, h.label(HeaderAction.SEND))
         assertEquals(DepotFiles.downloadName(Played("x".encodeToByteArray(), "b", type = "text/plain", uploaded = "notes").file(), "Notes"), h.downloadName)
         assertEquals(AppKinds.Facts(canWrite = true, hasContent = true), h.facts)
         val doors = AppKinds.doors("FILE", h.facts)
         val rights = NodeHeader.rights("FILE", true, true, true, true, false, doors.coverOffered, doors.copies, doors.downloads, true, false)
         val plan = NodeHeader.plan(rights, AppKinds.headerOrder("FILE"), 2, h.own)
-        assertEquals(listOf(NodeHeader.FAVORITE, NodeHeader.DOWNLOAD), plan.buttons)
-        assertTrue(FileModel.REPLACE in plan.menu && FileModel.SEND in plan.menu, "$plan")
+        assertEquals(listOf(HeaderAction.FAVORITE, HeaderAction.DOWNLOAD), plan.buttons)
+        assertTrue(HeaderAction.REPLACE in plan.menu && HeaderAction.SEND in plan.menu, "$plan")
         // a platform without a share sheet sends nothing; an empty file is uploaded into, and sends nothing
-        assertEquals(listOf(FileModel.REPLACE), open(Door(Played("x".encodeToByteArray(), "b1", type = "text/plain")), shares = false).current.header!!.own.map { it.id })
+        assertEquals(listOf(HeaderAction.REPLACE), open(Door(Played("x".encodeToByteArray(), "b1", type = "text/plain")), shares = false).current.header!!.own)
         val empty = open(Door(Played(ByteArray(0), null))).current.header!!
-        assertEquals(listOf(FileModel.REPLACE), empty.own.map { it.id })
+        assertEquals(listOf(HeaderAction.REPLACE), empty.own)
         assertEquals(Msg.DEPOT_UPLOAD_INTO, empty.replaceWord)
         assertEquals(AppKinds.Facts(canWrite = true, hasContent = false), empty.facts)
         // a member replaces nothing in a guest's identity folder
-        assertEquals(listOf(FileModel.SEND), open(Door(Played("x".encodeToByteArray(), "b1", type = "text/plain"), identity = true)).current.header!!.own.map { it.id })
+        assertEquals(listOf(HeaderAction.SEND), open(Door(Played("x".encodeToByteArray(), "b1", type = "text/plain"), identity = true)).current.header!!.own)
     }
 
     @Test

@@ -61,9 +61,6 @@ import me.raddatz.veyq.mobile.sharing.GuestAccess
 import me.raddatz.veyq.mobile.sharing.GuestPage
 import me.raddatz.veyq.mobile.sharing.GuestScreen
 
-/** The header's banner action: its id in the kind's order (`AppKinds.headerOrder`). */
-private const val BANNER_ACTION = "banner"
-
 /**
  * A Memory's or a chapter's own header action: its music played or stopped (core's `GalleryModel.headerActions`' MUSIC,
  * ADR 0142 decision 6). Adding photos is the page's creating action (`CreateAction`), not the header's.
@@ -76,18 +73,17 @@ private fun memoryHeader(node: NodeAt, model: AppModel): HeaderContribution {
     val musicHere = state.musicHere
     // the banner's dialog where whoever looks may set it, online (ADR 0144 decision 5; the web's header `banner`)
     val banner = if (!state.editsBanner) null else OwnAction(
-        BANNER_ACTION,
+        me.raddatz.veyq.mobile.navigation.HeaderAction.BANNER,
         androidx.compose.ui.res.stringResource(if (state.banner != null) R.string.memory_banner_change else R.string.memory_banner_add),
         androidx.compose.material.icons.Icons.Outlined.Panorama,
     ) { model.openBanner(gallery) }
     return HeaderContribution(
         // a Memory's and a chapter's ZIP, the web's archive (ADR 0149 decision 3: core's `MemoryExport` behind `NodeExport`)
         download = { out -> model.downloadNode(node, out) },
-        actions = gallery.headerActions.filter { it.id == me.raddatz.veyq.mobile.memories.GalleryModel.MUSIC }.map { a ->
+        actions = gallery.headerActions.filter { it == me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC }.map { a ->
             OwnAction(
-                a.id, say(gallery.label(a.id)!!),
+                a, say(gallery.label(a)!!),
                 if (musicHere) androidx.compose.material.icons.Icons.Outlined.MusicOff else androidx.compose.material.icons.Icons.Outlined.MusicNote,
-                a.slot,
             ) { gallery.toggleMusic() }
         } + listOfNotNull(banner),
     )
