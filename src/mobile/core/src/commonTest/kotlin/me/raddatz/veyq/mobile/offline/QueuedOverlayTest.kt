@@ -195,6 +195,8 @@ class QueuedOverlayTest {
         val saved = mutableListOf<ByteArray>()
         assertTrue(tray.saveCopy(refused.id) { saved += it })
         assertContentEquals("PNG-DUNE-PLAINTEXT".encodeToByteArray(), saved.fold(ByteArray(0)) { x, y -> x + y })
+        assertEquals(Notice(Msg.DOWNLOAD_DONE, "dune.png"), QueuedShown.copySaved("dune.png", true))
+        assertEquals(Notice(Msg.DOWNLOAD_FAILED, "dune.png"), QueuedShown.copySaved("dune.png", false))
         assertTrue(tray.discard(refused.id))
         assertTrue(tray.discard(items[0].id))
         assertEquals(0, tray.count())

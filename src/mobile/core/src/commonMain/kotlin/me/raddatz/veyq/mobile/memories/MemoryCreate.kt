@@ -99,7 +99,14 @@ object MemoryCreate {
      * What a create came to: the node made (to open), or why not — [refused] the server's answer where one was sent, [code]
      * the reason as a code where nothing was ([NAME_TAKEN] a sibling the tree shows, [ILLEGAL] its placement, [PARENT_GONE]).
      */
-    class Made(val node: NodeAt?, val notice: Notice?, internal val refused: NodeCreate.Result.Refused? = null, internal val code: String? = null)
+    class Made(
+        val node: NodeAt?, val notice: Notice?, internal val refused: NodeCreate.Result.Refused? = null, internal val code: String? = null,
+        /**
+         * Made offline and waiting to be sent (ADR 0153; ADR 0154 decision 1: an outcome a UI must tell apart is typed): the
+         * name dialog closes and [notice] (*Waiting to send*) is said — nothing to open yet, it shows where it was made.
+         */
+        val queued: Boolean = false,
+    )
 
     internal const val NAME_TAKEN = "name_taken"
     internal const val ILLEGAL = "illegal_structure"
