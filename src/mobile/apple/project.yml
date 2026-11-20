@@ -9,8 +9,10 @@ options:
     macOS: "26.0"
   createIntermediateGroups: true
   # The words' String Catalogs exist before Xcode plans a first build, which reads a catalog's languages before any
-  # script runs; each target's pre-build script keeps its own current (ADR 0136 decision 3).
-  preGenCommand: python3 ../words/generate_words.py --apple-strings build/generated/app/Words.xcstrings && python3 ../words/generate_words.py --apple-strings build/generated/share/Words.xcstrings
+  # script runs; each target's pre-build script keeps its own current (ADR 0136 decision 3). The manifest's words
+  # (the usage descriptions: InfoPlist.xcstrings, and InfoPlist.xcconfig, the app's config file) exist before the
+  # project does, since a build reads its config files before any script runs.
+  preGenCommand: python3 ../words/generate_words.py --apple-strings build/generated/app/Words.xcstrings --apple-infoplist build/generated/app && python3 ../words/generate_words.py --apple-strings build/generated/share/Words.xcstrings
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -32,6 +34,15 @@ targets:
       - path: build/generated/app/Words.xcstrings
         optional: true
         buildPhase: resources
+      # The usage descriptions in English and German (the permission prompts), from the same catalog.
+      - path: build/generated/app/InfoPlist.xcstrings
+        optional: true
+        buildPhase: resources
+    # The usage descriptions' English as the generated Info.plist's own values (`INFOPLIST_KEY_NS…UsageDescription`):
+    # generated, never written here (scripts/validate_mobile_words.py, manifest-literal).
+    configFiles:
+      Debug: build/generated/app/InfoPlist.xcconfig
+      Release: build/generated/app/InfoPlist.xcconfig
     dependencies:
       # The share extension (ADR 0138), embedded in the iOS app only.
       - target: VeyqShare
@@ -52,10 +63,11 @@ targets:
           python3 "$SRCROOT/../theme/generate_theme.py" --apple-assets "$SRCROOT/Veyq/Assets.xcassets"
       - name: Generate the words
         basedOnDependencyAnalysis: false
-        outputFiles: ["$(SRCROOT)/build/generated/app/Words.xcstrings"]
+        outputFiles: ["$(SRCROOT)/build/generated/app/Words.xcstrings", "$(SRCROOT)/build/generated/app/InfoPlist.xcstrings"]
         script: |
-          # The catalog's English and German as the String Catalog `Words` (ADR 0136 decision 3).
-          python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/app/Words.xcstrings"
+          # The catalog's English and German as the String Catalog `Words` (ADR 0136 decision 3), and the usage
+          # descriptions' (InfoPlist.xcconfig, read before this runs, is current as of the project's generation).
+          python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/app/Words.xcstrings" --apple-infoplist "$SRCROOT/build/generated/app"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.veyq
@@ -72,11 +84,11 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: veyq-accent
         INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
-        # A receipt's picture saved to Photos from the share sheet ("Save Image"): adding only, the library is never read.
-        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "veyq saves the picture you chose to your photos."
-        # A QR code read through the camera (the QR CR, D4): an Emergency Kit, linking a device. iOS and macOS both ask
-        # with it; the macOS app is not sandboxed, so no camera entitlement is needed beside it.
-        INFOPLIST_KEY_NSCameraUsageDescription: "veyq reads the QR code you point the camera at, such as your Emergency Kit's. The picture stays on this device."
+        # The usage descriptions are the catalog's (words.json's `apple_infoplist` keys), through the config file above:
+        # NSPhotoLibraryAddUsageDescription, a receipt's picture saved to Photos from the share sheet ("Save Image"),
+        # adding only, the library is never read; NSCameraUsageDescription, a QR code read through the camera (an
+        # Emergency Kit, linking a device), which iOS and macOS both ask with — the macOS app is not sandboxed, so no
+        # camera entitlement is needed beside it.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         LOCALIZATION_PREFERS_STRING_CATALOGS: YES
         SWIFT_EMIT_LOC_STRINGS: YES

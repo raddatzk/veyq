@@ -121,6 +121,11 @@ jobs:
       - name: Dependabot follow self-test
         run: .venv/bin/python scripts/dependabot_follow_selftest.py
 
+      # The apps' manifest words (generate_words.py --apple-infoplist, --metainfo): the usage descriptions and the
+      # Flatpak's summary and description in English and German, which no platform's words test reads.
+      - name: Words generator self-test
+        run: python3 src/mobile/words/generate_words_selftest.py
+
   backend:
     name: Backend checks
     runs-on: ubuntu-latest

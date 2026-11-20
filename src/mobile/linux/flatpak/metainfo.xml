@@ -1,21 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- The Linux app's AppStream metainfo (ADR 0139 decision 5). `run.py flatpak` fills @APP_ID@ (desktop-identity.json),
-     @VERSION@ (the tree's <major>.<minor>, as the pipeline counts it) and @DATE@ (the commit's date, not the build's),
-     and the manifest installs the result; `appstreamcli validate` holds it. -->
+<!-- The Linux app's AppStream metainfo (ADR 0139 decision 5), a template. `generate_words.py` (its metainfo output) replaces
+     @SUMMARY@ and @DESCRIPTION@ with the catalog's words in English and German (src/mobile/words/words.json's `metainfo`
+     keys; a hand-written summary or paragraph here is English only, and scripts/validate_mobile_words.py refuses it).
+     `run.py flatpak` runs it, then fills @APP_ID@ (desktop-identity.json), @VERSION@ (the tree's <major>.<minor>, as
+     the pipeline counts it) and @DATE@ (the commit's date, not the build's), and the manifest installs the result;
+     `appstreamcli validate` holds it. -->
 <component type="desktop-application">
   <id>@APP_ID@</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>AGPL-3.0-only</project_license>
   <name>veyq</name>
-  <summary>End-to-end encrypted spaces for your files and shared expenses</summary>
+  @SUMMARY@
   <description>
-    <p>
-      veyq keeps what you share sealed on your devices: the server it talks to stores and serves only ciphertext.
-      This app reaches your veyq server and holds its applications Expenses and Depot.
-    </p>
-    <p>
-      It is a preview: Memories and the settings are not in the app yet; the web holds them.
-    </p>
+    @DESCRIPTION@
   </description>
   <developer id="app.veyq">
     <name>veyq</name>

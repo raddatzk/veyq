@@ -8,6 +8,9 @@ A key without `de` is red unless it says `"untranslated": true` (a name such as 
 key's form on Apple where its guidelines word it otherwise (Title Case on buttons and menu entries); the same placeholders.
 `"core_text": true` marks a key whose words the core itself renders, not a platform: a text the core writes into a file
 (the Emergency Kit's PDF, ADR 0148 decision 5), never one shown on a screen. Such a key is no plural.
+`"apple_infoplist": "<Info.plist key>"` marks a key a manifest shows on Apple (a permission prompt's usage description,
+`NSCameraUsageDescription`), `"metainfo": "summary"` / `"description"` one the Flatpak's AppStream metainfo shows (its one
+summary; the description's paragraphs in the catalog's order): such a key is no plural and has no placeholders.
 
 The apps never write a word of their own: this script writes what each platform reads, and the builds run it.
 
@@ -35,6 +38,15 @@ Outputs (each optional; each a directory or file this script owns and rewrites w
                         plural's count first), its placeholders filled by number, the plural's category picked by the
                         rule of the language the catalog that answered names (a language without a rule refused), and
                         `Say(key, args)` reaching the same method by its key (a core `Notice`).
+  --apple-infoplist DIR the Apple app's manifest words: `InfoPlist.xcstrings` (each `apple_infoplist` key's English and
+                        German under its Info.plist key, which Xcode compiles into `<lang>.lproj/InfoPlist.strings`) and
+                        `InfoPlist.xcconfig` (`INFOPLIST_KEY_<key> = <English>`: the generated Info.plist's own value,
+                        the fallback for a language the app has not).
+  --metainfo TEMPLATE OUT
+                        the Flatpak's AppStream metainfo: TEMPLATE with its line `@SUMMARY@` replaced by the `summary`
+                        key's `<summary>` and its line `@DESCRIPTION@` by each `description` key's `<p>`, every one
+                        in English and then each other language's (`xml:lang`); the rest of TEMPLATE as it is (its own
+                        `@APP_ID@`, `@VERSION@` and `@DATE@` are `run.py`'s).
 
 Python 3.9 (Xcode's and Gradle's `python3` on the developer's Mac), standard library only.
 """
@@ -91,6 +103,18 @@ def load() -> dict:
             raise CatalogError(f"{key}: `core_text` is `true` or absent")
         if entry.get("core_text") and isinstance(entry["en"], dict):
             raise CatalogError(f"{key}: a `core_text` key is no plural (the core picks no plural form)")
+        manifest = [f for f in ("apple_infoplist", "metainfo") if f in entry]
+        if manifest and (isinstance(entry["en"], dict) or any(shape[1] for shape in shapes.values())):
+            raise CatalogError(f"{key}: a manifest's key ({manifest[0]}) is no plural and has no placeholders")
+        if "apple_infoplist" in entry and not re.fullmatch(r"[A-Z][A-Za-z]+", str(entry["apple_infoplist"])):
+            raise CatalogError(f"{key}: `apple_infoplist` names an Info.plist key, such as NSCameraUsageDescription")
+        if entry.get("metainfo", "summary") not in ("summary", "description"):
+            raise CatalogError(f"{key}: `metainfo` is `summary` or `description`")
+    infoplist = [e["apple_infoplist"] for e in words.values() if "apple_infoplist" in e]
+    if len(set(infoplist)) < len(infoplist):
+        raise CatalogError(f"two keys name the same Info.plist key: {sorted(k for k in infoplist if infoplist.count(k) > 1)}")
+    if sum(e.get("metainfo") == "summary" for e in words.values()) > 1:
+        raise CatalogError("more than one key is the metainfo's `summary`")
     return words
 
 
@@ -256,6 +280,54 @@ def apple_strings(words: dict, out: Path) -> None:
         strings[key] = item
     catalog = {"sourceLanguage": "en", "strings": strings, "version": "1.0"}
     write(out, json.dumps(catalog, ensure_ascii=False, indent=2) + "\n")
+
+
+def apple_infoplist(words: dict, out: Path) -> None:
+    strings, settings = {}, []
+    for key, entry in words.items():
+        name = entry.get("apple_infoplist")
+        if not name:
+            continue
+        en = entry.get("apple_en", entry["en"])
+        # an xcconfig value ends at `//` (a comment) and expands `$(…)`; a manifest's word holds neither
+        if "//" in en or "$" in en or "\n" in en:
+            raise CatalogError(f"{key}: an Info.plist word holds no `//`, `$` or line break (an xcconfig value)")
+        strings[name] = {"comment": entry.get("note", key), "extractionState": "manual", "localizations": {
+            lang: {"stringUnit": {"state": "translated", "value": entry.get(f"apple_{lang}", entry.get(lang))}}
+            for lang in LANGS if entry.get(f"apple_{lang}", entry.get(lang)) is not None}}
+        settings.append(f"INFOPLIST_KEY_{name} = {en}")
+    write(out / "InfoPlist.xcstrings", json.dumps({"sourceLanguage": "en", "strings": strings, "version": "1.0"},
+                                                  ensure_ascii=False, indent=2) + "\n")
+    write(out / "InfoPlist.xcconfig", "\n".join(
+        ["// Generated from src/mobile/words/words.json by generate_words.py; never edited, never committed.",
+         "// The Info.plist's own value of each manifest word: English, the fallback; InfoPlist.xcstrings localizes it."]
+        + settings) + "\n")
+
+
+# ---- Linux (AppStream metainfo) ----
+
+def metainfo(words: dict, template: Path, out: Path) -> None:
+    text = template.read_text(encoding="utf-8")
+    parts = {"summary": [], "description": []}
+    for key, entry in words.items():
+        if "metainfo" in entry:
+            parts[entry["metainfo"]].append(entry)
+    if not parts["summary"] or not parts["description"]:
+        raise CatalogError("the metainfo needs a `summary` key and at least one `description` key")
+    lines = text.split("\n")
+    for marker, tag in (("@SUMMARY@", "summary"), ("@DESCRIPTION@", "p")):
+        at = [i for i, line in enumerate(lines) if line.strip() == marker]
+        if len(at) != 1:
+            raise CatalogError(f"{template}: holds the line {marker} {len(at)} times, not once")
+        indent = lines[at[0]][: len(lines[at[0]]) - len(lines[at[0]].lstrip())]
+        made = []
+        for entry in parts["summary" if tag == "summary" else "description"]:
+            for lang in LANGS:
+                if lang in entry:
+                    attr = "" if lang == "en" else f' xml:lang="{lang}"'
+                    made.append(f"{indent}<{tag}{attr}>{xml_text(entry[lang])}</{tag}>")
+        lines[at[0]: at[0] + 1] = made
+    write(out, "\n".join(lines))
 
 
 # ---- Linux (gettext) ----
@@ -555,6 +627,8 @@ def main() -> int:
     ap.add_argument("--apple-strings", type=Path)
     ap.add_argument("--gettext", type=Path)
     ap.add_argument("--resw", type=Path)
+    ap.add_argument("--apple-infoplist", type=Path)
+    ap.add_argument("--metainfo", type=Path, nargs=2, metavar=("TEMPLATE", "OUT"))
     a = ap.parse_args()
     try:
         words = load()
@@ -583,6 +657,14 @@ def main() -> int:
         except CatalogError as e:
             print(f"words.json: {e}", file=sys.stderr)
             return 1
+    try:
+        if a.apple_infoplist:
+            apple_infoplist(words, a.apple_infoplist)
+        if a.metainfo:
+            metainfo(words, *a.metainfo)
+    except CatalogError as e:
+        print(f"words.json: {e}", file=sys.stderr)
+        return 1
     return 0
 
 

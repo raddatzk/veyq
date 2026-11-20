@@ -311,7 +311,7 @@ def build() -> int:
                       f"cargo test --locked -- {skips}; cargo build --locked"))
     rc = in_runtime(flatpak_arch, script, [
         "-v", f"veyq-flatpak-state-{flatpak_arch}-{CHECKOUT}:/veyq/state",
-        "-v", f"veyq-flatpak-cargo:/veyq/cargo", "-v", f"veyq-flatpak-target-{flatpak_arch}-{CHECKOUT}:/veyq/target",
+        "-v", "veyq-flatpak-cargo:/veyq/cargo", "-v", f"veyq-flatpak-target-{flatpak_arch}-{CHECKOUT}:/veyq/target",
         "-v", f"{repo_layout.MOBILE}:/veyq/mobile:ro", "-v", f"{FLATPAK_OUT}:/veyq/mobile/build/linux/flatpak",
         "-v", f"{repo_layout.MOBILE_LINUX}:/veyq/src:ro", "-v", f"{GENERATED}:/veyq/generated:ro",
         "-v", f"{lib_dir}:/veyq/lib:ro", "-v", f"{WORDS / 'words.json'}:/veyq/words.json:ro",
@@ -592,7 +592,10 @@ def write_manifest(version: str, date: str) -> None:
         return text
 
     (FLATPAK_OUT / "inputs").mkdir(parents=True, exist_ok=True)
-    (FLATPAK_OUT / "inputs" / f"{APP_ID}.metainfo.xml").write_text(filled((FLATPAK / "metainfo.xml").read_text()))
+    # the template's summary and description are the catalog's, in English and German (generate_words.py --metainfo)
+    metainfo = FLATPAK_OUT / "inputs" / f"{APP_ID}.metainfo.xml"
+    run(sys.executable, str(WORDS / "generate_words.py"), "--metainfo", str(FLATPAK / "metainfo.xml"), str(metainfo))
+    metainfo.write_text(filled(metainfo.read_text()))
     (FLATPAK_OUT / f"{APP_ID}.yml").write_text(filled((FLATPAK / "manifest.yml").read_text()))
     # flatpak-builder-lint's exceptions, each with its reason, keyed by the id as the linter reads them
     exceptions = json.loads((FLATPAK / "lint-exceptions.json").read_text())
