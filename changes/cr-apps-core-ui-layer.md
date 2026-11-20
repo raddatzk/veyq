@@ -141,8 +141,47 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   New folder → the folder's level; after a relaunch and an unlock the drawer's Expenses and Memories lists (registered)
   and Memories' Map tab. Not run: a received link's guest pages (the registry's `guest`), a Depot file's page (no file
   uploaded: the system picker), and the CR's before/after screenshots (phase 6).
-- [ ] **3 Apple** — the same. · Done when: both Apple builds green, the guards green. **Bite:** a Memories view using
+- [x] **3 Apple** — the same. · Done when: both Apple builds green, the guards green. **Bite:** a Memories view using
   `PotScreen` → red.
+  **Built** (2026-11-20). Layout (`src/mobile/apple/Veyq/`, XcodeGen's groups from the directories): the root keeps the
+  files `project.yml` names by path per target (`VeyqApp`, `ContinuedWork`, `BackgroundSync`, `DevLogin`, `DevAudio`: the
+  share extension's excludes) and the composition root `Applications.swift`; `Core/` the core UI, 45 files;
+  `Apps/Memories/` (gallery, curation, map view, music view, filter, contributions, `MemoryPlaces.swift` — the facts line,
+  date and place editors, the bar's Map tab, the pin map, a photo's map, split out of `MapViews.swift` —,
+  `PersonMemoriesSection.swift`, `MemoriesUi.swift`), `Apps/Expenses/` (Pot page, settings, create sheet, entry editor,
+  history, receipts, `ExpensesUi.swift`), `Apps/Depot/` (file and drop box pages, `DepotUi.swift`). Moved with `git mv`
+  (one commit of pure renames, then the edits); what core or two applications use left an application's file for core:
+  the music bar with the lightbox's compact controls (`Core/MusicBar.swift`), the formats (`Core/Formats.swift`: `money`,
+  `localDay`, `say(piece:)`, `decimalSeparator`, `MemoryDateText`), `CoreState`, and — named here, as Android's
+  `AppModel` keeps its per-application methods — the holders `AppModel` stores for Memories' sheets and windows
+  (`Core/AppModelHeld.swift`: `ParticipantsEdit`, `BannerEdit`, `BannerPicture`, `BannerImages`, `LightboxWindowValue`;
+  a stored property cannot live in an application's extension). The registry (`Core/Registry.swift`): per kind a
+  `KindPage(header, body, guest)` — `guest: (GuestPage, GuestHeld, AppModel) -> AnyView` —, per application an
+  `ApplicationUi(id, list, creates, personSection)` — `list: (AppModel, key) -> AnyView` (Memories' answers its Map tab
+  on `memories.map`), `creates: [AppKinds.Create: CreateDialog]`, `personSection: (PersonProfile, AppModel,
+  PersonFrame) -> AnyView` (core's frame and safety number handed in) —; `Registry.kind`/`.application` refuse a second
+  registration (`precondition`), `seal()` ends registering and a lookup before it fails. `Applications.register()` runs
+  first in `VeyqApp.init` and in the share extension's `viewDidLoad`: core's kinds (`KindPages`: folder, bookmark), then
+  Memories, Depot, Expenses, then seals; on a Mac `Applications.commands`/`.windows` hand the app Memories' lightbox
+  command and window (a scene is a static type, not a registry entry). The shell's object page and header, its
+  application lists, Home's New (one `.sheet(item:)` over `Registry.create`), a link's page (`GuestPageBody`: Level and
+  NotShown core's, every other variant the kind's `guest`; `ObjectRef.guest` the link's ref) and the person screen ask the
+  registry; `KindPage.of`'s switch is gone. Left in core, named: the link bar's file and music actions in `GuestLinks.swift`
+  (as Android's), `AppModel`'s per-application methods. Rules (a) and (b) on for Apple (`PLATFORMS["apple"]`; Swift by
+  an index of each `Apps/<App>/`'s non-private top-level names and its top-level extensions' members, comments and
+  string contents masked, an interpolation read as code). Bites, each red then restored green (`/bin/cp -f`): `typealias
+  … = PotScreen` in `Apps/Memories/MemoryScreen.swift` (b); `… = MemoryScreen` in `Core/ShellView.swift` (a);
+  `model.personMemories(…)` (Memories' `AppModel` extension) in `Core/PersonScreen.swift` (a); `"\(DepotUi.self)"` in
+  core (a, the interpolation); `func money(_:)` in `Apps/Expenses/PotScreen.swift` (a name declared by two sides);
+  `ExpensesList` in `Apps/Depot/DepotUi.swift` (b); `Applications.swift` without `ExpensesUi`; an `Apps/Music/` file;
+  `Apps/Depot/` emptied — and green with the names in a comment and a plain string. Checks: `./gradlew
+  :core:assembleVeyqCoreDebugXCFramework -Pkotlin.incremental=false` BUILD SUCCESSFUL, `xcodegen`, the macOS ad-hoc
+  `xcodebuild … -destination 'platform=macOS,arch=arm64' … build` and `-sdk iphonesimulator CODE_SIGNING_ALLOWED=NO
+  build` (the share extension's target with it) BUILD SUCCEEDED; every `scripts/validate_*.py` green, guard_gaps
+  included. Not run: a click-through (a Mac UI pass needs full-screen control, an agent's build only) — unclicked: a
+  Memory's, a Pot's, a Depot file's and a drop box's page, the drawer's Expenses and Memories lists and the Map tab,
+  Home's New pot and New Memory, a received link's guest pages, a person's profile with Memories' section, the Mac's
+  lightbox window and its menu command, the share extension.
 - [ ] **4 Linux** — the same; `raster_map.rs`' and `memory_page.rs`' crossings resolved through the registry or core
   UI. · Done when: `python3 linux/run.py test` and `build` green, the guards green. **Bite:** `crate::apps::depot::…`
   from `apps/memories` → red.
