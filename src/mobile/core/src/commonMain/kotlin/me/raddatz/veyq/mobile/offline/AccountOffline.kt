@@ -41,6 +41,9 @@ import me.raddatz.veyq.mobile.session.DeviceStore
  *   An entry two pins reach keeps the one left when the other goes. A pin goes with its node: at the sweep, a node no
  *   current answer lists any more (trashed, a scope left, a tenant left) drops its pin with a notice ([gone]); a node the
  *   operator blocked and a tenant answered as suspended keep it, as "not available right now".
+ * - **The outbox** ([outbox], ADR 0153 decision 2): the person's writes made offline, kinds of their own
+ *   ([KeptRead.QUEUED]) — never evicted, never dropped by "Clear cache" or the sweep, counted apart ([Usage.queued]),
+ *   refused below the free-space floor whatever the limit; only a send, a discard or a wipe removes them.
  */
 class AccountOffline internal constructor(
     internal val store: OfflineStore,
@@ -63,7 +66,7 @@ class AccountOffline internal constructor(
      * with and the pins' record ([KeptRead.PROTECTED], a few kB) count against the limit but in neither: they are no
      * content, and no button but a wipe drops them — counted as "Recently viewed" they showed after "Clear cache".
      */
-    data class Usage(val limit: Long, val automatic: Long, val pinned: Long, val free: Long?)
+    data class Usage(val limit: Long, val automatic: Long, val pinned: Long, val free: Long?, val queued: Long = 0)
 
     internal fun key(read: KeptRead, tenant: String = "", scope: String = "", id: String = "") = EntryKey(server, tenant, scope, read.kind, id)
 
@@ -86,6 +89,7 @@ class AccountOffline internal constructor(
             entries.filter { it.pins.isEmpty() && it.key.kind !in KeptRead.PROTECTED }.sumOf { it.size },
             entries.filter { it.pins.isNotEmpty() }.sumOf { it.size },
             files.freeBytes(store.directory),
+            entries.filter { it.key.kind in KeptRead.QUEUED }.sumOf { it.size },
         )
     }
 
@@ -179,6 +183,33 @@ class AccountOffline internal constructor(
         if (chunkCount <= 0) return 0
         val kept = store.frames(key).count { it in 0 until chunkCount }
         return byteSize * (chunkCount - kept) / chunkCount
+    }
+
+    // ---- the outbox (ADR 0153 decision 2)
+
+    private var outboxHeld: Outbox? = null
+
+    /** The account's writes made offline, kept in this store ([Outbox]); one per store, shared by its holders. */
+    internal fun outbox(suite: me.raddatz.veyq.mobile.crypto.V1): Outbox = outboxHeld ?: Outbox(this, suite, server).also { outboxHeld = it }
+
+    /**
+     * [content] kept as the queued entry [key] (an intent, the outbox's order) whatever the limit — the person's own writes
+     * are never the automatic tier's —, but refused below the free-space floor where [floor] (a new write; the order and a
+     * write's state are rewritten whatever is free, so a send or a discard always lands): false then, nothing written.
+     */
+    internal suspend fun putQueued(key: EntryKey, content: ByteArray, floor: Boolean): Boolean {
+        require(key.kind in KeptRead.QUEUED)
+        if (floor && !mayWrite(content.size.toLong(), pinned = true)) return false
+        store.put(key, content, null, clock(), emptySet())
+        return true
+    }
+
+    /** [frames] (each sealed under its blob's own `K_blob`) appended to the queued blob [key]; false below the floor, nothing written. */
+    internal suspend fun putQueuedFrames(key: EntryKey, frames: Map<Int, ByteArray>): Boolean {
+        require(key.kind == KeptRead.OUTBOX_FRAMES)
+        if (!mayWrite(frames.values.sumOf { it.size.toLong() }, pinned = true)) return false
+        store.putFrames(key, frames, emptySet())
+        return true
     }
 
     // ---- a map tile (ADR 0143 D4 as amended for inbox #939)
@@ -281,6 +312,8 @@ class AccountOffline internal constructor(
         val reached = HashSet<EntryKey>()
         reached += key(KeptRead.KEY_MATERIAL)
         reached += pinsKey
+        // the person's unsent writes (ADR 0153 decision 2): no listing reaches them, and no sweep drops them
+        store.entries().filter { it.key.kind in KeptRead.QUEUED }.mapTo(reached) { it.key }
         val tenantsKey = key(KeptRead.MY_TENANTS)
         reached += tenantsKey
         val tenants = json(tenantsKey).flatMap { it.array() }.mapNotNull { it.text("tenantId") }.toSet()

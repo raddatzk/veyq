@@ -181,6 +181,50 @@ class VeyqAccount private constructor(
 
     private var pinsHeld: me.raddatz.veyq.mobile.offline.OfflinePins? = null
 
+    /**
+     * This account's writes made offline on this device (ADR 0153 decisions 1 and 2); null where it keeps no offline store
+     * — no store, no queue: offline stays read-only there.
+     */
+    val outbox: me.raddatz.veyq.mobile.offline.Outbox?
+        get() = offline?.outbox(suite)
+
+    /**
+     * Whether a write of [q] made now is queued rather than refused (ADR 0153 decision 3): wherever this device keeps the
+     * account's store — no store, no queue. What [me.raddatz.veyq.mobile.offline.Queued] does not name is never queued.
+     */
+    fun queues(q: me.raddatz.veyq.mobile.offline.Queued): Boolean = offline != null
+
+    private val sendingLock = Mutex()
+    private var sendJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * The outbox sent (ADR 0153 decision 4, [me.raddatz.veyq.mobile.offline.OutboxSender]): one run at a time, each tenant
+     * opened once for it. Null where there is no outbox or the account is not online.
+     */
+    internal suspend fun sendQueued(): me.raddatz.veyq.mobile.offline.OutboxSender.Report? = sendingLock.withLock {
+        val box = outbox ?: return@withLock null
+        if (_reach.value != Reach.Online || sendsNothing || closed) return@withLock null
+        if (box.count() == 0) return@withLock me.raddatz.veyq.mobile.offline.OutboxSender.Report(0, 0, 0, 0)
+        me.raddatz.veyq.mobile.offline.OutboxSender(
+            box,
+            tenantOf = { id -> tenants.firstOrNull { it.tenantId == id }?.let { open(it) } },
+            online = { _reach.value == Reach.Online && !closed },
+            senderOf = me.raddatz.veyq.mobile.AppKinds::queuedSender,
+        ).run()
+    }
+
+    /** [sendQueued] in the background, where writes wait: after a reconnect and when an account opened online finds some. */
+    private fun startSending() {
+        if (closed) return
+        sendJob = background.launch {
+            runCatching { if ((outbox?.count() ?: 0) > 0) sendQueued() }
+                .onFailure { if (it is CancellationException) throw it else println("veyq: the outbox was not sent: $it") }
+        }
+    }
+
+    /** The background run [startSending] began, awaited (a test's). */
+    internal suspend fun awaitSending() { sendJob?.join() }
+
     /** This account's pins on this device and their sync (ADR 0140 decision 9); null where it keeps no offline store. */
     val offlinePins: me.raddatz.veyq.mobile.offline.OfflinePins?
         get() {
@@ -202,6 +246,8 @@ class VeyqAccount private constructor(
         offline = o
         keepOpening(o)
         runCatching { o.store.sweep() }
+        // an account opened online with writes waiting from before (a reconnect never came): they go now
+        if (_reach.value == Reach.Online && !sendsNothing) startSending()
     }
 
     /** The answers an offline unlock opens with: the key material (its wraps and sealed identity only) and the tenants. */
@@ -299,6 +345,8 @@ class VeyqAccount private constructor(
             _reach.value = Reach.Online
             // back online is an unlock too: the rotation's finish runs now, not 45 s later
             rotations.nudge()
+            // and what the person made offline is sent (ADR 0153 decision 4)
+            startSending()
             true
         } catch (e: CancellationException) {
             throw e
@@ -390,13 +438,14 @@ class VeyqAccount private constructor(
     /**
      * A rotation this device made committed (ADR 0148 decision 7, the web's `setUnlocked` after the publish): the account
      * takes the published Master Key and identity in place — the old ones zeroed —, and the marks, the pin store and the
-     * anchoring move to the new key's slot. The offline store was sealed under the old key: it is wiped ([wipeOffline],
-     * ADR 0140 decision 2) and opened anew under the new one. [newMaterial] is the key material as the server now serves
+     * anchoring move to the new key's slot. The offline store was sealed under the old key: what it kept is wiped, its
+     * outbox carried under a fresh `K_off` the new key wraps ([rekeyOffline], ADR 0153 decision 2), and it is opened anew
+     * under the new one. [newMaterial] is the key material as the server now serves
      * it (what an offline unlock opens with). Open tenants hold scope keys opened with the old identity: the host opens
      * its tenant again.
      */
     internal suspend fun swapKeys(newMasterKey: ByteArray, newIdentity: IdentityPrivate, newMaterial: AccountKeyMaterial) {
-        wipeOffline()
+        rekeyOffline(newMasterKey)
         val oldMk = masterKey
         val oldIdentity = identity
         masterKey = newMasterKey
@@ -832,6 +881,25 @@ class VeyqAccount private constructor(
         offline?.let { runCatching { it.closeForWipe() } }
         offline = null
         device.offline?.let { o -> runCatching { o.wipe(key) }.onFailure { println("veyq: the offline store was not wiped: $it") } }
+    }
+
+    /**
+     * This account's store at a Master Key rotation this device holds both keys of (ADR 0153 decision 2 — its own rotation,
+     * or one made elsewhere taken while this account still holds the old key): the waiting writes carried under a fresh
+     * `K_off` wrapped by [newMasterKey], everything kept beside them gone as ADR 0140 decision 2 has it. Where the carry fails
+     * (or no store is open) the store is wiped, as before the outbox. The caller opens it anew ([ensureOffline]).
+     */
+    private suspend fun rekeyOffline(newMasterKey: ByteArray) {
+        val o = offline
+        val stores = device.offline
+        if (o == null || stores == null) return wipeOffline()
+        pinsHeld?.stop()
+        pinsHeld = null
+        val carried = runCatching { stores.rekey(key, o.store, newMasterKey) { it.kind in KeptRead.QUEUED } }
+            .onFailure { println("veyq: the outbox was not carried across the rotation: $it") }.isSuccess
+        runCatching { o.closeForWipe() }
+        offline = null
+        if (!carried) runCatching { stores.wipe(key) }.onFailure { println("veyq: the offline store was not wiped: $it") }
     }
 
     /** The wrap deleted on the server (best effort: a wrap left behind opens only with this device's key, now gone) and
