@@ -70,7 +70,7 @@ Measured before the decision (2026-11-20):
      pass lists the same results in the same order before and after, and the web and an app list the same; a query
      over a 10,000-document corpus is at most 1.5× the TypeScript's time (median), measured the same way.
 
-   A full pass is the go. A miss goes to the owner with its number (open: the CR's Q2, recommended so); a no-go reverts
+   A full pass is the go. A miss goes to the owner with its number (the owner's answer, 2026-11-20); a no-go reverts
    the pilot's commits and the `js()` target, and this ADR is edited to record the numbers and that the web stays
    TypeScript.
 

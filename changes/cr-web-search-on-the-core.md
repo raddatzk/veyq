@@ -151,6 +151,8 @@ queries. The throwaway is erased after.
 - **Q2 — the go.** The gate's criteria decide; phase 5 reports and stops. **Recommendation:** so — a full pass is the go
   without a further question; a single miss comes to you with its number rather than reverting unasked.
 
+**Answered (owner 2026-11-20): Q2 as recommended.**
+
 ## Definition of done
 
 Phases 1–6 checked; every bite seen red and green; the gate's table complete and the go recorded (or the owner's answer
