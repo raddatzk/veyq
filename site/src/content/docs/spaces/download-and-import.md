@@ -3,6 +3,7 @@ title: "Download and import"
 sources:
   - docs/features/platform/use-cases/uc.platform.export-import.md
   - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
+  - docs/decisions/0152-the-apps-import-a-download-as-the-web-does-the-webs-reader-and-walk-in-the-core-each-kinds-import-its-applications-recognised-by-every-depot-upload.md
 ---
 
 You can download a folder, a file, a Memory or a drop
@@ -53,6 +54,10 @@ another one.
 ## In the app
 
 The veyq [app](/getting-started/install-the-app/) downloads a folder, a file, a Memory, a chapter, a Pot and a drop box
-as the browser does, into the place you choose in your device's own save dialog; the ZIP is the same, and the browser
-imports it. **Importing** is not in the app yet: bring a download back in with the browser. Someone who opened a link
-cannot download in the app, because the app opens no link yet.
+as the browser does, into the place you choose in your device's own save dialog; the ZIP is the same.
+
+On a computer — a Mac, Linux or Windows — the app **imports** as the browser does: upload a download with **New → Upload
+files** or **Upload folder…**, or drop it onto a folder, and the app offers to **Import** it. While an import runs,
+**Cancel** stops it and moves what it created to the trash (the browser lets an import finish). On Android, an iPhone
+or an iPad the app does not import yet: a download you upload there arrives as a file, so bring it in with the browser
+or the app on a computer.

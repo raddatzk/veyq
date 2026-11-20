@@ -267,7 +267,11 @@ two placeholders, closing asked (*Uploads laufen noch*, *2 Dateien*) and *Weiter
 for macOS and the iOS Simulator SDK, never run (§ Open).
 
 **Out and in.** The ZIP of a Pot, a folder, a file or a drop box, as the web writes it — measured 2026-11-09; a Memory's
-and a chapter's since 2026-11-19 (Memories' rest, below). Import of a download: [ADR 0152](../decisions/0152-the-apps-import-a-download-as-the-web-does-the-webs-reader-and-walk-in-the-core-each-kinds-import-its-applications-recognised-by-every-depot-upload.md), the desktops only (§ Open).
+and a chapter's since 2026-11-19 (Memories' rest, below). Import of a download on the desktops, built 2026-11-20 ([ADR 0152](../decisions/0152-the-apps-import-a-download-as-the-web-does-the-webs-reader-and-walk-in-the-core-each-kinds-import-its-applications-recognised-by-every-depot-upload.md)):
+*Upload files*, *Upload folder* and a drop on macOS, Linux and Windows offer a veyq download as an import, run by the
+core's port of the web's reader and walk in each platform's dialog — passed on Linux and Windows as throwaways (the
+web's download imported and each kind read back, *Upload as a file*, *Cancel* mid-run leaving nothing, the unpacked
+folder); the phones upload one as a file (owner 2026-11-19).
 
 **QR codes** ([ADR 0141](../decisions/0141-qr-codes-are-read-and-drawn-by-the-core.md)). One decoder and one encoder in
 the core, a scan model (`qr/QrScan`) and a camera on all four apps — CameraX, AVFoundation, the Camera portal over
@@ -621,8 +625,9 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
 **Expenses**: reading a receipt's text on the device (#549); what [expenses.md](../apps/expenses.md) keeps out of the
 first cut.
 
-**Depot**: a READ_WRITE guest's own name as uploader; importing a download on the desktops (cr-app-archive-import: the core, the bridge and the three desktops' dialogs built; the
-phones upload one as a file, owner 2026-11-19); multi-select and dragging a node onto a folder to move
+**Depot**: a READ_WRITE guest's own name as uploader; a download's import on the phones (not built, owner 2026-11-19),
+its macOS click pass and a drop from Files or Explorer ([ADR 0152](../decisions/0152-the-apps-import-a-download-as-the-web-does-the-webs-reader-and-walk-in-the-core-each-kinds-import-its-applications-recognised-by-every-depot-upload.md)'s
+Consequences, inbox #985); multi-select and dragging a node onto a folder to move
 it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built). A password-protected PDF's text
 selected and copied on Windows (drawn by `Windows.Data.Pdf`, which has no text API). Built 2026-11-18 (inbox #955): on
 Linux an overlay of its own over poppler's rendered pages (`src/mobile/linux/src/pdf_text.rs`; GTK has no view that

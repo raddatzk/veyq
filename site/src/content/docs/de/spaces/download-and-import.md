@@ -3,6 +3,7 @@ title: "Herunterladen und Importieren"
 sources:
   - docs/features/platform/use-cases/uc.platform.export-import.md
   - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
+  - docs/decisions/0152-the-apps-import-a-download-as-the-web-does-the-webs-reader-and-walk-in-the-core-each-kinds-import-its-applications-recognised-by-every-depot-upload.md
 ---
 
 Du kannst einen Ordner, eine Datei,
@@ -60,5 +61,11 @@ ZIP-Datei** — und ein solches ZIP wieder hineinladen, in dasselbe veyq oder in
 
 Die veyq-[App](/de/getting-started/install-the-app/) lädt einen Ordner, eine Datei, eine Erinnerung, ein Kapitel, eine
 Kasse und einen Briefkasten herunter wie der Browser, an den Ort, den du im Speichern-Dialog deines Geräts wählst; das
-ZIP ist dasselbe, und der Browser importiert es. **Importieren** kann die App noch nicht: Einen Download bringst du mit
-dem Browser wieder hinein. Über einen Link lädt niemand in der App herunter, denn die App öffnet noch keine Links.
+ZIP ist dasselbe.
+
+Auf einem Computer — einem Mac, unter Linux oder Windows — **importiert** die App wie der Browser: Lade einen Download
+mit **Neu → Dateien hochladen** oder **Ordner hochladen…** hoch oder zieh ihn auf einen Ordner, und die App bietet an,
+ihn zu **importieren**. Während ein Import läuft, hält **Abbrechen** ihn an und verschiebt, was er schon angelegt hat,
+in den Papierkorb (im Browser läuft ein Import zu Ende). Unter Android, auf dem iPhone oder dem iPad importiert die App
+noch nicht: Ein Download, den du dort hochlädst, kommt als Datei an — bring ihn mit dem Browser oder der App auf einem
+Computer hinein.
