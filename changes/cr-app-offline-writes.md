@@ -218,7 +218,30 @@ ADR 0153 decisions 1–5 hold them; here only what the work needs beside them.
 - [ ] **7 Android** — the enabled controls offline, the waiting marks, the tray's list and actions, the wipe asks.
   · Done when: `:android:assembleDebug`, the guidelines and words guards green.
 - [ ] **8 Apple** — the same. · Done when: both Apple builds green.
-- [ ] **9 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green.
+- [x] **9 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green.
+  **Built** 2026-11-20 (`claude/k-linux`): a second `AdwBanner` under the offline one (`queuedBanner`); the level's
+  `queuedHere` rows in place (`home::queued_row`); `queuedSaid` said once, then `Shell.QueuedSaidSeen`; the uploads
+  popover's own list (`Watched.QueuedTray`, grouped by `where`) with *Open* (`Queued.Open` → the shell's `open_queued`:
+  `QueuedOpen.Entry` → `Pot.Open` + `entry_editor::open_held`, `.Rename` → `Shell.OpenAt` then the header's `rename_as`
+  with the person's name, `.Place` → `Shell.OpenAt`), *Save a copy* (each file: `Queued.CopyName`, GTK's save dialog,
+  `Queued.SaveCopy`) and *Discard*; the held editor's newer version and *Discard mine* as an `AdwBanner`
+  (`Editor.OpenHeld`, `Editor.DiscardMine`); a Pot's *Not sent* marks and `balancesUnsent`; a gallery's waiting tiles;
+  Sign out, Stop trusting and Remove all offline content ask `Queued.Ask` first (its question and confirm). **Core
+  gained** (a desktop would else decide): `Shell.OpenAt(scopeId, nodeId?)` (`openFound`/`switchSpace`); `MemoryCreate.Made.queued`
+  and `Answer.Created.queued` — a Memory or chapter made offline answered `Made(null, offline_waiting)`, which a dialog
+  read as a problem and asked again (found in the pass); `PotView.canRecord` (`Shown.canRecord`) — offline `canWrite`
+  stays on where an entry queues, so a settle-up row's *Record* was offered for a payment that never queues (found in the
+  pass). Tests: `OfflineReadPathTest` (`queued`), `PotViewMoneyTest.aSettleUpsRecordIsOfferedOnlineAloneWhileAnEntryQueuesOffline`,
+  `WireTest`/`DispatchTest` (`ShellOpenAt`). Measured: `python3 linux/run.py build` and `test`, `:core:jvmTest`,
+  `:bridge:jvmTest` green. **Pass** (throwaway, own forwarder: the run container's socat killed and restarted, Broadway
+  from headless Chrome): offline, New offered only New folder, Upload files, New Memory; a folder, a Memory and a Pot
+  entry with a receipt queued — the banner "3 changes waiting to send", the folder's row "Waiting to send" in its level,
+  the tray listing all three with *Discard*, the entry "Not sent" and the balances "Includes entries not sent yet"; Stop
+  trusting asked "3 changes made offline have not been sent yet. They will be deleted." (cancelled); reconnected, a
+  refresh sent all three (stderr `queued said: offline_sent`, tray empty, folder, Memory and Pot on Home). **Not passed:**
+  a photo added offline, a medium's time, the held edit's conflict editor and *Discard mine*, *Save a copy* (no refused
+  write made), the store grep, the re-key; the two core fixes above are covered by their tests and the build, not seen in
+  the app again.
 - [ ] **10 Windows** — the same. · Done when: `python3 windows/run.py build` green on the VM.
 - [ ] **11 the passes** — § Passes; results into ADR 0153's Consequences.
 - [ ] **12 harvest** — ADR 0153's `Built:` and `Status: Accepted` once the owner's questions are answered; ADR 0140's
