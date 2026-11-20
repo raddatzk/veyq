@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Veyq.Core;
 
 namespace Veyq.Tests;
 

@@ -4,6 +4,7 @@ using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Veyq.Bridge.Wire;
+using Veyq.Core;
 using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
 

@@ -9,6 +9,7 @@ using System.Linq;
 using Microsoft.UI.Xaml;
 using Veyq.Bridge;
 using Veyq.Bridge.Wire;
+using Veyq.Core;
 
 namespace Veyq;
 
@@ -85,7 +86,7 @@ public sealed partial class MainWindow : Window
         Start started;
         // an Emergency Kit's pages and pictures are drawn by Windows' own renderer when the core asks (KitDrawing), a picked
         // medium's tiers by WIC and Windows.Media.Editing (MediaTiers), one's own profile picture framed square (ProfilePicture)
-        Core.Drawer = request => KitDrawing.Answer(request) ?? ProfilePicture.Answer(request) ?? MediaTiers.Answer(request) ?? MusicHost.Words(request);
+        Bridge.Core.Drawer = request => KitDrawing.Answer(request) ?? ProfilePicture.Answer(request) ?? MediaTiers.Answer(request) ?? MusicHost.Words(request);
         // the music's two decks and the system's controls play on this window's thread (MusicHost, ADR 0142 decisions 2 and 3)
         MusicHost.Start(DispatcherQueue, WinRT.Interop.WindowNative.GetWindowHandle(this));
         try
@@ -108,9 +109,9 @@ public sealed partial class MainWindow : Window
             var netLog = false;
 #if DEBUG
             netLog = true;
-            Core.NetLogged = line => Log.Write($"veyq-net {line}");
+            Bridge.Core.NetLogged = line => Log.Write($"veyq-net {line}");
 #endif
-            started = Core.Start(new Config { device = Environment.MachineName, window = hwnd, prompt = Words.DeviceUnlockPrompt(), offlineRoot = offline, language = Words.Language(), netLog = netLog }, store);
+            started = Bridge.Core.Start(new Config { device = Environment.MachineName, window = hwnd, prompt = Words.DeviceUnlockPrompt(), offlineRoot = offline, language = Words.Language(), netLog = netLog }, store);
         }
         catch (Exception e) when (e is DllNotFoundException or EntryPointNotFoundException or BadImageFormatException)
         {
@@ -147,9 +148,9 @@ public sealed partial class MainWindow : Window
             Face(AccountSettingsPage.Showing(this, DevSettings.Fake()).Page);
             return;
         }
-        _session =Core.Watch(new Watched.Session(), ShowGate, e => Log.Write(e.Message));
-        _shellWatch = Core.Watch(new Watched.Shell(), ShellUpdate, e => Log.Write(e.Message));
-        _manageWatch = Core.Watch(new Watched.Manage(), ManageUpdate, e => Log.Write(e.Message));
+        _session =Bridge.Core.Watch(new Watched.Session(), ShowGate, e => Log.Write(e.Message));
+        _shellWatch = Bridge.Core.Watch(new Watched.Shell(), ShellUpdate, e => Log.Write(e.Message));
+        _manageWatch = Bridge.Core.Watch(new Watched.Manage(), ManageUpdate, e => Log.Write(e.Message));
         if (_session is null || _shellWatch is null || _manageWatch is null)
         {
             Log.Write("the core refused to show the session, the shell or Manage servers");
@@ -158,7 +159,7 @@ public sealed partial class MainWindow : Window
         // the way in, once per process: the trusted accounts resume, or the sign-in shows
         try
         {
-            var (answer, _) = await Core.CallAsync(new Call.SessionStart());
+            var (answer, _) = await Bridge.Core.CallAsync(new Call.SessionStart());
             if (answer is not Answer.Done) Log.Write($"the start answered {answer.GetType().Name}");
         }
         catch (UnreadableException e)

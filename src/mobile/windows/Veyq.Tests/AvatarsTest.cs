@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Windows.Graphics.Imaging;
 using Windows.Storage.Streams;
+using Veyq.Core;
 
 namespace Veyq.Tests;
 
