@@ -240,8 +240,10 @@ ADR 0153 decisions 1–5 hold them; here only what the work needs beside them.
   trusting asked "3 changes made offline have not been sent yet. They will be deleted." (cancelled); reconnected, a
   refresh sent all three (stderr `queued said: offline_sent`, tray empty, folder, Memory and Pot on Home). **Not passed:**
   a photo added offline, a medium's time, the held edit's conflict editor and *Discard mine*, *Save a copy* (no refused
-  write made), the store grep, the re-key; the two core fixes above are covered by their tests and the build, not seen in
-  the app again.
+  write made), the store grep, the re-key. After the two core fixes, a second run (same throwaway, offline again): New
+  Memory closed its dialog saying "Waiting to send" (stderr `new memory: queued`), the Pot's Settle up showed no *Record*,
+  and the tray's *Discard* dropped the queued Memory (`Queued.Discard: Done`, tray empty). Throwaway erased, its home
+  volume removed.
 - [ ] **10 Windows** — the same. · Done when: `python3 windows/run.py build` green on the VM.
 - [ ] **11 the passes** — § Passes; results into ADR 0153's Consequences.
 - [ ] **12 harvest** — ADR 0153's `Built:` and `Status: Accepted` once the owner's questions are answered; ADR 0140's
