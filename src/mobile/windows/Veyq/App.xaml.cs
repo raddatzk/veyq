@@ -4,6 +4,7 @@
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Veyq.Bridge;
+using Veyq.Core;
 
 namespace Veyq;
 
@@ -27,9 +28,11 @@ public partial class App : Application
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         Words.Lookup = MrtWords.Open(null, DebugEnv.Language);
+        // every application registered into the core UI before anything is drawn (the composition root)
+        Applications.Register();
         _window = new MainWindow();
         AskBeforeClosing(_window);
-        _window.Closed += (_, _) => Core.Shutdown();
+        _window.Closed += (_, _) => Bridge.Core.Shutdown();
         _window.Activate();
         _window.StartCore();
         // the activation that started this process: a veyq: link waits for the core (DeepLinks, ADR 0150 § O3)

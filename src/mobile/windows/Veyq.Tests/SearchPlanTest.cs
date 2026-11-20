@@ -1,7 +1,8 @@
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Veyq.Bridge.Wire;
-using E = Veyq.SearchPlan.Entry;
+using Veyq.Core;
+using E = Veyq.Core.SearchPlan.Entry;
 
 namespace Veyq.Tests;
 
