@@ -233,8 +233,27 @@ internal class Tenant(
     },
     /** A space's trash sheet (`ShellModel.trashSheet`). */
     val trash: ((scopeId: String) -> TrashSheet)? = shell?.let { s -> { scopeId -> s.trashSheet(scopeId) {} } },
-    /** A new folder where the shell is (`ShellModel.createFolderHere`): why not, or null. */
-    val createFolder: (suspend (name: String) -> Notice?)? = shell?.let { s -> { name -> s.createFolderHere(name) } },
+    /** A new folder where the shell is (`ShellModel.createFolderHere`): the dialog's outcome. */
+    val createFolder: (suspend (name: String) -> me.raddatz.veyq.mobile.navigation.NameAnswer)? = shell?.let { s -> { name -> s.createFolderHere(name) } },
+    /**
+     * Whether files may be put under a parent (null: the space's top) of a space (`ShellModel.takesUpload`, ADR 0154 decision
+     * 1): every upload call judges its target again here, whatever the host's own gate said. Fail-closed: a tenant without a
+     * shell takes none unless a test plays one.
+     */
+    val takesUpload: (scopeId: String, parentId: String?) -> Boolean = shell?.let { s -> { scopeId, parentId -> s.takesUpload(scopeId, parentId) } }
+        ?: { _, _ -> false },
+    /** Whether a row of the level shown takes a drop (`ShellModel.dropTarget`): never a row by its kind. */
+    val dropTarget: (row: NodeAt) -> Boolean = shell?.let { s -> { row -> s.dropTarget(row) } } ?: { false },
+    /**
+     * A drop onto a target (`ShellModel.drop`, ADR 0154 decision 1): judged, sorted and uploaded into the tenant's Depot
+     * uploads (null: none), a file not kept handed to its `left`; a test's tenant plays one.
+     */
+    val drop: (suspend (
+        target: me.raddatz.veyq.mobile.navigation.DropTarget, items: List<me.raddatz.veyq.mobile.navigation.Dropped>,
+        depot: me.raddatz.veyq.mobile.depot.DepotUploads?, left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit, deletedName: String,
+    ) -> me.raddatz.veyq.mobile.navigation.DropOutcome)? = shell?.let { s ->
+        { target, items, depot, left, deletedName -> s.drop(target, items, depot, left, deletedName) }
+    },
     /** A node's move or copy sheet (`ShellModel.moveSheet`), a Pot's copy by the open Pot model handed in. */
     val move: ((node: NodeAt, copying: Boolean, pot: PotModel?, deletedName: String) -> MoveSheet)? = shell?.let { s ->
         { node, copying, pot, deletedName -> s.moveSheet(node, copying, pot, deletedName) {} }
@@ -1072,46 +1091,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.SaveCancel -> saves[call.save]?.let { if (it.cancel()) Answer.Done else Answer.Refused(Answer.Why.SAVE_ENDED) }
                 ?: Answer.Refused(Answer.Why.NO_SUCH_SAVE)
             is Call.FileChooseReplace -> filePages[call.file]?.let { if (it.chooseReplace()) Answer.Done else Answer.Refused(Answer.Why.NO_REPLACE) } ?: noFile
-            is Call.UploadFiles -> uploads.value?.let { u ->
-                // each path opened by the core and read at offsets: nothing of a file crosses, none is held whole; a path that
-                // does not read is said by name, never dropped unsaid
-                val sources = call.paths.map { it to parts.files.source(it) }
-                val notRead = sources.filter { it.second == null }.map { pathName(it.first) }
-                Answer.Queued(u.upload(call.scopeId, call.parentId, call.label, sources.mapNotNull { it.second }), Notices.notRead(notRead))
-            } ?: noTenant
-            is Call.UploadFolder -> uploads.value?.let { u ->
-                val found = parts.files.walk(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
-                Answer.Queued(u.uploadFolder(call.scopeId, call.parentId, null, call.path, found))
-            } ?: noTenant
-            is Call.ImportScreen -> uploads.value?.let { u ->
-                val sources = call.paths.map { it to parts.files.source(it) }
-                val notRead = Notices.notRead(sources.filter { it.second == null }.map { pathName(it.first) })
-                val screened = u.screen(call.scopeId, call.parentId, call.label, sources.mapNotNull { it.second }, deletedName = call.deletedName)
-                screened.offer?.let { Answer.ImportOffered(holdImport(it), screened.queued, notRead) } ?: Answer.Queued(screened.queued, notRead)
-            } ?: noTenant
-            is Call.ImportScreenFolder -> uploads.value?.let { u ->
-                val found = parts.files.walk(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
-                val screened = u.screenFolder(call.scopeId, call.parentId, call.label, null, call.path, found, call.deletedName)
-                screened.offer?.let { Answer.ImportOffered(holdImport(it), 0) } ?: Answer.Queued(screened.queued)
-            } ?: noTenant
-            is Call.ImportRun -> imports[call.import]?.let { it.import(); Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_IMPORT)
-            is Call.ImportAsFile -> imports[call.import]?.let { it.uploadAsFile(); Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_IMPORT)
-            is Call.ImportCancel -> imports[call.import]?.let { it.cancel(); Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_IMPORT)
-            is Call.UploadReplace -> uploads.value?.let { u ->
-                val page = filePages[call.file] ?: return noFile
-                val source = parts.files.source(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
-                if (u.replace(page, source)) Answer.Queued(1) else Answer.Refused(Answer.Why.NOT_CHOSEN)
-            } ?: noTenant
-            is Call.UploadCancel -> uploads.value?.cancel(call.item).done()
-            is Call.UploadRetry -> uploads.value?.retry(call.item).done()
-            Call.UploadCancelAll -> uploads.value?.cancelAll().done()
-            is Call.UploadAcknowledge -> uploads.value?.acknowledge(call.batch).done()
-            is Call.UploadTakeOffer -> uploads.value?.let { u ->
-                val said = u.current.saying.firstOrNull { it.id == call.said } ?: return Answer.Refused(Answer.Why.NO_SUCH_SAID)
-                u.take(said)
-                Answer.Done
-            } ?: noTenant
-            is Call.UploadSeen -> uploads.value?.seen(call.said).done()
+            is Call.UploadFiles, is Call.UploadFolder, is Call.ImportScreen, is Call.ImportScreenFolder, is Call.ImportRun, is Call.ImportAsFile,
+            is Call.ImportCancel, is Call.UploadReplace, is Call.UploadCancel, is Call.UploadRetry, Call.UploadCancelAll, is Call.UploadAcknowledge,
+            is Call.UploadTakeOffer, is Call.UploadSeen, is Call.Drop -> uploadCall(parts, call)
             is Call.HeaderOpen -> tenant.value?.models?.header?.let { make ->
                 val id = ids.incrementAndFetch()
                 headers.put(id, HeldHeader(make(call.node, call.facts, ::closeOpen), call.maxButtons))
@@ -1130,7 +1112,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.HeaderOfflineCancel -> headers[call.header]?.let { it.model.cancelOffline(); Answer.Done } ?: noHeader
             is Call.HeaderTrash -> headers[call.header]?.let { h -> h.model.trash().let { Answer.Trashed(it, h.model.current.undo != null) } } ?: noHeader
             is Call.HeaderUndo -> headers[call.header]?.let { Answer.Said(it.model.undoTrash()) } ?: noHeader
-            is Call.HeaderRename -> headers[call.header]?.let { it.model.rename(call.name).let { r -> Answer.Renamed(r.problem, r.notice) } } ?: noHeader
+            is Call.HeaderRename -> headers[call.header]?.let { named(it.model.rename(call.name)) } ?: noHeader
             is Call.HeaderCoverPicture -> headers[call.header]?.let { h ->
                 val picture = h.model.coverPicture() ?: return Answer.Refused(Answer.Why.NO_COVER)
                 payload(picture)
@@ -1184,7 +1166,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.MoveConfirm -> moves[call.move]?.let { sent(it.confirm()) } ?: noMove
             is Call.MoveCancelConfirm -> moves[call.move]?.cancelConfirm().done(Answer.Why.NO_SUCH_MOVE)
             is Call.MoveUndo -> moves[call.move]?.let { Answer.Said(it.undo()) } ?: noMove
-            is Call.ShellCreateFolder -> tenant.value?.models?.createFolder?.let { Answer.Said(it(call.name)) } ?: noTenant
+            is Call.ShellCreateFolder -> tenant.value?.models?.createFolder?.let { named(it(call.name)) } ?: noTenant
             is Call.TrashOpen -> tenant.value?.models?.trash?.let { make ->
                 val id = ids.incrementAndFetch()
                 val sheet = make(call.scopeId)
@@ -1311,7 +1293,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.LinkConfirm -> links[call.link]?.let { taken(it.model.confirm(call.label)) } ?: noLink
             is Call.LinkEnterCode -> links[call.link]?.let { taken(it.model.enterCode(call.code)) } ?: noLink
             is Call.LinkClose -> links.remove(call.link)?.let { closeLink(it); Answer.Done } ?: noLink
-            is Call.ReceivedOpen, is Call.ReceivedPassword, is Call.ReceivedAcceptTerms, is Call.ReceivedAcceptNote, is Call.ReceivedOpenNode, is Call.ReceivedBack, is Call.ReceivedStay, is Call.ReceivedLeave, is Call.ReceivedClose, is Call.ReceivedName, is Call.ReceivedForgetGuest, is Call.ReceivedKeep, is Call.ReceivedUpload, is Call.ReceivedReplace, is Call.ReceivedNewFolder, is Call.ReceivedReportNode, is Call.ReceivedReport, is Call.ReceivedKeepPlaces, is Call.ReceivedReportShown -> receivedCall(parts, call)
+            is Call.ReceivedOpen, is Call.ReceivedPassword, is Call.ReceivedAcceptTerms, is Call.ReceivedAcceptNote, is Call.ReceivedOpenNode, is Call.ReceivedBack, is Call.ReceivedStay, is Call.ReceivedLeave, is Call.ReceivedClose, is Call.ReceivedName, is Call.ReceivedForgetGuest, is Call.ReceivedKeep, is Call.ReceivedUpload, is Call.ReceivedReplace, is Call.ReceivedNewFolder, is Call.ReceivedNamingSave, is Call.ReceivedNamingDecline, is Call.ReceivedReportNode, is Call.ReceivedReport, is Call.ReceivedKeepPlaces, is Call.ReceivedReportShown -> receivedCall(parts, call)
             is Call.BookmarkOpen -> openBookmark(parts, call.node)
             is Call.BookmarkOwnPage -> bookmarks[call.bookmark]?.let { b ->
                 heldReceived(b.page.openOwnPage(tenant.value?.models?.session))
@@ -2283,14 +2265,22 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Call.ReceivedReplace -> received[call.received]?.let { h ->
             val page = h.screen.view.page.value as? me.raddatz.veyq.mobile.sharing.GuestPage.File ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
             val access = h.screen.view.access ?: return noReceived
-            if (access.role != me.raddatz.veyq.mobile.sharing.GuestAccess.READ_WRITE || access.session.value == null) return Answer.Refused(Answer.Why.NOT_OFFERED)
             val source = parts.files.source(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
-            if (access.replace(page.model, source)) Answer.Queued(1) else Answer.Refused(Answer.Why.NOT_CHOSEN).also { source.close() }
+            // the core's rule alone (`FileRights`, the role, the name asked at the write): no role or session read here
+            if (access.replaceAsking(page.model, source)) Answer.Queued(1) else Answer.Refused(Answer.Why.NOT_CHOSEN).also { source.close() }
         } ?: noReceived
         is Call.ReceivedNewFolder -> received[call.received]?.let { h ->
             val level = h.screen.view.page.value as? me.raddatz.veyq.mobile.sharing.GuestPage.Level ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
             if (!level.model.writes) return Answer.Refused(Answer.Why.NOT_OFFERED)
-            Answer.Said(level.model.createFolder(call.name))
+            named(level.model.createFolder(call.name))
+        } ?: noReceived
+        is Call.ReceivedNamingSave -> received[call.received]?.let { h ->
+            val access = h.screen.view.access ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+            named(access.naming.name(call.name))
+        } ?: noReceived
+        is Call.ReceivedNamingDecline -> received[call.received]?.let { h ->
+            h.screen.view.access?.naming?.decline()
+            Answer.Done
         } ?: noReceived
         is Call.ReceivedReportNode -> received[call.received]?.let { h ->
             val sheet = me.raddatz.veyq.mobile.sharing.GuestReport.nodeSheet(h.screen.view, call.node) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
@@ -2403,7 +2393,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     /** What the host is shown of a received link: never the link, its key or anything sealed. */
-    private fun shownReceived(h: HeldReceived, gate: me.raddatz.veyq.mobile.sharing.ShareGates.State, busy: Boolean, guest: me.raddatz.veyq.mobile.sharing.GuestSession?, s: me.raddatz.veyq.mobile.sharing.GuestScreen.State, page: ReceivedPage?): ReceivedShown {
+    private fun shownReceived(h: HeldReceived, gate: me.raddatz.veyq.mobile.sharing.ShareGates.State, busy: Boolean, guest: me.raddatz.veyq.mobile.sharing.GuestSession?, s: me.raddatz.veyq.mobile.sharing.GuestScreen.State, page: ReceivedPage?, naming: Boolean = false): ReceivedShown {
         val ready = gate as? me.raddatz.veyq.mobile.sharing.ShareGates.State.Ready
         val terms = gate as? me.raddatz.veyq.mobile.sharing.ShareGates.State.Terms
         return ReceivedShown(
@@ -2435,6 +2425,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             reportAsked = s.reporting,
             recordDays = h.screen.view.access?.guestWriteRecordDays,
             privacy = h.screen.view.access?.let { "${it.origin}/privacy#guest-write-record" },
+            naming = naming,
         )
     }
 
@@ -2797,14 +2788,20 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.Scan(w.scan, null))
         is Watched.Received -> received[w.received]?.let { h ->
             val gates = h.screen.view.gates
+            // the core's naming flow is the access's, set once the gates passed (and the page drawn): followed as it is set
+            val naming = combine(gates.state, gates.guest, h.page) { _, _, _ -> h.screen.view.access }
+                .distinctUntilChanged { a, b -> a === b }
+                .flatMapLatest { it?.naming?.asking ?: flowOf(false) }
             combine(gates.state, gates.busy, gates.guest, h.screen.state, h.page) { gate, busy, guest, s, page -> gate to listOf(busy, guest, s, page) }
-                .combine(h.open) { (gate, rest), open ->
+                .combine(h.open) { rest, open -> rest to open }
+                .combine(naming) { (pair, open), asking ->
+                    val (gate, rest) = pair
                     @Suppress("UNCHECKED_CAST")
                     Update.Received(
                         w.received,
                         if (open) shownReceived(
                             h, gate, rest[0] as Boolean, rest[1] as me.raddatz.veyq.mobile.sharing.GuestSession?,
-                            rest[2] as me.raddatz.veyq.mobile.sharing.GuestScreen.State, rest[3] as ReceivedPage?,
+                            rest[2] as me.raddatz.veyq.mobile.sharing.GuestScreen.State, rest[3] as ReceivedPage?, asking,
                         ) else null,
                     )
                 }
@@ -2875,6 +2872,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             queuedHere = queued.here,
             queuedSaid = queued.said,
             view = open.models.shell?.levelView?.let { ViewModeShown.valueOf(it.name) } ?: ViewModeShown.valueOf(me.raddatz.veyq.mobile.navigation.ViewMode.FIRST.name),
+            dropsHere = open.models.shell?.dropLevel(shell) != null,
+            dropRows = shell.space?.let { scopeId ->
+                lists.groups(shell).filter { it.folders }.flatMap { it.nodes }
+                    .filter { open.models.dropTarget(NodeAt(scopeId, it.nodeId, it.kind, it.name)) }.map { it.nodeId }
+            }.orEmpty(),
         )
     }
 
@@ -3227,6 +3229,102 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     /** A file's page as the host draws it ([FileShown]), each field the model's own answer. */
     /** An import offered (ADR 0152 decision 6): held by its id until its dialog closes. */
+    /**
+     * The uploads' and the imports' calls and a drop (`Upload.*`, `Import.*`, [Call.Drop]), apart from [dispatch] to keep
+     * its method within the JVM's size. Every call that names a target judges it again first ([takesUpload], ADR 0154
+     * decision 1).
+     */
+    private suspend fun uploadCall(parts: Composition<A, T>, call: Call): Answer = when (call) {
+        is Call.UploadFiles -> uploads.value?.let { u ->
+            // the target judged again before a path is opened: a host that skipped the gate is refused (ADR 0154 decision 1)
+            if (!takesUpload(call.scopeId, call.parentId)) return notHere
+            // each path opened by the core and read at offsets: nothing of a file crosses, none is held whole; a path that
+            // does not read is said by name, never dropped unsaid
+            val sources = call.paths.map { it to parts.files.source(it) }
+            val notRead = sources.filter { it.second == null }.map { pathName(it.first) }
+            Answer.Queued(u.upload(call.scopeId, call.parentId, call.label, sources.mapNotNull { it.second }), Notices.notRead(notRead))
+        } ?: noTenant
+        is Call.UploadFolder -> uploads.value?.let { u ->
+            if (!takesUpload(call.scopeId, call.parentId)) return notHere
+            val found = parts.files.walk(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
+            Answer.Queued(u.uploadFolder(call.scopeId, call.parentId, null, call.path, found))
+        } ?: noTenant
+        is Call.ImportScreen -> uploads.value?.let { u ->
+            if (!takesUpload(call.scopeId, call.parentId)) return notHere
+            val sources = call.paths.map { it to parts.files.source(it) }
+            val notRead = Notices.notRead(sources.filter { it.second == null }.map { pathName(it.first) })
+            val screened = u.screen(call.scopeId, call.parentId, call.label, sources.mapNotNull { it.second }, deletedName = call.deletedName)
+            screened.offer?.let { Answer.ImportOffered(holdImport(it), screened.queued, notRead) } ?: Answer.Queued(screened.queued, notRead)
+        } ?: noTenant
+        is Call.ImportScreenFolder -> uploads.value?.let { u ->
+            if (!takesUpload(call.scopeId, call.parentId)) return notHere
+            val found = parts.files.walk(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
+            val screened = u.screenFolder(call.scopeId, call.parentId, call.label, null, call.path, found, call.deletedName)
+            screened.offer?.let { Answer.ImportOffered(holdImport(it), 0) } ?: Answer.Queued(screened.queued)
+        } ?: noTenant
+        is Call.ImportRun -> imports[call.import]?.let { it.import(); Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_IMPORT)
+        is Call.ImportAsFile -> imports[call.import]?.let { it.uploadAsFile(); Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_IMPORT)
+        is Call.ImportCancel -> imports[call.import]?.let { it.cancel(); Answer.Done } ?: Answer.Refused(Answer.Why.NO_SUCH_IMPORT)
+        is Call.UploadReplace -> uploads.value?.let { u ->
+            val page = filePages[call.file] ?: return noFile
+            val source = parts.files.source(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
+            if (u.replace(page, source)) Answer.Queued(1) else Answer.Refused(Answer.Why.NOT_CHOSEN)
+        } ?: noTenant
+        is Call.UploadCancel -> uploads.value?.cancel(call.item).done()
+        is Call.UploadRetry -> uploads.value?.retry(call.item).done()
+        Call.UploadCancelAll -> uploads.value?.cancelAll().done()
+        is Call.UploadAcknowledge -> uploads.value?.acknowledge(call.batch).done()
+        is Call.UploadTakeOffer -> uploads.value?.let { u ->
+            val said = u.current.saying.firstOrNull { it.id == call.said } ?: return Answer.Refused(Answer.Why.NO_SUCH_SAID)
+            u.take(said)
+            Answer.Done
+        } ?: noTenant
+        is Call.UploadSeen -> uploads.value?.seen(call.said).done()
+        is Call.Drop -> drop(parts, call)
+        else -> Answer.Refused(Answer.Why.NOT_A_CALL)
+    }
+
+    /** A name dialog's outcome as the wire carries it (core's `NameAnswer`). */
+    private fun named(a: me.raddatz.veyq.mobile.navigation.NameAnswer): Answer = Answer.Named(a.problem, a.notice, a.queued, a.keepsOpen)
+
+    /** An upload call's target judged again ([Tenant.takesUpload]); no tenant open takes none. */
+    private fun takesUpload(scopeId: String, parentId: String?): Boolean = tenant.value?.models?.takesUpload?.invoke(scopeId, parentId) == true
+
+    private val notHere get() = Answer.Refused(Answer.Why.DROP_NOT_HERE)
+
+    /**
+     * [Call.Drop] (ADR 0154 decision 1): the host's items handed to the core as they are — a file opened by its path (one that
+     * does not read named), a folder walked (one that does not list said by the core) — and the target named; the core's
+     * one drop judges, sorts and uploads. Nothing is judged here.
+     */
+    private suspend fun drop(parts: Composition<A, T>, call: Call.Drop): Answer {
+        val t = tenant.value?.models ?: return noTenant
+        val drop = t.drop ?: return noTenant
+        val target = when (val on = call.on) {
+            is DropOn.Level -> me.raddatz.veyq.mobile.navigation.DropTarget.Level(on.label)
+            is DropOn.Row -> me.raddatz.veyq.mobile.navigation.DropTarget.Row(on.folder)
+            is DropOn.Gallery -> me.raddatz.veyq.mobile.navigation.DropTarget.Gallery(galleries[on.gallery] ?: return noGallery)
+        }
+        val items = call.items.map { item ->
+            when (item) {
+                is DropItem.File -> parts.files.source(item.path)?.let { me.raddatz.veyq.mobile.navigation.Dropped.File(PathSource(item.path, it)) }
+                    ?: me.raddatz.veyq.mobile.navigation.Dropped.Unread(pathName(item.path))
+                is DropItem.Folder -> me.raddatz.veyq.mobile.navigation.Dropped.Folder(item.path, null, parts.files.walk(item.path))
+                is DropItem.NotLocal -> me.raddatz.veyq.mobile.navigation.Dropped.NotLocal(item.name)
+            }
+        }
+        // a desktop reads each file in place at its path: one the drop does not keep is closed, nothing else to hand back
+        val left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit = { runCatching { it.close() } }
+        return when (val outcome = drop(target, items, uploads.value, left, call.deletedName)) {
+            is me.raddatz.veyq.mobile.navigation.DropOutcome.Uploaded -> Answer.Dropped(outcome.queued, outcome.notices)
+            is me.raddatz.veyq.mobile.navigation.DropOutcome.Offered -> Answer.Dropped(outcome.queued, outcome.notices, holdImport(outcome.offer))
+            is me.raddatz.veyq.mobile.navigation.DropOutcome.Refused -> {
+                items.filterIsInstance<me.raddatz.veyq.mobile.navigation.Dropped.File>().forEach { left(it.source) }
+                Answer.Dropped(0, outcome.notices, refused = true)
+            }
+        }
+    }
+
     private fun holdImport(dialog: me.raddatz.veyq.mobile.export.ImportDialog): Long {
         val id = ids.incrementAndFetch()
         imports.put(id, dialog)
@@ -3357,6 +3455,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     fun unwatch(id: Long) {
         watches.remove(id)?.cancel()
+    }
+
+    init {
+        // the core follows a reach's end (ADR 0154 decision 1, `SessionModel.followed`): the shown account ended on its own
+        // and the next one opened in its place — the bridge opens its tenant as a sign-in's, comparing nothing itself. Last
+        // in the class, so every registry exists when it first runs.
+        scope.launch { parts.await().session.followed.collect { o -> if (o != null) opened(o) } }
     }
 
     /** Ends everything: the watches, the calls under way, the models. */

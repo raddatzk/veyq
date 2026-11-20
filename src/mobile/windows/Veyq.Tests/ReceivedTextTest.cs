@@ -12,7 +12,7 @@ public sealed class ReceivedTextTest
     {
         host = "photos.example.org", gate = gate, refusal = null, askedAgain = false, busy = false, terms = "",
         operatorSection = "", record = "", note = "", rootName = "Summer", role = "READ_WRITE", page = null, atRoot = true,
-        guestName = null, leaving = false, left = false, keepOffered = true, reportAsked = false, recordDays = null, privacy = null,
+        guestName = null, leaving = false, left = false, keepOffered = true, reportAsked = false, recordDays = null, privacy = null, naming = false,
     };
 
     [TestMethod]

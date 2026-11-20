@@ -491,7 +491,7 @@ internal sealed class Call {
     /** The trash's undo while offered (`undoTrash`): [Answer.Said] with why it failed, or none. */
     @Serializable @SerialName("Header.Undo") data class HeaderUndo(val header: Long) : Call()
 
-    /** Renames the node (`rename`): [Answer.Renamed]. */
+    /** Renames the node (`rename`): [Answer.Named]. */
     @Serializable @SerialName("Header.Rename") data class HeaderRename(val header: Long, val name: String) : Call()
 
     /**
@@ -566,6 +566,8 @@ internal sealed class Call {
     /**
      * The files at [paths] (each as the host's open dialog or a drop gave it) uploaded as new files under [parentId] (null:
      * the space's top) of [scopeId], one batch labelled [label] (the level's name as the host shows it) — `DepotUploads.upload`.
+     * The target is judged again here (`ShellModel.takesUpload`, ADR 0154 decision 1): one the core does not offer is
+     * refused `DROP_NOT_HERE` before any path is opened.
      * The core opens each path itself and reads it at offsets a frame at a time (ADR 0137 decision 3): nothing of a file
      * crosses, and a file of any size is never held whole. A path that is no file that reads is left out. Answered once
      * queued ([Answer.Queued]: how many); a name a file already holds offers its replace through [UploadsShown.said].
@@ -577,7 +579,8 @@ internal sealed class Call {
      * (`PickedPaths.walk`: a link reported and never followed), its folders made while [UploadsShown.preparing] says so,
      * then its files queued as one batch under its own name. Answered once that is done ([Answer.Queued]: how many files,
      * 0 where none went); what it left out or why it went nowhere arrives as [UploadsShown.said]. Refused where [path] is
-     * no directory that lists.
+     * no directory that lists, and `DROP_NOT_HERE` — before it is walked — where the core does not offer the target
+     * (`ShellModel.takesUpload`).
      */
     @Serializable @SerialName("Upload.Folder") data class UploadFolder(val scopeId: String, val parentId: String?, val path: String) : Call()
 
@@ -643,7 +646,8 @@ internal sealed class Call {
      * member may create there, the first that is a veyq download by its content becomes an import offered ([Answer.ImportOffered],
      * watched as [Watched.Import]) and every other file is queued as [UploadFiles] queues it; with none, the answer is
      * [Answer.Queued]. Paths in, never bytes (ADR 0137): the core opens each and reads its end and directory only.
-     * [deletedName]: how an erased person of an imported Pot is named (the host's `pot_deleted_person`).
+     * [deletedName]: how an erased person of an imported Pot is named (the host's `pot_deleted_person`). Refused
+     * `DROP_NOT_HERE` before any path is opened where the core does not offer the target (`ShellModel.takesUpload`).
      */
     @Serializable @SerialName("Import.Screen")
     data class ImportScreen(val scopeId: String, val parentId: String?, val label: String, val paths: List<String>, val deletedName: String) : Call()
@@ -651,7 +655,7 @@ internal sealed class Call {
     /**
      * A directory picked or dropped into a level, screened first (`DepotUploads.screenFolder`): one holding
      * `.veyq/manifest.json` at its root is a download unpacked and offered as an import ([Answer.ImportOffered]); any other is
-     * uploaded as [UploadFolder] uploads it ([Answer.Queued]).
+     * uploaded as [UploadFolder] uploads it ([Answer.Queued]). Refused `DROP_NOT_HERE` as [ImportScreen] is.
      */
     @Serializable @SerialName("Import.ScreenFolder")
     data class ImportScreenFolder(val scopeId: String, val parentId: String?, val label: String, val path: String, val deletedName: String) : Call()
@@ -710,8 +714,18 @@ internal sealed class Call {
     /** The move's undo while offered (`undo`): [Answer.Said] with why it failed, or none. */
     @Serializable @SerialName("Move.Undo") data class MoveUndo(val move: Long) : Call()
 
-    /** A new folder where the shell is (`ShellModel.createFolderHere`): [Answer.Said] with why not, or none. */
+    /** A new folder where the shell is (`ShellModel.createFolderHere`): [Answer.Named], the dialog's outcome (ADR 0154 decision 1). */
     @Serializable @SerialName("Shell.CreateFolder") data class ShellCreateFolder(val name: String) : Call()
+
+    /**
+     * Files and folders dropped onto [on] (`ShellModel.drop`, ADR 0154 decision 1): the host names what it dropped on and
+     * tells each item a file from a folder by its file system ([DropItem]); the core judges the target — the level shown
+     * ([ShellShown.dropsHere]), a folder's row ([ShellShown.dropRows], never a row by its kind), a gallery (its rights) —,
+     * sorts the items through the target's answer, uploads them, and offers a level's veyq download as an import, one per
+     * drop. Paths in, never bytes (ADR 0137 decision 3). [Answer.Dropped]; [deletedName] names an imported Pot's erased
+     * person (the host's `pot_deleted_person`).
+     */
+    @Serializable @SerialName("Shell.Drop") data class Drop(val on: DropOn, val items: List<DropItem>, val deletedName: String) : Call()
 
     /** A space's trash sheet (`ShellModel.trashSheet`, read at once), answered with its id ([Answer.TrashOpened]). */
     @Serializable @SerialName("Trash.Open") data class TrashOpen(val scopeId: String) : Call()
@@ -941,9 +955,10 @@ internal sealed class Call {
     /**
      * The file on screen replaced by the file at [path] as the link's READ_WRITE guest (#1035; the web's share page), once
      * Replace was chosen on its page ([FileChooseReplace]): queued on the link's own queue, never a tenant's, so a signed-out
-     * guest replaces too; the page reads the file anew once it settled. [Answer.Queued]; refused `NOT_OFFERED` where no file
-     * shows, on a READ link or before the guest named itself, `NOT_CHOSEN` where Replace was not chosen; a path that does
-     * not read is said by name.
+     * guest replaces too; the page reads the file anew once it settled (`GuestAccess.replaceAsking`, ADR 0154 decision 1: a
+     * guest not named yet is asked its name first — [ReceivedShown.naming] — and the call answers once it was).
+     * [Answer.Queued]; refused `NOT_OFFERED` where no file shows, `NOT_CHOSEN` where the core did not queue it (Replace not
+     * chosen or not offered by `FileRights`, a READ link, the naming declined); a path that does not read is said by name.
      */
     @Serializable @SerialName("Received.Replace") data class ReceivedReplace(val received: Long, val path: String) : Call()
 
@@ -966,8 +981,17 @@ internal sealed class Call {
      */
     @Serializable @SerialName("Received.ReportNode") data class ReceivedReportNode(val received: Long, val node: String) : Call()
 
-    /** A READ_WRITE guest's new folder [name] in the folder on screen ([ReceivedPage.writes], #1034): [Answer.Said] — why not, or none once made. */
+    /** A READ_WRITE guest's new folder [name] in the folder on screen ([ReceivedPage.writes], #1034): [Answer.Named], the dialog's outcome. */
     @Serializable @SerialName("Received.NewFolder") data class ReceivedNewFolder(val received: Long, val name: String) : Call()
+
+    /**
+     * The name dialog's save while the core asks a guest's name at a write ([ReceivedShown.naming]; `GuestNaming.name`, ADR
+     * 0154 decision 1): [Answer.Named] — a [Answer.Named.problem] keeps the dialog open; once named the waiting write goes on.
+     */
+    @Serializable @SerialName("Received.NamingSave") data class ReceivedNamingSave(val received: Long, val name: String) : Call()
+
+    /** The name dialog's cancel (`GuestNaming.decline`): the waiting write is not made. [Answer.Done]. */
+    @Serializable @SerialName("Received.NamingDecline") data class ReceivedNamingDecline(val received: Long) : Call()
 
     /**
      * Kept link [node]'s page (core's `BookmarkPage`, ADR 0150 decision 6): its meta opened, the share shown in place while
@@ -1824,8 +1848,20 @@ internal sealed class Answer {
     /** A download: whether the file was written, what it says (done or failed) and what it left out, or null. */
     @Serializable @SerialName("Downloaded") data class Downloaded(val written: Boolean, val notice: Notice, val leftOut: Notice?) : Answer()
 
-    /** A rename: why it did not land ([problem]: the dialog asks again), or what to say once it did ([notice]). */
-    @Serializable @SerialName("Renamed") data class Renamed(val problem: Notice?, val notice: Notice?) : Answer()
+    /**
+     * A name dialog's save (core's `NameAnswer`, ADR 0154 decision 1: a rename, New Folder, a guest's naming): why the name
+     * is not taken ([problem]: the dialog stays open, the word under its field — [keepsOpen]), or what to say as it closes
+     * ([notice]); [queued]: made offline, it waits to be sent and shows where it was made.
+     */
+    @Serializable @SerialName("Named") data class Named(val problem: Notice?, val notice: Notice?, val queued: Boolean, val keepsOpen: Boolean) : Answer()
+
+    /**
+     * What a drop came to ([Call.Drop], core's `DropOutcome`): [queued] files uploaded (or queued offline) at once, [import]
+     * the import offered for one veyq download among it (for [Watched.Import]; null: none), [notices] said in order whatever
+     * the outcome; [refused]: the target takes no drop here, nothing of it was taken.
+     */
+    @Serializable @SerialName("Dropped")
+    data class Dropped(val queued: Int, val notices: List<Notice>, val import: Long? = null, val refused: Boolean = false) : Answer()
 
     /** The pixels a cover's crop shows ([Call.CoverCut]): from ([x], [y]), [width] × [height]. */
     @Serializable @SerialName("CoverCut") data class CoverCut(val x: Int, val y: Int, val width: Int, val height: Int) : Answer()
@@ -2045,6 +2081,9 @@ internal sealed class Answer {
 
         /** An upload: no replace offered or chosen on that page; a path that is no file (or directory) that reads; no such said. */
         NO_REPLACE, NOT_CHOSEN, NO_SUCH_PATH, NO_SUCH_SAID,
+
+        /** An upload call into a target the core does not offer (`ShellModel.takesUpload`, ADR 0154 decision 1): its word is `drop_not_here`. */
+        DROP_NOT_HERE,
 
         /** An import: none open by that id (ADR 0152). */
         NO_SUCH_IMPORT,
@@ -3872,6 +3911,10 @@ internal class ShellShown(
     /** How a level is drawn (the account's choice on this device, ADR 0149 decision 8; [Call.ViewSet]) and what it offers. */
     val view: ViewModeShown = ViewModeShown.valueOf(CoreViewMode.FIRST.name),
     val views: List<ViewModeShown> = CoreViewMode.LEVEL.map { ViewModeShown.valueOf(it.name) },
+    /** Whether the level shown takes a drop (`ShellModel.dropLevel`, ADR 0154 decision 1): [Call.Drop] onto [DropOn.Level]. */
+    val dropsHere: Boolean = false,
+    /** The folders among the level's rows that take a drop (`ShellModel.dropTarget`, never by their kind): [DropOn.Row]. */
+    val dropRows: List<String> = emptyList(),
 ) {
     @Serializable class ShownServer(val connection: String, val label: String, val tenants: List<TenantRef>)
     /** A switcher row ([me.raddatz.veyq.mobile.navigation.ShellWords.SwitcherEntry]); [line] its name and detail for a one-label menu item. */
@@ -4138,7 +4181,38 @@ internal class ReceivedShown(
     val recordDays: Int? = null,
     /** The link's instance's privacy notice at its guest-write record passage (the notice's *more*): its origin's, no share id. */
     val privacy: String? = null,
+    /**
+     * A write waits for the guest's name (`GuestNaming.asking`, ADR 0154 decision 1): the host shows its name dialog,
+     * answered by [Call.ReceivedNamingSave] or [Call.ReceivedNamingDecline].
+     */
+    val naming: Boolean = false,
 )
+
+/** What a drop landed on ([Call.Drop]; core's `DropTarget`): the core judges it. */
+@Serializable
+internal sealed class DropOn {
+    /** The level the shell shows, its title [label] as the host draws it (the batch's name). */
+    @Serializable @SerialName("DropOnLevel") data class Level(val label: String) : DropOn()
+
+    /** The row of [folder] on the level shown ([ShellShown.dropRows]). */
+    @Serializable @SerialName("DropOnRow") data class Row(val folder: NodeAt) : DropOn()
+
+    /** Gallery [gallery]'s Memory or chapter (its page open, [Watched.Gallery]). */
+    @Serializable @SerialName("DropOnGallery") data class Gallery(val gallery: Long) : DropOn()
+}
+
+/** One dropped item as the host's file system tells it ([Call.Drop]; core's `Dropped`): never sorted or judged by the host. */
+@Serializable
+internal sealed class DropItem {
+    /** A file at [path]: the core opens it and reads it at offsets. */
+    @Serializable @SerialName("DroppedFile") data class File(val path: String) : DropItem()
+
+    /** A folder at [path]: the core walks it. */
+    @Serializable @SerialName("DroppedFolder") data class Folder(val path: String) : DropItem()
+
+    /** An item with no local path (a virtual or remote item), said by its [name]. */
+    @Serializable @SerialName("DroppedNotLocal") data class NotLocal(val name: String) : DropItem()
+}
 
 /** Where a kept link's page stands (core's `BookmarkPage.State`). */
 @Serializable

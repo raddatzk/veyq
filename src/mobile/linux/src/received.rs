@@ -858,8 +858,9 @@ impl Inner {
             let toasts = toasts.clone();
             glib::spawn_future_local(async move {
                 match bridge::call(&Call::ReceivedNewFolder { received: id, name: name.clone() }).await.map(|(a, _)| a) {
-                    Ok(Answer::Said { notice: Some(n) }) => again(name, said::notice(&n)),
-                    Ok(Answer::Said { notice: None }) => eprintln!("veyq: a guest's new folder: made"),
+                    Ok(Answer::Named { problem: Some(p), .. }) => again(name, said::notice(&p)),
+                    Ok(Answer::Named { notice: Some(n), .. }) => toasts.add_toast(adw::Toast::new(&said::notice(&n))),
+                    Ok(Answer::Named { .. }) => eprintln!("veyq: a guest's new folder: made"),
                     other => {
                         eprintln!("veyq: a guest's new folder answered {}", answer_kind(&other));
                         toasts.add_toast(adw::Toast::new(&words::share_failed()));
@@ -1057,7 +1058,7 @@ mod tests {
             "host": "photos.example.org", "gate": gate, "refusal": null, "askedAgain": false, "busy": false,
             "terms": "", "operatorSection": "", "record": "", "note": "", "rootName": "Summer", "role": "READ_WRITE",
             "page": null, "atRoot": true, "guestName": null, "leaving": false, "left": false, "keepOffered": true,
-            "reportAsked": false, "recordDays": null, "privacy": null
+            "reportAsked": false, "recordDays": null, "privacy": null, "naming": false
         }))
         .expect("a ReceivedShown reads")
     }

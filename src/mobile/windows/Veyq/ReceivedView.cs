@@ -744,8 +744,9 @@ internal sealed class ReceivedView : IDisposable
             var typed = await Dialogs.AskName(_window, "received-new-folder-dialog", Words.FolderNew(), Words.FolderName(), name, problem, Words.FolderCreate());
             if (typed is null || typed.Trim().Length == 0) return;
             var (answer, _) = await Core.CallAsync(new Call.ReceivedNewFolder { received = Received, name = typed.Trim() });
-            if (answer is Answer.Said { notice: { } n }) NewFolder(typed, Veyq.Said.Notice(n));
-            else if (answer is not Answer.Said) Log.Write($"a guest's new folder answered {answer.GetType().Name}");
+            if (answer is Answer.Named { problem: { } p }) NewFolder(typed, Veyq.Said.Notice(p));
+            else if (answer is Answer.Named { notice: { } n }) Say(false, Veyq.Said.Notice(n));
+            else if (answer is not Answer.Named) Log.Write($"a guest's new folder answered {answer.GetType().Name}");
         }
         catch (Exception e)
         {

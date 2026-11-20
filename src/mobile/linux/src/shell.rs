@@ -452,10 +452,12 @@ impl Shell {
                 let toasts = toasts.clone();
                 glib::spawn_future_local(async move {
                     match bridge::call(&Call::ShellCreateFolder { name: name.clone() }).await.map(|(a, _)| a) {
-                        Ok(Answer::Said { notice: Some(n) }) => {
-                            eprintln!("veyq: new folder: {}", n.msg);
-                            again(name, said::notice(&n));
+                        Ok(Answer::Named { problem: Some(p), .. }) => {
+                            eprintln!("veyq: new folder: {}", p.msg);
+                            again(name, said::notice(&p));
                         }
+                        Ok(Answer::Named { notice: Some(n), .. }) => toasts.add_toast(adw::Toast::new(&said::notice(&n))),
+                        Ok(Answer::Named { .. }) => {}
                         other => header::say(&toasts, other, "Shell.CreateFolder"),
                     }
                 });

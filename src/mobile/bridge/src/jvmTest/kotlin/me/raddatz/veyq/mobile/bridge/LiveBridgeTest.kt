@@ -346,7 +346,7 @@ class LiveBridgeTest {
         assertTrue(home.shown!!.canCreateHere)
         assertTrue(home.shown.creates.any { it.create == me.raddatz.veyq.mobile.AppKinds.Create.FOLDER })
         val name = "App header ${System.currentTimeMillis() % 100_000}"
-        assertEquals(Answer.Said(null), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
         val made = assertNotNull(node(fresh(), name), "the new folder is not listed")
         println("made $name")
         val at = me.raddatz.veyq.mobile.navigation.NodeAt(made.scopeId, made.nodeId, made.kind, made.name)
@@ -373,7 +373,7 @@ class LiveBridgeTest {
 
         // renamed, read back under the new name; a header of the renamed node from now on (the host opens one per name)
         val renamed = "$name renamed"
-        assertEquals(Answer.Renamed(null, null), b.ask(Call.HeaderRename(header, renamed), timeout = 1.minutes))
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.HeaderRename(header, renamed), timeout = 1.minutes))
         assertNotNull(node(fresh(), renamed), "the rename did not land")
         assertEquals(Answer.Done, b.ask(Call.HeaderClose(header)))
         val at2 = at.copy(name = renamed)
@@ -484,7 +484,7 @@ class LiveBridgeTest {
         home?.let { h -> nodes(first).first { it.nodeId == h }.asFolder()?.let { assertEquals(Answer.Done, b.ask(Call.ShellEnter(it))) } }
         val n = System.currentTimeMillis() % 100_000
         val name = "App move $n"
-        assertEquals(Answer.Said(null), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
         val folder = assertNotNull(nodes(fresh()).firstOrNull { it.name == name && it.parentId == home }, "the new folder is not listed")
         println("made $name")
         val made = mutableListOf(folder)
@@ -619,7 +619,7 @@ class LiveBridgeTest {
         home?.let { h -> nodes(first).first { it.nodeId == h }.asFolder()?.let { assertEquals(Answer.Done, b.ask(Call.ShellEnter(it))) } }
         val n = System.currentTimeMillis() % 100_000
         val name = "App share $n"
-        assertEquals(Answer.Said(null), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
         val folder = assertNotNull(nodes(fresh()).firstOrNull { it.name == name && it.parentId == home }, "the new folder is not listed")
         println("made $name")
         try {
@@ -752,7 +752,7 @@ class LiveBridgeTest {
         try {
             val header = (b.ask(Call.HeaderOpen(at(copy), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
             b.watching(Watched.Header(header)).until { u -> (u as Update.Header).shown?.takeIf { it.plan != null } }
-            assertEquals(null, (b.ask(Call.HeaderRename(header, name), timeout = 1.minutes) as Answer.Renamed).problem)
+            assertEquals(null, (b.ask(Call.HeaderRename(header, name), timeout = 1.minutes) as Answer.Named).problem)
             b.ask(Call.HeaderClose(header))
             println("copied Amsterdam as $name")
             val ref = me.raddatz.veyq.mobile.navigation.ObjectRef(copy.scopeId, copy.nodeId, copy.kind, amsterdam.application, name)
@@ -882,7 +882,7 @@ class LiveBridgeTest {
         try {
             val header = (b.ask(Call.HeaderOpen(at(copy), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
             b.watching(Watched.Header(header)).until { u -> (u as Update.Header).shown?.takeIf { it.plan != null } }
-            assertEquals(null, (b.ask(Call.HeaderRename(header, name), timeout = 1.minutes) as Answer.Renamed).problem)
+            assertEquals(null, (b.ask(Call.HeaderRename(header, name), timeout = 1.minutes) as Answer.Named).problem)
             b.ask(Call.HeaderClose(header))
             println("copied Amsterdam as $name")
             val ref = me.raddatz.veyq.mobile.navigation.ObjectRef(copy.scopeId, copy.nodeId, copy.kind, amsterdam.application, name)
@@ -1437,7 +1437,7 @@ class LiveBridgeTest {
         }
         assertEquals(Answer.Done, b.ask(Call.ShellChoose(null)))
         assertEquals(Answer.Done, b.ask(Call.ShellSwitchSpace(personal)))
-        assertEquals(Answer.Said(null), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
         val folder = assertNotNull(fresh().state!!.lists.nodes.firstOrNull { it.scopeId == personal && it.name == name && it.parentId == null })
         val folderId = folder.nodeId
         println("made $name")
@@ -1847,7 +1847,7 @@ class LiveBridgeTest {
         try {
             val header = (b.ask(Call.HeaderOpen(at(copy), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
             b.watching(Watched.Header(header)).until { u -> (u as Update.Header).shown?.takeIf { it.plan != null } }
-            assertEquals(null, (b.ask(Call.HeaderRename(header, name), timeout = 1.minutes) as Answer.Renamed).problem)
+            assertEquals(null, (b.ask(Call.HeaderRename(header, name), timeout = 1.minutes) as Answer.Named).problem)
             b.ask(Call.HeaderClose(header))
             println("copied Amsterdam as $name")
             val ref = me.raddatz.veyq.mobile.navigation.ObjectRef(copy.scopeId, copy.nodeId, copy.kind, amsterdam.application, name)
@@ -1919,7 +1919,7 @@ class LiveBridgeTest {
         assertEquals(Answer.Done, b.ask(Call.ShellChoose(null)))
         assertEquals(Answer.Done, b.ask(Call.ShellSwitchSpace(scope)))
         home?.let { h -> nodes(first).first { it.nodeId == h }.asFolder()?.let { assertEquals(Answer.Done, b.ask(Call.ShellEnter(it))) } }
-        assertEquals(Answer.Said(null), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ShellCreateFolder(name), timeout = 1.minutes))
         val folder = assertNotNull(nodes(fresh()).firstOrNull { it.name == name && it.parentId == home }, "the new folder is not listed")
         val at = me.raddatz.veyq.mobile.navigation.NodeAt(folder.scopeId, folder.nodeId, folder.kind, folder.name)
         println("made $name")

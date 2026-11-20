@@ -214,9 +214,9 @@ impl Header {
             let toasts = toasts.clone();
             glib::spawn_future_local(async move {
                 match bridge::call(&Call::HeaderRename { header, name: name.clone() }).await.map(|(a, _)| a) {
-                    Ok(Answer::Renamed { problem: Some(p), .. }) => again(name, said::notice(&p)),
-                    Ok(Answer::Renamed { problem: None, notice }) => {
-                        eprintln!("veyq: header rename: Renamed");
+                    Ok(Answer::Named { problem: Some(p), .. }) => again(name, said::notice(&p)),
+                    Ok(Answer::Named { problem: None, notice, .. }) => {
+                        eprintln!("veyq: header rename: Named");
                         if let Some(n) = notice {
                             toasts.add_toast(adw::Toast::new(&said::notice(&n)));
                         }

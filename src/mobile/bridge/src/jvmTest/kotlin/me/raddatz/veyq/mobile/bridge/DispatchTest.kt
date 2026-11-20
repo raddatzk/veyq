@@ -1,6 +1,7 @@
 package me.raddatz.veyq.mobile.bridge
 
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
@@ -809,7 +810,7 @@ class DispatchTest {
                     })
                 },
                 trash = { _ -> me.raddatz.veyq.mobile.navigation.TrashSheet(played) {} },
-                createFolder = { name -> played.folders += name; if (name.isBlank()) me.raddatz.veyq.mobile.words.Notice(Msg.FOLDER_NAME_EMPTY) else null },
+                createFolder = { name -> played.folders += name; if (name.isBlank()) me.raddatz.veyq.mobile.navigation.NameAnswer.problem(me.raddatz.veyq.mobile.words.Notice(Msg.FOLDER_NAME_EMPTY)) else me.raddatz.veyq.mobile.navigation.NameAnswer.DONE },
             )
         }
     }
@@ -841,10 +842,10 @@ class DispatchTest {
 
         // rename: a refusal is the dialog's problem, a rename that landed says nothing
         played.renameOutcome = me.raddatz.veyq.mobile.session.NodeRename.Outcome.NAME_TAKEN
-        val refused = b.ask(Call.HeaderRename(id, "Taken")) as Answer.Renamed
-        assertTrue(refused.problem != null && refused.notice == null)
+        val refused = b.ask(Call.HeaderRename(id, "Taken")) as Answer.Named
+        assertTrue(refused.problem != null && refused.notice == null && refused.keepsOpen)
         played.renameOutcome = me.raddatz.veyq.mobile.session.NodeRename.Outcome.RENAMED
-        assertEquals(Answer.Renamed(null, null), b.ask(Call.HeaderRename(id, "Trip 2")))
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.HeaderRename(id, "Trip 2")))
         assertEquals(listOf("Taken", "Trip 2"), played.renamedTo)
 
         // trash: said, gone, its undo offered in the state; the bridge's closeOpen ran; the undo brings it back
@@ -886,8 +887,10 @@ class DispatchTest {
         assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.ShellCreateFolder("New")))
         assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.TrashOpen("s")))
         b.signedIn()
-        assertEquals(Answer.Said(null), b.ask(Call.ShellCreateFolder("Plans")))
-        assertEquals(Msg.FOLDER_NAME_EMPTY, (b.ask(Call.ShellCreateFolder(" ")) as Answer.Said).notice!!.msg)
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ShellCreateFolder("Plans")))
+        val empty = b.ask(Call.ShellCreateFolder(" ")) as Answer.Named
+        assertEquals(Msg.FOLDER_NAME_EMPTY, empty.problem!!.msg)
+        assertTrue(empty.keepsOpen, "a name problem closed the dialog")
         assertEquals(listOf("Plans", " "), played.folders)
 
         val id = (b.ask(Call.TrashOpen("s")) as Answer.TrashOpened).trash
@@ -1741,6 +1744,7 @@ class DispatchTest {
             Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
                 Tenant(
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
+                    takesUpload = { scopeId, _ -> scopeId == "s" },
                     uploads = { queue, deriver, changed ->
                         me.raddatz.veyq.mobile.depot.DepotUploads(queue, object : me.raddatz.veyq.mobile.depot.DepotUploads.Door by level {
                             override fun changed() { level.changed(); changed() }
@@ -1781,6 +1785,163 @@ class DispatchTest {
         Unit
     }
 
+    /** [JvmFiles] that records each path the core opened or walked: an upload refused before any read opens none. */
+    private class OpenedFiles : DeviceFiles by JvmFiles {
+        val opened: MutableList<String> = java.util.Collections.synchronizedList(ArrayList())
+        override fun source(path: String): me.raddatz.veyq.mobile.blob.UploadSource? { opened += path; return JvmFiles.source(path) }
+        override fun walk(path: String): List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>? { opened += path; return JvmFiles.walk(path) }
+    }
+
+    /**
+     * ADR 0154 decision 1 (G2): every upload call judges its scope and parent again (`ShellModel.takesUpload`), whatever the
+     * host's own gate said — a space the core does not offer and a guest's identity folder are refused `DROP_NOT_HERE`
+     * before a path is opened or walked, and nothing is queued; the target it offers takes the same call.
+     *
+     * Bite: the re-judgement in `Bridge.uploadCall` removed → red here.
+     */
+    @Test
+    fun anUploadCallIntoATargetTheCoreDoesNotOfferIsRefusedBeforeAnyRead() = runBlocking {
+        val dir = java.nio.file.Files.createTempDirectory("veyq-gate").toFile()
+        val a = java.io.File(dir, "a.txt").apply { writeText("a") }
+        val trip = java.io.File(dir, "Trip").apply { mkdirs(); java.io.File(this, "x.txt").writeText("x") }
+        val level = PlayedLevel()
+        val files = OpenedFiles()
+        val judged = java.util.Collections.synchronizedList(ArrayList<Pair<String, String?>>())
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, files) { _ ->
+                Tenant(
+                    shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
+                    // the core offers space "s", but never the guest's identity folder "identity" in it
+                    takesUpload = { scopeId, parentId -> judged += scopeId to parentId; scopeId == "s" && parentId != "identity" },
+                    uploads = { queue, _, changed -> me.raddatz.veyq.mobile.depot.DepotUploads(queue, object : me.raddatz.veyq.mobile.depot.DepotUploads.Door by level {
+                        override fun changed() { level.changed(); changed() }
+                    }) },
+                )
+            }
+        }
+        b.signedIn()
+        val notHere = Answer.Refused(Answer.Why.DROP_NOT_HERE)
+        for ((scope, parent) in listOf("other" to null, "s" to "identity")) {
+            assertEquals(notHere, b.ask(Call.UploadFiles(scope, parent, "Elsewhere", listOf(a.path))), "files into $scope/$parent")
+            assertEquals(notHere, b.ask(Call.UploadFolder(scope, parent, trip.path)), "a folder into $scope/$parent")
+            assertEquals(notHere, b.ask(Call.ImportScreen(scope, parent, "Elsewhere", listOf(a.path), "Deleted")), "a screen into $scope/$parent")
+            assertEquals(notHere, b.ask(Call.ImportScreenFolder(scope, parent, "Elsewhere", trip.path, "Deleted")), "a folder's screen into $scope/$parent")
+        }
+        assertEquals(emptyList(), files.opened, "a path was opened for a target the core does not offer")
+        assertEquals(8, judged.size, "a call was not judged")
+        assertTrue(level.sent.isEmpty())
+        // the target the core offers: the same call queued
+        assertEquals(Answer.Queued(1), b.ask(Call.UploadFiles("s", null, "Home", listOf(a.path))))
+        assertEquals(listOf(a.path), files.opened.toList())
+        kotlinx.coroutines.withTimeout(10_000) { while ("upload:top/a.txt" !in level.sent) kotlinx.coroutines.delay(20) }
+        b.shutdown()
+        dir.deleteRecursively()
+        Unit
+    }
+
+    /**
+     * ADR 0154 decision 1 (G1): [Call.Drop] hands the core what the host dropped as it is — a file opened by its path, a
+     * folder walked, one with no local path and one that does not read named — and the target it named; the core's one
+     * drop answers, the import it offers held for its calls, a refusal said and every opened file closed.
+     */
+    @Test
+    fun aDropHandsTheItemsAndTheTargetToTheCoresOneDrop() = runBlocking {
+        val dir = java.nio.file.Files.createTempDirectory("veyq-drop").toFile()
+        val a = java.io.File(dir, "a.txt").apply { writeText("a") }
+        val trip = java.io.File(dir, "Trip").apply { mkdirs(); java.io.File(this, "x.txt").writeText("x") }
+        val seen = java.util.Collections.synchronizedList(ArrayList<String>())
+        val closed = java.util.Collections.synchronizedList(ArrayList<String>())
+        var outcome: (me.raddatz.veyq.mobile.navigation.DropTarget) -> me.raddatz.veyq.mobile.navigation.DropOutcome = { _ ->
+            me.raddatz.veyq.mobile.navigation.DropOutcome.Uploaded(1, listOf(Notice(Msg.DEPOT_DROP_NOT_LOCAL, "Phone")))
+        }
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+                Tenant(
+                    shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
+                    drop = { target, items, _, left, deletedName ->
+                        seen += when (target) {
+                            is me.raddatz.veyq.mobile.navigation.DropTarget.Level -> "level:${target.label}"
+                            is me.raddatz.veyq.mobile.navigation.DropTarget.Row -> "row:${target.folder.nodeId}"
+                            is me.raddatz.veyq.mobile.navigation.DropTarget.Gallery -> "gallery"
+                        }
+                        seen += items.map {
+                            when (it) {
+                                is me.raddatz.veyq.mobile.navigation.Dropped.File -> "file:${it.source.name}"
+                                is me.raddatz.veyq.mobile.navigation.Dropped.Folder -> "folder:${it.name}:${it.found?.size}"
+                                is me.raddatz.veyq.mobile.navigation.Dropped.NotLocal -> "notLocal:${it.name}"
+                                is me.raddatz.veyq.mobile.navigation.Dropped.Unread -> "unread:${it.name}"
+                            }
+                        }
+                        seen += "deleted:$deletedName"
+                        items.filterIsInstance<me.raddatz.veyq.mobile.navigation.Dropped.File>().forEach { f ->
+                            val src = f.source
+                            left(object : me.raddatz.veyq.mobile.blob.UploadSource(src.name, src.size, src.type, src.modifiedAt) {
+                                override suspend fun read(from: Long, length: Int) = src.read(from, length)
+                                override fun close() { closed += src.name; src.close() }
+                            })
+                        }
+                        outcome(target)
+                    },
+                )
+            }
+        }
+        val items = listOf(DropItem.File(a.path), DropItem.Folder(trip.path), DropItem.NotLocal("Phone"), DropItem.File(java.io.File(dir, "gone.txt").path))
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.Drop(DropOn.Level("Home"), items, "Deleted")))
+        b.signedIn()
+        assertEquals(Answer.Dropped(1, listOf(Notice(Msg.DEPOT_DROP_NOT_LOCAL, "Phone"))), b.ask(Call.Drop(DropOn.Level("Home"), items, "Deleted")))
+        assertEquals(listOf("level:Home", "file:a.txt", "folder:Trip:1", "notLocal:Phone", "unread:gone.txt", "deleted:Deleted"), seen.toList())
+        assertEquals(listOf("a.txt"), closed.toList(), "a file the drop did not keep was not closed")
+        seen.clear()
+        outcome = { _ -> me.raddatz.veyq.mobile.navigation.DropOutcome.Refused(Notice(Msg.DROP_NOT_HERE)) }
+        val row = me.raddatz.veyq.mobile.navigation.NodeAt("s", "identity", "FOLDER", "Ben")
+        assertEquals(
+            Answer.Dropped(0, listOf(Notice(Msg.DROP_NOT_HERE)), refused = true),
+            b.ask(Call.Drop(DropOn.Row(row), listOf(DropItem.File(a.path)), "Deleted")),
+        )
+        assertEquals("row:identity", seen.first())
+        // a gallery not open is no target
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_GALLERY), b.ask(Call.Drop(DropOn.Gallery(999), listOf(DropItem.File(a.path)), "Deleted")))
+        b.shutdown()
+        dir.deleteRecursively()
+        Unit
+    }
+
+    /**
+     * ADR 0154 decision 1 (G5): the shown account ends on its own (a reconnect found this device's trust gone) — the core
+     * opens the next one and says the shell follows it (`SessionModel.followed`); the bridge opens that tenant as a
+     * sign-in's, comparing nothing itself.
+     *
+     * Bite: the bridge's watch of `followed` removed → red here.
+     */
+    @Test
+    fun aReachThatEndedForTheShownAccountMovesTheBridgesTenantToTheNextOne() = runBlocking {
+        val ending = MutableStateFlow<SignInFailure.Reason?>(null)
+        val two = object : SessionModel.Door<Acc, String> by Door() {
+            val b = Acc("b.example#u2", listOf(TenantRef("tb", "B", "b.example")))
+            override suspend fun signIn(server: String, email: String, password: String, secretKey: String): Acc =
+                if (server == "https://b.example") b else Door().signIn(server, email, password, secretKey)
+            override fun ends(account: Acc) = if (account.key == b.key) ending.filterNotNull() else null
+        }
+        val opened = java.util.Collections.synchronizedList(ArrayList<String>())
+        val bridge = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(two, hidden, RecentUses({}, emptyList())), hidden) { session ->
+                opened += session
+                Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {})
+            }
+        }
+        bridge.signedIn()
+        assertEquals(Answer.Done, bridge.ask(Call.SessionAddServer))
+        assertEquals(Answer.Done, bridge.ask(Call.SessionSignIn("b.example", "p@b.example", "right", "A3-SECRET")))
+        assertEquals(listOf("a.example#u1/ta", "b.example#u2/tb"), opened.toList())
+        ending.value = SignInFailure.Reason.DEVICE_NOT_TRUSTED
+        kotlinx.coroutines.withTimeout(10_000) { while (opened.size < 3) kotlinx.coroutines.delay(20) }
+        assertEquals("a.example#u1/ta", opened.last(), "the bridge's tenant did not follow the next account")
+        bridge.shutdown()
+    }
+
     @Test
     fun filesAFolderAndAReplaceAreUploadedByPathAndTheQueueIsDrivenThroughCalls() = runBlocking {
         val dir = java.nio.file.Files.createTempDirectory("veyq-up").toFile()
@@ -1805,6 +1966,7 @@ class DispatchTest {
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     header = { node, facts, _ -> me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, Played()) },
                     file = { node -> me.raddatz.veyq.mobile.depot.FileModel(node, level, shares = false) },
+                    takesUpload = { scopeId, _ -> scopeId == "s" },
                     uploads = { queue, _, changed -> me.raddatz.veyq.mobile.depot.DepotUploads(queue, object : me.raddatz.veyq.mobile.depot.DepotUploads.Door by level {
                         override fun changed() { level.changed(); changed() }
                     }) },
