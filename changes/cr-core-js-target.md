@@ -77,35 +77,95 @@ Branch `claude/kjs-refine` at `ff410c6c9`. `C=src/mobile/core/src`.
 
 ## Phases
 
-- [ ] **1 the measurement** — first, and a stop: on a scratch branch, `js()` added as J1 and every compile run
+- [x] **1 the measurement** — first, and a stop: on a scratch branch, `js()` added as J1 and every compile run
   (`:core:compileKotlinJs`, `:core:compileTestKotlinJs`). Recorded in this CR: every error that is not one of R1's
   `expect`s (a JVM- or native-only API in common code is handed back with its list, not worked around); the task
   graph of the package's Gradle task (`--dry-run`) with no `kotlinNodeJsSetup`, `kotlinYarnSetup`, `kotlinNpmInstall`
   or `kotlinStoreYarnLock`, and the switch that keeps them off; whether `src/mobile/` configures with no Android SDK
   present (`ANDROID_HOME` unset, in a JDK container) and on JDK 25 as on 21; two clean builds of the module compared
   byte for byte (`shasum -a 256` over `dist/`). · Done when: the four answers are in § Measured at implement; any
-  "no" is handed back before phase 2.
-- [ ] **2 the target** — J1, J2, J6. · Done when: `:core:jvmTest :core:macosArm64Test`, `:core:compileKotlinJs
+  "no" is handed back before phase 2. **Built** 2026-11-20: M1–M4, four yeses with their switches; the bites seen red
+  were the task-graph check (`:kotlinNpmInstall --dry-run`) and the reproducibility itself (4 variants in 4 builds).
+- [x] **2 the target** — J1, J2, J6. · Done when: `:core:jvmTest :core:macosArm64Test`, `:core:compileKotlinJs
   :core:compileTestKotlinJs` and `:bridge:jvmTest` green; `--warning-mode all` clean; `git diff --stat` shows only
   `jsMain`, `jsTest`, the build file and the metadata under `src/mobile/`. **Bite:** a common-code call to a JVM-only
   API (`System.currentTimeMillis()`) → `compileKotlinJs` red.
-- [ ] **3 the package** — J3, J4, J5. · Done when: from the repo root, `python3 scripts/pnpm_install_no_deprecated.py`
+  **Built** 2026-11-20: `jsMain` holds `crypto/JsPrimitives.kt` over one `@JsModule` file per noble entry
+  (`crypto/noble/`: `sha2`, `hmac`, `hkdf`, `argon2`, `utils`' `randomBytes`, `aes`' `gcm`, `ed25519`' `ed25519`/`x25519`,
+  `ml-kem`' `ml_kem768`; bytes shared as views, never copied), `nfc`/`nfkd`/`nfd`, `localWallClock` over `Date`,
+  `coreWebpEncoder = null`, and the refusals — in two `NotOnTheWeb.kt`, not one: an `actual` lives in its `expect`'s
+  package, and `saveKitFile` is `account`'s where `deviceFiles` and `inflate` are `blob`'s (one `NotOnTheWeb` error, in
+  `blob/`). The three thread-blocking tests moved to `threadedTest` (M1). The Gradle half of J3/J4 landed here too: the
+  `conformance` compilation (`jsConformance/…/crypto/ConformanceRun.kt`: `runConformance`, `runConformanceWithBrokenHkdf`),
+  `:core:jsPackage`, the plugin's `.d.ts` validation disabled (it runs `tsc` under Kotlin's Node). J6: 37 components (the
+  JavaScript variants of libraries the core already uses, `kotlin-stdlib-js`, `kotlin-dom-api-compat`, `kotlinx-browser`
+  among them; 290 lines, none removed) written from an empty Gradle home (`--write-verification-metadata sha256
+  :core:jsPackage :core:compileTestKotlinJs :core:compileTestKotlinJvm :bridge:compileTestKotlinJvm`, 10 m 52 s), and no
+  `nodejs/` or `yarn/` in that home afterwards. Checks: `:core:jvmTest` 1417 tests, `:core:macosArm64Test` 1188,
+  `:bridge:jvmTest` 136, `compileKotlinJs`, `compileTestKotlinJs`, `jsPackage` green with `--warning-mode all` and no
+  deprecation (`QueuedOverlayTest`'s gallery case red once under a load of ~9 — a `Dispatchers.Default` wait, outside
+  this CR — and green on the re-run). Bite: `System.currentTimeMillis()` in `media/WallClock.kt` →
+  `compileKotlinJs` red ("Unresolved reference 'System'"), restored green; M1's 44 errors are the sharper one (a
+  `runBlocking` that compiled for every target before turned red with the JavaScript one). `git diff --stat` under
+  `src/mobile/` names more than the plan said: `build.gradle.kts` (root), `gradle.properties` and the three moved tests
+  (M1, M2, M4).
+
+- [x] **3 the package** — J3, J4, J5. · Done when: from the repo root, `python3 scripts/pnpm_install_no_deprecated.py`
   green; in `src/packages/core-js`, `pnpm run build` and `pnpm run check` green; `src/packages/crypto`, `src/web`,
   `src/admin-web` and `tests/e2e` checks green unchanged; `ls src/mobile/core/kotlin-js-store src/mobile/kotlin-js-store`
   finds nothing; `python3 scripts/run_pipeline.py` runs the new steps. **Bites:** `JsPrimitives`' AES-GCM tag off by
   one byte → the package's check red; `Conformance` exported from the shipped binary → the package's test that the
   shipped `.d.ts` names no conformance symbol red.
-- [ ] **4 harvest** — the root `CLAUDE.md` § Repository shape (the workspace holds `@veyq/crypto` and `@veyq/core-js`,
+  **Built** 2026-11-20: `src/packages/core-js/` (`package.json` with the four `@noble/*` at `@veyq/crypto`'s ranges —
+  the lockfile resolves each to the one version already there; `exports` `{}`; `scripts/build.py` runs
+  `src/mobile/gradlew :core:jsPackage`; `src/conformance.test.ts`; a second `tsconfig.dist.json` checks the compiled
+  `.d.mts` with `skipLibCheck` off, the check Kotlin's own `.d.ts` validation would have run under its Node). The
+  conformance under Node: 303 cases, 0 failures, 0.76 s at the production Argon2id cost. Deviation from J4: the
+  conformance binary exports two functions, not one — `runConformance` and `runConformanceWithBrokenHkdf`, the JVM
+  test's bite run on the JavaScript primitives. Checks: `pnpm_install_no_deprecated.py` green (679 locked packages asked
+  of the registry); `core-js` build and check green (4 tests); `crypto` 599, `web` 7340 (+38 skipped), `admin-web` 959
+  and `tests/e2e` green and unchanged; no `kotlin-js-store/` under `src/mobile/` or `src/mobile/core/`.
+  `run_pipeline.py --job frontend` runs the new steps: red once on the web's `FileViewer.pdf.test.ts` timing out at
+  5000 ms under a load of 30–50 (the core-js step green in it), then `green, partial` in **5.2 min** of its 15 (load
+  35 → 11; the wrapper validation is a step it never runs locally). Before: 5.0 min (the site's stage map, remembered,
+  another day's load) — no rerun of the old tree was made to compare under one load. Bites: `JsPrimitives`' AES-GCM
+  seal with its tag's last byte +1 → the conformance red (53 failures), restored green; a `@JsExport` of `Conformance`
+  in `jsMain` → both shipped-module tests red (its `.d.mts` names it), removed green. Vitest prints "Sourcemap … points
+  to missing source files" per module: the maps name the Kotlin sources of the stdlib and libraries, which are not
+  on disk; harmless, left.
+
+- [x] **4 harvest** — the root `CLAUDE.md` § Repository shape (the workspace holds `@veyq/crypto` and `@veyq/core-js`,
   and why each), `pnpm-workspace.yaml`'s and the root `package.json`'s comments, `scripts/repo_layout.py` (`CORE_JS`),
   `src/mobile/CLAUDE.md` § Prove your work (`:core:compileKotlinJs :core:compileTestKotlinJs` with the JVM tests; the
   package's check for a change under `crypto/` or `jsMain`), the site's stage map (R6: `frontend` checks crypto,
   core-js, web, admin-web), `native-apps.md` § Platforms (the JavaScript target, what it ships: nothing yet), ADR
   0155's `Built:` (decision 3; decision 6 but the web's half). · Done when: every guard but guard_gaps green
   (`/usr/bin/python3`), the site's `pnpm run check` green.
+  **Built** 2026-11-20: the root `CLAUDE.md` (the workspace for two packages, and why each), `pnpm-workspace.yaml`'s
+  and the root `package.json`'s comments, `repo_layout.CORE_JS` (not in `SURFACES`: nothing ships it), `src/mobile/
+  CLAUDE.md` § Prove your work, the site's stage map (`frontend` checks crypto, core-js, web, admin-web), and
+  `native-apps.md` § Platforms (a Web row: what it compiles, that it ships nothing yet). **Not done here: ADR 0155's
+  `Built:`** — the pilot's re-plan edits ADR 0155 in parallel (the coordinator's instruction), so its line for decision
+  3 (and 6 but the web's half) is the coordinator's to set; the site page cites no ADR 0155 for the same reason (a
+  `sources:` entry needs the ADR's back-link, `validate_wiki_sources.py`). Every guard but guard_gaps green
+  (`/usr/bin/python3`; no validator changed), the site's `pnpm run check` green.
+
 
 ## Measured at implement
 
-_(phase 1 fills this)_
+Phase 1, 2026-11-20, on `claude/kjs-p0` (from `claude/windows-cr-f6c73c` at `3a05be7fe`), Kotlin 2.4.21, Gradle 9.8.2,
+macOS arm64. Every row `measured` by the command named; `C=src/mobile/core/src`.
+
+| # | Question | Answer |
+|---|---|---|
+| M1 | Does the common code compile for JavaScript? | **`commonMain`: yes** — `:core:compileKotlinJs` failed on R1's eight `expect`s and nothing else; with J2's actuals it is green. **`commonTest`: 44 errors in 3 files, none an `expect`** — `search/SearchModelTest.kt` (26), `search/SearchVolumeMeasure.kt` (9), `session/DeviceLinkTest.kt` (9): `runBlocking` (17 references) and `newFixedThreadPoolContext` (2), the rest their follow-on suspend/inference errors. Both are kotlinx.coroutines' JVM-and-native API (no JavaScript form: no thread to block). Answer: the three files move, unchanged, into a source set between `commonTest` and the JVM and native targets, `threadedTest` (the hierarchy's `threaded` group: `withJvm()` + `native`); the JVM and native test compilations compile exactly what they did. (`./gradlew :core:compileTestKotlinJs`, the errors in the scratchpad's `p0/testcompile.txt`.) |
+| M2 | Does the package's task reach Kotlin's Node, Yarn or npm? | **Not without an environment; always with one.** With `js { nodejs() }` even the link (`compileProductionLibraryKotlinJs --dry-run`) depends on `:kotlinNodeJsSetup`, `:kotlinYarnSetup`, `:kotlinNpmInstall`, `:rootPackageJson` and each compilation's `*PackageJson`, and configuring it fails on the settings' `FAIL_ON_PROJECT_REPOS` ("repository 'Distributions at https://nodejs.org/dist' was added"). With no environment, `:core:jsPackage --dry-run` lists only the core's generate tasks, `compileKotlinJs`, `compileConformanceKotlinJs`, the two production links and their `.d.ts` validations (whose `tsc` runs under Kotlin's Node; ignored by default, disabled here). **The switch:** no environment (the plugin's "JS Environment Not Selected" warning suppressed by its id, `kotlin.suppressGradlePluginWarnings=JsEnvironmentNotChosenExplicitly`: "will be an error in the future releases" — a Kotlin upgrade that makes it one is handed back); the root plugin an environment would have applied (`NodeJsRootPlugin`, whose extension the link's sync task reads — without it `tasks --all` fails) applied in `src/mobile/build.gradle.kts` with `download = false` for Node and Yarn; and a task-graph check there that fails a build reaching any of Kotlin's Node/Yarn/npm tasks (`./gradlew :kotlinNpmInstall --dry-run` → red, naming seven). No `kotlin-js-store/` was written. |
+| M3 | Does `src/mobile/` configure with no Android SDK, on JDK 21 as on 25? | **Yes.** `env -i HOME=… PATH=/usr/bin:/bin:/usr/sbin:/sbin JAVA_HOME=<temurin-21.0.13 \| 25.0.5> ./gradlew --no-daemon :core:jsPackage` green on both; in the same environment `:android:assembleDebug --dry-run` fails "SDK location not found" — no SDK was found, and `:core` needed none. Not in a container: no JDK image is on this host, and a pull is the Docker credential-helper stall this machine has (remembered); the emptied environment stands in. |
+| M4 | Are two clean builds byte-identical? | **Only without the JavaScript incremental caches.** Default (`kotlin.incremental.js.ir` on), clean `core/build` and `dist/`, fresh in-process compiler each time: the conformance's `kotlin-kotlin-stdlib.mjs` came out in **4 variants in 4 builds** (the interfaces' order in `initMetadataForClass`, e.g. `[Collection, KtList]` against `[KtList, Collection]`); whole-program granularity 3 in 4. With `kotlin.incremental.js.ir=false`: **4 in 4 identical** (`find dist -type f \| sort \| xargs shasum -a 256`, digest `55c98c7b…`). A warm rebuild after a one-line edit took the same with and without the caches (16–17 s against 17–18 s, `:core:jsPackage`, under a load of ~9). So `src/mobile/gradle.properties` turns them off. The shipped module itself (`veyq-mobile-core.mjs`, a few hundred bytes while it exports nothing) was identical in every build. Not measured: a build at another checkout path — the source maps of the third-party klibs name their sources relative to `dist/` (`../../…/Users/admin/Projects/KotlinCrypto/…`), so their bytes depend on the checkout's depth; that is the attested tier's question, not this CR's. |
+
+Each answer is a yes with its switch, so phase 2 went on (the coordinator's stop conditions: `commonMain`, Kotlin's Node/Yarn,
+reproducibility, the Android SDK). M1's move of three common tests is a deviation from phase 2's "only `jsMain`,
+`jsTest`, the build file and the metadata"; M2 and M4 add `src/mobile/build.gradle.kts` and `gradle.properties` to it.
 
 ## Owner questions
 

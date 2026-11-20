@@ -61,12 +61,15 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   orchestrator: it includes no surface's build (`src/backend/` is run through its own wrapper, never `includeBuild` —
   its verification metadata would be ignored) and aggregates no check. `infra/README.md` § The launcher holds the
   task list and the per-worktree ports.
-- `src/packages/crypto/` — the one internal workspace package (`@veyq/crypto`): the conformance-pinned crypto
+- `src/packages/crypto/` — the shared workspace package (`@veyq/crypto`): the conformance-pinned crypto
   suite + the cold account birth + the Emergency Kit codec that carries its Secret Key + the wire base64,
   shared by `src/web/` and `src/admin-web/` (and read by `tests/e2e/`, with the wire assertion's canary collision rule, ADR 0090)
-  ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)). The workspace exists **for that one
-  package** — duplicating key-material logic would be a security defect, not a maintenance nuisance. Nothing
-  else is shared: no UI, no router, no state. The workspace is **pnpm** ([ADR 0116](docs/decisions/0116-the-javascript-packages-are-installed-by-pnpm.md);
+  ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)) — duplicating key-material logic would be a
+  security defect, not a maintenance nuisance. Beside it **`src/packages/core-js/`** (`@veyq/core-js`): the Kotlin
+  `core` compiled for JavaScript over the web's own `@noble/*`, its `dist/` written by Gradle's `:core:jsPackage`
+  (`pnpm run build`, never committed), its check the suite's conformance under Node; the web imports nothing from it
+  yet ([ADR 0155](docs/decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)).
+  The workspace exists **for those two** — no UI, no router, no state is shared. The workspace is **pnpm** ([ADR 0116](docs/decisions/0116-the-javascript-packages-are-installed-by-pnpm.md);
   `pnpm-workspace.yaml`, the version pinned in `package.json` `packageManager`): `pnpm install` runs from the repo root, and its strict `node_modules` links each package
   only what it declares; each package still proves itself with its own `pnpm run check`.
 - `src/mobile/` — the **veyq app** (V2): one app for every application ([ADR 0122](docs/decisions/0122-one-app-holds-every-application-the-drawer-chooses-the-bar-belongs-to-it.md)),

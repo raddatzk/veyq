@@ -11,6 +11,8 @@ struct VeyqApp: App {
     #endif
 
     init() {
+        // each application into the core UI's registry, before anything is drawn (ADR 0154 decision 3)
+        Applications.register()
         #if DEBUG
         // the music's format matrix, no sign-in and no window needed (DevAudio)
         if let dir = DevAudio.requested { Task { await DevAudio.run(dir) } }
@@ -44,7 +46,7 @@ struct VeyqApp: App {
         }
         #if os(macOS)
         .commands {
-            LightboxCommands()
+            Applications.commands
             SearchCommands()
         }
         #endif
@@ -53,15 +55,8 @@ struct VeyqApp: App {
         Settings {
             SettingsPage(model: model)
         }
-        // a Memory's lightbox in a window of its own, only when asked ("Open in New Window"): its value carries ids alone,
-        // and it is not restored at the next start (its models are the open tenant's, opened anew each time)
-        WindowGroup(id: "lightbox", for: LightboxWindowValue.self) { $value in
-            if let value { LightboxWindow(model: model, value: value) }
-        }
-        .restorationBehavior(.disabled)
-        .defaultSize(width: 960, height: 720)
-        // a veyq: link never opens a lightbox window (it goes to the main one)
-        .handlesExternalEvents(matching: [])
+        // the windows an application opens beside the main one (a Memory's lightbox in a window of its own)
+        Applications.windows(model)
         #endif
     }
 

@@ -67,6 +67,7 @@ rates, a receipt's PDF uploaded, drawn and saved at document-portal paths, a Dep
 and VP9 played and heard, the account's Settings from the sidebar (rename, another session signed out, sign-out) in
 English/light and German/dark — 2026-11-13; Memories (as Windows', a drop from Files and the sound in the VM's session),
 2026-11-13/14 |
+| Web (JavaScript) | the core's common code, as `@veyq/core-js` (`js()`: IR, ES modules, es2015, `.d.mts`; primitives the web's own `@noble/*`), [ADR 0155](../decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md) decision 3 | none: the web draws in Vue, and ships nothing of the core yet (`cr-web-expenses-on-the-core` is the pilot) | — | its conformance over `contracts/crypto/vectors/v1.json` under Node, in `frontend` |
 
 Windows and Linux are wanted (owner 2026-11-09), each with its own native UI over the same core
 ([ADR 0136](../decisions/0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): Linux GTK 4 and
@@ -654,7 +655,7 @@ its macOS click pass and a drop from Files or Explorer ([ADR 0152](../decisions/
 Consequences, inbox #985); multi-select and dragging a node onto a folder to move
 it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built). A password-protected PDF's text
 selected and copied on Windows (drawn by `Windows.Data.Pdf`, which has no text API). Built 2026-11-18 (inbox #955): on
-Linux an overlay of its own over poppler's rendered pages (`src/mobile/linux/src/pdf_text.rs`; GTK has no view that
+Linux an overlay of its own over poppler's rendered pages (`src/mobile/linux/src/apps/depot/pdf_text.rs`; GTK has no view that
 selects a PDF's text) — poppler's `selected_region` for the highlight and `selected_text` for the copy, a drag across
 pages, a double click a word and a triple a line, Ctrl+A every page shown, Ctrl+C and the context menu's *Copy*; nothing
 of the text logged (a count of characters) or written. Passed in Broadway against the dev instance the same day: a

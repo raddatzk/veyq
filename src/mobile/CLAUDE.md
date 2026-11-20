@@ -44,9 +44,9 @@ A Gradle build of its own, run through its own wrapper.
   ([ADR 0143](../../docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)): the map services in core's `map/` (the consent per device, the tile
   fetch, its memory cache and its sealed shelf in the offline store's automatic tier (`TileShelf`, inbox #939), the geocoder, the viewport, clustering), a Memory's date and place in `memories/place/`
   and its GPX tracks in `memories/tracks/`. Apple draws them with MapKit (decision 1): `MapViews.swift` (the gate that
-  mounts a `Map` only while `MapServices.state` is `Shown`, the consent's offer naming Apple Maps, the facts line and the
-  two editors, the bar's Map tab, a photo's map, Settings' Map services) and `MemoryMapView.swift` (the Map view's
-  tracks), over `AppModel`'s map services; `AppleMemories.saveTrack` and `watchPlace` adapt what Swift cannot call. Android draws
+  mounts a `Map` only while `MapServices.state` is `Shown`, the consent's offer naming Apple Maps, Settings' Map
+  services), `MemoryPlaces.swift` (the facts line and the two editors, the bar's Map tab, a photo's map) and
+  `MemoryMapView.swift` (the Map view's tracks), over `AppModel`'s map services; `AppleMemories.saveTrack` and `watchPlace` adapt what Swift cannot call. Android draws
   the core's raster map in Compose (decision 1, no map library): `MapView.kt` (`RasterMap` — the tiles the core's tile view
   hands, drawn from the floor level scaled, a pan, a pinch and a double tap reported back as a `Viewport`; `MapPlace`, the
   consent's offer or the reason no map stands; the attribution and *Turn map services off* along every map's edge),
@@ -386,6 +386,12 @@ A Gradle build of its own, run through its own wrapper.
 
 ## Prove your work
 
+- `./gradlew :core:compileKotlinJs :core:compileTestKotlinJs` with the JVM tests, on every change to the core: its
+  common code compiles for JavaScript as for every other target (ADR 0155 decision 3), so a JVM- or native-only API in
+  `commonMain` is red here (a test that blocks a thread lives in `threadedTest`, the JVM's and native's). A change under
+  `crypto/` or `jsMain` also runs `@veyq/core-js`'s check (`cd src/packages/core-js && pnpm run build && pnpm run
+  check`): the suite's conformance over the web's `@noble/*` under Node, with its bite. No Kotlin/JS test task exists, and
+  none of Kotlin's Node, Yarn or npm tasks may run (`src/mobile/build.gradle.kts` fails a build that reaches one).
 - `./gradlew :core:jvmTest :core:macosArm64Test` — the suite against `contracts/crypto/vectors/v1.json` (with its
   bite) over BouncyCastle and over libsodium, the navigation model, and the grant check (`GrantTrustTest`: the web's
   `openOwnGrant`/`verifyOwnGrant` rules against a server the test plays). Any change under
@@ -1025,7 +1031,7 @@ answers: Tiles first and the Contributions as the web's, two square columns on a
 `.createMenu(…)` (Apple, `CreateAction.swift`), never a
 floating button built by hand; `scripts/validate_mobile_platform_guidelines.py` holds that. Row actions: an overflow menu on Android, swipe actions and a context
 menu on iOS. On Linux the GNOME HIG's way, as libadwaita draws it: the creating action is `create_action(…)` /
-`create_menu(…)` (`linux/src/create_action.rs`) in a header bar or the sidebar, `list-add-symbolic`, never a button
+`create_menu(…)` (`linux/src/core_ui/create_action.rs`) in a header bar or the sidebar, `list-add-symbolic`, never a button
 overlaid on a view (GNOME has no floating action button); the same guard holds it. On Windows Fluent's way, as
 Windows' own Settings and Explorer draw it: the creating action is New, the first command of the content's
 `CommandBar`, built only in `windows/Veyq/Core/CreateAction.cs`, never a button laid over a view; the same guard holds it.
@@ -1530,7 +1536,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   `PotCreate.Name`, `Share.Label`, `Share.Password` — a link's label once lost its last character to a Save sent 0.8 s after it,
   Linux 2026-11-12). No test sees the order of two trivial calls: `Dispatchers.Default` kept them in order in practice,
   so a `PotCreate.Name` launched instead of applied stayed green (2026-11-12); the order rests on `Bridge.call`'s path.
-- A text field is set from the state by D5's rule (`linux/src/typed.rs`, `windows/Veyq/Core/TypedText.cs`, the same cases):
+- A text field is set from the state by D5's rule (`linux/src/core_ui/typed.rs`, `windows/Veyq/Core/TypedText.cs`, the same cases):
   states lag the typing by a keystroke or two, so a focused field passes over a state that echoes a text it sent and
   takes any other (a stale save's version, a rate filled). "Differs from what it sent last" alone rewrote the field to an
   older text.

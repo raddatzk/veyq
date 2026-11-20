@@ -141,11 +141,95 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   New folder → the folder's level; after a relaunch and an unlock the drawer's Expenses and Memories lists (registered)
   and Memories' Map tab. Not run: a received link's guest pages (the registry's `guest`), a Depot file's page (no file
   uploaded: the system picker), and the CR's before/after screenshots (phase 6).
-- [ ] **3 Apple** — the same. · Done when: both Apple builds green, the guards green. **Bite:** a Memories view using
+- [x] **3 Apple** — the same. · Done when: both Apple builds green, the guards green. **Bite:** a Memories view using
   `PotScreen` → red.
-- [ ] **4 Linux** — the same; `raster_map.rs`' and `memory_page.rs`' crossings resolved through the registry or core
+  **Built** (2026-11-20). Layout (`src/mobile/apple/Veyq/`, XcodeGen's groups from the directories): the root keeps the
+  files `project.yml` names by path per target (`VeyqApp`, `ContinuedWork`, `BackgroundSync`, `DevLogin`, `DevAudio`: the
+  share extension's excludes) and the composition root `Applications.swift`; `Core/` the core UI, 45 files;
+  `Apps/Memories/` (gallery, curation, map view, music view, filter, contributions, `MemoryPlaces.swift` — the facts line,
+  date and place editors, the bar's Map tab, the pin map, a photo's map, split out of `MapViews.swift` —,
+  `PersonMemoriesSection.swift`, `MemoriesUi.swift`), `Apps/Expenses/` (Pot page, settings, create sheet, entry editor,
+  history, receipts, `ExpensesUi.swift`), `Apps/Depot/` (file and drop box pages, `DepotUi.swift`). Moved with `git mv`
+  (one commit of pure renames, then the edits); what core or two applications use left an application's file for core:
+  the music bar with the lightbox's compact controls (`Core/MusicBar.swift`), the formats (`Core/Formats.swift`: `money`,
+  `localDay`, `say(piece:)`, `decimalSeparator`, `MemoryDateText`), `CoreState`, and — named here, as Android's
+  `AppModel` keeps its per-application methods — the holders `AppModel` stores for Memories' sheets and windows
+  (`Core/AppModelHeld.swift`: `ParticipantsEdit`, `BannerEdit`, `BannerPicture`, `BannerImages`, `LightboxWindowValue`;
+  a stored property cannot live in an application's extension). The registry (`Core/Registry.swift`): per kind a
+  `KindPage(header, body, guest)` — `guest: (GuestPage, GuestHeld, AppModel) -> AnyView` —, per application an
+  `ApplicationUi(id, list, creates, personSection)` — `list: (AppModel, key) -> AnyView` (Memories' answers its Map tab
+  on `memories.map`), `creates: [AppKinds.Create: CreateDialog]`, `personSection: (PersonProfile, AppModel,
+  PersonFrame) -> AnyView` (core's frame and safety number handed in) —; `Registry.kind`/`.application` refuse a second
+  registration (`precondition`), `seal()` ends registering and a lookup before it fails. `Applications.register()` runs
+  first in `VeyqApp.init` and in the share extension's `viewDidLoad`: core's kinds (`KindPages`: folder, bookmark), then
+  Memories, Depot, Expenses, then seals; on a Mac `Applications.commands`/`.windows` hand the app Memories' lightbox
+  command and window (a scene is a static type, not a registry entry). The shell's object page and header, its
+  application lists, Home's New (one `.sheet(item:)` over `Registry.create`), a link's page (`GuestPageBody`: Level and
+  NotShown core's, every other variant the kind's `guest`; `ObjectRef.guest` the link's ref) and the person screen ask the
+  registry; `KindPage.of`'s switch is gone. Left in core, named: the link bar's file and music actions in `GuestLinks.swift`
+  (as Android's), `AppModel`'s per-application methods. Rules (a) and (b) on for Apple (`PLATFORMS["apple"]`; Swift by
+  an index of each `Apps/<App>/`'s non-private top-level names and its top-level extensions' members, comments and
+  string contents masked, an interpolation read as code). Bites, each red then restored green (`/bin/cp -f`): `typealias
+  … = PotScreen` in `Apps/Memories/MemoryScreen.swift` (b); `… = MemoryScreen` in `Core/ShellView.swift` (a);
+  `model.personMemories(…)` (Memories' `AppModel` extension) in `Core/PersonScreen.swift` (a); `"\(DepotUi.self)"` in
+  core (a, the interpolation); `func money(_:)` in `Apps/Expenses/PotScreen.swift` (a name declared by two sides);
+  `ExpensesList` in `Apps/Depot/DepotUi.swift` (b); `Applications.swift` without `ExpensesUi`; an `Apps/Music/` file;
+  `Apps/Depot/` emptied — and green with the names in a comment and a plain string. Checks: `./gradlew
+  :core:assembleVeyqCoreDebugXCFramework -Pkotlin.incremental=false` BUILD SUCCESSFUL, `xcodegen`, the macOS ad-hoc
+  `xcodebuild … -destination 'platform=macOS,arch=arm64' … build` and `-sdk iphonesimulator CODE_SIGNING_ALLOWED=NO
+  build` (the share extension's target with it) BUILD SUCCEEDED; every `scripts/validate_*.py` green, guard_gaps
+  included. Not run: a click-through (a Mac UI pass needs full-screen control, an agent's build only) — unclicked: a
+  Memory's, a Pot's, a Depot file's and a drop box's page, the drawer's Expenses and Memories lists and the Map tab,
+  Home's New pot and New Memory, a received link's guest pages, a person's profile with Memories' section, the Mac's
+  lightbox window and its menu command, the share extension.
+- [x] **4 Linux** — the same; `raster_map.rs`' and `memory_page.rs`' crossings resolved through the registry or core
   UI. · Done when: `python3 linux/run.py test` and `build` green, the guards green. **Bite:** `crate::apps::depot::…`
   from `apps/memories` → red.
+  **Built** (2026-11-20). Layout (`src/mobile/linux/src/`): `lib.rs` (the module map: `applications`, `bridge`, `core_ui`,
+  and `apps { depot, expenses, memories }` inline, so nothing sits under `apps/` outside an application), `main.rs`,
+  `bridge/` (the host requests; a host, read as core), the composition root `applications.rs` (each application's
+  `register`, then `seal`; called first in `main`), `core_ui/` (48 files with `mod.rs` and the new `registry.rs`) —
+  not `core/`: a crate module named `core` makes `core::…` ambiguous with the language's `core` crate —,
+  `apps/memories/` (memory page, banner, curation, facts, filter, lightbox, Music and Map views, Contributions, the Map
+  tab, `memory_create.rs` — New Memory's dialog, out of `shell.rs` —, `person_memories.rs`), `apps/expenses/` (Pot,
+  settings, New pot, entry editor, history), `apps/depot/` (file page, PDF text, drop box); each `mod.rs` holds its
+  `register`. Moved with `git mv`; what two sides used left an application's file for core: `saving.rs` (a save's
+  banner and toast: a file's, a lightbox's, a track's, a GPX's), `picture.rs` (`within_edge`: a file, a row's cover, the
+  lightbox, Contributions), `places.rs` (the bar's places: the Pot, the Memories list, the Map tab), `said::date_text`
+  (Home's rows, a person's rows, the facts line); `media_tiers`, `player`, `reader_stream`, `receipt_viewer` (a file's
+  PDF, a receipt, the kit) and the uploads, drop and import are core's. `person_page.rs` split: core's frame (avatar,
+  name, safety number, the `Person` model) and Memories' section (`PersonSection`). The registry
+  (`core_ui/registry.rs`): per kind a `KindPage { body, guest, actions, refreshes, facts_later }` — `body:
+  fn(&ObjectRef, &Frame) -> Box<dyn Page>` inside core's `Frame` (window, toasts, the content's navigation, the header
+  bar's `start` slot for the page's own creating action — *Add entry*, *Add chapter* —, the header told its facts, the
+  title's subtitle), `guest: GuestPage { kind: ReceivedPageKind, body, add_names_first }`, the window actions the
+  header's own actions fire (`pot-download`, `file-save`, `file-replace`, `memory-upload`, `memory-music`), Refresh
+  standing on it, its header told its facts later —; per application an `ApplicationUi { id, list, creates,
+  person_section, queued_open }` (its own list around core's — Memories' places, row dates and Map tab —, New's dialogs
+  as `win.create-pot`/`win.create-memory`, its section of a person's page, a held write's *Open* — a Pot entry's
+  editor). `kind`/`application` refuse a second registration (a guest variant too); a lookup before `seal()` fails.
+  The shell's object page (one `page` slot instead of four), its list, New, Refresh, the header's facts, a queued
+  open, the received view's guest pages (Level, the WRITE_ONLY pages and NotShown core's, every other variant the
+  kind's `guest`) and the person page ask the registry; R5's crossings: `raster_map.rs` opens a pin through
+  `registry::open_node` (the kind's application), `memory_page.rs`' `file_page::within_edge` is `picture`'s, Memories'
+  `file_page::saving` `saving`'s, `memories_map.rs`' `pot::places` `places`'. Left in core, named here: the hero still
+  placed by each page inside its own scroll (`Page::hero`, the frame hands it; moving it out of the scroll changes what
+  is drawn — the structure CR's), `header::action_of`'s and `home`'s kind literals, `home::ask_dates` (`Memories.Dates`,
+  a bridge call). Rules (a) and (b) on for Linux (`PLATFORMS["linux"]`): Rust paths resolved per file module
+  (`crate`/`veyq`, `self`/`super` chains, `use` groups, a leading `apps`), comments and literals masked (`rust_lexer`).
+  Bites, each red then restored green (`/bin/cp -f`): `crate::apps::depot::file_page::FilePage` in
+  `apps/memories/memory_page.rs` (b); `use super::super::expenses::pot` there (b); `use crate::apps` in
+  `apps/expenses/pot.rs` (b, no own name); `use crate::apps::memories::memory_page::MemoryPage` in `core_ui/shell.rs`
+  (a); `use crate::{apps::depot::file_page, bridge}` there (a, a group); `super::super::apps::expenses::register` in
+  `core_ui/received.rs` (a); `veyq::apps::depot::register` in `main.rs` (a); `applications.rs` without
+  `expenses::register` (the root); `apps/music/x.rs` and `apps/stray.rs` (no application); a copy without
+  `apps/depot` (an application without UI files); a comment and a literal naming `crate::apps::…` in core stay green.
+  Checks: `python3 src/mobile/linux/run.py build` (clippy `-D warnings`, 105 tests in the SDK + the 5 sandbox skips in
+  Fedora, the build) and `run.py test` (1198 + 1 + 1 PASSED) green; every `scripts/validate_*.py` green, guard_gaps
+  included. Smoke: `run.py run --no-secret-service --port 8196` started to `session SignIn` with no panic (the
+  registry sealed before the shell read it). Not run: a signed-in pass — a Memory, a Pot and a Depot folder, a received
+  link — needs a throwaway account, and its creation through the principal's env file was refused in this session;
+  the before/after pages are phase 6's.
 - [ ] **5 Windows** — the same; one dispatch. · Done when: `python3 windows/run.py build` and its tests green on the VM,
   the guards green. **Bite:** `Veyq.Apps.Expenses` used under `Veyq.Apps.Memories` → red.
 - [ ] **6 the passes** — § Passes.

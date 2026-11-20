@@ -29,6 +29,9 @@ BACKEND = SRC / "backend"
 WEB = SRC / "web"
 ADMIN_WEB = SRC / "admin-web"
 CRYPTO = SRC / "packages/crypto"
+# The Kotlin core compiled for JavaScript (ADR 0155 decision 6): its `dist/` is Gradle's `:core:jsPackage` output. Not in
+# `SURFACES`: no release ships it yet.
+CORE_JS = SRC / "packages/core-js"
 # The veyq app (ADR 0123): a Gradle build of its own, with the Android app's sources and the Apple app's. Not in
 # `SURFACES`: no release ships it yet, and no predecessor's tree is read for it.
 MOBILE = SRC / "mobile"

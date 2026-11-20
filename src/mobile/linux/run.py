@@ -433,11 +433,11 @@ FLATPAK_REFS = ("org.gnome.Platform", "org.gnome.Sdk", "org.freedesktop.Sdk.Exte
 # A picked medium's tiers (media_tiers) decode and encode through gdk-pixbuf, which goes through glycin for both in the
 # GNOME 51 runtime — its JPEG saver too (measured 2026-11-13: "Loader process exited early" for a save from raw pixels in
 # that sandbox, where GTK's own loader still decodes a JPEG): those run in the Fedora 44 container after the SDK's pass.
-SANDBOX_SKIPS = ("avatars::tests::a_picture_as_the_web_writes_it_decodes",
-                 "media_tiers::tests::a_photo_is_turned_by_its_exif_and_fitted_to_the_cores_edges",
-                 "media_tiers::tests::a_videos_poster_is_its_frame_at_the_cores_moment",
-                 "media_tiers::tests::a_file_that_does_not_decode_has_no_tiers",
-                 "media_tiers::tests::the_reply_packs_the_preview_then_the_thumbnail")
+SANDBOX_SKIPS = ("core_ui::avatars::tests::a_picture_as_the_web_writes_it_decodes",
+                 "core_ui::media_tiers::tests::a_photo_is_turned_by_its_exif_and_fitted_to_the_cores_edges",
+                 "core_ui::media_tiers::tests::a_videos_poster_is_its_frame_at_the_cores_moment",
+                 "core_ui::media_tiers::tests::a_file_that_does_not_decode_has_no_tiers",
+                 "core_ui::media_tiers::tests::the_reply_packs_the_preview_then_the_thumbnail")
 
 
 def runtime_pins(flatpak_arch: str) -> dict[str, str]:

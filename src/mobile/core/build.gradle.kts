@@ -172,6 +172,20 @@ fun libraryInput(taskName: String, library: File) =
 kotlin {
     jvmToolchain(21)
     jvm()
+    // JavaScript (ADR 0155 decision 3): the web's target, IR, ES modules, es2015, with TypeScript definitions and no
+    // experimental flag. Its primitives are the web's own @noble/* (`jsMain`'s `JsPrimitives`), resolved by pnpm from the
+    // lockfile, never by Gradle. No environment is chosen (src/mobile/build.gradle.kts says why), so no Kotlin/JS test task
+    // exists: the common tests compile for JavaScript (`compileTestKotlinJs`) and the suite's conformance runs under Node
+    // through `@veyq/core-js`, from the `conformance` compilation's binary of its own — never the shipped module's export.
+    js {
+        binaries.library()
+        useEsModules()
+        generateTypeScriptDefinitions()
+        compilerOptions { target.set("es2015") }
+        val main = compilations.getByName("main")
+        val conformance = compilations.create("conformance") { associateWith(main) }
+        binaries.library(conformance)
+    }
 
     // The targets reached through the bridge (ADR 0136 decision 5), Linux and Windows, share `bridgedMain`/`bridgedTest`
     // between `nativeMain` and their own sets: `nfc`/`nfkd` over utf8proc and the wall clock over kotlinx-datetime. The
@@ -188,6 +202,15 @@ kotlin {
             group("posix") {
                 group("apple")
                 group("linux")
+            }
+        }
+        // The tests that block a thread or run on a pool of them (`runBlocking`, `newFixedThreadPoolContext`: the JVM's and
+        // native's coroutines API, none on JavaScript) live in `threadedTest`, between `commonTest` and the JVM and native
+        // targets (cr-core-js-target phase 1).
+        common {
+            group("threaded") {
+                withJvm()
+                group("native")
             }
         }
     }
@@ -400,3 +423,20 @@ tasks.matching { it.name.startsWith("cinteropSodium") }.configureEach { dependsO
 listOf(buildLibsodium, buildUtf8proc, buildLibwebp).forEach { it.configure { dependsOn("downloadKotlinNativeDistribution") } }
 tasks.matching { it.name.startsWith("cinteropUtf8proc") }.configureEach { dependsOn(buildUtf8proc) }
 tasks.matching { it.name.startsWith("cinteropWebp") }.configureEach { dependsOn(buildLibwebp) }
+
+// The compiled module, its TypeScript definitions and source maps, into `@veyq/core-js`'s `dist/` (ADR 0155 decision 6):
+// the one directory where Gradle and pnpm meet. The conformance binary lands in `dist/conformance/`, beside and never
+// inside the shipped module. The package's `build` runs this task by name (src/packages/core-js/scripts/build.py).
+val coreJsDist = rootDir.resolve("../packages/core-js/dist")
+val jsPackage = tasks.register<Sync>("jsPackage") {
+    group = "veyq"
+    description = "Compiles the core for JavaScript and writes the module and its conformance runner into src/packages/core-js/dist."
+    from(tasks.named<org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrLink>("compileProductionLibraryKotlinJs").flatMap { it.destinationDirectory })
+    from(tasks.named<org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrLink>("compileConformanceProductionLibraryKotlinJs").flatMap { it.destinationDirectory }) {
+        into("conformance")
+    }
+    into(coreJsDist)
+}
+// The plugin's check of the generated `.d.ts` runs `tsc` under Kotlin's own Node (ignored by default today); the package's
+// own typecheck reads them instead, so the task never runs.
+tasks.withType<org.jetbrains.kotlin.gradle.targets.js.typescript.TypeScriptValidationTask>().configureEach { enabled = false }

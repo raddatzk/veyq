@@ -1,0 +1,29 @@
+{
+  "name": "@veyq/core-js",
+  "version": "0.0.0",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "//": "The Kotlin core (src/mobile/core) compiled for JavaScript, ADR 0155 decisions 3 and 6: Gradle compiles (`build`, which runs the core's `:core:jsPackage` and writes `dist/`, never committed), pnpm installs, bundles and tests. Its primitives are the web's own @noble/*, at @veyq/crypto's ranges so the lockfile holds one version of each. Its check runs the suite's conformance over contracts/crypto/vectors/v1.json under Node, from a binary of its own (`dist/conformance/`), never an export of the shipped module. Nothing is exported yet: each application's façade becomes one entry when it moves (ADR 0155 decision 5), and nothing under src/web/ imports this package before cr-web-expenses-on-the-core.",
+  "exports": {},
+  "scripts": {
+    "build": "python3 scripts/build.py",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.dist.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run test"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.4.0",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "@noble/post-quantum": "^0.7.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "eslint": "^10.14.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^5.1.0"
+  }
+}

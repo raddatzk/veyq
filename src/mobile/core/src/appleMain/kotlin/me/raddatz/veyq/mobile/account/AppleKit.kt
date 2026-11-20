@@ -17,7 +17,7 @@ import platform.posix.memcpy
 import platform.posix.memset
 
 /**
- * What the Apple app draws for a kit's read (`apple/Veyq/KitFile.swift`: PDFKit's pages, ImageIO's picture, each into
+ * What the Apple app draws for a kit's read (`apple/Veyq/Core/KitFile.swift`: PDFKit's pages, ImageIO's picture, each into
  * an 8-bit grey `CGContext` over a buffer it hands here). Swift implements no suspending Kotlin call, so these block the
  * calling thread, which is never the main one ([AppleKit.pictures] calls them on `Dispatchers.Default`). Each answers
  * null where it cannot; a page count of 0 says the PDF did not open.
@@ -49,7 +49,7 @@ object AppleKit {
     }
 
     /**
-     * The sign-in's kit scan for the Apple camera (`apple/Veyq/QrCamera.swift`): [SessionModel.scanKit] with each decode's
+     * The sign-in's kit scan for the Apple camera (`apple/Veyq/Core/QrCamera.swift`): [SessionModel.scanKit] with each decode's
      * time to [timing] — never the text. Swift sees neither default arguments nor a suspending decoder, and its camera
      * takes a `QrScan<AnyObject>`; the scan's `Found` carries only where the kit's server came from.
      */
