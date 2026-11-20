@@ -14,6 +14,7 @@
   Linux and on Windows, the bridge, the Linux app and the Windows app
 - Date: 2026-11-09 (decision 4 revised 2026-11-10: Linux in Rust over the native core, not on the JVM)
 - Model: [native-apps](../crosscutting/native-apps.md)
+- Extended by: [ADR 0154](0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md) (gates, structure, notices and formats the core's; a core UI per app that its applications plug into)
 
 ## Context
 
