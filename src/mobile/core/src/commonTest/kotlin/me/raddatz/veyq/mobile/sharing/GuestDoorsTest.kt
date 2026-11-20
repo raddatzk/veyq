@@ -9,6 +9,8 @@ import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.depot.DepotFiles
 import me.raddatz.veyq.mobile.depot.FileModel
 import me.raddatz.veyq.mobile.expenses.GuestPotDoor
+import me.raddatz.veyq.mobile.expenses.PotGuest
+import kotlinx.coroutines.async
 import me.raddatz.veyq.mobile.expenses.PotSession
 import me.raddatz.veyq.mobile.media.ByteSource
 import me.raddatz.veyq.mobile.memories.MediaUpload
@@ -205,6 +207,43 @@ class GuestDoorsTest {
         }
     }
 
+    /**
+     * ADR 0154 decision 1, the web's rule (`potSession.ts`, a guest names itself first): a READ_WRITE link's guest not named
+     * yet is offered *Add entry* — a READ one is not —, and its write asks its name through the core's one naming flow
+     * ([GuestNaming]); declined, nothing is sent ([PotSession.WriteOutcome.UNNAMED]); named, the write goes on as it.
+     */
+    @Test
+    fun aReadWriteUnnamedGuestIsOfferedAddEntryAndAskedItsNameAtTheWrite() = runTest {
+        assertFalse(PotGuest.offersEntries(assertNotNull(view(fixture("READ").share).also { it.load() }.access)), "a READ guest is offered Add entry")
+        val f = fixture("READ_WRITE")
+        val v = view(f.share)
+        v.load()
+        val access = assertNotNull(v.access)
+        val door = GuestPotDoor(access)
+        assertTrue(door.offersEntries, "an unnamed READ_WRITE guest is not offered Add entry")
+        assertFalse(door.writesEntries)
+        val session = PotSession.open(door, access.tree!!.node(f.pot)!!)
+        val requests = f.share.requests.size
+        // the write asks the name; declined, it is not made
+        val declined = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { session.write(emptyList()) }
+        withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(5_000) { access.naming.asking.first { it } } }
+        access.naming.decline()
+        assertEquals(PotSession.WriteOutcome.UNNAMED, declined.await())
+        assertFalse(access.naming.asking.value)
+        assertEquals(requests, f.share.requests.size, "a declined guest's write reached the server")
+        // asked again: an empty name keeps the dialog open, a name goes on as the guest
+        val named = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { door.named() }
+        withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(5_000) { access.naming.asking.first { it } } }
+        assertTrue(access.naming.name("  ").keepsOpen, "an empty name closed the dialog")
+        assertTrue(access.naming.asking.value)
+        assertEquals(me.raddatz.veyq.mobile.navigation.NameAnswer.DONE, access.naming.name("Ada"))
+        assertTrue(named.await(), "the named guest's write did not go on")
+        assertTrue(door.writesEntries)
+        // named, a write asks nothing again
+        assertTrue(door.named())
+        assertFalse(access.naming.asking.value)
+    }
+
     @Test
     fun aDropBoxsGuestNamesItselfAndAddsAFileIntoItsOwnFolder() = runTest {
         val share = PlayedShare(p, role = "WRITE_ONLY", rootKind = "DEPOT_DROPBOX")
@@ -267,18 +306,18 @@ class GuestDoorsTest {
         val level = assertIs<GuestPage.Level>(v.page.value).model
         assertTrue(level.writes, "a READ_WRITE guest's level offers no write")
         // nothing is written before the guest named itself (the web's `requestGuest`)
-        assertNotNull(level.createFolder("Neu"))
+        assertNotNull(level.createFolder("Neu").notice)
         assertEquals(0, level.upload(listOf(source("x.txt", "x"))))
         assertTrue(f.content.created.isEmpty())
         v.access!!.nameGuest("Ben")
-        assertNull(level.createFolder("Neu"), "the guest's new folder was refused")
+        assertEquals(me.raddatz.veyq.mobile.navigation.NameAnswer.DONE, level.createFolder("Neu"), "the guest's new folder was refused")
         val made = f.content.created.single()
         assertEquals("FOLDER" to f.share.rootId, made["kind"]!!.jsonPrimitive.content to made["parentId"]!!.jsonPrimitive.content)
         // the link read anew: the level on screen lists the folder, opened under the key the guest minted
         val after = assertIs<GuestPage.Level>(v.page.value).model
         assertTrue(after.rows.any { it.name == "Neu" && it.kind == "FOLDER" }, "the new folder is not listed after the write")
         assertTrue(v.atRoot)
-        assertEquals(me.raddatz.veyq.mobile.words.Msg.FOLDER_NAME_TAKEN, after.createFolder("Neu")?.msg, "a sibling's name was not said")
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.FOLDER_NAME_TAKEN, after.createFolder("Neu").problem?.msg, "a sibling's name was not said")
         // inside it: a file uploaded as the guest, its node made under the folder's key and its content completed
         val folder = after.rows.single { it.name == "Neu" }.nodeId
         v.open(folder)

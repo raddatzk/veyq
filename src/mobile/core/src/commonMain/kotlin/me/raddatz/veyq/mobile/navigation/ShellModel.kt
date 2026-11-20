@@ -423,6 +423,50 @@ class ShellModel(
         ShareAnswer.Place(NodeRef.FOLDER, tenant.applicationsOff(), online, folder?.let(::inIdentityFolder) ?: false)
 
     /**
+     * Whether files may be put under [parentId] (null: the space's top) of [scopeId] — the one gate of a drop, a pick's
+     * upload and the bridge's upload calls (ADR 0154 decision 1): a space of this tenant, its level asked as a folder
+     * ([FolderShare]'s answer: online, Depot on, no guest's identity folder). A host that skipped the gate is refused here.
+     */
+    fun takesUpload(scopeId: String, parentId: String?): Boolean {
+        if (_state.value?.lists?.spaces?.none { it.scopeId == scopeId } != false) return false
+        val answer = AppKinds.share(NodeRef.FOLDER) ?: return false
+        val inIdentity = parentId != null && tenant.inIdentityFolder(scopeId, parentId)
+        return answer.mayChoose(ShareAnswer.Place(NodeRef.FOLDER, tenant.applicationsOff(), online, inIdentity))
+    }
+
+    /**
+     * Whether [row] — a row of the level the shell shows — takes a drop into it (ADR 0154 decision 1): a folder the gate
+     * [takesUpload] offers, never a row by its kind alone (a guest's identity folder takes none). Every platform asks this.
+     */
+    fun dropTarget(row: NodeAt): Boolean = row.kind == NodeRef.FOLDER && takesUpload(row.scopeId, row.nodeId)
+
+    /**
+     * Files and folders dropped onto [target] (ADR 0154 decision 1, ADR 0138 decision 9), the platforms' one drop: judged —
+     * the level shown ([dropLevel]), a folder's row ([dropTarget]), a gallery (its rights, `GalleryModel.takesUploads`) —,
+     * sorted through the target's answer, and uploaded into [depot] (a level's) or the gallery at once; a level's veyq
+     * download offered as an import, one per drop. Each file a target does not keep is handed to [left] once no run reads
+     * it again; [deletedName] names an imported Pot's erased person. A target that takes none is [DropOutcome.Refused] and
+     * keeps nothing.
+     */
+    suspend fun drop(
+        target: DropTarget, items: List<Dropped>, depot: me.raddatz.veyq.mobile.depot.DepotUploads?,
+        left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit = {}, deletedName: String = "",
+    ): DropOutcome = when (target) {
+        is DropTarget.Gallery ->
+            if (!target.gallery.takesUploads) DropOutcome.notHere else Drops.ontoGallery(target.gallery, items, left)
+        is DropTarget.Level -> {
+            val level = shell?.let(::dropLevel)
+            if (level == null || depot == null) DropOutcome.notHere
+            else Drops.ontoLevel(level.scopeId, level.parentId, target.label, items, depot, level.answer, left, deletedName)
+        }
+        is DropTarget.Row -> {
+            val answer = AppKinds.share(NodeRef.FOLDER)
+            if (!dropTarget(target.folder) || depot == null || answer == null) DropOutcome.notHere
+            else Drops.ontoLevel(target.folder.scopeId, target.folder.nodeId, target.folder.name, items, depot, answer, left, deletedName)
+        }
+    }
+
+    /**
      * Whether [shell] shows a space's top level on Home, where its share offers "Add files only" ([topLevelShareSheet], the
      * web's level share): no folder, object, application, person's page or Search open, and the tenant's links and drop
      * boxes on. Every platform asks this (the phones through their `AppModel`, the desktops through `ShellShown.topLevelShare`).
@@ -601,29 +645,36 @@ class ShellModel(
         return Moved(r, Notices.moveRefused(r.outcome), from)
     }
 
-    /** A new folder [name] in [scopeId] under [parentId] (null: the space's root); why not, or null once made. */
-    suspend fun createFolder(scopeId: String, parentId: String?, name: String): Notice? {
+    /**
+     * A new folder [name] in [scopeId] under [parentId] (null: the space's root), as New Folder's dialog answers it
+     * ([NameAnswer], ADR 0154 decision 1): an empty name or one a sibling holds is a [NameAnswer.problem] (the dialog asks
+     * again); offline it is queued where this device keeps the account's store ([NameAnswer.QUEUED]: it shows at once where
+     * it was made, [queuedAt]) and refused otherwise; a refusal and a thrown error are said ([NameAnswer.notice]).
+     */
+    suspend fun createFolder(scopeId: String, parentId: String?, name: String): NameAnswer {
         val n = name.trim()
         if (queues(me.raddatz.veyq.mobile.offline.Queued.FOLDER_CREATE)) {
-            if (n.isEmpty()) return Notice(Msg.FOLDER_NAME_EMPTY)
-            // offline it waits to be sent and shows at once where it was made ([queuedAt]): made, as far as the dialog goes
-            return if (me.raddatz.veyq.mobile.offline.QueuedNodes.folder(tenant.account, tenantId, scopeId, parentId, n, wallClock()) != null) null else noRoom
+            if (n.isEmpty()) return NameAnswer.problem(Notice(Msg.FOLDER_NAME_EMPTY))
+            val queued = runCatching { me.raddatz.veyq.mobile.offline.QueuedNodes.folder(tenant.account, tenantId, scopeId, parentId, n, wallClock()) }.getOrNull()
+            return if (queued != null) NameAnswer.QUEUED else NameAnswer.said(noRoom)
         }
-        if (!online) return readOnly
-        if (n.isEmpty()) return Notice(Msg.FOLDER_NAME_EMPTY)
+        if (!online) return NameAnswer.said(readOnly)
+        if (n.isEmpty()) return NameAnswer.problem(Notice(Msg.FOLDER_NAME_EMPTY))
         val r = runCatching { FolderCreate.create(tenant, scopeId, parentId, n) }.getOrNull()
-        refresh()
+        runCatching { refresh() }
         return when (r) {
-            is NodeCreate.Result.Done -> null
-            is NodeCreate.Result.Refused -> Notices.folderRefused(r.reason)
-            null -> Notices.folderRefused(null)
+            is NodeCreate.Result.Done -> NameAnswer.DONE
+            is NodeCreate.Result.Refused ->
+                if (r.reason == NodeCreate.Reason.NAME_TAKEN) NameAnswer.problem(Notices.folderRefused(r.reason)) else NameAnswer.said(Notices.folderRefused(r.reason))
+            // a thrown error: the core says it, the platform never decides what a failure reads as
+            null -> NameAnswer.said(Notices.folderRefused(null))
         }
     }
 
-    /** A new folder [name] where the shell is: in its space, under the folder Home shows; why not, or null once made. */
-    suspend fun createFolderHere(name: String): Notice? {
+    /** [createFolder] where the shell is: in its space, under the folder Home shows. */
+    suspend fun createFolderHere(name: String): NameAnswer {
         val s = shell
-        val space = s?.space ?: return Notices.folderRefused(null)
+        val space = s?.space ?: return NameAnswer.said(Notices.folderRefused(null))
         return createFolder(space, s.folder?.nodeId, name)
     }
 

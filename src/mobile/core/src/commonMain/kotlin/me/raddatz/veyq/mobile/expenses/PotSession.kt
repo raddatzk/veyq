@@ -69,6 +69,12 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
      */
     val canWrite: Boolean get() = meta != null && door.writesEntries && (offline == null || queuesEntries)
 
+    /**
+     * Whether *Add entry* is offered here (ADR 0154 decision 1): where [canWrite] — and to a READ_WRITE link's guest not
+     * named yet, whose write asks its name first ([PotDoor.named]; [WriteOutcome.UNNAMED] where it declines).
+     */
+    val offersEntries: Boolean get() = meta != null && door.offersEntries && (offline == null || queuesEntries)
+
     /** Whether an entry added, edited or deleted offline is queued (this device keeps the account's store, ADR 0153). */
     val queuesEntries: Boolean get() = door.queueAccount?.queues(me.raddatz.veyq.mobile.offline.Queued.POT_ENTRY) == true
 
@@ -198,6 +204,8 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
         REFUSED,
         /** Offline, queued to be sent at the reconnect (ADR 0153): shown at once, marked *Not sent* ([unsent]). */
         QUEUED,
+        /** A link's guest asked its name at the write declined it: nothing was sent, the editor stays as it was. */
+        UNNAMED,
     }
 
     /**
@@ -210,6 +218,7 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
     /** [write] naming the heads [seen] where the writer read them before what is held now (a write queued offline). */
     internal suspend fun write(writes: List<PotWrite>, seen: List<Head>?): WriteOutcome {
         if (offline != null) return WriteOutcome.OFFLINE
+        if (!door.named()) return WriteOutcome.UNNAMED
         val base = meta?.base ?: return WriteOutcome.INVALID
         return atNodeEpoch { n ->
             val revisions = PotWrites.seal(codec, n.scopeId, n.id, n.key, held.values.toList(), writes, base, seen)
@@ -349,6 +358,8 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
         if (form.contentOf { it in known }.content == null) return WriteOutcome.INVALID
         if (pending.any { it.bytes.size > Receipts.MAX_BYTES }) return WriteOutcome.INVALID
         if (form.receipts.size + pending.size > Receipts.MAX_PER_ENTRY) return WriteOutcome.INVALID
+        // a guest not named yet is asked its name at the write, before a receipt goes up under its token
+        if (!door.named()) return WriteOutcome.UNNAMED
         val id = entryId ?: newId()
         val uploaded = ArrayList<String>()
         val skipped = ArrayList<String>()

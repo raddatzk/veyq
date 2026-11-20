@@ -34,6 +34,15 @@ interface PotDoor {
     /** Whether entries and people are written here (a member: Expenses on for the tenant; a guest: a READ_WRITE link). */
     val writesEntries: Boolean
 
+    /**
+     * Whether *Add entry* is offered here (ADR 0154 decision 1, the web's rule): where entries are written — and to a
+     * READ_WRITE link's guest not named yet, asked its name at the write ([named]). A member's is [writesEntries].
+     */
+    val offersEntries: Boolean get() = writesEntries
+
+    /** Before a write: whether it may go on — a guest not named yet is asked its name first (the web's `requestGuest`). */
+    suspend fun named(): Boolean = writesEntries
+
     /** Whether the Pot's settings (base currency, own categories) and its people's standing are changed here: a member's. */
     val changesSettings: Boolean
 

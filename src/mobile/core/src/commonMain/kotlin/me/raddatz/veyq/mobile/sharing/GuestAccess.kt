@@ -53,6 +53,9 @@ class GuestAccess internal constructor(
     /** *Not you?* */
     fun forgetGuest() = gates.forgetGuest()
 
+    /** The one naming flow a write offered to a guest not named yet asks through ([GuestNaming], the web's `requestGuest`). */
+    val naming: GuestNaming = GuestNaming(this)
+
     internal fun saveSession(session: GuestSession) = gates.saveSession(session)
     internal fun writeToken(): String = gates.writeToken()
 
@@ -141,6 +144,17 @@ class GuestAccess internal constructor(
         val job = file.replace(source) ?: return false
         q.enqueue(listOf(job), source.name, file.node.nodeId, onSettled = { file.reload() }, onFinished = null)
         return true
+    }
+
+    /**
+     * [replace] as the file page's Replace offers it to a READ_WRITE guest ([me.raddatz.veyq.mobile.depot.FileRights]
+     * alone, named or not; ADR 0154 decision 1): a guest not named yet is asked its name first ([naming]); false — nothing
+     * queued, [source] the caller's to close — where it declined, or where [replace] refuses.
+     */
+    suspend fun replaceAsking(file: me.raddatz.veyq.mobile.depot.FileModel, source: me.raddatz.veyq.mobile.blob.UploadSource): Boolean {
+        if (role != READ_WRITE || queue == null) return false
+        naming.request() ?: return false
+        return replace(file, source)
     }
 
     /** What a guest's create came to. */

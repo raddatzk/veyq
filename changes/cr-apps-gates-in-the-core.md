@@ -68,12 +68,32 @@ Branch `claude/core-owns-refine` at `a75188eb8` (= `claude/windows-cr-f6c73c`). 
 
 ## Phases
 
-- [ ] **1 core** — G1, G3, G4, G5. Tests: a drop on a folder the core does not offer (a guest's identity folder) refused;
+- [x] **1 core** — G1, G3, G4, G5. Tests: a drop on a folder the core does not offer (a guest's identity folder) refused;
   one import offer per drop with a ZIP and a folder in it; the gallery drop keeping media and naming the rest; a name
   problem vs a refusal vs a thrown error; a READ_WRITE unnamed guest offered *Add entry* and asked its name at the
   write; a reach ended for the shown tenant moves the shell. · Done when: `:core:jvmTest :core:macosArm64Test` green.
   **Bites:** (a) `dropTarget` true for every FOLDER → the identity-folder case red; (b) `Named` collapsed back to one
   notice → the dialog-stays-open case red; (c) the reach's follow removed → the moved-shell case red.
+  **Built** 2026-11-20 (`claude/gates-core`): G1 `navigation/Drop.kt` (`Dropped` File/Folder/NotLocal/Unread,
+  `DropTarget` Level(label)/Row(folder)/Gallery, `DropOutcome` Uploaded/Offered/Refused, the one sort `Drops`) behind
+  `ShellModel.drop(target, items, depot, left, deletedName)`, its gate `ShellModel.takesUpload(scopeId, parentId)` (G2's
+  re-judgement for the bridge) and `ShellModel.dropTarget(row)`; word `drop_not_here`. G3 `navigation/NameAnswer.kt`
+  (`problem`, `notice`, `queued`, `keepsOpen`) answered by `ShellModel.createFolder`/`createFolderHere`,
+  `NodeHeaderModel.rename` (its `Renamed` gone) and `GuestLevel.createFolder`. G4 `sharing/GuestNaming.kt`
+  (`GuestAccess.naming`: `asking`, `request`, `name` → `NameAnswer`, `decline`; word `share_guest_name_empty`),
+  `GuestAccess.replaceAsking`, `PotGuest.offersEntries`, `PotDoor.offersEntries`/`named()`, `PotSession`/`PotView.offersEntries`,
+  `WriteOutcome.UNNAMED` (the editor stays open). G5 `SessionModel.followed`/`watchFollowed`. Tests:
+  `GatesInTheCoreTest` (4), `SessionModelTest` (+2), `GuestDoorsTest` (+1); the offline createFolder cases read
+  `.queued`. Bites (a)–(c) seen red, plus one per further new test (`GuestPotDoor.offersEntries` back to
+  `writesEntries`; every dropped folder screened; the gallery's folder notices dropped), each restored with `/bin/cp -f`.
+  **Deviations:** (1) no `LevelRow` type exists — a row's gate is `ShellModel.dropTarget(row: NodeAt)`. (2) A level's
+  batch label stays the platform's drawn title (`DropTarget.Level(label)`); a row's is its folder's name. (3) A refused
+  drop hands nothing back, so a phone may still put a level's refused drop into the pick mode. (4) The phones' unread
+  items come as `Dropped.Unread(name)` (said by `Notices.notRead`), not a count. (5) A thrown create error also takes the
+  account offline (the reach's own rule), so the next create queues. **For phase 2 (bridge does not compile):**
+  `Bridge.kt` `createFolder` (line ~237) and `ReceivedNewFolder` (~2221) now get a `NameAnswer` — answer it as
+  `Answer.Renamed(problem, notice)`-shaped (keep `queued`); `ReceivedReplace`/`ReceivedNewFolder` read role and session
+  themselves — the replace goes through `access.replaceAsking` and `access.naming` needs a wire.
 - [ ] **2 bridge** — G1's call (`Drop`), G2's re-judgement on every upload call, G3's answer, G5's watch. Tests: an
   `UploadFiles` into a scope the core does not offer refused before any read. · Done when: `:bridge:jvmTest` green.
   **Bite:** the re-judgement removed → that test red.

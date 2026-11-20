@@ -28,6 +28,12 @@ import me.raddatz.veyq.mobile.sharing.GuestView
  * `expensesRights` guest rows: entries, adding and renaming people); no settings, no members, no member's names.
  */
 object PotGuest {
+    /**
+     * Whether a guest of [access] is offered *Add entry* (ADR 0154 decision 1, the web's rule): the link is READ_WRITE — a
+     * guest not named yet is asked its name at the write ([GuestAccess.naming]). No platform reads a role or a name.
+     */
+    fun offersEntries(access: GuestAccess): Boolean = access.role == GuestAccess.READ_WRITE
+
     val pot = GuestDoor { access, node, _: GuestView ->
         val opened = access.tree?.node(node.nodeId)?.takeIf { it.kind == PotSession.KIND } ?: return@GuestDoor GuestPage.NotShown(node)
         val door = GuestPotDoor(access)
@@ -42,6 +48,8 @@ internal class GuestPotDoor(private val access: GuestAccess) : PotDoor {
 
     /** A READ_WRITE guest writes entries and people once it named itself (the web's `requestGuest` first). */
     override val writesEntries: Boolean get() = access.role == GuestAccess.READ_WRITE && access.session.value != null
+    override val offersEntries: Boolean get() = PotGuest.offersEntries(access)
+    override suspend fun named(): Boolean = writesEntries || access.naming.request() != null
     override val changesSettings: Boolean get() = false
     override val member: Boolean get() = false
     override val tenantId: String get() = ""

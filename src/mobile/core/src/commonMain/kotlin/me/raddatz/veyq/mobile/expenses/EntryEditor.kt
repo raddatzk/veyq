@@ -269,6 +269,11 @@ class EntryEditor internal constructor(
                 Saved(true, notice)
             }
             PotSession.WriteOutcome.STALE -> Saved(false, stale(written.uploaded))
+            // the guest asked its name declined: the editor stays as it was, nothing said
+            PotSession.WriteOutcome.UNNAMED -> {
+                set { it.copy(saving = false) }
+                Saved(false, null)
+            }
             else -> {
                 val notice = Notice(Notices.entryRefused(written.outcome.name))
                 set { it.copy(form = it.form.copy(receipts = it.form.receipts + written.uploaded.filter { id -> id !in it.form.receipts }), saving = false, notice = notice) }
@@ -346,10 +351,10 @@ class EntryEditor internal constructor(
             val today = door.today()
             return if (entryId == null) {
                 val form = v.blankForm(today, separator) ?: return null
-                EntryEditor(door, door.newId(), true, null, separator, State(true, form, v.people, v.canWrite), pending, parent, work)
+                EntryEditor(door, door.newId(), true, null, separator, State(true, form, v.people, v.offersEntries), pending, parent, work)
             } else {
                 val e = v.editing(entryId, separator, today) ?: return null
-                val first = State(false, e.form, e.people, v.canWrite, invalid = e.status == Ledger.Status.INVALID)
+                val first = State(false, e.form, e.people, v.offersEntries, invalid = e.status == Ledger.Status.INVALID)
                 EntryEditor(door, entryId, false, e.basedOn, separator, first, pending, parent, work)
             }
         }

@@ -1,6 +1,7 @@
 package me.raddatz.veyq.mobile.session
 
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -114,6 +115,12 @@ class SessionModelTest {
         val retired = mutableListOf<String>()
         override suspend fun retire(account: Acc) { retired += account.key }
         override suspend fun forgetDevice(account: Acc) {}
+
+        /** Each account's own end ([Reach.Ended]'s reason), set by a test: the reconnect that found its trust gone. */
+        val endings = HashMap<String, kotlinx.coroutines.flow.MutableStateFlow<SignInFailure.Reason?>>()
+        fun ending(key: String) = endings.getOrPut(key) { kotlinx.coroutines.flow.MutableStateFlow(null) }
+        override fun ends(account: Acc): kotlinx.coroutines.flow.Flow<SignInFailure.Reason> =
+            ending(account.key).filterNotNull()
         override fun staySignedIn() = offered
         override fun declined(account: Acc) = account.key in declined
         override fun setDeclined(account: Acc, declined: Boolean) { if (declined) this.declined += account.key else this.declined -= account.key }
@@ -285,6 +292,57 @@ class SessionModelTest {
         assertEquals(listOf(a.key, b.key), d.signedOut)
         assertTrue(!hidden.isSpaceHidden("s1"))
         assertEquals(emptyList(), recentKept)
+    }
+
+    /** [read]'s first non-null answer, the model's watches running on their own thread: at most two seconds. */
+    private suspend fun <R : Any> waitFor(read: () -> R?): R? {
+        repeat(200) {
+            read()?.let { return it }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { kotlinx.coroutines.delay(10) }
+        }
+        return null
+    }
+
+    /**
+     * ADR 0154 decision 1: the shown account ended on its own (a reconnect found this device's trust gone) — the core opens
+     * the next one and says the shell follows it ([SessionModel.followed]); no platform compares accounts. An account not
+     * shown that ends moves nothing.
+     *
+     * Bite: the follow in `ended` removed → red here.
+     */
+    @Test
+    fun a_reach_ended_for_the_shown_tenant_moves_the_shell_to_the_next_one() = runTest {
+        val d = door()
+        d.records += record("https://a.example", "u1", TrustedDevice.Method.DEVICE_KEY)
+        d.records += record("https://b.example", "u2", TrustedDevice.Method.DEVICE_KEY)
+        val m = model(d)
+        m.start() // b is shown
+        assertEquals(Gate.Signed(b.key, "tb"), m.current)
+        val follows = mutableListOf<String>()
+        val watch = m.watchFollowed { follows += it.session }
+        assertNull(m.followed.value)
+        d.ending(b.key).value = SignInFailure.Reason.DEVICE_NOT_TRUSTED
+        val moved = assertNotNull(waitFor { m.followed.value }, "the shell was not told to follow the next account")
+        assertEquals(a, moved.account)
+        assertEquals("a.example#u1/ta", moved.session)
+        assertEquals(Gate.Signed(a.key, "ta"), m.current)
+        assertNotNull(waitFor { follows.takeIf { it.isNotEmpty() } }, "a watcher of the follow heard nothing")
+        assertEquals(listOf("a.example#u1/ta"), follows)
+        assertTrue(b.key in d.retired)
+        watch.stop()
+    }
+
+    @Test
+    fun an_account_not_shown_that_ends_moves_nothing() = runTest {
+        val d = door()
+        d.records += record("https://a.example", "u1", TrustedDevice.Method.DEVICE_KEY)
+        d.records += record("https://b.example", "u2", TrustedDevice.Method.DEVICE_KEY)
+        val m = model(d)
+        m.start() // b is shown
+        d.ending(a.key).value = SignInFailure.Reason.DEVICE_NOT_TRUSTED
+        assertNotNull(waitFor { d.retired.takeIf { a.key in it } }, "the ended account was not retired")
+        assertNull(m.followed.value)
+        assertEquals(Gate.Signed(b.key, "tb"), m.current)
     }
 
     @Test

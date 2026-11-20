@@ -2034,6 +2034,11 @@
       "other": "{1:int} Dateien ließen sich nicht lesen und wurden nicht hochgeladen."
     }
   },
+  "drop_not_here": {
+    "note": "A drop onto a place that takes none now (no right, a guest's folder, offline, Depot switched off): the core's DropOutcome.Refused (ADR 0154 decision 1).",
+    "en": "Nothing can be added here.",
+    "de": "Hier kann nichts hinzugefügt werden."
+  },
   "depot_drop_not_local": {
     "en": "“{1}” is not on this computer and was not uploaded.",
     "de": "„{1}“ liegt nicht auf diesem Computer und wurde nicht hochgeladen."
@@ -6391,6 +6396,11 @@
   "share_guest_name_title": {
     "en": "What is your name?",
     "de": "Wie heißt du?"
+  },
+  "share_guest_name_empty": {
+    "note": "The guest's name dialog saved empty: it stays open (the core's GuestNaming, ADR 0154 decision 1).",
+    "en": "Enter your name.",
+    "de": "Gib deinen Namen ein."
   },
   "share_guest_name_hint": {
     "en": "Before you add something, tell us your name. Only the people this belongs to see it.",

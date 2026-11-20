@@ -139,6 +139,8 @@ object QueuedExpenses {
             PotSession.WriteOutcome.BLOCKED -> QueuedOutcome.Refused("blocked")
             PotSession.WriteOutcome.INVALID, PotSession.WriteOutcome.NOT_SETTLED -> QueuedOutcome.Refused("invalid")
             PotSession.WriteOutcome.REFUSED -> QueuedOutcome.Refused(session.lastRefusal ?: "refused")
+            // a member's queued write is never a guest's: no name is asked
+            PotSession.WriteOutcome.UNNAMED -> QueuedOutcome.Refused("refused")
         }
     }
 
