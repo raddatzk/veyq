@@ -86,10 +86,30 @@ Branch `claude/kjs-refine` at `ff410c6c9`. `C=src/mobile/core/src`.
   byte for byte (`shasum -a 256` over `dist/`). · Done when: the four answers are in § Measured at implement; any
   "no" is handed back before phase 2. **Built** 2026-11-20: M1–M4, four yeses with their switches; the bites seen red
   were the task-graph check (`:kotlinNpmInstall --dry-run`) and the reproducibility itself (4 variants in 4 builds).
-- [ ] **2 the target** — J1, J2, J6. · Done when: `:core:jvmTest :core:macosArm64Test`, `:core:compileKotlinJs
+- [x] **2 the target** — J1, J2, J6. · Done when: `:core:jvmTest :core:macosArm64Test`, `:core:compileKotlinJs
   :core:compileTestKotlinJs` and `:bridge:jvmTest` green; `--warning-mode all` clean; `git diff --stat` shows only
   `jsMain`, `jsTest`, the build file and the metadata under `src/mobile/`. **Bite:** a common-code call to a JVM-only
   API (`System.currentTimeMillis()`) → `compileKotlinJs` red.
+  **Built** 2026-11-20: `jsMain` holds `crypto/JsPrimitives.kt` over one `@JsModule` file per noble entry
+  (`crypto/noble/`: `sha2`, `hmac`, `hkdf`, `argon2`, `utils`' `randomBytes`, `aes`' `gcm`, `ed25519`' `ed25519`/`x25519`,
+  `ml-kem`' `ml_kem768`; bytes shared as views, never copied), `nfc`/`nfkd`/`nfd`, `localWallClock` over `Date`,
+  `coreWebpEncoder = null`, and the refusals — in two `NotOnTheWeb.kt`, not one: an `actual` lives in its `expect`'s
+  package, and `saveKitFile` is `account`'s where `deviceFiles` and `inflate` are `blob`'s (one `NotOnTheWeb` error, in
+  `blob/`). The three thread-blocking tests moved to `threadedTest` (M1). The Gradle half of J3/J4 landed here too: the
+  `conformance` compilation (`jsConformance/…/crypto/ConformanceRun.kt`: `runConformance`, `runConformanceWithBrokenHkdf`),
+  `:core:jsPackage`, the plugin's `.d.ts` validation disabled (it runs `tsc` under Kotlin's Node). J6: 37 components (the
+  JavaScript variants of libraries the core already uses, `kotlin-stdlib-js`, `kotlin-dom-api-compat`, `kotlinx-browser`
+  among them; 290 lines, none removed) written from an empty Gradle home (`--write-verification-metadata sha256
+  :core:jsPackage :core:compileTestKotlinJs :core:compileTestKotlinJvm :bridge:compileTestKotlinJvm`, 10 m 52 s), and no
+  `nodejs/` or `yarn/` in that home afterwards. Checks: `:core:jvmTest` 1417 tests, `:core:macosArm64Test` 1188,
+  `:bridge:jvmTest` 136, `compileKotlinJs`, `compileTestKotlinJs`, `jsPackage` green with `--warning-mode all` and no
+  deprecation (`QueuedOverlayTest`'s gallery case red once under a load of ~9 — a `Dispatchers.Default` wait, outside
+  this CR — and green on the re-run). Bite: `System.currentTimeMillis()` in `media/WallClock.kt` →
+  `compileKotlinJs` red ("Unresolved reference 'System'"), restored green; M1's 44 errors are the sharper one (a
+  `runBlocking` that compiled for every target before turned red with the JavaScript one). `git diff --stat` under
+  `src/mobile/` names more than the plan said: `build.gradle.kts` (root), `gradle.properties` and the three moved tests
+  (M1, M2, M4).
+
 - [ ] **3 the package** — J3, J4, J5. · Done when: from the repo root, `python3 scripts/pnpm_install_no_deprecated.py`
   green; in `src/packages/core-js`, `pnpm run build` and `pnpm run check` green; `src/packages/crypto`, `src/web`,
   `src/admin-web` and `tests/e2e` checks green unchanged; `ls src/mobile/core/kotlin-js-store src/mobile/kotlin-js-store`
