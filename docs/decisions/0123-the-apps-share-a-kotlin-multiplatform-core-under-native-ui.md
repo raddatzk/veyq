@@ -1046,8 +1046,8 @@ implementation exists but what holds it to the first.
     and takes a screenshot only as proof.
   - **Guards** (decision 9): the words guard holds windows-literal and windows-resw, the guidelines guard windows-block
     (the creating action only in `CreateAction.cs`) and windows-floating-button; each rule bitten red and green.
-  - **Pictures and a Pot's download** (built 2026-11-11, ADR 0137). `Veyq/AvatarsHeld.cs`'s `Held<T>` (no control) is
-    Linux's `Held` rule for rule; `Veyq/Avatars.cs` feeds it from `ShellShown.pictures`, decodes each payload through
+  - **Pictures and a Pot's download** (built 2026-11-11, ADR 0137). `Veyq/Core/AvatarsHeld.cs`'s `Held<T>` (no control) is
+    Linux's `Held` rule for rule; `Veyq/Core/Avatars.cs` feeds it from `ShellShown.pictures`, decodes each payload through
     `BitmapImage.SetSourceAsync` over an `InMemoryRandomAccessStream`, and sets `ProfilePicture` on every
     `PersonPicture` bound to that id (initials of its `DisplayName` otherwise): the Pot's Settings people and Overview
     balances, and the signed-in member's before the tenant in the switcher. While a Pot is open the content's

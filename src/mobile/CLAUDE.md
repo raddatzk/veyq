@@ -1028,7 +1028,7 @@ menu on iOS. On Linux the GNOME HIG's way, as libadwaita draws it: the creating 
 `create_menu(…)` (`linux/src/create_action.rs`) in a header bar or the sidebar, `list-add-symbolic`, never a button
 overlaid on a view (GNOME has no floating action button); the same guard holds it. On Windows Fluent's way, as
 Windows' own Settings and Explorer draw it: the creating action is New, the first command of the content's
-`CommandBar`, built only in `windows/Veyq/CreateAction.cs`, never a button laid over a view; the same guard holds it.
+`CommandBar`, built only in `windows/Veyq/Core/CreateAction.cs`, never a button laid over a view; the same guard holds it.
 A tile WinUI places on a `Canvas` at the core's frame sits in a `Border` placed there, never a `Button` placed by
 `Canvas.SetLeft`/`SetTop`: the guard reads the latter as a floating button (Memories' grid, 2026-11-15). The guard knows
 no grid cell placed by its frame; an exception for one would be the cleaner answer (inbox #927).
@@ -1530,7 +1530,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   `PotCreate.Name`, `Share.Label`, `Share.Password` — a link's label once lost its last character to a Save sent 0.8 s after it,
   Linux 2026-11-12). No test sees the order of two trivial calls: `Dispatchers.Default` kept them in order in practice,
   so a `PotCreate.Name` launched instead of applied stayed green (2026-11-12); the order rests on `Bridge.call`'s path.
-- A text field is set from the state by D5's rule (`linux/src/typed.rs`, `windows/Veyq/TypedText.cs`, the same cases):
+- A text field is set from the state by D5's rule (`linux/src/typed.rs`, `windows/Veyq/Core/TypedText.cs`, the same cases):
   states lag the typing by a keystroke or two, so a focused field passes over a state that echoes a text it sent and
   takes any other (a stale save's version, a rate filled). "Differs from what it sent last" alone rewrote the field to an
   older text.
