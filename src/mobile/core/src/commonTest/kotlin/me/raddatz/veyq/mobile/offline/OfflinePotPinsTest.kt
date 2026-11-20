@@ -22,7 +22,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * A Pot pinned and a space's media kept (ADR 0153 decisions 6 and 7; cr-app-offline-pots-and-space-media phase 2) over a
+ * A Pot pinned and a space's media kept (ADR 0153 decisions 6 and 7) over a
  * server the test plays ([PlayedTenant]), real seals throughout: a pinned Pot fetches its ledger, its receipts and its
  * cover and keeps them through "Clear cache", opening offline; a Pot unpinned and never viewed goes with the next "Clear
  * cache"; search offline finds a medium of a Memory never opened, from the space's kept listing; the space's listing goes

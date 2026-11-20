@@ -322,7 +322,11 @@ class AccountOffline internal constructor(
         return open
     }
 
-    /** Node [node]'s listings and the blobs they name, into [into] (a medium or a blob the operator blocked: none). */
+    /**
+     * Node [node]'s listings and the blobs they name, into [into] (a medium or a blob the operator blocked: none). A kept
+     * read below a node that is not reached here is dropped by the sweep right after its first keep (seen with
+     * `POT_REVISIONS`): a new one is added here in the same change.
+     */
     private suspend fun belowNode(tenant: String, scope: String, node: String, into: MutableSet<EntryKey>) {
         val media = key(KeptRead.NODE_MEDIA, tenant, scope, node)
         into += media

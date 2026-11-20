@@ -5,6 +5,7 @@
   frontmost are the owner's ([native-apps](../crosscutting/native-apps.md) § Open)
 - Date: 2026-11-18
 - Model: [uc.platform.search](../features/platform/use-cases/uc.platform.search.md)
+- Replaced in part: decision 11's "the photos of every space are not searched offline" by ADR 0153 decision 7 (built)
 
 ## Context
 
@@ -129,14 +130,13 @@ search is a measured module of about 1,600 lines (`src/web/src/core/search/`, Me
     hidden on this device — the apps' own rule, which the web does not have. One tenant at a time, as ADR 0125 decision
     3 (owner, 2026-11-18): a member's tenants are separate places, and a second tenant's results would need their own row line and a
     switch on opening. A space the core could not open is named *not searched*.
-11. **Offline: what the store keeps is searched; the photos of every space are not.** Offline the trees are the store's,
-    so the nodes, their names and their Memories' facets are searched as kept, and the roster is the kept members'.
-    `listScopeMedia` is not a kept read: a whole space's listing would be the store's largest listing and needs its own
-    sweep rule, an amendment to [ADR 0140](0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md)
-    that belongs with offline search over every space's photos (inbox #956). So offline the media documents this
-    session built while online stay; a start offline has none but the open Memory's, and the status says *Photos are
-    searched once you are online* (the owner's words, 2026-11-18, with *Search all spaces* as the field's hint and
-    *Settings* as a settings result's second line).
+11. **Offline: what the store keeps is searched** — *replaced by [ADR 0153](0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md)
+    decision 7* (it said: the photos of every space are not, `listScopeMedia` being no kept read). Offline the trees,
+    the nodes, their names, their Memories' facets and the kept members are searched as kept, and each space's
+    `listScopeMedia` is a kept read in the automatic tier, so its photos are searched offline as online. Only a space
+    whose listing was never read online has none, and the status says *Photos are searched once you are online* (the
+    owner's words, 2026-11-18, with *Search all spaces* as the field's hint and *Settings* as a settings result's second
+    line).
 12. **Where the field lives, per platform** ([ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
     decision 9: the platform's guideline):
 

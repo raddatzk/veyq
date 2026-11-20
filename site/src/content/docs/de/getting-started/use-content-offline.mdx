@@ -3,6 +3,7 @@ title: "Inhalte offline nutzen"
 description: In der veyq-App bleibt, was du angesehen hast, bis zu einem Limit auf deinem Gerät, und was du offline verfügbar machst, bleibt, bis du es zurücknimmst. Beides öffnet sich ohne Verbindung.
 sources:
   - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
+  - docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md
   - docs/crosscutting/native-apps.md
   - docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md
   - docs/decisions/0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md
@@ -11,15 +12,16 @@ sources:
 Die veyq-[App](/de/getting-started/install-the-app/) kann Inhalte auf deinem Gerät behalten, damit du sie ohne
 Verbindung öffnen kannst. Sie behält zweierlei:
 
-- **Was du zuletzt angesehen hast:** Bilder, Vorschauen, den Teil eines Videos, den du abgespielt hast, und die Dateien,
-  die du geöffnet hast, bis zu einem Speicherlimit, das du festlegst — unter Android, Windows und Linux auch die
+- **Was du zuletzt angesehen hast:** Bilder, Vorschauen, den Teil eines Videos, den du abgespielt hast, die Dateien,
+  die du geöffnet hast, und die Einträge einer Kasse mit den Belegen, die du angesehen hast, bis zu einem Speicherlimit, das du festlegst — unter Android, Windows und Linux auch die
   Kartenbilder, die du angesehen hast, die nie offline gezeigt werden
   ([Sind meine Daten sicher?](/de/privacy/is-my-data-safe/#karten-nur-wenn-du-sie-einschaltest)). Ist es erreicht, geht
   zuerst, was du am längsten nicht angesehen hast.
-- **Was du offline verfügbar machst:** eine Erinnerung, ein Kapitel, einen Ordner oder eine Datei, ganz heruntergeladen und
-  behalten, bis du es ausschaltest.
+- **Was du offline verfügbar machst:** eine Erinnerung, ein Kapitel, einen Ordner, eine Datei oder eine Kasse, ganz
+  heruntergeladen und behalten, bis du es ausschaltest.
 
-Daneben behält sie die Mitgliederlisten deiner Bereiche, damit die Personen einer Erinnerung auch offline genannt werden.
+Daneben behält sie die Mitgliederlisten deiner Bereiche, damit die Personen einer Erinnerung auch offline genannt werden,
+und die Liste der Fotos und Videos jedes Bereichs, damit die [Suche](/de/spaces/search/) sie offline findet.
 
 Alles bleibt verschlossen. Die App behält es genau so, wie dein Server es speichert, und verschließt es für dieses Gerät
 ein zweites Mal. Wer die Dateien kopiert, erfährt daraus nichts. Der Browser behält nichts.
@@ -42,8 +44,8 @@ Unter Android fragt die App beim ersten Mal, ob sie Mitteilungen zeigen darf: Do
 ist. Wird der Platz auf deinem Gerät knapp, steht dort **Pausiert: nicht genug Platz auf diesem Gerät**.
 
 Ein Foto wird als seine Vorschau behalten, so wie die App es zeigt, nicht als Original. Ein Video, ein Lied einer Erinnerung, ein GPX-Track und eine Datei werden
-ganz behalten, ebenso die Cover und das Banner einer Erinnerung darin. Was andere hinzufügen oder ändern, während du online bist, wird ebenfalls
-geladen.
+ganz behalten, ebenso die Cover und das Banner einer Erinnerung darin. Eine Kasse wird mit ihren Einträgen und allen
+Belegen behalten. Was andere hinzufügen oder ändern, während du online bist, wird ebenfalls geladen.
 
 Zum Zurücknehmen wählst du noch einmal **Offline verfügbar**. Es ist sofort aus, ohne Nachfrage.
 
@@ -71,7 +73,8 @@ Gerät weniger als 5 % Platz frei, behält die App nichts Neues.
 Die App zeigt **Offline — Stand** und die Zeit, zu der dein Server zuletzt bestätigt hat, was sie zeigt. Du kannst dir
 alles ansehen, was behalten ist, und seine Videos und seine Musik abspielen; alles andere sagt **Nicht offline verfügbar**.
 Offline erscheint keine Karte (*Die Karte braucht eine Verbindung.*); die Kartenansicht einer Erinnerung listet ihre
-Tracks trotzdem. Die Personen einer Erinnerung werden offline nicht angezeigt. Offline
+Tracks trotzdem. Die Personen einer Erinnerung werden offline nicht angezeigt. Eine Kasse öffnet sich mit ihren
+Einträgen und Salden zum genannten Stand; ein Beleg, den du nie angesehen hast, sagt **Nicht offline verfügbar**. Offline
 lässt sich nichts ändern: *Du bist offline. Ändern geht wieder, sobald du online bist.*
 
 Du kannst die App auch ohne Verbindung starten: Entsperre sie wie immer. Ist der Server wieder erreichbar, merkt die

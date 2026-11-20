@@ -1,6 +1,7 @@
 # ADR 0153 — The apps queue a person's own additions and edits made offline, sealed to the device, and send them through the online write path; Expenses joins the store; a login-level device syncs in the background
 - Status: Accepted (owner 2026-11-19, the CRs' owner questions answered as recommended)
-- Built: no
+- Built: partly — decisions 6 and 7 on every app, passed on Android, Linux and Windows (§ Consequences); the Mac's
+  click pass and the iPhone's are open ([native-apps](../crosscutting/native-apps.md) § Open). Decisions 1–5 and 8 not built
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -172,6 +173,41 @@ Measured 2026-11-19 on `claude/offline-refine` at `4f3b57ecd` (commands from `sr
   (`SecretFreeSchemaTest`).
 - **Left as before:** an online upload the network cuts still fails and waits for the person's *Retry* (ADR 0145); it
   does not move into the queue.
+- **As built, decisions 6 and 7** (2026-11-20). `TenantPotDoor.whole` is the kept read: a read with no cursor — the
+  Pot's open, a re-open, a pin's sync and **the re-read after each own write** (`PotSession.readWhole`; a write's delta
+  re-read kept nothing, so an entry written after the open was missing offline, #1038) — while the live poll's deltas
+  stay unkept. The sweep reaches `POT_REVISIONS` below a Pot node from the first keep (without it the sweep after the
+  first keep drops the ledger). A Pot shown offline refuses every write (`offline_read_only`) and offers "Available
+  offline" only to turn it off: a pin cannot be sized and confirmed before its first byte (ADR 0140 decision 9). The
+  banner's time is the open page's own kept time (`TenantSession.pagesOffline`), else the lists'. A receipt just
+  attached is not kept until shown (decision 6's rule); its listing is current, a kept read on every read.
+  `SCOPE_MEDIA` is reached by the sweep from `MY_SCOPES`, never pinned, never protected; search falls back to *Photos
+  are searched once you are online* only where a space's listing is not kept (ADR 0146 decision 11 replaced in part).
+  Tests: `OfflinePotTest`, `OfflinePotPinsTest`, `OfflineBannerTest`, `DispatchTest`, `SecretFreeSchemaTest`.
+- **The passes (decisions 6 and 7).** Each a throwaway account with a member, erased after; two Pots made in the app — one
+  with an entry whose receipt was shown and one whose receipt never was, viewed; one pinned —, a Memory with one photo
+  never opened in the run; the network cut, the app closed, started and unlocked offline. **Android** (2026-11-20, a
+  throwaway API 36 AVD, deleted after; airplane mode): both Pots open read-only (no *Add entry*, no Record, Settings
+  without changes), each banner its own time; the shown receipt opens, the unshown one says "Not available offline";
+  search finds the never-opened Memory's photo; after *Clear cache* and a restart the viewed Pot says "Not available
+  offline", the pinned one opens; the app's data grepped for every title, receipt marker and name: no hit. **Linux**
+  (2026-11-20, `run.py run` under Broadway, the server cut by an unserved `VEYQ_LIVE` port): the same, the store (41
+  files) grepped for the titles, file names and the PNGs' markers: no hit; the viewed Pot showed "No entries yet." as of
+  its first open, its entries written after it (#1038, fixed since in core). **Windows** (2026-11-20, an unpackaged
+  debug build on the VM, the tunnel and forwarder killed): the same, the store (33 files) and what was written under
+  `%LOCALAPPDATA%\veyq`, `%TEMP%` and `INetCache` grepped: no hit; signed out offline, the account's store gone. **Not
+  run:** the Flatpak and the MSIX; sign-out offline on Android and Linux; a never-kept Pot opened offline on Linux and
+  Windows; the "searched once online" line on any desktop (every listing was kept). **The Mac's click pass** (the
+  coordinator's; both Apple builds green, `xcodebuild … CODE_SIGNING_ALLOWED=NO`, macOS and the iOS Simulator SDK): a Pot
+  viewed and one pinned through the header's *Available offline*; offline both open under the shell's banner with its
+  time, no *Add entry*, no Record, Settings without edits; a shown receipt opens, an unshown one and a never-kept Pot say
+  "Not available offline"; search finds a never-opened Memory's photo; the store grepped. **The iPhone's** is the
+  owner's, on a device (no simulator boots on the build Mac, #928).
+- **What the docs site says (decisions 6 and 7).** [Use content offline](../../site/src/content/docs/getting-started/use-content-offline.mdx)
+  (EN and DE): a Pot kept when viewed or made available offline, read-only offline, a receipt never looked at not kept,
+  each space's photo list kept for search; [Search all your spaces](../../site/src/content/docs/spaces/search.mdx): offline
+  search over every space whose list was read; [Expenses](../../site/src/content/docs/expenses/index.mdx): a Pot offline;
+  [Offline or unreachable](../../site/src/content/docs/help/offline.mdx): a Pot's entries among what is shown.
 
 ## Alternatives considered
 
