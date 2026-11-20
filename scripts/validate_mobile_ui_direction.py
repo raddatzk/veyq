@@ -31,6 +31,19 @@ or a qualified name —, which in Kotlin is the only way to reach another packag
     its directory's are each red. Kotlin's packages make the import the whole edge: a symbol of another package is
     unreachable without its name spelled.
 
+  Linux: the crate's sources under `src/mobile/linux/src/` (read with comments and literals blanked, `rust_lexer.mask`);
+  an application's UI is the module `apps::<application>` (directory `src/apps/<application>/`), everything else —
+  `core_ui/`, `bridge/`, `lib.rs`, `main.rs` — is the core UI. A Rust module is reached only through a path, so every
+  path is resolved against the file's own module: `crate::…` (and `veyq::…`, the library as `main.rs` names it) from the
+  root, `self::`/`super::…` from the file's module, a `use` group's members (`crate::{apps::depot::x, …}`) from its
+  prefix, a path whose first segment is `apps` from the root. A path that lands in `apps` names that application, or —
+  `crate::apps` alone, `crate::apps::{…}` — every one:
+  - **(a)** no core UI file names `apps` — but the composition root, `src/applications.rs`, which calls each
+    application's `register` (the web's `applications.ts`).
+  - **(b)** no file of one application names another's module (nor `apps` without its own name after it).
+  - fail closed: a file under `apps/` outside an application's directory, an application without a file under
+    `apps/<application>/`, and a composition root that is missing or names some application nowhere are each red.
+
 **The defect that bought it.** No incident — built with cr-apps-core-ui-layer (2026-11-20) because the apps had no
 direction guard but the search's (`validate_mobile_search_names_no_application.py`, which this one extends to the
 rest of core): at that CR's refine the Kotlin core's `memories/GalleryModel` imported `depot.FileSave` (an application
@@ -43,7 +56,9 @@ kind literals are a review's catch (the web's guard has a kind rule; the apps ha
 package (`me.raddatz.veyq.mobile.*`, then `memories.X`) is not seen either. `CORE_ROOTS` is a list of exceptions,
 held from growing only by review: a new file added there with a reason is green. The bridge module
 (`src/mobile/bridge`, the desktops' dispatch over every application) is not read: it is a host, a composition root
-by its nature. A platform whose rules are not switched on (`PLATFORMS`) is not read at all.
+by its nature. A platform whose rules are not switched on (`PLATFORMS`) is not read at all. On Linux a `#[path]`
+attribute that mounts another directory's file, an item re-exported by core under another name (`pub use`) and a
+macro that expands to a path are not seen; a kind literal (`"EXPENSES_POT"`, blanked) is not either.
 """
 from __future__ import annotations
 
@@ -54,6 +69,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import repo_layout  # noqa: E402
 from kotlin_lexer import mask  # noqa: E402
+from rust_lexer import mask as mask_rust  # noqa: E402
 
 MOBILE = repo_layout.MOBILE
 CORE_SRC = MOBILE / "core" / "src"
@@ -102,12 +118,16 @@ CORE_ROOTS: dict[str, str] = {
 }
 
 # The platforms whose UI rules (a) and (b) are on; each is switched on in its phase of cr-apps-core-ui-layer.
-PLATFORMS: dict[str, bool] = {"android": True}
+PLATFORMS: dict[str, bool] = {"android": True, "linux": True}
 
 ANDROID_SRC = MOBILE / "android" / "src"
 ANDROID_PACKAGE = "me.raddatz.veyq.mobile.android"
 ANDROID_BASE = pathlib.Path("kotlin/me/raddatz/veyq/mobile/android")
 ANDROID_ROOT = pathlib.Path("main") / ANDROID_BASE / "Applications.kt"
+
+LINUX_SRC = repo_layout.MOBILE_LINUX / "src"
+LINUX_ROOT = pathlib.Path("applications.rs")
+RUST_TOKEN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|::|[{},;]|\S")
 
 
 def applications(source: str) -> list[str]:
@@ -246,12 +266,131 @@ def check_android(android_src: pathlib.Path, apps: list[str]) -> list[str]:
     return errors
 
 
+def rust_module(rel: pathlib.Path) -> list[str]:
+    """The module path of the crate's file at [rel] (under `src/`): `lib.rs`/`main.rs` the root, `x/mod.rs` the module x."""
+    parts = list(rel.with_suffix("").parts)
+    if parts in (["lib"], ["main"]):
+        return []
+    return parts[:-1] if parts[-1] == "mod" else parts
+
+
+def rust_paths(masked: str, module: list[str]) -> list[tuple[list[str], int]]:
+    """Every path of [masked] resolved to the crate's root, with its offset: `crate`/`veyq` from the root, `self`/`super`
+    from [module], a `use` group's members from its prefix, a path starting with `apps` from the root; a path through
+    `::` only (a bare name is no path), so a local named `apps` is none."""
+    tokens = [(m.group(0), m.start()) for m in RUST_TOKEN.finditer(masked)]
+    out: list[tuple[list[str], int]] = []
+    groups: list[list[str] | None] = []  # per open brace: the `use` group's resolved prefix, or None for a block
+    i, n = 0, len(tokens)
+    while i < n:
+        tok, at = tokens[i]
+        if tok == "{":
+            groups.append(None)
+            i += 1
+            continue
+        if tok == "}":
+            if groups:
+                groups.pop()
+            i += 1
+            continue
+        if not (tok[0].isalpha() or tok[0] == "_") or (i > 0 and tokens[i - 1][0] == "::"):
+            i += 1
+            continue
+        segs = [tok]
+        j = i + 1
+        while j + 1 < n and tokens[j][0] == "::" and (tokens[j + 1][0][0].isalpha() or tokens[j + 1][0][0] == "_"):
+            segs.append(tokens[j + 1][0])
+            j += 2
+        opens_group = j + 1 < n and tokens[j][0] == "::" and tokens[j + 1][0] == "{"
+        prefix = groups[-1] if groups and i > 0 and tokens[i - 1][0] in ("{", ",") else None
+        if prefix is not None:
+            resolved: list[str] | None = prefix + ([] if segs == ["self"] else segs)
+        elif len(segs) == 1 and not opens_group:
+            resolved = None  # a bare name: no path
+        elif segs[0] in ("crate", "veyq"):
+            resolved = segs[1:]
+        elif segs[0] in ("self", "super"):
+            base = list(module)
+            k = 0
+            if segs[0] == "self":
+                k = 1
+            while k < len(segs) and segs[k] == "super":
+                base = base[:-1]
+                k += 1
+            resolved = base + segs[k:]
+        elif segs[0] == "apps":
+            resolved = segs
+        else:
+            resolved = None  # an outside crate's path, or a name a `use` brought in (the `use` is read itself)
+        if resolved is not None:
+            out.append((resolved, at))
+        if opens_group:
+            groups.append(resolved if resolved is not None else [])
+            i = j + 2
+            continue
+        i = j
+    return out
+
+
+def linux_sources(linux_src: pathlib.Path) -> list[pathlib.Path]:
+    return sorted(linux_src.rglob("*.rs")) if linux_src.is_dir() else []
+
+
+def check_linux(linux_src: pathlib.Path, apps: list[str]) -> list[str]:
+    errors: list[str] = []
+    files = linux_sources(linux_src)
+    if not files:
+        return [f"{_rel(linux_src)}: no Rust file — the guard would check nothing"]
+    root = linux_src / LINUX_ROOT
+    populated: set[str] = set()
+    for f in files:
+        rel = f.relative_to(linux_src)
+        own: str | None = None
+        if rel.parts[0] == "apps":
+            if len(rel.parts) < 3 or rel.parts[1] not in apps:
+                errors.append(f"{_rel(f)}: under `apps/` but in no application's directory (`apps/<{'|'.join(apps)}>/`)")
+                continue
+            own = rel.parts[1]
+            populated.add(own)
+        if f == root:
+            continue
+        masked = mask_rust(f.read_text(encoding="utf-8"))
+        for path, at in rust_paths(masked, rust_module(rel)):
+            if not path or path[0] != "apps":
+                continue
+            target = path[1] if len(path) > 1 else None
+            named = "apps" + (f"::{target}" if target else "")
+            if own is None:
+                errors.append(
+                    f"{_rel(f)}:{_line(masked, at)}: (a) the core UI names `{named}` — it reaches an application only "
+                    f"through the registry its composition root `{LINUX_ROOT}` fills",
+                )
+            elif target != own:
+                errors.append(
+                    f"{_rel(f)}:{_line(masked, at)}: (b) the application `{own}` names `{named}` — another "
+                    f"application's UI; what two applications draw belongs to the core UI",
+                )
+    for app in apps:
+        if app not in populated:
+            errors.append(f"{_rel(linux_src / 'apps' / app)}: the application `{app}` has no UI file under apps/")
+    if not root.is_file():
+        errors.append(f"{_rel(root)}: the composition root is missing — each application registers there")
+    else:
+        named = {p[1] for p, _ in rust_paths(mask_rust(root.read_text(encoding="utf-8")), rust_module(LINUX_ROOT))
+                 if len(p) > 1 and p[0] == "apps"}
+        for app in apps:
+            if app not in named:
+                errors.append(f"{_rel(root)}: the composition root names no `crate::apps::{app}` — `{app}` is not registered")
+    return errors
+
+
 def check(
     core_src: pathlib.Path = CORE_SRC,
     applications_file: pathlib.Path = APPLICATIONS,
     roots: dict[str, str] | None = None,
     platforms: dict[str, bool] | None = None,
     android_src: pathlib.Path = ANDROID_SRC,
+    linux_src: pathlib.Path = LINUX_SRC,
 ) -> list[str]:
     if not applications_file.is_file():
         return [f"{_rel(applications_file)}: not found — the applications are derived from ApplicationId's entries"]
@@ -262,6 +401,8 @@ def check(
     on = PLATFORMS if platforms is None else platforms
     if on.get("android"):
         errors += check_android(android_src, apps)
+    if on.get("linux"):
+        errors += check_linux(linux_src, apps)
     return errors
 
 
@@ -272,7 +413,8 @@ def main() -> int:
     if errors:
         print(f"validate_mobile_ui_direction: {len(errors)} violation(s)")
         return 1
-    read = len(core_sources(CORE_SRC)) + (len(android_sources(ANDROID_SRC)) if PLATFORMS.get("android") else 0)
+    read = len(core_sources(CORE_SRC)) + (len(android_sources(ANDROID_SRC)) if PLATFORMS.get("android") else 0) \
+        + (len(linux_sources(LINUX_SRC)) if PLATFORMS.get("linux") else 0)
     on = ", ".join(p for p, v in PLATFORMS.items() if v) or "none"
     print(f"validate_mobile_ui_direction: OK ({read} files; the Kotlin core, platforms on: {on})")
     return 0
