@@ -56,10 +56,25 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `M=src/mobile`.
 
 ## Phases
 
-- [ ] **1 the guard** — W1, W2, and W3's rule; the existing literals the new rules find moved into the catalog (EN + DE,
+- [x] **1 the guard** — W1, W2, and W3's rule; the existing literals the new rules find moved into the catalog (EN + DE,
   the German drafted, the owner's to change). · Done when: `/usr/bin/python3 scripts/validate_mobile_words.py` green;
   `validate_guard_gaps.py` run once (a validator changed). **Bites:** one planted literal per new rule (Kotlin `Text`,
   `accessibilityHint`, `SetHelpText`, `PrimaryButtonText`, `add_response`, a usage description) each seen red alone.
+  **Built** 2026-11-20 (`claude/words-guard`): `validate_mobile_words.py` — `android-literal` (W1; template `$x`/`${…}`
+  stripped before the letters test), `manifest-literal` (W3's rule: a `NS…UsageDescription` in `project.yml` or a checked-in
+  `Info.plist`, a `<summary>`/`<p>` in the metainfo template), W2's properties on their lists (Swift `.accessibilityHint`,
+  `.accessibilityValue`, `Text(verbatim:` with `\(…)` stripped; C# `SetHelpText`, XAML `AutomationProperties.HelpText`, the
+  three `…ButtonText`; GTK `.add_response(`'s label, each `add_responses` pair's, `.text(`), the docstring's stale limits
+  gone. **What the new rules found:** no source literal on any platform (measured: the guard green on the unchanged tree;
+  Android's 11 literals at a shown call are all templates or symbols) — only the manifests' four hand-written texts, moved
+  into words.json (`usage_camera`, `usage_photos`, `metainfo_summary`, `metainfo_about`, `metainfo_preview`, German drafted)
+  and staged by a `MANIFEST_PENDING` list (red on a stale entry) that phase 2 empties. **Bites** (planted one at a time,
+  `/bin/cp -f` restore, each red with its own rule's label alone): Kotlin `Text(`, `contentDescription`,
+  `stateDescription` if/else, `Toast.makeText`, `showSnackbar`; Swift `accessibilityHint`, `accessibilityValue`,
+  `Text(verbatim:`; C# `SetHelpText`, `PrimaryButtonText`, `CloseButtonText`, XAML `PrimaryButtonText`; Rust
+  `add_response`, an `add_responses` pair, `EntryRow.text`; a usage description in `project.yml` and in `Info.plist`; a
+  stale pending entry; no Kotlin read. Green controls: a Kotlin template, a commented literal, a Swift verbatim
+  interpolation, an `add_responses` of words. `validate_guard_gaps.py` run once: green, 104 pinned cases hold.
 - [ ] **2 the generator** — W3: the two outputs, wired into the Apple build (`project.yml`) and the Flatpak manifest;
   the generator's own test. · Done when: both Apple builds, `python3 linux/run.py build` and the Flatpak's metainfo
   validation (`appstreamcli validate` in the run image) green.
