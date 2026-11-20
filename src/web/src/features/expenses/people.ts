@@ -8,7 +8,7 @@
 // or departed account) — by the name sealed at adding, so the balances still say whom one owes. A link guest reads no
 // directory: it is handed none and shows the sealed name.
 import type { Person } from '../../core/people/directory'
-import { fold } from '../../shared/text/fold'
+import { fold } from '@veyq/core-js/search'
 import type { Participant, PotLedger } from './domain/ledger'
 import type { ParticipantBody } from './domain/format'
 

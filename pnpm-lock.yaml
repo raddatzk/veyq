@@ -269,6 +269,9 @@ importers:
       '@types/node':
         specifier: ^22.20.5
         version: 22.20.5
+      esbuild:
+        specifier: ^0.28.2
+        version: 0.28.2
       eslint:
         specifier: ^10.14.0
         version: 10.14.0(supports-color@10.2.2)
@@ -330,6 +333,9 @@ importers:
       '@lucide/vue':
         specifier: ^1.68.0
         version: 1.68.0(vue@3.5.44(typescript@6.0.3))
+      '@veyq/core-js':
+        specifier: workspace:*
+        version: link:../packages/core-js
       '@veyq/crypto':
         specifier: workspace:*
         version: link:../packages/crypto

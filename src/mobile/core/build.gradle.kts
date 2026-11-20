@@ -2,6 +2,7 @@ import java.net.URI
 import java.security.MessageDigest
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.plugin.KotlinHierarchyTemplate
+import org.jetbrains.kotlin.gradle.plugin.getKotlinPluginVersion
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 import org.openapitools.codegen.DefaultGenerator
 import org.openapitools.codegen.config.CodegenConfigurator
@@ -429,6 +430,15 @@ tasks.matching { it.name.startsWith("cinteropWebp") }.configureEach { dependsOn(
 // the one directory where Gradle and pnpm meet. The conformance binary lands in `dist/conformance/`, beside and never
 // inside the shipped module. The package's `build` runs this task by name (src/packages/core-js/scripts/build.py).
 val coreJsDist = rootDir.resolve("../packages/core-js/dist")
+// The Kotlin version the module was compiled with, for the web's licence file: the standard library is bundled into what
+// the web ships, and its notice names the version (src/web/vite.config.ts, `verify:license-sources`).
+val jsKotlinVersion = tasks.register("jsKotlinVersion") {
+    val version = getKotlinPluginVersion()
+    val out = layout.buildDirectory.file("core-js/kotlin-stdlib.version")
+    inputs.property("version", version)
+    outputs.file(out)
+    doLast { out.get().asFile.writeText("$version\n") }
+}
 val jsPackage = tasks.register<Sync>("jsPackage") {
     group = "veyq"
     description = "Compiles the core for JavaScript and writes the module and its conformance runner into src/packages/core-js/dist."
@@ -436,6 +446,18 @@ val jsPackage = tasks.register<Sync>("jsPackage") {
     from(tasks.named<org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrLink>("compileConformanceProductionLibraryKotlinJs").flatMap { it.destinationDirectory }) {
         into("conformance")
     }
+    from(jsKotlinVersion)
+    into(coreJsDist)
+}
+// The dev server's build (`build.py --watch`, src/web/vite.config.ts): the development link of the shipped module alone —
+// no dead-code elimination, no conformance binary — into the same `dist/`, so a saved rule reaches the open page inside
+// ADR 0155's 15 s (the production link is ~7 s more, measured 2026-11-20). Never what a check or an image ships: those
+// run `jsPackage`, which writes `dist/` anew.
+tasks.register<Sync>("jsPackageDev") {
+    group = "veyq"
+    description = "The development build of the core for JavaScript into src/packages/core-js/dist, for the web's dev server."
+    from(tasks.named<org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrLink>("compileDevelopmentLibraryKotlinJs").flatMap { it.destinationDirectory })
+    from(jsKotlinVersion)
     into(coreJsDist)
 }
 // The plugin's check of the generated `.d.ts` runs `tsc` under Kotlin's own Node (ignored by default today); the package's

@@ -56,7 +56,8 @@ import PersonAvatar from '../people/PersonAvatar.vue'
 import { useSettingsSections } from '../../features/settings/sections'
 import { searchContribution } from './contribution'
 import { requestOpenItem } from './openRequest'
-import { PERSON_DOCUMENT, SETTINGS_DOCUMENT, searchDocument, yearsOf, type SearchDocument } from './model'
+import { yearsOf } from '@veyq/core-js/search'
+import { PERSON_DOCUMENT, SETTINGS_DOCUMENT, searchDocument, type SearchDocument } from './model'
 import {
   chipKey, createMatcher, matchedText, nameParts, reasonKeyword, suggestChips, type ChipSuggestion, type NamePart, type SearchChip,
 } from './query'

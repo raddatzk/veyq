@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -171,6 +172,19 @@ function pdfjsDecoderNotices(): string {
     ].join('\n\n'),
   ).join('\n\n')
 }
+// The Kotlin core (`@veyq/core-js`, ADR 0155) is compiled into JavaScript, the Kotlin standard library with it: no npm
+// package carries it, so Vite's file does not list it. Whenever a module of the package's `dist/` is bundled, its notice
+// goes in under the same heading shape - the version Gradle compiled with (`dist/kotlin-stdlib.version`), the tag of
+// that version on Kotlin's repository as its `Source:`, and the Apache-2.0 text (`verify:license-sources` holds that form).
+const CORE_JS_DIR = fileURLToPath(new URL('../packages/core-js/', import.meta.url))
+function kotlinStdlibNotice(): string {
+  const version = readFileSync(join(CORE_JS_DIR, 'dist', 'kotlin-stdlib.version'), 'utf8').trim()
+  return [
+    `## kotlin-stdlib - ${version} (Apache-2.0)`,
+    `Source: https://github.com/JetBrains/kotlin/tree/v${version}\nCovers: the Kotlin standard library, compiled into @veyq/core-js`,
+    readFileSync(join(CORE_JS_DIR, 'notices', 'kotlin-stdlib.txt'), 'utf8').trim(),
+  ].join('\n\n')
+}
 function licenseSourcesPlugin(): Plugin {
   return {
     name: 'veyq-license-sources',
@@ -184,10 +198,12 @@ function licenseSourcesPlugin(): Plugin {
         const cache = new Map()
         const repositories = new Map<string, string | undefined>()
         let encoderBundled = false
+        let coreBundled = false
         for (const chunk of Object.values(bundle)) {
           if (chunk.type !== 'chunk') continue
           for (const id of chunk.moduleIds) {
             if (id.startsWith(WEBP_ENCODER_DIR)) encoderBundled = true
+            if (id.startsWith(join(CORE_JS_DIR, 'dist'))) coreBundled = true
             const pkg = packageOf(id, cache)
             if (pkg) repositories.set(`${pkg.name} - ${pkg.version}`, repositoryUrl(pkg.repository))
           }
@@ -198,6 +214,7 @@ function licenseSourcesPlugin(): Plugin {
           return `${heading}\n\n${lines.join('\n')}`
         })
         if (encoderBundled) asset.source = `${asset.source.trimEnd()}\n\n${libwebpNotice()}\n`
+        if (coreBundled) asset.source = `${asset.source.trimEnd()}\n\n${kotlinStdlibNotice()}\n`
         if (Object.keys(bundle).some((name) => name.startsWith(`${pdfjsDataDir()}decoders/`))) asset.source = `${asset.source.trimEnd()}\n\n${pdfjsDecoderNotices()}\n`
       },
     },
@@ -331,6 +348,29 @@ function devSeedCredentialsPlugin(): Plugin {
 // The repository root: the nearest directory above this file that holds `VERSION`. Walked up to rather than counted in
 // `../`, because how deep the client sits in the checkout is the layout's to decide (ADR 0106), and a count gone stale
 // in the dev-credentials endpoint would be swallowed by its catch and answer 404 in silence. Not found, it throws.
+// The Kotlin core's search (`@veyq/core-js`, ADR 0155) is Gradle's output, not a source Vite compiles: `pnpm run dev`
+// builds it once (`core`), and this keeps Gradle watching the core while the dev server runs, so a saved `.kt` change
+// rewrites the package's `dist/` and the page reloads from it with no manual step. Dev only; `VEYQ_CORE_WATCH=0` turns
+// it off (a second dev server beside one that watches already).
+function coreJsWatchPlugin(): Plugin {
+  return {
+    name: 'veyq-core-js-watch',
+    apply: 'serve',
+    configureServer(server) {
+      if (process.env.VEYQ_CORE_WATCH === '0' || process.env.VITEST) return
+      const build = fileURLToPath(new URL('../packages/core-js/scripts/build.py', import.meta.url))
+      const gradle = spawn('python3', [build, '--watch'], { stdio: ['ignore', 'inherit', 'inherit'] })
+      server.httpServer?.on('close', () => gradle.kill())
+      process.on('exit', () => gradle.kill())
+    },
+    // The watch writes the development link, which keeps what dead-code elimination drops - Ktor's Node branch among
+    // it, `import('ws')`, never taken in a browser and no dependency of the web: answered with an empty module.
+    resolveId: (id) => (id === 'ws' ? NO_WS : undefined),
+    load: (id) => (id === NO_WS ? 'export default undefined' : undefined),
+  }
+}
+const NO_WS = '\0veyq-no-ws'
+
 function repoRoot(): string {
   const start = dirname(fileURLToPath(import.meta.url))
   let dir = start
@@ -351,7 +391,7 @@ function platformMajor(): number {
 
 export default defineConfig(({ command }) => {
   return {
-    plugins: [vue(), vueWithoutPassThroughPolicyPlugin(), cspPlugin(command === 'serve'), smartAppBannerPlugin(), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin(), licenseSourcesPlugin()],
+    plugins: [vue(), vueWithoutPassThroughPolicyPlugin(), cspPlugin(command === 'serve'), smartAppBannerPlugin(), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin(), licenseSourcesPlugin(), coreJsWatchPlugin()],
     define: {
       __PDFJS_VERSION__: JSON.stringify(pdfjsPackage().version),
       // The platform's one major (ADR 0085 decision 1), read from the repository's VERSION as the backend's build reads

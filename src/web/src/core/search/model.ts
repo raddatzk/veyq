@@ -2,8 +2,9 @@
 // already opened - never a key, never a second source of truth. Core makes one document per node of every space it can open
 // (its name and where it lives); an application adds facets to its own kinds' documents through the registry
 // (`KindDescriptor.search`) and contributes documents of its own for the node on screen (`contribution.ts`: Memories' photos
-// of the open Memory).
-import { fold } from '../../shared/text/fold'
+// of the open Memory). The rules over them - folding, chips, matching, ranking, the order - are the Kotlin core's, through
+// `@veyq/core-js/search` (ADR 0155): what stays here is the shape the web draws, and `query.ts`/`results.ts` adapt it.
+import { fold } from '@veyq/core-js/search'
 import type { VeyqIconName } from '../../shared/ui/icons'
 
 /** Calendar years, both ends included: a Memory dated 2023-12-30 to 2024-01-02 is `{ from: 2023, to: 2024 }`. */
@@ -57,20 +58,14 @@ export interface SearchDocument {
   readonly open?: () => void
   /** A contributed document's icon; a node's comes from its kind. */
   readonly icon?: VeyqIconName
-  /** `name` folded (`shared/text/fold.ts`), once. */
-  readonly foldedName: string
-  /** `facets.places` folded, once. */
+  /** `facets.places` folded, once: what a place chip names, to draw the place it matched (`SearchField.vue`). */
   readonly foldedPlaces: readonly string[]
   /** Other names the object is found by as by its name (a person's `~username`). */
   readonly aliases?: readonly string[]
-  /** `aliases` folded, once. */
-  readonly foldedAliases: readonly string[]
   /** Words the object is found by at a word's start only, never inside one, and from the third typed character on (a
    *  settings section's "E-Mail", "Kennwort"): a word the member does not see beside the name must not match a stray
    *  letter, and where one is why a result is listed, its row draws it (`query.ts` `reasonKeyword`). */
   readonly keywords?: readonly string[]
-  /** `keywords` folded, once. */
-  readonly foldedKeywords: readonly string[]
   /** A document's own second line (a person's handle, a settings section's heading); a node's is where it lives. */
   readonly subtitle?: string
 }
@@ -111,33 +106,8 @@ export interface ScopeDocument {
 
 const NO_IDS: readonly string[] = Object.freeze([])
 
-/** Core's one way to make a document, so its folded fields are always there; `pathIds` left out is none (a document of
+/** Core's one way to make a document, so its folded places are always there; `pathIds` left out is none (a document of
  *  no space, or one no chip of a node can reach). */
-export function searchDocument(
-  d: Omit<SearchDocument, 'foldedName' | 'foldedPlaces' | 'foldedAliases' | 'foldedKeywords' | 'pathIds'> & { pathIds?: readonly string[] },
-): SearchDocument {
-  return {
-    ...d, pathIds: d.pathIds ?? NO_IDS, foldedName: fold(d.name), foldedPlaces: (d.facets.places ?? []).map(fold),
-    foldedAliases: (d.aliases ?? []).map(fold), foldedKeywords: (d.keywords ?? []).map(fold),
-  }
-}
-
-/** The years a document spans: its own span, else its capture year (local time, as the result row shows the day). */
-export function yearsOf(doc: Pick<SearchDocument, 'facets'>): YearSpan | null {
-  if (doc.facets.years) return doc.facets.years
-  const at = doc.facets.capturedAt
-  if (at === undefined || !Number.isFinite(at)) return null
-  const year = new Date(at).getFullYear()
-  return { from: year, to: year }
-}
-
-/** The months a document spans: its own span, else its capture month (local time, as {@link yearsOf}); null for an object
- *  with neither - a Memory without a date matches no month. */
-export function monthsOf(doc: Pick<SearchDocument, 'facets'>): MonthSpan | null {
-  if (doc.facets.months) return doc.facets.months
-  const at = doc.facets.capturedAt
-  if (at === undefined || !Number.isFinite(at)) return null
-  const d = new Date(at)
-  const month = `${String(d.getFullYear()).padStart(4, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}`
-  return { from: month, to: month }
+export function searchDocument(d: Omit<SearchDocument, 'foldedPlaces' | 'pathIds'> & { pathIds?: readonly string[] }): SearchDocument {
+  return { ...d, pathIds: d.pathIds ?? NO_IDS, foldedPlaces: (d.facets.places ?? []).map(fold) }
 }

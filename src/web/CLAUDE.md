@@ -4,7 +4,11 @@ The web client. Loaded in addition to the root `CLAUDE.md` when working here. Al
 here; the server is blind.
 
 ## Prove your work
-- `pnpm run check` (lint + typecheck + test + build).
+- `pnpm run check` (lint + typecheck + test + build), after `pnpm run core`: the search's rules are the Kotlin core's
+  (`@veyq/core-js`, ADR 0155), whose `dist/` Gradle writes (`src/mobile`, JDK 21) and git never holds, so `check` and
+  `dev` build it first, and the dev server keeps Gradle watching the core (`VEYQ_CORE_WATCH=0` turns that off). A fresh
+  worktree: `pnpm install`, then `pnpm run core`. A change under `src/mobile/core` that the search reaches also runs
+  `@veyq/core-js`'s check (`src/packages/core-js`: `pnpm run build && pnpm run check`).
 - API client is **generated** and **not tracked** (gitignored, mirrors the backend) — `pnpm run generate:api`
   from the specs under `../../contracts/api/` (core's at its top level, the Memories ones in `memories/`, one client
   directory per spec) produces it (and runs automatically on install via `prepare`). Never
@@ -363,7 +367,9 @@ here; the server is blind.
   guest's page does not, a bookmark's embed blocks it; its document of an object replaces the space's). An object found
   outside the page opens its node and leaves `openRequest.ts`'s in-memory request, which the node's page takes - no
   address. Memories: `features/memories/search.ts`. Text is compared through
-  `shared/text/fold.ts`, never `slugify`. A Memory's gallery filter (`features/memories/galleryFilter.ts`) reads its
+  `fold` of `@veyq/core-js/search`, never `slugify`. The search's rules - folding, chips, matching, ranking, the order -
+  are the Kotlin core's (ADR 0155): `query.ts` and `results.ts` hold the web's shapes and the adapter only, and a rule
+  changes in `src/mobile/core` (its `SearchVectorsTest` records the vectors), never here. A Memory's gallery filter (`features/memories/galleryFilter.ts`) reads its
   text with the same grammar - `tailsOf`, `wordPrefix`, `suggestChips`, `satisfies`, `textRank` - and adds only the
   capture day, a chip of its own; never a second copy of the chip logic. **One list after the suggestions** (decision 5,
   `results.ts`): no result groups and no heading below *Filter by*; ordered by the match, then where the result lies (the

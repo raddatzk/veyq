@@ -1,6 +1,6 @@
 // A Memory's gallery narrowed by facts (uc.memory.gallery step 8): a capture day, a capture year where the Memory spans more
 // than one, a place, a kind (photo, video), and free text over the original's name. It is the search's chip grammar over the
-// gallery's own items - core's `core/search/query.ts` reads the typed text, suggests and tests the year, place and kind chips
+// gallery's own items - core's search (`core/search/query.ts`, the Kotlin core's rules) reads the typed text, suggests and tests the year, place and kind chips
 // and matches the name - plus the capture DAY, which only a gallery has and which therefore lives here (core has no use for
 // it). One reading of the text, never a copy of it.
 //
@@ -15,7 +15,7 @@
 //
 // **Combining** ({@link galleryPredicate}): an item stays when it passes the mark filter (ADR 0068) AND every chip AND the
 // text. The grid's order is untouched; the predicate only removes items.
-import { fold } from '../../shared/text/fold'
+import { fold } from '@veyq/core-js/search'
 import { searchDocument, type SearchDocument } from '../../core/search/model'
 import { chipKey, MIN_TAIL, PER_TYPE, Rank, satisfies, suggestChips, tailsOf, textRank, wordPrefix, type SearchChip } from '../../core/search/query'
 import { mediaDocuments, PHOTO_DOCUMENT, VIDEO_DOCUMENT } from './search'

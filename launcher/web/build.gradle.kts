@@ -15,7 +15,8 @@ tasks.register<Exec>("bootstrap") {
 
 tasks.register<Exec>("run") {
     group = "veyq"
-    description = "Starts web's Vite dev server; browse veyq.localhost:<port> (default 8081)."
+    description = "Starts web's Vite dev server, after building the Kotlin core for it (@veyq/core-js, which Gradle then " +
+        "keeps watching); browse veyq.localhost:<port> (default 8081)."
     workingDir = webDir
     commandLine("pnpm", "run", "dev")
     ports["webPort"]?.let { environment("VITE_PORT", it) }

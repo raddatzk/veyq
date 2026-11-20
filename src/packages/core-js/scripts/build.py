@@ -18,7 +18,14 @@ GRADLEW = repo_layout.MOBILE / ("gradlew.bat" if sys.platform == "win32" else "g
 
 
 def main() -> int:
-    return subprocess.call([str(GRADLEW), "--console=plain", "-q", ":core:jsPackage"], cwd=repo_layout.MOBILE)
+    if "--watch" in sys.argv[1:]:
+        # The dev server's: the development link (`:core:jsPackageDev`, no dead-code elimination, no conformance), with
+        # the JavaScript compile's incremental caches, which a release build turns off for byte-identical output
+        # (src/mobile/gradle.properties) and a dev reload does not need.
+        task = ["-t", "-Pkotlin.incremental.js.ir=true", ":core:jsPackageDev"]
+    else:
+        task = [":core:jsPackage"]
+    return subprocess.call([str(GRADLEW), "--console=plain", "-q", *task], cwd=repo_layout.MOBILE)
 
 
 if __name__ == "__main__":

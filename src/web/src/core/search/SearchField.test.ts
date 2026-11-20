@@ -10,6 +10,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 const push = vi.hoisted(() => vi.fn())
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }), useRoute: () => ({ name: 'home', hash: '#trips/' }) }))
+// The core's matcher, its forgetting counted: the field must clear it when its list closes (the queries remembered below).
+vi.mock('@veyq/core-js/search', async (orig) => {
+  const core = await orig<typeof import('@veyq/core-js/search')>()
+  return { ...core, clearMatcher: vi.fn(core.clearMatcher) }
+})
 vi.mock('./searchIndex', async () => {
   const { reactive } = await import('vue')
   return {
@@ -43,6 +48,7 @@ import { activeSpace } from '../../app/activeSpace'
 import { FILE_KIND } from '../../features/depot/kinds'
 import { POT_KIND } from '../../features/expenses/kinds'
 import { searchDocument, type SearchDocument } from './model'
+import { clearMatcher } from '@veyq/core-js/search'
 import { setBreadcrumb } from '../../app/breadcrumb'
 import { realI18n, t } from '../../test/i18n'
 import { i18n } from '../../i18n'
@@ -912,26 +918,26 @@ describe('the bold part, the month chip, the settings words, a screen reader', (
 })
 
 // The owner's item (2026-11-09): the field remembers the queries asked while its list is open, and forgets them when it closes.
+// What the matcher remembers and narrows is the core's (`Query.Matcher`, held by its `SearchRulesTest`); the field's part is
+// to hand it the same matcher while the list is open and to clear it when the list closes.
 describe('the queries remembered while the list is open', () => {
-  it('Backspace reads no document while open; after the list closed, the same query reads every document again', async () => {
-    let reads = 0
+  it('Backspace answers from the open list; the list closing clears the matcher', async () => {
     const base = [doc({ id: 'a', name: 'Rome 2024' }), doc({ id: 'b', name: 'Rome garden' }), doc({ id: 'c', name: 'Paris' })]
-    vi.mocked(indexedDocuments).mockReturnValue(base.map((d) => Object.defineProperty({ ...d }, 'foldedName', { get: () => (reads++, d.foldedName) }) as SearchDocument))
+    vi.mocked(indexedDocuments).mockReturnValue(base)
     await mountField()
     await type('ro')
     await type('rom')
-    const before = reads
+    const cleared = vi.mocked(clearMatcher).mock.calls.length
     await type('ro') // Backspace
-    expect(reads).toBe(before)
+    expect(vi.mocked(clearMatcher).mock.calls.length).toBe(cleared) // still remembering while open
     expect(rows()).toContain('Rome 2024 Familie') // the answer is there all the same
     await press('Escape')
+    expect(vi.mocked(clearMatcher).mock.calls.length).toBeGreaterThan(cleared) // forgotten as the list closed
     field().focus()
     field().dispatchEvent(new FocusEvent('focus'))
     await flushPromises()
-    const reopened = reads
-    await type('r')
     await type('ro')
-    expect(reads - reopened).toBeGreaterThanOrEqual(base.length * 2) // control: forgotten, so scanned again
+    expect(rows()).toContain('Rome 2024 Familie')
   })
 })
 
