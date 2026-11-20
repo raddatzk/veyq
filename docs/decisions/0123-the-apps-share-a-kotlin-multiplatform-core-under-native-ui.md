@@ -1014,8 +1014,9 @@ implementation exists but what holds it to the first.
 - **The Windows app** (ADR 0136 decision 5; `src/mobile/windows/`). WinUI 3 in C# on .NET 10, `win-x64`, unpackaged
   and self-contained, the Windows App SDK included, so its build output runs where it is copied. Built 2026-11-10/11.
   - **Packages.** `Microsoft.WindowsAppSDK.WinUI` and `.Foundation` 2.6.5 and `Microsoft.Windows.SDK.BuildTools`, not the
-    metapackage (which pulls AI, ML, Search and Widgets); MSTest's `TestFramework` and `TestAdapter` 4.5.2 under
-    Microsoft.Testing.Platform, not the `MSTest` metapackage. Versions are central and exact (`Directory.Packages.props`),
+    metapackage (which pulls AI, ML, Search and Widgets); MSTest's `TestFramework` and `TestAdapter` 4.5.3 under
+    Microsoft.Testing.Platform, not the `MSTest` metapackage. nuget.org marks each superseded MSTest release
+    "Legacy" (4.5.2 on 2026-11-20), which reddens the gate below until the pin moves to the newest one. Versions are central and exact (`Directory.Packages.props`),
     the lock files committed and every restore `--locked-mode`, nuget.org the only source. The no-deprecated rule is a
     gate here: `run.py build` is red on any package `dotnet package list --deprecated` or `--vulnerable` names,
     transitive ones included (bitten with `WindowsAzure.Storage` 9.3.3). The .NET SDK alone builds the app — the XAML
