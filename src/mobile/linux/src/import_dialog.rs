@@ -87,8 +87,9 @@ struct Inner {
     dialog: adw::Dialog,
     nav: adw::NavigationView,
     toasts: adw::ToastOverlay,
-    import_button: gtk::Button,
-    as_file: gtk::Button,
+    /// The shown page's *Import* and *Upload as a file* (each page's header bar has its own).
+    import_button: RefCell<gtk::Button>,
+    as_file: RefCell<gtk::Button>,
     /// The page drawn last, by its tag; its content is drawn anew on each update.
     page: RefCell<String>,
     content: RefCell<Option<gtk::Box>>,
@@ -102,29 +103,18 @@ struct Inner {
 pub fn open(parent: &gtk::Widget, import: i64, toasts: &adw::ToastOverlay) {
     let nav = adw::NavigationView::new();
     let dialog = adw::Dialog::builder().content_width(480).content_height(420).title(words::import_title()).child(&nav).build();
-    let import_button = gtk::Button::builder().label(words::import_submit()).sensitive(false).build();
-    import_button.add_css_class("suggested-action");
-    let as_file = gtk::Button::builder().label(words::import_upload_as_file()).visible(false).build();
     let inner = Rc::new(Inner {
         id: import,
         watch: RefCell::new(None),
         dialog: dialog.clone(),
         nav: nav.clone(),
         toasts: toasts.clone(),
-        import_button: import_button.clone(),
-        as_file: as_file.clone(),
+        import_button: RefCell::new(gtk::Button::new()),
+        as_file: RefCell::new(gtk::Button::new()),
         page: RefCell::new(String::new()),
         content: RefCell::new(None),
         closed: Cell::new(false),
         told: Cell::new(false),
-    });
-    import_button.connect_clicked(move |_| {
-        eprintln!("veyq: import {import}: run");
-        bridge::send(Call::ImportRun { import });
-    });
-    as_file.connect_clicked(move |_| {
-        eprintln!("veyq: import {import}: upload as a file");
-        bridge::send(Call::ImportAsFile { import });
     });
     let held = inner.clone();
     dialog.connect_closed(move |_| held.end());
@@ -196,15 +186,17 @@ impl Inner {
         }
         let running = s.step == ImportStep::Running;
         self.dialog.set_can_close(!running);
-        self.import_button.set_label(&said::key(&s.import_word));
-        self.import_button.set_visible(offers_import(s));
-        self.import_button.set_sensitive(s.can_import && !running);
-        self.as_file.set_visible(s.can_as_file);
-        self.as_file.set_sensitive(!running);
         let tag = page_tag(s);
         if *self.page.borrow() != tag {
             self.show_page(tag, Some(s));
         }
+        let import_button = self.import_button.borrow();
+        import_button.set_label(&said::key(&s.import_word));
+        import_button.set_visible(offers_import(s));
+        import_button.set_sensitive(s.can_import && !running);
+        let as_file = self.as_file.borrow();
+        as_file.set_visible(s.can_as_file);
+        as_file.set_sensitive(!running);
         if let Some(content) = self.content.borrow().as_ref() {
             fill(content, s);
         }
@@ -226,14 +218,22 @@ impl Inner {
             inner.dialog.force_close();
         });
         header.pack_start(&cancel);
-        // the buttons move to the page shown
-        for b in [&self.import_button, &self.as_file] {
-            if let Some(p) = b.parent().and_downcast::<adw::HeaderBar>() {
-                p.remove(b);
-            }
-        }
-        header.pack_end(&self.import_button);
-        header.pack_end(&self.as_file);
+        let import = self.id;
+        let import_button = gtk::Button::builder().label(words::import_submit()).sensitive(false).build();
+        import_button.add_css_class("suggested-action");
+        import_button.connect_clicked(move |_| {
+            eprintln!("veyq: import {import}: run");
+            bridge::send(Call::ImportRun { import });
+        });
+        let as_file = gtk::Button::builder().label(words::import_upload_as_file()).visible(false).build();
+        as_file.connect_clicked(move |_| {
+            eprintln!("veyq: import {import}: upload as a file");
+            bridge::send(Call::ImportAsFile { import });
+        });
+        header.pack_end(&import_button);
+        header.pack_end(&as_file);
+        *self.import_button.borrow_mut() = import_button;
+        *self.as_file.borrow_mut() = as_file;
         let content = gtk::Box::new(gtk::Orientation::Vertical, 12);
         content.set_margin_top(12);
         content.set_margin_bottom(24);
