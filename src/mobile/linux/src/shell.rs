@@ -531,6 +531,13 @@ impl Shell {
                             eprintln!("veyq: new memory: made");
                             memory_page::open_node(&node);
                         }
+                        // made offline: it waits to be sent and shows where it was made; the dialog closes, the notice is said
+                        Ok(Answer::Created { queued: true, notice, .. }) => {
+                            eprintln!("veyq: new memory: queued");
+                            if let Some(n) = notice {
+                                toasts.add_toast(adw::Toast::new(&said::notice(&n)));
+                            }
+                        }
                         Ok(Answer::Created { notice: Some(n), .. }) => {
                             eprintln!("veyq: new memory: {}", n.msg);
                             again(name, said::notice(&n));

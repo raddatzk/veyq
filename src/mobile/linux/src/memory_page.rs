@@ -392,6 +392,13 @@ impl MemoryPage {
                         eprintln!("veyq: new chapter: made");
                         open_node(&node);
                     }
+                    // made offline: it waits to be sent and shows where it was made; the dialog closes, the notice is said
+                    Ok(Answer::Created { queued: true, notice, .. }) => {
+                        eprintln!("veyq: new chapter: queued");
+                        if let Some(n) = notice {
+                            toasts.add_toast(adw::Toast::new(&said::notice(&n)));
+                        }
+                    }
                     Ok(Answer::Created { notice: Some(n), .. }) => {
                         eprintln!("veyq: new chapter: {}", n.msg);
                         again(name, said::notice(&n));

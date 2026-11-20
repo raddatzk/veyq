@@ -459,7 +459,8 @@ impl Inner {
                 let amount = money(view, t.row.amount);
                 let row = adw::ActionRow::builder().title(glib_escape(&pays)).build();
                 row.add_suffix(&suffix(&amount, &["numeric"]));
-                if view.can_write {
+                // a payment never queues: *Record* where the core offers it (`canRecord`), never by `canWrite`
+                if view.can_record {
                     let record = gtk::Button::builder().label(words::balances_record()).valign(gtk::Align::Center).build();
                     let (w, one) = (Rc::downgrade(self), t.row.clone());
                     let body = [pays.clone(), amount.clone()].join(" · ");

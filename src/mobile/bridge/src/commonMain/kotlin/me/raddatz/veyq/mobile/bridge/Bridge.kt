@@ -1323,7 +1323,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.Created(NodeAt(call.scopeId, made.created!!, me.raddatz.veyq.mobile.AppKinds.BOOKMARK_KIND, made.nameShown), null)
             } ?: noTenant
             is Call.ShellCreateMemory -> tenant.value?.models?.createMemory?.let { make ->
-                make(call.scopeId, call.parentId, call.name, call.wasThere, call.autoPlace).let { Answer.Created(it.node, it.notice) }
+                make(call.scopeId, call.parentId, call.name, call.wasThere, call.autoPlace).let { Answer.Created(it.node, it.notice, it.queued) }
             } ?: noTenant
             is Call.ShellRowCover -> tenant.value?.models?.rowCover?.let { read ->
                 val row = read(call.nodeId, call.held) ?: return Answer.Refused(Answer.Why.NO_COVER)
@@ -1375,7 +1375,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.GalleryCancelAsk -> galleries[call.gallery]?.cancelAsk().done(Answer.Why.NO_SUCH_GALLERY)
             is Call.GallerySeen -> galleries[call.gallery]?.seen().done(Answer.Why.NO_SUCH_GALLERY)
             is Call.GallerySearchOpenedSeen -> galleries[call.gallery]?.searchOpenedSeen().done(Answer.Why.NO_SUCH_GALLERY)
-            is Call.GalleryCreateChapter -> galleries[call.gallery]?.let { g -> g.createChapter(call.name).let { Answer.Created(it.node, it.notice) } }
+            is Call.GalleryCreateChapter -> galleries[call.gallery]?.let { g -> g.createChapter(call.name).let { Answer.Created(it.node, it.notice, it.queued) } }
                 ?: noGallery
             is Call.MemoryUpload -> galleries[call.gallery]?.let { g ->
                 if (!g.rights.upload) return Answer.Refused(Answer.Why.NOT_OFFERED)

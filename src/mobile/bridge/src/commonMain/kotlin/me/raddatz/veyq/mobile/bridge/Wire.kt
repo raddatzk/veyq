@@ -1965,8 +1965,11 @@ internal sealed class Answer {
      */
     @Serializable @SerialName("RowCover") data class RowCover(val frame: String, val crop: NodeCover.Crop, val sent: Boolean, val mediaType: String?) : Answer()
 
-    /** A Memory or a chapter made ([Call.ShellCreateMemory], [Call.GalleryCreateChapter]): the node to open, or why not. */
-    @Serializable @SerialName("Created") data class Created(val node: NodeAt?, val notice: Notice?) : Answer()
+    /**
+     * A Memory or a chapter made ([Call.ShellCreateMemory], [Call.GalleryCreateChapter]): the node to open, or why not;
+     * [queued]: made offline, waiting to be sent ([notice] says so) — the dialog closes, nothing opens yet.
+     */
+    @Serializable @SerialName("Created") data class Created(val node: NodeAt?, val notice: Notice?, val queued: Boolean = false) : Answer()
 
     /**
      * A medium's details ([Call.LightboxDetails]), in the web's order: each row with its label and how it shows; who added
