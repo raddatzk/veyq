@@ -309,7 +309,16 @@ ADR 0153 decisions 1–5 hold them; here only what the work needs beside them.
   `ShellModel.takesUpload`/`dropLevel` take files offline where a Depot file queues (`takesFiles`) — New offered Upload
   files offline (`createsHere`) but the one upload gate of phase 2 refused every upload and drop offline
   (`QueuedOverlayTest`, the tray case). **Deviations:** *Open* of a held rename opens the node (`Shell.OpenAt`) for its
-  header's Rename, the person's chosen name in the tray's line rather than prefilled (Linux prefills it).
+  header's Rename, the person's chosen name in the tray's line rather than prefilled (Linux prefills it). *Save a copy*
+  says the outcome with the download words (as `QueuedShown.copySaved`; `Queued.SaveCopy` answers only Done/NOT_WRITTEN).
+  **Pass** (throwaway `--tenant tw-win`, erased; the VM's 8080 is held by tunnels of other sessions, so the app was
+  signed in through `http://tw-win.localhost:18731` — `run.py`'s own `ssh -R` to an own Mac-side forwarder to 8080, which
+  was stopped to cut the server and started again): offline, New folder queued (`Shell.CreateFolder: queued`), the
+  banner "Offline — Stand …" with "Eine Änderung wartet auf Versand", the folder's row "Wartet auf Versand" in its level,
+  the tray listing it with *Verwerfen* (shot); Manage's sign-out asked in place "Eine offline gemachte Änderung ist noch
+  nicht gesendet. Sie wird gelöscht." with *Trotzdem abmelden* (shot, dismissed); reconnected, it was sent (`queued
+  said: offline_sent`, tray empty, the folder listed). **Not passed:** a photo, a medium's time, a Pot entry with a
+  receipt, the held edit's conflict editor and *Discard mine*, *Save a copy*, the store grep, the re-key — phase 11's.
 - [ ] **11 the passes** — § Passes; results into ADR 0153's Consequences.
 - [ ] **12 harvest** — ADR 0153's `Built:` and `Status: Accepted` once the owner's questions are answered; ADR 0140's
   decision 7 pointed at it (already in its `Replaced in part`); `native-apps.md`; `src/mobile/CLAUDE.md` § Nothing on disk

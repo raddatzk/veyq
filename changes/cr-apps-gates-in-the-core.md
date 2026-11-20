@@ -211,7 +211,10 @@ Branch `claude/core-owns-refine` at `a75188eb8` (= `claude/windows-cr-f6c73c`). 
   Linux phases a READ_WRITE guest's level writes (New folder, Upload) go straight to the core, which asks the name
   (`GuestLevel.createFolder`/`uploadAsking`). **Deviations / left (#1042, Linux's):** a Memory's *Add photos* and a
   WRITE_ONLY page still name the guest first through `Received.Name`; `Received.Upload` takes paths only, so a picked
-  guest file without one is said by name in `ReceivedView`. Passes: phase 7's.
+  guest file without one is said by name in `ReceivedView`. **Pass** (throwaway `--tenant tw-win`, erased; `run.py
+  drive`): New Folder with a taken name kept the dialog open with "Hier gibt es schon etwas mit diesem Namen." under the
+  field (log `new-folder: kept open, folder_name_taken`, shot). **Not passed:** every drop (the VM's WinUI takes none
+  from Explorer, § Traps), a guest's Replace (no link opened) — phase 7's.
 - [ ] **7 the passes** — § Passes; results into ADR 0154's Consequences.
 - [ ] **8 harvest** — ADR 0154's `Built:` (decision 1); `native-apps.md`; `src/mobile/CLAUDE.md` § Traps loses any line
   this removes; inbox #1039 measured again on the Mac and closed or narrowed. · Done when: every guard but guard_gaps green.
