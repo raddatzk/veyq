@@ -607,7 +607,8 @@ internal sealed class PotPage : IDisposable
                 var pays = Said.Notice(t.pays);
                 var amount = Money(view, t.row.amount);
                 var trailing = new List<UIElement> { Trailing(amount) };
-                if (view.canWrite && pot is { } one)
+                // Record where the core offers it (PotView.canRecord: never offline)
+                if (view.canRecord && pot is { } one)
                 {
                     var record = new Button { Content = Words.BalancesRecord(), VerticalAlignment = VerticalAlignment.Center };
                     AutomationProperties.SetAutomationId(record, $"record:{t.row.fromId}:{t.row.toId}");

@@ -442,11 +442,12 @@ internal sealed class ReceivedView : IDisposable
         }
         else if (s.gate == ReceivedGate.Ready && s.page is { kind: ReceivedPageKind.Level, writes: true })
         {
-            // a READ_WRITE guest's folder (#1034): New folder and Upload files, the name asked first
+            // a READ_WRITE guest's folder (#1034): New folder and Upload files; an unnamed guest is asked its name by the
+            // core at the write (GuestLevel.createFolder, uploadAsking: ReceivedShown.naming, AskNaming)
             _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "received-new",
             [
-                (Words.FolderNew(), "received-new-folder", () => Write(NewFolder)),
-                (Words.DepotUpload(), "received-upload", () => Write(PickAndUpload)),
+                (Words.FolderNew(), "received-new-folder", NewFolder),
+                (Words.DepotUpload(), "received-upload", PickAndUpload),
             ]));
         }
         if (_file?.Id is { } file && s.gate == ReceivedGate.Ready && _fileReplaces)

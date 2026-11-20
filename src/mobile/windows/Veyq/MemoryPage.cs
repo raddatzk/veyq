@@ -390,6 +390,11 @@ internal sealed class MemoryPage : IDisposable
             var (answer, _) = await Core.CallAsync(new Call.GalleryCreateChapter { gallery = gallery, name = typed });
             switch (answer)
             {
+                case Answer.Created { queued: true } created:
+                    // made offline: waiting to be sent, said; nothing opens yet (it shows where it was made)
+                    Log.Write("new chapter: queued");
+                    if (created.notice is { } waiting) _say(false, Said.Notice(waiting));
+                    break;
                 case Answer.Created { node: { } made }:
                     Log.Write("new chapter: made");
                     OpenNode(made);

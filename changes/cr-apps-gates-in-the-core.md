@@ -163,10 +163,11 @@ Branch `claude/core-owns-refine` at `a75188eb8` (= `claude/windows-cr-f6c73c`). 
   (`SessionModel.followed`), G6 held already (`DevLogin`/`DevSettings` under `#if DEBUG`). **Core/bridge additions**
   (each with a test seen red): `DropTarget.Gallery.drop` and the bridge's `Shell.Drop` onto a gallery without a tenant (a
   signed-out guest's gallery answered `NO_TENANT`; `ReceivedBridgeTest.aSignedOutGuestsDropOntoAGalleryIsTheCoresDropWithNoTenant`);
-  `PotView.Shown.offersEntries` (the desktops had only `canWrite`; `GuestDoorsTest`). **Deviations:** a READ_WRITE
-  guest's level writes (New folder, Upload) and a WRITE_ONLY page still name the guest first through `Received.Name`
-  (the core asks no name at those writes — the CR left `Received.Name` to later); `Received.Upload` takes paths only,
-  so a picked guest file without one is said by name in `ReceivedView`. Passes: phase 7's.
+  `PotView.Shown.offersEntries` (also built by Linux in parallel; the merge kept Linux's, one field). After merging the
+  Linux phases a READ_WRITE guest's level writes (New folder, Upload) go straight to the core, which asks the name
+  (`GuestLevel.createFolder`/`uploadAsking`). **Deviations / left (#1042, Linux's):** a Memory's *Add photos* and a
+  WRITE_ONLY page still name the guest first through `Received.Name`; `Received.Upload` takes paths only, so a picked
+  guest file without one is said by name in `ReceivedView`. Passes: phase 7's.
 - [ ] **7 the passes** — § Passes; results into ADR 0154's Consequences.
 - [ ] **8 harvest** — ADR 0154's `Built:` (decision 1); `native-apps.md`; `src/mobile/CLAUDE.md` § Traps loses any line
   this removes; inbox #1039 measured again on the Mac and closed or narrowed. · Done when: every guard but guard_gaps green.

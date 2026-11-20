@@ -447,7 +447,8 @@ internal sealed class Uploads : IDisposable
             if (chosen is null) return;
             var (answer, _) = await Core.CallAsync(new Call.QueuedSaveCopy { write = write, index = index, path = chosen.Path });
             Log.Write($"Queued.SaveCopy: {(answer is Answer.Refused r ? $"Refused {r.why}" : answer.GetType().Name)}");
-            if (answer is Answer.Said { notice: { } n }) Says?.Invoke(false, Said.Notice(n));
+            // said as a download's end is (core's QueuedShown.copySaved; Queued.SaveCopy answers Done or NOT_WRITTEN alone)
+            Says?.Invoke(answer is Answer.Done, answer is Answer.Done ? Words.DownloadDone(suggested) : Words.DownloadFailed(suggested));
         }
         catch (Exception e)
         {

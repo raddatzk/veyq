@@ -1082,6 +1082,11 @@ internal sealed class ShellView
             var (answer, _) = await Core.CallAsync(new Call.ShellCreateMemory { scopeId = space, parentId = parent, name = typed, wasThere = there, autoPlace = armed });
             switch (answer)
             {
+                case Answer.Created { queued: true } created:
+                    // made offline: waiting to be sent, said; nothing opens yet (it shows where it was made)
+                    Log.Write("new memory: queued");
+                    if (created.notice is { } waiting) Say(false, Said.Notice(waiting));
+                    break;
                 case Answer.Created { node: { } made }:
                     Log.Write("new memory: made");
                     MemoryPage.OpenNode(made);
@@ -1135,7 +1140,7 @@ internal sealed class ShellView
                 }
                 break;
             case QueuedOpen.QueuedOpenRename r:
-                // the node's page or folder, whose header offers Rename
+                // the node's page or folder, whose header offers Rename (the name the person chose is the tray's line)
                 OpenNode(r.scope, r.node);
                 break;
             case QueuedOpen.QueuedOpenPlace p:
@@ -1144,20 +1149,9 @@ internal sealed class ShellView
         }
     }
 
-    /// <summary>Node <paramref name="node"/> of space <paramref name="scope"/> shown (null: the space's top): an object
-    /// opened, a folder entered — as the lists name it.</summary>
-    private void OpenNode(string scope, string? node)
-    {
-        if (_state is not { } state) return;
-        if (state.shell.space != scope) Act.Send(new Call.ShellSwitchSpace { scopeId = scope });
-        if (node is null) return;
-        if (state.lists.objects.FirstOrDefault(o => o.scopeId == scope && o.nodeId == node) is { } r) Act.Send(new Call.ShellOpen { Ref = r });
-        else if (state.lists.nodes.FirstOrDefault(n => n.scopeId == scope && n.nodeId == node) is { } f)
-        {
-            Act.Send(new Call.ShellEnter { folder = new FolderRef { nodeId = f.nodeId, name = f.name } });
-        }
-        else Log.Write("queued open: the node is not listed here");
-    }
+    /// <summary>Node <paramref name="node"/> of space <paramref name="scope"/> opened where it lives (Shell.OpenAt: the
+    /// core finds it — an object in its application, a folder on Home; null: the space's top).</summary>
+    private static void OpenNode(string scope, string? node) => Act.Send(new Call.ShellOpenAt { scopeId = scope, nodeId = node });
 
     /// <summary>How an action went, under the bar until it is closed or the object leaves.</summary>
     public void Say(bool done, string message)
