@@ -906,6 +906,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShellSelect -> shell?.select(call.tab).done()
             is Call.ShellOpen -> shell?.open(call.ref).done()
             is Call.ShellOpenAtTop -> shell?.openAtTop(call.ref).done()
+            is Call.ShellOpenAt -> shell?.let { m -> call.nodeId?.let { m.openFound(call.scopeId, it) } ?: m.switchSpace(call.scopeId) }.done()
             is Call.ShellOpenPerson -> shell?.openPerson(call.userId).done()
             is Call.ShellOpenBookmark -> shell?.openBookmark(call.node).done()
             is Call.ShellSearch -> shell?.search(call.on).done()
@@ -2256,7 +2257,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 is me.raddatz.veyq.mobile.sharing.GuestPage.DropBox -> page.model.upload(sources)
                 is me.raddatz.veyq.mobile.sharing.GuestPage.Uploader -> page.model.upload(sources)
                 // a READ_WRITE guest's files into the folder on screen (#1034), each its own file
-                is me.raddatz.veyq.mobile.sharing.GuestPage.Level -> page.model.upload(sources)
+                is me.raddatz.veyq.mobile.sharing.GuestPage.Level -> page.model.uploadAsking(sources)
                 else -> 0
             }
             if (sent == 0) sources.forEach { it.close() }

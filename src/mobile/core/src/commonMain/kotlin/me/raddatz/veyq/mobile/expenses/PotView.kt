@@ -559,6 +559,8 @@ class PotView(session: Source) {
         val settingsOffered: Boolean = true,
         /** Under the balances while they count entries made offline and not sent yet ([balancesUnsent]); null otherwise. */
         val balancesUnsent: Notice? = null,
+        /** *Add entry* is offered ([offersEntries], ADR 0154 decision 1): what a host draws it by, never [canWrite]. */
+        val offersEntries: Boolean = false,
     )
 
     /** What this view shows ([Shown]). */
@@ -576,6 +578,7 @@ class PotView(session: Source) {
         missing.map(::missingName),
         settingsOffered,
         balancesUnsent,
+        offersEntries,
     )
 
     /** A view on the wire: its [Shown], under the view's own name; there is no view to read back from it. */
