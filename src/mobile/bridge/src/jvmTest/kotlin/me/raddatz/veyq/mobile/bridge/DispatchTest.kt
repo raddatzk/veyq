@@ -2725,7 +2725,7 @@ class DispatchTest {
         val refused = Answer.Refused(Answer.Why.NO_TENANT_OPEN)
         listOf(
             Call.ShellChoose(ApplicationId.EXPENSES), Call.ShellSwitchSpace("s"), Call.ShellEnter(FolderRef("f", "F")), Call.ShellFilter(null),
-            Call.ShellBack, Call.ShellSelect(BarTab("expenses.entries")), Call.ShellOpen(ref), Call.ShellOpenAtTop(ref), Call.ShellSearch(true), Call.ShellRefresh, Call.HomeGroups,
+            Call.ShellBack, Call.ShellSelect(BarTab("expenses.entries")), Call.ShellOpen(ref), Call.ShellOpenAtTop(ref), Call.ShellOpenAt("s", "n"), Call.ShellSearch(true), Call.ShellRefresh, Call.HomeGroups,
             Call.SearchOpen, Call.PotOpen(ref), Call.AvatarPicture("u1"), Call.ShellOpenPerson("u2"), Call.ShellOffersWasThere("s"), Call.PersonOpen("u2"),
         ).forEach { assertEquals(refused, b.ask(it), "$it") }
         listOf(

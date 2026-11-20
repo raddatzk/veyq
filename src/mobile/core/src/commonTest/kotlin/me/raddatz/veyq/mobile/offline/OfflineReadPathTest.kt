@@ -267,7 +267,10 @@ class OfflineReadPathTest {
         val requests = t.requests.size
         // what ADR 0153 decision 3 queues waits to be sent (the device keeps the store); what it does not is refused
         assertTrue(shellOffline.createFolder(node.scope.id, null, "New").queued, "a folder made offline was not queued")
-        assertEquals(Msg.OFFLINE_WAITING, shellOffline.createMemory(node.scope.id, null, "New").notice?.msg)
+        val made = shellOffline.createMemory(node.scope.id, null, "New")
+        assertEquals(Msg.OFFLINE_WAITING, made.notice?.msg)
+        // typed, so a host closes its dialog on it instead of asking again with the notice as a problem (ADR 0154 decision 1)
+        assertTrue(made.queued, "a Memory made offline was not answered as queued")
         assertEquals(Msg.OFFLINE_WAITING, shellOffline.rename(me.raddatz.veyq.mobile.navigation.NodeAt(node.scope.id, node.id, "MEMORY", node.name), "Other").notice?.msg)
         assertEquals(Msg.OFFLINE_READ_ONLY, shellOffline.move(me.raddatz.veyq.mobile.navigation.NodeAt(node.scope.id, node.id, "MEMORY", node.name), null).notice?.msg)
         assertEquals(3, assertNotNull(offline.outbox).count())

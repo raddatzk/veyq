@@ -906,6 +906,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShellSelect -> shell?.select(call.tab).done()
             is Call.ShellOpen -> shell?.open(call.ref).done()
             is Call.ShellOpenAtTop -> shell?.openAtTop(call.ref).done()
+            is Call.ShellOpenAt -> shell?.let { m -> call.nodeId?.let { m.openFound(call.scopeId, it) } ?: m.switchSpace(call.scopeId) }.done()
             is Call.ShellOpenPerson -> shell?.openPerson(call.userId).done()
             is Call.ShellOpenBookmark -> shell?.openBookmark(call.node).done()
             is Call.ShellSearch -> shell?.search(call.on).done()
@@ -1322,7 +1323,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.Created(NodeAt(call.scopeId, made.created!!, me.raddatz.veyq.mobile.AppKinds.BOOKMARK_KIND, made.nameShown), null)
             } ?: noTenant
             is Call.ShellCreateMemory -> tenant.value?.models?.createMemory?.let { make ->
-                make(call.scopeId, call.parentId, call.name, call.wasThere, call.autoPlace).let { Answer.Created(it.node, it.notice) }
+                make(call.scopeId, call.parentId, call.name, call.wasThere, call.autoPlace).let { Answer.Created(it.node, it.notice, it.queued) }
             } ?: noTenant
             is Call.ShellRowCover -> tenant.value?.models?.rowCover?.let { read ->
                 val row = read(call.nodeId, call.held) ?: return Answer.Refused(Answer.Why.NO_COVER)
@@ -1374,7 +1375,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.GalleryCancelAsk -> galleries[call.gallery]?.cancelAsk().done(Answer.Why.NO_SUCH_GALLERY)
             is Call.GallerySeen -> galleries[call.gallery]?.seen().done(Answer.Why.NO_SUCH_GALLERY)
             is Call.GallerySearchOpenedSeen -> galleries[call.gallery]?.searchOpenedSeen().done(Answer.Why.NO_SUCH_GALLERY)
-            is Call.GalleryCreateChapter -> galleries[call.gallery]?.let { g -> g.createChapter(call.name).let { Answer.Created(it.node, it.notice) } }
+            is Call.GalleryCreateChapter -> galleries[call.gallery]?.let { g -> g.createChapter(call.name).let { Answer.Created(it.node, it.notice, it.queued) } }
                 ?: noGallery
             is Call.MemoryUpload -> galleries[call.gallery]?.let { g ->
                 if (!g.rights.upload) return Answer.Refused(Answer.Why.NOT_OFFERED)
@@ -2256,7 +2257,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 is me.raddatz.veyq.mobile.sharing.GuestPage.DropBox -> page.model.upload(sources)
                 is me.raddatz.veyq.mobile.sharing.GuestPage.Uploader -> page.model.upload(sources)
                 // a READ_WRITE guest's files into the folder on screen (#1034), each its own file
-                is me.raddatz.veyq.mobile.sharing.GuestPage.Level -> page.model.upload(sources)
+                is me.raddatz.veyq.mobile.sharing.GuestPage.Level -> page.model.uploadAsking(sources)
                 else -> 0
             }
             if (sent == 0) sources.forEach { it.close() }

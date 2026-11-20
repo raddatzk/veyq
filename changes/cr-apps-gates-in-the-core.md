@@ -124,9 +124,30 @@ Branch `claude/core-owns-refine` at `a75188eb8` (= `claude/windows-cr-f6c73c`). 
   `followEnded` gone, `BuildDefaults` into `src/debug`. · Done when: `:android:assembleDebug` and
   `:android:compileReleaseKotlin` (the release variant, `src/release` exists; remembered, not run at refine), the words and guidelines guards green; `grep -rn "veyq.localhost" android/src/main` empty.
 - [ ] **4 Apple** — the same; `try?` gone; the prefill under `#if DEBUG`. · Done when: both Apple builds green.
-- [ ] **5 Linux** — the drop through the bridge's `Drop`, `drop.rs`' sort gone, the folder row's drop from
+- [x] **5 Linux** — the drop through the bridge's `Drop`, `drop.rs`' sort gone, the folder row's drop from
   `dropTarget`, the dialogs and guest gates likewise, `file_page`/`header::say`'s log-only paths replaced by said
   notices. · Done when: `python3 linux/run.py test` and `build` green.
+  **Built** 2026-11-20 (`claude/k-linux`): `drop.rs` holds no sort — `items` tells a file from a folder by the file
+  system, `send` hands them to `Shell.Drop` and draws `Answer.Dropped` (notices said in order, an offered import opened
+  by `import_dialog::open`, a refusal said); a level's target only where `ShellShown.dropsHere`, a folder row's only where
+  `dropRows` names it (`row_on`, never by kind); the gallery's drop and its *Add photos* pick go to `DropOn::Gallery`
+  (`memory_page`'s sort and `said_at_once` gone). Name dialogs read `Answer.Named` (problem → asked again with the word,
+  notice said, queued closes). A guest's Replace, a level's New folder and upload ask the name through the core's naming
+  (`ReceivedShown.naming` drawn as an `AdwAlertDialog`, `Received.NamingSave`/`NamingDecline`, a problem keeps it open);
+  *Add entry* by `PotView.offersEntries` (`pot_add_offered`, the role check and the read-then-add dance gone).
+  `header::say` says a refusal or an unread answer (`node_save_failed`); a file that does not open says
+  `file_open_failed` in its place, a PDF whose pages do not lay out too. G5 needs nothing here (the bridge follows
+  `SessionModel.followed`); the prefill was debug-only already. **Core gained** (ADR 0154 decision 1, nothing a desktop
+  could ask): `GuestLevel.createFolder` asks the name via `GuestAccess.naming`, `GuestLevel.uploadAsking` (the bridge's
+  `Received.Upload` on a level uses it), `PotView.Shown.offersEntries`; tests `GuestDoorsTest` (the level's declined and
+  named writes, the wire's offer), `ReceivedBridgeTest` (the new folder named at the write); `drop.rs`'s two tests. Bites
+  seen red, restored with `/bin/cp -f`: `shown()` carrying `canWrite` for the offer; `createFolder`/`uploadAsking` back to
+  the session check (timeout); `row_on` offering every FOLDER row. Measured: `python3 linux/run.py build` (clippy, 105
+  cargo tests) and `test` (1189 + 2) green, `:core:jvmTest` and `:bridge:jvmTest` green. **Pass** (throwaway, Broadway
+  driven from headless Chrome): New folder with a taken name kept the dialog open with "Something with this name is
+  already here." (stderr `new folder: folder_name_taken`). **Not passed:** every drop (Broadway carries no file drop from
+  the browser) and a guest's Replace (no link opened). **Left (#1042):** a Memory's *Add photos* and a WRITE_ONLY page
+  still name the guest first through `Received.Name`, the app deciding by `guestName`.
 - [x] **6 Windows** — the same; `DropSort.cs` gone; `ReceivedView`'s role checks gone. · Done when: `python3
   windows/run.py build` green on the VM.
   **Built** 2026-11-20 (`claude/k-win`; measured: `VEYQ_WINDOWS_DIR='F:\veyq-kw' VEYQ_WINDOWS_TASKS=kw python3

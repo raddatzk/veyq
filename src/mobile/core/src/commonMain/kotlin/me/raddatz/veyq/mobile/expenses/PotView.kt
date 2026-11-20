@@ -440,8 +440,14 @@ class PotView(session: Source) {
     /** A settle-up row's sentence: who pays whom. */
     fun pays(t: SettleRow): me.raddatz.veyq.mobile.words.Notice = me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_PAYS, personWords(t.from), personWords(t.to))
 
+    /**
+     * A settle-up row's *Record* is offered: to a writer, online — a payment never queues (ADR 0153 decision 3), while
+     * [canWrite] stays on offline where an entry queues. Every platform draws *Record* by this, never by [canWrite].
+     */
+    val canRecord: Boolean get() = canWrite && !offline
+
     /** "Record all" is offered past one payment, to a writer. */
-    val canRecordAll: Boolean get() = canWrite && !offline && settleUp.size > 1
+    val canRecordAll: Boolean get() = canRecord && settleUp.size > 1
 
     /** Shown offline ([Source.offline]): an entry is queued then, nothing else is written. */
     val offline: Boolean = session.offline
@@ -559,11 +565,10 @@ class PotView(session: Source) {
         val settingsOffered: Boolean = true,
         /** Under the balances while they count entries made offline and not sent yet ([balancesUnsent]); null otherwise. */
         val balancesUnsent: Notice? = null,
-        /**
-         * *Add entry* is offered ([offersEntries], ADR 0154 decision 1): a member who writes, a READ_WRITE link's guest named
-         * or not (asked its name at the save), offline where an entry queues. The desktops draw it from here alone.
-         */
+        /** *Add entry* is offered ([offersEntries], ADR 0154 decision 1): what a host draws it by, never [canWrite]. */
         val offersEntries: Boolean = false,
+        /** A settle-up row's *Record* is offered ([canRecord]): never offline. */
+        val canRecord: Boolean = false,
     )
 
     /** What this view shows ([Shown]). */
@@ -582,6 +587,7 @@ class PotView(session: Source) {
         settingsOffered,
         balancesUnsent,
         offersEntries,
+        canRecord,
     )
 
     /** A view on the wire: its [Shown], under the view's own name; there is no view to read back from it. */

@@ -33,7 +33,7 @@ use crate::home::glib_escape;
 use crate::{avatars, said, words};
 
 /// What a Pot page tells of each read: whether it takes writes.
-type OnRead = Box<dyn Fn(bool)>;
+type OnRead = Box<dyn Fn(bool, bool)>;
 
 /// The Pot on screen: opened in the core when made, closed when dropped.
 pub struct PotPage {
@@ -217,8 +217,9 @@ impl PotPage {
         self.inner.draw();
     }
 
-    /// [f] is told whether the Pot takes writes, each time its view is read.
-    pub fn on_read(&self, f: impl Fn(bool) + 'static) {
+    /// [f] is told whether the Pot takes writes and whether *Add entry* is offered (the core's `canWrite`,
+    /// `offersEntries`), each time its view is read.
+    pub fn on_read(&self, f: impl Fn(bool, bool) + 'static) {
         *self.inner.read.borrow_mut() = Some(Box::new(f));
     }
 
@@ -266,7 +267,7 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
                 }
                 *inner.failure.borrow_mut() = failure;
                 if let (Some(view), Some(read)) = (state.as_ref().and_then(|s| s.view.as_ref()), inner.read.borrow().as_ref()) {
-                    read(view.can_write);
+                    read(view.can_write, view.offers_entries);
                 }
                 *inner.state.borrow_mut() = state;
                 inner.draw();
@@ -400,6 +401,11 @@ impl Inner {
         } else if let Some(b) = &e.badge {
             row.add_suffix(&suffix(&said::notice(&b.notice), if b.danger { &["caption", "error"] } else { &["caption", "dim-label"] }));
         }
+        // made offline and not sent yet (ADR 0153 decision 5): the core's *Not sent* mark
+        if let Some(m) = &e.unsent_mark {
+            row.add_prefix(&gtk::Image::from_icon_name("document-send-symbolic"));
+            row.add_suffix(&suffix(&said::notice(m), &["caption", "dim-label"]));
+        }
         if let Some(amount) = e.row.amount {
             row.add_suffix(&suffix(&money(view, amount), &["numeric"]));
         }
@@ -419,6 +425,10 @@ impl Inner {
 
     fn overview(self: &Rc<Self>, content: &gtk::Box, view: &PotView) {
         let balances = adw::PreferencesGroup::builder().title(words::pot_balances()).build();
+        // the balances count entries not sent yet: the core's line says so
+        if let Some(n) = &view.balances_unsent {
+            balances.set_description(Some(&glib_escape(&said::notice(n))));
+        }
         for b in &view.balances {
             let name = said::piece(&b.name);
             let row = adw::ActionRow::builder().title(glib_escape(&name)).subtitle(glib_escape(&said::line(&b.facts))).build();
@@ -449,7 +459,8 @@ impl Inner {
                 let amount = money(view, t.row.amount);
                 let row = adw::ActionRow::builder().title(glib_escape(&pays)).build();
                 row.add_suffix(&suffix(&amount, &["numeric"]));
-                if view.can_write {
+                // a payment never queues: *Record* where the core offers it (`canRecord`), never by `canWrite`
+                if view.can_record {
                     let record = gtk::Button::builder().label(words::balances_record()).valign(gtk::Align::Center).build();
                     let (w, one) = (Rc::downgrade(self), t.row.clone());
                     let body = [pays.clone(), amount.clone()].join(" · ");

@@ -222,9 +222,16 @@ class ReceivedBridgeTest {
         }
         val level = until { it.page?.kind == ReceivedPageKind.LEVEL }
         assertTrue(level.page!!.writes, "a READ_WRITE guest's level offers no write")
-        assertNotNull(assertIs<Answer.Named>(b.ask(Call.ReceivedNewFolder(opened.received, "Neu"))).notice, "a folder was made before the guest named itself")
-        b.ask(Call.ReceivedName(opened.received, "Ben"))
-        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ReceivedNewFolder(opened.received, "Neu")))
+        // not named yet: the new folder asks the guest's name at the write (ADR 0154 decision 1); declined, nothing is made
+        val declined = async { b.ask(Call.ReceivedNewFolder(opened.received, "Neu")) }
+        until { it.naming }
+        assertEquals(Answer.Done, b.ask(Call.ReceivedNamingDecline(opened.received)))
+        assertNotNull(assertIs<Answer.Named>(declined.await()).notice, "a folder was made before the guest named itself")
+        // named at the write: the folder the write asked for is made
+        val made = async { b.ask(Call.ReceivedNewFolder(opened.received, "Neu")) }
+        until { it.naming }
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ReceivedNamingSave(opened.received, "Ben")))
+        assertEquals(Answer.Named(null, null, false, false), made.await())
         assertTrue(until { s -> s.page?.rows?.any { it.name == "Neu" } == true }.page!!.writes, "the new folder was not drawn after the reload")
         // the reports: a row's (the Memory) and the page's (the root), never the link's
         assertIs<Answer.ReportOpened>(b.ask(Call.ReceivedReportNode(opened.received, memory)))

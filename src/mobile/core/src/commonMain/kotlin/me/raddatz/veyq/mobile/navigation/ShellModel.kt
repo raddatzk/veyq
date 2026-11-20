@@ -928,7 +928,8 @@ class ShellModel(
             // offline it waits to be sent: nothing to open yet, it shows where it was made ([queuedAt])
             if (name.isBlank()) return me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, Notice(Msg.FOLDER_NAME_EMPTY))
             val queued = me.raddatz.veyq.mobile.memories.QueuedMemories.create(tenant.account, tenantId, scopeId, parentId, kind, name, wallClock(), wasThere, autoPlace && offersAutoPlace())
-            return me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, if (queued != null) Notice(Msg.OFFLINE_WAITING) else noRoom)
+            return if (queued != null) me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, Notice(Msg.OFFLINE_WAITING), queued = true)
+            else me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, noRoom)
         }
         if (!online) return me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, readOnly)
         val armed = autoPlace && offersAutoPlace()

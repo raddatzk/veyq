@@ -58,4 +58,15 @@ class PotViewMoneyTest {
         val row = view.entries.single { it.id == museum }
         assertEquals(listOf<String?>("USD"), amounts(view.line(row)))
     }
+
+    /** ADR 0153 decision 3: offline an entry queues ([PotView.canWrite] on), a payment never — *Record* is not offered then. */
+    @Test
+    fun aSettleUpsRecordIsOfferedOnlineAloneWhileAnEntryQueuesOffline() {
+        val entries = listOf(Rev(DINNER, 1, PotFixture.expense("Dinner", 4200)))
+        val online = PotFixture.view(entries).shown()
+        assertTrue(online.canRecord && online.settleUp.isNotEmpty())
+        val offline = PotFixture.view(entries, offline = true).shown()
+        assertTrue(offline.canWrite, "an entry no longer queues offline")
+        kotlin.test.assertFalse(offline.canRecord, "a payment is offered offline, where it never queues")
+    }
 }

@@ -31,7 +31,8 @@ use std::rc::{Rc, Weak};
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::LimitField, wire::LimitUnit, wire::OfflineItem, wire::SettingsFamily, wire::SettingsShown, wire::Storage, wire::Update, wire::Watched};
+use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::LimitField, wire::LimitUnit, wire::OfflineItem, wire::QueuedAsk, wire::QueuedLoss,
+    wire::SettingsFamily, wire::SettingsShown, wire::Storage, wire::Update, wire::Watched};
 use crate::manage::{self, Change};
 use crate::map_services::MapServices;
 use crate::{said, sign_in, words};
@@ -68,6 +69,8 @@ struct Page {
     storage_watch: RefCell<Option<Watch>>,
     /// "Remove all offline content"'s question while the core asks it.
     remove_all_ask: RefCell<Option<adw::AlertDialog>>,
+    /// What the core asks before it while writes made offline wait (`Queued.Ask`, ADR 0153 decision 2): its question.
+    remove_all_queued: RefCell<Option<QueuedAsk>>,
     /// Map services (ADR 0143 decision 2): this device's consent, followed while the dialog shows; built once.
     maps: MapServices,
     /// The section a search's result asked for (`SettingsSection.id`), scrolled to once the page first drew.
@@ -200,6 +203,7 @@ impl Page {
             drawing: Cell::new(false),
             storage_watch: RefCell::new(None),
             remove_all_ask: RefCell::new(None),
+            remove_all_queued: RefCell::new(None),
             maps: MapServices::new(),
             at: RefCell::new(None),
             scroll: RefCell::new(None),
@@ -284,6 +288,17 @@ impl Page {
                 manage::said_change(&dialog, answered);
             }
         });
+    }
+
+    /// What the core asks before [loss] while writes made offline wait (`Queued.Ask`); None: none waits, nothing to ask.
+    async fn queued_ask(loss: QueuedLoss) -> Option<QueuedAsk> {
+        match bridge::call(&Call::QueuedAsk { loss }).await.map(|(a, _)| a) {
+            Ok(Answer::QueuedAsked { ask }) => ask,
+            other => {
+                eprintln!("veyq: Queued.Ask answered {other:?}");
+                None
+            }
+        }
     }
 
     /// Asks [body] under [heading] first, then sends what [make] builds (a destructive answer, [accept] its words).
@@ -575,14 +590,14 @@ impl Page {
             let weak = Rc::downgrade(self);
             forget.connect_activated(move |_| {
                 if let Some(p) = weak.upgrade() {
-                    // asked first, as the phones ask
-                    p.ask_then(
-                        words::account_settings_untrust_confirm_title(),
-                        words::account_settings_untrust_confirm(),
-                        words::manage_forget_device(),
-                        "stop trusting",
-                        |settings| Call::SettingsStopTrusting { settings },
-                    );
+                    // asked first, as the phones ask; while writes made offline wait, the core's question names them
+                    glib::spawn_future_local(async move {
+                        let (body, accept) = match Self::queued_ask(QueuedLoss::StopTrusting).await {
+                            Some(q) => (said::notice(&q.question), said::key(&q.confirm)),
+                            None => (words::account_settings_untrust_confirm(), words::manage_forget_device()),
+                        };
+                        p.ask_then(words::account_settings_untrust_confirm_title(), body, accept, "stop trusting", |settings| Call::SettingsStopTrusting { settings });
+                    });
                 }
             });
             group.add(&forget);
@@ -781,8 +796,12 @@ impl Page {
         let weak = Rc::downgrade(self);
         remove_all.connect_activated(move |_| {
             if let Some(p) = weak.upgrade() {
-                // the core asks first (`askingRemoveAll`), drawn by `draw_remove_all`
-                p.act("ask remove all", |settings| Call::SettingsAskRemoveAll { settings });
+                // the core asks first (`askingRemoveAll`), drawn by `draw_remove_all` — in its own words while writes made
+                // offline wait (`Queued.Ask`)
+                glib::spawn_future_local(async move {
+                    *p.remove_all_queued.borrow_mut() = Self::queued_ask(QueuedLoss::RemoveAll).await;
+                    p.act("ask remove all", |settings| Call::SettingsAskRemoveAll { settings });
+                });
             }
         });
         group.add(&remove_all);
@@ -859,11 +878,13 @@ impl Page {
         if self.remove_all_ask.borrow().is_some() {
             return;
         }
-        let ask = adw::AlertDialog::builder()
-            .heading(words::account_settings_storage_remove_all())
-            .body(words::account_settings_storage_remove_all_question())
-            .build();
-        ask.add_responses(&[("cancel", &words::signin_cancel()), ("accept", &words::account_settings_storage_remove_all_confirm())]);
+        let queued = self.remove_all_queued.borrow_mut().take();
+        let (body, accept) = match &queued {
+            Some(q) => (said::notice(&q.question), said::key(&q.confirm)),
+            None => (words::account_settings_storage_remove_all_question(), words::account_settings_storage_remove_all_confirm()),
+        };
+        let ask = adw::AlertDialog::builder().heading(words::account_settings_storage_remove_all()).body(body).build();
+        ask.add_responses(&[("cancel", &words::signin_cancel()), ("accept", &accept)]);
         ask.set_response_appearance("accept", adw::ResponseAppearance::Destructive);
         ask.set_default_response(Some("cancel"));
         ask.set_close_response("cancel");
@@ -888,7 +909,13 @@ impl Page {
         let weak = Rc::downgrade(self);
         row.connect_activated(move |_| {
             if let Some(p) = weak.upgrade() {
-                p.act("sign out here", |settings| Call::SettingsSignOutHere { settings });
+                // while writes made offline wait, the core asks first (ADR 0153 decision 2): *Sign out anyway* deletes them
+                glib::spawn_future_local(async move {
+                    match Self::queued_ask(QueuedLoss::SignOut).await {
+                        Some(q) => p.ask_then(words::drawer_sign_out(), said::notice(&q.question), said::key(&q.confirm), "sign out here", |settings| Call::SettingsSignOutHere { settings }),
+                        None => p.act("sign out here", |settings| Call::SettingsSignOutHere { settings }),
+                    }
+                });
             }
         });
         group.add(&row);

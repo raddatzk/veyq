@@ -102,6 +102,10 @@ impl FilePage {
                 None => {
                     let Ok((Answer::FileOpened { file }, _)) = bridge::call(&Call::FileOpen { node: open }).await else {
                         eprintln!("veyq: the file did not open in the core");
+                        // said in its place, never a spinner left turning
+                        if let Some(inner) = weak.upgrade() {
+                            inner.replace(&message(&words::file_open_failed()));
+                        }
                         return;
                     };
                     file
@@ -648,6 +652,9 @@ impl PdfPages {
                 Ok(Answer::ReceiptPages { shown, cut }) => (shown, cut),
                 other => {
                     eprintln!("veyq: File.Pages answered {other:?}");
+                    if let Some(this) = weak.upgrade() {
+                        this.column.append(&message(&words::file_open_failed()));
+                    }
                     return;
                 }
             };
