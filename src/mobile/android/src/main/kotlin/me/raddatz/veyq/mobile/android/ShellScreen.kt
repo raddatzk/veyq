@@ -207,7 +207,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     val body: @Composable () -> Unit = {
         Scaffold(
             // a drop onto the app is a share (ADR 0138 decision 9); a Memory's gallery takes its own
-            modifier = Modifier.sharedFilesDrop(model::receiveDrop),
+            modifier = Modifier.sharedFilesDrop { model.receiveDrop(it.incoming) },
             containerColor = MaterialTheme.colorScheme.background,
             snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
             topBar = {
@@ -441,8 +441,8 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
             })
         }
     }) { list, bottom ->
-    // a file dropped onto the level is uploaded here at once where Depot may put files (ADR 0138 decision 9), else a share
-    Column(Modifier.fillMaxSize().sharedFilesDrop { incoming -> model.dropOntoLevel(s.shell, incoming, levelLabel) }) {
+    // a file dropped onto the level goes through core's one drop (ADR 0154 decision 1): uploaded here where it takes it, else a share
+    Column(Modifier.fillMaxSize().sharedFilesDrop { drop -> model.drop(me.raddatz.veyq.mobile.navigation.DropTarget.Level(levelLabel), drop) }) {
         if (s.filters.size > 1) {
             val selected = s.filters.indexOf(s.shell.filter).coerceAtLeast(0)
             androidx.compose.material3.PrimaryScrollableTabRow(
@@ -481,7 +481,7 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                         val obj = node.asObject()
                         val bookmark = node.asBookmark()
                         if (folder != null) {
-                            LevelTile(node.name, null, LocalCovers.current[node.nodeId]?.second, Icons.Outlined.Folder, folder = true, modifier = modifier) { onEnter(folder) }
+                            LevelTile(node.name, null, LocalCovers.current[node.nodeId]?.second, Icons.Outlined.Folder, folder = true, modifier = modifier.rowDrop(node, model)) { onEnter(folder) }
                         } else if (obj != null) ObjectTile(obj, modifier, onOpen)
                         else if (bookmark != null) LevelTile(bookmark.name, null, null, kindIcon(bookmark.kind), folder = false, modifier = modifier) { model.openBookmark(bookmark) }
                     } else items(group.nodes, key = { it.scopeId + it.nodeId }) { node ->
@@ -496,7 +496,7 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                                     ) else FolderTile()
                                 },
                                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
-                                modifier = Modifier.clip(MaterialTheme.shapes.medium).clickableRow { onEnter(folder) },
+                                modifier = Modifier.rowDrop(node, model).clip(MaterialTheme.shapes.medium).clickableRow { onEnter(folder) },
                             )
                         } else {
                             node.asObject()?.let { ObjectRow(it, onOpen) }
@@ -509,7 +509,7 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
         }
     }
     }
-    if (naming) NameDialog(stringResource(R.string.folder_new), onClose = { naming = false }) { name -> model.createFolder(name) }
+    if (naming) NameAnswerDialog(stringResource(R.string.folder_new), onClose = { naming = false }, onSaid = model::said) { name -> model.createFolder(name) }
     if (creatingPot) PotCreateSheet(s, model) { creatingPot = false }
     val space = s.shell.space
     if (namingMemory && space != null) MemoryNameDialog(space, model, onClose = { namingMemory = false }) { name, wasThere, autoPlace ->
@@ -519,6 +519,33 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
         val create = remember(space, s.shell.folder?.nodeId) { model.bookmarkCreate(space, s.shell.folder?.nodeId) }
         if (create == null) keepingLink = false
         else BookmarkCreateDialog(create, onClose = { keepingLink = false }, onMade = model::bookmarkMade)
+    }
+}
+
+/**
+ * A folder's row as a drop target (ADR 0154 decision 1): only where core's `ShellModel.dropTarget` offers it — never by its
+ * kind (a guest's identity folder takes none) —, the drop handed to core's one drop onto that folder.
+ */
+@Composable
+private fun Modifier.rowDrop(node: me.raddatz.veyq.mobile.navigation.NodeRef, model: AppModel): Modifier {
+    val at = me.raddatz.veyq.mobile.navigation.NodeAt(node.scopeId, node.nodeId, node.kind, node.name)
+    return if (model.dropTarget(at)) sharedFilesDrop { drop -> model.drop(me.raddatz.veyq.mobile.navigation.DropTarget.Row(at), drop) } else this
+}
+
+/**
+ * A folder's name dialog answered by core's typed [me.raddatz.veyq.mobile.navigation.NameAnswer] (ADR 0154 decision 1):
+ * a problem keeps it open with the word under the field, a notice closes it and is said ([onSaid]), anything else closes it.
+ */
+@Composable
+internal fun NameAnswerDialog(
+    title: String, onClose: () -> Unit, onSaid: (me.raddatz.veyq.mobile.words.Notice) -> Unit,
+    onName: suspend (String) -> me.raddatz.veyq.mobile.navigation.NameAnswer,
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    NameDialog(title, onClose) { name ->
+        val answer = onName(name)
+        answer.notice?.let(onSaid)
+        answer.problem?.let { context.text(it) }
     }
 }
 

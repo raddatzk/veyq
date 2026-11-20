@@ -152,10 +152,10 @@ private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMod
     var viewing by remember { mutableStateOf<PotView.EntryRow?>(null) }
     val palette = LocalPalette.current
     val hero = LocalNodeHero.current
-    CreateAction(stringResource(R.string.pot_add), shown = view.canWrite && view.people.isNotEmpty(), onClick = { adding = true }) { list, bottom ->
+    CreateAction(stringResource(R.string.pot_add), shown = view.offersEntries && view.people.isNotEmpty(), onClick = { adding = true }) { list, bottom ->
         LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
             item(key = "hero") { hero(16.dp) }
-            if (view.entries.isEmpty()) item(key = "empty") { Note(stringResource(if (view.canWrite) R.string.pot_no_entries else R.string.pot_no_entries_readonly)) }
+            if (view.entries.isEmpty()) item(key = "empty") { Note(stringResource(if (view.offersEntries) R.string.pot_no_entries else R.string.pot_no_entries_readonly)) }
             items(view.entries, key = { it.id }) { e ->
                 // Every viewer opens an entry: a writer to edit it, a reader to read it (one dialog, inbox #401).
                 Row(

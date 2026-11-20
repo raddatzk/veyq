@@ -241,6 +241,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     init {
         viewModelScope.launch { session.gate.collect(::gateChanged) }
+        // the shown account ended on its own and core opened the next one (core's `SessionModel.followed`): the shell follows it
+        viewModelScope.launch {
+            session.followed.collect { opened ->
+                if (opened != null && shellModel?.tenant !== opened.session) {
+                    trustLog("the shown account ended: the shell follows the next one")
+                    show(opened)
+                }
+            }
+        }
         // a pin's fetch keeps the process once the app is left: WorkManager's worker, a dataSync foreground service
         OfflineWork.watch(app, viewModelScope)
         // an upload goes on with the app left (ADR 0145 decision 1)
@@ -272,24 +281,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Unlock -> _screen.value = Screen.Unlock(g.record, g.working, g.error)
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> {
                 shellModel?.state?.value?.let(::publish)
-                followEnded(g)
             }
             else -> _screen.value = Screen.Starting
         }
-    }
-
-    /**
-     * The shown account ended on its own ([me.raddatz.veyq.mobile.session.Reach.Ended]: a reconnect found this device's
-     * trust gone): core took it out of the switcher and opened the next one, which no call of this model asked for — the
-     * shell follows it here. A switch or a sign-out this model made shows its own opened account.
-     */
-    private fun followEnded(g: me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) {
-        if (g.switching) return
-        val opened = session.signedTo ?: return
-        val shown = shellModel?.tenant ?: return
-        if (shown === opened.session || session.accounts.any { it === shown.account }) return
-        trustLog("the shown account ended: the shell follows the next one")
-        viewModelScope.launch { if (shellModel?.tenant !== opened.session) show(opened) }
     }
 
     /** The activity a prompt for the unlock key is shown over, while one is resumed. */
@@ -1021,31 +1015,31 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Files dropped onto the level [shell] shows (ADR 0138 decision 9): uploaded under it at once, named [label], where
-     * Depot may put files there (core's `ShellModel.dropLevel`); anywhere else they wait in the pick mode, as a share's do.
-     * What did not read is said.
+     * Files dropped onto [target] (ADR 0138 decision 9, ADR 0154 decision 1): core's one drop judges the target, sorts and
+     * uploads (`ShellModel.drop`), and says what it did not take. A level that takes none leaves the files waiting in the pick
+     * mode, as a share's do (the open Pot among the places, [receiveDrop]); a gallery's or a row's refusal is said.
      */
-    fun dropOntoLevel(shell: Shell, incoming: me.raddatz.veyq.mobile.navigation.ShareInbox.Incoming, label: String) {
-        val level = shellModel?.dropLevel(shell)
-        if (level == null) {
-            receiveDrop(incoming)
+    fun drop(target: me.raddatz.veyq.mobile.navigation.DropTarget, drop: ShareIn.Drop) {
+        val m = shellModel
+        if (m == null) {
+            if (target is me.raddatz.veyq.mobile.navigation.DropTarget.Level) receiveDrop(drop.incoming) else drop.release()
             return
         }
-        level.drop(incoming.files, label, _depot.value, ShareIn::release)
-        if (incoming.refused > 0) {
-            notify(Notice(getApplication<Application>().text(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.SHARE_UNREAD, incoming.refused))))
+        viewModelScope.launch {
+            val outcome = m.drop(target, drop.items, _depot.value, ShareIn::release)
+            if (outcome is me.raddatz.veyq.mobile.navigation.DropOutcome.Refused && target is me.raddatz.veyq.mobile.navigation.DropTarget.Level) {
+                receiveDrop(drop.incoming)
+                return@launch
+            }
+            if (outcome is me.raddatz.veyq.mobile.navigation.DropOutcome.Refused) drop.release()
+            // the phones' Depot offers no import (core's `DepotUploads` built so, owner 2026-11-19): never offered here
+            if (outcome is me.raddatz.veyq.mobile.navigation.DropOutcome.Offered) outcome.offer.uploadAsFile()
+            outcome.notices.forEach(::said)
         }
     }
 
-    /** Files dropped onto [gallery]'s page (ADR 0138 decision 9): its photos and videos queued into it at once, as a pick's. */
-    fun dropOnto(gallery: me.raddatz.veyq.mobile.memories.GalleryModel, incoming: me.raddatz.veyq.mobile.navigation.ShareInbox.Incoming): me.raddatz.veyq.mobile.words.Notice? {
-        val sorted = me.raddatz.veyq.mobile.memories.MemoryShare.answer.sort(incoming.files)
-        val media = sorted.taken
-        val others = sorted.left
-        others.forEach(ShareIn::release)
-        if (media.isNotEmpty() && gallery.upload(media) == 0) media.forEach(ShareIn::release)
-        return me.raddatz.veyq.mobile.memories.MediaUploads.notTaken(others.size + incoming.refused)
-    }
+    /** Whether [row] of the level shown takes a drop into it (core's `ShellModel.dropTarget`), never by its kind. */
+    fun dropTarget(row: me.raddatz.veyq.mobile.navigation.NodeAt): Boolean = shellModel?.dropTarget(row) ?: false
 
     /**
      * Files arrive: the pick mode starts at the space's Home, never in the object last open, so the person chooses where
@@ -1245,6 +1239,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun notify(n: Notice) {
         _notices.trySend(n)
     }
+
+    /** Core's [notice] said by the shell, in the words of the app's language. */
+    fun said(notice: me.raddatz.veyq.mobile.words.Notice) = notify(Notice(getApplication<Application>().text(notice)))
 
     /**
      * The app's one upload queue (core's `UploadQueue`, the web's `core/blob/queue.ts`): every application's uploads, one
@@ -2022,12 +2019,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * Creates a folder named [name] where the shell is (core's `createFolderHere`, the web's `FolderNameDialog`): the lists
-     * are read anew. Why not, in the web's words, or null once created.
+     * are read anew. Core's typed answer: a problem keeps the dialog open, a notice closes it and is said.
      */
-    suspend fun createFolder(name: String): String? {
-        val app = getApplication<Application>()
-        val m = shellModel ?: return app.text(me.raddatz.veyq.mobile.words.Notices.folderRefused(null))
-        return m.createFolderHere(name)?.let { app.text(it) }.also { readRowDetails(m.tenant) }
+    suspend fun createFolder(name: String): me.raddatz.veyq.mobile.navigation.NameAnswer {
+        val m = shellModel ?: return me.raddatz.veyq.mobile.navigation.NameAnswer.said(me.raddatz.veyq.mobile.words.Notices.folderRefused(null))
+        return m.createFolderHere(name).also { readRowDetails(m.tenant) }
     }
 
     /**
@@ -2388,14 +2384,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /**
      * A READ_WRITE guest's replace of [file]'s content with the picked document (ADR 0150 decision 5, #1035): core's
-     * `GuestAccess.replace`, on the link's own queue (the app's one, handed to the link) — signed in or out; the page reads
+     * `GuestAccess.replaceAsking`, on the link's own queue (the app's one, handed to the link) — signed in or out; the page reads
      * the file anew once it settled.
      */
     fun guestReplace(access: me.raddatz.veyq.mobile.sharing.GuestAccess, file: me.raddatz.veyq.mobile.depot.FileModel, uri: android.net.Uri) {
         viewModelScope.launch {
             val p = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { picked(uri) } ?: return@launch
             val source = source(p)
-            if (!access.replace(file, source)) source.close()
+            // a guest not named yet is asked its name first (core's naming flow), declined nothing is replaced
+            if (!access.replaceAsking(file, source)) source.close()
         }
     }
 

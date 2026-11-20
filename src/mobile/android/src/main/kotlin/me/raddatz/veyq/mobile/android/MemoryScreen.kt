@@ -201,14 +201,10 @@ internal fun MemoryGallery(
     val music = if (musicOffered && view == MemoryView.MUSIC) remember(gallery) { model.musicModel(gallery) } else null
     val tracks = if (view == MemoryView.MAP) remember(gallery) { model.trackList(gallery) } else null
     val contributions = if (contributionsOffered && view == MemoryView.CONTRIBUTIONS) remember(gallery) { model.contributions(gallery) } else null
-    // photos and videos dropped from another app onto the gallery go into it at once, as a pick's (ADR 0138 decision 9)
-    val dropScope = androidx.compose.runtime.rememberCoroutineScope()
-    val dropContext = LocalContext.current
-    val dropped = Modifier.sharedFilesDrop { incoming ->
-        model.dropOnto(gallery, incoming)?.let { n -> dropScope.launch { snackbar.showSnackbar(dropContext.text(n)) } }
-    }
+    // photos and videos dropped from another app onto the gallery: core's one drop judges and sorts (ADR 0154 decision 1)
+    val dropped = Modifier.sharedFilesDrop { drop -> model.drop(me.raddatz.veyq.mobile.navigation.DropTarget.Gallery(gallery), drop) }
     val adds = state.rights.upload && canAdd
-    Box(Modifier.fillMaxSize().then(if (adds && !guest) dropped else Modifier)) {
+    Box(Modifier.fillMaxSize().then(if (!guest) dropped else Modifier)) {
     if (tracks != null) MemoryMapView(gallery, tracks, model, snackbar, viewSwitch) else
     if (music != null) MusicView(gallery, music, model, snackbar, viewSwitch) else
     if (contributions != null) ContributionsView(gallery, contributions, model, snackbar, viewSwitch) { id -> contributions.lightbox(id)?.let { open = it } } else
