@@ -5102,7 +5102,7 @@
     "de": "Ein Eintrag"
   },
   "offline_waiting": {
-    "note": "a tile, row or entry made offline, not sent yet (ADR 0153 decision 5; drafted in cr-app-offline-writes phase 5, the owner's to change)",
+    "note": "a tile, row or entry made offline, not sent yet (ADR 0153 decision 5)",
     "en": "Waiting to send",
     "de": "Wartet auf Versand"
   },

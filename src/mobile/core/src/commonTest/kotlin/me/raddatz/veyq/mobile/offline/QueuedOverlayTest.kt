@@ -33,7 +33,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * What the person sees of their writes made offline (ADR 0153 decision 5; the CR's phase 5, W4 and W5): each model's
+ * What the person sees of their writes made offline (ADR 0153 decision 5): each model's
  * state with a queued write offline — a gallery's medium as a placeholder tile *Waiting to send*, a trashed medium gone
  * from it, a mark shown set; a Pot's entry counted, marked *Not sent*, its balances saying so; a level's folder made
  * offline in place —, the banner's count, the tray's items and actions (*Discard*, *Save a copy* of a refused file), the

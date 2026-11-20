@@ -29,7 +29,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The apps' gates held by the core alone (ADR 0154 decision 1; `cr-apps-gates-in-the-core` phase 1), over a tenant the
+ * The apps' gates held by the core alone (ADR 0154 decision 1), over a tenant the
  * test plays: a drop judged, sorted and uploaded by one entry ([ShellModel.drop]) — a folder's row a target only where
  * [ShellModel.dropTarget] says so, one import offered per drop, a gallery keeping its media and naming the rest —, and New
  * Folder's typed answer ([NameAnswer]: a name problem keeps the dialog open, a refusal and a thrown error close it, said).

@@ -15,6 +15,7 @@ sources:
   - docs/crosscutting/cc.security.csp.md
   - docs/decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md
   - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
+  - docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md
   - docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md
 ---
 
@@ -573,6 +574,9 @@ that keeps no trust keeps no store. What remains:
 - **A replay:** each entry is authenticated, but whoever can write the device's disk can put older store files back,
   and the app then shows an older state offline — content the account could read at that time, never another account's
   and never a forged one (decision 5).
+- **Changes made offline:** what the person added or changed offline and not sent yet waits in the same store, sealed
+  the same way ([ADR 0153](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md) decision 2), so whoever opens the store under the first residual reads those too.
+  A refused refresh or a wrap the server no longer serves deletes them unsent: a removed device sends nothing.
 - **A suspended space seen as offline:** a space the operator suspends or holds is hidden, and its viewed copies
   dropped, as soon as the app reaches the server's refusal; a suspension that makes the server unreachable looks like
   being offline, so the app shows what it kept of that space until it next reaches the server (decision 6, our reading,

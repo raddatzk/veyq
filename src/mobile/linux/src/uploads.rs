@@ -8,7 +8,7 @@
 //! outcome, a replace offered — is an `AdwToast`, its button the offer's action (`Upload.TakeOffer`), dismissed
 //! otherwise (`Upload.Seen`).
 //!
-//! The writes made offline (ADR 0153, the CR's W5) are a list of their own in the same popover (`Watched.QueuedTray`),
+//! The writes made offline (ADR 0153 decision 5) are a list of their own in the same popover (`Watched.QueuedTray`),
 //! grouped under the place each was made in: each with what it is and *Waiting to send* or why it is held or refused, and
 //! its actions as the core offers them — *Open* (a held one: where it is decided, [Uploads::on_open]), *Save a copy* (a
 //! refused one's files, each through GTK's save dialog into the path it gives, `Queued.SaveCopy`) and *Discard*.

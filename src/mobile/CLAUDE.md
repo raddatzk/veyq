@@ -437,11 +437,21 @@ A Gradle build of its own, run through its own wrapper.
   `LiveOfflineTest` (`VEYQ_LIVE`: a gallery viewed online, a medium trashed from another session, the account unlocked
   again with the network cut) and `LivePinsTest` (a Memory pinned through the session's door, a photo added from another
   session kept after the next online open, its folder's subtree re-keyed with no frame fetched again, opened offline);
-  a Pot and a space's media (ADR 0153 decisions 6 and 7): `OfflinePotTest` (a Pot opened offline read-only as of its
-  read, a newer ledger replacing the kept one — an erased record gone —, an entry written after the open kept by the
+  a Pot and a space's media (ADR 0153 decisions 6 and 7): `OfflinePotTest` (a Pot opened offline as of its read, its
+  settings refused, a newer ledger replacing the kept one — an erased record gone —, an entry written after the open kept by the
   write's whole re-read, #1038, a download keeping no receipt), `OfflinePotPinsTest` (a pinned Pot surviving Clear cache,
   search offline over a never-opened Memory's kept `SCOPE_MEDIA`) and `OfflineBannerTest` (the banner's time the open
-  page's own).
+  page's own); the writes made offline (ADR 0153 decisions 1–5): `OutboxTest` (an intent sealed, the directory grepped for a
+  queued note and a blob's marker, kept by eviction and Clear cache, wiped by a refused refresh, carried across a
+  rotation), `QueuedTest` (each outcome over a played server — sent, re-sealed under a new node key, held, refused,
+  waiting after a transport failure, `id_taken` — and the closed list derived from the senders' operations, none of the
+  never-queue column), `QueuedMemoriesTest` and `QueuedDepotExpensesTest` (media waiting for a chapter made offline, a
+  `K_blob` wrapped at the send, a Pot entry's heads as the person saw them, the held editor), `QueuedOverlayTest` (each
+  model's queued rows, the tray, the banner, the reconnect's notice, the loss's ask, New offline) and `AppleQueuedTest`
+  (the Swift app's states by value, *Save a copy* into a path); live, `LiveQueuedTest` (a chapter, two photos and an
+  entry with a receipt queued offline and sent). The gates (ADR 0154 decision 1): `GatesInTheCoreTest` (the one drop, a
+  row's target, a name dialog's typed answer), `SessionModelTest`'s follow after a reach ended, `GuestDoorsTest` (a guest
+  named at the write); the bridge's re-judgement of every upload call in `DispatchTest`.
   The QR reader (`qr/`, a port of ZXing's QR path; its `NOTICE` beside it) changes only with ZXing's corpus still at
   upstream's thresholds: `QrCorpusTest` (JVM; `:core:fetchQrCorpus` fetches the images into `build/qr-corpus`, each held to
   its SHA-256 in `core/qr/zxing-corpus.sha256`, so the first run needs the network) and `QrDecoderTest` (every target, over
@@ -878,7 +888,11 @@ the core's package `offline/`; each host names its directory, ADR 0140 decision 
 offline, as ciphertext exactly as the server sent it — blob frames and an allowlist of listing answers — each entry
 sealed again under a key of this account on this device, in one directory per account whose file names are opaque. It
 never holds a decrypted byte, a token or a presigned URL, and sign-out, "Stop trusting this device" and removing the
-device wipe it. Anything else the app writes still has to be named here or in ADR 0047's Consequences.
+device wipe it. Beside it, the person's own writes made offline ([ADR 0153](../../docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md)
+decision 2; `offline/Outbox`, kinds `OUTBOX`/`OUTBOX_FRAMES`): their intent sealed under the store's key, a picked file's
+frames sealed at once under a fresh `K_blob` and the file let go — never evicted or swept, asked about before a wipe
+the person starts, wiped unasked by a refused refresh or a wrap no longer served. A refused write's file becomes
+plaintext only in the file the person chose for *Save a copy* (`QueuedTray.saveCopy`). Anything else the app writes still has to be named here or in ADR 0047's Consequences.
 
 **The one plaintext secret the app writes is the Emergency Kit** ([ADR 0148](../../docs/decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 5), and only into the file the person
 chose in the system's save dialog: the core writes it straight there (Android `CreateDocument`'s stream, macOS

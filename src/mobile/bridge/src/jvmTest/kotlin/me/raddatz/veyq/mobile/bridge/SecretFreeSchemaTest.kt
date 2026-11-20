@@ -246,7 +246,7 @@ class SecretFreeSchemaTest {
     }
 
     /**
-     * The writes made offline cross as items and states alone (ADR 0153 decision 5, the CR's phase 6): a tray item says
+     * The writes made offline cross as items and states alone (ADR 0153 decision 5): a tray item says
      * what the write is by its kind's word and the name the person gave, where it goes, its state and line and what it
      * offers; *Open* is a typed target of ids and the person's name; the ask before a loss its words — never the write
      * itself (`QueuedWrite`: the person's fields as they set them, a note's text, an amount, the revision they saw), never a

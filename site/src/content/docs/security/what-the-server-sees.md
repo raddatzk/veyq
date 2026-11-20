@@ -187,6 +187,9 @@ time the server observes live is not kept for them. What it does hold, each with
   every receipt. An app also reads a Pot's whole ledger, not only what changed, when it opens it and after each entry
   the person writes, and each space's list of media with the revision it kept when it searches
   ([ADR 0153](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md) decisions 6 and 7).
+  What a person adds or changes offline in an app reaches the server as ordinary writes once the device is online again:
+  a burst of them at the reconnect, stamped with the time they arrive, not the time they were made (a Pot entry carries
+  its own date, sealed) — ADR 0153 decisions 1 and 4.
 
 ### Sharing
 

@@ -28,8 +28,8 @@ drawn once, in the core UI.
   `registerApplication`), `src/web/src/applications.ts`, `core/node/components/NodePage.vue`;
   `scripts/validate_web_core_imports_no_applications.py` and `scripts/validate_backend_module_graph.py` (the two guards
   this one mirrors); `scripts/validate_mobile_search_names_no_application.py` (the core's one direction guard today).
-- **Order:** after `cr-apps-gates-in-the-core` (its platform phases edit the drop and dialog files this one moves) and
-  after `cr-app-offline-writes` phases 7–10 (a move under a running implementation is a merge conflict in every file).
+- **Order:** after `cr-apps-gates-in-the-core` and `cr-app-offline-writes` (both done 2026-11-20; their platform phases
+  edited the drop, dialog and tray files this one moves).
 - **A move is a move.** Each platform's phase moves files with `git mv` and changes only what the move needs (package
   or namespace, visibility, the registry); a rule change found on the way is filed, not made.
 - **Out of scope:** what any screen shows or in which order (the next CR); a platform's look.

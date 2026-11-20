@@ -650,7 +650,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     val settingsActions: SettingsActions = object : SettingsActions {
         override fun close() = closeSettings()
         override fun rename(label: String) = onSettings { it.rename(label); null }
-        override fun signOut(familyId: String) = onSettings { it.signOut(familyId) }
+        override fun signOut(familyId: String) {
+            // this device's own family is a sign-out here: asked first while writes made offline wait (ADR 0153 decision 2)
+            if (settingsModel?.current?.families?.firstOrNull { it.id == familyId }?.current == true) {
+                beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT) { onSettings { it.signOut(familyId) } }
+            } else {
+                onSettings { it.signOut(familyId) }
+            }
+        }
         override fun signOutOthers() = onSettings { it.signOutOthers(); null }
         override fun signOutAndRemoveKey(familyId: String) = onSettings { it.signOutAndRemoveKey(familyId); null }
         override fun removeSavedKey(deviceId: String) = onSettings { it.removeSavedKey(deviceId); null }

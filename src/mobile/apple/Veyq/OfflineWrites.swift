@@ -1,7 +1,7 @@
 import SwiftUI
 import VeyqCore
 
-// The writes made offline (ADR 0153; cr-app-offline-writes phase 8): drawn as the core says them — the banner's count,
+// The writes made offline (ADR 0153): drawn as the core says them — the banner's count,
 // what a level holds not sent yet, the tray's list and its actions, the reconnect's notices, the ask before a loss. Every
 // rule, word and state is the core's (`ShellModel.queued*`, `QueuedTray`, through `AppleQueued`); this only lays them out.
 
@@ -60,12 +60,20 @@ extension AppModel {
     }
 
     /// `go` — a sign-out, *Stop trusting*, *Remove all offline content* of `account` (nil: the open one) — asked first
-    /// while writes made offline wait (core's `QueuedTray.ask`, ADR 0153 decision 2); at once where none does. The tray is
-    /// the open account's: another account's outbox is not asked about (the core's, phase 6's deviation 3).
+    /// while writes made offline wait (core's `QueuedTray.ask`, ADR 0153 decision 2); at once where none does. Another
+    /// account's outbox is asked about through a tray of its own (Manage's sign-out of an account not open, #1043).
     func askingLoss(_ loss: QueuedLoss, of account: VeyqAccount? = nil, then go: @escaping () -> Void) {
-        guard let q = queued, account == nil || account === tenantSession?.account else { go(); return }
+        let tray: QueuedTray
+        if let account, account !== tenantSession?.account {
+            tray = QueuedTray(account: account, nameOf: { _, _ in nil })
+        } else if let q = queued {
+            tray = q.queued.tray
+        } else {
+            go()
+            return
+        }
         Task {
-            if let ask = (try? await q.queued.tray.ask(loss: loss)) ?? nil {
+            if let ask = (try? await tray.ask(loss: loss)) ?? nil {
                 lossAsk = LossAsk(ask: ask, go: go)
             } else {
                 go()

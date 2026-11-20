@@ -26,7 +26,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The outbox (ADR 0153 decisions 1 and 2, the CR's phase 1): a write made offline kept as its intent, sealed under `K_off`
+ * The outbox (ADR 0153 decisions 1 and 2): a write made offline kept as its intent, sealed under `K_off`
  * in the account's store, a queued blob sealed under its own `K_blob` at once; never evicted, cleared or swept; refused
  * below the free-space floor; wiped by a refused refresh; carried across a Master Key rotation this device makes.
  *

@@ -615,7 +615,7 @@ internal sealed class Call {
     /** What the uploads said was shown and dismissed without its action: the next waits. */
     @Serializable @SerialName("Upload.Seen") data class UploadSeen(val said: Long) : Call()
 
-    // --- the writes made offline (ADR 0153 decisions 2, 4 and 5; cr-app-offline-writes phase 6), the open tenant's account's
+    // --- the writes made offline (ADR 0153 decisions 2, 4 and 5), the open tenant's account's
 
     /** *Discard* (`QueuedTray.discard`): write [write] deleted unsent with every write waiting for it. Refused `NO_SUCH_QUEUED`. */
     @Serializable @SerialName("Queued.Discard") data class QueuedDiscard(val write: String) : Call()
@@ -646,6 +646,13 @@ internal sealed class Call {
      * question and confirm, or none (nothing waits: the host goes on without asking). *Cancel* keeps them to send first.
      */
     @Serializable @SerialName("Queued.Ask") data class QueuedAsk(val loss: me.raddatz.veyq.mobile.offline.QueuedLoss) : Call()
+
+    /**
+     * [QueuedAsk] for connection [connection]'s account, whichever tenant is open (`QueuedTray.ask` over that account's
+     * outbox): Manage's sign-out and "Stop trusting" of an account that is not the open one (inbox #1043).
+     * [Answer.QueuedAsked]; refused `NO_SUCH_CONNECTION`.
+     */
+    @Serializable @SerialName("Queued.AskFor") data class QueuedAskFor(val connection: String, val loss: me.raddatz.veyq.mobile.offline.QueuedLoss) : Call()
 
     /**
      * Files picked or dropped into a level, screened first (ADR 0152 decisions 1 and 6, `DepotUploads.screen`): where the
@@ -3908,7 +3915,7 @@ internal class ShellShown(
     /** Under the offline banner while writes made offline wait: their count (`ShellModel.queuedBanner`); null while none does. */
     val queuedBanner: Notice? = null,
     /**
-     * What the level the shell shows holds that is not sent yet (`ShellModel.queuedAt`, the CR's W4): the folders, Memories,
+     * What the level the shell shows holds that is not sent yet (`ShellModel.queuedAt`, ADR 0153 decision 5): the folders, Memories,
      * chapters and files made offline there, each drawn in place among its rows with its state and line.
      */
     val queuedHere: List<me.raddatz.veyq.mobile.offline.QueuedItem> = emptyList(),

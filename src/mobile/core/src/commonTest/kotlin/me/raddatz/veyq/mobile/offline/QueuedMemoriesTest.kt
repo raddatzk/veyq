@@ -26,7 +26,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * Memories' writes queued offline and sent (ADR 0153 decisions 1, 3 and 4; the CR's phase 3), each over a played server
+ * Memories' writes queued offline and sent (ADR 0153 decisions 1, 3 and 4), each over a played server
  * with real seals: a chapter made offline and two photos added into it, the photos waiting for it and sent after it; a
  * photo's `K_blob` wrapped at the send under the key its node has then (a re-key while offline); the picked file let go
  * once sealed, before anything is sent; a capture time held where someone else set that field, merged where they changed

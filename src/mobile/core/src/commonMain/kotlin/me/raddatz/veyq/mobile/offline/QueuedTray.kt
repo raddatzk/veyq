@@ -17,7 +17,7 @@ import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
 
 /**
- * One write made offline as the uploads tray lists it (ADR 0153 decision 5, the CR's W5): its [id], where it writes
+ * One write made offline as the uploads tray lists it (ADR 0153 decision 5): its [id], where it writes
  * ([tenant], [scope], [node]: the platform groups under the destination's label, [QueuedTray]'s `nameOf`), what it is
  * ([title]: a kind's word with the name the person gave, never more of its content), where it is ([state]) with the line
  * under it ([said]: *Waiting to send*, or why it is held or refused), and what it offers: *Discard* always, *Open* for a
@@ -78,7 +78,7 @@ enum class QueuedLoss(@Serializable(with = me.raddatz.veyq.mobile.words.MsgKey::
 @SerialName("QueuedAsk")
 class QueuedAsk(val question: Notice, @Serializable(with = me.raddatz.veyq.mobile.words.MsgKey::class) val confirm: Msg)
 
-/** The words of the writes made offline (ADR 0153 decision 5; drafted in the CR's phase 5, the owner's to change). */
+/** The words of the writes made offline (ADR 0153 decision 5). */
 object QueuedShown {
     /** Under the offline banner while writes wait: their count; null while none does. */
     fun banner(count: Int): Notice? = if (count > 0) Notice(Msg.OFFLINE_BANNER_WAITING, count) else null
@@ -159,7 +159,7 @@ object QueuedShown {
 }
 
 /**
- * The uploads tray's list of writes made offline (ADR 0153 decision 5, the CR's W5), over the account's outbox: every
+ * The uploads tray's list of writes made offline (ADR 0153 decision 5), over the account's outbox: every
  * write waiting, held or refused, oldest first ([items], read again at each change), and their actions — [discard] (with
  * what waits for it), [saveCopy] (a refused write's file, its plaintext handed only to the host's sink, the path the
  * person chose, ADR 0047). *Open* is the screen's own (the Pot's editor with [QueuedExpenses.entry], the rename dialog).

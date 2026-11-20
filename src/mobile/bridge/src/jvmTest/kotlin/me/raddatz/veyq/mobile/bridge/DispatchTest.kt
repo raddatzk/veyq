@@ -1793,7 +1793,7 @@ class DispatchTest {
     }
 
     /**
-     * ADR 0154 decision 1 (G2): every upload call judges its scope and parent again (`ShellModel.takesUpload`), whatever the
+     * ADR 0154 decision 1, the bridge's re-judgement: every upload call judges its scope and parent again (`ShellModel.takesUpload`), whatever the
      * host's own gate said — a space the core does not offer and a guest's identity folder are refused `DROP_NOT_HERE`
      * before a path is opened or walked, and nothing is queued; the target it offers takes the same call.
      *
@@ -1841,7 +1841,7 @@ class DispatchTest {
     }
 
     /**
-     * ADR 0154 decision 1 (G1): [Call.Drop] hands the core what the host dropped as it is — a file opened by its path, a
+     * ADR 0154 decision 1, the one drop: [Call.Drop] hands the core what the host dropped as it is — a file opened by its path, a
      * folder walked, one with no local path and one that does not read named — and the target it named; the core's one
      * drop answers, the import it offers held for its calls, a refusal said and every opened file closed.
      */
@@ -1909,7 +1909,30 @@ class DispatchTest {
     }
 
     /**
-     * ADR 0154 decision 1 (G5): the shown account ends on its own (a reconnect found this device's trust gone) — the core
+     * The ask before a loss for an account that is not the open one (inbox #1043: Manage's sign-out and "Stop trusting" of
+     * another account): the core's ask over that connection's account, whichever tenant is open; an unknown connection
+     * refused.
+     *
+     * Bite: the dispatch answering through the open tenant's tray (`queuedDoor`) → red here (none is played).
+     */
+    @Test
+    fun theAskBeforeALossIsTheNamedAccountsWhicheverTenantIsOpen() = runBlocking {
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(
+                SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles,
+                queuedAsk = { account, loss -> me.raddatz.veyq.mobile.offline.QueuedShown.ask(loss, if (account.key == "a.example#u1") 2 else 0) },
+            ) { _ -> Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}) }
+        }
+        b.signedIn()
+        val asked = b.ask(Call.QueuedAskFor("a.example#u1", me.raddatz.veyq.mobile.offline.QueuedLoss.STOP_TRUSTING)) as Answer.QueuedAsked
+        assertEquals(Notice(Msg.OFFLINE_WRITES_LOST, 2) to Msg.OFFLINE_STOP_TRUSTING_ANYWAY, asked.ask!!.question to asked.ask.confirm)
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_CONNECTION), b.ask(Call.QueuedAskFor("b.example#u2", me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT)))
+        b.shutdown()
+    }
+
+    /**
+     * ADR 0154 decision 1, the identity after a reach ended: the shown account ends on its own (a reconnect found this device's trust gone) — the core
      * opens the next one and says the shell follows it (`SessionModel.followed`); the bridge opens that tenant as a
      * sign-in's, comparing nothing itself.
      *
@@ -2132,8 +2155,8 @@ class DispatchTest {
     }
 
     /**
-     * The writes made offline cross as their tray's items and are acted on by calls (ADR 0153 decisions 2, 4 and 5; the
-     * CR's phase 6), over a tray the test plays: the items as the core lists them, at once and at each change, and null
+     * The writes made offline cross as their tray's items and are acted on by calls (ADR 0153 decisions 2, 4 and
+     * 5), over a tray the test plays: the items as the core lists them, at once and at each change, and null
      * once the tenant closed; *Discard* (twice: refused), *Open* of a held one as the core's typed target (a waiting one has
      * none), a refused file's name and type for the host's dialog and its plaintext written only into the file at the path
      * it gave — never for a write that is not refused or a file it does not carry, nothing left at a path that does not

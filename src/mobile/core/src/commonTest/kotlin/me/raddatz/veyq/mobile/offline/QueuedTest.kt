@@ -26,7 +26,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * `Queued`, the sender and the outcomes over core's node writes (ADR 0153 decisions 3 and 4, the CR's phase 2), each over
+ * `Queued`, the sender and the outcomes over core's node writes (ADR 0153 decisions 3 and 4), each over
  * a server the test plays with real seals: sent; `stale_epoch` re-sealed and sent under the node's new key; a rename
  * meeting `stale_placement` held, never rebuilt; `404` refused; a transport failure leaves the write waiting; `id_taken`
  * with the folder there sent, without it held; a held write holds what waits for it; a write made offline sent at the
