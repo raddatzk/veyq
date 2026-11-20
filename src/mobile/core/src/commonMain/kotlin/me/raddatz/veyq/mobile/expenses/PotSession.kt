@@ -63,8 +63,42 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
     /** When the server last answered a read of the ledger (the device's clock), what [wentOffline] says it is as of. */
     private var readAt: Long? = null
 
-    /** Whether this member may write here: Expenses is on for the tenant (a space pending deletion is not opened), online. */
-    val canWrite: Boolean get() = meta != null && door.writesEntries && offline == null
+    /**
+     * Whether this member may write entries here: Expenses is on for the tenant (a space pending deletion is not opened),
+     * online — or offline where an entry is queued (ADR 0153: [queuesEntries]); every other write still refuses offline.
+     */
+    val canWrite: Boolean get() = meta != null && door.writesEntries && (offline == null || queuesEntries)
+
+    /** Whether an entry added, edited or deleted offline is queued (this device keeps the account's store, ADR 0153). */
+    val queuesEntries: Boolean get() = door.queueAccount?.queues(me.raddatz.veyq.mobile.offline.Queued.POT_ENTRY) == true
+
+    /**
+     * The entries counted here that are not sent yet (ADR 0153 decision 5, owner 2026-11-19): added, edited or deleted
+     * offline and waiting; the list marks each *Not sent*, the balances say they include them.
+     */
+    var unsent: Set<String> = emptySet()
+        private set
+
+    /** The waiting entries as revisions on top of what is held: counted in [ledger], never in what is sent or checked. */
+    private var queuedOverlay: List<HeldRevision> = emptyList()
+
+    /** [ledger] made anew from what is held and the waiting entries ([queuedOverlay]); the check over what is held only. */
+    private suspend fun rebuild() {
+        val writes = runCatching { door.queueAccount?.outbox?.writes() }.getOrNull().orEmpty().filter {
+            it.op == me.raddatz.veyq.mobile.offline.Queued.POT_ENTRY.name && it.node == node.id && it.state == me.raddatz.veyq.mobile.offline.QueuedWrite.State.WAITING
+        }
+        queuedOverlay = writes.mapNotNull { w ->
+            val e = QueuedExpenses.entry(w) ?: return@mapNotNull null
+            val latest = held.values.filter { it.entryId == e.entryId }.maxOfOrNull { it.revision } ?: 0
+            // a revision past the one it was made on is held: this one is sent already, or meets a newer one (a conflict)
+            if (latest > (e.basedOn ?: 0)) return@mapNotNull null
+            HeldRevision(e.entryId, latest + 1, w.at, UNSENT, RevisionBody(emptyList(), e.content), null)
+        }
+        unsent = queuedOverlay.map { it.entryId }.toSet()
+        val all = held.values.toList()
+        ledger = meta?.let { Ledger.build(all + queuedOverlay, it.base) }
+        check = LedgerCheck.of(all)
+    }
 
     /** Whether this member may change the Pot's settings, a Pot without any included: Expenses is on for the tenant, online. */
     val canChangeSettings: Boolean get() = door.changesSettings && offline == null
@@ -141,9 +175,7 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
         ledgerTag = r.tag
         deleteRevision = r.deleteRevision
         cursor = r.cursor
-        val all = held.values.toList()
-        ledger = meta?.let { Ledger.build(all, it.base) }
-        check = LedgerCheck.of(all)
+        rebuild()
         return true
     }
 
@@ -164,6 +196,8 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
         OFFLINE,
         /** The server refused it otherwise (switched off, removed, an id taken): nothing was stored. */
         REFUSED,
+        /** Offline, queued to be sent at the reconnect (ADR 0153): shown at once, marked *Not sent* ([unsent]). */
+        QUEUED,
     }
 
     /**
@@ -303,7 +337,14 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
     suspend fun saveEntry(entryId: String?, form: EntryForm, basedOn: Long?, pending: List<PendingReceipt> = emptyList(), own: Set<String> = emptySet()): WriteOutcome {
         skippedReceipts = emptyList()
         uploadedReceipts = emptyList()
-        if (offline != null) return WriteOutcome.OFFLINE
+        if (offline != null) {
+            if (!queuesEntries) return WriteOutcome.OFFLINE
+            val people = ledger?.participants?.map { it.id }?.toSet() ?: return WriteOutcome.INVALID
+            if (form.contentOf { it in people }.content == null) return WriteOutcome.INVALID
+            QueuedExpenses.saveEntry(this, entryId, form, basedOn, pending, nowMs()) ?: return WriteOutcome.REFUSED
+            rebuild()
+            return WriteOutcome.QUEUED
+        }
         val known = ledger?.participants?.map { it.id }?.toSet() ?: return WriteOutcome.INVALID
         if (form.contentOf { it in known }.content == null) return WriteOutcome.INVALID
         if (pending.any { it.bytes.size > Receipts.MAX_BYTES }) return WriteOutcome.INVALID
@@ -428,8 +469,14 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
     /** Deletes entry [entryId] on [basedOn], the revision shown: a tombstone revision; it counts nowhere and stays in the
      *  Pot's list of deleted entries, restorable until its receipts are erased. */
     @Throws(Exception::class)
-    suspend fun deleteEntry(entryId: String, basedOn: Long): WriteOutcome =
-        write(listOf(PotWrite(entryId, Deleted, basedOn = basedOn)))
+    suspend fun deleteEntry(entryId: String, basedOn: Long): WriteOutcome {
+        if (offline != null && queuesEntries) {
+            if (!QueuedExpenses.deleteEntry(this, entryId, basedOn, nowMs())) return WriteOutcome.REFUSED
+            rebuild()
+            return WriteOutcome.QUEUED
+        }
+        return write(listOf(PotWrite(entryId, Deleted, basedOn = basedOn)))
+    }
 
     /** Restores deleted entry [entryId] on [basedOn]: its last content written again as the next revision, while it is
      *  still restorable ([PotView.restorable]). */
@@ -629,6 +676,9 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
         private const val NODE_REKEY_PENDING = "node_rekey_pending"
         private const val STALE_EPOCH = "stale_epoch"
         private const val STALE_REVISION = "stale_revision"
+
+        /** A waiting entry's digest in the overlay: no revision held has it. */
+        private const val UNSENT = "unsent"
 
         /** Opens the Pot [nodeId] of [scopeId] in [tenant] and reads it; null when the tenant holds no such open Pot. */
         suspend fun open(tenant: TenantSession, scopeId: String, nodeId: String): PotSession? {

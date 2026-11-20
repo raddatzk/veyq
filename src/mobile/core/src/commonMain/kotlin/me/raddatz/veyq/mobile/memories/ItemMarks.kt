@@ -136,6 +136,13 @@ class ItemMarks internal constructor(
         return out
     }
 
+    /** The caller's own set as shown holding [mediaId] or not ([marked]): a mark made offline, waiting to be sent. */
+    internal fun setLocal(mediaId: String, marked: Boolean) {
+        val mine = mine().toMutableSet()
+        if (marked) mine += mediaId else mine -= mediaId
+        sets = sets.filter { !it.own } + MemberSet(true, mine)
+    }
+
     /**
      * The caller's mark on [mediaId] set to [marked] (a mark queued offline, ADR 0153): written only where the own set as
      * read now holds otherwise — so the person's choice stands over whatever their set held meanwhile.

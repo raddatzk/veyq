@@ -30,13 +30,17 @@ class PotView(session: Source) {
         val ratesOffered: Boolean = false, val receipts: List<Receipts.Receipt> = emptyList(),
         /** A member reads the Pot ([PotDoor.member]); false for a link's guest. */
         val member: Boolean = true,
+        /** The entries counted that are not sent yet ([PotSession.unsent], ADR 0153 decision 5). */
+        val unsent: Set<String> = emptySet(),
+        /** Shown offline: only an entry is written then (queued), never a payment recorded or a restore. */
+        val offline: Boolean = false,
     )
 
     constructor(session: PotSession) : this(
         Source(
             session.name, session.meta, session.ledger, session.check, session.members, session.named, session.canWrite,
             session.canChangeSettings, session.currencyFixed, session.heldRevisions(), session.directory, session.ratesOffered,
-            session.receipts, session.member,
+            session.receipts, session.member, session.unsent, session.offline != null,
         ),
     )
 
@@ -50,6 +54,8 @@ class PotView(session: Source) {
         val id: String, val kind: Kind?, val title: String?, val date: String?, val category: String?, val who: List<String>,
         val amount: Long?, val foreignAmount: Long?, val foreignCurrency: String?, val foreignMinorUnits: Int,
         val status: Ledger.Status, val edited: Boolean,
+        /** Added, edited or deleted offline and not sent yet: marked *Not sent* (ADR 0153 decision 5). */
+        val unsent: Boolean = false,
     )
 
     /** One balance row; [settled] what transfers moved (positive: sent, negative: received). */
@@ -66,6 +72,8 @@ class PotView(session: Source) {
     class Person(val id: String, val name: String)
 
     val name = session.name
+    /** Before [entries]: what [row] marks *Not sent*. */
+    private val unsentIds: Set<String> = session.unsent
     val currency: String? = session.meta?.base?.currency
     val minorUnits: Int = session.meta?.base?.minorUnits ?: 2
     val canWrite: Boolean = session.canWrite
@@ -406,7 +414,21 @@ class PotView(session: Source) {
     fun pays(t: SettleRow): me.raddatz.veyq.mobile.words.Notice = me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.POT_PAYS, personWords(t.from), personWords(t.to))
 
     /** "Record all" is offered past one payment, to a writer. */
-    val canRecordAll: Boolean get() = canWrite && settleUp.size > 1
+    val canRecordAll: Boolean get() = canWrite && !offline && settleUp.size > 1
+
+    /** Shown offline ([Source.offline]): an entry is queued then, nothing else is written. */
+    val offline: Boolean = session.offline
+
+    /** The entries counted that are not sent yet. */
+    val unsent: Set<String> = session.unsent
+
+    /** Under the balances while they count entries not sent yet (owner 2026-11-19); null otherwise. */
+    val balancesUnsent: me.raddatz.veyq.mobile.words.Notice?
+        get() = if (unsent.isEmpty()) null else me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.OFFLINE_BALANCES_UNSENT)
+
+    /** The mark an entry row not sent yet carries; null for one sent. */
+    fun unsentMark(row: EntryRow): me.raddatz.veyq.mobile.words.Notice? =
+        if (row.unsent) me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.OFFLINE_NOT_SENT) else null
 
     /** A person's facts on the Settings tab: their balance in short, inactive, a former member. */
     fun personFacts(p: PersonEntry): List<me.raddatz.veyq.mobile.words.Piece> = listOfNotNull(
@@ -540,10 +562,10 @@ class PotView(session: Source) {
         val base = e.effect?.base?.toLong() ?: c?.let { Money.convertToBase(Big.of(it.amount), it.minorUnits, it.rate, minorUnits).toLong() }
         val foreign = c?.takeIf { it.currency != currency }
         return when (c) {
-            is Expense -> EntryRow(e.id, Kind.EXPENSE, c.title, c.date, c.category, c.payers.map { nameIn(it.participant) }, base, foreign?.amount, foreign?.currency, c.minorUnits, e.status, e.edited)
-            is Refund -> EntryRow(e.id, Kind.REFUND, c.title, c.date, c.category, c.receivers.map { nameIn(it.participant) }, base?.let { -it }, foreign?.amount, foreign?.currency, c.minorUnits, e.status, e.edited)
-            is Transfer -> EntryRow(e.id, Kind.TRANSFER, c.title, c.date, null, listOf(nameIn(c.from), nameIn(c.to)), base, foreign?.amount, foreign?.currency, c.minorUnits, e.status, e.edited)
-            null -> EntryRow(e.id, null, null, null, null, emptyList(), null, null, null, minorUnits, e.status, e.edited)
+            is Expense -> EntryRow(e.id, Kind.EXPENSE, c.title, c.date, c.category, c.payers.map { nameIn(it.participant) }, base, foreign?.amount, foreign?.currency, c.minorUnits, e.status, e.edited, e.id in unsentIds)
+            is Refund -> EntryRow(e.id, Kind.REFUND, c.title, c.date, c.category, c.receivers.map { nameIn(it.participant) }, base?.let { -it }, foreign?.amount, foreign?.currency, c.minorUnits, e.status, e.edited, e.id in unsentIds)
+            is Transfer -> EntryRow(e.id, Kind.TRANSFER, c.title, c.date, null, listOf(nameIn(c.from), nameIn(c.to)), base, foreign?.amount, foreign?.currency, c.minorUnits, e.status, e.edited, e.id in unsentIds)
+            null -> EntryRow(e.id, null, null, null, null, emptyList(), null, null, null, minorUnits, e.status, e.edited, e.id in unsentIds)
         }
     }
 }

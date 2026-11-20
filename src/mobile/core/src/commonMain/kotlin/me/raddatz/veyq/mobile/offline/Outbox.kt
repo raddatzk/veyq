@@ -37,6 +37,13 @@ class Outbox internal constructor(
     private val lock = Mutex()
     private var tidied = false
 
+    private val _changes = kotlinx.coroutines.flow.MutableStateFlow(0L)
+
+    /** Moves at every write queued, changed or gone: what the models' overlays and the tray read the outbox again on. */
+    val changes: kotlinx.coroutines.flow.StateFlow<Long> = _changes
+
+    private fun changed() { _changes.value = _changes.value + 1 }
+
     private val orderKey get() = EntryKey(server, "", "", KeptRead.OUTBOX, ORDER)
 
     private fun writeKey(id: String) = EntryKey(server, "", "", KeptRead.OUTBOX, id)
@@ -52,12 +59,14 @@ class Outbox internal constructor(
         val order = order()
         if (!offline.putQueued(writeKey(write.id), encode(write), floor = write.id !in order)) return@withLock false
         if (write.id !in order) setOrder(order + write.id)
+        changed()
         true
     }
 
     /** [write] stored again as it now is (its state after a send's outcome): never refused by the floor; nothing if it is gone. */
     internal suspend fun update(write: QueuedWrite) = lock.withLock {
         if (write.id in order()) offline.putQueued(writeKey(write.id), encode(write), floor = false)
+        changed()
     }
 
     /** Every waiting write, oldest first. */
@@ -76,6 +85,7 @@ class Outbox internal constructor(
         val write = read(id)
         offline.store.removeAll(listOf(writeKey(id)) + write?.blobs.orEmpty().map { blobKey(it.id) })
         setOrder(order() - id)
+        changed()
     }
 
     /**

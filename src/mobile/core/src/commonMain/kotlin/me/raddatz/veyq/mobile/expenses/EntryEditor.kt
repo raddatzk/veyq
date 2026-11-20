@@ -263,7 +263,7 @@ class EntryEditor internal constructor(
         own += written.uploaded
         pendingFiles = pendingFiles.filter { it.id !in written.uploaded }
         return when (written.outcome) {
-            PotSession.WriteOutcome.WRITTEN -> {
+            PotSession.WriteOutcome.WRITTEN, PotSession.WriteOutcome.QUEUED -> {
                 val notice = Notices.receiptsSkipped(written.skipped)
                 set { it.copy(saving = false, done = true, notice = notice) }
                 Saved(true, notice)
@@ -313,7 +313,7 @@ class EntryEditor internal constructor(
         set { it.copy(asking = false, saving = true, notice = null) }
         val outcome = runCatching { withContext(work) { door.delete(recordId, on) } }.getOrDefault(PotSession.WriteOutcome.REFUSED)
         return when (outcome) {
-            PotSession.WriteOutcome.WRITTEN -> {
+            PotSession.WriteOutcome.WRITTEN, PotSession.WriteOutcome.QUEUED -> {
                 set { it.copy(saving = false, done = true) }
                 true
             }

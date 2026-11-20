@@ -273,10 +273,10 @@ class PotModel internal constructor(
         _state.update {
             it?.with(
                 view = o?.view() ?: it.view, saving = false, offline = o?.offline ?: it.offline,
-                message = if (said) outcome.takeIf { x -> x != PotSession.WriteOutcome.WRITTEN }?.name else it.message,
+                message = if (said) outcome.takeIf { x -> x != PotSession.WriteOutcome.WRITTEN && x != PotSession.WriteOutcome.QUEUED }?.name else it.message,
             )
         }
-        return outcome == PotSession.WriteOutcome.WRITTEN
+        return outcome == PotSession.WriteOutcome.WRITTEN || outcome == PotSession.WriteOutcome.QUEUED
     }
 
     /** One [Op] on the open Pot, its refusal the Pot's message where [said]; what it came to. */
@@ -322,17 +322,18 @@ class PotModel internal constructor(
      * [op] as a write of the open Pot: saving while it runs (the live poll skips meanwhile), the Pot read after it; its
      * refusal the Pot's message where [said] (a sheet that says its own, the entry editor, passes false).
      */
-    internal suspend fun writing(said: Boolean, op: suspend () -> PotSession.WriteOutcome): Boolean =
-        outcomeOf(said, op) == PotSession.WriteOutcome.WRITTEN
+    internal suspend fun writing(said: Boolean, entry: Boolean = false, op: suspend () -> PotSession.WriteOutcome): Boolean =
+        outcomeOf(said, entry, op).let { it == PotSession.WriteOutcome.WRITTEN || it == PotSession.WriteOutcome.QUEUED }
 
     /**
      * [writing]'s outcome, null where no Pot is open. Offline nothing is sent: the write is refused at once with
      * [PotSession.WriteOutcome.OFFLINE] (`offline_read_only`, ADR 0153 decision 6) — what the controls the state turns off
      * would have sent.
      */
-    private suspend fun outcomeOf(said: Boolean, op: suspend () -> PotSession.WriteOutcome): PotSession.WriteOutcome? {
+    private suspend fun outcomeOf(said: Boolean, entry: Boolean = false, op: suspend () -> PotSession.WriteOutcome): PotSession.WriteOutcome? {
         if (opened == null) return null
-        if (_state.value?.offline != null) {
+        // offline only an entry's save or delete is queued (ADR 0153 decision 3); every other write refuses
+        if (_state.value?.offline != null && !(entry && session?.queuesEntries == true)) {
             ended(PotSession.WriteOutcome.OFFLINE, said)
             return PotSession.WriteOutcome.OFFLINE
         }
@@ -358,9 +359,9 @@ class PotModel internal constructor(
         override fun newId(): String = opened?.newId() ?: error("no Pot open")
         override suspend fun rate(currency: String, day: String) = rateFor(currency, day)
         override suspend fun save(entryId: String, form: EntryForm, basedOn: Long?, pending: List<PotSession.PendingReceipt>, own: Set<String>): EntryEditor.Written {
-            if (_state.value?.offline != null) return EntryEditor.Written(PotSession.WriteOutcome.OFFLINE)
+            if (_state.value?.offline != null && session?.queuesEntries != true) return EntryEditor.Written(PotSession.WriteOutcome.OFFLINE)
             var written = EntryEditor.Written(PotSession.WriteOutcome.REFUSED)
-            writing(said = false) {
+            writing(said = false, entry = true) {
                 val o = opened ?: return@writing PotSession.WriteOutcome.REFUSED
                 written = o.saveEntry(entryId, form, basedOn, pending, own)
                 written.outcome
@@ -368,7 +369,7 @@ class PotModel internal constructor(
             return written
         }
         override suspend fun delete(entryId: String, basedOn: Long): PotSession.WriteOutcome {
-            return outcomeOf(said = false) { opened?.deleteEntry(entryId, basedOn) ?: PotSession.WriteOutcome.REFUSED } ?: PotSession.WriteOutcome.REFUSED
+            return outcomeOf(said = false, entry = true) { opened?.deleteEntry(entryId, basedOn) ?: PotSession.WriteOutcome.REFUSED } ?: PotSession.WriteOutcome.REFUSED
         }
     }
 

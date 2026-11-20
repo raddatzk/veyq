@@ -40,6 +40,13 @@ object QueuedExpenses {
         return Entry(i.entryId, i.basedOn, body.content, i.receipts.size)
     }
 
+    /** The name and type receipt blob [blobId] of queued entry [write] is saved under (*Save a copy*); null where it is none. */
+    internal fun receiptOf(write: QueuedWrite, blobId: String): Pair<String?, String?>? {
+        if (write.op != Queued.POT_ENTRY.name) return null
+        val i = runCatching { QueuedNodes.decode(EntryIntent.serializer(), write) }.getOrNull() ?: return null
+        return i.receipts.firstOrNull { it.blob == blobId }?.let { it.name to it.type }
+    }
+
     private fun idOf(entryId: String) = ENTRY + entryId
 
     /**
@@ -128,7 +135,7 @@ object QueuedExpenses {
                 if (session.heldRevisions().any { it.entryId == i.entryId && it.revision == mine && it.body?.content == body.content }) QueuedOutcome.Sent
                 else QueuedOutcome.Held(STALE_REVISION)
             }
-            PotSession.WriteOutcome.BUSY, PotSession.WriteOutcome.OFFLINE -> QueuedOutcome.Waiting
+            PotSession.WriteOutcome.BUSY, PotSession.WriteOutcome.OFFLINE, PotSession.WriteOutcome.QUEUED -> QueuedOutcome.Waiting
             PotSession.WriteOutcome.BLOCKED -> QueuedOutcome.Refused("blocked")
             PotSession.WriteOutcome.INVALID, PotSession.WriteOutcome.NOT_SETTLED -> QueuedOutcome.Refused("invalid")
             PotSession.WriteOutcome.REFUSED -> QueuedOutcome.Refused(session.lastRefusal ?: "refused")

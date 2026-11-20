@@ -191,6 +191,25 @@ class GalleryModel(
         suspend fun setParticipants(wanted: List<String>, openedWith: List<String>): me.raddatz.veyq.mobile.memories.place.MemoryFacts.Outcome =
             me.raddatz.veyq.mobile.memories.place.MemoryFacts.Outcome.Refused(-1, null)
 
+        /**
+         * Whether a write made here offline is queued (ADR 0153 decision 3: `VeyqAccount.queues`): this device keeps the
+         * account's store. Then, offline, an upload, a trash, a mark, a capture time and a chapter are queued through the
+         * door's own writes (each queues where the account is offline), never refused. Absent: offline is read-only.
+         */
+        val queues: Boolean get() = false
+
+        /** The picked [sources] queued into the node offline, each sealed at once (`QueuedMemories.media`); how many. Absent: none. */
+        suspend fun queueMedia(sources: List<UploadSource>): Int = 0
+
+        /** Medium [mediaId] marked or not ([marked]) offline (`QueuedMemories.mark`); whether it was queued. Absent: never. */
+        suspend fun queueMark(mediaId: String, marked: Boolean): Boolean = false
+
+        /**
+         * What the outbox holds for this node (ADR 0153 decision 5, the overlay): the media whose trash waits — not shown —
+         * and the marks set or taken away offline. Absent: nothing.
+         */
+        suspend fun queuedHere(): QueuedHere = QueuedHere()
+
         /** Medium [item]'s capture time corrected to [overrideMs], or reset for null (`CaptureTime`). Absent: refused. */
         suspend fun captureTime(item: MemoryMedia.Item, overrideMs: Long?): CaptureTime.Outcome = CaptureTime.Outcome.Failed("refused")
 
@@ -228,6 +247,9 @@ class GalleryModel(
     }
 
     /** What a trash or a restore of a medium came to (`deleteMedia`, `restoreMedia`). */
+    /** What the outbox holds for a gallery's node ([Door.queuedHere]): media whose trash waits, marks set offline. */
+    class QueuedHere(val trashed: Set<String> = emptySet(), val marks: Map<String, Boolean> = emptyMap())
+
     enum class Removal {
         DONE,
         /** Already gone from this node, or no access (`404`). */
@@ -317,6 +339,8 @@ class GalleryModel(
         val marksLoaded: Boolean = false,
         /** The page's filter (ADR 0149 decision 5): stored nowhere, gone with the page. */
         val filter: GalleryFilter.State = GalleryFilter.State(),
+        /** Shown offline where writes made here are queued (ADR 0153): marks, uploads, trashes and capture times are offered. */
+        val queues: Boolean = false,
         /** What the last mark toggle said (too many, not saved); null once seen ([seen]). */
         val markSaid: Notice? = null,
         /** The filter's predicate over a medium id, as the filter, the marks and the rows last made it; null: nothing narrows. */
@@ -326,7 +350,7 @@ class GalleryModel(
         val shown: List<Row>? get() = rows?.let { r -> keep?.let { k -> r.filter { k(it.mediaId) } } ?: r }
 
         /** Whether a mark is offered here: the right, online (nothing is marked offline, ADR 0140 decision 7). */
-        val marking: Boolean get() = rights.mark && offline == null
+        val marking: Boolean get() = rights.mark && (offline == null || queues)
         /** The banner above the header (ADR 0144 decision 4) as sealed: what it shows; null for none (no frame drawn). */
         val banner: me.raddatz.veyq.mobile.memories.banner.Banner.Shown? get() = me.raddatz.veyq.mobile.memories.banner.Banner.shown(facts?.banner)
 
@@ -462,9 +486,13 @@ class GalleryModel(
 
     /** [this] offline as of [at] (read-only), or online again (null). */
     private fun State.offline(at: me.raddatz.veyq.mobile.session.OfflineAsOf?): State =
-        copy(offline = at, rights = if (at == null) granted else readOnly(granted))
+        copy(offline = at, rights = if (at == null || door.queues) granted else readOnly(granted), queues = at != null && door.queues)
 
-    /** The online rights less every write: what the page offers offline (ADR 0140 decision 7). */
+    /**
+     * The online rights less every write: what the page offers offline where nothing is queued (ADR 0140 decision 7). Where
+     * writes are queued (ADR 0153) the rights stay, and each write that never queues (the banner, the facts, the
+     * participants, a purge, an undo) refuses offline by its own check.
+     */
     private fun readOnly(r: MemoryRights.Rights) = r.copy(
         upload = false, deleteMedia = MemoryRights.DeleteMedia.NONE, createMemory = false, createChapter = false, editMeta = false,
     )
@@ -496,6 +524,8 @@ class GalleryModel(
 
     private suspend fun read() = reading.withLock {
         val read = runCatching { door.gallery() }.getOrNull()
+        val here = runCatching { door.queuedHere() }.getOrDefault(QueuedHere())
+        val hidden = here.trashed
         val chapters = if (node.kind == MEMORY) {
             runCatching { MediaDetails.chapters(node.kind, node.nodeId, door.scopeNodes()) }.getOrNull()
         } else {
@@ -514,16 +544,16 @@ class GalleryModel(
             if (read == null) withFacts.copy(failed = true)
             // a photo view's media only: a track and a music track are another view's (GalleryMedium, ADR 0135 decision 2)
             else withFacts.copy(
-                rows = read.items.filter { it.mediaId !in pending && GalleryMedium.shows(it.type, it.name) }.map(::Row),
-                music = MusicQueue.tracks(read.items.filter { it.mediaId !in pending }),
-                tracks = read.items.filter { it.mediaId !in pending && it.isTrack },
+                rows = read.items.filter { it.mediaId !in pending && it.mediaId !in hidden && GalleryMedium.shows(it.type, it.name) }.map(::Row),
+                music = MusicQueue.tracks(read.items.filter { it.mediaId !in pending && it.mediaId !in hidden }),
+                tracks = read.items.filter { it.mediaId !in pending && it.mediaId !in hidden && it.isTrack },
                 failed = false,
             ).let { it.copy(uploading = UploadTile.shown(queued, it.listedIds)) }.refiltered()
         }
         if (read != null) {
             searched(settled = true)
             // the marks with each listing (a kept read: offline as last read), the badges and the filter after them
-            scope.launch { readMarks() }
+            scope.launch { readMarks(here.marks) }
         }
         // the Memory opening is a settle point (the self-heal): once, on its first listing the server answered
         if (read != null && read.offline == null && !openedSettle) {
@@ -547,9 +577,13 @@ class GalleryModel(
     private fun factsNow(): GalleryFilter.Facts = factsOf(current.rows)
 
     /** Every member's marks read (with the gallery's first read and its live poll's); the badges and the filter follow. */
-    suspend fun readMarks() {
+    suspend fun readMarks() = readMarks(runCatching { door.queuedHere().marks }.getOrDefault(emptyMap()))
+
+    /** [readMarks] with the marks set offline and not sent yet ([queued]) shown as the person set them. */
+    private suspend fun readMarks(queued: Map<String, Boolean>) {
         val m = itemMarks ?: return
         val ok = runCatching { m.load() }.getOrDefault(false)
+        if (ok) queued.forEach { (id, marked) -> m.setLocal(id, marked) }
         _state.update { it.copy(marksLoaded = ok || it.marksLoaded) }
         refilter()
     }
@@ -579,6 +613,14 @@ class GalleryModel(
     suspend fun toggleMark(mediaId: String): Notice? {
         val m = itemMarks ?: return null
         if (!current.marking || !current.marksLoaded) return null
+        if (current.offline != null) {
+            // offline the mark is queued (ADR 0153) and shown as set at once
+            val marked = !m.markedByMe(mediaId)
+            if (!runCatching { door.queueMark(mediaId, marked) }.getOrDefault(false)) return readOnlyNotice
+            m.setLocal(mediaId, marked)
+            refilter()
+            return null
+        }
         val out = m.toggle(mediaId)
         refilter()
         out.notice?.let { said -> _state.update { it.copy(markSaid = said) } }
@@ -732,7 +774,7 @@ class GalleryModel(
      * the medium is not in the gallery). Each save has the gallery read anew, so it re-orders by the effective time.
      */
     fun captureTimeEditor(mediaId: String): CaptureTimeEditor? {
-        if (!current.rights.editMeta || current.offline != null) return null
+        if (!current.rights.editMeta || (current.offline != null && !current.queues)) return null
         val item = row(mediaId)?.item ?: return null
         return CaptureTimeEditor(item.meta?.capturedAt, item.meta?.capturedAtOverride) { overrideMs ->
             runCatching { door.captureTime(item, overrideMs) }.getOrElse { CaptureTime.Outcome.Failed("failed") }.also { reload() }
@@ -806,10 +848,16 @@ class GalleryModel(
      * The picked [sources] added to this Memory or chapter (the app's one upload queue), where the rights let whoever looks
      * upload; how many were queued.
      */
-    fun upload(sources: List<UploadSource>): Int = if (takesUploads) door.upload(sources) else 0
+    fun upload(sources: List<UploadSource>): Int {
+        if (!takesUploads) return 0
+        if (current.offline == null) return door.upload(sources)
+        // offline each is sealed at once and waits to be sent (ADR 0153 decision 1): a placeholder tile marked waiting
+        scope.launch { runCatching { door.queueMedia(sources) } }
+        return sources.count { MediaUpload.isMedia(it.type, it.name) }
+    }
 
-    /** Whether this page takes an upload now: the rights let whoever looks upload, and it is not shown offline. */
-    val takesUploads: Boolean get() = rights.upload && current.offline == null
+    /** Whether this page takes an upload now: the rights let whoever looks upload, online or queued offline. */
+    val takesUploads: Boolean get() = rights.upload && (current.offline == null || current.queues)
 
     // ---- a chapter made ----
 
@@ -818,7 +866,7 @@ class GalleryModel(
      * not. The gallery's chapters are read again with the lists.
      */
     suspend fun createChapter(name: String): MemoryCreate.Made {
-        if (current.offline != null) return MemoryCreate.Made(null, readOnlyNotice)
+        if (current.offline != null && !current.queues) return MemoryCreate.Made(null, readOnlyNotice)
         if (MemoryCreate.CHAPTER !in creates) return MemoryCreate.Made(null, Notice(Msg.NODE_ILLEGAL_STRUCTURE))
         if (name.isBlank()) return MemoryCreate.Made(null, Notice(Msg.FOLDER_NAME_EMPTY))
         return runCatching { door.createChapter(name.trim()) }.getOrElse { MemoryCreate.Made(null, MemoryCreate.refused(null)) }
@@ -850,7 +898,7 @@ class GalleryModel(
      */
     suspend fun trash(mediaId: String): Notice? {
         if (!known(mediaId)) return null
-        if (current.offline != null) return readOnlyNotice
+        if (current.offline != null && !current.queues) return readOnlyNotice
         return when (rights.deleteMedia) {
             MemoryRights.DeleteMedia.ANY -> if (asksBanner(mediaId)) {
                 _state.update { it.copy(bannerPicture = mediaId) }
@@ -895,14 +943,16 @@ class GalleryModel(
         _state.update { s -> s.copy(rows = s.rows?.filter { it.mediaId != mediaId }, music = s.music.filter { it.mediaId != mediaId }, tracks = s.tracks.filter { it.mediaId != mediaId }) }
         val said = Notice(Msg.MEMORY_MOVED_TO_TRASH)
         val u = Undoing(mediaId, name)
-        offerUndo(u, said)
+        // offline the trash is queued: no Undo (a restore never queues); the tray discards it
+        val queuedOffline = current.offline != null
+        if (!queuedOffline) offerUndo(u, said)
         val done = runCatching { door.trash(mediaId) }.getOrDefault(Removal.FAILED)
         u.trashed.complete(done)
         if (done != Removal.DONE) {
             if (undoing?.mediaId == mediaId) endUndo()
             pending -= mediaId
             read()
-        } else scope.launch { settle() } // a medium's trash is a settle point
+        } else if (!queuedOffline) scope.launch { settle() } // a medium's trash is a settle point
         return said
     }
 

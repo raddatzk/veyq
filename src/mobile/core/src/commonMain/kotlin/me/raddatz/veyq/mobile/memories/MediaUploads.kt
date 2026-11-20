@@ -61,6 +61,12 @@ class MediaUploads(
 
         /** The queue is done with [source]: no run reads it again. */
         fun left(source: UploadSource)
+
+        /**
+         * Offline (ADR 0153 decision 1): the picked [sources] into node [nodeId] of [scopeId] sealed at once into the
+         * account's outbox, each handed back once sealed; how many were queued. Absent: none.
+         */
+        suspend fun queue(scopeId: String, nodeId: String, sources: List<UploadSource>): Int = 0
     }
 
     private val lane = dispatcher.limitedParallelism(1)
@@ -187,6 +193,9 @@ class MediaUploads(
          */
         fun notTaken(count: Int): Notice? = if (count > 0) Notice(Msg.MEMORY_NOT_MEDIA, count) else null
     }
+
+    /** Offline: [sources] queued into node [nodeId] of [scopeId], sealed at once ([Door.queue]); how many. */
+    suspend fun queue(scopeId: String, nodeId: String, sources: List<UploadSource>): Int = door.queue(scopeId, nodeId, sources)
 
     /** The tenant closes: every picked file still held is handed back, nothing more is followed. */
     fun close() {

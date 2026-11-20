@@ -72,6 +72,15 @@ class DepotUploads(
         fun online(): Boolean = true
 
         /**
+         * Offline (ADR 0153 decision 1): [source] queued as a new file [name] under [parentId] of [scopeId], sealed at once
+         * into the account's outbox, then handed to [left]; whether it was queued. Absent: never (offline is read-only).
+         */
+        suspend fun queue(scopeId: String, parentId: String?, source: UploadSource, name: String, left: (UploadSource) -> Unit): Boolean = false
+
+        /** Whether an upload made offline is queued ([queue]): this device keeps the account's store. Absent: never. */
+        val queues: Boolean get() = false
+
+        /**
          * Whether a download picked, dropped or shared under [parentId] of [scopeId] may be imported there: a member who may
          * create a folder at that level (the web's `access.mode === 'member' && rights.createFolder`), never a guest, never
          * in a guest's folder. Absent: never.
@@ -176,6 +185,11 @@ class DepotUploads(
      * once for one not queued (offline, no tenant).
      */
     fun upload(scopeId: String, parentId: String?, label: String, sources: List<UploadSource>, left: ((UploadSource) -> Unit)?): Int {
+        if (!door.online() && door.queues) {
+            // offline each is sealed at once and waits to be sent (ADR 0153): it shows where it was made, *Waiting to send*
+            scope.launch { for (s in sources) runCatching { door.queue(scopeId, parentId, s, s.name) { left?.invoke(it) } }; door.changed() }
+            return sources.size
+        }
         val jobs = if (door.online()) sources.mapNotNull { s -> door.uploadJob(scopeId, parentId, s, s.name)?.let { it to s } } else emptyList()
         if (left != null) {
             val queued = jobs.map { it.second }.toSet()
