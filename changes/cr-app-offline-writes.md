@@ -79,12 +79,25 @@ ADR 0153 decisions 1–5 hold them; here only what the work needs beside them.
 
 ## Phases
 
-- [ ] **1 core — the outbox** (W2, W6) — the `OUTBOX` kind, the codec, the index, the free-space floor, the header
+- [x] **1 core — the outbox** (W2, W6) — the `OUTBOX` kind, the codec, the index, the free-space floor, the header
   re-wrap at a rotation. Tests: an intent round-trips sealed; the directory grepped for a queued note and a queued
   blob's plaintext marker finds nothing; "Clear cache" and eviction leave it; a refused refresh wipes it; a rotation keeps
   it. · Done when: `:core:jvmTest :core:macosArm64Test` green. **Bites:** (a) the outbox in the evictable tier → the
   eviction test red; (b) the rotation's wipe left in place → the rotation test red; (c) a queued blob written as
   plaintext frames → the grep test red.
+  **Built** 2026-11-20 (`claude/j2-core`): `offline/Outbox.kt` (`QueuedWrite`, `QueuedBlob`, the order entry, the tidy at
+  first read, `sealBlob` under a fresh `K_blob`), `KeptRead.OUTBOX`/`OUTBOX_FRAMES` in `PROTECTED`, `AccountOffline.putQueued`/
+  `putQueuedFrames` (the floor, whatever the limit), `Usage.queued`, `VeyqAccount.outbox`; `OutboxTest` (7) and
+  `OfflineWipeWiredTest`'s rotation case rewritten. Bites (a)–(c) seen red, restored with `/bin/cp -f`. **Deviations:**
+  (1) the rotation does not re-wrap the old header (ADR 0153 decision 2's wording) but carries the outbox under a *fresh*
+  `K_off` in the same directory (`OfflineStores.rekey`, `OfflineStore.carryInto`) and lets the reopen's sweep drop every
+  file of the old key — ADR 0148's Alternatives rejected keeping the old `K_off` for forward secrecy, and this keeps both;
+  both rotation paths (this device's own and `resume` after one elsewhere) run through `swapKeys`, so one carry serves both.
+  (2) Bite (c) cannot redden the directory's grep, since every frame is sealed under `K_off` as well: the test also greps
+  the frames as the sender will put them (`Outbox.frame`) and opens them under `K_blob`; that is what went red. (3) The
+  outbox's keys carry no tenant or scope (`EntryKey("", "")`), so a suspended tenant's sweep leaves a waiting write to be
+  refused on send rather than lost unsaid. The asks before a wipe stay phase 5's; "Remove all offline content" drops the
+  outbox (after that ask).
 - [ ] **2 core — `Queued`, the sender, the outcomes** (W1, W3) — the closed list over the core node writes first (folder
   create, rename, trash). Tests per outcome with a played server: sent; `stale_epoch` re-sealed and sent under the new
   key (the body opens under the new node key, not the old); `stale_placement` held, not rebuilt; `404` refused; a

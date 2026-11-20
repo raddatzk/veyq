@@ -136,8 +136,10 @@ class OfflineWipeWiredTest {
 
     /**
      * A rotation this device made (ADR 0148 decision 7, ADR 0140 decision 2 as written): the account takes the new
-     * Master Key, and what the store kept under the old one is gone — wiped, not re-wrapped — while the store opens anew
-     * under the new key. Bite (CR 3i j): keep the store across [VeyqAccount.swapKeys] and the kept entry outlives it.
+     * Master Key, and what the store kept under the old one is gone — wiped, not re-wrapped: no file of the old `K_off`
+     * is left, but the header the new key wraps — while the store opens anew under the new key. Only the outbox is
+     * carried (ADR 0153 decision 2, `OutboxTest`). Bite (CR 3i j): keep the store across [VeyqAccount.swapKeys] and the
+     * kept entry outlives it.
      */
     @Test
     fun a_rotation_wipes_the_store_and_opens_it_anew_under_the_new_key() = runTest {
@@ -149,11 +151,11 @@ class OfflineWipeWiredTest {
             "u1", me.raddatz.veyq.mobile.api.models.AccountKeyMaterial.SuiteId.v1, emptyList(),
             b64(suite.seal(Context("identity-priv"), newMk, concat(lp(identity.kemSeed), lp(identity.signSeed)))),
         )
+        val before = deviceFiles.list(oneDir).orEmpty().toSet()
         one.swapKeys(newMk, identity, material)
         assertTrue(one.masterKey.contentEquals(newMk))
         val reopened = assertNotNull(one.offline, "the store was not opened anew under the new Master Key")
-        assertFalse(exists(oneDir), "the store kept under the old Master Key outlived the rotation")
-        assertTrue(reopened.store.directory != oneDir)
+        assertEquals(setOf(OfflineStores.HEADER_NAME), before intersect deviceFiles.list(reopened.store.directory).orEmpty().toSet(), "the store kept under the old Master Key outlived the rotation")
         assertNull(reopened.store.get(entry))
         one.signOut()
     }

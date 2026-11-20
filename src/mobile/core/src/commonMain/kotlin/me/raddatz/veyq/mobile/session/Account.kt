@@ -181,6 +181,13 @@ class VeyqAccount private constructor(
 
     private var pinsHeld: me.raddatz.veyq.mobile.offline.OfflinePins? = null
 
+    /**
+     * This account's writes made offline on this device (ADR 0153 decisions 1 and 2); null where it keeps no offline store
+     * — no store, no queue: offline stays read-only there.
+     */
+    val outbox: me.raddatz.veyq.mobile.offline.Outbox?
+        get() = offline?.outbox(suite)
+
     /** This account's pins on this device and their sync (ADR 0140 decision 9); null where it keeps no offline store. */
     val offlinePins: me.raddatz.veyq.mobile.offline.OfflinePins?
         get() {
@@ -390,13 +397,14 @@ class VeyqAccount private constructor(
     /**
      * A rotation this device made committed (ADR 0148 decision 7, the web's `setUnlocked` after the publish): the account
      * takes the published Master Key and identity in place — the old ones zeroed —, and the marks, the pin store and the
-     * anchoring move to the new key's slot. The offline store was sealed under the old key: it is wiped ([wipeOffline],
-     * ADR 0140 decision 2) and opened anew under the new one. [newMaterial] is the key material as the server now serves
+     * anchoring move to the new key's slot. The offline store was sealed under the old key: what it kept is wiped, its
+     * outbox carried under a fresh `K_off` the new key wraps ([rekeyOffline], ADR 0153 decision 2), and it is opened anew
+     * under the new one. [newMaterial] is the key material as the server now serves
      * it (what an offline unlock opens with). Open tenants hold scope keys opened with the old identity: the host opens
      * its tenant again.
      */
     internal suspend fun swapKeys(newMasterKey: ByteArray, newIdentity: IdentityPrivate, newMaterial: AccountKeyMaterial) {
-        wipeOffline()
+        rekeyOffline(newMasterKey)
         val oldMk = masterKey
         val oldIdentity = identity
         masterKey = newMasterKey
@@ -832,6 +840,25 @@ class VeyqAccount private constructor(
         offline?.let { runCatching { it.closeForWipe() } }
         offline = null
         device.offline?.let { o -> runCatching { o.wipe(key) }.onFailure { println("veyq: the offline store was not wiped: $it") } }
+    }
+
+    /**
+     * This account's store at a Master Key rotation this device holds both keys of (ADR 0153 decision 2 — its own rotation,
+     * or one made elsewhere taken while this account still holds the old key): the waiting writes carried under a fresh
+     * `K_off` wrapped by [newMasterKey], everything kept beside them gone as ADR 0140 decision 2 has it. Where the carry fails
+     * (or no store is open) the store is wiped, as before the outbox. The caller opens it anew ([ensureOffline]).
+     */
+    private suspend fun rekeyOffline(newMasterKey: ByteArray) {
+        val o = offline
+        val stores = device.offline
+        if (o == null || stores == null) return wipeOffline()
+        pinsHeld?.stop()
+        pinsHeld = null
+        val carried = runCatching { stores.rekey(key, o.store, newMasterKey) { it.kind in KeptRead.QUEUED } }
+            .onFailure { println("veyq: the outbox was not carried across the rotation: $it") }.isSuccess
+        runCatching { o.closeForWipe() }
+        offline = null
+        if (!carried) runCatching { stores.wipe(key) }.onFailure { println("veyq: the offline store was not wiped: $it") }
     }
 
     /** The wrap deleted on the server (best effort: a wrap left behind opens only with this device's key, now gone) and

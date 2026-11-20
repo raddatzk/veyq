@@ -212,6 +212,37 @@ class OfflineStore internal constructor(
     }
 
     /**
+     * The entries [carry] picks, each opened under this store's key and sealed again under [target]'s — a store under a
+     * fresh `K_off` in the same directory, whose file names (HMACs under its own key) are not this one's —, a blob frame by
+     * frame in batches; then this store closes. The rest stays under the old key until the target's [sweep] removes every
+     * file its manifest does not name: a Master Key rotation's carry of the outbox ([OfflineStores.rekey]).
+     */
+    internal suspend fun carryInto(target: OfflineStore, carry: (EntryKey) -> Boolean) = lock.withLock {
+        check(!closed) { "the store is closed" }
+        for (s in shards) for (k in s.values.toList()) {
+            if (!carry(k.key)) continue
+            if (k.blob) {
+                val index = indexOf(k.key) ?: continue
+                for (batch in index.keys.sorted().chunked(CARRY_BATCH)) {
+                    val frames = HashMap<Int, ByteArray>()
+                    for (i in batch) {
+                        val (offset, length) = index.getValue(i)
+                        frames[i] = files.read(path(k.name), offset, length)?.let { open(it, frameAad(k.key, i)) }
+                            ?: throw IllegalStateException("a carried frame does not open")
+                    }
+                    target.putFrames(k.key, frames, k.pins)
+                }
+            } else {
+                val opened = files.read(path(k.name))?.let { open(it, aad(TAG_ENTRY, k.key)) }
+                    ?: throw IllegalStateException("a carried entry does not open")
+                target.put(k.key, opened, k.revision, k.asOf, k.pins)
+            }
+        }
+        closed = true
+        key.fill(0)
+    }
+
+    /**
      * Lines in the manifest for [entries] without their files, every shard written once: how the manifest's load is
      * measured at 100,000 entries (`OfflineManifestLoadTest`, D2's bound). What a later [sweep] finds no file for stays
      * a line until it is read.
@@ -303,6 +334,7 @@ class OfflineStore internal constructor(
 
     internal companion object {
         const val SHARDS = 256
+        const val CARRY_BATCH = 16
         const val BATCH_MS = 30_000L
         const val NONCE = 12
         const val TAG = 16

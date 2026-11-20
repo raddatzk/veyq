@@ -58,13 +58,46 @@ class OfflineStores internal constructor(
                 // no header, or one this Master Key does not open: whatever the directory holds is no longer readable
                 for (n in files.list(dir).orEmpty()) files.remove("$dir${files.separator}$n")
                 key = primitives.randomBytes(32)
-                val nonce = primitives.randomBytes(OfflineStore.NONCE)
-                val sealed = concat(byteArrayOf(HEADER_VERSION.toByte()), nonce, primitives.aesGcmSeal(wrapKey, nonce, key, aad))
-                files.write("$header${OfflineStore.BESIDE}", sealed)
-                files.rename("$header${OfflineStore.BESIDE}", header)
+                writeHeader(dir, account, wrapKey, key)
             }
             return OfflineStore(files, primitives, dir, account, key, clock).also { it.load() }
         } finally {
+            wrapKey.fill(0)
+        }
+    }
+
+    /** [key] (a store's `K_off`) sealed under [wrapKey] as [dir]'s header, written beside it and renamed over it. */
+    private fun writeHeader(dir: String, account: String, wrapKey: ByteArray, key: ByteArray) {
+        val header = "$dir${files.separator}${OfflineStore.HEADER}"
+        val aad = concat(HEADER_AAD, lp(account.encodeToByteArray()))
+        val nonce = primitives.randomBytes(OfflineStore.NONCE)
+        val sealed = concat(byteArrayOf(HEADER_VERSION.toByte()), nonce, primitives.aesGcmSeal(wrapKey, nonce, key, aad))
+        files.write("$header${OfflineStore.BESIDE}", sealed)
+        files.rename("$header${OfflineStore.BESIDE}", header)
+    }
+
+    /**
+     * [account]'s store [from] carried to a Master Key rotation's [newMasterKey] (ADR 0153 decision 2, this device holding
+     * both keys): a fresh `K_off`, the entries [carry] picks — the outbox — opened and sealed again under it in the same
+     * directory, and the header rewritten under the new key, which is the commit. Everything else stays under the old
+     * `K_off` and goes with the next open's sweep ([OfflineStore.sweep]), as ADR 0140 decision 2 wipes it: content kept from
+     * before a rotation is never readable under the new key, nor the new content under the old one (ADR 0148's reason
+     * not to re-wrap the old `K_off`). [from] is closed after. A crash before the header leaves the old store, whose
+     * header the new Master Key does not open: it is wiped at the next open, as before.
+     */
+    internal suspend fun rekey(account: String, from: OfflineStore, newMasterKey: ByteArray, carry: (EntryKey) -> Boolean) {
+        val record = records()[account]?.takeIf { !it.wiping } ?: throw IllegalStateException("no store to carry")
+        val dir = directory(record.id)
+        check(from.directory == dir) { "another store" }
+        val key = primitives.randomBytes(32)
+        val wrapKey = primitives.hkdfSha256(newMasterKey, ByteArray(0), WRAP_INFO, 32)
+        val target = OfflineStore(files, primitives, dir, account, key.copyOf(), clock)
+        try {
+            from.carryInto(target, carry)
+            writeHeader(dir, account, wrapKey, key)
+        } finally {
+            target.close()
+            key.fill(0)
             wrapKey.fill(0)
         }
     }
@@ -145,6 +178,8 @@ class OfflineStores internal constructor(
 
     internal companion object {
         const val KEY = "veyq.offline-stores"
+        /** The header's file name, the one a store's directory names in the clear (a test's). */
+        const val HEADER_NAME = OfflineStore.HEADER
         const val HEADER_VERSION = 1
         val WRAP_INFO = "veyq/v1/offline-store".encodeToByteArray()
         val HEADER_AAD = "veyq/offline/v1/header".encodeToByteArray()
