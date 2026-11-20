@@ -230,8 +230,53 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   registry sealed before the shell read it). Not run: a signed-in pass — a Memory, a Pot and a Depot folder, a received
   link — needs a throwaway account, and its creation through the principal's env file was refused in this session;
   the before/after pages are phase 6's.
-- [ ] **5 Windows** — the same; one dispatch. · Done when: `python3 windows/run.py build` and its tests green on the VM,
+- [x] **5 Windows** — the same; one dispatch. · Done when: `python3 windows/run.py build` and its tests green on the VM,
   the guards green. **Bite:** `Veyq.Apps.Expenses` used under `Veyq.Apps.Memories` → red.
+  **Built** (2026-11-20). Layout (`src/mobile/windows/Veyq/`, the SDK's glob compiles every folder): the root keeps what
+  the system names by class (`App.xaml(.cs)`, `MainWindow.xaml(.cs)`, `Program.cs`), the words' hand-written half
+  (`Words.cs`, partial with the generated `Words.g.cs` in `namespace Veyq`) and the composition root `Applications.cs`
+  (called first in `App.OnLaunched`); `Core/` (`Veyq.Core`) the core UI, 70 files; `Apps/Memories/` (`Veyq.Apps.Memories`:
+  gallery, lightbox, curation, banner, facts, map view, music view, filter bar, contributions, `MemoriesUi.cs`,
+  `MemoriesPlaces.cs` — the bar's tabs and the Memories map, out of `ShellView` —, `PersonMemoriesSection.cs` — out of
+  `PersonPage` —), `Apps/Expenses/` (Pot page, settings, create dialog, entry editor, history, receipt viewer,
+  `ExpensesUi.cs`), `Apps/Depot/` (file and drop box pages, `DepotUi.cs`). Moved with `git mv`; every moved file's
+  `using`s sit below its `namespace` line: `Veyq.Core` the namespace makes `Core` inside any `Veyq.*` name the namespace
+  before the bridge's `Core` class, and a namespace-level `using Veyq.Bridge;` is read first (the root files say
+  `Bridge.Core.`). What core used left an application's file: `RowDates.DateText` (was `MemoryFacts.DateText`, the rows'
+  and the facts line's date) and `PersonText.Title` (was `CurationText.PersonTitle`, the profile frame's title; its test
+  follows). The registry (`Core/Registry.cs`): per kind a `KindPage(Body, Guest, FactsWhenRead)` — `Body: (ObjectRef,
+  PageHost) -> KindBody`, `Guest: (ReceivedPage, GuestHost) -> KindBody?` (a received link's page of the kind), and
+  whether the header waits for the page to read the node's facts (was `node.kind is "EXPENSES_POT" or "FILE"`) —;
+  `KindBody` is what the frame asks of a page (its `HeroSlot`, `Tabs`, `OpenHeld`, `Refresh`, `OwnsCreating`/`Creating`
+  in place of the level's New, `Download`/`Replace`/`Upload`/`Music` for the header's commands, `Secondary`, `SaysUnderBar`,
+  and a guest's `GuestCreate`/`GuestReplaces`); per application an `ApplicationUi(Id, List, Creates, PersonSection)` —
+  `List: ListHost -> ApplicationList` (Memories' places), `Creates: {Create: CreateHost -> …}` (New Memory, New Pot),
+  `PersonSection: Window -> PersonSection` —; `Registry.Kind`/`.Application` throw on a second registration, `Seal()` ends
+  registering and a lookup before it throws. The shell's `if/else` over five kinds and the received link's second chain
+  are one dispatch each through `Registry.Page(kind)`; the frame places the header's hero into the `HeroSlot` each body
+  reserves in its own scroll (L3 within a move: where the hero stands is unchanged — it scrolls with the page — so a
+  slot, not a frame above the body; the structure CR's frame may lift it). Left in core, named here: kind literals for
+  glyphs and the rows' dates (`HomeView.KindGlyph`, `"MEMORY"`), the received link's WRITE_ONLY upload page (a drop
+  box's and a Memory's uploader's, one core page) and the bookmark page (a core kind). Rules (a) and (b) on for
+  Windows (`PLATFORMS["windows"]`, `check_windows`, its own `cs_mask`). Bites, each red then restored green (`/bin/cp -f`
+  on the tree; the rest on a copy through `check_windows`): `using Veyq.Apps.Expenses;` in `Apps/Memories/MemoryPage.cs`
+  (b); `Veyq.Apps.Expenses.PotPage` qualified and `Expenses.PotPage` (the sibling namespace) there (b); `using
+  Veyq.Apps.Memories;` in `Core/ShellView.cs` (a); `Apps.Depot.FilePage` relative in `Core/ReceivedView.cs` (a); a name in
+  an interpolation hole (a); `App.xaml.cs` naming an application (a); a core file declaring `Veyq.Apps.Memories`, and a
+  second block namespace (the folder rule); a `global using` and a csproj `<Using>` of an application; a XAML
+  `using:Veyq.Apps…`; `Applications.cs` without Expenses, and missing; `Apps/Music/` (no application); `Apps/Depot/`
+  emptied; a comment and a literal naming `Veyq.Apps…` in core stay green. After merging Apple's and Linux's phases, one
+  bite per platform red (android, linux, apple, windows: an application naming another's). Checks:
+  `VEYQ_WINDOWS_DIR='F:\veyq-cuw' VEYQ_WINDOWS_TASKS=cuw run.py build` exit 0 — the gates, Veyq.Bridge.Tests here and on
+  the VM, the app, Veyq.Tests 80/80, PdfWebTest 1/1 (before the merge; after it the app built again for the smoke);
+  every `scripts/validate_*.py` green. Smoke on the VM with a throwaway (`--tenant tw-win`, erased after; its tasks and
+  `F:\veyq-cuw` removed): signed in through Manage → Add server (the VM's data folder holds an earlier pass's stale
+  account, left as found; this pass's own signed out again); New → Folder, New → Memory (Memories' registered create) →
+  the Memory's page with Add chapter, Add photos, Refresh and the banner behind More; New → Pot from Expenses' list
+  (Expenses' registered create) → the Pot's page with Add entry, Refresh and its three places; the folder's level; the
+  Memories application's places (registered list) and its Map tab, no View beside it. Not run: a received link's guest
+  pages (the registry's `Guest`), a Depot file's page and a drop box's (no file uploaded), a person's profile with
+  Memories' section, and the before/after shots (phase 6).
 - [ ] **6 the passes** — § Passes.
 - [ ] **7 harvest** — ADR 0154's `Built:` (decision 3); `src/mobile/CLAUDE.md` gains the layout (one paragraph, pointing
   at the guard); `native-apps.md` § The split; `validate_guard_gaps.py` run once (a new guard). · Done when: every guard
