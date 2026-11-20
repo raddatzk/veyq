@@ -116,7 +116,28 @@ ADR 0153 decisions 6 and 7 hold them; here only what the work needs beside them.
   `:android:assembleDebug`, the guidelines and words guards green.
 - [ ] **5 Apple** — the same. · Done when: both Apple builds green.
 - [ ] **6 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green.
-- [ ] **7 Windows** — the same. · Done when: `python3 windows/run.py build` green on the VM.
+- [x] **7 Windows** — the same. · Done when: `python3 windows/run.py build` green on the VM.
+  **Built** (2026-11-20): `PotPage` says `Update.Pot`'s `failure` word where the Pot did not open (offline
+  `offline_not_kept`, else `pot_open_failed`); `ReceiptViewerDialog` says `offline_not_kept` for `Receipt.Open`'s
+  `Refused(NotKeptOffline)` (`receipt-not-kept`), not "unreadable"; the header's *Available offline* is the generic
+  `NodeHeader` toggle, now offered for a Pot (`HeaderPlanTest` pins it drawn for `EXPENSES_POT`, never the page's). The
+  "as of" line is the shell's `offline-banner`, as over a gallery — no Pot-own banner (its time is the shell's lists'
+  until core's rule moves it, the coordinator's change); writes are off through the core (`canWrite`/`canChangeSettings`:
+  no New, no Record, the editor read-only "Entry", Settings without edits). `VEYQ_WINDOWS_DIR='F:\veyq-j1w'
+  VEYQ_WINDOWS_TASKS=j1w python3 windows/run.py build` green (Veyq.Tests 84, Bridge tests, PdfWebTest). Bite: `IsDrawn`
+  refusing `offline` for `EXPENSES_POT` (on the VM's copy only) → `HeaderPlanTest` red. *Pass* (unpackaged debug build,
+  a `--tenant tw-win` throwaway with a member, erased; English): two Pots made in the app — Trip (Taxi with a receipt
+  shown, Dinner with one never shown) viewed, Flat (Rent with a receipt never shown) pinned ("Kept") — and a Memory
+  with one photo, found by search online. The server cut as ADR 0140's Windows pass did (other sessions' tunnels hold
+  the VM's 8080): the app signed in to `tw-win.localhost:18480` over its own `run.py run` tunnel to a forwarder on the
+  Mac, both killed by PID (`Invoke-WebRequest` on the VM: no connection); the window closed, the app started again
+  offline (*Stay signed in*). Both Pots opened with their entries under "Offline — content as of …", Add entry gone,
+  Overview without Record, Settings without edits; Taxi's shown receipt and Flat's pin-fetched one opened, Dinner's said
+  "Not available offline"; search found the Memory's photo (never opened in that run) with no "searched once online"
+  line. The store (33 files) and every file written under `%LOCALAPPDATA%\veyq`, `%TEMP%` and `INetCache` in the last
+  45 min grepped for the entries' titles and the receipts' and photo's PNG markers: no hit (the same read finds the marker
+  in the plain file). Signed out offline: the account's store directory gone. Not run: the MSIX, the "searched once
+  online" line (every listing was kept), a Pot opened offline that was never kept (`pot-failed`'s offline word).
 - [ ] **8 the passes** — § Passes; results into ADR 0153's Consequences.
 - [ ] **9 harvest** — ADR 0153's `Built:` names decisions 6 and 7; `native-apps.md`'s offline paragraph; the Use pages
   EN+DE: `getting-started/use-content-offline.mdx` (a Pot), `expenses/index.mdx` or `record-an-expense.mdx` (offline),
