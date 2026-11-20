@@ -654,7 +654,7 @@ its macOS click pass and a drop from Files or Explorer ([ADR 0152](../decisions/
 Consequences, inbox #985); multi-select and dragging a node onto a folder to move
 it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built). A password-protected PDF's text
 selected and copied on Windows (drawn by `Windows.Data.Pdf`, which has no text API). Built 2026-11-18 (inbox #955): on
-Linux an overlay of its own over poppler's rendered pages (`src/mobile/linux/src/pdf_text.rs`; GTK has no view that
+Linux an overlay of its own over poppler's rendered pages (`src/mobile/linux/src/apps/depot/pdf_text.rs`; GTK has no view that
 selects a PDF's text) — poppler's `selected_region` for the highlight and `selected_text` for the copy, a drag across
 pages, a double click a word and a triple a line, Ctrl+A every page shown, Ctrl+C and the context menu's *Copy*; nothing
 of the text logged (a count of characters) or written. Passed in Broadway against the dev instance the same day: a
