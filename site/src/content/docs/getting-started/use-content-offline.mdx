@@ -94,6 +94,27 @@ Your changes wait on this device sealed, as kept content does. Signing out, **St
 offline content** while changes wait asks first and names how many would be deleted. If the device was removed from your
 account meanwhile, they are deleted without asking.
 
+## Sync while the app is closed
+
+On an Android phone or an iPhone, an account that stays signed in with **Stay signed in** — the device's own unlock
+is enough, the app asks nothing at its start — also syncs while the app is closed: now and then the system starts the
+app, which sends the changes you made offline, updates what you made available offline, and closes the account again.
+It does nothing else, and it opens the account no more than starting the app would.
+
+It is on from the start. To turn it off, go to **Storage on this device** in Settings and turn off **Sync in the
+background**.
+
+- Where the app asks for your fingerprint, face or screen lock at each start (**Sign in with fingerprint or screen
+  lock**, on an iPhone **Sign in with Face ID**), or where you sign in with your password, there is no switch, and
+  Settings says why: *Syncing in the background is offered only where you stay signed in without confirming it is you:
+  while the app is closed, nobody is there to confirm.*
+- The system decides when it runs. On Android at most every 15 minutes, with a network and the battery not low. On an
+  iPhone more rarely, and only while the phone is unlocked: a locked iPhone keeps the app's key closed, and the run ends
+  having done nothing.
+- On a computer the app syncs while it runs; it does not sync when it is closed.
+- Your server sees the app's requests at times you did not open it ([What the server
+  sees](/security/what-the-server-sees/)).
+
 ## When kept content goes
 
 The app removes what it kept for an account:

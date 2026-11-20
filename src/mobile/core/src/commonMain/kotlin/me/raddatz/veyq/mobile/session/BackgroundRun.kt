@@ -15,7 +15,7 @@ import me.raddatz.veyq.mobile.offline.PinKinds
 
 /**
  * The accounts open in this process, each as the connection that opened it ([VeyqAccount.close] takes it off): what a
- * scheduled run uses instead of opening an account a second time (cr-app-background-sync B1, `OfflineStores.openShared`'s
+ * scheduled run uses instead of opening an account a second time (`OfflineStores.openShared`'s
  * rule — one store per account, one writer). Keyed by the [ThisDevice] instance, so two devices a test plays never meet.
  */
 internal object OpenAccounts {
@@ -31,8 +31,8 @@ internal object OpenAccounts {
 }
 
 /**
- * A run on the system's schedule while the person has not opened the app (ADR 0153 decision 8; cr-app-background-sync
- * B1): Android's periodic work and iOS's app refresh call [run], and a host does nothing else — it schedules the run
+ * A run on the system's schedule while the person has not opened the app (ADR 0153 decision 8):
+ * Android's periodic work and iOS's app refresh call [run], and a host does nothing else — it schedules the run
  * ([ThisDevice.backgroundWanted]) and hands it its time ([run]'s deadline). Every rule is here:
  *
  *  - **Which accounts:** each this device remembers at the **login level** whose *Sync in the background* is on
@@ -41,7 +41,7 @@ internal object OpenAccounts {
  *  - **How it opens:** exactly as an app start at that level ([VeyqAccount.resumeOnline]): the kept refresh token renews
  *    the session (no new session family), the login key opens the device's wrap without asking. Never the start's offline
  *    twin: a run without the server has nothing to send or fetch, so it opens nothing. Before any request, the kept wrap is
- *    tried under the login key: a key the system keeps closed now (an iPhone locked, B4) ends the run having sent nothing.
+ *    tried under the login key: a key the system keeps closed now (an iPhone locked) ends the run having sent nothing.
  *    A refused refresh ends the record and wipes the store, as at a start; an account already open in this process (the
  *    app in front, or left a moment ago) is used as it is, never opened twice, and left open.
  *  - **What it does:** the queue sent ([VeyqAccount.sendQueued], ADR 0153 decision 4), then the pins synced
@@ -124,6 +124,9 @@ class BackgroundRun(
                 SignInFailure.Reason.DEVICE_AUTH_CANCELLED -> Outcome.KEY_CLOSED
                 else -> Outcome.FAILED
             } to 0
+        } catch (e: DeviceAuthFailed) {
+            // a Keychain still locked since a restart refuses the kept session's token too (`AppleDeviceKeys`): closed, kept
+            return Outcome.KEY_CLOSED to 0
         }
         return try {
             onOpened(account)

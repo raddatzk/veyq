@@ -225,7 +225,7 @@ class ThisDevice(
         backgroundChanged()
     }
 
-    // ---- Sync in the background (ADR 0153 decision 8, cr-app-background-sync B2)
+    // ---- Sync in the background (ADR 0153 decision 8)
 
     /**
      * *Sync in the background* for account [key] on this device: on or off where a scheduled run may open it — this platform

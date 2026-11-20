@@ -189,7 +189,10 @@ time the server observes live is not kept for them. What it does hold, each with
   ([ADR 0153](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md) decisions 6 and 7).
   What a person adds or changes offline in an app reaches the server as ordinary writes once the device is online again:
   a burst of them at the reconnect, stamped with the time they arrive, not the time they were made (a Pot entry carries
-  its own date, sealed) — ADR 0153 decisions 1 and 4.
+  its own date, sealed) — ADR 0153 decisions 1 and 4. On a phone that stays signed in at the level that asks nothing
+  at a start, the app also syncs while it is closed, when the system starts it (ADR 0153 decision 8): the operator sees
+  a session refresh, the queued writes and the kept subtrees' reads at times the person did not open the app — Android
+  at most every 15 minutes, an iPhone more rarely —, the same requests an app start would make, and no other.
 
 ### Sharing
 

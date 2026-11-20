@@ -11,16 +11,20 @@
 		<string>VeyqMark</string>
 	</dict>
 	<!-- A pin's fetch and an upload as continued-processing tasks (ADR 0140 decision 9, ADR 0145 decision 1; iOS 26's
-	     BGContinuedProcessingTask): the bundle id, a context and a unique suffix per request, permitted by each wildcard. -->
+	     BGContinuedProcessingTask): the bundle id, a context and a unique suffix per request, permitted by each wildcard.
+	     The background sync's app-refresh task (ADR 0153 decision 8, BackgroundSync.swift) by its one name. -->
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>app.veyq.offline.*</string>
 		<string>app.veyq.uploads.*</string>
+		<string>app.veyq.background-sync</string>
 	</array>
-	<!-- A Memory's music plays on in the background and with the screen off (ADR 0142 decision 3); a Mac ignores it. -->
+	<!-- A Memory's music plays on in the background and with the screen off (ADR 0142 decision 3); the background sync's
+	     app refresh (`fetch`, which a BGAppRefreshTask needs, ADR 0153 decision 8). A Mac ignores both. -->
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>fetch</string>
 	</array>
 	<!-- A veyq: link opens the app (ADR 0150 § O): `veyq://link` its *Open a link*, any other the app where it is
 	     (VeyqApp's onOpenURL). The link carries nothing; no associated domains (a self-hosted domain has no

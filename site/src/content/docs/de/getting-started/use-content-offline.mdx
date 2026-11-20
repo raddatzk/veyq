@@ -102,6 +102,28 @@ Deine Änderungen warten versiegelt auf diesem Gerät, wie behaltene Inhalte. Ab
 vertrauen** oder **Alle Offline-Inhalte entfernen** fragt, solange Änderungen warten, zuerst und nennt, wie viele
 gelöscht würden. Wurde das Gerät inzwischen aus deinem Konto entfernt, werden sie ohne Nachfrage gelöscht.
 
+## Synchronisieren, während die App geschlossen ist
+
+Auf einem Android-Handy oder einem iPhone synchronisiert ein Konto, das mit **Angemeldet bleiben** angemeldet bleibt —
+die Entsperrung des Geräts genügt, die App fragt beim Start nichts —, auch, während die App geschlossen ist: Ab und zu
+startet das System die App, die dann sendet, was du offline geändert hast, aktualisiert, was du offline verfügbar
+gemacht hast, und das Konto wieder schließt. Sie tut nichts anderes und öffnet das Konto nicht weiter, als ein Start der
+App es täte.
+
+Es ist von Anfang an an. Zum Ausschalten geh in den Einstellungen zu **Speicher auf diesem Gerät** und schalte **Im
+Hintergrund synchronisieren** aus.
+
+- Wo die App bei jedem Start nach Fingerabdruck, Gesicht oder Displaysperre fragt (**Mit Fingerabdruck oder
+  Displaysperre anmelden**, auf einem iPhone **Mit Face ID anmelden**) oder wo du dich mit deinem Passwort anmeldest,
+  gibt es den Schalter nicht, und die Einstellungen sagen warum: *Im Hintergrund synchronisieren gibt es nur, wo du
+  angemeldet bleibst, ohne zu bestätigen, dass du es bist: Während die App geschlossen ist, kann niemand bestätigen.*
+- Wann es läuft, entscheidet das System. Auf Android höchstens alle 15 Minuten, mit Netz und nicht bei niedrigem
+  Akku. Auf einem iPhone seltener und nur, solange das iPhone entsperrt ist: Ein gesperrtes iPhone hält den Schlüssel
+  der App verschlossen, und der Lauf endet, ohne etwas getan zu haben.
+- Auf einem Computer synchronisiert die App, solange sie läuft; geschlossen synchronisiert sie nicht.
+- Dein Server sieht die Anfragen der App zu Zeiten, zu denen du sie nicht geöffnet hast ([What the server
+  sees](/de/security/what-the-server-sees/)).
+
 ## Wann Behaltenes verschwindet
 
 Die App entfernt, was sie für ein Konto behalten hat:

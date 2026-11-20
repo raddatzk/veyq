@@ -39,6 +39,18 @@ final class PlayedSettings: SettingsActions {
     private var saved: [(String, String)] = [("dev-old", "Old phone")]
     private var otherKeys = true
 
+    /// *Sync in the Background* as the core plays it (`ThisDevice.backgroundSync`): a switch at the login level on an
+    /// iPhone, the reason it is missing at any other trust there, nothing on a Mac.
+    private var backgroundOn = true
+    private var background: (on: KotlinBoolean?, missing: Msg?) {
+        #if os(iOS)
+        if method == .deviceKey && level == .login { return (KotlinBoolean(value: backgroundOn), nil) }
+        return (nil, .accountSettingsBackgroundSyncMissing)
+        #else
+        return (nil, nil)
+        #endif
+    }
+
     init(refused: Bool) { self.refused = refused }
 
     private func log(_ line: String) { NSLog("veyq-settings: %@", line) }
@@ -50,7 +62,7 @@ final class PlayedSettings: SettingsActions {
                 email: "ada@example.org", emailConfirmed: nil, device: AccountSettingsDevice(label: label, familyId: nil, trust: trust),
                 families: nil, savedKeyDevices: [], otherSavedKeys: false, addDevice: false, working: false,
                 refusal: .accountSettingsLoadFailed, registerRefusal: .accountSettingsRegisterUnreadable, storage: nil,
-                storageUnavailable: nil, askingRemoveAll: false)
+                storageUnavailable: nil, askingRemoveAll: false, backgroundSync: nil, backgroundSyncMissing: nil)
         }
         return AccountSettingsState(
             email: "ada@example.org", emailConfirmed: KotlinBoolean(value: false),
@@ -62,10 +74,14 @@ final class PlayedSettings: SettingsActions {
             },
             savedKeyDevices: saved.map { AccountSettingsSavedKeyDevice(deviceId: $0.0, label: $0.1) },
             otherSavedKeys: otherKeys, addDevice: true, working: false, refusal: nil, registerRefusal: nil, storage: nil,
-            storageUnavailable: nil, askingRemoveAll: false)
+            storageUnavailable: nil, askingRemoveAll: false, backgroundSync: background.on, backgroundSyncMissing: background.missing)
     }
 
     func closeSettings() { log("close") }
+    func setBackgroundSync(_ on: Bool) {
+        log("background sync \(on)")
+        backgroundOn = on
+    }
     func renameDevice(_ name: String) {
         log("rename")
         let trimmed = name.trimmingCharacters(in: .whitespaces)

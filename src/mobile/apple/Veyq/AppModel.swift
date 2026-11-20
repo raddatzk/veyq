@@ -94,6 +94,10 @@ final class AppModel {
     /// The share extension's model (ADR 0138): it signs in only from what the app left and moves nothing of the app's.
     let inExtension: Bool
 
+    /// The app's one `ThisDevice` in the process: the model's and the background sync's (`BackgroundSync`), so an account
+    /// the app holds open is the one a run finds (core's `BackgroundRun`: never opened twice). The share extension makes its own.
+    static let appDevice = makeDevice(inExtension: false)
+
     private static func makeDevice(inExtension: Bool) -> ThisDevice {
         #if os(iOS)
         let label = UIDevice.current.model
@@ -112,13 +116,16 @@ final class AppModel {
         }
         #if os(iOS)
         let limit = AccountOffline.companion.PHONE_LIMIT
+        // ADR 0153 decision 8: the iOS app syncs on the system's schedule (`BackgroundSync`), a Mac never
+        let backgroundRuns = true
         #else
         let limit = AccountOffline.companion.DESKTOP_LIMIT
+        let backgroundRuns = false
         #endif
         // the share extension never opens the offline store (ADR 0140 decision 3): it names no directory
         return AppleSessions.shared.device(
             keychain: keychain, label: label, prompt: say(.deviceUnlockPrompt), defaults: Shared.defaults,
-            offlineRoot: inExtension ? nil : offlineRoot(), offlineLimit: limit)
+            offlineRoot: inExtension ? nil : offlineRoot(), offlineLimit: limit, backgroundRuns: backgroundRuns && !inExtension)
     }
 
     /// The accounts' offline stores' directory (ADR 0140 decision 3): `offline/` in the app's Application Support — on iOS
@@ -178,7 +185,7 @@ final class AppModel {
 
     init(inExtension: Bool = false) {
         self.inExtension = inExtension
-        device = Self.makeDevice(inExtension: inExtension)
+        device = inExtension ? Self.makeDevice(inExtension: true) : Self.appDevice
         let stored = Shared.defaults.stringArray(forKey: "veyq.recent") ?? []
         recent = RecentUses(
             // called on core's threads (a sign-out of the last account clears it there): @Sendable, never main-actor
@@ -2671,6 +2678,7 @@ extension AppModel: SettingsActions {
     func signOutHere() { askingLoss(.signOut) { [weak self] in self?.onSettings { try await $0.signOutHere() } } }
     func setOfflineLimit(_ amount: String, _ unit: LimitUnit) { onSettings { try await $0.setOfflineLimit(amount: amount, unit: unit); return nil } }
     func turnOfflineLimitOff() { onSettings { try await $0.turnOfflineLimitOff(); return nil } }
+    func setBackgroundSync(_ on: Bool) { onSettings { try await $0.setBackgroundSync(on: on); return nil } }
     func clearOfflineCache() { onSettings { try await $0.clearOfflineCache(); return nil } }
     func unpinOffline(_ node: String) { onSettings { try await $0.unpinOffline(node: node); return nil } }
     func askRemoveAllOffline() { settingsModel?.askRemoveAllOffline(); syncSettings() }

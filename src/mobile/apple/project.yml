@@ -101,8 +101,9 @@ targets:
     platform: iOS
     sources:
       - path: Veyq
-        # ContinuedWork.swift asks UIApplication for background time, which an extension has not (ADR 0140 decision 9, ADR 0145 decision 1)
-        excludes: [Info.plist, "*.entitlements", VeyqApp.swift, DevLogin.swift, DevAudio.swift, ContinuedWork.swift]
+        # ContinuedWork.swift asks UIApplication for background time, which an extension has not (ADR 0140 decision 9, ADR 0145
+        # decision 1); BackgroundSync.swift is the app's scheduled run (ADR 0153 decision 8), never an extension's
+        excludes: [Info.plist, "*.entitlements", VeyqApp.swift, DevLogin.swift, DevAudio.swift, ContinuedWork.swift, BackgroundSync.swift]
       - path: VeyqShare
         excludes: [Info.plist, "*.entitlements"]
       - path: build/generated/share/Words.xcstrings

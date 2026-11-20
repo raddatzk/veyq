@@ -1,7 +1,8 @@
 # ADR 0153 — The apps queue a person's own additions and edits made offline, sealed to the device, and send them through the online write path; Expenses joins the store; a login-level device syncs in the background
 - Status: Accepted (owner 2026-11-19, the CRs' owner questions answered as recommended)
 - Built: decisions 1–7 on every app (2026-11-20), passed on Android, Linux and Windows (§ Consequences); the Mac's and
-  the iPhone's passes are open ([native-apps](../crosscutting/native-apps.md) § Open). Decision 8 not built (#896)
+  the iPhone's passes are open ([native-apps](../crosscutting/native-apps.md) § Open). Decision 8 built (2026-11-20):
+  passed on Android (§ Consequences), on iOS built and compiled, its run on an iPhone the owner's (native-apps § Open)
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -138,11 +139,12 @@ Measured 2026-11-19 on `claude/offline-refine` at `4f3b57ecd` (commands from `sr
    (a medium trashed elsewhere is gone with the next answer), swept with its scope. Offline, search reads it as online
    ([ADR 0146](0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md)); a
    hit whose tile is not kept is a tile without a picture.
-8. **Background sync: a login-level account, opened by the system's schedule, never by lowering what opens it** (#896;
-   the owner's to confirm). On a device trusted at the **login level** (`DEVICE_KEY`, `LOGIN`), with the person's
+8. **Background sync: a login-level account, opened by the system's schedule, never by lowering what opens it** (#896,
+   confirmed by the owner 2026-11-19). On a device trusted at the **login level** (`DEVICE_KEY`, `LOGIN`), with the person's
    *Sync in the background* on, a scheduled run opens the account exactly as an app start at that level does — no
    question, the device's sign-in being the authentication (ADR 0123) —, refreshes the pins (ADR 0140 decision 9), sends
-   the queue (decision 4), and closes the account, the Master Key zeroed, before it ends.
+   the queue (decision 4), and closes the account, the Master Key zeroed, before it ends. *As built (§ Consequences):*
+   the queue first, then the pins.
    - **Never at the presence level and never with the password trust:** those ask the person, and a background run has
      nobody to ask. Their Settings say why the switch is not there.
    - **Never by changing a key's protection:** iOS keeps the login key's `WhenPasscodeSet` class, so a scheduled run on
@@ -175,6 +177,42 @@ Measured 2026-11-19 on `claude/offline-refine` at `4f3b57ecd` (commands from `sr
   (`SecretFreeSchemaTest`).
 - **Left as before:** an online upload the network cuts still fails and waits for the person's *Retry* (ADR 0145); it
   does not move into the queue.
+- **As built, decision 8** (2026-11-20). One core entry, `BackgroundRun.run(deadline)` (`session/BackgroundRun.kt`): for
+  each account this device remembers at the login level (`DEVICE_KEY`, `LOGIN`) whose *Sync in the background* is on
+  (`ThisDevice.backgroundSync`, on by default, an off-list per account on the device, cleared when the record is
+  forgotten), the kept wrap is first tried under the login key — a key the system keeps closed now (a locked iPhone) ends
+  the run as `KEY_CLOSED` having sent nothing —, then the start's own online resume (`VeyqAccount.resumeOnline`, never
+  its offline twin: no server, nothing opened), **the queue sent, then the pins synced** within the deadline, and the
+  account closed (`retire`: the Master Key, the identity and every scope key it opened zeroed; the kept session stays). An
+  account already open in the process is used and left open, never opened twice. **The order is reversed** from the
+  decision's text: a pin's fetch can take longer than a run's time, and the person's own writes waiting behind it would
+  wait to the next run, while a queue is small and sent between checks of the deadline. A host only schedules
+  (`ThisDevice.backgroundWanted`) and hands the time: **Android** (`BackgroundWork.kt`) one unique periodic work
+  `veyq-background-sync` (`UPDATE`, 15 minutes, a network, the battery not low), its `SyncWorker` running the core with 9
+  of the worker's 10 minutes, no foreground promotion; **iOS** (`BackgroundSync.swift`) one `BGAppRefreshTaskRequest`
+  `app.veyq.background-sync` (permitted in the Info.plist, `UIBackgroundModes` `fetch`), requested again at each run and
+  each start, the run given 25 of the refresh's about 30 seconds through `AppleBackground` (a job the expiration handler
+  cancels; the task completed once the account is closed); a locked Keychain (`errSecInteractionNotAllowed`) is a closed
+  key in `AppleDeviceKeys`, never a missing one, so no new unlock key is stored over it and no kept session is taken for
+  gone. The desktops get no switch and no reason (`ThisDevice.backgroundRuns` false; the bridge carries neither). Settings'
+  *Storage on this device* draws the switch on the phones, or why it is missing at the presence level and with the
+  password trust. Tests: `BackgroundRunTest`, `BackgroundSyncWireTest`, `AppleBackgroundTest`.
+- **The pass (decision 8).** **Android** (2026-11-20, a throwaway API 36 AVD with a PIN, deleted after; a throwaway account
+  with a member, erased after): rebooted, unlocked once, locked (`dumpsys trust`: `deviceLocked=1`), the app's process
+  started by WorkManager's boot receiver with no activity — the forced job logged `background run: DONE`: the Keystore
+  login key opens after a reboot and the first unlock with the screen locked. A Memory pinned; offline a Memory queued; a
+  photo added to the pinned Memory from a second session; rebooted, unlocked once, locked, the network back; the forced
+  job sent the queued Memory (`DONE, sent 1`) and kept the added photo — opened afterwards in airplane mode, the pinned
+  Memory showed both photos as of the run's time. How a pass forces the job is a trap in
+  [`src/mobile/CLAUDE.md`](../../src/mobile/CLAUDE.md) § Traps (WorkManager's namespace, the 15 minutes' deferral,
+  force-stop cancelling the jobs, the standby bucket). **iOS:** both Apple builds green, never run — the Simulator runs no
+  app refresh and no simulator boots on the build Mac; the run on an iPhone is the owner's ([native-apps](../crosscutting/native-apps.md)
+  § Open). **Not run:** a run on low battery or without a network (WorkManager's constraints), a run that ends an account
+  (`BackgroundRunTest` holds it).
+- **What the docs site says (decision 8).** [Use content offline](../../site/src/content/docs/getting-started/use-content-offline.mdx)
+  (EN and DE): the switch, why it is missing, how often the system runs it; [What the server sees](../../site/src/content/docs/security/what-the-server-sees.md):
+  requests at times the app was closed; [Threat model](../../site/src/content/docs/security/threat-model.md): the run's
+  window on a stolen device.
 - **As built, decisions 6 and 7** (2026-11-20). `TenantPotDoor.whole` is the kept read: a read with no cursor — the
   Pot's open, a re-open, a pin's sync and **the re-read after each own write** (`PotSession.readWhole`; a write's delta
   re-read kept nothing, so an entry written after the open was missing offline, #1038) — while the live poll's deltas

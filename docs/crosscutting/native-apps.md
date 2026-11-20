@@ -306,7 +306,13 @@ trusted device the person's own additions and edits of the decision's list queue
 store (`offline/Outbox`), show where they were made as *Waiting to send*, are listed in the uploads tray (*Discard*,
 *Open* of a held one, *Save a copy* of a refused one's file) and are sent through the online write paths at the
 reconnect, what changed meanwhile held for the person; a sign-out, Stop trusting and Remove all offline content ask
-first while any wait. Passed on Android, Linux and Windows (ADR 0153's Consequences).
+first while any wait. Passed on Android, Linux and Windows (ADR 0153's Consequences). **Sync in the background**
+(ADR 0153 decision 8, the phones only): an account at the login level with its switch on (Settings' *Storage on this
+device*, on by default; at the presence level and with the password trust the reason it is missing) is opened by the
+system's schedule as a start opens it, its queue sent, then its pins synced, and closed with its keys zeroed — core's
+`BackgroundRun`, scheduled by Android's unique periodic work `veyq-background-sync` and iOS's app refresh
+`app.veyq.background-sync`; a locked iPhone keeps the login key closed and the run does nothing. Passed on Android (ADR
+0153's Consequences); iOS built, never run.
 
 **The gates are the core's** ([ADR 0154](../decisions/0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md) decision 1, every app): one drop
 (`ShellModel.drop`, a folder row a target only where `dropTarget` says), every upload call judged again in the bridge,
@@ -735,7 +741,15 @@ keeps no trust, so nothing queues) and the iPhone's is the owner's — offline N
 entry with a receipt queued and sent with the notice, a held entry's and a held rename's *Open*, *Save a copy*, each
 loss's ask; not run on any app: a capture time, a re-key while offline, *Save a copy*; not shown in place before they
 are sent: a capture time, a rename, a new Memory (#1040); Windows' and Linux's Manage ask nothing before signing out an
-account that is not open (#1043). Not built: a sync of pins while the app is not running (decision 8, #896).
+account that is not open (#1043). **Sync in the background** (decision 8): the iPhone's run is the owner's, on a device
+with a passcode and a signed build, the account at *Stay signed in* with the switch on in *Storage on this device* —
+a Memory pinned and a write queued offline, a photo added to the pinned Memory on the web, the app left (not swiped away:
+iOS runs no refresh for an app the person quit), then in Xcode's debugger, paused with the phone unlocked,
+`e -l objc -- (void)[[BGTaskScheduler sharedScheduler] _simulateLaunchForTaskWithIdentifier:@"app.veyq.background-sync"]`
+and continue: the console says `veyq: background run: DONE, sent 1`, the queued write is on the web and, opened in
+airplane mode, the pinned Memory shows the photo; the same with the phone locked says `KEY_CLOSED, sent 0`; and
+whether the system ever runs it unasked over a day (Settings' *Background App Refresh* on). Also unseen: the switch
+drawn on an iPhone, and its missing reason at *Sign in with Face ID*.
 **The gates** (ADR 0154 decision 1): no drop passed on any app — the phones need a window to drag from (#1045),
 Broadway carries no file drop, the Windows VM's WinUI takes none with UAC off; the Mac's drops and dialogs are the
 coordinator's pass (#1039), a guest's link on the iPhone the owner's; a Memory's *Add photos* and a WRITE_ONLY page still

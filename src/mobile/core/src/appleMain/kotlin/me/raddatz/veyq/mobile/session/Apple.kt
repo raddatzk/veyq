@@ -31,8 +31,12 @@ class UserDefaultsStore(private val defaults: NSUserDefaults) : DeviceStore {
     override fun remove(key: String) = defaults.removeObjectForKey(key)
 }
 
-/** What a Keychain read came to: the item's bytes, or none — [cancelled] when the person declined the prompt. */
-class KeychainRead(val data: NSData?, val cancelled: Boolean)
+/**
+ * What a Keychain read came to: the item's bytes, or none — [cancelled] when the person declined the prompt, [locked] when
+ * the Keychain refused the read because the device is locked (`errSecInteractionNotAllowed`: an item readable only while
+ * unlocked, read by a run in the background, ADR 0153 decision 8). A locked item is there: never taken for a missing one.
+ */
+class KeychainRead(val data: NSData?, val cancelled: Boolean, val locked: Boolean)
 
 /**
  * The Keychain as the Swift app reaches it (`apple/Veyq/KeychainStore.swift`): generic-password items on this device
@@ -61,7 +65,7 @@ class AppleDeviceKeys(private val keychain: KeychainBridge, private val prompt: 
     }
 
     override fun bindHmac(alias: String, message: ByteArray): ByteArray? {
-        val key = keychain.load(alias, prompt, protected = false).data?.toByteArray() ?: return null
+        val key = read(alias).data?.toByteArray() ?: return null
         return try { p.hmacSha256(key, message) } finally { key.fill(0) }
     }
 
@@ -76,6 +80,9 @@ class AppleDeviceKeys(private val keychain: KeychainBridge, private val prompt: 
         val protected = level == StaySignedIn.PRESENCE
         val read = keychain.load(unlockAccount(level), prompt, protected)
         read.data?.toByteArray()?.let { return@withContext it }
+        // the device locked (the login item is readable only while unlocked): the key is there, closed now — never
+        // replaced by a new one, which would orphan every wrap sealed under it
+        if (read.locked) throw DeviceAuthFailed(cancelled = false, detail = "the device is locked")
         if (read.cancelled) throw DeviceAuthFailed(cancelled = true)
         if (!create) throw DeviceAuthFailed(cancelled = false, detail = "no $level unlock key")
         if (level !in staySignedIn) throw DeviceAuthFailed(cancelled = false, detail = "$level is not offered without a passcode")
@@ -115,7 +122,15 @@ class AppleDeviceKeys(private val keychain: KeychainBridge, private val prompt: 
         keychain.store(alias, value.encodeToByteArray().toNSData(), protected = false, passcode = false)
     }
 
-    override fun secret(alias: String): String? = keychain.load(alias, prompt, protected = false).data?.toByteArray()?.decodeToString()
+    override fun secret(alias: String): String? = read(alias).data?.toByteArray()?.decodeToString()
+
+    /**
+     * An unprotected item ([createBindKey]'s, [putSecret]'s: readable after the first unlock since a restart), read; a
+     * Keychain still locked since the restart throws [DeviceAuthFailed] rather than answer "none", which the resume takes
+     * for a trust that ended and forgets the record (a run in the background before the first unlock, ADR 0153 decision 8).
+     */
+    private fun read(alias: String): KeychainRead =
+        keychain.load(alias, prompt, protected = false).also { if (it.locked) throw DeviceAuthFailed(cancelled = false, detail = "the device is locked") }
 
     override fun deleteSecret(alias: String) = keychain.remove(alias)
 
@@ -194,10 +209,19 @@ object AppleSessions {
     /**
      * This installation: [defaults] for its records and marks (the app group's on iOS), the Keychain for its keys, and
      * [offlineRoot] the directory the app names for the accounts' offline stores (ADR 0140 decision 3; null: none, as the
-     * share extension), each starting at [offlineLimit] (`AccountOffline.PHONE_LIMIT` on iOS, `DESKTOP_LIMIT` on macOS).
+     * share extension), each starting at [offlineLimit] (`AccountOffline.PHONE_LIMIT` on iOS, `DESKTOP_LIMIT` on macOS);
+     * [backgroundRuns] where the app syncs on the system's schedule (ADR 0153 decision 8: the iOS app, never a Mac).
      */
-    fun device(keychain: KeychainBridge, label: String, prompt: String, defaults: NSUserDefaults, offlineRoot: String?, offlineLimit: Long): ThisDevice =
-        ThisDevice(UserDefaultsStore(defaults), AppleDeviceKeys(keychain, prompt), label, LibsodiumPrimitives, offlineRoot, offlineLimit)
+    fun device(
+        keychain: KeychainBridge,
+        label: String,
+        prompt: String,
+        defaults: NSUserDefaults,
+        offlineRoot: String?,
+        offlineLimit: Long,
+        backgroundRuns: Boolean,
+    ): ThisDevice =
+        ThisDevice(UserDefaultsStore(defaults), AppleDeviceKeys(keychain, prompt), label, LibsodiumPrimitives, offlineRoot, offlineLimit, backgroundRuns)
 
     @Throws(SignInFailure::class, kotlin.coroutines.cancellation.CancellationException::class)
     suspend fun signIn(server: String, email: String, password: String, secretKey: String, device: ThisDevice): VeyqAccount =
