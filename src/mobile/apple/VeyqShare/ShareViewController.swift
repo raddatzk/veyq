@@ -11,6 +11,8 @@ final class ShareViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        // each application into the core UI's registry, before anything is drawn (ADR 0154 decision 3)
+        Applications.register()
         model.onShareDone = { [weak self] saved in
             guard let context = self?.extensionContext else { return }
             if saved {

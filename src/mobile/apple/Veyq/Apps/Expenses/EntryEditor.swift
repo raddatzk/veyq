@@ -1,9 +1,6 @@
 import SwiftUI
 import VeyqCore
 
-/// The reader's decimal separator as a UTF-16 unit (a Kotlin `Char`), as amounts are typed over.
-var decimalSeparator: unichar { (Locale.current.decimalSeparator ?? ".").utf16.first ?? 46 }
-
 /// A problem of the form or the write path in words (the web's `expenses.entry.problem.*`).
 func problemText(_ problem: String) -> String { say(Notices.shared.entryProblem(problem: problem)) }
 

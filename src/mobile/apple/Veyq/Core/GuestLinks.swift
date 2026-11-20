@@ -413,29 +413,22 @@ private struct GuestPageBody: View {
     let page: GuestPage
 
     var body: some View {
-        switch page {
-        case let level as GuestPage.Level:
+        if let level = page as? GuestPage.Level {
             GuestLevelView(model: model, held: held, level: level.model)
-        case let file as GuestPage.File:
-            FileScreen(model: model, ref: Self.ref(file.node, .depot))
-        case let gallery as GuestPage.Gallery:
-            MemoryScreen(model: model, ref: Self.ref(gallery.node, .memories))
-                .environment(\.guestGallery, GuestGallery(canAdd: held.guest.value != nil) { c in held.open(c.nodeId) })
-        case let pot as GuestPage.Pot:
-            GuestPotView(model: model, ref: Self.ref(pot.node, .expenses))
-        case let drop as GuestPage.DropBox:
-            GuestDropBoxView(model: model, held: held, drop: drop.model)
-        case let up as GuestPage.Uploader:
-            GuestUploaderView(model: model, held: held, up: up.model)
-        default:
+        } else if !(page is GuestPage.NotShown), let guest = Registry.page(page.node.kind)?.guest {
+            // the kind's page as its application registered it for a guest (the registry's `guest`)
+            guest(page, held, model)
+        } else {
             Text(say(.shareNotShown)).foregroundStyle(Role.muted).padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .accessibilityIdentifier("guest-not-shown")
         }
     }
+}
 
-    /// The guest's node as the member's page takes it.
-    static func ref(_ node: NodeAt, _ app: ApplicationId) -> ObjectRef {
+extension ObjectRef {
+    /// A link's node as the member's page of application `app` takes it.
+    static func guest(_ node: NodeAt, _ app: ApplicationId) -> ObjectRef {
         ObjectRef(scopeId: node.scopeId, nodeId: node.nodeId, kind: node.kind, application: app, name: node.name)
     }
 }
@@ -498,42 +491,6 @@ private struct GuestLevelView: View {
         }
         .alert(said ?? "", isPresented: Binding(get: { said != nil }, set: { if !$0 { said = nil } })) {
             Button(say(.ok), role: .cancel) {}
-        }
-    }
-}
-
-/// A Pot of a link: the member's Pot page over the guest's Pot (the app model reads and writes through it while it shows),
-/// its Entries, Overview and — where the core offers them (`PotView.settingsOffered`: a guest who writes, #1035) —
-/// Settings as a segmented control of its own; the guest's screen has no bar.
-private struct GuestPotView: View {
-    @Bindable var model: AppModel
-    let ref: ObjectRef
-    @State private var chosen = "expenses.entries"
-
-    /// The places offered now: Settings once the core offers them.
-    private var places: [String] {
-        let settings = model.pot.map { $0.ref == ref && $0.view?.settingsOffered == true } ?? false
-        return ["expenses.entries", "expenses.overview"] + (settings ? ["expenses.settings"] : [])
-    }
-
-    private func word(_ key: String) -> String {
-        switch key {
-        case "expenses.overview": say(.tabExpensesOverview)
-        case "expenses.settings": say(.tabExpensesSettings)
-        default: say(.tabExpensesEntries)
-        }
-    }
-
-    var body: some View {
-        let place = places.contains(chosen) ? chosen : "expenses.entries"
-        VStack(spacing: 0) {
-            Picker(say(.tabExpensesEntries), selection: $chosen) {
-                ForEach(places, id: \.self) { Text(word($0)).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding()
-            PotScreen(model: model, ref: ref, tab: place)
         }
     }
 }
@@ -601,7 +558,7 @@ private struct GuestFileActions: View {
 // MARK: The gates
 
 /// A gate's column: a form's width, centred, scrolled (the sign-in's measure).
-private struct GateColumn<Content: View>: View {
+struct GateColumn<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -615,7 +572,7 @@ private struct GateColumn<Content: View>: View {
 }
 
 /// A gate's or a page's one confirming action: the web's green role (`--app-primary`).
-private struct PrimaryButton: View {
+struct PrimaryButton: View {
     let title: String
     var working = false
     let action: () -> Void
@@ -768,7 +725,7 @@ struct OptionalNaming: ViewModifier {
 }
 
 /// "You are here as …" and *Not you?*, which asks first and then forgets this device's session (the web's words).
-private struct NotYou: View {
+struct NotYou: View {
     let session: GuestSession
     let onForget: () -> Void
     @State private var asking = false
@@ -872,7 +829,7 @@ private struct NamingSheet: View {
 }
 
 /// A drop page's naming in its body (the web's drop forms): the field, its hint, the record's notice, *Continue*.
-private struct InlineNaming: View {
+struct InlineNaming: View {
     let hint: String
     let days: Int?
     let origin: String
@@ -901,139 +858,6 @@ private struct InlineNaming: View {
             .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || working)
             .accessibilityIdentifier("guest-name-continue")
         }
-    }
-}
-
-// MARK: The WRITE_ONLY pages
-
-/// A drop box's WRITE_ONLY link (the web's `DropBoxShareBody`): the guest names itself — the record's notice before —, then
-/// sends files, each into its own folder; what it sent while the link is open here is listed, nothing else of the drop box.
-private struct GuestDropBoxView: View {
-    @Bindable var model: AppModel
-    let held: GuestHeld
-    let drop: GuestDropBox
-    @State private var sent: CoreState<NSArray>?
-    @State private var queue: CoreState<UploadQueue.State>?
-    @State private var picking = false
-
-    private var days: Int? { held.access?.guestWriteRecordDays?.intValue }
-    private var origin: String { held.access?.origin ?? "" }
-
-    var body: some View {
-        GateColumn {
-            Text(say(.shareDropboxTitle)).font(.title2.bold())
-            Text(say(.shareDropboxHint, drop.node.name)).foregroundStyle(Role.muted)
-            if let named = held.guest.value {
-                NotYou(session: named) { drop.forget() }
-                RecordNotice(days: days, origin: origin, guestId: named.identityId)
-                PrimaryButton(title: say(.shareDropboxPick)) { picking = true }.accessibilityIdentifier("guest-drop-pick")
-                let mine = (queue?.value.batches ?? []).filter { $0.label == drop.node.name }.flatMap { $0.items }
-                let names = (sent?.value as? [String]) ?? []
-                if !names.isEmpty || !mine.isEmpty {
-                    Text(say(.shareDropboxSession)).font(.headline).padding(.top, 8)
-                    ForEach(mine, id: \.id) { item in Text(item.name + " · " + status(item)) }
-                    ForEach(names.filter { n in !mine.contains { $0.name == n } }, id: \.self) { n in
-                        Text(n).accessibilityIdentifier("guest-drop-sent")
-                    }
-                }
-            } else {
-                InlineNaming(hint: say(.shareDropboxNameHint), days: days, origin: origin) { name in
-                    (try? await AppleSharing.shared.nameDrop(drop: drop, displayName: name))?.boolValue ?? false
-                }
-            }
-        }
-        .fileImporter(isPresented: $picking, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-            guard case .success(let urls) = result, !urls.isEmpty else { return }
-            _ = drop.upload(sources: urls.compactMap(model.guestSource))
-        }
-        .onAppear {
-            sent = CoreState({ (drop.sent.value as? NSArray) ?? [] }) { changed in AppleMemories.shared.watch(flow: drop.sent) { @Sendable _ in changed() } }
-            let uploads = model.uploads
-            queue = CoreState({ uploads.state.value as! UploadQueue.State }) { changed in AppleMemories.shared.watch(flow: uploads.state) { @Sendable _ in changed() } }
-        }
-        .onDisappear {
-            sent?.stop()
-            queue?.stop()
-        }
-    }
-
-    private func status(_ item: UploadQueue.Item) -> String {
-        if item.active { return say(.shareDropboxSending) }
-        return item.status == .failed ? say(.shareDropboxFailed) : say(.shareDropboxSent)
-    }
-}
-
-/// A Memory's or a chapter's WRITE_ONLY link (the web's `MemoryShareBody`): the guest names itself — the record's notice
-/// before —, then adds photos and videos; it sees only what it sent while the link is open here, and removes its own.
-private struct GuestUploaderView: View {
-    @Bindable var model: AppModel
-    let held: GuestHeld
-    let up: GuestUploader
-    @State private var sent: CoreState<NSArray>?
-    @State private var pickingPhotos = false
-    @State private var photos: [PhotosPickerItem] = []
-    @State private var pickingFiles = false
-    @State private var failed = false
-
-    private var days: Int? { held.access?.guestWriteRecordDays?.intValue }
-    private var origin: String { held.access?.origin ?? "" }
-
-    var body: some View {
-        GateColumn {
-            Text(say(.shareUploaderIntro)).foregroundStyle(Role.muted)
-            if let named = held.guest.value {
-                if up.offered {
-                    NotYou(session: named) { up.forget() }
-                    RecordNotice(days: days, origin: origin, guestId: named.identityId)
-                    Menu {
-                        Button { pickingPhotos = true } label: { Label(say(.photoLibrary), systemImage: "photo.on.rectangle") }
-                        Button { pickingFiles = true } label: { Label(say(.tabDepotFiles), systemImage: "folder") }
-                    } label: {
-                        Label(say(.shareAddPhotos), systemImage: "plus").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Role.primary)
-                    .accessibilityIdentifier("guest-uploader-pick")
-                    Text(say(.shareUploaderSession)).font(.footnote).foregroundStyle(Role.muted)
-                    ForEach((sent?.value as? [GuestUploader.Sent]) ?? [], id: \.mediaId) { s in
-                        HStack {
-                            Text(s.name).accessibilityIdentifier("guest-uploader-sent")
-                            Spacer()
-                            Button(say(.entryDelete), role: .destructive) {
-                                Task { failed = !((try? await up.remove(mediaId: s.mediaId))?.boolValue ?? false) }
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
-                }
-            } else {
-                InlineNaming(hint: say(.shareNameVisibility), days: days, origin: origin) { name in
-                    (try? await AppleSharing.shared.nameUploader(up: up, displayName: name))?.boolValue ?? false
-                }
-            }
-        }
-        .alert(say(.shareDeleteFailed), isPresented: $failed) { Button(say(.ok), role: .cancel) {} }
-        .photosPicker(isPresented: $pickingPhotos, selection: $photos, matching: .any(of: [.images, .videos]), preferredItemEncoding: .current)
-        .onChange(of: photos) {
-            let picked = photos
-            photos = []
-            guard !picked.isEmpty else { return }
-            Task {
-                var urls: [URL] = []
-                for item in picked {
-                    if let file = try? await item.loadTransferable(type: PickedMedia.self) { urls.append(file.url) }
-                }
-                _ = up.upload(sources: urls.compactMap { model.guestMediaSource($0, fromPhotos: true) })
-            }
-        }
-        .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.image, .movie], allowsMultipleSelection: true) { result in
-            guard case .success(let urls) = result, !urls.isEmpty else { return }
-            _ = up.upload(sources: urls.compactMap { model.guestMediaSource($0, fromPhotos: false) })
-        }
-        .onAppear {
-            sent = CoreState({ (up.sent.value as? NSArray) ?? [] }) { changed in AppleMemories.shared.watch(flow: up.sent) { @Sendable _ in changed() } }
-        }
-        .onDisappear { sent?.stop() }
     }
 }
 
@@ -1195,18 +1019,4 @@ struct NewBookmarkSheet: View {
         }
         .onDisappear { create?.stop() }
     }
-}
-
-// MARK: A guest's gallery
-
-/// A gallery shown to a link's guest (ADR 0150 decision 5): the member's page with a guest's rights — its chapters open
-/// inside the link (`onChapter`), it adds once it named itself (`canAdd`), and what is the account's (the Music and Map
-/// views, the music player, a drop from another app, a lightbox in a window of its own, a person's profile) is not offered.
-struct GuestGallery {
-    let canAdd: Bool
-    let onChapter: (NodeRef) -> Void
-}
-
-extension EnvironmentValues {
-    @Entry var guestGallery: GuestGallery?
 }

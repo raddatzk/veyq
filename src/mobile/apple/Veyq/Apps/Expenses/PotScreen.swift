@@ -101,38 +101,9 @@ private struct LiveKey: Equatable {
     let active: Bool
 }
 
-/// Minor units of `currency` as the person's locale writes money.
-func money(_ minor: Int64, _ currency: String?, _ minorUnits: Int32) -> String {
-    let value = Decimal(minor) / pow(Decimal(10), Int(minorUnits))
-    // D8: the core hands every amount with its currency; none is never a guessed one, but a number alone (the desktops' rule)
-    guard let currency else { return value.formatted(.number.precision(.fractionLength(Int(minorUnits)))) }
-    return value.formatted(.currency(code: currency).precision(.fractionLength(Int(minorUnits))))
-}
-
-/// An entry's `YYYY-MM-DD` as the person's locale writes a day.
-func localDay(_ iso: String) -> String {
-    let parse = DateFormatter()
-    parse.locale = Locale(identifier: "en_US_POSIX")
-    parse.dateFormat = "yyyy-MM-dd"
-    guard let date = parse.date(from: iso) else { return iso }
-    return date.formatted(date: .abbreviated, time: .omitted)
-}
-
 func categoryName(_ id: String?, _ view: PotView) -> String {
     guard let id else { return "" }
     return say(piece: view.categoryLabel(id: id))
-}
-
-/// One piece of a row's line (core's `Piece`), written Apple's way.
-func say(piece: Piece) -> String {
-    switch piece {
-    case let p as Piece.Said: say(notice: p.notice)
-    case let p as Piece.Plain: p.text
-    case let p as Piece.Day: localDay(p.iso)
-    case let p as Piece.Size: ByteCountFormatter.string(fromByteCount: p.bytes, countStyle: .file)
-    case let p as Piece.Money: money(p.amount, p.currency, p.minorUnits)
-    default: ""
-    }
 }
 
 func personName(_ name: String?) -> String { say(piece: PotView.companion.person(name: name)) }

@@ -1149,14 +1149,6 @@ private struct CaptureTimeEditorItem: Identifiable {
     var id: ObjectIdentifier { ObjectIdentifier(editor) }
 }
 
-/// A Mac's lightbox window's value: the ids alone (opaque; a window's value is what the system may keep), never a name or a
-/// key. (Declared on every platform, as `AppModel.windowLightbox` is; only a Mac opens such a window.)
-struct LightboxWindowValue: Codable, Hashable {
-    let scopeId: String
-    let nodeId: String
-    let mediaId: String
-}
-
 #if os(macOS)
 /// The inline lightbox's "Open in New Window", for the File menu (`LightboxCommands`) while it is the focused scene's.
 struct LightboxToWindow {
