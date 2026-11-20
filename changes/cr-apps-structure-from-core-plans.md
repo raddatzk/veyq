@@ -115,6 +115,8 @@ plan. The same screens on the web beside each, compared entry by entry.
 4. **The sign-in's order.** The web: Submit first, then the other ways in. *Recommendation:* the web's — Submit,
    Cancel, then the link and kit entries — on every app (Android and Apple change).
 
+**Answered (owner 2026-11-20): every question as recommended.**
+
 ## Definition of done
 
 Phases 1–9 checked; every bite seen red and green; the passes run as throwaways and erased; every guard but guard_gaps

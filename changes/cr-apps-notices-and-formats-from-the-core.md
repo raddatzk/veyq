@@ -96,6 +96,8 @@ window), "copied" (gone after `COPIED_MS`) — each beside the web's.
    ("Nov 20, 2026"), in German numeric ("20.11.2026") —, a Memory's range the web's numeric one; Windows' numeric
    English dates and Apple's abbreviated German month change.
 
+**Answered (owner 2026-11-20): every question as recommended.**
+
 ## Definition of done
 
 Phases 1–10 checked; every bite seen red and green; the passes run as throwaways and erased; every guard but guard_gaps

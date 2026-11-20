@@ -1,5 +1,5 @@
 # ADR 0154 — Every app draws the core's gates, plans, notices and formats through a core UI its applications plug into, as the web's do
-- Status: Proposed (refined 2026-11-20; the CRs' owner questions open)
+- Status: Accepted (owner 2026-11-20: the CRs' owner questions answered as recommended)
 - Built: no — the CRs `cr-apps-gates-in-the-core`, `cr-apps-words-guard-reads-every-ui`, `cr-apps-core-ui-layer`,
   `cr-apps-structure-from-core-plans` and `cr-apps-notices-and-formats-from-the-core` build it
 - Date: 2026-11-20
