@@ -84,14 +84,35 @@ fun EntryEditorSheet(
     initialPending: List<me.raddatz.veyq.mobile.expenses.PotSession.PendingReceipt> = emptyList(),
     /** Runs once the entry was saved, before [onClose] (a share's new expense hands back that it landed). */
     onSaved: () -> Unit = {},
+    /** A held write's id: core's held editor over the person's values made offline (ADR 0153 decision 4). */
+    heldWrite: String? = null,
     onClose: () -> Unit,
 ) {
     val sep = remember { separator() }
+    if (heldWrite != null) {
+        var held by remember(heldWrite) { mutableStateOf<me.raddatz.veyq.mobile.expenses.EntryEditor?>(null) }
+        androidx.compose.runtime.LaunchedEffect(heldWrite) {
+            held = model.heldEntryEditor(heldWrite, sep)
+            if (held == null) onClose()
+        }
+        held?.let { EntryEditorBody(view, model, it, entryId, sep, onSaved, onClose) }
+        return
+    }
     val editor = remember(entryId) { model.entryEditor(entryId, sep, initialPending) }
     if (editor == null) {
         androidx.compose.runtime.LaunchedEffect(Unit) { onClose() }
         return
     }
+    EntryEditorBody(view, model, editor, entryId, sep, onSaved, onClose)
+}
+
+/** The editor's sheet over core's [editor] (a new or an existing entry, or a held one with its newer version named). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EntryEditorBody(
+    view: PotView, model: AppModel, editor: me.raddatz.veyq.mobile.expenses.EntryEditor, entryId: String?, sep: Char,
+    onSaved: () -> Unit, onClose: () -> Unit,
+) {
     androidx.compose.runtime.DisposableEffect(editor) { onDispose { editor.close() } }
     // Set at once after each edit (a text field's value must not lag what was typed) and from the model's flow (the rate).
     var s by remember(editor) { mutableStateOf(editor.current) }
@@ -119,6 +140,8 @@ fun EntryEditorSheet(
                 style = MaterialTheme.typography.titleLarge,
             )
             if (s.invalid) Text(stringResource(R.string.ed_invalid), color = MaterialTheme.colorScheme.error)
+            // a change made offline held for the person: who saved the newer version and when (core's `State.newer`)
+            s.newer?.let { Text(say(it), color = MaterialTheme.colorScheme.error) }
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                 Kind.entries.forEachIndexed { i, k ->
                     SegmentedButton(
@@ -196,6 +219,10 @@ fun EntryEditorSheet(
                         Text(stringResource(R.string.entry_delete), color = MaterialTheme.colorScheme.error)
                     }
                     androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                }
+                // *Discard mine*: the held change deleted unsent, the newer version stays (core's `discardMine`)
+                if (s.discardsMine) TextButton(onClick = { scope.launch { if (editor.discardMine()) onClose() } }, enabled = !s.saving) {
+                    Text(stringResource(R.string.offline_discard_mine), color = MaterialTheme.colorScheme.error)
                 }
                 TextButton(onClick = onClose) { Text(stringResource(if (editable) R.string.entry_cancel else R.string.receipts_close)) }
                 if (editable) Button(

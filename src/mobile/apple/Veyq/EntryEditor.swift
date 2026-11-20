@@ -53,6 +53,8 @@ struct EntryEditorSheet: View {
         }
         .tint(Role.accent)
         .sheetFrame(minWidth: 480, minHeight: 560)
+        // a link's guest not named yet is asked its name at the save (core's `GuestAccess.naming`), above this sheet
+        .modifier(OptionalNaming(access: model.guests.screen?.access))
     }
 
     private func shown(_ s: EntryEditor.State, _ at: String, _ item: Int? = nil) -> String? {
@@ -68,6 +70,19 @@ struct EntryEditorSheet: View {
         let f = s.form
         let editable = s.editable
         Form {
+            // a change made offline held for the person (ADR 0153 decision 4): who changed it meanwhile and when, the
+            // person's values in the form; *Discard mine* deletes theirs unsent, the newer version stays
+            if s.newer != nil || s.discardsMine {
+                Section {
+                    if let newer = s.newer { Text(say(notice: newer)) }
+                    if s.discardsMine {
+                        Button(say(.offlineDiscardMine), role: .destructive) {
+                            Task { if await model.discardMine() { dismiss() } }
+                        }
+                        .disabled(s.saving)
+                    }
+                }
+            }
             if s.invalid { Section { Text(say(.edInvalid)).foregroundStyle(Role.danger) } }
             Picker(say(.entryKind), selection: Binding(get: { f.kind }, set: { model.edit(EditorChange.Kind(kind: $0)) })) {
                 Text(say(.edExpense)).tag(EntryForm.Kind.expense)

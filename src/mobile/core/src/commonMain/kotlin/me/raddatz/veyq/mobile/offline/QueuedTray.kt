@@ -99,6 +99,12 @@ object QueuedShown {
     /** The ask before [loss] while [count] writes wait ([lost] with the loss's confirm); null where none waits (nothing to ask). */
     fun ask(loss: QueuedLoss, count: Int): QueuedAsk? = lost(count)?.let { QueuedAsk(it, loss.confirm) }
 
+    /**
+     * What *Save a copy* of a refused write's file [name] came to ([QueuedTray.saveCopy] into the path the host's save
+     * dialog gave): saved, or not — the host then removes what it began to write. Said as a download's end is.
+     */
+    fun copySaved(name: String?, saved: Boolean): Notice = Notice(if (saved) Msg.DOWNLOAD_DONE else Msg.DOWNLOAD_FAILED, name.orEmpty())
+
     /** A held or refused write's reason as said; *Waiting to send* for one that waits. */
     fun said(write: QueuedWrite): Notice = when (write.state) {
         QueuedWrite.State.WAITING -> Notice(Msg.OFFLINE_WAITING)

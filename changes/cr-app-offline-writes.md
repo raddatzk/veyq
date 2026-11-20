@@ -215,9 +215,57 @@ ADR 0153 decisions 1–5 hold them; here only what the work needs beside them.
   name. (3) `Queued.Ask` covers the open tenant's account only; another signed-in account's outbox is not asked about.
   (4) `ShellShown.queuedSaid` and `queuedHere` are carried but held by no bridge test (no `ShellModel` opens over the
   dispatch's played tenant; the live walk is phase 9's/10's).
-- [ ] **7 Android** — the enabled controls offline, the waiting marks, the tray's list and actions, the wipe asks.
+- [x] **7 Android** — the enabled controls offline, the waiting marks, the tray's list and actions, the wipe asks.
   · Done when: `:android:assembleDebug`, the guidelines and words guards green.
-- [ ] **8 Apple** — the same. · Done when: both Apple builds green.
+  **Built** 2026-11-20 (`claude/k-android`): `AppModel` follows the shell's model as a flow (`queuedBanner`,
+  `queuedHere`, `queuedItems` from `QueuedTray.items`, `queuedSent` said); `QueuedTray.kt` draws the tray row (core's
+  count) and its sheet (grouped by `where`: *Discard*, *Open* where `opens`, *Save a copy* per carried file through
+  `CreateDocument` → `QueuedTray.saveCopy`, said by `QueuedShown.copySaved`), a level's `QueuedLevelRow`, the loss ask
+  (`QueuedLossDialog` over `QueuedTray.ask`: Manage's and Settings' sign-out, Stop trusting, Remove all offline content)
+  and a held rename's dialog; *Open* of a held entry opens the Pot and `EntryEditorSheet(heldWrite)` over
+  `PotModel.heldEditor` (`State.newer` shown, *Discard mine*); the offline banner carries the count; a gallery's waiting
+  tile says *Waiting to send*; a Pot row its `unsentMark`, the balances `balancesUnsent`; every New (level, drawer, the
+  Memories and Expenses lists) from `ShellModel.createsHere`. **Core added:** `MemoryCreate.Made.queued` (a Memory or
+  chapter made offline closes its dialog instead of showing *Waiting to send* as a problem; `OfflineReadPathTest`),
+  `QueuedShown.copySaved` (`QueuedOverlayTest`), and — found by the pass — `ShellModel` reads its lists anew once a run
+  sent writes (`queuedReports`), so what was made shows as itself without a pull
+  (`QueuedOverlayTest.the_lists_are_read_anew_once_writes_made_offline_were_sent`); each bitten red (3/3 for the refresh)
+  and restored with `/bin/cp -f`; `QueuedOverlayTest` also asserts `ShellModel.queuedHere`. Measured: `./gradlew
+  :android:assembleDebug :android:compileReleaseKotlin` and `:core:jvmTest :core:macosArm64Test` green, both mobile guards OK.
+  **Pass** (throwaway API 36 emulator `airplane-mode`, deleted after; throwaway `--with-member`, erased; the member on the
+  web in headless system Chrome): offline a folder and a Memory made (rows *Waiting to send*, dialogs closed), an entry with
+  a receipt added and another edited (*Not sent*, *Includes entries not sent yet*), two photos added to a kept Memory
+  (tiles *Waiting to send*), banner and tray counting; `run-as app.veyq grep -rl -e Dinner -e Taxi -e Offmem .` over 60
+  files: no hit; back online all sent (the web as the member: the receipt on the entry, the photos in the Memory);
+  meanwhile the member changed the edited entry on the web → held *Changed by someone else meanwhile*, *Open* showed
+  *… changed this entry on …. Your values are in the form.* with *Discard mine*, which dropped it; sign-out with a write
+  waiting asked *One change made offline has not been sent yet. It will be deleted.* (cancelled, then sent). **Not
+  clicked:** *Save a copy* (no refused write staged), a held rename, Stop trusting's and Remove all's asks (same dialog as
+  sign-out's), a re-keyed node, a capture time. **Deviation:** a Memory made offline cannot be opened until sent (phase 5
+  deviation 1), so the pass's photos went into a Memory kept online before; the tray row's word counts held writes as
+  *waiting to send* (core's `QueuedShown.banner`).
+- [x] **8 Apple** — the same. · Done when: both Apple builds green.
+  **Built** 2026-11-20 (`claude/k-apple`): `QueuedHeld` (over core's `AppleQueued`) follows the shell's
+  `queuedTray().items`, `queuedBanner`, `queuedHere` and `queuedSent`; `QueuedBanner` under the offline banner, a level's
+  `QueuedRow`s in place (rows and tiles), the reconnect's notices said once (`QueuedSaid`, then `saidSeen`); the uploads
+  popover lists the tray grouped by `where` with *Open* (`QueuedTray.opens`: `Entry` → the Pot opened, its
+  `PotModel.heldEditor` in the editor sheet with `State.newer` and *Discard mine*; `Rename` → `openFound`, the node's
+  header asks again with the person's name; `Place` → `openFound`/`switchSpace`), *Save a copy* (a Mac's `NSSavePanel` per
+  file, iOS's save sheet; said by `QueuedShown.copySaved`) and *Discard*; a Pot's `unsentMark`, `balancesUnsent`, *Record*
+  by `canRecord`; a gallery's waiting tile says `UploadTile.said`; every New (drawer, level, the Memories and Expenses
+  lists) from `ShellModel.createsHere`; a Memory made offline closes its dialog (`Made.queued`); sign-out (drawer, Manage,
+  Settings), Stop trusting (Manage, Settings) and Remove all offline content ask `QueuedTray.ask` first (`LossAsking`, on
+  the topmost of the shell, Manage and Settings). **Core added** (appleMain, no rule): `offline/AppleQueued.kt` — the
+  shell's flows as `StateFlow`s Swift reads by value (`AppleMemories.watch` takes only those) and `saveCopy` into the save
+  panel's path through `FileSink` (Swift cannot write a suspend sink), as the bridge's `QueuedDoor`; untested beyond the
+  builds (it decides nothing). Measured: as phase 4 of `cr-apps-gates-in-the-core`. **Not clicked** — the Mac and iPhone
+  pass waits for the owner's signed build: on an ad-hoc build the Keychain refuses, so no device is trusted and no
+  offline store exists, hence nothing queues there: offline New offering only folder, Memory, files; a folder, a Memory,
+  a photo into a kept Memory, a Pot entry with a receipt made offline (rows, tiles and entries *Waiting to send* / *Not
+  sent*, the banner's count, the tray); back online all sent with the notice; a held entry's *Open* → newer version and
+  *Discard mine*; a held rename's *Open*; *Save a copy* of a refused write; each loss ask. **Deviation:** Settings'
+  "sign out this device" from the sessions list (`signOutFamily` of its own family) is not asked first (the page does not
+  tell its own family apart; the sign-out button is).
 - [x] **9 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green.
   **Built** 2026-11-20 (`claude/k-linux`): a second `AdwBanner` under the offline one (`queuedBanner`); the level's
   `queuedHere` rows in place (`home::queued_row`); `queuedSaid` said once, then `Shell.QueuedSaidSeen`; the uploads

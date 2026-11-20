@@ -199,6 +199,14 @@ struct NodeHeaderActions: View {
         } message: {
             if let header { Text(say(notice: header.deleteQuestion())) }
         }
+        // the tray's *Open* of a rename held offline: this node's name dialog again, with the name the person gave
+        .onChange(of: model.renameAsked?.node, initial: true) { _, asked in
+            guard let r = model.renameAsked, asked == node.nodeId else { return }
+            model.renameAsked = nil
+            newName = r.name
+            renameProblem = nil
+            renaming = true
+        }
         // Core's name dialog (`FolderNameDialog`): the name as it is, trimmed on save; a refusal says why and asks again.
         .alert(say(.nodeRename), isPresented: $renaming) {
             TextField(say(.peopleName), text: $newName)

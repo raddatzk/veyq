@@ -120,10 +120,54 @@ Branch `claude/core-owns-refine` at `a75188eb8` (= `claude/windows-cr-f6c73c`). 
   dialog or `dropRows` yet; `Received.Name` (the explicit naming, WRITE_ONLY's uploader name among it) still branches on
   the role in the bridge; `dropsHere`/`dropRows` are held by no bridge test (no played tenant has a shell) — the
   platform phases' passes show them.
-- [ ] **3 Android** — the gallery and level drops through G1, the name dialogs through G3, the guest gates through G4,
+- [x] **3 Android** — the gallery and level drops through G1, the name dialogs through G3, the guest gates through G4,
   `followEnded` gone, `BuildDefaults` into `src/debug`. · Done when: `:android:assembleDebug` and
   `:android:compileReleaseKotlin` (the release variant, `src/release` exists; remembered, not run at refine), the words and guidelines guards green; `grep -rn "veyq.localhost" android/src/main` empty.
-- [ ] **4 Apple** — the same; `try?` gone; the prefill under `#if DEBUG`. · Done when: both Apple builds green.
+  **Built** 2026-11-20 (`claude/k-android`): every drop is `AppModel.drop(DropTarget, ShareIn.Drop)` over
+  `ShellModel.drop` — the level (`DropTarget.Level`, a `Refused` one left to the pick mode, deviation 3 of phase 1), a
+  folder row (`Modifier.rowDrop`, attached only where `ShellModel.dropTarget` says), the gallery (`DropTarget.Gallery`);
+  `ShareIn.dropOf` hands each clip item as `Dropped.File` or `Dropped.Unread(name)`; `dropOntoLevel`/`dropOnto` and the
+  app's `MemoryShare` sort gone (an `Offered` never comes: the phones' `DepotUploads` offers no import). New Folder (shell and
+  a guest's level) draws `NameAnswer` (`NameAnswerDialog`: a problem keeps it open, a notice is said); a guest's Replace is
+  offered where `FileRights.replace` holds and runs `GuestAccess.replaceAsking`; `NamingAsked` draws `GuestNaming.asking`
+  (save `name`, cancel `decline`), the explicit naming line shows where `GuestNaming.offered`; *Add entry* reads
+  `PotView.offersEntries`; `followEnded` replaced by observing `SessionModel.followed`; `BuildDefaults` in `src/debug`
+  (the dev host) and `src/release` (empty). **Core added** (minimal, other platforms may want it): `GuestNaming.offered`
+  (no app reads the link's role for the naming line), asserted in `GuestDoorsTest` and bitten (always true → red).
+  Measured: `./gradlew :android:assembleDebug :android:compileReleaseKotlin` green, `:core:jvmTest :core:macosArm64Test`
+  green, `validate_mobile_platform_guidelines.py`/`validate_mobile_words.py` OK, the `veyq.localhost` grep empty.
+  **Pass** (throwaway API 36 emulator, deleted after; throwaway account `--with-member`, erased): New Folder with a taken
+  name — the dialog stayed open with *Something with this name is already here.* under the field; a READ_WRITE link of
+  the owner's folder opened in the app, unnamed: *Replace…* offered on its file, the pick asked *What is your name?* at the
+  write, named, the upload worker ran (logcat `UploadWorker` SUCCESS). **Not clicked:** the four drops (a drag from
+  another app needs split screen, not drivable headless over adb), a guest's *Add entry* asking at the save, New Folder
+  refused offline (offline it now queues), the release build's empty server field (compiled, not installed).
+  After merging Linux's phase (`4eb8eb277`) a guest's level New shows where `GuestLevel.writes` and its folder and upload
+  ask the name at the write (`createFolder`, `uploadAsking`); a settle-up's *Record* reads `PotView.canRecord`.
+  **Deviation:** a guest's gallery *Add* still shows only once named (`canAdd = session != null`): `GalleryModel`'s guest
+  upload takes no naming flow yet — inbox #1044.
+- [x] **4 Apple** — the same; `try?` gone; the prefill under `#if DEBUG`. · Done when: both Apple builds green.
+  **Built** 2026-11-20 (`claude/k-apple`): every drop is `AppModel.drop(providers, onto: DropTarget)` over
+  `ShellModel.drop` — the level (`levelDropTarget`, a `Refused` one handed to the pick mode, phase 1's deviation 3), a
+  folder's row and tile (`DropsOnto`/`NodeTileItem.drop`, attached only where `ShellModel.dropTarget` offers it), the
+  gallery (`DropTarget.Gallery`); `IncomingFiles.dropped` hands `Dropped.Folder` (a Mac's folder walked in place),
+  `Dropped.File` and `Dropped.Unread(name)`; `dropOntoLevel`, `dropOnto` and the app's `MemoryShare` sort gone, the notices
+  said in order, a Mac's `Offered` opens `ImportSheet`. New Folder (shell and a guest's level) and the rename read
+  `NameAnswer` through one `nameAnswered` (a problem keeps the dialog open, a notice is said once it closed, queued
+  closes; a save that answered nothing stays open with `node_save_failed`, never "made"). A guest's Replace is offered by
+  `FileRights` (the header's own) and runs `GuestAccess.replaceAsking`; a guest level's New by `GuestLevel.writes`, its
+  folder and upload by `createFolder`/`uploadAsking`; *Add entry* by `PotView.offersEntries`; `AskedNaming` draws
+  `GuestNaming.asking` (save `name`, cancel `decline`) above the page or, while it is open, the entry editor; the naming
+  line where `GuestNaming.offered`. `followEnded` replaced by `SessionModel.watchFollowed`; the sign-in's prefill only
+  `#if DEBUG`. Measured: `./gradlew :core:assembleVeyqCoreDebugXCFramework`, `xcodegen`, the macOS ad-hoc build and the
+  iOS simulator compile green (on this phase's commit alone and after phase 8). **Core added:** nothing for this phase.
+  **Not clicked** (no full-screen control from a background agent, no simulator booted; the coordinator's Mac pass): on
+  the Mac a ZIP and a folder dropped together onto a level (one import offer), a file onto a folder row, onto a guest's
+  identity folder row (no drop target), onto a gallery (a PDF among photos said); New Folder with a taken name (the sheet
+  stays, the word under the field); a READ_WRITE link opened unnamed: Replace asks the name first, New folder and Upload
+  files ask at the write, *Add entry* asks at the save above the editor (two sheets stacked: unmeasured on iOS); the
+  release build's empty server field. **Deviation:** a guest's gallery *Add* still shows once named (`canAdd`), as
+  Android's (#1044).
 - [x] **5 Linux** — the drop through the bridge's `Drop`, `drop.rs`' sort gone, the folder row's drop from
   `dropTarget`, the dialogs and guest gates likewise, `file_page`/`header::say`'s log-only paths replaced by said
   notices. · Done when: `python3 linux/run.py test` and `build` green.

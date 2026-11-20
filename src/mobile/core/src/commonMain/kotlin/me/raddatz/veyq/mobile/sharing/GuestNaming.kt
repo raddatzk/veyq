@@ -18,6 +18,12 @@ import me.raddatz.veyq.mobile.words.Notice
  * waits on the same answer.
  */
 class GuestNaming internal constructor(private val access: GuestAccess) {
+    /**
+     * Whether this link names its guest at all (a READ_WRITE link): the platforms show "You are here as …" or the way to
+     * name itself only where it does — never by reading the link's role themselves.
+     */
+    val offered: Boolean get() = access.role == GuestAccess.READ_WRITE
+
     private val _asking = MutableStateFlow(false)
 
     /** Whether a write waits for the guest's name: the platform shows the name dialog while it does. */
@@ -32,7 +38,7 @@ class GuestNaming internal constructor(private val access: GuestAccess) {
      */
     suspend fun request(): GuestSession? {
         access.session.value?.let { return it }
-        if (access.role != GuestAccess.READ_WRITE) return null
+        if (!offered) return null
         val answer = one.withLock {
             access.session.value?.let { return it }
             waiting ?: CompletableDeferred<GuestSession?>().also { waiting = it; _asking.value = true }

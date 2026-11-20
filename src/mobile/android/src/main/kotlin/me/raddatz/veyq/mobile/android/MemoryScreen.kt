@@ -65,6 +65,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.platform.testTag
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -201,14 +202,10 @@ internal fun MemoryGallery(
     val music = if (musicOffered && view == MemoryView.MUSIC) remember(gallery) { model.musicModel(gallery) } else null
     val tracks = if (view == MemoryView.MAP) remember(gallery) { model.trackList(gallery) } else null
     val contributions = if (contributionsOffered && view == MemoryView.CONTRIBUTIONS) remember(gallery) { model.contributions(gallery) } else null
-    // photos and videos dropped from another app onto the gallery go into it at once, as a pick's (ADR 0138 decision 9)
-    val dropScope = androidx.compose.runtime.rememberCoroutineScope()
-    val dropContext = LocalContext.current
-    val dropped = Modifier.sharedFilesDrop { incoming ->
-        model.dropOnto(gallery, incoming)?.let { n -> dropScope.launch { snackbar.showSnackbar(dropContext.text(n)) } }
-    }
+    // photos and videos dropped from another app onto the gallery: core's one drop judges and sorts (ADR 0154 decision 1)
+    val dropped = Modifier.sharedFilesDrop { drop -> model.drop(me.raddatz.veyq.mobile.navigation.DropTarget.Gallery(gallery), drop) }
     val adds = state.rights.upload && canAdd
-    Box(Modifier.fillMaxSize().then(if (adds && !guest) dropped else Modifier)) {
+    Box(Modifier.fillMaxSize().then(if (!guest) dropped else Modifier)) {
     if (tracks != null) MemoryMapView(gallery, tracks, model, snackbar, viewSwitch) else
     if (music != null) MusicView(gallery, music, model, snackbar, viewSwitch) else
     if (contributions != null) ContributionsView(gallery, contributions, model, snackbar, viewSwitch) { id -> contributions.lightbox(id)?.let { open = it } } else
@@ -446,12 +443,19 @@ private fun UploadPlaceholder(tile: me.raddatz.veyq.mobile.memories.UploadTile, 
         tile.preparing -> stringResource(R.string.memory_upload_tile_preparing, tile.name)
         else -> stringResource(R.string.memory_upload_tile, tile.name)
     }
-    Box(modifier.background(role(palette.line)).semantics(mergeDescendants = true) { contentDescription = label }, contentAlignment = Alignment.Center) {
+    // added offline, sealed on this device: core's *Waiting to send* under the glyph, no progress (ADR 0153 decision 5)
+    val waiting = tile.said?.let { say(it) }
+    Box(modifier.background(role(palette.line)).semantics(mergeDescendants = true) { contentDescription = waiting?.let { "$label. $it" } ?: label }, contentAlignment = Alignment.Center) {
         Icon(
             if (tile.failed) Icons.Outlined.ErrorOutline else if (tile.isVideo) Icons.Outlined.Movie else Icons.Outlined.Image, null,
             tint = role(if (tile.failed) palette.danger else palette.muted),
         )
-        if (!tile.failed) {
+        if (waiting != null) {
+            Text(
+                waiting, style = MaterialTheme.typography.labelSmall, color = role(palette.muted), maxLines = 2,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(6.dp).testTag("gallery-waiting"),
+            )
+        } else if (!tile.failed) {
             val bar = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(6.dp)
             if (tile.preparing) LinearProgressIndicator(bar) else LinearProgressIndicator({ tile.progress.toFloat() }, bar)
         }

@@ -35,9 +35,29 @@ object ShareIn {
         return of(context, uris)
     }
 
-    /** The files of a drop's clip ([clip]): each item's URI, as a share's. */
-    fun fromClip(context: Context, clip: ClipData?): ShareInbox.Incoming? =
-        clip?.let { c -> of(context, (0 until c.itemCount).mapNotNull { c.getItemAt(it).uri }) }
+    /**
+     * A drop as core's one drop takes it (ADR 0154 decision 1): each item of the clip a file, or — where it did not open —
+     * one not read, by its name. [incoming] is the same drop as a share's files, for the pick mode a level that takes none
+     * leaves it to.
+     */
+    class Drop(val items: List<me.raddatz.veyq.mobile.navigation.Dropped>) {
+        private val files get() = items.filterIsInstance<me.raddatz.veyq.mobile.navigation.Dropped.File>().map { it.source }
+        val incoming: ShareInbox.Incoming get() = ShareInbox.Incoming(files, items.count { it !is me.raddatz.veyq.mobile.navigation.Dropped.File })
+
+        /** Nothing of the drop is kept: each file let go. */
+        fun release() = files.forEach(::release)
+    }
+
+    /** The items of a drop's clip ([clip]) for core's one drop; null where it carries no URI. */
+    fun dropOf(context: Context, clip: ClipData?): Drop? {
+        val c = clip ?: return null
+        val uris = (0 until c.itemCount).mapNotNull { c.getItemAt(it).uri }
+        if (uris.isEmpty()) return null
+        return Drop(uris.map { uri ->
+            source(context, uri)?.let { me.raddatz.veyq.mobile.navigation.Dropped.File(it) }
+                ?: me.raddatz.veyq.mobile.navigation.Dropped.Unread(uri.lastPathSegment ?: uri.toString())
+        })
+    }
 
     /** [uris] as the files that wait, in order; one that does not open counts as not read. */
     fun of(context: Context, uris: List<Uri>): ShareInbox.Incoming? {

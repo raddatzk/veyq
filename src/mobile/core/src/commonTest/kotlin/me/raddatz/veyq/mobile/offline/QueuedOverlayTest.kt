@@ -169,6 +169,8 @@ class QueuedOverlayTest {
         val here = shell.queuedAt(s.id, null).first()
         assertEquals(listOf(Notice(Msg.QUEUED_FOLDER, "Trip")), here.map { it.title })
         assertEquals(Notice(Msg.OFFLINE_WAITING), here.single().said)
+        shell.switchSpace(s.id)
+        assertEquals(here, shell.queuedHere.first(), "the level shown does not list what was made offline there")
         val uploads = shell.mediaUploads(UploadQueue(), deriver, {}, {})
         assertEquals(1, uploads.queue(s.id, m.id, listOf(photo("dune.png", "PNG-DUNE-PLAINTEXT"))))
         assertEquals(Notice(Msg.OFFLINE_BANNER_WAITING, 2), shell.queuedBanner.first())
@@ -199,6 +201,8 @@ class QueuedOverlayTest {
         val saved = mutableListOf<ByteArray>()
         assertTrue(tray.saveCopy(refused.id) { saved += it })
         assertContentEquals("PNG-DUNE-PLAINTEXT".encodeToByteArray(), saved.fold(ByteArray(0)) { x, y -> x + y })
+        assertEquals(Notice(Msg.DOWNLOAD_DONE, "dune.png"), QueuedShown.copySaved("dune.png", true))
+        assertEquals(Notice(Msg.DOWNLOAD_FAILED, "dune.png"), QueuedShown.copySaved("dune.png", false))
         assertTrue(tray.discard(refused.id))
         assertTrue(tray.discard(items[0].id))
         assertEquals(0, tray.count())
@@ -231,6 +235,31 @@ class QueuedOverlayTest {
         val said = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { kotlinx.coroutines.withTimeout(2000) { notices.await() } }
         assertEquals(listOf(Notice(Msg.OFFLINE_SENT, 1), Notice(Msg.OFFLINE_NEED_YOU, 1)), said)
         watch.cancel()
+        a.retire()
+    }
+
+    /** What was made offline and sent at the reconnect shows as itself in the shell's lists, unasked (no pull to refresh). */
+    @Test
+    fun the_lists_are_read_anew_once_writes_made_offline_were_sent() = runTest {
+        val (t, a, sm) = offlineMemory()
+        val (s, _) = sm
+        val shell = shellOf(tenantOf(a))
+        shell.load(openLastUsed = false)
+        assertTrue(shell.createFolder(s.id, null, "Late").queued)
+        // the server takes the create and lists the folder from then on
+        t.route = { r ->
+            if (r.method == io.ktor.http.HttpMethod.Post && r.url.encodedPath.matches(Regex("/api/scopes/[^/]+/nodes"))) {
+                val body = (r.body as io.ktor.http.content.OutgoingContent.ByteArrayContent).bytes().decodeToString()
+                val id = Regex("\"nodeId\"\\s*:\\s*\"([^\"]+)\"").find(body)!!.groupValues[1]
+                t.adopt(s, id, "FOLDER", null, "Late")
+                201 to """{"nodeId":"$id"}"""
+            } else null
+        }
+        t.reachable = true
+        assertTrue(a.reconnect())
+        a.awaitSending()
+        assertEquals(0, a.outbox?.count(), "the folder was not sent")
+        assertNotNull(waitFor { shell.current?.lists?.nodes?.firstOrNull { it.name == "Late" } }, "the folder sent is not listed")
         a.retire()
     }
 
