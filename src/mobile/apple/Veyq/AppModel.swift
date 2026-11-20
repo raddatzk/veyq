@@ -812,6 +812,23 @@ final class AppModel {
                 return
             }
         } else {
+            #if os(macOS)
+            // a Mac's level screens what it takes (ADR 0152 decision 1): a veyq download among it is offered as an import
+            if let level = target as? AddHere.Level {
+                let name = label(target)
+                Task {
+                    let offered = try? await level.takeOrOffer(inbox: inbox, label: name, depot: depot, left: { @Sendable source in
+                        if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
+                    }, deletedName: say(.potDeletedPerson))
+                    syncInbox()
+                    guard let offered else { return }
+                    offerImport(offered.offer)
+                    if let n = MediaUploads.companion.notTaken(count: offered.taken.refused) { notice = Notice(text: say(notice: n)) }
+                    onShareDone?(true)
+                }
+                return
+            }
+            #endif
             taken = target.take(inbox: inbox, label: label(target), depot: depot) { source in
                 if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
             }
@@ -838,9 +855,17 @@ final class AppModel {
         #endif
         guard !files.isEmpty else { return }
         let incoming = await IncomingFiles.read(files)
+        #if os(macOS)
+        // a dropped veyq download is offered as an import (ADR 0152 decision 1), the rest uploaded at once
+        let screened = try? await level.dropOrOffer(files: incoming.files, label: levelLabel, depot: depot, left: { @Sendable source in
+            if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
+        }, deletedName: say(.potDeletedPerson))
+        offerImport(screened?.offer)
+        #else
         _ = level.drop(files: incoming.files, label: levelLabel, depot: depot) { source in
             if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
         }
+        #endif
         if incoming.refused > 0 { notice = Notice(text: say(.shareUnread, incoming.refused)) }
     }
 
@@ -1842,12 +1867,18 @@ final class AppModel {
 
     private func openDepot(_ m: ShellModel, _ t: TenantSession) {
         closeDepot()
-        let d = m.depotUploads(queue: uploads) { @Sendable in
+        let changed: @Sendable () -> Void = {
             Task { @MainActor [weak self] in
                 guard let self, let t = self.tenantSession else { return }
                 await self.refreshLists(t)
             }
         }
+        #if os(macOS)
+        // a Mac's uploads offer a download's import (ADR 0152 decision 1); the phones' do not (owner 2026-11-19)
+        let d = m.depotUploadsImporting(queue: uploads, deriver: MediaDeriver.shared, changed: changed)
+        #else
+        let d = m.depotUploads(queue: uploads, changed: changed)
+        #endif
         depot = d
         depotState = d.current
         depotWatch = d.watch { @Sendable _ in
@@ -1856,6 +1887,10 @@ final class AppModel {
     }
 
     private func closeDepot() {
+        #if os(macOS)
+        importing?.dialog.close()
+        importing = nil
+        #endif
         depotWatch?.stop()
         depotWatch = nil
         depot?.close()
@@ -1900,8 +1935,40 @@ final class AppModel {
             guard let p = Picked(url) else { return nil }
             return AppleDepot.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
         }
+        #if os(macOS)
+        // the first picked veyq download is offered as an import, *Upload as a file* beside it (ADR 0152 decision 1)
+        let (parentId, label) = (shell.folder?.nodeId, levelLabel)
+        Task {
+            let screened = try? await d.screen(scopeId: scopeId, parentId: parentId, label: label, sources: sources, left: nil, deletedName: say(.potDeletedPerson))
+            offerImport(screened?.offer)
+        }
+        #else
         _ = d.upload(scopeId: scopeId, parentId: shell.folder?.nodeId, label: levelLabel, sources: sources)
+        #endif
     }
+
+    #if os(macOS)
+    /// A download's import offered by an upload's screen (core's `ImportDialog`), its sheet shown while it is open
+    /// (`ImportSheet`); a second offer while one is open is closed at once (one import at a time, as the web's dialog).
+    struct ImportOffer: Identifiable {
+        let dialog: ImportDialog
+        var id: ObjectIdentifier { ObjectIdentifier(dialog) }
+    }
+
+    var importing: ImportOffer?
+
+    /// What a finished import says once its sheet is gone (the imported line, the web's toast).
+    @ObservationIgnored var importedLine: String?
+
+    func offerImport(_ dialog: ImportDialog?) {
+        guard let dialog else { return }
+        if importing != nil {
+            dialog.close()
+            return
+        }
+        importing = ImportOffer(dialog: dialog)
+    }
+    #endif
 
     /// Depot's "Upload folder…": the directory at `url` (the system's folder picker) walked here — every entry by its path
     /// below it, hidden ones included, a link said as one and never followed — and handed to core's
@@ -1912,7 +1979,16 @@ final class AppModel {
         let files = Self.folderFiles(url)
         if scoped { url.stopAccessingSecurityScopedResource() }
         let found = AppleDepot.shared.found(root: url, files: files)
+        #if os(macOS)
+        // a folder holding `.veyq/manifest.json` is a download unpacked, offered as an import (ADR 0152 decision 1)
+        let screened = try? await d.screenFolder(
+            scopeId: scopeId, parentId: shell.folder?.nodeId, label: levelLabel, shownName: nil, path: url.path, found: found,
+            deletedName: say(.potDeletedPerson)
+        )
+        offerImport(screened?.offer)
+        #else
         try? await d.uploadFolder(scopeId: scopeId, parentId: shell.folder?.nodeId, shownName: nil, path: url.path, found: found)
+        #endif
     }
 
     /// The entries below the directory at `url`, each by its path below it and what it is (hidden ones included, as the

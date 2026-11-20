@@ -621,7 +621,7 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
 **Expenses**: reading a receipt's text on the device (#549); what [expenses.md](../apps/expenses.md) keeps out of the
 first cut.
 
-**Depot**: a READ_WRITE guest's own name as uploader; importing a download on the desktops (cr-app-archive-import: the core and the bridge built, the dialogs not; the
+**Depot**: a READ_WRITE guest's own name as uploader; importing a download on the desktops (cr-app-archive-import: the core, the bridge and the three desktops' dialogs built; the
 phones upload one as a file, owner 2026-11-19); multi-select and dragging a node onto a folder to move
 it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built). A password-protected PDF's text
 selected and copied on Windows (drawn by `Windows.Data.Pdf`, which has no text API). Built 2026-11-18 (inbox #955): on
@@ -657,8 +657,8 @@ bucket (#1031); **Apple's pass**, the
 agent's on the unlocked Mac (#994) and the owner's on an iPhone and an iPad (#925, #928), with the filter's place on an
 iPad and a Mac (#995); **Windows' UIA pass** (#1000, once the VM resolves a throwaway's tenant, #983). The fixes of
 #990, #991, #996, #997 and #1001 are in, checked by tests; #990's seen on Android, #996's on Android and Linux; #989's calendars are handed on every app,
-Apple's unclicked. A copy that a rotation interrupts fails (#988). The owner answered its four questions 2026-11-19 as built (ADR 0149's Consequences). Not built: import of an archive on the desktops
-(#985, cr-app-archive-import). A guest's gallery of a received link is ADR 0150's (built above). The web's own heart in its lightbox (#986) and its Contributions' "You" (#1003) are
+Apple's unclicked. A copy that a rotation interrupts fails (#988). The owner answered its four questions 2026-11-19 as built (ADR 0149's Consequences).
+A guest's gallery of a received link is ADR 0150's (built above). The web's own heart in its lightbox (#986) and its Contributions' "You" (#1003) are
 built (2026-11-19).
 A share into a Memory and into a folder (built above): Apple's passes — the iOS handoff, which types a Safari page and a
 Files share offer the extension, the iPad drop and the macOS drop onto a level (#1005); an iOS handoff for a space the app does not list

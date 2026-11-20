@@ -1,6 +1,7 @@
 //! The uploads (ADR 0123's Consequences, the Linux app's Depot whole), GNOME's way: files and a folder picked through GTK's own dialog (the portal's
 //! on a desktop) and handed to the core by their paths — the core opens and reads each at offsets a frame at a time
-//! (`Upload.Files`, `Upload.Folder`, ADR 0137 decision 3), so nothing of a file crosses and none is held whole —, a file's
+//! (`Import.Screen`, `Import.ScreenFolder` — a veyq download offered as an import, `import_dialog` —, else as `Upload.Files`,
+//! `Upload.Folder`, ADR 0137 decision 3), so nothing of a file crosses and none is held whole —, a file's
 //! Replace chosen before its dialog opens (`File.ChooseReplace`, `Upload.Replace`), and the queue as a header bar
 //! `gtk::MenuButton` shown while it lists anything: its icon's tooltip the core's one line, its popover each batch with its
 //! items, their progress, Cancel and Retry, Cancel all and a finished batch's Close. What the uploads say once — a folder's
@@ -388,7 +389,8 @@ pub struct Level {
     pub label: String,
 }
 
-/// New's "Upload files": GTK's open dialog picks several, their paths go to the core (`Upload.Files`).
+/// New's "Upload files": GTK's open dialog picks several, their paths go to the core's screen (`Import.Screen`), which
+/// queues them as `Upload.Files` does.
 pub fn pick_files(parent: &gtk::Window, level: Level, toasts: &adw::ToastOverlay) {
     let (parent, toasts) = (parent.clone(), toasts.clone());
     glib::spawn_future_local(async move {
@@ -402,12 +404,13 @@ pub fn pick_files(parent: &gtk::Window, level: Level, toasts: &adw::ToastOverlay
             return;
         }
         eprintln!("veyq: upload files: {} picked", paths.len());
-        let answer = bridge::call(&Call::UploadFiles { scope_id: level.scope_id, parent_id: level.parent_id, label: level.label, paths }).await.map(|(a, _)| a);
-        queued(&toasts, answer, "Upload.Files");
+        // screened first: a veyq download among them is offered as an import (ADR 0152 decision 1)
+        crate::import_dialog::screen_files(parent.upcast_ref(), &level, paths, &toasts);
     });
 }
 
-/// New's "Upload folder…": GTK's folder dialog picks one directory, which the core walks and uploads (`Upload.Folder`).
+/// New's "Upload folder…": GTK's folder dialog picks one directory, which the core walks, screens and uploads
+/// (`Import.ScreenFolder`, else as `Upload.Folder`).
 pub fn pick_folder(parent: &gtk::Window, level: Level, toasts: &adw::ToastOverlay) {
     let (parent, toasts) = (parent.clone(), toasts.clone());
     glib::spawn_future_local(async move {
@@ -418,8 +421,8 @@ pub fn pick_folder(parent: &gtk::Window, level: Level, toasts: &adw::ToastOverla
         };
         let Some(path) = local_path(&picked) else { return };
         eprintln!("veyq: upload folder: picked");
-        let answer = bridge::call(&Call::UploadFolder { scope_id: level.scope_id, parent_id: level.parent_id, path }).await.map(|(a, _)| a);
-        queued(&toasts, answer, "Upload.Folder");
+        // screened first: a download unpacked is offered as an import (ADR 0152 decision 1)
+        crate::import_dialog::screen_folder(parent.upcast_ref(), &level, path, &toasts);
     });
 }
 
