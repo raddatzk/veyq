@@ -171,8 +171,17 @@ class QueuedOverlayTest {
         assertEquals(1, uploads.queue(s.id, m.id, listOf(photo("dune.png", "PNG-DUNE-PLAINTEXT"))))
         assertEquals(Notice(Msg.OFFLINE_BANNER_WAITING, 2), shell.queuedBanner.first())
         assertEquals(Notice(Msg.OFFLINE_WRITES_LOST, 2), shell.queuedLost())
+        // New offline offers only what is queued (never a Pot, a folder uploaded whole or a kept link)
+        assertEquals(
+            listOf(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES, me.raddatz.veyq.mobile.AppKinds.Create.MEMORY),
+            shell.createsHere(isHome = true, bookmarks = true),
+        )
         val tray = shell.queuedTray()
+        // the ask before a loss names how many go, with the loss's own confirm
+        assertEquals(Notice(Msg.OFFLINE_WRITES_LOST, 2) to Msg.OFFLINE_STOP_TRUSTING_ANYWAY, tray.ask(QueuedLoss.STOP_TRUSTING)?.let { it.question to it.confirm })
         val items = tray.list()
+        // nothing held, nothing to open
+        assertNull(tray.opens(items[0].id))
         assertEquals(listOf(Queued.FOLDER_CREATE, Queued.MEDIA_ADD), items.map { it.op })
         assertEquals("Summer", items[1].where)
         assertTrue(items.all { it.state == QueuedWrite.State.WAITING && !it.opens && it.copies == 0 })

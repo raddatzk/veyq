@@ -50,6 +50,26 @@ object QueuedExpenses {
     private fun idOf(entryId: String) = ENTRY + entryId
 
     /**
+     * The receipts held entry [write] carries that the server has not seen, opened under their `K_blob`s into memory as a
+     * picked receipt is held (`PendingReceipt`) for the held entry's editor; none where one does not open.
+     */
+    internal suspend fun heldReceipts(account: me.raddatz.veyq.mobile.session.VeyqAccount, write: QueuedWrite): List<PotSession.PendingReceipt> {
+        val box = account.outbox ?: return emptyList()
+        val i = runCatching { QueuedNodes.decode(EntryIntent.serializer(), write) }.getOrNull() ?: return emptyList()
+        return i.receipts.mapNotNull { r ->
+            val blob = write.blobs.firstOrNull { it.id == r.blob } ?: return@mapNotNull null
+            val key = me.raddatz.veyq.mobile.crypto.unb64(blob.key)
+            try {
+                var bytes = ByteArray(0)
+                for (n in 0 until blob.chunkCount) bytes += account.suite.openFrame(key, n, blob.chunkCount, box.frame(blob, n) ?: return@mapNotNull null)
+                PotSession.PendingReceipt(r.id, bytes, r.type, r.name, r.modifiedAt)
+            } finally {
+                key.fill(0)
+            }
+        }
+    }
+
+    /**
      * The editor's [form] queued as entry [entryId] of [session]'s Pot (null: a new one) on [basedOn], the revision the
      * editor showed, with [pending] receipts sealed at once — the online save's checks first (a form that forms no entry, a
      * receipt too large or too many: nothing queued). The write queued; null where nothing was (no store, the floor, a

@@ -352,6 +352,42 @@ class PotModel internal constructor(
     fun editor(entryId: String?, separator: Char, pending: List<PotSession.PendingReceipt> = emptyList()): EntryEditor? =
         EntryEditor.open(EditorDoor(), entryId, separator, pending, scope, Dispatchers.Default)
 
+    /**
+     * The editor of held write [writeId] (ADR 0153 decision 4, `QueuedOpen.Entry`; owner 2026-11-19 Q3): the person's
+     * change made offline in the form over the newer version of the open Pot, named; saving puts theirs on top and drops
+     * the held write, *Discard mine* drops it unsent. Null where no Pot is read, or the write is no held entry of it.
+     */
+    suspend fun heldEditor(writeId: String, separator: Char): EntryEditor? {
+        val s = session ?: return null
+        val account = s.queueAccount ?: return null
+        val box = account.outbox ?: return null
+        val w = box.write(writeId)?.takeIf { it.state == me.raddatz.veyq.mobile.offline.QueuedWrite.State.HELD && it.node == s.nodeId } ?: return null
+        val mine = QueuedExpenses.entry(w) ?: return null
+        val pending = QueuedExpenses.heldReceipts(account, w)
+        val drop: suspend () -> Boolean = { box.write(writeId)?.let { box.remove(it.id); true } ?: false }
+        return EntryEditor.openHeld(HeldDoor(drop), mine.entryId, mine.content, separator, pending, scope, Dispatchers.Default, drop)
+    }
+
+    /**
+     * A held entry's editor's door: [EditorDoor]'s writes, the held write dropped once one landed — before it where it is
+     * queued again offline (the same entry's write, which would keep what the held one saw), after it online.
+     */
+    private inner class HeldDoor(private val drop: suspend () -> Boolean) : EntryEditor.Door by EditorDoor() {
+        private val queues get() = _state.value?.offline != null
+        override suspend fun save(entryId: String, form: EntryForm, basedOn: Long?, pending: List<PotSession.PendingReceipt>, own: Set<String>): EntryEditor.Written {
+            if (queues) drop()
+            val w = EditorDoor().save(entryId, form, basedOn, pending, own)
+            if (!queues && w.outcome == PotSession.WriteOutcome.WRITTEN) drop()
+            return w
+        }
+        override suspend fun delete(entryId: String, basedOn: Long): PotSession.WriteOutcome {
+            if (queues) drop()
+            val o = EditorDoor().delete(entryId, basedOn)
+            if (!queues && o == PotSession.WriteOutcome.WRITTEN) drop()
+            return o
+        }
+    }
+
     /** The editor's door onto the open Pot: its saves and deletes are this model's writes, each on the Pot it opened on. */
     private inner class EditorDoor : EntryEditor.Door {
         override fun view(): PotView? = _state.value?.view

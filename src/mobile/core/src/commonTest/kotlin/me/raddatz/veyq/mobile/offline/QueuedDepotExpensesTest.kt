@@ -16,7 +16,10 @@ import me.raddatz.veyq.mobile.expenses.Contribution
 import me.raddatz.veyq.mobile.expenses.Deleted
 import me.raddatz.veyq.mobile.expenses.Expense
 import me.raddatz.veyq.mobile.expenses.ParticipantBody
+import me.raddatz.veyq.mobile.expenses.PotModel
 import me.raddatz.veyq.mobile.expenses.PotSession
+import me.raddatz.veyq.mobile.navigation.ApplicationId
+import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.expenses.PotView
 import me.raddatz.veyq.mobile.expenses.QueuedExpenses
 import me.raddatz.veyq.mobile.expenses.Receipts
@@ -33,6 +36,7 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -161,6 +165,66 @@ class QueuedDepotExpensesTest {
         val tenant = a.open(a.tenants.first())
         val pot = assertNotNull(PotSession.open(tenant, x.scope.id, x.pot.id))
         assertEquals("Lunch (theirs)", PotView(pot).entries.first { it.id == LUNCH }.title)
+        a.retire()
+    }
+
+    /** An edit with a receipt made offline, held at the reconnect: someone else's lunch is the Pot's now. */
+    private suspend fun Setup.heldEdit(): Pair<VeyqAccount, QueuedWrite> {
+        val (a, s) = offline()
+        val editing = assertNotNull(PotView(s).editing(LUNCH))
+        val scan = "HELD-RECEIPT-MARKER".encodeToByteArray()
+        assertNotNull(QueuedExpenses.saveEntry(s, LUNCH, editing.form.copy(title = "Lunch (mine)"), editing.basedOn, listOf(PotSession.PendingReceipt(RECEIPT, scan, "image/png", "scan.png", null)), 1))
+        t.revise(pot, LUNCH, expense("Lunch (theirs)", 1900))
+        back(a)
+        val held = a.outbox!!.writes().single()
+        assertEquals(QueuedWrite.State.HELD, held.state)
+        return a to held
+    }
+
+    private suspend fun Setup.potModel(a: VeyqAccount) = PotModel(a.open(a.tenants.first()), { 0L }).also {
+        it.open(ObjectRef(scope.id, pot.id, "EXPENSES_POT", ApplicationId.EXPENSES, "Trip"))
+        assertNotNull(it.current?.view, "the Pot did not open")
+    }
+
+    /**
+     * A held edit's *Open* (ADR 0153 decision 4, owner 2026-11-19 Q3): the tray's typed target, then the entry's editor with
+     * the person's values and their receipt over the newer version, named; the save puts theirs on top of the newer
+     * revision and the held write is gone. Bitten by the held door that never drops the write (red: it stays).
+     */
+    @Test
+    fun a_held_edit_opens_the_persons_values_over_the_newer_version_and_its_save_lands_on_top() = runTest {
+        val x = setup()
+        val (a, held) = x.heldEdit()
+        assertEquals(QueuedOpen.Entry(held.tenant, x.scope.id, x.pot.id, LUNCH, held.id), QueuedTray(a).opens(held.id))
+        val model = x.potModel(a)
+        val editor = assertNotNull(model.heldEditor(held.id, '.'), "no editor for the held entry")
+        val shown = editor.current
+        assertEquals("Lunch (mine)", shown.form.title, "the person's values are not in the form")
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.OFFLINE_NEWER_VERSION, shown.newer?.msg, "the newer version is not named")
+        assertTrue(shown.discardsMine)
+        assertEquals(listOf("scan.png"), shown.pending.map { it.name }, "the receipt the change carried is not in the editor")
+        assertTrue(editor.save().done)
+        assertEquals(0, a.outbox!!.count(), "the held write stayed after its save landed")
+        val body = open(x, LUNCH, 3)
+        assertEquals("Lunch (mine)", (body.content as Expense).title)
+        assertEquals(listOf(RECEIPT), (body.content as Expense).receipts)
+        editor.close()
+        a.retire()
+    }
+
+    /** *Discard mine*: the held write gone unsent, nothing written over the newer version. */
+    @Test
+    fun a_held_edits_discard_mine_drops_it_unsent() = runTest {
+        val x = setup()
+        val (a, held) = x.heldEdit()
+        val editor = assertNotNull(x.potModel(a).heldEditor(held.id, '.'))
+        val before = x.up.appended.size
+        assertTrue(editor.discardMine())
+        assertTrue(editor.current.done)
+        assertEquals(0, a.outbox!!.count())
+        assertEquals(before, x.up.appended.size, "Discard mine wrote")
+        // a write that is not held opens no held editor
+        assertNull(x.potModel(a).heldEditor(held.id, '.'))
         a.retire()
     }
 

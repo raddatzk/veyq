@@ -245,6 +245,61 @@ class SecretFreeSchemaTest {
         assertEquals(listOf("x", "y", "size"), of("TileFrame"))
     }
 
+    /**
+     * The writes made offline cross as items and states alone (ADR 0153 decision 5, the CR's phase 6): a tray item says
+     * what the write is by its kind's word and the name the person gave, where it goes, its state and line and what it
+     * offers; *Open* is a typed target of ids and the person's name; the ask before a loss its words — never the write
+     * itself (`QueuedWrite`: the person's fields as they set them, a note's text, an amount, the revision they saw), never a
+     * queued blob (`QueuedBlob`: its `K_blob`, its frames), never an untyped JSON value (an intent carried through
+     * uninterpreted). A *Save a copy*'s plaintext goes into the host's file by path, never on the wire. These shapes carry
+     * exactly these fields; one added is red here until it is named below, with why.
+     */
+    @Test
+    fun theWritesMadeOfflineCrossAsItemsAndStatesAlone() {
+        assertEquals(emptyList(), queuedContent(Roots.all))
+        val schema = Schema(Roots.all)
+        val fields = schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }.groupBy({ it.owner }, { it.name })
+        fun of(name: String) = fields[name] ?: fields.entries.single { (owner, _) -> owner.endsWith(".$name") }.value
+        assertEquals(
+            listOf("id", "op", "tenant", "scope", "node", "where", "title", "state", "said", "opens", "copies", "at"), of("QueuedItem"),
+            "a write made offline says more than its kind's word, its name, where it goes, its state and what it offers",
+        )
+        assertEquals(listOf("tenant", "scope", "pot", "entry", "write"), of("QueuedOpen.Entry"))
+        assertEquals(listOf("tenant", "scope", "node", "name"), of("QueuedOpen.Rename"))
+        assertEquals(listOf("tenant", "scope", "node"), of("QueuedOpen.Place"))
+        assertEquals(listOf("question", "confirm"), of("QueuedAsk"))
+        assertEquals(listOf("name", "mediaType"), of("QueuedCopyName"), "a refused file's suggestion says more than its name and type")
+        // the check against what it must refuse: the write itself, a queued blob, an intent as a JSON value
+        assertEquals(
+            listOf(
+                "Intended.write: a queued write's content", "Intended.intent: a queued write's content",
+                "Intended.blobs: a queued write's content", "me.raddatz.veyq.mobile.offline.QueuedWrite.intent: a queued write's content",
+                "me.raddatz.veyq.mobile.offline.QueuedWrite.blobs: a queued write's content",
+            ),
+            queuedContent(listOf(Intended.serializer())),
+        )
+        assertTrue(leaks(listOf(Intended.serializer()), identifiers).any { it.endsWith("QueuedBlob.key: named like a secret") }, "a queued blob's K_blob crossed unseen")
+    }
+
+    @Serializable @kotlinx.serialization.SerialName("Intended")
+    class Intended(
+        val title: String,
+        val write: me.raddatz.veyq.mobile.offline.QueuedWrite?,
+        val intent: kotlinx.serialization.json.JsonObject?,
+        val blobs: List<me.raddatz.veyq.mobile.offline.QueuedBlob>,
+    )
+
+    /** A field that carries a queued write, a queued blob or an untyped JSON value (an intent uninterpreted), anywhere. */
+    private fun queuedContent(roots: List<KSerializer<*>>): List<String> {
+        val schema = Schema(roots)
+        fun carries(d: SerialDescriptor): Boolean = when (d.kind) {
+            StructureKind.LIST, StructureKind.MAP -> d.serialName.removeSuffix("?").startsWith("kotlinx.serialization.json.") || (0 until d.elementsCount).any { carries(d.getElementDescriptor(it)) }
+            else -> d.serialName.removeSuffix("?").let { n -> n.startsWith("kotlinx.serialization.json.") || n.endsWith("offline.QueuedWrite") || n.endsWith("offline.QueuedBlob") }
+        }
+        return schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }
+            .filter { carries(it.descriptor) }.map { "${it.owner}.${it.name}: a queued write's content" }
+    }
+
     @Serializable @kotlinx.serialization.SerialName("Digested")
     class Digested(val medium: String, val sha256: String?, val originalDigest: String, val contentHash: String)
 

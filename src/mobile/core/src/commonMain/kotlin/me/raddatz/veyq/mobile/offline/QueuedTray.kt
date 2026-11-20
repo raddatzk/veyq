@@ -41,6 +41,43 @@ data class QueuedItem(
     val at: Long,
 )
 
+/**
+ * Where a held write's *Open* goes (ADR 0153 decision 4: the online conflict's own screen), typed so a platform opens it
+ * without reading the write: [Entry] the Pot's entry editor over the person's values ([me.raddatz.veyq.mobile.expenses.PotModel.heldEditor]
+ * with [write]), [Rename] the node's rename dialog with the person's [name] in it (a rename that lands drops the held one,
+ * `ShellModel.rename`), [Place] the page the write was made on (a capture time's Memory, a create's level: [node] null is
+ * the space's top), where the person looks and then sends it no more (*Discard*).
+ */
+@Serializable
+@SerialName("QueuedOpen")
+sealed class QueuedOpen {
+    @Serializable @SerialName("QueuedOpen.Entry")
+    data class Entry(val tenant: String, val scope: String, val pot: String, val entry: String, val write: String) : QueuedOpen()
+
+    @Serializable @SerialName("QueuedOpen.Rename")
+    data class Rename(val tenant: String, val scope: String, val node: String, val name: String) : QueuedOpen()
+
+    @Serializable @SerialName("QueuedOpen.Place")
+    data class Place(val tenant: String, val scope: String, val node: String?) : QueuedOpen()
+}
+
+/**
+ * What deletes the writes made offline with the store (ADR 0153 decision 2, owner 2026-11-19), each with the confirm its
+ * ask offers: a sign-out, "Stop trusting this device", "Remove all offline content".
+ */
+@Serializable
+@SerialName("QueuedLoss")
+enum class QueuedLoss(@Serializable(with = me.raddatz.veyq.mobile.words.MsgKey::class) val confirm: Msg) {
+    SIGN_OUT(Msg.OFFLINE_SIGN_OUT_ANYWAY),
+    STOP_TRUSTING(Msg.OFFLINE_STOP_TRUSTING_ANYWAY),
+    REMOVE_ALL(Msg.OFFLINE_REMOVE_ANYWAY),
+}
+
+/** The ask before a [QueuedLoss] while writes wait: its [question] naming how many go, its [confirm] (*Cancel* beside it). */
+@Serializable
+@SerialName("QueuedAsk")
+class QueuedAsk(val question: Notice, @Serializable(with = me.raddatz.veyq.mobile.words.MsgKey::class) val confirm: Msg)
+
 /** The words of the writes made offline (ADR 0153 decision 5; drafted in the CR's phase 5, the owner's to change). */
 object QueuedShown {
     /** Under the offline banner while writes wait: their count; null while none does. */
@@ -58,6 +95,9 @@ object QueuedShown {
      * [Msg.OFFLINE_STOP_TRUSTING_ANYWAY] or [Msg.OFFLINE_REMOVE_ANYWAY].
      */
     fun lost(count: Int): Notice? = if (count > 0) Notice(Msg.OFFLINE_WRITES_LOST, count) else null
+
+    /** The ask before [loss] while [count] writes wait ([lost] with the loss's confirm); null where none waits (nothing to ask). */
+    fun ask(loss: QueuedLoss, count: Int): QueuedAsk? = lost(count)?.let { QueuedAsk(it, loss.confirm) }
 
     /** A held or refused write's reason as said; *Waiting to send* for one that waits. */
     fun said(write: QueuedWrite): Notice = when (write.state) {
@@ -138,6 +178,24 @@ class QueuedTray(private val account: VeyqAccount, private val nameOf: (scope: S
         return when (Queued.of(w.op)) {
             Queued.FOLDER_CREATE, Queued.MEMORY_CREATE, Queued.DEPOT_FILE_ADD -> nameOf(w.scope, parent)
             else -> nameOf(w.scope, w.node)
+        }
+    }
+
+    /** The ask before [loss] while writes wait here; null where none does. */
+    suspend fun ask(loss: QueuedLoss): QueuedAsk? = QueuedShown.ask(loss, count())
+
+    /** Where held write [id]'s *Open* goes ([QueuedOpen]); null where it is not held (nothing to decide) or not there. */
+    suspend fun opens(id: String): QueuedOpen? {
+        val w = box?.write(id)?.takeIf { it.state == QueuedWrite.State.HELD } ?: return null
+        fun field(k: String) = (w.intent[k] as? JsonPrimitive)?.contentOrNull
+        return when (Queued.of(w.op)) {
+            Queued.POT_ENTRY -> {
+                val e = QueuedExpenses.entry(w) ?: return null
+                QueuedOpen.Entry(w.tenant, w.scope, w.node ?: return null, e.entryId, w.id)
+            }
+            Queued.NODE_RENAME -> QueuedOpen.Rename(w.tenant, w.scope, w.node ?: return null, field("name").orEmpty())
+            Queued.FOLDER_CREATE, Queued.MEMORY_CREATE, Queued.DEPOT_FILE_ADD -> QueuedOpen.Place(w.tenant, w.scope, field("parent"))
+            else -> QueuedOpen.Place(w.tenant, w.scope, w.node)
         }
     }
 

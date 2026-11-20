@@ -221,6 +221,9 @@ internal sealed class Call {
      */
     @Serializable @SerialName("Shell.OfflineGoneSeen") data object ShellOfflineGoneSeen : Call()
 
+    /** The reconnect's notices ([ShellShown.queuedSaid]: how many writes made offline were sent, how many need the person) said. */
+    @Serializable @SerialName("Shell.QueuedSaidSeen") data object ShellQueuedSaidSeen : Call()
+
     @Serializable @SerialName("Shell.Choose") data class ShellChoose(val application: ApplicationId?) : Call()
     @Serializable @SerialName("Shell.SwitchSpace") data class ShellSwitchSpace(val scopeId: String) : Call()
     @Serializable @SerialName("Shell.Enter") data class ShellEnter(val folder: FolderRef) : Call()
@@ -323,6 +326,17 @@ internal sealed class Call {
 
     /** Editor [editor] is gone (`EntryEditor.close`); a rate still being asked is forgotten. */
     @Serializable @SerialName("Editor.Close") data class EditorClose(val editor: Long) : Call()
+
+    /**
+     * The editor of held write [write] on Pot [pot] (`PotModel.heldEditor`; a [Call.QueuedOpen]'s `QueuedOpen.Entry`, ADR
+     * 0153 decision 4): the person's change made offline in the form over the newer version, named ([EditorShown.newer]);
+     * *Discard mine* offered ([EditorShown.discardsMine], [EditorDiscardMine]). Answered [Answer.EditorOpened]; refused
+     * `NO_SUCH_ENTRY` where the write is no held entry of that Pot (sent, discarded, another Pot's) or the Pot is not read.
+     */
+    @Serializable @SerialName("Editor.OpenHeld") data class EditorOpenHeld(val pot: Long, val write: String, val separator: String) : Call()
+
+    /** *Discard mine* (`EntryEditor.discardMine`): the held change deleted unsent, answered as a save is ([Answer.EditorSaved]). */
+    @Serializable @SerialName("Editor.DiscardMine") data class EditorDiscardMine(val editor: Long) : Call()
 
     /**
      * Files picked as editor [editor]'s receipts by their [paths], as the host's open dialog gave them (ADR 0137 decision 3):
@@ -591,6 +605,38 @@ internal sealed class Call {
 
     /** What the uploads said was shown and dismissed without its action: the next waits. */
     @Serializable @SerialName("Upload.Seen") data class UploadSeen(val said: Long) : Call()
+
+    // --- the writes made offline (ADR 0153 decisions 2, 4 and 5; cr-app-offline-writes phase 6), the open tenant's account's
+
+    /** *Discard* (`QueuedTray.discard`): write [write] deleted unsent with every write waiting for it. Refused `NO_SUCH_QUEUED`. */
+    @Serializable @SerialName("Queued.Discard") data class QueuedDiscard(val write: String) : Call()
+
+    /**
+     * *Open* of held write [write] (`QueuedTray.opens`): where it is decided, typed ([Answer.QueuedOpens]) — a Pot entry's
+     * held editor ([EditorOpenHeld], on the Pot opened by its ids), the node's rename dialog with the person's name in it
+     * (a rename that lands drops the held one), or the page it was made on. Refused `NO_SUCH_QUEUED` where it is not held.
+     */
+    @Serializable @SerialName("Queued.Open") data class QueuedOpen(val write: String) : Call()
+
+    /**
+     * The name and type refused write [write]'s file [index] is offered under by the host's save dialog
+     * (`QueuedTray.copyName`; [QueuedItem]'s `copies` says how many it carries): [Answer.QueuedCopyName]. Refused `NO_SUCH_QUEUED`.
+     */
+    @Serializable @SerialName("Queued.CopyName") data class QueuedCopyName(val write: String, val index: Int) : Call()
+
+    /**
+     * *Save a copy* (`QueuedTray.saveCopy`): refused write [write]'s file [index] written as plaintext into [path], the one
+     * the host's save dialog gave (ADR 0137 decision 3, ADR 0047) — the only plaintext a queued write ever becomes, none
+     * of it on the wire. [Answer.Done]; refused `NO_SUCH_QUEUED` (none, not refused, no such file) or `NOT_WRITTEN`
+     * (nothing left at [path]).
+     */
+    @Serializable @SerialName("Queued.SaveCopy") data class QueuedSaveCopy(val write: String, val index: Int, val path: String) : Call()
+
+    /**
+     * What is asked before [loss] while writes wait (`QueuedTray.ask`, ADR 0153 decision 2): [Answer.QueuedAsked], its
+     * question and confirm, or none (nothing waits: the host goes on without asking). *Cancel* keeps them to send first.
+     */
+    @Serializable @SerialName("Queued.Ask") data class QueuedAsk(val loss: me.raddatz.veyq.mobile.offline.QueuedLoss) : Call()
 
     /**
      * Files picked or dropped into a level, screened first (ADR 0152 decisions 1 and 6, `DepotUploads.screen`): where the
@@ -1737,6 +1783,15 @@ internal sealed class Answer {
      * many, and what is said of those left out ([notice]: `MediaUploads.notTaken`; null where none was).
      */
     @Serializable @SerialName("Queued") data class Queued(val count: Int, val notice: Notice? = null) : Answer()
+
+    /** Where a held write's *Open* goes ([Call.QueuedOpen]): the core's typed target, never a write's content. */
+    @Serializable @SerialName("QueuedOpens") data class QueuedOpens(val open: me.raddatz.veyq.mobile.offline.QueuedOpen) : Answer()
+
+    /** What a refused write's file is saved under ([Call.QueuedCopyName]): its name and type, null where the write names none. */
+    @Serializable @SerialName("QueuedCopyName") data class QueuedCopyName(val name: String?, val mediaType: String?) : Answer()
+
+    /** The ask before a loss ([Call.QueuedAsk]); null: nothing waits, nothing to ask. */
+    @Serializable @SerialName("QueuedAsked") data class QueuedAsked(val ask: me.raddatz.veyq.mobile.offline.QueuedAsk?) : Answer()
     @Serializable @SerialName("TrashOpened") data class TrashOpened(val trash: Long) : Answer()
 
     /** What an action says: its notice, or null where it says nothing (it went through). */
@@ -1994,6 +2049,9 @@ internal sealed class Answer {
         /** An import: none open by that id (ADR 0152). */
         NO_SUCH_IMPORT,
 
+        /** A write made offline: none by that id in the open tenant's account's outbox, or not in the state the call needs (ADR 0153). */
+        NO_SUCH_QUEUED,
+
         /** A receipt the Pot shown offline does not keep (ADR 0153 decision 6): its word is `offline_not_kept`. */
         NOT_KEPT_OFFLINE,
 
@@ -2101,6 +2159,9 @@ internal sealed class Watched {
 
     /** The uploads of the tenant open now (`DepotUploads`), whichever that is: the tray, what it says once. */
     @Serializable @SerialName("Uploads") data object Uploads : Watched()
+
+    /** The writes made offline of the open tenant's account (`QueuedTray.items`): the uploads tray's list of its own. */
+    @Serializable @SerialName("QueuedTray") data object QueuedTray : Watched()
 
     /** An import offered by [Call.ImportScreen] or [Call.ImportScreenFolder]: its dialog ([ImportShown]). */
     @Serializable @SerialName("Import") data class Import(val import: Long) : Watched()
@@ -2258,6 +2319,13 @@ internal sealed class Update {
     /** The uploads; null while no tenant is open. */
     @Serializable @SerialName("Uploads") data class Uploads(val shown: UploadsShown?) : Update()
 
+    /**
+     * The writes made offline, oldest first ([me.raddatz.veyq.mobile.offline.QueuedItem]: each under the name of the place
+     * it writes into, its state and line, what it offers); empty where none waits or this device keeps no store; null while
+     * no tenant is open. An item carries its kind's word and the name the person gave, never the write's content or a key.
+     */
+    @Serializable @SerialName("QueuedTray") data class QueuedTray(val items: List<me.raddatz.veyq.mobile.offline.QueuedItem>?) : Update()
+
     /** Import [import]'s dialog as it is now; null once it is gone. */
     @Serializable @SerialName("Import") data class Import(val import: Long, val shown: ImportShown?) : Update()
 
@@ -2387,6 +2455,11 @@ internal class GalleryShown(
     val said: Notice?,
     /** Shown from the offline store, read-only, as of when (ADR 0140 decision 5): a time, nothing else; null online. */
     val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null,
+    /**
+     * Shown offline where writes made here are queued (`State.queues`, ADR 0153): uploads, marks, a trash, a capture time and
+     * a chapter offered and kept to be sent; every other write refuses offline by its own flag.
+     */
+    val queues: Boolean = false,
     /** The filter (ADR 0149 decision 5): [rows] are the media it shows; null where it is not offered. */
     val filter: FilterShown? = null,
     /** Whether the Contributions view is offered ([Call.BucketsOpen]; `rights.buckets` and `Contributions.OFFERED`). */
@@ -2447,7 +2520,12 @@ internal class GalleryShown(
  */
 @Serializable
 @SerialName("UploadTileShown")
-internal class UploadTileShown(val id: String, val video: Boolean, val progress: Double, val preparing: Boolean, val failed: Boolean, val label: Notice)
+internal class UploadTileShown(
+    val id: String, val video: Boolean, val progress: Double, val preparing: Boolean, val failed: Boolean, val label: Notice,
+    /** Added offline, sealed on this device, waiting to be sent (`UploadTile.waiting`, ADR 0153 decision 5); [said] its line. */
+    val waiting: Boolean = false,
+    val said: Notice? = null,
+)
 
 /**
  * A Memory's people line as the header draws it (core's `Participants.Line`, ADR 0144 decision 1): everyone listed
@@ -3367,6 +3445,10 @@ internal class EditorShown(
     val receipts: List<EditorReceipt>,
     val canAddReceipt: Boolean,
     val refusedPick: Boolean,
+    /** A held change's editor ([Call.EditorOpenHeld]): who saved the newer version and when (`State.newer`); null otherwise. */
+    val newer: Notice? = null,
+    /** *Discard mine* is offered ([Call.EditorDiscardMine]). */
+    val discardsMine: Boolean = false,
 )
 
 /**
@@ -3747,7 +3829,7 @@ internal class ShellShown(
     val canGoBack: Boolean,
     val isHome: Boolean,
     val drawerOpensAtStart: Boolean,
-    /** What the level's New offers (`AppKinds.createsWhere`), each with its words. */
+    /** What the level's New offers (`ShellModel.createsHere`: offline only what is queued), each with its words. */
     val creates: List<ShownCreate>,
     /** Whether New is offered where the shell is (`ShellModel.canCreateHere`: never in a guest's folder). */
     val canCreateHere: Boolean,
@@ -3771,9 +3853,22 @@ internal class ShellShown(
     /**
      * The banner offline (`ShellModel.State.banner`: "Offline — content as of {time}", the time the open page's own — a
      * Pot's kept ledger, a gallery's kept listing — where it has one, else the lists'); null online. The one offline
-     * banner: a host draws no page's time of its own. Offline every write is refused and New is not offered ([canCreateHere]).
+     * banner: a host draws no page's time of its own. Offline only what ADR 0153 decision 3 queues is offered: New offers
+     * [creates] (`ShellModel.createsHere`) where [canCreateHere].
      */
     val offlineBanner: Notice? = null,
+    /** Under the offline banner while writes made offline wait: their count (`ShellModel.queuedBanner`); null while none does. */
+    val queuedBanner: Notice? = null,
+    /**
+     * What the level the shell shows holds that is not sent yet (`ShellModel.queuedAt`, the CR's W4): the folders, Memories,
+     * chapters and files made offline there, each drawn in place among its rows with its state and line.
+     */
+    val queuedHere: List<me.raddatz.veyq.mobile.offline.QueuedItem> = emptyList(),
+    /**
+     * After a reconnect that sent writes made offline (`ShellModel.queuedSent`): how many were sent and how many need the
+     * person, until [Call.ShellQueuedSaidSeen]; empty otherwise.
+     */
+    val queuedSaid: List<Notice> = emptyList(),
     /** How a level is drawn (the account's choice on this device, ADR 0149 decision 8; [Call.ViewSet]) and what it offers. */
     val view: ViewModeShown = ViewModeShown.valueOf(CoreViewMode.FIRST.name),
     val views: List<ViewModeShown> = CoreViewMode.LEVEL.map { ViewModeShown.valueOf(it.name) },
