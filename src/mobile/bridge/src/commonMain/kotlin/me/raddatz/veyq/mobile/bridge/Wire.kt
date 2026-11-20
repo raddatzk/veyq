@@ -461,7 +461,8 @@ internal sealed class Call {
      * The header's "Available offline" (its plan's `offline` action, ADR 0140 decision 10; `NodeHeaderModel.toggleOffline`):
      * on, it turns off at once; off, the size it would keep is asked ([HeaderShown.offline]'s `asking` and `question`,
      * under the title `offline_pin_ask_title`) — nothing is kept until [HeaderOfflineConfirm] (`offline_pin_confirm`), or
-     * [HeaderOfflineCancel]. [Answer.Said] with why not, or none.
+     * [HeaderOfflineCancel]. [Answer.Said] with why not, or none. Offline the plan offers it only where the node is kept
+     * already (turning it off); a pin is refused (`offline_read_only`) and a size asked online is dropped.
      */
     @Serializable @SerialName("Header.Offline") data class HeaderOffline(val header: Long) : Call()
     @Serializable @SerialName("Header.OfflineConfirm") data class HeaderOfflineConfirm(val header: Long) : Call()
@@ -3768,8 +3769,9 @@ internal class ShellShown(
      */
     val picturesRound: Int = 0,
     /**
-     * The banner offline (`ShellModel.State.banner`: "Offline — content as of {time}"); null online. Offline every write
-     * is refused and New is not offered ([canCreateHere]).
+     * The banner offline (`ShellModel.State.banner`: "Offline — content as of {time}", the time the open page's own — a
+     * Pot's kept ledger, a gallery's kept listing — where it has one, else the lists'); null online. The one offline
+     * banner: a host draws no page's time of its own. Offline every write is refused and New is not offered ([canCreateHere]).
      */
     val offlineBanner: Notice? = null,
     /** How a level is drawn (the account's choice on this device, ADR 0149 decision 8; [Call.ViewSet]) and what it offers. */

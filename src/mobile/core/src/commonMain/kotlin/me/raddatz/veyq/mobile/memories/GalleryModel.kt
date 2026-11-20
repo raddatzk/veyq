@@ -98,6 +98,9 @@ class GalleryModel(
         /** Every node of the node's space this device opens (a Memory's chapters are among them). */
         suspend fun scopeNodes(): List<NodeRef>
 
+        /** The page shows the offline store's copy as of [at], or no longer (null): the shell's banner dates by it. */
+        fun shownOffline(at: me.raddatz.veyq.mobile.session.OfflineAsOf?) {}
+
         /** [blob] of [item], whole (a tile, a lightbox's picture); null where it does not read. */
         suspend fun read(item: MemoryMedia.Item, blob: MemoryMedia.Blob): ByteArray?
 
@@ -1088,6 +1091,7 @@ class GalleryModel(
         closed.value = true
         undoWindow?.cancel()
         scope.cancel()
+        door.shownOffline(null)
     }
 
     /*
@@ -1096,6 +1100,8 @@ class GalleryModel(
      * after the collector set it (`openedSettle`). A field the collectors use may sit anywhere above this block.
      */
     init {
+        // the page's own kept time offline, for the shell's banner (`PagesOffline`); [close] takes it back
+        scope.launch { state.map { it.offline }.distinctUntilChanged().collect { door.shownOffline(it) } }
         scope.launch { door.revisions.collect { read() } }
         music?.let { m ->
             scope.launch {
