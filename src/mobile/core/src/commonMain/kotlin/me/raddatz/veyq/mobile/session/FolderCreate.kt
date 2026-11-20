@@ -10,9 +10,9 @@ import me.raddatz.veyq.mobile.navigation.NodeRef
  */
 object FolderCreate {
     @Throws(Exception::class)
-    suspend fun create(tenant: TenantSession, scopeId: String, parentId: String?, name: String): NodeCreate.Result {
+    suspend fun create(tenant: TenantSession, scopeId: String, parentId: String?, name: String, nodeId: String? = null): NodeCreate.Result {
         val n = name.trim()
-        val r = NodeCreate.create(tenant, scopeId, parentId, NodeRef.FOLDER, n, Naming.slugify(n))
+        val r = NodeCreate.create(tenant, scopeId, parentId, NodeRef.FOLDER, n, Naming.slugify(n), nodeId = nodeId)
         tenant.forgetTree()
         return r
     }

@@ -14,6 +14,17 @@ import me.raddatz.veyq.mobile.session.NodeRekey
  */
 object AppKinds {
     /**
+     * Each write that may be queued offline and the sender that takes it through its online path (ADR 0153 decision 3,
+     * [me.raddatz.veyq.mobile.offline.Queued]): core's node writes here; an application's rows are its own senders.
+     */
+    internal fun queuedSender(q: me.raddatz.veyq.mobile.offline.Queued): me.raddatz.veyq.mobile.offline.QueuedSender = when (q) {
+        me.raddatz.veyq.mobile.offline.Queued.FOLDER_CREATE,
+        me.raddatz.veyq.mobile.offline.Queued.NODE_RENAME,
+        me.raddatz.veyq.mobile.offline.Queued.NODE_TRASH,
+        -> me.raddatz.veyq.mobile.offline.QueuedNodes.sender(q)
+    }
+
+    /**
      * The input a kind folds a node's name to for its slug token (the web's `registry.tokenInputFor`: the kind's own slug
      * rule — a file's stricter `fileNameSlug`, else `slugify` — behind its application's route slug where it claimed one,
      * pinned by `v1.json#name_folding`); null for a kind this build does not know, whose names it then does not write.

@@ -32,7 +32,9 @@ internal object NodePlacement {
 
     /**
      * Places node [nodeId] of [scopeId] under [parentOf] (of the node as read; null: the scope root), named [nameOf], its
-     * token's input folded by [tokenInput] (null: nothing is sent, [Ended.Refused] 0).
+     * token's input folded by [tokenInput] (null: nothing is sent, [Ended.Refused] 0). [placementSeen] (a write queued
+     * offline, ADR 0153 decision 4): the placement revision the person saw — the node at any other is [Ended.Refused]
+     * `409 stale_placement` without a request, and a `stale_placement` answer is never built again.
      */
     suspend fun place(
         tenant: TenantSession,
@@ -42,6 +44,7 @@ internal object NodePlacement {
         nameOf: (OpenNode) -> String,
         tokenInput: (kind: String, name: String) -> String?,
         waitsMs: List<Long>,
+        placementSeen: Long? = null,
     ): Ended {
         val account = tenant.account
         val suite = account.suite
@@ -71,6 +74,7 @@ internal object NodePlacement {
                 attempt = {
                     val n = node!!
                     val p = parent
+                    if (placementSeen != null && n.placementRevision != placementSeen) return@run NodeEpochWrite.Answer.OTHER to (409 to STALE_PLACEMENT)
                     val name = nameOf(n)
                     val input = tokenInput(n.kind, name) ?: return@run NodeEpochWrite.Answer.OTHER to (0 to "no_token_input")
                     val entryKey = p?.key ?: scopeKey
@@ -99,7 +103,7 @@ internal object NodePlacement {
                 },
             )
             val answered = result as? NodeEpochWrite.Result.Answered
-            if (!placed && answered != null && answered.value.first == 409 && answered.value.second == "stale_placement" && placements++ < PLACEMENT_RETRIES) {
+            if (!placed && answered != null && answered.value.first == 409 && answered.value.second == STALE_PLACEMENT && placementSeen == null && placements++ < PLACEMENT_RETRIES) {
                 // another device placed it meanwhile: the tree read again, the placement built on what it holds now
                 tenant.forgetTree()
                 if (!read()) return Ended.Gone
@@ -118,6 +122,8 @@ internal object NodePlacement {
 
     /** How often a `409 stale_placement` is built again on the tree read anew (`PLACEMENT_RETRIES`). */
     private const val PLACEMENT_RETRIES = 1
+
+    const val STALE_PLACEMENT = "stale_placement"
 
     fun codeOf(body: String): String? = runCatching { (Json.parseToJsonElement(body) as JsonObject)["code"]?.jsonPrimitive?.content }.getOrNull()
 }

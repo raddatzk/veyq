@@ -20,21 +20,24 @@ object NodeRename {
     }
 
     /** What came of it: [taken] is the sibling the name collides with when the loaded tree shows one; [links] the re-seal. */
-    class Result(val outcome: Outcome, val taken: OpenNode? = null, val links: ShareNames.Report? = null)
+    class Result(val outcome: Outcome, val taken: OpenNode? = null, val links: ShareNames.Report? = null, val code: String? = null)
 
     /**
      * Renames node [nodeId] of [scopeId] to [name] (trimmed; empty or unchanged writes nothing). [tokenInput] folds a name
      * of a kind to its slug token's input, as its application folds it (`registry.tokenInputFor`; null: a kind this
-     * client does not know, whose collision only the server sees).
+     * client does not know, whose collision only the server sees). [placementSeen] is a rename made offline (ADR 0153
+     * decision 4): the placement revision the person saw — a node placed meanwhile is held for them ([Outcome.NAME_TAKEN]
+     * with code `stale_placement`), never rebuilt on the newer placement as an online rename is.
      */
     @Throws(Exception::class)
     suspend fun rename(
         tenant: TenantSession, scopeId: String, nodeId: String, name: String, tokenInput: (kind: String, name: String) -> String?,
-        nowMs: Long, waitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS,
+        nowMs: Long, waitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS, placementSeen: Long? = null,
     ): Result {
         val trimmed = name.trim()
         val tree = tenant.trees()[scopeId].orEmpty()
-        val node = tree.firstOrNull { it.id == nodeId } ?: return Result(Outcome.FAILED)
+        val node = tree.firstOrNull { it.id == nodeId } ?: return Result(Outcome.FAILED, code = "not_found")
+        if (placementSeen != null && node.placementRevision != placementSeen) return Result(Outcome.NAME_TAKEN, code = NodePlacement.STALE_PLACEMENT)
         if (trimmed.isEmpty() || trimmed == node.name) return Result(Outcome.RENAMED)
         val input = tokenInput(node.kind, trimmed) ?: return Result(Outcome.FAILED)
         // The loaded tree's sibling that folds to the same input: said by name before anything is sent (`collidingSibling`).
@@ -42,6 +45,7 @@ object NodeRename {
             ?.let { return Result(Outcome.NAME_TAKEN, taken = it) }
         val ended = NodePlacement.place(
             tenant, scopeId, nodeId, parentOf = { it.parentId }, nameOf = { trimmed }, tokenInput = tokenInput, waitsMs = waitsMs,
+            placementSeen = placementSeen,
         )
         if (ended == NodePlacement.Ended.Placed) {
             val links = runCatching { ShareNames.reseal(tenant, scopeId, nodeId, trimmed, nowMs) }.getOrNull()
@@ -57,6 +61,11 @@ object NodeRename {
                     else -> Outcome.FAILED
                 }
                 else -> Outcome.FAILED
+            },
+            code = when (ended) {
+                is NodePlacement.Ended.Refused -> ended.code ?: "http_${ended.status}"
+                NodePlacement.Ended.Gone -> "not_found"
+                else -> null
             },
         )
     }

@@ -188,6 +188,43 @@ class VeyqAccount private constructor(
     val outbox: me.raddatz.veyq.mobile.offline.Outbox?
         get() = offline?.outbox(suite)
 
+    /**
+     * Whether a write of [q] made now is queued rather than refused (ADR 0153 decision 3): wherever this device keeps the
+     * account's store — no store, no queue. What [me.raddatz.veyq.mobile.offline.Queued] does not name is never queued.
+     */
+    fun queues(q: me.raddatz.veyq.mobile.offline.Queued): Boolean = offline != null
+
+    private val sendingLock = Mutex()
+    private var sendJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * The outbox sent (ADR 0153 decision 4, [me.raddatz.veyq.mobile.offline.OutboxSender]): one run at a time, each tenant
+     * opened once for it. Null where there is no outbox or the account is not online.
+     */
+    internal suspend fun sendQueued(): me.raddatz.veyq.mobile.offline.OutboxSender.Report? = sendingLock.withLock {
+        val box = outbox ?: return@withLock null
+        if (_reach.value != Reach.Online || sendsNothing || closed) return@withLock null
+        if (box.count() == 0) return@withLock me.raddatz.veyq.mobile.offline.OutboxSender.Report(0, 0, 0, 0)
+        me.raddatz.veyq.mobile.offline.OutboxSender(
+            box,
+            tenantOf = { id -> tenants.firstOrNull { it.tenantId == id }?.let { open(it) } },
+            online = { _reach.value == Reach.Online && !closed },
+            senderOf = me.raddatz.veyq.mobile.AppKinds::queuedSender,
+        ).run()
+    }
+
+    /** [sendQueued] in the background, where writes wait: after a reconnect and when an account opened online finds some. */
+    private fun startSending() {
+        if (closed) return
+        sendJob = background.launch {
+            runCatching { if ((outbox?.count() ?: 0) > 0) sendQueued() }
+                .onFailure { if (it is CancellationException) throw it else println("veyq: the outbox was not sent: $it") }
+        }
+    }
+
+    /** The background run [startSending] began, awaited (a test's). */
+    internal suspend fun awaitSending() { sendJob?.join() }
+
     /** This account's pins on this device and their sync (ADR 0140 decision 9); null where it keeps no offline store. */
     val offlinePins: me.raddatz.veyq.mobile.offline.OfflinePins?
         get() {
@@ -209,6 +246,8 @@ class VeyqAccount private constructor(
         offline = o
         keepOpening(o)
         runCatching { o.store.sweep() }
+        // an account opened online with writes waiting from before (a reconnect never came): they go now
+        if (_reach.value == Reach.Online && !sendsNothing) startSending()
     }
 
     /** The answers an offline unlock opens with: the key material (its wraps and sealed identity only) and the tenants. */
@@ -306,6 +345,8 @@ class VeyqAccount private constructor(
             _reach.value = Reach.Online
             // back online is an unlock too: the rotation's finish runs now, not 45 s later
             rotations.nudge()
+            // and what the person made offline is sent (ADR 0153 decision 4)
+            startSending()
             true
         } catch (e: CancellationException) {
             throw e

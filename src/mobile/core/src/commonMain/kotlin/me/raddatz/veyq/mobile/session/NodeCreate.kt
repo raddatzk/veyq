@@ -24,7 +24,8 @@ object NodeCreate {
 
     sealed interface Result {
         data class Done(val created: Created) : Result
-        data class Refused(val reason: Reason) : Result
+        /** Refused: [status] and [code] as the server answered (null where nothing was sent), e.g. `id_taken` for a replay. */
+        data class Refused(val reason: Reason, val status: Int? = null, val code: String? = null) : Result
     }
 
     enum class Reason {
@@ -41,12 +42,14 @@ object NodeCreate {
 
     /**
      * Creates a node of [kind] named [name] in [scopeId], under [parentId] (null: the scope's root). [sealMeta] seals the
-     * node's first meta under its new key and id, sent in the same request.
+     * node's first meta under its new key and id, sent in the same request. [nodeId] is the id the node is created with
+     * on every attempt (a write queued offline minted it, ADR 0153); null: a fresh one per attempt.
      */
     suspend fun create(
         tenant: TenantSession, scopeId: String, parentId: String?, kind: String, name: String, tokenInput: String,
         sealMeta: ((key: ByteArray, nodeId: String) -> String)? = null,
         waitsMs: List<Long> = NodeEpochWrite.REKEY_WAITS_MS,
+        nodeId: String? = null,
     ): Result {
         val account = tenant.account
         val suite = account.suite
@@ -56,7 +59,7 @@ object NodeCreate {
             parent = tenant.trees()[scopeId]?.firstOrNull { it.id == parentId }
             return parent != null
         }
-        if (!findParent()) return Result.Refused(Reason.REFUSED)
+        if (!findParent()) return Result.Refused(Reason.REFUSED, code = PARENT_GONE)
         // The scope key this session opened, and its epoch: what a new key is minted under (the server refuses another).
         val (scopeKey, scopeEpoch) = tenant.scopeKey(scopeId) ?: return Result.Refused(Reason.REFUSED)
         var created: Created? = null
@@ -72,7 +75,7 @@ object NodeCreate {
             attempt = {
                 val p = parent
                 val entryKey = p?.key ?: scopeKey
-                val nodeId = uuid(account)
+                val nodeId = nodeId ?: uuid(account)
                 val binding = arrayOf("scopeId" to scopeId, "nodeId" to nodeId, "epoch" to scopeEpoch.toLong(), "placementRevision" to 0L)
                 val key = account.primitives.randomBytes(32)
                 val request = CreateNodeRequest(
@@ -105,7 +108,8 @@ object NodeCreate {
         )
         return when (result) {
             NodeEpochWrite.Result.Busy -> Result.Refused(Reason.BUSY)
-            NodeEpochWrite.Result.Gone, NodeEpochWrite.Result.StaleAgain -> Result.Refused(Reason.REFUSED)
+            NodeEpochWrite.Result.Gone -> Result.Refused(Reason.REFUSED, code = PARENT_GONE)
+            NodeEpochWrite.Result.StaleAgain -> Result.Refused(Reason.REFUSED, 409, "stale_epoch")
             is NodeEpochWrite.Result.Answered -> {
                 val (status, code) = result.value
                 created?.let { Result.Done(it) } ?: Result.Refused(
@@ -115,10 +119,14 @@ object NodeCreate {
                         status == 422 -> Reason.NOT_ALLOWED
                         else -> Reason.REFUSED
                     },
+                    status, code,
                 )
             }
         }
     }
+
+    /** The parent the node was to be created under is not in the tree read (trashed, moved out of reach). */
+    const val PARENT_GONE = "parent_gone"
 
     private fun codeOf(body: String): String? = runCatching { (Json.parseToJsonElement(body) as JsonObject)["code"]?.jsonPrimitive?.content }.getOrNull()
 
