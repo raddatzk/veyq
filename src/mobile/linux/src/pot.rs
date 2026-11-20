@@ -15,6 +15,12 @@
 //! A link's guest has no shell bar, so the page holds the places itself there ([PotPage::own_places], #1035): Entries and
 //! Overview, as Android's and Apple's guest Pot. The web gives a writing guest a Settings tab of its people (add, rename);
 //! core's `PotSettings` offers a guest a member's people actions (deactivate, erase), so it is not offered here yet.
+//!
+//! Offline (ADR 0153 decision 6) the Pot reads as of its kept ledger: the shell's `AdwBanner` says "Offline — content as
+//! of …" with the Pot's own kept time (core's), never a banner of the page's; the view's `canWrite` is off, so Add entry,
+//! Record, Restore, the editor's Save and the settings' edits are not offered (the core's). Where it did not open, the
+//! page says the core's failure word (`Update.Pot`'s `failure`): offline, that this device does not keep it; else that
+//! it did not open.
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
@@ -39,6 +45,8 @@ struct Inner {
     root: gtk::Box,
     id: Cell<Option<i64>>,
     state: RefCell<Option<PotModelState>>,
+    /// What the page says where the Pot did not open (`Update.Pot`'s `failure`, a word's key); None where it opened.
+    failure: RefCell<Option<String>>,
     tabs: RefCell<(Vec<ShownTab>, Option<BarTab>)>,
     watch: RefCell<Option<Watch>>,
     /// The live poll's watch while the page is mapped and its window active; dropped, the poll stops.
@@ -78,6 +86,7 @@ impl PotPage {
             root: gtk::Box::new(gtk::Orientation::Vertical, 0),
             id: Cell::new(None),
             state: RefCell::new(None),
+            failure: RefCell::new(None),
             tabs: RefCell::new((Vec::new(), None)),
             watch: RefCell::new(None),
             live: RefCell::new(None),
@@ -251,7 +260,11 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
     while let Ok(update) = updates.recv().await {
         let Some(inner) = weak.upgrade() else { return };
         match update {
-            Ok(Update::Pot { state, .. }) => {
+            Ok(Update::Pot { state, failure, .. }) => {
+                if let Some(offline) = state.as_ref().and_then(|s| s.offline.as_ref()) {
+                    eprintln!("veyq: pot offline: as of {:?}, failure {}", offline.as_of, failure.as_deref().unwrap_or("-"));
+                }
+                *inner.failure.borrow_mut() = failure;
                 if let (Some(view), Some(read)) = (state.as_ref().and_then(|s| s.view.as_ref()), inner.read.borrow().as_ref()) {
                     read(view.can_write);
                 }
@@ -302,7 +315,12 @@ impl Inner {
         match (state.as_ref(), view) {
             (Some(s), None) if s.failed => {
                 self.scroll.set_visible(false);
-                self.root.append(&adw::StatusPage::builder().icon_name("dialog-warning-symbolic").title(words::pot_open_failed()).vexpand(true).build());
+                // offline, that this device does not keep it (not a failed load); else that it did not open
+                let (icon, title) = match self.failure.borrow().as_deref() {
+                    Some(key) => (if key == "offline_not_kept" { "network-offline-symbolic" } else { "dialog-warning-symbolic" }, said::key(key)),
+                    None => ("dialog-warning-symbolic", words::pot_open_failed()),
+                };
+                self.root.append(&adw::StatusPage::builder().icon_name(icon).title(title).vexpand(true).build());
                 return;
             }
             (_, None) => {
