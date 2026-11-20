@@ -20,7 +20,7 @@
 
 [ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md) put a Kotlin Multiplatform core under a
 native UI for Android (Compose) and the Apple platforms (SwiftUI). The core holds the suite, the API, the session, the
-navigation model and each application's domain; but each app's model (`android/…/AppModel.kt`, `apple/Veyq/AppModel.swift`,
+navigation model and each application's domain; but each app's model (`android/…/AppModel.kt`, `apple/Veyq/Core/AppModel.swift`,
 some 1,500 lines each) still holds logic both write again: when the lists are read anew, which outcome raises which
 notice, the sign-in, unlock and trust flow, what a page shows and what it may do. Two copies of a rule are two chances
 for one platform to be wrong; the upload queue (2026-11-09) was the first piece moved into the core for that reason,

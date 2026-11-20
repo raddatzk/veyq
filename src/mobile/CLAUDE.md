@@ -44,9 +44,9 @@ A Gradle build of its own, run through its own wrapper.
   ([ADR 0143](../../docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)): the map services in core's `map/` (the consent per device, the tile
   fetch, its memory cache and its sealed shelf in the offline store's automatic tier (`TileShelf`, inbox #939), the geocoder, the viewport, clustering), a Memory's date and place in `memories/place/`
   and its GPX tracks in `memories/tracks/`. Apple draws them with MapKit (decision 1): `MapViews.swift` (the gate that
-  mounts a `Map` only while `MapServices.state` is `Shown`, the consent's offer naming Apple Maps, the facts line and the
-  two editors, the bar's Map tab, a photo's map, Settings' Map services) and `MemoryMapView.swift` (the Map view's
-  tracks), over `AppModel`'s map services; `AppleMemories.saveTrack` and `watchPlace` adapt what Swift cannot call. Android draws
+  mounts a `Map` only while `MapServices.state` is `Shown`, the consent's offer naming Apple Maps, Settings' Map
+  services), `MemoryPlaces.swift` (the facts line and the two editors, the bar's Map tab, a photo's map) and
+  `MemoryMapView.swift` (the Map view's tracks), over `AppModel`'s map services; `AppleMemories.saveTrack` and `watchPlace` adapt what Swift cannot call. Android draws
   the core's raster map in Compose (decision 1, no map library): `MapView.kt` (`RasterMap` — the tiles the core's tile view
   hands, drawn from the floor level scaled, a pan, a pinch and a double tap reported back as a `Viewport`; `MapPlace`, the
   consent's offer or the reason no map stands; the attribution and *Turn map services off* along every map's edge),
