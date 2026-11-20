@@ -155,6 +155,20 @@ How each of these is built — the modules, the seams core asks, the web registr
   text guard, and the shell asks a build-time registry what to render for a kind. The kind is a string token on both
   sides, so the registry's fail-closed answer and its tests carry what a closed enum's exhaustiveness did. A cover and
   a record list's counters are core's (decision 3), so core's schema and config name no application concept.
+- **The entry chunk carries the descriptors, not the applications.** The composition root still imports every
+  application's `register.ts` statically (decision 5), but what a registration holds behind its descriptor is fetched
+  on first use: each page, dialog, drop page, person section and item review is an async component, and each async hook
+  (download, import, copy, re-key, the cover's match, the space search, the scope re-key, the drop box's link) a
+  `lazyHook` (`src/web/src/core/applications/lazy.ts`), each by a literal `import('./…')` in its own `register.ts` —
+  so what runs is still what the build saw, only split. What the shell asks synchronously stays eager: the kinds, their
+  labels and icons, header order, rights, row factories, content checks (`validateContent`, so each application keeps
+  it in a `contentSchema.ts` apart from its `exportImport.ts`), search facets, `onScopeReset` and the catalogs.
+  Measured with `npx vite build --outDir <scratch>` in `src/web`, each emitted `.js` gzipped at level 9 (2026-11-20):
+  before, `main` was all the entry loaded, 2.74 MB minified / 753 KB gzip of 5.76 MB / 1.68 MB in all; after, `main`
+  and the chunks `index.html` modulepreloads are 2.15 MB / 606 KB (`main` alone 1.05 MB / 300 KB) of 5.80 MB / 1.73 MB,
+  with Memories' page 140 KB / 43 KB, Expenses' 63 KB / 18 KB and Depot's file page 20 KB / 7 KB fetched on first open,
+  Leaflet (151 KB / 44 KB) with the first map. A tab open across an upgrade asks for chunks the new image no
+  longer has (ADR 0069): an application's page it has not opened yet then fails to load.
 - **An application registers through one registrar; what it supplies asks the page through one host.** Naming itself
   (its id, its name) answers an application the one scoped door it registers everything else through — its kinds, its
   route, its lifecycle hooks, its drop pages, its sections — so what it owns is what it registered there and its id is

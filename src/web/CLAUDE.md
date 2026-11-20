@@ -177,7 +177,11 @@ here; the server is blind.
   or reads an application's i18n namespace — `'memory.…'` / `'media.…'` / `'depot.…'` / `'expenses.…'` (the guard's `I18N_NAMESPACES`;
   core serves every application's nodes, so its strings are `node.*`/`common.*` and a kind's noun comes from its descriptor). The catalogs sit where they belong: core's names no application namespace, an application's exactly its own, and no application reads another's keys. `src/applicationMessages.ts` (the composition root's catalog half) may import an application's catalog and nothing else of it; `main.ts` calls `registerApplicationMessages()` then `registerApplications()`, and `src/test/setup.ts` calls the first statically for every test file, node environment included. The one exempt file is `src/applications.ts`, the composition root (by exact path, never a
   directory); `main.ts` calls its `registerApplications()` before `boot()`. Build-time only: no glob, no computed
-  `import()`, no loading after the fact (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
+  `import()`, no code the build did not see (ADR 0079 Decision 5, ADR 0026) — registered code runs with every unlocked key.
+  An application's pages, dialogs and async hooks are its own chunks all the same, fetched on first use by a literal
+  `import('./…')` in its `register.ts` (`core/applications/lazy.ts`, ADR 0079 Consequences); what the shell asks
+  synchronously - rights, rows, `validateContent` (each application's `contentSchema.ts`), search facets - stays eager, and
+  `src/test/setup.ts` loads the lazy components at registration (`test/lazyApplications.ts`).
   **People and participants (ADR 0083, `uc.memory.participants`).** A Memory lists who was there as OPAQUE USER IDS in its sealed meta
   (`participants: { userIds }`, `features/memories/memoryParticipants.ts`; cap 100 - `wrappedMeta` is limited to 8192 chars). The id list is the only
   thing stored: **never a name or a snapshot of one** - a share serves the node's meta unchanged and its guest holds `K_node`, so the
