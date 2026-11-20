@@ -129,18 +129,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("veyq-recent", Context.MODE_PRIVATE)
     private val recent = RecentUses(persist = ::persistRecent, initial = loadRecent())
     private val hidden = Hidden(persist = { prefs.edit().putStringSet("hidden", it).apply() }, initial = prefs.getStringSet("hidden", emptySet()).orEmpty())
-    private var host: java.lang.ref.WeakReference<android.app.Activity>? = null
     /** The device's keys in the Keystore: its wraps, its unlock keys, its sealed secrets (a link's guest sessions among them). */
-    private val deviceKeys = KeystoreDeviceKeys(app) { host?.get() }
-    private val device = ThisDevice(
-        PreferencesStore(app),
-        deviceKeys,
-        android.os.Build.MODEL,
-        BouncyCastlePrimitives,
-        // ADR 0140 decision 3: app-private, credential-encrypted, left out of Auto Backup by the directory itself
-        offlineRoot = java.io.File(app.noBackupFilesDir, "offline").path,
-        offlineLimit = me.raddatz.veyq.mobile.offline.AccountOffline.PHONE_LIMIT,
-    )
+    private val deviceKeys = AndroidDevice.keys(app)
+    /** This installation, the process's one: the background sync's worker reads the same ([AndroidDevice]). */
+    private val device = AndroidDevice.of(app)
 
     /** The way in (core's `SessionModel`): the start, the sign-in, the unlock, the switcher, the sign-out. */
     private val session = me.raddatz.veyq.mobile.session.SessionModel.accounts(
@@ -254,6 +246,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         OfflineWork.watch(app, viewModelScope)
         // an upload goes on with the app left (ADR 0145 decision 1)
         UploadWork.watch(app, viewModelScope)
+        // the background sync scheduled while an account at the login level has it on (ADR 0153 decision 8)
+        BackgroundWork.watch(app, viewModelScope)
     }
 
     private fun gateChanged(g: me.raddatz.veyq.mobile.session.SessionModel.Gate) {
@@ -288,7 +282,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** The activity a prompt for the unlock key is shown over, while one is resumed. */
     fun attach(activity: android.app.Activity?) {
-        host = activity?.let { java.lang.ref.WeakReference(it) }
+        AndroidDevice.host = activity?.let { java.lang.ref.WeakReference(it) }
     }
 
     /**
@@ -686,6 +680,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         override fun turnOfflineLimitOff() = onSettings { it.turnOfflineLimitOff(); null }
         override fun clearOfflineCache() = onSettings { it.clearOfflineCache(); null }
         override fun unpinOffline(node: String) = onSettings { it.unpinOffline(node); null }
+        override fun setBackgroundSync(on: Boolean) = onSettings { it.setBackgroundSync(on); null }
         override fun askRemoveAllOffline() { settingsModel?.askRemoveAllOffline() }
         override fun cancelRemoveAllOffline() { settingsModel?.cancelRemoveAllOffline() }
         override fun removeAllOffline() = beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.offline.QueuedLoss.REMOVE_ALL, cancel = ::cancelRemoveAllOffline) {

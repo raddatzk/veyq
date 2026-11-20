@@ -75,9 +75,10 @@ class MainActivity : ComponentActivity() {
 
     private fun devLogin(intent: android.content.Intent?) {
         DevLogin.from(intent)?.let { c ->
-            // `--remember` answers the offer with the presence level once the sign-in opened, as a person would
-            model.signIn(c.server, c.email, c.password, c.secretKey, then = if (c.remember) suspend {
-                model.answerOffer(me.raddatz.veyq.mobile.session.StaySignedIn.PRESENCE)
+            // `--remember` answers the offer with its level once the sign-in opened, as a person would
+            val level = c.remember
+            model.signIn(c.server, c.email, c.password, c.secretKey, then = if (level != null) suspend {
+                model.answerOffer(level)
             } else null)
         }
         DevLogin.unlockPassword(intent)?.let {

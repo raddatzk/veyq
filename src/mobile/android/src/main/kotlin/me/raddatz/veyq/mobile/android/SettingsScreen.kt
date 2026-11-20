@@ -46,6 +46,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.OfflinePin
 import androidx.compose.material.icons.outlined.SdStorage
 import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -127,6 +128,9 @@ interface SettingsActions {
     fun turnOfflineLimitOff() {}
     fun clearOfflineCache() {}
     fun unpinOffline(node: String) {}
+
+    /** *Sync in the background* turned on or off for this account on this device (ADR 0153 decision 8). */
+    fun setBackgroundSync(on: Boolean) {}
 
     /** "Remove all offline content", asked first (core's `askingRemoveAll`), then [removeAllOffline] or the cancel. */
     fun askRemoveAllOffline() {}
@@ -699,6 +703,7 @@ private fun LazyListScope.storage(state: AccountSettings.State, context: Context
     item(key = "storage-automatic") { SizeRow(stringResource(R.string.account_settings_storage_automatic), size(storage.automatic), Icons.Outlined.History, "settings-storage-automatic") }
     item(key = "storage-pinned") { SizeRow(stringResource(R.string.account_settings_storage_pinned), size(storage.pinned), Icons.Outlined.OfflinePin, "settings-storage-pinned") }
     storage.free?.let { free -> item(key = "storage-free") { SizeRow(stringResource(R.string.account_settings_storage_free), size(free), Icons.Outlined.SdStorage, "settings-storage-free") } }
+    backgroundSync(state, actions)
     if (storage.items.isEmpty()) item(key = "storage-items-empty") {
         Text(
             stringResource(R.string.account_settings_storage_items_empty), color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -729,6 +734,34 @@ private fun LazyListScope.storage(state: AccountSettings.State, context: Context
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 modifier = Modifier.testTag("settings-storage-remove-all"),
             ) { Text(stringResource(R.string.account_settings_storage_remove_all)) }
+        }
+    }
+}
+
+/**
+ * *Sync in the background* (ADR 0153 decision 8): the core's switch where the account stays signed in at the login level,
+ * as Material 3's switch list item — the whole row the one toggle —; where the core says why it is missing (the presence
+ * level, the password), that line instead. Nothing on a device the core gives neither.
+ */
+private fun LazyListScope.backgroundSync(state: AccountSettings.State, actions: SettingsActions) {
+    val on = state.backgroundSync
+    if (on != null) item(key = "storage-background") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.account_settings_background_sync)) },
+            supportingContent = { Text(stringResource(R.string.account_settings_background_sync_hint)) },
+            leadingContent = { Icon(Icons.Outlined.Sync, null) },
+            trailingContent = { Switch(on, null, enabled = !state.working) },
+            colors = listColors(),
+            modifier = Modifier.testTag("settings-background-sync")
+                .toggleable(value = on, enabled = !state.working, role = androidx.compose.ui.semantics.Role.Switch, onValueChange = actions::setBackgroundSync),
+        )
+    }
+    state.backgroundSyncMissing?.let { why ->
+        item(key = "storage-background-missing") {
+            Text(
+                say(why), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("settings-background-sync-missing"),
+            )
         }
     }
 }
