@@ -24,13 +24,21 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 /**
- * The core's port of the search against `contracts/platform/search/v1-vectors.json` (ADR 0146 decision 1), the vectors
- * the web's `vectors.test.ts` recorded from the web's own functions: every case of every section, on the JVM and on
- * `macosArm64` (and on Linux and Windows through `run.py test`). A case that fails names its section, index and rule. The
- * answers are compared as JSON, in the shape the web wrote them.
+ * The core's search against `contracts/platform/search/v1-vectors.json` (ADR 0146 decision 1): every case of every section,
+ * on the JVM and on `macosArm64` (and on Linux and Windows through `run.py test`); the web runs the same cases through
+ * `@veyq/core-js` (its `vectors.test.ts`). A case that fails names its section, index and rule. The answers are compared as
+ * JSON, in the shape the web reads them.
+ *
+ * **The write mode is here** (ADR 0155 § Consequences: the core's output is the one source): `VEYQ_WRITE_VECTORS=1 ./gradlew
+ * :core:jvmTest --tests '*SearchVectorsTest*'` records every case's `expected` from the core's own functions — the
+ * `matcher` section's as fresh scans, which a field's remembering matcher must then give —, written as JavaScript's
+ * `JSON.stringify(vectors, null, 2)` writes it, so an unchanged rule rewrites the file byte for byte. Read each changed
+ * case against its rule before committing it. The `match` cases order names by [NameOrder]; the web's collator must agree
+ * on them, which its own run of the cases holds.
  */
 class SearchVectorsTest {
-    private val vectors = Json.parseToJsonElement(readRepoFile("contracts/platform/search/v1-vectors.json").decodeToString()).jsonObject
+    private val vectors = Json.parseToJsonElement(readRepoFile(FILE).decodeToString()).jsonObject
+    private val writing = testEnv("VEYQ_WRITE_VECTORS") == "1"
 
     private fun JsonElement?.str(): String? = (this as? JsonPrimitive)?.takeIf { it.isString }?.content
     private fun JsonObject.strings(k: String): List<String> = (this[k] as? JsonArray)?.map { it.jsonPrimitive.content }.orEmpty()
@@ -184,6 +192,7 @@ class SearchVectorsTest {
     )
 
     private fun section(name: String) {
+        if (writing) return // the write mode records instead (writeTheVectors)
         val cases = vectors[name]!!.jsonArray
         assertTrue(cases.isNotEmpty(), "no $name vectors")
         val failures = cases.mapIndexedNotNull { i, c ->
@@ -203,6 +212,10 @@ class SearchVectorsTest {
         else -> a == b
     }
 
+    private companion object {
+        const val FILE = "contracts/platform/search/v1-vectors.json"
+    }
+
     @Test fun fold() = section("fold")
     @Test fun tails() = section("tails")
     @Test fun wordPrefix() = section("wordPrefix")
@@ -213,8 +226,65 @@ class SearchVectorsTest {
     @Test fun facets() = section("facets")
     @Test fun medium() = section("medium")
 
+    /** The write mode (see the class): every section's answers as its cases' `expected`, the rest of the file as it was. */
     @Test
-    fun theVectorsAreTheWebsRecordedOnes() {
+    fun writeTheVectors() {
+        if (!writing) return
+        val recorded = JsonObject(vectors.mapValues { (key, value) ->
+            val answer: ((JsonObject) -> JsonElement)? = when (key) {
+                // the recorded answer is a fresh scan; the field's matcher is held to it (the `matcher` section)
+                "matcher" -> { c: JsonObject ->
+                    val docs = docsOf(c["documents"])
+                    JsonArray(c["steps"]!!.jsonArray.map { q -> JsonArray(sortedRanks(Query.matchAll(docs.list, queryOf(q))).map(::JsonPrimitive)) })
+                }
+                else -> answers[key]
+            }
+            if (answer == null) value
+            else JsonArray(value.jsonArray.map { c ->
+                val case = c.jsonObject
+                JsonObject(if ("expected" in case) case.mapValues { (k, v) -> if (k == "expected") answer(case) else v } else case + ("expected" to answer(case)))
+            })
+        })
+        writeRepoFile(FILE, stringify(recorded, "") + "\n")
+    }
+
+    /** [e] as JavaScript's `JSON.stringify(e, null, 2)` writes it: what the web's write mode wrote, so a rewrite diffs only
+     *  where an answer changed. */
+    private fun stringify(e: JsonElement, indent: String): String {
+        val inner = "$indent  "
+        return when (e) {
+            is JsonNull -> "null"
+            is JsonPrimitive -> if (e.isString) quote(e.content) else e.content
+            is JsonArray -> if (e.isEmpty()) "[]" else e.joinToString(",\n", "[\n", "\n$indent]") { inner + stringify(it, inner) }
+            is JsonObject -> if (e.isEmpty()) "{}"
+            else e.entries.joinToString(",\n", "{\n", "\n$indent}") { (k, v) -> "$inner${quote(k)}: ${stringify(v, inner)}" }
+        }
+    }
+
+    /** A string as `JSON.stringify` quotes it: the quote and the backslash escaped, the C0 controls as their short escape or a
+     *  `u00xx` escape, a lone surrogate as its `udxxx` escape, every other character as itself. */
+    private fun quote(s: String): String {
+        val out = StringBuilder(s.length + 2).append('"')
+        for ((i, c) in s.withIndex()) {
+            val lone = (c.isHighSurrogate() && !(i + 1 < s.length && s[i + 1].isLowSurrogate())) ||
+                (c.isLowSurrogate() && !(i > 0 && s[i - 1].isHighSurrogate()))
+            when {
+                c == '"' -> out.append("\\\"")
+                c == '\\' -> out.append("\\\\")
+                c == '\b' -> out.append("\\b")
+                c == '\u000C' -> out.append("\\f")
+                c == '\n' -> out.append("\\n")
+                c == '\r' -> out.append("\\r")
+                c == '\t' -> out.append("\\t")
+                c < ' ' || lone -> out.append("\\u").append(c.code.toString(16).padStart(4, '0'))
+                else -> out.append(c)
+            }
+        }
+        return out.append('"').toString()
+    }
+
+    @Test
+    fun everyCaseIsRecorded() {
         // a case without its `expected` would compare nothing: the file is the recorded one, every case answered
         for (s in listOf("fold", "tails", "wordPrefix", "suggest", "match", "matcher", "nameParts", "facets", "medium")) {
             for (c in vectors[s]!!.jsonArray) assertTrue("expected" in c.jsonObject, "$s case without its expected: $c")
