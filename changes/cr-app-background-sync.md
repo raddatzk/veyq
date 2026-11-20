@@ -83,8 +83,13 @@ ADR 0153 decision 8 holds them; beside it:
   wrap); (b) `VeyqAccount.resume` in place of `resumeOnline` → the no-server test red (an account opened offline);
   (c) no `retire` → the login test red (the account still open); (d) `go` not asked → the deadline test red (both
   writes sent).
-- [ ] **2 bridge** — the switch on the wire (the desktops draw nothing; it is absent there). · Done when: `:bridge:jvmTest`
+- [x] **2 bridge** — the switch on the wire (the desktops draw nothing; it is absent there). · Done when: `:bridge:jvmTest`
   green.
+  **Built** 2026-11-20 (`claude/bgsync`): the wire does not change — `SettingsShown` carries neither `backgroundSync` nor
+  its reason and no call sets it; the bridge's `ThisDevice` says `backgroundRuns = false` outright, so the core gives the
+  desktops no switch and no reason. `BackgroundSyncWireTest` holds it over the whole schema (every type, variant and
+  field) against the core's page state, which has both; bite: `backgroundSync` added to `SettingsShown` → red. No Rust
+  or C# change (nothing on the wire moved).
 - [ ] **3 Android** — B3; the switch. First the measurement named in B3, stop-and-ask if the key does not open. · Done
   when: `:android:assembleDebug`, the guidelines and words guards green; a throwaway AVD run: the app force-stopped,
   `adb shell cmd jobscheduler run -f app.veyq <job id>` (or WorkManager's test driver) runs the work, a pin changed on the
