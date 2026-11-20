@@ -120,9 +120,30 @@ Branch `claude/core-owns-refine` at `a75188eb8` (= `claude/windows-cr-f6c73c`). 
   dialog or `dropRows` yet; `Received.Name` (the explicit naming, WRITE_ONLY's uploader name among it) still branches on
   the role in the bridge; `dropsHere`/`dropRows` are held by no bridge test (no played tenant has a shell) — the
   platform phases' passes show them.
-- [ ] **3 Android** — the gallery and level drops through G1, the name dialogs through G3, the guest gates through G4,
+- [x] **3 Android** — the gallery and level drops through G1, the name dialogs through G3, the guest gates through G4,
   `followEnded` gone, `BuildDefaults` into `src/debug`. · Done when: `:android:assembleDebug` and
   `:android:compileReleaseKotlin` (the release variant, `src/release` exists; remembered, not run at refine), the words and guidelines guards green; `grep -rn "veyq.localhost" android/src/main` empty.
+  **Built** 2026-11-20 (`claude/k-android`): every drop is `AppModel.drop(DropTarget, ShareIn.Drop)` over
+  `ShellModel.drop` — the level (`DropTarget.Level`, a `Refused` one left to the pick mode, deviation 3 of phase 1), a
+  folder row (`Modifier.rowDrop`, attached only where `ShellModel.dropTarget` says), the gallery (`DropTarget.Gallery`);
+  `ShareIn.dropOf` hands each clip item as `Dropped.File` or `Dropped.Unread(name)`; `dropOntoLevel`/`dropOnto` and the
+  app's `MemoryShare` sort gone (an `Offered` never comes: the phones' `DepotUploads` offers no import). New Folder (shell and
+  a guest's level) draws `NameAnswer` (`NameAnswerDialog`: a problem keeps it open, a notice is said); a guest's Replace is
+  offered where `FileRights.replace` holds and runs `GuestAccess.replaceAsking`; `NamingAsked` draws `GuestNaming.asking`
+  (save `name`, cancel `decline`), the explicit naming line shows where `GuestNaming.offered`; *Add entry* reads
+  `PotView.offersEntries`; `followEnded` replaced by observing `SessionModel.followed`; `BuildDefaults` in `src/debug`
+  (the dev host) and `src/release` (empty). **Core added** (minimal, other platforms may want it): `GuestNaming.offered`
+  (no app reads the link's role for the naming line), asserted in `GuestDoorsTest` and bitten (always true → red).
+  Measured: `./gradlew :android:assembleDebug :android:compileReleaseKotlin` green, `:core:jvmTest :core:macosArm64Test`
+  green, `validate_mobile_platform_guidelines.py`/`validate_mobile_words.py` OK, the `veyq.localhost` grep empty.
+  **Pass** (throwaway API 36 emulator, deleted after; throwaway account `--with-member`, erased): New Folder with a taken
+  name — the dialog stayed open with *Something with this name is already here.* under the field; a READ_WRITE link of
+  the owner's folder opened in the app, unnamed: *Replace…* offered on its file, the pick asked *What is your name?* at the
+  write, named, the upload worker ran (logcat `UploadWorker` SUCCESS). **Not clicked:** the four drops (a drag from
+  another app needs split screen, not drivable headless over adb), a guest's *Add entry* asking at the save, New Folder
+  refused offline (offline it now queues), the release build's empty server field (compiled, not installed).
+  **Deviations:** a guest's level New and a guest's gallery *Add* still show only once named (`GuestLevel.writes &&
+  named`, `canAdd = session != null`): their core writes need a session, not the naming flow — inbox row.
 - [ ] **4 Apple** — the same; `try?` gone; the prefill under `#if DEBUG`. · Done when: both Apple builds green.
 - [ ] **5 Linux** — the drop through the bridge's `Drop`, `drop.rs`' sort gone, the folder row's drop from
   `dropTarget`, the dialogs and guest gates likewise, `file_page`/`header::say`'s log-only paths replaced by said
