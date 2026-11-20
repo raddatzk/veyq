@@ -12,7 +12,9 @@
 // the shell draws it anew — after an object opened from it closed, after an update — by its place (ListScrolls).
 //
 // Offline (ADR 0140 decision 10) an InfoBar under the bar says so, as of when (ShellShown.offlineBanner), not closable while
-// it lasts; New is not offered then and the header's writes are gone (the core's). An item no longer available offline
+// it lasts, with the count of the writes made offline that wait to be sent under it (ShellShown.queuedBanner, ADR 0153);
+// New offers offline only what queues and the header's other writes are gone (the core's). The reconnect's notices — what
+// was sent, what needs the person — are said once (ShellShown.queuedSaid). An item no longer available offline
 // (ShellModel.State's gone) is said once in an InfoBar of its own, then told seen (Shell.OfflineGoneSeen).
 //
 // Every state is the core's (ShellModel.State and ShellShown); every action one call. Which item is selected, whether
@@ -47,6 +49,7 @@ internal sealed class ShellView
     private readonly InfoBar _said;
     /// <summary>"Offline — content as of …", open while the core shows the lists from the offline store.</summary>
     private readonly InfoBar _offline;
+    private string _queuedSaid = "";
     /// <summary>The items no longer available offline, said once; and what it said last.</summary>
     private readonly InfoBar _gone;
     private string _goneSaid = "";
@@ -170,7 +173,7 @@ internal sealed class ShellView
         AutomationProperties.SetAutomationId(_saving, "saving");
         _offer = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
         AutomationProperties.SetAutomationId(_offer, "uploads-said");
-        _uploads = new Uploads(window, _offer) { Changed = DrawCommands };
+        _uploads = new Uploads(window, _offer) { Changed = DrawCommands, Opens = OpenQueued, Says = Say };
         _body = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
         var content = new Grid();
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -396,8 +399,21 @@ internal sealed class ShellView
     /// <summary>The offline banner, and each item no longer available offline said once, then told seen.</summary>
     private void DrawOffline(ShellModelState state, ShellShown shown)
     {
-        _offline.Message = shown.offlineBanner is { } b ? Said.Notice(b) : "";
-        _offline.IsOpen = shown.offlineBanner is not null;
+        // the writes made offline waiting to be sent, counted under the offline banner (ShellModel.queuedBanner)
+        _offline.Message = string.Join("\n", new[] { shown.offlineBanner, shown.queuedBanner }.OfType<Notice>().Select(Said.Notice));
+        _offline.IsOpen = shown.offlineBanner is not null || shown.queuedBanner is not null;
+        // what the reconnect sent and what now needs the person, said once, then told seen (Shell.QueuedSaidSeen)
+        var sent = string.Join("\n", shown.queuedSaid.Select(Said.Notice));
+        if (sent != _queuedSaid)
+        {
+            _queuedSaid = sent;
+            if (sent.Length > 0)
+            {
+                foreach (var n in shown.queuedSaid) Log.Write($"queued said: {n.msg}");
+                Say(false, sent);
+                Act.Send(new Call.ShellQueuedSaidSeen());
+            }
+        }
         // compared as said: a record's list compares by reference, and each update is read anew
         var said = string.Join("\n", state.gone.Select(Said.Notice));
         if (said == _goneSaid) return;
@@ -612,6 +628,12 @@ internal sealed class ShellView
                 _pot.Read = canWrite => _header?.Facts(new Facts { canWrite = canWrite, hasContent = true });
                 _pot.Changed = DrawCommands;
                 _said.IsOpen = false;
+                // the tray's Open of a held entry: its conflict's editor once this Pot opened
+                if (_heldEntry is { } held && pot.nodeId == _heldPot)
+                {
+                    _heldEntry = null;
+                    _pot.OpenHeld(held);
+                }
             }
             _pot.Hero(_header?.Hero);
             _pot.Places(shown.tabs, shown.selectedTab);
@@ -878,7 +900,7 @@ internal sealed class ShellView
                 }))));
         }
         // an open Pot's "Add entry" is the content's creating action, first, where its places show and it takes writes
-        if (page is { CanAdd: true }) _commands.PrimaryCommands.Add(CreateAction.Button(Words.PotAdd(), "pot-add", page.AddEntry));
+        if (page is { OffersAdd: true }) _commands.PrimaryCommands.Add(CreateAction.Button(Words.PotAdd(), "pot-add", page.AddEntry));
         if (memory?.Shown is { } gallery && gallery.creates.Any(c => c.create == Create.Chapter))
         {
             _commands.PrimaryCommands.Add(CreateAction.Button(Words.MemoryAddChapter(), "memory-add-chapter", memory.CreateChapter));
@@ -993,11 +1015,12 @@ internal sealed class ShellView
         return new UploadLevel(space, folder?.nodeId, folder?.name ?? Said.Piece(shown.spaceName));
     }
 
-    /// <summary>Where a drop onto the level shown goes: only where its New offers Upload files (the core's creates).</summary>
+    /// <summary>Where a drop onto the level shown goes: the level where the core offers one (ShellShown.dropsHere), each
+    /// folder's row it names (ShellShown.dropRows); none where it offers neither.</summary>
     private Drops? LevelDrops()
     {
-        if (_shown is not { } shown || !shown.canCreateHere || !shown.creates.Any(c => c.create == Create.UploadFiles)) return null;
-        return Level() is { } level ? new Drops(_window, level, Say) : null;
+        if (_shown is not { } shown || (!shown.dropsHere && shown.dropRows.Count == 0)) return null;
+        return Level() is { } level ? new Drops(_window, level.Label, shown.dropsHere, shown.dropRows.ToHashSet(), Say) : null;
     }
 
     /// <summary>The Memory's page let go (closed in the core), its hero handed back.</summary>
@@ -1059,6 +1082,11 @@ internal sealed class ShellView
             var (answer, _) = await Core.CallAsync(new Call.ShellCreateMemory { scopeId = space, parentId = parent, name = typed, wasThere = there, autoPlace = armed });
             switch (answer)
             {
+                case Answer.Created { queued: true } created:
+                    // made offline: waiting to be sent, said; nothing opens yet (it shows where it was made)
+                    Log.Write("new memory: queued");
+                    if (created.notice is { } waiting) Say(false, Said.Notice(waiting));
+                    break;
                 case Answer.Created { node: { } made }:
                     Log.Write("new memory: made");
                     MemoryPage.OpenNode(made);
@@ -1078,31 +1106,52 @@ internal sealed class ShellView
         }
     }
 
-    /// <summary>New's folder (Shell.CreateFolder), named in a dialog that asks again with the core's problem.</summary>
-    private async void NewFolder() => await NewFolder("", null);
-
-    private async System.Threading.Tasks.Task NewFolder(string name, string? problem)
+    /// <summary>New's folder (Shell.CreateFolder), named in a dialog the core's answer keeps open with its problem
+    /// (ADR 0154 decision 1); a notice is said as it closes, a folder made offline (queued) reads as made.</summary>
+    private async void NewFolder()
     {
-        var typed = await Dialogs.AskName(_window, "new-folder", Words.FolderNew(), Words.FolderName(), name, problem, Words.FolderCreate());
-        if (typed is null) return;
-        Answer answer;
         try
         {
-            (answer, _) = await Core.CallAsync(new Call.ShellCreateFolder { name = typed });
+            var named = await Dialogs.AskNamed(_window, "new-folder", Words.FolderNew(), Words.FolderName(), "", Words.FolderCreate(),
+                typed => Dialogs.Named(new Call.ShellCreateFolder { name = typed }, "Shell.CreateFolder"));
+            if (named?.notice is { } n) Say(false, Said.Notice(n));
         }
         catch (Exception e)
         {
-            Log.Write($"Shell.CreateFolder failed ({e.GetType().Name})");
-            return;
+            Log.Write($"new folder failed ({e.GetType().Name})");
         }
-        if (answer is Answer.Named { problem: { } p })
-        {
-            Log.Write($"new folder: {p.msg}");
-            await NewFolder(typed, Said.Notice(p));
-        }
-        else if (answer is Answer.Named { notice: { } n }) Say(false, Said.Notice(n));
-        else Log.Write($"Shell.CreateFolder: {(answer is Answer.Named ? "Done" : answer.GetType().Name)}");
     }
+
+    private string? _heldEntry;
+    private string? _heldPot;
+
+    /// <summary>The tray's Open of a held write made offline (Answer.QueuedOpens): where the core says it is decided — a
+    /// Pot entry's conflict editor, the page a create or capture time was made on, the node whose name was taken.</summary>
+    private void OpenQueued(QueuedOpen open)
+    {
+        switch (open)
+        {
+            case QueuedOpen.QueuedOpenEntry e:
+                if (_pot is { } shownPot && shownPot.Ref.nodeId == e.pot) shownPot.OpenHeld(e.write);
+                else
+                {
+                    (_heldEntry, _heldPot) = (e.write, e.pot);
+                    OpenNode(e.scope, e.pot);
+                }
+                break;
+            case QueuedOpen.QueuedOpenRename r:
+                // the node's page or folder, whose header offers Rename (the name the person chose is the tray's line)
+                OpenNode(r.scope, r.node);
+                break;
+            case QueuedOpen.QueuedOpenPlace p:
+                OpenNode(p.scope, p.node);
+                break;
+        }
+    }
+
+    /// <summary>Node <paramref name="node"/> of space <paramref name="scope"/> opened where it lives (Shell.OpenAt: the
+    /// core finds it — an object in its application, a folder on Home; null: the space's top).</summary>
+    private static void OpenNode(string scope, string? node) => Act.Send(new Call.ShellOpenAt { scopeId = scope, nodeId = node });
 
     /// <summary>How an action went, under the bar until it is closed or the object leaves.</summary>
     public void Say(bool done, string message)

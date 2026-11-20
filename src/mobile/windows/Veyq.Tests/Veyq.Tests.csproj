@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- The app's words, formats and pictures on Windows (ADR 0123's Consequences, the Windows app): the app's own Words,
-       MrtWords, Said, AvatarsHeld, PictureDecode, TypedText, PdfPages, PdfWeb, KitDrawing (with Log), ReaderStream, DropSort, Recent, MediaTiers, MusicRamp, MapPins, ReceivedText and TrustWords sources (the last with the wire's generated types) against the .pri its build compiled (VEYQ_PRI), the system's formatters and
+       MrtWords, Said, AvatarsHeld, PictureDecode, TypedText, PdfPages, PdfWeb, KitDrawing (with Log), ReaderStream, Recent, MediaTiers, MusicRamp, MapPins, ReceivedText and TrustWords sources (the last with the wire's generated types) against the .pri its build compiled (VEYQ_PRI), the system's formatters and
        its image codecs. Windows only, an x64 process like the app (run.py runs it on the Windows host with arch x64,
        after the app's build). -->
   <PropertyGroup>
@@ -43,7 +43,6 @@
     <Compile Include="../Veyq/Log.cs" Link="App/Log.cs" />
     <Compile Include="../Veyq/ListScrolls.cs" Link="App/ListScrolls.cs" />
     <Compile Include="../Veyq/ReaderStream.cs" Link="App/ReaderStream.cs" />
-    <Compile Include="../Veyq/DropSort.cs" Link="App/DropSort.cs" />
     <Compile Include="../Veyq/ImportText.cs" Link="App/ImportText.cs" />
     <Compile Include="../Veyq/Recent.cs" Link="App/Recent.cs" />
     <Compile Include="../Veyq/MediaTiers.cs" Link="App/MediaTiers.cs" />

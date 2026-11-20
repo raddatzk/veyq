@@ -332,7 +332,7 @@ internal sealed class NodeHeader : IDisposable
             {
                 case "favorite": Pin(); break;
                 case "share": ShareDialog.Open(_window, s.node); break;
-                case "rename": Rename(s.node.name, null); break;
+                case "rename": Rename(s.node.name); break;
                 case "delete": Delete(); break;
                 case "download" when HeaderPlan.ByPage(a.id, s.node.kind): pageDownload(); break;
                 case "replace": pageReplace?.Invoke(); break;
@@ -391,23 +391,20 @@ internal sealed class NodeHeader : IDisposable
         Tell(await Ask(new Call.HeaderPin { header = header }), "Header.Pin");
     }
 
-    private async void Rename(string name, string? problem)
+    /// <summary>Rename (Header.Rename) in a dialog the core's answer keeps open with its problem (ADR 0154 decision 1);
+    /// its notice said as it closes.</summary>
+    private async void Rename(string name)
     {
         if (_id is not { } header) return;
-        var typed = await Dialogs.AskName(_window, "rename", Words.NodeRename(), Words.NodeName(), name, problem, Words.NodeRename());
-        if (typed is null) return;
-        switch (await Ask(new Call.HeaderRename { header = header, name = typed }))
+        try
         {
-            case Answer.Named { problem: { } p }:
-                Rename(typed, Veyq.Said.Notice(p)); // asked again, with the core's problem (the dialog closed first)
-                break;
-            case Answer.Named { notice: var n }:
-                Log.Write("header rename: Named");
-                if (n is not null) _say(true, Veyq.Said.Notice(n));
-                break;
-            case var other:
-                Log.Write($"Header.Rename answered {other?.GetType().Name}");
-                break;
+            var named = await Dialogs.AskNamed(_window, "rename", Words.NodeRename(), Words.NodeName(), name, Words.NodeRename(),
+                typed => Dialogs.Named(new Call.HeaderRename { header = header, name = typed }, "Header.Rename"));
+            if (named?.notice is { } n) _say(true, Veyq.Said.Notice(n));
+        }
+        catch (Exception e)
+        {
+            Log.Write($"header rename failed ({e.GetType().Name})");
         }
     }
 

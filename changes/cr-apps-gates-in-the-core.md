@@ -192,8 +192,29 @@ Branch `claude/core-owns-refine` at `a75188eb8` (= `claude/windows-cr-f6c73c`). 
   already here." (stderr `new folder: folder_name_taken`). **Not passed:** every drop (Broadway carries no file drop from
   the browser) and a guest's Replace (no link opened). **Left (#1042):** a Memory's *Add photos* and a WRITE_ONLY page
   still name the guest first through `Received.Name`, the app deciding by `guestName`.
-- [ ] **6 Windows** — the same; `DropSort.cs` gone; `ReceivedView`'s role checks gone. · Done when: `python3
+- [x] **6 Windows** — the same; `DropSort.cs` gone; `ReceivedView`'s role checks gone. · Done when: `python3
   windows/run.py build` green on the VM.
+  **Built** 2026-11-20 (`claude/k-win`; measured: `VEYQ_WINDOWS_DIR='F:\veyq-kw' VEYQ_WINDOWS_TASKS=kw python3
+  windows/run.py build` exit 0 — the deprecation gate, `Veyq.Bridge.Tests` here and there, the app, `Veyq.Drive`,
+  `Veyq.Tests`, `PdfWebTest` —, run over this phase together with offline-writes phase 10). `DropSort.cs` and its test
+  gone; `Drops.cs` hands every drop and pick — a level's (`ShellShown.dropsHere`), a folder row's (`dropRows`, never by
+  its kind), a gallery's — to `Shell.Drop` as `DroppedFile`/`DroppedFolder`/`DroppedNotLocal` by the file system and says
+  `Answer.Dropped`'s notices, an offered import opened. New Folder, rename and a guest's folder through
+  `Dialogs.AskNamed`: the dialog stays open on a `problem` (the word under the field), a thrown save keeps it open,
+  a `notice` is said as it closes. `ReceivedView`: Replace where the file's `headerFacts.canWrite` (`FileRights.replace`),
+  *Add entry* where `PotView.offersEntries`, both without asking a name first; the core's naming (`ReceivedShown.naming`)
+  drawn as one dialog with the record's notice (#1018) → `Received.NamingSave`/`NamingDecline`. G5 is the bridge's
+  (`SessionModel.followed`), G6 held already (`DevLogin`/`DevSettings` under `#if DEBUG`). **Core/bridge additions**
+  (each with a test seen red): `DropTarget.Gallery.drop` and the bridge's `Shell.Drop` onto a gallery without a tenant (a
+  signed-out guest's gallery answered `NO_TENANT`; `ReceivedBridgeTest.aSignedOutGuestsDropOntoAGalleryIsTheCoresDropWithNoTenant`);
+  `PotView.Shown.offersEntries` (also built by Linux in parallel; the merge kept Linux's, one field). After merging the
+  Linux phases a READ_WRITE guest's level writes (New folder, Upload) go straight to the core, which asks the name
+  (`GuestLevel.createFolder`/`uploadAsking`). **Deviations / left (#1042, Linux's):** a Memory's *Add photos* and a
+  WRITE_ONLY page still name the guest first through `Received.Name`; `Received.Upload` takes paths only, so a picked
+  guest file without one is said by name in `ReceivedView`. **Pass** (throwaway `--tenant tw-win`, erased; `run.py
+  drive`): New Folder with a taken name kept the dialog open with "Hier gibt es schon etwas mit diesem Namen." under the
+  field (log `new-folder: kept open, folder_name_taken`, shot). **Not passed:** every drop (the VM's WinUI takes none
+  from Explorer, § Traps), a guest's Replace (no link opened) — phase 7's.
 - [ ] **7 the passes** — § Passes; results into ADR 0154's Consequences.
 - [ ] **8 harvest** — ADR 0154's `Built:` (decision 1); `native-apps.md`; `src/mobile/CLAUDE.md` § Traps loses any line
   this removes; inbox #1039 measured again on the Mac and closed or narrowed. · Done when: every guard but guard_gaps green.

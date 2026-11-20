@@ -44,7 +44,14 @@ sealed class DropTarget {
     class Row(val folder: NodeAt) : DropTarget()
 
     /** A Memory's or a chapter's gallery (its page open). */
-    class Gallery(val gallery: GalleryModel) : DropTarget()
+    class Gallery(val gallery: GalleryModel) : DropTarget() {
+        /**
+         * The drop onto this gallery, judged by its rights alone (`GalleryModel.takesUploads`): the same answer with or
+         * without a tenant's shell — a link's guest, signed out, has none ([ShellModel.drop] asks this too).
+         */
+        fun drop(items: List<Dropped>, left: (UploadSource) -> Unit = {}): DropOutcome =
+            if (!gallery.takesUploads) DropOutcome.notHere else Drops.ontoGallery(gallery, items, left)
+    }
 }
 
 /**

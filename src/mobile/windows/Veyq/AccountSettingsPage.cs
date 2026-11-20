@@ -607,7 +607,18 @@ internal sealed class AccountSettingsPage : IDisposable
         // Sign out
         _sections.Children.Add(Heading(Words.DrawerSignOut()));
         var signOut = TextButton(Words.DrawerSignOut(), "settings-sign-out");
-        signOut.Click += (_, _) => Do("sign out here", id => new Call.SettingsSignOutHere { settings = id });
+        // writes made offline waiting: asked first (the core's question), deleted with the sign-out
+        signOut.Click += async (_, _) =>
+        {
+            try
+            {
+                if (await Dialogs.AskLoss(_window, QueuedLoss.SignOut, Words.DrawerSignOut()) != false) Do("sign out here", id => new Call.SettingsSignOutHere { settings = id });
+            }
+            catch (Exception e)
+            {
+                Log.Write($"settings sign out failed: {e.GetType().Name}");
+            }
+        };
         _sections.Children.Add(signOut);
 
         // a search's settings result asked for a section: scrolled to once this first draw is laid out
@@ -743,8 +754,10 @@ internal sealed class AccountSettingsPage : IDisposable
         _removeAllAsked = true;
         try
         {
-            var confirmed = await Dialogs.Confirm(_window, "settings-storage-remove-all-ask", Words.AccountSettingsStorageRemoveAll(),
-                Words.AccountSettingsStorageRemoveAllQuestion(), Words.AccountSettingsStorageRemoveAllConfirm());
+            // writes made offline waiting: the core's question in place of the plain one (Remove all deletes them too)
+            var confirmed = await Dialogs.AskLoss(_window, QueuedLoss.RemoveAll, Words.AccountSettingsStorageRemoveAll())
+                ?? await Dialogs.Confirm(_window, "settings-storage-remove-all-ask", Words.AccountSettingsStorageRemoveAll(),
+                    Words.AccountSettingsStorageRemoveAllQuestion(), Words.AccountSettingsStorageRemoveAllConfirm());
             if (_disposed) return;
             if (confirmed) await Send("remove all", id => new Call.SettingsRemoveAll { settings = id });
             else await Send("cancel remove all", id => new Call.SettingsCancelRemoveAll { settings = id });
@@ -787,8 +800,27 @@ internal sealed class AccountSettingsPage : IDisposable
         {
             var forget = TextButton(Words.ManageForgetDevice(), "settings-forget");
             // asked first, as the phones ask
-            forget.Click += (_, _) => AskThen("settings-forget-ask", Words.AccountSettingsUntrustConfirmTitle(), Words.AccountSettingsUntrustConfirm(),
-                Words.ManageForgetDevice(), "stop trusting", id => new Call.SettingsStopTrusting { settings = id });
+            forget.Click += async (_, _) =>
+            {
+                try
+                {
+                    // writes made offline waiting: the core's question in place of the plain one (they go with the trust)
+                    switch (await Dialogs.AskLoss(_window, QueuedLoss.StopTrusting, Words.AccountSettingsUntrustConfirmTitle()))
+                    {
+                        case null:
+                            AskThen("settings-forget-ask", Words.AccountSettingsUntrustConfirmTitle(), Words.AccountSettingsUntrustConfirm(),
+                                Words.ManageForgetDevice(), "stop trusting", id => new Call.SettingsStopTrusting { settings = id });
+                            break;
+                        case true:
+                            Do("stop trusting", id => new Call.SettingsStopTrusting { settings = id });
+                            break;
+                    }
+                }
+                catch (Exception e)
+                {
+                    Log.Write($"settings stop trusting failed: {e.GetType().Name}");
+                }
+            };
             buttons.Add(forget);
         }
         var line = TrustWords.Trusted(s.trusted, s.level) ?? Words.AccountSettingsThisDevice();

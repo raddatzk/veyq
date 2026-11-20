@@ -1691,7 +1691,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 - WinUI got no drop from Explorer on the Windows VM (2026-11-12): Explorer's drag started (its drag image shown over Explorer), the
   app logged no `DragEnter` and none of its windows held an OLE drop target. The VM runs with UAC off, so the app is elevated
   (`0x3000`) like everything else; Windows App SDK is reported to take no drop into an elevated app (remembered). The drop's rule is
-  held by `DropSortTest`; a visible drop needs a machine with UAC on. Turning UAC on there is the owner's step: it needs a
+  the core's one drop (`Shell.Drop`; `GatesInTheCoreTest`, `DispatchTest.aDropHandsTheItemsAndTheTargetToTheCoresOneDrop`); a visible drop needs a machine with UAC on. Turning UAC on there is the owner's step: it needs a
   reboot, and the VM has no automatic logon (`AutoAdminLogon 0`), so the console then waits for the person's password or PIN —
   which an agent never types — and every recipe needs that logged-on session. Without a reboot, `runas /trustlevel:0x20000` left
   the app at `0x3000`, and a restricted, medium-labelled copy of the drive's token still read elevated (`TokenElevation` 1) and its
@@ -1739,7 +1739,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   no drop came), while the open dialog took both files typed by name: `type 1148 <folder>`, `press 1148 enter`, `type
   1148 "a.mp4" "b.jpg"`, `press 1 enter`. Whether the drop needs UAC on (the unpackaged app takes one there) was not
   checked. The import's pass (2026-11-19) saw why once: the host kept the app's window above the `explorer` window, so
-  the driven press landed on the app and no drag began; a drop's calls are proved by `DropSortTest` until a pass places
+  the driven press landed on the app and no drag began; a drop's calls are proved by the core's `Shell.Drop` tests (`DispatchTest`) until a pass places
   Explorer where the press reaches it.
 - **A field a constructor's `init` collector writes is declared before that `init`** (`GalleryModel.queuedNow`): a
   model's scope runs on `Dispatchers.Default`, so the collector can run before a field declared below the block is set —

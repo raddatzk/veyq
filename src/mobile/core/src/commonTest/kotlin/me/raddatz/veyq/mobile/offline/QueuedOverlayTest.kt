@@ -139,6 +139,8 @@ class QueuedOverlayTest {
         val a = t.resume()
         val pot = assertNotNull(PotSession.open(tenantOf(a), s.id, p.id))
         assertTrue(PotView(pot).canWrite, "offline the Pot takes no entry although entries are queued")
+        // what crosses to the desktops (PotView.Shown, the bridge's Pot update) offers Add entry offline too
+        assertTrue(PotView(pot).shown().offersEntries, "the shown view does not offer Add entry offline")
         val before = PotView(pot).balances.first { it.id == BEN }.balance
         val form = assertNotNull(PotView(pot).blankForm("2026-07-02")).copy(title = "Taxi", payers = listOf(EntryForm.Payer(BEN, "10.00")))
         assertEquals(PotSession.WriteOutcome.QUEUED, pot.saveEntry(null, form, null))
@@ -178,6 +180,8 @@ class QueuedOverlayTest {
             listOf(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES, me.raddatz.veyq.mobile.AppKinds.Create.MEMORY),
             shell.createsHere(isHome = true, bookmarks = true),
         )
+        // the one upload gate (ADR 0154 decision 1: a drop, a pick, the bridge's upload calls) takes what New offers offline
+        assertTrue(shell.takesUpload(s.id, null), "New offers files offline, but the upload gate refuses them")
         val tray = shell.queuedTray()
         // the ask before a loss names how many go, with the loss's own confirm
         assertEquals(Notice(Msg.OFFLINE_WRITES_LOST, 2) to Msg.OFFLINE_STOP_TRUSTING_ANYWAY, tray.ask(QueuedLoss.STOP_TRUSTING)?.let { it.question to it.confirm })

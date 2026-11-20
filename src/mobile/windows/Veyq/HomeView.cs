@@ -116,7 +116,7 @@ internal static class HomeView
     private static LevelTiles.Item FolderTile(NodeRef n, Drops? drops) =>
         new(KindGlyph(n.kind), n.nodeId, n.name, null, $"folder:{n.name}",
             () => Act.Send(new Call.ShellEnter { folder = new FolderRef { nodeId = n.nodeId, name = n.name } }),
-            drops is not null && n.kind == "FOLDER" ? tile => drops.OntoFolder(tile, n.nodeId, n.name) : null);
+            drops is not null && drops.Rows.Contains(n.nodeId) ? tile => drops.OntoFolder(tile, n) : null);
 
     private static ListViewItem FolderRow(NodeRef n) =>
         Row(KindGlyph(n.kind), n.name, $"folder:{n.name}", true,
@@ -182,7 +182,7 @@ internal static class HomeView
     /// <summary>Home: the filters (where the core offers more than "all"), a folder's head (<paramref name="hero"/>, its
     /// cover: the folder's header's, as the Pot's and the Memory's pages place it), then the level's groups
     /// (Home.groups): a folder enters, an object opens in its application. With <paramref name="drops"/>, files and folders
-    /// dropped onto the level upload there, and onto a folder's row into that folder (ADR 0123's Consequences, the Windows
+    /// dropped onto the level upload there, and onto a folder's row into that folder, where the core offers each (ADR 0123's Consequences, the Windows
     /// app's Depot whole). Drawn as tiles where the account chose them (ShellShown.view).</summary>
     public static UIElement Home(ShellModelState state, ShellShown shown, Drops? drops = null, UIElement? hero = null)
     {
@@ -200,7 +200,7 @@ internal static class HomeView
             if (hero is FrameworkElement { Parent: Border border }) border.Child = null;
             content.Children.Add(hero);
         }
-        if (shown.groups.Count == 0) content.Children.Add(Empty());
+        if (shown.groups.Count == 0 && shown.queuedHere.Count == 0) content.Children.Add(Empty());
         var index = 0;
         foreach (var g in shown.groups)
         {
@@ -223,7 +223,8 @@ internal static class HomeView
                 if (g.folders)
                 {
                     var row = FolderRow(n);
-                    if (n.kind == "FOLDER") drops?.OntoFolder(row, n.nodeId, n.name);
+                    // a folder's row takes a drop only where the core offers it (ShellShown.dropRows), never by its kind
+                    drops?.OntoFolder(row, n);
                     rows.Add(row);
                 }
                 else if (state.lists.objects.FirstOrDefault(o => o.scopeId == n.scopeId && o.nodeId == n.nodeId) is { } o) rows.Add(ObjectRow(o));
@@ -231,8 +232,20 @@ internal static class HomeView
             }
             Section(content, heading, rows);
         }
+        // what was made here offline and waits to be sent (ShellShown.queuedHere, ADR 0153 decision 5): in place, marked
+        if (shown.queuedHere.Count > 0) Section(content, null, shown.queuedHere.Select(QueuedRow), apart: true);
         return scroll;
     }
+
+    /// <summary>A write made offline in the level shown, waiting to be sent: its title and its line (Waiting to send, or
+    /// why it is held) as the core says them; the uploads tray holds its actions.</summary>
+    private static ListViewItem QueuedRow(QueuedItem q) =>
+        Row(q.op switch
+        {
+            QueuedOp.FolderCreate => KindGlyph("FOLDER"),
+            QueuedOp.MemoryCreate => KindGlyph("MEMORY"),
+            _ => "\uE8A5",
+        }, Said.Notice(q.title), $"queued:{q.id}", false, () => { }, subtitle: Said.Notice(q.said));
 
     private static SelectorBar Filters(ShellModelState state, ShellShown shown)
     {

@@ -58,7 +58,7 @@ internal sealed class PotPage : IDisposable
     /// it was put in last (taken out of it before the next draw, as the head).</summary>
     private PotSettingsView? _settings;
     private Panel? _settingsHolder;
-    private bool _canWrite;
+    private bool _offersEntries;
 
     public ObjectRef Ref { get; }
 
@@ -75,14 +75,26 @@ internal sealed class PotPage : IDisposable
     /// <summary>Told when what the shell's CommandBar offers for this Pot changed: it was read, an editor opened or closed.</summary>
     public Action? Changed { get; set; }
 
-    /// <summary>Whether "Add entry" is offered: the Pot read, it takes writes, and no editor is open.</summary>
-    public bool CanAdd => _canWrite && _editor is null && _id is not null;
+    /// <summary>Whether "Add entry" is offered: the Pot read, the core offers it (PotView.offersEntries — a member who
+    /// writes, a READ_WRITE link's guest named or not, offline where an entry queues), and no editor is open.</summary>
+    public bool OffersAdd => _offersEntries && _editor is null && _id is not null;
 
     /// <summary>The entry editor of a new entry (the CommandBar's "Add entry").</summary>
     public void AddEntry() => OpenEditor(null);
 
-    /// <summary>The entry editor of <paramref name="entry"/> (null: a new one), in place of the places until it closes.</summary>
-    private void OpenEditor(string? entry)
+    /// <summary>The held change made offline <paramref name="write"/> in its conflict's editor (the tray's Open,
+    /// Editor.OpenHeld): the person's values over the newer version, Discard mine beside Save. Waits for the Pot to open.</summary>
+    public void OpenHeld(string write)
+    {
+        if (_id is null) _heldWaits = write;
+        else OpenEditor(null, write);
+    }
+
+    private string? _heldWaits;
+
+    /// <summary>The entry editor of <paramref name="entry"/> (null: a new one; <paramref name="held"/>: a held change's),
+    /// in place of the places until it closes.</summary>
+    private void OpenEditor(string? entry, string? held = null)
     {
         if (_id is not { } pot || _editor is not null) return;
         _editor = new EntryEditorPage(_window, pot, entry, _say, () =>
@@ -90,7 +102,7 @@ internal sealed class PotPage : IDisposable
             _editor = null;
             Draw();
             Changed?.Invoke();
-        });
+        }, held);
         Draw();
         Changed?.Invoke();
     }
@@ -183,6 +195,11 @@ internal sealed class PotPage : IDisposable
         }
         _id = pot;
         Live();
+        if (_heldWaits is { } waiting)
+        {
+            _heldWaits = null;
+            OpenEditor(null, waiting);
+        }
         _watch = Core.Watch(new Watched.Pot { pot = pot }, update =>
         {
             if (_closed || update is not Update.Pot p) return;
@@ -194,9 +211,9 @@ internal sealed class PotPage : IDisposable
                 if (OwnPlaces) GuestPlaces(view.settingsOffered);
                 Log.Write($"pot update: {view.entries.Count} entries, {view.deleted.Count} deleted, {view.settleUp.Count} to settle");
                 Read?.Invoke(view.canWrite);
-                if (view.canWrite != _canWrite)
+                if (view.offersEntries != _offersEntries)
                 {
-                    _canWrite = view.canWrite;
+                    _offersEntries = view.offersEntries;
                     Changed?.Invoke();
                 }
             }
@@ -519,6 +536,8 @@ internal sealed class PotPage : IDisposable
             var trailing = new List<UIElement>();
             if (deleted) trailing.Add(Trailing(Words.EntriesDeletedBadge(), "TextFillColorSecondaryBrush"));
             else if (e.badge is { } b) trailing.Add(Trailing(Said.Notice(b.notice), b.danger ? "SystemFillColorCriticalBrush" : "TextFillColorSecondaryBrush"));
+            // an entry made offline and not sent yet, marked in place (ShownEntry.unsentMark, ADR 0153 decision 5)
+            if (!deleted && e.unsentMark is { } unsent) trailing.Add(Trailing(Said.Notice(unsent), "SystemFillColorCautionBrush"));
             string? amount = e.row.amount is { } a ? Money(view, a) : null;
             if (amount is not null) trailing.Add(Trailing(amount));
             var title = e.row.title ?? Words.PotTransfer();
@@ -557,6 +576,14 @@ internal sealed class PotPage : IDisposable
             content.Children.Add(LedRow(Avatars.Person(name, b.row.userId, PersonSize), name, Said.Line(b.facts), $"balance:{b.row.id}",
                 [Trailing(Said.Notice(b.balance.notice), tone)]));
         }
+        // the balances count entries made offline and not sent yet: said under them (PotView.balancesUnsent)
+        if (view.balancesUnsent is { } unsent)
+        {
+            var said = new TextBlock { Text = Said.Notice(unsent), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12, 4, 12, 0),
+                Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"] };
+            AutomationProperties.SetAutomationId(said, "balances-unsent");
+            content.Children.Add(said);
+        }
         if (view.settleUp.Count > 0)
         {
             var head = new Grid { Margin = new Thickness(0, 0, 12, 0) };
@@ -580,7 +607,8 @@ internal sealed class PotPage : IDisposable
                 var pays = Said.Notice(t.pays);
                 var amount = Money(view, t.row.amount);
                 var trailing = new List<UIElement> { Trailing(amount) };
-                if (view.canWrite && pot is { } one)
+                // Record where the core offers it (PotView.canRecord: never offline)
+                if (view.canRecord && pot is { } one)
                 {
                     var record = new Button { Content = Words.BalancesRecord(), VerticalAlignment = VerticalAlignment.Center };
                     AutomationProperties.SetAutomationId(record, $"record:{t.row.fromId}:{t.row.toId}");

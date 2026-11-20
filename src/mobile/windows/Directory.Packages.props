@@ -9,8 +9,8 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="MSTest.TestFramework" Version="[4.5.2]" />
-    <PackageVersion Include="MSTest.TestAdapter" Version="[4.5.2]" />
+    <PackageVersion Include="MSTest.TestFramework" Version="[4.5.3]" />
+    <PackageVersion Include="MSTest.TestAdapter" Version="[4.5.3]" />
     <!-- The app: WinUI and the Windows App SDK's foundation (MRT Core's resources among it) and the SDK build tools
          (makepri, the WinRT projection's metadata), not the Microsoft.WindowsAppSDK metapackage, which adds AI, ML,
          Search and Widgets. -->

@@ -292,7 +292,33 @@ ADR 0153 decisions 1–5 hold them; here only what the work needs beside them.
   Memory closed its dialog saying "Waiting to send" (stderr `new memory: queued`), the Pot's Settle up showed no *Record*,
   and the tray's *Discard* dropped the queued Memory (`Queued.Discard: Done`, tray empty). Throwaway erased, its home
   volume removed.
-- [ ] **10 Windows** — the same. · Done when: `python3 windows/run.py build` green on the VM.
+- [x] **10 Windows** — the same. · Done when: `python3 windows/run.py build` green on the VM.
+  **Built** 2026-11-20 (`claude/k-win`; measured: `VEYQ_WINDOWS_DIR='F:\veyq-kw' VEYQ_WINDOWS_TASKS=kw python3
+  windows/run.py build` exit 0 after merging the Linux phases; `:core:jvmTest :bridge:jvmTest` green). The offline
+  `InfoBar` carries `queuedBanner` under `offlineBanner`; `queuedSaid` said once, then `Shell.QueuedSaidSeen`; a level's
+  `queuedHere` rows in place (`HomeView.QueuedRow`, the core's title and line); the uploads flyout's own list
+  (`Watched.QueuedTray`, grouped by `where`) with *Open* (`Queued.Open` → `QueuedOpen.Entry`: the Pot opened and
+  `Editor.OpenHeld`; `.Rename`/`.Place` → `Shell.OpenAt`), *Save a copy* per carried file (`Queued.CopyName`,
+  `FileSavePicker`, `Queued.SaveCopy`, the path never logged) and *Discard* (asked, `Queued.Discard`); the held editor's
+  `newer` as a warning `InfoBar` and *Discard mine* in its `CommandBar` (`Editor.DiscardMine`); a Pot's *Not sent* mark
+  (`unsentMark`), `balancesUnsent` under the balances, *Record* by `canRecord`, *Add entry* by `offersEntries`; a
+  gallery's waiting tile (`UploadTileShown.waiting`/`said` in place of its bar) and a tile's mark offline where
+  `GalleryShown.queues`; a Memory or chapter made offline (`Answer.Created.queued`) closes its dialog and is said; Sign
+  out and Stop trusting (Settings, and Manage's in place as a `Flyout` — a `ContentDialog` opens no second one) and
+  Remove all offline content ask `Queued.Ask` first, its question and confirm. **Core gained** (with a test seen red):
+  `ShellModel.takesUpload`/`dropLevel` take files offline where a Depot file queues (`takesFiles`) — New offered Upload
+  files offline (`createsHere`) but the one upload gate of phase 2 refused every upload and drop offline
+  (`QueuedOverlayTest`, the tray case). **Deviations:** *Open* of a held rename opens the node (`Shell.OpenAt`) for its
+  header's Rename, the person's chosen name in the tray's line rather than prefilled (Linux prefills it). *Save a copy*
+  says the outcome with the download words (as `QueuedShown.copySaved`; `Queued.SaveCopy` answers only Done/NOT_WRITTEN).
+  **Pass** (throwaway `--tenant tw-win`, erased; the VM's 8080 is held by tunnels of other sessions, so the app was
+  signed in through `http://tw-win.localhost:18731` — `run.py`'s own `ssh -R` to an own Mac-side forwarder to 8080, which
+  was stopped to cut the server and started again): offline, New folder queued (`Shell.CreateFolder: queued`), the
+  banner "Offline — Stand …" with "Eine Änderung wartet auf Versand", the folder's row "Wartet auf Versand" in its level,
+  the tray listing it with *Verwerfen* (shot); Manage's sign-out asked in place "Eine offline gemachte Änderung ist noch
+  nicht gesendet. Sie wird gelöscht." with *Trotzdem abmelden* (shot, dismissed); reconnected, it was sent (`queued
+  said: offline_sent`, tray empty, the folder listed). **Not passed:** a photo, a medium's time, a Pot entry with a
+  receipt, the held edit's conflict editor and *Discard mine*, *Save a copy*, the store grep, the re-key — phase 11's.
 - [ ] **11 the passes** — § Passes; results into ADR 0153's Consequences.
 - [ ] **12 harvest** — ADR 0153's `Built:` and `Status: Accepted` once the owner's questions are answered; ADR 0140's
   decision 7 pointed at it (already in its `Replaced in part`); `native-apps.md`; `src/mobile/CLAUDE.md` § Nothing on disk

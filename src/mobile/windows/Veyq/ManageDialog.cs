@@ -92,6 +92,39 @@ internal sealed class ManageDialog
         _servers.Children.Add(add);
     }
 
+    /// <summary>The ask before <paramref name="loss"/> deletes writes made offline that wait (Queued.Ask, ADR 0153
+    /// decision 2), in place as a Flyout on <paramref name="anchor"/> — a ContentDialog opens no second one over this one:
+    /// true where none waits or the person took the core's confirm, false on a dismiss.</summary>
+    private static async System.Threading.Tasks.Task<bool> Lose(QueuedLoss loss, FrameworkElement anchor)
+    {
+        try
+        {
+            var (answer, _) = await Core.CallAsync(new Call.QueuedAsk { loss = loss });
+            if (answer is not Answer.QueuedAsked { ask: { } ask }) return true;
+            var chosen = new System.Threading.Tasks.TaskCompletionSource<bool>();
+            var panel = new StackPanel { Spacing = 12, MaxWidth = 320 };
+            panel.Children.Add(new TextBlock { Text = Said.Notice(ask.question), TextWrapping = TextWrapping.Wrap });
+            var confirm = new Button { Content = Said.Key(ask.confirm), Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+            AutomationProperties.SetAutomationId(confirm, "manage-queued-loss-confirm");
+            panel.Children.Add(confirm);
+            var flyout = new Flyout { Content = panel };
+            confirm.Click += (_, _) =>
+            {
+                chosen.TrySetResult(true);
+                flyout.Hide();
+            };
+            flyout.Closed += (_, _) => chosen.TrySetResult(false);
+            Log.Write($"queued ask before {loss}");
+            flyout.ShowAt(anchor);
+            return await chosen.Task;
+        }
+        catch (Exception e)
+        {
+            Log.Write($"the queued ask failed ({e.GetType().Name})");
+            return false;
+        }
+    }
+
     private static TextBlock Caption(string text) => new()
     {
         Text = text,
@@ -127,13 +160,13 @@ internal sealed class ManageDialog
         var signOut = new Button { Content = Words.ManageSignOut() };
         AutomationProperties.SetAutomationId(signOut, $"manage-sign-out:{server.label}");
         var connection = server.connection;
-        signOut.Click += (_, _) => Act.Send(new Call.SessionSignOut { connection = connection });
+        signOut.Click += async (_, _) => { if (await Lose(QueuedLoss.SignOut, signOut)) Act.Send(new Call.SessionSignOut { connection = connection }); };
         buttons.Children.Add(signOut);
         if (server.trusted is not null)
         {
             var forget = new Button { Content = Words.ManageForgetDevice() };
             AutomationProperties.SetAutomationId(forget, $"manage-forget:{server.label}");
-            forget.Click += (_, _) => Act.Send(new Call.SessionForgetDevice { connection = connection });
+            forget.Click += async (_, _) => { if (await Lose(QueuedLoss.StopTrusting, forget)) Act.Send(new Call.SessionForgetDevice { connection = connection }); };
             buttons.Children.Add(forget);
         }
         section.Children.Add(buttons);

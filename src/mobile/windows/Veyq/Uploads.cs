@@ -1,9 +1,9 @@
 // The uploads (ADR 0123's Consequences, the Windows app's Depot whole), Fluent's way: files and a folder picked through Windows' own pickers
 // (FileOpenPicker, FolderPicker, owned by the window as the save picker is) and handed to the core by their paths — the
 // core opens and reads each at offsets a frame at a time (ADR 0137 decision 3), so nothing of a file crosses and none is
-// held whole —, screened first as the web's upload screens (Import.Screen, Import.ScreenFolder; ADR 0152 decision 1): a
-// veyq download among them is offered as an import in ImportDialog, everything else queued as Upload.Files and
-// Upload.Folder queue it; a file's Replace chosen before its picker opens (File.ChooseReplace,
+// held whole —, through the core's one drop onto the level shown (Shell.Drop, ADR 0154 decision 1; Drops), which judges
+// the level, screens as the web's upload screens (ADR 0152 decision 1) — a veyq download among them offered as an import in
+// ImportDialog — and queues the rest; a file's Replace chosen before its picker opens (File.ChooseReplace,
 // Upload.Replace), and the queue as an AppBarButton in the content's CommandBar while it lists anything: its label the
 // core's one line, its Flyout each batch with its items, their progress, Cancel and Retry, Cancel all and a finished
 // batch's Close. What the uploads say once — a folder's outcome, a replace offered — is an InfoBar under the bar, its
@@ -57,25 +57,48 @@ internal sealed class Uploads : IDisposable
         };
         _watch = Core.Watch(new Watched.Uploads(), update =>
         {
-            if (update is Update.Uploads u) Draw(u.shown);
+            if (update is not Update.Uploads u) return;
+            _last = u.shown;
+            Draw();
         }, e => Log.Write($"an uploads update: {e.Message}"));
+        // the writes made offline: the tray's list of their own (ADR 0153 decision 5)
+        _queuedWatch = Core.Watch(new Watched.QueuedTray(), update =>
+        {
+            if (update is not Update.QueuedTray q) return;
+            _queued = q.items ?? [];
+            Log.Write($"queued tray: {_queued.Count} ({string.Join(",", _queued.Select(i => i.state))})");
+            Draw();
+        }, e => Log.Write($"a queued tray update: {e.Message}"));
     }
 
-    private void Draw(UploadsShown? s)
+    private UploadsShown? _last;
+    private IReadOnlyList<QueuedItem> _queued = [];
+    private readonly Watch? _queuedWatch;
+
+    /// <summary>Opens what a held write made offline is decided on (the tray's Open, Answer.QueuedOpens); the shell's.</summary>
+    public Action<QueuedOpen>? Opens { get; set; }
+
+    /// <summary>Says what the tray's actions came to; the shell's.</summary>
+    public Action<bool, string>? Says { get; set; }
+
+    private void Draw()
     {
+        var s = _last;
         Active = s?.active ?? 0;
         _list.Children.Clear();
-        var visible = s is not null && (s.summary is not null || s.preparing is not null);
+        var uploads = s is not null && (s.summary is not null || s.preparing is not null);
+        var visible = uploads || _queued.Count > 0;
         var was = Button is not null;
         Button = visible ? _button : null;
         if (s is null)
         {
-            if (was) Changed?.Invoke();
+            DrawQueued();
+            if (was != visible) Changed?.Invoke();
             return;
         }
         LogItems(s);
         var summary = s.summary is { } n ? Said.Notice(n) : null;
-        _button.Label = summary ?? (s.preparing is { } p ? Said.Notice(p) : Words.UploadTitle());
+        _button.Label = summary ?? (s.preparing is { } p ? Said.Notice(p) : _queued.Count > 0 ? _button.Label : Words.UploadTitle());
         AutomationProperties.SetName(_button, _button.Label);
 
         // the head: the title, the one line, Cancel all while anything may still go up
@@ -125,6 +148,7 @@ internal sealed class Uploads : IDisposable
             foreach (var item in batch.items) _list.Children.Add(Row(item));
         }
         Say(s);
+        DrawQueued();
         if (was != visible) Changed?.Invoke();
     }
 
@@ -227,8 +251,9 @@ internal sealed class Uploads : IDisposable
         }
     }
 
-    /// <summary>New's "Upload files": the open picker picks several, their paths go to the core, screened (Import.Screen):
-    /// the first veyq download among them offered as an import, the rest queued.</summary>
+    /// <summary>New's "Upload files": the open picker picks several, handed to the core's one drop onto the level shown
+    /// (Shell.Drop, ADR 0154 decision 1) as a drop is: judged, screened — the first veyq download among them offered as an
+    /// import —, the rest queued; a picked item with no local path said by the core.</summary>
     public async void PickFiles(UploadLevel level, Action<bool, string> say)
     {
         try
@@ -238,13 +263,7 @@ internal sealed class Uploads : IDisposable
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
             var picked = await picker.PickMultipleFilesAsync();
             if (picked is null || picked.Count == 0) return;
-            // sorted as a drop is: a picked file with no local path (a phone's, a cloud's) said by name, never left out unsaid
-            var sorted = DropSort.Sort(picked.Select(f => new DroppedItem(f.Name, f.Path, false)));
-            Log.Write($"upload files: {sorted.Files.Count} picked, {sorted.Refused.Count} refused");
-            foreach (var name in sorted.Refused) say(false, Words.DepotDropNotLocal(name));
-            if (sorted.Files.Count == 0) return;
-            var (answer, _) = await Core.CallAsync(DropSort.Screen(level, sorted.Files));
-            Screened(_window, answer, "Import.Screen", say);
+            await Drops.Send(_window, new DropOn.DropOnLevel { label = level.Label }, Drops.Items(picked), say);
         }
         catch (Exception e)
         {
@@ -253,8 +272,8 @@ internal sealed class Uploads : IDisposable
         }
     }
 
-    /// <summary>New's "Upload folder…": the folder picker picks one directory, which the core walks: a download unpacked
-    /// is offered as an import, any other uploaded (Import.ScreenFolder).</summary>
+    /// <summary>New's "Upload folder…": the folder picker picks one directory, handed to the core's one drop onto the level
+    /// shown, which walks it: a download unpacked is offered as an import, any other uploaded.</summary>
     public async void PickFolder(UploadLevel level, Action<bool, string> say)
     {
         try
@@ -263,10 +282,9 @@ internal sealed class Uploads : IDisposable
             picker.FileTypeFilter.Add("*");
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
             var folder = await picker.PickSingleFolderAsync();
-            if (folder is null || string.IsNullOrEmpty(folder.Path)) return;
+            if (folder is null) return;
             Log.Write("upload folder: picked");
-            var (answer, _) = await Core.CallAsync(DropSort.ScreenFolder(level, folder.Path));
-            Screened(_window, answer, "Import.ScreenFolder", say);
+            await Drops.Send(_window, new DropOn.DropOnLevel { label = level.Label }, Drops.Items([folder]), say);
         }
         catch (Exception e)
         {
@@ -301,21 +319,6 @@ internal sealed class Uploads : IDisposable
         }
     }
 
-    /// <summary>A screened upload's answer: an import offered opens its dialog over <paramref name="window"/> (what was
-    /// queued beside it said in the log); anything else as <see cref="Queued"/>. Whether one was offered.</summary>
-    internal static bool Screened(Window window, Answer answer, string what, Action<bool, string> say)
-    {
-        if (answer is not Answer.ImportOffered offered)
-        {
-            Queued(answer, what, say);
-            return false;
-        }
-        Log.Write($"{what}: import {offered.import} offered, {offered.queued} queued{(offered.notice is null ? "" : $", said {offered.notice.msg}")}");
-        if (offered.notice is { } n) say(false, Said.Notice(n));
-        ImportDialog.Open(window, offered.import, say);
-        return true;
-    }
-
     internal static void Queued(Answer answer, string what, Action<bool, string> say)
     {
         switch (answer)
@@ -336,5 +339,126 @@ internal sealed class Uploads : IDisposable
         }
     }
 
-    public void Dispose() => _watch?.Dispose();
+    /// <summary>The writes made offline, first in the flyout, under the place each writes into (QueuedItem.where): each
+    /// its title and its line as the core says them, and what it offers — Discard always, Open where it is held for the
+    /// person, Save a copy of each file a refused write carries.</summary>
+    private void DrawQueued()
+    {
+        if (_queued.Count == 0) return;
+        if (_last is null || (_last.summary is null && _last.preparing is null))
+        {
+            _button.Label = Said.Notice(_queued.Count == 1 ? _queued[0].said : _queued[0].title);
+            AutomationProperties.SetName(_button, _button.Label);
+        }
+        var title = new TextBlock { Text = Words.OfflineWaiting(), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] };
+        AutomationProperties.SetHeadingLevel(title, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
+        _list.Children.Add(title);
+        foreach (var group in _queued.GroupBy(q => q.where ?? ""))
+        {
+            if (group.Key.Length > 0)
+            {
+                _list.Children.Add(new TextBlock { Text = group.Key, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], TextTrimming = TextTrimming.CharacterEllipsis });
+            }
+            foreach (var item in group) _list.Children.Add(QueuedRow(item));
+        }
+    }
+
+    private UIElement QueuedRow(QueuedItem item)
+    {
+        var row = new StackPanel { Spacing = 4 };
+        var name = Said.Notice(item.title);
+        row.Children.Add(new TextBlock { Text = name, TextTrimming = TextTrimming.CharacterEllipsis });
+        var line = new TextBlock { Text = Said.Notice(item.said), TextWrapping = TextWrapping.Wrap, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"] };
+        line.Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources[item.state == QueuedWriteState.Waiting ? "TextFillColorSecondaryBrush" : "SystemFillColorCriticalBrush"];
+        AutomationProperties.SetAutomationId(line, $"queued-line:{item.id}");
+        row.Children.Add(line);
+        var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        if (item.opens) actions.Children.Add(Link(Words.OfflineOpen(), $"queued-open:{item.id}", () => Open(item.id)));
+        for (var i = 0; i < item.copies; i++)
+        {
+            var index = i;
+            actions.Children.Add(Link(Words.OfflineSaveCopy(), $"queued-copy:{item.id}:{index}", () => SaveCopy(item.id, index)));
+        }
+        actions.Children.Add(Link(Words.OfflineDiscard(), $"queued-discard:{item.id}", () => Discard(item.id, name)));
+        row.Children.Add(actions);
+        AutomationProperties.SetName(row, $"{name}, {line.Text}");
+        return row;
+    }
+
+    private static HyperlinkButton Link(string label, string automationId, System.Action act)
+    {
+        var button = new HyperlinkButton { Content = label, Padding = new Thickness(4, 2, 4, 2) };
+        AutomationProperties.SetAutomationId(button, automationId);
+        button.Click += (_, _) => act();
+        return button;
+    }
+
+    /// <summary>Discard: the write deleted unsent with every write waiting for it (Queued.Discard), asked first.</summary>
+    private async void Discard(string write, string name)
+    {
+        try
+        {
+            if (_button.Flyout is Flyout f) f.Hide();
+            if (!await Dialogs.Confirm(_window, "queued-discard", Words.OfflineDiscard(), name, Words.OfflineDiscard())) return;
+            var (answer, _) = await Core.CallAsync(new Call.QueuedDiscard { write = write });
+            Log.Write($"Queued.Discard: {answer.GetType().Name}");
+        }
+        catch (Exception e)
+        {
+            Log.Write($"Queued.Discard failed ({e.GetType().Name})");
+        }
+    }
+
+    /// <summary>Open: where the held write is decided (Queued.Open), handed to the shell.</summary>
+    private async void Open(string write)
+    {
+        try
+        {
+            if (_button.Flyout is Flyout f) f.Hide();
+            var (answer, _) = await Core.CallAsync(new Call.QueuedOpen { write = write });
+            Log.Write($"Queued.Open: {(answer is Answer.QueuedOpens o ? o.open.GetType().Name : answer.GetType().Name)}");
+            if (answer is Answer.QueuedOpens opens) Opens?.Invoke(opens.open);
+        }
+        catch (Exception e)
+        {
+            Log.Write($"Queued.Open failed ({e.GetType().Name})");
+        }
+    }
+
+    /// <summary>Save a copy of a refused write's file <paramref name="index"/>: the save picker suggests the core's name
+    /// (Queued.CopyName), the core writes the path it gave (Queued.SaveCopy); never logged.</summary>
+    private async void SaveCopy(string write, int index)
+    {
+        try
+        {
+            if (_button.Flyout is Flyout f) f.Hide();
+            var (named, _) = await Core.CallAsync(new Call.QueuedCopyName { write = write, index = index });
+            if (named is not Answer.QueuedCopyName { name: var name })
+            {
+                Log.Write($"Queued.CopyName answered {named.GetType().Name}");
+                return;
+            }
+            var suggested = name ?? "";
+            var picker = new FileSavePicker { SuggestedStartLocation = PickerLocationId.Downloads, SuggestedFileName = System.IO.Path.GetFileNameWithoutExtension(suggested) };
+            var extension = System.IO.Path.GetExtension(suggested);
+            picker.FileTypeChoices.Add(Words.TabDepotFile(), [extension.Length > 1 ? extension : ".bin"]);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
+            var chosen = await picker.PickSaveFileAsync();
+            if (chosen is null) return;
+            var (answer, _) = await Core.CallAsync(new Call.QueuedSaveCopy { write = write, index = index, path = chosen.Path });
+            Log.Write($"Queued.SaveCopy: {(answer is Answer.Refused r ? $"Refused {r.why}" : answer.GetType().Name)}");
+            // said as a download's end is (core's QueuedShown.copySaved; Queued.SaveCopy answers Done or NOT_WRITTEN alone)
+            Says?.Invoke(answer is Answer.Done, answer is Answer.Done ? Words.DownloadDone(suggested) : Words.DownloadFailed(suggested));
+        }
+        catch (Exception e)
+        {
+            Log.Write($"Queued.SaveCopy failed ({e.GetType().Name})");
+        }
+    }
+
+    public void Dispose()
+    {
+        _watch?.Dispose();
+        _queuedWatch?.Dispose();
+    }
 }

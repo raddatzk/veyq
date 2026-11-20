@@ -22,7 +22,7 @@ internal static class LevelTiles
     public const double LabelHeight = 46;
 
     /// <summary>One tile: its kind's <paramref name="Glyph"/>, the node whose cover it shows, its name and second line, its
-    /// AutomationId (the row's), what a click does, and a folder's drop (Drops.OntoFolder) where it takes one.</summary>
+    /// AutomationId (the row's), what a click does, and a folder's drop (Drops.OntoFolder) where the core offers one.</summary>
     public sealed record Item(string Glyph, string NodeId, string Name, string? Subtitle, string AutomationId, Action Open, Action<Control>? Droppable = null);
 
     /// <summary>The tiles of <paramref name="items"/> at the core's frames, laid out anew when the grid's width changes.</summary>

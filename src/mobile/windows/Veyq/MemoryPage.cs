@@ -277,7 +277,8 @@ internal sealed class MemoryPage : IDisposable
         _heroSlot.Child = hero;
     }
 
-    /// <summary>"Add photos": the open picker for photos and videos (several), their paths to the core (Memory.Upload).</summary>
+    /// <summary>"Add photos": the open picker for photos and videos (several), handed to the core's one drop onto this
+    /// gallery (Shell.Drop, ADR 0154 decision 1), which keeps its photos and videos and says the rest.</summary>
     public async void Add()
     {
         if (_id is not { } gallery) return;
@@ -288,7 +289,7 @@ internal sealed class MemoryPage : IDisposable
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
             var picked = await picker.PickMultipleFilesAsync();
             if (picked is null || picked.Count == 0) return;
-            await Upload(gallery, DropSort.Sort(picked.Select(f => new DroppedItem(f.Name, f.Path, false))));
+            await Drops.Send(_window, new DropOn.DropOnGallery { gallery = gallery }, Drops.Items(picked), _say);
         }
         catch (Exception e)
         {
@@ -296,53 +297,12 @@ internal sealed class MemoryPage : IDisposable
         }
     }
 
-    /// <summary>Sends <paramref name="sorted"/>'s files to gallery <paramref name="gallery"/> and says what was not taken.</summary>
-    private async Task Upload(long gallery, DropSort.Sorted sorted)
-    {
-        Log.Write($"memory upload: {sorted.Files.Count} files, {sorted.Folders.Count} folders, {sorted.Refused.Count} refused");
-        foreach (var text in DropSort.GallerySaid(sorted)) _say(false, text);
-        if (DropSort.GalleryCall(gallery, sorted) is not { } call) return;
-        var (answer, _) = await Core.CallAsync(call);
-        Uploads.Queued(answer, "Memory.Upload", _say);
-    }
-
-    /// <summary>A drop of files onto the page adds them, where the rights add anything.</summary>
+    /// <summary>A drop of files onto the page goes to the core's one drop onto this gallery, where its rights upload
+    /// (GalleryShown.canUpload; the core judges it again).</summary>
     private void Droppable()
     {
-        _scroll.AllowDrop = true;
-        _scroll.DragEnter += (_, e) => Log.Write($"a drag entered the gallery: files {e.DataView.Contains(StandardDataFormats.StorageItems)}");
-        _scroll.DragOver += (_, e) =>
-        {
-            if (!e.DataView.Contains(StandardDataFormats.StorageItems) || _shown is not { canUpload: true }) return;
-            e.AcceptedOperation = DataPackageOperation.Copy;
-            e.DragUIOverride.Caption = Words.MemoryAdd();
-            e.Handled = true;
-        };
-        _scroll.Drop += async (_, e) =>
-        {
-            if (!e.DataView.Contains(StandardDataFormats.StorageItems) || _id is not { } gallery || _shown is not { canUpload: true }) return;
-            e.Handled = true;
-            try
-            {
-                DropSort.Sorted sorted;
-                var deferral = e.GetDeferral();
-                try
-                {
-                    var items = await e.DataView.GetStorageItemsAsync();
-                    sorted = DropSort.Sort(items.Select(i => new DroppedItem(i.Name, i.Path, i.IsOfType(StorageItemTypes.Folder))));
-                }
-                finally
-                {
-                    deferral.Complete();
-                }
-                await Upload(gallery, sorted);
-            }
-            catch (Exception ex)
-            {
-                // an exception out of an async handler would end the app in combase, with nothing in the log
-                Log.Write($"a drop onto the gallery failed: {ex.GetType().Name}: {ex.Message}");
-            }
-        };
+        Drops.Attach(_scroll, () => _id is { } gallery && _shown is { canUpload: true } ? new DropOn.DropOnGallery { gallery = gallery } : null,
+            Words.MemoryAdd(), null, _window, _say);
     }
 
     /// <summary>The header's music action: the node's music started shuffled, or stopped where it plays (Gallery.Music).</summary>
@@ -430,6 +390,11 @@ internal sealed class MemoryPage : IDisposable
             var (answer, _) = await Core.CallAsync(new Call.GalleryCreateChapter { gallery = gallery, name = typed });
             switch (answer)
             {
+                case Answer.Created { queued: true } created:
+                    // made offline: waiting to be sent, said; nothing opens yet (it shows where it was made)
+                    Log.Write("new chapter: queued");
+                    if (created.notice is { } waiting) _say(false, Said.Notice(waiting));
+                    break;
                 case Answer.Created { node: { } made }:
                     Log.Write("new chapter: made");
                     OpenNode(made);
@@ -454,8 +419,9 @@ internal sealed class MemoryPage : IDisposable
         Act.Send(new Call.ShellOpen { Ref = new ObjectRef { scopeId = node.scopeId, nodeId = node.nodeId, kind = node.kind, application = ApplicationId.Memories, name = node.name } });
 
     /// <summary>Whether a tile's menu marks (Marks.Toggle): where the core says a mark may be flipped
-    /// (GalleryShown.marking, #1001: a member's, the own set read — a personal space's too) and the page is online.</summary>
-    private bool Marking => _shown is { marking: true, offline: null };
+    /// (GalleryShown.marking, #1001: a member's, the own set read — a personal space's too), online or where the core
+    /// queues the page's writes offline (GalleryShown.queues, ADR 0153: a mark kept to be sent).</summary>
+    private bool Marking => _shown is { marking: true } s && (s.offline is null || s.queues);
 
     /// <summary>The grid's width: the scroll's view, less the page's margins.</summary>
     private double Width => _scroll.ViewportWidth - 2 * Margin;
@@ -660,8 +626,8 @@ internal sealed class MemoryPage : IDisposable
         }
     }
 
-    /// <summary>A placeholder's stage, what its tile is built from: preparing, sending, failed.</summary>
-    private static string Stage(UploadTileShown u) => u.failed ? "failed" : u.preparing ? "preparing" : "sending";
+    /// <summary>A placeholder's stage, what its tile is built from: waiting to be sent (added offline), preparing, sending, failed.</summary>
+    private static string Stage(UploadTileShown u) => u.waiting ? "waiting" : u.failed ? "failed" : u.preparing ? "preparing" : "sending";
 
     /// <summary>A photo or video on its way into this page (ADR 0145 decision 3): its kind's glyph on the card, a running
     /// bar while its tiers are made on the device, then how far it is (<see cref="StepUploads"/> moves it), or that it
@@ -676,7 +642,22 @@ internal sealed class MemoryPage : IDisposable
         glyph.HorizontalAlignment = HorizontalAlignment.Center;
         glyph.VerticalAlignment = VerticalAlignment.Center;
         face.Children.Add(glyph);
-        if (!upload.failed)
+        if (upload.waiting)
+        {
+            // added offline, sealed on this device: Waiting to send (or why it is held), in place of a bar (ADR 0153 decision 5)
+            var waits = new TextBlock
+            {
+                Text = upload.said is { } w ? Said.Notice(w) : Words.OfflineWaiting(),
+                Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                TextWrapping = TextWrapping.Wrap,
+                TextAlignment = TextAlignment.Center,
+                Margin = new Thickness(8),
+                VerticalAlignment = VerticalAlignment.Bottom,
+            };
+            face.Children.Add(waits);
+            label = $"{label}, {waits.Text}";
+        }
+        else if (!upload.failed)
         {
             var bar = new ProgressBar { IsIndeterminate = upload.preparing, Maximum = 1, Value = upload.progress, Margin = new Thickness(8), VerticalAlignment = VerticalAlignment.Bottom };
             if (!upload.preparing) _bars[upload.id] = new WeakReference<ProgressBar>(bar);
