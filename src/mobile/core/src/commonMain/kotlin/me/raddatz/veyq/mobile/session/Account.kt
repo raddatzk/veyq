@@ -733,24 +733,35 @@ class VeyqAccount private constructor(
 
     /**
      * Ends this connection only, as the duplicate of a connection of the same account held already (`SessionModel`'s add),
-     * or one whose trust a reconnect found gone (its store wiped already): its server session logged out and its keys
-     * zeroed — nothing on the device changes: the record, the wrap copy and the offline store stay with the account, which
-     * stays on this device (ADR 0140 decision 11: the store goes only when the account leaves this device).
+     * or one whose trust a reconnect found gone (its store wiped already): its server session logged out (but see below)
+     * and its keys zeroed — nothing on the device changes: the record, the wrap copy and the offline store stay with the
+     * account, which stays on this device (ADR 0140 decision 11: the store goes only when the account leaves this device).
+     *
+     * A remembered account's session stays where it is the one this device keeps the refresh token of: a logout revokes
+     * the whole session family (`/api/logout`), so it would refuse the very token the next start resumes with — the
+     * resume, or an unlock offline at its reconnect, would forget the trust (`QueuedTest`, the 2026-11-20 live case).
      */
     suspend fun retire() {
         pinsHeld?.stop()
         pinsHeld = null
         offline?.close()
         offline = null
-        close()
+        close(logout = !holdsKeptSession())
     }
 
-    private suspend fun close() {
+    /** Whether this connection's session is the one this device keeps for its remembered record (its refresh token). */
+    private fun holdsKeptSession(): Boolean {
+        val record = trusted?.takeIf { it.method == TrustedDevice.Method.DEVICE_KEY } ?: return false
+        val refresh = tokens.refresh ?: return false
+        return runCatching { device.keys.secret(record.refreshAlias) }.getOrNull() == refresh
+    }
+
+    private suspend fun close(logout: Boolean = true) {
         if (closed) return
         closed = true
         probing?.cancel()
         background.coroutineContext[kotlinx.coroutines.Job]?.cancel()
-        if (!sendsNothing) runCatching { call { SessionApi(server, http).logout() } }
+        if (logout && !sendsNothing) runCatching { call { SessionApi(server, http).logout() } }
         masterKey.fill(0)
         identity.kemSeed.fill(0)
         identity.signSeed.fill(0)

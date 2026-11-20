@@ -74,7 +74,7 @@ class OfflineWipeWiredTest {
                 )
                 r.method == HttpMethod.Get && path == "/api/account/device-register" -> json("""{"revision":0,"blob":null}""")
                 r.method == HttpMethod.Delete -> respond("", HttpStatusCode.NoContent)
-                r.method == HttpMethod.Post && path == "/api/session/logout" -> respond("", HttpStatusCode.NoContent)
+                r.method == HttpMethod.Post && path == "/api/logout" -> respond("", HttpStatusCode.NoContent)
                 else -> json("{}", HttpStatusCode.NotFound)
             }
         }

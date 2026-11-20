@@ -49,7 +49,7 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
 
     /** Whether any request reaches the server or its store. */
     var reachable = true
-    /** What a refresh of the session answers. */
+    /** What a refresh of the session answers (401 once a logout revoked the session family). */
     var refreshStatus = 200
     /** Whether `key-material` serves this device's wrap. */
     var serveWrap = true
@@ -431,7 +431,9 @@ internal class PlayedTenant(files: DeviceFiles = SizedVolume(), val clock: () ->
             )
             path == "/api/scopes/my-tenants" -> json(tenants.joinToString(",", "[", "]") { """{"tenantId":"${it.id}","name":"${it.id}","domain":"${it.domain}","role":"OWNER","status":"ACTIVE","iconEpoch":0}""" })
             path == "/api/account/device-register" -> json("""{"revision":0,"blob":null}""")
-            path == "/api/session/logout" -> respond("", HttpStatusCode.NoContent)
+            // a logout revokes the session family, as the server does (`auth.openapi.yaml` `/api/logout`): the refresh token a
+            // remembered device keeps is of it, so a refresh after it is refused
+            path == "/api/logout" -> { refreshStatus = 401; respond("", HttpStatusCode.NoContent) }
             path.matches(Regex("/api/tenants/[^/]+/capabilities")) ->
                 capabilities?.let { json("""{"capabilities":$it,"applicationErasures":[]}""") } ?: json("{}", HttpStatusCode.NotFound)
             path == "/api/scopes" -> json(scopes.filter { it.tenant == tenant && (it.member || it.stillListed) }.joinToString(",", "[", "]") { scopeJson(it) })

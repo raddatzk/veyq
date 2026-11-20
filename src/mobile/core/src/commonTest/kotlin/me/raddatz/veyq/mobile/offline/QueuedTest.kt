@@ -255,6 +255,22 @@ class QueuedTest {
         offline.retire()
     }
 
+    @Test
+    fun an_account_left_and_unlocked_offline_reconnects_on_its_kept_session_and_keeps_the_trust() = runTest {
+        // the app leaving a remembered account (retire) keeps its server session: it is the one the device's kept refresh
+        // token renews, and a logout revokes it — the reconnect would find it refused and forget the trust (2026-11-20 live)
+        val x = setup()
+        x.a.retire()
+        assertTrue("/api/logout" !in x.t.requests, "leaving the account logged its remembered session out")
+        x.t.reachable = false
+        val offline = x.t.resume()
+        assertIs<Reach.Offline>(offline.reach.value)
+        x.t.reachable = true
+        assertTrue(offline.reconnect(), "the account unlocked offline did not reconnect")
+        assertEquals(listOf(x.t.record.key), x.t.device.trusted().map { it.key }, "the reconnect dropped the device's trust")
+        offline.retire()
+    }
+
     // ---- the closed list, derived
 
     /** The operations of ADR 0153 decision 3's never-queue column that a node write could reach. */
