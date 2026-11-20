@@ -83,6 +83,12 @@ object QueuedNodes {
         return box.put(QueuedWrite(TRASH + node, Queued.NODE_TRASH.name, tenant, scope, node = node, intent = encode(TrashIntent.serializer(), TrashIntent()), at = nowMs))
     }
 
+    /** A rename of [node] held for the person (`stale_placement`, a name taken) dropped: a rename online decided it. */
+    internal suspend fun renameDecided(account: VeyqAccount, node: String) {
+        val box = account.outbox ?: return
+        box.write(RENAME + node)?.takeIf { it.state == QueuedWrite.State.HELD }?.let { box.remove(it.id) }
+    }
+
     /** Write [id] discarded with every write that waits for it, theirs after them. */
     internal suspend fun dropWithDependents(box: Outbox, id: String) {
         val all = box.writes()

@@ -13,6 +13,8 @@ import me.raddatz.veyq.mobile.session.TenantSession
  * restore, a purge, …), fails it — the list is checked, not trusted. An application's rows have their senders in the
  * application ([me.raddatz.veyq.mobile.memories.QueuedMemories], …), reached through [me.raddatz.veyq.mobile.AppKinds.queuedSender].
  */
+@kotlinx.serialization.Serializable
+@kotlinx.serialization.SerialName("QueuedOp")
 enum class Queued(internal val operations: Set<String>) {
     /** Core: a folder created (`FolderCreate`, its id the write's). */
     FOLDER_CREATE(setOf("createNode")),
