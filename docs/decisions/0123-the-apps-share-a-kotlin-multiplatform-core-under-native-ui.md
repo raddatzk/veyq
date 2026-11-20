@@ -3,7 +3,7 @@
 - Status: Accepted
 - Built: partly — what stands and what is open is [native-apps](../crosscutting/native-apps.md)
 - Date: 2026-11-08
-- Extended by: [ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) (all of an app's logic in the core; Windows and Linux)
+- Extended by: [ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) (all of an app's logic in the core; Windows and Linux); [ADR 0155](0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md) (a `js()` target; the web draws over the core)
 
 ## Context
 
