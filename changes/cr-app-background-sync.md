@@ -60,11 +60,29 @@ ADR 0153 decision 8 holds them; beside it:
 
 ## Phases
 
-- [ ] **1 core — `BackgroundRun`** (B1, B2) — Tests: a login-level account runs, a presence-level and a password-trusted
+- [x] **1 core — `BackgroundRun`** (B1, B2) — Tests: a login-level account runs, a presence-level and a password-trusted
   one are skipped without a prompt (`SoftwareDeviceKeys.prompts` stays 0); a refused refresh ends the record and wipes;
   the deadline stops the run between writes; the keys are zeroed after (the account's `closed` state). · Done when:
   `:core:jvmTest :core:macosArm64Test` green. **Bites:** (a) the level check dropped → the presence test red (a prompt
   counted); (b) the offline resume used → the "no server, nothing done" test red.
+  **Built** 2026-11-20 (`claude/bgsync`): `session/BackgroundRun.kt` — `run(deadline)` over `ThisDevice.backgroundAccounts()`
+  (`BackgroundRun.runs`: DEVICE_KEY at LOGIN; `ThisDevice.backgroundRuns` false on the desktops), each through
+  `VeyqAccount.resumeOnline` (now internal, `send = false`) or the account `OpenAccounts` holds open in the process (used,
+  left open, an offline one reconnected first); before any request the kept wrap is tried under the **login** key
+  (`keyOpens`: a closed key — a locked iPhone, B4 — ends as `KEY_CLOSED` with nothing sent, and is a second guard behind
+  the level check); then the queue (`sendQueued(go)`, `OutboxSender`'s `go` asked between writes), **then** the pins
+  (`withTimeoutOrNull` to the deadline) — the order reversed from B1 so a long pin fetch never holds the person's writes
+  to the next run; the run's own account closed under `NonCancellable` (`retire`: no logout, the kept family stays). The
+  account's close now zeroes every scope key it opened (`openedScopeKeys`) beside the Master Key and the identity. B2:
+  `ThisDevice.backgroundSync`/`setBackgroundSync` (on by default, an off-list per account, cleared when the record is
+  forgotten), `backgroundWanted` (a flow the hosts schedule by); `AccountSettings.State.backgroundSync` and
+  `backgroundSyncMissing` (`account_settings_background_sync_missing` at the presence level or the password trust on a
+  phone; nothing on a desktop). Words `account_settings_background_sync`, `_hint`, `_missing` (drafts, the owner's to
+  change). `BackgroundRunTest` (7). Bites, each seen red then restored: (a) `runs` without the level → the presence test
+  red ("a presence-level account has a switch"; no prompt is reached even so: the login-key probe refuses a presence
+  wrap); (b) `VeyqAccount.resume` in place of `resumeOnline` → the no-server test red (an account opened offline);
+  (c) no `retire` → the login test red (the account still open); (d) `go` not asked → the deadline test red (both
+  writes sent).
 - [ ] **2 bridge** — the switch on the wire (the desktops draw nothing; it is absent there). · Done when: `:bridge:jvmTest`
   green.
 - [ ] **3 Android** — B3; the switch. First the measurement named in B3, stop-and-ask if the key does not open. · Done

@@ -82,6 +82,7 @@ import me.raddatz.veyq.mobile.api.models.MyTenant
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.builtins.ListSerializer
 
 /** Why a sign-in did not complete, in words a member can act on (the platform localizes by [reason]). */
@@ -201,7 +202,7 @@ class VeyqAccount private constructor(
      * The outbox sent (ADR 0153 decision 4, [me.raddatz.veyq.mobile.offline.OutboxSender]): one run at a time, each tenant
      * opened once for it. Null where there is no outbox or the account is not online.
      */
-    internal suspend fun sendQueued(): me.raddatz.veyq.mobile.offline.OutboxSender.Report? = sendingLock.withLock {
+    internal suspend fun sendQueued(go: () -> Boolean = { true }): me.raddatz.veyq.mobile.offline.OutboxSender.Report? = sendingLock.withLock {
         val box = outbox ?: return@withLock null
         if (_reach.value != Reach.Online || sendsNothing || closed) return@withLock null
         if (box.count() == 0) return@withLock me.raddatz.veyq.mobile.offline.OutboxSender.Report(0, 0, 0, 0)
@@ -210,6 +211,7 @@ class VeyqAccount private constructor(
             tenantOf = { id -> tenants.firstOrNull { it.tenantId == id }?.let { open(it) } },
             online = { _reach.value == Reach.Online && !closed },
             senderOf = me.raddatz.veyq.mobile.AppKinds::queuedSender,
+            go = go,
         ).run()
     }
 
@@ -251,8 +253,11 @@ class VeyqAccount private constructor(
     private var probing: kotlinx.coroutines.Job? = null
     private val reconnecting = Mutex()
 
-    /** The store opened (where this device trusts the account and the host named a directory) and the opening answers kept. */
-    internal suspend fun ensureOffline() {
+    /**
+     * The store opened (where this device trusts the account and the host named a directory) and the opening answers kept;
+     * writes waiting from before go at once where [send] (a scheduled run sends them itself, within its time: `BackgroundRun`).
+     */
+    internal suspend fun ensureOffline(send: Boolean = true) {
         if (offline != null || trusted == null) return
         val stores = device.offline ?: return
         val o = runCatching { stores.openShared(key, masterKey, server, device.offlineLimit) }
@@ -261,7 +266,7 @@ class VeyqAccount private constructor(
         keepOpening(o)
         runCatching { o.store.sweep() }
         // an account opened online with writes waiting from before (a reconnect never came): they go now
-        if (_reach.value == Reach.Online && !sendsNothing) startSending()
+        if (send && _reach.value == Reach.Online && !sendsNothing) startSending()
     }
 
     /** The answers an offline unlock opens with: the key material (its wraps and sealed identity only) and the tenants. */
@@ -649,7 +654,7 @@ class VeyqAccount private constructor(
                 return
             }
             when (val o = grants.open(s, view)) {
-                is GrantOutcome.Opened -> open += TenantSession.OpenScope(s, o.key, scopeName(s, tenant))
+                is GrantOutcome.Opened -> open += TenantSession.OpenScope(s, opened(o.key), scopeName(s, tenant))
                 is GrantOutcome.Refused -> closed[s.id] = o.reason
             }
         }
@@ -682,7 +687,7 @@ class VeyqAccount private constructor(
         val open = mutableListOf<TenantSession.OpenScope>()
         val closed = mutableMapOf<String, GrantOutcome.Reason>()
         for (s in summaries) when (val o = grants.openHeld(s)) {
-            is GrantOutcome.Opened -> open += TenantSession.OpenScope(s, o.key, scopeName(s, tenant))
+            is GrantOutcome.Opened -> open += TenantSession.OpenScope(s, opened(o.key), scopeName(s, tenant))
             is GrantOutcome.Refused -> closed[s.id] = o.reason
         }
         // the tenant's directory as kept (ADR 0144 decision 7): offline a participant and an uploader are named as online, never judged
@@ -766,6 +771,8 @@ class VeyqAccount private constructor(
         identity.kemSeed.fill(0)
         identity.signSeed.fill(0)
         authSeed?.fill(0)
+        scopeKeys.value.forEach { it.fill(0) }
+        OpenAccounts.closed(this)
         http.close()
         outside.close()
     }
@@ -969,6 +976,14 @@ class VeyqAccount private constructor(
 
     /** Closed: [close] ran, the Master Key is zeroed. */
     private var closed = false
+
+    /** Every scope key this account opened ([openScopes], [openOffline]): zeroed when it closes — nothing reads them after. */
+    private val scopeKeys = MutableStateFlow<List<ByteArray>>(emptyList())
+
+    /** The scope keys [scopeKeys] holds (a test's look that they are zeroed at the close). */
+    internal val openedScopeKeys: List<ByteArray> get() = scopeKeys.value
+
+    private fun opened(key: ByteArray): ByteArray = key.also { k -> scopeKeys.update { if (it.any { held -> held === k }) it else it + k } }
 
     /** A copy of the Master Key the caller zeroes, null once the account closed. */
     internal fun masterKeyCopy(): ByteArray? = if (closed) null else masterKey.copyOf()
@@ -1219,7 +1234,7 @@ class VeyqAccount private constructor(
         const val SERVER_WORK_MS = 10L * 60 * 1000
 
         /** The DEVICE_KEY wrap's associated data, the web's (`deviceKeyWrap.ts`); only this device ever opens it. */
-        private val DEVICE_KEY_AAD = utf8("veyq/v1/device-key-wrap")
+        internal val DEVICE_KEY_AAD = utf8("veyq/v1/device-key-wrap")
 
         /** The probe's cadence while offline (ADR 0140 decision 5): 5 s, doubling to 60 s. */
         internal val PROBE = LivePoll.Cadence(intervalMs = 5_000, maxBackoffMs = 60_000, jitter = 0.2, minGapMs = 0)
@@ -1317,6 +1332,7 @@ class VeyqAccount private constructor(
             device: ThisDevice,
             familyId: String?,
             label: String = device.label,
+            send: Boolean = true,
         ): VeyqAccount {
             val suite = c.suite
             val identity = suite.deserializeIdentityPrivate(suite.open(Context("identity-priv"), masterKey, unb64(material.wrappedIdentityPrivateKey)))
@@ -1338,9 +1354,10 @@ class VeyqAccount private constructor(
             account.answered()
             account.readdress()
             account.trusted?.let { device.touch(it.key) }
-            account.ensureOffline()
+            account.ensureOffline(send)
             account.recordThisDevice(familyId, label)
             account.rotations.start()
+            OpenAccounts.opened(account)
             return account
         }
 
@@ -1393,6 +1410,7 @@ class VeyqAccount private constructor(
                     it.startProbe()
                     // its passes wait for the reconnect, which runs one at once ([reconnect])
                     it.rotations.start()
+                    OpenAccounts.opened(it)
                 }
             } catch (e: Exception) {
                 o.close()
@@ -1669,11 +1687,17 @@ class VeyqAccount private constructor(
             resumeOffline(primitives, record, device, client) ?: throw e
         }
 
-        private suspend fun resumeOnline(
+        /**
+         * The start's resume with the server reached, never its offline twin: what [resume] tries first, and all a scheduled
+         * run does (`BackgroundRun`, ADR 0153 decision 8: without the server it does nothing). [send]: writes waiting go at
+         * once ([ensureOffline]).
+         */
+        internal suspend fun resumeOnline(
             primitives: Primitives,
             record: TrustedDevice,
             device: ThisDevice,
             client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+            send: Boolean = true,
         ): VeyqAccount {
             require(record.method == TrustedDevice.Method.DEVICE_KEY) { "not a remembered record" }
             val c = connect(primitives, record.server, client, device)
@@ -1709,7 +1733,7 @@ class VeyqAccount private constructor(
                 } catch (e: OpenRefused) {
                     throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "wrap does not open")
                 }
-                finish(c, primitives, record.email, material, masterKey, device, null)
+                finish(c, primitives, record.email, material, masterKey, device, null, send = send)
             }
         }
 

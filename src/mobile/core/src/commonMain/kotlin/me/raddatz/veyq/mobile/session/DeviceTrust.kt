@@ -144,7 +144,8 @@ data class TrustedDevice(
  * in the account's device register (the model's name), its id there, and the accounts it trusts — and [offlineRoot],
  * the directory the host names for the accounts' offline stores (ADR 0140 decision 3), null where it names none, with
  * [offlineLimit], the limit an account's store starts with on this kind of device (decision 8: 2 GB on a phone, 10 GB on
- * a desktop).
+ * a desktop) — and [backgroundRuns], whether the platform runs a scheduled sync without the person (ADR 0153 decision 8:
+ * Android's periodic work, iOS's app refresh; never a desktop).
  */
 class ThisDevice(
     val store: DeviceStore,
@@ -153,6 +154,7 @@ class ThisDevice(
     private val primitives: Primitives,
     val offlineRoot: String? = null,
     val offlineLimit: Long = me.raddatz.veyq.mobile.offline.AccountOffline.DESKTOP_LIMIT,
+    val backgroundRuns: Boolean = false,
 ) {
     /** The accounts' offline stores on this device, where the host named their directory. */
     val offline: OfflineStores? by lazy { offlineRoot?.let { OfflineStores(it, store, primitives, offlineFiles, offlineClock) } }
@@ -210,12 +212,63 @@ class ThisDevice(
 
     fun trusted(key: String): TrustedDevice? = trusted().firstOrNull { it.key == key }
 
-    internal fun remember(record: TrustedDevice) =
+    internal fun remember(record: TrustedDevice) {
         store.write(TRUSTED, JSON.encodeToString(listOf(record) + trusted().filter { it.key != record.key }))
+        backgroundChanged()
+    }
 
     internal fun forget(key: String) {
         store.write(TRUSTED, JSON.encodeToString(trusted().filter { it.key != key }))
         dropWrap(key)
+        // a later stay at the login level starts on again, as a first one does
+        backgroundOff().takeIf { key in it }?.let { off -> store.write(BACKGROUND_OFF, JSON.encodeToString(off - key)) }
+        backgroundChanged()
+    }
+
+    // ---- Sync in the background (ADR 0153 decision 8, cr-app-background-sync B2)
+
+    /**
+     * *Sync in the background* for account [key] on this device: on or off where a scheduled run may open it — this platform
+     * runs one ([backgroundRuns]) and the account stays signed in at the login level ([BackgroundRun.runs]) —, on until the
+     * person turns it off (owner 2026-11-19); null elsewhere: the presence level and the password trust ask the person, and a
+     * run has nobody to ask, so there is no switch.
+     */
+    fun backgroundSync(key: String): Boolean? {
+        if (!backgroundRuns) return null
+        val record = trusted(key)?.takeIf { BackgroundRun.runs(it) } ?: return null
+        return record.key !in backgroundOff()
+    }
+
+    /** [backgroundSync] turned [on] or off for account [key]; nothing where the account has no switch. */
+    internal fun setBackgroundSync(key: String, on: Boolean) {
+        if (backgroundSync(key) == null) return
+        val off = backgroundOff().filter { it != key } + if (on) emptyList() else listOf(key)
+        store.write(BACKGROUND_OFF, JSON.encodeToString(off))
+        backgroundChanged()
+    }
+
+    private fun backgroundOff(): List<String> =
+        runCatching { store.read(BACKGROUND_OFF)?.let { JSON.decodeFromString<List<String>>(it) } }.getOrNull().orEmpty()
+
+    /** The accounts a scheduled run opens now ([BackgroundRun]): each record whose switch is on, the most recently used first. */
+    fun backgroundAccounts(): List<TrustedDevice> = trusted().filter { backgroundSync(it.key) == true }
+
+    private val _backgroundWanted = kotlinx.coroutines.flow.MutableStateFlow(false)
+    private var backgroundRead = false
+
+    /**
+     * Whether any account has its switch on: what a platform schedules its periodic run by, and cancels it at false
+     * (Android's unique periodic work, iOS's refresh request). Moves with every trust kept or forgotten and every switch.
+     */
+    val backgroundWanted: kotlinx.coroutines.flow.StateFlow<Boolean>
+        get() {
+            if (!backgroundRead) backgroundChanged()
+            return _backgroundWanted
+        }
+
+    private fun backgroundChanged() {
+        backgroundRead = true
+        _backgroundWanted.value = backgroundAccounts().isNotEmpty()
     }
 
     /**
@@ -253,6 +306,7 @@ class ThisDevice(
         const val ID = "veyq.device-id"
         const val TRUSTED = "veyq.trusted-devices"
         const val DECLINED = "veyq.stay-signed-in-declined"
+        const val BACKGROUND_OFF = "veyq.background-sync-off"
         const val WRAP = "veyq.offline-wrap."
         const val SALT = "veyq.instance-salt."
         const val MOVING = "veyq.address-change."

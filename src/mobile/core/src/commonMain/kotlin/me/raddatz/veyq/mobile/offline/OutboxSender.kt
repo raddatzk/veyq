@@ -21,6 +21,11 @@ class OutboxSender internal constructor(
     private val tenantOf: suspend (tenantId: String) -> TenantSession?,
     private val online: () -> Boolean,
     private val senderOf: (Queued) -> QueuedSender,
+    /**
+     * Whether the run may begin another write: a scheduled run's time left (`BackgroundRun`, ADR 0153 decision 8). Asked
+     * only between writes — a write begun is finished and its outcome kept —, so what is left waits for the next run.
+     */
+    private val go: () -> Boolean = { true },
 ) {
     /** What a run came to: how many were sent, held, refused, and still wait. */
     data class Report(val sent: Int, val held: Int, val refused: Int, val waiting: Int)
@@ -32,7 +37,7 @@ class OutboxSender internal constructor(
         val tenants = HashMap<String, TenantSession?>()
         try {
             for (write in outbox.writes()) {
-                if (!online()) break
+                if (!online() || !go()) break
                 if (write.state != QueuedWrite.State.WAITING) continue
                 if (write.after != null && outbox.write(write.after) != null) continue
                 val outcome = try {
