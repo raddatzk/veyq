@@ -236,19 +236,10 @@ def check_android_kotlin(android: Path) -> list[str]:
 USAGE_YML = re.compile(r"^\s*(?:INFOPLIST_KEY_)?(NS\w*UsageDescription)\s*:", re.M)
 USAGE_PLIST = re.compile(r"<key>\s*(NS\w*UsageDescription)\s*</key>")
 METAINFO_SHOWN = re.compile(r"<(summary|p)\b")
-# Staged (cr-apps-words-guard-reads-every-ui): the manifests' texts are in the catalog, and the generator that writes
-# them is its phase 2, which empties this list; an entry is red once its manifest no longer holds it.
-MANIFEST_PENDING = {
-    ("apple/project.yml", "NSPhotoLibraryAddUsageDescription"),
-    ("apple/project.yml", "NSCameraUsageDescription"),
-    ("linux/flatpak/metainfo.xml", "summary"),
-    ("linux/flatpak/metainfo.xml", "p"),
-}
 
 
 def check_manifests(root: Path) -> list[str]:
     errors: list[str] = []
-    found: list = []  # (the manifest under root, what it holds by hand, where, the generator's flag)
     project, metainfo = root / "apple" / "project.yml", root / "linux" / "flatpak" / "metainfo.xml"
     for need in (project, metainfo):
         if not need.exists():
@@ -260,13 +251,8 @@ def check_manifests(root: Path) -> list[str]:
             continue
         text = XAML_COMMENT.sub(lambda m: "\n" * m.group().count("\n"), f.read_text(encoding="utf-8"))
         for m in pattern.finditer(text):
-            found.append((f.relative_to(root).as_posix(), m.group(1), f"{f.relative_to(ROOT)}:{text.count(chr(10), 0, m.start()) + 1}", flag))
-    for rel, what, at, flag in found:
-        if (rel, what) not in MANIFEST_PENDING:
-            errors.append(f"manifest-literal: {at}: {what} written by hand, English only — its words are the catalog's "
-                          f"(generate_words.py {flag})")
-    for rel, what in sorted(MANIFEST_PENDING - {(r, w) for r, w, _, _ in found}):
-        errors.append(f"manifest-literal: MANIFEST_PENDING names {rel}'s {what}, which it no longer holds — drop the entry")
+            errors.append(f"manifest-literal: {f.relative_to(ROOT)}:{text.count(chr(10), 0, m.start()) + 1}: {m.group(1)} "
+                          f"written by hand, English only — its words are the catalog's (generate_words.py {flag})")
     return errors
 
 
