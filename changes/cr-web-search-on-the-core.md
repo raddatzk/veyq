@@ -102,24 +102,59 @@ plus ~9 KB gz of its own, against ~3 KB gz of TypeScript deleted (S2, S4).
 
 ## Phases
 
-- [ ] **1 the baseline** — before any edit: the eager set (`main` and its modulepreloads) and every lazy chunk (raw,
+- [x] **1 the baseline** — before any edit: the eager set (`main` and its modulepreloads) and every lazy chunk (raw,
   min, gz, S1's method), the slice's share of them (S2's method), `pnpm run check`'s time in `src/web` cold and warm,
   the `frontend` job's time over its last three runs, the search's speed over S6's corpus through the TypeScript
   (median and p90 of the same query list), S7's list. Written into § Measured at implement. · Done when: the numbers
-  are there.
-- [ ] **2 core** — S3; core tests added where S6's accounting needs one; the vectors' write mode in
+  are there. **Built** 2026-11-20: B1–B6.
+- [x] **2 core** — S3; core tests added where S6's accounting needs one; the vectors' write mode in
   `SearchVectorsTest`. · Done when: `:core:jvmTest :core:macosArm64Test`, `:core:compileKotlinJs` and `:bridge:jvmTest`
   green; `SearchVectorsTest` and `SearchModelTest` unchanged but for the write mode. **Bite:** the default order's
   name comparison reversed → `SearchVectorsTest` red.
-- [ ] **3 the façade** — S1, S2, S4. · Done when: the package's `pnpm run check` green with the vectors' pure cases
+  **Built** 2026-11-20: `Results.searchResults(…, names)` (default `BY_NAME`, NameOrder over the folded names); the write
+  mode in `SearchVectorsTest` (`VEYQ_WRITE_VECTORS=1`), written as `JSON.stringify(v, null, 2)` — a rewrite from today's
+  rules left `git diff contracts/` empty; `SearchRulesTest` (19 cases, S6's table). Two changes the CR did not plan, both
+  for the speed criterion and rule-neutral: the scan's place and alias loops indexed, and the name test `String.holds`
+  (`expect`; `includes` on JavaScript, `contains` elsewhere) — Kotlin/JS's `contains` was a quarter of the query time.
+  Checks: `:core:jvmTest :core:macosArm64Test :core:compileKotlinJs :core:compileTestKotlinJs :core:jsPackage
+  :bridge:jvmTest` green (`--warning-mode all`). Bites: the order reversed → `SearchVectorsTest.match` red; `holds` as
+  `startsWith` on the JVM plus the matcher's remembered answer removed → 8 of 19 `SearchRulesTest` cases red.
+- [x] **3 the façade** — S1, S2, S4. · Done when: the package's `pnpm run check` green with the vectors' pure cases
   through the façade, and the `.d.ts` of both handles without a member. **Bites:** `Json.encodeToString` planted in
   `Query.kt` → the slice check red; a `deviceFiles` call planted in the façade → red; `ß → ss` dropped in `Fold.kt` →
   the vectors red; the façade ignoring the passed collator → the `collator` cases red.
-- [ ] **4 web** — S5, S6, S7, S8; S10's refs. · Done when: `pnpm run generate:api` then `pnpm run check` in `src/web`
+  **Built** 2026-11-20: `jsMain/…/search/web/{SearchWeb,Shapes}.kt`; every shape an `@JsExport external interface`
+  (exportable, so the `.d.mts` declares it — a plain external interface was referenced but undeclared); the handles
+  `SearchCorpus`, `SearchMatcher` (`private constructor()` only); `exports["./search"]`; `sideEffects: false` (the module
+  imports Ktor's client for its engine's eager registration, which no façade reaches); `src/search.test.ts` (the pure
+  sections, the matcher under both contributions' nodes, the collator crossing with `sv` against `de`) and
+  `src/slice.test.ts` (esbuild over the entry, its sources through the chained maps; printed: 78,916 B minified, 27,734 B
+  gz, the standard library 52,384 B, the core's own 26,219 B). Deviations: the façade exports `textRank`, `satisfies` and
+  `searchRules` (Memories' gallery filter and the settings test call them) and not `matchedRanges`/`monthsOf` (no caller).
+  The vectors' `collator` cases agree with NameOrder by design, so the collator bite is the package's `sv` case. Bites,
+  each red then green: `Json.encodeToString` in `Query.matchedText` → slice check red (2 sources); `deviceFiles` read in
+  `fold` → red (`NotOnTheWeb.kt`); `ß → ss` dropped → 4 vector cases red; `Results.BY_NAME` for the passed comparison →
+  the collator case red.
+- [x] **4 web** — S5, S6, S7, S8; S10's refs. · Done when: `pnpm run generate:api` then `pnpm run check` in `src/web`
   green; `src/admin-web` and `tests/e2e` checks green; the app image builds; every guard but guard_gaps green; the
   browser pass of § Passes run. **Bites:** a core file importing an application's `@veyq/core-js` entry → the guard
   red; the `ß` mutation of phase 3 → the web's `vectors.test.ts` red.
-- [ ] **5 the gate** — ADR 0155 decision 2, each criterion measured against phase 1 and written into a table here: size
+  **Built** 2026-11-20: S5–S8 as decided, S6's table below; `pnpm run core` (the package's build) before `check` and
+  `dev`; the dev server keeps Gradle watching the core on its development link (`:core:jsPackageDev`, unplanned: the
+  production link made a reload 16–18 s, the criterion is 15; Ktor's Node-only `import('ws')`, kept by the development
+  link, answered with an empty module in dev); the image's stage builds on the backend's JDK image (one image, one tag:
+  `validate_image_pins.py`), copying `scripts/repo_layout.py` and `validate_web_contrast.py` for the theme generator; the
+  licence file's `kotlin-stdlib` entry (version from `dist/kotlin-stdlib.version`, Apache-2.0 text in
+  `src/packages/core-js/notices/`). Two staying web tests changed beyond their imports, both where they reached into the
+  moved TypeScript: `SearchField.test.ts`' matcher-memory case counted reads of `foldedName` (now: the field clears the
+  core's matcher when its list closes, counted on `clearMatcher`; the memory itself is `SearchRulesTest`'s) and
+  `searchIndex.test.ts`' query ran `matchAll` (now `searchResults`). `validate_pnpm_installs_gated.py` needed no change
+  (it reads the lockfile's COPY, not the members). Checks: `generate:api` then `check` in `src/web` green (7,274 tests);
+  `src/admin-web`, `tests/e2e`, `src/packages/core-js` green; the app image built (`docker build -f src/backend/Dockerfile`,
+  493 s); every guard green, guard_gaps run (a validator changed). Bites: `import '@veyq/core-js/expenses'` in
+  `core/search/results.ts` → the guard red; `ß → ss` dropped → the web's `vectors.test.ts` 4 cases red; the
+  `kotlinStdlibNotice()` line dropped → `verify:license-sources` red. Browser pass: § Passes below.
+- [x] **5 the gate** — ADR 0155 decision 2, each criterion measured against phase 1 and written into a table here: size
   (the eager set, `main` alone, every lazy chunk; the façade's own share and its ratio to S2's deleted TypeScript),
   build (the `frontend` job over three runs, its timeout), development (a `Query.kt` edit to the reloaded dev page,
   timed warm three times; a thrown façade error's stack frame naming the `.kt` line in Chrome's devtools;
@@ -128,6 +163,7 @@ plus ~9 KB gz of its own, against ~3 KB gz of TypeScript deleted (S2, S4).
   `dist/`; `verify:csp`, `verify:license-sources`), behaviour (S6's speed against phase 1's; § Passes). · Done when:
   the table is complete; a full pass is the go (Q2), a miss is with the owner with its number, and nothing after this
   phase starts before that answer.
+  **Measured** 2026-11-20: the table under § Measured at implement — a miss (reproducibility), so phase 6 waits.
 - [ ] **6 harvest** — on a go: ADR 0155's `Built:` (decisions 2, 4–6) and decision 7's ratio (the measured one,
   rounded up to the next half); the root `CLAUDE.md` (a moved slice's phase order: contracts → backend → core →
   clients), `docs/ai/README.md` § The pipeline where it names the order, `src/web/CLAUDE.md` § Prove your work (the
@@ -145,6 +181,91 @@ more"; a person and a settings section; the open Memory's photos. Each result li
 in order, with their bold parts) and compared before and after; one screenshot of each as the final proof. Then the app
 (the Linux app or the Android emulator) searches the same account and lists the same results for three of the
 queries. The throwaway is erased after.
+
+## Measured at implement
+
+2026-11-20, branch `claude/kjs-p1` (from `claude/windows-cr-f6c73c` at `421982845`), macOS arm64, Kotlin 2.4.21, under
+other agents' load (load averages named where a time is reported). The scratch scripts: `chunks.cjs` (every chunk,
+`gzip -9`), `attr.cjs` (S2's source-map attribution), `perf.mjs` (the web's own API, `searchDocument` →
+`createMatcher` → `searchResults`, over S6's 10,000-document corpus, the matcher cleared before each of 200 queries),
+`devloop.mjs` (headless Chrome on the worktree's dev server: a `Query.kt` edit to the page's `load`).
+
+| # | Phase 1, before any edit | Number | Command |
+|---|---|---|---|
+| B1 | The eager set: `main` + `index.html`'s 28 modulepreloads | 29 chunks, 2,148,024 B / **606,761 gz**; `main` 1,051,910 / 300,411 gz | `vite build --sourcemap --outDir <s>/dist-before`; `node chunks.cjs` |
+| B2 | Every lazy chunk | 58 chunks, 3,645,022 B / 1,124,940 gz (each in `chunks-before.json`) | the same |
+| B3 | The slice's share | `query.ts` 5,536 + `results.ts` 905 B in `main`, `model.ts` 681 + `fold.ts` 330 B in `activeSpace`: 7,452 B min, **3,129 B gz** alone (2,613 + 516) | `attr.cjs` per chunk |
+| B4 | `pnpm run check` in `src/web` | cold 330 s (red: 2 timeouts, load 40), warm 296 s (red: 1 timeout, load 94) | `rm -rf node_modules/.vite* dist; time pnpm run check`, twice |
+| B5 | The `frontend` job | CI, its last three runs before core-js joined it: 9.53, 10.27, 10.22 min (2026-11-16/18). Locally: red in 12.5 min (timeouts, load 29) | `gh run view <id> --json jobs`; `run_pipeline.py --job frontend` |
+| B6 | The search's speed (TypeScript) | corpus 8–11.5 ms; query median **0.42–0.46 ms**, p90 0.72–0.84 ms (six runs) | `node perf.mjs ts-before.mjs` (esbuild of the three files) |
+| B7 | S7's list | 21 files, as the refine counted | S7's grep |
+
+### S6 — every deleted assertion's holder
+
+69 cases (`query.test.ts` 51, `results.test.ts` 12, `fold.test.ts` 6). **V** = a vector case of `v1-vectors.json`
+(run by `SearchVectorsTest`, the package's `search.test.ts` and the web's `vectors.test.ts`); **R** = a
+`SearchRulesTest` case; **W** = a staying web test.
+
+| Deleted case(s) | Holder |
+|---|---|
+| query 1–5, 7, 8 (year, person, tail, place, space, kind, In: suggestions) | V `suggest` #0–6, #9, #10, #17 |
+| query 6 (one letter, a chip already chosen) | V `suggest` #7, #8 |
+| query 9, 11, 12, 14, 16, 17 (In:, space, photo year, person, kind chips; no-space document) | V `match` #15, #16, #18, #20–22 |
+| query 10 (In: by id across spaces) | R `anInChipAsksTheNodesIdAndItsSpace` |
+| query 13 (year span edges) | V `match` #15 + R `aYearChipHoldsBothEndsOfASpan` |
+| query 15 (place chip folded, whole) | V `match` #19 + R `aPlaceChipIsTheWholeFoldedPlace` |
+| query 18 (every chip) | R `everyChipMustHold` |
+| query 19, 22 (the rank ladder, rank then name) | V `matcher` #0, #1; `match` #3, #14 |
+| query 20, 21 (fold and several words: their ranks) | V `match` #9–11 + R `theRanksOfFoldedAndSeveralWordMatches` |
+| query 23, 28 (a settings word ranks as a place, from three characters; a name first) | V `match` #6, `matcher` #0 + R `aSettingsWordRanksAsAPlaceAndANameFirst` |
+| query 24 (an alias at its best rank) | V `match` #12, `matcher` #0 + R `anAliasCountsAtItsBestRank` |
+| query 25 (an empty query) | V `match` #24 |
+| query 26, 45 (one character: word starts, places; the matcher over "rk") | V `match` #4, #5, `matcher` #0 + R `oneCharacterMatchesWordStartsOnlyPlacesToo` |
+| query 27 (a character outside the BMP) | V `match` #13 + R `aCharacterOutsideTheBasicPlaneIsOne` |
+| query 29, 30 (a short settings word typed whole; the reason word) | V `match` #5–7 + R `aShortSettingsWordTypedWholeAndTheReason`; W `SearchField.test.ts` (the drawn reason) |
+| query 31, 39–43 (the bold parts) | V `nameParts` #0–10 |
+| query 32–35 (month chips) | V `suggest` #11–15; W `SearchField.test.ts` ("may 2024") |
+| query 36, 38 (month span edges, no month without a date) | V `match` #17 + R `aMonthChipHoldsBothEndsOfASpanAcrossAYear` |
+| query 37 (a photo's local month at its last minute) | R `aPhotosMonthIsItsLocalOne` |
+| query 44 (the matcher equals a scan along a typed sequence) | V `matcher` #0, #1 (with the field's remembering matcher, in all three runners) |
+| query 46 (narrowing never asks a dropped document again) | R `theMatcherNarrowsOnlyWhatItRemembered` |
+| query 47 (a new list, another chip, an empty query) | V `matcher` #1 + R `theMatcherScansAgainForANewGenerationAndAnswersNothingForNothing` |
+| query 48 (the same query again is the last answer) | R `theSameQueryAgainIsTheRememberedAnswer` |
+| query 49–51 (reads counted: Backspace, a new generation, the history's bound) | R `theSameQueryAgainIsTheRememberedAnswer`, `theMatcherForgetsAtANewGenerationAndAtClear`, `theMatcherRemembersAtMostItsHistory` (identity, where TypeScript counted property reads); W `SearchField.test.ts` (the field clears the matcher as its list closes) |
+| results 1–5 (one list: rank, place, name) | V `match` #0–3, #5, #14 |
+| results 6–8 (a chip over people and settings) | V `match` #15, #18, #20; W `SearchField.test.ts` (Kind: Person) |
+| results 9 (where a node lies, a cycle) | W `documents.test.ts` (moved: `documents.ts` stays the web's) |
+| results 10–12 (`firstRanked`, its input untouched, a page and the exact total) | V `match` #23 + R `theFirstNAreAFullSortsFirstN` |
+| fold 1–6 (case, accents, `ß`, composed and decomposed, the fold map) | V `fold` #0–9 + R `foldReadsTheCapitalSharpSAndCapitals` (`ẞ`) |
+
+Stryker's manifest (`src/web/stryker.mutate.json`) named no search file before or after.
+
+### The gate (phase 5) — ADR 0155 decision 2, against B1–B7
+
+| Criterion | Number | Command | |
+|---|---|---|---|
+| size: the eager set | **+24,860 B gz** (606,761 → 631,621; ≤ 40,960): the Kotlin lands in `activeSpace` (+26,838 gz), `main` −1,974 gz | `chunks.cjs` over `dist-before`/`dist-after` | pass |
+| size: every lazy chunk | largest growth **+14 B gz** (`MemoryDetailHost`; ≤ 1,024) | the same | pass |
+| size: the façade's own share | 25,541 B min, **8,754 B gz** alone (the standard library 51,479 B min, 18,218 gz); the adapter left in `main` 1,096 B | `attr.cjs` over `activeSpace`/`main` | — |
+| size: its ratio to the deleted TypeScript (B3) | **2.80** gz (8,754 / 3,129), 3.43 minified → decision 7's R rounds up to **3.0** | the same | — |
+| build: the `frontend` job | after **5.7 min** green (core-js and the web's `pnpm run core` in it); before, the same host the same hour, 8.9 min red (one `FileViewer.pdf` timeout, load ~22); CI's last three 9.5–10.3 min; budget 15 | `run_pipeline.py --job frontend --rev 436d16ab0`, then `--rev 9d2f77c57` | pass (local; no CI run, nothing pushed) |
+| development: an edit to the dev page | **11.1, 11.3, 11.3** s warm (12.8 s the first), a `Query.kt` constant to the reloaded page reading it, load 6–11 | `devloop.mjs` (headless Chrome, `VITE_PORT=8097`, its watch) | pass |
+| development: a stack frame names the `.kt` line | `chipOf` → `SearchWeb.kt:159` (`throw IllegalArgumentException(…)`), `chipKey` → `SearchWeb.kt:65`, through the map the dev server serves (what devtools reads; not looked at in devtools' UI) | `stackmap.mjs` | pass |
+| development: no `any` in a façade signature | none; the `.d.mts` holds `any` twice outside the façade — Kotlin's `KtSingleton` helper and Ktor's `initHook` getter, the compiled module's own exports | `grep -n any dist/veyq-mobile-core.d.mts` | pass |
+| tests: every deleted assertion accounted | S6's table, 69 of 69 | above | pass |
+| tests: the vectors against the shipped JavaScript in `check`, a Kotlin mutation red | the package's `search.test.ts` and the web's `vectors.test.ts`; `ß → ss` dropped → 4 red in each | the bites of phases 3 and 4 | pass |
+| tests: Stryker | names no search file before or after | `grep search src/web/stryker.mutate.json` | pass |
+| delivery: two clean builds byte-identical | **no: 3 fresh-process clean builds, 3 digests** (`2fdb5daa…`, `71a592f9…`, `78f377f4…`; two warm-daemon ones `efef2cb5…`, `9a71c50a…`). Only `kotlin-kotlin-stdlib.mjs` differs (and its conformance copy): the super-interfaces' order in `initMetadataForClass` (`[KtList, Collection]` against `[Collection, KtList]`) — P0's M4 nondeterminism, which `kotlin.incremental.js.ir=false` did not remove here | `rm -rf dist; ./gradlew --no-daemon --rerun-tasks -Pkotlin.compiler.execution.strategy=in-process :core:jsPackage; find dist -type f \| sort \| xargs shasum -a 256 \| shasum -a 256`, three times | **miss** |
+| delivery: no `eval`, `new Function` or DOM sink | 0 hits | `grep -cE "eval\(\|new Function\|innerHTML\|outerHTML\|insertAdjacentHTML\|document\.write"` over the shipped module and the standard library | pass |
+| delivery: `verify:csp`, `verify:license-sources` with the standard library's notice | green in `pnpm run check`; the notice's bite red | the web's check | pass |
+| behaviour: the remaining web search tests pass with only their imports changed | they pass (7,274 tests), but **two changed beyond their imports**: `SearchField.test.ts`' matcher-memory case (it counted property reads of `foldedName` on the web's documents; the core reads its own copies) and one line of `searchIndex.test.ts` (it queried through the deleted `matchAll`) | `git diff 9d2f77c57 -- src/web/src/core/search/*.test.ts` | **miss, as worded** (both reached into the moved TypeScript; no search behaviour they assert changed) |
+| behaviour: every query of the pass the same before and after | **identical**: 17 queries and their 64 listed lines, bold parts marked, the TypeScript search (the coordinator's Vite, 8081) against this branch's (8097), one throwaway | `search.mjs 8081`, `search.mjs 8097`, `diff` | pass |
+| behaviour: an app lists the same | **not run** (no Linux app or emulator in this session) | — | open |
+| behaviour: a 10,000-document query ≤ 1.5× the TypeScript | median **0.523–0.530 ms** against 0.432–0.446 ms: **1.19–1.23×**; the answers identical | `perf.mjs`, three alternating runs each | pass |
+
+**Verdict: no go yet — one miss measured (delivery: reproducibility), one miss as worded (behaviour: two tests edited
+beyond their imports), and the app's comparison not run.** With the owner (Q2: a miss comes back with its number); phase 6
+waits for that answer, and nothing is reverted unasked.
 
 ## Owner questions
 
