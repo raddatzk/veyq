@@ -51,25 +51,56 @@ enum IncomingFiles {
     }
 
     #if os(macOS)
-    /// The dropped items that are folders, by the URL Finder hands (read in place, as Depot's *Upload folder…* reads its
-    /// pick), apart from the rest (decision 9: a folder dropped onto a level uploads as a folder).
+    /// The dropped items that are folders, read in place as Depot's *Upload folder…* reads its pick, apart from the rest
+    /// (decision 9: a folder dropped onto a level uploads as a folder; one holding `.veyq/manifest.json` is offered as an
+    /// import, ADR 0152 decision 1).
     static func folders(_ providers: [NSItemProvider]) async -> ([URL], [NSItemProvider]) {
         var folders: [URL] = []
         var rest: [NSItemProvider] = []
         for provider in providers {
-            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier), let url = await fileURL(provider),
-               (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
-                folders.append(url)
-            } else {
-                rest.append(provider)
-            }
+            if let url = await folderURL(provider) { folders.append(url) } else { rest.append(provider) }
         }
         return (folders, rest)
+    }
+
+    /// The folder `provider` carries, or nil where it carries none: by the file URL Finder hands where it registers one,
+    /// else by the in-place representation of the folder's own type. A provider holding only `public.folder` (no
+    /// `public.file-url`, none of `.data`) passed neither this nor `carriesFile`, so a dropped folder was skipped without
+    /// a word while a ZIP went up (the macOS pass of 2026-11-20; which shape Finder's drop takes is not measured here —
+    /// both are read).
+    private static func folderURL(_ provider: NSItemProvider) async -> URL? {
+        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier), let url = await fileURL(provider) {
+            return (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true ? url : nil
+        }
+        guard let type = provider.registeredContentTypes.first(where: { $0.conforms(to: .directory) }) else { return nil }
+        return await inPlace(provider, type)
     }
 
     private static func fileURL(_ provider: NSItemProvider) async -> URL? {
         await withCheckedContinuation { c in
             _ = provider.loadObject(ofClass: URL.self) { url, _ in c.resume(returning: url) }
+        }
+    }
+
+    /// The directory of `type` the provider holds: the sender's own where it is offered in place, else the system's copy
+    /// (valid only inside the callback) copied into a directory of its own under `pickedDir`, swept at start and when the
+    /// tenant closes (an upload reads its files after this returns).
+    private static func inPlace(_ provider: NSItemProvider, _ type: UTType) async -> URL? {
+        let dir = AppModel.pickedDir.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        return await withCheckedContinuation { c in
+            _ = provider.loadInPlaceFileRepresentation(forTypeIdentifier: type.identifier) { file, inPlace, _ in
+                guard let file else { c.resume(returning: nil); return }
+                if inPlace { c.resume(returning: file); return }
+                let to = dir.appendingPathComponent(file.lastPathComponent, isDirectory: true)
+                do {
+                    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                    try FileManager.default.copyItem(at: file, to: to)
+                    c.resume(returning: to)
+                } catch {
+                    try? FileManager.default.removeItem(at: dir)
+                    c.resume(returning: nil)
+                }
+            }
         }
     }
     #endif
