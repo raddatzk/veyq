@@ -16,7 +16,7 @@ invariants:
 ADR 0155 decisions 3 and 6, the pilot's P0. After this CR `:core` has a `js()` target whose primitives are `@noble/*`,
 its compiled module lands in the new workspace package `src/packages/core-js/` (`@veyq/core-js`), and that package's
 `pnpm run check` runs the suite's conformance over `contracts/crypto/vectors/v1.json` under Node, in CI's `frontend`
-job. The web consumes nothing yet: that is `cr-web-expenses-on-the-core`.
+job. The web consumes nothing yet: that is `cr-web-search-on-the-core`.
 
 ## Context & constraints
 
@@ -30,7 +30,7 @@ job. The web consumes nothing yet: that is `cr-web-expenses-on-the-core`.
   `cr-apps-structure-from-core-plans`, `cr-apps-notices-and-formats-from-the-core`) — its files are disjoint from
   theirs but `core/build.gradle.kts` and `gradle/verification-metadata.xml`. From its merge on, their common code must
   also compile for JavaScript (`:core:compileKotlinJs`), which phase 4 writes into the core's check.
-- **Out of scope:** any façade, any web import, the JSON seam (`cr-web-expenses-on-the-core`).
+- **Out of scope:** any façade, any web import, the JSON seam (Expenses', after the pilot: ADR 0155 decision 7).
 
 ## Measured at refine (2026-11-20)
 
