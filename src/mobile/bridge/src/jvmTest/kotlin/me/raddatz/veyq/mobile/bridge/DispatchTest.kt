@@ -1969,6 +1969,89 @@ class DispatchTest {
             me.raddatz.veyq.mobile.expenses.ExchangeRates.Filled("1.082954", "2026-11-11").also { rates += currency to day }
     }
 
+    /**
+     * The writes made offline cross as their tray's items and are acted on by calls (ADR 0153 decisions 2, 4 and 5; the
+     * CR's phase 6), over a tray the test plays: the items as the core lists them, at once and at each change, and null
+     * once the tenant closed; *Discard* (twice: refused), *Open* of a held one as the core's typed target (a waiting one has
+     * none), a refused file's name and type for the host's dialog and its plaintext written only into the file at the path
+     * it gave — never for a write that is not refused or a file it does not carry, nothing left at a path that does not
+     * write —, and the ask before a loss with its confirm. Bitten by a *Save a copy* dispatched without the refused check
+     * (the waiting write's answered `NOT_WRITTEN`, not `NO_SUCH_QUEUED`).
+     */
+    @Test
+    fun theWritesMadeOfflineAreListedDiscardedOpenedAndARefusedFileSavedToAPath() = runBlocking {
+        fun item(id: String, op: me.raddatz.veyq.mobile.offline.Queued, state: me.raddatz.veyq.mobile.offline.QueuedWrite.State, said: Msg, opens: Boolean, copies: Int, at: Long) =
+            me.raddatz.veyq.mobile.offline.QueuedItem(id, op, "ta", "s", "n", "Trip", Notice(Msg.QUEUED_FOLDER, id), state, Notice(said), opens, copies, at)
+        val waiting = item("w1", me.raddatz.veyq.mobile.offline.Queued.FOLDER_CREATE, me.raddatz.veyq.mobile.offline.QueuedWrite.State.WAITING, Msg.OFFLINE_WAITING, false, 0, 1)
+        val held = item("entry:e1", me.raddatz.veyq.mobile.offline.Queued.POT_ENTRY, me.raddatz.veyq.mobile.offline.QueuedWrite.State.HELD, Msg.OFFLINE_HELD_CHANGED, true, 0, 2)
+        val refused = item("m1", me.raddatz.veyq.mobile.offline.Queued.MEDIA_ADD, me.raddatz.veyq.mobile.offline.QueuedWrite.State.REFUSED, Msg.OFFLINE_REFUSED_NO_ROOM, false, 1, 3)
+        val items = MutableStateFlow(listOf(waiting, held, refused))
+        val plain = "PNG-DUNE-PLAINTEXT".encodeToByteArray()
+        val door = QueuedDoor(
+            items = items,
+            discard = { id -> items.value.any { it.id == id }.also { found -> if (found) items.value = items.value.filter { it.id != id } } },
+            opens = { id -> if (id == held.id) me.raddatz.veyq.mobile.offline.QueuedOpen.Entry("ta", "s", "p", "e1", id) else null },
+            copyName = { id, index -> if (id == refused.id && index == 0) "dune.png" to "image/png" else null },
+            // the played tray answers any write it holds, refused or not: the refused check is the dispatch's to hold
+            saveCopy = { id, _, sink -> if (items.value.any { it.id == id }) { sink(plain.copyOfRange(0, 4)); sink(plain.copyOfRange(4, plain.size)); true } else false },
+            ask = { loss -> me.raddatz.veyq.mobile.offline.QueuedShown.ask(loss, items.value.size) },
+            banner = kotlinx.coroutines.flow.flowOf(null), sent = kotlinx.coroutines.flow.emptyFlow(), here = kotlinx.coroutines.flow.flowOf(emptyList()),
+        )
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+                Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}, queued = door)
+            }
+        }
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.QueuedDiscard("w1")), "a call before a tenant is open")
+        b.signedIn()
+        val tray = b.watching(Watched.QueuedTray)
+        val first = tray.until { (it as Update.QueuedTray).items }
+        assertEquals(listOf("w1" to "WAITING", "entry:e1" to "HELD", "m1" to "REFUSED"), first.map { it.id to it.state.name })
+        assertEquals(listOf(Notice(Msg.OFFLINE_WAITING), Notice(Msg.OFFLINE_HELD_CHANGED), Notice(Msg.OFFLINE_REFUSED_NO_ROOM)), first.map { it.said })
+
+        // Open: the core's typed target for a held one, none for one that waits
+        assertEquals(Answer.QueuedOpens(me.raddatz.veyq.mobile.offline.QueuedOpen.Entry("ta", "s", "p", "e1", "entry:e1")), b.ask(Call.QueuedOpen("entry:e1")))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_QUEUED), b.ask(Call.QueuedOpen("w1")))
+        // a held entry's editor needs its Pot open first
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_POT), b.ask(Call.EditorOpenHeld(99, "entry:e1", ",")))
+
+        // Save a copy: the name the dialog offers, the plaintext only into the file at the path it gave
+        assertEquals(Answer.QueuedCopyName("dune.png", "image/png"), b.ask(Call.QueuedCopyName("m1", 0)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_QUEUED), b.ask(Call.QueuedCopyName("w1", 0)))
+        val dir = kotlin.io.path.createTempDirectory("veyq-queued").toFile()
+        try {
+            val saved = java.io.File(dir, "dune.png")
+            assertEquals(Answer.Done, b.ask(Call.QueuedSaveCopy("m1", 0, saved.path)))
+            assertTrue(plain.contentEquals(saved.readBytes()), "the saved file is not the refused write's file")
+            val waitingCopy = java.io.File(dir, "waiting.png")
+            assertEquals(Answer.Refused(Answer.Why.NO_SUCH_QUEUED), b.ask(Call.QueuedSaveCopy("w1", 0, waitingCopy.path)), "a write that waits saved a copy")
+            assertEquals(Answer.Refused(Answer.Why.NO_SUCH_QUEUED), b.ask(Call.QueuedSaveCopy("m1", 1, waitingCopy.path)), "a file the write does not carry")
+            assertTrue(!waitingCopy.exists(), "a refused save left a file")
+            assertEquals(Answer.Refused(Answer.Why.NOT_WRITTEN), b.ask(Call.QueuedSaveCopy("m1", 0, java.io.File(dir, "no/such/dir.png").path)))
+        } finally {
+            dir.deleteRecursively()
+        }
+
+        // the ask before a loss: how many go, and the loss's own confirm
+        val asked = b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT)) as Answer.QueuedAsked
+        assertEquals(Notice(Msg.OFFLINE_WRITES_LOST, 3) to Msg.OFFLINE_SIGN_OUT_ANYWAY, asked.ask!!.question to asked.ask.confirm)
+        assertEquals(Msg.OFFLINE_REMOVE_ANYWAY, (b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.offline.QueuedLoss.REMOVE_ALL)) as Answer.QueuedAsked).ask!!.confirm)
+
+        // Discard: gone from the list at once; a second is refused
+        assertEquals(Answer.Done, b.ask(Call.QueuedDiscard("w1")))
+        assertEquals(listOf("entry:e1", "m1"), tray.until { u -> (u as Update.QueuedTray).items?.takeIf { it.size == 2 } }.map { it.id })
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_QUEUED), b.ask(Call.QueuedDiscard("w1")))
+        items.value = emptyList()
+        assertEquals(Answer.QueuedAsked(null), b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.offline.QueuedLoss.STOP_TRUSTING)), "asked with nothing waiting")
+
+        // the tenant closed: the tray is gone
+        assertEquals(Answer.Done, b.ask(Call.SessionSignOut("a.example#u1")))
+        tray.until { u -> (u as Update.QueuedTray).takeIf { it.items == null } }
+        b.unwatch(tray.id)
+        b.shutdown()
+    }
+
     private fun bridgeWithPot(pot: PlayedPot, clock: java.util.concurrent.atomic.AtomicLong, opened: kotlinx.coroutines.CompletableDeferred<Unit>, files: DeviceFiles = JvmFiles) = Bridge {
         val hidden = Hidden({}, emptySet())
         Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, files) { _ ->

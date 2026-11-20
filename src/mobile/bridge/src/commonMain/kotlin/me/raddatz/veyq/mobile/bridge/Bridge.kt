@@ -304,6 +304,11 @@ internal class Tenant(
         measure: me.raddatz.veyq.mobile.memories.music.MusicUpload.Measure,
     ) -> me.raddatz.veyq.mobile.memories.music.MusicModel)? =
         shell?.let { s -> { gallery, uploads, measure -> s.musicModel(gallery, uploads, measure, left = {}) } },
+    /**
+     * The writes made offline of this tenant's account (`ShellModel.queuedTray` and its flows, ADR 0153 decisions 2, 4 and 5);
+     * a test's tenant plays one over a door of its own.
+     */
+    val queued: QueuedDoor? = shell?.let(QueuedDoor::of),
     /** A Memory made where New makes it (`ShellModel.createMemory`), *I was there* ticked or not: the node made, or why not. */
     val createMemory: (suspend (scopeId: String, parentId: String?, name: String, wasThere: Boolean, autoPlace: Boolean) -> me.raddatz.veyq.mobile.memories.MemoryCreate.Made)? =
         shell?.let { s -> { scopeId, parentId, name, wasThere, autoPlace -> s.createMemory(scopeId, parentId, name, wasThere, autoPlace) } },
@@ -451,6 +456,39 @@ internal class HeldDropBox(val page: me.raddatz.veyq.mobile.depot.DropBoxPage) {
     @kotlin.concurrent.Volatile var trashed: NodeHeaderModel? = null
 }
 
+/**
+ * What the bridge reaches of the writes made offline (ADR 0153; cr-app-offline-writes phase 6), each one core function:
+ * the tray's [items] and its actions ([discard], [opens], [copyName], [saveCopy] — the file's plaintext handed only to the
+ * host's file), the ask before a loss ([ask]), the banner's count ([banner]), the reconnect's notices ([sent]) and what
+ * the level shown holds not sent yet ([here]). Over a shell ([of]); a test plays one.
+ */
+internal class QueuedDoor(
+    val items: Flow<List<me.raddatz.veyq.mobile.offline.QueuedItem>>,
+    val discard: suspend (id: String) -> Boolean,
+    val opens: suspend (id: String) -> me.raddatz.veyq.mobile.offline.QueuedOpen?,
+    val copyName: suspend (id: String, index: Int) -> Pair<String?, String?>?,
+    val saveCopy: suspend (id: String, index: Int, sink: suspend (ByteArray) -> Unit) -> Boolean,
+    val ask: suspend (loss: me.raddatz.veyq.mobile.offline.QueuedLoss) -> me.raddatz.veyq.mobile.offline.QueuedAsk?,
+    val banner: Flow<Notice?>,
+    val sent: Flow<List<Notice>>,
+    val here: Flow<List<me.raddatz.veyq.mobile.offline.QueuedItem>>,
+) {
+    companion object {
+        fun of(shell: ShellModel): QueuedDoor {
+            val tray = shell.queuedTray()
+            return QueuedDoor(
+                tray.items, tray::discard, tray::opens, tray::copyName, tray::saveCopy, tray::ask,
+                shell.queuedBanner, shell.queuedSent, shell.queuedHere,
+            )
+        }
+    }
+}
+
+/** What the shell's state carries of the writes made offline ([ShellShown.queuedBanner], `queuedHere`, `queuedSaid`). */
+internal class QueuedBeside(
+    val banner: Notice? = null, val here: List<me.raddatz.veyq.mobile.offline.QueuedItem> = emptyList(), val said: List<Notice> = emptyList(),
+)
+
 /** An entry editor the host opened on Pot [pot] ([Call.EditorOpen]), typed in with [separator]. */
 internal class HeldEditor(val pot: Long, val model: EntryEditor, val separator: Char)
 
@@ -581,6 +619,16 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     /** The open tenant's uploads over [queue] ([Watched.Uploads]); null while none is open. */
     private val uploads = MutableStateFlow<me.raddatz.veyq.mobile.depot.DepotUploads?>(null)
+
+    /**
+     * The open tenant's reconnect notices (`ShellModel.queuedSent`: how many writes made offline were sent, how many need the
+     * person), held for [ShellShown.queuedSaid] until [Call.ShellQueuedSaidSeen] or the tenant closes.
+     */
+    private val queuedSaid = MutableStateFlow<List<Notice>>(emptyList())
+    private var queuedSaidJob: Job? = null
+
+    /** The open tenant's account's writes made offline ([QueuedDoor]); null while none is open. */
+    private val queuedDoor: QueuedDoor? get() = tenant.value?.models?.queued
 
     /** The open tenant's Memories uploads over the same [queue] (the tray stays [uploads]'); null while none is open. */
     private val mediaUploads = MutableStateFlow<me.raddatz.veyq.mobile.memories.MediaUploads?>(null)
@@ -845,6 +893,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             // a person's refresh (F5): the members too, a picture replaced since among them
             Call.ShellRefresh -> shell?.refresh(people = true).done()
             Call.ShellOfflineGoneSeen -> shell?.goneSeen().done()
+            Call.ShellQueuedSaidSeen -> {
+                queuedSaid.value = emptyList()
+                Answer.Done
+            }
             Call.HomeGroups -> shell?.current?.let { Answer.Groups(it.lists.groups(it.shell)) } ?: noTenant
             Call.SearchOpen -> tenant.value?.models?.search?.let { make ->
                 val id = ids.incrementAndFetch()
@@ -926,6 +978,25 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.EditorDelete -> editors[call.editor]?.model?.let { e -> e.delete().let { Answer.EditorSaved(it, if (it) null else e.current.notice) } } ?: noEditor
             is Call.EditorCancelAsk -> editors[call.editor]?.model?.cancelAsk().done(Answer.Why.NO_SUCH_EDITOR)
             is Call.EditorClose -> editors.remove(call.editor)?.model?.close().done(Answer.Why.NO_SUCH_EDITOR)
+            is Call.EditorOpenHeld -> pots[call.pot]?.let { pot ->
+                val separator = call.separator.firstOrNull() ?: '.'
+                val model = pot.heldEditor(call.write, separator) ?: return Answer.Refused(Answer.Why.NO_SUCH_ENTRY)
+                val id = ids.incrementAndFetch()
+                editors.put(id, HeldEditor(call.pot, model, separator))
+                Answer.EditorOpened(id)
+            } ?: noPot
+            is Call.EditorDiscardMine -> editors[call.editor]?.model?.let { e -> Answer.EditorSaved(e.discardMine(), null) } ?: noEditor
+            is Call.QueuedDiscard -> queuedDoor?.let { q -> if (q.discard(call.write)) Answer.Done else noQueued } ?: noTenant
+            is Call.QueuedOpen -> queuedDoor?.let { q -> q.opens(call.write)?.let(Answer::QueuedOpens) ?: noQueued } ?: noTenant
+            is Call.QueuedCopyName -> queuedDoor?.let { q -> q.copyName(call.write, call.index)?.let { (name, type) -> Answer.QueuedCopyName(name, type) } ?: noQueued } ?: noTenant
+            is Call.QueuedSaveCopy -> queuedDoor?.let { q ->
+                // only a refused write's file, and only one it carries; its plaintext goes into the file at the host's path alone
+                val item = q.items.first().firstOrNull { it.id == call.write }
+                if (item == null || item.state != me.raddatz.veyq.mobile.offline.QueuedWrite.State.REFUSED || call.index !in 0 until item.copies) return noQueued
+                val written = runCatching { parts.files.write(call.path) { sink -> q.saveCopy(call.write, call.index) { sink(it) } } }.getOrDefault(false)
+                if (written) Answer.Done else Answer.Refused(Answer.Why.NOT_WRITTEN)
+            } ?: noTenant
+            is Call.QueuedAsk -> queuedDoor?.let { q -> Answer.QueuedAsked(q.ask(call.loss)) } ?: noTenant
             is Call.EditorAddReceipts -> editors[call.editor]?.model?.let { e ->
                 // each file read by the core at the path given, never more than a receipt may hold
                 val picked = call.paths.map { path ->
@@ -2091,6 +2162,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noShare = Answer.Refused(Answer.Why.NO_SUCH_SHARE)
     private val noReport = Answer.Refused(Answer.Why.NO_SUCH_REPORT)
     private val noEditor = Answer.Refused(Answer.Why.NO_SUCH_EDITOR)
+    private val noQueued = Answer.Refused(Answer.Why.NO_SUCH_QUEUED)
     private val noCreate = Answer.Refused(Answer.Why.NO_SUCH_CREATE)
     private val noFile = Answer.Refused(Answer.Why.NO_SUCH_FILE)
     private val noDropBox = Answer.Refused(Answer.Why.NO_SUCH_DROPBOX)
@@ -2494,6 +2566,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         // the tenant's map services on this device (ADR 0143 decision 2): the shell's place names come from them from now on
         val language = parts.await().language
         mapServices.value = t.mapServices?.invoke { language }
+        queuedSaidJob = t.queued?.let { q -> scope.launch { q.sent.collect { if (it.isNotEmpty()) queuedSaid.value = it } } }
         scope.launch { runCatching { t.loadPictures() } }
         t.shell?.load(openLastUsed = true)
         return Answer.Done
@@ -2508,6 +2581,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         // the uploads are the tenant's: what still waits or runs is cancelled (the phones' `uploads.clear()` on a switch)
         uploads.value?.close()
         uploads.value = null
+        // the reconnect's notices are the tenant's account's
+        queuedSaidJob?.cancel()
+        queuedSaidJob = null
+        queuedSaid.value = emptyList()
         mediaUploads.value?.close()
         mediaUploads.value = null
         queue.clear()
@@ -2592,7 +2669,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             tenant.flatMapLatest { open ->
                 val m = open?.models
                 m?.shell?.state?.let { state ->
-                    combine(state, m.pictures, m.picturesRound, hiddenTurned, viewTurned) { s, pictures, round, _, _ -> Update.Shell(s, s?.let { shown(parts, open, it, pictures.keys, round) }) }
+                    // the writes made offline beside it (ADR 0153 decision 5): the banner's count, the level's, the reconnect's notices
+                    val queued = combine(m.queued?.banner ?: flowOf(null), m.queued?.here ?: flowOf(emptyList()), queuedSaid) { b, h, said -> QueuedBeside(b, h, said) }
+                    combine(state, m.pictures, m.picturesRound, hiddenTurned, viewTurned) { s, pictures, round, _, _ -> Triple(s, pictures, round) }
+                        .combine(queued) { (s, pictures, round), q -> Update.Shell(s, s?.let { shown(parts, open, it, pictures.keys, round, q) }) }
                 } ?: flowOf(Update.Shell(null))
             }
         }
@@ -2740,6 +2820,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Watched.Settings -> accountPages[w.settings]?.let { held ->
             combine(held.model.state, held.open) { s, open -> Update.Settings(w.settings, if (open) shownAccount(s) else null) }
         } ?: flowOf(Update.Settings(w.settings, null))
+        Watched.QueuedTray -> tenant.flatMapLatest { open ->
+            open?.models?.queued?.items?.map { Update.QueuedTray(it) } ?: flowOf(Update.QueuedTray(null))
+        }
         Watched.Uploads -> uploads.flatMapLatest { u -> u?.state?.map { Update.Uploads(shownUploads(it)) } ?: flowOf(Update.Uploads(null)) }
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
@@ -2751,7 +2834,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * What the shell shows beside [s] ([ShellShown]; ADR 0123's Consequences, the bridge): each field one core
      * function's answer.
      */
-    private fun shown(parts: Composition<A, T>, open: Open<A>, s: ShellModel.State, pictures: Set<String>, round: Int): ShellShown {
+    private fun shown(
+        parts: Composition<A, T>, open: Open<A>, s: ShellModel.State, pictures: Set<String>, round: Int, queued: QueuedBeside = QueuedBeside(),
+    ): ShellShown {
         val shell = s.shell
         val lists = s.lists
         val space = lists.space(shell)
@@ -2778,7 +2863,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             canGoBack = shell.canGoBack,
             isHome = shell.isHome,
             drawerOpensAtStart = shell.drawerOpensAtStart,
-            creates = AppKinds.createsWhere(shell.isHome, bookmarks = true).map { ShellShown.ShownCreate(it, it.word) },
+            creates = open.models.shell?.createsHere(shell.isHome, bookmarks = true).orEmpty().map { ShellShown.ShownCreate(it, it.word) },
             canCreateHere = open.models.shell?.canCreateHere == true,
             topLevelShare = open.models.shell?.offersTopLevelShare(shell) == true,
             headed = shell.bookmark ?: shell.openObject?.at ?: shell.space?.let(shell::folderAt),
@@ -2786,6 +2871,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             pictures = pictures.sorted(),
             picturesRound = round,
             offlineBanner = s.banner,
+            queuedBanner = queued.banner,
+            queuedHere = queued.here,
+            queuedSaid = queued.said,
             view = open.models.shell?.levelView?.let { ViewModeShown.valueOf(it.name) } ?: ViewModeShown.valueOf(me.raddatz.veyq.mobile.navigation.ViewMode.FIRST.name),
         )
     }
@@ -2830,6 +2918,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 EditorReceipt(id, me.raddatz.veyq.mobile.expenses.Receipts.downloadName(r?.name, r?.type), held = false, opens = r != null && !r.blocked)
             } + s.pending.map { EditorReceipt(it.id, it.name, held = true, opens = false) },
             canAddReceipt = s.canAddReceipt, refusedPick = s.refusedPick,
+            newer = s.newer, discardsMine = s.discardsMine,
         )
     }
 
@@ -2926,6 +3015,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         purgeQuestion = g.purgeQuestion.takeIf { s.purging != null },
         said = s.said,
         offline = s.offline,
+        queues = s.queues,
         musicView = me.raddatz.veyq.mobile.memories.music.MusicModel.shown(s),
         musicHere = s.musicHere,
         date = s.facts?.let { dateShown(s.date) },
@@ -2943,6 +3033,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             UploadTileShown(
                 t.tileId, t.isVideo, t.progress, t.preparing, t.failed,
                 Notice(if (t.failed) Msg.MEMORY_UPLOAD_TILE_FAILED else if (t.preparing) Msg.MEMORY_UPLOAD_TILE_PREPARING else Msg.MEMORY_UPLOAD_TILE, t.name),
+                waiting = t.waiting, said = t.said,
             )
         },
         searchOpened = s.searchOpened,
