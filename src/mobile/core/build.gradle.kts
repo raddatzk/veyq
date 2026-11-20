@@ -243,14 +243,16 @@ kotlin {
         }
     }
 
-    // Windows' device keys (session/WindowsDeviceKeys.kt): DPAPI and the Passport key storage provider, through the
-    // helpers of wincred/veyq_wincred.h; Windows' own import libraries, so no library of ours. The header is declared the
-    // task's input, as libraryInput declares a static library: its includeDirs is not one.
+    // Windows' device keys (session/WindowsDeviceKeys.kt): DPAPI and the Passport key storage provider, and a received
+    // link's guest sessions in the Credential Locker (sharing/WindowsGuestSessions.kt), through the helpers of
+    // wincred/veyq_wincred.h (its WinRT internals in veyq_wincred_vault.h); Windows' own import libraries, so no library
+    // of ours. The headers are declared the task's input, as libraryInput declares a static library: its includeDirs is
+    // not one.
     mingwX64().compilations.getByName("main").cinterops.create("wincred") {
         definitionFile.set(file("wincred/wincred.def"))
         includeDirs(file("wincred"))
-        val header = file("wincred/veyq_wincred.h")
-        tasks.matching { it.name == interopProcessingTaskName }.configureEach { inputs.file(header).withPropertyName("header") }
+        val headers = files("wincred/veyq_wincred.h", "wincred/veyq_wincred_vault.h")
+        tasks.matching { it.name == interopProcessingTaskName }.configureEach { inputs.files(headers).withPropertyName("wincredHeaders") }
     }
 
     // Linux's device keys (session/LinuxDeviceKeys.kt): the Secret Service through libsecret, which secret/veyq_secret.h

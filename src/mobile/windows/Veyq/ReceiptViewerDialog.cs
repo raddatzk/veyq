@@ -5,7 +5,8 @@
 // PDF by Windows' own renderer (Windows.Data.Pdf, PdfPages.cs) — as many pages as the core says (Receipt.Pages), and what
 // it says when that is not all. A file WIC does not decode (HEIC without the codec) or that is no picture and no PDF is
 // offered for saving only. Save a copy asks the save picker for a path and the core writes the receipt there
-// (Receipt.Save).
+// (Receipt.Save). Offline (ADR 0153 decision 6) a receipt this device does not keep — never shown here, nor fetched by
+// the Pot's pin — is refused NotKeptOffline and says so, not that it is unreadable; one shown before opens from the store.
 using System;
 using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;
@@ -64,6 +65,12 @@ internal static class ReceiptViewerDialog
         {
             var (answer, bytes) = await Core.CallAsync(new Call.ReceiptOpen { pot = pot, receipt = receipt });
             body.Children.Clear();
+            if (answer is Answer.Refused { why: Why.NotKeptOffline })
+            {
+                Log.Write("Receipt.Open: not kept offline");
+                body.Children.Add(Note(Words.OfflineNotKept(), "receipt-not-kept"));
+                return;
+            }
             if (answer is not Answer.Bytes { mediaType: var type } || bytes is null)
             {
                 Log.Write($"Receipt.Open answered {answer.GetType().Name}");

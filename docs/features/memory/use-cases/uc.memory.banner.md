@@ -149,7 +149,7 @@ stored once — 0 store PUTs); Apple's pass is the owner's ([native-apps](../../
 - **An equal file:** Android asks once for full access to photos and videos before the first pick, as an upload does —
   the system picker's own copy has its location zeroed, so its digest would never equal the gallery's original.
 - **Offline** a pinned Memory shows its banner and plays its video (the pin keeps both blobs); nothing is edited.
-- **A guest** reaches no link in the apps yet (inbox #435); the core shows a guest the banner as a member sees it.
+- **A guest** opens a link in the apps since [ADR 0150](../../../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md); the core shows a guest the banner as a member sees it.
 
 ## User impact
 

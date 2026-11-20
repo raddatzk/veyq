@@ -1,9 +1,17 @@
 package me.raddatz.veyq.mobile.navigation
 
+import kotlinx.coroutines.test.runTest
+import me.raddatz.veyq.mobile.AppKinds
+import me.raddatz.veyq.mobile.offline.PlayedTenant
+import me.raddatz.veyq.mobile.offline.removeAll
+import me.raddatz.veyq.mobile.words.Msg
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 /** The shell's rules after a read and after a folder on Home's path changed, both apps' once (ADR 0136). */
 class ShellModelTest {
@@ -12,6 +20,31 @@ class ShellModelTest {
     private val pot = ObjectRef("t", "pot", "EXPENSES_POT", ApplicationId.EXPENSES, "Trip")
 
     private fun folder(id: String, parent: String?, name: String = id) = NodeRef("t", id, parent, NodeRef.FOLDER, name)
+
+    private val played = mutableListOf<PlayedTenant>()
+
+    @AfterTest
+    fun cleanUp() = played.forEach { removeAll(it.root) }
+
+    @Test
+    fun a_kept_links_report_sheet_offers_its_name_alone_and_any_other_node_the_choice() = runTest {
+        val t = PlayedTenant().also { played += it }
+        t.scope("s1")
+        t.remember()
+        val a = t.resume()
+        val shell = ShellModel(a.open(a.tenants.first()), Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }
+        // a kept link (ADR 0150 decision 6): no "it and everything in it" beside its name — the backend refuses a NODE report
+        val bookmark = shell.reportSheet(NodeAt("s1", "b", AppKinds.BOOKMARK_KIND, "Link"))
+        assertFalse(bookmark.offersName, "a kept link's sheet offers the whole beside its name")
+        assertFalse(bookmark.current.whole)
+        assertEquals(Msg.REPORT_SCOPE_NAME_HINT, bookmark.current.scopeHint)
+        bookmark.whole(true)
+        assertFalse(bookmark.current.whole, "a kept link's sheet takes the whole")
+        // any other node: the choice, the whole preselected
+        val folder = shell.reportSheet(NodeAt("s1", "f", "FOLDER", "Trip"))
+        assertTrue(folder.offersName)
+        assertTrue(folder.current.whole)
+    }
 
     @Test
     fun an_applications_list_holds_its_favorites_then_its_recent_then_the_rest() {

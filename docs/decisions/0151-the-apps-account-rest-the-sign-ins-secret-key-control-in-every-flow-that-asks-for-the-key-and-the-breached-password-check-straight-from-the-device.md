@@ -1,7 +1,8 @@
 # ADR 0151 — The apps' account rest: the sign-in's Secret Key control in every flow that asks for the key, and the breached-password check straight from the device
 - Status: Accepted
-- Built: partly — the core and the bridge (cr-app-account-rest phases 2–4, 2026-11-19); the platforms' screens, the
-  words and the passes follow in that CR
+- Built: yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android, Linux and Windows as
+  throwaways; the macOS pass is open and the iPhone's and iPad's are the owner's; a hit drawn live on no platform
+  (§ Consequences)
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md) (the check: [security-model](../crosscutting/security-model.md) § the breached-password check)
 
@@ -100,6 +101,55 @@ words.
 - **The password, its full hash and the Secret Key are in no request, no log, no store and no bridge update**; the key
   lives in the core's memory for the call (or, a kit held, until the flow took it or closed) and is zeroed after it.
 - **Out of scope:** the apps have no join, recovery or first-run setup; when one comes, it takes decision 5's check.
+- **Built 2026-11-19 on every app** (cr-app-account-rest): the core's `account/KeyIntake` (`typed`, `key`, `read`,
+  `take`, `scan`, `clear`, `spent`; what a screen sees, `IntakeState` and `HeldKit`), `SessionModel` on it, and one
+  intake in each of `PasswordChange`, `AddressChange` (its request and its kit step share it) and `KeyRotation`, whose
+  actions take the field's text (the byte overloads `internal`); `account/Sha1`, `session/OutsideHttp` (the map's
+  `MapHttp` renamed and moved, its tests unchanged but for the name), `account/BreachCheck` (`BreachState`, `BreachKind`;
+  the password it speaks about `@Transient`, never printed), wired into `passwordChange()` and `keyRotation()` by
+  `BreachCheck.of(account)`. The bridge: `Kit.Read(flow, path)` (`NO_KIT` where none was read), `Kit.Clear(flow)`,
+  `ScanKind.FLOW_KIT`, `PasswordChange.Check`/`Edited`/`UseAnyway` and `KeyRotation`'s alike; `Update.PasswordChange`
+  and `.KeyRotation` carry `kit: IntakeState?` and `breach: BreachState?`, `Update.AddressChange` `kit`. The screens:
+  Android `AccountSecretFlows.kt` (`FlowKeyField`, `NewPasswordField`, the scanner drawn once over the flow); Apple
+  `AccountFlows.swift` (`FlowKeySection` with `.fileImporter([.pdf, .image])` and `KitScannerView` over appleMain's
+  `AppleKit.scan(intake:timing:)`, `NewPasswordRows` with `@FocusState` and a `Toggle`); Linux `account_flows.rs`
+  (`KeyControl` through `gtk::FileDialog` and `ScanView::open_flow_kit`, `NewPassword` with an
+  `EventControllerFocus` and a `gtk::CheckButton`); Windows `AccountFlows.cs` (`FlowKeyControl` through
+  `FileOpenPicker` and `QrCamera.OpenFlowKit` in a `ContentDialog`, `NewPasswordField` with `LostFocus` and a
+  `CheckBox`). The words of decision 8, the web's EN and DE. No permission, entitlement or dependency was added.
+- **Where it was built otherwise than decided.** *Decision 4's "Use another":* a held kit offers the sign-in's
+  *Enter it instead* (`signin_kit_clear`), which clears it back to the typed field. *The desktops' rows:* the password
+  change's and the rotation gate's rows stay filled until the core took them — the web's form; emptying a row first
+  would send `Edited` and drop an acceptance before the submit —, and Windows builds both forms once and draws them in
+  place, so a verdict arriving while the next box is typed in never takes the focus.
+- **What the passes proved** (each as a throwaway owner with a member, made and erased by the pass). The instance's range
+  address is the real Have I Been Pwned (`/api/setup`), so every pass blocked it on its own platform and **no live
+  query was sent** (`src/mobile/CLAUDE.md` § Prove your work says how). *Android* (a throwaway API 36 emulator, deleted
+  after): the password changed with the kit **file** picked in DocumentsUI and no key typed, then again with the
+  `veyqkit:` token entered into the Secret Key field; another account's kit in the address change warned with both
+  addresses, and *Enter it instead* went back to typing; with `-dns-server 192.0.2.1` leaving the new password showed
+  *could not be checked* and the change went through; afterwards the app's 20 files and logcat held no password (old,
+  both new), no Secret Key (printed or compact), no token, no SHA-1 (upper, lower) nor suffix, no `pwnedpasswords`.
+  *Linux* (Broadway in the Fedora 44 container, the debug build; `VEYQ_UNREACHABLE=api.pwnedpasswords.com`): the same
+  three — the kit file through GTK's dialog, the token typed into the Secret Key row, another account's kit warned and
+  cleared —, *could not be checked* (`Checking` → `Unavailable`) in the password change and on the rotation's gate, the
+  change through; the app's stderr and its home volume (19 files) held none of the same canaries. *Windows* (the VM
+  through UI Automation, a throwaway on `tw-win.localhost`): the password changed three times — the kit file through
+  the open picker, the token typed, the kit **scanned** (`VEYQ_DEV_CAMERA`, the token's QR) —; another account's kit
+  warned and cleared; the rotation's gate proved with the kit file (`KeyRotation.Prove` → the kit step; left there,
+  nothing published); with the instance's range address rewritten to one under `.invalid` by a pass-only proxy,
+  *could not be checked* in the password change and the rotation, the changes through; the app's data, `TEMP`,
+  `INetCache` and `Recent` (1167 files) held none of the canaries, either account's key included.
+- **What no pass has proved yet.** **A hit drawn live** — the count, the submit held, *Use it anyway*, an edit taking
+  the acceptance back — on any platform: no played range service reaches an app, so these states are
+  `BreachCheckTest`'s and `BreachCanaryTest`'s (the request's shape against a played tenant), not a screen's.
+  **macOS: no pass ran** — the agents' sessions have no full-screen control (`src/mobile/CLAUDE.md` § Traps); the
+  coordinator runs it from the main session (the kit file through the open panel in each flow, the notice under the new
+  password). **The owner's:** an iPhone and an iPad — the kit scanned with the real camera in the password change, the
+  notice under a new password (no simulator boots here, #928). **Not run:** a scan on Android (no virtual-scene kit) and
+  on Linux (no camera in the container; a `VEYQ_DEV_CAMERA` scan of a flow is open); the rotation's gate with a kit on
+  Android and Linux, and on no platform the rotation run to its end with a kit; the address change sent with a kit
+  (every pass read one there for the warning only); Linux's Flatpak build (the container's debug build instead).
 
 ## Alternatives considered
 

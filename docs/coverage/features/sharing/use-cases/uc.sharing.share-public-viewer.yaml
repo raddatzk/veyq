@@ -9,6 +9,13 @@ title: Share a Memory as a public viewer link (web)
 # unit round-trip of the operator-blind decrypt path. v1 scope is deliberately narrow: personal-scope
 # Memories, READ role only; contributor/uploader, password protection, group/tenant sharing, persisted-shares
 # and notices are separate later slices.
+# The apps (ADR 0150, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named here, not
+# cited — core `ReceivedLinkTest` (every case of contracts/platform/share-links/cases.v1.json parsed as the web parses it),
+# `ShareGatesTest` (the password, terms before the note before the content, a foreign major refused before any resolve,
+# the guest session in the credential store never the device store, no request of a whole visit holding K_share),
+# `GuestDoorsTest` (each kind its application's page with the guest's rights), `GuestReportTest`; bridge
+# `ReceivedBridgeTest` (no update with the link or its key); `LinuxGuestSessionsTest`, `WindowsGuestSessionsTest`; live as
+# throwaways `ReceivedLinkLiveTest`, `GuestGapsLiveTest`, `GuestRemainderLiveTest`.
 acceptanceCriteria:
   - id: create-public-share
     text: A curator turns one of their personal-scope Memories into a public share — the client generates a random K_share and a 256-bit unguessable shareId, computes symWrap(K_share, K_node), re-seals the Memory name under a field key derived from K_share, and POSTs { shareId, nodeId, role READ, wrap, sealedName, expiresAt? }. The server stores the record opaquely under that id; it never sees K_share, K_node, or the name. The link is /s/{shareId}#k=base64url(K_share) with the key in the fragment.

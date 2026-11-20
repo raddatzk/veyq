@@ -7,6 +7,7 @@ sources:
   - src/mobile/desktop-identity.json
   - docs/features/account/enablers/en.account.key-model.md
   - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
+  - docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md
 ---
 
 import { Code } from '@astrojs/starlight/components';
@@ -19,8 +20,9 @@ the same account, and it locks everything on your computer before it sends it, j
 The app is a **preview**. It holds **Depot**, **Expenses** and **Memories**, your spaces' folders and share links, and
 your account's settings — [your profile](/account/your-profile/), [devices and sessions](/account/devices-and-sessions/),
 your password and email address, [securing](/account/replace-your-keys/) and erasing your account — and a member's
-[safety number](/account/verify-a-person/), and it can keep content for
-[offline use](/getting-started/use-content-offline/). Not yet in it: inviting people and managing a space's members,
+[safety number](/account/verify-a-person/); it can keep content for
+[offline use](/getting-started/use-content-offline/), and it opens a link someone sent you, without an account, and keeps
+links as bookmarks ([Open a link in the app](/sharing/open-a-link-in-the-app/)). Not yet in it: inviting people and managing a space's members,
 resetting a forgotten password, *Who's who*, [importing a download](/spaces/download-and-import/), and moderation. For those, keep using the browser.
 On Linux and Windows the app has no place in the system's share menu: drop photos and videos onto a Memory instead
 ([Share into veyq](/getting-started/share-into-veyq/)).
@@ -169,6 +171,9 @@ You sign in as in the browser, with your email, your password and, the first tim
 [Emergency Kit](/getting-started/emergency-kit/). Instead of typing the Secret Key, choose **Open Emergency Kit** and
 pick the kit's PDF, or a photo or screenshot of its QR code. Where your computer has a camera, **Scan Emergency Kit**
 reads the QR code on the printout.
+
+Under the sign-in, **Open a link** opens a link someone sent you without signing in:
+[Open a link in the app](/sharing/open-a-link-in-the-app/).
 
 ## Is the file really veyq's?
 

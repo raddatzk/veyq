@@ -35,7 +35,9 @@ import me.raddatz.veyq.mobile.words.Notices
  * - **"Available offline"** (ADR 0140 decisions 9 and 10), where the account keeps an offline store on this device and
  *   the kind is pinned: its toggle's state ([State.offline]: on, where its fetch is, its line), turned on only after the
  *   size it keeps is asked ([toggleOffline], then [confirmOffline] or [cancelOffline]) and off at once;
- * - **offline** ([Door.online] false) every write leaves the header (ADR 0140 decision 7): its rights read only.
+ * - **offline** ([Door.online] false) every write leaves the header (ADR 0140 decision 7): its rights read only, and
+ *   "Available offline" only where the node is kept already — offline a pin cannot be sized nor fetched (decision 9), so
+ *   it is not offered, [toggleOffline] refuses it (`offline_read_only`) and a size asked online is dropped;
  *
  * Each app draws [state] (or [watch]) and the dialogs; what it says is a [Notice] the actions return. The move, the copy,
  * the share and the report are sheets of their own ([MoveSheet], [ShareSheet], [ReportSheet]).
@@ -110,7 +112,7 @@ class NodeHeaderModel(
     /** The size a pin waits to be confirmed with ([toggleOffline]); null while none is asked. */
     private val asking = MutableStateFlow<Long?>(null)
 
-    private val _state = MutableStateFlow(State(pinned = door.isFavorite(node)).let { it.copy(rights = rights(it.pinned)) })
+    private val _state = MutableStateFlow(State(pinned = door.isFavorite(node)).let { it.copy(rights = rights(it)) })
     val state: StateFlow<State> = _state.asStateFlow()
     val current: State get() = _state.value
 
@@ -131,6 +133,8 @@ class NodeHeaderModel(
         scope.launch {
             door.online.collect {
                 online = it
+                // a pin's size asked online is no question offline: it could not fetch
+                if (!it) asking.value = null
                 recompose()
             }
         }
@@ -138,7 +142,7 @@ class NodeHeaderModel(
             scope.launch {
                 kotlinx.coroutines.flow.combine(o.pins, o.progress, asking) { pins, progress, ask ->
                     me.raddatz.veyq.mobile.offline.OfflineShown.toggle(node.nodeId, pins, progress, ask)
-                }.collect { t -> _state.update { it.copy(offline = t).let { s -> s.copy(rights = rights(s.pinned)) } } }
+                }.collect { t -> _state.update { it.copy(offline = t).let { s -> s.copy(rights = rights(s)) } } }
             }
         }
     }
@@ -157,9 +161,10 @@ class NodeHeaderModel(
         if (was != null && facts != null && was != facts && AppKinds.downloadsItself(node.kind)) scope.launch { readDownloadName() }
     }
 
-    private fun recompose() = _state.update { it.copy(rights = rights(it.pinned)) }
+    private fun recompose() = _state.update { it.copy(rights = rights(it)) }
 
-    private fun rights(pinned: Boolean?): NodeHeader.Rights? {
+    private fun rights(state: State): NodeHeader.Rights? {
+        val pinned = state.pinned
         val f = facts ?: return null
         val kind = AppKinds.header(node.kind)
         val doors = AppKinds.doors(node.kind, f)
@@ -167,7 +172,7 @@ class NodeHeaderModel(
             node.kind, favoriteKnown = pinned != null, shareable = kind?.shareable == true, linksOn = door.linksOn(),
             rename = kind?.renames != false, takesCover = kind?.takesCover == true, coverOffered = doors.coverOffered,
             copy = doors.copies, download = doors.downloads, report = reportOffered, inGuestFolder = door.inIdentityFolder(node),
-            offline = offlineNodes != null, online = online,
+            offline = offlineNodes != null, online = online, offlineOn = state.offline?.on == true,
         )
     }
 
@@ -191,11 +196,11 @@ class NodeHeaderModel(
     /** Pins or unpins the node: the heart turns at once and back when the write did not land; its notice then, or null. */
     suspend fun toggleFavorite(): Notice? {
         val was = current.pinned ?: return null
-        _state.update { it.copy(pinned = !was).let { s -> s.copy(rights = rights(s.pinned)) } }
+        _state.update { it.copy(pinned = !was).let { s -> s.copy(rights = rights(s)) } }
         val stored = door.toggleFavorite(node)
         door.changed()
         if (stored) return null
-        _state.update { it.copy(pinned = door.isFavorite(node)).let { s -> s.copy(rights = rights(s.pinned)) } }
+        _state.update { it.copy(pinned = door.isFavorite(node)).let { s -> s.copy(rights = rights(s)) } }
         return Notice(Msg.NODE_FAVORITE_FAILED)
     }
 
@@ -264,6 +269,7 @@ class NodeHeaderModel(
             o.unpin(node)
             return null
         }
+        if (!online) return Notice(Msg.OFFLINE_READ_ONLY)
         val bytes = runCatching { o.plan(node) }.getOrNull() ?: return Notice(Msg.OFFLINE_PIN_FAILED)
         asking.value = bytes
         return null
@@ -273,6 +279,10 @@ class NodeHeaderModel(
     suspend fun confirmOffline(): Notice? {
         val o = offlineNodes ?: return null
         if (asking.value == null) return null
+        if (!online) {
+            asking.value = null
+            return Notice(Msg.OFFLINE_READ_ONLY)
+        }
         val pinned = runCatching { o.pin(node) }.getOrDefault(false)
         asking.value = null
         return if (pinned) null else Notice(Msg.OFFLINE_PIN_FAILED)

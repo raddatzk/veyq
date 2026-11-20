@@ -1,8 +1,8 @@
 // Drag and drop onto a level and onto a folder's row (ADR 0123's Consequences, the Windows app's Depot whole), Fluent's way: the level's scroller and each
 // folder's row take dropped storage items (Explorer's files and folders) as a copy, the row under the pointer highlighted
 // as a list's hovered row is; what was dropped is sorted by DropSort and handed to the core by path (ADR 0137 decision 3:
-// the core opens and reads each at offsets, nothing of a file crosses). A dropped veyq download is uploaded as the file
-// it is (until import is built, native-apps § Open).
+// the core opens and reads each at offsets, nothing of a file crosses). A dropped veyq download — a ZIP, or its unpacked
+// folder — is offered as an import (ADR 0152 decision 1), one per drop as on the web; the rest is the ordinary upload.
 using System;
 using System.Linq;
 using Microsoft.UI.Xaml;
@@ -15,8 +15,8 @@ using Windows.Storage;
 namespace Veyq;
 
 /// <summary>Where a drop onto the level shown goes, saying through <paramref name="Say"/>: the level itself, and each of
-/// its folders' rows into that folder.</summary>
-internal sealed record Drops(UploadLevel Level, Action<bool, string> Say)
+/// its folders' rows into that folder; an import offered opens over <paramref name="Window"/>.</summary>
+internal sealed record Drops(Window Window, UploadLevel Level, Action<bool, string> Say)
 {
     /// <summary>The level's own drop: onto its scroller, wherever no folder's row takes it.</summary>
     public void OntoLevel(UIElement scroller) => Attach(scroller, Level, null);
@@ -72,10 +72,12 @@ internal sealed record Drops(UploadLevel Level, Action<bool, string> Say)
                 // core cannot read says why in the log (the packaged app's drop, 2026-11-13)
                 foreach (var path in sorted.Files.Concat(sorted.Folders)) Log.Write($"a dropped path: {DropSort.Facts(path)}");
                 foreach (var name in sorted.Refused) Say(false, Words.DepotDropNotLocal(name));
-                foreach (var call in DropSort.Calls(level, sorted))
+                var offered = false;
+                foreach (var screened in DropSort.Calls(level, sorted))
                 {
+                    var call = offered ? DropSort.Plain(screened) : screened;
                     var (answer, _) = await Core.CallAsync(call);
-                    Uploads.Queued(answer, call is Call.UploadFolder ? "Upload.Folder" : "Upload.Files", Say);
+                    offered |= Uploads.Screened(Window, answer, call.GetType().Name, Say);
                 }
             }
             catch (Exception ex)

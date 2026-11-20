@@ -282,12 +282,16 @@ describe('ShareView — the donation banner and the footer links', () => {
     vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
   })
 
-  it('shows one banner at the top, and the footer links the security and donation pages once each', async () => {
+  it('shows one banner of each kind at the top, and the footer links the security and donation pages once each', async () => {
     const wrapper = mountShareView()
     await flushPromises()
     expect(wrapper.find('.share-view-header').exists()).toBe(true) // the content: the positive control
+    expect(wrapper.findAll('[data-testid="open-in-app"]')).toHaveLength(1)
     expect(wrapper.findAll('[data-testid="donation-banner"]')).toHaveLength(1)
-    expect(wrapper.find('.share-view').element.firstElementChild?.matches('[data-testid="donation-banner"]')).toBe(true)
+    // the open-in-app banner first (ADR 0150 § O2), then the donation banner
+    const top = wrapper.find('.share-view').element
+    expect(top.firstElementChild?.matches('[data-testid="open-in-app"]')).toBe(true)
+    expect(top.firstElementChild?.nextElementSibling?.matches('[data-testid="donation-banner"]')).toBe(true)
     const footerLinks = wrapper.findAll('.share-view-footer a').map((a) => a.attributes('href'))
     expect(footerLinks.filter((h) => h === 'https://veyq.app/privacy/is-my-data-safe/')).toHaveLength(1)
     expect(footerLinks.filter((h) => h === 'https://veyq.app/donate/')).toHaveLength(1)

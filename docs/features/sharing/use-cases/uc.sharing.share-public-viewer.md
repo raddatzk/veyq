@@ -133,6 +133,8 @@ account, and switch it off whenever you like.
 
 ## Related
 
+- **The apps** (A5, built 2026-11-19 on every app, [ADR 0150](../../../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md) decisions 2–5, 7, 8; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): *Open a link*, the gates and each kind's guest door. Tests (no coverage surface, ADR 0040): `ReceivedLinkTest`, `ShareGatesTest`, `GuestDoorsTest`, `GuestReportTest`, `ReceivedBridgeTest`, `LinuxGuestSessionsTest`, `WindowsGuestSessionsTest`, Windows' `ReceivedTextTest`; live `ReceivedLinkLiveTest`, `GuestGapsLiveTest`, `GuestRemainderLiveTest`.
+- End-user view (docs site): [Open a link in the app](../../../../site/src/content/docs/sharing/open-a-link-in-the-app.mdx)
 - End-user view (docs site): [Sharing with people who have no account](../../../../site/src/content/docs/sharing/index.mdx)
 - Feature: [Sharing](../_index.md)
 - Enabler: [en.sharing.public-link](../enablers/en.sharing.public-link.md) (the record, keys, gates and lifecycle)

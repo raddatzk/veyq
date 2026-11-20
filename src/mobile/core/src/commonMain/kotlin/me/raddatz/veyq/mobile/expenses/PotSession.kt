@@ -52,11 +52,27 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
     var check: LedgerCheck = LedgerCheck.of(emptyList())
         private set
 
-    /** Whether this member may write here: Expenses is on for the tenant (a space pending deletion is not opened). */
-    val canWrite: Boolean get() = meta != null && door.writesEntries
+    /**
+     * Shown from the offline store, read-only, its ledger as of when (ADR 0153 decision 6, ADR 0140 decision 5): the kept
+     * whole ledger read while the server was unreachable, or the account gone offline since the last read ([wentOffline]);
+     * null while the server answers.
+     */
+    var offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null
+        private set
 
-    /** Whether this member may change the Pot's settings, a Pot without any included: Expenses is on for the tenant. */
-    val canChangeSettings: Boolean get() = door.changesSettings
+    /** When the server last answered a read of the ledger (the device's clock), what [wentOffline] says it is as of. */
+    private var readAt: Long? = null
+
+    /** Whether this member may write here: Expenses is on for the tenant (a space pending deletion is not opened), online. */
+    val canWrite: Boolean get() = meta != null && door.writesEntries && offline == null
+
+    /** Whether this member may change the Pot's settings, a Pot without any included: Expenses is on for the tenant, online. */
+    val canChangeSettings: Boolean get() = door.changesSettings && offline == null
+
+    /** The account went offline with the Pot open: it shows what it read, read-only, as of its last read. */
+    internal fun wentOffline() {
+        if (offline == null) offline = me.raddatz.veyq.mobile.session.OfflineAsOf(readAt)
+    }
 
     /** Whether a member reads the Pot ([PotDoor.member]); false for a link's guest. */
     val member: Boolean get() = door.member
@@ -100,8 +116,15 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
     private var receiptsDue = false
 
     private suspend fun read(): Boolean {
-        val r = door.read(node, ledgerTag, cursor, deleteRevision) ?: return false
-        if (r.whole) held.clear() // a guest's read is the link's whole answer, replaced when its tag moved
+        val r = door.read(node, ledgerTag, cursor, deleteRevision) ?: run {
+            // the server answered: the ledger held is current, and online again where it was not
+            readAt = nowMs()
+            return (offline != null).also { offline = null }
+        }
+        offline = r.offline
+        if (r.offline == null) readAt = nowMs()
+        // a whole read (a guest's, the link's whole answer; a member's open, kept offline) replaces what is held, never merges
+        if (r.whole) held.clear()
         r.keep?.let { ids -> held.keys.retainAll(ids) }
         // A re-served id (a re-key's new wrap) replaces the held row.
         Revisions.open(codec, node.scopeId, node.id, node.key, r.rows).forEach { held[it.id] = it }
@@ -127,6 +150,8 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
         BUSY,
         /** The operator blocked the Pot. */
         BLOCKED,
+        /** The Pot is shown offline (ADR 0153 decision 6): nothing was sent; a write waits for the server (`offline_read_only`). */
+        OFFLINE,
         /** The server refused it otherwise (switched off, removed, an id taken): nothing was stored. */
         REFUSED,
     }
@@ -137,6 +162,7 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
      */
     @Throws(Exception::class)
     suspend fun write(writes: List<PotWrite>): WriteOutcome {
+        if (offline != null) return WriteOutcome.OFFLINE
         val base = meta?.base ?: return WriteOutcome.INVALID
         return atNodeEpoch { n ->
             val revisions = PotWrites.seal(codec, n.scopeId, n.id, n.key, held.values.toList(), writes, base)
@@ -147,6 +173,7 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
     /** Deletes or removes participant [participantId] by its sealed erasure (members only; settled people only). */
     @Throws(Exception::class)
     suspend fun erase(participantId: String): WriteOutcome {
+        if (offline != null) return WriteOutcome.OFFLINE
         val base = meta?.base ?: return WriteOutcome.INVALID
         return atNodeEpoch { n ->
             val request = PotWrites.erasure(codec, n.scopeId, n.id, n.key, n.epoch, held.values.toList(), participantId, base)
@@ -263,6 +290,7 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
     suspend fun saveEntry(entryId: String?, form: EntryForm, basedOn: Long?, pending: List<PendingReceipt> = emptyList(), own: Set<String> = emptySet()): WriteOutcome {
         skippedReceipts = emptyList()
         uploadedReceipts = emptyList()
+        if (offline != null) return WriteOutcome.OFFLINE
         val known = ledger?.participants?.map { it.id }?.toSet() ?: return WriteOutcome.INVALID
         if (form.contentOf { it in known }.content == null) return WriteOutcome.INVALID
         if (pending.any { it.bytes.size > Receipts.MAX_BYTES }) return WriteOutcome.INVALID
@@ -321,12 +349,21 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
         return true
     }
 
-    /** A receipt's bytes, opened under the Pot's key; a blocked receipt opens nothing. */
+    /**
+     * A receipt's bytes as the viewer shows them, opened under the Pot's key; a blocked receipt opens nothing. Its frames
+     * are kept in the offline store (ADR 0153 decision 6: a receipt shown opens offline, as a Depot file's do).
+     */
     @Throws(Exception::class)
-    suspend fun openReceipt(receiptId: String): ByteArray? {
+    suspend fun openReceipt(receiptId: String): ByteArray? = readReceipt(receiptId, keep = true)
+
+    /**
+     * A receipt's bytes read for another purpose than showing it — a download, a copy (`PotExport`, `PotCopy`) — where
+     * [keep] is false: they keep nothing on the device.
+     */
+    internal suspend fun readReceipt(receiptId: String, keep: Boolean): ByteArray? {
         val r = receipts.firstOrNull { it.receiptId == receiptId } ?: return null
         if (r.blocked) return null
-        return runCatching { door.receipts.download(node, r.listed) }.getOrNull()
+        return runCatching { door.receipts.download(node, r.listed, keep) }.getOrNull()
     }
 
     /** Deletes entry [entryId] on [basedOn], the revision shown: a tombstone revision; it counts nowhere and stays in the
@@ -388,6 +425,7 @@ class PotSession internal constructor(private val door: PotDoor, private var nod
      */
     @Throws(Exception::class)
     suspend fun writeMeta(change: (PotMeta?) -> PotMeta?): WriteOutcome {
+        if (offline != null) return WriteOutcome.OFFLINE
         val result = try {
             NodeEpochWrite.run(
                 waitsMs = rekeyWaitsMs,

@@ -339,7 +339,9 @@ internal sealed class Call {
     /**
      * Receipt [receipt] of Pot [pot] opened to its bytes (`PotModel.openReceipt`), answered as [Answer.Bytes] with what the
      * bytes are (`Receipts.mediaTypeOf`: an image's type, `application/pdf`, or null — a file only saved); refused
-     * `NO_RECEIPT` where it does not open (blocked, not held, not read). The host decodes it in memory, never from a file.
+     * `NO_RECEIPT` where it does not open (blocked, not held, not read), `NOT_KEPT_OFFLINE` where the Pot is shown offline
+     * and this device does not keep the receipt (`PotModel.receiptFailure`: never shown here, nor fetched by a pin; its
+     * word `offline_not_kept`). The host decodes it in memory, never from a file.
      */
     @Serializable @SerialName("Receipt.Open") data class ReceiptOpen(val pot: Long, val receipt: String) : Call()
 
@@ -348,8 +350,8 @@ internal sealed class Call {
 
     /**
      * Receipt [receipt] of Pot [pot] saved into the file at [path], which the host's save dialog gave (ADR 0137 decision 3:
-     * the core opens and writes it; nothing is left there on a failure): done, or refused `NO_RECEIPT` (it does not open)
-     * or `NOT_WRITTEN` (the file was not written).
+     * the core opens and writes it; nothing is left there on a failure): done, or refused `NO_RECEIPT` (it does not open;
+     * `NOT_KEPT_OFFLINE` offline where this device does not keep it) or `NOT_WRITTEN` (the file was not written).
      */
     @Serializable @SerialName("Receipt.Save") data class ReceiptSave(val pot: Long, val receipt: String, val path: String) : Call()
 
@@ -459,7 +461,8 @@ internal sealed class Call {
      * The header's "Available offline" (its plan's `offline` action, ADR 0140 decision 10; `NodeHeaderModel.toggleOffline`):
      * on, it turns off at once; off, the size it would keep is asked ([HeaderShown.offline]'s `asking` and `question`,
      * under the title `offline_pin_ask_title`) — nothing is kept until [HeaderOfflineConfirm] (`offline_pin_confirm`), or
-     * [HeaderOfflineCancel]. [Answer.Said] with why not, or none.
+     * [HeaderOfflineCancel]. [Answer.Said] with why not, or none. Offline the plan offers it only where the node is kept
+     * already (turning it off); a pin is refused (`offline_read_only`) and a size asked online is dropped.
      */
     @Serializable @SerialName("Header.Offline") data class HeaderOffline(val header: Long) : Call()
     @Serializable @SerialName("Header.OfflineConfirm") data class HeaderOfflineConfirm(val header: Long) : Call()
@@ -841,6 +844,13 @@ internal sealed class Call {
      * whose grant is already being spent finishes its sign-in all the same (the core's rule): the screen ends, not that.
      */
     @Serializable @SerialName("Link.Close") data class LinkClose(val link: Long) : Call()
+
+    /**
+     * A `veyq:` link the system handed the app (ADR 0150 § O1: a desktop's command line or activation, a protocol launch):
+     * [uri] as it arrived, inward once. The core reads its host alone (`DeepLink.parse`) and answers the screen it opens
+     * ([Answer.DeepLinked]); nothing of it is kept, logged or sent back. Stateless, signed in or not.
+     */
+    @Serializable @SerialName("DeepLink") data class DeepLink(val uri: String) : Call()
 
     /**
      * A received link pasted into *Open a link* (ADR 0150 decisions 4, 7): [text] as the person pasted it — the link with
@@ -1803,6 +1813,12 @@ internal sealed class Answer {
     /** A device link opened (`Link.*` of a role): its id, for [Watched.Link] and the link's calls. */
     @Serializable @SerialName("LinkOpened") data class LinkOpened(val link: Long) : Answer()
 
+    /**
+     * The screen a `veyq:` link opens ([Call.DeepLink]): [DeepScreen.LINK] *Open a link* — on the sign-in or the unlock
+     * screen, and signed in over the open tenant —, [DeepScreen.OPEN] the app where it is. Nothing of the link.
+     */
+    @Serializable @SerialName("DeepLinked") data class DeepLinked(val screen: DeepScreen) : Answer()
+
     /** A received link opened ([Call.ReceivedOpen]): its id, for [Watched.Received] and the `Received.*` calls. */
     @Serializable @SerialName("ReceivedOpened") data class ReceivedOpened(val received: Long) : Answer()
 
@@ -1977,6 +1993,9 @@ internal sealed class Answer {
 
         /** An import: none open by that id (ADR 0152). */
         NO_SUCH_IMPORT,
+
+        /** A receipt the Pot shown offline does not keep (ADR 0153 decision 6): its word is `offline_not_kept`. */
+        NOT_KEPT_OFFLINE,
 
         /** A drop box's page: none by that id; no guest's folder listed by that id; a delete that was not asked. */
         NO_SUCH_DROPBOX, NO_SUCH_FOLDER, NOT_ASKED,
@@ -2197,8 +2216,14 @@ internal sealed class Update {
     /**
      * Null while nothing is open in this Pot model (closed, or an id the bridge does not hold). [pictures] are the user
      * ids whose picture the core holds ([Call.AvatarPicture]); a person whose member id is not among them shows the letter.
+     * Offline (ADR 0153 decision 6) the state's `offline` says as of when — read-only: its view's `canWrite` is off — and
+     * [failure] what the page says where the Pot did not open (`PotModel.State.failure`: offline, that this device does
+     * not keep it; else that it did not open); null where it opened.
      */
-    @Serializable @SerialName("Pot") data class Pot(val pot: Long, val state: PotModel.State?, val pictures: List<String> = emptyList()) : Update()
+    @Serializable @SerialName("Pot") data class Pot(
+        val pot: Long, val state: PotModel.State?, val pictures: List<String> = emptyList(),
+        @Serializable(with = MsgKey::class) val failure: Msg? = state?.failure,
+    ) : Update()
 
     /** A header's state; null once it was closed (or an id the bridge does not hold). */
     @Serializable @SerialName("Header") data class Header(val header: Long, val shown: HeaderShown?) : Update()
@@ -3695,8 +3720,15 @@ internal class ShellShown(
     val tenant: TenantRef,
     val server: String,
     val connection: String,
-    /** The switcher's servers, each with the tenants it lists (`Hidden.visibleTenants`). */
+    /** The switcher's servers, each with the tenants it lists (`Hidden.visibleTenants`). Superseded by [switcher]. */
     val servers: List<ShownServer>,
+    /**
+     * The switcher's tenant rows (`ShellWords.switcher`): every row its tenant's name and the line that says where it is —
+     * its domain, and the account's address where two signed-in accounts list the same tenant (owner 2026-11-19).
+     */
+    val switcher: List<ShownSwitcherEntry> = emptyList(),
+    /** The drawer's sections that have something in them (`Lists.drawerSections`): an empty one is not drawn (owner 2026-11-19). */
+    val drawerSections: List<me.raddatz.veyq.mobile.navigation.DrawerSection> = emptyList(),
     /** The space Home shows (`Lists.space`), its name (`ShellWords.space`) and the line under it (`switcherSubtitle`). */
     val space: SpaceRef?,
     val spaceName: Piece,
@@ -3737,8 +3769,9 @@ internal class ShellShown(
      */
     val picturesRound: Int = 0,
     /**
-     * The banner offline (`ShellModel.State.banner`: "Offline — content as of {time}"); null online. Offline every write
-     * is refused and New is not offered ([canCreateHere]).
+     * The banner offline (`ShellModel.State.banner`: "Offline — content as of {time}", the time the open page's own — a
+     * Pot's kept ledger, a gallery's kept listing — where it has one, else the lists'); null online. The one offline
+     * banner: a host draws no page's time of its own. Offline every write is refused and New is not offered ([canCreateHere]).
      */
     val offlineBanner: Notice? = null,
     /** How a level is drawn (the account's choice on this device, ADR 0149 decision 8; [Call.ViewSet]) and what it offers. */
@@ -3746,6 +3779,8 @@ internal class ShellShown(
     val views: List<ViewModeShown> = CoreViewMode.LEVEL.map { ViewModeShown.valueOf(it.name) },
 ) {
     @Serializable class ShownServer(val connection: String, val label: String, val tenants: List<TenantRef>)
+    /** A switcher row ([me.raddatz.veyq.mobile.navigation.ShellWords.SwitcherEntry]); [line] its name and detail for a one-label menu item. */
+    @Serializable class ShownSwitcherEntry(val connection: String, val tenant: TenantRef, val name: String, val detail: String, val line: String, val current: Boolean)
     @Serializable class ShownSpace(val space: SpaceRef, val name: Piece)
     @Serializable class ShownApplication(val application: ApplicationId, @Serializable(with = MsgKey::class) val word: Msg)
     @Serializable class ShownTab(val tab: BarTab, @Serializable(with = MsgKey::class) val word: Msg)
@@ -3936,6 +3971,10 @@ internal object Roots {
     val outward: List<KSerializer<*>> = listOf(Answer.serializer(), Update.serializer(), HostRequest.serializer())
     val all: List<KSerializer<*>> get() = inward + outward
 }
+
+/** What a `veyq:` link opens (core's `DeepLink`, ADR 0150 § O1): the app where it is, or *Open a link*. */
+@Serializable
+internal enum class DeepScreen { OPEN, LINK }
 
 /** Where a received link stands (core's `ShareGates.State`, ADR 0150 decision 2). */
 @Serializable

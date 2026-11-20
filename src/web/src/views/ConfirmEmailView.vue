@@ -19,12 +19,15 @@ import VeyqMessage from '../shared/ui/VeyqMessage.vue'
 import { confirmEmail } from '../features/account/email/emailConfirmation'
 import { session } from '../app/session'
 import { HttpStatus, httpStatus } from '../shared/httpError'
+import { afterTheStep } from '../core/openInApp/openInApp'
 
 const { t } = useI18n()
 const router = useRouter()
 
 type Phase = 'noLink' | 'confirming' | 'done' | 'signInFirst' | 'invalid' | 'failed'
 const phase = ref<Phase>('noLink')
+// The *Open in the app* banner appears once this page's step is done (ADR 0150 § O2), never before.
+afterTheStep(() => phase.value === 'done')
 
 async function consumeFragment() {
   const token = window.location.hash.replace(/^#/, '')

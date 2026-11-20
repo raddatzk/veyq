@@ -1,5 +1,6 @@
 // The veyq app on Windows (ADR 0136 decision 5; ADR 0123's Consequences, the Windows app): the window, the core started
-// behind it, and what its session says. Each screen draws the core's state and calls its actions; nothing else.
+// behind it, and what its session says. Each screen draws the core's state and calls its actions; nothing else. Its
+// entry is Program.cs (one instance of the packaged app); a veyq: link is DeepLinks'.
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Veyq.Bridge;
@@ -31,6 +32,8 @@ public partial class App : Application
         _window.Closed += (_, _) => Core.Shutdown();
         _window.Activate();
         _window.StartCore();
+        // the activation that started this process: a veyq: link waits for the core (DeepLinks, ADR 0150 § O3)
+        DeepLinks.Launched();
     }
 
     /// <summary>The person chose "Quit anyway": the next close goes through.</summary>

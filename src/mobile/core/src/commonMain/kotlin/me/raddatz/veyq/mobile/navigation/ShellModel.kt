@@ -77,6 +77,9 @@ class ShellModel(
         fun groups(shell: Shell): List<Home.Group> = Home.groups(level(shell))
 
         fun space(shell: Shell): SpaceRef? = spaces.firstOrNull { it.scopeId == shell.space }
+
+        /** The drawer's sections that have something in them ([DrawerSection.shown]); an empty one is not drawn. */
+        val drawerSections: List<DrawerSection> get() = DrawerSection.shown(drawer, applications)
     }
 
     /**
@@ -84,7 +87,8 @@ class ShellModel(
      * are the offline store's, read-only, as of when (ADR 0140 decision 5, the shell's banner: [banner]); null online.
      * [gone]: each item made available offline that was removed from this device since it is no longer available (ADR
      * 0140 decision 6), named where the shell held its name ([me.raddatz.veyq.mobile.offline.OfflineShown.gone]) — shown
-     * until [goneSeen].
+     * until [goneSeen]. [pages]: the kept time each page of the tenant shows offline, by node id
+     * ([me.raddatz.veyq.mobile.offline.PagesOffline]) — the open one's dates the banner.
      */
     @Serializable
     class State(
@@ -92,11 +96,15 @@ class ShellModel(
         val lists: Lists,
         val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null,
         val gone: List<Notice> = emptyList(),
+        @kotlinx.serialization.Transient val pages: Map<String, Long> = emptyMap(),
     ) {
-        /** The banner offline: "Offline — content as of {time}"; null online. */
-        val banner: Notice? get() = me.raddatz.veyq.mobile.offline.OfflineShown.banner(offline)
+        /**
+         * The banner offline: "Offline — content as of {time}", the time the open page's own (a Pot's kept ledger, a
+         * gallery's kept listing) where it has one, else the lists'; null online.
+         */
+        val banner: Notice? get() = me.raddatz.veyq.mobile.offline.OfflineShown.banner(offline, shell.openObject?.let { pages[it.nodeId] })
 
-        internal fun moved(shell: Shell, lists: Lists = this.lists) = State(shell, lists, offline, gone)
+        internal fun moved(shell: Shell, lists: Lists = this.lists) = State(shell, lists, offline, gone, pages)
     }
 
     /** The tenant as read, before what this device hides is taken out. */
@@ -138,7 +146,12 @@ class ShellModel(
             tenant.account.reach.drop(1).collect { if (it == Reach.Online) refresh() else rebuild() }
         }
         watchGone()
+        if (pagesWatch == null) pagesWatch = CoroutineScope(Dispatchers.Default).launch {
+            tenant.pagesOffline.shown.collect { p -> _state.update { s -> s?.let { State(it.shell, it.lists, it.offline, it.gone, p) } } }
+        }
     }
+
+    private var pagesWatch: kotlinx.coroutines.Job? = null
 
     private var reaches: kotlinx.coroutines.Job? = null
     private var goneWatch: kotlinx.coroutines.Job? = null
@@ -156,7 +169,7 @@ class ShellModel(
         goneWatch = CoroutineScope(Dispatchers.Default).launch {
             pins.gone.collect { gone ->
                 val said = gone.filter { it.tenant == tenant.tenant.tenantId }.map { me.raddatz.veyq.mobile.offline.OfflineShown.gone(heldNames[it.node]) }
-                _state.update { s -> s?.let { State(it.shell, it.lists, it.offline, said) } }
+                _state.update { s -> s?.let { State(it.shell, it.lists, it.offline, said, it.pages) } }
             }
         }
     }
@@ -164,7 +177,7 @@ class ShellModel(
     /** The [State.gone] notices said: they are not said again (on any screen of the account). */
     suspend fun goneSeen() {
         tenant.account.offlinePins?.offline?.seenGone()
-        _state.update { s -> s?.let { State(it.shell, it.lists, it.offline) } }
+        _state.update { s -> s?.let { State(it.shell, it.lists, it.offline, pages = it.pages) } }
     }
 
     /** Whether the account reaches its server: offline every write here is refused ([readOnly], ADR 0140 decision 7). */
@@ -217,7 +230,7 @@ class ShellModel(
             uses = recent.resolve(objects),
         )
         _state.update { prior ->
-            State(next(prior?.shell.takeUnless { start }, spaces, if (openLastUsed) recent.lastUsed(objects) else null), lists, offlineNow(), prior?.gone.orEmpty())
+            State(next(prior?.shell.takeUnless { start }, spaces, if (openLastUsed) recent.lastUsed(objects) else null), lists, offlineNow(), prior?.gone.orEmpty(), tenant.pagesOffline.shown.value)
         }
     }
 
@@ -787,6 +800,7 @@ class ShellModel(
         me.raddatz.veyq.mobile.memories.GalleryModel(ref, object : me.raddatz.veyq.mobile.memories.GalleryModel.Door {
             override suspend fun gallery() = me.raddatz.veyq.mobile.memories.MemoryMedia.list(tenant, ref.scopeId, ref.nodeId)
             override suspend fun scopeNodes() = this@ShellModel.scopeNodes(ref.scopeId)
+            override fun shownOffline(at: me.raddatz.veyq.mobile.session.OfflineAsOf?) = tenant.pagesOffline.shown(ref.nodeId, at)
             override suspend fun read(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, blob: me.raddatz.veyq.mobile.memories.MemoryMedia.Blob) =
                 me.raddatz.veyq.mobile.memories.MemoryMedia.read(tenant, item, blob)
             override fun reader(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item) =

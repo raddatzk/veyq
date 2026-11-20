@@ -154,6 +154,8 @@ class SecretFreeSchemaTest {
             "a pinned item says more than its ids, its name from the held tree, its state and its size",
         )
         assertEquals(listOf("on", "status", "said", "done", "total", "asking", "question"), of("OfflineToggle"), "a node's toggle says more than its state and sizes")
+        // a Pot offline (ADR 0153 decision 6): its state carries as of when beside what it carried online, never a revision
+        assertEquals(listOf("ref", "view", "failed", "saving", "message", "offline"), of("PotModel.State"), "a Pot's state says more than its view, its flags and as of when")
         assertTrue(fields.keys.none { it in setOf("me.raddatz.veyq.mobile.offline.Pin", "me.raddatz.veyq.mobile.offline.PinRecord", "me.raddatz.veyq.mobile.offline.PinGone") }, "the store's own record of a pin is on the wire")
         // where they ride: the shell's state, a gallery's, a header's, the Settings page's
         val holders = fields.filterValues { names -> "offline" in names || "storage" in names }.keys.map { it.substringAfterLast('.') }.toSet()

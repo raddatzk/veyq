@@ -116,6 +116,7 @@ class BookmarksTest {
                 return NodeReport.Sent(NodeReport.Outcome.SENT, "r")
             }
         }, nameOnly = true)
+        assertFalse(sheet.offersName, "a kept link's sheet offers no choice of the whole")
         sheet.whole(true)
         sheet.category(NodeReport.CATEGORIES.first().token)
         sheet.reason("spam")

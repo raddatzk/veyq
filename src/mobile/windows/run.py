@@ -301,6 +301,11 @@ def test(pattern: str | None) -> int:
     # and the search's vectors (SearchVectorsTest, ADR 0146 decision 1), read the same way
     search_vectors = Path("contracts/platform/search/v1-vectors.json")
     copy_to([ROOT / search_vectors], remote / "repo" / PureWindowsPath(search_vectors.parent))
+    # and the import's cases, the web's download and the archive's schema (ImportCasesTest, SubtreeImportTest,
+    # ZipReaderTest, ImportScreenTest; ADR 0152 decision 4), read the same way
+    for name in ("import-cases/cases.v1.json", "import-cases/web-download.zip", "veyq-subtree.schema.json"):
+        fixture = Path("contracts/export") / name
+        copy_to([ROOT / fixture], remote / "repo" / PureWindowsPath(fixture.parent))
     env = {"VEYQ_VECTORS": str(remote / VECTORS.name), "VEYQ_NORMALIZATION_TEST": str(remote / NORMALIZATION_TEST.name),
            "VEYQ_REPO_ROOT": str(remote / "repo")}
     forward: list[str] | None = None

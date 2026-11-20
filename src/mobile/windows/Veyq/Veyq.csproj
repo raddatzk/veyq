@@ -23,6 +23,8 @@
          native veyq.dll in the build output, so the app found no veyq_init and crashed at its start (measured 2026-11-10). -->
     <AssemblyName>Veyq.App</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Program.cs is the entry: one instance of the packaged app, a veyq: link handed to the running one (ADR 0150 § O3). -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- The words' fallback language, the .pri's default qualifier. -->
     <DefaultLanguage>en-US</DefaultLanguage>

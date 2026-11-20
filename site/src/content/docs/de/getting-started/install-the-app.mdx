@@ -7,6 +7,7 @@ sources:
   - src/mobile/desktop-identity.json
   - docs/features/account/enablers/en.account.key-model.md
   - docs/decisions/0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md
+  - docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md
 ---
 
 import { Code } from '@astrojs/starlight/components';
@@ -20,7 +21,9 @@ Die App ist eine **Vorschau**. Sie kann **Depot**, **Ausgaben** und **Erinnerung
 Links zum Teilen, die Einstellungen deines Kontos – [dein Profil](/de/account/your-profile/),
 [Geräte und Sitzungen](/de/account/devices-and-sessions/), Passwort und E-Mail-Adresse, dein Konto
 [absichern](/de/account/replace-your-keys/) und löschen – und die [Sicherheitsnummer](/de/account/verify-a-person/)
-eines Mitglieds, und sie kann Inhalte für die [Offline-Nutzung](/de/getting-started/use-content-offline/) behalten.
+eines Mitglieds; sie kann Inhalte für die [Offline-Nutzung](/de/getting-started/use-content-offline/) behalten, und sie öffnet einen
+Link, den dir jemand geschickt hat, ohne Konto, und bewahrt Links als Lesezeichen auf
+([Einen Link in der App öffnen](/de/sharing/open-a-link-in-the-app/)).
 Noch nicht dabei sind Einladungen und die Mitglieder eines Bereichs, ein vergessenes Passwort zurückzusetzen,
 *Wer ist wer*, [einen Download zu importieren](/de/spaces/download-and-import/) und die Moderation: Dafür benutzt du
 weiter den Browser. Unter Linux und Windows steht die App nicht im Teilen-Menü des Systems: Zieh Fotos und Videos
@@ -178,6 +181,9 @@ Du meldest dich an wie im Browser, mit deiner E-Mail, deinem Passwort und beim e
 [Notfall-Kit](/de/getting-started/emergency-kit/). Statt den Secret Key einzutippen, wähle **Notfall-Kit öffnen** und
 wähle das PDF des Kits oder ein Foto oder einen Screenshot seines QR-Codes. Wo dein Computer eine Kamera hat, liest
 **Notfall-Kit scannen** den QR-Code auf dem Ausdruck.
+
+Unter der Anmeldung öffnet **Link öffnen** einen Link, den dir jemand geschickt hat, ohne dass du dich anmeldest:
+[Einen Link in der App öffnen](/de/sharing/open-a-link-in-the-app/).
 
 ## Ist die Datei wirklich die von veyq?
 

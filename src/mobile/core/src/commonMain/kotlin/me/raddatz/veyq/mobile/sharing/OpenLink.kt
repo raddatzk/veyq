@@ -11,7 +11,7 @@ import me.raddatz.veyq.mobile.words.Msg
 
 /**
  * *Open a link* (ADR 0150 decisions 4 and 8): a field the person pastes a received link into — on the sign-in screen
- * under the sign-in (no session needed) and in the account menu —, checked as it is typed, opened as the link's guest
+ * under the sign-in alone (no session needed; owner 2026-11-19: not in the shell's menus) —, checked as it is typed, opened as the link's guest
  * ([GuestScreen]) by [open], or refused with its reason and, where the link may still be a browser's, *Open in the
  * browser* ([State.browser]: the text as received, which the platform hands to the system browser — the same thing a click
  * on it would have done). The platform's paste control writes into [text]; nothing here reads a clipboard.

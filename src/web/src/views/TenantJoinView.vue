@@ -54,6 +54,7 @@ import { identityPublicFromPrivate } from '@veyq/crypto/v1'
 import { HttpStatus, isUnauthorized } from '../shared/httpError'
 import { isMailbox } from '../shared/mailbox'
 import { requestEmailConfirmation } from '../features/account/email/emailConfirmation'
+import { afterTheStep } from '../core/openInApp/openInApp'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -61,6 +62,8 @@ const router = useRouter()
 
 type Phase = 'loading' | 'missing' | 'invalid' | 'expired' | 'redeemed' | 'code' | 'register' | 'kit' | 'signin' | 'done'
 const phase = ref<Phase>('loading')
+// The *Open in the app* banner appears once this page's step is done (ADR 0150 § O2), never before.
+afterTheStep(() => phase.value === 'done')
 const error = ref('')
 const busy = ref(false)
 

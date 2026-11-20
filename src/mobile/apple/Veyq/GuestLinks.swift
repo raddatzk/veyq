@@ -5,7 +5,7 @@ import VeyqCore
 
 // MARK: The app's received links (ADR 0150 decisions 3–5)
 
-/// *Open a link*'s field (`asking`) — on the sign-in, the unlock and in the drawer's foot — and the one link open as its guest
+/// *Open a link*'s field (`asking`) — on the sign-in and the unlock (owner 2026-11-19: not in the shell) — and the one link open as its guest
 /// (`screen`), a screen in the place of whatever was on screen: the sign-in or the shell, which stay as they were in the app
 /// model and are shown again once the link is left. Every guest view of the app — opened here, by a bookmark's page or its
 /// *Open on its own page* — is made by one `GuestOpener` over the app's group defaults (the terms' and the note's

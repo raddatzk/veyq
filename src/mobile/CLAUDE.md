@@ -102,6 +102,37 @@ A Gradle build of its own, run through its own wrapper.
   platforms: Android `AccountFlows.kt`, `AccountSecretFlows.kt`, `SafetyNumber.kt`; Apple `AccountFlows.swift`; Linux
   `account_flows.rs`, `profile_edit.rs`, `safety.rs`; Windows `AccountFlows.cs`, `ProfileFlow.cs`, `ProfilePicture.cs`,
   `SafetyNumber.cs`.
+- **The flows' Secret Key and the breached-password check** ([ADR 0151](../../docs/decisions/0151-the-apps-account-rest-the-sign-ins-secret-key-control-in-every-flow-that-asks-for-the-key-and-the-breached-password-check-straight-from-the-device.md), built 2026-11-19):
+  `account/KeyIntake` is the sign-in's key control as a model — `typed(text)` (a `veyqkit:` token first, then a bare
+  key: the web's paste swap), `read` (a kit file, `KitImport`), `scan`, `take`, `clear`, `spent`; the screen sees only
+  `IntakeState`/`HeldKit` (the kit's address and server, the other-account and other-server notices), never the key.
+  `SessionModel` holds one, and so does each of `PasswordChange`, `AddressChange` (request and kit step share it) and
+  `KeyRotation`'s gate: their actions take the field's text (empty while a kit is held), the key a copy the call zeroes,
+  the held key zeroed after a successful call, at `clear` and at the flow's close. `account/BreachCheck` is the web's
+  `useBreachCheck` + `pwned.ts` (`BreachState`/`BreachKind`; `check` on leaving the field, `edited` on every edit,
+  `useAnyway`; `proceed()` decides, and the core refuses a submit it does not pass), over `account/Sha1` (no
+  dependency, no suite primitive) and `session/OutsideHttp` — the core's one door to a third party (the map's former
+  `MapHttp`): https only, no bearer, no cookie, no `Referer`, the app's `User-Agent` naming the instance. The address is
+  `getSetupStatus`' `core.breached-password` `serviceUrl`, read when a flow opens; none, no check. The bridge: `Kit.Read(flow,
+  path)`, `Kit.Clear(flow)`, `ScanKind.FLOW_KIT` (`Scan.Open`'s `link` the flow), `PasswordChange.`/`KeyRotation.Check`,
+  `.Edited`, `.UseAnyway`; the updates carry `kit` and `breach`. The platforms: Android `AccountSecretFlows.kt`
+  (`FlowKeyField`, `NewPasswordField`); Apple `AccountFlows.swift` (`FlowKeySection`, `NewPasswordRows`; the scan over
+  appleMain's `AppleKit.scan(intake:timing:)`); Linux `account_flows.rs` (`KeyControl`, `NewPassword`); Windows
+  `AccountFlows.cs` (`FlowKeyControl`, `NewPasswordField`).
+- **A received link** ([ADR 0150](../../docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md), built 2026-11-19): the web's share page in core's `sharing/` —
+  `ReceivedLink` (the web's parse, held to `contracts/platform/share-links/cases.v1.json` by `ReceivedLinkTest` and the
+  web's `bookmarkLink.test.ts`), `ShareInstance` (the link instance's `/api/setup`), `ShareGates` (password, terms, note,
+  content, the naming), `GuestTree`, `GuestView` and `GuestAccess` (the link's reads, writes and own upload queue),
+  `GuestReport`, the `GuestSessions` port; *Open a link* and the screen above the shell, `OpenLink` and `GuestScreen`
+  (*Keep* where a tenant is open, *Back* that asks at the root); a kept link's meta, dialog and page, `BookmarkMeta`,
+  `BookmarkCreate`, `BookmarkPage` (listed and opened through `Shell.bookmark`). Each kind's guest door is its
+  application's, through `AppKinds.guestDoor`: core's `GuestLevel`, Depot's `DepotGuest`, Memories' `MemoriesGuest`,
+  Expenses' `PotGuest` over `PotDoor` (the Pot's session reads and writes through a door, the member's
+  `TenantPotDoor`). The bridge: `Received.*`, `Bookmark.*`, `Shell.OpenBookmark` (`ReceivedBridgeTest`: no update holds
+  the link or its key). The platforms: Android `GuestLinks.kt`, `GuestScreens.kt`, `BookmarkScreen.kt`; Apple
+  `GuestLinks.swift`, `BookmarkScreen.swift`, `appleMain`'s `sharing/AppleSharing.kt`; Linux `received.rs`,
+  `bookmark_page.rs`, `bookmark_create.rs`; Windows `ReceivedView.cs`, `ReceivedText.cs`, `BookmarkPage.cs`,
+  `BookmarkCreateDialog.cs`. The guest's session stores: § Nothing on disk the app did not choose.
 - **The device trust** ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)
   decision 8; what each store guarantees is security-model § What a trusted device rests on): the flows are core's
   (`session/Account.kt`, `SessionModel.kt`: every sign-in enrols the password trust, `Gate.Signed.offer` offers staying
@@ -188,7 +219,7 @@ A Gradle build of its own, run through its own wrapper.
   The system's controls are told `Controls.Bind|Show|Clear`; a picked track's length is `Media.Duration`, an untitled
   track's title the host's `Words.Say`. A host answers the deck and control requests from its UI thread, in the order
   sent (Linux `music_host` through `bridge::reply`, Windows `MusicHost` through `Core.Player`), never inside the host
-  function; a track's report is `ReportShown.offersName` false (no "only its name").
+  function; a track's report is `ReportShown.offersName` false (no "only its name"), as a kept link's is (the name alone, no whole).
   A Memory's date, place and maps (ADR 0143 decision 11): the tenant's map services are made when it opens and closed when
   it closes (`Composition.language`, from `Config.language`, is the geocoder's); a map is opened by its owner's call —
   `Map.OpenMemories` (the bar's Map tab), `Lightbox.Map` (a photo's), `Place.Open` and `Tracks.Open` (answered with the
@@ -275,8 +306,10 @@ A Gradle build of its own, run through its own wrapper.
   app's data folder (`DataFolder`: the package's own `LocalState` when packaged, `%LOCALAPPDATA%\veyq\` unpackaged; the
   app's `AppData` asks for package identity), and the hand-off to the UI thread; `Veyq.Bridge.Tests` its round trip,
   `DataFolderTest` and the real DLL.
-  `Veyq` is the app (WinUI 3, unpackaged, self-contained, `win-x64`; its assembly `Veyq.App`): `App.xaml.cs`,
-  `MainWindow`, one class per screen (`SignInView`, `ShellView` with Search, `HomeView`, `PotPage` with its download;
+  `Veyq` is the app (WinUI 3, unpackaged, self-contained, `win-x64`; its assembly `Veyq.App`): `Program.cs` (the entry in
+  place of WinUI's generated one: with package identity one instance, a second activation handed to the running one by
+  `AppInstance`), `App.xaml.cs`, `DeepLinks` (a `veyq:` link the MSIX's `windows.protocol` hands in, through
+  `Call.DeepLink`: *Open a link* or the window in front, ADR 0150 § O), `MainWindow`, one class per screen (`SignInView`, `ShellView` with Search, `HomeView`, `PotPage` with its download;
   a node's header `NodeHeader` with `HeaderPlan`, and its sheets `TrashDialog`, `MoveDialog`, `ShareDialog` with
   `ShareDays`, `ReportDialog`, `CoverDialog`, every `ContentDialog` shown through `Dialogs.Show`),
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
@@ -306,8 +339,15 @@ A Gradle build of its own, run through its own wrapper.
   a clip refuses the file (an Ogg track); both JPEGs encoded in memory; `MediaTiersTest`), `MusicBar` (the account's
   music bar along the shell's bottom), `MusicHost` (the two decks, `MediaPlayer`s over `ReaderStream`, ramps in
   `MusicRamp`'s steps; one SMTC for the window through `GetForWindow`; `MusicTest`), `RowCovers` (every list row's cover through `Shell.RowCover`), `Uploads` (New's Upload files and Upload folder through `FileOpenPicker`
-  and `FolderPicker`, a file's Replace, the queue's `AppBarButton` with its `Flyout`, what it says in an `InfoBar`),
-  `DropBoxPage` (a drop box's page), `ListScrolls` (where each list was
+  and `FolderPicker`, a file's Replace, the queue's `AppBarButton` with its `Flyout`, what it says in an `InfoBar`; every pick and
+  drop screened by `Import.Screen`/`Import.ScreenFolder` first, ADR 0152), `ImportDialog` (a veyq download offered as an import:
+  one `ContentDialog` through reading, the summary, running and done — Import, Upload as a file, Cancel rolling back — its
+  face without a widget in `ImportText`, `ImportTextTest`),
+  `DropBoxPage` (a drop box's page), `ReceivedView` (a received link opened as its guest, ADR 0150: *Open a link* under the
+  sign-in and the unlock (not in the account menu, owner 2026-11-19); the screen above every face with its gates, the member's pages over the
+  guest's models, a WRITE_ONLY guest's page, the guest-write record's `InfoBar`, Keep, the reports, Back with its question;
+  its rules without a widget in `ReceivedText`, `ReceivedTextTest`), `BookmarkPage` (a kept link's page, in place or on its
+  own, while the shell's state names it) and `BookmarkCreateDialog` (New → Bookmark), `ListScrolls` (where each list was
   scrolled to; `ListScrollsTest`), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with
   `ReceiptViewerDialog` and `PdfPages` (a receipt's PDF through `Windows.Data.Pdf`, from memory; `PdfPagesTest`), `TypedText`
   (when a text box is set from the state; `TypedTextTest`), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
@@ -640,6 +680,16 @@ A Gradle build of its own, run through its own wrapper.
   is free at once (measured: create, erase, create again under `tw-probe2`). A pass that erases in the app erases the
   member there and leaves the owner to `--erase`: an owner erased in the app takes the tenant into its deletion, which no
   move can leave, and the name stays taken until its purge.
+  **A pass that chooses a password never asks the real range service.** A dev instance serves Have I Been Pwned's
+  address (`core.breached-password`), so a pass blocks it on its own platform and proves *could not be checked* going
+  ahead; a hit is `BreachCheckTest`'s (no played range service reaches an app). Android: start the throwaway emulator
+  with `-dns-server 192.0.2.1` (a dead resolver) and reach the instance at `10.0.2.2` by address (`ping
+  api.pwnedpasswords.com` → unknown host). Linux: `VEYQ_UNREACHABLE=api.pwnedpasswords.com python3 linux/run.py run`
+  maps each named host to the container's loopback. Windows: WinHTTP takes no per-process proxy, so the app reaches
+  the backend through a port of its own (`ssh -R`) behind a pass-only proxy on the Mac that rewrites the setup answer's
+  range address to one under `.invalid` — nothing changed on the VM or the instance (ADR 0151's Consequences,
+  2026-11-19). Afterwards grep the app's files and logs for the passwords, the key, the token, the full SHA-1 (upper,
+  lower) and its suffix.
   Dev helpers for a device pass (not checks): `VEYQ_DEV_KIT_OUT=<dir> --tests '*DevKitTest*'` writes `dev-kit.pdf` (the
   principal's token in its `Keywords`) and `dev-kit-qr.png`, for a pass to pick or show a camera — kept outside an
   indexed folder (GNOME's Tracker indexes all of `~`; `/tmp` is reached by the chooser's path) and removed after;
@@ -852,7 +902,8 @@ decision 3): `K_share` lives only in the open link's model (`sharing/ShareGates`
 offline store, no recent use, no log, no bridge update. A write link's guest session (identity id, contributor token, an
 uploader's `K_up`; the web's `localStorage` entry) goes through core's `sharing/GuestSessions` port into the platform's
 credential store — the Keychain, the Keystore-wrapped store, the Secret Service (Linux's `sharing/LinuxGuestSessions`: an
-item of the device keys' schema whose `alias` is `guest/<name>`, `secret-tool search alias guest/…`), the credential locker — under
+item of the device keys' schema whose `alias` is `guest/<name>`, `secret-tool search alias guest/…`), the Credential Locker
+(Windows' `sharing/WindowsGuestSessions`: a WinRT `PasswordVault` credential whose resource is the name, user `veyq`) — under
 `GuestNames.of(origin, shareId)` (a truncated SHA-256, never the id); the terms' and the note's acceptances, no secret,
 are `DeviceStore` entries under the same kind of name. *Not you?* removes the session.
 
@@ -952,6 +1003,15 @@ WinUI's own chrome (the pane's button, back, the scroll bar, a `ToggleSwitch`'s 
 whatever the app's words are, as on every Windows app, so a switch carries no words of its own: its header says what it
 turns on; a built-in item that shows a word of its own (`NavigationView`'s Settings) is replaced
 by one carrying the catalog's.
+
+The drawer and the switcher, the owner's rules (2026-11-19), on every app: **a section with nothing in it is not shown**
+— no heading, no "Nothing yet" — by core's `Lists.drawerSections` (`DrawerSection.shown`; the bridge's
+`ShellShown.drawerSections`), never a platform's own emptiness test. **Every switcher row says which server and account it
+is**: core's `ShellWords.switcher` (the bridge's `ShellShown.switcher`) gives each tenant row its name and its detail —
+the tenant's domain, as the web's switcher shows it, and the account's address where two signed-in accounts list the same
+tenant —, and which one is current; a platform draws them, never a server heading of its own over identical rows.
+**_Open a link_ is the sign-in's alone** (and the unlock's), where a signed-out person has no other way in — never in
+the account menu, the drawer's foot or a menu bar (ADR 0150 decision 4).
 
 A node's header is core's, for every kind (ADR 0123, the web's `NodePage` + `NodeHeader`): core's `navigation/NodeHeader.kt`
 plans it (`NodeHeaderTest`), each app's `NodeHeaderActions` draws it and owns every dialog behind it, and a kind only
@@ -1604,6 +1664,16 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   keysyms and frames (`pipewiresrc path=<node> keepalive-time=100`), with no portal dialog; the session stays unlocked
   (`lock-enabled false`). Sound is read from the default sink's monitor (`parec -d <sink>.monitor`), unmuted for it. A drag
   across libadwaita's sidebar activates the row under the pointer (a Pot opened mid-drag, 2026-11-12): cross it on a heading.
+- A browser pass into the VM's apps (ADR 0150 § O's, 2026-11-19): the VM's sshd refused a remote forward
+  on port 8095 (`remote port forwarding failed`; on 38095 it took — remembered as SELinux's port labels, not measured), and
+  Fedora resolves `*.localhost` to `::1` first, so the tunnel lands on a high port and a forwarder in the session listens
+  on both `127.0.0.1` and `::1` at the page's port. A Firefox started over ssh while another window has the focus only
+  posts "… is ready" (GNOME's focus-stealing prevention): click the notice. Firefox asks *Allow this site to open the veyq
+  link with veyq?* before each `veyq:` launch — answer *Open Link*, never *Always allow*. A Firefox first started by a
+  pass creates `~/.config/mozilla` and `~/.cache/mozilla` (its history holds the pass's links): removed after. On the
+  Android emulator `adb root` restarts adbd and drops every `adb reverse`: set them after it; its Chrome skips the first
+  run with `_ --disable-fre --no-first-run` in `/data/local/tmp/chrome-command-line` and `am set-debug-app --persistent
+  com.android.chrome`, which declines nothing on the person's behalf.
 - A Linux debug build run outside its container (the VM) found no catalogs — they lie in the build's directory — and spoke English
   under `LANGUAGE=de` (measured 2026-11-12): copy `out/locale` beside it and set `VEYQ_LOCALE_DIR`. GTK's file dialog in an app
   that is not sandboxed is GTK's own; `GDK_DEBUG=portals` takes the portal's, as a Flatpak does.

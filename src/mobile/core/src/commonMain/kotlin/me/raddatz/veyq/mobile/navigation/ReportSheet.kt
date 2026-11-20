@@ -32,16 +32,23 @@ class ReportSheet(
     private val door: Door,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     /**
-     * Whether "only its name" is offered beside the whole: a node's report offers it; an item's (a Memory's music track,
+     * Whether "only its name" may be offered beside the whole: a node's report offers it; an item's (a Memory's music track,
      * ADR 0142 decision 11) has no name of its own to report apart, so the sheet shows no choice and sends it whole.
      */
-    val offersName: Boolean = true,
+    offersName: Boolean = true,
     /**
      * Only the name is reported, never the whole (a kept link, ADR 0120 decision 7, ADR 0150 decision 6): the node's key
      * would hand this instance's moderators the key of a link to another operator's content, which the backend refuses.
      */
     val nameOnly: Boolean = false,
 ) {
+    /**
+     * Whether the sheet offers a choice of "it and everything in it" or "only its name" — what every platform draws the
+     * scope's choice by. None for an item (sent whole) and none for a [nameOnly] sheet: a kept link has no whole to offer,
+     * so its sheet reports the name without asking (offering the whole would offer what the backend refuses).
+     */
+    val offersName: Boolean = offersName && !nameOnly
+
     /** What the sheet sends ([ShellModel.reportSheet] over a tenant, a test over a server it plays). */
     interface Door {
         /** The tenant's origin, under which its privacy notice is served. */
@@ -97,7 +104,7 @@ class ReportSheet(
     /** A change of the form, taken only while it may still change (nothing under way, nothing sent). */
     private fun edit(change: (State) -> State) = _state.update { if (it.sending || it.sent != null) it else change(it) }
 
-    fun whole(on: Boolean) = edit { if (offersName && !nameOnly) it.copy(whole = on) else it }
+    fun whole(on: Boolean) = edit { if (offersName) it.copy(whole = on) else it }
 
     /** The category by its token; one the contract does not know is not taken. */
     fun category(token: String) = edit { s -> if (NodeReport.CATEGORIES.any { it.token == token }) s.copy(category = token) else s }

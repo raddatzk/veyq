@@ -1,4 +1,5 @@
 import SwiftUI
+import VeyqCore
 
 @main
 struct VeyqApp: App {
@@ -41,11 +42,6 @@ struct VeyqApp: App {
         .commands {
             LightboxCommands()
             SearchCommands()
-            // *Open a link* in the File menu too, as a Mac app's every action is (ADR 0150 decision 4)
-            CommandGroup(after: .newItem) {
-                Button(say(.linkOpen)) { model.guests.ask(model) }
-                    .disabled(model.guests.screen != nil)
-            }
         }
         #endif
         #if os(macOS)
@@ -60,6 +56,8 @@ struct VeyqApp: App {
         }
         .restorationBehavior(.disabled)
         .defaultSize(width: 960, height: 720)
+        // a veyq: link never opens a lightbox window (it goes to the main one)
+        .handlesExternalEvents(matching: [])
         #endif
     }
 
@@ -70,6 +68,20 @@ struct VeyqApp: App {
                 ContinuedWork.start()
                 model.start()
             }
+            .onOpenURL { url in openDeepLink(url) }
+            #if os(macOS)
+            // a veyq: link goes to the window already open, never a new one
+            .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
+            #endif
+    }
+
+    /// A `veyq:` link (ADR 0150 § O): `veyq://link` opens *Open a link* over whatever shows — the sign-in, the unlock or
+    /// the open tenant —, anything else only brings the app to the front, which the system already did. Nothing of the URL
+    /// is read but what core's `DeepLink.parse` reads, and nothing of it is kept or logged. A field already open keeps
+    /// what the person typed there.
+    private func openDeepLink(_ url: URL) {
+        guard !model.inExtension, DeepLinkCompanion.shared.parse(uri: url.absoluteString) is DeepLinkLink else { return }
+        if model.guests.asking == nil { model.guests.ask(model) }
     }
 }
 

@@ -83,19 +83,21 @@ object NodeHeader {
      * offers it, its copy and download doors, the report where the server publishes its key; the move and the delete
      * always — then narrowed where the node is a guest's folder or lies in one ([inIdentityFolder]); "Available offline"
      * where [offline] offers it. Offline ([online] false) every write is taken away (ADR 0140 decision 7): what is left
-     * reads — the download — or is this device's own ("Available offline").
+     * reads — the download — or is this device's own: "Available offline" only where the node is made available already
+     * ([offlineOn]: turning it off keeps no byte and asks no server). A pin offline is not offered: it cannot be sized and
+     * confirmed before its first byte nor fetch (ADR 0140 decision 9), and nothing is queued (decision 7).
      */
     fun rights(
         kind: String, favoriteKnown: Boolean, shareable: Boolean, linksOn: Boolean, rename: Boolean, takesCover: Boolean,
         coverOffered: Boolean, copy: Boolean, download: Boolean, report: Boolean, inGuestFolder: Boolean,
-        offline: Boolean = false, online: Boolean = true,
+        offline: Boolean = false, online: Boolean = true, offlineOn: Boolean = false,
     ): Rights {
         val granted = Rights(
             favorite = favoriteKnown, share = shareable && linksOn, rename = rename, move = true,
             cover = takesCover && coverOffered, copy = copy, download = download, report = report, delete = true, offline = offline,
         )
         val narrowed = if (inGuestFolder) inIdentityFolder(granted, kind) else granted
-        return if (online) narrowed else readOnly(narrowed)
+        return if (online) narrowed else readOnly(narrowed).let { it.copy(offline = it.offline && offlineOn) }
     }
 
     /** [rights] while the server is unreachable: no write (the heart, the link, rename, move, cover, copy, report, delete). */

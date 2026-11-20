@@ -1,7 +1,7 @@
 // What the core says, in words (ADR 0123's Consequences, the Windows app): a Notice by its key and arguments through
 // the generated Words.Say, a Piece piece by piece, a line's pieces joined — Linux's said.rs, Android's NoticeText.kt,
 // Apple's say(notice). Nothing here decides what is said; that is the core's (ADR 0136 decision 1). Said.cs writes the
-// money, days and sizes; this half needs the wire's types, which the words' tests do not compile.
+// money, days and sizes; this half needs the wire's types (Veyq.Tests compiles both, ImportTextTest reads notices through it).
 using System;
 using System.Collections.Generic;
 using System.Globalization;

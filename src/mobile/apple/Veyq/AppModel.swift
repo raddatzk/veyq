@@ -6,12 +6,11 @@ import VeyqCore
 import UIKit
 #endif
 
-/// One server in the switcher: its account and the tenants the switcher lists there.
+/// One tenant row of the switcher (core's `ShellWords.SwitcherEntry`) and the account it switches to.
 struct ServerEntry: Identifiable {
     let account: VeyqAccount
-    let tenants: [TenantRef]
-    var id: String { account.key }
-    var label: String { account.label }
+    let entry: ShellWords.SwitcherEntry
+    var id: String { entry.connection + "\n" + entry.tenant.tenantId }
 }
 
 /// A tenant on "Manage servers"; `spaces` is nil while they load.
@@ -77,6 +76,8 @@ final class AppModel {
     private(set) var objects: [ObjectRef] = []
     private(set) var favorites: [ObjectRef] = []
     private(set) var drawer: ArrangedList = ArrangedList(favorites: [], recent: [], all: [])
+    /// The drawer's sections with something in them (core's `Lists.drawerSections`): an empty one is not drawn.
+    private(set) var drawerSections: [DrawerSection] = []
     private(set) var switching = false
     /// The shell's banner while the server is out of reach (core's `ShellModel.State.banner`); nil online.
     private(set) var offlineBanner: VeyqCore.Notice?
@@ -698,9 +699,10 @@ final class AppModel {
         applications = l.applications
         filters = l.filters.map { $0 as? ApplicationId }
         drawer = l.drawer
-        servers = session.accounts.map { c in
-            ServerEntry(account: c, tenants: hidden.visibleTenants(connectionKey: c.key, tenants: c.tenants, current: c == account ? tenant : nil))
+        servers = ShellWords.shared.switcher(accounts: session.accounts, hidden: hidden, current: account, tenant: tenant).compactMap { e in
+            session.accounts.first { $0.key == e.connection }.map { ServerEntry(account: $0, entry: e) }
         }
+        drawerSections = l.drawerSections
         let wasSearching = shell.searching
         shell = state.shell
         // the search left for anything but what it opened (whose back returns to it): the field empties (core's `close`)

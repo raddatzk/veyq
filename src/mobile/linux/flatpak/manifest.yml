@@ -121,6 +121,9 @@ modules:
       - cargo build --offline --locked --release
       - install -Dm755 target/release/veyq /app/bin/veyq
       - install -Dm755 inputs/lib/libveyq.so /app/lib/libveyq.so
+      # the desktop entry claims `veyq:` (MimeType=x-scheme-handler/veyq, Exec=veyq %u; ADR 0150 § O3): flatpak exports it with
+      # its MimeType, and a second launch's link reaches the running instance over the session bus under the app's own id,
+      # which a Flatpak may own without a finish-arg
       - install -Dm644 "inputs/generated/linux/theme/@APP_ID@.desktop" "/app/share/applications/@APP_ID@.desktop"
       - install -Dm644 "inputs/generated/linux/theme/icons/scalable/apps/@APP_ID@.svg" "/app/share/icons/hicolor/scalable/apps/@APP_ID@.svg"
       - install -Dm644 "inputs/generated/linux/theme/icons/symbolic/apps/@APP_ID@-symbolic.svg" "/app/share/icons/hicolor/symbolic/apps/@APP_ID@-symbolic.svg"

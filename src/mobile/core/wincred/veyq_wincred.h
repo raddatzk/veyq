@@ -1,7 +1,8 @@
 /*
  * Windows' key stores for the core's WindowsDeviceKeys (mingwMain, session/WindowsDeviceKeys.kt): DPAPI for the bind
  * keys, the secrets and the unlock key where Windows Hello is not set up; the Microsoft Passport Key Storage Provider
- * (NCrypt) for the unlock key behind Windows Hello (ADR 0136's Consequences).
+ * (NCrypt) for the unlock key behind Windows Hello (ADR 0136's Consequences); the Credential Locker for a received link's
+ * guest session (sharing/WindowsGuestSessions.kt, ADR 0150 decision 3).
  *
  * Every Windows call is made here, in C, and only plain integers, byte buffers and UTF-16 strings cross into Kotlin:
  * the interop exposes this header alone (wincred.def's headerFilter), so none of windows.h's types meets
@@ -14,6 +15,7 @@
 #define VEYQ_WINCRED_H
 
 #include <stdint.h>
+#include <string.h>
 #include <wchar.h>
 #include <windows.h>
 #include <wincrypt.h>
@@ -194,5 +196,89 @@ static inline int32_t veyq_ngc_delete_key(uint64_t key) {
 
 /* The console's window, 0 where the process has none: the prompt's owner for the Hello probe, a console process. */
 static inline uint64_t veyq_console_window(void) { return (uint64_t)(uintptr_t)GetConsoleWindow(); }
+
+/*
+ * The Credential Locker (Windows.Security.Credentials.PasswordVault) for a received link's guest session (ADR 0150
+ * decision 3; the core's sharing/WindowsGuestSessions.kt): one PasswordCredential per session, its resource the name the
+ * core gives, its user name VEYQ_VAULT_USER, its password the session. WinRT through its C ABI: the sysroot has no
+ * windows.security.credentials.h, so the two interfaces are declared here, their IIDs and method order as Windows'
+ * metadata names them (read on the Windows VM 2026-11-19: IPasswordVault 61fd2c0b-…, Add Remove Retrieve
+ * FindAllByResource FindAllByUserName RetrieveAll; IPasswordCredential 6ab18989-…, get/put Resource, UserName, Password,
+ * RetrievePassword, get_Properties). Every call initialises the calling thread's apartment (multithreaded where it has
+ * none) and leaves it as it found it.
+ */
+#include "veyq_wincred_vault.h"
+
+/* Keeps [password] under [resource], replacing what was kept there. */
+static inline int32_t veyq_vault_write(const wchar_t *resource, const wchar_t *password) {
+    HRESULT hr;
+    int entered = veyq_ro_enter(&hr);
+    if (FAILED(hr)) return (int32_t)hr;
+    veyq_vault *vault = NULL;
+    veyq_credential *c = NULL;
+    HSTRING r = NULL, u = NULL, p = NULL;
+    hr = veyq_activate(L"Windows.Security.Credentials.PasswordVault", &VEYQ_IID_PASSWORD_VAULT, (void **)&vault);
+    if (SUCCEEDED(hr)) hr = veyq_activate(L"Windows.Security.Credentials.PasswordCredential", &VEYQ_IID_PASSWORD_CREDENTIAL, (void **)&c);
+    if (SUCCEEDED(hr)) hr = veyq_hstring(resource, &r);
+    if (SUCCEEDED(hr)) hr = veyq_hstring(VEYQ_VAULT_USER, &u);
+    if (SUCCEEDED(hr)) hr = veyq_hstring(password, &p);
+    if (SUCCEEDED(hr)) hr = c->v->put_Resource(c, r);
+    if (SUCCEEDED(hr)) hr = c->v->put_UserName(c, u);
+    if (SUCCEEDED(hr)) hr = c->v->put_Password(c, p);
+    if (SUCCEEDED(hr)) hr = vault->v->Add(vault, c);
+    WindowsDeleteString(r);
+    WindowsDeleteString(u);
+    WindowsDeleteString(p);
+    if (c) c->v->base.Release(c);
+    if (vault) vault->v->base.Release(vault);
+    if (entered) RoUninitialize();
+    return (int32_t)hr;
+}
+
+/*
+ * The password kept under [resource] into [buf] (UTF-16, [cap] units, not terminated), its length in [*len]; an error
+ * where nothing is kept, and HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER) with the length needed where [cap] is short.
+ */
+static inline int32_t veyq_vault_read(const wchar_t *resource, wchar_t *buf, int32_t cap, int32_t *len) {
+    HRESULT hr;
+    int entered = veyq_ro_enter(&hr);
+    if (FAILED(hr)) return (int32_t)hr;
+    veyq_vault *vault = NULL;
+    veyq_credential *c = NULL;
+    HSTRING p = NULL;
+    *len = 0;
+    hr = veyq_activate(L"Windows.Security.Credentials.PasswordVault", &VEYQ_IID_PASSWORD_VAULT, (void **)&vault);
+    if (SUCCEEDED(hr)) hr = veyq_vault_retrieve(vault, resource, &c);
+    if (SUCCEEDED(hr)) hr = c->v->RetrievePassword(c);
+    if (SUCCEEDED(hr)) hr = c->v->get_Password(c, &p);
+    if (SUCCEEDED(hr)) {
+        UINT32 n = 0;
+        const wchar_t *raw = WindowsGetStringRawBuffer(p, &n);
+        *len = (int32_t)n;
+        if ((int32_t)n > cap) hr = HRESULT_FROM_WIN32(ERROR_INSUFFICIENT_BUFFER);
+        else if (n > 0) memcpy(buf, raw, n * sizeof(wchar_t));
+    }
+    WindowsDeleteString(p);
+    if (c) c->v->base.Release(c);
+    if (vault) vault->v->base.Release(vault);
+    if (entered) RoUninitialize();
+    return (int32_t)hr;
+}
+
+/* Removes what is kept under [resource]; an error where nothing is. */
+static inline int32_t veyq_vault_remove(const wchar_t *resource) {
+    HRESULT hr;
+    int entered = veyq_ro_enter(&hr);
+    if (FAILED(hr)) return (int32_t)hr;
+    veyq_vault *vault = NULL;
+    veyq_credential *c = NULL;
+    hr = veyq_activate(L"Windows.Security.Credentials.PasswordVault", &VEYQ_IID_PASSWORD_VAULT, (void **)&vault);
+    if (SUCCEEDED(hr)) hr = veyq_vault_retrieve(vault, resource, &c);
+    if (SUCCEEDED(hr)) hr = vault->v->Remove(vault, c);
+    if (c) c->v->base.Release(c);
+    if (vault) vault->v->base.Release(vault);
+    if (entered) RoUninitialize();
+    return (int32_t)hr;
+}
 
 #endif

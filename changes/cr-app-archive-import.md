@@ -38,7 +38,7 @@ folders, Depot's files and drop boxes, Expenses' Pots, Memories' Memories and ch
   this Mac (#928)**; the macOS app runs here when the screen is unlocked (else named open).
 - **Order:** after #987 (done 2026-11-19), whose share into a folder and drop onto a level on Android and Apple are two
   of this CR's entries (core's `navigation/AddHere`: `Level.take` and `Level.drop`; iOS's handoff of kind `FOLDER`,
-  queued by `AppModel.pickUpHandoffs`). Block H's [cr-app-received-links](cr-app-received-links.md) edits `AppKinds.kt` in parallel: re-read it
+  queued by `AppModel.pickUpHandoffs`). Block H's cr-app-received-links (done 2026-11-19, ADR 0150) edited `AppKinds.kt` in parallel: re-read it
   before editing.
 - **Out of scope:** a guest's import (never, ADR 0082 decision 7); an import that goes on with the app closed (Q1);
   the web's own import, unchanged but for phase 2's test reading the shared cases.
@@ -64,7 +64,7 @@ Branch `claude/refine-open` at `6de08a8d0`. `C=src/mobile/core/src/commonMain/ko
 
 ## Decisions
 
-Written into **ADR 0152** in phase 1 (the next after [cr-app-account-rest](cr-app-account-rest.md)'s 0151; re-run
+Written into **ADR 0152** in phase 1 (the next after cr-app-account-rest's 0151; re-run
 `git log --all --name-only --format= | grep -o 'docs/decisions/01[4-9][0-9]-' | sort -u` in phase 1 and take the next
 free number). Its title: *The apps import a download as the web does: the web's reader and walk in the core, each kind's
 import its application's, recognised by every Depot upload.* ADR 0149's "Import stays the web's until #985" and the use
@@ -183,8 +183,22 @@ The web's `export.*` import keys ported to `words.json` (EN+DE, each `note` nami
   (`notes.txt` 44 characters, the Pot's Dinner €42.00, the Memory's medium and chapter, the drop box as a folder);
   *Upload as a file* left the ZIP as a file; Cancel at 4 of 7 left nothing. Not run here: the drop from Files (Broadway
   has none) and a version-3 manifest (the core's `ImportCasesTest` holds `newer_version`).
-- [ ] **10 Windows** — the same (the settings frame's sub-page form or a `ContentDialog`, as ADR 0148's Windows
+- [x] **10 Windows** — the same (the settings frame's sub-page form or a `ContentDialog`, as ADR 0148's Windows
   flows); its drops screened. · Done when: `python3 windows/run.py build` green on the VM; § Passes' Windows row.
+  *Status (2026-11-19):* built — `ImportDialog.cs` (one `ContentDialog` through reading, the summary, running and done;
+  Import keeps it open and runs, *Upload as a file*, Cancel and Escape send `Import.Cancel`, a done import closes with the
+  core's line in the shell's `InfoBar`), its face without a widget in `ImportText.cs` (`ImportTextTest`, 8 cases; bitten:
+  no-room counted as an error → red); *Upload files*, *Upload folder…* and every drop go through `Import.Screen` /
+  `Import.ScreenFolder` (`DropSort.Screen`/`ScreenFolder`, one import per drop — the rest `DropSort.Plain`, `DropSortTest`).
+  `run.py build` green on the VM (`Veyq.Tests` 84, `Veyq.Bridge.Tests` 5, `PdfWebTest`). The Windows pass, a throwaway on
+  `tw-win.localhost` (UI Automation, the debug build): `web-download.zip` picked by *Upload files* into a folder → offered
+  (7 items, the web's summary) → Cancel wrote nothing; *Upload as a file* uploaded the ZIP (9778 B) as a file; Import then
+  Cancel while running → the level kept only the ZIP and *Trip* lay in the trash; Import → `Done, 7 of 7`, *Imported
+  “Trip”*; read back: `notes.txt` (44 B, its text), the drop box as a folder, the Pot's entry with its receipt (1661 B
+  JPEG opened), the Memory with its chapter and its photo's tile; the unpacked download picked by *Upload folder…* →
+  offered without *Upload as a file* → imported as *Trip (2)*. A drop from Explorer was not proven by UIA: the host kept
+  the app's window above Explorer, so the driven press landed on the app (no drag reached it); the drop's calls are
+  `DropSortTest`'s.
 - [ ] **11 the passes** — § Passes, each a throwaway, erased after; results into ADR 0152's Consequences.
 - [ ] **12 harvest** — the Use pages EN+DE: `spaces/download-and-import.md` § In the app, `depot/upload-files-and-folders.mdx`;
   `native-apps.md` § Built; #985's row deleted; this CR deleted. · Done when: `pnpm run check` in `site/` and every

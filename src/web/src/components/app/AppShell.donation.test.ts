@@ -70,7 +70,10 @@ describe('AppShell — the donation banner and the footer links (uc.platform.sup
     const w = await mountAt('/')
     expect(w.findAll(BANNER)).toHaveLength(1)
     expect(getMyProfile).toHaveBeenCalledOnce() // a member's banner: the account is asked
-    expect(w.find('main.content').element.firstElementChild?.matches(BANNER)).toBe(true)
+    // the first notice above the route after the open-in-app banner (ADR 0150 § O2; the address banner draws nothing here)
+    const first = w.find('main.content').element.firstElementChild
+    expect(first?.matches('[data-testid="open-in-app"]')).toBe(true)
+    expect(first?.nextElementSibling?.matches(BANNER)).toBe(true)
     expect(w.findAll('.app-operator-footer .operator-identification__project').map((l) => l.attributes('href'))).toEqual([
       'https://veyq.app/privacy/is-my-data-safe/',
       'https://veyq.app/donate/',

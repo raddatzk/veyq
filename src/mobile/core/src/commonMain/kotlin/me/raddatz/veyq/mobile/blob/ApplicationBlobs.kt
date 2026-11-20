@@ -296,12 +296,13 @@ class ApplicationBlobs(private val tenant: TenantSession) {
     }
 
     /**
-     * A listed blob's plaintext: presigned GETs from the store, each frame opened at its place in the whole blob. A
+     * A listed blob's plaintext: presigned GETs from the store, each frame opened at its place in the whole blob — from the
+     * offline store where it keeps them; [keep]: the frames fetched are kept there (a blob shown, ADR 0140 decision 8). A
      * network failure, a 5xx, 408 or 429 is tried again (at most 4 times, backing off); a 403 signs again (twice at most).
      */
-    suspend fun download(scopeId: String, node: OpenNode, b: Listed): ByteArray {
+    suspend fun download(scopeId: String, node: OpenNode, b: Listed, keep: Boolean = false): ByteArray {
         val key = keyOf(scopeId, node, b) ?: throw UploadRefused("key_unreadable")
-        return frames(scopeId, b.blobId, b.chunkCount, key)
+        return frames(scopeId, b.blobId, b.chunkCount, key, keep = keep)
     }
 
     /** The key of blob [blobId] in [role] of [node], from its wrap, or null when it does not open there (not this blob's). */

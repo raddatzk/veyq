@@ -85,7 +85,7 @@ Apple's map was not passed (the owner's).
 
 **The breached-password check is the second instance, and the first exception to opt-in.** The web's five screens
 that choose a password (set up the server, join a tenant, change a password, recover access, replace the keys with a
-new password) and the apps' two, being built (change a password, replace the keys with a new password —
+new password) and the apps' two, built 2026-11-19 on every app (change a password, replace the keys with a new password —
 [ADR 0151](../decisions/0151-the-apps-account-rest-the-sign-ins-secret-key-control-in-every-flow-that-asks-for-the-key-and-the-breached-password-check-straight-from-the-device.md) decisions 5–6) ask the Have I Been Pwned
 range API whether the password appears in known breaches, straight from the device, never through veyq. The fences apply like this:
 
@@ -122,7 +122,11 @@ password the policy refuses; a hit blocks the submit until "Use it anyway"; an e
 that could not run goes ahead. Each dialog's own test (`ChangePasswordPanel.policy`, `TenantJoinView.passwordPolicy`,
 `RecoverView`, admin-web's `SetupView`) pins that its password field's blur runs the check, that its submit awaits
 it, the note and the one line for a check that could not run; `TenantJoinView.passwordPolicy` also pins that the
-sign-in password, which chooses nothing, is never sent.
+sign-in password, which chooses nothing, is never sent. The apps' port answers to the same cases
+(`BreachCheckTest`, the web test's one for one), and `BreachCanaryTest` records every request of a signed-in account's
+check: none holds the password, its full SHA-1 or its suffix, none carries `Authorization`, none goes to the veyq
+server. No app pass has sent a live query: each blocked the range address on its own platform and saw the check that
+could not run go ahead (2026-11-19, [ADR 0151](../decisions/0151-the-apps-account-rest-the-sign-ins-secret-key-control-in-every-flow-that-asks-for-the-key-and-the-breached-password-check-straight-from-the-device.md)'s Consequences).
 
 **The day's exchange rates are the third instance, and the second exception to opt-in** ([ADR 0108](../decisions/0108-expenses-a-pot-is-a-node-its-entries-are-sealed-revisions.md)
 decision 8, [uc.expenses.exchange-rates](../features/expenses/use-cases/uc.expenses.exchange-rates.md)). Where an

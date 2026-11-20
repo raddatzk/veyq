@@ -512,6 +512,8 @@ class VeyqAccount private constructor(
     /** One account per user per server: signing in to the same one twice is the same connection. */
     override val key: String get() = "${Url(server).host}#$userId"
 
+    override val address: String get() = email
+
     /** The server's name as the switcher shows it: its host, without a scheme or a port. */
     override val label: String get() = Url(server).host
 
@@ -999,8 +1001,11 @@ class VeyqAccount private constructor(
         class Refused(val status: Int, val code: String?) : Fetched()
     }
 
-    /** A kept read's answer: its pages, and — where they came from the store with the server unreachable — as of when. */
-    internal class Read(val pages: List<ByteArray>, val offline: OfflineAsOf?)
+    /**
+     * A kept read's answer: its pages, and — where they came from the store with the server unreachable — as of when;
+     * [revision] the answer's (the kept one's on a `304` or offline), null where it has none.
+     */
+    internal class Read(val pages: List<ByteArray>, val offline: OfflineAsOf?, val revision: String? = null)
 
     /** A read the server refused ([status], its error [code]); what was kept of it is gone. */
     class Refused(val status: Int, val code: String?) : Exception("HTTP $status${code?.let { " $it" } ?: ""}")
@@ -1020,20 +1025,20 @@ class VeyqAccount private constructor(
         val key = o?.key(read, tenant, scope, id)
         if (o != null && _reach.value != Reach.Online) {
             val kept = o.answer(key!!) ?: throw Unreachable("not kept")
-            return Read(kept.pages, OfflineAsOf(kept.asOf))
+            return Read(kept.pages, OfflineAsOf(kept.asOf), kept.revision)
         }
         val kept = if (o != null && conditional) o.answer(key!!) else null
         val fetched = try {
             fetch(kept?.revision)
         } catch (e: Unreachable) {
             val stored = kept ?: o?.answer(key!!) ?: throw e
-            return Read(stored.pages, OfflineAsOf(stored.asOf))
+            return Read(stored.pages, OfflineAsOf(stored.asOf), stored.revision)
         }
         return when (fetched) {
             is Fetched.NotModified -> {
                 val k = kept ?: throw IllegalStateException("a 304 with no kept answer")
                 o!!.confirm(key!!)
-                Read(k.pages, null)
+                Read(k.pages, null, k.revision)
             }
             is Fetched.Pages -> {
                 if (o != null) {
@@ -1043,7 +1048,7 @@ class VeyqAccount private constructor(
                     // a pinned listing's revision moved (decision 9): the pins' sync fetches what is new
                     if (conditional && kept != null && kept.revision != fetched.revision && o.store.entry(key)?.pins?.isNotEmpty() == true) pinsHeld?.wake()
                 }
-                Read(fetched.pages, null)
+                Read(fetched.pages, null, fetched.revision)
             }
             is Fetched.Refused -> {
                 if (o != null && (fetched.status == 403 || fetched.status == 404)) {
@@ -1787,6 +1792,9 @@ class TenantSession internal constructor(
 
     /** One's own profile in this tenant (ADR 0148 decision 2): a new model each time a place opens it; the host closes it. Android, whose core target has no libwebp, hands its own [encoder]. */
     fun profile(encoder: me.raddatz.veyq.mobile.media.WebpEncoder? = me.raddatz.veyq.mobile.media.coreWebpEncoder): ProfileModel = ProfileModel(TenantProfileDoor(this), account.suite, encoder)
+
+    /** The kept time each of this tenant's pages shows offline (a Pot, a gallery): the shell's banner names the open page's. */
+    val pagesOffline: me.raddatz.veyq.mobile.offline.PagesOffline = me.raddatz.veyq.mobile.offline.PagesOffline()
 
     /** The members' profile pictures, synced from [people]'s revisions (`MemberAvatars`). */
     val avatars: MemberAvatars by lazy { MemberAvatars(this) }

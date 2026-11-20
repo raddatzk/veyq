@@ -14,7 +14,8 @@
 //
 // Below them the two ways in from another device (ADR 0059 §1): "Scan a code from another device",
 // only where there is a camera, and "Sign in with a QR code" — each a ceremony of DeviceLinkDialog over the server the
-// form names (nothing a scan reads changes it).
+// form names (nothing a scan reads changes it). Last, *Open a link* (ADR 0150 decision 4): a received link opened as its
+// guest, no sign-in needed (ReceivedView).
 using System;
 using System.Linq;
 using Microsoft.UI.Xaml;
@@ -47,6 +48,8 @@ internal sealed class SignInView
     /// <summary>The two device-linking entries; the scan only where there is a camera.</summary>
     private readonly Button _linkScan;
     private readonly Button _linkShow;
+    /// <summary>*Open a link*: a link someone sent, opened as its guest without signing in (ReceivedView).</summary>
+    private readonly Button _openLink;
     /// <summary>The kit's server replaced a different one the form held: said, never refused.</summary>
     private readonly TextBlock _otherServer;
     /// <summary>The kit the form last showed, so a new one fills the email and the server once.</summary>
@@ -76,6 +79,10 @@ internal sealed class SignInView
         _linkScan.Click += (_, _) => Link(server => new Call.LinkScanFromTrusted { server = server });
         _linkShow = Field(new Button { Content = Words.SigninLinkShow(), HorizontalAlignment = HorizontalAlignment.Stretch }, "signin-link-show");
         _linkShow.Click += (_, _) => Link(server => new Call.LinkShowForSignIn { server = server });
+        // *Open a link* under the sign-in (ADR 0150 decision 4): a received link needs no session
+        var openLink = Field(new Button { Content = Words.LinkOpen(), HorizontalAlignment = HorizontalAlignment.Stretch }, "open-link");
+        openLink.Click += (_, _) => ReceivedView.OpenLink(_window);
+        _openLink = openLink;
         _otherServer = Field(new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed }, "signin-kit-other-server");
         _otherServer.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
         _error = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
@@ -107,7 +114,7 @@ internal sealed class SignInView
         AutomationProperties.SetAutomationId(_heading, "signin-title");
         AutomationProperties.SetHeadingLevel(_heading, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1);
         var column = new StackPanel { Spacing = 16, MaxWidth = 420, Padding = new Thickness(24), VerticalAlignment = VerticalAlignment.Center };
-        foreach (var child in new UIElement[] { _heading, _server, _email, _password, _secretKey, _kitHeld, _openKit, _scanKit, _otherServer, _error, _submit, _cancel, _working, _linkScan, _linkShow }) column.Children.Add(child);
+        foreach (var child in new UIElement[] { _heading, _server, _email, _password, _secretKey, _kitHeld, _openKit, _scanKit, _otherServer, _error, _submit, _cancel, _working, _linkScan, _linkShow, _openLink }) column.Children.Add(child);
         // a width-capped column straight in a ScrollViewer sat off centre once the window was resized (measured): the
         // ScrollViewer's child stretches, the column centres in it
         var stretch = new Grid();
@@ -147,13 +154,16 @@ internal sealed class SignInView
         }
     }
 
+    /// <summary>What the open picker offers for a kit: a PDF or a picture (the account flows' kit control too).</summary>
+    internal static readonly string[] KitFileTypes = [".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".avif", ".bmp", ".tif", ".tiff"];
+
     /// <summary>"Open Emergency Kit": the open picker for a PDF or a picture; the core reads the file at the path picked.</summary>
     private async void PickKit()
     {
         try
         {
             var picker = new Windows.Storage.Pickers.FileOpenPicker { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary };
-            foreach (var ext in new[] { ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".avif", ".bmp", ".tif", ".tiff" }) picker.FileTypeFilter.Add(ext);
+            foreach (var ext in KitFileTypes) picker.FileTypeFilter.Add(ext);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
             var file = await picker.PickSingleFileAsync();
             if (file is null || string.IsNullOrEmpty(file.Path)) return;
@@ -210,7 +220,7 @@ internal sealed class SignInView
 
     /// <summary>What the kit's scan shows but its camera: no camera or a refused one says to open the file or type the key
     /// instead (the web's scanError); a found kit closes the dialog.</summary>
-    private static UIElement? ScanSaid(ScanShown shown) => shown.state is ScanState.NoCamera or ScanState.Denied
+    internal static UIElement? ScanSaid(ScanShown shown) => shown.state is ScanState.NoCamera or ScanState.Denied
         ? new TextBlock { Text = Words.SigninKitScanDenied(), TextWrapping = TextWrapping.Wrap, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
         : null;
 

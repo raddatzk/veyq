@@ -140,7 +140,8 @@ internal class GuestPotDoor(private val access: GuestAccess) : PotDoor {
             return BlobMeta.open(suite, key, unb64(sealed))
         }
 
-        override suspend fun download(node: OpenNode, b: ApplicationBlobs.Listed): ByteArray {
+        // a link's guest keeps nothing on the device (ADR 0150 decision 3): [keep] is a member's
+        override suspend fun download(node: OpenNode, b: ApplicationBlobs.Listed, keep: Boolean): ByteArray {
             val key = keyOf(node, b) ?: throw ApplicationBlobs.UploadRefused("key_unreadable")
             return access.blobs.whole(b.blobId, b.chunkCount, key)
         }

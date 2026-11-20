@@ -5,8 +5,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use adw::prelude::*;
-use gtk::glib;
-use veyq::bridge::wire::{Answer, Call, Config, Gate, Method, Update, Watched};
+use gtk::{gio, glib};
+use veyq::bridge::wire::{Answer, Call, Config, DeepScreen, Gate, Method, Update, Watched};
 use veyq::bridge::{self, DeviceStore, Start};
 use veyq::shell::Shell;
 use veyq::manage::Manage;
@@ -18,8 +18,11 @@ use veyq::{dev_login, dev_scan, dev_settings, words};
 fn main() -> glib::ExitCode {
     words::init();
     veyq::theme::register();
-    let app = adw::Application::builder().application_id(APP_ID).build();
+    // HANDLES_OPEN: a `veyq:` link (the desktop entry's `x-scheme-handler/veyq`, `Exec=veyq %u`) arrives at [open] — in
+    // the running instance, where GApplication hands a second launch's URI over D-Bus and that launch exits
+    let app = adw::Application::builder().application_id(APP_ID).flags(gio::ApplicationFlags::HANDLES_OPEN).build();
     app.connect_activate(activate);
+    app.connect_open(open);
     app.connect_shutdown(|_| bridge::shutdown());
     app.run()
 }
@@ -283,6 +286,37 @@ fn activate(app: &adw::Application) {
                 Ok(_) => {}
                 Err(e) => eprintln!("veyq: a shell update did not read: {:?}", e.0),
             }
+        }
+    });
+}
+
+/// A `veyq:` link (ADR 0150 § O): the window brought to the front — made first if the link started the app —, and on
+/// `veyq://link` *Open a link* over whatever it shows (the sign-in, the unlock, the open tenant); a dialog already open
+/// keeps what was typed there. The core reads the host alone (`Call::DeepLink`); nothing of the URI is kept or said on
+/// stderr.
+fn open(app: &adw::Application, files: &[gio::File], _hint: &str) {
+    if app.active_window().is_none() {
+        activate(app);
+    }
+    let Some(window) = app.active_window() else { return };
+    window.present();
+    let uris: Vec<String> = files.iter().map(|f| f.uri().to_string()).collect();
+    glib::spawn_future_local(async move {
+        let mut link = false;
+        for uri in uris {
+            match bridge::call(&Call::DeepLink { uri }).await.map(|(answer, _)| answer) {
+                Ok(Answer::DeepLinked { screen }) => link |= matches!(screen, DeepScreen::Link),
+                _ => eprintln!("veyq: a veyq: link was not answered"),
+            }
+        }
+        let shown = window
+            .downcast_ref::<adw::ApplicationWindow>()
+            .and_then(|w| w.visible_dialog())
+            .is_some_and(|d| d.widget_name() == veyq::received::OPEN_LINK_DIALOG);
+        // the screen alone, for a pass's log: nothing of the link
+        eprintln!("veyq: a veyq: link opened {}", if link { "Open a link" } else { "the app where it is" });
+        if link && !shown {
+            veyq::received::open_link(&window);
         }
     });
 }

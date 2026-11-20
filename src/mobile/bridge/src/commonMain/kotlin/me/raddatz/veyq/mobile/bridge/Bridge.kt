@@ -936,13 +936,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noEditor
             is Call.EditorDropReceipt -> editors[call.editor]?.model?.dropReceipt(call.receipt).done(Answer.Why.NO_SUCH_EDITOR)
             is Call.ReceiptOpen -> pots[call.pot]?.let { pot ->
-                val bytes = pot.openReceipt(call.receipt) ?: return Answer.Refused(Answer.Why.NO_RECEIPT)
+                val bytes = pot.openReceipt(call.receipt) ?: return Answer.Refused(pot.receiptRefusal())
                 payload(bytes)
                 Answer.Bytes(me.raddatz.veyq.mobile.expenses.Receipts.mediaTypeOf(bytes))
             } ?: noPot
             is Call.ReceiptPages -> Answer.ReceiptPages(me.raddatz.veyq.mobile.expenses.Receipts.pagesShown(call.total), me.raddatz.veyq.mobile.expenses.Receipts.pagesCut(call.total))
             is Call.ReceiptSave -> pots[call.pot]?.let { pot ->
-                val bytes = pot.openReceipt(call.receipt) ?: return Answer.Refused(Answer.Why.NO_RECEIPT)
+                val bytes = pot.openReceipt(call.receipt) ?: return Answer.Refused(pot.receiptRefusal())
                 val written = runCatching { parts.files.write(call.path) { sink -> sink(bytes); true } }.getOrDefault(false)
                 if (written) Answer.Done else Answer.Refused(Answer.Why.NOT_WRITTEN)
             } ?: noPot
@@ -1189,6 +1189,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShareDelete -> shares[call.share]?.let { Answer.Said(it.delete().notice) } ?: noShare
             is Call.ShareSwitchOff -> shares[call.share]?.let { Answer.Said(it.switchOff(call.link).notice) } ?: noShare
             is Call.ShareReactivate -> shares[call.share]?.let { Answer.Said(it.reactivate(call.link).notice) } ?: noShare
+            is Call.DeepLink -> Answer.DeepLinked(
+                when (me.raddatz.veyq.mobile.sharing.DeepLink.parse(call.uri)) {
+                    is me.raddatz.veyq.mobile.sharing.DeepLink.Link -> DeepScreen.LINK
+                    is me.raddatz.veyq.mobile.sharing.DeepLink.Open -> DeepScreen.OPEN
+                },
+            )
             is Call.ScanOpen -> {
                 val id = ids.incrementAndFetch()
                 scans.put(id, when (call.kind) {
@@ -2756,6 +2762,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             servers = parts.session.accounts.map { c ->
                 ShellShown.ShownServer(c.key, c.label, parts.hidden.visibleTenants(c.key, c.tenants, if (c == open.account) open.tenant else null))
             },
+            switcher = ShellWords.switcher(parts.session.accounts, parts.hidden, open.account, open.tenant).map {
+                ShellShown.ShownSwitcherEntry(it.connection, it.tenant, it.name, it.detail, it.line, it.current)
+            },
+            drawerSections = lists.drawerSections,
             space = space,
             spaceName = ShellWords.space(space),
             switcherSubtitle = ShellWords.switcherSubtitle(space, open.tenant.name, open.account.label),
@@ -3354,3 +3364,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         const val HIDDEN = "veyq.hidden"
     }
 }
+
+/** Why a receipt of this Pot did not open: offline, that this device does not keep it (`PotModel.receiptFailure`); else none. */
+private fun PotModel.receiptRefusal(): Answer.Why =
+    if (receiptFailure() == Msg.OFFLINE_NOT_KEPT) Answer.Why.NOT_KEPT_OFFLINE else Answer.Why.NO_RECEIPT
+

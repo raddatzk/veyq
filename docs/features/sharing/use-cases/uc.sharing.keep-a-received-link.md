@@ -68,6 +68,8 @@ was shared — without this server learning anything about it.
 
 ## Related
 
+- **The apps** (A3, built 2026-11-19 on every app, [ADR 0150](../../../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md) decision 6; [native-apps](../../../crosscutting/native-apps.md) § Built, by area): *New → Bookmark*, a kept link's page and reports, *Keep*. Tests (no coverage surface, ADR 0040): `BookmarksTest`, `ShellModelTest` (a kept link's sheet offers its name alone; its page after rename and trash); live `ReceivedLinkLiveTest` (kept in the personal space), `GuestGapsLiveTest` (listed, found, opened on its own page), `GuestRemainderLiveTest`.
+- End-user view (docs site): [Open a link in the app](../../../../site/src/content/docs/sharing/open-a-link-in-the-app.mdx) (*Keep*)
 - Enabler: [en.sharing.public-link](../enablers/en.sharing.public-link.md) (the link's shape, key and gates)
 - **Feature:** [sharing](../_index.md)
 - **Decisions:** [ADR 0120](../../../decisions/0120-a-received-link-is-kept-as-a-bookmark-node-that-opens-and-reports-where-the-share-lives.md),
@@ -76,5 +78,7 @@ was shared — without this server learning anything about it.
   [ADR 0079](../../../decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md) (a core kind).
 - **Built since:** browsing the share in place, of this or another instance —
   [uc.sharing.browse-a-received-share-in-place](uc.sharing.browse-a-received-share-in-place.md) (ADR 0121).
-- **Planned:** a received link kept in the account (inbox #435).
+- **Built since:** no account-level list — a link kept privately is a bookmark in the personal space; the apps open,
+  keep and report a received link, and the web's share page opens the app with *Copy link and open the app*
+  ([ADR 0150](../../../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md) decision 1, § O).
 - End-user view (docs site): [Keep a link someone sent you](../../../../site/src/content/docs/sharing/keep-a-link.mdx)

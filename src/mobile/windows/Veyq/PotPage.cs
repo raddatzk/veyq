@@ -12,6 +12,11 @@
 // (AddEntry). Its download
 // (Pot.Download) goes where the system's save picker says, under the name the core gives (Pot.ArchiveName); the core
 // writes the file (ADR 0137 decision 3).
+//
+// Offline (ADR 0153 decision 6) the Pot reads as of its kept ledger: the shell's InfoBar says "Offline — content as of …",
+// as over a gallery; the view's canWrite is off, so New, Record, Restore, the editor's Save and the settings' edits are not
+// offered (the core's). Where it did not open, the page says the core's failure word (Update.Pot's failure): offline,
+// that this device does not keep it; else that it did not open.
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -32,6 +37,8 @@ internal sealed class PotPage : IDisposable
     private long? _id;
     private Watch? _watch;
     private PotModelState? _state;
+    /// <summary>What the page says where the Pot did not open (Update.Pot's failure, a word's key); null where it opened.</summary>
+    private string? _failure;
     private IReadOnlyList<ShownTab> _tabs = [];
     private BarTab? _selected;
     private bool _closed;
@@ -54,6 +61,13 @@ internal sealed class PotPage : IDisposable
     private bool _canWrite;
 
     public ObjectRef Ref { get; }
+
+    /// <summary>The model a received link's guest page handed in, opened by the core (null: Pot.Open opens it).</summary>
+    private readonly long? _opened;
+
+    /// <summary>A received link's guest Pot holds its places itself (the shell's bar is a tenant's): Entries and Overview,
+    /// and Settings where the core offers them (PotView.settingsOffered: a guest who writes, #1035).</summary>
+    private bool OwnPlaces => _opened is not null;
 
     /// <summary>Told whether the Pot takes writes, each time its view is read (its header's facts).</summary>
     public Action<bool>? Read { get; set; }
@@ -85,9 +99,12 @@ internal sealed class PotPage : IDisposable
 
     /// <summary>Opens Pot <paramref name="r"/> on a page of <paramref name="window"/>; <paramref name="say"/> says what
     /// its actions did.</summary>
-    public PotPage(ObjectRef r, Window window, Action<bool, string> say)
+    /// <summary>With <paramref name="opened"/>, over the model the core already opened (a received link's guest page,
+    /// ReceivedPage.pot), watched and closed with the page as a member's is.</summary>
+    public PotPage(ObjectRef r, Window window, Action<bool, string> say, long? opened = null)
     {
         Ref = r;
+        _opened = opened;
         _window = window;
         _say = say;
         _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -147,7 +164,7 @@ internal sealed class PotPage : IDisposable
         Answer answer;
         try
         {
-            (answer, _) = await Core.CallAsync(new Call.PotOpen { Ref = Ref });
+            (answer, _) = _opened is { } opened ? ((Answer)new Answer.PotOpened { pot = opened }, (byte[]?)null) : await Core.CallAsync(new Call.PotOpen { Ref = Ref });
         }
         catch (Exception e)
         {
@@ -170,8 +187,11 @@ internal sealed class PotPage : IDisposable
         {
             if (_closed || update is not Update.Pot p) return;
             _state = p.state;
+            _failure = p.failure;
+            if (p.state?.offline is { } offline) Log.Write($"pot offline: as of {offline.asOf?.ToString() ?? "unknown"}, failure {p.failure ?? "-"}");
             if (p.state?.view is { } view)
             {
+                if (OwnPlaces) GuestPlaces(view.settingsOffered);
                 Log.Write($"pot update: {view.entries.Count} entries, {view.deleted.Count} deleted, {view.settleUp.Count} to settle");
                 Read?.Invoke(view.canWrite);
                 if (view.canWrite != _canWrite)
@@ -304,7 +324,8 @@ internal sealed class PotPage : IDisposable
             var status = new StackPanel { Spacing = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             if (_state is { failed: true })
             {
-                status.Children.Add(Text(Words.PotOpenFailed(), "pot-failed", "SubtitleTextBlockStyle"));
+                // offline, that this device does not keep it (not a failed load); else that it did not open
+                status.Children.Add(Text(_failure is { } failure ? Said.Key(failure) : Words.PotOpenFailed(), "pot-failed", "SubtitleTextBlockStyle"));
             }
             else
             {
@@ -369,7 +390,14 @@ internal sealed class PotPage : IDisposable
         var current = _selected?.key;
         bar.SelectionChanged += (b, _) =>
         {
-            if (b.SelectedItem?.Tag is string key && key != current) Act.Send(new Call.ShellSelect { tab = new BarTab { key = key } });
+            if (b.SelectedItem?.Tag is not string key || key == current) return;
+            if (!OwnPlaces) Act.Send(new Call.ShellSelect { tab = new BarTab { key = key } });
+            else
+            {
+                // a guest's place is the page's own
+                _selected = new BarTab { key = key };
+                Draw();
+            }
         };
         return bar;
     }
@@ -591,6 +619,19 @@ internal sealed class PotPage : IDisposable
     }
 
     /// <summary>The Settings place (PotSettingsView): opened in the core the first time it shows, kept across redraws.</summary>
+    /// <summary>A guest Pot's places (OwnPlaces), its Settings only where offered; a place no longer offered gives way to
+    /// the entries.</summary>
+    private void GuestPlaces(bool settings)
+    {
+        var keys = new List<string> { "expenses.entries", "expenses.overview" };
+        if (settings) keys.Add("expenses.settings");
+        var tabs = keys.Select(k => new ShownTab { tab = new BarTab { key = k }, word = "tab_" + k.Replace('.', '_') }).ToList();
+        var selected = _selected is { } s && keys.Contains(s.key) ? s : new BarTab { key = "expenses.entries" };
+        if (Same(tabs, _tabs) && selected.key == _selected?.key) return;
+        _tabs = tabs;
+        _selected = selected;
+    }
+
     private void Settings(StackPanel content)
     {
         if (_id is not { } pot) return;
