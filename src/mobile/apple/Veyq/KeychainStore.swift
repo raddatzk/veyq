@@ -65,7 +65,7 @@ final class KeychainStore: NSObject, KeychainBridge {
         query[kSecReturnAttributes as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         if protected {
-            guard let evaluated = authenticate(prompt) else { return KeychainRead(data: nil, cancelled: true) }
+            guard let evaluated = authenticate(prompt) else { return KeychainRead(data: nil, cancelled: true, locked: false) }
             query[kSecUseAuthenticationContext as String] = evaluated
         }
         var out: CFTypeRef?
@@ -73,9 +73,11 @@ final class KeychainStore: NSObject, KeychainBridge {
         if status == errSecSuccess, let item = out as? [String: Any], let data = item[kSecValueData as String] as? Data {
             let passcode = !protected && (item[kSecAttrAccessible as String] as? String) == (kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly as String)
             moveIntoSharedGroup(account, data: data, protected: protected, passcode: passcode, group: item[kSecAttrAccessGroup as String] as? String)
-            return KeychainRead(data: data, cancelled: false)
+            return KeychainRead(data: data, cancelled: false, locked: false)
         }
-        return KeychainRead(data: nil, cancelled: status == errSecUserCanceled || status == errSecAuthFailed)
+        // errSecInteractionNotAllowed: an item readable only while unlocked (the login level's key), read on a locked device
+        // by a run in the background (ADR 0153 decision 8) — there, but closed now
+        return KeychainRead(data: nil, cancelled: status == errSecUserCanceled || status == errSecAuthFailed, locked: status == errSecInteractionNotAllowed)
     }
 
     /// The person's Face ID, Touch ID or passcode, asked once within `reuse` and blocking the calling thread; the

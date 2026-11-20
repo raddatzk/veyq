@@ -28,6 +28,8 @@ protocol SettingsActions: AnyObject {
     func setOfflineLimit(_ amount: String, _ unit: LimitUnit)
     func turnOfflineLimitOff()
     func clearOfflineCache()
+    /// *Sync in the Background* (ADR 0153 decision 8) turned on or off for this account on this device.
+    func setBackgroundSync(_ on: Bool)
     func unpinOffline(_ node: String)
     /// "Remove All Offline Content", asked first (core's `askingRemoveAll`), then `removeAllOffline` or the cancel.
     func askRemoveAllOffline()
@@ -41,6 +43,7 @@ extension SettingsActions {
     func setOfflineLimit(_ amount: String, _ unit: LimitUnit) {}
     func turnOfflineLimitOff() {}
     func clearOfflineCache() {}
+    func setBackgroundSync(_ on: Bool) {}
     func unpinOffline(_ node: String) {}
     func askRemoveAllOffline() {}
     func cancelRemoveAllOffline() {}
@@ -151,6 +154,7 @@ struct SettingsView: View {
                 .id("add-device")
             }
             storage.id("storage")
+            backgroundSync.id("background-sync")
             if let maps { MapServicesSection(model: maps).id("maps") }
             #if os(iOS)
             // D3: the app follows the system's appearance; its language is the system's per-app setting
@@ -326,6 +330,27 @@ struct SettingsView: View {
             }
         } else if let why = state.storageUnavailable {
             Section(say(.accountSettingsStorage)) {
+                Text(say(why)).foregroundStyle(Role.muted)
+            }
+        }
+    }
+
+    /// *Sync in the Background* (ADR 0153 decision 8): the core's switch where the account stays signed in at the login
+    /// level, as the system's own settings show one — a toggle, what it does in the footer —; where the core says why it is
+    /// missing (the presence level, the password), that line instead. Nothing on a Mac, which the core gives neither.
+    @ViewBuilder
+    private var backgroundSync: some View {
+        if let on = state.backgroundSync {
+            Section {
+                Toggle(isOn: Binding(get: { on.boolValue }, set: { actions.setBackgroundSync($0) })) {
+                    Label(say(.accountSettingsBackgroundSync), systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(state.working)
+            } footer: {
+                Text(say(.accountSettingsBackgroundSyncHint))
+            }
+        } else if let why = state.backgroundSyncMissing {
+            Section {
                 Text(say(why)).foregroundStyle(Role.muted)
             }
         }

@@ -15,6 +15,10 @@ struct VeyqApp: App {
         // the music's format matrix, no sign-in and no window needed (DevAudio)
         if let dir = DevAudio.requested { Task { await DevAudio.run(dir) } }
         #endif
+        #if os(iOS)
+        // registered before the launch ends, also when the system launches the app only for a run (no scene then)
+        BackgroundSync.start(AppModel.appDevice)
+        #endif
     }
 
     var body: some Scene {
