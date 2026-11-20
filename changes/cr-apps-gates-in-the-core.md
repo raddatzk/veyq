@@ -146,7 +146,28 @@ Branch `claude/core-owns-refine` at `a75188eb8` (= `claude/windows-cr-f6c73c`). 
   ask the name at the write (`createFolder`, `uploadAsking`); a settle-up's *Record* reads `PotView.canRecord`.
   **Deviation:** a guest's gallery *Add* still shows only once named (`canAdd = session != null`): `GalleryModel`'s guest
   upload takes no naming flow yet — inbox #1044.
-- [ ] **4 Apple** — the same; `try?` gone; the prefill under `#if DEBUG`. · Done when: both Apple builds green.
+- [x] **4 Apple** — the same; `try?` gone; the prefill under `#if DEBUG`. · Done when: both Apple builds green.
+  **Built** 2026-11-20 (`claude/k-apple`): every drop is `AppModel.drop(providers, onto: DropTarget)` over
+  `ShellModel.drop` — the level (`levelDropTarget`, a `Refused` one handed to the pick mode, phase 1's deviation 3), a
+  folder's row and tile (`DropsOnto`/`NodeTileItem.drop`, attached only where `ShellModel.dropTarget` offers it), the
+  gallery (`DropTarget.Gallery`); `IncomingFiles.dropped` hands `Dropped.Folder` (a Mac's folder walked in place),
+  `Dropped.File` and `Dropped.Unread(name)`; `dropOntoLevel`, `dropOnto` and the app's `MemoryShare` sort gone, the notices
+  said in order, a Mac's `Offered` opens `ImportSheet`. New Folder (shell and a guest's level) and the rename read
+  `NameAnswer` through one `nameAnswered` (a problem keeps the dialog open, a notice is said once it closed, queued
+  closes; a save that answered nothing stays open with `node_save_failed`, never "made"). A guest's Replace is offered by
+  `FileRights` (the header's own) and runs `GuestAccess.replaceAsking`; a guest level's New by `GuestLevel.writes`, its
+  folder and upload by `createFolder`/`uploadAsking`; *Add entry* by `PotView.offersEntries`; `AskedNaming` draws
+  `GuestNaming.asking` (save `name`, cancel `decline`) above the page or, while it is open, the entry editor; the naming
+  line where `GuestNaming.offered`. `followEnded` replaced by `SessionModel.watchFollowed`; the sign-in's prefill only
+  `#if DEBUG`. Measured: `./gradlew :core:assembleVeyqCoreDebugXCFramework`, `xcodegen`, the macOS ad-hoc build and the
+  iOS simulator compile green (on this phase's commit alone and after phase 8). **Core added:** nothing for this phase.
+  **Not clicked** (no full-screen control from a background agent, no simulator booted; the coordinator's Mac pass): on
+  the Mac a ZIP and a folder dropped together onto a level (one import offer), a file onto a folder row, onto a guest's
+  identity folder row (no drop target), onto a gallery (a PDF among photos said); New Folder with a taken name (the sheet
+  stays, the word under the field); a READ_WRITE link opened unnamed: Replace asks the name first, New folder and Upload
+  files ask at the write, *Add entry* asks at the save above the editor (two sheets stacked: unmeasured on iOS); the
+  release build's empty server field. **Deviation:** a guest's gallery *Add* still shows once named (`canAdd`), as
+  Android's (#1044).
 - [x] **5 Linux** — the drop through the bridge's `Drop`, `drop.rs`' sort gone, the folder row's drop from
   `dropTarget`, the dialogs and guest gates likewise, `file_page`/`header::say`'s log-only paths replaced by said
   notices. · Done when: `python3 linux/run.py test` and `build` green.
