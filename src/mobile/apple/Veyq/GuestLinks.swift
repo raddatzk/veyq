@@ -484,17 +484,8 @@ private struct GuestLevelView: View {
             guard case .success(let urls) = result, !urls.isEmpty else { return }
             _ = level.upload(sources: urls.compactMap(model.guestSource))
         }
-        .alert(say(.folderNew), isPresented: $naming) {
-            TextField(say(.peopleName), text: $newName)
-            Button(say(.createPotCreate)) {
-                let name = newName
-                Task {
-                    if let problem = try? await AppleSharing.shared.createFolder(level: level, name: name) { nameProblem = say(notice: problem); naming = true }
-                }
-            }
-            Button(say(.signinCancel), role: .cancel) {}
-        } message: {
-            if let nameProblem { Text(nameProblem) }
+        .folderNaming($naming, name: $newName, problem: $nameProblem) { name in
+            (try? await AppleSharing.shared.createFolder(level: level, name: name)).map { say(notice: $0) }
         }
     }
 }
