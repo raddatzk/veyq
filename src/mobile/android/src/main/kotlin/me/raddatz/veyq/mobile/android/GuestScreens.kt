@@ -297,11 +297,14 @@ internal fun GuestContent(screen: GuestScreen, model: AppModel, snackbar: Snackb
         is ShareGates.State.Ready -> Column(Modifier.fillMaxSize()) {
             if (g.note.isNotBlank()) Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { MarkdownText(g.note) }
             val access = view.access
-            // a READ_WRITE link's guest: who this device is here as, or the way to name itself before its first write
-            if (access != null && access.role == GuestAccess.READ_WRITE) GuestLine(access) {
+            // a READ_WRITE link's guest (core's `GuestNaming.offered`): who this device is here as, or the way to name itself
+            val said: (me.raddatz.veyq.mobile.words.Notice) -> Unit = { n -> scope.launch { snackbar.showSnackbar(context.text(n)) } }
+            if (access != null && access.naming.offered) GuestLine(access, said) {
                 // a Pot's page reads its write right anew: a named guest adds entries (the web's `requestGuest`, then the write)
                 if (view.page.value is GuestPage.Pot) model.refreshPot {}
             }
+            // a write offered to a guest not named yet asks its name at the write (core's one naming flow, the web's)
+            if (access != null) NamingAsked(access, said) { if (view.page.value is GuestPage.Pot) model.refreshPot {} }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 page?.let { GuestPageBody(it, screen, model, snackbar) } ?: Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
@@ -316,7 +319,7 @@ private fun GuestPageBody(page: GuestPage, screen: GuestScreen, model: AppModel,
     val view = screen.view
     val session = view.access?.session?.collectAsStateWithLifecycle()?.value
     when (page) {
-        is GuestPage.Level -> GuestLevelPage(page.model, view, model, session != null)
+        is GuestPage.Level -> GuestLevelPage(page.model, view, model, snackbar)
         is GuestPage.File -> {
             DisposableEffect(page.model) { onDispose { page.model.close() } }
             FilePage(page.model, page.node.name)
@@ -333,12 +336,12 @@ private fun GuestPageBody(page: GuestPage, screen: GuestScreen, model: AppModel,
 }
 
 /**
- * A folder of the link (core's level over the guest's tree): its rows, each opened as its kind's page, and — for a named
+ * A folder of the link (core's level over the guest's tree): its rows, each opened as its kind's page, and — for a
  * READ_WRITE guest outside an identity folder (`GuestLevel.writes`, #1034; the web's `ShareTreePage`) — the level's New:
  * a folder, files uploaded here. The link is read anew after each write, so what was added is listed.
  */
 @Composable
-private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, view: me.raddatz.veyq.mobile.sharing.GuestView, model: AppModel, named: Boolean) {
+private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, view: me.raddatz.veyq.mobile.sharing.GuestView, model: AppModel, snackbar: SnackbarHostState) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var naming by remember(level) { mutableStateOf(false) }
@@ -348,7 +351,8 @@ private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, vie
     val rows = level.rows
     // what a guest adds here: a folder and files (Depot's level action); a guest makes no Memory, Pot or drop box
     val creates = listOf(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES)
-    CreateAction(stringResource(R.string.create_new), shown = level.writes && named, onClick = {}, menu = { close ->
+    // offered where core's level writes; a guest not named yet is asked its name at the write (core's naming flow)
+    CreateAction(stringResource(R.string.create_new), shown = level.writes, onClick = {}, menu = { close ->
         creates.forEach { c ->
             androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, modifier = Modifier.testTag("guest-create-${c.name.lowercase()}"), onClick = {
                 close()
@@ -368,9 +372,10 @@ private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, vie
             }
         }
     }
-    if (naming) NameDialog(stringResource(R.string.folder_new), onClose = { naming = false }) { name ->
-        withContext(Dispatchers.IO) { level.createFolder(name) }?.let { context.text(it) }
-    }
+    if (naming) NameAnswerDialog(
+        stringResource(R.string.folder_new), onClose = { naming = false },
+        onSaid = { n -> scope.launch { snackbar.showSnackbar(context.text(n)) } },
+    ) { name -> withContext(Dispatchers.IO) { level.createFolder(name) } }
 }
 
 /** A guest's Memory's music played or stopped (core's `GalleryModel.headerActions`' MUSIC), as the member's header offers it. */
@@ -417,7 +422,10 @@ private fun GuestPot(page: GuestPage.Pot, model: AppModel) {
     }
 }
 
-/** A file's own actions on the link's bar: its download (a copy where the person picks) and a named READ_WRITE guest's replace. */
+/**
+ * A file's own actions on the link's bar: its download (a copy where the person picks) and, where core offers it
+ * (`FileRights.replace`), a READ_WRITE guest's replace — a guest not named yet asked its name at the write.
+ */
 @Composable
 private fun GuestFileActions(page: GuestPage.File, access: GuestAccess?, model: AppModel, snackbar: SnackbarHostState) {
     val file = page.model
@@ -445,8 +453,7 @@ private fun GuestFileActions(page: GuestPage.File, access: GuestAccess?, model: 
         uri?.let { model.guestReplace(a, file, it) }
     }
     IconButton(onClick = { save.launch(h.downloadName) }) { Icon(Icons.Outlined.Download, stringResource(R.string.node_download)) }
-    val session = access?.session?.collectAsStateWithLifecycle()?.value
-    if (session != null && h.own.any { it.id == me.raddatz.veyq.mobile.depot.FileModel.REPLACE }) {
+    if (access != null && h.own.any { it.id == me.raddatz.veyq.mobile.depot.FileModel.REPLACE }) {
         IconButton(onClick = { if (file.chooseReplace()) pick.launch(arrayOf("*/*")) }) {
             Icon(Icons.Outlined.Upload, say(h.label(me.raddatz.veyq.mobile.depot.FileModel.REPLACE)!!))
         }
@@ -458,7 +465,7 @@ private fun GuestFileActions(page: GuestPage.File, access: GuestAccess?, model: 
  * the way to name itself, which a guest's first write needs; the record kept of a guest's writes said in both (#1018).
  */
 @Composable
-private fun GuestLine(access: GuestAccess, onNamed: () -> Unit) {
+private fun GuestLine(access: GuestAccess, said: (me.raddatz.veyq.mobile.words.Notice) -> Unit, onNamed: () -> Unit) {
     val session by access.session.collectAsStateWithLifecycle()
     var naming by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
@@ -472,8 +479,23 @@ private fun GuestLine(access: GuestAccess, onNamed: () -> Unit) {
     }
     if (naming) NamingDialog(
         title = stringResource(R.string.share_guest_name_title), hint = stringResource(R.string.share_guest_name_hint),
-        days = access.guestWriteRecordDays, origin = access.origin, onClose = { naming = false },
-    ) { name -> runCatching { access.nameGuest(name.trim()) }.isSuccess.also { if (it) onNamed() } }
+        days = access.guestWriteRecordDays, origin = access.origin, onClose = { naming = false }, onSaid = said,
+    ) { name -> access.naming.name(name).also { if (it.notice == null && !it.keepsOpen) onNamed() } }
+}
+
+/**
+ * The name a waiting write asks of a guest not named yet (core's `GuestNaming.asking`, the web's `requestGuest`): the
+ * naming dialog while it asks; its save answers core's `name`, its cancel `decline` (the write is not made).
+ */
+@Composable
+private fun NamingAsked(access: GuestAccess, said: (me.raddatz.veyq.mobile.words.Notice) -> Unit, onNamed: () -> Unit) {
+    val asking by access.naming.asking.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    if (asking) NamingDialog(
+        title = stringResource(R.string.share_guest_name_title), hint = stringResource(R.string.share_guest_name_hint),
+        days = access.guestWriteRecordDays, origin = access.origin,
+        onClose = { scope.launch { access.naming.decline() } }, onSaid = said,
+    ) { name -> access.naming.name(name).also { if (it.notice == null && !it.keepsOpen) onNamed() } }
 }
 
 /** "You are here as …" and *Not you?*, which asks first and then forgets this device's session (the web's words). */
@@ -528,11 +550,13 @@ internal fun RecordNotice(days: Int?, origin: String, guestId: String? = null) {
 /** A guest naming itself (the web's naming dialog and drop forms): its name, who sees it, the record's notice, *Continue*. */
 @Composable
 private fun NamingDialog(
-    title: String, hint: String, days: Int?, origin: String, onClose: () -> Unit, onName: suspend (String) -> Boolean,
+    title: String, hint: String, days: Int?, origin: String, onClose: () -> Unit,
+    onSaid: (me.raddatz.veyq.mobile.words.Notice) -> Unit, onName: suspend (String) -> me.raddatz.veyq.mobile.navigation.NameAnswer,
 ) {
     var name by remember { mutableStateOf("") }
     var working by remember { mutableStateOf(false) }
-    var failed by remember { mutableStateOf(false) }
+    // core's answer: a problem keeps the dialog open with it shown, a notice closes it and is said
+    var problem by remember { mutableStateOf<me.raddatz.veyq.mobile.words.Notice?>(null) }
     val scope = rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = { if (!working) onClose() },
@@ -540,19 +564,21 @@ private fun NamingDialog(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(hint)
-                NameField(name) { name = it; failed = false }
+                NameField(name) { name = it; problem = null }
                 Text(stringResource(R.string.share_name_visibility), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
                 RecordNotice(days, origin)
-                if (failed) Text(stringResource(R.string.share_join_failed), color = MaterialTheme.colorScheme.error)
+                problem?.let { Text(say(it), color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
             TextButton(enabled = name.isNotBlank() && !working, modifier = Modifier.testTag("guest-name-continue"), onClick = {
                 working = true
                 scope.launch {
-                    val ok = withContext(Dispatchers.IO) { onName(name) }
+                    val answer = withContext(Dispatchers.IO) { onName(name) }
                     working = false
-                    if (ok) onClose() else failed = true
+                    problem = answer.problem
+                    answer.notice?.let(onSaid)
+                    if (!answer.keepsOpen) onClose()
                 }
             }) { Text(stringResource(R.string.share_join)) }
         },
