@@ -1,0 +1,3 @@
+# The compiled core (`pnpm run build`, i.e. Gradle's `:core:jsPackage`): a build output, never committed (ADR 0155
+# decision 6) — in git it would drift from the Kotlin it claims to come from.
+dist/
