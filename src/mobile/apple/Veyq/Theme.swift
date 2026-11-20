@@ -69,3 +69,16 @@ struct Chrome: View {
             .ignoresSafeArea()
     }
 }
+
+extension View {
+    /// A sheet's size on a Mac: a macOS sheet takes its content's ideal size, and a `List`, a `Form` or a `ScrollView` has
+    /// none — it drew the title and the toolbar alone (the share and trash sheets, the macOS pass of 2026-11-20; the copy
+    /// sheet before them). Every sheet whose body is one of those carries this or its own macOS frame; iOS is untouched.
+    @ViewBuilder func sheetFrame(minWidth: CGFloat = 460, minHeight: CGFloat = 420) -> some View {
+        #if os(macOS)
+        frame(minWidth: minWidth, minHeight: minHeight)
+        #else
+        self
+        #endif
+    }
+}

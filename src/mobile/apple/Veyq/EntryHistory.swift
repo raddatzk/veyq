@@ -72,6 +72,7 @@ struct DeletedEntrySheet: View {
             }
         }
         .tint(Role.accent)
+        .sheetFrame(minWidth: 460, minHeight: 440)
     }
 }
 

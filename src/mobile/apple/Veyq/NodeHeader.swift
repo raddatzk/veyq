@@ -479,6 +479,7 @@ struct CoverSheet: View {
                 }
             }
         }
+        .sheetFrame(minWidth: 520, minHeight: 520)
         .task {
             // the stored cover, framed as stored
             guard hasCover else { return }

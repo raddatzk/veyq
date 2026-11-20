@@ -71,6 +71,7 @@ struct NewPotSheet: View {
             }
         }
         .tint(Role.accent)
+        .sheetFrame(minWidth: 460, minHeight: 520)
         .onAppear { model.openCreateSheet() }
         .onDisappear { model.closeCreateSheet() }
     }

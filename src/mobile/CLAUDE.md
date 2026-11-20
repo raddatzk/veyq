@@ -1181,7 +1181,13 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   view of its own per said (`.id(said.id)`, `ShellView`). And a `.fileImporter`'s binding is cleared on dismissal BEFORE its
   completion runs: a completion that reads the state the binding clears finds nothing (the picked file for Replace was
   dropped) — keep what it needs apart (`AppModel.replaceChosen`). The move sheet's "move out of the drop box?" fell into
-  the cancel-before-action trap above (nothing moved); it now cancels only on Cancel.
+  the cancel-before-action trap above (nothing moved); it now cancels only on Cancel. So a name asked in an alert whose
+  refusal reopens it is lost on a Mac (New Folder's *Create* click did nothing, the macOS pass of 2026-11-20): New
+  Folder asks in a sheet there (`folderNaming`, `ShellView.swift`).
+- A Mac's sheet takes its content's ideal size, and a `List`, a `Form` or a `ScrollView` has none: the sheet drew its
+  title and toolbar alone (the copy sheet 2026-11-19; the share and trash sheets 2026-11-20, measured by clicking). Every
+  sheet's content carries `.sheetFrame(…)` (`Theme.swift`; a no-op on iOS) or its own `#if os(macOS)` frame — a new
+  sheet too.
 - A coroutine that was cancelled fails every suspending call at once, its own clean-up's too: a cancelled Depot upload
   left a "not uploaded yet" file because its abandon's listing and trash ran cancelled. A give-up runs `NonCancellable`
   (`DepotFiles.upload`, `UploadJob.abandon`). A failed upload whose give-up could not reach the server (offline) keeps the

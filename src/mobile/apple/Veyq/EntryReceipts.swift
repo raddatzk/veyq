@@ -148,6 +148,7 @@ struct ReceiptViewer: View {
                 }
             }
         }
+        .sheetFrame(minWidth: 520, minHeight: 560)
         .task(id: receiptId) {
             if let d = await model.openReceipt(receiptId) { data = d } else { failed = true }
         }

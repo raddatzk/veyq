@@ -59,6 +59,7 @@ struct SpaceTrashSheet: View {
                 Text(say(.trashPurgeConfirm, row.name))
             }
         }
+        .sheetFrame(minHeight: 440)
     }
 
     @ViewBuilder private func rowView(_ row: NodeTrash.Trashed) -> some View {

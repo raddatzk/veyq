@@ -52,6 +52,7 @@ struct EntryEditorSheet: View {
             }
         }
         .tint(Role.accent)
+        .sheetFrame(minWidth: 480, minHeight: 560)
     }
 
     private func shown(_ s: EntryEditor.State, _ at: String, _ item: Int? = nil) -> String? {
