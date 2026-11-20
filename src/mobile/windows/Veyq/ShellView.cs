@@ -12,7 +12,9 @@
 // the shell draws it anew — after an object opened from it closed, after an update — by its place (ListScrolls).
 //
 // Offline (ADR 0140 decision 10) an InfoBar under the bar says so, as of when (ShellShown.offlineBanner), not closable while
-// it lasts; New is not offered then and the header's writes are gone (the core's). An item no longer available offline
+// it lasts, with the count of the writes made offline that wait to be sent under it (ShellShown.queuedBanner, ADR 0153);
+// New offers offline only what queues and the header's other writes are gone (the core's). The reconnect's notices — what
+// was sent, what needs the person — are said once (ShellShown.queuedSaid). An item no longer available offline
 // (ShellModel.State's gone) is said once in an InfoBar of its own, then told seen (Shell.OfflineGoneSeen).
 //
 // Every state is the core's (ShellModel.State and ShellShown); every action one call. Which item is selected, whether
@@ -47,6 +49,7 @@ internal sealed class ShellView
     private readonly InfoBar _said;
     /// <summary>"Offline — content as of …", open while the core shows the lists from the offline store.</summary>
     private readonly InfoBar _offline;
+    private string _queuedSaid = "";
     /// <summary>The items no longer available offline, said once; and what it said last.</summary>
     private readonly InfoBar _gone;
     private string _goneSaid = "";
@@ -170,7 +173,7 @@ internal sealed class ShellView
         AutomationProperties.SetAutomationId(_saving, "saving");
         _offer = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
         AutomationProperties.SetAutomationId(_offer, "uploads-said");
-        _uploads = new Uploads(window, _offer) { Changed = DrawCommands };
+        _uploads = new Uploads(window, _offer) { Changed = DrawCommands, Opens = OpenQueued, Says = Say };
         _body = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
         var content = new Grid();
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -396,8 +399,21 @@ internal sealed class ShellView
     /// <summary>The offline banner, and each item no longer available offline said once, then told seen.</summary>
     private void DrawOffline(ShellModelState state, ShellShown shown)
     {
-        _offline.Message = shown.offlineBanner is { } b ? Said.Notice(b) : "";
-        _offline.IsOpen = shown.offlineBanner is not null;
+        // the writes made offline waiting to be sent, counted under the offline banner (ShellModel.queuedBanner)
+        _offline.Message = string.Join("\n", new[] { shown.offlineBanner, shown.queuedBanner }.OfType<Notice>().Select(Said.Notice));
+        _offline.IsOpen = shown.offlineBanner is not null || shown.queuedBanner is not null;
+        // what the reconnect sent and what now needs the person, said once, then told seen (Shell.QueuedSaidSeen)
+        var sent = string.Join("\n", shown.queuedSaid.Select(Said.Notice));
+        if (sent != _queuedSaid)
+        {
+            _queuedSaid = sent;
+            if (sent.Length > 0)
+            {
+                foreach (var n in shown.queuedSaid) Log.Write($"queued said: {n.msg}");
+                Say(false, sent);
+                Act.Send(new Call.ShellQueuedSaidSeen());
+            }
+        }
         // compared as said: a record's list compares by reference, and each update is read anew
         var said = string.Join("\n", state.gone.Select(Said.Notice));
         if (said == _goneSaid) return;
@@ -612,6 +628,12 @@ internal sealed class ShellView
                 _pot.Read = canWrite => _header?.Facts(new Facts { canWrite = canWrite, hasContent = true });
                 _pot.Changed = DrawCommands;
                 _said.IsOpen = false;
+                // the tray's Open of a held entry: its conflict's editor once this Pot opened
+                if (_heldEntry is { } held && pot.nodeId == _heldPot)
+                {
+                    _heldEntry = null;
+                    _pot.OpenHeld(held);
+                }
             }
             _pot.Hero(_header?.Hero);
             _pot.Places(shown.tabs, shown.selectedTab);
@@ -1093,6 +1115,48 @@ internal sealed class ShellView
         {
             Log.Write($"new folder failed ({e.GetType().Name})");
         }
+    }
+
+    private string? _heldEntry;
+    private string? _heldPot;
+
+    /// <summary>The tray's Open of a held write made offline (Answer.QueuedOpens): where the core says it is decided — a
+    /// Pot entry's conflict editor, the page a create or capture time was made on, the node whose name was taken.</summary>
+    private void OpenQueued(QueuedOpen open)
+    {
+        switch (open)
+        {
+            case QueuedOpen.QueuedOpenEntry e:
+                if (_pot is { } shownPot && shownPot.Ref.nodeId == e.pot) shownPot.OpenHeld(e.write);
+                else
+                {
+                    (_heldEntry, _heldPot) = (e.write, e.pot);
+                    OpenNode(e.scope, e.pot);
+                }
+                break;
+            case QueuedOpen.QueuedOpenRename r:
+                // the node's page or folder, whose header offers Rename
+                OpenNode(r.scope, r.node);
+                break;
+            case QueuedOpen.QueuedOpenPlace p:
+                OpenNode(p.scope, p.node);
+                break;
+        }
+    }
+
+    /// <summary>Node <paramref name="node"/> of space <paramref name="scope"/> shown (null: the space's top): an object
+    /// opened, a folder entered — as the lists name it.</summary>
+    private void OpenNode(string scope, string? node)
+    {
+        if (_state is not { } state) return;
+        if (state.shell.space != scope) Act.Send(new Call.ShellSwitchSpace { scopeId = scope });
+        if (node is null) return;
+        if (state.lists.objects.FirstOrDefault(o => o.scopeId == scope && o.nodeId == node) is { } r) Act.Send(new Call.ShellOpen { Ref = r });
+        else if (state.lists.nodes.FirstOrDefault(n => n.scopeId == scope && n.nodeId == node) is { } f)
+        {
+            Act.Send(new Call.ShellEnter { folder = new FolderRef { nodeId = f.nodeId, name = f.name } });
+        }
+        else Log.Write("queued open: the node is not listed here");
     }
 
     /// <summary>How an action went, under the bar until it is closed or the object leaves.</summary>

@@ -161,6 +161,17 @@ internal static class Dialogs
         return await Show(window, dialog) == ContentDialogResult.Primary ? outcome : null;
     }
 
+    /// <summary>The ask before <paramref name="loss"/> deletes writes made offline that wait (Queued.Ask, ADR 0153
+    /// decision 2): null where none waits (the action goes on as it would), else whether the person confirmed the core's
+    /// question — its own confirm word ("Sign out anyway"), Cancel the other — titled <paramref name="title"/>.</summary>
+    public static async Task<bool?> AskLoss(Window window, QueuedLoss loss, string title)
+    {
+        var (answer, _) = await Veyq.Bridge.Core.CallAsync(new Call.QueuedAsk { loss = loss });
+        if (answer is not Answer.QueuedAsked { ask: { } ask }) return null;
+        Log.Write($"queued ask before {loss}");
+        return await Confirm(window, "queued-loss-ask", title, Said.Notice(ask.question), Said.Key(ask.confirm));
+    }
+
     /// <summary>A name dialog's save as a call answered <c>Answer.Named</c>: that answer, or null (said in the log) where
     /// the call answered anything else.</summary>
     public static async Task<Answer.Named?> Named(Call call, string what)

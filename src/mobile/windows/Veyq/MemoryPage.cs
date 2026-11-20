@@ -414,8 +414,9 @@ internal sealed class MemoryPage : IDisposable
         Act.Send(new Call.ShellOpen { Ref = new ObjectRef { scopeId = node.scopeId, nodeId = node.nodeId, kind = node.kind, application = ApplicationId.Memories, name = node.name } });
 
     /// <summary>Whether a tile's menu marks (Marks.Toggle): where the core says a mark may be flipped
-    /// (GalleryShown.marking, #1001: a member's, the own set read — a personal space's too) and the page is online.</summary>
-    private bool Marking => _shown is { marking: true, offline: null };
+    /// (GalleryShown.marking, #1001: a member's, the own set read — a personal space's too), online or where the core
+    /// queues the page's writes offline (GalleryShown.queues, ADR 0153: a mark kept to be sent).</summary>
+    private bool Marking => _shown is { marking: true } s && (s.offline is null || s.queues);
 
     /// <summary>The grid's width: the scroll's view, less the page's margins.</summary>
     private double Width => _scroll.ViewportWidth - 2 * Margin;
@@ -620,8 +621,8 @@ internal sealed class MemoryPage : IDisposable
         }
     }
 
-    /// <summary>A placeholder's stage, what its tile is built from: preparing, sending, failed.</summary>
-    private static string Stage(UploadTileShown u) => u.failed ? "failed" : u.preparing ? "preparing" : "sending";
+    /// <summary>A placeholder's stage, what its tile is built from: waiting to be sent (added offline), preparing, sending, failed.</summary>
+    private static string Stage(UploadTileShown u) => u.waiting ? "waiting" : u.failed ? "failed" : u.preparing ? "preparing" : "sending";
 
     /// <summary>A photo or video on its way into this page (ADR 0145 decision 3): its kind's glyph on the card, a running
     /// bar while its tiers are made on the device, then how far it is (<see cref="StepUploads"/> moves it), or that it
@@ -636,7 +637,22 @@ internal sealed class MemoryPage : IDisposable
         glyph.HorizontalAlignment = HorizontalAlignment.Center;
         glyph.VerticalAlignment = VerticalAlignment.Center;
         face.Children.Add(glyph);
-        if (!upload.failed)
+        if (upload.waiting)
+        {
+            // added offline, sealed on this device: Waiting to send (or why it is held), in place of a bar (ADR 0153 decision 5)
+            var waits = new TextBlock
+            {
+                Text = upload.said is { } w ? Said.Notice(w) : Words.OfflineWaiting(),
+                Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+                TextWrapping = TextWrapping.Wrap,
+                TextAlignment = TextAlignment.Center,
+                Margin = new Thickness(8),
+                VerticalAlignment = VerticalAlignment.Bottom,
+            };
+            face.Children.Add(waits);
+            label = $"{label}, {waits.Text}";
+        }
+        else if (!upload.failed)
         {
             var bar = new ProgressBar { IsIndeterminate = upload.preparing, Maximum = 1, Value = upload.progress, Margin = new Thickness(8), VerticalAlignment = VerticalAlignment.Bottom };
             if (!upload.preparing) _bars[upload.id] = new WeakReference<ProgressBar>(bar);

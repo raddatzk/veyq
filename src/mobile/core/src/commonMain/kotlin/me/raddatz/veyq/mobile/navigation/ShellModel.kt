@@ -431,7 +431,13 @@ class ShellModel(
 
     /** Where a level stands for a share: a folder's place (a space's top asks as one, [folder] null). */
     private fun levelPlace(folder: NodeAt?) =
-        ShareAnswer.Place(NodeRef.FOLDER, tenant.applicationsOff(), online, folder?.let(::inIdentityFolder) ?: false)
+        ShareAnswer.Place(NodeRef.FOLDER, tenant.applicationsOff(), takesFiles, folder?.let(::inIdentityFolder) ?: false)
+
+    /**
+     * Whether files put on a level are written: online, or offline where a Depot file is queued (ADR 0153 decision 3) —
+     * the same rule as New's Upload files offline ([createsHere]), so the upload gate never refuses what New offers.
+     */
+    private val takesFiles: Boolean get() = online || queues(me.raddatz.veyq.mobile.offline.Queued.DEPOT_FILE_ADD)
 
     /**
      * Whether files may be put under [parentId] (null: the space's top) of [scopeId] — the one gate of a drop, a pick's
@@ -442,7 +448,7 @@ class ShellModel(
         if (_state.value?.lists?.spaces?.none { it.scopeId == scopeId } != false) return false
         val answer = AppKinds.share(NodeRef.FOLDER) ?: return false
         val inIdentity = parentId != null && tenant.inIdentityFolder(scopeId, parentId)
-        return answer.mayChoose(ShareAnswer.Place(NodeRef.FOLDER, tenant.applicationsOff(), online, inIdentity))
+        return answer.mayChoose(ShareAnswer.Place(NodeRef.FOLDER, tenant.applicationsOff(), takesFiles, inIdentity))
     }
 
     /**

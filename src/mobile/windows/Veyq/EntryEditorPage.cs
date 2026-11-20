@@ -34,6 +34,10 @@ internal sealed class EntryEditorPage : IDisposable
     private readonly Window _window;
     private readonly long _pot;
     private readonly string? _entry;
+    /// <summary>The held write made offline this editor resolves (Editor.OpenHeld, ADR 0153 decision 4); null otherwise.</summary>
+    private readonly string? _held;
+    private readonly AppBarButton _discardMine;
+    private readonly InfoBar _newer;
     private readonly Action<bool, string> _say;
     private readonly Action _closed;
     private readonly Grid _root = new();
@@ -55,11 +59,12 @@ internal sealed class EntryEditorPage : IDisposable
 
     /// <summary>The editor of entry <paramref name="entry"/> of Pot <paramref name="pot"/> (null: a new entry);
     /// <paramref name="say"/> takes what a done save says, <paramref name="closed"/> runs once the editor is gone.</summary>
-    public EntryEditorPage(Window window, long pot, string? entry, Action<bool, string> say, Action closed)
+    public EntryEditorPage(Window window, long pot, string? entry, Action<bool, string> say, Action closed, string? held = null)
     {
         _window = window;
         _pot = pot;
         _entry = entry;
+        _held = held;
         _say = say;
         _closed = closed;
         _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -79,8 +84,13 @@ internal sealed class EntryEditorPage : IDisposable
         AutomationProperties.SetAutomationId(_cancel, "ed-cancel");
         _cancel.Click += (_, _) => Close();
         _cancel.KeyboardAccelerators.Add(new KeyboardAccelerator { Key = VirtualKey.Escape });
+        // a held change's "Discard mine" (EditorShown.discardsMine): the change made offline dropped unsent
+        _discardMine = new AppBarButton { Icon = new SymbolIcon(Symbol.Undo), Label = Words.OfflineDiscardMine(), Visibility = Visibility.Collapsed };
+        AutomationProperties.SetAutomationId(_discardMine, "ed-discard-mine");
+        _discardMine.Click += (_, _) => DiscardMine();
         var bar = new CommandBar { DefaultLabelPosition = CommandBarDefaultLabelPosition.Right, VerticalAlignment = VerticalAlignment.Center };
         bar.PrimaryCommands.Add(_save);
+        bar.PrimaryCommands.Add(_discardMine);
         bar.PrimaryCommands.Add(_delete);
         bar.PrimaryCommands.Add(_cancel);
         AutomationProperties.SetAutomationId(bar, "ed-commands");
@@ -93,8 +103,14 @@ internal sealed class EntryEditorPage : IDisposable
         _root.Children.Add(head);
         _refused = new InfoBar { IsOpen = false, IsClosable = false, Severity = InfoBarSeverity.Error, Margin = new Thickness(12, 0, 12, 4) };
         AutomationProperties.SetAutomationId(_refused, "ed-refused");
-        Grid.SetRow(_refused, 1);
-        _root.Children.Add(_refused);
+        // a held change's newer version, named (who, when: EditorShown.newer); the person's values are in the form
+        _newer = new InfoBar { IsOpen = false, IsClosable = false, Severity = InfoBarSeverity.Warning, Margin = new Thickness(12, 0, 12, 4) };
+        AutomationProperties.SetAutomationId(_newer, "ed-newer");
+        var notes = new StackPanel();
+        notes.Children.Add(_refused);
+        notes.Children.Add(_newer);
+        Grid.SetRow(notes, 1);
+        _root.Children.Add(notes);
         var loading = new ProgressRing { IsActive = true, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         Grid.SetRow(loading, 2);
         _root.Children.Add(loading);
@@ -107,7 +123,10 @@ internal sealed class EntryEditorPage : IDisposable
         try
         {
             var separator = CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator;
-            var (answer, _) = await Core.CallAsync(new Call.EditorOpen { pot = _pot, entry = _entry, separator = separator.Length == 1 ? separator : "." });
+            var sep = separator.Length == 1 ? separator : ".";
+            var (answer, _) = await Core.CallAsync(_held is { } write
+                ? new Call.EditorOpenHeld { pot = _pot, write = write, separator = sep }
+                : new Call.EditorOpen { pot = _pot, entry = _entry, separator = sep });
             if (answer is not Answer.EditorOpened { editor: var editor })
             {
                 Log.Write($"Editor.Open answered {answer.GetType().Name}");
@@ -162,6 +181,22 @@ internal sealed class EntryEditorPage : IDisposable
         _watch?.Dispose();
         _watch = null;
         if (_editor is { } e) Act.Send(new Call.EditorClose { editor = e });
+    }
+
+    /// <summary>"Discard mine": the held change made offline dropped unsent (Editor.DiscardMine); the editor closes.</summary>
+    private async void DiscardMine()
+    {
+        if (_editor is not { } e) return;
+        try
+        {
+            var (answer, _) = await Core.CallAsync(new Call.EditorDiscardMine { editor = e });
+            Log.Write($"Editor.DiscardMine: {answer.GetType().Name}");
+            if (answer is Answer.Done) Close();
+        }
+        catch (Exception ex)
+        {
+            Log.Write($"Editor.DiscardMine failed: {ex.GetType().Name}");
+        }
     }
 
     /// <summary>One edit sent; the core applies it in the order sent.</summary>
@@ -372,6 +407,9 @@ internal sealed class EntryEditorPage : IDisposable
         _delete.Visibility = !s.isNew && s.editable ? Visibility.Visible : Visibility.Collapsed;
         _delete.IsEnabled = !s.saving;
         _cancel.Label = s.editable ? Words.EntryCancel() : Words.ReceiptsClose();
+        _discardMine.Visibility = s.discardsMine ? Visibility.Visible : Visibility.Collapsed;
+        _newer.Message = s.newer is { } newer ? Said.Notice(newer) : "";
+        _newer.IsOpen = s.newer is not null;
         var shape = Shape(s);
         _drawing = true;
         try

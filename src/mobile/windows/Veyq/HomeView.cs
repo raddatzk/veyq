@@ -200,7 +200,7 @@ internal static class HomeView
             if (hero is FrameworkElement { Parent: Border border }) border.Child = null;
             content.Children.Add(hero);
         }
-        if (shown.groups.Count == 0) content.Children.Add(Empty());
+        if (shown.groups.Count == 0 && shown.queuedHere.Count == 0) content.Children.Add(Empty());
         var index = 0;
         foreach (var g in shown.groups)
         {
@@ -232,8 +232,20 @@ internal static class HomeView
             }
             Section(content, heading, rows);
         }
+        // what was made here offline and waits to be sent (ShellShown.queuedHere, ADR 0153 decision 5): in place, marked
+        if (shown.queuedHere.Count > 0) Section(content, null, shown.queuedHere.Select(QueuedRow), apart: true);
         return scroll;
     }
+
+    /// <summary>A write made offline in the level shown, waiting to be sent: its title and its line (Waiting to send, or
+    /// why it is held) as the core says them; the uploads tray holds its actions.</summary>
+    private static ListViewItem QueuedRow(QueuedItem q) =>
+        Row(q.op switch
+        {
+            QueuedOp.FolderCreate => KindGlyph("FOLDER"),
+            QueuedOp.MemoryCreate => KindGlyph("MEMORY"),
+            _ => "\uE8A5",
+        }, Said.Notice(q.title), $"queued:{q.id}", false, () => { }, subtitle: Said.Notice(q.said));
 
     private static SelectorBar Filters(ShellModelState state, ShellShown shown)
     {
