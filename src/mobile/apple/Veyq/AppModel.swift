@@ -1642,14 +1642,18 @@ final class AppModel {
 
     /// The open Pot as core's model holds it now.
     private func syncPot() {
-        pot = potModel?.current.map { PotState(ref: $0.ref, view: $0.view, failed: $0.failed, saving: $0.saving, message: $0.message) }
+        pot = potModel?.current.map {
+            PotState(ref: $0.ref, view: $0.view, failed: $0.failed, failure: $0.failure, saving: $0.saving, message: $0.message)
+        }
     }
 
-    /// An open Pot's views: `view` nil while it loads, `failed` when it did not open; `message` the last add's refusal.
+    /// An open Pot's views: `view` nil while it loads, `failed` when it did not open — `failure` what its page says then
+    /// (core's: offline not kept, else it did not open); `message` the last add's refusal.
     struct PotState {
         let ref: ObjectRef
         var view: PotView?
         var failed = false
+        var failure: Msg?
         var saving = false
         var message: String?
     }
@@ -2300,6 +2304,9 @@ final class AppModel {
         guard let session = potSession else { return nil }
         return (try? await AppleSessions.shared.openReceipt(pot: session, receiptId: receiptId)) ?? nil
     }
+
+    /// Why the open Pot's receipt did not open (core's `PotModel.receiptFailure`): not kept offline, or unreadable.
+    func receiptFailure() -> Msg { potModel?.receiptFailure() ?? .receiptsUnreadable }
 
 
     /// Forgets the open Pot's last refusal (a sheet closed).
