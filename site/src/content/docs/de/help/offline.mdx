@@ -5,6 +5,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.tenant-reachability.md
   - docs/features/admin/use-cases/uc.admin.delete-tenant.md
   - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
+  - docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md
 ---
 
 ## „Dieser Bereich ist vorübergehend offline“
@@ -27,7 +28,7 @@ Verbindung und versuch es später erneut. Auf deinem Gerät geht nichts verloren
 ## „Offline — Stand …“ in der App
 
 Die veyq-App zeigt, was sie auf diesem Gerät behalten hat: was du zuletzt angesehen und was du offline verfügbar gemacht
-hast, mit dem Stand, den sie nennt. Du kannst es dir ansehen und seine Videos abspielen, aber nichts ändern, bis der
+hast — auch die Einträge einer Kasse —, mit dem Stand, den sie nennt. Du kannst es dir ansehen und seine Videos abspielen, aber nichts ändern, bis der
 Server wieder da ist; was nicht behalten ist, sagt **Nicht offline verfügbar**. Die App merkt von selbst, wenn der
 Server wieder erreichbar ist: [Inhalte offline nutzen](/de/getting-started/use-content-offline/).
 

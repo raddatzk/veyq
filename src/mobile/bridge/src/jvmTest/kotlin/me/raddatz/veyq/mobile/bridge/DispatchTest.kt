@@ -2161,7 +2161,7 @@ class DispatchTest {
     }
 
     /**
-     * A Pot shown offline (ADR 0153 decision 6; cr-app-offline-pots-and-space-media phase 3): its state says as of when, a
+     * A Pot shown offline (ADR 0153 decision 6): its state says as of when, a
      * write is refused with the offline notice and never reaches the Pot, the receipt kept opens and one not kept is refused `NOT_KEPT_OFFLINE`.
      */
     @Test

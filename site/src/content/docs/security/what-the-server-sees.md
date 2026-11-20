@@ -19,6 +19,7 @@ sources:
   - docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md
   - docs/decisions/0092-logs-are-operational-and-name-no-person.md
   - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
+  - docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md
   - docs/decisions/0102-a-memorys-banner-is-its-own-attachment-framed-by-a-focal-point.md
 ---
 
@@ -182,7 +183,10 @@ time the server observes live is not kept for them. What it does hold, each with
   nothing about it beyond the reads it serves anyway. Making something available offline fetches what lies below it,
   so the operator sees a burst of whole-blob reads of that subtree, and later reads of its listings with the revision
   the device kept (`If-None-Match`), from which it can tell that a device keeps a subtree in step; a later sync fetches
-  only the frames the device does not hold yet.
+  only the frames the device does not hold yet. A Pot available offline is read the same way: its whole ledger and
+  every receipt. An app also reads a Pot's whole ledger, not only what changed, when it opens it and after each entry
+  the person writes, and each space's list of media with the revision it kept when it searches
+  ([ADR 0153](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md) decisions 6 and 7).
 
 ### Sharing
 

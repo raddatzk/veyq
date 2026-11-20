@@ -3,6 +3,7 @@ title: "Expenses"
 sources:
   - docs/features/expenses/_index.md
   - docs/apps/expenses.md
+  - docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md
   - docs/features/expenses/use-cases/uc.expenses.create-pot.md
   - docs/features/expenses/use-cases/uc.expenses.manage-participants.md
   - docs/features/expenses/use-cases/uc.expenses.verify-ledger.md
@@ -78,6 +79,9 @@ file of its own. An import and a copy bring the receipts along with their entrie
 [report it](/help/report-something/).
 
 If Expenses is [switched off](/applications/), a banner says so and nothing in a Pot can be added or changed.
+
+In the veyq app, a Pot you opened or made **Available offline** opens without a connection, as of when it was last read,
+and nothing in it can be changed until you are back online: [Use content offline](/getting-started/use-content-offline/).
 
 ## Is it private?
 

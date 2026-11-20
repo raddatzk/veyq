@@ -187,7 +187,7 @@
     "de": "Durchsucht Namen, Daten, Orte und Personen in all deinen Bereichen und findet auch Mitglieder und Einstellungen."
   },
   "search_offline_photos": {
-    "note": "offline: the photos of every space are searched only online (ADR 0146 decision 11; owner's copy 2026-11-18)",
+    "note": "offline: a space whose media listing was never read online (ADR 0153 decision 7; owner's copy 2026-11-18)",
     "en": "Photos are searched once you are online.",
     "de": "Fotos werden durchsucht, sobald du online bist."
   },

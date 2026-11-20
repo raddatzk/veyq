@@ -295,6 +295,13 @@ network cut, the app closed, started and unlocked offline, the pinned video play
 a plaintext marker and the media's names (no hit), and the store empty after sign-out (ADR 0140's Consequences, each
 pass); the manifest's load at 100,000 entries 173–869 ms on the Windows VM, 199–277 ms cold on ART. The Use page that
 says this to a person: [Use content offline](../../site/src/content/docs/getting-started/use-content-offline.mdx).
+**Pots and search offline** ([ADR 0153](../decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md) decisions 6 and 7): a Pot's
+whole ledger is a kept read (`KeptRead.POT_REVISIONS`), replaced — never merged — at each online open, each pin sync and
+after each own write (#1038), its receipts' frames kept when shown; a Pot is pinnable (its ledger, every receipt, its
+cover) and opens offline read-only under the banner with its own kept time, a receipt never shown saying "Not available
+offline". Each space's `listScopeMedia` is a kept read in the automatic tier (`KeptRead.SCOPE_MEDIA`, never pinned,
+swept with its scope), so search offline finds the photos of a Memory never opened. Passed on Android, Linux and Windows
+(ADR 0153's Consequences).
 
 **Music, on all four apps** ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md)). The web's player ported into the core's
 `audio/` (`MusicPlayer`, its order, fades and the lightbox video's interruption) and Memories' music into
@@ -609,8 +616,8 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
 **Navigation and sharing**
 - Search ([ADR 0146](../decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md), built above): **the owner's passes** — the iPhone's search tab and
   the iPad's field with tokens and VoiceOver's count on a device (no simulator boots here, #928), Orca reading the count
-  and a chip in a real GNOME session, and ⌘F, Return and Esc with the Mac app frontmost. Open findings: #957–#962;
-  offline over every space's photos (#956). Not built: listing a kind across scopes.
+  and a chip in a real GNOME session, and ⌘F, Return and Esc with the Mac app frontmost. Open findings: #957–#962.
+  Not built: listing a kind across scopes.
 - A received link opened in the app ([ADR 0150](../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md), built above): **the macOS pass** (`PasteButton`, the guest
   screen, the record's notice before a guest's write, the Keychain entry and *Not you?*, a bookmark in place — the coordinator's, from the main session) and **the
   owner's** iPhone and iPad (#928); on no platform a link of another instance, a live link with terms and a note, or a
@@ -709,6 +716,8 @@ build, the pass the other three ran, and whether `BGContinuedProcessingTask`'s s
 identifier and how long `beginBackgroundTask` lasts (the Simulator has no background processing, and an ad-hoc macOS
 build keeps no trust and so no store). Not run on any app: a real phone's release build and the system killing the app,
 the presence level's offline unlock (a PIN or Windows Hello typed), the Flatpak's and the MSIX's own data folders, a
-pinned Depot file or folder (built, run by no test). Not built: writes made offline and sent later, a sync of pins
-while the app is not running, Expenses offline and a space's media kept for search
-([ADR 0153](../decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md), Proposed; #897, #896, #898, #956).
+pinned Depot file or folder (built, run by no test). **Pots and search offline** (ADR 0153 decisions 6 and 7): the Mac's
+click pass is the coordinator's and the iPhone's the owner's (ADR 0153's Consequences hold the click list); not run on
+any app: the Flatpak's and the MSIX's, sign-out offline on Linux, a never-kept Pot opened offline on Linux and Windows.
+Not built: writes made offline and sent later, a sync of pins while the app is not running
+([ADR 0153](../decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md) decisions 1–5 and 8; #897, #896).

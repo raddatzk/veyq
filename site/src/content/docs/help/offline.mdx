@@ -5,6 +5,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.tenant-reachability.md
   - docs/features/admin/use-cases/uc.admin.delete-tenant.md
   - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
+  - docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md
 ---
 
 ## "This space is temporarily offline"
@@ -25,8 +26,8 @@ again later. Nothing on your device is lost; your keys stay where they were.
 
 ## "Offline — content as of …" in the app
 
-The veyq app shows what it kept on this device: what you viewed recently and what you made available offline, as of
-the time it names. You can look at it and play its videos, but change nothing until the server is back; anything not
+The veyq app shows what it kept on this device: what you viewed recently and what you made available offline — a Pot's
+entries too —, as of the time it names. You can look at it and play its videos, but change nothing until the server is back; anything not
 kept says **Not available offline**. The app notices by itself when the server can be reached again:
 [Use content offline](/getting-started/use-content-offline/).
 
