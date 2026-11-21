@@ -775,5 +775,4 @@ drawn on an iPhone, and its missing reason at *Sign in with Face ID*.
 Broadway carries no file drop, the Windows VM's WinUI takes none with UAC off; the Mac's drops and dialogs are the
 coordinator's pass (#1039), a guest's link on the iPhone the owner's; a Memory's *Add photos* and a WRITE_ONLY page still
 name a guest first (#1042), the phones' guest gallery offers *Add* only once named (#1044).
-**The structure** (ADR 0154 decision 2): passed on Linux and Android; Windows' pass waits for the VM's tenant name
-(#1051); the Mac's is the coordinator's click list (ADR 0154's Consequences), the iPhone's the owner's; no level selects yet (#1049).
+**The structure** (ADR 0154 decision 2): passed on Linux, Android and Windows; the Mac's is the coordinator's click list (ADR 0154's Consequences), the iPhone's the owner's; no level selects yet (#1049).

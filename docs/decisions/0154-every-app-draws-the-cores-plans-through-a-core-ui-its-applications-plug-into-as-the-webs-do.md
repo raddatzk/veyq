@@ -273,11 +273,19 @@ held for the screens' models but not around them:
   (a throwaway API 36 emulator, deleted after; its phase's unclicked items): a medium tile's long press (the mark only), a
   file's header (Favorite, Download | share, replace, rename, send a copy, offline | move, copy, report, delete), a Pot's
   (Favorite, Share | download, rename, cover, offline | move, copy, report, delete) and a bookmark's (*Open on its own
-  page*, Favorite | rename | move, report name, report shared content, delete). **Not run: Windows** — the VM resolves
-  only `tw-win.localhost`, which an owner-less pending tenant of an earlier failed attempt holds, so no throwaway could
-  take it; a Host-rewriting proxy to another throwaway reached the backend but the sign-in was refused, and the app
-  showed only its sign-in (Submit, the QR, the kit, *Open a link*, read by UI Automation). **Apple:** both builds green,
-  nothing clicked — the coordinator's Mac pass: the sign-in's order; Home's New and its tools (Trash, then the view
+  page*, Favorite | rename | move, report name, report shared content, delete). **Windows** (the VM's
+  `tw-win.localhost` throwaway, its own directory and tasks, read by UI Automation; the tenant name was freed by revoking
+  the earlier owner-less pending tenants): the sign-in Submit, then the QR, the kit and *Open a link*; Home's `CommandBar`
+  New first (folder, Pot, files, folder upload, Memory, bookmark), then *Add files only*, Trash and the view switch, no
+  Trash in the switcher; the drawer's New (folder, Pot, Memory, bookmark) — its New Folder made from inside a folder
+  landed at the space's top; a folder's (New, Favorite, Share, Trash, View | download, rename, cover, offline | move,
+  copy, report, delete), a Memory's (*Add banner* in its overflow), a Pot's, a file's (Favorite, Download | share,
+  replace, rename, offline | move, copy, report, delete) and a bookmark's header (*Open on its own page*, Favorite |
+  rename | move, report name, report shared content, delete) each with Delete last, each plan in the log; a folder
+  tile's flyout, opened by Shift+F10 (rename, move, favorite, share, copy, cover, download | report, delete; a file
+  tile's the same without the cover); a medium tile's (the mark only); a link row's (Copy and Share buttons; Edit, Renew,
+  Revoke under More); Settings (maps, storage, offline, sessions, this device, saved keys, account, email, password, add
+  a device, security, profile, erase, Sign out last). **Apple:** both builds green, nothing clicked — the coordinator's Mac pass: the sign-in's order; Home's New and its tools (Trash, then the view
   switch, none in the bar's Home actions); the drawer's New below the switcher (its folder at the space's top) and the
   application lists without a New of their own; a folder's, a Memory's (Upload's submenu), a Pot's, a file's and a
   bookmark's header with Delete last; a row's, a medium tile's (with *Open in New Window* beside the plan) and a link
