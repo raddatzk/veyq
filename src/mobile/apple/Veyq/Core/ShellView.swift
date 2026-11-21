@@ -581,11 +581,16 @@ struct HomeView: View {
     @State private var pickingFolder = false
     @State private var keepingLink = false
 
-    /// A group's rows: a folder enters, an object opens; each row's menu is core's (`NodeRowMenu`).
+    /// A group's rows: a folder enters, an object opens; each row's menu is core's (`NodeRowMenu`), as each tile's (`tile`).
     @ViewBuilder private func rows(_ nodes: [NodeRef]) -> some View {
         ForEach(nodes, id: \.nodeId) { node in
-            row(node).modifier(NodeRowMenu(model: model, node: NodeAt(scopeId: node.scopeId, nodeId: node.nodeId, kind: node.kind, name: node.name)))
+            row(node).modifier(NodeRowMenu(model: model, node: Self.at(node)))
         }
+    }
+
+    /// A level node as its menu's node.
+    private static func at(_ node: NodeRef) -> NodeAt {
+        NodeAt(scopeId: node.scopeId, nodeId: node.nodeId, kind: node.kind, name: node.name)
     }
 
     @ViewBuilder private func row(_ node: NodeRef) -> some View {
@@ -661,7 +666,7 @@ struct HomeView: View {
                     // the folders apart from the rest, as the web's level view (core's `Home.groups`)
                     ForEach(groups, id: \.folders) { group in
                         if let heading = group.heading { SectionLabel(title: say(heading)).padding(.horizontal) }
-                        NodeTiles(items: group.nodes.compactMap(tile), width: tilesWidth).padding(.horizontal)
+                        NodeTiles(items: group.nodes.compactMap(tile), width: tilesWidth, model: model).padding(.horizontal)
                     }
                     // what was made here offline and waits to be sent, in place (core's `queuedHere`)
                     ForEach(queuedHere, id: \.id) { QueuedRow(item: $0).padding(.horizontal) }
@@ -694,15 +699,15 @@ struct HomeView: View {
         }
     }
 
-    /// A node of the level as a tile: a folder enters, an object opens.
+    /// A node of the level as a tile: a folder enters, an object opens; its menu the row's (#1053).
     private func tile(_ node: NodeRef) -> NodeTileItem? {
         if let folder = node.asFolder() {
             let target = model.dropTarget(node)
             return NodeTileItem(id: node.nodeId, name: node.name, cover: model.covers[node.nodeId]?.image, symbol: "folder", folder: true,
-                                drop: target.map { t in { providers in Task { await model.drop(providers, onto: t) } } }) { model.enter(folder) }
+                                drop: target.map { t in { providers in Task { await model.drop(providers, onto: t) } } }, menu: Self.at(node)) { model.enter(folder) }
         }
         if let bookmark = node.asBookmark() {
-            return NodeTileItem(id: node.nodeId, name: node.name, symbol: Names.kindSymbol(bookmark.kind), enabled: !picking) { model.openBookmark(bookmark) }
+            return NodeTileItem(id: node.nodeId, name: node.name, symbol: Names.kindSymbol(bookmark.kind), enabled: !picking, menu: Self.at(node)) { model.openBookmark(bookmark) }
         }
         guard let ref = node.asObject() else { return nil }
         return NodeTileItem(ref: ref, details: details, covers: covers, picking: picking, takesShare: takesShare, onOpen: model.open)
@@ -1004,12 +1009,16 @@ struct ArrangedListView: View {
 
     @ViewBuilder private func tiles(_ refs: [ObjectRef], heading: String?) -> some View {
         if let heading { SectionLabel(title: heading).padding(.horizontal) }
-        NodeTiles(items: refs.map { NodeTileItem(ref: $0, details: details, covers: covers, picking: picking, takesShare: takesShare, onOpen: onOpen) }, width: tilesWidth)
+        NodeTiles(items: refs.map { NodeTileItem(ref: $0, details: details, covers: covers, picking: picking, takesShare: takesShare, onOpen: onOpen) }, width: tilesWidth, model: model)
             .padding(.horizontal)
     }
 
+    /// Each row's menu is core's (`NodeRowMenu`), as a level's row's and as each tile's — Linux's and Windows' application
+    /// lists draw it too (#1053).
     private func rows(_ refs: [ObjectRef]) -> some View {
-        ForEach(refs, id: \.nodeId) { ref in ObjectRow(ref: ref, onOpen: onOpen).listRowBackground(Role.surface) }
+        ForEach(refs, id: \.nodeId) { ref in
+            ObjectRow(ref: ref, onOpen: onOpen).listRowBackground(Role.surface).modifier(NodeRowMenu(model: model, node: ref.at))
+        }
     }
 }
 

@@ -53,6 +53,9 @@ struct NodeTileItem: Identifiable {
     var enabled = true
     /// What a drop onto the tile does, where the core offers one (a folder's, `ShellModel.dropTarget`); nil: no drop target.
     var drop: (([NSItemProvider]) -> Void)?
+    /// The node whose menu a secondary click or a long press opens: its row's, core's `rowPlan` (`NodeRowMenu`, ADR 0154
+    /// decision 2); nil: none (a tile that is no level's row, a person's Memories).
+    var menu: NodeAt?
     let open: () -> Void
 }
 
@@ -62,18 +65,21 @@ struct NodeTiles: View {
     let items: [NodeTileItem]
     /// The width the grid is laid out in (measured by the page).
     let width: CGFloat
+    /// Where a tile's menu reads its plan and runs its entries; nil: no tile has a menu.
+    var model: AppModel?
 
     var body: some View {
         let gap = CGFloat(TileGrid.shared.GAP)
         let columns = Int(TileGrid.shared.columns(width: Double(width)))
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: gap, alignment: .top), count: max(columns, 1)), alignment: .leading, spacing: gap) {
-            ForEach(items) { NodeTile(item: $0) }
+            ForEach(items) { NodeTile(item: $0, model: model) }
         }
     }
 }
 
 private struct NodeTile: View {
     let item: NodeTileItem
+    let model: AppModel?
 
     var body: some View {
         Button(action: item.open) {
@@ -105,6 +111,22 @@ private struct NodeTile: View {
         .opacity(item.enabled ? 1 : 0.38)
         .accessibilityElement(children: .combine)
         .modifier(TileDrop(drop: item.drop))
+        .modifier(TileMenu(model: model, node: item.menu))
+    }
+}
+
+/// A tile's menu where it has one (`NodeTileItem.menu`): its row's, whole and in order, Delete last (`NodeRowMenu`) — the
+/// level's two views offer the same entries (#1053: the Tiles view drew none).
+private struct TileMenu: ViewModifier {
+    let model: AppModel?
+    let node: NodeAt?
+
+    func body(content: Content) -> some View {
+        if let model, let node {
+            content.modifier(NodeRowMenu(model: model, node: node))
+        } else {
+            content
+        }
     }
 }
 
@@ -132,7 +154,7 @@ extension NodeTileItem {
     ) {
         self.init(
             id: ref.nodeId, name: ref.name, details: details[ref.nodeId].map(joinedLine), cover: covers[ref.nodeId],
-            symbol: Names.kindSymbol(ref.kind), enabled: !picking || takesShare(ref)
+            symbol: Names.kindSymbol(ref.kind), enabled: !picking || takesShare(ref), menu: ref.at
         ) { onOpen(ref) }
     }
 }
