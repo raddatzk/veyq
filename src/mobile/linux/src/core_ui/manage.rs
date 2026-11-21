@@ -254,18 +254,18 @@ fn lose(dialog: &adw::PreferencesDialog, connection: String, loss: QueuedLoss, h
 
 /// Says what a change of trust was answered, where it did not happen, as a toast over [dialog] (Settings' too).
 pub(crate) fn said_change(dialog: &adw::PreferencesDialog, answered: Result<Answer, bridge::Unreadable>) {
-    let text = match answered {
+    let (key, text) = match answered {
         Ok(Answer::Done) => return,
         // a prompt cancelled: nothing changed, and nothing to say
         Ok(Answer::Refused { why: Why::TrustCancelled }) => return,
-        Ok(Answer::Refused { why: Why::WrongPassword }) => words::manage_wrong_password(),
-        Ok(Answer::Refused { why: Why::TrustFailed }) => words::trust_failed(),
+        Ok(Answer::Refused { why: Why::WrongPassword }) => ("manage_wrong_password", words::manage_wrong_password()),
+        Ok(Answer::Refused { why: Why::TrustFailed }) => ("trust_failed", words::trust_failed()),
         other => {
             eprintln!("veyq: a change of trust answered {other:?}");
-            words::trust_failed()
+            ("trust_failed", words::trust_failed())
         }
     };
-    dialog.add_toast(adw::Toast::new(&text));
+    dialog.add_toast(crate::core_ui::said::word_toast(key, &text));
 }
 
 /// Stays signed in to [connection] at [level] instead; Manage follows (the core refreshes it).

@@ -613,10 +613,10 @@ impl Inner {
             let mut lines: Vec<(String, String)> = rows.iter().map(|r| {
                 let value = if let Some(w) = &r.words {
                     said::notice(w)
-                } else if let Some(size) = r.size {
-                    said::size(size)
-                } else if let Some(moment) = r.moment {
-                    said::moment(moment)
+                } else if let Some(size) = &r.size_text {
+                    size.clone()
+                } else if let Some(moment) = &r.moment_text {
+                    moment.clone()
                 } else {
                     r.text.clone().unwrap_or_default()
                 };
@@ -746,7 +746,7 @@ impl Inner {
         let Some(name) = self.shown.borrow().as_ref().and_then(|s| s.download_name.clone()) else { return };
         let (parent, toasts) = (self.window.clone(), self.toasts.clone());
         glib::spawn_future_local(async move {
-            let failed = || adw::Toast::new(&glib_escape(&words::download_failed(&name)));
+            let failed = || said::word_toast("download_failed", &words::download_failed(&name));
             let dialog = gtk::FileDialog::builder().title(words::memory_download()).initial_name(name.as_str()).modal(true).build();
             if let Some(pictures) = glib::user_special_dir(glib::UserDirectory::Pictures).filter(|d| d.is_dir()) {
                 dialog.set_initial_folder(Some(&gtk::gio::File::for_path(pictures)));

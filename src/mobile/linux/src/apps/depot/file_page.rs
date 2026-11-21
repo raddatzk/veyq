@@ -155,7 +155,7 @@ impl FilePage {
         drop(shown);
         let (parent, toasts) = (parent.clone(), toasts.clone());
         glib::spawn_future_local(async move {
-            let failed = || adw::Toast::new(&words::download_failed(&name));
+            let failed = || said::word_toast("download_failed", &words::download_failed(&name));
             let dialog = gtk::FileDialog::builder().title(words::node_download()).initial_name(name.as_str()).modal(true).build();
             if let Some(downloads) = glib::user_special_dir(glib::UserDirectory::Downloads).filter(|d| d.is_dir()) {
                 dialog.set_initial_folder(Some(&gtk::gio::File::for_path(downloads)));
@@ -419,7 +419,8 @@ fn text_view(text: &str, cut: Option<String>) -> gtk::Widget {
         note.set_label(&if truncated { words::file_text_copied_shown() } else { words::file_text_copied() });
         eprintln!("veyq: file text copied: {} characters", shown.chars().count());
         let note = note.clone();
-        glib::timeout_add_seconds_local_once(6, move || note.set_label(""));
+        // "copied" shows for the core's `COPIED_MS` (the web's copy notes)
+        glib::timeout_add_local_once(crate::core_ui::said::copied_for(), move || note.set_label(""));
     });
     let (v, sc) = (view.clone(), scroll.clone());
     wrap.connect_toggled(move |w| {

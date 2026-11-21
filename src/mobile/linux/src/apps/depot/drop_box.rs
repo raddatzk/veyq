@@ -251,7 +251,7 @@ impl Inner {
                 match bridge::call(&Call::DropBoxDelete { r#box, folder }).await.map(|(a, _)| a) {
                     Ok(Answer::Trashed { notice, undoable }) => {
                         eprintln!("veyq: drop box folder trashed: {}, undo offered: {undoable}", notice.msg);
-                        let toast = adw::Toast::new(&said::notice(&notice));
+                        let toast = said::notice_toast(&notice);
                         if undoable {
                             toast.set_button_label(Some(&words::trash_undo()));
                             let t = toasts.clone();

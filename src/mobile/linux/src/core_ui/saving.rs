@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use adw::prelude::*;
 use gtk::glib;
 
-use crate::bridge::{self, wire::Call, wire::SaveEnd, wire::Update, wire::Watched};
+use crate::bridge::{self, wire::Call, wire::Update, wire::Watched};
 use crate::core_ui::home::glib_escape;
 use crate::core_ui::{said, words};
 
@@ -50,11 +50,8 @@ pub async fn saving(save: i64, toasts: &adw::ToastOverlay) {
             continue;
         }
         eprintln!("veyq: save {save} ended {:?}: {} of {} B", s.end, s.written, s.total);
-        let done = adw::Toast::new(&glib_escape(&said::notice(&s.notice)));
-        if s.end == Some(SaveEnd::Saved) {
-            done.set_timeout(5);
-        }
-        toasts.add_toast(done);
+        // a save's end lives as its notice's kind says: saved briefly, a failure until closed
+        toasts.add_toast(said::notice_toast(&s.notice));
         break;
     }
     // ended, or its watch went with the tenant: the banner goes either way

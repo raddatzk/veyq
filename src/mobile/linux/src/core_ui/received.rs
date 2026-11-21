@@ -758,7 +758,7 @@ impl Inner {
                 Ok(Answer::Done) => {}
                 other => {
                     eprintln!("veyq: a guest's upload answered {}", answer_kind(&other));
-                    toasts.add_toast(adw::Toast::new(&words::share_failed()));
+                    toasts.add_toast(said::word_toast("share_failed", &words::share_failed()));
                 }
             }
         });
@@ -797,7 +797,7 @@ impl Inner {
                     Ok(Answer::Done) => then(&i),
                     other => {
                         eprintln!("veyq: the guest's name answered {}", answer_kind(&other));
-                        i.root.add_toast(adw::Toast::new(&words::share_failed()));
+                        i.root.add_toast(said::word_toast("share_failed", &words::share_failed()));
                     }
                 }
             });
@@ -858,12 +858,12 @@ impl Inner {
                     Ok(Answer::Named { notice, .. }) => {
                         eprintln!("veyq: the guest's naming: named");
                         if let Some(n) = notice {
-                            i.root.add_toast(adw::Toast::new(&said::notice(&n)));
+                            i.root.add_toast(said::notice_toast(&n));
                         }
                     }
                     other => {
                         eprintln!("veyq: the guest's naming answered {}", answer_kind(&other));
-                        i.root.add_toast(adw::Toast::new(&words::share_failed()));
+                        i.root.add_toast(said::word_toast("share_failed", &words::share_failed()));
                     }
                 }
             });
@@ -880,11 +880,11 @@ impl Inner {
             glib::spawn_future_local(async move {
                 match bridge::call(&Call::ReceivedNewFolder { received: id, name: name.clone() }).await.map(|(a, _)| a) {
                     Ok(Answer::Named { problem: Some(p), .. }) => again(name, said::notice(&p)),
-                    Ok(Answer::Named { notice: Some(n), .. }) => toasts.add_toast(adw::Toast::new(&said::notice(&n))),
+                    Ok(Answer::Named { notice: Some(n), .. }) => toasts.add_toast(said::notice_toast(&n)),
                     Ok(Answer::Named { .. }) => eprintln!("veyq: a guest's new folder: made"),
                     other => {
                         eprintln!("veyq: a guest's new folder answered {}", answer_kind(&other));
-                        toasts.add_toast(adw::Toast::new(&words::share_failed()));
+                        toasts.add_toast(said::word_toast("share_failed", &words::share_failed()));
                     }
                 }
             });
@@ -977,14 +977,14 @@ impl Inner {
                         Ok(Answer::Done) => {
                             // the kept link's row shows on its level once the shell's lists are read anew
                             bridge::send(Call::ShellRefresh);
-                            words::link_kept(&name)
+                            said::word_toast("link_kept", &words::link_kept(&name))
                         }
                         other => {
                             eprintln!("veyq: Keep answered {}", answer_kind(&other));
-                            words::bookmark_create_failed()
+                            said::word_toast("bookmark_create_failed", &words::bookmark_create_failed())
                         }
                     };
-                    toasts.add_toast(adw::Toast::new(&said));
+                    toasts.add_toast(said);
                 });
             });
             ask.present(Some(&i.root));

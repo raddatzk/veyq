@@ -372,7 +372,7 @@ impl Inner {
         }
         if s.sent {
             self.stack.set_visible_child_name("sent");
-            let at = s.received_at.as_deref().map(said::instant_moment).unwrap_or_default();
+            let at = s.received_text.clone().unwrap_or_default();
             self.receipt.set_label(&words::report_receipt(s.reference.as_deref().unwrap_or_default(), &at));
             self.send.set_visible(false);
             self.cancel.set_visible(false);

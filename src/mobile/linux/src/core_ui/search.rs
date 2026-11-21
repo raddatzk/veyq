@@ -413,10 +413,7 @@ impl Inner {
                 let line = said::line(&r.line);
                 let mut subtitle = glib_escape(&line);
                 if let Some(reason) = &r.reason {
-                    if !subtitle.is_empty() {
-                        subtitle.push_str(" · ");
-                    }
-                    subtitle.push_str(&markup(reason));
+                    subtitle = if subtitle.is_empty() { markup(reason) } else { said::joined(&[subtitle, markup(reason)]) };
                 }
                 let row = row(icon(&r.icon), &markup(&r.name), &subtitle, None);
                 let plain: String = r.name.iter().map(|p| p.text.as_str()).collect();

@@ -394,7 +394,7 @@ impl MemoryPage {
                     Ok(Answer::Created { queued: true, notice, .. }) => {
                         eprintln!("veyq: new chapter: queued");
                         if let Some(n) = notice {
-                            toasts.add_toast(adw::Toast::new(&said::notice(&n)));
+                            toasts.add_toast(said::notice_toast(&n));
                         }
                     }
                     Ok(Answer::Created { notice: Some(n), .. }) => {
@@ -1035,7 +1035,8 @@ impl Inner {
             if !self.seen_undo.replace(true)
                 && let Some(gallery) = self.id.get()
             {
-                let toast = adw::Toast::builder().title(glib_escape(&said::notice(undo))).timeout(0).button_label(words::trash_undo()).build();
+                let toast = said::toast(&said::notice(undo), crate::bridge::wire::NoticeKind::Undo);
+                toast.set_button_label(Some(&words::trash_undo()));
                 toast.connect_button_clicked(move |_| {
                     eprintln!("veyq: gallery undo pressed");
                     bridge::send(Call::GalleryUndo { gallery });
@@ -1054,7 +1055,7 @@ impl Inner {
         }
         if let (Some(said), Some(gallery), false) = (&s.said, self.id.get(), self.said_shown.replace(s.said.is_some())) {
             eprintln!("veyq: gallery said: {}", said.msg);
-            self.toasts.add_toast(adw::Toast::new(&glib_escape(&said::notice(said))));
+            self.toasts.add_toast(said::notice_toast(said));
             bridge::send(Call::GallerySeen { gallery });
         }
         if s.purging.is_none() {

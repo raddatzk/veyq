@@ -12,7 +12,6 @@ use adw::prelude::*;
 use gtk::glib;
 
 use crate::bridge::{self, Watch, wire::Call, wire::NowPlayingShown, wire::PlayerShown, wire::Update, wire::Watched};
-use crate::core_ui::home::glib_escape;
 use crate::core_ui::{said, words};
 
 /// The account's music bar: [bar] is what the shell places at the window's bottom; it reveals itself.
@@ -34,13 +33,6 @@ pub struct MusicBar {
     /// The notice said, until a state without it.
     said: Cell<bool>,
     watch: RefCell<Option<Watch>>,
-}
-
-/// [ms] as a player says a time: `m:ss`, `h:mm:ss` from an hour on.
-pub fn clock(ms: i64) -> String {
-    let s = ms.max(0) / 1000;
-    let (h, m, s) = (s / 3600, s / 60 % 60, s % 60);
-    if h > 0 { format!("{h}:{m:02}:{s:02}") } else { format!("{m}:{s:02}") }
 }
 
 impl MusicBar {
@@ -130,9 +122,10 @@ impl MusicBar {
         let weak = Rc::downgrade(self);
         self.scale.connect_change_value(move |_, scroll, value| {
             let Some(b) = weak.upgrade() else { return glib::Propagation::Proceed };
+            // held, the scale moves alone: the clocks are the core's (`Shown.length`) and say the playing position until
+            // the seek on release
             if scroll == gtk::ScrollType::Jump {
                 b.dragging.set(true);
-                b.elapsed.set_label(&clock(value as i64));
             } else {
                 bridge::send(Call::PlayerSeek { position_ms: value.max(0.0) as i64 });
             }
@@ -187,7 +180,7 @@ impl MusicBar {
         match shown.as_ref().and_then(|s| s.notice.as_ref()) {
             Some(n) if !self.said.replace(true) => {
                 eprintln!("veyq: music bar said: {}", n.msg);
-                self.toasts.add_toast(adw::Toast::builder().title(glib_escape(&said::notice(n))).timeout(5).build());
+                self.toasts.add_toast(said::nothing_plays_toast(n));
             }
             Some(_) => {}
             None => self.said.set(false),
@@ -219,26 +212,11 @@ impl MusicBar {
         self.play.update_property(&[gtk::accessible::Property::Label(&label)]);
         self.scale.update_property(&[gtk::accessible::Property::Label(&words::music_progress(&n.title))]);
         self.scale.set_sensitive(n.duration_ms > 0);
-        self.total.set_label(&if n.duration_ms > 0 { clock(n.duration_ms) } else { String::new() });
+        self.total.set_label(if n.duration_ms > 0 { &n.duration_text } else { "" });
         if !self.dragging.get() {
             self.scale.set_range(0.0, n.duration_ms.max(1) as f64);
             self.scale.set_value(n.position_ms as f64);
-            self.elapsed.set_label(&clock(n.position_ms));
+            self.elapsed.set_label(&n.position_text);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// The bar's times as a player says them: minutes and seconds, hours once there are any.
-    #[test]
-    fn a_time_is_said_as_minutes_and_seconds() {
-        assert_eq!(clock(0), "0:00");
-        assert_eq!(clock(59_999), "0:59");
-        assert_eq!(clock(61_000), "1:01");
-        assert_eq!(clock(3_725_000), "1:02:05");
-        assert_eq!(clock(-5), "0:00");
     }
 }

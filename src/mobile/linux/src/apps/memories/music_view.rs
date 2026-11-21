@@ -149,7 +149,7 @@ pub fn subtitle_of(t: &MusicTrackShown) -> String {
     } else {
         None
     };
-    [t.length.clone(), mark].into_iter().flatten().collect::<Vec<_>>().join(" · ")
+    said::joined(&[t.length.clone(), mark].into_iter().flatten().collect::<Vec<_>>())
 }
 
 impl Inner {
@@ -168,7 +168,7 @@ impl Inner {
         }
         if let (Some(said), Some(music), false) = (&s.said, self.id.get(), self.said_shown.replace(s.said.is_some())) {
             eprintln!("veyq: music view said: {}", said.msg);
-            self.toasts.add_toast(adw::Toast::new(&glib_escape(&said::notice(said))));
+            self.toasts.add_toast(said::notice_toast(said));
             bridge::send(Call::MusicSeen { music });
         }
         let tracks = s.tracks.clone();
@@ -306,7 +306,7 @@ impl Inner {
                     eprintln!("veyq: Music.Add: {} said", said.len());
                     // the last refusal is the view's own said as well (`MusicShown.said`), which says it once: the rest here
                     for n in said.iter().take(said.len().saturating_sub(1)) {
-                        toasts.add_toast(adw::Toast::new(&glib_escape(&said::notice(n))));
+                        toasts.add_toast(said::notice_toast(n));
                     }
                 }
                 other => crate::core_ui::header::say(&toasts, other, "Music.Add"),
@@ -352,7 +352,7 @@ impl Inner {
         let name = t.file_name.clone().unwrap_or_else(|| title_of(t));
         let (parent, toasts, media_id) = (self.window.clone(), self.toasts.clone(), t.media_id.clone());
         glib::spawn_future_local(async move {
-            let failed = || adw::Toast::new(&glib_escape(&words::music_download_failed()));
+            let failed = || said::word_toast("music_download_failed", &words::music_download_failed());
             let dialog = gtk::FileDialog::builder().title(words::music_download()).initial_name(name.as_str()).modal(true).build();
             if let Some(dir) = glib::user_special_dir(glib::UserDirectory::Music).filter(|d| d.is_dir()) {
                 dialog.set_initial_folder(Some(&gio::File::for_path(dir)));
@@ -423,7 +423,7 @@ mod tests {
     fn a_tracks_row_says_its_length_and_why_it_does_not_play() {
         let t = track();
         assert_eq!(subtitle_of(&t), "3:05");
-        assert_eq!(subtitle_of(&MusicTrackShown { unplayable: true, ..t.clone() }), format!("3:05 · {}", words::music_track_unplayable()));
+        assert_eq!(subtitle_of(&MusicTrackShown { unplayable: true, ..t.clone() }), said::joined(&["3:05".to_string(), words::music_track_unplayable()]));
         assert_eq!(subtitle_of(&MusicTrackShown { blocked: true, length: None, ..t.clone() }), words::memory_blocked());
         assert_eq!(title_of(&MusicTrackShown { title: Some("Song".into()), ..t.clone() }), "Song");
         assert_eq!(title_of(&t), words::music_untitled(2), "an untitled track is said by its number");

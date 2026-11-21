@@ -27,23 +27,17 @@ pub fn day_of(y: i32, m: i32, d: i32) -> Option<i64> {
     glib::DateTime::from_utc(y, m, d, 0, 0, 0.0).ok().map(|t| t.to_unix().div_euclid(86_400))
 }
 
-/// A day the person reads: the locale's date.
-fn day_text(day: i64) -> String {
-    let (y, m, d) = ymd(day);
-    said::day(&format!("{y:04}-{m:02}-{d:02}"))
-}
-
 /// A link's line under its title: when it was made and ends, then its badges.
 pub fn subtitle(link: &ShownLink) -> String {
-    let mut dates = vec![words::share_created(&said::instant_day(&link.created_at))];
-    if let Some(e) = &link.expires_at {
-        dates.push(words::share_expires(&said::instant_day(e)));
+    let mut dates = vec![words::share_created(&link.created_text)];
+    if let Some(e) = &link.expires_text {
+        dates.push(words::share_expires(e));
     }
     let badges: Vec<String> = link.badges.iter().map(said::notice).collect();
-    let mut line = dates.join(" · ");
+    let mut line = said::joined(&dates);
     if !badges.is_empty() {
         line.push('\n');
-        line.push_str(&badges.join(" · "));
+        line.push_str(&said::joined(&badges));
     }
     line
 }
@@ -378,7 +372,7 @@ impl Inner {
     fn copy(&self, from: &impl IsA<gtk::Widget>, address: &str) {
         from.clipboard().set_text(address);
         eprintln!("veyq: share: a link's address copied");
-        self.toasts.add_toast(adw::Toast::new(&words::share_copied()));
+        self.toasts.add_toast(said::copied_toast(&words::share_copied()));
     }
 
     fn draw(self: &Rc<Self>) {
@@ -531,7 +525,7 @@ impl Inner {
         f.end.set_sensitive(form.end.optional && !s.saving);
         f.end.set_subtitle(&said::notice(&form.end.hint));
         f.end_day.set_visible(form.end.on);
-        f.end_day.set_subtitle(&day_text(form.end.day));
+        f.end_day.set_subtitle(&form.end.day_text);
         let (y, m, d) = ymd(form.end.day);
         if let Ok(t) = glib::DateTime::from_local(y, m, d, 12, 0, 0.0) {
             f.calendar.set_date(&t);
@@ -601,9 +595,10 @@ mod tests {
             badges: vec![Notice { msg: "share_switched_off".into(), args: vec![], kind: crate::bridge::wire::NoticeKind::Held }],
             created_at: "2026-11-01T10:00:00Z".into(), expires_at: None, address: None, can_copy: false, can_edit: false,
             can_renew: true, can_switch_off: false, can_reactivate: true, can_delete: true, actions: vec![],
+            created_text: "Nov 1, 2026".into(), expires_text: None,
         };
         let line = subtitle(&link);
         assert_eq!(line.lines().count(), 2, "{line}");
-        assert!(line.lines().next().unwrap().contains(&said::instant_day("2026-11-01T10:00:00Z")));
+        assert!(line.lines().next().unwrap().contains("Nov 1, 2026"), "the core's day, as it came: {line}");
     }
 }

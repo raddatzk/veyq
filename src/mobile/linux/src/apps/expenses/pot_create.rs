@@ -26,7 +26,7 @@ pub fn open(parent: &gtk::Window, said: &adw::ToastOverlay) {
             Ok(Answer::PotCreateOpened { create }) => create,
             other => {
                 eprintln!("veyq: PotCreate.Open answered {other:?}");
-                said.add_toast(adw::Toast::new(&words::create_pot_failed()));
+                said.add_toast(said::word_toast("create_pot_failed", &words::create_pot_failed()));
                 return;
             }
         };
@@ -169,19 +169,19 @@ impl Inner {
                 Ok(Answer::Stored { stored: true, notice }) => {
                     eprintln!("veyq: new pot created{}", notice.as_ref().map(|n| format!(", {}", n.msg)).unwrap_or_default());
                     if let Some(n) = notice {
-                        i.said.add_toast(adw::Toast::new(&said::notice(&n)));
+                        i.said.add_toast(said::notice_toast(&n));
                     }
                     i.dialog.close();
                 }
                 Ok(Answer::Stored { stored: false, notice }) => {
                     eprintln!("veyq: new pot refused: {}", notice.as_ref().map(|n| n.msg.to_string()).unwrap_or_default());
                     if let Some(n) = notice {
-                        i.toasts.add_toast(adw::Toast::new(&said::notice(&n)));
+                        i.toasts.add_toast(said::notice_toast(&n));
                     }
                 }
                 other => {
                     eprintln!("veyq: PotCreate.Create answered {other:?}");
-                    i.toasts.add_toast(adw::Toast::new(&words::create_pot_failed()));
+                    i.toasts.add_toast(said::word_toast("create_pot_failed", &words::create_pot_failed()));
                 }
             }
         });

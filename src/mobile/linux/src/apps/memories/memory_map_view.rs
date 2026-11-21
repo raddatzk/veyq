@@ -183,7 +183,7 @@ pub fn subtitle_of(t: &TrackShown) -> String {
     match t.status {
         TrackStatus::Loading => words::track_loading(),
         TrackStatus::Failed => words::track_unreadable(),
-        TrackStatus::Ready => t.facts.iter().filter_map(fact_text).collect::<Vec<_>>().join(" · "),
+        TrackStatus::Ready => said::joined(&t.facts.iter().filter_map(fact_text).collect::<Vec<_>>()),
     }
 }
 
@@ -229,7 +229,7 @@ impl Inner {
         }
         if let (Some(said), Some(tracks), false) = (&s.said, self.id.get(), self.said_shown.replace(s.said.is_some())) {
             eprintln!("veyq: map view said: {}", said.msg);
-            self.toasts.add_toast(adw::Toast::new(&glib_escape(&said::notice(said))));
+            self.toasts.add_toast(said::notice_toast(said));
             bridge::send(Call::TracksSeen { tracks });
         }
         let tracks = s.tracks.clone().unwrap_or_default();
@@ -348,7 +348,7 @@ impl Inner {
                 Ok(Answer::TracksAdded { said }) => {
                     eprintln!("veyq: Tracks.Add: {} said", said.len());
                     for n in &said {
-                        toasts.add_toast(adw::Toast::new(&glib_escape(&said::notice(n))));
+                        toasts.add_toast(said::notice_toast(n));
                     }
                 }
                 other => crate::core_ui::header::say(&toasts, other, "Tracks.Add"),
@@ -421,7 +421,7 @@ impl Inner {
                     Ok(Answer::Queued { count, notice }) => {
                         eprintln!("veyq: Tracks.Confirm: {count} queued");
                         if let Some(n) = notice {
-                            toasts.add_toast(adw::Toast::new(&glib_escape(&said::notice(&n))));
+                            toasts.add_toast(said::notice_toast(&n));
                         }
                     }
                     other => crate::core_ui::header::say(&toasts, other, "Tracks.Confirm"),
@@ -470,7 +470,7 @@ impl Inner {
         let name = t.file_name.clone().unwrap_or_else(|| name_of(t));
         let (parent, toasts, media_id) = (self.window.clone(), self.toasts.clone(), t.media_id.clone());
         glib::spawn_future_local(async move {
-            let failed = || adw::Toast::new(&glib_escape(&words::track_download_failed()));
+            let failed = || said::word_toast("track_download_failed", &words::track_download_failed());
             let dialog = gtk::FileDialog::builder().title(words::track_download()).initial_name(name.as_str()).modal(true).build();
             let chosen = match dialog.save_future(Some(&parent)).await {
                 Ok(chosen) => chosen,
@@ -544,7 +544,7 @@ mod tests {
     #[test]
     fn a_tracks_row_says_its_facts_its_read_and_its_activity() {
         let t = track();
-        assert_eq!(subtitle_of(&t), format!("{} · {}", words::track_distance_km(&number(3.24, 1)), words::track_duration_minutes(38)));
+        assert_eq!(subtitle_of(&t), said::joined(&[words::track_distance_km(&number(3.24, 1)), words::track_duration_minutes(38)]));
         assert_eq!(subtitle_of(&TrackShown { status: TrackStatus::Loading, ..t.clone() }), words::track_loading());
         assert_eq!(subtitle_of(&TrackShown { status: TrackStatus::Failed, ..t.clone() }), words::track_unreadable());
         assert_eq!(subtitle_of(&TrackShown { blocked: true, ..t.clone() }), words::memory_blocked());

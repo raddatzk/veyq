@@ -30,9 +30,9 @@ pub fn fake() -> SettingsShown {
         level: Some(StaySignedIn::Login),
         levels: vec![StaySignedIn::Login],
         families: Some(vec![
-            SettingsFamily { id: "f-here".into(), created_at: Some(now - 9 * day), last_used_at: Some(now), current: true, label: Some("fedora".into()), removes_key: false },
-            SettingsFamily { id: "f-laptop".into(), created_at: Some(now - 40 * day), last_used_at: Some(now - 2 * day), current: false, label: Some("Work laptop".into()), removes_key: true },
-            SettingsFamily { id: "f-old".into(), created_at: Some(now - 120 * day), last_used_at: Some(now - 30 * day), current: false, label: None, removes_key: false },
+            SettingsFamily { id: "f-here".into(), created_at: Some(now - 9 * day), last_used_at: Some(now), current: true, label: Some("fedora".into()), removes_key: false, created_text: None, last_used_text: None },
+            SettingsFamily { id: "f-laptop".into(), created_at: Some(now - 40 * day), last_used_at: Some(now - 2 * day), current: false, label: Some("Work laptop".into()), removes_key: true, created_text: None, last_used_text: None },
+            SettingsFamily { id: "f-old".into(), created_at: Some(now - 120 * day), last_used_at: Some(now - 30 * day), current: false, label: None, removes_key: false, created_text: None, last_used_text: None },
         ]),
         kept_devices: vec![SettingsKeptDevice { device_id: "d-phone".into(), label: "Old phone".into() }],
         other_saved_keys: true,

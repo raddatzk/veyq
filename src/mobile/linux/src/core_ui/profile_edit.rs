@@ -178,7 +178,7 @@ pub fn open(parent: &gtk::Widget) {
             other => {
                 eprintln!("veyq: Profile.Open answered {other:?}");
                 if let Some(i) = w.upgrade() {
-                    i.toasts.add_toast(adw::Toast::new(&words::profile_load_failed()));
+                    i.toasts.add_toast(said::word_toast("profile_load_failed", &words::profile_load_failed()));
                 }
                 return;
             }
@@ -236,7 +236,7 @@ impl Inner {
             self.first.set_text(&s.first_name);
             self.last.set_text(&s.last_name);
             if self.filled_at.get().is_some() {
-                self.toasts.add_toast(adw::Toast::new(&words::profile_saved()));
+                self.toasts.add_toast(said::word_toast("profile_saved", &words::profile_saved()));
             }
             self.filled_at.set(Some(s.saves));
         }
@@ -320,7 +320,7 @@ impl Inner {
                 Some(Ok(t)) => Cropper::push(&i, path, &t),
                 other => {
                     eprintln!("veyq: profile: the picture did not decode ({:?})", other.map(|r| r.err()));
-                    i.toasts.add_toast(adw::Toast::new(&words::profile_picture_not_image()));
+                    i.toasts.add_toast(said::word_toast("profile_picture_not_image", &words::profile_picture_not_image()));
                 }
             }
         });
@@ -348,7 +348,7 @@ impl Cropper {
         let scale = (f64::from(EDGE * 4) / f64::from(tw.min(th).max(1))).min(1.0);
         let (w, h) = (((f64::from(tw) * scale).round() as i32).max(1), ((f64::from(th) * scale).round() as i32).max(1));
         let Some(surface) = crate::core_ui::cover::scaled(texture, w, h) else {
-            profile.toasts.add_toast(adw::Toast::new(&words::profile_picture_not_image()));
+            profile.toasts.add_toast(said::word_toast("profile_picture_not_image", &words::profile_picture_not_image()));
             return;
         };
         let area = gtk::DrawingArea::builder().content_width(EDGE).content_height(EDGE).halign(gtk::Align::Center).build();
@@ -433,7 +433,7 @@ impl Cropper {
                     Ok(Answer::Done) => {
                         i.nav.pop();
                     }
-                    _ => i.toasts.add_toast(adw::Toast::new(&words::profile_picture_not_image())),
+                    _ => i.toasts.add_toast(said::word_toast("profile_picture_not_image", &words::profile_picture_not_image())),
                 }
             });
         });

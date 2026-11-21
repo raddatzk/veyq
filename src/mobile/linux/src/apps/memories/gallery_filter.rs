@@ -204,13 +204,9 @@ impl Inner {
     }
 }
 
-/// A chip as it reads: a day the desktop's way (the core labels it by its ISO day in the device's zone, `day:<iso>`, inbox
-/// #989), any other by the core's label.
+/// A chip as it reads: the core's label (a day written as every app writes one, ADR 0154 decision 5).
 pub fn label_of(c: &ChipShown) -> String {
-    match c.chip.strip_prefix("day:") {
-        Some(iso) => crate::core_ui::said::day(iso),
-        None => c.label.clone(),
-    }
+    c.label.clone()
 }
 
 /// What an empty grid says while a filter keeps nothing (E5: an empty grid never reads as an empty Memory): the marks'
@@ -252,11 +248,11 @@ mod tests {
         }
     }
 
-    /// A day chip reads the desktop's way; any other as the core labels it.
+    /// A chip reads as the core labels it, a day too (the core writes it, ADR 0154 decision 5).
     #[test]
-    fn a_day_chip_reads_the_desktops_way() {
-        let day = ChipShown { chip: "day:2024-05-03".into(), label: "2024-05-03".into(), rest: None };
-        assert_eq!(label_of(&day), crate::core_ui::said::day("2024-05-03"));
+    fn a_chip_reads_as_the_core_labels_it() {
+        let day = ChipShown { chip: "day:2024-05-03".into(), label: "May 3, 2024".into(), rest: None };
+        assert_eq!(label_of(&day), "May 3, 2024");
         let place = ChipShown { chip: "place:berlin".into(), label: "Berlin".into(), rest: None };
         assert_eq!(label_of(&place), "Berlin");
     }
