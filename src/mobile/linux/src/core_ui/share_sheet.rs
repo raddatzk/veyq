@@ -603,7 +603,7 @@ mod tests {
             share_id: "s".into(), title: Piece::Plain { text: "Family".into() },
             badges: vec![Notice { msg: "share_switched_off".into(), args: vec![] }],
             created_at: "2026-11-01T10:00:00Z".into(), expires_at: None, address: None, can_copy: false, can_edit: false,
-            can_renew: true, can_switch_off: false, can_reactivate: true, can_delete: true,
+            can_renew: true, can_switch_off: false, can_reactivate: true, can_delete: true, actions: vec![],
         };
         let line = subtitle(&link);
         assert_eq!(line.lines().count(), 2, "{line}");

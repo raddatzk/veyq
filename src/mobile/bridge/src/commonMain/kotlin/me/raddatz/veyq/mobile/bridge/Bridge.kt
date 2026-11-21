@@ -473,6 +473,9 @@ internal class HeldHeader(val model: NodeHeaderModel, val maxButtons: Int) {
 
     /** The Memory's or chapter's page whose own actions join the plan ([Call.HeaderFacts]' `gallery`: its upload). */
     val gallery = MutableStateFlow<Long?>(null)
+
+    /** The kept link's page whose own entries join the plan ([Call.HeaderFacts]' `bookmark`: open on its own page, report). */
+    val bookmark = MutableStateFlow<Long?>(null)
 }
 
 /** A drop box's page the host opened, and the header its last delete trashed through (its undo, [Call.DropBoxUndo]). */
@@ -1104,6 +1107,15 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.UploadFiles, is Call.UploadFolder, is Call.ImportScreen, is Call.ImportScreenFolder, is Call.ImportRun, is Call.ImportAsFile,
             is Call.ImportCancel, is Call.UploadReplace, is Call.UploadCancel, is Call.UploadRetry, Call.UploadCancelAll, is Call.UploadAcknowledge,
             is Call.UploadTakeOffer, is Call.UploadSeen, is Call.Drop -> uploadCall(parts, call)
+            is Call.RowPlan -> tenant.value?.models?.shell?.let { shell ->
+                val plan = shell.rowPlan(call.node)
+                val pinned = shell.isFavorite(call.node)
+                val deleteTitle = AppKinds.header(call.node.kind)?.deleteTitle
+                fun word(id: me.raddatz.veyq.mobile.navigation.HeaderAction) =
+                    me.raddatz.veyq.mobile.navigation.NodeHeader.label(id, call.node.kind, pinned, hasCover = false) ?: deleteTitle.takeIf { id == me.raddatz.veyq.mobile.navigation.HeaderAction.DELETE }
+                Answer.RowPlan(plan.menu.map { HeaderShown.PlanAction(it, word(it)) }, plan.last.map { HeaderShown.PlanAction(it, word(it)) })
+            } ?: noTenant
+            is Call.SignInPlan -> Answer.SignInPlan(me.raddatz.veyq.mobile.session.SignInPlan.entries(call.adding, call.camera))
             is Call.HeaderOpen -> tenant.value?.models?.header?.let { make ->
                 val id = ids.incrementAndFetch()
                 headers.put(id, HeldHeader(make(call.node, call.facts, ::closeOpen), call.maxButtons))
@@ -1112,6 +1124,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.HeaderFacts -> headers[call.header]?.let { h ->
                 h.file.value = call.file
                 h.gallery.value = call.gallery
+                h.bookmark.value = call.bookmark
                 h.model.update(call.facts)
                 Answer.Done
             } ?: noHeader
@@ -2681,7 +2694,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Watched.Header -> headers[w.header]?.let { h ->
             val page = h.file.flatMapLatest { f -> f?.let { filePages[it]?.state } ?: flowOf(null) }
             val gallery = h.gallery.flatMapLatest { g -> g?.let { galleries[it]?.state } ?: flowOf(null) }
-            combine(h.model.state, page, gallery) { _, _, _ -> Update.Header(w.header, shownHeader(h)) }
+            val bookmark = h.bookmark.flatMapLatest { b -> b?.let { bookmarks[it]?.page?.state } ?: flowOf(null) }
+            combine(h.model.state, page, gallery, bookmark) { _, _, _, _ -> Update.Header(w.header, shownHeader(h)) }
         } ?: flowOf(Update.Header(w.header, null))
         is Watched.Gallery -> galleries[w.gallery]?.let { g -> g.state.map { Update.Gallery(w.gallery, shownGallery(g, it)) } }
             ?: flowOf(Update.Gallery(w.gallery, null))
@@ -2857,7 +2871,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             switcher = ShellWords.switcher(parts.session.accounts, parts.hidden, open.account, open.tenant).map {
                 ShellShown.ShownSwitcherEntry(it.connection, it.tenant, it.name, it.detail, it.line, it.current)
             },
-            drawerSections = lists.drawerSections,
+            drawerSections = open.models.shell?.drawerSections(lists).orEmpty(),
             space = space,
             spaceName = ShellWords.space(space),
             switcherSubtitle = ShellWords.switcherSubtitle(space, open.tenant.name, open.account.label),
@@ -2883,6 +2897,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             queuedSaid = queued.said,
             view = open.models.shell?.levelView?.let { ViewModeShown.valueOf(it.name) } ?: ViewModeShown.valueOf(me.raddatz.veyq.mobile.navigation.ViewMode.FIRST.name),
             dropsHere = open.models.shell?.dropLevel(shell) != null,
+            level = open.models.shell?.levelPlan(shell)?.let { p ->
+                ShellShown.ShownLevel(p.creates.map { ShellShown.ShownCreate(it, it.word) }, p.tools)
+            },
+            drawerCreates = open.models.shell?.drawerCreates().orEmpty().map { ShellShown.ShownCreate(it, it.word) },
             dropRows = shell.space?.let { scopeId ->
                 lists.groups(shell).filter { it.folders }.flatMap { it.nodes }
                     .filter { open.models.dropTarget(NodeAt(scopeId, it.nodeId, it.kind, it.name)) }.map { it.nodeId }
@@ -2954,6 +2972,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         storageUnavailable = s.storageUnavailable,
         askingRemoveAll = s.askingRemoveAll,
         limitUnits = me.raddatz.veyq.mobile.offline.LimitUnit.entries.map { SettingsLimitUnit(it, it.word) },
+        // a desktop's page offers no appearance of its own (the system's); the maps' consent where the tenant built them
+        sections = s.sections(maps = tenant.value?.models?.shell?.mapsOffered == true, appearance = false),
     )
 
     /** A Pot's settings as the host draws them ([PotSettingsShown]), each field one core function's answer. */
@@ -2984,9 +3004,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         val s = m.current
         val page = h.file.value?.let { filePages[it] }?.current?.header
         val gallery = h.gallery.value?.let { galleries[it] }
-        fun word(id: String) = page?.label(id) ?: gallery?.label(id) ?: m.label(id, hasCover = s.cover != null)
-        fun actions(ids: List<String>) = ids.map { HeaderShown.PlanAction(it, word(it)) }
-        val own = page?.own ?: gallery?.headerActions.orEmpty()
+        val bookmark = h.bookmark.value?.let { bookmarks[it] }?.page
+        fun word(id: me.raddatz.veyq.mobile.navigation.HeaderAction) = page?.label(id) ?: gallery?.label(id) ?: bookmark?.label(id) ?: m.label(id, hasCover = s.cover != null)
+        fun actions(ids: List<me.raddatz.veyq.mobile.navigation.HeaderAction>) = ids.map { HeaderShown.PlanAction(it, word(it)) }
+        // the kind's page's own entries (ADR 0154 decision 2): a file's, a gallery's or a kept link's
+        val own = page?.own ?: gallery?.headerActions ?: bookmark?.headerActions().orEmpty()
         return HeaderShown(
             node = m.node,
             pinned = s.pinned,
@@ -3021,7 +3043,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         chapters = s.chapters.map { NodeAt(it.scopeId, it.nodeId, it.kind, it.name) },
         canUpload = s.rights.upload,
         canSave = s.rights.download,
-        creates = AppKinds.Create.entries.filter { it.name in g.creates }.map { ShellShown.ShownCreate(it, it.word) },
+        creates = g.creates.map { AppKinds.Create.valueOf(it) }.map { ShellShown.ShownCreate(it, it.word) },
         undo = s.undo,
         purging = s.purging,
         purgeQuestion = g.purgeQuestion.takeIf { s.purging != null },
@@ -3181,7 +3203,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         val personal = g.current.marks.values.any { it.count == null }
         return GalleryRow(
             r.mediaId, r.name, r.type, r.isVideo, r.blocked, r.tile, r.picture, r.capturedAt, r.width, r.height, r.said, g.deletes(r.mediaId),
-            marks = mark?.count ?: if (personal) null else 0, mine = mark?.mine == true,
+            marks = mark?.count ?: if (personal) null else 0, mine = mark?.mine == true, tileActions = g.tileActions(r),
         )
     }
 
@@ -3426,7 +3448,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 val l = r.link
                 ShareShown.ShownLink(
                     l.shareId, r.title, r.badges.map { Notice(it) }, l.createdAt, l.expiresAt, l.url.takeIf { r.canCopy }, r.canCopy, r.canEdit,
-                    r.canRenew, r.canSwitchOff, r.canReactivate, r.canDelete,
+                    r.canRenew, r.canSwitchOff, r.canReactivate, r.canDelete, ShareSheet.rowActions(r),
                 )
             }
         },

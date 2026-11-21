@@ -60,14 +60,14 @@ private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution? {
         downloadName = h.downloadName,
         downloadMime = "application/octet-stream",
         actions = h.own.map { a ->
-            when (a.id) {
-                me.raddatz.veyq.mobile.depot.FileModel.REPLACE ->
-                    OwnAction(a.id, say(h.label(a.id)!!), androidx.compose.material.icons.Icons.Outlined.Upload, a.slot) {
+            when (a) {
+                me.raddatz.veyq.mobile.navigation.HeaderAction.REPLACE ->
+                    OwnAction(a, say(h.label(a)!!), androidx.compose.material.icons.Icons.Outlined.Upload) {
                         // the content shown now is what the replace expects (core's choice), whatever a reload shows while picking
                         if (file.chooseReplace()) pick.launch(arrayOf("*/*"))
                     }
                 // a decrypted copy to another app the person picks (the system's share sheet), after the shell's notice
-                else -> OwnAction(a.id, say(h.label(a.id)!!), androidx.compose.material.icons.Icons.AutoMirrored.Outlined.Send, a.slot) { model.askToSend(node) }
+                else -> OwnAction(a, say(h.label(a)!!), androidx.compose.material.icons.Icons.AutoMirrored.Outlined.Send) { model.askToSend(node) }
             }
         },
     )

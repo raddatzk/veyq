@@ -63,7 +63,7 @@ import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.android.R
 import me.raddatz.veyq.mobile.android.words
 import me.raddatz.veyq.mobile.navigation.NodeAt
-import me.raddatz.veyq.mobile.navigation.NodeHeader as Plan
+import me.raddatz.veyq.mobile.navigation.HeaderAction as Plan
 
 /**
  * What a kind's page hands core's header (the web's `contributeNodeHeader` and the page's doors): a subtitle under the name,
@@ -86,7 +86,7 @@ internal class HeaderContribution(
 )
 
 /** An action of the application's own on its node's header. */
-internal class OwnAction(val id: String, val label: String, val icon: ImageVector, val slot: Plan.Slot = Plan.Slot.ANY, val onClick: () -> Unit)
+internal class OwnAction(val id: Plan, val label: String, val icon: ImageVector, val onClick: () -> Unit)
 
 /**
  * Core's header actions on a node of any kind (the web's `NodeHeader` with `coreNodeActions.ts` and `standardNodeActions`,
@@ -109,8 +109,8 @@ internal fun NodeHeaderActions(
     val state by header.state.collectAsStateWithLifecycle()
     val pinned = state.pinned
     var menu by remember { mutableStateOf(false) }
-    var dialog by remember(node.nodeId) { mutableStateOf<String?>(null) }
-    val plan = header.plan(maxButtons, contribution.actions.map { Plan.Action(it.id, it.slot) }) ?: return
+    var dialog by remember(node.nodeId) { mutableStateOf<Plan?>(null) }
+    val plan = header.plan(maxButtons, contribution.actions.map { it.id }) ?: return
     val own = contribution.actions.associateBy { it.id }
     val hasCover = covers.containsKey(node.nodeId)
 
@@ -132,7 +132,7 @@ internal fun NodeHeaderActions(
             snackbar.showSnackbar(said, duration = if (left.isNullOrEmpty()) SnackbarDuration.Short else SnackbarDuration.Long)
         }
     }
-    fun run(id: String) {
+    fun run(id: Plan) {
         when (id) {
             // the heart turns at once and back when the write did not land (core's)
             Plan.FAVORITE -> scope.launch { header.toggleFavorite()?.let { snackbar.showSnackbar(context.text(it)) } }
@@ -224,6 +224,9 @@ internal fun NodeHeaderActions(
             },
             dismissButton = { TextButton(onClick = close) { Text(stringResource(R.string.entry_cancel)) } },
         )
+        // no dialog of core's: these run at once ([run])
+        null, Plan.FAVORITE, Plan.DOWNLOAD, Plan.OFFLINE, Plan.UPLOAD, Plan.MUSIC, Plan.BANNER, Plan.REPLACE, Plan.SEND, Plan.OPEN_OWN_PAGE,
+        Plan.REPORT_SHARED -> {}
     }
 }
 
@@ -295,15 +298,15 @@ private fun OfflineMenuItem(label: String, offline: me.raddatz.veyq.mobile.offli
     )
 }
 
-private fun iconOf(id: String, own: Map<String, OwnAction>): ImageVector = when (id) {
+private fun iconOf(id: Plan, own: Map<Plan, OwnAction>): ImageVector = when (id) {
     Plan.SHARE -> Icons.Outlined.Share
     Plan.DOWNLOAD -> Icons.Outlined.Download
     else -> own[id]?.icon ?: Icons.Outlined.MoreVert
 }
 
 @Composable
-private fun labelOf(id: String, header: me.raddatz.veyq.mobile.navigation.NodeHeaderModel, contribution: HeaderContribution, hasCover: Boolean): String =
-    header.label(id, hasCover)?.let { say(it) } ?: contribution.actions.firstOrNull { it.id == id }?.label ?: id
+private fun labelOf(id: Plan, header: me.raddatz.veyq.mobile.navigation.NodeHeaderModel, contribution: HeaderContribution, hasCover: Boolean): String =
+    header.label(id, hasCover)?.let { say(it) } ?: contribution.actions.firstOrNull { it.id == id }?.label ?: id.name
 
 /**
  * Core's head of a node's page (the web's `NodeHeader` leading visual, ADR 0110): what the shell hands the body of the node on

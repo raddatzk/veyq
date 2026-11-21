@@ -75,13 +75,62 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
 
 ## Phases
 
-- [ ] **1 core** — S1–S5; the orders' tests reading the web; Q1–Q4's answers. · Done when: `:core:jvmTest
+- [x] **1 core** — S1–S5; the orders' tests reading the web; Q1–Q4's answers. · Done when: `:core:jvmTest
   :core:macosArm64Test` green. **Bites:** (a) Memory's `headerOrder` swapped against `register.ts` → the web-order test
   red; (b) Delete out of `last` → red; (c) `SettingsSection` order changed → its test red.
-- [ ] **2 bridge** — the enums and plans on the wire, generated into C# and Rust. · Done when: `:bridge:jvmTest` green.
-- [ ] **3 the guard** — S6, on for the core and the bridge, each platform switched on in its phase. · Done when: the
+  **Built** (2026-11-20). `@Plan` (`navigation/Plan.kt`) marks a plan's enum: `HeaderAction` (core's ten, the pages' own
+  `UPLOAD`, `MUSIC`, `BANNER`, `REPLACE`, `SEND`, `OPEN_OWN_PAGE`, `REPORT_SHARED`; serial names the web's ids, each its
+  `slot`), `LevelTool` (`TRASH`, `VIEW`), `DrawerSection` (`NEW` first), `SettingsSection`, `SignInEntry`, `LinkAction`,
+  `TileAction`, `AppKinds.Create`. S1: `NodeHeader.Plan` of `HeaderAction`, `headerOrder` of them; the pages hand their own
+  (`GalleryModel.headerActions` with the banner, `FileModel.Header.own`, `BookmarkPage.headerActions`, each with its
+  `label`); a kept link's report is its name's (`BOOKMARK_REPORT_NAME`), its share's right after it, the delete last. S2:
+  `ShellModel.levelPlan(shell)` → `LevelPlan(creates, tools)` (New where `canCreateHere`, the trash where
+  `trashOffered`, the view switch but on the Memories map), `drawerCreates()` and `drawerSections(lists)` (`Lists`' own
+  getter is internal now). S3: `SettingsSection` in the web's order with the app-only ones beside their kin and `SIGN_OUT`
+  last (`search_words_sign_out`), drawn from `AccountSettings.State.sections(maps, appearance)`. S4: `SignInPlan.entries`
+  (Submit, Cancel while adding, show a link, scan one with a camera, the kit's open and scan, *Open a link*). S5:
+  `LevelRow.plan(rights)` (`ShellModel.rowPlan(row)`), `GalleryModel.tileActions(row)`, `ShareSheet.rowActions(row)`.
+  Tests: `PlansAreTheWebsTest` (jvmTest: each kind's `header.order` from its registration, core's merge order from
+  `coreNodeActions.ts`, the Settings order from `sections.ts`), `NodeHeaderTest`, `PlansTest`, `QueuedOverlayTest`'s tile.
+  Each bite seen red (`eachKindsHeaderOrderIsItsRegistrations`; five `NodeHeaderTest` cases; `theSettingsSections…`).
+  Android and Apple compile on it with their behaviour kept (their own entries now `HeaderAction`s, a `NEW` arm drawing
+  nothing until phase 4). **Deviations:** no `SELECT` tool — no app level selects (#1049); a level's tabs stay
+  `Shell.barTabs` (the bar's, ADR 0122), no `LevelPlan` field; the account's address sits beside it as `ACCOUNT`, `EMAIL`,
+  `PASSWORD`.
+- [x] **2 bridge** — the enums and plans on the wire, generated into C# and Rust. · Done when: `:bridge:jvmTest` green.
+  **Built** (2026-11-20). `HeaderShown.PlanAction.id` is a `HeaderAction`; `Call.HeaderFacts` takes the kept link's page
+  (`bookmark`), whose own entries and words join the plan as a file's and a gallery's do; `ShellShown.level`
+  (`ShownLevel(creates, tools)`) and `drawerCreates`, `drawerSections` the shell's (`NEW` first); `SettingsShown.sections`
+  (no appearance on a desktop, the maps' consent where `ShellModel.mapsOffered`); `Call.RowPlan` → `Answer.RowPlan` (each
+  entry worded) and `Call.SignInPlan(adding, camera)` → `Answer.SignInPlan`; `GalleryRow.tileActions`,
+  `ShareShown.ShownLink.actions`; a gallery's creates read as `Create.valueOf` (no filter over the enum). Every enum is
+  generated into `bridge.rs` and `Bridge.g.cs` with the wire's ids. Tests: `DispatchTest` (the sign-in's and a row's
+  plan; the header's entries as enums), `WireTest`'s samples carry each new type, `SecretFreeSchemaTest`'s gallery row,
+  and the core's `ShellModelTest` for `levelPlan`, `drawerSections`, `drawerCreates`, `rowPlan` (bitten: the trash
+  dropped → red). Linux and Windows compile with their drawing kept: a plan entry's wire id (`header::wire_id`,
+  `HeaderPlan.Id`) feeds their whitelists until phases 6 and 7 replace them; their initializers carry the new fields
+  (`bookmark: None`, `sections: vec![]`/`[]`, `tile_actions`, `actions`). `linux/run.py bridge` and `build` green,
+  `windows/run.py build` green on the VM (Veyq.Tests 80, PdfWebTest), both Apple builds green — after phase 1's Swift
+  named two entries as Kotlin/Native does not: the framework mangles `COPY` to `theCopy` and `DELETE` to `delete_`.
+- [x] **3 the guard** — S6, on for the core and the bridge, each platform switched on in its phase. · Done when: the
   guard green; `validate_guard_gaps.py` run once. **Bites:** a `default:` planted over `HeaderAction` in a Swift file,
   a whitelist array in Rust, a `.filter` on a plan in Kotlin — each red alone.
+  **Built** (2026-11-20). `scripts/validate_mobile_structure.py` (its docstring the rules and limits) reads the `@Plan`
+  enums, their entries and serial names from the core's main sources and each one's name per language (Swift's
+  lowerCamel or Kotlin/Native's mangled `theCopy`/`delete_`; Rust's and C#'s the generated names), and the plans' lists
+  from the core's and the wire's `List<…>` declarations: (a) no `else ->`/`default:`/`_ =>` in a `when`/`switch`/`match`
+  whose arms name a plan's entry — on the core, the bridge and each platform switched on; (b) no collection literal whose
+  elements are all a plan's entries, nor one of two or more strings that are all a plan's ids (a registration keyed by an
+  entry is none); (c) no filter or sort in the statement that reads a plan's list — (b) and (c) on the bridge and the
+  platforms. `PLATFORMS` all off (phases 4–7 switch each on); `--platform` previews one, `--paths` reads the files given.
+  Its first run found the bridge filtering `Create.entries` for a gallery's New (now `Create.valueOf`). Bites, each red
+  alone and green restored: a `default:` over `HeaderAction` in `apple/…/BookmarkScreen.swift` (`--paths`); an array of
+  two `HeaderAction`s in `linux/…/said.rs` (`--paths`; it first went unseen behind a `crate::…` path, now read); a
+  `.filter` on `p.buttons` in the bridge (the full run); an `else ->` in `NodeHeader.label` (the core); a `_ =>` over
+  `HeaderAction` in a C# switch expression (`--paths`). The preview per platform: Android 7, Apple 6, Linux 5, Windows 6
+  — the phases' work. Every guard green, `validate_guard_gaps.py` run once (104 cases hold). **Open:** a Swift `switch`
+  over a Kotlin enum is no exhaustive one and needs `default:` to compile (#1050) — Apple's phase needs an exhaustive Swift
+  form first.
 - [ ] **4 Android** — every plan drawn in the core UI; the guard on for Android. · Done when: `:android:assembleDebug`,
   the words, guidelines, direction and structure guards green.
 - [ ] **5 Apple** — the same. · Done when: both Apple builds green, the guards green.

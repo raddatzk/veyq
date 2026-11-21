@@ -20,10 +20,9 @@ struct HeaderContribution {
 
 /// An action of the application's own on its node's header.
 struct OwnAction {
-    let id: String
+    let id: HeaderAction
     let label: String
     let systemImage: String
-    var slot: NodeHeader.Slot = .any
     let run: () -> Void
 }
 
@@ -38,7 +37,7 @@ struct NodeHeaderActions: View {
     let contribution: HeaderContribution
     /// How many actions are toolbar buttons: a level's bar keeps its room for its title (0: one "More" menu).
     var maxButtons: Int32 = 2
-    @State private var dialog: String?
+    @State private var dialog: HeaderAction?
     @State private var asking = false
     @State private var renaming = false
     @State private var newName = ""
@@ -55,7 +54,7 @@ struct NodeHeaderActions: View {
     /// Core's plan; read with the app model's `headerRevision`, so each change of the header redraws it.
     private var plan: NodeHeader.Plan? {
         _ = model.headerRevision
-        return header?.plan(maxButtons: maxButtons, own: contribution.actions.map { NodeHeader.Action(id: $0.id, slot: $0.slot) })
+        return header?.plan(maxButtons: maxButtons, own: contribution.actions.map(\.id))
     }
 
     private var pinned: Bool? {
@@ -79,11 +78,11 @@ struct NodeHeaderActions: View {
                 if plan.hasMenu {
                     Menu {
                         ForEach(plan.menu, id: \.self) { id in
-                            if id == NodeHeader.shared.OFFLINE { offlineToggle } else { Button { run(id) } label: { label(id) } }
+                            if id == HeaderAction.offline { offlineToggle } else { Button { run(id) } label: { label(id) } }
                         }
                         if !plan.menu.isEmpty, !plan.last.isEmpty { Divider() }
                         ForEach(plan.last, id: \.self) { id in
-                            Button(role: id == NodeHeader.shared.DELETE ? .destructive : nil) { run(id) } label: { label(id) }
+                            Button(role: id == HeaderAction.delete_ ? .destructive : nil) { run(id) } label: { label(id) }
                         }
                     } label: {
                         if downloading { ProgressView() } else { Label(say(.nodeMore), systemImage: "ellipsis.circle") }
@@ -92,11 +91,11 @@ struct NodeHeaderActions: View {
             }
         }
         .onChange(of: contribution.facts) { header?.update(facts: contribution.facts) }
-        .sheet(isPresented: shown(NodeHeader.shared.SHARE)) { NodeShareSheet(model: model, ref: node) }
-        .sheet(isPresented: shown(NodeHeader.shared.REPORT)) { ReportSheet(model: model, ref: node) }
-        .sheet(isPresented: shown(NodeHeader.shared.COVER)) { CoverSheet(model: model, node: node) }
-        .sheet(isPresented: shown(NodeHeader.shared.MOVE)) { NodeMoveSheet(model: model, ref: node) }
-        .sheet(isPresented: shown(NodeHeader.shared.COPY)) { NodeMoveSheet(model: model, ref: node, copying: true) }
+        .sheet(isPresented: shown(.share)) { NodeShareSheet(model: model, ref: node) }
+        .sheet(isPresented: shown(.report)) { ReportSheet(model: model, ref: node) }
+        .sheet(isPresented: shown(.cover)) { CoverSheet(model: model, node: node) }
+        .sheet(isPresented: shown(.move)) { NodeMoveSheet(model: model, ref: node) }
+        .sheet(isPresented: shown(.theCopy)) { NodeMoveSheet(model: model, ref: node, copying: true) }
         // The system's save sheet takes the written file where the person picks; the temporary copy goes either way.
         .fileMover(isPresented: Binding(get: { downloaded != nil }, set: { if !$0 { cleanUpDownload() } }), file: downloaded) { _ in
             cleanUpDownload()
@@ -159,25 +158,25 @@ struct NodeHeaderActions: View {
     }
 
     /// A sheet's presentation: on while `dialog` is `id`.
-    private func shown(_ id: String) -> Binding<Bool> {
+    private func shown(_ id: HeaderAction) -> Binding<Bool> {
         Binding(get: { dialog == id }, set: { if !$0, dialog == id { dialog = nil } })
     }
 
-    private func run(_ id: String) {
+    private func run(_ id: HeaderAction) {
         switch id {
-        case NodeHeader.shared.FAVORITE:
+        case .favorite:
             // the heart turns at once and back when the write did not land (core's)
             guard let header else { return }
             Task { if let notice = try? await header.toggleFavorite() { failed = say(notice: notice) } }
-        case NodeHeader.shared.RENAME:
+        case .rename:
             newName = node.name
             renameProblem = nil
             renaming = true
-        case NodeHeader.shared.DELETE:
+        case .delete_:
             asking = true
-        case NodeHeader.shared.DOWNLOAD:
+        case .download:
             Task { await download() }
-        case NodeHeader.shared.OFFLINE:
+        case .offline:
             // on: off at once; off: core reads the size it keeps and asks first (the alert above)
             guard let header else { return }
             Task { if let notice = try? await header.toggleOffline() { failed = say(notice: notice) } }
@@ -189,9 +188,9 @@ struct NodeHeaderActions: View {
     /// "Available offline" in the "More" menu (ADR 0140 decision 10): a toggle, as the system's menus show a state, with its
     /// state's line under it (core's: "Downloading 3 MB of 12 MB", "On this device", "Paused: …").
     private var offlineToggle: some View {
-        Toggle(isOn: Binding(get: { offline?.on ?? false }, set: { _ in run(NodeHeader.shared.OFFLINE) })) {
+        Toggle(isOn: Binding(get: { offline?.on ?? false }, set: { _ in run(.offline) })) {
             Label {
-                Text(word(NodeHeader.shared.OFFLINE))
+                Text(word(.offline))
                 if let said = offline?.said { Text(say(notice: said)) }
             } icon: {
                 Image(systemName: "arrow.down.circle.dotted")
@@ -200,23 +199,23 @@ struct NodeHeaderActions: View {
     }
 
     /// A core action's words (core's `NodeHeaderModel.label`).
-    private func word(_ id: String) -> String {
-        header?.label(id: id, hasCover: model.covers[node.nodeId] != nil).map { say($0) } ?? id
+    private func word(_ id: HeaderAction) -> String {
+        header?.label(id: id, hasCover: model.covers[node.nodeId] != nil).map { say($0) } ?? id.name
     }
 
-    @ViewBuilder private func label(_ id: String) -> some View {
+    @ViewBuilder private func label(_ id: HeaderAction) -> some View {
         switch id {
-        case NodeHeader.shared.FAVORITE:
+        case .favorite:
             Label(word(id), systemImage: pinned == true ? "heart.fill" : "heart")
                 .foregroundStyle(pinned == true ? Role.favorite : Role.text)
-        case NodeHeader.shared.SHARE: Label(word(id), systemImage: "square.and.arrow.up")
-        case NodeHeader.shared.RENAME: Label(word(id), systemImage: "pencil")
-        case NodeHeader.shared.MOVE: Label(word(id), systemImage: "folder")
-        case NodeHeader.shared.COPY: Label(word(id), systemImage: "doc.on.doc")
-        case NodeHeader.shared.COVER: Label(word(id), systemImage: "photo")
-        case NodeHeader.shared.DOWNLOAD: Label(word(id), systemImage: "arrow.down.circle")
-        case NodeHeader.shared.REPORT: Label(word(id), systemImage: "flag")
-        case NodeHeader.shared.DELETE: Label(word(id), systemImage: "trash")
+        case .share: Label(word(id), systemImage: "square.and.arrow.up")
+        case .rename: Label(word(id), systemImage: "pencil")
+        case .move: Label(word(id), systemImage: "folder")
+        case .theCopy: Label(word(id), systemImage: "doc.on.doc")
+        case .cover: Label(word(id), systemImage: "photo")
+        case .download: Label(word(id), systemImage: "arrow.down.circle")
+        case .report: Label(word(id), systemImage: "flag")
+        case .delete_: Label(word(id), systemImage: "trash")
         default:
             if let own = contribution.actions.first(where: { $0.id == id }) { Label(own.label, systemImage: own.systemImage) }
         }

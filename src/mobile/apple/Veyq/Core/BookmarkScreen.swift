@@ -37,11 +37,6 @@ final class BookmarkHeld {
 }
 
 extension KindPage {
-    /// The header's own action that opens a kept link on its own page (`AppKinds.headerOrder`'s `open-own-page`).
-    static let openOwnPage = "open-own-page"
-    /// The header's own action that reports a kept link's content to the share's own operator (ADR 0150 decision 6).
-    static let reportShared = "report-shared"
-
     /// Core's kept link (ADR 0150 decision 6; the web's `BookmarkDetail`): *Open on its own page* first and *Report shared
     /// content* beside core's report — which, on a bookmark, reports its name only to this instance (core's
     /// `ShellModel.reportSheet`). Its rename, move, favourite and delete are core's; it is never shared on and takes no cover.
@@ -50,8 +45,8 @@ extension KindPage {
         let page = held.page
         if held.state.value is BookmarkPage.StateLoading || held.state.value is BookmarkPage.StateUnreadable { return HeaderContribution() }
         return HeaderContribution(actions: [
-            OwnAction(id: openOwnPage, label: say(.bookmarkOpenOwnPage), systemImage: "arrow.up.forward.square") { model.bookmarkOwnPage(page) },
-            OwnAction(id: reportShared, label: say(.bookmarkReportShare), systemImage: "flag", slot: .last) { model.bookmarkReportShared(page) },
+            OwnAction(id: .openOwnPage, label: say(.bookmarkOpenOwnPage), systemImage: "arrow.up.forward.square") { model.bookmarkOwnPage(page) },
+            OwnAction(id: .reportShared, label: say(.bookmarkReportShare), systemImage: "flag") { model.bookmarkReportShared(page) },
         ])
     }, body: { ref, _, model in AnyView(BookmarkScreen(model: model, node: ref.at)) })
 }

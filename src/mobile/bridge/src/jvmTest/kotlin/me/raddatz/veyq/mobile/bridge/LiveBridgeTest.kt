@@ -354,8 +354,8 @@ class LiveBridgeTest {
         val header = (b.ask(Call.HeaderOpen(at, me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
         val watched = b.watching(Watched.Header(header))
         val plan = watched.until { u -> (u as Update.Header).shown?.takeIf { it.pinned != null }?.plan }
-        println("plan: " + listOf(plan.buttons, plan.menu, plan.last).joinToString(" | ") { g -> g.joinToString { it.id } })
-        assertEquals("delete", plan.last.last().id)
+        println("plan: " + listOf(plan.buttons, plan.menu, plan.last).joinToString(" | ") { g -> g.joinToString { it.id.name } })
+        assertEquals(me.raddatz.veyq.mobile.navigation.HeaderAction.DELETE, plan.last.last().id)
 
         // pinned and unpinned, each read back
         // a fresh read: the lists (and the pin set) read anew, a fresh header asked whether it is pinned
@@ -544,7 +544,7 @@ class LiveBridgeTest {
             // the folder downloaded into a file the host named, read back
             val header = (b.ask(Call.HeaderOpen(at(folder), me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
             val shown = (b.watching(Watched.Header(header)).until { u -> (u as Update.Header).shown?.takeIf { it.plan != null } })
-            assertTrue(shown.plan!!.menu.any { it.id == "download" } || shown.plan.buttons.any { it.id == "download" }, "a folder offers no download")
+            assertTrue(shown.plan!!.menu.any { it.id == me.raddatz.veyq.mobile.navigation.HeaderAction.DOWNLOAD } || shown.plan.buttons.any { it.id == me.raddatz.veyq.mobile.navigation.HeaderAction.DOWNLOAD }, "a folder offers no download")
             val dir = kotlin.io.path.createTempDirectory("veyq-bridge").toFile()
             val zip = File(dir, shown.archiveName)
             val downloaded = b.ask(Call.HeaderDownload(header, zip.path, "deleted person"), timeout = 3.minutes) as Answer.Downloaded
@@ -1980,7 +1980,7 @@ class LiveBridgeTest {
             val h = (b.ask(Call.HeaderOpen(at, me.raddatz.veyq.mobile.AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
             assertEquals(Answer.Said(null), b.ask(Call.HeaderCoverSave(h, file.path, left), timeout = 2.minutes))
             val set = freshHeader(left)
-            assertEquals(me.raddatz.veyq.mobile.words.Msg.COVER_CHANGE, set.plan!!.let { it.buttons + it.menu + it.last }.first { it.id == "cover" }.word)
+            assertEquals(me.raddatz.veyq.mobile.words.Msg.COVER_CHANGE, set.plan!!.let { it.buttons + it.menu + it.last }.first { it.id == me.raddatz.veyq.mobile.navigation.HeaderAction.COVER }.word)
             val (answer, bytes) = b.askWithPayload(Call.HeaderCoverPicture(h), timeout = 1.minutes)
             assertEquals(Answer.Bytes("image/jpeg"), answer)
             assertTrue(bytes!!.contentEquals(jpeg), "the cover does not open to the bytes set")

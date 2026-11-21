@@ -113,7 +113,7 @@ class NodeHeaderModelTest {
         )
         assertEquals(Msg.POT_DELETE, p.deleteTitle)
         assertEquals(Notice(Msg.POT_DELETE_CONFIRM, "Rome"), p.deleteQuestion())
-        assertEquals(Msg.POT_DELETE, p.label(NodeHeader.DELETE, hasCover = false))
+        assertEquals(Msg.POT_DELETE, p.label(HeaderAction.DELETE, hasCover = false))
     }
 
     @Test
@@ -121,12 +121,12 @@ class NodeHeaderModelTest {
         val door = Door().apply { gate = CompletableDeferred() }
         val h = header(folder, door)
         assertEquals(false, h.current.pinned)
-        assertEquals(Msg.NODE_FAVORITE, h.label(NodeHeader.FAVORITE, false))
+        assertEquals(Msg.NODE_FAVORITE, h.label(HeaderAction.FAVORITE, false))
         door.stores = false
         val said = async { h.toggleFavorite() }
         runCurrent()
         assertEquals(true, h.current.pinned, "turned before the write answered")
-        assertEquals(Msg.NODE_UNFAVORITE, h.label(NodeHeader.FAVORITE, false))
+        assertEquals(Msg.NODE_UNFAVORITE, h.label(HeaderAction.FAVORITE, false))
         door.gate!!.complete(Unit)
         assertEquals(Notice(Msg.NODE_FAVORITE_FAILED), said.await())
         assertEquals(false, h.current.pinned, "turned back: the pin did not land")
@@ -198,7 +198,7 @@ class NodeHeaderModelTest {
         val door = Door().apply { stored = NodeCover.Crop(0.5, 0.0, 0.5, 1.0) }
         val h = header(folder, door)
         assertEquals(NodeCover.Crop(0.5, 0.0, 0.5, 1.0), h.current.cover, "read when the header opens")
-        assertEquals(Msg.COVER_CHANGE, h.label(NodeHeader.COVER))
+        assertEquals(Msg.COVER_CHANGE, h.label(HeaderAction.COVER))
         // no picture picked: the stored one framed anew, its blob kept
         val left = NodeCover.Crop(0.0, 0.0, 0.5, 1.0)
         assertNull(h.saveCover(null, left))
@@ -214,7 +214,7 @@ class NodeHeaderModelTest {
         assertEquals(NodeCover.Crop.FULL, h.current.cover)
         assertNull(h.removeCover())
         assertNull(h.current.cover)
-        assertEquals(Msg.COVER_SET, h.label(NodeHeader.COVER))
+        assertEquals(Msg.COVER_SET, h.label(HeaderAction.COVER))
         // nothing to frame anew without a cover
         assertEquals(Notice(Msg.COVER_FAILED), h.saveCover(null, left))
         assertEquals(listOf("recrop", "set 3", "set 4", "remove"), door.coverWrites)

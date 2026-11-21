@@ -13,11 +13,11 @@ enum DepotUi {
             facts: h.facts,
             download: { await model.downloadNode(node, to: $0) },
             actions: h.own.map { a in
-                let label = h.label(id: a.id).map { say($0) } ?? a.id
-                if a.id == FileModel.companion.SEND {
-                    return OwnAction(id: a.id, label: label, systemImage: "paperplane", slot: a.slot) { model.sendingCopy = node }
+                let label = h.label(id: a).map { say($0) } ?? a.name
+                if a == .send {
+                    return OwnAction(id: a, label: label, systemImage: "paperplane") { model.sendingCopy = node }
                 }
-                return OwnAction(id: a.id, label: label, systemImage: "square.and.arrow.down.on.square", slot: a.slot) {
+                return OwnAction(id: a, label: label, systemImage: "square.and.arrow.down.on.square") {
                     // the content shown now is what the replace expects (core's choice), whatever a reload shows while picking
                     if file.chooseReplace() { model.replacing = file }
                 }

@@ -93,7 +93,7 @@ internal sealed class NodeHeader : IDisposable
         _hero.SizeChanged += (_, e) => { if (e.NewSize.Width > 0) _hero.Height = e.NewSize.Width * 9 / 16; };
         _hero.Click += (_, _) =>
         {
-            if (Shown is { plan: { } plan } s && _id is { } header && new[] { plan.buttons, plan.menu, plan.last }.Any(g => g.Any(a => a.id == "cover")))
+            if (Shown is { plan: { } plan } s && _id is { } header && new[] { plan.buttons, plan.menu, plan.last }.Any(g => g.Any(a => a.id == HeaderAction.Cover)))
             {
                 _heroRead = false; // a new picture may come under the crop it had
                 CoverDialog.Open(_window, header, s.node, s.cover);
@@ -125,7 +125,7 @@ internal sealed class NodeHeader : IDisposable
             return;
         }
         _id = header;
-        if (_laterSet) Act.Send(new Call.HeaderFacts { header = header, facts = _later, file = _laterFile, gallery = _laterGallery });
+        if (_laterSet) Act.Send(new Call.HeaderFacts { header = header, facts = _later, file = _laterFile, gallery = _laterGallery, bookmark = null });
         _watch = Core.Watch(new Watched.Header { header = header }, update =>
         {
             if (_closed || update is not Update.Header h) return;
@@ -208,14 +208,14 @@ internal sealed class NodeHeader : IDisposable
         }
     }
 
-    private static string Ids(Plan? p) => p is null ? "" : string.Join(" | ", new[] { p.buttons, p.menu, p.last }.Select(g => string.Join(",", g.Select(a => a.id))));
+    private static string Ids(Plan? p) => p is null ? "" : string.Join(" | ", new[] { p.buttons, p.menu, p.last }.Select(g => string.Join(",", g.Select(a => HeaderPlan.Id(a.id)))));
 
     /// <summary>What the kind's page knows now (a Pot read: whether it takes writes) and, for a file's page, its id
     /// <paramref name="file"/>, for a Memory's or a chapter's its gallery's <paramref name="gallery"/>: the page's own
     /// actions (Replace, Add photos) join the plan.</summary>
     public void Facts(Facts? facts, long? file = null, long? gallery = null)
     {
-        if (_id is { } header) Act.Send(new Call.HeaderFacts { header = header, facts = facts, file = file, gallery = gallery });
+        if (_id is { } header) Act.Send(new Call.HeaderFacts { header = header, facts = facts, file = file, gallery = gallery, bookmark = null });
         else (_later, _laterFile, _laterGallery, _laterSet) = (facts, file, gallery, true);
     }
 
@@ -234,7 +234,7 @@ internal sealed class NodeHeader : IDisposable
         foreach (var a in HeaderPlan.Primary(plan, kind)) primary.Add(Command(a, s, pageDownload, pageReplace, pageUpload, pageMusic, pageOwnPage));
         foreach (var a in HeaderPlan.Secondary(plan, kind))
         {
-            if (a is { id: "offline" })
+            if (a is { id: HeaderAction.Offline })
             {
                 secondary.AddRange(Offline(a, s));
                 continue;
@@ -249,7 +249,7 @@ internal sealed class NodeHeader : IDisposable
     private IEnumerable<ICommandBarElement> Offline(PlanAction a, HeaderShown s)
     {
         var on = s.offline?.on == true;
-        var toggle = new AppBarToggleButton { Icon = new SymbolIcon(Symbol.Download), Label = a.word is { } w ? Veyq.Core.Said.Key(w) : a.id, IsChecked = on };
+        var toggle = new AppBarToggleButton { Icon = new SymbolIcon(Symbol.Download), Label = a.word is { } w ? Veyq.Core.Said.Key(w) : HeaderPlan.Id(a.id), IsChecked = on };
         AutomationProperties.SetAutomationId(toggle, "header:offline");
         // Checked/Unchecked, not Click: UI Automation's Toggle (a screen reader's) raises no Click. The core's state, not
         // the toggle, checks it: put back at once, the next state redraws it
@@ -306,8 +306,9 @@ internal sealed class NodeHeader : IDisposable
 
     private AppBarButton Command(PlanAction a, HeaderShown s, Action pageDownload, Action? pageReplace, Action? pageUpload, Action? pageMusic, Action? pageOwnPage)
     {
-        var label = a.word is { } w ? Veyq.Core.Said.Key(w) : a.id;
-        var icon = a.id switch
+        var id = HeaderPlan.Id(a.id);
+        var label = a.word is { } w ? Veyq.Core.Said.Key(w) : id;
+        var icon = id switch
         {
             "favorite" => new SymbolIcon(s.pinned == true ? Symbol.UnFavorite : Symbol.Favorite),
             "download" => new SymbolIcon(Symbol.Download),
@@ -326,16 +327,16 @@ internal sealed class NodeHeader : IDisposable
             _ => new SymbolIcon(Symbol.More),
         };
         var button = new AppBarButton { Icon = icon, Label = label };
-        AutomationProperties.SetAutomationId(button, $"header:{a.id}");
+        AutomationProperties.SetAutomationId(button, $"header:{id}");
         button.Click += (_, _) =>
         {
-            switch (a.id)
+            switch (id)
             {
                 case "favorite": Pin(); break;
                 case "share": ShareDialog.Open(_window, s.node); break;
                 case "rename": Rename(s.node.name); break;
                 case "delete": Delete(); break;
-                case "download" when HeaderPlan.ByPage(a.id, s.node.kind): pageDownload(); break;
+                case "download" when HeaderPlan.ByPage(id, s.node.kind): pageDownload(); break;
                 case "replace": pageReplace?.Invoke(); break;
                 case "upload": pageUpload?.Invoke(); break;
                 case "music": pageMusic?.Invoke(); break;
@@ -412,7 +413,7 @@ internal sealed class NodeHeader : IDisposable
     private async void Delete()
     {
         if (_id is not { } header || Shown is not { } s) return;
-        var title = s.plan?.last.FirstOrDefault(a => a.id == "delete")?.word is { } w ? Veyq.Core.Said.Key(w) : Words.EntryDelete();
+        var title = s.plan?.last.FirstOrDefault(a => a.id == HeaderAction.Delete)?.word is { } w ? Veyq.Core.Said.Key(w) : Words.EntryDelete();
         if (!await Dialogs.Confirm(_window, "delete", title, Veyq.Core.Said.Notice(s.deleteQuestion), Words.EntryDelete())) return;
         switch (await Ask(new Call.HeaderTrash { header = header }))
         {

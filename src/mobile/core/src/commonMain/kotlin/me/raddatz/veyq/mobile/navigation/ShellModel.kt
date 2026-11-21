@@ -79,8 +79,11 @@ class ShellModel(
 
         fun space(shell: Shell): SpaceRef? = spaces.firstOrNull { it.scopeId == shell.space }
 
-        /** The drawer's sections that have something in them ([DrawerSection.shown]); an empty one is not drawn. */
-        val drawerSections: List<DrawerSection> get() = DrawerSection.shown(drawer, applications)
+        /**
+         * The drawer's sections that list something ([DrawerSection.shown]); an empty one is not drawn. Its New is the
+         * shell's to say ([ShellModel.drawerSections] holds it): a platform draws that one.
+         */
+        internal val listedSections: List<DrawerSection> get() = DrawerSection.shown(drawer, applications)
     }
 
     /**
@@ -519,6 +522,65 @@ class ShellModel(
         val all = AppKinds.createsWhere(isHome, bookmarks)
         if (online) return all
         return all.filter { c -> QUEUED_CREATES[c]?.let { tenant.account.queues(it) } == true }
+    }
+
+    /**
+     * What the drawer's New offers (ADR 0122 decision 2; owner 2026-11-20: on all four apps): made at the shown space's top
+     * wherever the shell is — online a folder, a Pot, a Memory and a kept link, offline only what queues there
+     * ([createsHere]); none outside a space.
+     */
+    fun drawerCreates(): List<AppKinds.Create> = if (shell?.space == null) emptyList() else createsHere(isHome = false, bookmarks = true)
+
+    /**
+     * The drawer's sections, in their order ([DrawerSection.shown]): its New where [drawerCreates] offers any, then each
+     * list with something in it. Every platform draws this list whole (ADR 0154 decision 2).
+     */
+    fun drawerSections(lists: Lists? = current?.lists): List<DrawerSection> =
+        lists?.let { DrawerSection.shown(it.drawer, it.applications, creates = drawerCreates().isNotEmpty()) }.orEmpty()
+
+    /**
+     * Whether the shown level offers the space's trash (the web's `trashOffered`, `FolderRights.nodeTrash`): a level of a
+     * space, online (the trash reads and restores), never in a guest's folder.
+     */
+    fun trashOffered(shell: Shell): Boolean {
+        val space = shell.space ?: return false
+        if (!online) return false
+        return shell.folderAt(space)?.let { !inIdentityFolder(it) } ?: true
+    }
+
+    /**
+     * A level row's menu (ADR 0154 decision 2, [LevelRow.plan]): the rights its node's header would grant it, on what a row
+     * knows — no page read it, so its kind's doors on [AppKinds.Facts]' defaults —, the report where the server takes one.
+     * A kind this build registers no page for offers nothing.
+     */
+    suspend fun rowPlan(row: NodeAt): LevelRow.Plan {
+        val kind = AppKinds.header(row.kind) ?: return LevelRow.Plan(emptyList(), emptyList())
+        val doors = AppKinds.doors(row.kind, AppKinds.Facts())
+        val rights = NodeHeader.rights(
+            row.kind, favoriteKnown = isFavorite(row) != null, shareable = kind.shareable, linksOn = tenant.linkRules.on,
+            rename = kind.renames, takesCover = kind.takesCover, coverOffered = doors.coverOffered, copy = doors.copies,
+            download = doors.downloads, report = reportOffered(), inGuestFolder = inIdentityFolder(row), online = online,
+        )
+        return LevelRow.plan(rights)
+    }
+
+    /** Whether the tenant's map services were built: the Settings page offers the maps' consent
+     *  ([me.raddatz.veyq.mobile.session.AccountSettings.State.sections]). */
+    val mapsOffered: Boolean get() = placeNames != null
+
+    /**
+     * The plan of the level [shell] shows (ADR 0154 decision 2, [LevelPlan]); null where it shows none (an object, a
+     * person, a kept link, Search). A level of Home: New where [canCreateHere] ([createsHere]), the trash where
+     * [trashOffered], the view switch. An application's list: the view switch, unless the Memories map is its tab — its New
+     * is the drawer's.
+     */
+    fun levelPlan(shell: Shell? = this.shell): LevelPlan? {
+        val s = shell ?: return null
+        if (s.searching || s.openObject != null || s.person != null || s.bookmark != null) return null
+        if (s.application != null) return LevelPlan.of(emptyList(), trash = false, views = s.selectedTab?.key != MAP_TAB)
+        if (s.space == null) return null
+        val creates = if (s == this.shell && canCreateHere) createsHere(isHome = true, bookmarks = true) else emptyList()
+        return LevelPlan.of(creates, trash = trashOffered(s), views = true)
     }
 
     /** Pins or unpins [ref], then the lists are read anew; false when it was not stored (the heart goes back). */
@@ -1285,6 +1347,9 @@ class ShellModel(
         })
 
     companion object {
+        /** The bar's tab that shows the Memories map, no list (`Applications.kt`): a level there offers no view switch. */
+        private const val MAP_TAB = "memories.map"
+
         /** What each "New" that is queued offline writes ([createsHere]); one not here is never queued. */
         private val QUEUED_CREATES = mapOf(
             AppKinds.Create.FOLDER to me.raddatz.veyq.mobile.offline.Queued.FOLDER_CREATE,

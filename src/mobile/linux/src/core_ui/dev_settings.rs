@@ -42,5 +42,6 @@ pub fn fake() -> SettingsShown {
         storage_unavailable: None,
         asking_remove_all: false,
         limit_units: vec![],
+        sections: vec![],
     }
 }

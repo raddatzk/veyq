@@ -129,8 +129,8 @@ class OfflineScreensTest {
         val nodes = Nodes()
         val h = header(memory, Door(nodes))
         assertEquals(OfflineToggle(on = false, status = OfflineStatus.OFF, said = null), h.current.offline)
-        assertTrue(NodeHeader.OFFLINE in assertNotNull(h.plan(2)).menu, "the toggle is not in the header's menu")
-        assertEquals(Msg.OFFLINE_AVAILABLE, h.label(NodeHeader.OFFLINE))
+        assertTrue(me.raddatz.veyq.mobile.navigation.HeaderAction.OFFLINE in assertNotNull(h.plan(2)).menu, "the toggle is not in the header's menu")
+        assertEquals(Msg.OFFLINE_AVAILABLE, h.label(me.raddatz.veyq.mobile.navigation.HeaderAction.OFFLINE))
 
         // on: the size asked, nothing kept until confirmed
         assertNull(h.toggleOffline())
@@ -175,7 +175,7 @@ class OfflineScreensTest {
     fun a_kind_not_pinned_or_no_store_offers_no_toggle_and_offline_the_header_writes_nothing() = runTest {
         assertNull(header(memory, Door(null)).current.offline)
         assertNull(header(NodeAt("s", "p", "EXPENSES_POT", "Rome"), Door(Nodes())).current.offline)
-        assertFalse(NodeHeader.OFFLINE in assertNotNull(header(memory, Door(null)).plan(9)).menu)
+        assertFalse(me.raddatz.veyq.mobile.navigation.HeaderAction.OFFLINE in assertNotNull(header(memory, Door(null)).plan(9)).menu)
 
         val reach = MutableStateFlow(true)
         val h = header(NodeAt("s", "f", "MEMORY", "Trip"), Door(Nodes(), reach))
@@ -205,7 +205,7 @@ class OfflineScreensTest {
         assertNull(h.confirmOffline(), "a confirm with nothing asked any more")
         // not kept: not offered, and a call that comes anyway is refused before anything is asked of the server
         assertEquals(false, h.current.rights?.offline, "offline the header offers a pin it cannot fetch")
-        assertFalse(NodeHeader.OFFLINE in assertNotNull(h.plan(9)).menu)
+        assertFalse(me.raddatz.veyq.mobile.navigation.HeaderAction.OFFLINE in assertNotNull(h.plan(9)).menu)
         assertEquals(Notice(Msg.OFFLINE_READ_ONLY), h.toggleOffline())
         runCurrent()
         assertEquals(listOf("plan"), nodes.did, "offline a pin was planned or made")

@@ -54,6 +54,7 @@ internal static class DevSettings
             storageUnavailable = null,
             askingRemoveAll = false,
             limitUnits = [],
+            sections = [],
         };
     }
 }

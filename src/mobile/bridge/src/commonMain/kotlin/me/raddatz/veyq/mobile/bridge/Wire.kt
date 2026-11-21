@@ -467,11 +467,27 @@ internal sealed class Call {
     @Serializable @SerialName("Header.Open") data class HeaderOpen(val node: NodeAt, val facts: AppKinds.Facts?, val maxButtons: Int) : Call()
 
     /**
+     * A level row's menu (`ShellModel.rowPlan`, the web's `levelRow.ts`; ADR 0154 decision 2): [Answer.RowPlan], drawn whole
+     * through the host's gesture (a context menu), each entry run as the header's of that node.
+     */
+    @Serializable @SerialName("Row.Plan") data class RowPlan(val node: NodeAt) : Call()
+
+    /**
+     * The sign-in's entries below its fields (`SignInPlan.entries`, ADR 0154 decision 2): [Answer.SignInPlan], asked again
+     * whenever the gate's [adding] or the host's [camera] (whether this device may have one) changes.
+     */
+    @Serializable @SerialName("SignIn.Plan") data class SignInPlan(val adding: Boolean, val camera: Boolean) : Call()
+
+    /**
      * What the kind's page knows now (`NodeHeaderModel.update`) and, for a file's page, its id ([file]): the page's own
      * actions (`FileModel.Header.own`: Replace) join the plan, worded by the page; for a Memory's or a chapter's page, its
      * gallery's id ([gallery]): its own (`GalleryModel.headerActions`: adding photos and videos) join it the same way.
      */
-    @Serializable @SerialName("Header.Facts") data class HeaderFacts(val header: Long, val facts: AppKinds.Facts?, val file: Long? = null, val gallery: Long? = null) : Call()
+    @Serializable @SerialName("Header.Facts") data class HeaderFacts(
+        val header: Long, val facts: AppKinds.Facts?, val file: Long? = null, val gallery: Long? = null,
+        /** The kept link's page ([Call.BookmarkOpen]) whose own entries join the plan (`BookmarkPage.headerActions`). */
+        val bookmark: Long? = null,
+    ) : Call()
     @Serializable @SerialName("Header.Close") data class HeaderClose(val header: Long) : Call()
 
     /** Pins or unpins (`toggleFavorite`): [Answer.Said] with the failure's notice, or none. */
@@ -1804,6 +1820,12 @@ internal sealed class Answer {
     @Serializable @SerialName("Reader") data class Reader(val reader: Long, val size: Long, val mediaType: String?) : Answer()
 
     @Serializable @SerialName("HeaderOpened") data class HeaderOpened(val header: Long) : Answer()
+
+    /** A level row's menu ([Call.RowPlan]): [menu], then after a separator [last], each entry with its words. */
+    @Serializable @SerialName("RowPlan") data class RowPlan(val menu: List<HeaderShown.PlanAction>, val last: List<HeaderShown.PlanAction>) : Answer()
+
+    /** The sign-in's entries in their order ([Call.SignInPlan]). */
+    @Serializable @SerialName("SignInPlan") data class SignInPlan(val entries: List<me.raddatz.veyq.mobile.session.SignInEntry>) : Answer()
     @Serializable @SerialName("FileOpened") data class FileOpened(val file: Long) : Answer()
 
     /** A copy being saved ([Call.FileSave]): its id, for [Watched.Save] and [Call.SaveCancel]. */
@@ -2766,6 +2788,8 @@ internal class GalleryRow(
     /** Its badge (ADR 0149 decision 4): how many marked it (null: a personal scope, no count; 0: nobody) and whether the caller did. */
     val marks: Int? = 0,
     val mine: Boolean = false,
+    /** What its tile offers beside opening it (`GalleryModel.tileActions`, ADR 0154 decision 2): the mark, where allowed. */
+    val tileActions: List<me.raddatz.veyq.mobile.memories.TileAction> = emptyList(),
 )
 
 /**
@@ -3241,6 +3265,11 @@ internal class SettingsShown(
     val askingRemoveAll: Boolean = false,
     /** The limit field's units, each with its word. */
     val limitUnits: List<SettingsLimitUnit> = emptyList(),
+    /**
+     * The page's sections, in their order (`AccountSettings.State.sections`, ADR 0154 decision 2: the web's order, Sign
+     * out last): the host draws each, whole, every one anchored by its `id` (a search's settings result scrolls there).
+     */
+    val sections: List<me.raddatz.veyq.mobile.search.SettingsSection> = emptyList(),
 )
 
 /** A unit of the storage limit's field and its word. */
@@ -3665,10 +3694,12 @@ internal class HeaderShown(
     @Serializable class Plan(val buttons: List<PlanAction>, val menu: List<PlanAction>, val last: List<PlanAction>)
 
     /**
-     * One action: its id (`NodeHeader`'s, or an application's own) and its words (null: an application's own). Not named
+     * One action (ADR 0154 decision 2): its entry, a [me.raddatz.veyq.mobile.navigation.HeaderAction] the host draws
+     * exhaustively (the generated Rust and C# enum: an entry added fails the host's build until drawn), and its words —
+     * core's, or the kind's page's own (`GalleryModel.label`, `FileModel.Header.label`, `BookmarkPage.label`). Not named
      * `Action`: the generated C# would clash with `System.Action`.
      */
-    @Serializable class PlanAction(val id: String, @Serializable(with = MsgKey::class) val word: Msg?)
+    @Serializable class PlanAction(val id: me.raddatz.veyq.mobile.navigation.HeaderAction, @Serializable(with = MsgKey::class) val word: Msg?)
 }
 
 /**
@@ -3791,6 +3822,8 @@ internal class ShareShown(
         val canSwitchOff: Boolean,
         val canReactivate: Boolean,
         val canDelete: Boolean,
+        /** Its menu, in the web's order (`ShareSheet.rowActions`, ADR 0154 decision 2): drawn whole, each entry its word. */
+        val actions: List<me.raddatz.veyq.mobile.navigation.LinkAction> = emptyList(),
     )
 
     /**
@@ -3931,7 +3964,18 @@ internal class ShellShown(
     val dropsHere: Boolean = false,
     /** The folders among the level's rows that take a drop (`ShellModel.dropTarget`, never by their kind): [DropOn.Row]. */
     val dropRows: List<String> = emptyList(),
+    /**
+     * The shown level's plan (`ShellModel.levelPlan`, ADR 0154 decision 2): its New in the level's head and its tools in
+     * the level's tools row, each drawn whole and in order; null where no level shows (an object, a person, a kept link,
+     * Search).
+     */
+    val level: ShownLevel? = null,
+    /** What the drawer's New offers (`ShellModel.drawerCreates`): its entry is [DrawerSection.NEW] in [drawerSections]. */
+    val drawerCreates: List<ShownCreate> = emptyList(),
 ) {
+    /** A level's plan: New's entries with their words, then the tools row's (`LevelPlan`). */
+    @Serializable class ShownLevel(val creates: List<ShownCreate>, val tools: List<me.raddatz.veyq.mobile.navigation.LevelTool>)
+
     @Serializable class ShownServer(val connection: String, val label: String, val tenants: List<TenantRef>)
     /** A switcher row ([me.raddatz.veyq.mobile.navigation.ShellWords.SwitcherEntry]); [line] its name and detail for a one-label menu item. */
     @Serializable class ShownSwitcherEntry(val connection: String, val tenant: TenantRef, val name: String, val detail: String, val line: String, val current: Boolean)

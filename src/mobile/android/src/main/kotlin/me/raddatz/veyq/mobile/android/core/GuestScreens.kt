@@ -378,11 +378,11 @@ private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, vie
 private fun GuestMusicAction(page: GuestPage.Gallery) {
     val gallery = page.model
     val state by gallery.state.collectAsStateWithLifecycle()
-    if (gallery.headerActions.none { it.id == me.raddatz.veyq.mobile.memories.GalleryModel.MUSIC }) return
+    if (gallery.headerActions.none { it == me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC }) return
     IconButton(onClick = gallery::toggleMusic, modifier = Modifier.testTag("guest-music")) {
         Icon(
             if (state.musicHere) androidx.compose.material.icons.Icons.Outlined.MusicOff else androidx.compose.material.icons.Icons.Outlined.MusicNote,
-            say(gallery.label(me.raddatz.veyq.mobile.memories.GalleryModel.MUSIC)!!),
+            say(gallery.label(me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC)!!),
         )
     }
 }
@@ -418,9 +418,9 @@ private fun GuestFileActions(page: GuestPage.File, access: GuestAccess?, model: 
         uri?.let { model.guestReplace(a, file, it) }
     }
     IconButton(onClick = { save.launch(h.downloadName) }) { Icon(Icons.Outlined.Download, stringResource(R.string.node_download)) }
-    if (access != null && h.own.any { it.id == me.raddatz.veyq.mobile.depot.FileModel.REPLACE }) {
+    if (access != null && h.own.any { it == me.raddatz.veyq.mobile.navigation.HeaderAction.REPLACE }) {
         IconButton(onClick = { if (file.chooseReplace()) pick.launch(arrayOf("*/*")) }) {
-            Icon(Icons.Outlined.Upload, say(h.label(me.raddatz.veyq.mobile.depot.FileModel.REPLACE)!!))
+            Icon(Icons.Outlined.Upload, say(h.label(me.raddatz.veyq.mobile.navigation.HeaderAction.REPLACE)!!))
         }
     }
 }

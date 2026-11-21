@@ -116,6 +116,9 @@ class QueuedOverlayTest {
         assertTrue(gallery.current.marking, "offline no mark is offered although marks are queued")
         val x2 = t.id("x2")
         waitFor { gallery.current.marksLoaded.takeIf { it } }
+        // the tile's plan offers the mark once the own set is read (ADR 0154 decision 2: the web's tile, nothing else)
+        val x2row = assertNotNull(gallery.current.rows?.firstOrNull { it.mediaId == x2 })
+        assertEquals(listOf(me.raddatz.veyq.mobile.memories.TileAction.MARK), gallery.tileActions(x2row))
         assertNull(gallery.toggleMark(x2))
         assertEquals(true, gallery.current.marks[x2]?.mine)
         assertEquals(listOf(Queued.MEDIA_ADD, Queued.MEDIA_TRASH, Queued.MEDIA_MARK).map { it.name }, a.outbox!!.writes().map { it.op })

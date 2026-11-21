@@ -356,6 +356,11 @@
     "en": "delete account, close account",
     "de": "Konto löschen, Konto schließen"
   },
+  "search_words_sign_out": {
+    "note": "Settings' Sign out (SettingsSection.SIGN_OUT, cr-apps-structure-from-core-plans): what the search also finds it by.",
+    "en": "log out, sign off, leave this device",
+    "de": "ausloggen, abmelden, dieses Gerät verlassen"
+  },
   "back": {
     "en": "Back",
     "de": "Zurück"

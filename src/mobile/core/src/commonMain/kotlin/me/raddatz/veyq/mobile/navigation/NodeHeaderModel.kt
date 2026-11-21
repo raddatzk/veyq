@@ -176,16 +176,19 @@ class NodeHeaderModel(
         )
     }
 
-    /** The header's split for a bar of [maxButtons] buttons with the kind's [own] actions; null while nothing is offered yet. */
-    fun plan(maxButtons: Int, own: List<NodeHeader.Action> = emptyList()): NodeHeader.Plan? =
+    /**
+     * The header's split for a bar of [maxButtons] buttons with the kind's page's [own] actions (`GalleryModel.headerActions`,
+     * `FileModel.Header.own`, `BookmarkPage.headerActions`); null while nothing is offered yet.
+     */
+    fun plan(maxButtons: Int, own: List<HeaderAction> = emptyList()): NodeHeader.Plan? =
         current.rights?.let { NodeHeader.plan(it, AppKinds.headerOrder(node.kind), maxButtons, own) }
 
     /** A core action's words ([NodeHeader.label]; the delete's its kind's title); null for an application's own. */
-    fun label(id: String, hasCover: Boolean): Msg? =
-        NodeHeader.label(id, node.kind, current.pinned, hasCover) ?: if (id == NodeHeader.DELETE) deleteTitle else null
+    fun label(id: HeaderAction, hasCover: Boolean): Msg? =
+        NodeHeader.label(id, node.kind, current.pinned, hasCover) ?: if (id == HeaderAction.DELETE) deleteTitle else null
 
     /** A core action's words with the cover's state as the header holds it ([State.cover]). */
-    fun label(id: String): Msg? = label(id, current.cover != null)
+    fun label(id: HeaderAction): Msg? = label(id, current.cover != null)
 
     /** The delete's title in the kind's words (`deleteTitle`). */
     val deleteTitle: Msg get() = AppKinds.header(node.kind)?.deleteTitle ?: Msg.FOLDER_DELETE

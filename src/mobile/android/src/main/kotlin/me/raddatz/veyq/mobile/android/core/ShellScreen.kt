@@ -747,6 +747,9 @@ private fun Drawer(
                 Row(app = Icons.Outlined.Home, label = stringResource(R.string.drawer_home), selected = s.shell.isHome) { onChoose(null) }
                 // only the sections with something in them (core's `Lists.drawerSections`; owner 2026-11-19)
                 for (section in s.drawerSections) when (section) {
+                    // the drawer's New stands above the switcher's Home until this app draws the plan whole
+                    // (cr-apps-structure-from-core-plans phase 4)
+                    me.raddatz.veyq.mobile.navigation.DrawerSection.NEW -> {}
                     me.raddatz.veyq.mobile.navigation.DrawerSection.FAVORITES -> {
                         Section(stringResource(R.string.drawer_favorites))
                         ObjectItems(s.drawer.favorites, s.shell.openObject, onOpen)
