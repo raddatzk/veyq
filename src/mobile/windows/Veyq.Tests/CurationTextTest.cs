@@ -75,7 +75,9 @@ public sealed class CurationTextTest
         Assert.AreEqual(Words.MediaMetaUnreadable(), CurationText.CaptureSaid(CurationSaid.Unreadable));
         Assert.IsNull(CurationText.CaptureSaid(null));
         Assert.AreEqual(Words.MemoryParticipantsSaveFailed(), CurationText.ParticipantsSaid(CurationSaid.Failed));
-        Assert.AreEqual(Words.MemoryBannerStale(), CurationText.BannerSaidText(BannerSaid.Stale));
+        Assert.AreEqual(Words.MemoryBannerStale(), CurationText.BannerSaidText(BannerSaid.Stale, "40 MB"));
+        // the too-large words name the core's bound as it wrote it (BannerEditorShown.tooLargeBound)
+        Assert.AreEqual(Words.MemoryBannerTooLarge("40 MB"), CurationText.BannerSaidText(BannerSaid.TooLarge, "40 MB"));
         Assert.AreEqual(Words.MemoryBannerPreparing(), CurationText.BannerProgress(null));
         Assert.AreEqual(Words.MemoryBannerUploading(42), CurationText.BannerProgress(0.42));
     }
