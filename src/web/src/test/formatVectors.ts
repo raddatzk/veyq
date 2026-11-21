@@ -4,8 +4,8 @@
 // Each case calls the web's own formatter, or `Intl` with the options its call sites pass where the format is an
 // inline `Intl.DateTimeFormat` (`dateStyle: 'medium'`, with `timeStyle: 'short'` for a moment; `de-DE` / `en-US`). A
 // moment is written in UTC here, so the file is the same in every zone; the core turns an instant into the device's
-// local wall clock first. Not an import of the app: nothing under `src/` reaches this module but its test.
-import { formatBytes } from './formatBytes'
+// local wall clock first. Test support (`src/test/`, a consumer of core and the applications alike): no app code imports it.
+import { formatBytes } from '../shared/formatBytes'
 import { decimalOf, formatMoney, knownCurrencies, minorUnitsOf } from '../features/expenses/amounts'
 import { formatClosedRange, formatDay } from '../features/memories/memoryDateRange'
 import { formatTrackLength } from '../features/memories/music/audio'

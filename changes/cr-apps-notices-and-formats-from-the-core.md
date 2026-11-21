@@ -78,7 +78,7 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
 
 - [x] **1 vectors** — F3: the script, the file, the web's pinning test. · Done when: `pnpm run check` in `src/web` green.
   **Bite:** one size vector edited → the web test red.
-  **Built** (2026-11-21): `src/web/src/shared/formatVectors.ts` renders every case through the web's formatters
+  **Built** (2026-11-21): `src/web/src/test/formatVectors.ts` (test support, so it may read core and the applications) renders every case through the web's formatters
   (`formatBytes`, `formatMoney` over `knownCurrencies`/`minorUnitsOf`, `memoryDateRange`, `joinList`, `formatTrackLength`,
   and `Intl` with the date call sites' options, a moment in UTC); `scripts/format-vectors.mts` writes
   `src/mobile/words/format-vectors.json` (ICU 77.1: 262 sizes, 19 days, 34 moments, 17 Memory days, 4 ranges, 815 amounts
