@@ -1,7 +1,7 @@
 ---
 id: cr-web-expenses-on-the-core
 title: Expenses' rules move onto the Kotlin core for the web — `@veyq/core-js/expenses`, the JSON seam, the TypeScript twins deleted
-status: planned
+status: in-progress
 satisfies: ["uc.expenses.balances", "uc.expenses.record-entries", "uc.expenses.verify-ledger", "uc.expenses.exchange-rates", "uc.expenses.entry-history", "uc.expenses.manage-participants"]
 adrs: ["0155", "0154", "0108", "0079", "0136", "0046"]
 invariants:
@@ -11,6 +11,35 @@ invariants:
   - "a Long never crosses the façade; amounts in a format shape are JavaScript numbers (safe integers, entry.v1.schema.json), money results are bigint"
   - "no behaviour a member sees changes, except the currency list and digits named in decision 6"
 ---
+
+> **Status: parked by the owner 2026-11-21, behind
+> [cr-core-platform-and-application-modules](cr-core-platform-and-application-modules.md)** (ADR 0155 decision 7's
+> new order: the core splits, the platform moves slice by slice, then the applications, Expenses first). Phases 1–3 and
+> one timing round are built and committed on branch **`claude/p2-impl`**, not merged; its worktree
+> (`…/scratchpad/p2-impl`) is left as it is. When the split is through, the branch is rebased onto `:apps:expenses`
+> and reused, not rebuilt.
+>
+> | Step | Commit | What |
+> |---|---|---|
+> | Phase 1 | `c76d3212f` | the vectors both sides answer (three disagreements settled the web's way) |
+> | Phase 2 | `c5793db14` | the JSON seam, Expenses' pure homes, `money-vectors.json` written by the core |
+> | Phase 3 | `cbf54e21e` | `@veyq/core-js/expenses`, one entry file per façade, the package's checks |
+> | Decision 5's fallback | `243e89185` | `Big` over the engine's `BigInt` on JavaScript (25.7 s → 306 ms) |
+> | Timing round | `7b8af11cf` | the revision handle and six steps: 306 → 260 → 165 → 126 → 103 → 87 → 81 ms |
+>
+> **Open at the park:**
+> - **Decision 4 does not hold.** One module with one entry file per façade puts Expenses into the search's entry
+>   (28,189 → 59,587 B gz alone, over the 40 KB; `src/slice.test.ts` on the branch is red on it), and per-file
+>   granularity puts Expenses at ~30.8 KB net, over its 25 KB. Decision 4 is replaced by the split's per-module
+>   granularity, measured in that CR's last phase before this one resumes (ADR 0155 § Consequences).
+> - **`SearchField.test.ts` is red** on the parked work only (`main` is green): the extra module hop between the web
+>   and the search's façade changes when the field's watchers fire. The cause is not fully found; with per-module output
+>   the hop changes again, so it is re-diagnosed on the rebased branch, not before.
+> - **The time gate is amended** (decision 9, ADR 0155 decision 7.3): ≤ 2.5× the TypeScript's median and ≤ 100 ms.
+>   At the park `buildLedger` 80.4–82.9 ms against 38–41 (2.07–2.12×), `checkLedger` 4.9–5.0 against 4.1–4.6
+>   (1.15–1.19×), Node 22.23.3, median of 15 after 3 warm-ups, the 10,010-revision Pot — inside. Re-measured after the
+>   rebase, since the module boundary is new.
+> - Phases 4 (the web's callers, the twins deleted, the browser pass) and 5 (docs) are not started on the branch.
 
 ## Goal
 
@@ -166,8 +195,9 @@ where ADR 0154's money vectors turn around (the core becomes their source).
      `new Function` or DOM sink; `verify:csp`, `verify:license-sources` green;
    - **behaviour:** the staying web tests pass with only their imports and the `Date`→number reads changed — any other
      change is listed in the retrospective with why (the pilot's two were ruled a pass by the owner when they read the
-     deleted code's internals; the same reading applies, stated, not assumed); `buildLedger` and `checkLedger` over a
-     10,000-entry Pot ≤ 1.5× the TypeScript's median (Node, the same machine, measured before the deletion), answers
+     deleted code's internals; the same reading applies, stated, not assumed); `buildLedger` and `checkLedger` over the
+     10,010-revision Pot each ≤ **2.5×** the TypeScript's median **and** ≤ **100 ms** (ADR 0155 decision 7.3, the owner
+     2026-11-21; it replaced this CR's first 1.5×), Node, the same machine, measured before the deletion, answers
      identical;
    - **tests:** decision 7's accounting complete; a mutated Kotlin rule (a +1 in `Ledger.settleUp`, half-even instead of
      half-away in `Money.roundHalfAwayFromZero`) turns `src/expenses.test.ts` and the web's `vectors.test.ts` red.
@@ -247,7 +277,7 @@ Done when: every `scripts/validate_*.py` green (`validate_guard_gaps.py` only if
   sort.
 - **Two JSON parsers** (decision 3): a parser edge the vectors do not name can still differ. Phase 1's edge cases are
   the defence; a new edge found later is a vector case first.
-- **Per-call re-reading** (decision 5) may miss the 1.5× bound on large Pots; the handle is the named fallback, `Big`
+- **Per-call re-reading** (decision 5) may miss the time bound on large Pots; the handle is the named fallback, `Big`
   over native `BigInt` on JavaScript the second.
 - **Shared buffers.** Views instead of copies keep zeroing effective, and mean a Kotlin function that keeps a reference
   to its argument keeps the caller's bytes; the codec keeps none (its tests in phase 3 hold a zeroed key).
