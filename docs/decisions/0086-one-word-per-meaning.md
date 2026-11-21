@@ -41,7 +41,8 @@ One meaning per word, in docs, code and the wiki (EN+DE):
 | **version** | compatibility only: the major (ADR 0085), a crypto suite | a concurrency counter |
 | **revision** | a concurrency or change counter: `metaRevision`, `mediaRevision`, a tree revision, the edition of a text that changes (the terms' `termsRevision`) | compatibility |
 | **format** | a sealed payload's schema, per node kind, readable forever (ADR 0079 decision 7) | the platform's major |
-| **history** (*Verlauf*) | reserved for a future earlier-contents-of-a-file feature | "versions" of a file |
+| **history** (*Verlauf*) | the earlier contents of a file (reserved for a future feature) or of a journal, its kept snapshot revisions ([ADR 0133](0133-a-memorys-journal-is-a-sealed-crdt-log-whose-snapshots-only-members-write.md) decision 8) | "versions" of a file or a journal |
+| **journal** (*Tagebuch*) | the markdown text of a Memory or a Chapter, written together ([ADR 0133](0133-a-memorys-journal-is-a-sealed-crdt-log-whose-snapshots-only-members-write.md)); a function of Memories, not an application | a dated list of entries (a Chapter is already the day) |
 | **bookmark** (*Lesezeichen*) | a node that keeps a public link someone sent, opened where the share lives ([ADR 0120](0120-a-received-link-is-kept-as-a-bookmark-node-that-opens-and-reports-where-the-share-lives.md)) | a **favorite** (*Favorit*), a member's private pin of a node |
 | **`K_node`** (identifier `kNode`) | the random content key every node carries — a Memory, a Chapter, a folder, a Depot file or drop box — wrapped under its parent's key (ADR 0012, ADR 0080) | `K_mem`, which named it when only a Memory had a key; the wire labels (seal purposes, derivation info strings) never carried the name and do not change |
 

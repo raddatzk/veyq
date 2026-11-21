@@ -11,9 +11,13 @@ invariants:
   - "a journal update bumps the journal's own list of the node's items revision — never the gallery's, never the scope tree's (ADR 0133 decision 3)"
   - "a guest's journal updates leave one guest-write record row per writing session, and every update keeps its own server time (ADR 0093 § 10)"
   - "a link guest is served each contributor's alias, never a name or a member or identity id, and the journal's alias key is never served (ADR 0133 decision 9)"
-  - "every journal rule a client runs is the Kotlin core's, drawn by the web through @veyq/core-js/memories; the web holds no second implementation of it (ADR 0155 decision 1, ADR 0133 § Proposed amendment A1)"
+  - "every journal rule a client runs is the Kotlin core's, drawn by the web through @veyq/core-js/memories; the web holds no second implementation of it (ADR 0155 decision 1, ADR 0133 decision 2)"
   - "the journal's Kotlin lands in the journal's lazy chunk: the eager set grows by at most 1 KB gz (ADR 0155 decisions 2 and 7)"
 ---
+
+> **Status: planned, deferred by the owner 2026-11-21** — the journal waits behind the web's move onto the core
+> ([ADR 0155](../docs/decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)
+> P2, [cr-web-expenses-on-the-core](cr-web-expenses-on-the-core.md)); no date set.
 
 ## Goal
 
@@ -37,12 +41,13 @@ fallback.
   functionality, every client only draws), [ADR 0154](../docs/decisions/0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md)
   (gates, plans, notices with their lifetimes, formats from the core),
   [ADR 0153](../docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md)
-  (the apps' outbox) and the V2 order (`docs/inbox.md` § V2, block I: this CR first, then #855). What changed is
-  written as **ADR 0133 § Proposed amendment** (A1–A4), which this CR builds once the owner accepts it; the decisions
-  of ADR 0133 above it stand.
+  (the apps' outbox) and the V2 order (`docs/inbox.md` § V2, block I: this CR first, then #855). What changed was
+  proposed as an amendment of ADR 0133, accepted by the owner on 2026-11-21 and folded into its decisions: the rules in
+  the core and the engine a port (decision 2), the snapshot check normalised through the checker's engine (decision 4),
+  the pseudonym lists in the words catalog (decision 9), an unsent update in the apps an offline write (decision 11).
 - **Where the model lives — decided: (b), the engine per platform, everything around it in the core.**
   - *(a) the engine in Kotlin too* is rejected for lack of an engine: no maintained Kotlin engine reads Yjs update v1 on
-    the core's targets (measured 2026-11-21, ADR 0133 amendment's list: `gh api repos/y-crdt/ykt` → last push
+    the core's targets (measured 2026-11-21, ADR 0133 § Context's list: `gh api repos/y-crdt/ykt` → last push
     2023-01-17, README "currently not active"; `gh api repos/hwisu/yks` → JVM 21 only, one contributor, created
     2026-07-05, GitHub Packages behind a token; `gh api repos/y-crdt/y-octo/readme` → Kotlin/Swift bindings "coming
     soon"). `yrs` (MIT, v0.28.2 of 2026-11-19, `gh api repos/y-crdt/y-crdt/releases`) reaches the web only as `ywasm`,
@@ -68,7 +73,7 @@ fallback.
   `encodeStateAsUpdate`; a withheld delete-only update unnoticed by Yjs) hold for the pinned version; measured again
   2026-11-21 only from the registry: `yjs` `latest` is still 13.6.33, `@y/y` `beta` is now 14.0.0-rc.30
   (`curl -s https://registry.npmjs.org/yjs`, `…/@y%2Fy`, `dist-tags`). Re-run the probes in phase 4 if the pinned Yjs
-  differs, plus the fixed point amendment A2 needs (encode → apply → encode, the same bytes).
+  differs, plus the fixed point ADR 0133 decision 4's normalised check needs (encode → apply → encode, the same bytes).
 - **Measured 2026-11-21 on `claude/windows-cr-f6c73c` (`8b760b0f3`), the two facts the design leans on, spot-checked
   by reading the code — both still hold:**
   - Core's items revision is one row per node: `veyq_node_items_revision` keyed by `node_id` alone
@@ -97,7 +102,7 @@ fallback.
   check` (backend), the core's `./gradlew :core:jvmTest` (`src/mobile`), `@veyq/core-js`'s and the web's `pnpm run
   check`. Each phase records its gate's exit code on the tip before its first edit (changes/README § A done-when that
   names a gate).
-- Out: the apps' drawing (#855, which also adds the journal to ADR 0153's queue as amendment A3 says), a Memory's view
+- Out: the apps' drawing (#855, which also adds the journal to ADR 0153's queue as ADR 0133 decision 11 says), a Memory's view
   of its Chapters' journals (#853; nothing here may assume one journal per Memory only), live cursors (#854).
 
 ## Decisions (technical, settled here)
@@ -170,7 +175,7 @@ fallback.
    and updates; a content block refuses append, snapshot and restore with `451`; `memories.journal` and Memories off
    refuse writes, reads stay.
 9. **The journal's model — the Kotlin core, `src/mobile/core/src/commonMain/kotlin/me/raddatz/veyq/mobile/memories/journal/`**
-   (ADR 0133 amendment A1). No coroutines, serialization or Ktor in anything below (ADR 0155 decision 4; the package's
+   (ADR 0133 decision 2). No coroutines, serialization or Ktor in anything below (ADR 0155 decision 4; the package's
    slice check reads the shipped bundle):
    - `JournalEngine` — the port: `merge(updates)`, `state(base?, updates)`, `text(state)`, `editTo(state, text)`, bytes
      in and out. The core's tests run over a played engine; the engine-bound vectors over Yjs in phase 5 (and Yrs in
@@ -184,11 +189,11 @@ fallback.
    - `JournalWriter` — local updates buffered, the flush (at most one envelope a second, merged through the engine;
      one over the cap answered as *too large*, so the web's editor splits a paste above it into consecutive inserts),
      the re-seal set after `409 stale_revision`; an update the server refuses for good ends writing under that client
-     id (the editor turns to the read view; amendment A3).
+     id (the editor turns to the read view; ADR 0133 decision 11).
    - `JournalCompaction` — when (the three triggers of decision 5, the jitter drawn from a source the caller hands),
      what the snapshot folds (state, projection, folded position, `continues`), and the check before compacting over a
      predecessor and of every snapshot a reader holds the predecessor of, **normalised through the reader's engine**
-     (amendment A2); a lost race (`409`) drops the snapshot.
+     (ADR 0133 decision 4); a lost race (`409`) drops the snapshot.
    - `JournalRestore` — the edit from the current state to a kept revision's projection, then a compaction.
    - `JournalRights` — a gate (ADR 0154 decision 1): from the viewer (a member; a `READ` or `READ_WRITE` guest), the
      switch and a block, whether it edits, compacts, reads the history and restores, or only reads. A `WRITE_ONLY`
@@ -229,11 +234,12 @@ fallback.
     the vectors), drawn by the renderer hook.
 13. **Words:** the pseudonym lists (64 adjectives × 64 animals, EN and DE, each German animal with its gender and each
     German adjective a regular stem; friendly, nothing a reader could take as a judgement of a person) are `core_text`
-    keys of `src/mobile/words/words.json` (amendment A4; `generate_words.py` writes `CoreText.kt`; a test holds both
+    keys of `src/mobile/words/words.json` (ADR 0133 decision 9; `generate_words.py` writes `CoreText.kt`; a test holds both
     lists to 64 distinct words per language); the façade takes the language. The web's other journal words (the tab,
     the tools, the history, the notices, the banners) are the web's i18n in EN and DE; the same keys and texts join
-    `words.json` with #855, so the CR lists them in its phase 7 commit message as the table #855 copies. Product words:
-    **Journal** and **History** (owner questions below).
+    `words.json` with #855, so the CR lists them in its phase 7 commit message as the table #855 copies. Product words
+    (owner 2026-11-21, [ADR 0086](../docs/decisions/0086-one-word-per-meaning.md)'s table): **Journal** (de *Tagebuch*)
+    for the tab and the text, **History** (de *Verlauf*) for the kept snapshot revisions.
 14. **UI** (reuse first, `ui-web-styleguide.md` § Reuse first): a **Journal** tab on a Memory's and a Chapter's detail
     (beside Chapters/Map); the editor drawing `JournalPlans`' tools; the read view where `JournalRights` says read; a
     contributors popover drawing `JournalPeople`' rows (a member's page: names as elsewhere; a guest's: the core's
@@ -307,7 +313,7 @@ sequence gap is reported and the later updates held, and released when the gap f
 a snapshot that does not open skipped and the kept log replayed; the flush bounds updates to one a second and answers
 *too large* above the cap; the re-seal set after `409`; a refusal for good ends the client id; compaction's triggers,
 jitter and drop on `409`; the check names a forged snapshot and passes an honest one written by a second played
-engine that encodes the same state in other bytes (amendment A2's case); the rights table; the pseudonyms (the same
+engine that encodes the same state in other bytes (ADR 0133 decision 4's case); the rights table; the pseudonyms (the same
 alias the same name, EN and DE with the German adjective agreeing for each gender, both lists 64 distinct words in
 each language, animal and adjective from their own alias bytes, equal names numbered in ordinal order with the earlier
 writer's suffix kept when a later one appends, the guest's own row "You"); the token grammar and its export rewrite.
@@ -317,7 +323,7 @@ writer's suffix kept when a later one appends, the guest's own row "You"); the t
 **Phase 5 — core-js, Memories' façade and the size gate.** Decision 10. Record `@veyq/core-js`'s and the web's `pnpm
 run check` exit codes and the web build's eager set and chunk sizes on the tip first (the pilot's method: `main` and
 the chunks `index.html` modulepreloads, gzip level 9, attributed by source map). The engine-bound fixture generated
-over the pinned Yjs, and amendment A2's fixed point measured (encode → apply → encode) — a Yjs that is no fixed point
+over the pinned Yjs, and ADR 0133 decision 4's fixed point measured (encode → apply → encode) — a Yjs that is no fixed point
 stops the phase and goes back to refine. Tests: the journal vectors through the shipped module over Yjs, a dropped
 gap rule turning them red; the slice check names no coroutines, serialization, Ktor or refusal file in the entry.
 Done when: the package's `pnpm run build && pnpm run check` green; **the eager set grows by at most 1 KB gz** and the
@@ -350,27 +356,27 @@ extended and green, and a browser pass: restore an earlier state while a second 
 
 **Phase 9 — docs, site, coverage.** `uc.memory.journal`'s criteria from its gaps into refs beside their tests
 (except `live-and-present`, `cr-live-stream`'s), the coverage file to `built` only if every criterion has a ref;
-ADR 0133's `Built` line and its amendment folded into the decisions it amends (status stays Accepted), ADR 0093's
+ADR 0133's `Built` line, ADR 0093's
 `Built` line, ADR 0155's `Built` line (Memories' façade, the journal's slice); `en.moderation.guest-write-record` (the
 session row from decided to built); `docs/apps/journal.md` (the rules in the core, the engine a port, the apps through
 #855); the security model's append-only statement; the capability register's `memories.journal` from planned (docs
 and `site/.../run/capabilities.mdx`, `security/roadmap.md`); inbox #855's row (the engine port in the core through
-`yffi`, the outbox of amendment A3, the plan entry of decision 14). Site: a new Use page *Write a journal together*
+`yffi`, the outbox of ADR 0133 decision 11, the plan entry of decision 14). Site: a new Use page *Write a journal together*
 (EN+DE, beside the Memories pages, at their depth); Security pages that list what the server sees and the known
 limitations (the freshness residual, the kept history's residual); Run: the journal's retention and the storage term,
 where a Run page states retention. Done when: the trust-chain guards (`scripts/validate_*.py`, `/usr/bin/python3`) and
 the site's own check green.
 
-## Owner questions (product and copy, each with a recommendation)
+## Owner answers (2026-11-21: "all as recommended, the journal later")
 
-1. **Accept ADR 0133 § Proposed amendment (A1–A4)?** Recommended: yes — the journal is the first feature built core
-   first, so no TypeScript twin is ever written, and the apps' #855 binds no CRDT library of its own.
-2. **The German word for Journal.** Recommended: *Tagebuch* (de) for **Journal** (en) — the plain German word for a
-   trip's written account; ADR 0133's rejection of "dated entries" is about structure, not the word. The word joins
-   ADR 0086's table.
-3. **History for a journal's earlier snapshot revisions.** ADR 0086 reserves **history** (*Verlauf*) for "a future
-   earlier-contents-of-a-file feature". Recommended: use it, and widen the row to "earlier contents of a file or a
-   journal" — the same meaning, so one word.
+1. **ADR 0133's amendment (the rules in the core, the engine a port) — accepted**, folded into ADR 0133's decisions 2,
+   4, 9 and 11 and its Context; the ADR stays Accepted.
+2. **The German word for Journal is *Tagebuch*** — in ADR 0086's table; the UI strings arrive with phase 7 (decision 13's
+   words).
+3. **History (*Verlauf*) names a journal's earlier snapshot revisions too** — ADR 0086's row reads "earlier contents
+   of a file or of a journal".
+4. **The journal comes later** — deferred behind the web's move onto the core (ADR 0155 P2,
+   [cr-web-expenses-on-the-core](cr-web-expenses-on-the-core.md)); see the status note at the top.
 
 ## Definition of done
 

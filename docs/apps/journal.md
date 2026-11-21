@@ -8,10 +8,14 @@
 > This page is the model in one place; it says what is true once built, and the work orders
 > `changes/cr-live-journal.md` and `changes/cr-live-stream.md` build it.
 
-The journal is a **function of Memories**, not an application of its own: the text of a Memory and of each Chapter, in
+The **journal** (de: *Tagebuch*, [ADR 0086](../decisions/0086-one-word-per-meaning.md)) is a **function of Memories**,
+not an application of its own: the text of a Memory and of each Chapter, in
 markdown, with the node's photos, Chapters, map and GPX tracks embedded as tokens, written by several people at the
 same time. The server stores and relays sealed bytes it cannot read and cannot merge; every merge, snapshot and
-rendering happens in a client.
+rendering happens in a client. Every rule a client runs — the envelope, the order and gap checks, compaction, the
+snapshot check, restore, who may do what, the guest's pseudonyms — is the Kotlin core's (`memories/journal/`), drawn by
+the web through `@veyq/core-js/memories` and by the apps through the core; the CRDT engine is a port the core calls
+with bytes only, Yjs on the web and Yrs through `yffi` in the apps (ADR 0133 decision 2).
 
 ## The shape
 
@@ -47,4 +51,5 @@ Not the text, not which passage, not the embeds, not a cursor.
 
 - A Memory's page that shows its Chapters' journals together, read-only (inbox #853).
 - Live cursors with names (inbox #854).
-- The journal in the native apps, through a Yrs binding (inbox #855).
+- The journal in the native apps: Yrs through `yffi` behind the core's engine port, unsent updates in the offline
+  outbox (inbox #855, ADR 0133 decisions 2 and 11).
