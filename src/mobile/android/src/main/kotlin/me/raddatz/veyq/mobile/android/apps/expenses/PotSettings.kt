@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.android.apps.expenses
 
+import me.raddatz.veyq.mobile.expenses.potRefused
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row

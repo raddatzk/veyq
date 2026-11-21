@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.blob
 
+import me.raddatz.veyq.mobile.composition.PickedPaths
+
 import kotlinx.coroutines.test.runTest
 import kotlin.random.Random
 import kotlin.test.AfterTest

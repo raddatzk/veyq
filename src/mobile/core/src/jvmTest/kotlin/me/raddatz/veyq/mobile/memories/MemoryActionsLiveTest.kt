@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.delay
@@ -58,7 +59,7 @@ class MemoryActionsLiveTest {
             liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         val tenant = account.open(account.defaultTenant!!)
-        val shell = me.raddatz.veyq.mobile.navigation.ShellModel(
+        val shell = me.raddatz.veyq.mobile.composition.ShellModel(
             tenant, me.raddatz.veyq.mobile.navigation.Hidden({}, emptySet()), me.raddatz.veyq.mobile.navigation.RecentUses({}, emptyList()),
         ) { System.currentTimeMillis() }
         shell.load(openLastUsed = false)
@@ -69,9 +70,9 @@ class MemoryActionsLiveTest {
         val again = shell.createMemory(scopeId, null, name)
         assertTrue(again.node == null && again.notice != null, "its name is taken now")
         val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
-        val uploads = shell.mediaUploads(queue, object : MediaUpload.Deriver {
-            override fun derive(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) =
-                done(MediaUpload.Derived(null, null, null, null))
+        val uploads = shell.mediaUploads(queue, object : Derivation.Deriver {
+            override fun derive(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, done: (Derivation.Derived) -> Unit) =
+                done(Derivation.Derived(null, null, null, null))
         }, left = {}) {}
         val gallery = shell.galleryModel(NodeAt(scopeId, memory.nodeId, "MEMORY", name), uploads)
         try {
@@ -83,7 +84,7 @@ class MemoryActionsLiveTest {
                 val up = MediaUpload.upload(
                     tenant, scopeId, memory.nodeId,
                     MediaUpload.Original(ByteSource(photo.size.toLong()) { from, length -> photo.copyOfRange(from.toInt(), minOf(photo.size.toLong(), from + length).toInt()) }, "image/jpeg", "App photo $i.jpg", 1_000_000L * i),
-                    MediaUpload.Derived(null, null, null, null), System.currentTimeMillis(),
+                    Derivation.Derived(null, null, null, null), System.currentTimeMillis(),
                 )
                 assertEquals(MediaUpload.Outcome.DONE, up.outcome, up.code)
                 up.mediaId!!

@@ -20,6 +20,8 @@ import kotlin.test.assertTrue
  * a re-key that finds the scope ahead of the held key opens it anew too, rather than leaving the write to wait.
  */
 class ScopeMovedUnderAnOpenTenantTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest

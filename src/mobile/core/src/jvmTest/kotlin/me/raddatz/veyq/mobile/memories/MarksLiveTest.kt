@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
@@ -50,8 +51,8 @@ class MarksLiveTest {
             val memory = assertNotNull(MemoryCreate.create(owner, scopeId, null, MemoryCreate.MEMORY, "App marks ${System.currentTimeMillis() % 100_000}").node).nodeId
             val photo = File(root, "src/web/src/features/memories/__fixtures__/exif-sample.jpg").readBytes()
             fun source(b: ByteArray) = ByteSource(b.size.toLong()) { from, length -> b.copyOfRange(from.toInt(), minOf(b.size.toLong(), from + length).toInt()) }
-            val ownersPhoto = MediaUpload.upload(owner, scopeId, memory, MediaUpload.Original(source(photo), "image/jpeg", "Owner.jpg", 1), MediaUpload.Derived(photo, photo, 4032, 3024), System.currentTimeMillis()).mediaId!!
-            val membersPhoto = MediaUpload.upload(member, scopeId, memory, MediaUpload.Original(source(photo), "image/jpeg", "Member.jpg", 1), MediaUpload.Derived(photo, photo, 4032, 3024), System.currentTimeMillis()).mediaId!!
+            val ownersPhoto = MediaUpload.upload(owner, scopeId, memory, MediaUpload.Original(source(photo), "image/jpeg", "Owner.jpg", 1), Derivation.Derived(photo, photo, 4032, 3024), System.currentTimeMillis()).mediaId!!
+            val membersPhoto = MediaUpload.upload(member, scopeId, memory, MediaUpload.Original(source(photo), "image/jpeg", "Member.jpg", 1), Derivation.Derived(photo, photo, 4032, 3024), System.currentTimeMillis()).mediaId!!
 
             for (s in listOf(owner, member)) {
                 val m = ItemMarks.of(s, scopeId, memory)

@@ -27,6 +27,8 @@ import kotlin.test.assertTrue
  * [SizedVolume] answering the host's volume → on a host under 5 % free every test that keeps anything goes red.
  */
 class OfflineLimitTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val p = testPrimitives
     private val root = freshTestDirectory()
 

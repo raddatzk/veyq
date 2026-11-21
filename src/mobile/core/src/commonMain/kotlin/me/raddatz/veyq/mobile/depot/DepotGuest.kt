@@ -34,16 +34,22 @@ import me.raddatz.veyq.mobile.sharing.GuestSession
  * account.
  */
 object DepotGuest {
+    /** A Depot file as a link's guest sees it: its page with a guest's viewer. */
+    class File(override val node: NodeAt, val model: FileModel) : GuestPage()
+
+    /** A drop box's WRITE_ONLY link: the drop page (the guest names itself, adds files). */
+    class DropBox(override val node: NodeAt, val model: GuestDropBox) : GuestPage()
+
     /** A file of a READ or READ_WRITE link. */
     val file = GuestDoor { access, node, _ ->
         val tree = access.tree ?: return@GuestDoor GuestPage.NotShown(node)
         tree.node(node.nodeId) ?: return@GuestDoor GuestPage.NotShown(node)
         val viewer = if (access.role == GuestAccess.READ_WRITE) FileRights.Viewer.READ_WRITE else FileRights.Viewer.READ
-        GuestPage.File(node, FileModel(node, GuestFileDoor(access), access.sharesCopies, viewer))
+        DepotGuest.File(node, FileModel(node, GuestFileDoor(access), access.sharesCopies, viewer))
     }
 
     /** A drop box's WRITE_ONLY link. */
-    val dropBox = GuestDoor { access, node, _ -> GuestPage.DropBox(node, GuestDropBox(access, node)) }
+    val dropBox = GuestDoor { access, node, _ -> DepotGuest.DropBox(node, GuestDropBox(access, node)) }
 
     /** The guest's tree node of [node], whose key opens its file. */
     private fun opened(access: GuestAccess, node: NodeAt): OpenNode? = access.tree?.node(node.nodeId)

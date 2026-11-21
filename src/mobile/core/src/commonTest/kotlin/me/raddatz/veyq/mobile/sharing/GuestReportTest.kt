@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.memories.MemoriesGuest
+
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
@@ -34,6 +36,8 @@ import kotlin.test.assertTrue
  * not only its address.
  */
 class GuestReportTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val p = testPrimitives
 
     /** The played instance's moderation: its epoch's seed, and every report received (the request's JSON). */
@@ -159,7 +163,7 @@ class GuestReportTest {
         val v = view(share)
         v.load()
         v.open(memory)
-        val gallery = assertIs<GuestPage.Gallery>(v.page.value).model
+        val gallery = assertIs<MemoriesGuest.Gallery>(v.page.value).model
         val rows = withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(10_000) { gallery.state.first { it.rows != null }.rows!! } }
         val mediaId = rows.single().mediaId
         val sheet = assertNotNull(gallery.reportSheet(mediaId), "a viewing guest is offered no medium's report")

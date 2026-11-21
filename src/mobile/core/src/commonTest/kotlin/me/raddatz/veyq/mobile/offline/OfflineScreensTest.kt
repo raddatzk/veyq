@@ -12,7 +12,7 @@ import me.raddatz.veyq.mobile.navigation.NodeHeader
 import me.raddatz.veyq.mobile.navigation.NodeHeaderModel
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.session.AccountSettings
 import me.raddatz.veyq.mobile.session.OfflineAsOf
 import me.raddatz.veyq.mobile.session.OpenNode
@@ -45,6 +45,8 @@ import kotlin.test.assertTrue
  * offline whatever the toggle's state → a node not kept offers its pin offline.
  */
 class OfflineScreensTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest
@@ -111,9 +113,9 @@ class OfflineScreensTest {
         override fun linksOn() = true
         override suspend fun reportOffered() = false
         override suspend fun toggleFavorite(ref: NodeAt) = true
-        override suspend fun trash(ref: NodeAt): ShellModel.Trashed = throw UnsupportedOperationException()
+        override suspend fun trash(ref: NodeAt): NodeHeaderModel.Trashed = throw UnsupportedOperationException()
         override suspend fun undoTrash(node: OpenNode): Notice? = null
-        override suspend fun rename(ref: NodeAt, name: String): ShellModel.Renamed = throw UnsupportedOperationException()
+        override suspend fun rename(ref: NodeAt, name: String): NodeHeaderModel.Renamed = throw UnsupportedOperationException()
         override fun closeOpen(ref: NodeAt) {}
         override fun changed() {}
         override fun offline() = nodes

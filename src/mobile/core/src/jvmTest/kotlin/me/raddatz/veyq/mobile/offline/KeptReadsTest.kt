@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 
 /**
  * No kept body carries a token or an address (ADR 0140 decisions 1 and 5): every field the store may hold is derived from
- * the generated client's model of each [KeptRead] — walked down through every object, list and map it holds, so a field
+ * the generated client's model of each [KeptRead], core's and each application's — walked down through every object, list and map it holds, so a field
  * added to the contract is checked without a list of its own — and each is refused whose name, or whose description in
  * `contracts/api`, marks a token, a credential or an address. A presigned URL is a bearer credential until it lapses; a
  * token is one for as long as it lives.
@@ -33,7 +33,9 @@ class KeptReadsTest {
 
     @Test
     fun noKeptBodyCarriesATokenOrAnAddress() {
-        val fields = fields(KeptRead.entries.map { it.model.descriptor })
+        // core's and every application's, as the composition installs them
+        val reads = KeptRead.platform + me.raddatz.veyq.mobile.composition.AppComposition.applications.mapNotNull { it.kept }.flatMap { it.reads }
+        val fields = fields(reads.map { it.model.descriptor })
         assertTrue(fields.size > 40, "the walk found ${fields.size} fields: it walks nothing")
         assertEquals(emptyList(), refused(fields))
         // each exception still names a field the kept bodies have

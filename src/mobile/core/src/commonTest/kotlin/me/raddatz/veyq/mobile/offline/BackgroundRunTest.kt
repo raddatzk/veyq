@@ -40,6 +40,8 @@ import kotlin.test.assertTrue
  * deadline not asked between writes (`OutboxSender`'s `go`) → [the_deadline_stops_the_run_between_writes] red.
  */
 class BackgroundRunTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest

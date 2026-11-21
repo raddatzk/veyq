@@ -1,5 +1,7 @@
-package me.raddatz.veyq.mobile.navigation
+package me.raddatz.veyq.mobile.composition
 
+import me.raddatz.veyq.mobile.navigation.NodeAt
+import me.raddatz.veyq.mobile.navigation.*
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.depot.DepotUploads
 import me.raddatz.veyq.mobile.depot.FolderUpload
@@ -35,7 +37,7 @@ sealed class Dropped {
     class Unread(val name: String) : Dropped()
 }
 
-/** What a drop landed on: the platform names it, the core judges it ([me.raddatz.veyq.mobile.navigation.ShellModel.drop]). */
+/** What a drop landed on: the platform names it, the core judges it ([ShellModel.drop]). */
 sealed class DropTarget {
     /** The level the shell shows (a folder, a space's top), its title [label] as the platform draws it (the batch's name). */
     class Level(val label: String) : DropTarget()

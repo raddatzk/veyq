@@ -156,9 +156,11 @@ def test(pattern: str | None) -> int:
     search_vectors = "contracts/platform/search/v1-vectors.json"
     # and the import's cases, the web's download and the manifest's schema (ImportFixtures, ZipReaderTest; ADR 0152 decision 4)
     export_contracts = "contracts/export"
+    # and the web's format vectors (ShownVectorsTest, ADR 0154 decision 5), read the same way
+    format_vectors = "src/mobile/words/format-vectors.json"
     mounts = {kexe_dir: "/veyq/bin", VECTORS: "/veyq/vectors.json", NORMALIZATION_TEST: "/veyq/NormalizationTest.txt",
               ROOT / qr_fixtures: f"/veyq/repo/{qr_fixtures}", ROOT / search_vectors: f"/veyq/repo/{search_vectors}",
-              ROOT / export_contracts: f"/veyq/repo/{export_contracts}"}
+              ROOT / export_contracts: f"/veyq/repo/{export_contracts}", ROOT / format_vectors: f"/veyq/repo/{format_vectors}"}
     env = {"VEYQ_VECTORS": "/veyq/vectors.json", "VEYQ_NORMALIZATION_TEST": "/veyq/NormalizationTest.txt",
            "VEYQ_REPO_ROOT": "/veyq/repo", "TZ": ZONE}
     # WallClockTest's values are Berlin's. kotlinx-datetime reads the zone from /etc/localtime, glibc from TZ: both set.

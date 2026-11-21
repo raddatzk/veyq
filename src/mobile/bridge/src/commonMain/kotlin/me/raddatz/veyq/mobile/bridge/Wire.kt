@@ -18,7 +18,7 @@ import me.raddatz.veyq.mobile.navigation.Home
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.navigation.ObjectRef
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.SessionModel
@@ -229,7 +229,7 @@ internal sealed class Call {
     @Serializable @SerialName("Settings.CancelRemoveAll") data class SettingsCancelRemoveAll(val settings: Long) : Call()
 
     /**
-     * The notices of items no longer available offline ([me.raddatz.veyq.mobile.navigation.ShellModel.State]'s `gone`,
+     * The notices of items no longer available offline ([me.raddatz.veyq.mobile.composition.ShellModel.State]'s `gone`,
      * each named where the shell held its name) said: not said again (`goneSeen`).
      */
     @Serializable @SerialName("Shell.OfflineGoneSeen") data object ShellOfflineGoneSeen : Call()
@@ -674,14 +674,14 @@ internal sealed class Call {
      * What is asked before [loss] while writes wait (`QueuedTray.ask`, ADR 0153 decision 2): [Answer.QueuedAsked], its
      * question and confirm, or none (nothing waits: the host goes on without asking). *Cancel* keeps them to send first.
      */
-    @Serializable @SerialName("Queued.Ask") data class QueuedAsk(val loss: me.raddatz.veyq.mobile.offline.QueuedLoss) : Call()
+    @Serializable @SerialName("Queued.Ask") data class QueuedAsk(val loss: me.raddatz.veyq.mobile.composition.QueuedLoss) : Call()
 
     /**
      * [QueuedAsk] for connection [connection]'s account, whichever tenant is open (`QueuedTray.ask` over that account's
      * outbox): Manage's sign-out and "Stop trusting" of an account that is not the open one (inbox #1043).
      * [Answer.QueuedAsked]; refused `NO_SUCH_CONNECTION`.
      */
-    @Serializable @SerialName("Queued.AskFor") data class QueuedAskFor(val connection: String, val loss: me.raddatz.veyq.mobile.offline.QueuedLoss) : Call()
+    @Serializable @SerialName("Queued.AskFor") data class QueuedAskFor(val connection: String, val loss: me.raddatz.veyq.mobile.composition.QueuedLoss) : Call()
 
     /**
      * Files picked or dropped into a level, screened first (ADR 0152 decisions 1 and 6, `DepotUploads.screen`): where the
@@ -1874,13 +1874,13 @@ internal sealed class Answer {
     @Serializable @SerialName("Queued") data class Queued(val count: Int, val notice: Notice? = null) : Answer()
 
     /** Where a held write's *Open* goes ([Call.QueuedOpen]): the core's typed target, never a write's content. */
-    @Serializable @SerialName("QueuedOpens") data class QueuedOpens(val open: me.raddatz.veyq.mobile.offline.QueuedOpen) : Answer()
+    @Serializable @SerialName("QueuedOpens") data class QueuedOpens(val open: me.raddatz.veyq.mobile.composition.QueuedOpen) : Answer()
 
     /** What a refused write's file is saved under ([Call.QueuedCopyName]): its name and type, null where the write names none. */
     @Serializable @SerialName("QueuedCopyName") data class QueuedCopyName(val name: String?, val mediaType: String?) : Answer()
 
     /** The ask before a loss ([Call.QueuedAsk]); null: nothing waits, nothing to ask. */
-    @Serializable @SerialName("QueuedAsked") data class QueuedAsked(val ask: me.raddatz.veyq.mobile.offline.QueuedAsk?) : Answer()
+    @Serializable @SerialName("QueuedAsked") data class QueuedAsked(val ask: me.raddatz.veyq.mobile.composition.QueuedAsk?) : Answer()
     @Serializable @SerialName("TrashOpened") data class TrashOpened(val trash: Long) : Answer()
 
     /** What an action says: its notice, or null where it says nothing (it went through). */
@@ -2430,11 +2430,11 @@ internal sealed class Update {
     @Serializable @SerialName("Uploads") data class Uploads(val shown: UploadsShown?) : Update()
 
     /**
-     * The writes made offline, oldest first ([me.raddatz.veyq.mobile.offline.QueuedItem]: each under the name of the place
+     * The writes made offline, oldest first ([me.raddatz.veyq.mobile.composition.QueuedItem]: each under the name of the place
      * it writes into, its state and line, what it offers); empty where none waits or this device keeps no store; null while
      * no tenant is open. An item carries its kind's word and the name the person gave, never the write's content or a key.
      */
-    @Serializable @SerialName("QueuedTray") data class QueuedTray(val items: List<me.raddatz.veyq.mobile.offline.QueuedItem>?) : Update()
+    @Serializable @SerialName("QueuedTray") data class QueuedTray(val items: List<me.raddatz.veyq.mobile.composition.QueuedItem>?) : Update()
 
     /** Import [import]'s dialog as it is now; null once it is gone. */
     @Serializable @SerialName("Import") data class Import(val import: Long, val shown: ImportShown?) : Update()
@@ -3892,7 +3892,7 @@ internal class ShareShown(
         val canReactivate: Boolean,
         val canDelete: Boolean,
         /** Its menu, in the web's order (`ShareSheet.rowActions`, ADR 0154 decision 2): drawn whole, each entry its word. */
-        val actions: List<me.raddatz.veyq.mobile.navigation.LinkAction> = emptyList(),
+        val actions: List<me.raddatz.veyq.mobile.composition.LinkAction> = emptyList(),
     ) {
         /** The local days it was made and ends, as the host shows them (ADR 0154 decision 5). */
         val createdText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.dayOf(createdAt)
@@ -4031,7 +4031,7 @@ internal class ShellShown(
      * What the level the shell shows holds that is not sent yet (`ShellModel.queuedAt`, ADR 0153 decision 5): the folders, Memories,
      * chapters and files made offline there, each drawn in place among its rows with its state and line.
      */
-    val queuedHere: List<me.raddatz.veyq.mobile.offline.QueuedItem> = emptyList(),
+    val queuedHere: List<me.raddatz.veyq.mobile.composition.QueuedItem> = emptyList(),
     /**
      * After a reconnect that sent writes made offline (`ShellModel.queuedSent`): how many were sent and how many need the
      * person, until [Call.ShellQueuedSaidSeen]; empty otherwise.

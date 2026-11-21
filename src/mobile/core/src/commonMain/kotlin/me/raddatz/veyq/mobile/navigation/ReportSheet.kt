@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.navigation
 
+
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -49,7 +50,7 @@ class ReportSheet(
      */
     val offersName: Boolean = offersName && !nameOnly
 
-    /** What the sheet sends ([ShellModel.reportSheet] over a tenant, a test over a server it plays). */
+    /** What the sheet sends (`ShellModel.reportSheet` over a tenant, a test over a server it plays). */
     interface Door {
         /** The tenant's origin, under which its privacy notice is served. */
         val origin: String

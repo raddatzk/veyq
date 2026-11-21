@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.navigation.ObjectRef
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellDoor
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import me.raddatz.veyq.mobile.session.LivePoll
@@ -499,12 +499,12 @@ class PotModel internal constructor(
     val skippedReceipts: List<String> get() = session?.skippedReceipts.orEmpty()
 
     /** The open Pot [ref] copied to [to] (null: the space's root): a new Pot under fresh keys; the shell's lists read anew. */
-    suspend fun duplicate(shell: ShellModel, ref: ObjectRef, to: String?, deletedName: String, uuid: () -> String): PotCopy.Copied {
+    suspend fun duplicate(shell: ShellDoor, ref: ObjectRef, to: String?, deletedName: String, uuid: () -> String): PotCopy.Copied {
         val failed = PotCopy.Copied(PotCopy.Outcome.FAILED)
         val s = session?.takeIf { _state.value?.ref == ref } ?: return failed
         val t = tenant ?: return failed
         val r = runCatching { PotCopy.duplicate(s, t, ref.scopeId, to, deletedName, uuid) }.getOrDefault(failed)
-        shell.refresh()
+        shell.reread()
         return r
     }
 
@@ -513,20 +513,20 @@ class PotModel internal constructor(
      * (the base currency it starts with); null before the shell is read. Its create reads the shell's lists again and
      * opens the new Pot there.
      */
-    fun createSheet(shell: ShellModel, language: String): PotCreateSheet? {
+    fun createSheet(shell: ShellDoor, language: String): PotCreateSheet? {
         val t = tenant ?: return null
-        val now = shell.state.value ?: return null
-        return PotCreateSheet.open(CreateDoor(t, shell), now.shell, now.lists.spaces, language, scope, Dispatchers.Default)
+        val place = shell.place() ?: return null
+        return PotCreateSheet.open(CreateDoor(t, shell), place, shell.spaces(), language, scope, Dispatchers.Default)
     }
 
-    private class CreateDoor(private val t: TenantSession, private val shell: ShellModel) : PotCreateSheet.Door {
+    private class CreateDoor(private val t: TenantSession, private val shell: ShellDoor) : PotCreateSheet.Door {
         override suspend fun members(scopeId: String) = t.scopeMembers(scopeId)
         override suspend fun create(scopeId: String, parentId: String?, name: String, base: Ledger.BaseCurrency, people: List<PotCreate.NewPerson>): PotCreate.Result {
             val r = runCatching { PotCreate.create(t, scopeId, parentId, name, base, people) }.getOrDefault(PotCreate.Result(PotCreate.Outcome.REFUSED))
             val nodeId = r.nodeId ?: return r
             t.forgetTree()
-            shell.refresh()
-            shell.state.value?.lists?.objects?.firstOrNull { it.nodeId == nodeId }?.let(shell::open)
+            shell.reread()
+            shell.objects().firstOrNull { it.nodeId == nodeId }?.let(shell::openObject)
             return r
         }
     }

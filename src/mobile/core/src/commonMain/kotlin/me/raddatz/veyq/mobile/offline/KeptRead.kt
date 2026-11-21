@@ -2,8 +2,6 @@ package me.raddatz.veyq.mobile.offline
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
-import me.raddatz.veyq.mobile.api.depot.models.FileListPage
-import me.raddatz.veyq.mobile.api.memories.models.MediaListPage
 import me.raddatz.veyq.mobile.api.models.AccountKeyMaterial
 import me.raddatz.veyq.mobile.api.models.ApplicationBlobPage
 import me.raddatz.veyq.mobile.api.models.MyTenant
@@ -12,7 +10,9 @@ import me.raddatz.veyq.mobile.api.models.ScopeMember
 import me.raddatz.veyq.mobile.api.models.ScopeSummary
 
 /**
- * The reads whose answers the offline store keeps (ADR 0140 decision 5) — the one place they are named. Each is a
+ * A read whose answers the offline store keeps (ADR 0140 decision 5): core's are named here ([platform]), each
+ * application's in its own part ([ApplicationKept.reads]: Memories' media, marks, buckets and a space's media, Depot's
+ * files, Expenses' ledger), and `KeptReadsTest` reads them all. Each is a
  * listing the server answers with ciphertext and opaque metadata, kept exactly as answered (every page of it, [Pages]),
  * and read back by the same code that reads the server's: [kind] names it in an [EntryKey], [model] is the generated
  * client's model of one page, from which `KeptReadsTest` derives every field the store may hold and refuses any that
@@ -21,51 +21,27 @@ import me.raddatz.veyq.mobile.api.models.ScopeSummary
  * `listMyTenants` is kept too, though decision 5's list does not name it: an account opened offline needs the tenants it
  * belongs to (their names and domains) before it can open one, and the answer carries no token or address.
  */
-enum class KeptRead(val kind: String, internal val model: KSerializer<*>) {
-    /** `getAccountKeyMaterial`: this account's wraps and sealed identity (decision 4) — the identity an offline unlock opens. */
-    KEY_MATERIAL("getAccountKeyMaterial", AccountKeyMaterial.serializer()),
-    MY_TENANTS("listMyTenants", ListSerializer(MyTenant.serializer())),
-    /** Per tenant: its scopes with their grants (decision 4's scope grants). */
-    MY_SCOPES("listMyScopes", ListSerializer(ScopeSummary.serializer())),
-    /** Per scope: its tree, `ETag` its revision (ADR 0081). */
-    NODES("listNodes", ListSerializer(NodeSummary.serializer())),
-    /** Per Memory or chapter: its media, `mediaRevision` its revision. */
-    NODE_MEDIA("listNodeMedia", MediaListPage.serializer()),
-    /** Per Depot folder: its files' blobs. */
-    FILES("listFiles", FileListPage.serializer()),
-    /** Per node: its application blobs, `ETag` its revision. */
-    APPLICATION_BLOBS("listApplicationBlobs", ApplicationBlobPage.serializer()),
-    /**
-     * Per scope: its members, the directory that names a Memory's participants and a medium's uploader (ADR 0144 decision 7): the
-     * usernames, sealed real names and avatar revisions as the server answered, each scope's own list (a group's members are
-     * not the tenant's). No revision; replaced at each online read.
-     */
-    MEMBERS("listScopeMembers", ListSerializer(ScopeMember.serializer())),
-    /**
-     * Per Memory or chapter: every member's sealed item-mark set (ADR 0149 decision 4), so a kept Memory shows its badges
-     * offline. No member id: whose a set is, is its self-tag. No revision; replaced at each online read.
-     */
-    ITEM_FAVORITES("getItemFavorites", ListSerializer(me.raddatz.veyq.mobile.api.memories.models.ItemFavoritesEntry.serializer())),
-    /**
-     * Per Memory or chapter: its buckets with their sealed names (ADR 0149 decision 6), so a guest stays named offline. No
-     * revision; replaced at each online read.
-     */
-    NODE_BUCKETS("listNodeBuckets", me.raddatz.veyq.mobile.api.memories.models.BucketListResponse.serializer()),
-    /**
-     * Per Pot: its whole ledger (ADR 0153 decision 6), every page of a read without `since`, `ledgerRevision` its revision.
-     * Kept by each whole read — the Pot's open and a pin's sync —, replaced and never merged; the live poll's deltas are
-     * not kept, so an entry a co-member deleted or an erasure dropped is gone from the next whole answer.
-     */
-    POT_REVISIONS("listPotRevisions", me.raddatz.veyq.mobile.api.expenses.models.PotRevisionPage.serializer()),
-    /**
-     * Per scope: every live medium of the space (ADR 0153 decision 7), what the search opens (`MemoriesSearch`), `ETag` its
-     * revision. The automatic tier only — never pinned, never among [PROTECTED] —, replaced and never merged, kept while
-     * its scope is the account's (the sweep, from [MY_SCOPES]).
-     */
-    SCOPE_MEDIA("listScopeMedia", me.raddatz.veyq.mobile.api.memories.models.ScopeMediaPage.serializer()),
-    ;
-
+class KeptRead(val kind: String, internal val model: KSerializer<*>) {
     companion object {
+        /** `getAccountKeyMaterial`: this account's wraps and sealed identity (decision 4) — the identity an offline unlock opens. */
+        val KEY_MATERIAL = KeptRead("getAccountKeyMaterial", AccountKeyMaterial.serializer())
+        val MY_TENANTS = KeptRead("listMyTenants", ListSerializer(MyTenant.serializer()))
+        /** Per tenant: its scopes with their grants (decision 4's scope grants). */
+        val MY_SCOPES = KeptRead("listMyScopes", ListSerializer(ScopeSummary.serializer()))
+        /** Per scope: its tree, `ETag` its revision (ADR 0081). */
+        val NODES = KeptRead("listNodes", ListSerializer(NodeSummary.serializer()))
+        /** Per node: its application blobs, `ETag` its revision. */
+        val APPLICATION_BLOBS = KeptRead("listApplicationBlobs", ApplicationBlobPage.serializer())
+        /**
+         * Per scope: its members, the directory that names a Memory's participants and a medium's uploader (ADR 0144 decision 7): the
+         * usernames, sealed real names and avatar revisions as the server answered, each scope's own list (a group's members are
+         * not the tenant's). No revision; replaced at each online read.
+         */
+        val MEMBERS = KeptRead("listScopeMembers", ListSerializer(ScopeMember.serializer()))
+
+        /** Core's kept reads (each application's are its own, `ApplicationKept.reads`). */
+        val platform: List<KeptRead> = listOf(KEY_MATERIAL, MY_TENANTS, MY_SCOPES, NODES, APPLICATION_BLOBS, MEMBERS)
+
         /** A blob's frames, as the object store served them. */
         const val FRAMES = "frames"
 
@@ -100,8 +76,9 @@ enum class KeptRead(val kind: String, internal val model: KSerializer<*>) {
         /** What neither the limit, "Clear cache" nor the sweep drops: the opening answers, the pins' record and the outbox. */
         internal val PROTECTED = OPENING + PINS + QUEUED
 
-        /** The listings below a scope: what a pin reaches through. */
-        internal val LISTINGS = setOf(NODES.kind, NODE_MEDIA.kind, FILES.kind, APPLICATION_BLOBS.kind, POT_REVISIONS.kind)
+        /** The listings below a scope: what a pin reaches through — core's and each application's ([ApplicationKept.listings]). */
+        internal val LISTINGS: Set<String>
+            get() = setOf(NODES.kind, APPLICATION_BLOBS.kind) + me.raddatz.veyq.mobile.AppKinds.kept.flatMap { it.listings }.map { it.kind }
     }
 }
 

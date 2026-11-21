@@ -13,7 +13,7 @@ import me.raddatz.veyq.mobile.export.NodeExport
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.HeaderAction
 import me.raddatz.veyq.mobile.navigation.NodeHeader
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
 import kotlin.test.Test
@@ -25,6 +25,8 @@ import kotlin.test.assertTrue
 
 /** A file's page both phones drew (ADR 0136 decision 2 and its Consequences, Depot's screens) — over a file the test plays. */
 class FileModelTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val node = NodeAt("s", "f", "FILE", "notes.txt")
 
     private val png = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13)

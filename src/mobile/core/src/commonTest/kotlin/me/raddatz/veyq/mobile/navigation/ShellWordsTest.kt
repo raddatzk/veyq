@@ -13,6 +13,8 @@ import kotlin.test.assertTrue
 
 /** What the shell says, finds and creates, both apps' once (ADR 0136); the two had drifted on two tab words. */
 class ShellWordsTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     @Test
     fun the_switcher_names_the_tenant_under_a_space_unless_it_is_the_tenants_own() {
         assertEquals("veyq.localhost", ShellWords.switcherSubtitle(SpaceRef("t", "TENANT", "Familie"), "Familie", "veyq.localhost"))

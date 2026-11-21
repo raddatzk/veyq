@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.expenses.ExpensesKept
+
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.expenses.Allocation
 import me.raddatz.veyq.mobile.expenses.Contribution
@@ -39,6 +41,8 @@ import kotlin.test.assertTrue
  * missing offline.
  */
 class OfflinePotTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest
@@ -159,11 +163,11 @@ class OfflinePotTest {
         val tenant = tenantOf(a)
         PotSession.open(tenant, pot.node.scope.id, pot.node.id)
         val o = assertNotNull(a.offline)
-        assertEquals(1, o.kept(KeptRead.POT_REVISIONS.kind).size)
+        assertEquals(1, o.kept(ExpensesKept.POT_REVISIONS.kind).size)
         pot.node.refuseLedger = 404
         tenant.forgetTree()
         assertFailsWith<Exception> { PotSession.open(tenant, pot.node.scope.id, pot.node.id) }
-        assertEquals(emptyList(), o.kept(KeptRead.POT_REVISIONS.kind), "a refused ledger stayed kept")
+        assertEquals(emptyList(), o.kept(ExpensesKept.POT_REVISIONS.kind), "a refused ledger stayed kept")
 
         t.reachable = false
         tenant.forgetTree()

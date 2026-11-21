@@ -17,6 +17,8 @@ import kotlin.test.assertNotNull
  * entry that does not open is left out, never failing the trash; a member's entry beside it is listed (the control).
  */
 class NodeTrashIdentityTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest

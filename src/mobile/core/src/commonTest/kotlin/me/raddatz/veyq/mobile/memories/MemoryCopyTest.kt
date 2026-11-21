@@ -22,6 +22,8 @@ import kotlin.test.assertTrue
  * framing; and a failure part-way trashing what was made. Nothing is decoded: the copy has no deriver to ask.
  */
 class MemoryCopyTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private inner class Played : MemoryCopy.Target {
         val created = mutableListOf<Triple<String, String, JsonObject?>>()
         val media = mutableListOf<MemoryCopy.Medium>()

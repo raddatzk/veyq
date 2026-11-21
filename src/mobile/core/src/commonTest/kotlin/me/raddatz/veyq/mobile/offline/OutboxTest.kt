@@ -38,6 +38,8 @@ import kotlin.test.assertTrue
  * passes, but by the frames as they will be sent.
  */
 class OutboxTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val p = testPrimitives
     private val suite = V1(p)
     private val root = freshTestDirectory()

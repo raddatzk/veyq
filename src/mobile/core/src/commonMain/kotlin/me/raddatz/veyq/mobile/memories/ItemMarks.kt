@@ -218,7 +218,7 @@ class ItemMarks internal constructor(
             val api = ItemFavoritesApi(tenant.base, account.http)
             val store = object : Store {
                 override suspend fun list(): List<ItemFavoritesEntry> {
-                    val read = account.kept(KeptRead.ITEM_FAVORITES, tenant.tenant.tenantId, scopeId, nodeId) {
+                    val read = account.kept(MemoriesKept.ITEM_FAVORITES, tenant.tenant.tenantId, scopeId, nodeId) {
                         account.fetched(account.respond { api.getItemFavorites(scopeId, nodeId) }, null)
                     }
                     return VeyqAccount.KEPT_JSON.decodeFromString(ListSerializer(ItemFavoritesEntry.serializer()), read.pages.single().decodeToString())

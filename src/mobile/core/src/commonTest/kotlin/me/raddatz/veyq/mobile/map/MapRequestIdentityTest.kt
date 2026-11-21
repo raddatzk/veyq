@@ -18,6 +18,8 @@ import kotlin.test.assertTrue
  * carries a bearer.
  */
 class MapRequestIdentityTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val view = Viewport(BERLIN, 12.0, 800.0, 600.0)
 
     private fun assertIdentity(origin: String, headers: (String) -> String?, has: (String) -> Boolean, what: String) {

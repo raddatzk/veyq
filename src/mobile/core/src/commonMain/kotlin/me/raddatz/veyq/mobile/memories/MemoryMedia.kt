@@ -121,7 +121,7 @@ object MemoryMedia {
         val suite = tenant.account.suite
         val api = MediaApi(tenant.base, tenant.account.http)
         val read = try {
-            tenant.account.kept(KeptRead.NODE_MEDIA, tenant.tenant.tenantId, scopeId, nodeId, conditional = true) { tag -> pages(tenant, api, scopeId, nodeId, tag) }
+            tenant.account.kept(MemoriesKept.NODE_MEDIA, tenant.tenant.tenantId, scopeId, nodeId, conditional = true) { tag -> pages(tenant, api, scopeId, nodeId, tag) }
         } catch (e: me.raddatz.veyq.mobile.session.VeyqAccount.Refused) {
             throw IllegalStateException("media list ${e.status}")
         }

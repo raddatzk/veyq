@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -20,7 +21,7 @@ import me.raddatz.veyq.mobile.session.VeyqAccount
  * a medium's capture time set, a medium trashed, a mark set or taken away — queued as the person's intent ([Outbox]) and
  * sent through the online path each takes ([MemoryCreate], [MediaUpload], [CaptureTime], [MemoryMedia.trash], [ItemMarks]).
  *
- * - **A medium is sealed at once** ([media]): its tiers derived by the platform's [MediaUpload.Deriver], its digest and
+ * - **A medium is sealed at once** ([media]): its tiers derived by the platform's [Derivation.Deriver], its digest and
  *   metadata read ([MediaUpload.prepare]) — exactly the on-device stage of an online upload —, then the original and the
  *   two tiers sealed frame by frame under fresh `K_blob`s ([Outbox.sealBlob]) and the picked file let go ([left]). Only
  *   each `K_blob`'s wrap under the node's key is made at the send, under the key the node has then (decision 1).
@@ -80,7 +81,7 @@ object QueuedMemories {
      */
     suspend fun media(
         account: VeyqAccount, tenant: String, scope: String, node: String, sources: List<UploadSource>,
-        deriver: MediaUpload.Deriver, now: () -> Long, left: (UploadSource) -> Unit,
+        deriver: Derivation.Deriver, now: () -> Long, left: (UploadSource) -> Unit,
     ): List<QueuedWrite> {
         val box = account.outbox
         val out = ArrayList<QueuedWrite>()
@@ -98,7 +99,7 @@ object QueuedMemories {
 
     private suspend fun medium(
         box: Outbox, account: VeyqAccount, tenant: String, scope: String, node: String, source: UploadSource,
-        deriver: MediaUpload.Deriver, now: () -> Long,
+        deriver: Derivation.Deriver, now: () -> Long,
     ): QueuedWrite? {
         val original = MediaUpload.Original(source.bytes(), source.type, source.name, source.modifiedAt)
         val prepared = MediaUpload.prepare(original, now()) { type ->
@@ -204,7 +205,7 @@ object QueuedMemories {
         val sealed = MediaUpload.SealedMedium(w.id, box.sealed(originalBlob), blob(i.thumbnail), blob(i.preview))
         // the plaintext is gone: only the frames sealed then are sent
         val original = MediaUpload.Original(ByteSource(i.size) { _, _ -> throw IllegalStateException("a queued medium is sent sealed") }, i.type, i.name, i.modifiedAt)
-        val prepared = MediaUpload.Prepared(i.type, i.sha256, MediaUpload.Derived(null, null, null, null), i.metaTier, i.exif)
+        val prepared = MediaUpload.Prepared(i.type, i.sha256, Derivation.Derived(null, null, null, null), i.metaTier, i.exif)
         val r = MediaUpload.once(tenant, w.scope, node, original, prepared, sealed) {}
         when (r.outcome) {
             MediaUpload.Outcome.DONE -> QueuedOutcome.Sent

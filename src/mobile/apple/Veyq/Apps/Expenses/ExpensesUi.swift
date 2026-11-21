@@ -17,7 +17,7 @@ enum ExpensesUi {
             download: { await model.downloadPot(ref, to: $0) }
         )
     }, body: { ref, key, model in AnyView(PotScreen(model: model, ref: ref, tab: key)) }, guest: { page, _, model in
-        guard page is GuestPage.Pot else { return AnyView(EmptyView()) }
+        guard page is PotGuest.Pot else { return AnyView(EmptyView()) }
         return AnyView(GuestPotView(model: model, ref: .guest(page.node, .expenses)))
     })
 

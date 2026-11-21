@@ -306,6 +306,9 @@ def test(pattern: str | None) -> int:
     for name in ("import-cases/cases.v1.json", "import-cases/web-download.zip", "veyq-subtree.schema.json"):
         fixture = Path("contracts/export") / name
         copy_to([ROOT / fixture], remote / "repo" / PureWindowsPath(fixture.parent))
+    # and the web's format vectors (ShownVectorsTest, ADR 0154 decision 5), read the same way
+    format_vectors = Path("src/mobile/words/format-vectors.json")
+    copy_to([ROOT / format_vectors], remote / "repo" / PureWindowsPath(format_vectors.parent))
     env = {"VEYQ_VECTORS": str(remote / VECTORS.name), "VEYQ_NORMALIZATION_TEST": str(remote / NORMALIZATION_TEST.name),
            "VEYQ_REPO_ROOT": str(remote / "repo")}
     forward: list[str] | None = None

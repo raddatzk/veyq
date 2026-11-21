@@ -12,6 +12,8 @@ import kotlin.test.assertTrue
 
 /** A link's row in the share sheet both apps drew (the web's `FolderShareDialog`, `DropBoxShareDialog`). */
 class LinkRowTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val words = ShareWords.of("FOLDER")
 
     private fun link(

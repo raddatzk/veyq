@@ -32,6 +32,8 @@ import kotlin.test.assertTrue
  * whose videos were played asks less than its pin keeps (1731 B asked 345), a kept pin's asks 0.
  */
 class OfflinePinsTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     private fun play() = PlayedTenant().also { played += it }

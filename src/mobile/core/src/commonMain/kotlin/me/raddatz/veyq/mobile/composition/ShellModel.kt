@@ -1,5 +1,8 @@
-package me.raddatz.veyq.mobile.navigation
+package me.raddatz.veyq.mobile.composition
 
+import me.raddatz.veyq.mobile.expenses.potCopyRefused
+import me.raddatz.veyq.mobile.navigation.NodeAt
+import me.raddatz.veyq.mobile.navigation.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +18,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import me.raddatz.veyq.mobile.AppKinds
+import me.raddatz.veyq.mobile.navigation.NodeHeaderModel.Renamed
+import me.raddatz.veyq.mobile.navigation.NodeHeaderModel.Trashed
 import me.raddatz.veyq.mobile.export.NodeExport
 import me.raddatz.veyq.mobile.export.SubtreeCopy
 import me.raddatz.veyq.mobile.session.FolderCreate
@@ -50,7 +55,7 @@ class ShellModel(
     private val hidden: Hidden,
     private val recent: RecentUses,
     private val now: () -> Long,
-) {
+) : ShellDoor {
     /** What the shell lists, this device's hidden spaces taken out. */
     @Serializable
     class Lists(
@@ -239,35 +244,35 @@ class ShellModel(
     }
 
     /**
-     * The uploads tray's list of writes made offline on this device ([me.raddatz.veyq.mobile.offline.QueuedTray]), each
+     * The uploads tray's list of writes made offline on this device ([QueuedTray]), each
      * under the name of the place it writes into: its items, *Discard*, *Save a copy*.
      */
-    fun queuedTray(): me.raddatz.veyq.mobile.offline.QueuedTray = me.raddatz.veyq.mobile.offline.QueuedTray(tenant.account, ::placeName)
+    fun queuedTray(): QueuedTray = QueuedTray(tenant.account, ::placeName)
 
     /**
      * Under the offline banner (ADR 0153 decision 5): how many writes wait, at once and at each change; null while none
      * does (and without a store).
      */
     val queuedBanner: kotlinx.coroutines.flow.Flow<Notice?>
-        get() = tenant.account.outbox?.let { box -> box.changes.map { me.raddatz.veyq.mobile.offline.QueuedShown.banner(box.count()) } }
+        get() = tenant.account.outbox?.let { box -> box.changes.map { QueuedShown.banner(box.count()) } }
             ?: kotlinx.coroutines.flow.flowOf(null)
 
     /** After each reconnect that sent writes made offline: how many went and how many need the person (one notice each). */
     val queuedSent: kotlinx.coroutines.flow.Flow<List<Notice>>
-        get() = tenant.account.queuedReports.map { me.raddatz.veyq.mobile.offline.QueuedShown.report(it) }
+        get() = tenant.account.queuedReports.map { QueuedShown.report(it) }
 
     /**
      * What a level shows in place of its nodes not sent yet (ADR 0153 decision 5): the folders, Memories,
      * chapters and files made offline under [parentId] (null: the space's top) of [scopeId], each a tray item marked
      * *Waiting to send* (or held, refused), at once and at each change.
      */
-    fun queuedAt(scopeId: String, parentId: String?): kotlinx.coroutines.flow.Flow<List<me.raddatz.veyq.mobile.offline.QueuedItem>> {
+    fun queuedAt(scopeId: String, parentId: String?): kotlinx.coroutines.flow.Flow<List<QueuedItem>> {
         val box = tenant.account.outbox ?: return kotlinx.coroutines.flow.flowOf(emptyList())
         return box.changes.map {
             box.writes().filter { w ->
                 w.tenant == tenantId && w.scope == scopeId && w.op in me.raddatz.veyq.mobile.offline.QueuedNodes.CREATES &&
                     (w.intent["parent"] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { p -> p !is kotlinx.serialization.json.JsonNull }?.content == parentId
-            }.map { me.raddatz.veyq.mobile.offline.QueuedShown.item(it, placeName(scopeId, parentId)) }
+            }.map { QueuedShown.item(it, placeName(scopeId, parentId)) }
         }
     }
 
@@ -276,7 +281,7 @@ class ShellModel(
      * outbox changes; empty anywhere else (an application's list, an object's page).
      */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    val queuedHere: kotlinx.coroutines.flow.Flow<List<me.raddatz.veyq.mobile.offline.QueuedItem>>
+    val queuedHere: kotlinx.coroutines.flow.Flow<List<QueuedItem>>
         get() = state.map { st -> st?.shell?.takeIf { it.isHome }?.let { sh -> sh.space?.let { it to sh.folder?.nodeId } } }
             .distinctUntilChanged()
             .flatMapLatest { at -> at?.let { (space, folder) -> queuedAt(space, folder) } ?: kotlinx.coroutines.flow.flowOf(emptyList()) }
@@ -285,7 +290,7 @@ class ShellModel(
      * What a sign-out, "Stop trusting" or "Remove all offline content" asks first while writes made offline wait (ADR 0153
      * decision 2, owner 2026-11-19): the question naming how many are deleted; null where none waits (nothing to ask).
      */
-    suspend fun queuedLost(): Notice? = me.raddatz.veyq.mobile.offline.QueuedShown.lost(tenant.account.queuedCount())
+    suspend fun queuedLost(): Notice? = QueuedShown.lost(tenant.account.queuedCount())
 
     /** What the shell shows offline: as of when its lists were last confirmed by the server; null online. */
     private fun offlineNow(): me.raddatz.veyq.mobile.session.OfflineAsOf? = when (val r = tenant.account.reach.value) {
@@ -295,6 +300,13 @@ class ShellModel(
     }
 
     private var rekeys: kotlinx.coroutines.Job? = null
+
+    // the shell as an application's model reads it ([ShellDoor])
+    override suspend fun reread() = refresh()
+    override fun place(): Shell? = state.value?.shell
+    override fun spaces(): List<SpaceRef> = state.value?.lists?.spaces.orEmpty()
+    override fun objects(): List<ObjectRef> = state.value?.lists?.objects.orEmpty()
+    override fun openObject(ref: ObjectRef) = open(ref)
 
     /**
      * Reads the lists anew from the server (after a write, or what another device or a guest wrote); a read that fails
@@ -592,14 +604,6 @@ class ShellModel(
         return stored
     }
 
-    /** What a trash came to: the outcome, its notice (moved, with its undo; or why not) and the node as it was. */
-    class Trashed(val outcome: NodeTrash.Deleted, val notice: Notice, val before: OpenNode?) {
-        /** Whether the node is gone from where it was (an open page of it left, an open Pot of it closed). */
-        val gone: Boolean get() = outcome == NodeTrash.Deleted.TRASHED || outcome == NodeTrash.Deleted.GONE
-        /** Whether its undo is offered. */
-        val undoable: Boolean get() = outcome == NodeTrash.Deleted.TRASHED && before != null
-    }
-
     /** Moves [ref] with everything under it to its space's trash; a page of it leaves for its parent. */
     suspend fun trash(ref: NodeAt): Trashed {
         if (queues(me.raddatz.veyq.mobile.offline.Queued.NODE_TRASH)) {
@@ -696,12 +700,6 @@ class ShellModel(
         override suspend fun restore(row: NodeTrash.Trashed, newName: String?) = restoreFromTrash(row, newName)
         override suspend fun purge(row: NodeTrash.Trashed) = this@ShellModel.purge(row)
     }, changed)
-
-    /** What a rename came to, and its notice where it did not land. */
-    class Renamed(val result: NodeRename.Result, val notice: Notice?) {
-        /** Renamed, but a link to it still shows its old name to its guests. */
-        val linksFailed: Boolean get() = result.outcome == NodeRename.Outcome.RENAMED && !(result.links?.failed.isNullOrEmpty())
-    }
 
     /** Renames [ref] to [name] (its placement, then its open links' names); an open page follows it under its new name. */
     suspend fun rename(ref: NodeAt, name: String): Renamed {
@@ -919,12 +917,12 @@ class ShellModel(
      * each imported medium's tiers made by its [deriver].
      */
     fun depotUploadsImporting(
-        queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver?, changed: () -> Unit,
+        queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.media.Derivation.Deriver?, changed: () -> Unit,
     ): me.raddatz.veyq.mobile.depot.DepotUploads = depotUploads(queue, imports = true, deriver = deriver, changed = changed)
 
     private fun depotUploads(
         queue: me.raddatz.veyq.mobile.blob.UploadQueue, imports: Boolean,
-        deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver?, changed: () -> Unit,
+        deriver: me.raddatz.veyq.mobile.media.Derivation.Deriver?, changed: () -> Unit,
     ): me.raddatz.veyq.mobile.depot.DepotUploads =
         me.raddatz.veyq.mobile.depot.DepotUploads(queue, object : me.raddatz.veyq.mobile.depot.DepotUploads.Door {
             override fun uploadJob(scopeId: String, parentId: String?, source: me.raddatz.veyq.mobile.blob.UploadSource, name: String) =
@@ -961,7 +959,7 @@ class ShellModel(
      * end (the app reads its lists anew), [left] once the queue is done with a picked file.
      */
     fun mediaUploads(
-        queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver,
+        queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.media.Derivation.Deriver,
         left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit, changed: () -> Unit,
     ): me.raddatz.veyq.mobile.memories.MediaUploads =
         me.raddatz.veyq.mobile.memories.MediaUploads(queue, object : me.raddatz.veyq.mobile.memories.MediaUploads.Door {
@@ -1069,7 +1067,7 @@ class ShellModel(
      * poll finds them moved; what it adds goes through [uploads]; a medium trashed and restored, a chapter made.
      */
     fun galleryModel(
-        ref: NodeAt, uploads: me.raddatz.veyq.mobile.memories.MediaUploads, music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null,
+        ref: NodeAt, uploads: me.raddatz.veyq.mobile.memories.MediaUploads, music: me.raddatz.veyq.mobile.audio.PageMusic? = null,
         calendar: me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar = me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar.UTC,
     ): me.raddatz.veyq.mobile.memories.GalleryModel =
         me.raddatz.veyq.mobile.memories.GalleryModel(ref, object : me.raddatz.veyq.mobile.memories.GalleryModel.Door {
@@ -1450,8 +1448,8 @@ class ShellModel(
         fun afterRename(shell: Shell, renamed: NodeAt): Shell =
             if (shell.bookmark?.let { it.nodeId == renamed.nodeId && it.scopeId == renamed.scopeId } == true) shell.copy(bookmark = renamed) else shell
 
-        /** How long a trash's undo is offered (the web's `TRASH_UNDO_MS`). */
-        const val TRASH_UNDO_MS = 6_000L
+        /** How long a trash's undo is offered (the web's `TRASH_UNDO_MS`; the platform's [NodeHeaderModel.TRASH_UNDO_MS]). */
+        const val TRASH_UNDO_MS = NodeHeaderModel.TRASH_UNDO_MS
 
         /** The drawer's short lists (ADR 0122): six favorites, eight recent. */
         const val DRAWER_FAVORITES = 6

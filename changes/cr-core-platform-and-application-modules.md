@@ -1,7 +1,7 @@
 ---
 id: cr-core-platform-and-application-modules
 title: The Kotlin core splits into a platform module and one module per application — `:core`, `:apps:<application>`, `:composition`, the direction held from the build files
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0155", "0079", "0154", "0123", "0136", "0046"]
 invariants:
@@ -279,6 +279,103 @@ The core is `:core`, `:apps:memories`, `:apps:depot`, `:apps:expenses`, `:compos
 the direction with its bites recorded; every client builds and its checks pass as in phase 1's list; the Apple header
 and the bridge's bindings are unchanged except where named; the search's entry is within 40 KB; phase 4's numbers are
 in ADR 0155; every `scripts/validate_*.py` is green, `validate_guard_gaps.py` with it.
+
+## Decision log
+
+The owner's mandate of 2026-11-21: decided by the implementer, each decision written here as it is taken; moved
+to an ADR at the harvest. Each entry: the question, the options, the choice and why, the evidence (`measured` with its
+command, or `remembered`), what it costs or leaves open.
+
+1. **2026-11-21 — The substrate and the baseline.** Question: what tree are the "before" copies of `VeyqCore.h` and
+   the bridge's bindings taken from? Options: the main checkout (shared, moving), or this worktree before its first
+   edit. Chosen: this worktree, branch `claude/core-split` at `d089bffd2`, clean but for nothing (`git status --short`
+   empty), copies taken by `./gradlew :core:assembleVeyqCoreDebugXCFramework :bridge:generateBindings` before any
+   Kotlin edit. The native libraries (`src/mobile/build/{libsodium,libwebp,utf8proc}`) were copied from another
+   checkout's build output, which `build_libsodium.py` and its twins check slice by slice and rebuild where they
+   differ. Evidence: measured (the commands above). Cost: none.
+
+2. **2026-11-21 — The registry's shape (decision 2).** Question: how does `AppKinds` reach an application's answer?
+   Options: (a) a per-kind descriptor (the web's `KindDescriptor`), each kind one object; (b) one part per application
+   (`ApplicationKinds`), every member asked with the kind, the one non-null answer taken; (c) a `when` in the
+   composition. Chosen (b): `AppKinds` keeps every member and signature its callers and Swift read, core's own kinds
+   (a folder, a kept link) answered inline, the rest `applications.firstNotNullOfOrNull { … }`; (a) would have
+   rewritten every call site, (c) the platform cannot see. An application may answer for a platform kind where it acts
+   for it (Depot: files shared to a folder, a link guest's upload into a folder). `AppCompositionTest` holds one part
+   per `ApplicationId`, no kind owned twice, every queued write sent by one part, every per-kind member answered by at
+   most one part. Evidence: measured, `./gradlew :core:jvmTest` 1470 tests, 0 failures (34 skipped live cases).
+   Cost: a new per-kind member has to be added to `ApplicationKinds` and `AppKinds` both. Left open: the CR's "every
+   `Create` value an application owns is answered" has no registry member to test — a `Create` is dispatched by each
+   client to its own dialog, not through `AppKinds`.
+3. **2026-11-21 — A second install.** Question: the CR says a second install fails loudly; Android recreates its
+   model, the bridge may start twice, and every test class of one JVM installs. Options: fail on any second install;
+   no-op on the same parts, fail on different ones. Chosen the second: `AppKinds.install` compares the parts it holds;
+   a read before any install fails (`AppKinds read before the applications were installed`). Evidence: measured,
+   `AppCompositionTest.aSecondInstallOfOtherPartsFails`. Cost: none known.
+4. **2026-11-21 — The platform knew applications beyond the 18 roots.** Question: is the CR's root list the whole
+   platform → application knowledge? No: the guard reads package names, not kind literals or shapes. Measured by
+   `grep -rnE "\"(MEMORY|CHAPTER|FILE|DEPOT_DROPBOX|EXPENSES_POT)\"" src/mobile/core/src/*Main` outside the
+   application packages and by `KeptRead`'s split: `navigation/Library.kt`'s `applicationOf` (a `when` over kind
+   literals), `Notices.renameRefused` (`"EXPENSES_POT"`), `ShareWords.of` (a Memory's, a drop box's, a file's and a
+   Pot's words) and `AccountOffline`'s pin reach (it walked Memories' media, Depot's files and a Pot's ledger by their
+   JSON). Chosen: each becomes a registry member — `objectKinds`/`applicationOf`, `noun`, `shareWords`, `kept`
+   (`ApplicationKept` with a `KeptReach` over one scope's kept answers). Cost: `ApplicationKinds` grew five members
+   the CR did not list. Left: the literal `"CHAPTER"` in the lifted `QueuedTray` and `"MEMORY"` in the lifted
+   `ShareSheet` (composition, which may name applications).
+5. **2026-11-21 — Lift, narrow, split (decision 3), re-measured.** Lifted whole into `…mobile.composition`:
+   `ShellModel`, `Drop`, `AddHere`, `ShareSheet`, `RowDetails`, `QueuedTray`, native `PickedPaths` and `NodeDownload`
+   (an extension of `ShellModel`), Apple's `AppleSharing`, `FileDownloads`, `AppleQueued` (each over several
+   applications or the shell). **Deviation:** `LinkForm` is not lifted — only `ShareWords.of` named applications, and it
+   splits into the registry (`shareWords`); `LinkForm` stays in `session`. Narrowed: `TRASH_UNDO_MS` into
+   `NodeHeaderModel`'s companion (`ShellModel.TRASH_UNDO_MS` aliases it for the clients); `ShellModel.Trashed` and
+   `.Renamed` into `NodeHeaderModel` (their only platform reader; no Swift user, `grep -rn` over `apple/`); `PotModel`'s
+   `ShellModel` parameter to a platform interface `navigation.ShellDoor` the shell implements (Swift passes the same
+   object). Evidence: measured, `/usr/bin/python3 scripts/validate_mobile_ui_direction.py` green with the composition
+   package as its only root. Cost: Android's and the bridge's Kotlin imports of the lifted names changed package.
+6. **2026-11-21 — Splitting a Swift-facing object without changing Swift: extensions.** Question: how do
+   `Notices`' application lines, `AppleSessions`' Pot functions, `AppleAudio`'s track save and WAV wrap and
+   `GuestAccess.replace`/`replaceAsking` leave the platform? Options: new objects per application (every Swift, Android
+   and bridge call site renamed); extension functions of the platform object in the application's package. Chosen the
+   extensions: Kotlin/Native exports them as an Objective-C category of the same class, so Swift's
+   `Notices.shared.potRefused(outcome:)` is unchanged (the Apple app compiled, decision 1's evidence below); Kotlin
+   callers add one import. `Notices.isMedium` had no caller anywhere (`grep -rn isMedium src/mobile`) and is deleted;
+   `uploadProblem`'s Depot codes are `UploadQueue.NAME_TAKEN`/`BUSY` now (server codes, not Depot's). Cost: a header
+   diff of categories instead of members (named in entry 9).
+7. **2026-11-21 — Platform types that lived in an application.** `MediaUpload.Deriver`/`Derived` (the device's tier
+   service, handed to the guest views and the import) move to `media.Derivation`; `GalleryModel.Music` (the player and
+   a word) to `audio.PageMusic`. `GuestPage` is no longer sealed (an application's subclass lives in another module):
+   `Level` and `NotShown` stay nested, the applications' pages nest in their door objects (`DepotGuest.File`,
+   `DepotGuest.DropBox`, `MemoriesGuest.Gallery`, `MemoriesGuest.Uploader`, `PotGuest.Pot`); the bridge's `when` over
+   pages gets an `else` (not shown). Cost: Swift renamed in 7 files (`MediaUploadDeriver` → `DerivationDeriver`,
+   `GalleryModel.Music` → `PageMusic`, `GuestPage.File` → `DepotGuest.File`, …), Android and the bridge likewise.
+8. **2026-11-21 — `@PlatformApi` (decision 4) and Objective-C.** `RequiresOptIn` binds the declaring module too, so
+   `:core` opts into its own marker (module-wide `optIn`); the guard's rule (d) therefore allows the platform module as
+   well. Every `@PlatformApi` declaration also carries `@HiddenFromObjC`, as do the registry's parts and
+   `AppComposition.applications`; `kotlin.experimental.ExperimentalObjCRefinement` is opted into per module (an API
+   opt-in, `-opt-in`, not an experimental compiler flag). **Deviation:** phase 1 opens only what the registry needs
+   (`QueuedSender`, `AppKinds.kept`); the other `internal` crossings show only once the modules exist and are opened in
+   phase 2 from the compiler's list.
+9. **2026-11-21 — Phase 1's header and bindings diffs.** Evidence: measured, `scratchpad/cs/tools/hdiff.py` (per
+   `@interface`/`@protocol`, members as sets) against the copy of entry 1. Removed: `GalleryModelMusic`,
+   `GuestPage{File,Gallery,Pot,DropBox,Uploader}`, `MediaUploadDerived`, `MediaUploadDeriver`,
+   `ShellModel{Trashed,Renamed}`, the moved `Notices`/`AppleSessions`/`AppleAudio`/`GuestAccess` members and
+   `Notices.isMedium`; `KeptRead` an enum before. Added: `AppComposition`, `ShellDoor` (and `ShellModel`'s conformance
+   and its five members), `DerivationDeriver`/`DerivationDerived`, `PageMusic`, the five applications' guest pages,
+   `NodeHeaderModel{Trashed,Renamed,Companion}`, the categories `Notices (Extensions)`, `AppleSessions (Extensions)`,
+   `AppleAudio (Extensions)`, `GuestAccess (Extensions)`, `AppKinds.applicationOf`/`noun`/`shareWords`,
+   `UploadQueue.NAME_TAKEN`/`BUSY`, `KeptRead` a class with its companion. The bridge's `bridge.rs` and `Bridge.g.cs`:
+   the same types, only the moved types' package lines and order (`bdiff.py`: 0 removed, 0 added).
+10. **2026-11-21 — Each client's start path.** Android: a new `VeyqApplication` (the manifest's `android:name`), since
+    WorkManager's workers start a process without an activity; Apple: `AppModel.init` (the app's and the share
+    extension's); the bridge: `Bridge`'s first `init`. Tests: each test class that reads the registry installs it
+    (`init { AppComposition.install() }`, 62 classes). Evidence: measured, a throwaway `forkEvery = 1` on `:core:jvmTest`
+    (one JVM per class, the build file restored after) green, so no class passes only because another installed first.
+11. **2026-11-21 — A red that was there before.** `linux/run.py test` and `windows/run.py test` each failed 14
+    `ShownVectorsTest` cases ("cannot read src/mobile/words/format-vectors.json"): neither ships that file to the
+    container or the VM since the vectors were added. Fixed in both (a file this CR touches). Evidence: measured, before
+    14 failed; after, Linux 1248 passed, Windows 1249 passed.
+12. **2026-11-21 — The guard's intermediate state.** `validate_mobile_ui_direction.py`'s `CORE_ROOTS` becomes empty and
+    the package `…mobile.composition` is the one root: it may name applications, and no other file names it (rule c3).
+    Phase 3 retires these rules into the module graph guard.
 
 ## Retrospective
 

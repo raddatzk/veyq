@@ -40,6 +40,8 @@ import kotlin.test.assertTrue
  * throw → the same test red (the refresh token read as none).
  */
 class AppleBackgroundTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest

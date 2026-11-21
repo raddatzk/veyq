@@ -30,6 +30,8 @@ import kotlin.test.assertTrue
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ImportScreenTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private fun plain(name: String) = UploadSource.of(name, 30, "text/plain", null) { from, n -> ByteArray(minOf(n.toLong(), 30 - from).toInt()) }
     private fun download() = CountingSource("Trip.zip", ImportFixtures.webDownload())
 

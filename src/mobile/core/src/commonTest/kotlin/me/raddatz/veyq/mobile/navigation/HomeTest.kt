@@ -7,6 +7,8 @@ import kotlin.test.assertTrue
 import me.raddatz.veyq.mobile.words.Msg
 
 class HomeTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val nodes = listOf(
         NodeRef("s", "f", null, "FOLDER", "Reisen"),
         NodeRef("s", "p", null, "EXPENSES_POT", "Sri Lanka"),

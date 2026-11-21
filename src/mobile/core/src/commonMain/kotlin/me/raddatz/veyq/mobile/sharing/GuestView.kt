@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -11,7 +12,6 @@ import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.crypto.Primitives
-import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.session.DeviceStore
 
@@ -121,10 +121,10 @@ class GuestView internal constructor(
     val gates: ShareGates,
     private val doors: (kind: String, role: String) -> GuestDoor?,
     private val queue: UploadQueue?,
-    private val deriver: MediaUpload.Deriver?,
+    private val deriver: Derivation.Deriver?,
     private val now: () -> Long,
     private val sharesCopies: Boolean = false,
-    private val music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null,
+    private val music: me.raddatz.veyq.mobile.audio.PageMusic? = null,
 ) {
     /** Where a write's settle reads the link anew ([reloadSoon]); cancelled at [close]. */
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
@@ -239,9 +239,9 @@ class GuestView internal constructor(
         fun open(
             primitives: Primitives, link: ReceivedLink.ShareLink, client: (block: HttpClientConfig<*>.() -> Unit) -> HttpClient,
             store: DeviceStore, sessions: GuestSessions, locale: () -> String, handedPassword: String? = null,
-            queue: UploadQueue? = null, deriver: MediaUpload.Deriver? = null, now: () -> Long = { 0L }, sharesCopies: Boolean = false,
+            queue: UploadQueue? = null, deriver: Derivation.Deriver? = null, now: () -> Long = { 0L }, sharesCopies: Boolean = false,
             doors: (kind: String, role: String) -> GuestDoor? = AppKinds::guestDoor,
-            music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null,
+            music: me.raddatz.veyq.mobile.audio.PageMusic? = null,
         ): GuestView {
             val guest = GuestClient.of(primitives, link.origin, client)
             val gates = ShareGates(link, guest, store, sessions, locale, handedPassword) { h -> h.rootKind?.let { doors(it, h.role) } != null }
@@ -251,9 +251,9 @@ class GuestView internal constructor(
         /** Over an existing guest client (a test's played instance). */
         internal fun over(
             link: ReceivedLink.ShareLink, guest: GuestClient, store: DeviceStore, sessions: GuestSessions, locale: () -> String = { "en" },
-            handedPassword: String? = null, queue: UploadQueue? = null, deriver: MediaUpload.Deriver? = null, now: () -> Long = { 0L },
+            handedPassword: String? = null, queue: UploadQueue? = null, deriver: Derivation.Deriver? = null, now: () -> Long = { 0L },
             doors: (kind: String, role: String) -> GuestDoor? = AppKinds::guestDoor,
-            music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null,
+            music: me.raddatz.veyq.mobile.audio.PageMusic? = null,
         ): GuestView {
             val gates = ShareGates(link, guest, store, sessions, locale, handedPassword) { h -> h.rootKind?.let { doors(it, h.role) } != null }
             return GuestView(gates, doors, queue, deriver, now, music = music)

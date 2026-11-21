@@ -1,5 +1,7 @@
-package me.raddatz.veyq.mobile.sharing
+package me.raddatz.veyq.mobile.composition
 
+import me.raddatz.veyq.mobile.media.Derivation
+import me.raddatz.veyq.mobile.sharing.*
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
@@ -39,7 +41,7 @@ object AppleSharing {
      */
     fun view(
         link: ReceivedLink.ShareLink, password: String?, store: DeviceStore, sessions: GuestSessions, language: () -> String,
-        queue: UploadQueue?, deriver: MediaUpload.Deriver?, music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null,
+        queue: UploadQueue?, deriver: Derivation.Deriver?, music: me.raddatz.veyq.mobile.audio.PageMusic? = null,
     ): GuestView = GuestView.open(
         LibsodiumPrimitives, link, { block -> appleHttpClient(block) }, store, sessions, language, password, queue, deriver,
         now = { (NSDate().timeIntervalSince1970 * 1000).toLong() }, music = music,
@@ -65,7 +67,7 @@ object AppleSharing {
 
     /** Each guest view the app opens, over this installation's stores, its upload queue and the person's [language]. */
     fun opener(
-        store: DeviceStore, sessions: GuestSessions, language: String, queue: UploadQueue?, deriver: MediaUpload.Deriver?,
+        store: DeviceStore, sessions: GuestSessions, language: String, queue: UploadQueue?, deriver: Derivation.Deriver?,
     ): GuestOpener = GuestOpener(store, sessions, language, queue, deriver)
 
     /** The page of bookmark [node] in [tenant], its link opened as a guest by [opener]. */
@@ -148,10 +150,10 @@ class GuestOpener internal constructor(
     private val sessions: GuestSessions,
     private val language: String,
     private val queue: UploadQueue?,
-    private val deriver: MediaUpload.Deriver?,
+    private val deriver: Derivation.Deriver?,
 ) {
     /** The player a guest's Memory plays its music with (#1034): the app's one, set by the app as it changes. */
-    var music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null
+    var music: me.raddatz.veyq.mobile.audio.PageMusic? = null
 
     /** A guest view of [link], [password] handed in memory (a bookmark's). */
     fun view(link: ReceivedLink.ShareLink, password: String?): GuestView =

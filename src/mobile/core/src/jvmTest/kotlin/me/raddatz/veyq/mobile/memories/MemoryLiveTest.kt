@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.flow.first
@@ -50,15 +51,15 @@ class MemoryLiveTest {
             liveRun.device(),
         ) { block -> HttpClient(OkHttp, block) }
         val tenant = account.open(account.defaultTenant!!)
-        val shell = me.raddatz.veyq.mobile.navigation.ShellModel(
+        val shell = me.raddatz.veyq.mobile.composition.ShellModel(
             tenant, me.raddatz.veyq.mobile.navigation.Hidden({}, emptySet()), me.raddatz.veyq.mobile.navigation.RecentUses({}, emptyList()),
         ) { System.currentTimeMillis() }
         shell.load(openLastUsed = false)
         val memory = tenant.nodes().first { it.kind == "MEMORY" && it.name == name }
         val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
-        val uploads = shell.mediaUploads(queue, object : MediaUpload.Deriver {
-            override fun derive(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) =
-                done(MediaUpload.Derived(null, null, null, null))
+        val uploads = shell.mediaUploads(queue, object : Derivation.Deriver {
+            override fun derive(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, done: (Derivation.Derived) -> Unit) =
+                done(Derivation.Derived(null, null, null, null))
         }, left = {}) {}
         val gallery = shell.galleryModel(me.raddatz.veyq.mobile.navigation.NodeAt(memory.scopeId, memory.nodeId, memory.kind, memory.name), uploads)
         val rows = gallery.state.first { it.rows != null || it.failed }.rows // real time: runTest's own timeout bounds it

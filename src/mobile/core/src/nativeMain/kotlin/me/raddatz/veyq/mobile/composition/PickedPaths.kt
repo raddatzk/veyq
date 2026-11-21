@@ -1,7 +1,8 @@
 @file:OptIn(ExperimentalForeignApi::class)
 
-package me.raddatz.veyq.mobile.blob
+package me.raddatz.veyq.mobile.composition
 
+import me.raddatz.veyq.mobile.blob.*
 import kotlinx.cinterop.ExperimentalForeignApi
 import me.raddatz.veyq.mobile.depot.FolderUpload
 import platform.posix.fclose

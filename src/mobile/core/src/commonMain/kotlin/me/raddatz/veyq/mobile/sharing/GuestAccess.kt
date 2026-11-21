@@ -1,12 +1,12 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.flow.StateFlow
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.V1
 import me.raddatz.veyq.mobile.crypto.unb64
-import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.navigation.NodeAt
 
 /**
@@ -23,13 +23,13 @@ class GuestAccess internal constructor(
     /** The guest view's upload queue (a guest's uploads); null where the host gave none. */
     val queue: UploadQueue?,
     /** The platform's tiers of a picked photo or video; null where the host gave none (a guest then uploads none). */
-    val deriver: MediaUpload.Deriver?,
+    val deriver: Derivation.Deriver?,
     /** The device's clock in epoch ms. */
     val now: () -> Long,
     /** Whether the platform hands a copy on through a share sheet (a file's "Send a copy"). */
     val sharesCopies: Boolean = false,
     /** The player a guest's Memory plays its music with (the account's one, or the app's while signed out); null: none. */
-    val music: me.raddatz.veyq.mobile.memories.GalleryModel.Music? = null,
+    val music: me.raddatz.veyq.mobile.audio.PageMusic? = null,
 ) {
     val role: String get() = head.role
     val shareId: String get() = head.shareId
@@ -131,32 +131,6 @@ class GuestAccess internal constructor(
         return false
     }
 
-    /**
-     * A READ_WRITE guest's Replace of [file]'s content with [source] (the web's share page: `guestFileUploadJob` with a
-     * `replace` target), queued on this link's own [queue] — never a tenant's: signed out or in, the link writes as its
-     * guest (#1035). The page reads the file anew once it settled. False — nothing queued, [source] the caller's to close —
-     * on a READ link, before the guest named itself, without a queue, or where Replace was not chosen on [file]
-     * (`FileModel.chooseReplace`, the choice then left standing).
-     */
-    fun replace(file: me.raddatz.veyq.mobile.depot.FileModel, source: me.raddatz.veyq.mobile.blob.UploadSource): Boolean {
-        val q = queue ?: return false
-        if (role != READ_WRITE || session.value == null) return false
-        val job = file.replace(source) ?: return false
-        q.enqueue(listOf(job), source.name, file.node.nodeId, onSettled = { file.reload() }, onFinished = null)
-        return true
-    }
-
-    /**
-     * [replace] as the file page's Replace offers it to a READ_WRITE guest ([me.raddatz.veyq.mobile.depot.FileRights]
-     * alone, named or not; ADR 0154 decision 1): a guest not named yet is asked its name first ([naming]); false — nothing
-     * queued, [source] the caller's to close — where it declined, or where [replace] refuses.
-     */
-    suspend fun replaceAsking(file: me.raddatz.veyq.mobile.depot.FileModel, source: me.raddatz.veyq.mobile.blob.UploadSource): Boolean {
-        if (role != READ_WRITE || queue == null) return false
-        naming.request() ?: return false
-        return replace(file, source)
-    }
-
     /** What a guest's create came to. */
     sealed class Created {
         /** Made: its id and its fresh key (the caller's to zero), at its own epoch 0 under the parent's scope epoch. */
@@ -213,23 +187,16 @@ class GuestAccess internal constructor(
  * guest's door and rights — share view = member view, rights only remove functions — or, for a kind without a guest
  * answer, the share page's "not shown here" state, never a half view. The platform draws each as it draws the member's.
  */
-sealed class GuestPage {
+abstract class GuestPage {
     abstract val node: NodeAt
 
     /** A folder: core's level over the guest's tree. */
     class Level(override val node: NodeAt, val model: GuestLevel) : GuestPage()
-    /** A Depot file: its page with a guest's viewer. */
-    class File(override val node: NodeAt, val model: me.raddatz.veyq.mobile.depot.FileModel) : GuestPage()
-    /** A Memory or a chapter: its gallery with a guest's access. */
-    class Gallery(override val node: NodeAt, val model: me.raddatz.veyq.mobile.memories.GalleryModel) : GuestPage()
-    /** A Pot: its page over the link's Pot reads. */
-    class Pot(override val node: NodeAt, val model: me.raddatz.veyq.mobile.expenses.PotModel) : GuestPage()
-    /** A drop box's WRITE_ONLY link: the drop page (the guest names itself, adds files). */
-    class DropBox(override val node: NodeAt, val model: me.raddatz.veyq.mobile.depot.GuestDropBox) : GuestPage()
-    /** A Memory's or a chapter's WRITE_ONLY link: the uploader (the guest names itself, adds photos and videos). */
-    class Uploader(override val node: NodeAt, val model: me.raddatz.veyq.mobile.memories.GuestUploader) : GuestPage()
     /** A kind this build shows no guest: the share page's "not shown here". */
     class NotShown(override val node: NodeAt) : GuestPage()
+
+    // each application's own pages are its own (`DepotGuest.File`, `DepotGuest.DropBox`, `MemoriesGuest.Gallery`,
+    // `MemoriesGuest.Uploader`, `PotGuest.Pot`), opened through its door (`AppKinds.guestDoor`)
 }
 
 /** A kind's answer to a link's guest (`AppKinds.guestDoor`): the page of [node] for [access]. */

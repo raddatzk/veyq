@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.flow.first
@@ -51,7 +52,7 @@ class DevMemoryTest {
                 println("dev memory: $purge trashed and purged")
                 return@runBlocking
             }
-            val shell = me.raddatz.veyq.mobile.navigation.ShellModel(
+            val shell = me.raddatz.veyq.mobile.composition.ShellModel(
                 tenant, me.raddatz.veyq.mobile.navigation.Hidden({}, emptySet()), me.raddatz.veyq.mobile.navigation.RecentUses({}, emptyList()),
             ) { System.currentTimeMillis() }
             shell.load(openLastUsed = false)
@@ -73,7 +74,7 @@ class DevMemoryTest {
                     MediaUpload.upload(
                         tenant, scopeId, memory.nodeId,
                         MediaUpload.Original(source, null, f.name, f.lastModified()),
-                        MediaUpload.Derived(sidecar(".preview.jpg"), sidecar(".thumb.jpg"), null, null),
+                        Derivation.Derived(sidecar(".preview.jpg"), sidecar(".thumb.jpg"), null, null),
                         System.currentTimeMillis(),
                     )
                 }

@@ -39,6 +39,8 @@ import kotlin.test.assertTrue
  * [every_queued_operation_is_derived_from_its_sender_and_none_is_in_the_never_column] red.
  */
 class QueuedTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest
@@ -313,9 +315,9 @@ class QueuedTest {
         Queued.MEMORY_CREATE -> QueuedWrite(x.t.id("m-sample"), q.name, "t1", x.scope.id, node = x.t.id("m-sample"), intent = QueuedNodes.encode(me.raddatz.veyq.mobile.memories.QueuedMemories.CreateIntent.serializer(), me.raddatz.veyq.mobile.memories.QueuedMemories.CreateIntent(null, "MEMORY", "Sample")), at = 0)
         Queued.MEDIA_ADD -> {
             val photo = me.raddatz.veyq.mobile.blob.UploadSource.of("a.png", 8, "image/png", null) { from, length -> "PNGBYTES".encodeToByteArray().copyOfRange(from.toInt(), from.toInt() + length) }
-            val deriver = object : me.raddatz.veyq.mobile.memories.MediaUpload.Deriver {
-                override fun derive(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, done: (me.raddatz.veyq.mobile.memories.MediaUpload.Derived) -> Unit) =
-                    done(me.raddatz.veyq.mobile.memories.MediaUpload.Derived(null, null, null, null))
+            val deriver = object : me.raddatz.veyq.mobile.media.Derivation.Deriver {
+                override fun derive(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, done: (me.raddatz.veyq.mobile.media.Derivation.Derived) -> Unit) =
+                    done(me.raddatz.veyq.mobile.media.Derivation.Derived(null, null, null, null))
             }
             me.raddatz.veyq.mobile.memories.QueuedMemories.media(x.a, "t1", x.scope.id, x.memory.id, listOf(photo), deriver, { 0L }, {}).single()
         }

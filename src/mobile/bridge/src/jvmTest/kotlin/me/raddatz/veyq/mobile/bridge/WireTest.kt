@@ -30,7 +30,7 @@ import me.raddatz.veyq.mobile.navigation.Home
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.navigation.Shell
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.SessionModel
@@ -83,7 +83,7 @@ class WireTest {
         me = "user-1", pictures = listOf("user-1", "user-2"),
         queuedBanner = Notice(Msg.OFFLINE_BANNER_WAITING, listOf(2)),
         queuedHere = listOf(
-            me.raddatz.veyq.mobile.offline.QueuedItem("f1", me.raddatz.veyq.mobile.offline.Queued.FOLDER_CREATE, "t", "scope-1", "f1", "Mine", Notice(Msg.QUEUED_FOLDER, listOf("Plans")),
+            me.raddatz.veyq.mobile.composition.QueuedItem("f1", me.raddatz.veyq.mobile.offline.Queued.FOLDER_CREATE, "t", "scope-1", "f1", "Mine", Notice(Msg.QUEUED_FOLDER, listOf("Plans")),
                 me.raddatz.veyq.mobile.offline.QueuedWrite.State.WAITING, Notice(Msg.OFFLINE_WAITING), opens = false, copies = 0, at = 1_700_000_000_000),
         ),
         queuedSaid = listOf(Notice(Msg.OFFLINE_SENT, listOf(1)), Notice(Msg.OFFLINE_NEED_YOU, listOf(1))),
@@ -154,7 +154,7 @@ class WireTest {
             Call.UploadFiles("s1", "f1", "Trip", emptyList()), Call.UploadFolder("s1", "f1", "/home/p/Trip"), Call.UploadReplace(20, "/tmp/b.bin"),
             Call.UploadCancel("i1"), Call.UploadRetry("i1"), Call.UploadCancelAll, Call.UploadAcknowledge("b1"), Call.UploadTakeOffer(3), Call.UploadSeen(4),
             Call.QueuedDiscard("w1"), Call.QueuedOpen("entry:e1"), Call.QueuedCopyName("m1", 0), Call.QueuedSaveCopy("m1", 0, "/home/p/Pictures/dune.png"),
-            Call.QueuedAsk(me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT), Call.QueuedAskFor("b.example#u2", me.raddatz.veyq.mobile.offline.QueuedLoss.STOP_TRUSTING),
+            Call.QueuedAsk(me.raddatz.veyq.mobile.composition.QueuedLoss.SIGN_OUT), Call.QueuedAskFor("b.example#u2", me.raddatz.veyq.mobile.composition.QueuedLoss.STOP_TRUSTING),
             Call.ImportScreen("s1", null, "Home", listOf("/home/a/Trip.zip"), "Gelöschte Personen"), Call.ImportScreenFolder("s1", "f1", "Trip", "/home/a/Trip", "Deleted people"),
             Call.ImportRun(60), Call.ImportAsFile(60), Call.ImportCancel(60),
             Call.HeaderFacts(7, me.raddatz.veyq.mobile.AppKinds.Facts(canWrite = true, hasContent = true), 20),
@@ -269,11 +269,11 @@ class WireTest {
             Answer.HeaderOpened(7),
             Answer.RowPlan(listOf(HeaderShown.PlanAction(me.raddatz.veyq.mobile.navigation.HeaderAction.RENAME, Msg.NODE_RENAME)), listOf(HeaderShown.PlanAction(me.raddatz.veyq.mobile.navigation.HeaderAction.DELETE, Msg.FOLDER_DELETE))),
             Answer.SignInPlan(me.raddatz.veyq.mobile.session.SignInEntry.entries), Answer.FileOpened(20), Answer.Saving(21), Answer.ImportOffered(60, 2, Notice(Msg.DEPOT_FOLDER_UNREADABLE, listOf("gone.txt"))), Answer.ImportOffered(61, 0), Answer.Queued(3),
-            Answer.QueuedOpens(me.raddatz.veyq.mobile.offline.QueuedOpen.Entry("t", "scope-1", "pot-1", "e1", "entry:e1")),
-            Answer.QueuedOpens(me.raddatz.veyq.mobile.offline.QueuedOpen.Rename("t", "scope-1", "node-1", "Trip (mine)")),
-            Answer.QueuedOpens(me.raddatz.veyq.mobile.offline.QueuedOpen.Place("t", "scope-1", null)),
+            Answer.QueuedOpens(me.raddatz.veyq.mobile.composition.QueuedOpen.Entry("t", "scope-1", "pot-1", "e1", "entry:e1")),
+            Answer.QueuedOpens(me.raddatz.veyq.mobile.composition.QueuedOpen.Rename("t", "scope-1", "node-1", "Trip (mine)")),
+            Answer.QueuedOpens(me.raddatz.veyq.mobile.composition.QueuedOpen.Place("t", "scope-1", null)),
             Answer.QueuedCopyName("dune.png", "image/png"), Answer.QueuedCopyName(null, null),
-            Answer.QueuedAsked(me.raddatz.veyq.mobile.offline.QueuedAsk(Notice(Msg.OFFLINE_WRITES_LOST, listOf(2)), Msg.OFFLINE_SIGN_OUT_ANYWAY)), Answer.QueuedAsked(null), Answer.TrashOpened(8), Answer.Said(Notice(Msg.TRASH_MOVED, listOf("Trip"))), Answer.Said(null), Answer.Trashed(Notice(Msg.TRASH_MOVED, listOf("Trip")), undoable = true),
+            Answer.QueuedAsked(me.raddatz.veyq.mobile.composition.QueuedAsk(Notice(Msg.OFFLINE_WRITES_LOST, listOf(2)), Msg.OFFLINE_SIGN_OUT_ANYWAY)), Answer.QueuedAsked(null), Answer.TrashOpened(8), Answer.Said(Notice(Msg.TRASH_MOVED, listOf("Trip"))), Answer.Said(null), Answer.Trashed(Notice(Msg.TRASH_MOVED, listOf("Trip")), undoable = true),
             Answer.Named(Notice(Msg.NODE_SLUG_TAKEN), null, false, true), Answer.Named(null, Notice(Msg.SHARE_NAME_RESEAL_FAILED), false, false), Answer.Named(null, null, true, false),
             Answer.Dropped(2, listOf(Notice(Msg.MEMORY_DROP_FOLDER, listOf("Trip"))), 62), Answer.Dropped(0, listOf(Notice(Msg.DROP_NOT_HERE)), refused = true), Answer.Refused(Answer.Why.DROP_NOT_HERE), Answer.Refused(Answer.Why.NO_SUCH_ROW),
             Answer.MoveOpened(9), Answer.ShareOpened(10), Answer.DropBoxOpened(30), Answer.Refused(Answer.Why.NOT_ASKED), Answer.ReportOpened(11), Answer.Refused(Answer.Why.NO_COVER),
@@ -432,9 +432,9 @@ class WireTest {
             Update.Uploads(null),
             Update.QueuedTray(null), Update.QueuedTray(emptyList()),
             Update.QueuedTray(listOf(
-                me.raddatz.veyq.mobile.offline.QueuedItem("entry:e1", me.raddatz.veyq.mobile.offline.Queued.POT_ENTRY, "t", "scope-1", "pot-1", "Trip", Notice(Msg.QUEUED_ENTRY, listOf("Taxi")),
+                me.raddatz.veyq.mobile.composition.QueuedItem("entry:e1", me.raddatz.veyq.mobile.offline.Queued.POT_ENTRY, "t", "scope-1", "pot-1", "Trip", Notice(Msg.QUEUED_ENTRY, listOf("Taxi")),
                     me.raddatz.veyq.mobile.offline.QueuedWrite.State.HELD, Notice(Msg.OFFLINE_HELD_CHANGED), opens = true, copies = 0, at = 1_700_000_000_000),
-                me.raddatz.veyq.mobile.offline.QueuedItem("m1", me.raddatz.veyq.mobile.offline.Queued.MEDIA_ADD, "t", "scope-1", "memory-1", null, Notice(Msg.QUEUED_MEDIUM, listOf("dune.png")),
+                me.raddatz.veyq.mobile.composition.QueuedItem("m1", me.raddatz.veyq.mobile.offline.Queued.MEDIA_ADD, "t", "scope-1", "memory-1", null, Notice(Msg.QUEUED_MEDIUM, listOf("dune.png")),
                     me.raddatz.veyq.mobile.offline.QueuedWrite.State.REFUSED, Notice(Msg.OFFLINE_REFUSED_NO_ROOM), opens = false, copies = 1, at = 1_700_000_000_001),
             )),
             Update.Import(60, ImportShown(
@@ -462,7 +462,7 @@ class WireTest {
                     ShareShown.ShownLink("share-1", Piece.Plain("Family"), listOf(Notice(Msg.SHARE_ROLE_VIEWER), Notice(Msg.SHARE_PASSWORD_BADGE)),
                         "2026-11-01T10:00:00Z", "2026-12-01T22:59:59.999Z", "http://veyq.localhost:8080/s/share-1#k=AAAA", canCopy = true, canEdit = true,
                         canRenew = true, canSwitchOff = true, canReactivate = false, canDelete = false,
-                        actions = listOf(me.raddatz.veyq.mobile.navigation.LinkAction.COPY, me.raddatz.veyq.mobile.navigation.LinkAction.SWITCH_OFF)),
+                        actions = listOf(me.raddatz.veyq.mobile.composition.LinkAction.COPY, me.raddatz.veyq.mobile.composition.LinkAction.SWITCH_OFF)),
                     ShareShown.ShownLink("share-2", Piece.Said(Notice(Msg.SHARE_ROLE_VIEWER)), listOf(Notice(Msg.SHARE_SWITCHED_OFF)), "2026-10-01T10:00:00Z", null,
                         null, canCopy = false, canEdit = false, canRenew = true, canSwitchOff = false, canReactivate = true, canDelete = true),
                 ),

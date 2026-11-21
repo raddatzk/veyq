@@ -1,36 +1,64 @@
 package me.raddatz.veyq.mobile
 
+import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.crypto.Naming
-import me.raddatz.veyq.mobile.expenses.PotCreate
-import me.raddatz.veyq.mobile.expenses.PotExport
-import me.raddatz.veyq.mobile.expenses.PotRekey
-import me.raddatz.veyq.mobile.expenses.PotSession
 import me.raddatz.veyq.mobile.navigation.HeaderAction as H
 import me.raddatz.veyq.mobile.session.NodeRekey
 
 /**
- * Every node kind this build knows, as core's writes need it: the composition root of kinds (the web's registry, filled by
- * each application's `register.ts`), the one place core's session meets an application. Core's session never names a
- * kind; the apps hand it these.
+ * Every node kind this build knows, as core's writes need it: the platform's one registry of kinds (ADR 0154 decision 3;
+ * the web's registry, filled by each application's `register.ts`), the one place core's session meets an application.
+ * Core's own kinds (a folder, a kept link) are answered here; every other answer is an application's part
+ * ([ApplicationKinds]), which the composition installs once ([install]) before any session opens. Core's session never
+ * names a kind; the apps hand it these.
  */
 object AppKinds {
+    @kotlin.concurrent.Volatile
+    private var installed: List<ApplicationKinds>? = null
+
+    /**
+     * The applications' parts, in the order installed. A read before [install] fails: never a silent default, since an
+     * unregistered kind would write a node the app cannot name.
+     */
+    internal val applications: List<ApplicationKinds>
+        get() = installed ?: error("AppKinds read before the applications were installed (composition's AppComposition.install)")
+
+    /**
+     * Installs the applications' parts (the composition's `AppComposition.install`, from each client's start path): one per
+     * [me.raddatz.veyq.mobile.navigation.ApplicationId], no kind owned twice. The same parts again are no change (an
+     * Android activity recreated, a second bridge instance, a test class after another); different ones fail.
+     */
+        @HiddenFromObjC
+    fun install(parts: List<ApplicationKinds>) {
+        installed?.let { held ->
+            check(held == parts) { "AppKinds installed twice with different applications: ${held.map { it.application }} then ${parts.map { it.application }}" }
+            return
+        }
+        val ids = parts.map { it.application }
+        check(ids.toSet() == me.raddatz.veyq.mobile.navigation.ApplicationId.entries.toSet() && ids.size == ids.toSet().size) {
+            "AppKinds needs exactly one part per ApplicationId, got $ids"
+        }
+        val kinds = parts.flatMap { it.kinds }
+        check(kinds.size == kinds.toSet().size && kinds.none { it in CORE }) { "a node kind owned twice: $kinds" }
+        installed = parts
+    }
+
+    /** Each application's part of the offline store, in the order installed. */
+    internal val kept: List<me.raddatz.veyq.mobile.offline.ApplicationKept> get() = applications.mapNotNull { it.kept }
+
+    private val CORE = setOf("FOLDER", "SHARE_BOOKMARK")
     /**
      * Each write that may be queued offline and the sender that takes it through its online path (ADR 0153 decision 3,
      * [me.raddatz.veyq.mobile.offline.Queued]): core's node writes here; an application's rows are its own senders.
      */
+    @PlatformApi
+    @HiddenFromObjC
     internal fun queuedSender(q: me.raddatz.veyq.mobile.offline.Queued): me.raddatz.veyq.mobile.offline.QueuedSender = when (q) {
         me.raddatz.veyq.mobile.offline.Queued.FOLDER_CREATE,
         me.raddatz.veyq.mobile.offline.Queued.NODE_RENAME,
         me.raddatz.veyq.mobile.offline.Queued.NODE_TRASH,
         -> me.raddatz.veyq.mobile.offline.QueuedNodes.sender(q)
-        me.raddatz.veyq.mobile.offline.Queued.MEMORY_CREATE,
-        me.raddatz.veyq.mobile.offline.Queued.MEDIA_ADD,
-        me.raddatz.veyq.mobile.offline.Queued.MEDIA_CAPTURE_TIME,
-        me.raddatz.veyq.mobile.offline.Queued.MEDIA_TRASH,
-        me.raddatz.veyq.mobile.offline.Queued.MEDIA_MARK,
-        -> me.raddatz.veyq.mobile.memories.QueuedMemories.sender(q)
-        me.raddatz.veyq.mobile.offline.Queued.DEPOT_FILE_ADD -> me.raddatz.veyq.mobile.depot.QueuedDepot.fileSender
-        me.raddatz.veyq.mobile.offline.Queued.POT_ENTRY -> me.raddatz.veyq.mobile.expenses.QueuedExpenses.entrySender
+        else -> applications.firstNotNullOfOrNull { it.queuedSender(q) } ?: error("no application sends a queued $q")
     }
 
     /**
@@ -39,11 +67,8 @@ object AppKinds {
      * pinned by `v1.json#name_folding`); null for a kind this build does not know, whose names it then does not write.
      */
     fun tokenInput(kind: String, name: String): String? = when (kind) {
-        FOLDER, DROPBOX, SHARE_BOOKMARK -> Naming.slugify(name)
-        FILE -> Naming.fileNameSlug(name)
-        MEMORY, CHAPTER -> "memories/" + Naming.slugify(name)
-        PotSession.KIND -> PotCreate.tokenInput(name)
-        else -> null
+        FOLDER, SHARE_BOOKMARK -> Naming.slugify(name)
+        else -> applications.firstNotNullOfOrNull { it.tokenInput(kind, name) }
     }
 
     /**
@@ -53,10 +78,8 @@ object AppKinds {
      */
     val rekeys = NodeRekey.Kinds { kind ->
         when (kind) {
-            FOLDER, FILE, DROPBOX, SHARE_BOOKMARK -> NodeRekey.ContentRekey.NONE
-            PotSession.KIND -> PotRekey.content
-            MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoryRekey.content
-            else -> null
+            FOLDER, SHARE_BOOKMARK -> NodeRekey.ContentRekey.NONE
+            else -> applications.firstNotNullOfOrNull { it.rekey(kind) }
         }
     }
 
@@ -68,8 +91,8 @@ object AppKinds {
      * 0115 decision 2): Memories' item marks' value-key wraps (`ItemMarksRotation.participant`). Core's `ScopeRotation`
      * stages them after its own, under the same re-key id.
      */
-    val scopeRekeyParticipants: List<me.raddatz.veyq.mobile.session.rotation.ScopeRekeyParticipant> =
-        listOf(me.raddatz.veyq.mobile.memories.ItemMarksRotation.participant)
+    val scopeRekeyParticipants: List<me.raddatz.veyq.mobile.session.rotation.ScopeRekeyParticipant>
+        get() = applications.flatMap { it.scopeRekeyParticipants }
 
     /**
      * The account's Master Key replaced (an account rotation's `afterCommit`, the web's lifecycle `onMasterKeyRotated`):
@@ -79,12 +102,14 @@ object AppKinds {
      * (the caller owns both).
      */
     suspend fun masterKeyRotated(account: me.raddatz.veyq.mobile.session.VeyqAccount, oldMk: ByteArray, newMk: ByteArray) {
-        try {
-            me.raddatz.veyq.mobile.memories.ItemMarksRotation.retag(account, oldMk, newMk)
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            // a mark whose tag the new key does not verify reads as someone else's set (ADR 0068 §9) until its next toggle
+        for (part in applications) {
+            try {
+                part.masterKeyRotated(account, oldMk, newMk)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // a mark whose tag the new key does not verify reads as someone else's set (ADR 0068 §9) until its next toggle
+            }
         }
     }
 
@@ -96,18 +121,10 @@ object AppKinds {
      * Depot's files are listed once.
      */
     fun exports(deletedName: String): me.raddatz.veyq.mobile.export.NodeExport.Kinds {
-        val depot = me.raddatz.veyq.mobile.depot.DepotExport()
+        val parts = applications.mapNotNull { it.exports(deletedName) }
         return me.raddatz.veyq.mobile.export.NodeExport.Kinds(
-            exports = { it == PotSession.KIND || it == FILE || it == DROPBOX || it == MEMORY || it == CHAPTER },
-            content = { tenant, node ->
-                when (node.kind) {
-                    PotSession.KIND -> PotSession.open(tenant, node.scopeId, node.id)?.let { PotExport.content(it, deletedName) }
-                    FILE -> depot.file(tenant, node)
-                    DROPBOX -> me.raddatz.veyq.mobile.depot.DepotExport.dropBox()
-                    MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoryExport.content(tenant, node)
-                    else -> null
-                }
-            },
+            exports = { kind -> parts.any { it.exports(kind) } },
+            content = { tenant, node -> parts.firstOrNull { it.exports(node.kind) }?.content?.invoke(tenant, node) },
         )
     }
 
@@ -115,7 +132,7 @@ object AppKinds {
      * Whether a node of [kind] downloads as its own content rather than the web's ZIP (a Depot file: the file itself, under
      * its own name, ADR 0136's Consequences); every other kind downloads the ZIP of it with everything under it.
      */
-    fun downloadsItself(kind: String): Boolean = kind == FILE
+    fun downloadsItself(kind: String): Boolean = applications.any { it.downloadsItself(kind) }
 
     /**
      * Node [ref]'s own download into [sink] where its kind has one ([downloadsItself]): true once whole, false where it has
@@ -123,20 +140,13 @@ object AppKinds {
      */
     @Throws(Exception::class)
     suspend fun ownDownload(tenant: me.raddatz.veyq.mobile.session.TenantSession, ref: me.raddatz.veyq.mobile.navigation.NodeAt, sink: (ByteArray) -> Unit): Boolean? =
-        when (ref.kind) {
-            FILE -> me.raddatz.veyq.mobile.depot.DepotFiles.download(tenant, ref.scopeId, ref.nodeId, sink)
-            else -> null
-        }
+        applications.firstOrNull { it.downloadsItself(ref.kind) }?.ownDownload(tenant, ref, sink)
 
     /** The name node [ref]'s download is saved as: a file's own (`DepotFiles.downloadName`), else the ZIP's. */
     @Throws(Exception::class)
     suspend fun downloadName(tenant: me.raddatz.veyq.mobile.session.TenantSession, ref: me.raddatz.veyq.mobile.navigation.NodeAt): String =
-        when (ref.kind) {
-            FILE -> me.raddatz.veyq.mobile.depot.DepotFiles.downloadName(
-                runCatching { me.raddatz.veyq.mobile.depot.DepotFiles.one(tenant, ref.scopeId, ref.nodeId) }.getOrNull(), ref.name,
-            )
-            else -> me.raddatz.veyq.mobile.export.NodeExport.fileName(ref.name)
-        }
+        applications.firstOrNull { it.downloadsItself(ref.kind) }?.downloadName(tenant, ref)
+            ?: me.raddatz.veyq.mobile.export.NodeExport.fileName(ref.name)
 
     /**
      * How the build's kinds copy (the web's `importContent` for a copy, `SubtreeCopy`): a Pot by Expenses' copy (`PotCopy`,
@@ -146,22 +156,13 @@ object AppKinds {
      * left out and said. One per run: Depot's files are listed once.
      */
     fun copies(deletedName: String, uuid: () -> String): me.raddatz.veyq.mobile.export.SubtreeCopy.Kinds {
-        val depot = me.raddatz.veyq.mobile.depot.DepotExport()
+        val parts = applications.mapNotNull { it.copies(deletedName, uuid) }
         return me.raddatz.veyq.mobile.export.SubtreeCopy.Kinds(
-            copies = { it == PotSession.KIND || it == FILE || it == DROPBOX || it == MEMORY || it == CHAPTER },
-            asFolder = { it == DROPBOX },
+            copies = { kind -> parts.any { it.copies(kind) } },
+            asFolder = { kind -> parts.any { it.asFolder(kind) } },
             duplicate = { tenant, node, scopeId, parentId, name ->
-                when (node.kind) {
-                    PotSession.KIND -> me.raddatz.veyq.mobile.export.SubtreeCopy.Made(
-                        PotSession.open(tenant, scopeId, node.id)?.let { source ->
-                            me.raddatz.veyq.mobile.expenses.PotCopy.duplicate(source, tenant, scopeId, parentId, deletedName, uuid)
-                                .takeIf { it.outcome == me.raddatz.veyq.mobile.expenses.PotCopy.Outcome.COPIED }?.nodeId
-                        },
-                    )
-                    FILE -> depot.duplicate(tenant, node, parentId, name, ::tokenInput)
-                    MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoryCopy.duplicate(tenant, node, scopeId, parentId, name)
-                    else -> me.raddatz.veyq.mobile.export.SubtreeCopy.Made(null)
-                }
+                parts.firstOrNull { it.copies(node.kind) }?.duplicate?.invoke(tenant, node, scopeId, parentId, name)
+                    ?: me.raddatz.veyq.mobile.export.SubtreeCopy.Made(null)
             },
         )
     }
@@ -175,22 +176,10 @@ object AppKinds {
      * have none, and are left out with what is under them (`unknown_application`), as on the web.
      */
     fun imports(
-        deletedName: String, uuid: () -> String, deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver?, now: () -> Long,
+        deletedName: String, uuid: () -> String, deriver: me.raddatz.veyq.mobile.media.Derivation.Deriver?, now: () -> Long,
     ): me.raddatz.veyq.mobile.export.SubtreeImport.Kinds {
-        val file = me.raddatz.veyq.mobile.depot.DepotImport.file(::tokenInput)
-        val pot = me.raddatz.veyq.mobile.expenses.PotImport.hook(deletedName, uuid)
-        val memory = me.raddatz.veyq.mobile.memories.MemoryImport.hook(MEMORY, deriver, now)
-        val chapter = me.raddatz.veyq.mobile.memories.MemoryImport.hook(CHAPTER, deriver, now)
-        return me.raddatz.veyq.mobile.export.SubtreeImport.Kinds { kind ->
-            when (kind) {
-                FILE -> file
-                DROPBOX -> me.raddatz.veyq.mobile.depot.DepotImport.dropBox
-                PotSession.KIND -> pot
-                MEMORY -> memory
-                CHAPTER -> chapter
-                else -> null
-            }
-        }
+        val parts = applications.mapNotNull { it.imports(deletedName, uuid, deriver, now) }
+        return me.raddatz.veyq.mobile.export.SubtreeImport.Kinds { kind -> parts.firstNotNullOfOrNull { it.hook(kind) } }
     }
 
     /**
@@ -200,9 +189,8 @@ object AppKinds {
      */
     val placement = me.raddatz.veyq.mobile.session.NodeMove.PlacementAllows { kind, parent ->
         when (kind) {
-            FOLDER, PotSession.KIND, MEMORY, FILE, DROPBOX, SHARE_BOOKMARK -> parent == null || parent == FOLDER
-            CHAPTER -> parent == MEMORY
-            else -> false
+            FOLDER, SHARE_BOOKMARK -> parent == null || parent == FOLDER
+            else -> applications.firstNotNullOfOrNull { it.placement(kind, parent) } ?: false
         }
     }
 
@@ -212,30 +200,25 @@ object AppKinds {
      * order from the web's own registration (`registry.ts`, each application's `register.ts`, `core/bookmark/kind.ts`).
      */
     fun headerOrder(kind: String): List<H> = when (kind) {
-        FOLDER, DROPBOX, PotSession.KIND -> listOf(H.FAVORITE, H.SHARE, H.DOWNLOAD, H.MOVE, H.COPY)
-        FILE -> listOf(H.FAVORITE, H.DOWNLOAD, H.SHARE, H.REPLACE, H.MOVE, H.COPY)
-        MEMORY, CHAPTER -> listOf(H.FAVORITE, H.UPLOAD, H.SHARE, H.MUSIC, H.DOWNLOAD, H.BANNER, H.MOVE, H.COPY)
+        FOLDER -> listOf(H.FAVORITE, H.SHARE, H.DOWNLOAD, H.MOVE, H.COPY)
         SHARE_BOOKMARK -> listOf(H.OPEN_OWN_PAGE, H.FAVORITE, H.MOVE)
-        else -> emptyList()
+        else -> applications.firstNotNullOfOrNull { it.headerOrder(kind) } ?: emptyList()
     }
+
+    /** The application whose object a node of [kind] is; null for core's kinds and a chapter. */
+    fun applicationOf(kind: String): me.raddatz.veyq.mobile.navigation.ApplicationId? =
+        applications.firstOrNull { kind in it.objectKinds }?.application
+
+    /** The noun a node of [kind] is named with in a refusal ("a Pot"), where its application has one. */
+    fun noun(kind: String): me.raddatz.veyq.mobile.words.Msg? = applications.firstNotNullOfOrNull { it.noun(kind) }
 
     /** An application's name. */
-    fun applicationWord(app: me.raddatz.veyq.mobile.navigation.ApplicationId): me.raddatz.veyq.mobile.words.Msg = when (app) {
-        me.raddatz.veyq.mobile.navigation.ApplicationId.MEMORIES -> me.raddatz.veyq.mobile.words.Msg.APP_MEMORIES
-        me.raddatz.veyq.mobile.navigation.ApplicationId.DEPOT -> me.raddatz.veyq.mobile.words.Msg.APP_DEPOT
-        me.raddatz.veyq.mobile.navigation.ApplicationId.EXPENSES -> me.raddatz.veyq.mobile.words.Msg.APP_EXPENSES
-    }
+    fun applicationWord(app: me.raddatz.veyq.mobile.navigation.ApplicationId): me.raddatz.veyq.mobile.words.Msg =
+        applications.first { it.application == app }.word
 
     /** A bar tab's name; Depot's one tab names the object open ([objectKind]): a file or a drop box. */
-    fun tabWord(tab: me.raddatz.veyq.mobile.navigation.BarTab, objectKind: String?): me.raddatz.veyq.mobile.words.Msg = when (tab.key) {
-        "memories.all" -> me.raddatz.veyq.mobile.words.Msg.TAB_MEMORIES_ALL
-        "memories.map" -> me.raddatz.veyq.mobile.words.Msg.TAB_MEMORIES_MAP
-        "depot.file" -> if (objectKind == DROPBOX) me.raddatz.veyq.mobile.words.Msg.TAB_DEPOT_DROPBOX else me.raddatz.veyq.mobile.words.Msg.TAB_DEPOT_FILE
-        "expenses.entries" -> me.raddatz.veyq.mobile.words.Msg.TAB_EXPENSES_ENTRIES
-        "expenses.overview" -> me.raddatz.veyq.mobile.words.Msg.TAB_EXPENSES_OVERVIEW
-        "expenses.settings" -> me.raddatz.veyq.mobile.words.Msg.TAB_EXPENSES_SETTINGS
-        else -> me.raddatz.veyq.mobile.words.Msg.NOT_BUILT
-    }
+    fun tabWord(tab: me.raddatz.veyq.mobile.navigation.BarTab, objectKind: String?): me.raddatz.veyq.mobile.words.Msg =
+        applications.firstNotNullOfOrNull { it.tabWord(tab.key, objectKind) } ?: me.raddatz.veyq.mobile.words.Msg.NOT_BUILT
 
     /**
      * What "New" creates at a level (the web's menu); each app wires each to its own dialog or picker. An entry of a plan
@@ -290,15 +273,9 @@ object AppKinds {
     /** The header of a node of [kind]; null for a kind this build registers no page for. */
     fun header(kind: String): Header? = when (kind) {
         FOLDER -> Header(true, true, true, me.raddatz.veyq.mobile.words.Msg.FOLDER_DELETE, me.raddatz.veyq.mobile.words.Msg.FOLDER_DELETE_CONFIRM)
-        PotSession.KIND -> Header(true, true, true, me.raddatz.veyq.mobile.words.Msg.POT_DELETE, me.raddatz.veyq.mobile.words.Msg.POT_DELETE_CONFIRM)
-        FILE -> Header(true, false, true, me.raddatz.veyq.mobile.words.Msg.FILE_DELETE, me.raddatz.veyq.mobile.words.Msg.FILE_DELETE_CONFIRM)
-        // a drop box is never renamed: its name is its guests' address
-        DROPBOX -> Header(true, true, false, me.raddatz.veyq.mobile.words.Msg.DROPBOX_DELETE, me.raddatz.veyq.mobile.words.Msg.DROPBOX_DELETE_CONFIRM)
-        MEMORY -> Header(true, true, true, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_MEMORY, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CONFIRM)
-        CHAPTER -> Header(true, true, true, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CHAPTER, me.raddatz.veyq.mobile.words.Msg.MEMORY_DELETE_CONFIRM)
         // a kept link is never shared on (ADR 0120 decision 7) and takes no cover; its delete says what it is
         SHARE_BOOKMARK -> Header(false, false, true, me.raddatz.veyq.mobile.words.Msg.BOOKMARK_DELETE, me.raddatz.veyq.mobile.words.Msg.BOOKMARK_DELETE_CONFIRM)
-        else -> null
+        else -> applications.firstNotNullOfOrNull { it.header(kind) }
     }
 
     /**
@@ -318,11 +295,8 @@ object AppKinds {
      * downloads only with content; a Memory and a chapter both (ADR 0149 decision 3). A kind this build does not know opens none.
      */
     fun doors(kind: String, facts: Facts): Doors = when (kind) {
-        FOLDER, DROPBOX -> Doors(coverOffered = true, copies = true, downloads = true)
-        PotSession.KIND -> Doors(coverOffered = facts.canWrite, copies = facts.canWrite, downloads = true)
-        FILE -> Doors(coverOffered = true, copies = facts.hasContent, downloads = facts.hasContent)
-        MEMORY, CHAPTER -> Doors(coverOffered = true, copies = true, downloads = true)
-        else -> Doors(coverOffered = false, copies = false, downloads = false)
+        FOLDER -> Doors(coverOffered = true, copies = true, downloads = true)
+        else -> applications.firstNotNullOfOrNull { it.doors(kind, facts) } ?: Doors(coverOffered = false, copies = false, downloads = false)
     }
 
     /**
@@ -344,10 +318,7 @@ object AppKinds {
     fun lossesOfCopy(kinds: List<String>): List<me.raddatz.veyq.mobile.words.Msg> = kinds.sorted().flatMap { kind ->
         when (kind) {
             FOLDER -> listOf(me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_FOLDER_COVER)
-            PotSession.KIND -> listOf(me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_POT, me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_COVER)
-            DROPBOX -> listOf(me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_DROPBOX)
-            MEMORY, CHAPTER -> listOf(me.raddatz.veyq.mobile.words.Msg.COPY_LOSS_MEMORY)
-            else -> emptyList()
+            else -> applications.firstNotNullOfOrNull { it.lossesOfCopy(kind) } ?: emptyList()
         }
     }.distinct()
 
@@ -356,7 +327,7 @@ object AppKinds {
      * Pot open on its page (`PotModel.duplicate`: its session read, its write right known — the web's `canCopy`); every
      * other kind (a folder, a drop box, a file) through `SubtreeCopy`.
      */
-    fun copiesByOpenModel(kind: String): Boolean = kind == PotSession.KIND
+    fun copiesByOpenModel(kind: String): Boolean = applications.any { it.copiesByOpenModel(kind) }
 
     /**
      * What a pin keeps of each kind (ADR 0140 decision 9, `OfflinePins`): a Memory and a chapter their media's tiles and
@@ -367,19 +338,15 @@ object AppKinds {
      * is not kept.
      */
     val pins: me.raddatz.veyq.mobile.offline.PinKinds = object : me.raddatz.veyq.mobile.offline.PinKinds {
-        override fun pinnable(kind: String): Boolean = kind == MEMORY || kind == CHAPTER || kind == FOLDER || kind == FILE || kind == PotSession.KIND
+        private fun of(kind: String) = applications.firstNotNullOfOrNull { a -> a.pins?.takeIf { it.pinnable(kind) } }
+
+        override fun pinnable(kind: String): Boolean = kind == FOLDER || of(kind) != null
 
         override suspend fun blobs(tenant: me.raddatz.veyq.mobile.session.TenantSession, node: me.raddatz.veyq.mobile.session.OpenNode) =
-            when (node.kind) {
-                MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoryMedia.pinned(tenant, node)
-                FILE -> me.raddatz.veyq.mobile.depot.DepotFiles.pinned(tenant, node)
-                PotSession.KIND -> me.raddatz.veyq.mobile.expenses.PotPins.pinned(tenant, node)
-                else -> emptyList()
-            }
+            of(node.kind)?.blobs(tenant, node) ?: emptyList()
 
-        // a Memory's and a chapter's banner: only their sealed meta names it (ADR 0144 decision 7)
         override fun named(tenant: me.raddatz.veyq.mobile.session.TenantSession, node: me.raddatz.veyq.mobile.session.OpenNode) =
-            if (node.kind == MEMORY || node.kind == CHAPTER) me.raddatz.veyq.mobile.memories.banner.Banner.pinned(tenant, node) else emptyList()
+            of(node.kind)?.named(tenant, node) ?: emptyList()
     }
 
     /**
@@ -390,35 +357,17 @@ object AppKinds {
      * The one place an application's part reaches core's `search/`.
      */
     val search: me.raddatz.veyq.mobile.search.SearchKinds = object : me.raddatz.veyq.mobile.search.SearchKinds {
-        private val memoryDocuments = listOf(
-            me.raddatz.veyq.mobile.search.DocumentKind(
-                me.raddatz.veyq.mobile.memories.MemoriesSearch.PHOTO, me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_PHOTO,
-                me.raddatz.veyq.mobile.memories.MemoriesSearch.PHOTO_ICON,
-            ),
-            me.raddatz.veyq.mobile.search.DocumentKind(
-                me.raddatz.veyq.mobile.memories.MemoriesSearch.VIDEO, me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_VIDEO,
-                me.raddatz.veyq.mobile.memories.MemoriesSearch.VIDEO_ICON,
-            ),
-        )
-        private val byKind = linkedMapOf(
-            FOLDER to me.raddatz.veyq.mobile.search.KindSearch(me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_FOLDER, "folder"),
-            SHARE_BOOKMARK to me.raddatz.veyq.mobile.search.KindSearch(me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_BOOKMARK, "bookmark"),
-            FILE to me.raddatz.veyq.mobile.search.KindSearch(me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_FILE, "file"),
-            DROPBOX to me.raddatz.veyq.mobile.search.KindSearch(me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_DROPBOX, "inbox"),
-            PotSession.KIND to me.raddatz.veyq.mobile.search.KindSearch(me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_POT, "wallet"),
-            MEMORY to me.raddatz.veyq.mobile.search.KindSearch(
-                me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_MEMORY, "images", me.raddatz.veyq.mobile.memories.MemoriesSearch::facets, memoryDocuments,
-            ),
-            CHAPTER to me.raddatz.veyq.mobile.search.KindSearch(
-                me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_CHAPTER, "images", me.raddatz.veyq.mobile.memories.MemoriesSearch::facets, memoryDocuments,
-            ),
-        )
+        private val byKind by lazy {
+            linkedMapOf(
+                FOLDER to me.raddatz.veyq.mobile.search.KindSearch(me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_FOLDER, "folder"),
+                SHARE_BOOKMARK to me.raddatz.veyq.mobile.search.KindSearch(me.raddatz.veyq.mobile.words.Msg.SEARCH_KIND_BOOKMARK, "bookmark"),
+            ).apply { for (a in this@AppKinds.applications) for (k in a.kinds) a.search(k)?.let { put(k, it) } }
+        }
 
         override fun kind(kind: String) = byKind[kind]
-        override val kinds: List<String> = byKind.keys.toList()
-        override val applications = listOf(
-            me.raddatz.veyq.mobile.navigation.ApplicationId.MEMORIES.id to me.raddatz.veyq.mobile.memories.MemoriesSearch.search,
-        )
+        override val kinds: List<String> get() = byKind.keys.toList()
+        override val applications: List<Pair<String, me.raddatz.veyq.mobile.search.ApplicationSearch>>
+            get() = this@AppKinds.applications.mapNotNull { a -> a.spaceSearch?.let { a.application.id to it } }
     }
 
     /**
@@ -426,12 +375,10 @@ object AppKinds {
      * (`PotShare`), a Memory's and a chapter's upload queue (`MemoryShare`), a folder's — a space's top asks as one — Depot's
      * upload queue (`FolderShare`); null for a kind that takes nothing.
      */
-    fun share(kind: String): me.raddatz.veyq.mobile.navigation.ShareAnswer? = when (kind) {
-        PotSession.KIND -> me.raddatz.veyq.mobile.expenses.PotShare.answer
-        MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoryShare.answer
-        FOLDER -> me.raddatz.veyq.mobile.depot.FolderShare.answer
-        else -> null
-    }
+    fun share(kind: String): me.raddatz.veyq.mobile.navigation.ShareAnswer? = applications.firstNotNullOfOrNull { it.share(kind) }
+
+    /** The words of a node of [kind]'s share sheet, where its application has its own; null: core's folder words. */
+    fun shareWords(kind: String): me.raddatz.veyq.mobile.session.ShareWords? = applications.firstNotNullOfOrNull { it.shareWords(kind) }
 
     /**
      * The answer of [kind] to a link's guest of [role] (ADR 0150 decision 5): each application's own door in its package —
@@ -439,20 +386,10 @@ object AppKinds {
      * Memory and a chapter their gallery with a guest's access and a WRITE_ONLY link their uploader, a Pot its page over the
      * link's reads; null for a kind or role without one (the guest view says "not shown here").
      */
-    fun guestDoor(kind: String, role: String): me.raddatz.veyq.mobile.sharing.GuestDoor? = when (role) {
-        me.raddatz.veyq.mobile.sharing.GuestAccess.WRITE_ONLY -> when (kind) {
-            DROPBOX -> me.raddatz.veyq.mobile.depot.DepotGuest.dropBox
-            MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoriesGuest.uploader
-            else -> null
-        }
-        me.raddatz.veyq.mobile.sharing.GuestAccess.READ, me.raddatz.veyq.mobile.sharing.GuestAccess.READ_WRITE -> when (kind) {
-            FOLDER -> me.raddatz.veyq.mobile.sharing.GuestLevel.door
-            FILE -> me.raddatz.veyq.mobile.depot.DepotGuest.file
-            MEMORY, CHAPTER -> me.raddatz.veyq.mobile.memories.MemoriesGuest.gallery
-            PotSession.KIND -> me.raddatz.veyq.mobile.expenses.PotGuest.pot
-            else -> null
-        }
-        else -> null
+    fun guestDoor(kind: String, role: String): me.raddatz.veyq.mobile.sharing.GuestDoor? = when {
+        kind == FOLDER && (role == me.raddatz.veyq.mobile.sharing.GuestAccess.READ || role == me.raddatz.veyq.mobile.sharing.GuestAccess.READ_WRITE) ->
+            me.raddatz.veyq.mobile.sharing.GuestLevel.door
+        else -> applications.firstNotNullOfOrNull { it.guestDoor(kind, role) }
     }
 
     /**
@@ -462,12 +399,9 @@ object AppKinds {
     fun guestLevelUploads(
         access: me.raddatz.veyq.mobile.sharing.GuestAccess, session: me.raddatz.veyq.mobile.sharing.GuestSession,
         parent: me.raddatz.veyq.mobile.session.OpenNode, sources: List<me.raddatz.veyq.mobile.blob.UploadSource>,
-    ): List<me.raddatz.veyq.mobile.blob.UploadQueue.Job> = sources.map { me.raddatz.veyq.mobile.depot.DepotGuest.LevelUpload(access, session, parent, it) }
+    ): List<me.raddatz.veyq.mobile.blob.UploadQueue.Job> =
+        sources.mapNotNull { source -> applications.firstNotNullOfOrNull { it.guestLevelUpload(access, session, parent, source) } }
 
     private const val FOLDER = "FOLDER"
-    private const val FILE = "FILE"
-    private const val DROPBOX = "DEPOT_DROPBOX"
     private const val SHARE_BOOKMARK = "SHARE_BOOKMARK"
-    private const val MEMORY = "MEMORY"
-    private const val CHAPTER = "CHAPTER"
 }

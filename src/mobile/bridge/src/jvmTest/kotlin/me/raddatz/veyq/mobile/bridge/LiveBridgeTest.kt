@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.bridge
 
+import me.raddatz.veyq.mobile.expenses.receiptsSkipped
+import me.raddatz.veyq.mobile.depot.replaceOffered
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.runBlocking
@@ -396,7 +398,7 @@ class LiveBridgeTest {
         w2.until(30.seconds) { u -> (u as Update.Header).shown?.takeIf { it.undo == null } }
         val held = System.currentTimeMillis() - offeredAt
         println("the undo was offered for ${held} ms")
-        assertTrue(held >= me.raddatz.veyq.mobile.navigation.ShellModel.TRASH_UNDO_MS - 500, "the undo ended early")
+        assertTrue(held >= me.raddatz.veyq.mobile.composition.ShellModel.TRASH_UNDO_MS - 500, "the undo ended early")
         assertNull(node(fresh(), renamed))
 
         // the space's trash: listed, restored, read back; trashed once more, purged, gone from the trash
@@ -525,7 +527,7 @@ class LiveBridgeTest {
             b.watching(Watched.Move(again)).until(30.seconds) { u -> (u as Update.Move).shown?.takeIf { it.undo == null } }
             val held = System.currentTimeMillis() - offeredAt
             println("the move's undo was offered for $held ms")
-            assertTrue(held >= me.raddatz.veyq.mobile.navigation.ShellModel.TRASH_UNDO_MS - 500, "the undo ended early")
+            assertTrue(held >= me.raddatz.veyq.mobile.composition.ShellModel.TRASH_UNDO_MS - 500, "the undo ended early")
             assertEquals(folder.nodeId, nodes(fresh()).first { it.nodeId == potCopy.nodeId }.parentId)
             b.ask(Call.MoveClose(again))
 

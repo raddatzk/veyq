@@ -40,6 +40,8 @@ import kotlin.test.assertNotNull
  * kept with only its wrap moved, the banner's wraps moved inside the one meta core seals, a field no surface knows carried.
  */
 class MemoryRekeyTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val p = testPrimitives
     private val suite = V1(p)
     private val scope = "7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c"

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.okhttp.OkHttp
@@ -13,7 +14,7 @@ import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.Home
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.session.LiveRun
 import me.raddatz.veyq.mobile.session.NodeTrash
 import me.raddatz.veyq.mobile.session.Reach
@@ -92,7 +93,7 @@ class LiveOfflineTest {
                 val up = MediaUpload.upload(
                     tenant, scopeId, memory.nodeId,
                     MediaUpload.Original(ByteSource(photo.size.toLong()) { from, length -> photo.copyOfRange(from.toInt(), minOf(photo.size.toLong(), from + length).toInt()) }, "image/jpeg", "Offline photo $i.jpg", 1_000_000L * i),
-                    MediaUpload.Derived(photo, photo, null, null), System.currentTimeMillis(),
+                    Derivation.Derived(photo, photo, null, null), System.currentTimeMillis(),
                 )
                 assertEquals(MediaUpload.Outcome.DONE, up.outcome, up.code)
                 up.mediaId!!

@@ -1,5 +1,8 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.media.Derivation
+import me.raddatz.veyq.mobile.composition.AppleQueued
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
@@ -11,7 +14,7 @@ import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.session.Reach
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
@@ -35,6 +38,8 @@ import kotlin.test.assertTrue
  * true without the tray's answer (`runCatching { …; true }`) → the unknown id's case red.
  */
 class AppleQueuedTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest
@@ -49,9 +54,9 @@ class AppleQueuedTest {
         return null
     }
 
-    private val deriver = object : MediaUpload.Deriver {
-        override fun derive(source: UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) =
-            done(MediaUpload.Derived("p".encodeToByteArray(), "t".encodeToByteArray(), 4, 3))
+    private val deriver = object : Derivation.Deriver {
+        override fun derive(source: UploadSource, type: String, done: (Derivation.Derived) -> Unit) =
+            done(Derivation.Derived("p".encodeToByteArray(), "t".encodeToByteArray(), 4, 3))
     }
 
     @Test

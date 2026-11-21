@@ -29,6 +29,8 @@ import kotlin.test.assertTrue
  * until the tree is read anew, dropped when the tenant closes; offline built from what the device kept.
  */
 class ParticipantIndexTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val tenant = SpaceRef("t", "TENANT", "Family")
     private val group = SpaceRef("g", "GROUP", "Group")
     private val personal = SpaceRef("p", "PERSONAL", "Personal")

@@ -25,6 +25,8 @@ import kotlin.test.assertTrue
  * whose listing fails named *not searched*. Real `AppKinds.search`: a Memory's facets are read from its meta.
  */
 class SearchModelTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val s1 = SpaceRef("s1", "TENANT", "Family")
     private val s2 = SpaceRef("s2", "GROUP", "Club")
     private val key = ByteArray(32) { 1 }

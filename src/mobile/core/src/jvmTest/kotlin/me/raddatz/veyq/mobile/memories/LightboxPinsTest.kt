@@ -1,6 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals

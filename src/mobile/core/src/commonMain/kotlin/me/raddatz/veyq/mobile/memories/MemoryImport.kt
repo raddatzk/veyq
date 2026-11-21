@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -26,7 +27,7 @@ import me.raddatz.veyq.mobile.session.NodeMetaWrite
  * Memories' part in an import (ADR 0152 decision 3), a port of the web's `features/memories/exportImport.ts`
  * `validateMemoryContent` and `importMemoryContent`: the node (a Memory or a chapter) is created with its date and place
  * sealed at birth; each medium's checked original goes the way a picked one does — its tiers derived by the platform's
- * [MediaUpload.Deriver] (decoded, never held whole), its digest and metadata read ([MediaUpload.prepare]), the facts the
+ * [Derivation.Deriver] (decoded, never held whole), its digest and metadata read ([MediaUpload.prepare]), the facts the
  * bytes cannot carry restored and sealed at birth ([restored]) —, then the cover (its JPEG as it is) and the banner (its
  * files as they are; a banner that does not come back is a loss, never a failed import). Who was there and who added each
  * photo are not carried (ADR 0083).
@@ -153,7 +154,7 @@ object MemoryImport {
     }
 
     /** Memories' hook for [kind] (a Memory or a chapter): [deriver] the platform's tiers (null: an original goes alone). */
-    fun hook(kind: String, deriver: MediaUpload.Deriver?, now: () -> Long) = NodeImport.Hook(APPLICATION, SCHEMA, ::validate) { ctx ->
+    fun hook(kind: String, deriver: Derivation.Deriver?, now: () -> Long) = NodeImport.Hook(APPLICATION, SCHEMA, ::validate) { ctx ->
         val content = ctx.node.content ?: throw NodeImport.Failed("import_invalid_content")
         val tenant = ctx.session()
         val suite = tenant.account.suite
@@ -176,7 +177,7 @@ object MemoryImport {
             val source = UploadSource.of(name, ref.size, ref.mediaType, ref.modifiedAt) { from, length -> checked.read(from, length) }
             val original = MediaUpload.Original(source.bytes(), ref.mediaType, name, ref.modifiedAt)
             val prepared = MediaUpload.prepare(original, now()) { type ->
-                if (deriver == null) MediaUpload.Derived(null, null, null, null)
+                if (deriver == null) Derivation.Derived(null, null, null, null)
                 else suspendCancellableCoroutine { c -> deriver.derive(source, type) { d -> c.resume(d) { _, _, _ -> } } }
             }
             val withFacts = MediaUpload.Prepared(prepared.type, prepared.sha256, prepared.derived, restored(prepared.metaTier, m, prepared.type, name), prepared.exif)

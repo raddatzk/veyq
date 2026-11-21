@@ -13,6 +13,8 @@ import kotlin.test.assertNull
  * page, though a chapter is no object of a list (`NodeRef.asObject` gives none for it).
  */
 class GalleryPageTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     @Test
     fun a_chapter_row_and_a_node_made_open_as_memories_pages() {
         val chapter = NodeRef("s", "c1", "m", "CHAPTER", "Day one")

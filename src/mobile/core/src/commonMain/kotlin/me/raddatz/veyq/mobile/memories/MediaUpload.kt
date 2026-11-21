@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -30,7 +31,7 @@ import me.raddatz.veyq.mobile.session.TenantSession
  * A member's upload of one photo or video into a Memory or a chapter (the web's `media.ts` `addMedia`, `uploadMediaVia`):
  * on the device first, with no key — the original's SHA-256 read frame by frame, its metadata ([MediaMetadata]) —, then a
  * fresh medium id, its two tiers sealed under the node's key bound to it, and its blobs — the original and, where the
- * platform derived them ([Derived]), the `THUMBNAIL` and the `PREVIEW` JPEG — each under its own `K_blob` wrapped bound
+ * platform derived them ([Derivation.Derived]), the `THUMBNAIL` and the `PREVIEW` JPEG — each under its own `K_blob` wrapped bound
  * to the medium and its role (`blob-key` with `ownerId` the medium's id), reserved in one start request, sent frame by
  * frame direct to the store, and attached by one `media-batch` completion. At the node's epoch ([NodeEpochWrite]): a
  * re-keyed node is pulled forward and its key read again, and the whole medium is sealed again under it. An app runs it
@@ -57,32 +58,15 @@ object MediaUpload {
     /** What a platform hands over of a picked file: its bytes at any offset, its given type, name and modification time. */
     class Original(val source: ByteSource, val type: String?, val name: String?, val modifiedAt: Long?)
 
-    /**
-     * What the platform derived (the web's `mediaDeriver.ts`): the `PREVIEW` JPEG (long edge ≤ [PREVIEW_EDGE], quality
-     * [PREVIEW_QUALITY], upright) and the `THUMBNAIL` JPEG made from it (≤ [THUMBNAIL_EDGE], [THUMBNAIL_QUALITY]) — a video's
-     * poster, taken at [posterAtMs], as both —, and the size as it is shown (a video's only where its header names none);
-     * all null where the original does not decode here (it then goes alone).
-     */
-    class Derived(val preview: ByteArray?, val thumbnail: ByteArray?, val width: Int?, val height: Int?)
-
     enum class Outcome { DONE, NO_ROOM, SWITCHED_OFF, BUSY, FAILED }
 
     class Result(val outcome: Outcome, val mediaId: String? = null, val code: String? = null)
 
-    /**
-     * A platform's tiers of a picked photo or video (the web's `mediaDeriver.ts`): Android's `ImageDecoder` and
-     * `MediaMetadataRetriever`, Apple's ImageIO and AVFoundation. It calls [done] once, on any thread, with what it
-     * derived — [Derived]'s nulls where the original does not decode there.
-     */
-    interface Deriver {
-        fun derive(source: UploadSource, type: String, done: (Derived) -> Unit)
-    }
-
     /** What the device works out before anything is sent: no key, no request (the job's on-device stage). */
-    internal class Prepared(val type: String, val sha256: String, val derived: Derived, val metaTier: JsonObject?, val exif: JsonObject?)
+    internal class Prepared(val type: String, val sha256: String, val derived: Derivation.Derived, val metaTier: JsonObject?, val exif: JsonObject?)
 
     /** The type of [original] and its bytes' head, then its SHA-256 and metadata, with the tiers from [derive]. */
-    internal suspend fun prepare(original: Original, now: Long, derive: suspend (type: String) -> Derived): Prepared {
+    internal suspend fun prepare(original: Original, now: Long, derive: suspend (type: String) -> Derivation.Derived): Prepared {
         val head = original.source.read(0, minOf(original.source.size, SNIFF_BYTES.toLong()).toInt())
         val type = typeOf(original.type, original.name, head)
         val derived = derive(type)
@@ -101,7 +85,7 @@ object MediaUpload {
      */
     @Throws(Exception::class)
     suspend fun upload(
-        tenant: TenantSession, scopeId: String, nodeId: String, original: Original, derived: Derived, now: Long,
+        tenant: TenantSession, scopeId: String, nodeId: String, original: Original, derived: Derivation.Derived, now: Long,
         progress: (Double) -> Unit = {},
     ): Result = once(tenant, scopeId, nodeId, original, prepare(original, now) { derived }, progress)
 
@@ -113,7 +97,7 @@ object MediaUpload {
      */
     class Job(
         private val tenant: TenantSession, val scopeId: String, val nodeId: String, private val source: UploadSource,
-        private val deriver: Deriver, private val now: () -> Long,
+        private val deriver: Derivation.Deriver, private val now: () -> Long,
     ) : UploadQueue.Job {
         override val name get() = source.name
         override val sizeBytes get() = source.size
@@ -227,7 +211,7 @@ object MediaUpload {
     /** One medium sealed under [node]'s key, sent and completed; throws [ApplicationBlobs.UploadRefused] with a refusal's code. */
     private suspend fun attach(
         tenant: TenantSession, suite: V1, scopeId: String, node: OpenNode, original: Original, type: String, sha256: String,
-        derived: Derived, metaTier: JsonObject?, exif: JsonObject?, progress: (Double) -> Unit, sealed: SealedMedium? = null,
+        derived: Derivation.Derived, metaTier: JsonObject?, exif: JsonObject?, progress: (Double) -> Unit, sealed: SealedMedium? = null,
     ): Result {
         val mediaId = sealed?.mediaId ?: NodeCreate.uuid(tenant.account)
         val wrappedMeta = metaTier?.let { MediaMetadata.sealMeta(suite, node.key, scopeId, mediaId, it) }
@@ -333,7 +317,7 @@ object MediaUpload {
      * (the guest door's [attachAsGuest]). A quota fails it with [UploadQueue.QUOTA_EXCEEDED].
      */
     class GuestJob internal constructor(
-        private val source: UploadSource, private val deriver: Deriver, private val now: () -> Long,
+        private val source: UploadSource, private val deriver: Derivation.Deriver, private val now: () -> Long,
         private val send: suspend (original: Original, prepared: Prepared, progress: (Double) -> Unit) -> Result,
     ) : UploadQueue.Job {
         override val name get() = source.name

@@ -6,7 +6,7 @@ import me.raddatz.veyq.mobile.blob.deviceFiles
 import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.session.Reach
 import me.raddatz.veyq.mobile.session.SignInFailure
 import me.raddatz.veyq.mobile.session.TenantSession
@@ -36,6 +36,8 @@ import kotlin.test.assertTrue
  * (`AccountOffline.walk`) or hide a suspended tenant without dropping it (`AccountOffline.suspend`) → the bytes stay.
  */
 class OfflineReadPathTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     private fun play(files: DeviceFiles = SizedVolume(), clock: () -> Long = { 0L }) = PlayedTenant(files, clock).also { played += it }

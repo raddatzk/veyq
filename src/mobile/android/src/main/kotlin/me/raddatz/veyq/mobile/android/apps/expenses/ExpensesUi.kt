@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.android.apps.expenses
 
+import me.raddatz.veyq.mobile.expenses.PotGuest
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -67,7 +69,7 @@ private fun ExpensesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) 
  * #1035) — Settings as tabs of its own; the guest view has no bar.
  */
 @Composable
-private fun GuestPot(page: GuestPage.Pot, model: AppModel) {
+private fun GuestPot(page: PotGuest.Pot, model: AppModel) {
     DisposableEffect(page.model) {
         model.showGuestPot(page.model)
         onDispose { model.showGuestPot(null) }
@@ -104,7 +106,7 @@ internal object ExpensesUi {
     private val pot = KindPage(
         header = { node, model -> potHeader(node, model) },
         body = { ref, tab, model -> PotScreen(ref, tab, model) },
-        guest = { page, _, model, _ -> if (page is GuestPage.Pot) GuestPot(page, model) },
+        guest = { page, _, model, _ -> if (page is PotGuest.Pot) GuestPot(page, model) },
     )
 
     fun register(registry: Registry) {

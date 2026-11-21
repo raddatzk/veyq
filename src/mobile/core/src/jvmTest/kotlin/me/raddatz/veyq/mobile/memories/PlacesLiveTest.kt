@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +22,7 @@ import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.Home
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.offline.KeptRead
 import me.raddatz.veyq.mobile.offline.Pin
 import me.raddatz.veyq.mobile.session.AccountDoor
@@ -104,8 +105,8 @@ class PlacesLiveTest {
         val memory = assertNotNull(MemoryCreate.create(tenant, scopeId, null, MemoryCreate.MEMORY, name).node, "the Memory was not made").nodeId
         tenant.forgetTree()
         val queue = UploadQueue()
-        val uploads = shell.mediaUploads(queue, object : MediaUpload.Deriver {
-            override fun derive(source: UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) = done(MediaUpload.Derived(null, null, null, null))
+        val uploads = shell.mediaUploads(queue, object : Derivation.Deriver {
+            override fun derive(source: UploadSource, type: String, done: (Derivation.Derived) -> Unit) = done(Derivation.Derived(null, null, null, null))
         }, left = {}) {}
         val dir = Files.createTempDirectory("veyq-places-live").toFile()
         var pinned: VeyqAccount? = null
@@ -130,7 +131,7 @@ class PlacesLiveTest {
             assertEquals(MemoryFacts.Outcome.Written, MemoryFacts.setDate(tenant, scopeId, memory, MemoryDate.NONE))
             assertEquals(MemoryFacts.Outcome.Written, MemoryFacts.setLocation(tenant, scopeId, memory, MemoryLocation("Our trip", MemoryLocation.NameSource.MANUAL, null, MemoryLocation.DerivedMode.AUTO)))
             for ((file, label) in listOf("exif-sample.jpg" to "Munich.jpg", "exif-sample-fallbacks.jpg" to "Santiago.jpg")) {
-                val up = MediaUpload.upload(tenant, scopeId, memory, MediaUpload.Original(source(fixture(file)), "image/jpeg", label, 1_000_000), MediaUpload.Derived(null, null, null, null), System.currentTimeMillis())
+                val up = MediaUpload.upload(tenant, scopeId, memory, MediaUpload.Original(source(fixture(file)), "image/jpeg", label, 1_000_000), Derivation.Derived(null, null, null, null), System.currentTimeMillis())
                 assertEquals(MediaUpload.Outcome.DONE, up.outcome, up.code)
             }
             tenant.forgetTree()

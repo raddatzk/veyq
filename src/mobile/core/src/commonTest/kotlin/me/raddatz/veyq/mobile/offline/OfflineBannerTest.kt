@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.media.Derivation
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.blob.UploadSource
@@ -11,7 +12,7 @@ import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.session.OfflineAsOf
 import me.raddatz.veyq.mobile.session.TenantSession
 import me.raddatz.veyq.mobile.session.VeyqAccount
@@ -33,6 +34,8 @@ import kotlin.test.assertNotNull
  * lists' time.
  */
 class OfflineBannerTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest
@@ -126,8 +129,8 @@ class OfflineBannerTest {
         val shell = shellOf(tenant)
         shell.load(openLastUsed = false)
         val lists = assertNotNull(shell.current?.offline?.asOf)
-        val uploads = shell.mediaUploads(UploadQueue(), object : MediaUpload.Deriver {
-            override fun derive(source: UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) = Unit
+        val uploads = shell.mediaUploads(UploadQueue(), object : Derivation.Deriver {
+            override fun derive(source: UploadSource, type: String, done: (Derivation.Derived) -> Unit) = Unit
         }, {}, {})
         val gallery = shell.galleryModel(assertNotNull(shell.galleryAt(s.id, m.id)), uploads)
         val listing = assertNotNull(waitFor { gallery.current.offline?.asOf }, "the Memory opened from the store")

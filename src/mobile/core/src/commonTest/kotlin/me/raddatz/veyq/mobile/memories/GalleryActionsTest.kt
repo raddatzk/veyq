@@ -15,7 +15,7 @@ import me.raddatz.veyq.mobile.crypto.V1
 import me.raddatz.veyq.mobile.memories.MemoryRights.Access
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeRef
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.session.LivePoll
 import me.raddatz.veyq.mobile.session.ShareLinks
 import me.raddatz.veyq.mobile.words.Msg
@@ -35,6 +35,8 @@ import kotlin.test.assertTrue
  * the page, the slideshow's clock, a chapter made only on a Memory.
  */
 class GalleryActionsTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val memory = NodeAt("s", "m", "MEMORY", "Ostsee 2026")
     private val chapter = NodeAt("s", "c1", "CHAPTER", "Day one")
 

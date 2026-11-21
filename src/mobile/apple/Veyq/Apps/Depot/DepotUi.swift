@@ -30,7 +30,7 @@ enum DepotUi {
             }
         )
     }, body: { ref, _, model in AnyView(FileScreen(model: model, ref: ref)) }, guest: { page, _, model in
-        guard page is GuestPage.File else { return AnyView(EmptyView()) }
+        guard page is DepotGuest.File else { return AnyView(EmptyView()) }
         return AnyView(FileScreen(model: model, ref: .guest(page.node, .depot)))
     })
 
@@ -40,7 +40,7 @@ enum DepotUi {
             download: { await model.downloadNode(node, to: $0) }
         )
     }, body: { ref, _, model in AnyView(DropBoxScreen(model: model, ref: ref)) }, guest: { page, held, model in
-        guard let drop = page as? GuestPage.DropBox else { return AnyView(EmptyView()) }
+        guard let drop = page as? DepotGuest.DropBox else { return AnyView(EmptyView()) }
         return AnyView(GuestDropBoxView(model: model, held: held, drop: drop.model))
     })
 

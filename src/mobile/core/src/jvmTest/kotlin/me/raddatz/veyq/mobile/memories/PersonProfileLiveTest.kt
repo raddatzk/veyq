@@ -13,7 +13,7 @@ import me.raddatz.veyq.mobile.memories.people.PersonMemories
 import me.raddatz.veyq.mobile.memories.place.MemoryFacts
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.session.LiveRun
 import me.raddatz.veyq.mobile.session.NodeTrash
 import me.raddatz.veyq.mobile.session.Reach

@@ -6,6 +6,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class HiddenTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private var stored: Set<String> = emptySet()
     private fun hidden() = Hidden({ stored = it }, stored)
 

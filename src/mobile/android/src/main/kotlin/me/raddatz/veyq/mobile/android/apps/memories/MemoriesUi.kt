@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.android.apps.memories
 
+import me.raddatz.veyq.mobile.memories.MemoriesGuest
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -210,12 +212,12 @@ private fun MemoryGuestPage(page: GuestPage, screen: GuestScreen, model: AppMode
     val scope = rememberCoroutineScope()
     val view = screen.view
     when (page) {
-        is GuestPage.Gallery -> {
+        is MemoriesGuest.Gallery -> {
             val session = view.access?.session?.collectAsStateWithLifecycle()?.value
             DisposableEffect(page.model) { onDispose { page.model.close() } }
             MemoryGallery(page.model, model, guest = true, canAdd = session != null, onChapter = { c -> scope.launch(Dispatchers.IO) { view.open(c.nodeId) } })
         }
-        is GuestPage.Uploader -> GuestUploaderPage(page.model, view.access, model, snackbar)
+        is MemoriesGuest.Uploader -> GuestUploaderPage(page.model, view.access, model, snackbar)
         else -> {}
     }
 }

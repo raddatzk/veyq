@@ -29,6 +29,8 @@ import kotlin.test.assertTrue
  * dialog, the page in place or on its own, the two reports, *Back* that asks, and *Keep* only for a signed-in person.
  */
 class BookmarksTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val p = testPrimitives
     private val suite = V1(p)
     private val LINK = "https://photos.example.org:8443/s/" + "Ab3_-".padEnd(43, 'x') + "#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"

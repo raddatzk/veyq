@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.navigation
 
+import me.raddatz.veyq.mobile.composition.ShellModel
+
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -7,6 +9,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class ShellTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val pot = ObjectRef("s", "p", "EXPENSES_POT", ApplicationId.EXPENSES, "Sri Lanka")
     private val memory = ObjectRef("s", "m", "MEMORY", ApplicationId.MEMORIES, "Ostsee 2026")
 

@@ -326,8 +326,9 @@ class AccountOffline internal constructor(
             for (scope in scopes) {
                 // a scope's member list (ADR 0144 decision 7) is reached while the scope is the account's; a list refused drops itself
                 reached += key(KeptRead.MEMBERS, tenant, scope, scope)
-                // the space's media as the search reads them (ADR 0153 decision 7): kept while the scope is the account's
-                reached += key(KeptRead.SCOPE_MEDIA, tenant, scope, scope)
+                // what an application keeps per scope (a space's media as the search reads them, ADR 0153 decision 7): kept
+                // while the scope is the account's
+                for (part in me.raddatz.veyq.mobile.AppKinds.kept) for (read in part.perScope) reached += key(read, tenant, scope, scope)
                 val nodesKey = key(KeptRead.NODES, tenant, scope, scope)
                 reached += nodesKey
                 val rows = json(nodesKey).flatMap { it.array() }
@@ -361,21 +362,10 @@ class AccountOffline internal constructor(
      * `POT_REVISIONS`): a new one is added here in the same change.
      */
     private suspend fun belowNode(tenant: String, scope: String, node: String, into: MutableSet<EntryKey>) {
-        val media = key(KeptRead.NODE_MEDIA, tenant, scope, node)
-        into += media
-        for (row in json(media).flatMap { it.field("media").array() }) {
-            if (row.flag("blockedByOperator")) continue
-            row.text("blobId")?.let { into += blobKey(tenant, scope, it) }
-            for (d in row.field("derivatives").array()) d.text("blobId")?.let { into += blobKey(tenant, scope, it) }
-        }
-        // a Memory's marks and buckets (ADR 0149 decisions 4 and 6): its badges and its guests' names, kept as its listing is
-        into += key(KeptRead.ITEM_FAVORITES, tenant, scope, node)
-        into += key(KeptRead.NODE_BUCKETS, tenant, scope, node)
-        // a Pot's ledger (ADR 0153 decision 6): its receipts are its application blobs, below
-        into += key(KeptRead.POT_REVISIONS, tenant, scope, node)
-        val files = key(KeptRead.FILES, tenant, scope, node)
-        into += files
-        filesOf(files, tenant, scope, into, null)
+        // each application's listings below the node and the blobs they name (Memories' media, marks and buckets, a Pot's
+        // ledger, Depot's files: ADR 0140, 0149 and 0153)
+        val at = KeptReach(this, tenant, scope)
+        for (part in me.raddatz.veyq.mobile.AppKinds.kept) part.below(at, node, into)
         val blobs = key(KeptRead.APPLICATION_BLOBS, tenant, scope, node)
         into += blobs
         for (b in json(blobs).flatMap { it.field("blobs").array() }) {
@@ -385,15 +375,8 @@ class AccountOffline internal constructor(
     }
 
     /** The blobs folder listing [files] names, into [into]; [only]: of these file nodes alone. */
-    private suspend fun filesOf(files: EntryKey, tenant: String, scope: String, into: MutableSet<EntryKey>, only: Set<String>?) {
-        for (item in json(files).flatMap { it.field("items").array() }) {
-            if (only != null && item.text("nodeId") !in only) continue
-            item.field("fileBlob").text("blobId")?.let { into += blobKey(tenant, scope, it) }
-        }
-    }
-
     /** The pages kept under [key], parsed; none where nothing is kept. */
-    private suspend fun json(key: EntryKey): List<JsonElement> {
+    internal suspend fun json(key: EntryKey): List<JsonElement> {
         val bytes = store.get(key) ?: return emptyList()
         return runCatching { Pages.decode(bytes).map { JSON.parseToJsonElement(it.decodeToString()) } }.getOrDefault(emptyList())
     }
@@ -529,12 +512,11 @@ class AccountOffline internal constructor(
                 pin.covers[n]?.let { into += blobKey(pin.tenant, pin.scope, it) }
                 pin.named[n]?.forEach { into += blobKey(pin.tenant, pin.scope, it) }
             }
-            // a pinned file is listed in its folder's files (the space's top: ""): that listing is the pin's too, before it is kept
+            // what the pin reaches in its parent's listings (a pinned file in its folder's files, the space's top: ""), before
+            // that listing is kept
             val row = rows.firstOrNull { it.text("id") == pin.node }
-            val parent = key(KeptRead.FILES, pin.tenant, pin.scope, row?.text("parentId") ?: "")
-            val own = HashSet<EntryKey>()
-            filesOf(parent, pin.tenant, pin.scope, own, only = below)
-            if (own.isNotEmpty() || row?.text("kind") == FILE_KIND) into += own + parent
+            val at = KeptReach(this, pin.tenant, pin.scope)
+            for (part in me.raddatz.veyq.mobile.AppKinds.kept) part.inParent(at, row?.text("parentId") ?: "", pin.node, row?.text("kind"), below, into)
             for (k in into) out.getOrPut(k) { HashSet() } += pin.node
         }
         return out.also { reachCache = it }
@@ -614,9 +596,6 @@ class AccountOffline internal constructor(
         /** The defaults the hosts pass (owner 2026-11-15): 2 GB on a phone, 10 GB on a desktop. */
         const val PHONE_LIMIT = 2_000_000_000L
         const val DESKTOP_LIMIT = 10_000_000_000L
-
-        /** A Depot file's node kind: its content is listed in its folder's files (`listFiles`, [KeptRead.FILES]). */
-        private const val FILE_KIND = "FILE"
 
         /** Neither tier writes while the volume has less than this share free. */
         private const val FLOOR_PERCENT = 5

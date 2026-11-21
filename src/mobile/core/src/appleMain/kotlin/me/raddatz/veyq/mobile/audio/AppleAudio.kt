@@ -3,16 +3,10 @@ package me.raddatz.veyq.mobile.audio
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
-import me.raddatz.veyq.mobile.blob.FileSink
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.blob.Sniff
 import me.raddatz.veyq.mobile.crypto.V1
-import me.raddatz.veyq.mobile.blob.FileSave
-import me.raddatz.veyq.mobile.memories.music.MusicModel
 import platform.Foundation.NSData
 import platform.posix.memcpy
 import kotlin.coroutines.resume
@@ -60,28 +54,9 @@ object AppleAudio {
     }
 
     /**
-     * Track [mediaId] of [music] saved at [path] (`MusicModel.save` into core's [FileSink], which leaves nothing at [path]
-     * when it did not finish), awaited to its end; null where it may not be saved.
-     */
-    @Throws(Exception::class)
-    suspend fun save(music: MusicModel, mediaId: String, path: String): FileSave.End? {
-        val save = music.save(mediaId) { produce ->
-            withContext(Dispatchers.Default) { FileSink.write(path, kept = { it }) { sink -> produce(sink) } }
-        } ?: return null
-        return save.state.first { it.end != null }.end
-    }
-
-    /**
      * A reader over [data] held in memory, cut into the frames a sealed blob has (debug only: the format matrix runs the
      * deck over the same reader a track is played through, without a server).
      */
-    /**
-     * A decoded end of a picked track ([pcm]: interleaved 32-bit float, as `AVAudioFile` reads it) as the WAV the core's
-     * silence scan reads (inbox #932, `MusicUpload.Measure.ends`), copied once.
-     */
-    fun floatWav(pcm: NSData, channels: Int, sampleRate: Int): ByteArray =
-        me.raddatz.veyq.mobile.memories.music.PcmWav.of(me.raddatz.veyq.mobile.account.AppleKit.bytes(pcm), channels, sampleRate, 32, float = true)
-
     fun reader(data: NSData): RangeReader {
         val bytes = ByteArray(data.length.toInt())
         if (bytes.isNotEmpty()) bytes.usePinned { memcpy(it.addressOf(0), data.bytes, data.length) }

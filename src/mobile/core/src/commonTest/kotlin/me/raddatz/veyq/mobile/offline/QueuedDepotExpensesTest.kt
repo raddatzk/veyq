@@ -1,5 +1,8 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.composition.QueuedOpen
+import me.raddatz.veyq.mobile.composition.QueuedTray
+
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpMethod
 import io.ktor.http.content.OutgoingContent
@@ -50,6 +53,8 @@ import kotlin.test.assertTrue
  * ([seen] ignored) → [the_revision_names_the_heads_the_person_read_not_the_ones_found_at_the_send] red.
  */
 class QueuedDepotExpensesTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest

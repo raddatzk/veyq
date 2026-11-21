@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.expenses
 
+import me.raddatz.veyq.mobile.navigation.NodeAt
 import io.ktor.client.statement.bodyAsText
 import me.raddatz.veyq.mobile.api.apis.ShareApplicationBlobsApi
 import me.raddatz.veyq.mobile.api.expenses.apis.ShareExpensesApi
@@ -28,6 +29,9 @@ import me.raddatz.veyq.mobile.sharing.GuestView
  * `expensesRights` guest rows: entries, adding and renaming people); no settings, no members, no member's names.
  */
 object PotGuest {
+    /** A Pot as a link's guest sees it: its page over the link's Pot reads. */
+    class Pot(override val node: NodeAt, val model: PotModel) : GuestPage()
+
     /**
      * Whether a guest of [access] is offered *Add entry* (ADR 0154 decision 1, the web's rule): the link is READ_WRITE — a
      * guest not named yet is asked its name at the write ([GuestAccess.naming]). No platform reads a role or a name.
@@ -37,7 +41,7 @@ object PotGuest {
     val pot = GuestDoor { access, node, _: GuestView ->
         val opened = access.tree?.node(node.nodeId)?.takeIf { it.kind == PotSession.KIND } ?: return@GuestDoor GuestPage.NotShown(node)
         val door = GuestPotDoor(access)
-        GuestPage.Pot(node, PotModel(null, access.now, { ref: ObjectRef -> if (ref.nodeId == opened.id) PotModel.SessionOpened(PotSession.open(door, opened)) else null }))
+        PotGuest.Pot(node, PotModel(null, access.now, { ref: ObjectRef -> if (ref.nodeId == opened.id) PotModel.SessionOpened(PotSession.open(door, opened)) else null }))
     }
 }
 

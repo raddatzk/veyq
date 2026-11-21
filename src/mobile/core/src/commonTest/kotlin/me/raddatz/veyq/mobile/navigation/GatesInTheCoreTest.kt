@@ -1,5 +1,11 @@
 package me.raddatz.veyq.mobile.navigation
 
+import me.raddatz.veyq.mobile.media.Derivation
+import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.composition.DropOutcome
+import me.raddatz.veyq.mobile.composition.DropTarget
+import me.raddatz.veyq.mobile.composition.Dropped
+
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.blob.UploadQueue
@@ -39,6 +45,8 @@ import kotlin.test.assertTrue
  * notice ([NameAnswer] collapsed back to one notice) → [a_name_problem_keeps_the_dialog_open_a_refusal_and_a_thrown_error_close_it] red.
  */
 class GatesInTheCoreTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest
@@ -148,8 +156,8 @@ class GatesInTheCoreTest {
     fun the_gallery_drop_keeps_its_media_and_names_the_rest() = runTest {
         lateinit var memory: PlayedTenant.Node
         val o = opened { s -> memory = node(s, "m", name = "Summer") }
-        val uploads = o.shell.mediaUploads(UploadQueue(), object : MediaUpload.Deriver {
-            override fun derive(source: UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) = Unit
+        val uploads = o.shell.mediaUploads(UploadQueue(), object : Derivation.Deriver {
+            override fun derive(source: UploadSource, type: String, done: (Derivation.Derived) -> Unit) = Unit
         }, {}, {})
         val gallery = o.shell.galleryModel(assertNotNull(o.shell.galleryAt(memory.scope.id, memory.id)), uploads)
         assertNotNull(waitFor { gallery.takesUploads.takeIf { it } }, "the owner's Memory takes no upload")

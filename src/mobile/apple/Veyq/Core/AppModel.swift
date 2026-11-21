@@ -184,6 +184,8 @@ final class AppModel {
     typealias Opened = SessionModelOpened<VeyqAccount, TenantSession>
 
     init(inExtension: Bool = false) {
+        // each application's part of the core's registry, before any session opens (AppComposition, ADR 0154 decision 3)
+        AppComposition.shared.install()
         self.inExtension = inExtension
         device = inExtension ? Self.makeDevice(inExtension: true) : Self.appDevice
         let stored = Shared.defaults.stringArray(forKey: "veyq.recent") ?? []
@@ -1531,8 +1533,8 @@ final class AppModel {
     var musicCommands: (any PlayerCommands)? { musicPlayer }
 
     /// What a gallery plays its music with: the account's player, an untitled track named by its number.
-    private var galleryMusic: GalleryModel.Music? {
-        musicPlayer.map { GalleryModel.Music(player: $0, untitled: { @Sendable n in say(.musicUntitled, n) }) }
+    private var galleryMusic: PageMusic? {
+        musicPlayer.map { PageMusic(player: $0, untitled: { @Sendable n in say(.musicUntitled, n) }) }
     }
 
     private func openMusic(_ m: ShellModel, switched: Bool) {
@@ -1543,7 +1545,7 @@ final class AppModel {
 
     /// What a guest's Memory plays its music with (#1034): the account's player, or — signed out — one made for the links,
     /// which the music bar draws as it draws the account's.
-    func guestMusic() -> GalleryModel.Music? {
+    func guestMusic() -> PageMusic? {
         if musicPlayer == nil { holdMusic(AppleSharing.shared.musicPlayer(newDeck: { AVDeck.make($0) }, controls: SystemMusicControls())) }
         return galleryMusic
     }
@@ -2526,19 +2528,19 @@ final class AppModel {
     /// guest's model is held in the shell's place while it shows (ADR 0150 decision 5: share view = member view).
     func adoptGuestPage(_ page: GuestPage) {
         switch page {
-        case let g as GuestPage.Gallery:
+        case let g as MemoriesGuest.Gallery:
             if openGallery?.model !== g.model {
                 closeGallery()
                 galleryShown = nil
                 holdGallery(g.model)
             }
-        case let f as GuestPage.File:
+        case let f as DepotGuest.File:
             if openFile?.model !== f.model {
                 closeFile()
                 fileShown = nil
                 holdFile(f.model)
             }
-        case let p as GuestPage.Pot:
+        case let p as PotGuest.Pot:
             if memberPot == nil { memberPot = (potModel, potWatch) } else { potWatch?.stop() }
             potModel = p.model
             potWatch = p.model.watch { @Sendable _ in
@@ -2554,21 +2556,21 @@ final class AppModel {
     /// A link's page `page` left: its model goes, the member's place is the shell's again.
     func releaseGuestPage(_ page: GuestPage) {
         switch page {
-        case let g as GuestPage.Gallery:
+        case let g as MemoriesGuest.Gallery:
             if openGallery?.model === g.model {
                 closeGallery()
                 galleryShown = nil
             } else {
                 g.model.close()
             }
-        case let f as GuestPage.File:
+        case let f as DepotGuest.File:
             if openFile?.model === f.model {
                 closeFile()
                 fileShown = nil
             } else {
                 f.model.close()
             }
-        case let p as GuestPage.Pot:
+        case let p as PotGuest.Pot:
             if potModel === p.model, let member = memberPot {
                 potWatch?.stop()
                 potModel = member.model

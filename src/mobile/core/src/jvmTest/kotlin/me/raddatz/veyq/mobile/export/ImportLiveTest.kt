@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.export
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
@@ -68,8 +69,8 @@ class ImportLiveTest {
             val folder = (FolderCreate.create(tenant, scopeId, null, "App import $n") as NodeCreate.Result.Done).created.nodeId
             val photo = entries.getValue("Trip/Lisbon/IMG_0001.jpg")
             // the platform's tiers, played: the photo stands in for its own preview and thumbnail
-            val deriver = object : MediaUpload.Deriver {
-                override fun derive(source: UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) = done(MediaUpload.Derived(photo, photo, 640, 480))
+            val deriver = object : Derivation.Deriver {
+                override fun derive(source: UploadSource, type: String, done: (Derivation.Derived) -> Unit) = done(Derivation.Derived(photo, photo, 640, 480))
             }
             val kinds = AppKinds.imports("Deleted people", { NodeCreate.uuid(tenant.account) }, deriver) { System.currentTimeMillis() }
             suspend fun import(): SubtreeImport.Result {

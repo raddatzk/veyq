@@ -184,7 +184,7 @@ internal class TenantPotDoor(private val tenant: TenantSession) : PotDoor {
      */
     internal suspend fun whole(node: OpenNode): PotDoor.Read {
         val read = try {
-            account.kept(KeptRead.POT_REVISIONS, tenant.tenant.tenantId, node.scopeId, node.id, conditional = true) { tag -> pages(node, tag) }
+            account.kept(ExpensesKept.POT_REVISIONS, tenant.tenant.tenantId, node.scopeId, node.id, conditional = true) { tag -> pages(node, tag) }
         } catch (e: me.raddatz.veyq.mobile.session.VeyqAccount.Refused) {
             throw SignInFailure(SignInFailure.Reason.PROTOCOL, "pot revisions ${e.status}")
         }

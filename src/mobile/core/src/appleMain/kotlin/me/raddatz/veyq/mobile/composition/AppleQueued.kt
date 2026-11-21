@@ -1,5 +1,6 @@
-package me.raddatz.veyq.mobile.offline
+package me.raddatz.veyq.mobile.composition
 
+import me.raddatz.veyq.mobile.offline.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -13,7 +14,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.raddatz.veyq.mobile.blob.FileSink
-import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.words.Notice
 
 /**

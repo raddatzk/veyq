@@ -2,6 +2,8 @@
 
 package me.raddatz.veyq.mobile.bridge
 
+import me.raddatz.veyq.mobile.media.Derivation
+
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -260,13 +262,13 @@ internal class PathSource(val path: String, private val inner: UploadSource) :
 internal class HostTiers(
     private val host: Host,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
-) : MediaUpload.Deriver {
-    override fun derive(source: UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) {
+) : Derivation.Deriver {
+    override fun derive(source: UploadSource, type: String, done: (Derivation.Derived) -> Unit) {
         val path = (source as? PathSource)?.path ?: return done(NONE)
         scope.launch { done(runCatching { tiers(path, type) }.getOrDefault(NONE)) }
     }
 
-    private fun tiers(path: String, type: String): MediaUpload.Derived {
+    private fun tiers(path: String, type: String): Derivation.Derived {
         val at = if (type.startsWith("video/")) {
             MediaUpload.posterAtMs((host.ask(HostRequest.MediaDuration(path)) as? HostReply.Value)?.value?.toLongOrNull() ?: 0L)
         } else {
@@ -284,13 +286,13 @@ internal class HostTiers(
             packed?.fill(0)
             return NONE
         }
-        return MediaUpload.Derived(packed.copyOfRange(0, t.previewSize), packed.copyOfRange(t.previewSize, packed.size), t.width, t.height)
+        return Derivation.Derived(packed.copyOfRange(0, t.previewSize), packed.copyOfRange(t.previewSize, packed.size), t.width, t.height)
             .also { packed.fill(0) }
     }
 
     companion object {
         /** No tiers: the original goes up alone. */
-        val NONE = MediaUpload.Derived(null, null, null, null)
+        val NONE = Derivation.Derived(null, null, null, null)
     }
 }
 
@@ -335,8 +337,8 @@ internal object NoBannerPictures : me.raddatz.veyq.mobile.memories.banner.Banner
 }
 
 /** A composition that derives no tiers (a test's that plays none): every original goes up alone. */
-internal object NoTiers : MediaUpload.Deriver {
-    override fun derive(source: UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) = done(HostTiers.NONE)
+internal object NoTiers : Derivation.Deriver {
+    override fun derive(source: UploadSource, type: String, done: (Derivation.Derived) -> Unit) = done(HostTiers.NONE)
 }
 
 /** A composition that draws nothing (a test's that plays none, and a kit file that did not read: nothing to draw). */

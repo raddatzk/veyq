@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.navigation
 
+import me.raddatz.veyq.mobile.composition.ShellModel
+
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.TestScope
@@ -24,6 +26,8 @@ import kotlin.test.assertTrue
 
 /** A node's header both apps drew (ADR 0136 decision 2): its rights, pin, trash with its undo, rename — over a door the test plays. */
 class NodeHeaderModelTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val folder = NodeAt("s", "f", "FOLDER", "Trip")
     private val pot = NodeAt("s", "p", "EXPENSES_POT", "Rome")
     private val file = NodeAt("s", "x", "FILE", "a.txt")
@@ -51,11 +55,11 @@ class NodeHeaderModelTest {
             if (stores) pinned = pinned?.not()
             return stores
         }
-        override suspend fun trash(ref: NodeAt) = ShellModel.Trashed(
+        override suspend fun trash(ref: NodeAt) = NodeHeaderModel.Trashed(
             trashed, Notices.trashed(trashed, ref.name), OpenNode(ref.scopeId, ref.nodeId, null, ref.kind, ref.name, ByteArray(32)),
         )
         override suspend fun undoTrash(node: OpenNode): Notice? { restored += node.id; return null }
-        override suspend fun rename(ref: NodeAt, name: String) = ShellModel.Renamed(renamed, Notices.renameRefused(renamed))
+        override suspend fun rename(ref: NodeAt, name: String) = NodeHeaderModel.Renamed(renamed, Notices.renameRefused(renamed))
         override fun closeOpen(ref: NodeAt) { closed += ref }
         override fun changed() { changes++ }
         var stored: NodeCover.Crop? = null

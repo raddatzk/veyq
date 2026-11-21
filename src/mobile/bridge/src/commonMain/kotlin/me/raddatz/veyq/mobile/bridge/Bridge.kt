@@ -2,6 +2,11 @@
 
 package me.raddatz.veyq.mobile.bridge
 
+import me.raddatz.veyq.mobile.depot.replaceAsking
+
+import me.raddatz.veyq.mobile.expenses.entryProblem
+import me.raddatz.veyq.mobile.media.Derivation
+
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import kotlinx.coroutines.CancellationException
@@ -44,7 +49,7 @@ import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeHeaderModel
 import me.raddatz.veyq.mobile.navigation.TrashSheet
 import me.raddatz.veyq.mobile.navigation.MoveSheet
-import me.raddatz.veyq.mobile.navigation.ShareSheet
+import me.raddatz.veyq.mobile.composition.ShareSheet
 import me.raddatz.veyq.mobile.navigation.ReportSheet
 import me.raddatz.veyq.mobile.session.CoverFrame
 import me.raddatz.veyq.mobile.session.NodeCover
@@ -56,7 +61,7 @@ import me.raddatz.veyq.mobile.words.Notices
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.navigation.ShellWords
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.navigation.UseKey
@@ -106,10 +111,10 @@ internal class Composition<A : Connection, T : Any>(
      */
     val settings: (session: SessionModel<A, T>, account: A, separator: Char) -> AccountSettings<A, T>? = { _, _, _ -> null },
     /**
-     * How a Memories upload's tiers are made (`MediaUpload.Deriver`): asked of the host in the library ([HostTiers]); a test
+     * How a Memories upload's tiers are made (`Derivation.Deriver`): asked of the host in the library ([HostTiers]); a test
      * plays the host, or has none (every original goes up alone).
      */
-    val tiers: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver = NoTiers,
+    val tiers: me.raddatz.veyq.mobile.media.Derivation.Deriver = NoTiers,
     /**
      * How a picked banner is decoded for its previews and its upload (`BannerWrite.Pictures`): asked of the host in the
      * library ([HostBannerPictures], its upload tiers' request with the cover's spec); a test plays the host, or has none
@@ -161,13 +166,13 @@ internal class Composition<A : Connection, T : Any>(
     val received: (
         link: me.raddatz.veyq.mobile.sharing.ReceivedLink.ShareLink, queue: me.raddatz.veyq.mobile.blob.UploadQueue, password: String?,
         /** The player a guest's Memory plays its music with (#1034): the open tenant's, where one plays. */
-        music: me.raddatz.veyq.mobile.memories.GalleryModel.Music?,
+        music: me.raddatz.veyq.mobile.audio.PageMusic?,
     ) -> me.raddatz.veyq.mobile.sharing.GuestView? = { _, _, _, _ -> null },
     /**
      * What is asked before [loss] deletes account [account]'s writes made offline ([Call.QueuedAskFor]): `QueuedTray.ask`
      * over that account in the library; a test plays one, or has none (nothing asked).
      */
-    val queuedAsk: suspend (account: A, loss: me.raddatz.veyq.mobile.offline.QueuedLoss) -> me.raddatz.veyq.mobile.offline.QueuedAsk? = { _, _ -> null },
+    val queuedAsk: suspend (account: A, loss: me.raddatz.veyq.mobile.composition.QueuedLoss) -> me.raddatz.veyq.mobile.composition.QueuedAsk? = { _, _ -> null },
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
@@ -255,9 +260,9 @@ internal class Tenant(
      * uploads (null: none), a file not kept handed to its `left`; a test's tenant plays one.
      */
     val drop: (suspend (
-        target: me.raddatz.veyq.mobile.navigation.DropTarget, items: List<me.raddatz.veyq.mobile.navigation.Dropped>,
+        target: me.raddatz.veyq.mobile.composition.DropTarget, items: List<me.raddatz.veyq.mobile.composition.Dropped>,
         depot: me.raddatz.veyq.mobile.depot.DepotUploads?, left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit, deletedName: String,
-    ) -> me.raddatz.veyq.mobile.navigation.DropOutcome)? = shell?.let { s ->
+    ) -> me.raddatz.veyq.mobile.composition.DropOutcome)? = shell?.let { s ->
         { target, items, depot, left, deletedName -> s.drop(target, items, depot, left, deletedName) }
     },
     /** A node's move or copy sheet (`ShellModel.moveSheet`), a Pot's copy by the open Pot model handed in. */
@@ -288,7 +293,7 @@ internal class Tenant(
      * the open file pages read anew); a test's tenant plays one over a door of its own.
      */
     val uploads: ((
-        queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver, changed: () -> Unit,
+        queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.media.Derivation.Deriver, changed: () -> Unit,
     ) -> me.raddatz.veyq.mobile.depot.DepotUploads)? =
         // a desktop offers a download's import at its uploads (ADR 0152 decision 1): each bridge host is one
         shell?.let { s -> { queue, deriver, changed -> s.depotUploadsImporting(queue, deriver, changed) } },
@@ -298,7 +303,7 @@ internal class Tenant(
      * needs nothing done. A test's tenant plays one over a door of its own.
      */
     val mediaUploads: ((
-        queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver, changed: () -> Unit,
+        queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.media.Derivation.Deriver, changed: () -> Unit,
     ) -> me.raddatz.veyq.mobile.memories.MediaUploads)? =
         shell?.let { s -> { queue, deriver, changed -> s.mediaUploads(queue, deriver, left = {}, changed = changed) } },
     /**
@@ -306,7 +311,7 @@ internal class Tenant(
      * [music] (the account's player; null: none).
      */
     val gallery: ((
-        node: NodeAt, uploads: me.raddatz.veyq.mobile.memories.MediaUploads, music: me.raddatz.veyq.mobile.memories.GalleryModel.Music?,
+        node: NodeAt, uploads: me.raddatz.veyq.mobile.memories.MediaUploads, music: me.raddatz.veyq.mobile.audio.PageMusic?,
     ) -> me.raddatz.veyq.mobile.memories.GalleryModel)? =
         shell?.let { s -> { node, uploads, music -> s.galleryModel(node, uploads, music) } },
     /** A page's Contributions view (`ShellModel.contributions`, ADR 0149 decision 6); a test's tenant plays one over its own door. */
@@ -491,15 +496,15 @@ internal class HeldDropBox(val page: me.raddatz.veyq.mobile.depot.DropBoxPage) {
  * the level shown holds not sent yet ([here]). Over a shell ([of]); a test plays one.
  */
 internal class QueuedDoor(
-    val items: Flow<List<me.raddatz.veyq.mobile.offline.QueuedItem>>,
+    val items: Flow<List<me.raddatz.veyq.mobile.composition.QueuedItem>>,
     val discard: suspend (id: String) -> Boolean,
-    val opens: suspend (id: String) -> me.raddatz.veyq.mobile.offline.QueuedOpen?,
+    val opens: suspend (id: String) -> me.raddatz.veyq.mobile.composition.QueuedOpen?,
     val copyName: suspend (id: String, index: Int) -> Pair<String?, String?>?,
     val saveCopy: suspend (id: String, index: Int, sink: suspend (ByteArray) -> Unit) -> Boolean,
-    val ask: suspend (loss: me.raddatz.veyq.mobile.offline.QueuedLoss) -> me.raddatz.veyq.mobile.offline.QueuedAsk?,
+    val ask: suspend (loss: me.raddatz.veyq.mobile.composition.QueuedLoss) -> me.raddatz.veyq.mobile.composition.QueuedAsk?,
     val banner: Flow<Notice?>,
     val sent: Flow<List<Notice>>,
-    val here: Flow<List<me.raddatz.veyq.mobile.offline.QueuedItem>>,
+    val here: Flow<List<me.raddatz.veyq.mobile.composition.QueuedItem>>,
 ) {
     companion object {
         fun of(shell: ShellModel): QueuedDoor {
@@ -514,7 +519,7 @@ internal class QueuedDoor(
 
 /** What the shell's state carries of the writes made offline ([ShellShown.queuedBanner], `queuedHere`, `queuedSaid`). */
 internal class QueuedBeside(
-    val banner: Notice? = null, val here: List<me.raddatz.veyq.mobile.offline.QueuedItem> = emptyList(), val said: List<Notice> = emptyList(),
+    val banner: Notice? = null, val here: List<me.raddatz.veyq.mobile.composition.QueuedItem> = emptyList(), val said: List<Notice> = emptyList(),
 )
 
 /** An entry editor the host opened on Pot [pot] ([Call.EditorOpen]), typed in with [separator]. */
@@ -611,6 +616,9 @@ private class Open<A : Connection>(val models: Tenant, val account: A, val tenan
  * request it makes (the store's first read) never waits on the thread that started the core.
  */
 internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>) {
+    // each application's part of the core's registry, before any session opens (ADR 0154 decision 3)
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val parts = scope.async { compose() }
 
@@ -1385,7 +1393,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 ) return Answer.Refused(Answer.Why.NOT_OFFERED)
                 val id = ids.incrementAndFetch()
                 val audio = parts.audio
-                val music = player.value?.let { p -> audio?.let { a -> me.raddatz.veyq.mobile.memories.GalleryModel.Music(p, a::untitled) } }
+                val music = player.value?.let { p -> audio?.let { a -> me.raddatz.veyq.mobile.audio.PageMusic(p, a::untitled) } }
                 galleries.put(id, make(call.node, uploads, music))
                 Answer.GalleryOpened(id)
             } ?: noTenant
@@ -2221,8 +2229,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noBookmark = Answer.Refused(Answer.Why.NO_SUCH_BOOKMARK)
 
     /** The player a guest's Memory plays its music with: the open tenant's, where one plays (the members' galleries' own). */
-    private fun music(parts: Composition<A, T>): me.raddatz.veyq.mobile.memories.GalleryModel.Music? =
-        player.value?.let { p -> parts.audio?.let { a -> me.raddatz.veyq.mobile.memories.GalleryModel.Music(p, a::untitled) } }
+    private fun music(parts: Composition<A, T>): me.raddatz.veyq.mobile.audio.PageMusic? =
+        player.value?.let { p -> parts.audio?.let { a -> me.raddatz.veyq.mobile.audio.PageMusic(p, a::untitled) } }
 
     /** Whether space [scopeId] of the open tenant is a group space's (its bookmark dialog says who else opens the link). */
     private suspend fun groupSpace(scopeId: String): Boolean =
@@ -2301,8 +2309,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             val sources = call.paths.mapNotNull { parts.files.source(it) }
             if (sources.isEmpty()) return Answer.Refused(Answer.Why.NO_SUCH_PATH)
             val sent = when (val page = h.screen.view.page.value) {
-                is me.raddatz.veyq.mobile.sharing.GuestPage.DropBox -> page.model.upload(sources)
-                is me.raddatz.veyq.mobile.sharing.GuestPage.Uploader -> page.model.upload(sources)
+                is me.raddatz.veyq.mobile.depot.DepotGuest.DropBox -> page.model.upload(sources)
+                is me.raddatz.veyq.mobile.memories.MemoriesGuest.Uploader -> page.model.upload(sources)
                 // a READ_WRITE guest's files into the folder on screen (#1034), each its own file
                 is me.raddatz.veyq.mobile.sharing.GuestPage.Level -> page.model.uploadAsking(sources)
                 else -> 0
@@ -2311,7 +2319,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             taken(sent > 0)
         } ?: noReceived
         is Call.ReceivedReplace -> received[call.received]?.let { h ->
-            val page = h.screen.view.page.value as? me.raddatz.veyq.mobile.sharing.GuestPage.File ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+            val page = h.screen.view.page.value as? me.raddatz.veyq.mobile.depot.DepotGuest.File ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
             val access = h.screen.view.access ?: return noReceived
             val source = parts.files.source(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
             // the core's rule alone (`FileRights`, the role, the name asked at the write): no role or session read here
@@ -2398,22 +2406,23 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 ReceivedPageKind.LEVEL, node.name, node.kind, page.model.rows.map { ReceivedRow(it.nodeId, it.kind, it.name, it.identity) },
                 null, null, null, emptyList(), writes = page.model.writes,
             )
-            is me.raddatz.veyq.mobile.sharing.GuestPage.File -> shown(ReceivedPageKind.FILE, file = ids.incrementAndFetch().also { filePages.put(it, page.model) })
-            is me.raddatz.veyq.mobile.sharing.GuestPage.Gallery -> shown(ReceivedPageKind.GALLERY, gallery = ids.incrementAndFetch().also { galleries.put(it, page.model) })
-            is me.raddatz.veyq.mobile.sharing.GuestPage.Pot -> {
+            is me.raddatz.veyq.mobile.depot.DepotGuest.File -> shown(ReceivedPageKind.FILE, file = ids.incrementAndFetch().also { filePages.put(it, page.model) })
+            is me.raddatz.veyq.mobile.memories.MemoriesGuest.Gallery -> shown(ReceivedPageKind.GALLERY, gallery = ids.incrementAndFetch().also { galleries.put(it, page.model) })
+            is me.raddatz.veyq.mobile.expenses.PotGuest.Pot -> {
                 val id = ids.incrementAndFetch()
                 pots.put(id, page.model)
                 h.screen.view.access?.tree?.node(node.nodeId)?.asObject()?.let { ref -> scope.launch { page.model.open(ref) } }
                 shown(ReceivedPageKind.POT, pot = id)
             }
             // what a WRITE_ONLY guest sent shows as it settles: the page follows the model's list while it stands
-            is me.raddatz.veyq.mobile.sharing.GuestPage.DropBox -> shown(ReceivedPageKind.DROP_BOX, sent = page.model.sent.value).also { first ->
+            is me.raddatz.veyq.mobile.depot.DepotGuest.DropBox -> shown(ReceivedPageKind.DROP_BOX, sent = page.model.sent.value).also { first ->
                 h.sending = scope.launch { page.model.sent.collect { sent -> h.page.value = ReceivedPage(first.kind, first.name, first.nodeKind, first.rows, null, null, null, sent) } }
             }
-            is me.raddatz.veyq.mobile.sharing.GuestPage.Uploader -> shown(ReceivedPageKind.UPLOADER, sent = page.model.sent.value.map { it.name }).also { first ->
+            is me.raddatz.veyq.mobile.memories.MemoriesGuest.Uploader -> shown(ReceivedPageKind.UPLOADER, sent = page.model.sent.value.map { it.name }).also { first ->
                 h.sending = scope.launch { page.model.sent.collect { sent -> h.page.value = ReceivedPage(first.kind, first.name, first.nodeKind, first.rows, null, null, null, sent.map { it.name }) } }
             }
-            is me.raddatz.veyq.mobile.sharing.GuestPage.NotShown -> shown(ReceivedPageKind.NOT_SHOWN)
+            // a kind this build shows no guest, and any page an application adds before the bridge draws it
+            else -> shown(ReceivedPageKind.NOT_SHOWN)
         }
     }
 
@@ -3358,29 +3367,29 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      */
     private suspend fun drop(parts: Composition<A, T>, call: Call.Drop): Answer {
         // a gallery's drop needs no tenant (a signed-out link's guest has none): judged by the gallery's rights alone
-        val gallery = (call.on as? DropOn.Gallery)?.let { on -> me.raddatz.veyq.mobile.navigation.DropTarget.Gallery(galleries[on.gallery] ?: return noGallery) }
+        val gallery = (call.on as? DropOn.Gallery)?.let { on -> me.raddatz.veyq.mobile.composition.DropTarget.Gallery(galleries[on.gallery] ?: return noGallery) }
         val drop = if (gallery != null) null else tenant.value?.models?.drop ?: return noTenant
         val target = when (val on = call.on) {
-            is DropOn.Level -> me.raddatz.veyq.mobile.navigation.DropTarget.Level(on.label)
-            is DropOn.Row -> me.raddatz.veyq.mobile.navigation.DropTarget.Row(on.folder)
+            is DropOn.Level -> me.raddatz.veyq.mobile.composition.DropTarget.Level(on.label)
+            is DropOn.Row -> me.raddatz.veyq.mobile.composition.DropTarget.Row(on.folder)
             is DropOn.Gallery -> gallery!!
         }
         val items = call.items.map { item ->
             when (item) {
-                is DropItem.File -> parts.files.source(item.path)?.let { me.raddatz.veyq.mobile.navigation.Dropped.File(PathSource(item.path, it)) }
-                    ?: me.raddatz.veyq.mobile.navigation.Dropped.Unread(pathName(item.path))
-                is DropItem.Folder -> me.raddatz.veyq.mobile.navigation.Dropped.Folder(item.path, null, parts.files.walk(item.path))
-                is DropItem.NotLocal -> me.raddatz.veyq.mobile.navigation.Dropped.NotLocal(item.name)
+                is DropItem.File -> parts.files.source(item.path)?.let { me.raddatz.veyq.mobile.composition.Dropped.File(PathSource(item.path, it)) }
+                    ?: me.raddatz.veyq.mobile.composition.Dropped.Unread(pathName(item.path))
+                is DropItem.Folder -> me.raddatz.veyq.mobile.composition.Dropped.Folder(item.path, null, parts.files.walk(item.path))
+                is DropItem.NotLocal -> me.raddatz.veyq.mobile.composition.Dropped.NotLocal(item.name)
             }
         }
         // a desktop reads each file in place at its path: one the drop does not keep is closed, nothing else to hand back
         val left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit = { runCatching { it.close() } }
         val outcome = if (drop == null) gallery!!.drop(items, left) else drop(target, items, uploads.value, left, call.deletedName)
         return when (outcome) {
-            is me.raddatz.veyq.mobile.navigation.DropOutcome.Uploaded -> Answer.Dropped(outcome.queued, outcome.notices)
-            is me.raddatz.veyq.mobile.navigation.DropOutcome.Offered -> Answer.Dropped(outcome.queued, outcome.notices, holdImport(outcome.offer))
-            is me.raddatz.veyq.mobile.navigation.DropOutcome.Refused -> {
-                items.filterIsInstance<me.raddatz.veyq.mobile.navigation.Dropped.File>().forEach { left(it.source) }
+            is me.raddatz.veyq.mobile.composition.DropOutcome.Uploaded -> Answer.Dropped(outcome.queued, outcome.notices)
+            is me.raddatz.veyq.mobile.composition.DropOutcome.Offered -> Answer.Dropped(outcome.queued, outcome.notices, holdImport(outcome.offer))
+            is me.raddatz.veyq.mobile.composition.DropOutcome.Refused -> {
+                items.filterIsInstance<me.raddatz.veyq.mobile.composition.Dropped.File>().forEach { left(it.source) }
                 Answer.Dropped(0, outcome.notices, refused = true)
             }
         }
@@ -3547,7 +3556,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             /** A kit file's drawings by its path: the host's ([HostPictures]). */
             pictures: (path: String) -> me.raddatz.veyq.mobile.account.KitPictures = { NoPictures },
             /** A Memories upload's tiers: the host's ([HostTiers]). */
-            tiers: me.raddatz.veyq.mobile.memories.MediaUpload.Deriver = NoTiers,
+            tiers: me.raddatz.veyq.mobile.media.Derivation.Deriver = NoTiers,
             /** The music's decks, system controls, measure and words: the host's ([HostAudio]); none: no player. */
             audio: HostAudio? = null,
             /** A picked banner's decoding: the host's ([HostBannerPictures]). */
@@ -3602,7 +3611,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     )
                 },
                 squarePicture = squarePicture,
-                queuedAsk = { account, loss -> me.raddatz.veyq.mobile.offline.QueuedTray(account).ask(loss) },
+                queuedAsk = { account, loss -> me.raddatz.veyq.mobile.composition.QueuedTray(account).ask(loss) },
                 received = { link, queue, password, music ->
                     me.raddatz.veyq.mobile.sharing.GuestView.open(
                         primitives, link, client, store, guestSessions, { config.language }, handedPassword = password, queue = queue,

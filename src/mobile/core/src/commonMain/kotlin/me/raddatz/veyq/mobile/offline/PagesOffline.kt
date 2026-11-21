@@ -9,7 +9,7 @@ import me.raddatz.veyq.mobile.session.OfflineAsOf
 /**
  * The kept time each page of one tenant shows offline, by its node id (ADR 0140 decision 10): a page read from the
  * offline store as of its own last answer — a Pot's ledger, a gallery's listing — says so here while it is shown, and
- * the shell's banner names that time on the open page instead of its lists' ([me.raddatz.veyq.mobile.navigation.ShellModel.State.banner]).
+ * the shell's banner names that time on the open page instead of its lists' (`ShellModel.State.banner`).
  * Only a known time is held: a page offline without one, online again or gone leaves.
  */
 class PagesOffline {

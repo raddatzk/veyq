@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.android.core
 
+import me.raddatz.veyq.mobile.media.Derivation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,12 +43,12 @@ class GuestLinks(
     private val store: DeviceStore,
     private val sessions: GuestSessions,
     private val queue: UploadQueue,
-    private val deriver: MediaUpload.Deriver,
+    private val deriver: Derivation.Deriver,
     /** The tenant a signed-in person keeps a link in (*Keep*); null signed out. */
     private val tenant: () -> TenantSession?,
     private val language: () -> String,
     /** The player a guest's Memory plays its music with (#1034): the tenant's, or the app's own signed out. */
-    private val music: () -> me.raddatz.veyq.mobile.memories.GalleryModel.Music? = { null },
+    private val music: () -> me.raddatz.veyq.mobile.audio.PageMusic? = { null },
 ) {
     private val _asking = MutableStateFlow<OpenLink?>(null)
 

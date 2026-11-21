@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
@@ -57,7 +58,7 @@ class MemoryUploadLiveTest {
         val photoUp = MediaUpload.upload(
             tenant, memory.scopeId, memory.nodeId,
             MediaUpload.Original(source(photo), "image/jpeg", "App upload.jpg", 1_000_000),
-            MediaUpload.Derived(jpeg(2048, 1536, Color(0x2E7D32), 0.85f), jpeg(512, 384, Color(0x2E7D32), 0.8f), 4032, 3024),
+            Derivation.Derived(jpeg(2048, 1536, Color(0x2E7D32), 0.85f), jpeg(512, 384, Color(0x2E7D32), 0.8f), 4032, 3024),
             now,
         )
         assertEquals(MediaUpload.Outcome.DONE, photoUp.outcome, photoUp.code)
@@ -66,7 +67,7 @@ class MemoryUploadLiveTest {
         val videoUp = MediaUpload.upload(
             tenant, memory.scopeId, memory.nodeId,
             MediaUpload.Original(source(video), null, "App clip.mp4", 2_000_000),
-            MediaUpload.Derived(poster, poster, null, null),
+            Derivation.Derived(poster, poster, null, null),
             now,
         )
         assertEquals(MediaUpload.Outcome.DONE, videoUp.outcome, videoUp.code)

@@ -109,44 +109,11 @@ APPLICATIONS = CORE_SRC / "commonMain/kotlin/me/raddatz/veyq/mobile/navigation/A
 ENTRY = re.compile(r"^\s*([A-Z][A-Z0-9_]*)\s*\(\s*\"([a-z][a-z0-9]*)\"\s*\)\s*,", re.MULTILINE)
 PACKAGE_DECL = re.compile(r"^\s*package\s+([\w.]+)", re.MULTILINE)
 
-# The Kotlin core's files outside the application packages that still name one (rule c2), by their path under
-# `core/src/`, each with the reason. Only shrinks: an entry that names no application any more is red.
-CORE_ROOTS: dict[str, str] = {
-    "commonMain/kotlin/me/raddatz/veyq/mobile/AppKinds.kt":
-        "the composition root: each application's part of core's tables (search, share, export, copy, re-key, pins, queued writes)",
-    "commonMain/kotlin/me/raddatz/veyq/mobile/navigation/ShellModel.kt":
-        "the shell's model holds each application's open screen model (gallery, file, uploads, Memory create, music, tracks, reports); a hook per screen model needs a design of its own",
-    "commonMain/kotlin/me/raddatz/veyq/mobile/navigation/Drop.kt":
-        "the one drop (ADR 0154 decision 1) hands a level's files to Depot's uploads and a gallery's to Memories'; behind AppKinds a design of its own",
-    "commonMain/kotlin/me/raddatz/veyq/mobile/navigation/AddHere.kt":
-        "where Add here goes: Depot's uploads into a level, Memories' into the open gallery; the drop's twin",
-    "commonMain/kotlin/me/raddatz/veyq/mobile/navigation/ShareSheet.kt":
-        "the top level's Add files only reads Depot's files and drop boxes",
-    "commonMain/kotlin/me/raddatz/veyq/mobile/RowDetails.kt":
-        "a row's second line read from the Pots, Depot's files and drop boxes",
-    "commonMain/kotlin/me/raddatz/veyq/mobile/words/Notices.kt":
-        "the notices of applications' outcomes (an upload's, a folder walk's, a Pot copy's) said in core's one table",
-    "commonMain/kotlin/me/raddatz/veyq/mobile/session/LinkForm.kt":
-        "a pasted link opened as a Pot or a Depot file",
-    "commonMain/kotlin/me/raddatz/veyq/mobile/sharing/GuestAccess.kt":
-        "GuestPage's variants carry each kind's member page model (share view = member view, ADR 0150 decision 5)",
-    "commonMain/kotlin/me/raddatz/veyq/mobile/sharing/GuestView.kt":
-        "a guest's gallery is handed the music and the media deriver it plays and uploads with",
-    "commonMain/kotlin/me/raddatz/veyq/mobile/offline/QueuedTray.kt":
-        "the tray says each queued Expenses write by its own type",
-    "commonMain/kotlin/me/raddatz/veyq/mobile/offline/KeptRead.kt":
-        "the kept reads' serializers are the applications' generated models (ITEM_FAVORITES, NODE_BUCKETS, POT_REVISIONS, …)",
-    "nativeMain/kotlin/me/raddatz/veyq/mobile/blob/PickedPaths.kt":
-        "a picked folder walked into Depot's FolderUpload.Found",
-    "appleMain/kotlin/me/raddatz/veyq/mobile/sharing/AppleSharing.kt":
-        "Swift's adapter (Swift calls no suspend function or flow) for a link's pages, whose models are the applications'",
-    "appleMain/kotlin/me/raddatz/veyq/mobile/audio/AppleAudio.kt":
-        "Swift's adapter for the music: a track's save and its WAV wrap are Memories'",
-    "appleMain/kotlin/me/raddatz/veyq/mobile/export/FileDownloads.kt":
-        "Swift's adapter for a Pot's export",
-    "appleMain/kotlin/me/raddatz/veyq/mobile/session/Apple.kt":
-        "Swift's adapter: a Pot opened, its receipts read and picked",
-}
+# The composition root (rule c2): the one package outside the applications that names them — it installs each
+# application's part into `AppKinds` and holds what reads several (the shell's model, the drop, the guest adapters). No
+# other file names it (rule c3), so the platform and the applications never reach it.
+COMPOSITION = "composition"
+CORE_ROOTS: dict[str, str] = {}
 
 # The platforms whose UI rules (a) and (b) are on; each is switched on in its phase of cr-apps-core-ui-layer.
 PLATFORMS: dict[str, bool] = {"android": True, "apple": True, "linux": True, "windows": True}
@@ -209,6 +176,7 @@ def check_core(core_src: pathlib.Path, apps: list[str], roots: dict[str, str]) -
     if not files:
         return [f"{_rel(core_src)}: no Kotlin file under */kotlin — the guard would check nothing"]
     named = re.compile(r"\b" + _dotted(CORE_PACKAGE) + r"\s*\.\s*(?:api\s*\.\s*)?(" + "|".join(apps) + r")\b")
+    composed = re.compile(r"\b" + _dotted(CORE_PACKAGE + "." + COMPOSITION) + r"\b")
     seen_roots: set[str] = set()
     for f in files:
         rel = f.relative_to(core_src)
@@ -222,6 +190,11 @@ def check_core(core_src: pathlib.Path, apps: list[str], roots: dict[str, str]) -
         under = source_set_rel.parts[len(CORE_PACKAGE.split(".")):]
         own = under[0] if len(under) > 1 and under[0] in apps else None
         hits = [(m.group(1), m.start()) for m in named.finditer(masked)]
+        if len(under) > 1 and under[0] == COMPOSITION:
+            continue
+        for m in composed.finditer(masked):
+            errors.append(f"{_rel(f)}:{_line(masked, m.start())}: (c3) names the composition root (`{CORE_PACKAGE}.{COMPOSITION}`) — "
+                          f"the platform and the applications never reach it; it reaches them")
         key = str(rel)
         if own is not None:
             for app, at in hits:

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.okhttp.OkHttp
@@ -18,7 +19,7 @@ import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.Home
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.session.AccountDoor
 import me.raddatz.veyq.mobile.session.FolderCreate
 import me.raddatz.veyq.mobile.session.LiveRun
@@ -91,7 +92,7 @@ class LivePinsTest {
         val up = MediaUpload.upload(
             tenant, scopeId, nodeId,
             MediaUpload.Original(ByteSource(bytes.size.toLong()) { from, length -> bytes.copyOfRange(from.toInt(), minOf(bytes.size.toLong(), from + length).toInt()) }, "image/jpeg", name, at),
-            MediaUpload.Derived(bytes, bytes, null, null), System.currentTimeMillis(),
+            Derivation.Derived(bytes, bytes, null, null), System.currentTimeMillis(),
         )
         assertEquals(MediaUpload.Outcome.DONE, up.outcome, up.code)
         return up.mediaId!!

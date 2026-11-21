@@ -23,6 +23,8 @@ import kotlin.test.assertTrue
  * the names a row shows are the ones another device sealed.
  */
 class AccountSettingsTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val p = testPrimitives
     private val suite = V1(p)
     private val masterKey = p.randomBytes(32)

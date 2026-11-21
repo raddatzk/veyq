@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.audio.PageMusic
+import me.raddatz.veyq.mobile.navigation.NodeHeaderModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -27,7 +29,6 @@ import me.raddatz.veyq.mobile.blob.FileSave
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.HeaderAction
 import me.raddatz.veyq.mobile.navigation.NodeRef
-import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.LivePoll
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
@@ -49,7 +50,7 @@ import me.raddatz.veyq.mobile.words.Notice
  * **One page for a member and a link's guest** (share view = member view, inbox #401): what it offers is
  * [MemoryRights.of] who looks ([State.rights]) — an upload, a delete, a chapter made —, never a view of its own. A medium
  * deleted goes the way the rights say: a member's to the trash, out of the rows at once with its Undo offered for
- * [ShellModel.TRASH_UNDO_MS] ([trash], [undo]: restore is reached only from that Undo, as the web's); a guest's own one is a
+ * [NodeHeaderModel.TRASH_UNDO_MS] ([trash], [undo]: restore is reached only from that Undo, as the web's); a guest's own one is a
  * purge, asked first and without Undo ([askPurge], [purge]).
  *
  * **Offline** (ADR 0140 decisions 5 and 7) the page shows the listing the offline store kept, [State.offline] saying as
@@ -72,7 +73,7 @@ class GalleryModel(
     /** Who looks: the apps open a gallery as a member today; a link's guest is a source, never another view. */
     access: MemoryRights.Access = MemoryRights.Access.Member(),
     /** The account's music player and how an untitled track is named; null: the page plays no music. */
-    val music: Music? = null,
+    val music: PageMusic? = null,
     /** The tenant's search (ADR 0146 decision 8): what the page contributes and the request it takes; null: none. */
     private val search: Search? = null,
     /** The viewer's calendar for the filter's day chips (ADR 0149 decision 5): the platform's; ISO dates in UTC by default. */
@@ -87,10 +88,7 @@ class GalleryModel(
      */
     class Search(val requests: me.raddatz.veyq.mobile.search.OpenRequests, val contributions: me.raddatz.veyq.mobile.search.SearchContributions)
 
-    /** What the page plays its music with (ADR 0142 decision 1): the account's one [player]; [untitled] names a track by its number. */
-    class Music(val player: MusicPlayer, val untitled: (Int) -> String)
-
-    /** What the page reads ([me.raddatz.veyq.mobile.navigation.ShellModel.galleryModel] over a tenant, a test over its own). */
+    /** What the page reads (`ShellModel.galleryModel` over a tenant, a test over its own). */
     interface Door {
         /** The node's gallery as listed now (`MemoryMedia.list`); null or a throw where it did not read. */
         suspend fun gallery(): MemoryMedia.Gallery?
@@ -911,7 +909,7 @@ class GalleryModel(
 
     /**
      * Medium [mediaId] deleted the way the rights say: a member's to the trash — out of the rows at once, its Undo offered
-     * for [ShellModel.TRASH_UNDO_MS] ([State.undo]); a trash that did not go drops the Undo and reads the gallery anew (the
+     * for [NodeHeaderModel.TRASH_UNDO_MS] ([State.undo]); a trash that did not go drops the Undo and reads the gallery anew (the
      * web's) —; a guest's own one asked first ([State.purging], then [purge]). What to say at once, or null.
      */
     suspend fun trash(mediaId: String): Notice? {
@@ -979,7 +977,7 @@ class GalleryModel(
         undoing = u
         _state.update { it.copy(undo = said) }
         undoWindow = scope.launch {
-            delay(ShellModel.TRASH_UNDO_MS)
+            delay(NodeHeaderModel.TRASH_UNDO_MS)
             endUndo()
         }
     }

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories.tracks
 
+import me.raddatz.veyq.mobile.media.Derivation
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonElement
@@ -80,7 +81,7 @@ object TrackUpload {
         private suspend fun ready(): MediaUpload.Prepared = lock.withLock {
             prepared ?: try {
                 MediaUpload.Prepared(
-                    Gpx.MEDIA_TYPE, MediaUpload.sha256(original.source), MediaUpload.Derived(null, null, null, null),
+                    Gpx.MEDIA_TYPE, MediaUpload.sha256(original.source), Derivation.Derived(null, null, null, null),
                     metaTier(label, source.modifiedAt), null,
                 )
             } finally {

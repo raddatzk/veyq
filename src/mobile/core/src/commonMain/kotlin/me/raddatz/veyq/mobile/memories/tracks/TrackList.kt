@@ -43,7 +43,7 @@ class TrackList(
     private val door: Door,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
-    /** What the view does beyond the gallery ([me.raddatz.veyq.mobile.navigation.ShellModel.trackList], a test's own). */
+    /** What the view does beyond the gallery (`ShellModel.trackList`, a test's own). */
     interface Door {
         /** A picked file checked as a track, the node holding [held] already ([TrackUpload.check]). */
         suspend fun check(source: UploadSource, held: Int): TrackUpload.Check

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpMethod
 import io.ktor.http.content.OutgoingContent
@@ -36,6 +37,8 @@ import kotlin.test.assertTrue
  * time and the send reusing that wrap → [a_medium_is_wrapped_at_the_send_under_the_key_its_node_has_then] red.
  */
 class QueuedMemoriesTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest
@@ -75,9 +78,9 @@ class QueuedMemoriesTest {
     private fun picked(marker: String) = Picked("$marker.png", ("PNG-$marker-" + "x".repeat(200)).encodeToByteArray())
 
     /** The platform's tiers: a preview and a thumbnail naming the photo they came from. */
-    private val deriver = object : MediaUpload.Deriver {
-        override fun derive(source: UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) =
-            done(MediaUpload.Derived("preview of ${source.name}".encodeToByteArray(), "thumb of ${source.name}".encodeToByteArray(), 40, 30))
+    private val deriver = object : Derivation.Deriver {
+        override fun derive(source: UploadSource, type: String, done: (Derivation.Derived) -> Unit) =
+            done(Derivation.Derived("preview of ${source.name}".encodeToByteArray(), "thumb of ${source.name}".encodeToByteArray(), 40, 30))
     }
 
     @Test

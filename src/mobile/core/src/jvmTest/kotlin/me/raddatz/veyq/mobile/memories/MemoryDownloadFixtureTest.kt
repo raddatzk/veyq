@@ -18,6 +18,8 @@ import kotlin.test.assertTrue
  * '*MemoryDownloadFixtureTest*' --rerun`, and the web's case then says whether the web still reads it.
  */
 class MemoryDownloadFixtureTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     @Test
     fun theCoresDownloadOfAMemoryIsTheCommittedFixtureTheWebImports() = runTest {
         val f = MemoryExportTest.fixture()

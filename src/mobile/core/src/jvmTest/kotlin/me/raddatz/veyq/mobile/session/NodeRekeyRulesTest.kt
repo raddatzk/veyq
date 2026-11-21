@@ -9,6 +9,8 @@ import kotlin.test.assertTrue
 
 /** The re-key's rules (the web's `rekeyScope.ts`): which nodes a path takes, the frontier, and what this client re-keys. */
 class NodeRekeyRulesTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private fun row(id: String, parent: String?, due: Boolean, kind: String = "FOLDER", ownerOnly: Boolean = false, drop: Boolean = false, identity: Boolean = false) =
         RekeyNode(
             id = id, kind = kind, trashed = false, ownerOnly = ownerOnly, epoch = 1, scopeEpoch = 1, due = due, placementRevision = 1, metaRevision = 0,

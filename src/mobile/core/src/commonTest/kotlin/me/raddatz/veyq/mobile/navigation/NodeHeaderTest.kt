@@ -21,6 +21,8 @@ import kotlin.test.assertFalse
 
 /** The web's header rules (`nodeHeader.ts`, `coreNodeActions.ts`, ADR 0110) as the apps' one header plans them. */
 class NodeHeaderTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val all = Rights(favorite = true, share = true, rename = true, move = true, cover = true, copy = true, download = true, report = true, delete = true)
     private val folderOrder = AppKinds.headerOrder("FOLDER")
 

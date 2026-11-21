@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories.music
 
+import me.raddatz.veyq.mobile.audio.PageMusic
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -32,6 +33,8 @@ import kotlin.test.assertTrue
  * interrupting the music, its end resuming it.
  */
 class MusicModelTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val memory = NodeAt("s1", "n1", "MEMORY", "Lisbon")
 
     private fun photo(id: String, at: Long) = MemoryMedia.Item(
@@ -98,7 +101,7 @@ class MusicModelTest {
         val audio = PlayedAudio(items.associate { it.mediaId to 62_000L })
         val door = Door(audio, items)
         val player = MusicPlayer(audio::newDeck, audio.controls, random = { 0 }, scope = backgroundScope)
-        val gallery = GalleryModel(memory, door, backgroundScope, backgroundScope, music = GalleryModel.Music(player) { "Track $it" })
+        val gallery = GalleryModel(memory, door, backgroundScope, backgroundScope, music = PageMusic(player) { "Track $it" })
         val music = MusicModel(gallery, door, backgroundScope)
         runCurrent()
         return Page(audio, door, player, gallery, music)

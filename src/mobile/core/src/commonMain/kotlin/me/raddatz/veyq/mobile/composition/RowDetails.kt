@@ -1,5 +1,6 @@
-package me.raddatz.veyq.mobile
+package me.raddatz.veyq.mobile.composition
 
+import me.raddatz.veyq.mobile.*
 import me.raddatz.veyq.mobile.depot.DepotFiles
 import me.raddatz.veyq.mobile.depot.DropBoxes
 import me.raddatz.veyq.mobile.expenses.PotRows

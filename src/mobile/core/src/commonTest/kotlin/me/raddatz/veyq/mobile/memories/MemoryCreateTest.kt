@@ -17,6 +17,8 @@ import kotlinx.serialization.json.Json
  * server's refusal said as the dialog says it.
  */
 class MemoryCreateTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     @Test
     fun aMemoryIsOfferedAtASpacesTopAndInAFolderAChapterOnlyInAMemory() {
         assertEquals(listOf(MemoryCreate.MEMORY), MemoryCreate.offered(null))

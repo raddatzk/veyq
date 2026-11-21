@@ -41,12 +41,7 @@ data class NodeRef(
  * (`contracts/platform/kinds/<application>.json`). A folder or a kept link belongs to core and is no object of an
  * application.
  */
-fun applicationOf(kind: String): ApplicationId? = when (kind) {
-    "MEMORY" -> ApplicationId.MEMORIES
-    "FILE", "DEPOT_DROPBOX" -> ApplicationId.DEPOT
-    "EXPENSES_POT" -> ApplicationId.EXPENSES
-    else -> null
-}
+fun applicationOf(kind: String): ApplicationId? = me.raddatz.veyq.mobile.AppKinds.applicationOf(kind)
 
 /**
  * What the shell lists, decrypted, for one tenant. The signed-in session implements it from the member's scopes; a

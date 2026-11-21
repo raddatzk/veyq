@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
@@ -67,7 +68,7 @@ class MemoryExportLiveTest {
             val video = File(root, "src/web/src/shared/image/__fixtures__/dated.mp4").readBytes()
             fun source(b: ByteArray) = ByteSource(b.size.toLong()) { from, length -> b.copyOfRange(from.toInt(), minOf(b.size.toLong(), from + length).toInt()) }
             for ((bytes, name, type) in listOf(Triple(photo, "Photo.jpg", "image/jpeg"), Triple(video, "Clip.mp4", "video/mp4"))) {
-                val up = MediaUpload.upload(tenant, scopeId, memory, MediaUpload.Original(source(bytes), type, name, 1_000_000), MediaUpload.Derived(photo, photo, 4032, 3024), System.currentTimeMillis())
+                val up = MediaUpload.upload(tenant, scopeId, memory, MediaUpload.Original(source(bytes), type, name, 1_000_000), Derivation.Derived(photo, photo, 4032, 3024), System.currentTimeMillis())
                 assertEquals(MediaUpload.Outcome.DONE, up.outcome, up.code)
             }
             val picked = BannerWrite.Picked(UploadSource.of("banner.mp4", video.size.toLong(), "video/mp4", null) { from, length ->

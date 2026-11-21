@@ -14,6 +14,8 @@ import kotlin.test.assertIs
  * badges and names its guest offline, from the store; nothing is marked offline (decision 7).
  */
 class MarksAndBucketsOfflineTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     @Test
     fun aKeptMemoryShowsItsBadgesAndNamesItsGuestOffline_noToggle() = runTest {
         val t = PlayedTenant()

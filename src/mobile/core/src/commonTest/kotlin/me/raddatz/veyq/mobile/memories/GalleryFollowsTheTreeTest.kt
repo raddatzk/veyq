@@ -1,12 +1,13 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.offline.PlayedTenant
 import me.raddatz.veyq.mobile.offline.removeAll
 import kotlin.test.AfterTest
@@ -23,6 +24,8 @@ import kotlin.test.assertSame
  * keeps the lists as they were (the control: the follow is not a re-read on every tick).
  */
 class GalleryFollowsTheTreeTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest
@@ -42,8 +45,8 @@ class GalleryFollowsTheTreeTest {
         val tenant = account.open(account.tenants.first())
         val shell = ShellModel(tenant, Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }
         shell.load(openLastUsed = false)
-        val uploads = shell.mediaUploads(UploadQueue(), object : MediaUpload.Deriver {
-            override fun derive(source: UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) = Unit
+        val uploads = shell.mediaUploads(UploadQueue(), object : Derivation.Deriver {
+            override fun derive(source: UploadSource, type: String, done: (Derivation.Derived) -> Unit) = Unit
         }, {}, {})
         val gallery = shell.galleryModel(assertNotNull(shell.galleryAt(s.id, m.id)), uploads)
         assertEquals(listOf(a), waitFor { gallery.current.facts?.participants?.takeIf { it.isNotEmpty() } })

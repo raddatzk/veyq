@@ -36,7 +36,7 @@ class DropBoxPage(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val now: () -> Long = monotonicMs(),
 ) {
-    /** What the page reads ([me.raddatz.veyq.mobile.navigation.ShellModel.dropBoxPage], a test's played tree). */
+    /** What the page reads (`ShellModel.dropBoxPage`, a test's played tree). */
     interface Door {
         /** The guests' folders as listed now; null where they did not read. */
         suspend fun folders(): List<DropBoxes.GuestFolder>?

@@ -41,7 +41,7 @@ class MusicModel(
     private val door: Door,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
-    /** What the view does beyond the gallery ([me.raddatz.veyq.mobile.navigation.ShellModel.musicModel], a test's own). */
+    /** What the view does beyond the gallery (`ShellModel.musicModel`, a test's own). */
     interface Door {
         /** A picked file checked as a track (`MusicUpload.check` with the platform's `Measure`). */
         suspend fun check(source: UploadSource): MusicUpload.Check

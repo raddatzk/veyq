@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.flow.first
@@ -9,7 +10,7 @@ import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.memories.place.MemoryFacts
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.session.LiveRun
 import me.raddatz.veyq.mobile.session.NodeTrash
 import me.raddatz.veyq.mobile.session.ThisDevice
@@ -99,7 +100,7 @@ class CurationLiveTest {
             // a capture time corrected and reset
             val up = MediaUpload.upload(
                 tenant, scopeId, memory, MediaUpload.Original(source(fixture("exif-sample.jpg")), "image/jpeg", "Munich.jpg", 1_000_000),
-                MediaUpload.Derived(null, null, null, null), System.currentTimeMillis(),
+                Derivation.Derived(null, null, null, null), System.currentTimeMillis(),
             )
             assertEquals(MediaUpload.Outcome.DONE, up.outcome, up.code)
             suspend fun photo() = assertNotNull(MemoryMedia.list(tenant, scopeId, memory)?.items?.singleOrNull(), "the photo is listed")

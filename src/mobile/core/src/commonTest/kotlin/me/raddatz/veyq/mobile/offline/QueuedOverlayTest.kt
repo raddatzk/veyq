@@ -1,5 +1,9 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.media.Derivation
+import me.raddatz.veyq.mobile.composition.QueuedLoss
+import me.raddatz.veyq.mobile.composition.QueuedShown
+
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
@@ -17,7 +21,7 @@ import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.session.Reach
 import me.raddatz.veyq.mobile.session.TenantSession
 import me.raddatz.veyq.mobile.session.VeyqAccount
@@ -43,6 +47,8 @@ import kotlin.test.assertTrue
  * `current.offline == null`) → [a_gallery_offline_shows_a_queued_medium_as_a_waiting_tile_a_trash_and_a_mark_in_place] red.
  */
 class QueuedOverlayTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest
@@ -61,9 +67,9 @@ class QueuedOverlayTest {
         return null
     }
 
-    private val deriver = object : MediaUpload.Deriver {
-        override fun derive(source: UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) =
-            done(MediaUpload.Derived("p".encodeToByteArray(), "t".encodeToByteArray(), 4, 3))
+    private val deriver = object : Derivation.Deriver {
+        override fun derive(source: UploadSource, type: String, done: (Derivation.Derived) -> Unit) =
+            done(Derivation.Derived("p".encodeToByteArray(), "t".encodeToByteArray(), 4, 3))
     }
 
     private fun photo(name: String, text: String) = UploadSource.of(name, text.length.toLong(), "image/png", null) { from, length -> text.encodeToByteArray().copyOfRange(from.toInt(), from.toInt() + length) }

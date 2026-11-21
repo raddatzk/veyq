@@ -7,7 +7,7 @@ import kotlin.test.assertNotNull
 
 /**
  * The tiers' spec is the core's, the web's numbers (`src/web/src/shared/image/mediaDeriver.ts`, which
- * `MediaUpload.Derived` names): every platform derives with [MediaUpload]'s constants, and these are read here against the
+ * `Derivation.Derived` names): every platform derives with [MediaUpload]'s constants, and these are read here against the
  * web's file itself, so neither side moves alone.
  */
 class MediaTierSpecTest {

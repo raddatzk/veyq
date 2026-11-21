@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.navigation
 
+import me.raddatz.veyq.mobile.composition.AddHere
+
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.blob.UploadSource
@@ -16,6 +18,8 @@ import kotlin.test.assertTrue
 
 /** Shared files from arrival to where they went (ADR 0138), every app's one state machine, and each kind's answer. */
 class ShareInboxTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private fun file(name: String, type: String?, size: Long = 3): UploadSource =
         UploadSource.of(name, size, type, null) { from, length -> ByteArray(minOf(length.toLong(), size - from).toInt()) { (from + it).toByte() } }
 

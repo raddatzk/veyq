@@ -1,5 +1,10 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.depot.replace
+
+import me.raddatz.veyq.mobile.media.Derivation
+import me.raddatz.veyq.mobile.depot.DepotGuest
+
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.coroutines.test.runTest
@@ -32,6 +37,8 @@ import kotlin.test.assertTrue
  * rights — over a played instance whose link serves one node of every kind ([PlayedGuestContent]).
  */
 class GuestDoorsTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val p = testPrimitives
 
     private class Fixture(val share: PlayedShare, val content: PlayedGuestContent, val file: String, val memory: String, val pot: String)
@@ -56,13 +63,13 @@ class GuestDoorsTest {
         val level = assertIs<GuestPage.Level>(v.page.value, "the root folder is not core's level")
         assertEquals(setOf("notes.txt" to "FILE", "Trip" to "MEMORY", "Dinner" to "EXPENSES_POT"), level.model.rows.map { it.name to it.kind }.toSet())
         v.open(f.file)
-        assertIs<GuestPage.File>(v.page.value, "a file did not open as Depot's file page")
+        assertIs<DepotGuest.File>(v.page.value, "a file did not open as Depot's file page")
         assertTrue(v.back())
         v.open(f.memory)
-        assertIs<GuestPage.Gallery>(v.page.value, "a Memory did not open as its gallery")
+        assertIs<MemoriesGuest.Gallery>(v.page.value, "a Memory did not open as its gallery")
         v.back()
         v.open(f.pot)
-        assertIs<GuestPage.Pot>(v.page.value, "a Pot did not open as its page")
+        assertIs<PotGuest.Pot>(v.page.value, "a Pot did not open as its page")
         v.back()
         assertTrue(v.atRoot)
         assertFalse(v.back(), "Back at the root stayed inside the link instead of asking")
@@ -79,7 +86,7 @@ class GuestDoorsTest {
         val v = view(f.share)
         v.load()
         v.open(f.memory)
-        val gallery = assertIs<GuestPage.Gallery>(v.page.value).model
+        val gallery = assertIs<MemoriesGuest.Gallery>(v.page.value).model
         val rights = gallery.rights
         assertTrue(rights.download && rights.navigate)
         assertFalse(rights.upload, "a READ guest is offered an upload")
@@ -102,7 +109,7 @@ class GuestDoorsTest {
         val v = view(f.share)
         v.load()
         v.open(f.memory)
-        val rights = assertIs<GuestPage.Gallery>(v.page.value).model.rights
+        val rights = assertIs<MemoriesGuest.Gallery>(v.page.value).model.rights
         assertTrue(rights.upload)
         assertEquals(me.raddatz.veyq.mobile.memories.MemoryRights.DeleteMedia.OWN, rights.deleteMedia)
         assertFalse(rights.mark || rights.buckets || rights.mediaTrash)
@@ -115,7 +122,7 @@ class GuestDoorsTest {
             val v = view(f.share)
             v.load()
             v.open(f.file)
-            val model = assertIs<GuestPage.File>(v.page.value).model
+            val model = assertIs<DepotGuest.File>(v.page.value).model
             val header = withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(10_000) { model.state.first { it.header != null }.header!! } }
             assertEquals(replaces, header.own.any { it == me.raddatz.veyq.mobile.navigation.HeaderAction.REPLACE }, "$role's file offers replace = ${!replaces}")
             assertTrue(header.facts.hasContent)
@@ -153,7 +160,7 @@ class GuestDoorsTest {
             val v = GuestView.over((ReceivedLink.open(f.share.link) as ReceivedLink.Parsed.Ok).link, f.share.client(), MemoryDeviceStore(), MemoryGuestSessions(), queue = queue)
             v.load()
             v.open(f.file)
-            val model = assertIs<GuestPage.File>(v.page.value).model
+            val model = assertIs<DepotGuest.File>(v.page.value).model
             withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(10_000) { model.state.first { it.header != null } } }
             return Triple(f, v, model)
         }
@@ -261,7 +268,7 @@ class GuestDoorsTest {
         val sessions = MemoryGuestSessions()
         val v = view(share, sessions)
         v.load()
-        val drop = assertIs<GuestPage.DropBox>(v.page.value).model
+        val drop = assertIs<DepotGuest.DropBox>(v.page.value).model
         assertTrue(drop.name("Ben"))
         val session = assertNotNull(drop.session.value)
         assertNotNull(session.uploaderKey, "the uploader's K_up was not kept")
@@ -286,11 +293,11 @@ class GuestDoorsTest {
         content.dropKey()
         val v = view(share)
         v.load()
-        val uploader = assertIs<GuestPage.Uploader>(v.page.value).model
+        val uploader = assertIs<MemoriesGuest.Uploader>(v.page.value).model
         assertTrue(uploader.name("Ada"))
         val bytes = "a picture".encodeToByteArray()
         val original = MediaUpload.Original(ByteSource(bytes.size.toLong()) { from, length -> bytes.copyOfRange(from.toInt(), (from + length).toInt()) }, "image/jpeg", "a.jpg", null)
-        val prepared = MediaUpload.Prepared("image/jpeg", "sha", MediaUpload.Derived(null, null, null, null), null, null)
+        val prepared = MediaUpload.Prepared("image/jpeg", "sha", Derivation.Derived(null, null, null, null), null, null)
         val r = uploader.send(original, prepared, {}, "a.jpg")
         assertEquals(MediaUpload.Outcome.DONE, r.outcome)
         assertEquals(1, uploader.sent.value.size)
@@ -364,11 +371,11 @@ class GuestDoorsTest {
     fun aGuestsMemoryHasTheHandedMusicPlayer() = runTest {
         val f = fixture("READ")
         val player = me.raddatz.veyq.mobile.audio.MusicPlayer({ _ -> NoDeck }, null, me.raddatz.veyq.mobile.audio.randomIntOf { p.randomBytes(it) })
-        val music = me.raddatz.veyq.mobile.memories.GalleryModel.Music(player) { "Track $it" }
+        val music = me.raddatz.veyq.mobile.audio.PageMusic(player) { "Track $it" }
         val v = GuestView.over((ReceivedLink.open(f.share.link) as ReceivedLink.Parsed.Ok).link, f.share.client(), MemoryDeviceStore(), MemoryGuestSessions(), music = music)
         v.load()
         v.open(f.memory)
-        val gallery = assertIs<GuestPage.Gallery>(v.page.value).model
+        val gallery = assertIs<MemoriesGuest.Gallery>(v.page.value).model
         assertTrue(gallery.music === music, "the guest's Memory plays no music")
         gallery.close()
         player.stop()

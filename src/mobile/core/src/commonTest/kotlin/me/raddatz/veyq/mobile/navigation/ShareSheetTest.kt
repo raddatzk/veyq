@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.navigation
 
+import me.raddatz.veyq.mobile.composition.ShareSheet
+
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.depot.DropBoxes
 import me.raddatz.veyq.mobile.session.LocalDays
@@ -19,6 +21,8 @@ import kotlin.test.assertTrue
  * on, delete — each over a server the test plays (its links, as `ShareLinks` and `ShareLinkChanges` read and change them).
  */
 class ShareSheetTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val pot = NodeAt("s", "pot", "EXPENSES_POT", "Trip")
     private val folder = NodeAt("s", "f", NodeRef.FOLDER, "Photos")
     private val now = 1_700_000_000_000L

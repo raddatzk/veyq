@@ -71,7 +71,7 @@ class FileModel(
     /** Where a copy saved runs ([save]): not the page's own [scope], so a save outlives its page. */
     private val saves: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
-    /** What the page reads ([me.raddatz.veyq.mobile.navigation.ShellModel.fileModel] over a tenant, a test over its own). */
+    /** What the page reads (`ShellModel.fileModel` over a tenant, a test over its own). */
     interface Door {
         /** The file as it is listed now, or null where it is not (gone, or its listing did not read). */
         suspend fun file(node: NodeAt): DepotFiles.File?

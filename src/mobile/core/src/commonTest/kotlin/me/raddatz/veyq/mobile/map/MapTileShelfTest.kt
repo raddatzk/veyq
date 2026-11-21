@@ -30,6 +30,8 @@ import kotlin.test.assertTrue
  * third). That the shelf is read only behind the gate is `MapTilesTest`'s: offline at a launch no tile service exists.
  */
 class MapTileShelfTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest

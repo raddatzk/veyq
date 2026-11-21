@@ -1,5 +1,11 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.depot.replace
+
+import me.raddatz.veyq.mobile.expenses.PotGuest
+
+import me.raddatz.veyq.mobile.depot.DepotGuest
+
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.Dispatchers
@@ -16,7 +22,7 @@ import me.raddatz.veyq.mobile.expenses.Ledger
 import me.raddatz.veyq.mobile.expenses.PotCreate
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.session.FolderCreate
 import me.raddatz.veyq.mobile.session.LiveRun
 import me.raddatz.veyq.mobile.session.MemoryDeviceStore
@@ -108,7 +114,7 @@ class GuestRemainderLiveTest {
                 withTimeout(30_000) { rw.view.page.first { p -> (p as? GuestPage.Level)?.model?.rows?.any { it.name == "notes.txt" } == true } }
             }.let { (it as GuestPage.Level).model.rows.single { r -> r.name == "notes.txt" } }
             rw.view.open(row.nodeId)
-            val file = assertIs<GuestPage.File>(rw.view.page.value).model
+            val file = assertIs<DepotGuest.File>(rw.view.page.value).model
             suspend fun shown(): String = withContext(Dispatchers.Default) {
                 withTimeout(30_000) { (file.state.first { it.shown is FileModel.Shown.Text }.shown as FileModel.Shown.Text).text }
             }
@@ -129,7 +135,7 @@ class GuestRemainderLiveTest {
             val pg = GuestScreen(guest(potUrl))
             passGates(pg)
             pg.view.access!!.nameGuest("Pot guest")
-            val pot = assertIs<GuestPage.Pot>(pg.view.page.value).model
+            val pot = assertIs<PotGuest.Pot>(pg.view.page.value).model
             pot.open(assertNotNull(pg.view.access!!.tree!!.node(potId)!!.asObject()))
             val view = assertNotNull(pot.view())
             assertTrue(view.settingsOffered, "a named READ_WRITE guest is offered no Settings")

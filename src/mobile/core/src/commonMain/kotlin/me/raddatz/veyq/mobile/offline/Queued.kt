@@ -1,5 +1,8 @@
 package me.raddatz.veyq.mobile.offline
 
+import kotlin.native.HiddenFromObjC
+import me.raddatz.veyq.mobile.PlatformApi
+
 import me.raddatz.veyq.mobile.session.TenantSession
 
 /**
@@ -76,6 +79,8 @@ sealed interface QueuedOutcome {
 }
 
 /** A [Queued] write's sender: its online path called with the write's intent, never a copy of it. */
-internal fun interface QueuedSender {
+@PlatformApi
+@HiddenFromObjC
+fun interface QueuedSender {
     suspend fun send(tenant: TenantSession, write: QueuedWrite): QueuedOutcome
 }

@@ -92,7 +92,7 @@ object DepotFiles {
      * is reached, replacing the kept one; the kept answer while it is not.
      */
     private suspend fun listing(tenant: TenantSession, scopeId: String, parentId: String?, settle: Boolean = true): me.raddatz.veyq.mobile.api.depot.models.FileListPage {
-        val read = tenant.account.kept(me.raddatz.veyq.mobile.offline.KeptRead.FILES, tenant.tenant.tenantId, scopeId, parentId ?: "", settle = settle) {
+        val read = tenant.account.kept(DepotKept.FILES, tenant.tenant.tenantId, scopeId, parentId ?: "", settle = settle) {
             tenant.account.fetched(tenant.account.respond { FilesApi(tenant.base, tenant.account.http).listFiles(scopeId, parentId) }, null)
         }
         return me.raddatz.veyq.mobile.session.VeyqAccount.KEPT_JSON.decodeFromString(
@@ -173,10 +173,10 @@ object DepotFiles {
         /** A file of the name is here ([UploadJob.existing]): the person replaces it or picks another name. */
         const val EXISTS = "file_exists"
         /** A sibling of another kind holds the name. */
-        const val NAME_TAKEN = "name_taken"
+        const val NAME_TAKEN = me.raddatz.veyq.mobile.blob.UploadQueue.NAME_TAKEN
         /** The file's content changed since it was read ([ReplaceJob.currentBlobId]). */
         const val STALE = "stale_file"
-        const val BUSY = "node_rekey_pending"
+        const val BUSY = me.raddatz.veyq.mobile.blob.UploadQueue.BUSY
         const val FAILED = "upload_failed"
         internal val FINAL = setOf(EXISTS, NAME_TAKEN, STALE)
     }

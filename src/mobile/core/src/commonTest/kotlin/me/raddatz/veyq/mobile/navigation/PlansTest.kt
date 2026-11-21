@@ -1,5 +1,8 @@
 package me.raddatz.veyq.mobile.navigation
 
+import me.raddatz.veyq.mobile.composition.ShareSheet
+import me.raddatz.veyq.mobile.composition.LinkAction
+
 import me.raddatz.veyq.mobile.session.LinkRow
 import me.raddatz.veyq.mobile.session.SessionModel
 import me.raddatz.veyq.mobile.session.ShareLinks
@@ -11,6 +14,8 @@ import kotlin.test.assertEquals
 
 /** The plans a UI draws whole and in order (ADR 0154 decision 2): the sign-in's entries and a share link row's menu. */
 class PlansTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     @Test
     fun theSignInSubmitsFirstThenCancelsThenTheOtherWaysIn() {
         // owner 2026-11-20 (the CR's Q4): the web's LoginView — Submit first, then the links, the kit, Open a link

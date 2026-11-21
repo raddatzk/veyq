@@ -141,7 +141,7 @@ object MemoriesSearch {
     }
 
     /**
-     * [scopeMediaDocuments] through the offline store (`KeptRead.SCOPE_MEDIA`, automatic tier): the kept `ETag` sent as
+     * [scopeMediaDocuments] through the offline store (`MemoriesKept.SCOPE_MEDIA`, automatic tier): the kept `ETag` sent as
      * `If-None-Match`, a newer listing replacing the kept one — never merged, so a medium trashed elsewhere is gone with the
      * next answer —, the kept listing while the server is unreachable. The answer is null where its tag is still [ctx]'s.
      */
@@ -149,7 +149,7 @@ object MemoriesSearch {
         val tenant = ctx.tenant
         val api = MediaApi(tenant.base, tenant.account.http)
         val read = try {
-            tenant.account.kept(KeptRead.SCOPE_MEDIA, tenant.tenant.tenantId, ctx.scopeId, ctx.scopeId, conditional = true) { tag -> pages(tenant, api, ctx.scopeId, tag) }
+            tenant.account.kept(MemoriesKept.SCOPE_MEDIA, tenant.tenant.tenantId, ctx.scopeId, ctx.scopeId, conditional = true) { tag -> pages(tenant, api, ctx.scopeId, tag) }
         } catch (e: VeyqAccount.Refused) {
             throw IllegalStateException("scope media ${e.status}")
         }

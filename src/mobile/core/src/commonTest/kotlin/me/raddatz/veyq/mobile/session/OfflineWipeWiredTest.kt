@@ -39,6 +39,8 @@ import kotlin.test.assertTrue
  * Bite: drop the wipe from [VeyqAccount.signOut] or from its `forget` and the store's directory outlives it.
  */
 class OfflineWipeWiredTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val p = testPrimitives
     private val suite = V1(p)
     private val root = freshTestDirectory()

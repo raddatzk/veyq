@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.okhttp.OkHttp
@@ -20,7 +21,7 @@ import me.raddatz.veyq.mobile.memories.place.MemoryFacts
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.Home
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.offline.OfflinePins
 import me.raddatz.veyq.mobile.offline.Pin
 import me.raddatz.veyq.mobile.session.AccountDoor
@@ -106,7 +107,7 @@ class BannerLiveTest {
     private suspend fun addVideo(tenant: TenantSession, scopeId: String, memory: String, name: String): String {
         val up = MediaUpload.upload(
             tenant, scopeId, memory, MediaUpload.Original(source(webm), "video/webm", name, 1_000_000),
-            MediaUpload.Derived(jpeg, jpeg, 320, 240), System.currentTimeMillis(),
+            Derivation.Derived(jpeg, jpeg, 320, 240), System.currentTimeMillis(),
         )
         assertEquals(MediaUpload.Outcome.DONE, up.outcome, up.code)
         return up.mediaId!!

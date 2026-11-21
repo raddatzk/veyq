@@ -292,6 +292,12 @@ kotlin {
     }
 
     sourceSets {
+        // The platform's API for its applications and the composition (`PlatformApi`): the platform module uses its own.
+        // and Kotlin/Native's `HiddenFromObjC` (an API opt-in, no compiler flag), on every such member and on the registry's parts
+        all {
+            languageSettings.optIn("me.raddatz.veyq.mobile.PlatformApi")
+            languageSettings.optIn("kotlin.experimental.ExperimentalObjCRefinement")
+        }
         commonMain {
             kotlin.srcDir(generatedApi.map { it.dir("src/commonMain/kotlin") })
             kotlin.srcDir(generatedMajor)

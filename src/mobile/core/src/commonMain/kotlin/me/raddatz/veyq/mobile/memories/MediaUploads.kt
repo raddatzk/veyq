@@ -20,7 +20,7 @@ import me.raddatz.veyq.mobile.words.Notice
 
 /**
  * Memories' uploads over the app's one [UploadQueue] (the web's `addMedia` through `uploadQueue.ts`; ADR 0136 decision 2):
- * picked photos and videos queued into a Memory or a chapter as [MediaUpload.Job]s, the platform's [MediaUpload.Deriver]
+ * picked photos and videos queued into a Memory or a chapter as [MediaUpload.Job]s, the platform's [Derivation.Deriver]
  * making their tiers, and each one's **settle**, the core's:
  *
  * - a medium in names its node on [uploaded] (the gallery of that node reads itself anew, [GalleryModel]);
@@ -41,7 +41,7 @@ class MediaUploads(
     private val door: Door,
     dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
-    /** What the uploads make and tell ([me.raddatz.veyq.mobile.navigation.ShellModel.mediaUploads], a test's own). */
+    /** What the uploads make and tell (`ShellModel.mediaUploads`, a test's own). */
     interface Door {
         /** [source] added to node [nodeId] of [scopeId], as a job of the queue ([MediaUpload.Job]). */
         fun job(scopeId: String, nodeId: String, source: UploadSource): UploadQueue.Job

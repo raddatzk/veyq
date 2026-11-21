@@ -35,6 +35,8 @@ import kotlin.test.assertTrue
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class DepotUploadsTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private fun source(name: String, size: Long = 4) = UploadSource.of(name, size, "text/plain", null) { _, n -> ByteArray(n) }
 
     private fun file(nodeId: String, blobId: String?) = DepotFiles.File("s", nodeId, blobId, 1, 40, null, 4, "text/plain", nodeId, null, "user:u1")

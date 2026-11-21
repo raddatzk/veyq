@@ -1,5 +1,8 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.media.Derivation
+import me.raddatz.veyq.mobile.memories.MemoriesGuest
+
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.Dispatchers
@@ -16,7 +19,7 @@ import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.memories.MemoryCreate
 import me.raddatz.veyq.mobile.navigation.Home
 import me.raddatz.veyq.mobile.navigation.Shell
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.session.FolderCreate
 import me.raddatz.veyq.mobile.session.LiveRun
 import me.raddatz.veyq.mobile.session.MemoryDeviceStore
@@ -94,14 +97,14 @@ class GuestGapsLiveTest {
 
             // ---- #1033: a viewing link reported from the views ----
             val memory = assertNotNull(MemoryCreate.create(owner, scopeId, null, MemoryCreate.MEMORY, "Gaps $stamp").node).nodeId
-            MediaUpload.upload(owner, scopeId, memory, MediaUpload.Original(bytes(photo), "image/jpeg", "Owner.jpg", 1), MediaUpload.Derived(photo, photo, 4032, 3024), System.currentTimeMillis())
+            MediaUpload.upload(owner, scopeId, memory, MediaUpload.Original(bytes(photo), "image/jpeg", "Owner.jpg", 1), Derivation.Derived(photo, photo, 4032, 3024), System.currentTimeMillis())
             val readUrl = assertNotNull(ShareLinks.mint(owner, scopeId, memory, ShareLinks.READ, "", "", null).url)
             val reported = GuestScreen(guest(readUrl), reportAsked = true)
             passGates(reported)
             assertTrue(reported.state.value.reporting)
             val rootReport = send(assertNotNull(reported.reportSheet()))
             assertEquals(NodeReport.Outcome.SENT, rootReport?.outcome, "a READ link's root report was not received")
-            val gallery = assertIs<GuestPage.Gallery>(reported.view.page.value).model
+            val gallery = assertIs<MemoriesGuest.Gallery>(reported.view.page.value).model
             val rows = withContext(Dispatchers.Default) { withTimeout(30_000) { gallery.state.first { it.rows != null }.rows!! } }
             val itemReport = send(assertNotNull(gallery.reportSheet(rows.first().mediaId), "a viewing guest is offered no medium's report"))
             assertEquals(NodeReport.Outcome.SENT, itemReport?.outcome, "a medium's ITEM report was not received")
@@ -148,7 +151,7 @@ class GuestGapsLiveTest {
             assertTrue(state is BookmarkPage.State.InPlace || state is BookmarkPage.State.OnItsOwn, "the bookmark's page did not read: $state")
             val own = assertNotNull(page.openOwnPage(owner))
             passGates(own)
-            assertIs<GuestPage.Gallery>(own.view.page.value, "the bookmark's own page did not open the kept Memory")
+            assertIs<MemoriesGuest.Gallery>(own.view.page.value, "the bookmark's own page did not open the kept Memory")
             own.leave()
             page.close()
             println("[live] #1032: bookmark listed on the personal space's level, found by search as its page, opened (${state::class.simpleName}) and on its own page")

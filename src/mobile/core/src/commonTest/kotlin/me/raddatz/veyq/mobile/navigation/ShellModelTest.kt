@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.navigation
 
+import me.raddatz.veyq.mobile.composition.ShellModel
+
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.offline.PlayedTenant
@@ -15,6 +17,8 @@ import kotlin.test.assertTrue
 
 /** The shell's rules after a read and after a folder on Home's path changed, both apps' once (ADR 0136). */
 class ShellModelTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val tenantSpace = SpaceRef("t", "TENANT", "Family")
     private val personal = SpaceRef("p", "PERSONAL", "Mine")
     private val pot = ObjectRef("t", "pot", "EXPENSES_POT", ApplicationId.EXPENSES, "Trip")

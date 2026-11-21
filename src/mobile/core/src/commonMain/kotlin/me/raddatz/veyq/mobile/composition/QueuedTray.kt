@@ -1,5 +1,6 @@
-package me.raddatz.veyq.mobile.offline
+package me.raddatz.veyq.mobile.composition
 
+import me.raddatz.veyq.mobile.offline.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerialName

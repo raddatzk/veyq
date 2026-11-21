@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile
 
+import me.raddatz.veyq.mobile.composition.RowDetails
+
 import me.raddatz.veyq.mobile.depot.DepotFiles
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.words.Msg

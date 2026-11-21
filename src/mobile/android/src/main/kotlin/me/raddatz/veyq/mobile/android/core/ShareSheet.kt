@@ -112,12 +112,12 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
                                 LinkRow(row, busy = state.busy == id) { action ->
                                     when (action) {
                                         // the copy is the row's own (its button and the system's share sheet)
-                                        me.raddatz.veyq.mobile.navigation.LinkAction.COPY -> {}
-                                        me.raddatz.veyq.mobile.navigation.LinkAction.EDIT -> sheet.edit(id)
-                                        me.raddatz.veyq.mobile.navigation.LinkAction.RENEW -> sheet.askRenew(id)
-                                        me.raddatz.veyq.mobile.navigation.LinkAction.REACTIVATE -> { scope.launch { sheet.reactivate(id) } }
-                                        me.raddatz.veyq.mobile.navigation.LinkAction.SWITCH_OFF -> { scope.launch { sheet.switchOff(id) } }
-                                        me.raddatz.veyq.mobile.navigation.LinkAction.DELETE -> sheet.askDelete(id)
+                                        me.raddatz.veyq.mobile.composition.LinkAction.COPY -> {}
+                                        me.raddatz.veyq.mobile.composition.LinkAction.EDIT -> sheet.edit(id)
+                                        me.raddatz.veyq.mobile.composition.LinkAction.RENEW -> sheet.askRenew(id)
+                                        me.raddatz.veyq.mobile.composition.LinkAction.REACTIVATE -> { scope.launch { sheet.reactivate(id) } }
+                                        me.raddatz.veyq.mobile.composition.LinkAction.SWITCH_OFF -> { scope.launch { sheet.switchOff(id) } }
+                                        me.raddatz.veyq.mobile.composition.LinkAction.DELETE -> sheet.askDelete(id)
                                     }
                                 }
                                 HorizontalDivider()
@@ -157,12 +157,12 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
  * ask first ([onAction] runs each but the copy).
  */
 @Composable
-private fun LinkRow(row: me.raddatz.veyq.mobile.session.LinkRow, busy: Boolean, onAction: (me.raddatz.veyq.mobile.navigation.LinkAction) -> Unit) {
+private fun LinkRow(row: me.raddatz.veyq.mobile.session.LinkRow, busy: Boolean, onAction: (me.raddatz.veyq.mobile.composition.LinkAction) -> Unit) {
     val palette = LocalPalette.current
     val context = LocalContext.current
     val copied = rememberCopied()
     val link = row.link
-    val actions = me.raddatz.veyq.mobile.navigation.ShareSheet.rowActions(row)
+    val actions = me.raddatz.veyq.mobile.composition.ShareSheet.rowActions(row)
     val url = link.url
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -176,7 +176,7 @@ private fun LinkRow(row: me.raddatz.veyq.mobile.session.LinkRow, busy: Boolean, 
             if (badges.isNotEmpty()) Text(badges.joined(), style = MaterialTheme.typography.bodySmall, color = role(palette.accent))
         }
         if (copied.shown) Text(stringResource(R.string.share_copied), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
-        if (url != null && me.raddatz.veyq.mobile.navigation.LinkAction.COPY in actions) IconButton(onClick = { copy(context, url); copied.said() }) {
+        if (url != null && me.raddatz.veyq.mobile.composition.LinkAction.COPY in actions) IconButton(onClick = { copy(context, url); copied.said() }) {
             Icon(Icons.Outlined.ContentCopy, stringResource(R.string.share_copy))
         }
         if (busy) CircularProgressIndicator(Modifier.padding(12.dp).width(20.dp))
@@ -186,18 +186,18 @@ private fun LinkRow(row: me.raddatz.veyq.mobile.session.LinkRow, busy: Boolean, 
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
                 androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
                     for (a in actions) when (a) {
-                        me.raddatz.veyq.mobile.navigation.LinkAction.COPY -> if (url != null) {
+                        me.raddatz.veyq.mobile.composition.LinkAction.COPY -> if (url != null) {
                             androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_send)) }, onClick = { menu = false; sendText(context, url) })
                         }
-                        me.raddatz.veyq.mobile.navigation.LinkAction.EDIT ->
+                        me.raddatz.veyq.mobile.composition.LinkAction.EDIT ->
                             androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_edit)) }, onClick = { menu = false; onAction(a) })
-                        me.raddatz.veyq.mobile.navigation.LinkAction.RENEW ->
+                        me.raddatz.veyq.mobile.composition.LinkAction.RENEW ->
                             androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_renew)) }, onClick = { menu = false; onAction(a) })
-                        me.raddatz.veyq.mobile.navigation.LinkAction.REACTIVATE ->
+                        me.raddatz.veyq.mobile.composition.LinkAction.REACTIVATE ->
                             androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_reactivate)) }, onClick = { menu = false; onAction(a) })
-                        me.raddatz.veyq.mobile.navigation.LinkAction.SWITCH_OFF ->
+                        me.raddatz.veyq.mobile.composition.LinkAction.SWITCH_OFF ->
                             androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_switch_off), color = role(palette.danger)) }, onClick = { menu = false; onAction(a) })
-                        me.raddatz.veyq.mobile.navigation.LinkAction.DELETE ->
+                        me.raddatz.veyq.mobile.composition.LinkAction.DELETE ->
                             androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_delete), color = role(palette.danger)) }, onClick = { menu = false; onAction(a) })
                     }
                 }

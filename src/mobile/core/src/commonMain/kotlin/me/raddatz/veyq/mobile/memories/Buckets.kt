@@ -158,7 +158,7 @@ object Buckets {
     suspend fun list(tenant: TenantSession, scopeId: String, nodeId: String): Listed {
         val account = tenant.account
         val api = BucketsApi(tenant.base, account.http)
-        val read = account.kept(KeptRead.NODE_BUCKETS, tenant.tenant.tenantId, scopeId, nodeId) {
+        val read = account.kept(MemoriesKept.NODE_BUCKETS, tenant.tenant.tenantId, scopeId, nodeId) {
             account.fetched(account.respond { api.listNodeBuckets(scopeId, nodeId) }, null)
         }
         val page = VeyqAccount.KEPT_JSON.decodeFromString(BucketListResponse.serializer(), read.pages.single().decodeToString())

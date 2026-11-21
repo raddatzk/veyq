@@ -34,15 +34,21 @@ import me.raddatz.veyq.mobile.sharing.GuestSession
  * guest calls; nothing of an account.
  */
 object MemoriesGuest {
+    /** A Memory or a chapter as a link's guest sees it: its gallery with a guest's access. */
+    class Gallery(override val node: NodeAt, val model: GalleryModel) : GuestPage()
+
+    /** A Memory's or a chapter's WRITE_ONLY link: the uploader (the guest names itself, adds photos and videos). */
+    class Uploader(override val node: NodeAt, val model: GuestUploader) : GuestPage()
+
     /** A Memory or a chapter of a READ or READ_WRITE link: its gallery. */
     val gallery = GuestDoor { access, node, _ ->
         val opened = access.tree?.node(node.nodeId) ?: return@GuestDoor GuestPage.NotShown(node)
         // its music as the member's (#1034): the player the host handed the link — the account's, or the app's signed out
-        GuestPage.Gallery(node, GalleryModel(node, GuestGalleryDoor(access, opened), access = MemoryRights.Access.Guest(access.role), music = access.music))
+        MemoriesGuest.Gallery(node, GalleryModel(node, GuestGalleryDoor(access, opened), access = MemoryRights.Access.Guest(access.role), music = access.music))
     }
 
     /** A Memory's or a chapter's WRITE_ONLY link: the uploader. */
-    val uploader = GuestDoor { access, node, _ -> GuestPage.Uploader(node, GuestUploader(access, node)) }
+    val uploader = GuestDoor { access, node, _ -> MemoriesGuest.Uploader(node, GuestUploader(access, node)) }
 
     private fun roleOf(item: MemoryMedia.Item, blob: MemoryMedia.Blob): String = when (blob) {
         item.thumbnail -> MemoryMedia.THUMBNAIL

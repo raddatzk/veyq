@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
@@ -57,7 +58,7 @@ class ScopeRelockLiveTest {
             fun source(b: ByteArray) = ByteSource(b.size.toLong()) { from, length -> b.copyOfRange(from.toInt(), minOf(b.size.toLong(), from + length).toInt()) }
             val first = MediaUpload.upload(
                 a, scopeId, made.nodeId, MediaUpload.Original(source(photo), "image/jpeg", "Before.jpg", 1_000_000),
-                MediaUpload.Derived(photo, photo, 4032, 3024), System.currentTimeMillis(),
+                Derivation.Derived(photo, photo, 4032, 3024), System.currentTimeMillis(),
             )
             assertEquals(MediaUpload.Outcome.DONE, first.outcome, first.code)
             a.forgetTree()
@@ -87,7 +88,7 @@ class ScopeRelockLiveTest {
             // A's upload meets the due Memory, pulls its re-key forward on this device and lands
             val second = MediaUpload.upload(
                 a, scopeId, made.nodeId, MediaUpload.Original(source(photo), "image/jpeg", "After.jpg", 2_000_000),
-                MediaUpload.Derived(photo, photo, 4032, 3024), System.currentTimeMillis(),
+                Derivation.Derived(photo, photo, 4032, 3024), System.currentTimeMillis(),
             )
             assertEquals(MediaUpload.Outcome.DONE, second.outcome, second.code)
             assertTrue(!due(), "the upload did not pull the Memory's re-key")

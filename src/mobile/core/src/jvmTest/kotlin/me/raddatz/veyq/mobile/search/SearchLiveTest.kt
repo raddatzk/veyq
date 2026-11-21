@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.search
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.okhttp.OkHttp
@@ -22,7 +23,7 @@ import me.raddatz.veyq.mobile.memories.place.MemoryLocation
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.session.LiveRun
 import me.raddatz.veyq.mobile.session.NodeRename
 import me.raddatz.veyq.mobile.session.NodeTrash
@@ -127,7 +128,7 @@ class SearchLiveTest {
             val up = MediaUpload.upload(
                 tenant, tenantSpace, memory,
                 MediaUpload.Original(ByteSource(photo.size.toLong()) { from, length -> photo.copyOfRange(from.toInt(), minOf(photo.size.toLong(), from + length).toInt()) }, "image/jpeg", "Beachphoto $n.jpg", 1_000_000),
-                MediaUpload.Derived(photo, photo, 4032, 3024), System.currentTimeMillis(),
+                Derivation.Derived(photo, photo, 4032, 3024), System.currentTimeMillis(),
             )
             assertEquals(MediaUpload.Outcome.DONE, up.outcome, up.code)
             val mediaId = assertNotNull(up.mediaId)
@@ -161,8 +162,8 @@ class SearchLiveTest {
             model.settled()
             assertEquals(OpenRequests.Request(tenantSpace, memory, mediaId), shell.openRequests.request.value)
             assertEquals(memory, shell.state.value!!.shell.openObject?.nodeId, "the Memory opened")
-            val uploads = shell.mediaUploads(UploadQueue(), object : MediaUpload.Deriver {
-                override fun derive(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, done: (MediaUpload.Derived) -> Unit) = error("no upload")
+            val uploads = shell.mediaUploads(UploadQueue(), object : Derivation.Deriver {
+                override fun derive(source: me.raddatz.veyq.mobile.blob.UploadSource, type: String, done: (Derivation.Derived) -> Unit) = error("no upload")
             }, {}, {})
             val gallery = shell.galleryModel(NodeAt(tenantSpace, memory, "MEMORY", name), uploads)
             try {

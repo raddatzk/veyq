@@ -28,6 +28,8 @@ import kotlin.test.fail
  * a cancel too, "Import the rest", and a quota refused before any write.
  */
 class SubtreeImportTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val cases = ImportFixtures.cases()
 
     private suspend fun run(target: PlayedImport, input: ImportInput, parentId: String? = null) =

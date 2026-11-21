@@ -25,6 +25,8 @@ import kotlin.test.assertNull
  * files —, a guest's without any name or EXIF copy, and a folder's download that carries its Memory and the chapter in it.
  */
 class MemoryExportTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     /** The fixture's Memory: two photos (one corrected, placed and EXIF'd), a chapter with one, the facts, a cover, an image banner. */
     internal class Fixture(val t: PlayedTenant, val s: PlayedTenant.Scope, val folder: PlayedTenant.Node, val memory: PlayedTenant.Node, val chapter: PlayedTenant.Node, val exifReads: () -> Int)
 

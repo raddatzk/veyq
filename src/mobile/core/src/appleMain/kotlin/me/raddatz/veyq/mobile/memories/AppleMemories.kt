@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
@@ -71,8 +72,8 @@ object AppleMemories {
         FileUploadSource(url, null, name, size, type, modifiedAt)
 
     /** The tiers the app derived ([preview], [thumbnail], the size as shown), as core takes them. */
-    fun derived(preview: NSData?, thumbnail: NSData?, width: Int?, height: Int?): MediaUpload.Derived =
-        MediaUpload.Derived(preview?.toByteArray(), thumbnail?.toByteArray(), width, height)
+    fun derived(preview: NSData?, thumbnail: NSData?, width: Int?, height: Int?): Derivation.Derived =
+        Derivation.Derived(preview?.toByteArray(), thumbnail?.toByteArray(), width, height)
 
     private fun NSData.toByteArray(): ByteArray {
         val out = ByteArray(length.toInt())

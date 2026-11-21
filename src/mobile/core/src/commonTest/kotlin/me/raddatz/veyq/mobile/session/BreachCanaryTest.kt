@@ -21,6 +21,8 @@ import kotlin.test.assertTrue
  * server about it.
  */
 class BreachCanaryTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private companion object {
         const val FINAL = "correct horse battery staple"
         const val HASH = "ABF7AAD6438836DBE526AA231ABDE2D0EEF74D42"

@@ -41,6 +41,8 @@ import kotlin.time.Duration.Companion.seconds
  * single-flight, run at the unlock, and its 45 s loop stopped at the close.
  */
 class FinishRotationTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val p = testPrimitives
     private val trust = Trust(me.raddatz.veyq.mobile.crypto.V1(p))
 

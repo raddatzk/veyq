@@ -9,7 +9,7 @@ import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.crypto.V1
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeRef
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor

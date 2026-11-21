@@ -8,6 +8,8 @@ import kotlin.test.assertTrue
 
 /** The new-link form's rules both apps wrote (the web's `FolderShareDialog`). */
 class LinkFormTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val free = ShareLinks.Rules(on = true, contribute = true, passwordRequired = false, maxDays = null, dropBox = true)
     private val strict = ShareLinks.Rules(on = true, contribute = false, passwordRequired = true, maxDays = 7, dropBox = true)
     private val today = 20_000L

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
@@ -58,7 +59,7 @@ class MemoryRekeyLiveTest {
             fun source(b: ByteArray) = ByteSource(b.size.toLong()) { from, length -> b.copyOfRange(from.toInt(), minOf(b.size.toLong(), from + length).toInt()) }
             val first = MediaUpload.upload(
                 owner, scopeId, made.nodeId, MediaUpload.Original(source(photo), "image/jpeg", "Before.jpg", 1_000_000),
-                MediaUpload.Derived(photo, photo, 4032, 3024), System.currentTimeMillis(),
+                Derivation.Derived(photo, photo, 4032, 3024), System.currentTimeMillis(),
             )
             assertEquals(MediaUpload.Outcome.DONE, first.outcome, first.code)
             val picked = BannerWrite.Picked(UploadSource.of("banner.jpg", photo.size.toLong(), "image/jpeg", null) { from, length ->
@@ -79,7 +80,7 @@ class MemoryRekeyLiveTest {
             val member = session("VEYQ_USER2")
             val second = MediaUpload.upload(
                 member, scopeId, made.nodeId, MediaUpload.Original(source(photo), "image/jpeg", "After.jpg", 2_000_000),
-                MediaUpload.Derived(photo, photo, 4032, 3024), System.currentTimeMillis(),
+                Derivation.Derived(photo, photo, 4032, 3024), System.currentTimeMillis(),
             )
             assertEquals(MediaUpload.Outcome.DONE, second.outcome, second.code)
             assertTrue(!due(), "the Memory is still due")

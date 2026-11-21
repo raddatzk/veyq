@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.api.createClientPlugin
@@ -63,7 +64,7 @@ class ReceivedLinkLiveTest {
             val memory = assertNotNull(MemoryCreate.create(owner, scopeId, null, MemoryCreate.MEMORY, "Received ${System.currentTimeMillis() % 100_000}").node).nodeId
             val photo = File(root, "src/web/src/features/memories/__fixtures__/exif-sample.jpg").readBytes()
             fun source(b: ByteArray) = ByteSource(b.size.toLong()) { from, length -> b.copyOfRange(from.toInt(), minOf(b.size.toLong(), from + length).toInt()) }
-            MediaUpload.upload(owner, scopeId, memory, MediaUpload.Original(source(photo), "image/jpeg", "Owner.jpg", 1), MediaUpload.Derived(photo, photo, 4032, 3024), System.currentTimeMillis())
+            MediaUpload.upload(owner, scopeId, memory, MediaUpload.Original(source(photo), "image/jpeg", "Owner.jpg", 1), Derivation.Derived(photo, photo, 4032, 3024), System.currentTimeMillis())
             val minted = ShareLinks.mint(owner, scopeId, memory, ShareLinks.READ_WRITE, "", "live password 1", null)
             val url = assertNotNull(minted.url, "no link minted: ${minted.refusal}")
 
@@ -84,14 +85,14 @@ class ReceivedLinkLiveTest {
             }
             assertIs<ShareGates.State.Ready>(view.gates.state.value, "the gates did not open: ${view.gates.state.value}")
             view.enter()
-            val gallery = assertIs<GuestPage.Gallery>(view.page.value)
+            val gallery = assertIs<MemoriesGuest.Gallery>(view.page.value)
             assertTrue(gallery.model.rights.upload)
             val access = assertNotNull(view.access)
             val door = MemoriesGuest.GuestGalleryDoor(access, access.tree!!.root)
             val item = assertNotNull(door.gallery()).items.single()
             assertContentEquals(photo, door.read(item, item.original), "the guest read another photo than the owner uploaded")
             access.nameGuest("Live guest")
-            val prepared = MediaUpload.prepare(MediaUpload.Original(source(photo), "image/jpeg", "Guest.jpg", 2), System.currentTimeMillis()) { MediaUpload.Derived(photo, photo, 4032, 3024) }
+            val prepared = MediaUpload.prepare(MediaUpload.Original(source(photo), "image/jpeg", "Guest.jpg", 2), System.currentTimeMillis()) { Derivation.Derived(photo, photo, 4032, 3024) }
             val up = MemoriesGuest.send(access, access.session.value!!, scopeId, access.tree!!.root.key, access.rootEpoch, null, MediaUpload.Original(source(photo), "image/jpeg", "Guest.jpg", 2), prepared) {}
             assertEquals(MediaUpload.Outcome.DONE, up.outcome, "the guest's upload: ${up.code}")
             val listed = assertNotNull(MemoryMedia.list(session("VEYQ"), scopeId, memory)).items

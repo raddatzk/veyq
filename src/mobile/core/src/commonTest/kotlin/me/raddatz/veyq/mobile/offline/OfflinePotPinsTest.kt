@@ -1,5 +1,9 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.memories.MemoriesKept
+
+import me.raddatz.veyq.mobile.expenses.ExpensesKept
+
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.expenses.Allocation
@@ -29,10 +33,12 @@ import kotlin.test.assertTrue
  * with "Clear cache" and with the space itself.
  *
  * Bites (each one edit, seen red, then restored): (a) `AccountOffline.belowNode` without the Pot's ledger → the pinned
- * Pot's ledger is swept, it does not open offline; (b) `KeptRead.SCOPE_MEDIA` among `KeptRead.PROTECTED` → "Clear cache"
+ * Pot's ledger is swept, it does not open offline; (b) `MemoriesKept.SCOPE_MEDIA` among `KeptRead.PROTECTED` → "Clear cache"
  * keeps the space's listing.
  */
 class OfflinePotPinsTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val played = mutableListOf<PlayedTenant>()
 
     @AfterTest
@@ -83,7 +89,7 @@ class OfflinePotPinsTest {
         assertEquals(Pin.State.KEPT, pins.pins.value.single().state)
         o.clearCache()
         assertEquals(setOf("p1-receipt", "p1-cover"), o.frames(t), "Clear cache dropped the pinned Pot's blobs")
-        assertEquals(1, o.kept(KeptRead.POT_REVISIONS.kind).size, "Clear cache dropped the pinned Pot's ledger")
+        assertEquals(1, o.kept(ExpensesKept.POT_REVISIONS.kind).size, "Clear cache dropped the pinned Pot's ledger")
         a.retire()
 
         t.reachable = false
@@ -108,10 +114,10 @@ class OfflinePotPinsTest {
         pins.pin(tenant, s.id, p.id)
         pins.sync()
         val o = assertNotNull(a.offline)
-        assertEquals(1, o.kept(KeptRead.POT_REVISIONS.kind).size)
+        assertEquals(1, o.kept(ExpensesKept.POT_REVISIONS.kind).size)
         pins.unpin(p.id)
         o.clearCache()
-        assertEquals(emptyList(), o.kept(KeptRead.POT_REVISIONS.kind), "an unpinned Pot's ledger stayed")
+        assertEquals(emptyList(), o.kept(ExpensesKept.POT_REVISIONS.kind), "an unpinned Pot's ledger stayed")
         assertEquals(emptySet(), o.frames(t), "an unpinned Pot's receipt stayed")
         a.retire()
     }
@@ -142,7 +148,7 @@ class OfflinePotPinsTest {
         val found = assertNotNull(search(tenant, s), "offline the space's listing was not read from the store")
         assertEquals(setOf("beach.jpg", "dunes.jpg"), found.documents.map { it.name }.toSet())
         // the Memory itself was never opened: its own listing is not kept
-        assertNull(assertNotNull(off.offline).store.entries().firstOrNull { it.key.kind == KeptRead.NODE_MEDIA.kind })
+        assertNull(assertNotNull(off.offline).store.entries().firstOrNull { it.key.kind == MemoriesKept.NODE_MEDIA.kind })
         off.retire()
     }
 
@@ -159,15 +165,15 @@ class OfflinePotPinsTest {
         search(tenant, s1)
         search(tenant, s2)
         val o = assertNotNull(a.offline)
-        assertEquals(setOf(s1.id, s2.id), o.kept(KeptRead.SCOPE_MEDIA.kind).map { it.scope }.toSet())
+        assertEquals(setOf(s1.id, s2.id), o.kept(MemoriesKept.SCOPE_MEDIA.kind).map { it.scope }.toSet())
         // the account leaves s2: the next read of the scopes sweeps its listing
         s2.member = false
         tenant.forgetTree()
         tenant.nodes()
-        assertEquals(setOf(s1.id), o.kept(KeptRead.SCOPE_MEDIA.kind).map { it.scope }.toSet(), "a space left kept its media listing")
+        assertEquals(setOf(s1.id), o.kept(MemoriesKept.SCOPE_MEDIA.kind).map { it.scope }.toSet(), "a space left kept its media listing")
         o.clearCache()
-        assertEquals(emptyList(), o.kept(KeptRead.SCOPE_MEDIA.kind), "Clear cache kept a space's media listing")
-        assertFalse(o.store.entries().any { it.key.kind == KeptRead.SCOPE_MEDIA.kind && it.pins.isNotEmpty() })
+        assertEquals(emptyList(), o.kept(MemoriesKept.SCOPE_MEDIA.kind), "Clear cache kept a space's media listing")
+        assertFalse(o.store.entries().any { it.key.kind == MemoriesKept.SCOPE_MEDIA.kind && it.pins.isNotEmpty() })
         a.retire()
     }
 

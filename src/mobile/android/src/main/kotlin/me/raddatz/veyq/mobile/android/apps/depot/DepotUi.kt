@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.android.apps.depot
 
+import me.raddatz.veyq.mobile.depot.DepotGuest
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
@@ -147,7 +149,7 @@ internal object DepotUi {
         header = { node, model -> fileHeader(node, model) },
         body = { ref, _, model -> FileScreen(ref, model) },
         guest = { page, _, _, _ ->
-            if (page is GuestPage.File) {
+            if (page is DepotGuest.File) {
                 DisposableEffect(page.model) { onDispose { page.model.close() } }
                 FilePage(page.model, page.node.name)
             }
@@ -162,7 +164,7 @@ internal object DepotUi {
             )
         },
         body = { ref, _, model -> DropBoxScreen(ref, model) },
-        guest = { page, screen, model, _ -> if (page is GuestPage.DropBox) GuestDropBoxPage(page.model, screen.view.access, model) },
+        guest = { page, screen, model, _ -> if (page is DepotGuest.DropBox) GuestDropBoxPage(page.model, screen.view.access, model) },
     )
 
     fun register(registry: Registry) {

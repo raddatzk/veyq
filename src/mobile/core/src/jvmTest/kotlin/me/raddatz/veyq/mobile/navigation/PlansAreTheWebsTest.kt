@@ -17,6 +17,8 @@ import kotlin.test.assertTrue
  * (as `MediaTierSpecTest` holds the tiers).
  */
 class PlansAreTheWebsTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val web = File(System.getProperty("veyq.repoRoot"), "src/web/src")
 
     private fun read(path: String) = File(web, path).readText()
