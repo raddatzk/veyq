@@ -403,7 +403,7 @@ impl Shell {
                             eprintln!("veyq: new folder: {}", p.msg);
                             again(name, said::notice(&p));
                         }
-                        Ok(Answer::Named { notice: Some(n), .. }) => toasts.add_toast(adw::Toast::new(&said::notice(&n))),
+                        Ok(Answer::Named { notice: Some(n), .. }) => toasts.add_toast(said::notice_toast(&n)),
                         Ok(Answer::Named { .. }) => {}
                         other => header::say(&toasts, other, "Shell.CreateFolder"),
                     }
@@ -526,9 +526,10 @@ impl Shell {
         Drops { level: here.then(|| self.level().map(|l| l.label)).flatten(), rows, toasts: self.toasts.clone() }
     }
 
-    /// Says [text] as a toast over the content.
+    /// Says [text] — what did not happen (a level this device could not keep) — as a toast over the content, held until
+    /// closed (ADR 0154 decision 4).
     pub fn say(&self, text: &str) {
-        self.toasts.add_toast(adw::Toast::new(text));
+        self.toasts.add_toast(said::toast(text, crate::bridge::wire::NoticeKind::Held));
     }
 
     /// A switch to another tenant is under way (`Gate.Signed.switching`).
@@ -578,7 +579,7 @@ impl Shell {
             if !shown.queued_said.is_empty() {
                 for n in &shown.queued_said {
                     eprintln!("veyq: queued said: {}", n.msg);
-                    self.toasts.add_toast(adw::Toast::new(&home::glib_escape(&said::notice(n))));
+                    self.toasts.add_toast(said::notice_toast(n));
                 }
                 bridge::send(Call::ShellQueuedSaidSeen);
             }
@@ -592,7 +593,7 @@ impl Shell {
         }
         for n in &state.gone {
             eprintln!("veyq: offline gone: {}", n.msg);
-            self.toasts.add_toast(adw::Toast::new(&home::glib_escape(&said::notice(n))));
+            self.toasts.add_toast(said::notice_toast(n));
         }
         bridge::send(Call::ShellOfflineGoneSeen);
     }

@@ -156,7 +156,7 @@ impl PotPage {
         let Some(pot) = self.inner.id.get() else { return };
         let (name, parent, toasts) = (self.r#ref.name.clone(), parent.clone(), toasts.clone());
         glib::spawn_future_local(async move {
-            let failed = || adw::Toast::new(&words::download_failed(&name));
+            let failed = || said::word_toast("download_failed", &words::download_failed(&name));
             let suggested = match bridge::call(&Call::PotArchiveName { pot }).await.map(|(answer, _)| answer) {
                 Ok(Answer::Name { name }) => name,
                 other => {
@@ -186,7 +186,7 @@ impl PotPage {
             };
             let call = Call::PotDownload { pot, path, deleted_name: words::pot_deleted_person() };
             match bridge::call(&call).await.map(|(answer, _)| answer) {
-                Ok(Answer::Done) => toasts.add_toast(adw::Toast::new(&words::download_done(&name))),
+                Ok(Answer::Done) => toasts.add_toast(said::word_toast("download_done", &words::download_done(&name))),
                 other => {
                     eprintln!("veyq: Pot.Download answered {other:?}");
                     toasts.add_toast(failed());
@@ -379,21 +379,21 @@ impl Inner {
         } else {
             let group = adw::PreferencesGroup::new();
             for e in &view.entries {
-                group.add(&self.entry_row(view, e, false));
+                group.add(&self.entry_row(e, false));
             }
             content.append(&group);
         }
         if !view.deleted.is_empty() {
             let deleted = adw::PreferencesGroup::builder().title(words::entries_deleted_title()).build();
             for e in &view.deleted {
-                deleted.add(&self.entry_row(view, e, true));
+                deleted.add(&self.entry_row(e, true));
             }
             content.append(&deleted);
         }
     }
 
     /// An entry's row, opened to the editor (a deleted one's to its history and restore).
-    fn entry_row(self: &Rc<Self>, view: &PotView, e: &ShownEntry, deleted: bool) -> adw::ActionRow {
+    fn entry_row(self: &Rc<Self>, e: &ShownEntry, deleted: bool) -> adw::ActionRow {
         let title = e.row.title.clone().unwrap_or_else(words::pot_transfer);
         let row = adw::ActionRow::builder().title(glib_escape(&title)).subtitle(glib_escape(&said::line(&e.line))).activatable(true).build();
         if deleted {
@@ -406,11 +406,11 @@ impl Inner {
             row.add_prefix(&gtk::Image::from_icon_name("document-send-symbolic"));
             row.add_suffix(&suffix(&said::notice(m), &["caption", "dim-label"]));
         }
-        if let Some(amount) = e.row.amount {
-            row.add_suffix(&suffix(&money(view, amount), &["numeric"]));
+        if let Some(amount) = &e.amount_text {
+            row.add_suffix(&suffix(amount, &["numeric"]));
         }
         row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
-        let (w, id, amount) = (Rc::downgrade(self), e.row.id.clone(), e.row.amount.map(|a| money(view, a)));
+        let (w, id, amount) = (Rc::downgrade(self), e.row.id.clone(), e.amount_text.clone());
         row.connect_activated(move |_| {
             let Some(i) = w.upgrade() else { return };
             let Some(pot) = i.id.get() else { return };
@@ -456,14 +456,14 @@ impl Inner {
             }
             for t in &view.settle_up {
                 let pays = said::notice(&t.pays);
-                let amount = money(view, t.row.amount);
+                let amount = t.amount_text.clone().unwrap_or_default();
                 let row = adw::ActionRow::builder().title(glib_escape(&pays)).build();
                 row.add_suffix(&suffix(&amount, &["numeric"]));
                 // a payment never queues: *Record* where the core offers it (`canRecord`), never by `canWrite`
                 if view.can_record {
                     let record = gtk::Button::builder().label(words::balances_record()).valign(gtk::Align::Center).build();
                     let (w, one) = (Rc::downgrade(self), t.row.clone());
-                    let body = [pays.clone(), amount.clone()].join(" · ");
+                    let body = said::joined(&[pays.clone(), amount.clone()]);
                     record.connect_clicked(move |_| if let Some(i) = w.upgrade() {
                         i.ask_record(vec![one.clone()], &words::balances_record_question(), &[body.clone(), words::balances_record_hint()].join("\n\n"));
                     });
@@ -477,11 +477,11 @@ impl Inner {
             let categories = adw::PreferencesGroup::builder().title(words::pot_by_category()).build();
             for c in &view.by_category {
                 let row = adw::ActionRow::builder().title(glib_escape(&said::piece(&c.label))).build();
-                row.add_suffix(&suffix(&money(view, c.row.amount), &["numeric"]));
+                row.add_suffix(&suffix(c.amount_text.as_deref().unwrap_or_default(), &["numeric"]));
                 categories.add(&row);
             }
             let total = adw::ActionRow::builder().title(words::pot_total()).build();
-            total.add_suffix(&suffix(&money(view, view.total), &["numeric", "heading"]));
+            total.add_suffix(&suffix(&view.total_text, &["numeric", "heading"]));
             categories.add(&total);
             content.append(&categories);
         }
@@ -588,10 +588,6 @@ fn suffix(text: &str, classes: &[&str]) -> gtk::Label {
         label.add_css_class(c);
     }
     label
-}
-
-fn money(view: &PotView, amount: i64) -> String {
-    said::money(amount, view.currency.as_deref(), view.minor_units)
 }
 
 /// The ledger check's notice (ADR 0108 decision 5): what the read found missing, so the balances may be wrong.

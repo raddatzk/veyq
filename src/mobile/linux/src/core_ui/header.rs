@@ -275,7 +275,7 @@ impl Inner {
                     Ok(Answer::Named { problem: None, notice, .. }) => {
                         eprintln!("veyq: header rename: Named");
                         if let Some(n) = notice {
-                            toasts.add_toast(adw::Toast::new(&said::notice(&n)));
+                            toasts.add_toast(said::notice_toast(&n));
                         }
                     }
                     other => say(&toasts, other, "Header.Rename"),
@@ -316,7 +316,7 @@ impl Inner {
         let Some(suggested) = self.shown.borrow().as_ref().map(|s| s.archive_name.clone()) else { return };
         let (name, parent, toasts) = (self.node.name.clone(), parent.clone(), self.toasts.clone());
         glib::spawn_future_local(async move {
-            let failed = || adw::Toast::new(&words::download_failed(&name));
+            let failed = || said::word_toast("download_failed", &words::download_failed(&name));
             let dialog = gtk::FileDialog::builder().title(words::node_download()).initial_name(suggested).modal(true).build();
             if let Some(downloads) = glib::user_special_dir(glib::UserDirectory::Downloads).filter(|d| d.is_dir()) {
                 dialog.set_initial_folder(Some(&gio::File::for_path(downloads)));
@@ -341,7 +341,7 @@ impl Inner {
                 Ok(Answer::Downloaded { notice, left_out, .. }) => {
                     eprintln!("veyq: header download: {}, left out: {}", notice.msg, left_out.is_some());
                     let said = [Some(&notice), left_out.as_ref()].into_iter().flatten().map(said::notice).collect::<Vec<_>>().join(" ");
-                    toasts.add_toast(adw::Toast::new(&said));
+                    toasts.add_toast(said::toast(&said, notice.kind));
                 }
                 other => {
                     eprintln!("veyq: Header.Download answered {other:?}");
@@ -374,7 +374,7 @@ impl Inner {
                 match answered {
                     Ok(Answer::Trashed { notice, undoable }) => {
                         eprintln!("veyq: header trash: {}, undo offered: {undoable}", notice.msg);
-                        inner.offer(&said::notice(&notice), undoable, header);
+                        inner.offer(&notice, undoable, header);
                     }
                     other => say(&inner.toasts, other, "Header.Trash"),
                 }
@@ -434,11 +434,10 @@ impl Inner {
     }
 
     /// What the trash said, with Undo where the core offers it now: a toast that stays until the offer ends.
-    fn offer(self: &Rc<Self>, text: &str, undo: bool, header: i64) {
-        let toast = adw::Toast::new(text);
+    fn offer(self: &Rc<Self>, notice: &crate::bridge::wire::Notice, undo: bool, header: i64) {
+        let toast = said::notice_toast(notice);
         if undo {
             toast.set_button_label(Some(&words::trash_undo()));
-            toast.set_timeout(0);
             let toasts = self.toasts.clone();
             toast.connect_button_clicked(move |_| {
                 let toasts = toasts.clone();
@@ -774,16 +773,16 @@ pub fn say(toasts: &adw::ToastOverlay, answered: Result<Answer, bridge::Unreadab
         Ok(Answer::Said { notice: None }) | Ok(Answer::Done) => eprintln!("veyq: {what}: Done"),
         Ok(Answer::Said { notice: Some(n) }) => {
             eprintln!("veyq: {what}: {}", n.msg);
-            toasts.add_toast(adw::Toast::new(&said::notice(&n)));
+            toasts.add_toast(said::notice_toast(&n));
         }
         // a refusal or an answer that did not read is said, never only logged (ADR 0154 decision 1)
         Ok(Answer::Refused { why }) => {
             eprintln!("veyq: {what}: Refused {why:?}");
-            toasts.add_toast(adw::Toast::new(&words::node_save_failed()));
+            toasts.add_toast(said::word_toast("node_save_failed", &words::node_save_failed()));
         }
         Err(e) => {
             eprintln!("veyq: {what}: did not read: {:?}", e.0);
-            toasts.add_toast(adw::Toast::new(&words::node_save_failed()));
+            toasts.add_toast(said::word_toast("node_save_failed", &words::node_save_failed()));
         }
         Ok(other) => eprintln!("veyq: {what} answered {other:?}"),
     }

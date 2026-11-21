@@ -21,7 +21,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, wire::Answer, wire::Call, wire::QueuedItem, wire::QueuedOpen, wire::QueuedWriteState, wire::Update, wire::UploadBatch,
+use crate::bridge::{self, wire::Answer, wire::Call, wire::NoticeKind, wire::QueuedItem, wire::QueuedOpen, wire::QueuedWriteState, wire::Update, wire::UploadBatch,
     wire::UploadItem, wire::UploadStatus, wire::UploadsShown, wire::Watched, wire::Why};
 use crate::core_ui::home::glib_escape;
 use crate::core_ui::{header, said, words};
@@ -485,12 +485,13 @@ impl Uploads {
         }
         let text = told.notices.iter().map(said::notice).collect::<Vec<_>>().join("\n");
         eprintln!("veyq: uploads say {}: {}", told.id, told.notices.iter().map(|n| n.msg.as_str()).collect::<Vec<_>>().join(", "));
-        let toast = adw::Toast::builder().title(glib_escape(&text)).build();
+        // an offer stays until taken or closed; else the line lives as its first notice does
+        let kind = if told.action.is_some() { NoticeKind::Held } else { told.notices.first().map_or(NoticeKind::Held, |n| n.kind) };
+        let toast = said::toast(&text, kind);
         let id = told.id;
         let taken = Rc::new(Cell::new(false));
         if let Some(action) = &told.action {
             toast.set_button_label(Some(&said::key(action)));
-            toast.set_timeout(0);
             let taken = taken.clone();
             toast.connect_button_clicked(move |_| {
                 taken.set(true);
@@ -533,14 +534,14 @@ async fn save_copy(parent: &gtk::Window, write: &str, index: i32, toasts: &adw::
         Err(e) => return dismissed(&e, "save a copy"),
     };
     let Some(path) = local_path(&chosen) else {
-        toasts.add_toast(adw::Toast::new(&words::download_failed(&name)));
+        toasts.add_toast(said::word_toast("download_failed", &words::download_failed(&name)));
         return;
     };
     match bridge::call(&Call::QueuedSaveCopy { write: write.to_owned(), index, path }).await.map(|(a, _)| a) {
         Ok(Answer::Done) => eprintln!("veyq: queued: a copy saved"),
         other => {
             eprintln!("veyq: Queued.SaveCopy answered {other:?}");
-            toasts.add_toast(adw::Toast::new(&words::download_failed(&name)));
+            toasts.add_toast(said::word_toast("download_failed", &words::download_failed(&name)));
         }
     }
 }
@@ -661,7 +662,7 @@ pub fn queued(toasts: &adw::ToastOverlay, answer: Result<Answer, bridge::Unreada
             // what did not read is the core's to say (Notices.notRead), never dropped unsaid
             if let Some(n) = notice {
                 eprintln!("veyq: {what}: {}", n.msg);
-                toasts.add_toast(adw::Toast::new(&said::notice(&n)));
+                toasts.add_toast(said::notice_toast(&n));
             }
         }
         other => header::say(toasts, other, what),

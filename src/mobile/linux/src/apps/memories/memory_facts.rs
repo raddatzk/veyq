@@ -20,7 +20,7 @@ use crate::core_ui::home::glib_escape;
 use crate::core_ui::raster_map::RasterMap;
 use crate::core_ui::typed::Typed;
 use crate::core_ui::said::date_text;
-use crate::core_ui::{said, words};
+use crate::core_ui::words;
 
 /// Whether the level picker's rows must be drawn anew: a lookup at another spot answers the same levels with other names
 /// (a pan from Munich's Marienplatz to Waldperlach, seen live 2026-11-16), and rows kept by their levels alone showed the
@@ -316,14 +316,13 @@ impl DateEditor {
         if self.mode.selected() != at {
             self.mode.set_selected(at);
         }
-        let day = |iso: &str| if iso.is_empty() { String::new() } else { said::day(iso) };
         self.from.set_title(&match s.mode {
             DateMode::Single => words::memory_date_day(),
             DateMode::Range => words::memory_date_from(),
             _ => words::memory_date_start(),
         });
-        self.from.set_subtitle(&glib_escape(&day(&s.from)));
-        self.to.set_subtitle(&glib_escape(&day(&s.to)));
+        self.from.set_subtitle(&glib_escape(&s.from_text));
+        self.to.set_subtitle(&glib_escape(&s.to_text));
         for (calendar, iso) in [(&self.from_calendar, &s.from), (&self.to_calendar, &s.to)] {
             let mut parts = iso.splitn(3, '-').map(str::parse::<i32>);
             if let (Some(Ok(y)), Some(Ok(m)), Some(Ok(d))) = (parts.next(), parts.next(), parts.next())

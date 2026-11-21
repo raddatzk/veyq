@@ -524,6 +524,8 @@ mod tests {
             playing,
             position_ms: 1500,
             duration_ms: 60_000,
+            position_text: "0:02".into(),
+            duration_text: "1:00".into(),
         };
         assert_eq!(status_of(None), "Stopped");
         assert_eq!(status_of(Some(&now(true))), "Playing");

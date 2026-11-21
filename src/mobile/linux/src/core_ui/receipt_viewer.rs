@@ -202,18 +202,22 @@ fn save_copy(dialog: &adw::Dialog, toasts: &adw::ToastOverlay, pot: i64, receipt
             Err(e) if e.matches(gtk::DialogError::Dismissed) || e.matches(gtk::DialogError::Cancelled) => return,
             Err(e) => {
                 eprintln!("veyq: the receipt's save dialog failed: {e}");
-                toasts.add_toast(adw::Toast::new(&words::receipts_not_saved()));
+                toasts.add_toast(said::word_toast("receipts_not_saved", &words::receipts_not_saved()));
                 return;
             }
         };
         // the core opens the path itself; one that is no UTF-8 does not cross the wire
         let Some(path) = file.path().and_then(|p| p.to_str().map(str::to_owned)) else {
-            toasts.add_toast(adw::Toast::new(&words::receipts_not_saved()));
+            toasts.add_toast(said::word_toast("receipts_not_saved", &words::receipts_not_saved()));
             return;
         };
         let answered = bridge::call(&Call::ReceiptSave { pot, receipt, path: path.clone() }).await.map(|(a, _)| a);
         eprintln!("veyq: receipt saved to {path}: {answered:?}");
-        toasts.add_toast(adw::Toast::new(&if matches!(answered, Ok(Answer::Done)) { words::receipts_saved() } else { words::receipts_not_saved() }));
+        toasts.add_toast(if matches!(answered, Ok(Answer::Done)) {
+            said::word_toast("receipts_saved", &words::receipts_saved())
+        } else {
+            said::word_toast("receipts_not_saved", &words::receipts_not_saved())
+        });
     });
 }
 

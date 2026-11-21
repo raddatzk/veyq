@@ -14,7 +14,6 @@ use gtk::{gdk, gio, glib};
 
 use crate::bridge::wire::{Answer, Call, DropItem, DropOn, NodeAt, NodeRef};
 use crate::bridge::{self, Unreadable};
-use crate::core_ui::home::glib_escape;
 use crate::core_ui::{header, import_dialog, said, words};
 
 /// Each dropped file as the file system tells it: a directory (a link to one included) a folder, anything else with a
@@ -103,7 +102,7 @@ pub fn answered(toasts: &adw::ToastOverlay, answer: Result<Answer, Unreadable>) 
             eprintln!("veyq: Shell.Drop: {queued} queued, import {import:?}, refused {refused}, {} said", notices.len());
             for n in &notices {
                 eprintln!("veyq: Shell.Drop: {}", n.msg);
-                toasts.add_toast(adw::Toast::new(&glib_escape(&said::notice(n))));
+                toasts.add_toast(said::notice_toast(n));
             }
             import
         }

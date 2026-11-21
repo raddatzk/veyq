@@ -58,7 +58,8 @@
   in its UI sources (the same files the literal rules read) no duration at a notice or a timer (Android's
   `SnackbarDuration.*`, `Toast.LENGTH_*`, a `delay(…)` of a literal; Apple's `Task.sleep(…)` of a literal and
   `.seconds(n)` / `.milliseconds(n)`; GTK's toast `.timeout(n)` / `set_timeout(n)`, `timeout_add_seconds*` /
-  `timeout_add_local*` of a literal; Windows' `TimeSpan.From…(n)`, `Task.Delay(n)`) — the core's `Notice.kind`,
+  `timeout_add_local*` of a literal, an `adw::Toast` made anywhere but the one helper (libadwaita's unseen 5 s);
+  Windows' `TimeSpan.From…(n)`, `Task.Delay(n)`) — the core's `Notice.kind`,
   `Notice.SAID_MS`, `COPIED_MS` and `NOTHING_PLAYS_MS` are what a notice lives by —; no size, date or money formatter
   (`formatShortFileSize`, `formatFileSize`, `NumberFormat`, `DateTimeFormatter.ofLocalized…`, `DateFormat`/`DateUtils`;
   `ByteCountFormatter`, `DateFormatter`, `NumberFormatter`, `.formatted(` with a date, a byte count or a currency,
@@ -275,7 +276,7 @@ def check_manifests(root: Path) -> list[str]:
 
 # platform-format (ADR 0154 decisions 4 and 5): switched on per platform by its phase of
 # cr-apps-notices-and-formats-from-the-core; each platform's own durations and formatters are gone then.
-PLATFORM_FORMAT_ON: set[str] = {"android", "apple"}
+PLATFORM_FORMAT_ON: set[str] = {"android", "apple", "linux"}
 # (platform, file relative to src/mobile, the matched text) a platform may keep, each with why.
 PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {
     ("android", "android/src/main/kotlin/me/raddatz/veyq/mobile/android/core/NoticeHost.kt", "SnackbarDuration.Indefinite"):
@@ -299,13 +300,26 @@ PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {
         "a debug build's audio probe (`#if DEBUG`) waiting for its deck — no notice's",
     ("apple", "apple/Veyq/DevLogin.swift", "Task.sleep(for: ."):
         "a debug build's dev sign-in (`#if DEBUG`) waiting for the screens it drives — no notice's",
+    ("linux", "linux/src/core_ui/said.rs", "adw::Toast::new"):
+        "the one toast every notice is made by, its timeout the core's kind and lifetimes (`said::toast`)",
+    ("linux", "linux/src/core_ui/said.rs", "localeconv"):
+        "the decimal separator a person types an amount with, handed to the core's parser; no value shown",
+    ("linux", "linux/src/apps/memories/lightbox.rs", "timeout_add_local_once(std::time::Duration::from_secs(3"):
+        "a timer that is no notice's: the details read again once a capture time's save has landed",
+    ("linux", "linux/src/core_ui/account_settings.rs", "timeout_add_local_once(std::time::Duration::from_millis(2"):
+        "a timer that is no notice's: the scroll put back after the redrawn groups are laid out",
+    ("linux", "linux/src/core_ui/account_settings.rs", "timeout_add_local(std::time::Duration::from_millis(1"):
+        "a timer that is no notice's: a section scrolled to, tried each tick until it is laid out",
+    ("linux", "linux/src/core_ui/shell.rs", "timeout_add_local_once(std::time::Duration::from_millis(4"):
+        "a timer that is no notice's: a list grown shorter put back at its end once laid out",
 }
 
 _SEP = re.compile(r'"[^"\n]* \u00b7 [^"\n]*"')
 _DURATION = {
     "android": re.compile(r"\bSnackbarDuration\.\w+|\bToast\.LENGTH_\w+|\bdelay\(\s*[0-9][0-9_]*L?\s*\)"),
     "apple": re.compile(r"\bTask\.sleep\(\s*(?:for:\s*)?(?:nanoseconds:\s*)?[.0-9]|\.(?:seconds|milliseconds)\(\s*[0-9]"),
-    "linux": re.compile(r"\.(?:set_)?timeout\(\s*[0-9]|\btimeout_add(?:_seconds)?(?:_local)?(?:_once)?\(\s*(?:std::time::)?(?:Duration::from_\w+\(\s*)?[0-9]"),
+    # a toast made outside the one helper lives libadwaita's default 5 s: GTK's own duration, unseen at the call
+    "linux": re.compile(r"\.(?:set_)?timeout\(\s*[0-9]|\btimeout_add(?:_seconds)?(?:_local)?(?:_once)?\(\s*(?:std::time::)?(?:Duration::from_\w+\(\s*)?[0-9]|\badw::Toast::(?:new|builder)\b"),
     "windows": re.compile(r"\bTimeSpan\.From\w+\(\s*[0-9]|\bTask\.Delay\(\s*[0-9]"),
 }
 _FORMATTER = {

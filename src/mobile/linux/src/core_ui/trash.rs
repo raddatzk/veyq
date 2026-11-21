@@ -124,7 +124,7 @@ impl Inner {
             let busy = s.busy.as_deref() == Some(row.id.as_str());
             let subtitle = match (&s.error_row, &s.error) {
                 (Some(r), Some(e)) if *r == row.id => said::key(e),
-                _ => words::trash_row_dates(&said::instant_day(&row.deleted_at), &said::instant_day(&row.purge_after)),
+                _ => words::trash_row_dates(&row.deleted_text, &row.purge_text),
             };
             let line = adw::ActionRow::builder().title(glib_escape(&row.name)).subtitle(glib_escape(&subtitle)).sensitive(!busy).build();
             line.add_prefix(&gtk::Image::from_icon_name(kind_icon(&row.kind)));

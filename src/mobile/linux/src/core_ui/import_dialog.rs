@@ -14,7 +14,6 @@ use adw::prelude::*;
 use gtk::glib;
 
 use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::ImportShown, wire::ImportStep, wire::Update, wire::Watched};
-use crate::core_ui::home::glib_escape;
 use crate::core_ui::uploads::{self, Level};
 use crate::core_ui::{said, words};
 
@@ -53,7 +52,7 @@ pub fn screened(parent: &gtk::Widget, call: Call, what: &'static str, toasts: &a
             Ok(Answer::ImportOffered { import, queued, notice }) => {
                 eprintln!("veyq: {what}: an import offered, {queued} queued");
                 if let Some(n) = notice {
-                    toasts.add_toast(adw::Toast::new(&glib_escape(&said::notice(&n))));
+                    toasts.add_toast(said::notice_toast(&n));
                 }
                 open(&parent, import, &toasts);
             }
@@ -174,7 +173,9 @@ impl Inner {
     fn draw(self: &Rc<Self>, s: &ImportShown) {
         if s.step == ImportStep::Done && !self.told.replace(true) {
             let line = s.said.iter().map(said::notice).collect::<Vec<_>>().join("\n");
-            self.toasts.add_toast(adw::Toast::new(&glib_escape(&line)));
+            // the run's line lives as its first notice does (done: said briefly; a refusal: held)
+            let kind = s.said.first().map_or(crate::bridge::wire::NoticeKind::Held, |n| n.kind);
+            self.toasts.add_toast(said::toast(&line, kind));
         }
         if s.closed || s.step == ImportStep::Done {
             // done (the dialog's close closes the core's import), or closed by the core already (an upload as a file)

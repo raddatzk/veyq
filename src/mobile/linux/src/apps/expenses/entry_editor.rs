@@ -39,7 +39,7 @@ pub fn open(parent: &gtk::Window, pot: i64, entry: Option<&str>, said: &adw::Toa
             Ok(Answer::EditorOpened { editor }) => editor,
             other => {
                 eprintln!("veyq: Editor.Open answered {other:?}");
-                said.add_toast(adw::Toast::new(&words::ed_save_failed()));
+                said.add_toast(said::word_toast("ed_save_failed", &words::ed_save_failed()));
                 return;
             }
         };
@@ -59,7 +59,7 @@ pub fn open_held(parent: &gtk::Window, pot: i64, write: &str, said: &adw::ToastO
             Ok(Answer::EditorOpened { editor }) => editor,
             other => {
                 eprintln!("veyq: Editor.OpenHeld answered {other:?}");
-                said.add_toast(adw::Toast::new(&words::ed_save_failed()));
+                said.add_toast(said::word_toast("ed_save_failed", &words::ed_save_failed()));
                 closed();
                 return;
             }
@@ -326,18 +326,18 @@ impl Inner {
                     eprintln!("veyq: editor save: done {done}, {}", notice.as_ref().map_or("no notice", |n| n.msg.as_str()));
                     if done {
                         if let Some(n) = notice {
-                            i.said.add_toast(adw::Toast::new(&said::notice(&n)));
+                            i.said.add_toast(said::notice_toast(&n));
                         }
                         i.dialog.close();
                         return;
                     }
                     if let Some(n) = notice {
-                        i.toasts.add_toast(adw::Toast::new(&said::notice(&n)));
+                        i.toasts.add_toast(said::notice_toast(&n));
                     }
                 }
                 other => {
                     eprintln!("veyq: Editor.Save answered {other:?}");
-                    i.toasts.add_toast(adw::Toast::new(&words::ed_save_failed()));
+                    i.toasts.add_toast(said::word_toast("ed_save_failed", &words::ed_save_failed()));
                 }
             }
             i.save.set_sensitive(true);
@@ -369,8 +369,8 @@ impl Inner {
                     Ok(Answer::EditorSaved { done: true, .. }) => {
                         i.dialog.close();
                     }
-                    Ok(Answer::EditorSaved { notice: Some(n), .. }) => i.toasts.add_toast(adw::Toast::new(&said::notice(&n))),
-                    _ => i.toasts.add_toast(adw::Toast::new(&words::ed_save_failed())),
+                    Ok(Answer::EditorSaved { notice: Some(n), .. }) => i.toasts.add_toast(said::notice_toast(&n)),
+                    _ => i.toasts.add_toast(said::word_toast("ed_save_failed", &words::ed_save_failed())),
                 }
             });
         });
@@ -928,7 +928,7 @@ fn update(f: &Form, s: &EditorShown) {
         EntryKind::Transfer => "TRANSFER",
     });
     f.title.set(&s.title);
-    f.date.set_subtitle(&said::day(&s.date));
+    f.date.set_subtitle(&s.date_text);
     let mut d = s.date.splitn(3, '-').map(str::parse::<i32>);
     if let (Some(Ok(y)), Some(Ok(m)), Some(Ok(day))) = (d.next(), d.next(), d.next())
         && let Ok(t) = glib::DateTime::from_local(y, m, day, 12, 0, 0.0)
@@ -944,7 +944,7 @@ fn update(f: &Form, s: &EditorShown) {
     } else {
         match &s.rate_fill {
             Some(r) if r.state == RateState::Filling => words::ed_rate_loading(),
-            Some(r) if r.state == RateState::Filled => words::ed_rate_filled(&said::day(r.day.as_deref().unwrap_or_default())),
+            Some(r) if r.state == RateState::Filled => words::ed_rate_filled(r.day_text.as_deref().unwrap_or_default()),
             Some(_) => words::ed_rate_missing(&s.currency),
             None => words::ed_rate_hint(),
         }

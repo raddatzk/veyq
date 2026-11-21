@@ -449,7 +449,7 @@ impl Page {
         // why the last action did not come through, said once
         if *self.refusal.borrow() != s.refusal {
             if let Some(why) = &s.refusal {
-                self.dialog.add_toast(adw::Toast::new(&said::key(why)));
+                self.dialog.add_toast(said::word_toast(why, &said::key(why)));
             }
             *self.refusal.borrow_mut() = s.refusal.clone();
         }
@@ -793,14 +793,14 @@ impl Page {
         group.add(&self.limit);
         *self.limit_group.borrow_mut() = Some(group.clone());
         let sizes = [
-            (words::account_settings_storage_automatic(), Some(st.automatic)),
-            (words::account_settings_storage_pinned(), Some(st.pinned)),
-            (words::account_settings_storage_free(), st.free),
+            (words::account_settings_storage_automatic(), Some(&st.automatic_text)),
+            (words::account_settings_storage_pinned(), Some(&st.pinned_text)),
+            (words::account_settings_storage_free(), st.free_text.as_ref()),
         ];
-        for (title, bytes) in sizes {
-            let Some(bytes) = bytes else { continue };
+        for (title, text) in sizes {
+            let Some(text) = text else { continue };
             let row = adw::ActionRow::builder().title(title).build();
-            let size = gtk::Label::builder().label(said::size(bytes)).valign(gtk::Align::Center).build();
+            let size = gtk::Label::builder().label(text.as_str()).valign(gtk::Align::Center).build();
             size.add_css_class("dim-label");
             size.add_css_class("numeric");
             row.add_suffix(&size);
@@ -963,7 +963,7 @@ fn find_scrolled(widget: &gtk::Widget) -> Option<gtk::ScrolledWindow> {
 
 /// A family's dates as its row says them: when it signed in and when it was last used, the ones the server sent.
 pub fn family_dates(f: &SettingsFamily) -> String {
-    let lines: Vec<String> = [f.created_at.map(|t| words::account_settings_signed_in(&said::moment(t))), f.last_used_at.map(|t| words::account_settings_last_used(&said::moment(t)))]
+    let lines: Vec<String> = [f.created_text.as_deref().map(words::account_settings_signed_in), f.last_used_text.as_deref().map(words::account_settings_last_used)]
         .into_iter()
         .flatten()
         .collect();
@@ -972,10 +972,9 @@ pub fn family_dates(f: &SettingsFamily) -> String {
 
 /// An item's line under its name: its status as the core says it, and the size it keeps on this device.
 pub fn item_line(item: &OfflineItem) -> String {
-    let size = said::size(item.bytes);
     match &item.said {
-        Some(n) => format!("{} · {size}", said::notice(n)),
-        None => size,
+        Some(n) => said::joined(&[said::notice(n), item.bytes_text.clone()]),
+        None => item.bytes_text.clone(),
     }
 }
 
@@ -989,15 +988,17 @@ mod tests {
         let item = |said: Option<Notice>| OfflineItem {
             tenant: "t".into(), scope: "s".into(), node: "n".into(), kind: "MEMORY".into(),
             title: Notice { msg: "offline_item_named".into(), args: vec![], kind: crate::bridge::wire::NoticeKind::Held }, status: OfflineStatus::Kept, said, bytes: 7_000_000,
+            bytes_text: "7 MB".into(),
         };
         let kept = item_line(&item(Some(Notice { msg: "offline_status_kept".into(), args: vec![], kind: crate::bridge::wire::NoticeKind::Held })));
         assert!(kept.starts_with(&words::offline_status_kept()), "{kept}");
-        assert!(kept.ends_with(&said::size(7_000_000)), "{kept}");
-        assert_eq!(item_line(&item(None)), said::size(7_000_000));
+        assert!(kept.ends_with("7 MB"), "the core's size, as it came: {kept}");
+        assert_eq!(item_line(&item(None)), "7 MB");
     }
 
     fn family(created_at: Option<i64>, last_used_at: Option<i64>) -> SettingsFamily {
-        SettingsFamily { id: "f".into(), created_at, last_used_at, current: false, label: None, removes_key: false }
+        let text = |t: Option<i64>| t.map(|t| format!("at {t}"));
+        SettingsFamily { id: "f".into(), created_at, last_used_at, current: false, label: None, removes_key: false, created_text: text(created_at), last_used_text: text(last_used_at) }
     }
 
     #[test]
@@ -1005,6 +1006,7 @@ mod tests {
         let both = family_dates(&family(Some(1_793_527_200_000), Some(1_794_475_800_000)));
         assert_eq!(both.lines().count(), 2, "{both}");
         assert!(both.starts_with(&words::account_settings_signed_in("").trim_end().to_string()), "{both}");
+        assert!(both.contains("at 1793527200000") && both.contains("at 1794475800000"), "the core's moments, as they came: {both}");
         assert_eq!(family_dates(&family(None, Some(1_794_475_800_000))).lines().count(), 1);
         assert_eq!(family_dates(&family(None, None)), "");
     }

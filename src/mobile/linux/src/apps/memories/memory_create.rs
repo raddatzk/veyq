@@ -47,7 +47,7 @@ pub fn open(window: &gtk::Window, toasts: &adw::ToastOverlay, level: Option<Leve
                 Ok(Answer::Created { queued: true, notice, .. }) => {
                     eprintln!("veyq: new memory: queued");
                     if let Some(n) = notice {
-                        toasts.add_toast(adw::Toast::new(&said::notice(&n)));
+                        toasts.add_toast(said::notice_toast(&n));
                     }
                 }
                 Ok(Answer::Created { notice: Some(n), .. }) => {

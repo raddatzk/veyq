@@ -52,7 +52,7 @@ struct Inner {
 pub fn row_subtitle(row: &PersonRowShown) -> String {
     let date = row.date.as_ref().and_then(crate::core_ui::said::date_text);
     let group = row.group_name.as_ref().map(said::piece);
-    [date, row.place.clone(), group].into_iter().flatten().filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" · ")
+    said::joined(&[date, row.place.clone(), group].into_iter().flatten().filter(|s| !s.is_empty()).collect::<Vec<_>>())
 }
 
 impl PersonMemories {

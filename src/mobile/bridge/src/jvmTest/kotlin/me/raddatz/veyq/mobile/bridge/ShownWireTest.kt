@@ -42,4 +42,45 @@ class ShownWireTest {
             wireIn("de").encodeToString(ListSerializer(Piece.serializer()), line),
         )
     }
+
+    private fun field(json: String, name: String): String? = Regex("\"$name\":(null|\"[^\"]*\")").find(json)?.groupValues?.get(1)?.removeSurrounding("\"")?.takeIf { it != "null" }
+
+    /**
+     * The values a view carries raw for the host's own use arrive beside the text the core writes for them (phase 7 of
+     * cr-apps-notices-and-formats-from-the-core): a size, a moment, a day, a server instant's day, a Memory's days, an
+     * amount and a player's clock, in the host's language — none for a host to format.
+     */
+    @Test
+    fun aViewsRawValuesArriveWithTheirTextInTheHostsLanguage() {
+        val en = wireIn("en")
+        val de = wireIn("de")
+        val detail = DetailRow(Msg.COPY_DONE, null, 1_500_000, null, null)
+        assertEquals("1.5 MB", field(en.encodeToString(DetailRow.serializer(), detail), "sizeText"))
+        assertEquals("1,5 MB", field(de.encodeToString(DetailRow.serializer(), detail), "sizeText"))
+        assertEquals(null, field(en.encodeToString(DetailRow.serializer(), detail), "momentText"))
+        val link = ShareShown.ShownLink("s", Piece.Plain("t"), emptyList(), "2026-11-20T12:00:00Z", null, null, false, false, false, false, false, false)
+        assertEquals("Nov 20, 2026", field(en.encodeToString(ShareShown.ShownLink.serializer(), link), "createdText"))
+        assertEquals("20.11.2026", field(de.encodeToString(ShareShown.ShownLink.serializer(), link), "createdText"))
+        val range = MemoryDateShown(DateMode.RANGE, "2026-03-12", "2026-03-14")
+        assertEquals("03/12/2026 – 03/14/2026", field(en.encodeToString(MemoryDateShown.serializer(), range), "text"))
+        assertEquals("12.03.2026", field(de.encodeToString(MemoryDateShown.serializer(), MemoryDateShown(DateMode.ONGOING, "2026-03-12", null)), "text"))
+        assertEquals("", field(en.encodeToString(MemoryDateShown.serializer(), MemoryDateShown(DateMode.AUTO, null, null)), "text"))
+        val now = NowPlayingShown("t", "Song", null, null, true, 59_600, 3_725_000)
+        val clocks = en.encodeToString(NowPlayingShown.serializer(), now)
+        assertEquals("1:00" to "1:02:05", field(clocks, "positionText") to field(clocks, "durationText"))
+        val chip = ChipShown("day:2026-11-20", me.raddatz.veyq.mobile.words.ShownText.day("2026-11-20"))
+        assertEquals("""{"chip":"day:2026-11-20","label":"20.11.2026","rest":null}""", de.encodeToString(ChipShown.serializer(), chip))
+        val total = me.raddatz.veyq.mobile.words.ShownText.money(-123_456, "EUR", 2)
+        assertEquals("-€1,234.56", en.encodeToString(me.raddatz.veyq.mobile.words.ShownText.serializer(), total).removeSurrounding("\""))
+    }
+
+    /** What a host draws its own notices and lines by: the lifetimes, the words that live as `SAID` or `UNDO`, the separator. */
+    @Test
+    fun theLifetimesNameTheKindsOfWordsAndTheSeparator() {
+        val l = noticeLifetimes()
+        assertEquals(listOf(4_000L, 6_000L, 2_000L, 5_000L), listOf(l.saidMs, l.undoMs, l.copiedMs, l.nothingPlaysMs))
+        assertEquals(" · ", l.separator)
+        assert("profile_saved" in l.saidWords && "download_done" in l.saidWords && "trash_moved" in l.undoWords) { l.toString() }
+        assert("download_failed" !in l.saidWords && "download_failed" !in l.undoWords)
+    }
 }
