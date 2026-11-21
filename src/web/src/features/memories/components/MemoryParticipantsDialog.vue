@@ -15,7 +15,7 @@ import VeyqSearchField from '../../../shared/ui/VeyqSearchField.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import PersonAvatar from '../../../core/people/PersonAvatar.vue'
 import type { Person } from '../../../core/people/directory'
-import { fold } from '../../../shared/text/fold'
+import { fold } from '@veyq/core-js/search'
 
 const props = defineProps<{
   /** The scope's current members; null while they are being read. */

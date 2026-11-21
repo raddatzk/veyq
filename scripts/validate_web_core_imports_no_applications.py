@@ -21,7 +21,9 @@ Dependencies run application → core, never back, and never application → app
   file and tested for landing inside an application or one of its generated clients, so `'../../memories/memoryNodes'`
   and `'../features/memories/memoryNodes'` are the same edge, as are `'../generated/media'` and
   `'../../api/generated/media/models'`; a non-relative specifier that spells an application's directory or client
-  path is refused too (no alias exists today).
+  path is refused too (no alias exists today). The Kotlin core's package is read the same way (ADR 0155 decision 5): it
+  exposes one entry per façade, and `@veyq/core-js/<owner>` is that application's, as `features/<owner>` is, while an
+  entry named for a core area (`@veyq/core-js/search`) is core's, open to core and every application.
 - **application** (every application): no file of one application names ANOTHER application, or another
   application's generated client, by the same specifier reading. An application imports core and itself; what two
   applications share belongs in core (ADR 0079 Decision 4, the backend's rule (b) in
@@ -136,6 +138,8 @@ RULE_CATALOG_ROOT, RULE_HEADER = "catalog-root", "header"
 CORE_HEADER = ("core", "node", "components", "NodeHeader.vue")
 
 # `from '…'` covers import/export-from, also across lines; `import('…')` and a bare `import '…'` the others.
+# The Kotlin core's package, one entry per façade (ADR 0155 decision 5): an entry named for an application is its.
+CORE_JS_ENTRY = re.compile(r"^@veyq/core-js/([^/]+)")
 SPECIFIER = re.compile(r"""(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)(['"])([^'"\n]+)\1""")
 GLOB = re.compile(r"\bimport\.meta\.glob(?:Eager)?\b")
 # The applications' kinds — Memories' MEMORY and CHAPTER, Depot's FILE and DEPOT_DROPBOX, Expenses' EXPENSES_POT. Built from parts so this file never spells a
@@ -243,6 +247,9 @@ def anchors_of(owners, clients: dict[str, list[pathlib.PurePosixPath]]) -> list[
 
 
 def reaches(rel: pathlib.PurePosixPath, spec: str, anchors: list[tuple[str, ...]]) -> bool:
+    entry = CORE_JS_ENTRY.match(spec)
+    if entry:
+        return entry.group(1) in OWNERS and APPLICATIONS[entry.group(1)] in anchors
     if spec.startswith("."):
         target = pathlib.PurePosixPath(os.path.normpath(str(rel.parent / spec)))
         return any(_inside(target, a) for a in anchors)

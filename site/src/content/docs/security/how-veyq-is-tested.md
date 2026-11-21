@@ -7,6 +7,7 @@ sources:
   - docs/decisions/0090-end-to-end-tests-boot-the-release-candidate.md
   - docs/decisions/0040-coverage-gaps-and-http-not-a-surface.md
   - docs/decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md
+  - docs/decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md
   - docs/ai/README.md
   - docs/architecture/README.md
 ---
@@ -58,7 +59,7 @@ each one runs](#where-and-when-each-stage-runs) follows it.
 |---|---|---|---|
 | **Guards** (`scripts/validate_*.py`) | The tree keeps its written rules: every reference resolves, every contract field declares what the server may read, every image is pinned by digest, the production recipe is hardened. | That what a reference points at carries weight — a cited test that asserts nothing passes. | Built. |
 | **Guard gaps** (`validate_guard_gaps.py`) | The guards still reject the forgeries they claim to reject, and their documented limits are still exactly where they are written. | A guard's limit that was never documented. | Built. |
-| **Surface checks** (`./gradlew check`, `pnpm run check` per package, the chart check) | Each part's unit and integration tests: the backend against an in-memory database and in-process fakes, the web client, the admin console and the crypto package in their test runners; the Helm chart's renders keep the production recipe's structural rules, and an upgrade from the previous chart changes no field Kubernetes refuses to change. | The real database, the real object store, the real browser. | Built. |
+| **Surface checks** (`./gradlew check`, `pnpm run check` per package, the chart check) | Each part's unit and integration tests: the backend against an in-memory database and in-process fakes, the web client, the admin console and the crypto package in their test runners, and the Kotlin core compiled for the web (`@veyq/core-js`: the suite's conformance, and the search's vectors through the very module the web ships); the Helm chart's renders keep the production recipe's structural rules, and an upgrade from the previous chart changes no field Kubernetes refuses to change. | The real database, the real object store, the real browser. | Built. |
 | **Crypto conformance** | The bytes of the cryptographic suite cannot move silently: every primitive is pinned to published test vectors. | Whether a correct primitive is used correctly. | Built, inside the surface checks; see [Verify it yourself](/security/verify-it-yourself/). |
 | **Mutation** | The tests of the scoped crypto and policy files fail when that code changes; on the backend, each scoped class also on its own, within a budget of one surviving change, so a weak class cannot pass on the score of the others. | Files outside the scope. | Built. |
 | **Races on MariaDB** | Concurrent writes behave on the production database as they do in the in-memory one. | Races no test provokes. | Built. |

@@ -416,7 +416,9 @@ A refined CR nails **decisions, not keystrokes**:
 **Every use-case owes `backend` and `web`** — covered, or a gap with its reason. The whole surface set (also
 `crypto`, `admin-web` and `stack`, which a use-case may claim but does not owe) is `SURFACES` in
 `scripts/validate_coverage.py`, with `OWED` and `ADMITTED` beside it; read it there, never from a list in prose.
-CR phases follow the dependency order **contracts → backend → web**.
+CR phases follow the dependency order **contracts → backend → web**; where the web draws a rule from the Kotlin core
+([ADR 0155](../decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md):
+the search so far), **contracts → backend → core → clients**.
 
 The rule underneath, from [ADR 0040](../decisions/0040-coverage-gaps-and-http-not-a-surface.md): **a test that
 no CI run executes makes no coverage claim.** It is not about which directories exist, or even which surfaces —

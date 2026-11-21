@@ -3,8 +3,8 @@ package me.raddatz.veyq.mobile.search
 import me.raddatz.veyq.mobile.crypto.nfd
 
 /**
- * Text compared as a person reads it, case and accents aside (ADR 0125 decision 4; the web's `shared/text/fold.ts`, ported
- * for ADR 0146 decision 3): "Zoë", "ZOE" and "zoe" are the same letters, and so are "Straße" and "STRASSE". One rule for
+ * Text compared as a person reads it, case and accents aside (ADR 0125 decision 4; ported from the web for ADR 0146
+ * decision 3, and since ADR 0155 the web's own through `@veyq/core-js/search`): "Zoë", "ZOE" and "zoe" are the same letters, and so are "Straße" and "STRASSE". One rule for
  * the search and the participants picker, as on the web, held to `contracts/platform/search/v1-vectors.json`'s `fold`.
  *
  * **Not a slug** (`crypto/Naming.slugify` is frozen into stored tokens); this one is for comparing in memory only.

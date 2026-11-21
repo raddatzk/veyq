@@ -44,8 +44,21 @@ if (headings.length !== all.length) {
   for (const m of all) if (!sourced.has(m.index)) failures.push(`no Source line under "${m[0]}"`)
 }
 for (const [, name, version, source] of headings) {
-  if (name === 'libwebp') continue // not an npm package: held below
+  if (name === 'libwebp' || name === 'kotlin-stdlib') continue // not npm packages: held below
   if (source !== `https://www.npmjs.com/package/${name}/v/${version}`) failures.push(`${name} ${version}: Source is "${source}"`)
+}
+// The Kotlin standard library, compiled into @veyq/core-js (ADR 0155): the web always ships the core's search, so its notice
+// is always there, once, at the version Gradle compiled with, its tag as the Source and the Apache-2.0 text beside it.
+// Bite: drop the `kotlinStdlibNotice()` line from vite.config.ts's plugin - RED.
+const CORE_JS = fileURLToPath(new URL('../../packages/core-js/', import.meta.url))
+const kotlin = headings.filter(([, name]) => name === 'kotlin-stdlib')
+if (kotlin.length !== 1) failures.push(`kotlin-stdlib (the Kotlin core's standard library) is listed ${kotlin.length} times, not once`)
+else {
+  const [, , version, source] = kotlin[0]
+  const compiled = readFileSync(CORE_JS + 'dist/kotlin-stdlib.version', 'utf8').trim()
+  if (version !== compiled) failures.push(`kotlin-stdlib is listed as ${version}, the core was compiled with ${compiled}`)
+  if (source !== `https://github.com/JetBrains/kotlin/tree/v${compiled}`) failures.push(`kotlin-stdlib: Source is "${source}", not its tag`)
+  if (!text.includes('Apache License') || !text.includes(readFileSync(CORE_JS + 'notices/kotlin-stdlib.txt', 'utf8').trim())) failures.push("kotlin-stdlib's entry does not carry its licence")
 }
 const libwebp = headings.filter(([, name]) => name === 'libwebp')
 if (libwebp.length !== 1) failures.push(`libwebp (the WebP encoder) is listed ${libwebp.length} times, not once`)

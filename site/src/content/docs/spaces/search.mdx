@@ -3,6 +3,7 @@ title: "Search all your spaces"
 sources:
   - docs/features/platform/use-cases/uc.platform.search.md
   - docs/decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md
+  - docs/decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md
   - docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md
 ---
 
@@ -78,7 +79,8 @@ A shared link has no search.
 
 ## In the app
 
-The veyq [app](/getting-started/install-the-app/) searches as the browser does, with these differences:
+The veyq [app](/getting-started/install-the-app/) searches as the browser does: both run the same code to decide what
+matches and in which order. What differs:
 
 - **Where to find it:** on Android and an iPhone, **Search** is the last place in the bar at the bottom. On an iPad and a
   Mac it is the search field at the top right of the window; press <kbd>⌘</kbd>+<kbd>F</kbd> on a Mac. On Linux it is

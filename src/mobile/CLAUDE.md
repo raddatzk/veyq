@@ -5,7 +5,7 @@ a Kotlin Multiplatform base under each platform's own UI ([ADR 0123](../../docs/
 A Gradle build of its own, run through its own wrapper.
 
 - `core/` — the shared base: the v1 suite (`crypto/`), the generated API client (`build/generated/openapi`, from
-  `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), the search (`search/`: the web's `core/search` ported rule by rule and held to `contracts/platform/search/v1-vectors.json`, [ADR 0146](../../docs/decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md); it names no application — `scripts/validate_mobile_search_names_no_application.py` —, each application's part reaches it through `AppKinds.search`), the music player (`audio/`, ADR 0142 decisions 1–3 and 13: the order, the fades, `MusicPlayer` with its interruption, and the two ports each platform implements — `Deck` and `SystemControls`: Android's `MusicPlayback.kt` — `MediaDeck`, `AndroidMusicControls` with its `MusicService` —, Apple's through `appleMain`'s `AppleAudio` — `MusicPlayback.swift`; carried over the bridge as host requests for Linux's `music_host` and Windows' decks with SMTC), a photo's and a video's metadata read from their bytes (`media/`),
+  `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), the search (`search/`: ported rule by rule from the web's `core/search`, which draws it from the core since ADR 0155, and held to `contracts/platform/search/v1-vectors.json`, [ADR 0146](../../docs/decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md); it names no application — `scripts/validate_mobile_search_names_no_application.py` —, each application's part reaches it through `AppKinds.search`), the music player (`audio/`, ADR 0142 decisions 1–3 and 13: the order, the fades, `MusicPlayer` with its interruption, and the two ports each platform implements — `Deck` and `SystemControls`: Android's `MusicPlayback.kt` — `MediaDeck`, `AndroidMusicControls` with its `MusicService` —, Apple's through `appleMain`'s `AppleAudio` — `MusicPlayback.swift`; carried over the bridge as host requests for Linux's `music_host` and Windows' decks with SMTC), a photo's and a video's metadata read from their bytes (`media/`),
   the uploads under way that a phone holds its process for, `blob/UploadsUnderway` (Android's `UploadWork.kt`, Apple's
   `ContinuedWork.swift` beside the pins' `OfflineFetching`; ADR 0145 decision 1),
   what another app shares or a drop hands in, `navigation/ShareInbox` (the files as `UploadSource`s waiting in the pick
@@ -414,6 +414,11 @@ A Gradle build of its own, run through its own wrapper.
   `crypto/` or `jsMain` also runs `@veyq/core-js`'s check (`cd src/packages/core-js && pnpm run build && pnpm run
   check`): the suite's conformance over the web's `@noble/*` under Node, with its bite. No Kotlin/JS test task exists, and
   none of Kotlin's Node, Yarn or npm tasks may run (`src/mobile/build.gradle.kts` fails a build that reaches one).
+  `:core:jsPackage` writes byte-identical output (ADR 0155 decision 2): it sorts the interface lists Kotlin 2.4's
+  dead-code elimination leaves in hash order (KT-68281, `sortFreeInterfaceLists`) and fails on a Kotlin that carries
+  the fix — the upgrade to 2.5 deletes the step. A change to the JavaScript build proves it with three clean builds in
+  fresh processes (`rm -rf ../packages/core-js/dist; ./gradlew --no-daemon --rerun-tasks :core:jsPackage`, then
+  `find dist -type f | sort | xargs shasum -a 256 | shasum -a 256` in `src/packages/core-js`), one digest.
 - `./gradlew :core:jvmTest :core:macosArm64Test` — the suite against `contracts/crypto/vectors/v1.json` (with its
   bite) over BouncyCastle and over libsodium, the navigation model, and the grant check (`GrantTrustTest`: the web's
   `openOwnGrant`/`verifyOwnGrant` rules against a server the test plays). Any change under
@@ -510,9 +515,13 @@ A Gradle build of its own, run through its own wrapper.
   the held key's lifetime (one rule: the key lives exactly as long as the gate shows a kit) and the scan's `accepts` by
   `SessionModelTest`. The account's Settings page by `AccountSettingsTest` (the web's `SessionsPanel` orderings,
   `uc.account.sessions` E1–E5, over a played door).
-  The search (`search/`, ADR 0146) changes only with the vectors that pin it: a rule of the fold, the query or the order
-  by `SearchVectorsTest` (`contracts/platform/search/v1-vectors.json`, the web's `vectors.test.ts` recorded it; a rule
-  changed in both changes the file, written by the web's test with `VEYQ_WRITE_VECTORS=1`), the field's model by
+  The search (`search/`, ADR 0146) changes only with the vectors that pin it, and is the web's too (ADR 0155: the web
+  draws it through `@veyq/core-js/search`, `jsMain/…/search/web/`): a rule of the fold, the query or the order by
+  `SearchVectorsTest` (`contracts/platform/search/v1-vectors.json`; a changed rule rewrites the file from the core's own
+  answers, `VEYQ_WRITE_VECTORS=1 ./gradlew :core:jvmTest --tests '*SearchVectorsTest*'`, byte for byte where nothing
+  changed) and `SearchRulesTest` (the web's former unit cases: chip edges, ranks, the matcher's memory by identity,
+  `firstRanked`), then `@veyq/core-js`'s check (the façade over the same vectors, the web's collator crossing, the slice
+  check) and the web's `vectors.test.ts`; the field's model by
   `SearchModelTest` (the visible spaces only, the open Memory's own photo winning, a result opened where it lives, chips,
   people and settings, a failing listing named), Memories' space walk by `MemoriesSearchWalkTest` (every `K_blob`, drop
   seed and `K_up` it unwraps zeroed, a thrown walk too) and the gallery's request and contribution by `GalleryModelTest`;

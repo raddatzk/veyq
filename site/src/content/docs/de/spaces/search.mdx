@@ -3,6 +3,7 @@ title: "Alle deine Bereiche durchsuchen"
 sources:
   - docs/features/platform/use-cases/uc.platform.search.md
   - docs/decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md
+  - docs/decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md
   - docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md
 ---
 
@@ -86,7 +87,8 @@ Ein geteilter Link hat keine Suche.
 
 ## In der App
 
-Die veyq-[App](/de/getting-started/install-the-app/) sucht wie der Browser, mit diesen Unterschieden:
+Die veyq-[App](/de/getting-started/install-the-app/) sucht wie der Browser: Beide entscheiden mit demselben Code, was
+passt und in welcher Reihenfolge. Was sich unterscheidet:
 
 - **Wo du sie findest:** Unter Android und auf dem iPhone ist **Suche** der letzte Platz in der Leiste unten. Auf dem
   iPad und dem Mac ist es das Suchfeld oben rechts im Fenster; auf dem Mac drückst du <kbd>⌘</kbd>+<kbd>F</kbd>. Unter

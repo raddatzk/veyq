@@ -3,6 +3,28 @@
 # building `file: Dockerfile`, it just never fired on a non-main branch. Ported to today's tree; every delta
 # from the recovered original is commented below.
 
+# --- the Kotlin core for JavaScript ------------------------------------------------------------------------
+# The web's search is the Kotlin core's (ADR 0155 decision 6): `@veyq/core-js`'s `dist/` is Gradle's output, never
+# committed, so it is compiled here and copied into the web's stage below. On the backend's JDK image (one image, one
+# version: validate_image_pins.py): the core's `jvmToolchain(21)` binds only its JVM compilations, and only
+# `:core:jsPackage` runs — no JVM compile, no Android SDK, no Kotlin/Native and none of Kotlin's own Node, Yarn or npm
+# (src/mobile/build.gradle.kts refuses a build that reaches one). Python runs the core's two generators (theme, words).
+FROM eclipse-temurin:25-jdk-jammy@sha256:e4f029273ed9e4444697df30bb6098dbe51477291598aebc54dd0b48d95d6ae7 AS core-js-build
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/*
+# What the core's build reads outside src/mobile/: the API specs it generates its client from, the platform's major,
+# the web's theme tokens and the WebP encoder's pin (a declared input), and the two scripts the theme generator imports
+# (where the surfaces live, and the contrast guard's token reader).
+COPY scripts/repo_layout.py scripts/validate_web_contrast.py /repo/scripts/
+COPY contracts/api /repo/contracts/api
+COPY VERSION /repo/VERSION
+COPY src/web/src/styles/base.css /repo/src/web/src/styles/base.css
+COPY src/web/webp-encoder/libwebp.pin /repo/src/web/webp-encoder/libwebp.pin
+COPY src/mobile /repo/src/mobile
+WORKDIR /repo/src/mobile
+RUN ./gradlew --no-daemon --console=plain -q :core:jsPackage
+
 # --- web -------------------------------------------------------------------------------------------------
 # Was `frontend/` — the surface is `src/web/` since the greenfield reset.
 FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS frontend-build
@@ -34,6 +56,9 @@ COPY scripts/verify_openapi_generator_jar.mjs scripts/openapi_generator_jar.sha2
 # build step), and pnpm links it into node_modules at install time, so the sources have to be there already.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /repo/
 COPY src/packages/crypto /repo/src/packages/crypto
+# `@veyq/core-js` the same way, with the compiled `dist/` from the stage above (`.dockerignore` keeps any host copy out).
+COPY src/packages/core-js /repo/src/packages/core-js
+COPY --from=core-js-build /repo/src/packages/core-js/dist /repo/src/packages/core-js/dist
 # openapitools.json travels with the manifest: `prepare` runs generate:api during the install, and both the JAR
 # verifier and the generator read the pinned version from it (without it the verifier fails the install).
 COPY src/web/package.json src/web/openapitools.json ./

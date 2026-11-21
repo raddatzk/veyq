@@ -1,9 +1,9 @@
 package me.raddatz.veyq.mobile.search
 
 /**
- * The results: ONE list after the chip suggestions (ADR 0125 decision 5; the web's `core/search/results.ts`, ported for ADR
- * 0146). The order is the match first ([Query.Rank]), then where the result lies — below the open node, the rest of the
- * active space, the other spaces, then the documents of no space —, then the name ([NameOrder]), then the id. A chip is a
+ * The results: ONE list after the chip suggestions (ADR 0125 decision 5; ported from the web for ADR 0146,
+ * the web's own since ADR 0155). The order is the match first ([Query.Rank]), then where the result lies — below the open node, the rest of the
+ * active space, the other spaces, then the documents of no space —, then the name ([NameOrder], or the caller's), then the id. A chip is a
  * predicate over every document, so no kind is hidden by a rule of its own. The list is ranked only as far as it is drawn:
  * the first `limit` are selected, the total stays exact.
  */
@@ -37,23 +37,35 @@ object Results {
         return if (open && ctx.openNodeId in doc.pathIds) Place.OPEN else Place.SPACE
     }
 
-    /** The matches of [query] in [docs] as one ordered list: its first [limit] and how many match. */
+    /**
+     * The matches of [query] in [docs] as one ordered list: its first [limit] and how many match. [names] orders two documents
+     * of an equal rank and place; the apps take the default, [BY_NAME], and the web passes its browser's `Intl.Collator` over
+     * the names (ADR 0155 § Consequences: the one parameter the web's search adds, so it keeps its collation).
+     */
     fun searchResults(
         docs: SearchDocuments, query: SearchQuery, ctx: SearchContext, limit: Int = Int.MAX_VALUE, matcher: Query.Matcher? = null,
+        names: Comparator<SearchDocument> = BY_NAME,
     ): SearchResults {
         val ranked = ArrayList<Ranked>()
         val matches = matcher?.match(docs, query) ?: Query.matchAll(docs.list, query)
         for (m in matches) placeOf(m.doc, ctx)?.let { ranked += Ranked(m.doc, m.rank, it) }
-        return SearchResults(firstRanked(ranked, limit, ORDER).map { it.doc }, ranked.size)
+        val order = if (names === BY_NAME) ORDER else orderBy(names)
+        return SearchResults(firstRanked(ranked, limit, order).map { it.doc }, ranked.size)
     }
 
-    /** The order: the rank, where the result lies, the name ([NameOrder]), the id (UTF-16 order, as JavaScript's `<`). */
-    val ORDER: Comparator<Ranked> = Comparator { a, b ->
+    /** The apps' name order: [NameOrder] over the folded names. */
+    val BY_NAME: Comparator<SearchDocument> = Comparator { a, b -> NameOrder.compare(a.foldedName, b.foldedName) }
+
+    /** The order: the rank, where the result lies, the name ([names]), the id (UTF-16 order, as JavaScript's `<`). */
+    fun orderBy(names: Comparator<SearchDocument>): Comparator<Ranked> = Comparator { a, b ->
         (a.rank - b.rank).takeIf { it != 0 }
             ?: (a.place - b.place).takeIf { it != 0 }
-            ?: NameOrder.compare(a.doc.foldedName, b.doc.foldedName).takeIf { it != 0 }
+            ?: names.compare(a.doc, b.doc).takeIf { it != 0 }
             ?: a.doc.id.compareTo(b.doc.id)
     }
+
+    /** The order with the apps' names ([BY_NAME]). */
+    val ORDER: Comparator<Ranked> = orderBy(BY_NAME)
 
     /** The first [n] of [matches] in [order], without sorting the rest; [matches] itself is left as it was. */
     fun <T> firstRanked(matches: List<T>, n: Int, order: Comparator<T>): List<T> {

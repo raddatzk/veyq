@@ -44,8 +44,8 @@ class SearchDocuments(val list: List<SearchDocument>) {
 }
 
 /**
- * The query (ADR 0125 decision 4, uc.platform.search steps 4–5; the web's `core/search/query.ts`, ported rule by rule for
- * ADR 0146 decision 2 and held to `contracts/platform/search/v1-vectors.json`): chips from the typed text, each a predicate
+ * The query (ADR 0125 decision 4, uc.platform.search steps 4–5; ported rule by rule from the web for ADR 0146
+ * decision 2, the web's own since ADR 0155 through `@veyq/core-js/search`, and held to `contracts/platform/search/v1-vectors.json`): chips from the typed text, each a predicate
  * over every document, and the text matched against names — exact, prefix, a word's start, inside a word, then a place or a
  * settings word. A result is never listed for a reason the member cannot see: one typed character matches word starts only,
  * a settings word counts from [MIN_KEYWORD] characters. Pure: no network, no key, no storage.
@@ -225,14 +225,18 @@ object Query {
         val inside = lengthOf(t) >= MIN_INSIDE
         bestNameRank(doc, t, words, inside)?.let { return it }
         if (keywordAt(doc, t, words) >= 0) return Rank.PLACE
-        if (doc.foldedPlaces.any { if (inside) it.contains(t) else wordPrefix(it, t) }) return Rank.PLACE
+        // indexed loops, here and below: this runs for every document on every keystroke, and an iterator per document
+        // was a third of the web's query time (ADR 0155's speed criterion, measured 2026-11-20)
+        val places = doc.foldedPlaces
+        for (i in places.indices) if (if (inside) places[i].holds(t) else wordPrefix(places[i], t)) return Rank.PLACE
         return null
     }
 
     private fun bestNameRank(doc: SearchDocument, t: String, words: List<String>, inside: Boolean): Int? {
         var best = nameRank(doc.foldedName, t, words, inside)
-        for (alias in doc.foldedAliases) {
-            val rank = nameRank(alias, t, words, inside)
+        val aliases = doc.foldedAliases
+        for (i in aliases.indices) {
+            val rank = nameRank(aliases[i], t, words, inside)
             if (rank != null && (best == null || rank < best)) best = rank
         }
         return best
@@ -256,7 +260,7 @@ object Query {
 
     private fun nameRank(name: String, t: String, words: List<String>, inside: Boolean): Int? {
         // most documents do not hold the text at all: one search answers them
-        if (!name.contains(t)) return if (words.size > 1 && words.all { name.contains(it) }) Rank.INSIDE else null
+        if (!name.holds(t)) return if (words.size > 1 && words.all { name.holds(it) }) Rank.INSIDE else null
         if (name == t) return Rank.EXACT
         if (name.startsWith(t)) return Rank.PREFIX
         if (wordPrefix(name, t)) return Rank.WORD_START

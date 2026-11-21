@@ -2,7 +2,8 @@ package me.raddatz.veyq.mobile.search
 
 import me.raddatz.veyq.mobile.session.LocalDays
 
-// The search's documents (ADR 0125 decisions 2 and 6; the web's `core/search/model.ts`, ported for ADR 0146): what a member
+// The search's documents (ADR 0125 decisions 2 and 6; the web's `core/search/model.ts` keeps the shape
+// it draws, ADR 0146): what a member
 // can find, as plaintext derived from what the client already opened — never a key, never a second source of truth.
 
 /** Calendar years, both ends included: a Memory dated 2023-12-30 to 2024-01-02 is `2023..2024`. */

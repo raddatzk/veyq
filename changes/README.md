@@ -46,7 +46,8 @@ into a CR — if you feel the urge, the state doc is what should be updated inst
 
 A small CR is single-phase. Each phase ends with the repo in a
 working, verifiable state (its own "Done when:"). The natural seam is the dependency order:
-contracts → backend → web. **Genuinely independent work = separate CRs, not phases.**
+contracts → backend → web (contracts → backend → core → clients for what the web draws from the core, ADR 0155).
+**Genuinely independent work = separate CRs, not phases.**
 
 **A phase commits before the next phase's first edit of a file the two share.** cr-report-and-hold's phase 4 (the
 hold) wired itself into the report handler, the module-composition test, the stored-time readers and the migration pins
