@@ -19,6 +19,8 @@ object Shown {
     private const val NBSP = ' '
     private const val DAY_MS = 86_400_000L
     private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    private val MONTHS_EN = listOf("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+    private val MONTHS_DE = listOf("Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember")
     private val UNITS = listOf("B", "kB", "MB", "GB", "TB")
 
     private fun german(language: String) = language.lowercase().startsWith("de")
@@ -96,10 +98,42 @@ object Shown {
     internal fun wallMoment(wallMs: Long, language: String): String {
         val (y, m, d) = LocalDays.civil(wallMs.floorDiv(DAY_MS))
         val inDay = wallMs.mod(DAY_MS) / 60_000
-        val hour = (inDay / 60).toInt()
-        val minute = (inDay % 60).toString().padStart(2, '0')
-        return if (german(language)) "${mediumDay(y, m, d, language)}, ${hour.toString().padStart(2, '0')}:$minute"
-        else "${mediumDay(y, m, d, language)}, ${if (hour % 12 == 0) 12 else hour % 12}:$minute ${if (hour < 12) "AM" else "PM"}"
+        return "${mediumDay(y, m, d, language)}, ${clock((inDay / 60).toInt(), (inDay % 60).toInt(), language)}"
+    }
+
+    /** A time of day as [moment] writes its time (`timeStyle: 'short'`): "2:05 PM" / "14:05" — a picked time shown beside its day. */
+    fun clock(hour: Int, minute: Int, language: String): String {
+        val mm = minute.toString().padStart(2, '0')
+        return if (german(language)) "${two(hour)}:$mm" else "${if (hour % 12 == 0) 12 else hour % 12}:$mm ${if (hour < 12) "AM" else "PM"}"
+    }
+
+    /**
+     * A gallery filter's day chip (the web's `galleryFilter.ts` label, `day: 'numeric', month: 'long'`): "November 3" /
+     * "3. November", with its year where the Memory spans more than one ([withYear]).
+     */
+    fun dayLabel(epochDay: Long, withYear: Boolean, language: String): String {
+        val (y, m, d) = LocalDays.civil(epochDay)
+        return dayLabel(y, m, d, withYear, language)
+    }
+
+    /** An ISO day as [dayLabel] writes it; the text itself where it is no day. */
+    fun dayLabel(iso: String, withYear: Boolean, language: String): String {
+        val (y, m, d) = isoDay(iso) ?: return iso
+        return dayLabel(y, m, d, withYear, language)
+    }
+
+    private fun dayLabel(y: Int, m: Int, d: Int, withYear: Boolean, language: String): String =
+        if (german(language)) "$d. ${MONTHS_DE[m - 1]}${if (withYear) " $y" else ""}"
+        else "${MONTHS_EN[m - 1]} $d${if (withYear) ", $y" else ""}"
+
+    /**
+     * A track's length as the list says it (the web's `trackFacts.ts` `formatDistance`), [value] already rounded by the
+     * core (`Gpx.roundedDistance`): whole metres ("850 m") or kilometres to at most one decimal ("12.3 km", "12 km").
+     */
+    fun distance(value: Double, kilometres: Boolean, language: String): String {
+        if (!kilometres) return "${number(kotlin.math.round(value).toLong(), 0, language)} m"
+        val tenths = kotlin.math.round(value * 10).toLong()
+        return "${if (tenths % 10 == 0L) number(tenths / 10, 0, language) else number(tenths, 1, language)} km"
     }
 
     private fun mediumDay(y: Int, m: Int, d: Int, language: String): String =
