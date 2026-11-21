@@ -330,6 +330,16 @@ a name dialog's typed answer (`NameAnswer`), a link guest's Replace and *Add ent
 name asked at the write, the shell following a reach's end (`SessionModel.followed`), no development server in a
 release build (ADR 0154's Consequences).
 
+**A screen's structure is the core's plan** ([ADR 0154](../decisions/0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md) decision 2, every app, 2026-11-21):
+a node's header (`HeaderAction`, Delete last, the banner and a kept link's own entries in the plan), a level's New and
+its tools (Trash, then the view switch), the drawer's New below the switcher (a folder at the space's top), the Settings
+sections in the web's order with Sign out last, the sign-in's entries (Submit first), a level row's, a medium tile's and
+a link row's menu — each a list of `@Plan` enum entries every app draws whole and in order, its look the platform's. The
+orders are held to the web's sources by `PlansAreTheWebsTest`, the drawing by the compilers' exhaustiveness (Apple's
+over generated Swift mirrors, `apple/generate_plans.py`; Windows' with `CS8509` an error) and by
+`scripts/validate_mobile_structure.py` (no fallback arm, no whitelist, no filter over a plan). An application's list
+draws no New of its own; the drawer's makes its kinds.
+
 **Music, on all four apps** ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md)). The web's player ported into the core's
 `audio/` (`MusicPlayer`, its order, fades and the lightbox video's interruption) and Memories' music into
 `memories/music/` (the queue, the facts, the WAV trim, the upload's refusals, the rename, the Music view's model), each
@@ -764,3 +774,5 @@ drawn on an iPhone, and its missing reason at *Sign in with Face ID*.
 Broadway carries no file drop, the Windows VM's WinUI takes none with UAC off; the Mac's drops and dialogs are the
 coordinator's pass (#1039), a guest's link on the iPhone the owner's; a Memory's *Add photos* and a WRITE_ONLY page still
 name a guest first (#1042), the phones' guest gallery offers *Add* only once named (#1044).
+**The structure** (ADR 0154 decision 2): passed on Linux and Android; Windows' pass waits for the VM's tenant name
+(#1051); the Mac's is the coordinator's click list (ADR 0154's Consequences), the iPhone's the owner's; no level selects yet (#1049).

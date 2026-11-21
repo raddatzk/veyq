@@ -30,8 +30,8 @@ comments and literals blanked (`kotlin_lexer.mask`, `rust_lexer.mask`, the direc
   snake_case). `<PlanEnum>.entries` filtered counts too.
 
 **Where.** (a) is on for the Kotlin core's main sources (the plans' author: building a plan is filtering, so (b) and (c)
-are not the core's) and for the bridge's main sources, which hold all three. Each platform is switched on in its phase of
-the CR (`PLATFORMS`), so the guard is never born red: Android's main sources, Apple's `Veyq` and `VeyqShare`, Linux's
+are not the core's) and for the bridge's main sources, which hold all three. Each platform is on (`PLATFORMS`; a new one
+is switched on once its drawing holds, so the guard is never born red): Android's main sources, Apple's `Veyq` and `VeyqShare`, Linux's
 `src`, Windows' `Veyq`. No test source is read (a test names entries to assert a plan). `--platform <name>` reads a
 platform whose rules are not on yet (a phase's preview); `--paths <file>…` reads exactly the files given, each by its
 extension and its platform, whatever is switched on (a bite).
@@ -68,7 +68,8 @@ MOBILE = repo_layout.MOBILE
 CORE_SRC = MOBILE / "core" / "src"
 BRIDGE_SRC = MOBILE / "bridge" / "src"
 
-# Each platform is switched on in its phase of cr-apps-structure-from-core-plans (4 Android, 5 Apple, 6 Linux, 7 Windows).
+# Every platform is on (switched on one by one as each drew the plans whole, 2026-11-21); a new platform starts off
+# and is switched on once its drawing holds.
 PLATFORMS: dict[str, bool] = {"android": True, "apple": True, "linux": True, "windows": True}
 
 PLAN_ANNOTATION = re.compile(r"@(?:me\.raddatz\.veyq\.mobile\.navigation\.)?Plan\b(?!\.)")
