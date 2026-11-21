@@ -300,7 +300,7 @@ internal fun GuestContent(screen: GuestScreen, model: AppModel, snackbar: Snackb
             if (g.note.isNotBlank()) Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { MarkdownText(g.note) }
             val access = view.access
             // a READ_WRITE link's guest (core's `GuestNaming.offered`): who this device is here as, or the way to name itself
-            val said: (me.raddatz.veyq.mobile.words.Notice) -> Unit = { n -> scope.launch { snackbar.showSnackbar(context.text(n)) } }
+            val said: (me.raddatz.veyq.mobile.words.Notice) -> Unit = { n -> scope.launch { snackbar.show(context, n) } }
             if (access != null && access.naming.offered) GuestLine(access, said) {
                 // a Pot's page reads its write right anew: a named guest adds entries (the web's `requestGuest`, then the write)
                 if (view.page.value is GuestPage.Pot) model.refreshPot {}
@@ -376,7 +376,7 @@ private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, vie
     }
     if (naming) NameAnswerDialog(
         stringResource(R.string.folder_new), onClose = { naming = false },
-        onSaid = { n -> scope.launch { snackbar.showSnackbar(context.text(n)) } },
+        onSaid = { n -> scope.launch { snackbar.show(context, n) } },
     ) { name -> withContext(Dispatchers.IO) { level.createFolder(name) } }
 }
 
@@ -417,7 +417,7 @@ private fun GuestFileActions(page: GuestPage.File, access: GuestAccess?, model: 
             if (ended.end != me.raddatz.veyq.mobile.blob.FileSave.End.SAVED) {
                 withContext(Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) } }
             }
-            snackbar.showSnackbar(context.text(ended.notice))
+            snackbar.show(context, ended.notice)
         }
     }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -622,7 +622,7 @@ private fun KeepFlow(screen: GuestScreen, model: AppModel, snackbar: SnackbarHos
         val name = spaceName(space)
         BookmarkCreateDialog(create, onClose = onClose) {
             model.bookmarkMade()
-            scope.launch { snackbar.showSnackbar(context.getString(R.string.link_kept, name)) }
+            scope.launch { snackbar.show(context, me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.LINK_KEPT, name)) }
         }
     }
 }

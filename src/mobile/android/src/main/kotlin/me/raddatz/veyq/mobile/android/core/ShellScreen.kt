@@ -135,7 +135,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     // what the model says (an upload's refusal, its "Replace anyway"): one snackbar each
     androidx.compose.runtime.LaunchedEffect(model) {
         model.notices.collect { n ->
-            val answer = snackbar.showSnackbar(n.text, actionLabel = n.action, withDismissAction = n.action != null, duration = androidx.compose.material3.SnackbarDuration.Long)
+            val answer = snackbar.show(n.text, n.kind, n.action)
             if (answer == androidx.compose.material3.SnackbarResult.ActionPerformed) n.run?.let { scope.launch { it() } }
             n.done?.invoke()
         }
@@ -143,7 +143,6 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     // "Send a copy…": what happens is said first — the copy leaves veyq decrypted —, then the system's share sheet
     val sending by model.sending.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
-    val sendFailed = stringResource(R.string.download_failed, sending?.name ?: "")
     sending?.let { node ->
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { model.askToSend(null) },
@@ -155,7 +154,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                     scope.launch {
                         val copy = model.copyForSending(node)
                         if (copy == null) {
-                            snackbar.showSnackbar(sendFailed)
+                            snackbar.show(context, me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DOWNLOAD_FAILED, node.name))
                             return@launch
                         }
                         val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
@@ -175,7 +174,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     // each, then core does not say them again
     androidx.compose.runtime.LaunchedEffect(s.gone) {
         if (s.gone.isEmpty()) return@LaunchedEffect
-        for (n in s.gone) snackbar.showSnackbar(context.text(n), withDismissAction = true, duration = androidx.compose.material3.SnackbarDuration.Long)
+        for (n in s.gone) snackbar.show(context, n)
         model.goneSeen()
     }
 
@@ -871,7 +870,7 @@ private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit, onMenu: (() -
     ListItem(
         headlineContent = { Text(ref.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
         // The application's facts about the object (a Pot: its currency), left out when it has none.
-        supportingContent = details.takeIf { it.isNotEmpty() }?.let { { Text(it.joinToString(" · "), color = role(LocalPalette.current.muted)) } },
+        supportingContent = details.takeIf { it.isNotEmpty() }?.let { { Text(it.joined(), color = role(LocalPalette.current.muted)) } },
         // the node's cover where it has one (core's row visual), else its kind's tile
         leadingContent = {
             val cover = LocalCovers.current[ref.nodeId]?.second
@@ -915,7 +914,7 @@ private fun ObjectTile(ref: ObjectRef, modifier: Modifier, onOpen: (ObjectRef) -
     val details = LocalRowDetails.current[ref.nodeId].orEmpty()
     val takes = !LocalPicking.current || LocalTakesShare.current(ref)
     LevelTile(
-        ref.name, details.takeIf { it.isNotEmpty() }?.joinToString(" · "), LocalCovers.current[ref.nodeId]?.second, kindIcon(ref.kind),
+        ref.name, details.takeIf { it.isNotEmpty() }?.joined(), LocalCovers.current[ref.nodeId]?.second, kindIcon(ref.kind),
         folder = false, modifier = modifier, enabled = takes, selected = LocalOpenObject.current == ref.nodeId, onMenu = onMenu,
     ) { onOpen(ref) }
 }
@@ -1036,7 +1035,7 @@ private fun ShareBanner(
         TextButton(onClick = onCancel) { Text(stringResource(R.string.entry_cancel)) }
         if (addHere != null) {
             androidx.compose.material3.FilledTonalButton(onClick = {
-                model.addHere(addHere, label)?.let { n -> scope.launch { snackbar.showSnackbar(context.text(n)) } }
+                model.addHere(addHere, label)?.let { n -> scope.launch { snackbar.show(context, n) } }
             }) { Text(stringResource(R.string.share_add_here)) }
         }
     }

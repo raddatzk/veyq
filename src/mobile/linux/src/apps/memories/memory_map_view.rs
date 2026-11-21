@@ -161,15 +161,10 @@ pub fn name_of(t: &TrackShown) -> String {
 }
 
 /// A number with [decimals] digits after the person's decimal sign.
-fn number(value: f64, decimals: usize) -> String {
-    format!("{value:.decimals$}").replace('.', &said::decimal_separator())
-}
-
-/// One of a track's facts: a distance in the locale's number (`track_distance_km`, `_m`), else the core's phrase.
+/// One of a track's facts: its distance as the core writes it (`Shown.distance`), else the core's phrase.
 pub fn fact_text(f: &TrackFactShown) -> Option<String> {
-    match (f.distance, &f.words) {
-        (Some(d), _) if f.kilometres => Some(words::track_distance_km(&number(d, 1))),
-        (Some(d), _) => Some(words::track_distance_m(&number(d.round(), 0))),
+    match (&f.distance_text, &f.words) {
+        (Some(d), _) => Some(d.clone()),
         (None, Some(n)) => Some(said::notice(n)),
         _ => None,
     }
@@ -528,8 +523,8 @@ mod tests {
             color: 0xFF_E5_39_35,
             status: TrackStatus::Ready,
             facts: vec![
-                TrackFactShown { distance: Some(3.24), kilometres: true, words: None },
-                TrackFactShown { distance: None, kilometres: false, words: Some(Notice { msg: "track_duration_minutes".into(), args: vec![NoticeArg::Int { value: 38 }], kind: crate::bridge::wire::NoticeKind::Held }) },
+                TrackFactShown { distance: Some(3.24), kilometres: true, words: None, distance_text: Some("3.2 km".into()) },
+                TrackFactShown { distance: None, kilometres: false, distance_text: None, words: Some(Notice { msg: "track_duration_minutes".into(), args: vec![NoticeArg::Int { value: 38 }], kind: crate::bridge::wire::NoticeKind::Held }) },
             ],
             shown: true,
             selected: false,
@@ -538,17 +533,17 @@ mod tests {
         }
     }
 
-    /// A track's line: its distance in the locale's number with its unit, then the core's phrases; its read's state
+    /// A track's line: its distance as the core writes it, then the core's phrases; its read's state
     /// instead while it reads or did not; the operator's block over all. An untitled track is said by its number, and its
     /// activity by its word (a token's dash read as the key's underscore).
     #[test]
     fn a_tracks_row_says_its_facts_its_read_and_its_activity() {
         let t = track();
-        assert_eq!(subtitle_of(&t), said::joined(&[words::track_distance_km(&number(3.24, 1)), words::track_duration_minutes(38)]));
+        assert_eq!(subtitle_of(&t), said::joined(&["3.2 km".to_string(), words::track_duration_minutes(38)]));
         assert_eq!(subtitle_of(&TrackShown { status: TrackStatus::Loading, ..t.clone() }), words::track_loading());
         assert_eq!(subtitle_of(&TrackShown { status: TrackStatus::Failed, ..t.clone() }), words::track_unreadable());
         assert_eq!(subtitle_of(&TrackShown { blocked: true, ..t.clone() }), words::memory_blocked());
-        assert_eq!(fact_text(&TrackFactShown { distance: Some(812.4), kilometres: false, words: None }), Some(words::track_distance_m("812")));
+        assert_eq!(fact_text(&TrackFactShown { distance: Some(812.4), kilometres: false, words: None, distance_text: Some("812 m".into()) }), Some("812 m".into()), "the core's distance, as it came");
         assert_eq!(name_of(&t), words::track_unnamed(2));
         assert_eq!(activity_word(t.activity.as_deref()), Some(words::track_activity_mountain_biking()));
         assert_eq!(activity_word(None), None);

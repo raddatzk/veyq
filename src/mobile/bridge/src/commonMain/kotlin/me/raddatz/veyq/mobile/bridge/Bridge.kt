@@ -3235,8 +3235,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     /** A filter chip as it reads: a year by its number, a day, a place or a kind by its label. */
     private fun chipLabel(c: me.raddatz.veyq.mobile.memories.GalleryFilter.Chip): me.raddatz.veyq.mobile.words.ShownText = when (c) {
-        // a day the device's zone gave, written as every app writes a day (ADR 0154 decision 5)
-        is me.raddatz.veyq.mobile.memories.GalleryFilter.Chip.Day -> me.raddatz.veyq.mobile.words.ShownText.day(c.day)
+        // labelled by the calendar the host's composition hands (`GalleryFilter.Calendar.local`: the web's day chip)
+        is me.raddatz.veyq.mobile.memories.GalleryFilter.Chip.Day -> me.raddatz.veyq.mobile.words.ShownText.written(c.label)
         is me.raddatz.veyq.mobile.memories.GalleryFilter.Chip.Search -> me.raddatz.veyq.mobile.words.ShownText.written(when (val k = c.chip) {
             is me.raddatz.veyq.mobile.search.SearchChip.Year -> k.year.toString()
             is me.raddatz.veyq.mobile.search.SearchChip.Place -> k.label
@@ -3560,7 +3560,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             profileEncoder: me.raddatz.veyq.mobile.media.WebpEncoder? = me.raddatz.veyq.mobile.media.coreWebpEncoder,
             /** The search's words in the host's language: the host's ([HostWords]). */
             words: me.raddatz.veyq.mobile.search.SearchWords = me.raddatz.veyq.mobile.search.SearchWords { it.key },
-            /** The gallery filter's day chips' calendar (inbox #989): the desktop's zone in the library ([LocalCalendar]); UTC on the JVM. */
+            /** The gallery filter's day chips' calendar (inbox #989): the device's, labelled in the host's language (`GalleryFilter.Calendar.local`); UTC on the JVM. */
             calendar: me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar = me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar.UTC,
             now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
             /**

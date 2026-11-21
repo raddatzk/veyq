@@ -27,14 +27,13 @@ import androidx.compose.ui.unit.dp
 import me.raddatz.veyq.mobile.android.R
 import me.raddatz.veyq.mobile.android.core.AppModel
 import me.raddatz.veyq.mobile.android.core.LocalPalette
+import me.raddatz.veyq.mobile.android.core.joined
+import me.raddatz.veyq.mobile.android.core.moment
 import me.raddatz.veyq.mobile.android.core.money
 import me.raddatz.veyq.mobile.android.core.piece
 import me.raddatz.veyq.mobile.android.core.role
 import me.raddatz.veyq.mobile.expenses.PotView
 
-private fun localDateTime(epochMs: Long): String =
-    java.time.Instant.ofEpochMilli(epochMs).atZone(java.time.ZoneId.systemDefault())
-        .format(java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.MEDIUM, java.time.format.FormatStyle.SHORT))
 
 /** An entry's history (`EntryHistory.vue`): every revision the Pot holds, newest first, what it said, when and by whom. */
 @Composable
@@ -45,9 +44,9 @@ internal fun EntryHistory(view: PotView, entryId: String) {
     val palette = LocalPalette.current
     for (r in view.history(entryId)) {
         Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-            Text(view.historyLine(r).map { piece(it) }.joinToString(" · "))
+            Text(view.historyLine(r).map { piece(it) }.joined())
             Text(
-                "${r.writer ?: stringResource(R.string.history_unknown_writer)}, ${localDateTime(r.at)}",
+                "${r.writer ?: stringResource(R.string.history_unknown_writer)}, ${moment(r.at)}",
                 style = MaterialTheme.typography.bodySmall, color = role(palette.muted),
             )
         }
@@ -70,7 +69,7 @@ internal fun DeletedEntrySheet(view: PotView, state: me.raddatz.veyq.mobile.expe
             row.amount?.let { Text(money(it, view.currency, view.minorUnits), fontWeight = FontWeight.SemiBold) }
             Text(stringResource(R.string.entry_deleted_hint))
             when {
-                purge != null && restorable -> Text(stringResource(R.string.entry_restorable_until, localDateTime(purge)))
+                purge != null && restorable -> Text(stringResource(R.string.entry_restorable_until, moment(purge)))
                 purge != null -> Text(stringResource(R.string.entry_not_restorable))
             }
             HorizontalDivider()

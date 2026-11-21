@@ -3235,7 +3235,10 @@ internal class TrackShown(
  */
 @Serializable
 @SerialName("TrackFactShown")
-internal class TrackFactShown(val distance: Double?, val kilometres: Boolean, val words: Notice?)
+internal class TrackFactShown(val distance: Double?, val kilometres: Boolean, val words: Notice?) {
+    /** [distance] with its unit as the host shows it (`Shown.distance`, ADR 0154 decision 5). */
+    val distanceText: me.raddatz.veyq.mobile.words.ShownText? = distance?.let { me.raddatz.veyq.mobile.words.ShownText.distance(it, kilometres) }
+}
 
 /** A picked file waiting for its label (`TrackList.Asked`): its name, and the name it falls back to (the field's hint). */
 @Serializable

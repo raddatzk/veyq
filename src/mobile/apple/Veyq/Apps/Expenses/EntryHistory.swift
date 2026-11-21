@@ -1,10 +1,6 @@
 import SwiftUI
 import VeyqCore
 
-private func localDateTime(_ epochMs: Int64) -> String {
-    Date(timeIntervalSince1970: Double(epochMs) / 1000).formatted(date: .abbreviated, time: .shortened)
-}
-
 /// An entry's history (`EntryHistory.vue`): every revision the Pot holds, newest first, what it said, when and by whom.
 struct EntryHistory: View {
     let view: PotView
@@ -17,14 +13,14 @@ struct EntryHistory: View {
             ForEach(view.history(entryId: entryId), id: \.revision) { r in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(what(r))
-                    Text(verbatim: "\(r.writer ?? say(.historyUnknownWriter)), \(localDateTime(r.at))").font(.caption).foregroundStyle(Role.muted)
+                    Text(verbatim: "\(r.writer ?? say(.historyUnknownWriter)), \(shownMoment(r.at))").font(.caption).foregroundStyle(Role.muted)
                 }
             }
         }
     }
 
     private func what(_ r: PotView.HistoryRow) -> String {
-        view.historyLine(r: r).map { say(piece: $0) }.joined(separator: " · ")
+        pieceLine(view.historyLine(r: r))
     }
 }
 
@@ -47,7 +43,7 @@ struct DeletedEntrySheet: View {
                     Text(say(.entryDeletedHint))
                     if let purge {
                         if restorable {
-                            Text(say(.entryRestorableUntil, localDateTime(purge)))
+                            Text(say(.entryRestorableUntil, shownMoment(purge)))
                         } else {
                             Text(say(.entryNotRestorable))
                         }

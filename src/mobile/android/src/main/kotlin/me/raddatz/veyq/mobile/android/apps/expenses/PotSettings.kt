@@ -44,6 +44,7 @@ import me.raddatz.veyq.mobile.android.core.LocalNodeHero
 import me.raddatz.veyq.mobile.android.core.LocalPalette
 import me.raddatz.veyq.mobile.android.core.PersonAvatar
 import me.raddatz.veyq.mobile.android.core.Section
+import me.raddatz.veyq.mobile.android.core.joined
 import me.raddatz.veyq.mobile.android.core.piece
 import me.raddatz.veyq.mobile.android.core.role
 import me.raddatz.veyq.mobile.android.core.say
@@ -181,7 +182,7 @@ private fun People(view: PotView, ui: SettingsUi) {
             Column(Modifier.weight(1f)) {
                 Text(p.name, fontWeight = FontWeight.SemiBold)
                 val facts = view.personFacts(p).map { piece(it) }
-                Text(facts.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+                Text(facts.joined(), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
             }
             if (p.renamable) {
                 IconButton(onClick = { renaming = p }, enabled = !ui.saving) {

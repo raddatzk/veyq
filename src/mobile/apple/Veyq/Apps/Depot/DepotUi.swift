@@ -76,7 +76,7 @@ private struct GuestDropBoxView: View {
                 let names = (sent?.value as? [String]) ?? []
                 if !names.isEmpty || !mine.isEmpty {
                     Text(say(.shareDropboxSession)).font(.headline).padding(.top, 8)
-                    ForEach(mine, id: \.id) { item in Text(item.name + " · " + status(item)) }
+                    ForEach(mine, id: \.id) { item in Text(joinedLine([item.name, status(item)])) }
                     ForEach(names.filter { n in !mine.contains { $0.name == n } }, id: \.self) { n in
                         Text(n).accessibilityIdentifier("guest-drop-sent")
                     }

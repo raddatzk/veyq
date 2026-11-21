@@ -51,9 +51,11 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.android.R
 import me.raddatz.veyq.mobile.android.core.AppModel
+import me.raddatz.veyq.mobile.android.core.language
 import me.raddatz.veyq.mobile.android.core.money
 import me.raddatz.veyq.mobile.android.core.say
 import me.raddatz.veyq.mobile.android.core.separator
+import me.raddatz.veyq.mobile.android.core.show
 import me.raddatz.veyq.mobile.android.core.text
 import me.raddatz.veyq.mobile.android.words
 import me.raddatz.veyq.mobile.expenses.EditorChange
@@ -127,6 +129,8 @@ private fun EntryEditorBody(
     }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val context = androidx.compose.ui.platform.LocalContext.current
+    // what a save said outlives the editor: the shell's snackbar says it
+    val notices = me.raddatz.veyq.mobile.android.core.LocalShellNotices.current
     val form = s.form
     val editable = s.editable
     val people = s.people
@@ -236,7 +240,7 @@ private fun EntryEditorBody(
                             s = editor.current
                             if (saved.done) {
                                 // A receipt the space's storage had no room for was left out; the entry is saved.
-                                saved.notice?.let { android.widget.Toast.makeText(context, context.text(it), android.widget.Toast.LENGTH_LONG).show() }
+                                saved.notice?.let { n -> notices?.let { it.scope.launch { it.snackbar.show(context, n) } } }
                                 onSaved()
                                 onClose()
                             }
@@ -269,7 +273,7 @@ private fun DateField(date: String, problem: String?, onPick: (String) -> Unit) 
     val millis = runCatching { java.time.LocalDate.parse(date).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().toEpochMilli() }.getOrNull()
     Box(Modifier.fillMaxWidth()) {
         OutlinedTextField(
-            runCatching { java.time.LocalDate.parse(date).format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM)) }.getOrDefault(date),
+            me.raddatz.veyq.mobile.words.Shown.day(date, language()),
             {}, readOnly = true, label = { Text(stringResource(R.string.ed_date)) }, modifier = Modifier.fillMaxWidth(), enabled = LocalEditable.current,
             isError = problem != null, supportingText = problem?.let { { Text(problemText(it)) } },
         )
@@ -332,7 +336,7 @@ private fun CurrencyField(view: PotView, form: EntryForm, problem: String?, note
                     Text(
                         problem?.let { problemText(it) } ?: when (note?.state) {
                             EditorModel.RateState.FILLING -> stringResource(R.string.ed_rate_loading)
-                            EditorModel.RateState.FILLED -> stringResource(R.string.ed_rate_filled, localDay(note.day.orEmpty()))
+                            EditorModel.RateState.FILLED -> stringResource(R.string.ed_rate_filled, me.raddatz.veyq.mobile.words.Shown.day(note.day.orEmpty(), language()))
                             EditorModel.RateState.MISSING -> stringResource(R.string.ed_rate_missing, form.currency)
                             null -> stringResource(R.string.ed_rate_hint)
                         },
@@ -419,6 +423,3 @@ private fun Preview(view: PotView, form: EntryForm, rows: List<PotView.ShareRow>
     }
 }
 
-private fun localDay(iso: String): String = runCatching {
-    java.time.LocalDate.parse(iso).format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM))
-}.getOrDefault(iso)

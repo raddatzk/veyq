@@ -75,10 +75,13 @@ import me.raddatz.veyq.mobile.android.core.MapNote
 import me.raddatz.veyq.mobile.android.core.MapPlace
 import me.raddatz.veyq.mobile.android.core.RasterMap
 import me.raddatz.veyq.mobile.android.core.ReportSheet
+import me.raddatz.veyq.mobile.android.core.joined
+import me.raddatz.veyq.mobile.android.core.language
 import me.raddatz.veyq.mobile.android.core.photoDot
 import me.raddatz.veyq.mobile.android.core.projected
 import me.raddatz.veyq.mobile.android.core.role
 import me.raddatz.veyq.mobile.android.core.say
+import me.raddatz.veyq.mobile.android.core.show
 import me.raddatz.veyq.mobile.android.core.text
 import me.raddatz.veyq.mobile.android.core.trackLine
 import me.raddatz.veyq.mobile.android.words
@@ -124,7 +127,7 @@ internal fun MemoryMapView(gallery: GalleryModel, tracks: TrackList, model: AppM
     val said = state.said
     LaunchedEffect(said) {
         if (said == null) return@LaunchedEffect
-        snackbar.showSnackbar(context.text(said))
+        snackbar.show(context, said)
         tracks.seen()
     }
     var editing by remember { mutableStateOf<TrackList.Entry?>(null) }
@@ -135,7 +138,7 @@ internal fun MemoryMapView(gallery: GalleryModel, tracks: TrackList, model: AppM
         saving = null
         if (uri == null || id == null) return@rememberLauncherForActivityResult
         val save = model.saveGpx(tracks, id, uri) ?: return@rememberLauncherForActivityResult
-        scope.launch { snackbar.showSnackbar(context.text(save.state.first { it.end != null }.notice)) }
+        scope.launch { snackbar.show(context, save.state.first { it.end != null }.notice) }
     }
     val points = g.gpsPoints
     val entries = state.entries
@@ -150,7 +153,7 @@ internal fun MemoryMapView(gallery: GalleryModel, tracks: TrackList, model: AppM
     LaunchedEffect(framedNow != null) { if (framedNow != null) camera.opened() }
     LaunchedEffect(everything) {
         if (camera.userMoved || everything.isEmpty()) return@LaunchedEffect
-        val v = kotlinx.coroutines.flow.flow { while (true) { camera.view?.let { emit(it) }; kotlinx.coroutines.delay(50) } }.first()
+        val v = androidx.compose.runtime.snapshotFlow { camera.view }.first { it != null }!!
         Viewport.fit(everything, v.width, v.height)?.let { camera.frame(it, animated = false) }
     }
     // a track selected is framed
@@ -203,7 +206,7 @@ internal fun MemoryMapView(gallery: GalleryModel, tracks: TrackList, model: AppM
                             saving = e.mediaId
                             saveTo.launch(e.fileName ?: ((e.name ?: context.words(Msg.TRACK_UNNAMED, e.number)) + ".gpx"))
                         },
-                        onRemove = { model.galleryAct { tracks.remove(e.mediaId)?.let { snackbar.showSnackbar(context.text(it)) } } },
+                        onRemove = { model.galleryAct { tracks.remove(e.mediaId)?.let { snackbar.show(context, it) } } },
                         onReport = { reporting = tracks.reportSheet(e.mediaId) },
                     )
                 }
@@ -240,14 +243,12 @@ private fun activityWords(token: String?): String = say(
 @Composable
 private fun factsLine(facts: List<TrackFacts.Fact>): String {
     val context = LocalContext.current
-    return facts.joinToString(" · ") { f ->
+    return facts.map { f ->
         when (f) {
-            is TrackFacts.Fact.Distance -> android.icu.text.MeasureFormat.getInstance(java.util.Locale.getDefault(), android.icu.text.MeasureFormat.FormatWidth.SHORT,
-                android.icu.text.NumberFormat.getInstance().apply { minimumFractionDigits = if (f.kilometres) 1 else 0; maximumFractionDigits = if (f.kilometres) 1 else 0 })
-                .format(android.icu.util.Measure(f.value, if (f.kilometres) android.icu.util.MeasureUnit.KILOMETER else android.icu.util.MeasureUnit.METER))
+            is TrackFacts.Fact.Distance -> me.raddatz.veyq.mobile.words.Shown.distance(f.value, f.kilometres, context.language)
             is TrackFacts.Fact.Words -> context.text(f.notice)
         }
-    }
+    }.joined()
 }
 
 /** A track's swatch: a short stroke in its colour with its activity's dash, as its line is drawn on the map. */

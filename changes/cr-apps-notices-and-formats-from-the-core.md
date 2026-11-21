@@ -140,8 +140,57 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   `/usr/bin/python3`; `validate_guard_gaps.py --force` green (104 cases). **Bites**, each in a throwaway tree with only
   its platform switched on, green with the clean line, red with the planted one alone, green with the platform off:
   `TimeSpan.FromSeconds(6)` beside an InfoBar (Windows), `ByteCountFormatter()` (Apple), `parts.join(" · ")` (Linux).
-- [ ] **5 Android** · **6 Apple** · **7 Linux** · **8 Windows** — each platform's formatters and durations removed, the
+- [x] **5 Android** — the platform's formatters and durations removed, the notice host mapping F1, the guard on.
+  **Built** (2026-11-21): `core/NoticeHost.kt` is the one place a notice meets Material's snackbar — every notice shown
+  `Indefinite` (the guard's one Android exception) and closed by `SnackbarHostState.show(text, kind, action, ended)`: a
+  `SAID` one `lifeMs` after it appears (not while queued), a `HELD` one with a close until closed, an undo until the core
+  ends it; `AppModel.Notice` carries the `kind` (an upload's offer or a refusal among its lines is `HELD`). Every
+  `showSnackbar`/`Toast` goes through it; the platform-picked words became core notices (`TRUST_FAILED`,
+  `DOWNLOAD_FAILED`, `SHARE_REFUSED`, `MEMORY_BANNER_FAILED`, `MEMORY_BUCKETS_*_FAILED`, `SHARE_DELETE_FAILED` held;
+  `LINK_KEPT`, `PROFILE_SAVED`, `RECEIPTS_SAVED_GALLERY` added to `NoticeKind`'s success words); a receipt's gallery
+  save is said inside its dialog, "copied" (a link, a text file) is an inline note for `COPIED_MS`. `Formats.kt` and
+  `NoticeText.kt` write through `Shown` in the app's language (`Context.language`): `text(notice)` over `Shown.args`,
+  `piece` over `Shown.piece`, `money`, `size`, `moment`, `localDate`, a Memory's date `Shown.dayRange`/`memoryDay` (the
+  web's numeric range, no longer `DateUtils.formatDateRange`), `List<String>.joined()`. Core additions, each pinned to
+  the web: `Shown.dayLabel`'s day chip (phase 6's, merged: Android hands `GalleryFilter.Calendar.local` — it showed `dMMM`
+  — and its ISO overload is the vectors' input, so the chip is also held to `galleryFilter.ts`' own output), `Shown.distance` (a track's length, `trackFacts.ts`' `formatDistance`), both new sections of
+  `format-vectors.json` written by `formatVectors.ts`; `Shown.clock` (the capture-time editor's time, the moment's own
+  time part). The map's camera wait is a `snapshotFlow`, the time picker takes Material's own 24-hour default.
+  Exceptions (`PLATFORM_FORMAT_EXCEPTIONS`): `SnackbarDuration.Indefinite` in `NoticeHost.kt`, the settings page's
+  two scroll-poll delays, the debug build's playback probe. Measured: `:core:jvmTest :core:macosArm64Test` (words)
+  `:core:compileKotlinJs :android:assembleDebug` green; `ShownVectorsTest` 13/13 and `NoticeKindTest` 5/5 first try;
+  `formatVectors.test.ts` 12/12; every `scripts/validate_*.py` but guard_gaps green. **Bites:** a
+  `formatShortFileSize`, a `" · "` join, a `delay(4_000)` in `NoticeHost.kt` → the guard red each; `März` → `Maerz`,
+  the distance's whole-kilometre rule dropped and `LINK_KEPT` out of the success words → `dayLabels`, `distances`,
+  `aSuccessIsSaid` red; a `dayLabel` and a `distance` vector edited → the web test red; all restored → green.
+  **Smoke** (throwaway on an API 36 AVD, erased): a copy's "copied to" gone after ~4 s, a trash's Undo after ~6 s, an
+  upload's "Replace" offer still up after 14 s with its Dismiss, a link's "Copied" note ~2 s; a 1.5 MB file reads "1.5 MB ·
+  Modified Nov 21, 2026, 2:29 PM" / "1,5 MB · Geändert 21.11.2026, 14:29", a link "Created Nov 21, 2026 · Expires Dec
+  21, 2026" / "Erstellt am 21.11.2026 · Läuft ab am 21.12.2026", the offline banner "as of Nov 21, 2026, 2:28 PM". Not
+  smoked: a Pot's amounts (the smoke's Pot was made without people, so it offered no entry; amounts are the vectors' `money`).
+  Seen, not this CR's: the shell's row details (`AppModel.rowDetails`) keep the language they were read in until the
+  app restarts after an in-app language switch — as before.
+- [ ] **6 Apple** · **7 Linux** · **8 Windows** — each platform's formatters and durations removed, the
   notice host mapping F1, the guard on. · Done when: each platform's build (as the CR before) and the guards green.
+  **6 Apple — Built** (2026-11-21): every value the app shows goes through the core's `Shown` in the catalog's language
+  (`shownLanguage`, `Bundle.main.preferredLocalizations`): `Formats.swift`'s `money`, `localDay`, `shownSize`,
+  `shownMoment`, `shownDayOf`, `shownLength` (the music bar's clocks, `musicTime` gone), `say(piece:)` over `Shown.piece`,
+  `say(notice:)` over `Shown.args`, a line by `pieceLine`/`joinedLine` (`Shown.joined`); a Memory's date the web's numeric
+  `memoryDay`/`dayRange`; the date pickers' ISO day by a Gregorian `IsoDay`, no `DateFormatter`. The notice host maps
+  `NoticeKind`: `AppModel.show` — `HELD` the shell's alert until closed, `SAID` at the bottom closing after its `lifeMs`,
+  `UNDO` with its Undo until core drops the offer —, the uploads' said that only says something went through, the
+  import's line and a name dialog's notice among them; a guest's screens by `saidNotice`; "copied" (a file's text, a
+  link) for `COPIED_MS`, "nothing plays" for `NOTHING_PLAYS_MS`; the live polls held by `untilCancelled()`, no timer.
+  Core addition: `Shown.dayLabel`/`dayLabelOf` (the web's gallery day chip, `day: 'numeric', month: 'long'`) and
+  `GalleryFilter.Calendar.local(language)`, which Apple now hands (`ShownDayLabelTest`, Node's strings). Exceptions
+  (`PLATFORM_FORMAT_EXCEPTIONS`): the Pot create sheet's `currency(code:)` call, the fade's 25 ms step, the debug test
+  camera's rate, Settings' anchor settle, `DevAudio`/`DevLogin` (debug only). Open: a GPX track's distance stays the
+  system's `Measurement` (no web vector). Measured: `validate_mobile_words.py` green with `apple` on; `:core:jvmTest`
+  (`words.*`, `GalleryFilter*`), `:core:macosArm64Test` (`words.*`), `:core:compileKotlinJs`,
+  `:core:assembleVeyqCoreDebugXCFramework`, `xcodegen`, the macOS ad-hoc build and the iOS simulator compile green.
+  **Bites:** a planted `ByteCountFormatter` and a planted `Task.sleep(for: .seconds(4))` in `Formats.swift` → the guard
+  red, restored (`/bin/cp -f`) → green; "März" misspelt → `ShownDayLabelTest` red, restored → green. Unclicked (build
+  only): every notice's life and every value on the Mac and the simulator.
   - [x] **7 Linux** — **Built** (2026-11-21): the first step, `run.py build` at the phase-4 tip, green (phase 3's `said.rs`
     compiles). **The wire's open values (phase 3's list) now arrive as the core's text** — `words/ShownText` (core,
     `Notices.kt` beside the other wire serializers): a value held raw, written by `Shown` in the encoder's
@@ -175,8 +224,9 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
     `trash.rs` — each red alone, restored green; `kind_of` answering `Said` for every word → `said` test red, restored
     green; `MemoryDateShown.text` with its ongoing test inverted → `ShownWireTest` red, restored green. `LINK_KEPT` dropped from the
     success words → `NoticeKindTest.aDesktopsOwnSuccessIsSaid` red, restored green. Smoke: see the
-    report of this phase. Left open: the map view's distances (`memory_map_view.rs` `number`, a host decimal format of a
-    double, no `Shown` function); ADR 0123's Linux lines (`localeconv`, `%x`, `instant_day`) are history for phase 10.
+    report of this phase. After the merge of phases 5–6: a track's distance is `TrackFactShown.distanceText`
+    (`Shown.distance`), and the bridge's gallery calendar is `GalleryFilter.Calendar.local(language)` (its day chip the
+    web's label; `LocalCalendar.kt` gone, Windows' too). ADR 0123's Linux lines (`localeconv`, `%x`, `instant_day`) are history for phase 10.
 - [ ] **9 the passes** — § Passes.
 - [ ] **10 harvest** — ADR 0154's `Built:` (decisions 4, 5); `native-apps.md`; the words guard's docstring; the Use
   pages that quote a notice's behaviour, if any (`grep -rln -i "undo\|rückgängig" site/src/content/docs`). · Done when:

@@ -31,7 +31,7 @@ struct DropBoxScreen: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(file.name).foregroundStyle(Role.text)
                                         if let details = model.rowDetails[file.id], !details.isEmpty {
-                                            Text(details.joined(separator: " · ")).font(.footnote).foregroundStyle(Role.muted)
+                                            Text(joinedLine(details)).font(.footnote).foregroundStyle(Role.muted)
                                         }
                                     }
                                 }
@@ -112,7 +112,7 @@ final class DropBoxBox {
     /// cancellation stops the poll.
     func live() async {
         guard let live = page?.startLive() else { return }
-        while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
+        await untilCancelled()
         live.stop()
     }
 }

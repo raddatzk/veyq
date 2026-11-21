@@ -334,9 +334,3 @@ final class AssetMeasure: NSObject, MusicUploadMeasure, @unchecked Sendable {
         )
     }
 }
-
-/// `ms` as the bar writes a time: `m:ss`.
-func musicTime(_ ms: Int64) -> String {
-    let s = max(0, ms) / 1000
-    return String(format: "%d:%02d", s / 60, s % 60)
-}

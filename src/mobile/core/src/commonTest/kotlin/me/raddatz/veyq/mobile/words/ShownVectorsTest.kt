@@ -2,6 +2,8 @@ package me.raddatz.veyq.mobile.words
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -57,6 +59,20 @@ class ShownVectorsTest {
     @Test fun lengths() {
         val wrong = cases("length").filter { Shown.length(it.getValue("ms").jsonPrimitive.long) != it.s("text") }
         assertEquals(emptyList(), wrong)
+    }
+
+    @Test fun dayLabels() = each("dayLabel") { c, l -> Shown.dayLabel(c.s("iso"), c.getValue("withYear").jsonPrimitive.boolean, l) }
+
+    /** The web's distance from the raw metres: the core's rounding (`Gpx.roundedDistance`) and [Shown.distance] together. */
+    @Test fun distances() = each("distance") { c, l ->
+        val (value, km) = me.raddatz.veyq.mobile.memories.tracks.Gpx.roundedDistance(c.getValue("meters").jsonPrimitive.double)
+        Shown.distance(value, km, l)
+    }
+
+    /** A time alone is the moment's time part (held by [moments]); its two forms named. */
+    @Test fun clocks() {
+        assertEquals(listOf("12:00 AM", "2:05 PM", "12:30 PM"), listOf(Shown.clock(0, 0, "en"), Shown.clock(14, 5, "en"), Shown.clock(12, 30, "en")))
+        assertEquals(listOf("00:00", "14:05", "09:07"), listOf(Shown.clock(0, 0, "de"), Shown.clock(14, 5, "de"), Shown.clock(9, 7, "de")))
     }
 
     /** Every currency a Pot offers has its money held: the web's `Intl` list is the core's [Currencies.known]. */

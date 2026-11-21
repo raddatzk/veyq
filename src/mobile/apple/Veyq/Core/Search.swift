@@ -239,7 +239,7 @@ private struct SuggestionRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(say(piece: suggestion.label))
                 if !suggestion.`where`.isEmpty {
-                    Text(suggestion.`where`.map { say(piece: $0) }.joined(separator: " · ")).font(.caption).foregroundStyle(Role.muted)
+                    Text(pieceLine(suggestion.`where`)).font(.caption).foregroundStyle(Role.muted)
                 }
             }
             Spacer(minLength: 8)
@@ -301,9 +301,9 @@ private struct ResultRow: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Self.parts(result.name).foregroundStyle(Role.text)
-                let line = result.line.map { say(piece: $0) }.joined(separator: " · ")
+                let line = pieceLine(result.line)
                 if !line.isEmpty || result.reason != nil {
-                    (Text(line) + (result.reason.map { (line.isEmpty ? Text("") : Text(" · ")) + Self.parts($0) } ?? Text("")))
+                    (Text(line) + (result.reason.map { (line.isEmpty ? Text("") : Text(Shown.shared.SEPARATOR)) + Self.parts($0) } ?? Text("")))
                         .font(.caption).foregroundStyle(Role.muted)
                 }
             }

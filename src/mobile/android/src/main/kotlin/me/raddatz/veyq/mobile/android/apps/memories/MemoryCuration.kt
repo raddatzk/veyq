@@ -102,6 +102,7 @@ import me.raddatz.veyq.mobile.android.core.EdgeToEdgeDialogWindow
 import me.raddatz.veyq.mobile.android.core.LocalPalette
 import me.raddatz.veyq.mobile.android.core.PersonAvatar
 import me.raddatz.veyq.mobile.android.core.ReaderPlayer
+import me.raddatz.veyq.mobile.android.core.language
 import me.raddatz.veyq.mobile.android.core.role
 import me.raddatz.veyq.mobile.android.core.text
 import me.raddatz.veyq.mobile.memories.CaptureTimeEditor
@@ -410,7 +411,7 @@ internal fun BannerDialog(editor: BannerEditor, gallery: GalleryModel, model: Ap
                 }
                 s.said?.let { said ->
                     val text = when (said) {
-                        BannerEditor.Said.TOO_LARGE -> stringResource(R.string.memory_banner_too_large, android.text.format.Formatter.formatShortFileSize(context, BannerWrite.MAX_IMAGE_BYTES / (1024 * 1024) * 1_000_000))
+                        BannerEditor.Said.TOO_LARGE -> stringResource(R.string.memory_banner_too_large, me.raddatz.veyq.mobile.words.Shown.size(BannerWrite.MAX_IMAGE_BYTES / (1024 * 1024) * 1_000_000, context.language))
                         BannerEditor.Said.UNREADABLE, BannerEditor.Said.NOT_MEDIA -> stringResource(R.string.memory_banner_unreadable)
                         BannerEditor.Said.VIDEO_UNREADABLE -> stringResource(R.string.memory_banner_video_unreadable)
                         BannerEditor.Said.STALE -> stringResource(R.string.memory_banner_stale)
@@ -477,7 +478,7 @@ internal fun BannerPictureQuestion(gallery: GalleryModel, model: AppModel) {
                 model.galleryAct {
                     val said = gallery.trashBannerPicture(remove)
                     // the trash's own notice is its Undo (the gallery's state); a banner that did not go is said
-                    if (remove && said?.msg == Msg.MEMORY_REFUSED_FAILED) model.notify(AppModel.Notice(context.getString(R.string.memory_banner_failed)))
+                    if (remove && said?.msg == Msg.MEMORY_REFUSED_FAILED) model.said(me.raddatz.veyq.mobile.words.Notice(Msg.MEMORY_BANNER_FAILED))
                 }
             }) { Text(stringResource(R.string.memory_trash), color = role(LocalPalette.current.danger)) }
         },
@@ -517,8 +518,8 @@ internal fun CaptureTimeDialog(editor: CaptureTimeEditor, onClose: () -> Unit) {
         title = { Text(stringResource(R.string.media_edit_captured_at)) },
         text = {
             Column {
-                val dayText = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date.from(day.atStartOfDay(zone).toInstant()))
-                val timeText = android.text.format.DateFormat.getTimeFormat(context).format(java.util.Date.from(day.atTime(time).atZone(zone).toInstant()))
+                val dayText = me.raddatz.veyq.mobile.words.Shown.day(day.toEpochDay(), context.language)
+                val timeText = me.raddatz.veyq.mobile.words.Shown.clock(time.hour, time.minute, context.language)
                 ListItem(
                     headlineContent = { Text(dayText) },
                     leadingContent = { Icon(Icons.Outlined.CalendarMonth, null) },
@@ -568,7 +569,7 @@ internal fun CaptureTimeDialog(editor: CaptureTimeEditor, onClose: () -> Unit) {
         ) { DatePicker(state) }
     }
     if (pickingTime) {
-        val state = rememberTimePickerState(time.hour, time.minute, android.text.format.DateFormat.is24HourFormat(context))
+        val state = rememberTimePickerState(time.hour, time.minute)
         AlertDialog(
             onDismissRequest = { pickingTime = false },
             text = { TimePicker(state) },

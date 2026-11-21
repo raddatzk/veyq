@@ -19,7 +19,7 @@ struct FileScreen: View {
         VStack(alignment: .leading, spacing: 12) {
             if let state {
                 if !state.facts.isEmpty {
-                    Text(state.facts.map { say(piece: $0) }.joined(separator: " · ")).font(.footnote).foregroundStyle(Role.muted)
+                    Text(pieceLine(state.facts)).font(.footnote).foregroundStyle(Role.muted)
                 }
                 // who uploaded it (Depot's header fact): a member by name, one who left, a guest by the name it gave itself
                 if let uploader = state.uploader { Text(say(notice: uploader)).font(.footnote).foregroundStyle(Role.muted) }
@@ -79,7 +79,8 @@ private struct FileText: View {
         .task(id: ObjectIdentifier(shown)) { lines = shown.text.components(separatedBy: "\n") }
         .task(id: copied) {
             guard copied != nil else { return }
-            try? await Task.sleep(for: .seconds(6))
+            // "copied" beside the text, for the core's while (`Notice.COPIED_MS`); a new copy starts it anew
+            guard (try? await waitCore(Notice.companion.COPIED_MS)) != nil else { return }
             copied = nil
         }
     }
