@@ -798,7 +798,10 @@ implementation exists but what holds it to the first.
     take the sidebar's rows. Home has its groups and filters (`AdwToggleGroup`); Favorites, Recent and an
     application's list are there; a Pot is read only (entries, overview, people). An object the slice does not draw
     says so with the core's `not_built`.
-  - **Money, days and sizes** are written the desktop's way: glibc's `localeconv`, `%x` and `g_format_size`.
+  - **Money, days and sizes** were written the desktop's way (glibc's `localeconv`, `%x` and `g_format_size`) until
+    [ADR 0154](0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md)
+    decision 5 (2026-11-21): every shown value is now the core's `Shown` text, the web's (`localeconv` stays only for
+    the decimal separator a person types).
   - **Guards** (decision 9). The words guard holds linux-literal (no Rust literal as a widget's shown text) and
     linux-po; the guidelines guard holds linux-block (the creating action only in `create_action.rs`) and
     linux-floating-button. Each rule was bitten red and green on the restore.
@@ -821,8 +824,8 @@ implementation exists but what holds it to the first.
     has no share sheet, so copy is the share (`gdk::Clipboard`). `report.rs`: an `AdwDialog`, the privacy passage
     opened through `gtk::UriLauncher`, the receipt after. `cover.rs`: an `AdwDialog` with GTK's open dialog, a 16:9
     `gtk::DrawingArea` (a drag pans, a `gtk::Scale` zooms), `gdk::Texture`'s decode, cairo's scale to `Cover.Fit`'s
-    size and gdk-pixbuf's JPEG saver at the core's quality. A server instant is said as the local day or moment
-    (`said::instant_day`, `instant_moment`), never raw.
+    size and gdk-pixbuf's JPEG saver at the core's quality. A server instant is said as the local day or moment, never
+    raw — since ADR 0154 decision 5 the wire's `…Text` field the core wrote (`said::instant_day`/`instant_moment` gone).
 
   Measured 2026-11-10:
   - `python3 src/mobile/linux/run.py build` is green: `cargo clippy -- -D warnings`, and `cargo test` (the round
@@ -1029,9 +1032,9 @@ implementation exists but what holds it to the first.
   - **Theme.** `generate_theme.py --winui` writes `Theme.xaml`: the web's brand roles as the accent, light and dark;
     everything else is Fluent's. The window has a Mica backdrop and the system's light or dark. No icon yet: it is the
     packaging's.
-  - **Money, days and sizes** are the system's: `CurrencyFormatter(code)` (any currency with its own symbol), the
-    culture's short date, and `StrFormatByteSizeEx` (Explorer's). Money follows the regional format, the words the
-    display language.
+  - **Money, days and sizes** were the system's (`CurrencyFormatter(code)`, the culture's short date,
+    `StrFormatByteSizeEx` — base 1024) until ADR 0154 decision 5 (2026-11-21): every shown value is now the core's
+    `Shown` text, the web's, in the display language.
   - **The first slice**, as Linux's but to Fluent: every start a sign-in; a `NavigationView` whose `PaneDisplayMode`
     `Auto` decides the form by its own thresholds (Left from 1008 epx, LeftCompact from 641, LeftMinimal below), the
     switcher its `PaneHeader` (a `DropDownButton` whose menu lists the spaces and each server's tenants), Search its
@@ -1113,9 +1116,9 @@ implementation exists but what holds it to the first.
     `CurrencyFormatter`'s layout of the region's own currency, whose own symbol for another currency is never used — it
     wrote Canadian dollars "12,50 $" in de-DE, the US dollar's sign. Measured on the VM (2026-11-18, `SaidTest`): "12,50 CA$"
     and "1.234 ¥" in de-DE, "€1,234.56" and "CA$1,234.56" in en-US, a negative in en-US in brackets as Windows writes its
-    own, CHF (no symbol but its code in ICU) by its code. Linux does the same through `libicuuc` (its versioned names read
-    from pkg-config by `build.rs`: 77 in the Fedora 44 image, 78 in the GNOME 51 runtime), placed as `lconv` places the
-    locale's own symbol.
+    own, CHF (no symbol but its code in ICU) by its code. Linux did the same through `libicuuc`. Both are gone since
+    ADR 0154 decision 5 (2026-11-21, `Said.cs` and `build.rs`' ICU link removed): a Pot's amounts are the core's
+    `Shown.money`, held to the web's `formatMoney` by `format-vectors.json`.
 
   Measured 2026-11-12 (`run.py build`: `Veyq.Tests` 25 with `PdfPagesTest` — a one-page PDF at 400 × 200 with its left
   half black, 25 pages counted, bytes that are no PDF refused —, `TypedTextTest` and `SaidTest`'s code mode bitten; a

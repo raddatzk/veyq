@@ -1,8 +1,8 @@
 # ADR 0154 — Every app draws the core's gates, plans, notices and formats through a core UI its applications plug into, as the web's do
 - Status: Accepted (owner 2026-11-20: the CRs' owner questions answered as recommended)
 - Built: decisions 1 and 3 on every app and decision 6's words and direction guard (2026-11-20), decision 2 on every
-  app and decision 6's structure guard (2026-11-21; § Consequences); decisions 4, 5 and the rest of 6 (the duration and
-  formatter rule) not yet — `cr-apps-notices-and-formats-from-the-core` builds them. Decision 6's shared plan fixture
+  app and decision 6's structure guard (2026-11-21), decisions 4 and 5 on every app and the rest of decision 6, the
+  duration and formatter rule `platform-format` (2026-11-21; each § Consequences). Decision 6's shared plan fixture
   each platform's tests draw was not built: the compilers' exhaustiveness and the structure guard hold it (§ Consequences)
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
@@ -290,6 +290,93 @@ held for the screens' models but not around them:
   application lists without a New of their own; a folder's, a Memory's (Upload's submenu), a Pot's, a file's and a
   bookmark's header with Delete last; a row's, a medium tile's (with *Open in New Window* beside the plan) and a link
   row's context menu; Settings with Sign out last.
+- **As built, decision 4** (2026-11-21). `Notice.kind` (`words/Notices.kt`): `NoticeKind.SAID` (a success,
+  `Notice.SAID_MS` 4 s), `HELD` (a refusal or failure, until closed), `UNDO` (until the state drops the offer, the
+  window `ShellModel.TRASH_UNDO_MS` 6 s); the inline notes `Notice.COPIED_MS` (2 s) and `NOTHING_PLAYS_MS` (5 s). The
+  default is `NoticeKind.of(msg)` — `SAID` for the success words (a copy, a move, a download, an import, an offline send,
+  and the platforms' own successes made core notices: a kept link, a saved profile, receipts saved), `UNDO` for a trash,
+  every other word `HELD` —, overridden where the same word lives otherwise (`living(kind)`: a move's offered undo is
+  `UNDO`, a trash queued offline `SAID`); `NoticeKindTest` holds the table. Each app has one notice host mapping the
+  kind onto its control: Android `core/NoticeHost.kt` (every snackbar `Indefinite`, closed by the core's `lifeMs` once
+  it appears, a held one with a close), Apple `AppModel.show` (`HELD` the shell's alert, `SAID` a bottom toast, `UNDO`
+  its Undo toast), Linux `said.rs` (the one `adw::Toast`), Windows `Core/NoticeBar.cs` with `Core/Lives.cs` (the InfoBar
+  under the bar: a Success, an Error with its close, an Undo until `EndOffer`). The desktops read every duration, the
+  kind of their own words and the separator once from the bridge, `Call.NoticeLifetimes` → `Answer.Lifetimes`, answered
+  before the core starts; a wire `Notice` carries its `kind`.
+- **As built, decision 5** (2026-11-21). `words/Shown.kt`: `size`, `day`, `dayOf`, `moment`, `memoryDay`, `dayRange`,
+  `dayLabel` (the gallery's chip), `money`, `number`, `list`, `length` (a track and both music clocks), `distance` (a
+  track's length), `clock` (a picked time), `joined`/`SEPARATOR`, and `args(notice)`/`piece(p)`, each in the app's
+  language, free of kotlinx.serialization. What each app draws through it: **Android** `Formats.kt`/`NoticeText.kt`
+  (`Context.language`); **Apple** `Formats.swift` (`shownLanguage`; the date pickers' ISO day by a Gregorian `IsoDay`,
+  a GPX track's distance `Shown.distance` since phase 10); **Linux** and **Windows** the wire's text — a notice's sizes,
+  moments and amounts as `text`, a line's `Piece` as `said` or `plain`, and every value a view held raw beside its new
+  `…Text` field (`ShownText`, written by `Shown` in the bridge's `WireWords.module` language, a plain string on the
+  wire): the storage's `automaticText`/`pinnedText`/`freeText`, `OfflineItem.bytesText`, a session's
+  `createdText`/`lastUsedText`, `rotatedText`, a rate's `dayText`, a Pot's `amountText`s and `totalText`, an entry's
+  `untilText`/`atText`/`dateText`, `DateShown` `fromText`/`toText`, `MemoryDateShown.text`, `DetailRow`
+  `sizeText`/`momentText`, a link's `createdText`/`expiresText`, `ShownEnd.dayText`, the trash's
+  `deletedText`/`purgeText`, `ReportShown.receivedText`, `NowPlayingShown` `positionText`/`durationText`,
+  `TrackFactShown.distanceText`, `BannerEditorShown.tooLargeBound`, and `ChipShown.label`. Gone with it: Windows'
+  `Said.cs` (`CurrencyFormatter`, `StrFormatByteSizeEx` at base 1024, the `"d"`/`"g"` dates) and its truncating
+  `MusicTime`, Linux's `format_size`/`%x`/`localeconv` money and its `libicuuc` link, Apple's `ByteCountFormatter`,
+  `musicTime` and `Measurement`, Android's `formatShortFileSize` and `DateUtils.formatDateRange`. The vectors:
+  `src/mobile/words/format-vectors.json`, written by `src/web/scripts/format-vectors.mts` over the web's own formatters
+  (`src/web/src/test/formatVectors.ts`), re-rendered by the web's `formatVectors.test.ts`, held by the core's
+  `ShownVectorsTest` (and `ShownDayLabelTest`) on the JVM and `macosArm64`, which also holds `expenses/Currencies` —
+  the digits a new Pot or entry is sealed with — to the web's `minorUnitsOf`. **The file depends on the ICU of the Node
+  that writes it**: written first under Node 23.11 (ICU 77.1), it failed on Node 22.23 (ICU 78.3), which CI runs —
+  COP, HUF, IDR and PKR lost their minor digits and RSD gained two (25 money cases; measured 2026-11-21 by running the
+  web test under `npx node@22`). Every Node line `package.json`'s `engines` names ships ICU 78.3 (22.23.3, 24.22.3,
+  26.13.1), so the file was written anew under Node 22 and `Currencies` followed; the web test names an ICU major
+  mismatch before the cases it moves.
+- **The web stays the source of these formats.** ADR 0155's Consequences make the core's output the one source for what
+  *moved*; these formats did not move, and moving them now misses that ADR's decision-7 budget by a measured factor: a
+  throwaway `@JsExport` façade of `Shown` (size, day, moment, Memory day and range, money, list, length) bundled beside
+  the search's entry grew it from 78,824 B min / 27,691 B gz to 91,955 / 32,658 — 4,967 B gz of own code against the
+  703 B gz (1,221 min) of TypeScript it would delete (`formatBytes`, `formatMoney`+`decimalOf`, `memoryDateRange`'s
+  two; esbuild `--minify`, `gzip -9`): 7.1×, where R = 3.0 allows about 2.1 KB. It would also give up `Intl`'s
+  browser locale data and put the money table in the eager set. So the vectors run web → core, and the turn comes with
+  the move that owns a format (Expenses brings `formatMoney`): then `Shown` is the source and the file is written by a
+  core test, as `SearchVectorsTest` writes the search's.
+- **As built, decision 6's `platform-format`** (2026-11-21). `validate_mobile_words.py`'s tenth rule, on for all four
+  platforms (`PLATFORM_FORMAT_ON`): no duration literal at a notice or an inline note (Linux also: no `adw::Toast` made
+  outside `said.rs`, libadwaita's unseen 5 s), no size, date, money or measurement formatter by name, no `" · "` literal.
+  `PLATFORM_FORMAT_EXCEPTIONS` names each kept call with why (the docstring lists the classes: the one notice host's
+  control without a lifetime of its own, a player's media time, a timer that is no notice's, a picked day encoded as ISO,
+  the decimal separator a person types, a Pot create sheet's currency picker, debug-only sources). Bitten per platform
+  (a `formatShortFileSize`, a `ByteCountFormatter`, a `.formatted(.measurement`, `format_size`, an `adw::Toast::new`,
+  `TimeSpan.FromSeconds(6)`, a `.ToString("N0")`, a `" · "` — each red alone, green restored).
+- **What changed for a person**: Windows' sizes are base 1000 and its dates the web's (`Nov 21, 2026` / `21.11.2026`),
+  "copied" lives 2 s everywhere (was 6 s), the music clocks round as the web's, a success closes after 4 s and a refusal
+  stays on every app, a Memory's range is the web's numeric one on Android, a track's distance the web's on Apple, and
+  apps sealing a new Pot in COP, HUF, IDR or PKR use 0 digits, RSD 2 (ICU 78's, as current browsers; a stored amount
+  never moves).
+- **The passes (decisions 4 and 5)**, 2026-11-21, each a throwaway erased after, each value compared with what
+  `format-vectors.json` holds for the web. **Android** (a throwaway API 36 emulator, deleted after): a copy's notice gone
+  after about 4 s, a trash's Undo after about 6 s, an upload's *Replace* offer (held) still up after 14 s with its
+  Dismiss, a link's "Copied" about 2 s; a 1.5 MB file "1.5 MB" / "1,5 MB", a moment "Nov 21, 2026, 2:29 PM" /
+  "21.11.2026, 14:29", a link's days; a Pot in USD with a EUR entry: "$1,234.56", "€50.50", "paid $1,290.11 · consumed
+  $645.06" / "1.234,56 $", "50,50 €", "bezahlt 1.290,11 $ · verbraucht 645,06 $"; a Memory's range "03/12/2026 –
+  04/02/2026" / "12.03.2026 – 02.04.2026"; a 95.6 s track listed "1:36" (rounded, the web's; the system's file picker
+  showed "01:35") with the running clock "0:02 / 1:36". **Windows** (the VM, a `tw-win` throwaway, a directory and
+  tasks of its own): the app logs `lives read: said 4000 ms, 13 words not held`; a trash's Undo ended after 6.0 s; a
+  copy's notice gone between 1.5 s and 5.5 s; a download's "downloaded" there at 2.5 s and gone by 14.5 s; a download
+  that failed (its file held open by another process the moment the save picker made it) an Error InfoBar with its
+  close, still up after 18 s; Settings' "10 kB", "0 B", "31.3 GB"; a trash row's days; a Pot in EUR with a USD entry
+  "€1,234.56", "$50.50" → "€45.45", "paid €1,280.01 · consumed €640.01" / "1.234,56 €", "50,50 $", "bezahlt
+  1.280,01 € · verbraucht 640,01 €"; a lightbox's "Size: 2.4 MB" for 2,440,775 bytes (base 1000; Windows' old base 1024
+  wrote 2.3) and "Taken: Mar 20, 2026, 12:00 PM" / "Größe: 2,4 MB", "Aufgenommen: 20.03.2026, 12:00"; a Memory's range
+  "03/12/2026 – 04/02/2026" / "12.03.2026 – 02.04.2026". A move onto a taken name is said inside the move sheet, not as
+  a notice. **Linux** (phase 7, Broadway): built and its rules bitten; the notices' lifetimes and a Pot's amounts were
+  not seen there. **Not passed:** Windows' music clocks (the core's text, `ShownWireTest` and the vectors);
+  Linux's lifetimes and amounts; **the Mac and the iPhone: both builds green, nothing clicked** — the coordinator's Mac
+  pass: a copy's notice at the bottom gone after 4 s; a refusal (a download whose target fails) the alert until closed;
+  a trash's and a move's Undo gone after 6 s; a link's "Copied" about 2 s; *nothing plays* about 5 s; in English and
+  German a 1.5 MB file's line ("1.5 MB · Modified …" / "1,5 MB · Geändert …"), a Pot's amounts in EUR and USD and its
+  overview, a Memory's range and an ongoing one's "Since …", a 95.6 s track's "1:36" and the running clock, a GPX
+  track's distance ("850 m", "12.3 km"; was the system's `Measurement`), the lightbox's size and moment, Settings'
+  storage sizes and session dates, the trash's and a link's days, the gallery's day chip ("March 12" / "12. März"); the
+  iPhone's the same, the owner's.
 
 ## Alternatives considered
 

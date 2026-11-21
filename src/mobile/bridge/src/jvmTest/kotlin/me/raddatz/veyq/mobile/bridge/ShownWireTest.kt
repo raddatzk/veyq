@@ -46,8 +46,8 @@ class ShownWireTest {
     private fun field(json: String, name: String): String? = Regex("\"$name\":(null|\"[^\"]*\")").find(json)?.groupValues?.get(1)?.removeSurrounding("\"")?.takeIf { it != "null" }
 
     /**
-     * The values a view carries raw for the host's own use arrive beside the text the core writes for them (phase 7 of
-     * cr-apps-notices-and-formats-from-the-core): a size, a moment, a day, a server instant's day, a Memory's days, an
+     * The values a view carries raw for the host's own use arrive beside the text the core writes for them (ADR 0154
+     * decision 5): a size, a moment, a day, a server instant's day, a Memory's days, an
      * amount and a player's clock, in the host's language — none for a host to format.
      */
     @Test

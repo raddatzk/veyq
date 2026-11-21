@@ -22,8 +22,8 @@ sheets behind it (`MoveSheet`, `ShareSheet`, `ReportSheet`; ADR 0136's Consequen
 box's page (`depot/DropBoxPage`), a Memory's page and its lightbox (`memories/GalleryModel`, `Lightbox`, the grid's layout
 `MediaGridLayout`, the rights `MemoryRights`, `MemoryCreate`) and Memories' uploads' settle (`memories/MediaUploads`); which words an outcome raises (`words/Notices`) and what a row or a page says, piece by piece
 (`words/Piece`). A platform keeps only its UI, built to its own guidelines, and what only it can do: the system pickers
-and share sheets, the secure store, decoding and framing pictures, writing a date, a size or an amount its own way, the
-device's calendar, and the order of a view's own steps.
+and share sheets, the secure store, decoding and framing pictures, the device's calendar, and the order of a view's own
+steps — never a date, a size, an amount or a notice's lifetime, which are the core's (below).
 
 Where the two apps had drifted, one answer was chosen (each pinned by a core test): after the open node is trashed the
 shell goes to its parent, read anew (one opened at the top: its application's list); a move's undo is offered for the
@@ -340,6 +340,21 @@ orders are held to the web's sources by `PlansAreTheWebsTest`, the drawing by th
 over generated Swift mirrors, `apple/generate_plans.py`; Windows' with `CS8509` an error) and by
 `scripts/validate_mobile_structure.py` (no fallback arm, no whitelist, no filter over a plan). An application's list
 draws no New of its own; the drawer's makes its kinds.
+
+**A notice's lifetime and every shown value are the core's** ([ADR 0154](../decisions/0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md)
+decisions 4 and 5, every app, 2026-11-21). A `Notice` names its `NoticeKind`: `SAID` (a success, closed after
+`Notice.SAID_MS`, 4 s), `HELD` (a refusal or failure, until closed), `UNDO` (until the core drops the offer,
+`ShellModel.TRASH_UNDO_MS`, 6 s); "copied" lives `COPIED_MS` (2 s), "nothing plays" `NOTHING_PLAYS_MS` (5 s). Each app
+maps the kind onto its one control: Android's `NoticeHost.kt` (a snackbar), Apple's `AppModel.show` (the alert, a
+bottom toast, the Undo toast), Linux's `said.rs` (an `AdwToast`), Windows' `Core/NoticeBar.cs` (the InfoBar); a
+desktop reads the durations and the kind of its own words once, from the bridge's `Answer.Lifetimes`. Every size, day,
+moment, Memory date and range, amount, number, list, track length and distance, music clock and `" · "` line is the
+core's `words/Shown` in the app's language — on the desktops the wire's `…Text` fields (`ShownText`, written in the
+bridge's language), so no host formats a value. `Shown` is held to `src/mobile/words/format-vectors.json`, which the
+web's own formatters write (`src/web/scripts/format-vectors.mts`, pinned by `formatVectors.test.ts`; the web stays the
+source until a move gives a format to the core, ADR 0154's Consequences). The words guard's `platform-format` rule
+refuses a duration literal at a notice, a platform size/date/money/measurement formatter and a `" · "` literal, outside
+its named exceptions.
 
 **Music, on all four apps** ([ADR 0142](../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md)). The web's player ported into the core's
 `audio/` (`MusicPlayer`, its order, fades and the lightbox video's interruption) and Memories' music into
@@ -776,3 +791,4 @@ Broadway carries no file drop, the Windows VM's WinUI takes none with UAC off; t
 coordinator's pass (#1039), a guest's link on the iPhone the owner's; a Memory's *Add photos* and a WRITE_ONLY page still
 name a guest first (#1042), the phones' guest gallery offers *Add* only once named (#1044).
 **The structure** (ADR 0154 decision 2): passed on Linux, Android and Windows; the Mac's is the coordinator's click list (ADR 0154's Consequences), the iPhone's the owner's; no level selects yet (#1049).
+**Notices and formats** (ADR 0154 decisions 4 and 5): passed on Android and Windows in English and German (each lifetime, a held refusal staying, sizes, moments, a Pot's amounts in two currencies, a Memory's range; the music clocks on Android only); Linux's lifetimes and amounts were not seen in Broadway; the Mac's is the coordinator's click list (ADR 0154's Consequences), the iPhone's the owner's.
