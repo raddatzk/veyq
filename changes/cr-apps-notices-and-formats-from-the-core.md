@@ -128,8 +128,18 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   `Notice.kind`, a `Piece` of `Plain`/`Said` and the lifetimes call in both `bridge.rs` and `Bridge.g.cs`. Not compiled:
   the Rust and C# hosts (their builds need the Flatpak SDK and the Windows host; phases 7–8 build them). **Bite:**
   `WireWords.languageOf` ignoring its module → `ShownWireTest` 2/2 red, restored → green.
-- [ ] **4 the guard** — F4, switched on per platform in its phase. · Done when: the guard green; `validate_guard_gaps.py`
+- [x] **4 the guard** — F4, switched on per platform in its phase. · Done when: the guard green; `validate_guard_gaps.py`
   run once. **Bites:** a `FromSeconds(6)` at a notice, a `ByteCountFormatter`, a `" · "` literal — each red alone.
+  **Built** (2026-11-21): `validate_mobile_words.py`'s tenth rule, `platform-format` (`check_platform_format`): per
+  platform the notice and timer durations of a literal, the size/date/money formatters by name, and a `" · "` literal, in
+  the same sources the literal rules read; `PLATFORM_FORMAT_ON` is empty — each of phases 5–8 adds its platform once its
+  own are gone —, and `PLATFORM_FORMAT_EXCEPTIONS` names (platform, file, match) with why (a player's own media time, a
+  timer that is no notice's). Switched on everywhere today it names **218 sites**, each phase's work list: Android 15
+  durations, 35 formatters, 20 joins; Apple 19, 31, 19; Linux 11, 8, 14; Windows 17, 17, 12 (the joins exactly R6's
+  counts; `check_platform_format(on={…all four…})`). Measured: every `scripts/validate_*.py` green with
+  `/usr/bin/python3`; `validate_guard_gaps.py --force` green (104 cases). **Bites**, each in a throwaway tree with only
+  its platform switched on, green with the clean line, red with the planted one alone, green with the platform off:
+  `TimeSpan.FromSeconds(6)` beside an InfoBar (Windows), `ByteCountFormatter()` (Apple), `parts.join(" · ")` (Linux).
 - [ ] **5 Android** · **6 Apple** · **7 Linux** · **8 Windows** — each platform's formatters and durations removed, the
   notice host mapping F1, the guard on. · Done when: each platform's build (as the CR before) and the guards green.
 - [ ] **9 the passes** — § Passes.

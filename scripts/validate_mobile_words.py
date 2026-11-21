@@ -2,7 +2,7 @@
 """Guard that the veyq app writes no word of its own on any platform: every word it shows comes from the one catalog
 `src/mobile/words/words.json` (ADR 0136 decision 3).
 
-**What it asserts.** Nine rules, over the app's sources (`src/mobile/android/src`, `src/mobile/apple`, no `build/`;
+**What it asserts.** Ten rules, over the app's sources (`src/mobile/android/src`, `src/mobile/apple`, no `build/`;
 `src/mobile/linux`, no `target/`; `src/mobile/windows`, no `bin/` or `obj/`) and the two manifests that show text:
 - **android-strings**: no `res/values*/strings.xml` (nor any `res/values*/*.xml` holding a `<string` or `<plurals`): the
   Android words are generated (`generate_words.py --android-res`), and a hand-written resource would sit beside them
@@ -54,6 +54,21 @@
   generated from the catalog in every language (`generate_words.py --apple-infoplist`, `--metainfo`), and a hand-written
   one is English only. Red when either file is missing. Windows' MSIX manifest shows only the name `veyq`, an
   untranslated name, so it is not read.
+- **platform-format**: a platform holds no notice lifetime and writes no value of its own (ADR 0154 decisions 4 and 5):
+  in its UI sources (the same files the literal rules read) no duration at a notice or a timer (Android's
+  `SnackbarDuration.*`, `Toast.LENGTH_*`, a `delay(…)` of a literal; Apple's `Task.sleep(…)` of a literal and
+  `.seconds(n)` / `.milliseconds(n)`; GTK's toast `.timeout(n)` / `set_timeout(n)`, `timeout_add_seconds*` /
+  `timeout_add_local*` of a literal; Windows' `TimeSpan.From…(n)`, `Task.Delay(n)`) — the core's `Notice.kind`,
+  `Notice.SAID_MS`, `COPIED_MS` and `NOTHING_PLAYS_MS` are what a notice lives by —; no size, date or money formatter
+  (`formatShortFileSize`, `formatFileSize`, `NumberFormat`, `DateTimeFormatter.ofLocalized…`, `DateFormat`/`DateUtils`;
+  `ByteCountFormatter`, `DateFormatter`, `NumberFormatter`, `.formatted(` with a date, a byte count or a currency,
+  `.currency(code:`; `format_size`, `localeconv`, a `glib::DateTime`'s `.format(`; `StrFormatByteSize`,
+  `CurrencyFormatter`, `DateTimeFormatter`, a `ToString(` of a date, money or number pattern) — the core's
+  `words/Shown` writes each —; and no `" · "` in a literal: a line's parts are joined by `Shown.joined`. It is switched
+  on per platform (`PLATFORM_FORMAT_ON`) by that platform's phase of cr-apps-notices-and-formats-from-the-core, which
+  removes the platform's own; `PLATFORM_FORMAT_EXCEPTIONS` names, per platform, a file and the one call it may keep
+  with why — only a player's own media time, which it hands to the core's `Shown.length`, or a timer that is no
+  notice's (a retry's back-off, a search's debounce).
 
 **The defect that bought it.** The Apple app had no German at all: ~480 English literals, while Android carried its
 own copy of the same words in German (owner 2026-11-09, ADR 0136). A word added on one platform alone is how they
@@ -66,7 +81,9 @@ above lack is not seen: on Linux `glib::Object::builder().property("title", …)
 own taking a `String` it shows (`label = "…"` passed to it). A Kotlin template whose `${…}` holds a quoted literal
 (`"${if (a) "x" else "y"}"`) ends the literal early, and a C# verbatim or raw string holding a quote (the Kotlin lexer
 reads `@"a""b"` as two literals) is read as two. A manifest's other fields are not read (the metainfo's `<name>` and
-`<developer>` hold the name `veyq`, an untranslated name).
+`<developer>` hold the name `veyq`, an untranslated name). **platform-format** reads names and literals, not what a
+value means: a duration held in a variable (`delay(wait)`), a formatter reached through an alias or a helper of another
+name, and a `·` joined without its spaces are not seen; a timer its exception names is trusted to be no notice's.
 
 Exit 0 green, 1 red (every violation printed), 2 when the tree is not where it should be.
 """
@@ -256,6 +273,66 @@ def check_manifests(root: Path) -> list[str]:
     return errors
 
 
+# platform-format (ADR 0154 decisions 4 and 5): switched on per platform by its phase of
+# cr-apps-notices-and-formats-from-the-core; each platform's own durations and formatters are gone then.
+PLATFORM_FORMAT_ON: set[str] = set()
+# (platform, file relative to src/mobile, the matched text) a platform may keep, each with why. Empty until a platform's
+# phase names one.
+PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {}
+
+_SEP = re.compile(r'"[^"\n]* \u00b7 [^"\n]*"')
+_DURATION = {
+    "android": re.compile(r"\bSnackbarDuration\.\w+|\bToast\.LENGTH_\w+|\bdelay\(\s*[0-9][0-9_]*L?\s*\)"),
+    "apple": re.compile(r"\bTask\.sleep\(\s*(?:for:\s*)?(?:nanoseconds:\s*)?[.0-9]|\.(?:seconds|milliseconds)\(\s*[0-9]"),
+    "linux": re.compile(r"\.(?:set_)?timeout\(\s*[0-9]|\btimeout_add(?:_seconds)?(?:_local)?(?:_once)?\(\s*(?:std::time::)?(?:Duration::from_\w+\(\s*)?[0-9]"),
+    "windows": re.compile(r"\bTimeSpan\.From\w+\(\s*[0-9]|\bTask\.Delay\(\s*[0-9]"),
+}
+_FORMATTER = {
+    "android": re.compile(r"\b(?:formatShortFileSize|formatFileSize|NumberFormat|ofLocalizedDate(?:Time)?|ofLocalizedTime|DateFormat|DateUtils\.format\w*)\b"),
+    "apple": re.compile(r"\b(?:ByteCountFormatter|DateFormatter|NumberFormatter|ISO8601DateFormatter)\b|\.formatted\(\s*(?:date:|\.dateTime|\.byteCount|\.currency)|\.currency\(\s*code:"),
+    "linux": re.compile(r"\b(?:format_size|localeconv)\b|\.format\(\s*\"%"),
+    "windows": re.compile(r"\b(?:StrFormatByteSize\w*|CurrencyFormatter|DateTimeFormatter)\b|\.ToString\(\s*\"(?:[dDgGfFcCnN]\d*|[^\"]*(?:yy|MM|dd|HH)[^\"]*)\""),
+}
+
+
+def _platform_sources(root: Path) -> dict[str, list[Path]]:
+    android = root / "android" / "src"
+    apple = root / "apple"
+    linux = root / repo_layout.MOBILE_LINUX.relative_to(MOBILE)
+    windows = root / repo_layout.MOBILE_WINDOWS.relative_to(MOBILE)
+    return {
+        "android": sorted(p for p in android.rglob("*.kt") if "build" not in p.relative_to(android).parts) if android.exists() else [],
+        "apple": sorted(p for p in apple.rglob("*.swift") if "build" not in p.relative_to(apple).parts) if apple.exists() else [],
+        "linux": rust_sources(linux) if linux.exists() else [],
+        "windows": windows_sources(windows, ".cs") if windows.exists() else [],
+    }
+
+
+def check_platform_format(root: Path = MOBILE, on: set[str] | None = None) -> list[str]:
+    errors: list[str] = []
+    platforms = PLATFORM_FORMAT_ON if on is None else on
+    for platform, files in _platform_sources(root).items():
+        if platform not in platforms:
+            continue
+        if not files:
+            errors.append(f"platform-format: no {platform} source under {root} — the rule would read nothing")
+        for f in files:
+            raw = f.read_text(encoding="utf-8")
+            code = mask_rust(raw, literals=False) if f.suffix == ".rs" else (
+                "\n".join(strip_comment(line) for line in raw.splitlines()) if f.suffix == ".swift" else mask_kotlin(raw, literals=False))
+            rel = f.relative_to(root).as_posix()
+            found = [(m, "a duration of its own — a notice lives by the core's `Notice.kind` / `*_MS`") for m in _DURATION[platform].finditer(code)]
+            found += [(m, "a formatter of its own — the core's `Shown` writes it") for m in _FORMATTER[platform].finditer(code)]
+            found += [(m, "\" · \" joined by hand — `Shown.joined`") for m in _SEP.finditer(code)]
+            for m, why in sorted(found, key=lambda x: x[0].start()):
+                if (platform, rel, m.group().strip()) in PLATFORM_FORMAT_EXCEPTIONS:
+                    continue
+                line = code.count("\n", 0, m.start()) + 1
+                errors.append(f"platform-format: {f.relative_to(ROOT) if f.is_relative_to(ROOT) else rel}:{line}: "
+                              f"`{m.group().strip()[:50]}` is {why} (ADR 0154 decisions 4 and 5)")
+    return errors
+
+
 def strip_comment(line: str) -> str:
     i = line.find("//")
     return line if i < 0 else line[:i]
@@ -287,6 +364,7 @@ def check(root: Path = MOBILE) -> list[str]:
     errors += check_linux(root / repo_layout.MOBILE_LINUX.relative_to(MOBILE))
     errors += check_windows(root / repo_layout.MOBILE_WINDOWS.relative_to(MOBILE))
     errors += check_manifests(root)
+    errors += check_platform_format(root)
     return errors
 
 
