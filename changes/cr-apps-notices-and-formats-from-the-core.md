@@ -142,6 +142,41 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   `TimeSpan.FromSeconds(6)` beside an InfoBar (Windows), `ByteCountFormatter()` (Apple), `parts.join(" · ")` (Linux).
 - [ ] **5 Android** · **6 Apple** · **7 Linux** · **8 Windows** — each platform's formatters and durations removed, the
   notice host mapping F1, the guard on. · Done when: each platform's build (as the CR before) and the guards green.
+  - [x] **7 Linux** — **Built** (2026-11-21): the first step, `run.py build` at the phase-4 tip, green (phase 3's `said.rs`
+    compiles). **The wire's open values (phase 3's list) now arrive as the core's text** — `words/ShownText` (core,
+    `Notices.kt` beside the other wire serializers): a value held raw, written by `Shown` in the encoder's
+    `WireWords.module` language, a plain string on the wire (so Rust and C# read `String`) —, added beside each raw value
+    the host still reads or in place of one it only showed: `AccountSettings.Storage` `automaticText`/`pinnedText`/
+    `freeText`, `OfflineItem.bytesText`, `PersonTrust.Shown.rotatedText`, `EntryEditor.Rate.dayText`, `PotView`'s
+    `ShownEntry`/`ShownSettle`/`ShownCategory` `amountText` and `Shown.totalText`; the bridge's `SettingsFamily`
+    `createdText`/`lastUsedText`, `Answer.EntryHistory.untilText`, `HistoryShown.atText`, `EditorShown.dateText`,
+    `DateShown` `fromText`/`toText`, `MemoryDateShown.text` (the web's numeric day or closed range; an ongoing one's
+    first day, worded "Since …" by the host), `DetailRow` `sizeText`/`momentText`, `ShownLink` `createdText`/`expiresText`,
+    `ShownEnd.dayText` (the picked day, so no call is needed for it), `TrashShown.Row` `deletedText`/`purgeText`,
+    `ReportShown.receivedText`, `NowPlayingShown` `positionText`/`durationText`, and `ChipShown.label` typed `ShownText`
+    (a day chip the core's day; the wire unchanged). All additive for Windows (phase 8 reads the same fields).
+    `Answer.Lifetimes` gained `saidWords`/`undoWords` (core's `NoticeKind.of` over every word: the kind of a toast a
+    desktop raises itself) and `separator` (`Shown.SEPARATOR`), and is answered at once, before the core's start
+    (`Call.NoticeLifetimes` beside the host-ordered calls), so Linux asks it once, blocking, right after `bridge::start`.
+    `NoticeKind`'s success words gained `PROFILE_SAVED`, `RECEIPTS_SAVED`, `LINK_KEPT`, the Linux app's own success toasts.
+    Linux: `said.rs` holds the one toast (`said::toast` / `notice_toast` / `word_toast` / `copied_toast` /
+    `nothing_plays_toast`: `SAID` the core's `SAID_MS`, `HELD` and `UNDO` until closed or dropped), `joined` and
+    `copied_for`; every `adw::Toast` goes through it (73 sites, each platform word by its key's kind); glib's
+    `format_size`/`%x`, `localeconv` money and ICU's currency names are gone (`build.rs` links no `libicuuc` any more; the
+    CLAUDE.md trap about it removed), the music clock is the core's (the elapsed label keeps the playing position while
+    the scale is held), and every `" · "` is `said::joined`. Guard: `PLATFORM_FORMAT_ON = {"linux"}`; the Linux duration
+    rule also names an `adw::Toast::new`/`builder` outside `said.rs` (libadwaita's unseen default 5 s); exceptions:
+    `said.rs`' one toast and `localeconv` (the decimal separator a person types), and four layout/refresh timers that are
+    no notice's (`lightbox.rs` 3 s details re-read, `account_settings.rs` 250/100 ms scroll, `shell.rs` 400 ms).
+    Measured: `run.py build` green (clippy `-D warnings`, `cargo test` 101 + 5, the build's `*WireTest*`);
+    `:bridge:jvmTest` green (`ShownWireTest` two new cases, `SecretFreeSchemaTest` naming the new text fields, `WireTest`'s
+    chip); `:core:jvmTest` (`words.*`) and `:core:compileKotlinJs` green; every `scripts/validate_*.py` green with
+    `/usr/bin/python3` (guard_gaps skipped). **Bites:** `format_size`, an `adw::Toast::new` and a `" · "` planted in
+    `trash.rs` — each red alone, restored green; `kind_of` answering `Said` for every word → `said` test red, restored
+    green; `MemoryDateShown.text` with its ongoing test inverted → `ShownWireTest` red, restored green. `LINK_KEPT` dropped from the
+    success words → `NoticeKindTest.aDesktopsOwnSuccessIsSaid` red, restored green. Smoke: see the
+    report of this phase. Left open: the map view's distances (`memory_map_view.rs` `number`, a host decimal format of a
+    double, no `Shown` function); ADR 0123's Linux lines (`localeconv`, `%x`, `instant_day`) are history for phase 10.
 - [ ] **9 the passes** — § Passes.
 - [ ] **10 harvest** — ADR 0154's `Built:` (decisions 4, 5); `native-apps.md`; the words guard's docstring; the Use
   pages that quote a notice's behaviour, if any (`grep -rln -i "undo\|rückgängig" site/src/content/docs`). · Done when:
