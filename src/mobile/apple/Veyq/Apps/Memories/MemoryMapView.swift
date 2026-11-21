@@ -180,12 +180,12 @@ struct MemoryMapView<Switch: View>: View {
         }
     }
 
-    /// The numbers beside a track (core's `TrackFacts`): a length in the device's locale, the rest in the catalog's words.
+    /// The numbers beside a track (core's `TrackFacts`): a length as the web writes it (core's `Shown.distance`), the rest
+    /// in the catalog's words.
     static func facts(_ facts: [TrackFactsFact]) -> String {
         joinedLine(facts.map { fact -> String in
             if let d = fact as? TrackFactsFactDistance {
-                let m = Measurement(value: d.value, unit: d.kilometres ? UnitLength.kilometers : UnitLength.meters)
-                return m.formatted(.measurement(width: .abbreviated, usage: .asProvided, numberFormatStyle: .number.precision(.fractionLength(d.kilometres ? 1 : 0))))
+                return Shown.shared.distance(value: d.value, kilometres: d.kilometres, language: shownLanguage)
             }
             return (fact as? TrackFactsFactWords).map { say(notice: $0.notice) } ?? ""
         })

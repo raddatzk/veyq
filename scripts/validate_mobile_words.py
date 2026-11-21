@@ -62,14 +62,16 @@
   Windows' `TimeSpan.From…(n)`, `Task.Delay(n)`) — the core's `Notice.kind`,
   `Notice.SAID_MS`, `COPIED_MS` and `NOTHING_PLAYS_MS` are what a notice lives by —; no size, date or money formatter
   (`formatShortFileSize`, `formatFileSize`, `NumberFormat`, `DateTimeFormatter.ofLocalized…`, `DateFormat`/`DateUtils`;
-  `ByteCountFormatter`, `DateFormatter`, `NumberFormatter`, `.formatted(` with a date, a byte count or a currency,
-  `.currency(code:`; `format_size`, `localeconv`, a `glib::DateTime`'s `.format(`; `StrFormatByteSize`,
-  `CurrencyFormatter`, `DateTimeFormatter`, a `ToString(` of a date, money or number pattern) — the core's
-  `words/Shown` writes each —; and no `" · "` in a literal: a line's parts are joined by `Shown.joined`. It is switched
-  on per platform (`PLATFORM_FORMAT_ON`) by that platform's phase of cr-apps-notices-and-formats-from-the-core, which
-  removes the platform's own; `PLATFORM_FORMAT_EXCEPTIONS` names, per platform, a file and the one call it may keep
-  with why — only a player's own media time, which it hands to the core's `Shown.length`, or a timer that is no
-  notice's (a retry's back-off, a search's debounce).
+  `ByteCountFormatter`, `DateFormatter`, `NumberFormatter`, `MeasurementFormatter`, `.formatted(` with a date, a byte
+  count, a currency or a measurement, `.currency(code:`; `format_size`, `localeconv`, a `glib::DateTime`'s `.format(`;
+  `StrFormatByteSize`, `CurrencyFormatter`, `DateTimeFormatter`, a `ToString(` of a date, money or number pattern) — the
+  core's `words/Shown` writes each —; and no `" · "` in a literal: a line's parts are joined by `Shown.joined`. It is on
+  for every platform (`PLATFORM_FORMAT_ON`; a new platform joins it once its own formatters are gone);
+  `PLATFORM_FORMAT_EXCEPTIONS` names, per platform, a file and the one call it may keep with why — the one notice host's
+  control shown without a lifetime of its own (Android's `SnackbarDuration.Indefinite`, Linux's one toast in `said.rs`),
+  a player's own media time it hands to the core, a timer that is no notice's (a layout settle, a scroll, a retry's
+  back-off, a test's wait), a day the person picked encoded as ISO for the core, the decimal separator a person types
+  (`localeconv`), a Pot create sheet's currency picker, and debug-only sources.
 
 **The defect that bought it.** The Apple app had no German at all: ~480 English literals, while Android carried its
 own copy of the same words in German (owner 2026-11-09, ADR 0136). A word added on one platform alone is how they
@@ -274,8 +276,8 @@ def check_manifests(root: Path) -> list[str]:
     return errors
 
 
-# platform-format (ADR 0154 decisions 4 and 5): switched on per platform by its phase of
-# cr-apps-notices-and-formats-from-the-core; each platform's own durations and formatters are gone then.
+# platform-format (ADR 0154 decisions 4 and 5): on for every platform since 2026-11-21, each one's own durations and
+# formatters gone; a new platform joins once its own are.
 PLATFORM_FORMAT_ON: set[str] = {"android", "apple", "linux", "windows"}
 # (platform, file relative to src/mobile, the matched text) a platform may keep, each with why.
 PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {
@@ -338,7 +340,7 @@ _DURATION = {
 }
 _FORMATTER = {
     "android": re.compile(r"\b(?:formatShortFileSize|formatFileSize|NumberFormat|ofLocalizedDate(?:Time)?|ofLocalizedTime|DateFormat|DateUtils\.format\w*)\b"),
-    "apple": re.compile(r"\b(?:ByteCountFormatter|DateFormatter|NumberFormatter|ISO8601DateFormatter)\b|\.formatted\(\s*(?:date:|\.dateTime|\.byteCount|\.currency)|\.currency\(\s*code:"),
+    "apple": re.compile(r"\b(?:ByteCountFormatter|DateFormatter|NumberFormatter|ISO8601DateFormatter|MeasurementFormatter)\b|\.formatted\(\s*(?:date:|\.dateTime|\.byteCount|\.currency|\.measurement)|\.currency\(\s*code:"),
     "linux": re.compile(r"\b(?:format_size|localeconv)\b|\.format\(\s*\"%"),
     "windows": re.compile(r"\b(?:StrFormatByteSize\w*|CurrencyFormatter|DateTimeFormatter)\b|\.ToString\(\s*\"(?:[dDgGfFcCnN]\d*|[^\"]*(?:yy|MM|dd|HH)[^\"]*)\""),
 }

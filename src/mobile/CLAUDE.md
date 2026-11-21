@@ -397,6 +397,12 @@ A Gradle build of its own, run through its own wrapper.
   (every source a platform shows text from, and the manifests) and its limits. A test of the
   words asserts a language whose words differ from the fallback: English is gettext's `msgid`, so an English-only run
   passes over a catalog that never loaded.
+  A shown value is the core's too (ADR 0154 decision 5): a size, day, moment, Memory date, amount, list, length,
+  distance or `" · "` line is `words/Shown` (a desktop reads the wire's `…Text` field), and a notice lives by its
+  `NoticeKind` through the platform's one notice host (decision 4), never a duration of the platform's own.
+  `format-vectors.json` beside `words.json` is the web's output: written by `src/web/scripts/format-vectors.mts` under
+  the ICU of the Node lines `engines` names (78.3 for 22, 24 and 26 on 2026-11-21; ICU 77 moves five currencies'
+  digits), never by hand; `ShownVectorsTest` holds `Shown` and `expenses/Currencies` to it.
 - `theme/generate_theme.py` — the web's colour roles and brand mark for every platform (ADR 0123 decision 7): the
   builds run it (`:core:generateTheme`, `:android:generateThemeRes`, the Apple project's pre-build step, and `--gtk`,
   libadwaita's `style.css`, the icon and the desktop entry, in `run.py build`; `--winui`, WinUI's `Theme.xaml` and
@@ -1483,8 +1489,6 @@ only with the web's.
 - Windows resolves no `*.localhost`. The Windows host reaches the Mac's dev backend through `ssh -R`, and its `hosts`
   file maps `veyq.localhost` and every seeded tenant's name to `127.0.0.1`; the backend picks the tenant from the Host
   header, which WinHTTP sends from the URL. A new seeded tenant needs its line there.
-- `StrFormatByteSizeEx` ignores the thread's culture (`SetThreadUILanguage` and `SetThreadLocale` changed nothing,
-  measured 2026-11-10): a size is in the user's culture only, and a test asserts it in the host's.
 - `VEYQ_THEME` sets the application's theme, not only the window's: a brush looked up in code is the application
   theme's, and under the window's dark alone a row's caption stayed light's, dark on dark (measured 2026-11-11).
 - UI Automation, as the driver sees it: a `NavigationViewItem` has no Invoke, only SelectionItem, so a pane item is
@@ -1897,6 +1901,12 @@ only with the web's.
   2026-11-21 after the dev DB's full disk, #1051); `--erase` cannot reach it (no env file was written). A Host-rewriting
   proxy from `tw-win.localhost:<port>` to another throwaway's tenant reached the backend, but the sign-in was refused
   (measured 2026-11-21, the cause not read) — not a way around it.
+- **A held refusal on Windows in a fresh tenant** (no second device): a download that fails. The save picker itself
+  refuses a target another process holds ("Die Datei wird verwendet"), so the holder must grab the file only after the
+  picker made it — a PowerShell loop started through `Invoke-CimMethod Win32_Process -MethodName Create` (outside ssh's
+  job, so it outlives the call) that opens any new `.zip` in Downloads with `FileShare.None`; the core's write then fails
+  and the InfoBar shows the Error with its close (measured 2026-11-21). A move onto a taken name is no such case: the move
+  sheet says it inside itself.
 - A fresh worktree builds everything its first `linux/run.py run` needs — libsodium for each Kotlin/Native target, the
   bridge, the whole cargo tree in a new `veyq-linux-target-<checkout>` volume — about 20 minutes (2026-11-21); remove
   that volume when the worktree goes. A fresh worktree has no `local.properties`: `ANDROID_HOME=$HOME/Library/Android/sdk

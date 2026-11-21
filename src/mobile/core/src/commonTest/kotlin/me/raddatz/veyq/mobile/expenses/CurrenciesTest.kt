@@ -22,6 +22,6 @@ class CurrenciesTest {
         assertEquals(3, Currencies.minorUnits("BHD"))
         assertEquals(0, Currencies.minorUnits("IQD")) // ISO 4217 (java.util.Currency) says 3; Intl, the web, 0
         assertEquals(2, Currencies.minorUnits("ZZZ"))
-        assertEquals(126, Currencies.known.count { Currencies.minorUnits(it) == 2 })
+        assertEquals(123, Currencies.known.count { Currencies.minorUnits(it) == 2 })
     }
 }
