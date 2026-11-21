@@ -43,6 +43,9 @@ class Written private constructor(private val write: (String) -> String) {
         /** A Memory's closed range of days ([Shown.dayRange]). */
         fun dayRange(from: String, to: String?) = Written { Shown.dayRange(from, to, it) }
 
+        /** A track's distance, metres or kilometres as the core rounded it ([Shown.distance]). */
+        fun distance(value: Double, kilometres: Boolean) = Written { Shown.distance(value, kilometres, it) }
+
         /** A track's length or a player's clock in ms ([Shown.length]). */
         fun length(ms: Long) = Written { Shown.length(ms) }
     }

@@ -15,7 +15,7 @@ public sealed class GalleryTextTest
         offered = true,
         mode = mode,
         modeOffered = true,
-        chips = [.. System.Linq.Enumerable.Select(chips, c => new ChipShown { chip = $"place:{c}", label = c, rest = null, labelShown = new Piece.Plain { text = c } })],
+        chips = [.. System.Linq.Enumerable.Select(chips, c => new ChipShown { chip = $"place:{c}", label = c, rest = null })],
         text = text,
         suggestions = [],
         shown = 0,
@@ -52,9 +52,9 @@ public sealed class GalleryTextTest
     [TestMethod]
     public void AChipIsSaidAsTheCoreWritesIt()
     {
-        var day = new ChipShown { chip = "day:2024-05-03", label = "2024-05-03", rest = null, labelShown = new Piece.Plain { text = "May 3, 2024" } };
+        var day = new ChipShown { chip = "day:2024-05-03", label = "May 3, 2024", rest = null };
         Assert.AreEqual("May 3, 2024", GalleryText.ChipLabel(day));
-        Assert.AreEqual("Rome", GalleryText.ChipLabel(new ChipShown { chip = "place:rome", label = "Rome", rest = null, labelShown = new Piece.Plain { text = "Rome" } }));
+        Assert.AreEqual("Rome", GalleryText.ChipLabel(new ChipShown { chip = "place:rome", label = "Rome", rest = null }));
         Assert.AreEqual(Words.MediaFilterEmpty("May 3, 2024"), GalleryText.Empty(Filter() with { chips = [day] }));
     }
 

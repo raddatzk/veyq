@@ -55,7 +55,6 @@ import me.raddatz.veyq.mobile.blob.pathName
 import me.raddatz.veyq.mobile.words.Notices
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Msg
-import me.raddatz.veyq.mobile.words.Amount
 import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.ShellWords
@@ -3169,12 +3168,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 activity = e.activity, dash = e.dash, fileName = e.fileName, color = e.color, status = TrackStatus.valueOf(e.status.name),
                 facts = e.facts.map { f ->
                     when (f) {
-                        is me.raddatz.veyq.mobile.memories.tracks.TrackFacts.Fact.Distance -> TrackFactShown(
-                            f.value, f.kilometres,
-                            // the distance in words with its number written (`Shown.number` through an [Amount] without a currency)
-                            if (f.kilometres) Notice(Msg.TRACK_DISTANCE_KM, Amount(kotlin.math.round(f.value * 10).toLong(), null, 1))
-                            else Notice(Msg.TRACK_DISTANCE_M, Amount(kotlin.math.round(f.value).toLong(), null, 0)),
-                        )
+                        is me.raddatz.veyq.mobile.memories.tracks.TrackFacts.Fact.Distance -> TrackFactShown(f.value, f.kilometres, null)
                         is me.raddatz.veyq.mobile.memories.tracks.TrackFacts.Fact.Words -> TrackFactShown(null, false, f.notice)
                     }
                 },
@@ -3552,7 +3546,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             profileEncoder: me.raddatz.veyq.mobile.media.WebpEncoder? = me.raddatz.veyq.mobile.media.coreWebpEncoder,
             /** The search's words in the host's language: the host's ([HostWords]). */
             words: me.raddatz.veyq.mobile.search.SearchWords = me.raddatz.veyq.mobile.search.SearchWords { it.key },
-            /** The gallery filter's day chips' calendar (inbox #989): the desktop's zone in the library ([LocalCalendar]); UTC on the JVM. */
+            /** The gallery filter's day chips' calendar (inbox #989): the device's, each chip labelled in the host's language (`GalleryFilter.Calendar.local`); UTC on the JVM. */
             calendar: me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar = me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar.UTC,
             now: () -> Long = { Clock.System.now().toEpochMilliseconds() },
             /**

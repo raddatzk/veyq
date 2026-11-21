@@ -2883,11 +2883,7 @@ internal class FilterShown(
 /** A filter chip: its identity [chip] (`GalleryFilter.key`, what [Call.FilterChip] and [Call.FilterRemove] name), its [label], the text that stays ([rest], a suggestion's). */
 @Serializable
 @SerialName("ChipShown")
-internal class ChipShown(
-    val chip: String, val label: String, val rest: String? = null,
-    /** [label] as the chip shows it: a day chip's day written (`Shown.day`), any other's as it is. */
-    val labelShown: Piece = if (chip.startsWith("day:")) Piece.Day(label) else Piece.Plain(label),
-)
+internal class ChipShown(val chip: String, val label: String, val rest: String? = null)
 
 /**
  * A Contributions view as the host draws it (`Contributions.State`): each bucket row at its depth with its label, its count,
@@ -3234,12 +3230,15 @@ internal class TrackShown(
 
 /**
  * One of a track's facts (core's `TrackFacts.Fact`): a distance — [distance] metres (whole) or kilometres (one decimal,
- * [kilometres]) — or a phrase; either way in [words], a distance's number written by the core (`Shown.number`), so the
- * host draws [words] alone.
+ * [kilometres]), written by the core in [distanceShown] (`Shown.distance`) — or a phrase in [words]; the host draws the
+ * one of them that is there.
  */
 @Serializable
 @SerialName("TrackFactShown")
-internal class TrackFactShown(val distance: Double?, val kilometres: Boolean, val words: Notice?)
+internal class TrackFactShown(
+    val distance: Double?, val kilometres: Boolean, val words: Notice?,
+    val distanceShown: me.raddatz.veyq.mobile.words.Written? = distance?.let { me.raddatz.veyq.mobile.words.Written.distance(it, kilometres) },
+)
 
 /** A picked file waiting for its label (`TrackList.Asked`): its name, and the name it falls back to (the field's hint). */
 @Serializable

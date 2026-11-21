@@ -239,7 +239,7 @@ class SecretFreeSchemaTest {
             of("GalleryRow"), "a gallery row says more than its medium's facts and its badge",
         )
         assertEquals(listOf("offered", "mode", "modeOffered", "chips", "text", "suggestions", "shown", "total"), of("FilterShown"))
-        assertEquals(listOf("chip", "label", "rest", "labelShown"), of("ChipShown"))
+        assertEquals(listOf("chip", "label", "rest"), of("ChipShown"))
         assertEquals(listOf("rows", "selected", "media", "createsSub", "renames", "moveTargets", "loading", "failed", "refused"), of("BucketsShown"))
         assertEquals(listOf("bucketId", "label", "depth", "mediaCount", "isPrimary", "own"), of("BucketRowShown"))
         assertEquals(listOf("x", "y", "size"), of("TileFrame"))

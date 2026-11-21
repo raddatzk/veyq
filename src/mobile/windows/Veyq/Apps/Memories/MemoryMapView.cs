@@ -179,8 +179,8 @@ internal sealed class MemoryMapView : IDisposable
     public static string? Activity(string? token) =>
         token is null ? null : Words.Say($"track_activity_{token.Replace('-', '_')}", []);
 
-    /// <summary>A track's facts on one line, each in the core's words (a distance's number written by the core).</summary>
-    public static string Facts(IEnumerable<TrackFactShown> facts) => Lives.Joined(facts.Select(f => f.words is { } w ? Said.Notice(w) : null));
+    /// <summary>A track's facts on one line, each the core's: a distance written by it, or its words.</summary>
+    public static string Facts(IEnumerable<TrackFactShown> facts) => Lives.Joined(facts.Select(f => f.distanceShown ?? (f.words is { } w ? Said.Notice(w) : null)));
 
     private FrameworkElement Row(TrackShown t, TracksShown s)
     {
