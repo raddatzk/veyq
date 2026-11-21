@@ -221,12 +221,13 @@ internal fun MemoryGallery(
     val music = if (musicOffered && view == MemoryView.MUSIC) remember(gallery) { model.musicModel(gallery) } else null
     val tracks = if (view == MemoryView.MAP) remember(gallery) { model.trackList(gallery) } else null
     val contributions = if (contributionsOffered && view == MemoryView.CONTRIBUTIONS) remember(gallery) { model.contributions(gallery) } else null
-    // photos and videos dropped from another app onto the gallery: core's one drop judges and sorts (ADR 0154 decision 1)
+    // photos and videos dropped from another app onto the gallery: core's one drop judges and sorts (ADR 0154 decision 1).
+    // Only where the gallery's media show: the Music and Map views take no drop, as the web's tabs take none (#1054)
     val dropped = Modifier.sharedFilesDrop { drop -> model.drop(me.raddatz.veyq.mobile.navigation.DropTarget.Gallery(gallery), drop) }
     // a member adds photos through the header's Upload (core's `GalleryModel.headerActions`); a guest's link page has no
     // core header, so its page offers them here
     val adds = guest && state.rights.upload && canAdd
-    Box(Modifier.fillMaxSize().then(if (!guest) dropped else Modifier)) {
+    Box(Modifier.fillMaxSize().then(if (!guest && music == null && tracks == null) dropped else Modifier)) {
     if (tracks != null) MemoryMapView(gallery, tracks, model, snackbar, viewSwitch) else
     if (music != null) MusicView(gallery, music, model, snackbar, viewSwitch) else
     if (contributions != null) ContributionsView(gallery, contributions, model, snackbar, viewSwitch) { id -> contributions.lightbox(id)?.let { open = it } } else

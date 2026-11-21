@@ -323,9 +323,13 @@ struct MemoryScreen: View {
             if phase == .active { await model.liveGallery(node) }
         }
         // photos and videos dropped onto the gallery go into it at once, as a pick's (ADR 0138 decision 9) — judged, sorted
-        // and said by core's one drop (`ShellModel.drop`, ADR 0154 decision 1); a guest's gallery is the link's, not the shell's
-        .onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
-            guard guest == nil, let gallery = model.galleryModel(node) else { return false }
+        // and said by core's one drop (`ShellModel.drop`, ADR 0154 decision 1); a guest's gallery is the link's, not the shell's.
+        // Only where the gallery's media show (Photos, Contributions): the Music and Map views take no drop, as the web's tabs
+        // take none — an audio file dropped on Music was refused as "only photos and videos" (#1054); their Add is their way in.
+        // There the shell's drop takes it, a share as onto any place that is no target of its own (ADR 0138 decision 9)
+        // (no types asked there, rather than no modifier: the page's identity stays as the view switches)
+        .onDrop(of: showsMusic || showsMap ? [] : IncomingFiles.accepted, isTargeted: nil) { providers in
+            guard guest == nil, !showsMusic, !showsMap, let gallery = model.galleryModel(node) else { return false }
             Task { await model.drop(providers, onto: DropTarget.Gallery(gallery: gallery)) }
             return true
         }

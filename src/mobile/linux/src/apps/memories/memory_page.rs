@@ -488,11 +488,15 @@ impl Inner {
                 None
             });
         }
-        // a drop of files onto the page goes to the core's one drop, which judges the gallery's rights and sorts it
+        // a drop of files onto the page goes to the core's one drop, which judges the gallery's rights and sorts it — only
+        // where the gallery's media show: the Music and Map views take no drop, as the web's tabs take none (#1054)
         let target = gtk::DropTarget::new(gdk::FileList::static_type(), gdk::DragAction::COPY);
         let weak = Rc::downgrade(this);
         target.connect_drop(move |_, value, _, _| {
             let Some(inner) = weak.upgrade() else { return false };
+            if inner.music_slot.is_visible() || inner.map_slot.is_visible() {
+                return false;
+            }
             let Some(gallery) = inner.id.get() else { return false };
             let Ok(list) = value.get::<gdk::FileList>() else { return false };
             crate::core_ui::drop::send(inner.window.upcast_ref(), DropOn::DropOnGallery { gallery }, crate::core_ui::drop::items(&list.files()), &inner.toasts);
