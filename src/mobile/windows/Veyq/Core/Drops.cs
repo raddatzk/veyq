@@ -27,7 +27,7 @@ internal sealed record UploadLevel(string ScopeId, string? ParentId, string Labe
 /// <paramref name="Level"/> (ShellShown.dropsHere), and onto each folder's row <paramref name="Rows"/> names
 /// (ShellShown.dropRows); an import offered opens over <paramref name="Window"/>, the rest said through
 /// <paramref name="Say"/>.</summary>
-internal sealed record Drops(Window Window, string Label, bool Level, IReadOnlySet<string> Rows, Action<bool, string> Say)
+internal sealed record Drops(Window Window, string Label, bool Level, IReadOnlySet<string> Rows, Action<Spoken> Say)
 {
     /// <summary>The level's own drop: onto its scroller, wherever no folder's row takes it; nothing where the core
     /// offers none.</summary>
@@ -49,7 +49,7 @@ internal sealed record Drops(Window Window, string Label, bool Level, IReadOnlyS
     /// <summary>Makes <paramref name="target"/> take a drop onto what <paramref name="on"/> answers at each drag — null
     /// where nothing is offered now (a gallery not open yet, or whose rights upload nothing) — with the drag's caption
     /// <paramref name="caption"/>, <paramref name="highlighted"/> lit while a drag is over it.</summary>
-    public static void Attach(UIElement target, Func<DropOn?> on, string caption, Control? highlighted, Window window, Action<bool, string> say)
+    public static void Attach(UIElement target, Func<DropOn?> on, string caption, Control? highlighted, Window window, Action<Spoken> say)
     {
         target.AllowDrop = true;
         // said once per entry, so a pass reads whether a drag reached the app before its shot
@@ -112,7 +112,7 @@ internal sealed record Drops(Window Window, string Label, bool Level, IReadOnlyS
 
     /// <summary>The core's one drop (Shell.Drop) of <paramref name="items"/> onto <paramref name="on"/>: each notice said in
     /// order, an import offered opened over <paramref name="window"/>.</summary>
-    public static async Task Send(Window window, DropOn on, IReadOnlyList<DropItem> items, Action<bool, string> say)
+    public static async Task Send(Window window, DropOn on, IReadOnlyList<DropItem> items, Action<Spoken> say)
     {
         if (items.Count == 0) return;
         Log.Write($"dropped onto {on.GetType().Name}: {items.Count(i => i is DropItem.DroppedFile)} files, {items.Count(i => i is DropItem.DroppedFolder)} folders, {items.Count(i => i is DropItem.DroppedNotLocal)} not local");
@@ -129,7 +129,7 @@ internal sealed record Drops(Window Window, string Label, bool Level, IReadOnlyS
             return;
         }
         Log.Write($"Shell.Drop: {dropped.queued} queued, import {dropped.import?.ToString() ?? "-"}, refused {dropped.refused}, said {string.Join(",", dropped.notices.Select(n => n.msg))}");
-        foreach (var n in dropped.notices) say(false, Said.Notice(n));
+        foreach (var n in dropped.notices) say(Spoken.Of(n));
         if (dropped.import is { } import) ImportDialog.Open(window, import, say);
     }
 

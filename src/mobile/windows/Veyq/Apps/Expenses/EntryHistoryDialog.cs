@@ -19,7 +19,7 @@ internal static class EntryHistoryDialog
 {
     /// <summary>Opens entry <paramref name="entry"/>'s history in Pot <paramref name="pot"/> over
     /// <paramref name="window"/>, headed by <paramref name="title"/> and <paramref name="amount"/>.</summary>
-    public static async void Open(Window window, long pot, string entry, string title, string? amount, Action<bool, string> say)
+    public static async void Open(Window window, long pot, string entry, string title, string? amount, Action<Spoken> say)
     {
         try
         {
@@ -36,9 +36,9 @@ internal static class EntryHistoryDialog
             if (h.deleted)
             {
                 column.Children.Add(Text(Words.EntryDeletedHint(), "history-deleted", "BodyTextBlockStyle"));
-                if (h.until is { } until)
+                if (h.untilShown is { } until)
                 {
-                    column.Children.Add(Text(h.restorable ? Words.EntryRestorableUntil(Said.Moment(until)) : Words.EntryNotRestorable(), "history-until", "BodyTextBlockStyle"));
+                    column.Children.Add(Text(h.restorable ? Words.EntryRestorableUntil(until) : Words.EntryNotRestorable(), "history-until", "BodyTextBlockStyle"));
                 }
             }
             var heading = Text(Words.HistoryShow(), "history-heading", "BodyStrongTextBlockStyle");
@@ -50,7 +50,7 @@ internal static class EntryHistoryDialog
             {
                 var row = new StackPanel { Padding = new Thickness(0, 4, 0, 4) };
                 var line = Said.Line(r.line);
-                var by = Words.HistoryBy(r.writer ?? Words.HistoryUnknownWriter(), Said.Moment(r.at));
+                var by = Words.HistoryBy(r.writer ?? Words.HistoryUnknownWriter(), r.atShown);
                 row.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
                 row.Children.Add(new TextBlock
                 {
@@ -107,7 +107,7 @@ internal static class EntryHistoryDialog
         {
             // an exception out of an async void would end the app in combase, with nothing in the log
             Log.Write($"the entry's history failed: {e.GetType().Name}: {e.Message}");
-            say(false, Words.PeopleFailed());
+            say(Spoken.Own("people_failed", Words.PeopleFailed()));
         }
     }
 

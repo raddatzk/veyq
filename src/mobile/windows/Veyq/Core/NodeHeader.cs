@@ -39,7 +39,7 @@ internal sealed class NodeHeader : IDisposable
 
     private readonly Window _window;
     private readonly Action _changed;
-    private readonly Action<bool, string> _say;
+    private readonly Action<Spoken> _say;
     private long? _id;
     private Watch? _watch;
     private Facts? _facts;
@@ -68,12 +68,12 @@ internal sealed class NodeHeader : IDisposable
     /// <summary>Whether the trash's Undo stands: the header is kept until it is over.</summary>
     public bool Undoing { get; private set; }
 
-    /// <summary>The InfoBar the Undo stands in, its action button.</summary>
-    public InfoBar? UndoBar { get; set; }
+    /// <summary>The notice bar the Undo stands in, its action button.</summary>
+    public NoticeBar? UndoBar { get; set; }
 
     /// <summary>Opens the header of <paramref name="node"/>; <paramref name="changed"/> runs on each state (the bar is
     /// drawn anew), <paramref name="say"/> says what an action did.</summary>
-    public NodeHeader(Window window, NodeAt node, Facts? facts, Action changed, Action<bool, string> say)
+    public NodeHeader(Window window, NodeAt node, Facts? facts, Action changed, Action<Spoken> say)
     {
         _window = window;
         Node = node;
@@ -144,11 +144,7 @@ internal sealed class NodeHeader : IDisposable
                 {
                     Undoing = false;
                     Log.Write("header undo offer ended");
-                    if (UndoBar is { } bar)
-                    {
-                        bar.ActionButton = null;
-                        bar.IsOpen = false;
-                    }
+                    UndoBar?.EndOffer();
                 }
             }
             _changed();
@@ -407,11 +403,12 @@ internal sealed class NodeHeader : IDisposable
             {
                 case Answer.Downloaded { written: var written, notice: var n, leftOut: var left }:
                     Log.Write($"header download: {n.msg}, left out: {left is not null}");
-                    _say(written, string.Join(" ", new[] { n, left }.OfType<Notice>().Select(Veyq.Core.Said.Notice)));
+                    var notices = new[] { n, left }.OfType<Notice>().ToList();
+                    _say(Spoken.Of(notices, string.Join(" ", notices.Select(Veyq.Core.Said.Notice))));
                     break;
                 case var other:
                     Log.Write($"Header.Download answered {other?.GetType().Name}");
-                    _say(false, Words.DownloadFailed(name));
+                    _say(Spoken.Own("download_failed", Words.DownloadFailed(name)));
                     break;
             }
         }
@@ -419,7 +416,7 @@ internal sealed class NodeHeader : IDisposable
         {
             // an exception out of an async void would end the app in combase, with nothing in the log
             Log.Write($"the download failed: {e.GetType().Name}: {e.Message}");
-            _say(false, Words.DownloadFailed(name));
+            _say(Spoken.Own("download_failed", Words.DownloadFailed(name)));
         }
     }
 
@@ -438,7 +435,7 @@ internal sealed class NodeHeader : IDisposable
         {
             var named = await Dialogs.AskNamed(_window, "rename", Words.NodeRename(), Words.NodeName(), name, Words.NodeRename(),
                 typed => Dialogs.Named(new Call.HeaderRename { header = header, name = typed }, "Header.Rename"));
-            if (named?.notice is { } n) _say(true, Veyq.Core.Said.Notice(n));
+            if (named?.notice is { } n) _say(Spoken.Of(n));
         }
         catch (Exception e)
         {
@@ -455,7 +452,7 @@ internal sealed class NodeHeader : IDisposable
         {
             case Answer.Trashed { notice: var n, undoable: var undoable }:
                 Log.Write($"header trash: {n.msg}, undo offered: {undoable}");
-                Offer(Veyq.Core.Said.Notice(n), undoable, header);
+                Offer(n, undoable, header);
                 break;
             case var other:
                 Tell(other, "Header.Trash");
@@ -463,30 +460,28 @@ internal sealed class NodeHeader : IDisposable
         }
     }
 
-    /// <summary>What the trash said, with Undo where the core offers it now: the InfoBar's action until the offer ends.</summary>
-    private void Offer(string text, bool undoable, long header)
+    /// <summary>What the trash said, with Undo where the core offers it now: the bar's action until the offer ends.
+    /// Without the offer the notice lives as its kind says (a trash without Undo: said briefly).</summary>
+    private void Offer(Notice said, bool undoable, long header)
     {
         if (UndoBar is not { } bar) return;
-        bar.Severity = InfoBarSeverity.Informational;
-        bar.Message = text;
-        if (undoable)
+        if (!undoable)
         {
-            var undo = new Button { Content = Words.TrashUndo() };
-            AutomationProperties.SetAutomationId(undo, "undo");
-            undo.Click += async (_, _) =>
-            {
-                bar.ActionButton = null;
-                bar.IsOpen = false;
-                Undoing = false;
-                var answered = await Ask(new Call.HeaderUndo { header = header });
-                Log.Write($"header undo: {answered?.GetType().Name}");
-                Tell(answered, "Header.Undo");
-            };
-            bar.ActionButton = undo;
-            Undoing = true;
+            bar.Say(Spoken.Of(said));
+            return;
         }
-        else bar.ActionButton = null;
-        bar.IsOpen = true;
+        var undo = new Button { Content = Words.TrashUndo() };
+        AutomationProperties.SetAutomationId(undo, "undo");
+        undo.Click += async (_, _) =>
+        {
+            bar.EndOffer();
+            Undoing = false;
+            var answered = await Ask(new Call.HeaderUndo { header = header });
+            Log.Write($"header undo: {answered?.GetType().Name}");
+            Tell(answered, "Header.Undo");
+        };
+        bar.Offer(Spoken.Of(said), undo);
+        Undoing = true;
     }
 
     private void Tell(Answer? answered, string what)
@@ -498,7 +493,7 @@ internal sealed class NodeHeader : IDisposable
                 break;
             case Answer.Said { notice: { } n }:
                 Log.Write($"{what}: {n.msg}");
-                _say(false, Veyq.Core.Said.Notice(n));
+                _say(Spoken.Of(n));
                 break;
             default:
                 Log.Write($"{what} answered {answered?.GetType().Name}");

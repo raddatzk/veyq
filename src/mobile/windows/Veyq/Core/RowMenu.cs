@@ -21,10 +21,10 @@ internal static class RowMenu
     public static Window? Window { get; set; }
 
     /// <summary>Where an entry says what it did (the shell's InfoBar under the bar).</summary>
-    public static Action<bool, string>? Say { get; set; }
+    public static Action<Spoken>? Say { get; set; }
 
-    /// <summary>The InfoBar a delete's Undo stands in (the shell's).</summary>
-    public static InfoBar? UndoBar { get; set; }
+    /// <summary>The notice bar a delete's Undo stands in (the shell's).</summary>
+    public static NoticeBar? UndoBar { get; set; }
 
     /// <summary>The header the last entry ran through, and one whose trash's Undo still stands.</summary>
     private static NodeHeader? _running;

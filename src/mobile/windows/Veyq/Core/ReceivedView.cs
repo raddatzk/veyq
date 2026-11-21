@@ -222,6 +222,7 @@ internal sealed class ReceivedView : IDisposable
     private readonly CommandBar _commands;
     private readonly InfoBar _notice;
     private readonly InfoBar _said;
+    private readonly NoticeBar _notices;
     private readonly StackPanel _guestLine;
     private readonly TextBlock _guestText;
     private readonly ContentControl _content = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
@@ -289,6 +290,7 @@ internal sealed class ReceivedView : IDisposable
         _notice.ActionButton = more;
         _said = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
         AutomationProperties.SetAutomationId(_said, "received-said");
+        _notices = new NoticeBar(_said);
         _guestText = new TextBlock { TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
         AutomationProperties.SetAutomationId(_guestText, "received-guest");
         var notYou = new HyperlinkButton { Content = Words.ShareGuestNotYou(), VerticalAlignment = VerticalAlignment.Center };
@@ -566,7 +568,7 @@ internal sealed class ReceivedView : IDisposable
                 {
                     Window = _window,
                     Say = Say,
-                    Said = _said,
+                    Said = _notices,
                     Node = node,
                     OpenNode = id => Act.Send(new Call.ReceivedOpenNode { received = Received, node = id }),
                     Changed = () => DrawCommands(_shown),
@@ -665,7 +667,7 @@ internal sealed class ReceivedView : IDisposable
             var picked = await picker.PickMultipleFilesAsync();
             if (picked is null || picked.Count == 0) return;
             // Received.Upload takes paths alone: a picked item with none (a phone's, a cloud's) is said by its name
-            foreach (var f in picked.Where(f => string.IsNullOrEmpty(f.Path))) Say(false, Words.DepotDropNotLocal(f.Name));
+            foreach (var f in picked.Where(f => string.IsNullOrEmpty(f.Path))) Say(Spoken.Own("depot_drop_not_local", Words.DepotDropNotLocal(f.Name)));
             var paths = picked.Select(f => f.Path).Where(p => !string.IsNullOrEmpty(p)).ToList();
             if (paths.Count == 0) return;
             Log.Write($"guest upload: {paths.Count} picked");
@@ -673,7 +675,7 @@ internal sealed class ReceivedView : IDisposable
             if (answer is not Answer.Done)
             {
                 Log.Write($"a guest's upload answered {answer.GetType().Name}");
-                Say(false, Words.ShareFailed());
+                Say(Spoken.Own("share_failed", Words.ShareFailed()));
             }
         }
         catch (Exception e)
@@ -717,7 +719,7 @@ internal sealed class ReceivedView : IDisposable
         {
             var named = await Dialogs.AskNamed(_window, "received-new-folder-dialog", Words.FolderNew(), Words.FolderName(), "", Words.FolderCreate(),
                 typed => Dialogs.Named(new Call.ReceivedNewFolder { received = Received, name = typed.Trim() }, "Received.NewFolder"));
-            if (named?.notice is { } n) Say(false, Veyq.Core.Said.Notice(n));
+            if (named?.notice is { } n) Say(Spoken.Of(n));
         }
         catch (Exception e)
         {
@@ -748,7 +750,7 @@ internal sealed class ReceivedView : IDisposable
                 Act.Send(new Call.ReceivedNamingDecline { received = Received });
                 return;
             }
-            if (named.notice is { } n) Say(false, Veyq.Core.Said.Notice(n));
+            if (named.notice is { } n) Say(Spoken.Of(n));
         }
         catch (Exception e)
         {
@@ -799,7 +801,7 @@ internal sealed class ReceivedView : IDisposable
             else
             {
                 Log.Write($"the guest's name answered {answer.GetType().Name}");
-                Say(false, Words.ShareFailed());
+                Say(Spoken.Own("share_failed", Words.ShareFailed()));
             }
         }
         catch (Exception e)
@@ -872,14 +874,14 @@ internal sealed class ReceivedView : IDisposable
             var (kept, _) = await Core.CallAsync(new Call.ReceivedKeep { received = Received, scope = place.space.scopeId });
             if (kept is Answer.Done)
             {
-                Say(true, Words.LinkKept(Said.Piece(place.name)));
+                Say(Spoken.Own("link_kept", Words.LinkKept(Said.Piece(place.name))));
                 // the shell's lists read anew, so the kept link's row is there when the person returns
                 Act.Send(new Call.ShellRefresh());
             }
             else
             {
                 Log.Write($"Keep answered {kept.GetType().Name}");
-                Say(false, Words.BookmarkCreateFailed());
+                Say(Spoken.Own("bookmark_create_failed", Words.BookmarkCreateFailed()));
             }
         }
         catch (Exception e)
@@ -891,13 +893,8 @@ internal sealed class ReceivedView : IDisposable
     /// <summary>Report shared content: the core's report sheet of the link, to its own operator (ReportDialog).</summary>
     private void Report() => ReportDialog.Open(_window, new Call.ReceivedReport { received = Received });
 
-    /// <summary>What an action did, in the screen's own InfoBar.</summary>
-    private void Say(bool done, string message)
-    {
-        _said.Severity = done ? InfoBarSeverity.Success : InfoBarSeverity.Error;
-        _said.Message = message;
-        _said.IsOpen = true;
-    }
+    /// <summary>What an action did, in the screen's own InfoBar, living as its kind says.</summary>
+    private void Say(Spoken said) => _notices.Say(said);
 
     private static UIElement Spinner()
     {

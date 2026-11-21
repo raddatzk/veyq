@@ -25,7 +25,7 @@ internal sealed class PotSettingsView : IDisposable
 {
     private readonly long _pot;
     private readonly Window _window;
-    private readonly Action<bool, string> _say;
+    private readonly Action<Spoken> _say;
     private long? _id;
     private Watch? _watch;
     private bool _closed;
@@ -49,7 +49,7 @@ internal sealed class PotSettingsView : IDisposable
 
     public long Pot => _pot;
 
-    public PotSettingsView(long pot, Window window, Action<bool, string> say)
+    public PotSettingsView(long pot, Window window, Action<Spoken> say)
     {
         _pot = pot;
         _window = window;
@@ -321,7 +321,7 @@ internal sealed class PotSettingsView : IDisposable
             {
                 Log.Write($"{c.GetType().Name}: stored {stored}{(notice is null ? "" : ", " + notice.msg)}");
                 if (stored && box is not null) box.Text = "";
-                if (notice is not null) _say(false, Said.Notice(notice));
+                if (notice is not null) _say(Spoken.Of(notice));
             }
             else Log.Write($"{c.GetType().Name} answered {answer.GetType().Name}");
         }

@@ -45,7 +45,7 @@ internal sealed class PotPage : IDisposable
     private BarTab? _selected;
     private bool _closed;
     private readonly Window _window;
-    private readonly Action<bool, string> _say;
+    private readonly Action<Spoken> _say;
     private Watch? _live;
     private bool _loaded;
     private bool _active = true;
@@ -117,7 +117,7 @@ internal sealed class PotPage : IDisposable
     /// its actions did.</summary>
     /// <summary>With <paramref name="opened"/>, over the model the core already opened (a received link's guest page,
     /// ReceivedPage.pot), watched and closed with the page as a member's is.</summary>
-    public PotPage(ObjectRef r, Window window, Action<bool, string> say, long? opened = null)
+    public PotPage(ObjectRef r, Window window, Action<Spoken> say, long? opened = null)
     {
         Ref = r;
         _opened = opened;
@@ -237,7 +237,7 @@ internal sealed class PotPage : IDisposable
     /// unpackaged app gives it) suggests the core's name in Downloads, the core writes the file the picker chose, and
     /// <paramref name="said"/> says how it went — true when done. A dismissed picker says nothing.
     /// </summary>
-    public async void Download(nint window, Action<bool, string> said)
+    public async void Download(nint window, Action<Spoken> said)
     {
         if (_id is not { } pot) return;
         var name = Ref.name;
@@ -247,7 +247,7 @@ internal sealed class PotPage : IDisposable
             if (named is not Answer.Name { name: var suggested })
             {
                 Log.Write($"Pot.ArchiveName answered {named.GetType().Name}");
-                said(false, Words.DownloadFailed(name));
+                said(Spoken.Own("download_failed", Words.DownloadFailed(name)));
                 return;
             }
             var picker = new FileSavePicker { SuggestedStartLocation = PickerLocationId.Downloads, SuggestedFileName = suggested };
@@ -258,17 +258,17 @@ internal sealed class PotPage : IDisposable
             var (answer, _) = await Core.CallAsync(new Call.PotDownload { pot = pot, path = file.Path, deletedName = Words.PotDeletedPerson() });
             if (answer is Answer.Done)
             {
-                said(true, Words.DownloadDone(name));
+                said(Spoken.Own("download_done", Words.DownloadDone(name)));
                 return;
             }
             Log.Write($"Pot.Download answered {(answer is Answer.Failed f ? $"Failed ({f.error})" : answer.GetType().Name)}");
-            said(false, Words.DownloadFailed(name));
+            said(Spoken.Own("download_failed", Words.DownloadFailed(name)));
         }
         catch (Exception e)
         {
             // an exception out of an async void would end the app in combase, with nothing in the log
             Log.Write($"the download failed: {e.GetType().Name}: {e.Message}");
-            said(false, Words.DownloadFailed(name));
+            said(Spoken.Own("download_failed", Words.DownloadFailed(name)));
         }
     }
 
@@ -499,7 +499,8 @@ internal sealed class PotPage : IDisposable
         return block;
     }
 
-    private static string Money(PotView view, long amount) => Said.Money(amount, view.currency, view.minorUnits);
+    /// <summary>An amount as the core writes it (PotView's amounts, Shown.money); empty where it sent none.</summary>
+    private static string Money(Piece? amount) => amount is null ? "" : Said.Piece(amount);
 
     /// <summary>The ledger check's notice (ADR 0108 decision 5): what the read found missing, so the balances may be wrong.</summary>
     private static void Missing(StackPanel content, PotView view)
@@ -533,7 +534,7 @@ internal sealed class PotPage : IDisposable
             else if (e.badge is { } b) trailing.Add(Trailing(Said.Notice(b.notice), b.danger ? "SystemFillColorCriticalBrush" : "TextFillColorSecondaryBrush"));
             // an entry made offline and not sent yet, marked in place (ShownEntry.unsentMark, ADR 0153 decision 5)
             if (!deleted && e.unsentMark is { } unsent) trailing.Add(Trailing(Said.Notice(unsent), "SystemFillColorCautionBrush"));
-            string? amount = e.row.amount is { } a ? Money(view, a) : null;
+            string? amount = e.amountShown is { } a ? Said.Piece(a) : null;
             if (amount is not null) trailing.Add(Trailing(amount));
             var title = e.row.title ?? Words.PotTransfer();
             var line = Row(title, Said.Line(e.line), $"{(deleted ? "deleted" : "entry")}-line:{e.row.id}", [.. trailing]);
@@ -600,7 +601,7 @@ internal sealed class PotPage : IDisposable
             foreach (var t in view.settleUp)
             {
                 var pays = Said.Notice(t.pays);
-                var amount = Money(view, t.row.amount);
+                var amount = Money(t.amountShown);
                 var trailing = new List<UIElement> { Trailing(amount) };
                 // Record where the core offers it (PotView.canRecord: never offline)
                 if (view.canRecord && pot is { } one)
@@ -608,7 +609,7 @@ internal sealed class PotPage : IDisposable
                     var record = new Button { Content = Words.BalancesRecord(), VerticalAlignment = VerticalAlignment.Center };
                     AutomationProperties.SetAutomationId(record, $"record:{t.row.fromId}:{t.row.toId}");
                     var row = t.row;
-                    record.Click += (_, _) => Record(one, [row], Words.BalancesRecordQuestion(), $"{pays} · {amount}\n\n{Words.BalancesRecordHint()}");
+                    record.Click += (_, _) => Record(one, [row], Words.BalancesRecordQuestion(), $"{Lives.Joined([pays, amount])}\n\n{Words.BalancesRecordHint()}");
                     trailing.Add(record);
                 }
                 content.Children.Add(Row(pays, null, $"settle:{t.row.fromId}:{t.row.toId}", [.. trailing]));
@@ -617,8 +618,8 @@ internal sealed class PotPage : IDisposable
         if (view.byCategory.Count > 0)
         {
             Heading(content, Words.PotByCategory());
-            foreach (var c in view.byCategory) content.Children.Add(Row(Said.Piece(c.label), null, $"category:{c.row.id}", Trailing(Money(view, c.row.amount))));
-            content.Children.Add(Row(Words.PotTotal(), null, "total", Trailing(Money(view, view.total), strong: true)));
+            foreach (var c in view.byCategory) content.Children.Add(Row(Said.Piece(c.label), null, $"category:{c.row.id}", Trailing(Money(c.amountShown))));
+            content.Children.Add(Row(Words.PotTotal(), null, "total", Trailing(Money(view.totalShown), strong: true)));
         }
     }
 
@@ -631,8 +632,8 @@ internal sealed class PotPage : IDisposable
             if (!await Dialogs.Ask(_window, "record-ask", title, question, Words.BalancesRecord())) return;
             var (answer, _) = await Core.CallAsync(new Call.PotRecord { pot = pot, rows = rows });
             Log.Write($"pot record {rows.Count} row(s): {(answer is Answer.Said { notice: { } n } ? n.msg : answer.GetType().Name)}");
-            if (answer is Answer.Said { notice: { } said }) _say(false, Said.Notice(said));
-            else if (answer is not Answer.Said) _say(false, Words.PeopleFailed());
+            if (answer is Answer.Said { notice: { } said }) _say(Spoken.Of(said));
+            else if (answer is not Answer.Said) _say(Spoken.Own("people_failed", Words.PeopleFailed()));
         }
         catch (Exception e)
         {

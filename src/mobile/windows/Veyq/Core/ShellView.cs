@@ -55,6 +55,8 @@ internal sealed class ShellView
     private readonly CommandBar _commands;
     private readonly PersonPicture _me;
     private readonly InfoBar _said;
+    /// <summary>The notices under the bar, each living as the core's kind says (ADR 0154 decision 4).</summary>
+    private readonly NoticeBar _notices;
     /// <summary>"Offline — content as of …", open while the core shows the lists from the offline store.</summary>
     private readonly InfoBar _offline;
     private string _queuedSaid = "";
@@ -68,7 +70,6 @@ internal sealed class ShellView
     /// <summary>The upload queue: its command in the bar while it lists anything, the pickers that fill it.</summary>
     private readonly Uploads _uploads;
     private readonly MusicBar _musicBar;
-    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _sayTimer;
     private readonly ListScrolls _scrolls = new();
     /// <summary>The page of the open object's kind, as its application registered it (Registry.Page), while one is open.</summary>
     private KindBody? _page;
@@ -175,6 +176,7 @@ internal sealed class ShellView
         AutomationProperties.SetAutomationId(_gone, "offline-gone");
         _said = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
         AutomationProperties.SetAutomationId(_said, "said");
+        _notices = new NoticeBar(_said);
         _saving = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
         AutomationProperties.SetAutomationId(_saving, "saving");
         _offer = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
@@ -183,7 +185,7 @@ internal sealed class ShellView
         // a level row's menu runs as the header of its node: its dialogs over this window, its Undo under the bar
         RowMenu.Window = window;
         RowMenu.Say = Say;
-        RowMenu.UndoBar = _said;
+        RowMenu.UndoBar = _notices;
         _body = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
         var content = new Grid();
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -419,7 +421,7 @@ internal sealed class ShellView
             if (sent.Length > 0)
             {
                 foreach (var n in shown.queuedSaid) Log.Write($"queued said: {n.msg}");
-                Say(false, sent);
+                Say(Spoken.Of(shown.queuedSaid, sent));
                 Act.Send(new Call.ShellQueuedSaidSeen());
             }
         }
@@ -707,7 +709,7 @@ internal sealed class ShellView
     {
         Window = _window,
         Say = Say,
-        Said = _said,
+        Said = _notices,
         Saving = Saving,
         // read at the call: the header of the node on screen then
         Facts = (facts, file, gallery) => _header?.Facts(facts, file, gallery),
@@ -741,7 +743,7 @@ internal sealed class ShellView
         {
             // a folder's page knows all it needs; a Pot's and a file's tell once they are read
             var facts = Registry.Shared.Page(node.kind) is { FactsWhenRead: true } ? null : new Facts { canWrite = true, hasContent = true };
-            _header = new NodeHeader(_window, node, facts, DrawCommands, Say) { UndoBar = _said };
+            _header = new NodeHeader(_window, node, facts, DrawCommands, Say) { UndoBar = _notices };
         }
     }
 
@@ -892,7 +894,7 @@ internal sealed class ShellView
         {
             var named = await Dialogs.AskNamed(_window, "new-folder", Words.FolderNew(), Words.FolderName(), "", Words.FolderCreate(),
                 typed => Dialogs.Named(new Call.ShellCreateFolder { name = typed, top = top }, "Shell.CreateFolder"));
-            if (named?.notice is { } n) Say(false, Said.Notice(n));
+            if (named?.notice is { } n) Say(Spoken.Of(n));
         }
         catch (Exception e)
         {
@@ -931,30 +933,13 @@ internal sealed class ShellView
     /// core finds it — an object in its application, a folder on Home; null: the space's top).</summary>
     private static void OpenNode(string scope, string? node) => Act.Send(new Call.ShellOpenAt { scopeId = scope, nodeId = node });
 
-    /// <summary>How an action went, under the bar until it is closed or the object leaves.</summary>
-    public void Say(bool done, string message)
-    {
-        _said.Content = null;
-        _said.ActionButton = null;
-        _said.Severity = done ? InfoBarSeverity.Success : InfoBarSeverity.Error;
-        _said.Message = message;
-        _said.IsOpen = true;
-    }
+    /// <summary>How an action went, under the bar for as long as its kind lives (a success the core's while, a refusal
+    /// until it is closed) or until the object leaves.</summary>
+    public void Say(Spoken said) => _notices.Say(said);
 
-    /// <summary>What the music bar says (a queue none of whose tracks played here), under the bar for 5 s (the web's).</summary>
-    private void SayForAWhile(string message)
-    {
-        Say(false, message);
-        _sayTimer?.Stop();
-        var timer = _sayTimer = _nav.DispatcherQueue.CreateTimer();
-        timer.Interval = TimeSpan.FromSeconds(5);
-        timer.IsRepeating = false;
-        timer.Tick += (_, _) =>
-        {
-            if (Equals(_said.Message, message)) _said.IsOpen = false;
-        };
-        timer.Start();
-    }
+    /// <summary>What the music bar says (a queue none of whose tracks played here), under the bar for the core's
+    /// "nothing plays" while (the web's AudioBar).</summary>
+    private void SayForAWhile(string message) => _notices.SayFor(message, Lives.NothingPlays);
 
     /// <summary>A file's Save a copy under way: the InfoBar says how far it is with a ProgressBar and Cancel
     /// (Save.Cancel), then how it ended; it stays when the page leaves.</summary>

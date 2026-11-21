@@ -31,7 +31,7 @@ internal sealed class ContributionsView : IDisposable
 
     private readonly Window _window;
     private readonly long _gallery;
-    private readonly Action<bool, string> _say;
+    private readonly Action<Spoken> _say;
     /// <summary>Opens the lightbox the core opens by the call it is given (Buckets.Lightbox).</summary>
     private readonly Action<Call> _open;
     /// <summary>Whether the page reads from the offline store: nothing is curated then.</summary>
@@ -58,7 +58,7 @@ internal sealed class ContributionsView : IDisposable
 
     public UIElement View => _view;
 
-    public ContributionsView(Window window, long gallery, Action<bool, string> say, Action<Call> open, Func<bool> offline)
+    public ContributionsView(Window window, long gallery, Action<Spoken> say, Action<Call> open, Func<bool> offline)
     {
         _window = window;
         _gallery = gallery;
@@ -182,13 +182,13 @@ internal sealed class ContributionsView : IDisposable
         else if (!_refusedSaid && _id is { } buckets)
         {
             _refusedSaid = true;
-            _say(false, _moving ? Words.MemoryBucketsMoveFailed() : Words.MemoryBucketsSaveFailed());
+            _say(_moving ? Spoken.Own("memory_buckets_move_failed", Words.MemoryBucketsMoveFailed()) : Spoken.Own("memory_buckets_save_failed", Words.MemoryBucketsSaveFailed()));
             Act.Send(new Call.BucketsSeen { buckets = buckets });
         }
     }
 
     /// <summary>A bucket as the picker lists it: indented by its depth, its count after its name (Apple's rowWords).</summary>
-    private static string RowWords(BucketRowShown r) => new string(' ', 4 * r.depth) + Said.Piece(r.label) + " · " + r.mediaCount;
+    private static string RowWords(BucketRowShown r) => new string(' ', 4 * r.depth) + Lives.Joined([Said.Piece(r.label), r.mediaCount.ToString(System.Globalization.CultureInfo.CurrentCulture)]);
 
     private static TextBlock Line(string text, string id)
     {

@@ -28,7 +28,7 @@ internal sealed class MusicView : IDisposable
     private static readonly string[] AudioTypes = [".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".oga", ".opus"];
 
     private readonly Window _window;
-    private readonly Action<bool, string> _say;
+    private readonly Action<Spoken> _say;
     private readonly Action<long> _saving;
     /// <summary>The view, in the page's scroll under its head and its SelectorBar.</summary>
     private readonly StackPanel _root = new() { Spacing = 8 };
@@ -47,7 +47,7 @@ internal sealed class MusicView : IDisposable
 
     /// <summary>Gallery <paramref name="gallery"/>'s Music view; what its actions do said through <paramref name="say"/>, a
     /// download followed by <paramref name="saving"/>.</summary>
-    public MusicView(Window window, long gallery, Action<bool, string> say, Action<long> saving)
+    public MusicView(Window window, long gallery, Action<Spoken> say, Action<long> saving)
     {
         _window = window;
         _say = say;
@@ -152,7 +152,7 @@ internal sealed class MusicView : IDisposable
             if (said != _saidShown)
             {
                 _saidShown = said;
-                _say(false, said);
+                _say(Spoken.Of(s.said));
             }
             Act.Send(new Call.MusicSeen { music = music });
         }
@@ -311,12 +311,12 @@ internal sealed class MusicView : IDisposable
                 return;
             }
             Log.Write($"Music.Download answered {answer.GetType().Name}");
-            _say(false, Words.MusicDownloadFailed());
+            _say(Spoken.Own("music_download_failed", Words.MusicDownloadFailed()));
         }
         catch (Exception e)
         {
             Log.Write($"the track was not saved: {e.GetType().Name}");
-            _say(false, Words.MusicDownloadFailed());
+            _say(Spoken.Own("music_download_failed", Words.MusicDownloadFailed()));
         }
     }
 
@@ -328,7 +328,7 @@ internal sealed class MusicView : IDisposable
         {
             var (answer, _) = await Core.CallAsync(new Call.MusicRemove { music = music, mediaId = t.mediaId });
             if (answer is Answer.Trashed { undoable: var undoable }) Log.Write($"music remove: Trashed, undo {undoable}");
-            else if (answer is Answer.Said { notice: { } n }) _say(false, Said.Notice(n));
+            else if (answer is Answer.Said { notice: { } n }) _say(Spoken.Of(n));
             else Log.Write($"Music.Remove answered {answer.GetType().Name}");
         }
         catch (Exception e)
@@ -360,7 +360,7 @@ internal sealed class MusicView : IDisposable
             {
                 Log.Write($"music added: {said.Count} refused ({string.Join(", ", said.Select(n => n.msg))})");
                 // the last refusal is the view's own said as well (MusicShown.said), which says it once: the rest here
-                foreach (var n in said.Take(said.Count - 1)) _say(false, Said.Notice(n));
+                foreach (var n in said.Take(said.Count - 1)) _say(Spoken.Of(n));
             }
             else Log.Write($"Music.Add answered {answer.GetType().Name}");
         }

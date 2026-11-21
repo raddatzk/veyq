@@ -35,16 +35,6 @@ public sealed class MusicTest
         Assert.AreEqual(1.0, MusicRamp.Steps(0.2, 7, 100)[^1], "held to 0–1");
     }
 
-    [TestMethod]
-    public void TheBarSaysMinutesAndSeconds()
-    {
-        Assert.AreEqual("0:00", MusicTime.Said(0));
-        Assert.AreEqual("0:05", MusicTime.Said(5999));
-        Assert.AreEqual("3:07", MusicTime.Said(187_000));
-        Assert.AreEqual("75:00", MusicTime.Said(4_500_000), "an hour runs on as minutes");
-        Assert.AreEqual("0:00", MusicTime.Said(-5));
-    }
-
     private static string Temp(string name) => Path.Combine(Path.GetTempPath(), $"veyq-music-{Environment.ProcessId}-{name}");
 
     /// <summary>2 s of 16-bit stereo PCM at 44.1 kHz, a 440 Hz tone.</summary>

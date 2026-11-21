@@ -40,7 +40,7 @@ internal sealed class EntryEditorPage : IDisposable
     private readonly string? _held;
     private readonly AppBarButton _discardMine;
     private readonly InfoBar _newer;
-    private readonly Action<bool, string> _say;
+    private readonly Action<Spoken> _say;
     private readonly Action _closed;
     private readonly Grid _root = new();
     private readonly TextBlock _heading;
@@ -61,7 +61,7 @@ internal sealed class EntryEditorPage : IDisposable
 
     /// <summary>The editor of entry <paramref name="entry"/> of Pot <paramref name="pot"/> (null: a new entry);
     /// <paramref name="say"/> takes what a done save says, <paramref name="closed"/> runs once the editor is gone.</summary>
-    public EntryEditorPage(Window window, long pot, string? entry, Action<bool, string> say, Action closed, string? held = null)
+    public EntryEditorPage(Window window, long pot, string? entry, Action<Spoken> say, Action closed, string? held = null)
     {
         _window = window;
         _pot = pot;
@@ -132,7 +132,7 @@ internal sealed class EntryEditorPage : IDisposable
             if (answer is not Answer.EditorOpened { editor: var editor })
             {
                 Log.Write($"Editor.Open answered {answer.GetType().Name}");
-                _say(false, Words.EdSaveFailed());
+                _say(Spoken.Own("ed_save_failed", Words.EdSaveFailed()));
                 Close();
                 return;
             }
@@ -220,7 +220,7 @@ internal sealed class EntryEditorPage : IDisposable
                 Log.Write($"editor save: done {saved.done}, {saved.notice?.msg ?? "no notice"}");
                 if (saved.done)
                 {
-                    if (saved.notice is { } n) _say(false, Said.Notice(n));
+                    if (saved.notice is { } n) _say(Spoken.Of(n));
                     Close();
                     return;
                 }
@@ -728,7 +728,7 @@ internal sealed class EntryEditorPage : IDisposable
                 {
                     var row = new StackPanel { Padding = new Thickness(0, 4, 0, 4) };
                     var line = Said.Line(r.line);
-                    var by = Words.HistoryBy(r.writer ?? Words.HistoryUnknownWriter(), Said.Moment(r.at));
+                    var by = Words.HistoryBy(r.writer ?? Words.HistoryUnknownWriter(), r.atShown);
                     row.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
                     row.Children.Add(new TextBlock { Text = by, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], Foreground = Brush("TextFillColorSecondaryBrush") });
                     AutomationProperties.SetAutomationId(row, $"ed-history:{i++}");
@@ -851,7 +851,7 @@ internal sealed class EntryEditorPage : IDisposable
             var note = s.rateFill?.state switch
             {
                 RateState.Filling => Words.EdRateLoading(),
-                RateState.Filled => Words.EdRateFilled(Said.Day(s.rateFill.day ?? "")),
+                RateState.Filled => Words.EdRateFilled(s.rateFill.dayShown ?? ""),
                 RateState.Missing => Words.EdRateMissing(s.currency),
                 _ => Words.EdRateHint(),
             };

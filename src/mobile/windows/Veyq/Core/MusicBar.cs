@@ -101,7 +101,6 @@ internal sealed class MusicBar : IDisposable
         _progress.AddHandler(UIElement.PointerCaptureLostEvent, new PointerEventHandler(LetGo), true);
         _progress.ValueChanged += (_, e) =>
         {
-            _elapsed.Text = MusicTime.Said((long)e.NewValue);
             if (!_setting && !_dragging) Seek();
         };
 
@@ -161,7 +160,7 @@ internal sealed class MusicBar : IDisposable
         AutomationProperties.SetName(_toggle, label);
         ToolTipService.SetToolTip(_toggle, label);
         AutomationProperties.SetName(_progress, Words.MusicProgress(now.title));
-        _total.Text = now.durationMs > 0 ? MusicTime.Said(now.durationMs) : "";
+        _total.Text = now.durationMs > 0 ? now.duration : "";
         if (!_dragging)
         {
             _setting = true;
@@ -170,7 +169,8 @@ internal sealed class MusicBar : IDisposable
             _progress.IsEnabled = now.durationMs > 0;
             _setting = false;
         }
-        _elapsed.Text = MusicTime.Said(now.positionMs);
+        // the core's clock (Shown.length): while the slider is held it shows where the track stands, as the web's range
+        _elapsed.Text = now.position;
     }
 
     public void Dispose() => _watch?.Dispose();

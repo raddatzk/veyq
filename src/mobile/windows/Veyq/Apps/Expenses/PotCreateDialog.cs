@@ -22,7 +22,7 @@ using Veyq.Core;
 internal sealed class PotCreateDialog
 {
     private readonly Window _window;
-    private readonly Action<bool, string> _say;
+    private readonly Action<Spoken> _say;
     private readonly long _create;
     private readonly ContentDialog _dialog;
     private readonly TextBox _name = new() { Header = Words.CreatePotName(), MinWidth = 320 };
@@ -41,7 +41,7 @@ internal sealed class PotCreateDialog
 
     /// <summary>Opens New pot over <paramref name="window"/>; <paramref name="say"/> takes what a create that landed
     /// still says.</summary>
-    public static async void Open(Window window, Action<bool, string> say)
+    public static async void Open(Window window, Action<Spoken> say)
     {
         try
         {
@@ -51,7 +51,7 @@ internal sealed class PotCreateDialog
             if (answer is not Answer.PotCreateOpened { create: var create })
             {
                 Log.Write($"PotCreate.Open answered {answer.GetType().Name}");
-                say(false, Words.CreatePotFailed());
+                say(Spoken.Own("create_pot_failed", Words.CreatePotFailed()));
                 return;
             }
             Log.Write("new pot open");
@@ -64,7 +64,7 @@ internal sealed class PotCreateDialog
         }
     }
 
-    private PotCreateDialog(Window window, Action<bool, string> say, long create)
+    private PotCreateDialog(Window window, Action<Spoken> say, long create)
     {
         _window = window;
         _say = say;
@@ -165,7 +165,7 @@ internal sealed class PotCreateDialog
             {
                 case Answer.Stored { stored: true, notice: var n }:
                     Log.Write($"new pot created{(n is null ? "" : ", " + n.msg)}");
-                    if (n is not null) _say(false, Said.Notice(n));
+                    if (n is not null) _say(Spoken.Of(n));
                     _dialog.Hide();
                     break;
                 case Answer.Stored { notice: var n }:

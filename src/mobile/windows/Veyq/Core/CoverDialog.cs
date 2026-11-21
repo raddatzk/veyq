@@ -117,7 +117,7 @@ internal sealed class CoverDialog
 
         var dialog = new ContentDialog
         {
-            Title = $"{Words.CoverTitle()} · {node.name}",
+            Title = Lives.Joined([Words.CoverTitle(), node.name]),
             Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0, 0, 16, 0) },
             PrimaryButtonText = Words.CoverSave(),
             CloseButtonText = Words.EntryCancel(),

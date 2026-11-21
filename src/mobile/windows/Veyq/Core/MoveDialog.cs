@@ -21,7 +21,7 @@ using Veyq.Bridge.Wire;
 internal sealed class MoveDialog
 {
     private readonly Window _window;
-    private readonly InfoBar? _bar;
+    private readonly NoticeBar? _bar;
     private readonly StackPanel _body = new() { Spacing = 12, MinWidth = 440 };
     private readonly BreadcrumbBar _trail = new();
     private ContentDialog? _dialog;
@@ -33,7 +33,7 @@ internal sealed class MoveDialog
     private bool _seenUndo;
     private bool _sending;
 
-    private MoveDialog(Window window, InfoBar? bar)
+    private MoveDialog(Window window, NoticeBar? bar)
     {
         _window = window;
         _bar = bar;
@@ -55,12 +55,12 @@ internal sealed class MoveDialog
 
     /// <summary>Opens the move (<paramref name="copy"/> false) or copy sheet of <paramref name="node"/> over
     /// <paramref name="window"/>, saying what it did in <paramref name="bar"/>.</summary>
-    public static void Open(Window window, NodeAt node, bool copy, InfoBar? bar) =>
+    public static void Open(Window window, NodeAt node, bool copy, NoticeBar? bar) =>
         new MoveDialog(window, bar).Show(node.name, copy, new Call.MoveOpen { node = node, copy = copy, deletedName = Words.PotDeletedPerson() });
 
     /// <summary>Opens the sheet <paramref name="open"/> opens in the core (answered MoveOpened: a drop box's
     /// DropBox.MoveOut), a move, titled <paramref name="name"/> while it reads.</summary>
-    public static void OpenWith(Window window, string name, Call open, InfoBar? bar) => new MoveDialog(window, bar).Show(name, false, open);
+    public static void OpenWith(Window window, string name, Call open, NoticeBar? bar) => new MoveDialog(window, bar).Show(name, false, open);
 
     private async void Show(string name, bool copy, Call open)
     {
@@ -131,11 +131,7 @@ internal sealed class MoveDialog
                 {
                     _undoing = false;
                     Log.Write("move undo offer ended");
-                    if (_bar is { } bar)
-                    {
-                        bar.ActionButton = null;
-                        bar.IsOpen = false;
-                    }
+                    _bar?.EndOffer();
                     if (_closed) End();
                 }
             }
@@ -248,7 +244,7 @@ internal sealed class MoveDialog
         {
             case Answer.MoveSent { done: { } done, undoable: var undoable }:
                 Log.Write($"{what}: {done.msg}, undo offered: {undoable}");
-                Offer(Said.Notice(done), undoable, m);
+                Offer(done, undoable, m);
                 _dialog?.Hide();
                 break;
             case Answer.MoveSent { confirming: true }:
@@ -264,45 +260,38 @@ internal sealed class MoveDialog
         if (!_closed) Draw();
     }
 
-    /// <summary>What the move or copy said, with Undo where the core offers it now: the InfoBar's action until the offer ends.</summary>
-    private void Offer(string text, bool undoable, long m)
+    /// <summary>What the move or copy said, with Undo where the core offers it now: the bar's action until the offer
+    /// ends; without the offer the notice lives as its kind says.</summary>
+    private void Offer(Notice done, bool undoable, long m)
     {
         if (_bar is not { } bar) return;
-        bar.Severity = InfoBarSeverity.Success;
-        bar.Message = text;
-        if (undoable)
+        if (!undoable)
         {
-            var undo = new Button { Content = Words.TrashUndo() };
-            AutomationProperties.SetAutomationId(undo, "undo");
-            undo.Click += async (_, _) =>
-            {
-                bar.ActionButton = null;
-                bar.IsOpen = false;
-                _undoing = false;
-                Answer? answered;
-                try
-                {
-                    answered = (await Core.CallAsync(new Call.MoveUndo { move = m })).Answer;
-                }
-                catch (Exception e)
-                {
-                    Log.Write($"Move.Undo failed: {e.GetType().Name}");
-                    answered = null;
-                }
-                Log.Write($"move undo: {(answered is Answer.Said { notice: { } n } ? n.msg : answered?.GetType().Name)}");
-                if (answered is Answer.Said { notice: { } said })
-                {
-                    bar.Severity = InfoBarSeverity.Error;
-                    bar.Message = Said.Notice(said);
-                    bar.IsOpen = true;
-                }
-                if (_closed) End();
-            };
-            bar.ActionButton = undo;
-            _undoing = true;
+            bar.Say(Spoken.Of(done));
+            return;
         }
-        else bar.ActionButton = null;
-        bar.IsOpen = true;
+        var undo = new Button { Content = Words.TrashUndo() };
+        AutomationProperties.SetAutomationId(undo, "undo");
+        undo.Click += async (_, _) =>
+        {
+            bar.EndOffer();
+            _undoing = false;
+            Answer? answered;
+            try
+            {
+                answered = (await Core.CallAsync(new Call.MoveUndo { move = m })).Answer;
+            }
+            catch (Exception e)
+            {
+                Log.Write($"Move.Undo failed: {e.GetType().Name}");
+                answered = null;
+            }
+            Log.Write($"move undo: {(answered is Answer.Said { notice: { } n } ? n.msg : answered?.GetType().Name)}");
+            if (answered is Answer.Said { notice: { } said }) bar.Say(Spoken.Of(said));
+            if (_closed) End();
+        };
+        bar.Offer(Spoken.Of(done), undo);
+        _undoing = true;
     }
 
     private static TextBlock Text(string text, string id, string brush)

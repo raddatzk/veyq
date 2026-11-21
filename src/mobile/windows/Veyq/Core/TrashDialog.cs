@@ -127,7 +127,7 @@ internal sealed class TrashDialog
             var text = new StackPanel();
             text.Children.Add(new TextBlock { Text = row.name, TextTrimming = TextTrimming.CharacterEllipsis });
             var under = s.errorRow == row.id && s.error is { } e ? Said.Key(e)
-                : Words.TrashRowDates(Said.InstantDay(row.deletedAt), Said.InstantDay(row.purgeAfter));
+                : Words.TrashRowDates(row.deletedDay, row.purgeDay);
             var caption = new TextBlock { Text = under, TextWrapping = TextWrapping.Wrap, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"] };
             AutomationProperties.SetAutomationId(caption, $"trash-row-said:{row.name}");
             text.Children.Add(caption);

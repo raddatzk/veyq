@@ -23,8 +23,8 @@ using ApplicationId = Veyq.Bridge.Wire.ApplicationId;
 internal sealed class PageHost
 {
     public required Window Window { get; init; }
-    public required Action<bool, string> Say { get; init; }
-    public required InfoBar Said { get; init; }
+    public required Action<Spoken> Say { get; init; }
+    public required NoticeBar Said { get; init; }
     public required Action<long> Saving { get; init; }
     public required Action<Facts?, long?, long?> Facts { get; init; }
     public required Action Changed { get; init; }
@@ -37,8 +37,8 @@ internal sealed class PageHost
 internal sealed class GuestHost
 {
     public required Window Window { get; init; }
-    public required Action<bool, string> Say { get; init; }
-    public required InfoBar Said { get; init; }
+    public required Action<Spoken> Say { get; init; }
+    public required NoticeBar Said { get; init; }
     public required NodeAt Node { get; init; }
     public required Action<string> OpenNode { get; init; }
     public required Action Changed { get; init; }
@@ -162,7 +162,7 @@ internal abstract class ApplicationList
 internal sealed class CreateHost
 {
     public required Window Window { get; init; }
-    public required Action<bool, string> Say { get; init; }
+    public required Action<Spoken> Say { get; init; }
     public required Func<ShellModelState?> State { get; init; }
 }
 

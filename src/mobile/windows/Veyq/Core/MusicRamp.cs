@@ -31,13 +31,3 @@ internal static class MusicRamp
     /// <summary>The time between two steps of a ramp over <paramref name="overMs"/>: never more than <see cref="StepMs"/>.</summary>
     public static TimeSpan Interval(long overMs) => TimeSpan.FromMilliseconds(overMs <= 0 ? 0 : overMs / (double)Count(overMs));
 }
-
-internal static class MusicTime
-{
-    /// <summary><paramref name="ms"/> as the bar shows it, <c>m:ss</c> (the web's AudioBar; hours run on as minutes).</summary>
-    public static string Said(long ms)
-    {
-        var s = Math.Max(0, ms) / 1000;
-        return $"{s / 60}:{s % 60:00}";
-    }
-}

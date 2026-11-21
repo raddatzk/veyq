@@ -19,14 +19,14 @@ using Veyq.Bridge.Wire;
 internal sealed class ImportDialog
 {
     private readonly long _import;
-    private readonly Action<bool, string> _say;
+    private readonly Action<Spoken> _say;
     private readonly ContentDialog _dialog;
     private readonly StackPanel _body = new() { Spacing = 12, MinWidth = 360, MaxWidth = 480 };
     private ImportStep? _logged;
     private bool _answered;
     private bool _done;
 
-    private ImportDialog(long import, Action<bool, string> say)
+    private ImportDialog(long import, Action<Spoken> say)
     {
         _import = import;
         _say = say;
@@ -55,7 +55,7 @@ internal sealed class ImportDialog
 
     /// <summary>Opens the dialog of the import <paramref name="import"/> over <paramref name="window"/>, saying through
     /// <paramref name="say"/> what a done import says.</summary>
-    public static async void Open(Window window, long import, Action<bool, string> say)
+    public static async void Open(Window window, long import, Action<Spoken> say)
     {
         try
         {
@@ -103,7 +103,7 @@ internal sealed class ImportDialog
         {
             if (_done) return;
             _done = true;
-            _say(true, ImportText.Done(s));
+            _say(Spoken.Of(s.said, ImportText.Done(s)));
             _dialog.Hide();
             return;
         }

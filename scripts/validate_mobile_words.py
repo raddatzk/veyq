@@ -275,10 +275,25 @@ def check_manifests(root: Path) -> list[str]:
 
 # platform-format (ADR 0154 decisions 4 and 5): switched on per platform by its phase of
 # cr-apps-notices-and-formats-from-the-core; each platform's own durations and formatters are gone then.
-PLATFORM_FORMAT_ON: set[str] = set()
-# (platform, file relative to src/mobile, the matched text) a platform may keep, each with why. Empty until a platform's
-# phase names one.
-PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {}
+PLATFORM_FORMAT_ON: set[str] = {"windows"}
+# (platform, file relative to src/mobile, the matched text) a platform may keep, each with why: a timer that is no
+# notice's, a wire encoding never shown.
+PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {
+    ("windows", "windows/Veyq/Apps/Expenses/EntryEditorPage.cs", '.ToString("yyyy-MM-dd"'): "the picked day as the ISO day the core reads (EditorChange.EditDay), never shown",
+    ("windows", "windows/Veyq/Apps/Memories/MemoryFacts.cs", '.ToString("yyyy-MM-dd"'): "the picked day as the ISO day the core reads (a Memory's date), never shown",
+    ("windows", "windows/Veyq/Core/PdfWeb.cs", '.ToString("N"'): "a Guid's hex digits naming a folder, no shown value",
+    ("windows", "windows/Veyq/Core/PdfWeb.cs", 'Task.Delay(1'): "a held folder's delete retried, no notice's",
+    ("windows", "windows/Veyq/Core/AccountSettingsPage.cs", 'TimeSpan.FromMilliseconds(1'): "a section's scroll retried while it lays out, no notice's",
+    ("windows", "windows/Veyq/Core/DeviceLinkDialog.cs", 'TimeSpan.FromMilliseconds(1'): "the confirm slider's spring-back frames, no notice's",
+    ("windows", "windows/Veyq/Core/RasterMap.cs", 'TimeSpan.FromMilliseconds(1'): "the map's viewport told to the core at most every 100 ms, no notice's",
+    ("windows", "windows/Veyq/Core/ShellView.cs", 'TimeSpan.FromMilliseconds(4'): "a list's scroll put back once it settled, no notice's",
+    ("windows", "windows/Veyq.Bridge.Tests/CoreTest.cs", 'TimeSpan.FromSeconds(3'): "a test's wait for the core, no notice's",
+    ("windows", "windows/Veyq.Bridge.Tests/CoreTest.cs", 'Task.Delay(3'): "a test's wait for the core, no notice's",
+    ("windows", "windows/Veyq.Tests/CurationTextTest.cs", 'TimeSpan.FromHours(2'): "a test's zone offset, no notice's",
+    ("windows", "windows/Veyq.Tests/MediaTiersTest.cs", 'TimeSpan.FromSeconds(1'): "a test video's frame moment, no notice's",
+    ("windows", "windows/Veyq.Tests/PdfWebTest.cs", 'Task.Delay(3'): "a test's wait for WebView2, no notice's",
+    ("windows", "windows/Veyq.Tests/PdfWebTest.cs", 'Task.Delay(1'): "a test's wait for WebView2, no notice's",
+}
 
 _SEP = re.compile(r'"[^"\n]* \u00b7 [^"\n]*"')
 _DURATION = {

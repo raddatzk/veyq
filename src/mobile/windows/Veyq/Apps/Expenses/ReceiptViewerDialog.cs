@@ -32,7 +32,7 @@ internal static class ReceiptViewerDialog
 
     /// <summary>Opens receipt <paramref name="receipt"/> of Pot <paramref name="pot"/>, listed as <paramref name="name"/>;
     /// <paramref name="say"/> says how a saved copy went.</summary>
-    public static async void Open(Window window, long pot, string receipt, string name, Action<bool, string> say)
+    public static async void Open(Window window, long pot, string receipt, string name, Action<Spoken> say)
     {
         try
         {
@@ -182,7 +182,7 @@ internal static class ReceiptViewerDialog
     }
 
     /// <summary>"Save a copy": the save picker names the file, the core writes the receipt there.</summary>
-    private static async void SaveCopy(Window window, long pot, string receipt, string name, Action<bool, string> say)
+    private static async void SaveCopy(Window window, long pot, string receipt, string name, Action<Spoken> say)
     {
         try
         {
@@ -194,13 +194,13 @@ internal static class ReceiptViewerDialog
             if (file is null) return;
             var (answer, _) = await Core.CallAsync(new Call.ReceiptSave { pot = pot, receipt = receipt, path = file.Path });
             Log.Write($"receipt saved to {file.Path}: {answer.GetType().Name}");
-            if (answer is Answer.Done) say(true, Words.ReceiptsSaved());
-            else say(false, Words.ReceiptsNotSaved());
+            if (answer is Answer.Done) say(Spoken.Own("receipts_saved", Words.ReceiptsSaved()));
+            else say(Spoken.Own("receipts_not_saved", Words.ReceiptsNotSaved()));
         }
         catch (Exception e)
         {
             Log.Write($"the receipt's copy failed: {e.GetType().Name}: {e.Message}");
-            say(false, Words.ReceiptsNotSaved());
+            say(Spoken.Own("receipts_not_saved", Words.ReceiptsNotSaved()));
         }
     }
 }

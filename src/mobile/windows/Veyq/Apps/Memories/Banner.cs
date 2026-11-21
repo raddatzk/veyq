@@ -80,7 +80,7 @@ internal sealed record BannerPicture(ImageSource Whole, int Width, int Height, b
 internal sealed class BannerStage : IDisposable
 {
     private readonly Window _window;
-    private readonly Action<bool, string> _say;
+    private readonly Action<Spoken> _say;
     private readonly Border _root = new() { HorizontalAlignment = HorizontalAlignment.Center, Visibility = Visibility.Collapsed };
     private long _gallery;
     private BannerShown? _banner;
@@ -93,7 +93,7 @@ internal sealed class BannerStage : IDisposable
     private long _asked;
     private bool _closed;
 
-    public BannerStage(Window window, Action<bool, string> say)
+    public BannerStage(Window window, Action<Spoken> say)
     {
         _window = window;
         _say = say;
@@ -228,7 +228,7 @@ internal sealed class BannerStage : IDisposable
             if (answer is not Answer.Reader { reader: var reader, size: var size, mediaType: var type })
             {
                 Log.Write($"Banner.Play answered {(answer is Answer.Refused r ? $"Refused {r.why}" : answer.GetType().Name)}");
-                _say(true, Words.MemoryBannerPlayFailed());
+                _say(Spoken.Own("memory_banner_play_failed", Words.MemoryBannerPlayFailed()));
                 return;
             }
             if (_closed || !ReferenceEquals(frame, _drawn))
@@ -240,7 +240,7 @@ internal sealed class BannerStage : IDisposable
             var player = new MediumPlayer(reader, size, type ?? _banner?.mediaType, "banner-video", Words.MemoryBannerVideo(), true, _root.DispatcherQueue, () =>
             {
                 if (_closed) return;
-                _say(true, Words.MemoryBannerPlayFailed());
+                _say(Spoken.Own("memory_banner_play_failed", Words.MemoryBannerPlayFailed()));
                 StopPlayer();
             });
             _player = player;
@@ -251,7 +251,7 @@ internal sealed class BannerStage : IDisposable
         catch (Exception e)
         {
             Log.Write($"the banner's video did not open ({e.GetType().Name}: {e.Message})");
-            _say(true, Words.MemoryBannerPlayFailed());
+            _say(Spoken.Own("memory_banner_play_failed", Words.MemoryBannerPlayFailed()));
         }
     }
 
@@ -289,7 +289,7 @@ internal sealed class BannerStage : IDisposable
 
     /// <summary>A2: the banner's own picture asked to be trashed — the banner stays unless "Remove the banner too" is
     /// ticked; Cancel deletes nothing (Gallery.TrashBannerPicture, Gallery.CancelAsk).</summary>
-    public static async void Ask(Window window, long gallery, Action<bool, string> say)
+    public static async void Ask(Window window, long gallery, Action<Spoken> say)
     {
         try
         {
@@ -312,7 +312,7 @@ internal sealed class BannerStage : IDisposable
                 var remove = too.IsChecked == true;
                 var (answer, _) = await Core.CallAsync(new Call.GalleryTrashBannerPicture { gallery = gallery, removeBanner = remove });
                 Log.Write($"Gallery.TrashBannerPicture (remove the banner {remove}): {(answer is Answer.Refused r ? $"Refused {r.why}" : answer.GetType().Name)}");
-                if (answer is Answer.Said { notice: { } n }) say(false, Said.Notice(n));
+                if (answer is Answer.Said { notice: { } n }) say(Spoken.Of(n));
             }
             else
             {
@@ -538,7 +538,7 @@ internal sealed class BannerDialog
         _progress.IsIndeterminate = s.progress is null or <= 0;
         _progress.Value = s.progress ?? 0;
         _progressText.Text = CurationText.BannerProgress(s.progress);
-        var said = CurationText.BannerSaidText(s.said);
+        var said = CurationText.BannerSaidText(s.said, s.tooLargeBound);
         _problem.Text = said ?? "";
         _problem.Visibility = said is null ? Visibility.Collapsed : Visibility.Visible;
         _dialog.IsPrimaryButtonEnabled = s.canSave && !s.saving;
