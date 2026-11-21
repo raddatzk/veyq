@@ -131,7 +131,7 @@ extension NodeTileItem {
         onOpen: @escaping (ObjectRef) -> Void
     ) {
         self.init(
-            id: ref.nodeId, name: ref.name, details: details[ref.nodeId]?.joined(separator: " · "), cover: covers[ref.nodeId],
+            id: ref.nodeId, name: ref.name, details: details[ref.nodeId].map(joinedLine), cover: covers[ref.nodeId],
             symbol: Names.kindSymbol(ref.kind), enabled: !picking || takesShare(ref)
         ) { onOpen(ref) }
     }

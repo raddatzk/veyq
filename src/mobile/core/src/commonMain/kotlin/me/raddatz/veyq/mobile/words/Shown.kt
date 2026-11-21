@@ -102,6 +102,26 @@ object Shown {
         else "${mediumDay(y, m, d, language)}, ${if (hour % 12 == 0) 12 else hour % 12}:$minute ${if (hour < 12) "AM" else "PM"}"
     }
 
+    /**
+     * A gallery's day chip (the web's `galleryFilter` label, `day: 'numeric', month: 'long'`, the year only where the
+     * Memory spans more than one): "May 3" / "3. Mai", "May 3, 2026" / "3. Mai 2026" — a local day ([LocalDays]' count).
+     */
+    fun dayLabel(epochDay: Long, withYear: Boolean, language: String): String {
+        val (y, m, d) = LocalDays.civil(epochDay)
+        return if (german(language)) "$d. ${MONTHS_LONG_DE[m - 1]}${if (withYear) " $y" else ""}"
+        else "${MONTHS_LONG_EN[m - 1]} $d${if (withYear) ", $y" else ""}"
+    }
+
+    /** The local day an instant falls on as [dayLabel] writes it. */
+    fun dayLabelOf(epochMs: Long, withYear: Boolean, language: String): String = dayLabel(LocalDays.dayOf(epochMs), withYear, language)
+
+    private val MONTHS_LONG_EN = listOf(
+        "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December",
+    )
+    private val MONTHS_LONG_DE = listOf(
+        "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember",
+    )
+
     private fun mediumDay(y: Int, m: Int, d: Int, language: String): String =
         if (german(language)) "${two(d)}.${two(m)}.$y" else "${MONTHS[m - 1]} $d, $y"
 

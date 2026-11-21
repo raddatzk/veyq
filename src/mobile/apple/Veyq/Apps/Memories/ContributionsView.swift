@@ -137,7 +137,7 @@ struct ContributionsView: View {
 
     /// A bucket as the picker lists it: indented by its depth, its count after its name.
     static func rowWords(_ row: Buckets.Row) -> String {
-        String(repeating: "    ", count: Int(row.depth)) + say(piece: row.label) + " · " + String(row.mediaCount)
+        String(repeating: "    ", count: Int(row.depth)) + joinedLine([say(piece: row.label), String(row.mediaCount)])
     }
 
     private var grid: some View {

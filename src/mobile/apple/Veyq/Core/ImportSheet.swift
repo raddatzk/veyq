@@ -45,7 +45,7 @@ struct ImportSheet: View {
         .onChange(of: st.step) { _, step in
             // done: the imported line is the shell's to say once the sheet is gone (the web's toast)
             if step == .done {
-                model.importedLine = st.said.map { say(notice: $0) }.joined(separator: "\n")
+                model.importedLine = st.said
                 dialog.close()
             }
         }

@@ -4,20 +4,6 @@ import VeyqCore
 /// A problem of the form or the write path in words (the web's `expenses.entry.problem.*`).
 func problemText(_ problem: String) -> String { say(Notices.shared.entryProblem(problem: problem)) }
 
-/// A picked `yyyy-MM-dd` as the date picker takes it, and back: the form keeps the ISO text, the picker a `Date`.
-private enum PickedDay {
-    private static let format: DateFormatter = {
-        let f = DateFormatter()
-        f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
-
-    static func date(_ iso: String) -> Date? { format.date(from: iso) }
-    static func iso(_ date: Date) -> String { format.string(from: date) }
-}
-
 /// A split's index on the wire: an item's, or nil for the rest's.
 private func at(_ item: Int?) -> KotlinInt? { item.map { KotlinInt(value: Int32($0)) } }
 
@@ -92,8 +78,8 @@ struct EntryEditorSheet: View {
                 TextField(f.kind == .transfer ? say(.edNote) : say(.entryTitle), text: bind({ model.editorState?.form.title ?? "" }) { EditorChange.Title(text: $0) })
                 problem(shown(s, "title"))
                 DatePicker(say(.edDate), selection: Binding(
-                    get: { PickedDay.date(model.editorState?.form.date ?? "") ?? PickedDay.date(model.today) ?? .distantPast },
-                    set: { model.edit(EditorChange.Day(iso: PickedDay.iso($0))) }
+                    get: { IsoDay.date(model.editorState?.form.date ?? "") ?? IsoDay.date(model.today) ?? .distantPast },
+                    set: { model.edit(EditorChange.Day(iso: IsoDay.iso($0))) }
                 ), displayedComponents: .date)
                 problem(shown(s, "date"))
                 if f.kind != .transfer {
@@ -140,7 +126,7 @@ struct EntryEditorSheet: View {
                             guard let saved = await model.saveEntry(), saved.done else { return }
                             onSaved?()
                             // a receipt the space's storage had no room for was left out; the entry is saved, the editor closes
-                            if let left = saved.notice { model.notice = AppModel.Notice(text: say(notice: left)) }
+                            if let left = saved.notice { model.show(left) }
                             dismiss()
                         }
                     }

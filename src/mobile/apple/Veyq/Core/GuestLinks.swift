@@ -444,7 +444,7 @@ private struct GuestLevelView: View {
     @State private var newName = ""
     @State private var nameProblem: String?
     @State private var pickingFiles = false
-    @State private var said: String?
+    @State private var said: VeyqCore.Notice?
 
     var body: some View {
         let rows = level.rows
@@ -495,9 +495,7 @@ private struct GuestLevelView: View {
         .folderNaming($naming, name: $newName, problem: $nameProblem) { name in
             nameAnswered(try? await AppleSharing.shared.createFolder(level: level, name: name)) { said = $0 }
         }
-        .alert(said ?? "", isPresented: Binding(get: { said != nil }, set: { if !$0 { said = nil } })) {
-            Button(say(.ok), role: .cancel) {}
-        }
+        .saidNotice($said)
     }
 }
 
@@ -694,7 +692,7 @@ struct AskedNaming: ViewModifier {
     /// False while a sheet above this view asks instead (an entry editor's save, `EntryEditorSheet`).
     var active = true
     @State private var asking: CoreState<KotlinBoolean>?
-    @State private var said: String?
+    @State private var said: VeyqCore.Notice?
 
     func body(content: Content) -> some View {
         let naming = access.naming
@@ -707,9 +705,7 @@ struct AskedNaming: ViewModifier {
                     nameAnswered(try? await naming.name(displayName: name)) { said = $0 }
                 }
             }
-            .alert(said ?? "", isPresented: Binding(get: { said != nil }, set: { if !$0 { said = nil } })) {
-                Button(say(.ok), role: .cancel) {}
-            }
+            .saidNotice($said)
             .task(id: ObjectIdentifier(access)) {
                 asking?.stop()
                 asking = CoreState({ naming.asking.value as! KotlinBoolean }) { changed in
