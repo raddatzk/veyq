@@ -70,7 +70,7 @@ struct MemoryPeopleLine: View {
     }
 
     /// "+N" in the third slot: a number, the same in every language.
-    private static func more(_ n: Int32) -> String { "+" + n.formatted() }
+    private static func more(_ n: Int32) -> String { "+" + Shown.shared.number(amount: Int64(n), minorUnits: 0, language: shownLanguage) }
 
     /// Up to three avatars overlapping, each ringed in the page's ground; "+N" in the third slot for more.
     private var avatars: some View {
@@ -456,7 +456,7 @@ struct BannerSheet: View {
 
     private static func text(_ said: BannerEditor.Said) -> String {
         switch said {
-        case .tooLarge: say(.memoryBannerTooLarge, ByteCountFormatter.string(fromByteCount: BannerWrite.shared.MAX_IMAGE_BYTES, countStyle: .file))
+        case .tooLarge: say(.memoryBannerTooLarge, shownSize(BannerWrite.shared.MAX_IMAGE_BYTES))
         case .unreadable, .notMedia: say(.memoryBannerUnreadable)
         case .videoUnreadable: say(.memoryBannerVideoUnreadable)
         case .stale: say(.memoryBannerStale)

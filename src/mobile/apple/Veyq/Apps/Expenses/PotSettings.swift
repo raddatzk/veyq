@@ -187,7 +187,7 @@ struct PotSettingsTab: View {
         }
     }
 
-    private func facts(_ p: PotView.PersonEntry) -> String { view.personFacts(p: p).map { say(piece: $0) }.joined(separator: " · ") }
+    private func facts(_ p: PotView.PersonEntry) -> String { pieceLine(view.personFacts(p: p)) }
 
     // MARK: Own categories
 

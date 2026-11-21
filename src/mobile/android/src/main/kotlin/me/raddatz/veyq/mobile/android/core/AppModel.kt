@@ -1583,18 +1583,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * The viewer's calendar for a gallery filter's day chips (ADR 0149 decision 5, inbox #989): a capture time's local day on
-     * this device's zone, its chip labelled in the app's language by the core (`Shown.dayLabel`, the web's, with the year
-     * where the gallery spans more than one) — the core does no zone arithmetic here.
+     * The viewer's calendar for a gallery filter's day chips (ADR 0149 decision 5, inbox #989): the core's
+     * (`GalleryFilter.Calendar.local`: a capture time's local day, its chip labelled as the web labels it) in the app's language.
      */
-    private fun galleryCalendar(): me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar {
-        val language = getApplication<Application>().language
-        val zone = java.time.ZoneId.systemDefault()
-        fun day(ms: Long) = java.time.Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
-        return me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar({ ms -> day(ms).toString() }) { ms, withYear ->
-            me.raddatz.veyq.mobile.words.Shown.dayLabel(day(ms).toEpochDay(), withYear, language)
-        }
-    }
+    private fun galleryCalendar(): me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar =
+        me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar.local(getApplication<Application>().language)
 
     // ---- a Memory's Contributions view (ADR 0149 decision 6) ----
 

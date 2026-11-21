@@ -143,11 +143,11 @@ private struct LinkRowView: View {
         HStack {
             VStack(alignment: .leading, spacing: 3) {
                 Text(say(piece: row.title)).fontWeight(.semibold)
-                Text([say(.shareCreated, day(link.createdAt)), link.expiresAt.map { say(.shareExpires, day($0)) }]
-                    .compactMap { $0 }.joined(separator: " · "))
+                Text(joinedLine([say(.shareCreated, day(link.createdAt)), link.expiresAt.map { say(.shareExpires, day($0)) }]
+                    .compactMap { $0 }))
                     .font(.caption).foregroundStyle(Role.muted)
                 let badges = row.badges.map { say($0) }
-                if !badges.isEmpty { Text(badges.joined(separator: " · ")).font(.caption).foregroundStyle(Role.accent) }
+                if !badges.isEmpty { Text(joinedLine(badges)).font(.caption).foregroundStyle(Role.accent) }
             }
             Spacer()
             if let url = link.url, row.canCopy {
@@ -156,6 +156,7 @@ private struct LinkRowView: View {
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel(say(.shareCopy))
+                .task(id: copied) { await copiedFor($copied) }
             }
             if busy { ProgressView() }
         }
@@ -213,6 +214,7 @@ private struct FreshLinkView: View {
             Section(say(.shareReady)) {
                 Text(url).font(.footnote.monospaced()).textSelection(.enabled)
                 Button(copied ? say(.shareCopied) : say(.shareCopy), systemImage: copied ? "checkmark" : "doc.on.doc") { Clipboard.copy(url); copied = true }
+                    .task(id: copied) { await copiedFor($copied) }
                 ShareLink(item: url) { Label(say(.shareSend), systemImage: "square.and.arrow.up") }
             }
             Section { Button(say(.shareDone), action: onDone) }
@@ -307,13 +309,8 @@ private struct NewLinkForm: View {
     }
 }
 
-/// The day of a server instant (ISO 8601), in the device's words.
-private func day(_ instant: String) -> String {
-    let parse = ISO8601DateFormatter()
-    parse.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    let date = parse.date(from: instant) ?? ISO8601DateFormatter().date(from: instant)
-    return date.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? String(instant.prefix(10))
-}
+/// The local day of a server instant (ISO 8601), as the web writes a day (core's `Shown.dayOf`).
+private func day(_ instant: String) -> String { shownDayOf(instant) }
 
 /// The system's pasteboard, on iOS and macOS alike.
 enum Clipboard {
@@ -325,4 +322,10 @@ enum Clipboard {
         NSPasteboard.general.setString(text, forType: .string)
         #endif
     }
+}
+
+/// "Copied" shown for the core's while (`Notice.COPIED_MS`, the web's copy note), then the copy offered again.
+@MainActor private func copiedFor(_ copied: Binding<Bool>) async {
+    guard copied.wrappedValue, (try? await waitCore(Notice.companion.COPIED_MS)) != nil else { return }
+    copied.wrappedValue = false
 }

@@ -164,8 +164,8 @@ private struct PersonMemoryRow: View {
 
     /// Its date, place and group, as its second line says them.
     static func details(_ row: PersonMemories.Row) -> String {
-        [row.date.flatMap { MemoryDateText.text($0) }, row.placeName.flatMap { $0.isEmpty ? nil : $0 }, row.group.map { Names.spaceName($0) }]
-            .compactMap { $0 }.joined(separator: " · ")
+        joinedLine([row.date.flatMap { MemoryDateText.text($0) }, row.placeName.flatMap { $0.isEmpty ? nil : $0 }, row.group.map { Names.spaceName($0) }]
+            .compactMap { $0 })
     }
 
     var body: some View {

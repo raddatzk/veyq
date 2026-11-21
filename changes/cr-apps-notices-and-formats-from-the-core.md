@@ -152,8 +152,8 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   `NoticeText.kt` write through `Shown` in the app's language (`Context.language`): `text(notice)` over `Shown.args`,
   `piece` over `Shown.piece`, `money`, `size`, `moment`, `localDate`, a Memory's date `Shown.dayRange`/`memoryDay` (the
   web's numeric range, no longer `DateUtils.formatDateRange`), `List<String>.joined()`. Core additions, each pinned to
-  the web: `Shown.dayLabel` (the gallery filter's day chip, `galleryFilter.ts`' long month — Android showed `dMMM`),
-  `Shown.distance` (a track's length, `trackFacts.ts`' `formatDistance`), both new sections of
+  the web: `Shown.dayLabel`'s day chip (phase 6's, merged: Android hands `GalleryFilter.Calendar.local` — it showed `dMMM`
+  — and its ISO overload is the vectors' input, so the chip is also held to `galleryFilter.ts`' own output), `Shown.distance` (a track's length, `trackFacts.ts`' `formatDistance`), both new sections of
   `format-vectors.json` written by `formatVectors.ts`; `Shown.clock` (the capture-time editor's time, the moment's own
   time part). The map's camera wait is a `snapshotFlow`, the time picker takes Material's own 24-hour default.
   Exceptions (`PLATFORM_FORMAT_EXCEPTIONS`): `SnackbarDuration.Indefinite` in `NoticeHost.kt`, the settings page's
@@ -172,6 +172,25 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   app restarts after an in-app language switch — as before.
 - [ ] **6 Apple** · **7 Linux** · **8 Windows** — each platform's formatters and durations removed, the
   notice host mapping F1, the guard on. · Done when: each platform's build (as the CR before) and the guards green.
+  **6 Apple — Built** (2026-11-21): every value the app shows goes through the core's `Shown` in the catalog's language
+  (`shownLanguage`, `Bundle.main.preferredLocalizations`): `Formats.swift`'s `money`, `localDay`, `shownSize`,
+  `shownMoment`, `shownDayOf`, `shownLength` (the music bar's clocks, `musicTime` gone), `say(piece:)` over `Shown.piece`,
+  `say(notice:)` over `Shown.args`, a line by `pieceLine`/`joinedLine` (`Shown.joined`); a Memory's date the web's numeric
+  `memoryDay`/`dayRange`; the date pickers' ISO day by a Gregorian `IsoDay`, no `DateFormatter`. The notice host maps
+  `NoticeKind`: `AppModel.show` — `HELD` the shell's alert until closed, `SAID` at the bottom closing after its `lifeMs`,
+  `UNDO` with its Undo until core drops the offer —, the uploads' said that only says something went through, the
+  import's line and a name dialog's notice among them; a guest's screens by `saidNotice`; "copied" (a file's text, a
+  link) for `COPIED_MS`, "nothing plays" for `NOTHING_PLAYS_MS`; the live polls held by `untilCancelled()`, no timer.
+  Core addition: `Shown.dayLabel`/`dayLabelOf` (the web's gallery day chip, `day: 'numeric', month: 'long'`) and
+  `GalleryFilter.Calendar.local(language)`, which Apple now hands (`ShownDayLabelTest`, Node's strings). Exceptions
+  (`PLATFORM_FORMAT_EXCEPTIONS`): the Pot create sheet's `currency(code:)` call, the fade's 25 ms step, the debug test
+  camera's rate, Settings' anchor settle, `DevAudio`/`DevLogin` (debug only). Open: a GPX track's distance stays the
+  system's `Measurement` (no web vector). Measured: `validate_mobile_words.py` green with `apple` on; `:core:jvmTest`
+  (`words.*`, `GalleryFilter*`), `:core:macosArm64Test` (`words.*`), `:core:compileKotlinJs`,
+  `:core:assembleVeyqCoreDebugXCFramework`, `xcodegen`, the macOS ad-hoc build and the iOS simulator compile green.
+  **Bites:** a planted `ByteCountFormatter` and a planted `Task.sleep(for: .seconds(4))` in `Formats.swift` → the guard
+  red, restored (`/bin/cp -f`) → green; "März" misspelt → `ShownDayLabelTest` red, restored → green. Unclicked (build
+  only): every notice's life and every value on the Mac and the simulator.
 - [ ] **9 the passes** — § Passes.
 - [ ] **10 harvest** — ADR 0154's `Built:` (decisions 4, 5); `native-apps.md`; the words guard's docstring; the Use
   pages that quote a notice's behaviour, if any (`grep -rln -i "undo\|rückgängig" site/src/content/docs`). · Done when:

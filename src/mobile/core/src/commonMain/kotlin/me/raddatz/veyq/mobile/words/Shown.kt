@@ -19,8 +19,6 @@ object Shown {
     private const val NBSP = ' '
     private const val DAY_MS = 86_400_000L
     private val MONTHS = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-    private val MONTHS_EN = listOf("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
-    private val MONTHS_DE = listOf("Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember")
     private val UNITS = listOf("B", "kB", "MB", "GB", "TB")
 
     private fun german(language: String) = language.lowercase().startsWith("de")
@@ -107,24 +105,11 @@ object Shown {
         return if (german(language)) "${two(hour)}:$mm" else "${if (hour % 12 == 0) 12 else hour % 12}:$mm ${if (hour < 12) "AM" else "PM"}"
     }
 
-    /**
-     * A gallery filter's day chip (the web's `galleryFilter.ts` label, `day: 'numeric', month: 'long'`): "November 3" /
-     * "3. November", with its year where the Memory spans more than one ([withYear]).
-     */
-    fun dayLabel(epochDay: Long, withYear: Boolean, language: String): String {
-        val (y, m, d) = LocalDays.civil(epochDay)
-        return dayLabel(y, m, d, withYear, language)
-    }
-
-    /** An ISO day as [dayLabel] writes it; the text itself where it is no day. */
+    /** An ISO day as [dayLabel] writes it (the vectors' input); the text itself where it is no day. */
     fun dayLabel(iso: String, withYear: Boolean, language: String): String {
         val (y, m, d) = isoDay(iso) ?: return iso
         return dayLabel(y, m, d, withYear, language)
     }
-
-    private fun dayLabel(y: Int, m: Int, d: Int, withYear: Boolean, language: String): String =
-        if (german(language)) "$d. ${MONTHS_DE[m - 1]}${if (withYear) " $y" else ""}"
-        else "${MONTHS_EN[m - 1]} $d${if (withYear) ", $y" else ""}"
 
     /**
      * A track's length as the list says it (the web's `trackFacts.ts` `formatDistance`), [value] already rounded by the
@@ -135,6 +120,29 @@ object Shown {
         val tenths = kotlin.math.round(value * 10).toLong()
         return "${if (tenths % 10 == 0L) number(tenths / 10, 0, language) else number(tenths, 1, language)} km"
     }
+
+    /**
+     * A gallery's day chip (the web's `galleryFilter` label, `day: 'numeric', month: 'long'`, the year only where the
+     * Memory spans more than one): "May 3" / "3. Mai", "May 3, 2026" / "3. Mai 2026" — a local day ([LocalDays]' count).
+     */
+    fun dayLabel(epochDay: Long, withYear: Boolean, language: String): String {
+        val (y, m, d) = LocalDays.civil(epochDay)
+        return dayLabel(y, m, d, withYear, language)
+    }
+
+    private fun dayLabel(y: Int, m: Int, d: Int, withYear: Boolean, language: String): String =
+        if (german(language)) "$d. ${MONTHS_LONG_DE[m - 1]}${if (withYear) " $y" else ""}"
+        else "${MONTHS_LONG_EN[m - 1]} $d${if (withYear) ", $y" else ""}"
+
+    /** The local day an instant falls on as [dayLabel] writes it. */
+    fun dayLabelOf(epochMs: Long, withYear: Boolean, language: String): String = dayLabel(LocalDays.dayOf(epochMs), withYear, language)
+
+    private val MONTHS_LONG_EN = listOf(
+        "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December",
+    )
+    private val MONTHS_LONG_DE = listOf(
+        "Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember",
+    )
 
     private fun mediumDay(y: Int, m: Int, d: Int, language: String): String =
         if (german(language)) "${two(d)}.${two(m)}.$y" else "${MONTHS[m - 1]} $d, $y"

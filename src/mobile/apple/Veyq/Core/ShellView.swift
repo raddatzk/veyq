@@ -415,8 +415,8 @@ struct Bar: View {
         #if os(macOS)
         // a download's import an upload offered (ADR 0152 decision 1); its imported line said once the sheet is gone
         .sheet(item: Binding(get: { model.importing }, set: { model.importing = $0 }), onDismiss: {
-            if let line = model.importedLine, !line.isEmpty { model.notice = AppModel.Notice(text: line) }
-            model.importedLine = nil
+            model.show(model.importedLine)
+            model.importedLine = []
         }) { ImportSheet(model: model, dialog: $0.dialog) }
         #endif
         // what the model says once (an upload's refusal, its "Replace anyway")
@@ -864,7 +864,7 @@ struct ObjectRow: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(ref.name).fontWeight(.bold).foregroundStyle(Role.text)
-                    if let d = details[ref.nodeId], !d.isEmpty { Text(d.joined(separator: " · ")).font(.caption).foregroundStyle(Role.muted) }
+                    if let d = details[ref.nodeId], !d.isEmpty { Text(joinedLine(d)).font(.caption).foregroundStyle(Role.muted) }
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Role.muted)
@@ -1155,10 +1155,10 @@ struct ObjectPlaceholder: View {
 /// open (nil: it closes), its notice handed to `said` once it closed; queued offline it closes (it shows where it was made).
 /// A save that answered nothing (its task cancelled) is never taken as made: the dialog stays open saying it was not saved.
 @MainActor
-func nameAnswered(_ answer: NameAnswer?, said: (String) -> Void) -> String? {
+func nameAnswered(_ answer: NameAnswer?, said: (VeyqCore.Notice) -> Void) -> String? {
     guard let answer else { return say(.nodeSaveFailed) }
     if let problem = answer.problem { return say(notice: problem) }
-    if let n = answer.notice { said(say(notice: n)) }
+    if let n = answer.notice { said(n) }
     return nil
 }
 

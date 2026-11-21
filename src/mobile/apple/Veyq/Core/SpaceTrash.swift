@@ -92,13 +92,8 @@ struct SpaceTrashSheet: View {
         .padding(.vertical, 4)
     }
 
-    /// The day of a server instant (ISO 8601), in the device's words.
-    private static func day(_ instant: String) -> String {
-        let parse = ISO8601DateFormatter()
-        parse.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let date = parse.date(from: instant) ?? ISO8601DateFormatter().date(from: instant)
-        return date.map { $0.formatted(date: .abbreviated, time: .omitted) } ?? String(instant.prefix(10))
-    }
+    /// The local day of a server instant (ISO 8601), as the web writes a day (core's `Shown.dayOf`).
+    private static func day(_ instant: String) -> String { shownDayOf(instant) }
 }
 
 /// Core's trash sheet held for SwiftUI: its state mirrored on the main actor as it changes.

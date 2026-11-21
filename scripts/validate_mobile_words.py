@@ -275,7 +275,7 @@ def check_manifests(root: Path) -> list[str]:
 
 # platform-format (ADR 0154 decisions 4 and 5): switched on per platform by its phase of
 # cr-apps-notices-and-formats-from-the-core; each platform's own durations and formatters are gone then.
-PLATFORM_FORMAT_ON: set[str] = {"android"}
+PLATFORM_FORMAT_ON: set[str] = {"android", "apple"}
 # (platform, file relative to src/mobile, the matched text) a platform may keep, each with why.
 PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {
     ("android", "android/src/main/kotlin/me/raddatz/veyq/mobile/android/core/NoticeHost.kt", "SnackbarDuration.Indefinite"):
@@ -287,6 +287,18 @@ PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {
         "a layout poll while the search's section is scrolled into view, no notice's",
     ("android", "android/src/debug/kotlin/me/raddatz/veyq/mobile/android/DevAudio.kt", "delay(1500)"):
         "a debug build's playback probe lets a deck play before it reads the position, no notice's",
+    ("apple", "apple/Veyq/Core/AppModel.swift", ".currency(code:"):
+        "the Pot create sheet's own `currency(code:)` — a currency picked, nothing formatted",
+    ("apple", "apple/Veyq/Core/MusicPlayback.swift", ".milliseconds(2"):
+        "a fade's 25 ms step (ADR 0142 decision 2: steps of at most 50 ms) — the player's timer, no notice's",
+    ("apple", "apple/Veyq/Core/QrCamera.swift", ".milliseconds(1"):
+        "the debug test camera's frame offered ten times a second (`VEYQ_DEV_CAMERA`) — no notice's",
+    ("apple", "apple/Veyq/Core/SettingsView.swift", ".seconds(3"):
+        "how long an anchored Settings section is scrolled to again as rows arrive — a layout's settle, no notice's",
+    ("apple", "apple/Veyq/DevAudio.swift", "Task.sleep(for: ."):
+        "a debug build's audio probe (`#if DEBUG`) waiting for its deck — no notice's",
+    ("apple", "apple/Veyq/DevLogin.swift", "Task.sleep(for: ."):
+        "a debug build's dev sign-in (`#if DEBUG`) waiting for the screens it drives — no notice's",
 }
 
 _SEP = re.compile(r'"[^"\n]* \u00b7 [^"\n]*"')
