@@ -131,8 +131,30 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   — the phases' work. Every guard green, `validate_guard_gaps.py` run once (104 cases hold). **Open:** a Swift `switch`
   over a Kotlin enum is no exhaustive one and needs `default:` to compile (#1050) — Apple's phase needs an exhaustive Swift
   form first.
-- [ ] **4 Android** — every plan drawn in the core UI; the guard on for Android. · Done when: `:android:assembleDebug`,
+- [x] **4 Android** — every plan drawn in the core UI; the guard on for Android. · Done when: `:android:assembleDebug`,
   the words, guidelines, direction and structure guards green.
+  **Built** (2026-11-21). The header's runner (`core/NodeHeader.kt` `nodeActions`) and its icons are exhaustive `when`s over
+  `HeaderAction` (core's dialogs, the page's own entries from its `HeaderContribution`); a Memory's page hands all of
+  `GalleryModel.headerActions` (its Upload now the header's, the FAB the chapter's — a guest's link page, which has no core
+  header, keeps its upload there), a file's `FileModel.Header.own`. The level's New is `LevelPlan.creates` (the FAB) and its
+  tools `LevelPlan.tools` in the toolbar (the trash, then the view switch); the drawer's New is the `DrawerSection.NEW` arm
+  (`drawerCreates`, below the switcher's Home), `requestNew` typed by `Create`. An application's list draws no New of its
+  own any more — the plan offers none there (Expenses' *New pot* and Memories' *New Memory* FABs went; the drawer's New
+  makes both). Settings is `State.sections(…)` drawn whole (the account section split into `ACCOUNT` and `EMAIL`, Sign out
+  its own last section); the sign-in `SignInPlan.entries`; a level row's and tile's long press opens `rowPlan`'s menu
+  (`LevelRowMenu`, the header's runner); a medium tile's long press `tileActions`; a link row `ShareSheet.rowActions`
+  (the copy its button, the system's share sheet its menu's first item). **Core addition:** `GuestLevel.creates` (a guest's
+  level New, a folder then files), held in `GuestDoorsTest` (bitten: the order swapped → red). Guard on for Android
+  (`PLATFORMS`); bites, each red alone and restored with `/bin/cp -f`: an `else ->` over `LevelTool` (a), a `listOf` of two
+  `Create`s (b), a `.filter` on `SignInPlan.entries` (c). Smoke on a throwaway API 36 AVD as a throwaway account (both
+  erased): sign-in Submit first then show, scan, kit open, kit scan, *Open a link*; Home's toolbar share, Trash, view;
+  the level New's six entries; a folder's header (Delete last) and its tile's long-press menu (rename, move, …, report,
+  delete); the drawer's New below Home (folder, Pot, Memory, bookmark); Settings appearance, maps, storage, sessions,
+  this device, account, email, password, add a device, security, profile, erase, sign out; a Memory's header (Favorite,
+  Add photos; menu share, download, banner, …, Delete last) and FAB *Add chapter*; a link row (copy; Share, Edit, Renew,
+  Revoke). **Unclicked:** a medium tile's menu (no medium uploaded), a file's, a Pot's and a bookmark's header.
+  **Open:** a guest's link pages still draw only the gallery's music from `headerActions` (`GuestMusicAction`), not the
+  whole plan — the guard reads `.none {}` as no filter; phase 8's guest pass is where it shows.
 - [ ] **5 Apple** — the same. · Done when: both Apple builds green, the guards green.
 - [ ] **6 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green, the guards green.
 - [ ] **7 Windows** — the same; `CS8509`/`CS8524` as errors. · Done when: `python3 windows/run.py build` green on the
