@@ -79,6 +79,8 @@ enum class NoticeKind {
         private val SAID_WORDS = setOf(
             Msg.COPY_DONE, Msg.MOVE_MOVED, Msg.DOWNLOAD_DONE, Msg.DOWNLOAD_CANCELLED, Msg.IMPORT_IMPORTED,
             Msg.IMPORT_IMPORTED_LEFT_OUT, Msg.OFFLINE_SENT,
+            // a platform's own success, said where its own action went through: a link kept, receipts saved
+            Msg.LINK_KEPT, Msg.RECEIPTS_SAVED,
         )
 
         /** The words that offer an undo (the web's `showUndo`). */
@@ -90,6 +92,12 @@ enum class NoticeKind {
             in UNDO_WORDS -> UNDO
             else -> HELD
         }
+
+        /**
+         * Every word whose kind is not [HELD], by its catalog key: what a host across the bridge reads once to say a word
+         * of its own as the core would ([of]).
+         */
+        val notHeld: Map<String, NoticeKind> get() = SAID_WORDS.associate { it.key to SAID } + UNDO_WORDS.associate { it.key to UNDO }
     }
 }
 

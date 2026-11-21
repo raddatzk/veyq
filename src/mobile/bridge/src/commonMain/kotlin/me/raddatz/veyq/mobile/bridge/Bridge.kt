@@ -55,6 +55,7 @@ import me.raddatz.veyq.mobile.blob.pathName
 import me.raddatz.veyq.mobile.words.Notices
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.Amount
 import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.ShellWords
@@ -818,6 +819,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 me.raddatz.veyq.mobile.words.Notice.SAID_MS, ShellModel.TRASH_UNDO_MS,
                 me.raddatz.veyq.mobile.words.Notice.COPIED_MS, me.raddatz.veyq.mobile.words.Notice.NOTHING_PLAYS_MS,
             )
+            Call.ShownSeparator -> Answer.Name(me.raddatz.veyq.mobile.words.Shown.SEPARATOR)
             is Call.SessionSignIn -> opened(session.signIn(call.server, call.email, call.password, call.secretKey)).also { managed(parts) }
             is Call.SessionStaySignedIn -> (session.stay(call.level)?.answer() ?: Answer.Refused(Answer.Why.NO_OFFER)).also { managed(parts) }
             Call.SessionNotNow -> if (session.notNow()) Answer.Done else Answer.Refused(Answer.Why.NO_OFFER)
@@ -3167,7 +3169,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 activity = e.activity, dash = e.dash, fileName = e.fileName, color = e.color, status = TrackStatus.valueOf(e.status.name),
                 facts = e.facts.map { f ->
                     when (f) {
-                        is me.raddatz.veyq.mobile.memories.tracks.TrackFacts.Fact.Distance -> TrackFactShown(f.value, f.kilometres, null)
+                        is me.raddatz.veyq.mobile.memories.tracks.TrackFacts.Fact.Distance -> TrackFactShown(
+                            f.value, f.kilometres,
+                            // the distance in words with its number written (`Shown.number` through an [Amount] without a currency)
+                            if (f.kilometres) Notice(Msg.TRACK_DISTANCE_KM, Amount(kotlin.math.round(f.value * 10).toLong(), null, 1))
+                            else Notice(Msg.TRACK_DISTANCE_M, Amount(kotlin.math.round(f.value).toLong(), null, 0)),
+                        )
                         is me.raddatz.veyq.mobile.memories.tracks.TrackFacts.Fact.Words -> TrackFactShown(null, false, f.notice)
                     }
                 },

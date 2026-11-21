@@ -107,7 +107,7 @@ class WireTest {
     private val samples: Map<KSerializer<*>, List<Any>> = mapOf(
         Config.serializer() to listOf(Config("Fedora 44", 0, ""), Config("WIN-VM", 0x2051C, "veyq wants to open your account", "C:\\Users\\p\\AppData\\Local\\veyq\\offline"), Config("Fedora 44", 0, "", "/home/p/.local/share/veyq/offline"), Config("Fedora 44", 0, "", null, "de"), Config("Fedora 44", 0, "", null, "en", netLog = true)),
         Call.serializer() to listOf(
-            Call.SessionStart, Call.NoticeLifetimes, Call.SessionSignIn("veyq.localhost:8080", "p@example.org", "typed", "A3-TYPED"),
+            Call.SessionStart, Call.NoticeLifetimes, Call.ShownSeparator, Call.SessionSignIn("veyq.localhost:8080", "p@example.org", "typed", "A3-TYPED"),
             Call.SessionStaySignedIn(StaySignedIn.PRESENCE), Call.SessionStaySignedIn(StaySignedIn.LOGIN), Call.SessionNotNow,
             Call.ManageStaySignedIn("veyq.localhost#user-1", StaySignedIn.LOGIN), Call.ManagePasswordTrust("veyq.localhost#user-1", "typed"),
             Call.SessionUnlock("typed"), Call.SessionUnlock(""), Call.SessionOtherAccount, Call.SessionForgetDevice("veyq.localhost#user-1"),

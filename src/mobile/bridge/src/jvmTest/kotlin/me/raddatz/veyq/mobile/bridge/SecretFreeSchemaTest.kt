@@ -147,10 +147,10 @@ class SecretFreeSchemaTest {
         val fields = schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }.groupBy({ it.owner }, { it.name })
         fun of(suffix: String) = fields.entries.single { (owner, _) -> owner == suffix || owner.endsWith(".$suffix") }.value
         assertEquals(listOf("asOf"), of("OfflineAsOf"), "a screen offline says more than as of when")
-        assertEquals(listOf("limit", "automatic", "pinned", "free", "field", "items"), of("AccountSettings.Storage"), "the Settings section's storage says more than sizes, its field and its items")
+        assertEquals(listOf("limit", "automatic", "pinned", "free", "field", "items", "automaticSize", "pinnedSize", "freeSize"), of("AccountSettings.Storage"), "the Settings section's storage says more than sizes, its field and its items")
         assertEquals(listOf("amount", "unit", "off"), of("LimitField"))
         assertEquals(
-            listOf("tenant", "scope", "node", "kind", "title", "status", "said", "bytes"), of("OfflineItem"),
+            listOf("tenant", "scope", "node", "kind", "title", "status", "said", "bytes", "size"), of("OfflineItem"),
             "a pinned item says more than its ids, its name from the held tree, its state and its size",
         )
         assertEquals(listOf("on", "status", "said", "done", "total", "asking", "question"), of("OfflineToggle"), "a node's toggle says more than its state and sizes")
@@ -211,7 +211,7 @@ class SecretFreeSchemaTest {
         )
         assertEquals(listOf("userId", "name", "ticked", "togglable"), of("MemberShown"))
         assertEquals(listOf("atMs", "corrected", "originalMs", "saving", "said", "saved"), of("CaptureTimeShown"))
-        assertEquals(listOf("hasBanner", "picking", "picked", "saving", "progress", "said", "done", "canSave", "canRemove"), of("BannerEditorShown"))
+        assertEquals(listOf("hasBanner", "picking", "picked", "saving", "progress", "said", "done", "canSave", "canRemove", "tooLargeBound"), of("BannerEditorShown"))
         assertEquals(listOf("medium", "mediaType", "pick"), of("BannerPickedShown"), "a picked file says more than its medium and type: its path echoed?")
         assertEquals(listOf("width", "height", "wide", "surroundWidth", "surroundHeight"), of("BannerFramed"))
         assertEquals(listOf("userId", "name", "former", "picture", "username", "sections", "memories"), of("PersonShown"))
@@ -239,7 +239,7 @@ class SecretFreeSchemaTest {
             of("GalleryRow"), "a gallery row says more than its medium's facts and its badge",
         )
         assertEquals(listOf("offered", "mode", "modeOffered", "chips", "text", "suggestions", "shown", "total"), of("FilterShown"))
-        assertEquals(listOf("chip", "label", "rest"), of("ChipShown"))
+        assertEquals(listOf("chip", "label", "rest", "labelShown"), of("ChipShown"))
         assertEquals(listOf("rows", "selected", "media", "createsSub", "renames", "moveTargets", "loading", "failed", "refused"), of("BucketsShown"))
         assertEquals(listOf("bucketId", "label", "depth", "mediaCount", "isPrimary", "own"), of("BucketRowShown"))
         assertEquals(listOf("x", "y", "size"), of("TileFrame"))

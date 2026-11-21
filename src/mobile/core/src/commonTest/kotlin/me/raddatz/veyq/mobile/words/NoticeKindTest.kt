@@ -40,6 +40,15 @@ class NoticeKindTest {
         for (m in listOf(Msg.COPY_DONE, Msg.MOVE_MOVED, Msg.IMPORT_IMPORTED, Msg.OFFLINE_SENT, Msg.DOWNLOAD_CANCELLED)) assertEquals(NoticeKind.SAID, NoticeKind.of(m), "$m")
     }
 
+    /** A platform's own success (Windows' link kept, its receipts saved) lives as the core's table says, read by key. */
+    @Test fun aPlatformsOwnSuccessIsInTheTableAHostReads() {
+        for (m in listOf(Msg.LINK_KEPT, Msg.RECEIPTS_SAVED)) assertEquals(NoticeKind.SAID, NoticeKind.of(m), "$m")
+        assertEquals(NoticeKind.SAID, NoticeKind.notHeld["link_kept"])
+        assertEquals(NoticeKind.UNDO, NoticeKind.notHeld["trash_moved"])
+        assertEquals(null, NoticeKind.notHeld["receipts_not_saved"])
+        assertEquals(Msg.entries.filter { NoticeKind.of(it) != NoticeKind.HELD }.associate { it.key to NoticeKind.of(it) }, NoticeKind.notHeld)
+    }
+
     @Test fun aSiteSaysOtherwiseAndTheKindIsPartOfTheNotice() {
         val undo = Notice(Msg.MOVE_MOVED, "a", "b").living(NoticeKind.UNDO)
         assertEquals(NoticeKind.UNDO, undo.kind)

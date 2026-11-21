@@ -48,6 +48,12 @@ object BannerWrite {
     /** The largest picked image taken as a banner source (decoded whole on the device): the web's cover bound. */
     const val MAX_IMAGE_BYTES = 40L * 1024 * 1024
 
+    /**
+     * [MAX_IMAGE_BYTES] as its words name it (`memory_banner_too_large`): "40 MB", the web's BannerDialog's — the binary
+     * bound named in decimal units, so written by `Shown.size` it reads as the web's does.
+     */
+    const val MAX_IMAGE_NAMED = 40_000_000L
+
     /** An image above [MAX_IMAGE_BYTES] (`banner_too_large`). */
     const val TOO_LARGE = "banner_too_large"
 

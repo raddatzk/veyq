@@ -521,7 +521,11 @@ class PotView(session: Source) {
 
     /** An entry row with its line and badge. */
     @Serializable
-    class ShownEntry(val row: EntryRow, val line: List<Piece>, val badge: Badge?, val unsentMark: Notice? = null)
+    class ShownEntry(
+        val row: EntryRow, val line: List<Piece>, val badge: Badge?, val unsentMark: Notice? = null,
+        /** [row]'s amount in the base currency as the row shows it (a [Piece.Money], written on the wire). */
+        val amountShown: Piece? = null,
+    )
 
     /** A balance row with its person's name as a row shows it ([person]), its words and what makes it. */
     @Serializable
@@ -529,11 +533,11 @@ class PotView(session: Source) {
 
     /** A settle-up row with its sentence. */
     @Serializable
-    class ShownSettle(val row: SettleRow, val pays: Notice)
+    class ShownSettle(val row: SettleRow, val pays: Notice, val amountShown: Piece? = null)
 
     /** A category's total with its name. */
     @Serializable
-    class ShownCategory(val row: CategoryRow, val label: Piece)
+    class ShownCategory(val row: CategoryRow, val label: Piece, val amountShown: Piece? = null)
 
     /** One of the Settings tab's people with their facts. */
     @Serializable
@@ -569,18 +573,23 @@ class PotView(session: Source) {
         val offersEntries: Boolean = false,
         /** A settle-up row's *Record* is offered ([canRecord]): never offline. */
         val canRecord: Boolean = false,
+        /** [total] as the view shows it (a [Piece.Money] in the base currency). */
+        val totalShown: Piece? = null,
     )
+
+    /** [amount] minor units of the base currency as a row shows them (written on the wire, `Shown.money`). */
+    private fun money(amount: Long): Piece = Piece.Money(amount, currency, minorUnits)
 
     /** What this view shows ([Shown]). */
     fun shown(): Shown = Shown(
         name, subtitle, currency, minorUnits, ready, canWrite,
-        entries.map { ShownEntry(it, line(it), badge(it), unsentMark(it)) },
-        deletedEntries.map { ShownEntry(it, line(it), null) },
+        entries.map { ShownEntry(it, line(it), badge(it), unsentMark(it), it.amount?.let(::money)) },
+        deletedEntries.map { ShownEntry(it, line(it), null, amountShown = it.amount?.let(::money)) },
         balances.map { ShownBalance(it, person(it.name), balance(it), balanceFacts(it)) },
-        settleUp.map { ShownSettle(it, pays(it)) },
+        settleUp.map { ShownSettle(it, pays(it), money(it.amount)) },
         canRecordAll,
         total,
-        byCategory.map { ShownCategory(it, categoryLabel(it.id)) },
+        byCategory.map { ShownCategory(it, categoryLabel(it.id), money(it.amount)) },
         personEntries.map { ShownPerson(it, personFacts(it)) },
         deletedPeople,
         missing.map(::missingName),
@@ -588,6 +597,7 @@ class PotView(session: Source) {
         balancesUnsent,
         offersEntries,
         canRecord,
+        money(total),
     )
 
     /** A view on the wire: its [Shown], under the view's own name; there is no view to read back from it. */
