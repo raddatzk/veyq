@@ -7,7 +7,10 @@
 // core's report sheet (ReportDialog), the cover its dialog (CoverDialog); a folder's download goes where the save picker says
 // (Header.Download, under the core's archive name), a Pot's through its page (Pot.Download), a file's — the file itself,
 // with its progress and Cancel — through its page (File.Save, FilePage). What is offered, in which
-// order and with which words is the core's (HeaderPlan: what is drawn so far, and the bar's groups).
+// order and with which words is the core's: every entry of the plan is drawn, in its order (HeaderPlan: the bar's groups;
+// ADR 0154 decision 2) — a page's own entries (a Memory's banner and Add photos, a file's Replace, a kept link's Open on its
+// own page and Report shared content) done by that page (PageHooks). A level row's menu runs its entries through a header
+// of that row's node (Run, RowMenu).
 //
 // "Available offline" (ADR 0140 decision 10) is an AppBarToggleButton among the secondary commands, checked as the core's
 // offline.on says, the pin's status line under it ("Downloading 3 MB of 12 MB", "On this device"); turning it on asks first,
@@ -39,10 +42,11 @@ internal sealed class NodeHeader : IDisposable
     private readonly Action<bool, string> _say;
     private long? _id;
     private Watch? _watch;
-    private Facts? _later;
-    private long? _laterFile;
-    private long? _laterGallery;
-    private bool _laterSet;
+    private Facts? _facts;
+    private long? _file;
+    private long? _gallery;
+    private long? _bookmark;
+    private bool _factsPending;
     private bool _closed;
     private bool _seenUndo;
     private bool _offlineAsked;
@@ -93,12 +97,9 @@ internal sealed class NodeHeader : IDisposable
         _hero.SizeChanged += (_, e) => { if (e.NewSize.Width > 0) _hero.Height = e.NewSize.Width * 9 / 16; };
         _hero.Click += (_, _) =>
         {
-            if (Shown is { plan: { } plan } s && _id is { } header && new[] { plan.buttons, plan.menu, plan.last }.Any(g => g.Any(a => a.id == HeaderAction.Cover)))
-            {
-                _heroRead = false; // a new picture may come under the crop it had
-                CoverDialog.Open(_window, header, s.node, s.cover);
-            }
+            if (Shown is { plan: { } plan } s && new[] { plan.buttons, plan.menu, plan.last }.Any(g => g.Any(a => a.id == HeaderAction.Cover))) OpenCover(s);
         };
+        _facts = facts;
         Open(facts);
     }
 
@@ -125,7 +126,7 @@ internal sealed class NodeHeader : IDisposable
             return;
         }
         _id = header;
-        if (_laterSet) Act.Send(new Call.HeaderFacts { header = header, facts = _later, file = _laterFile, gallery = _laterGallery, bookmark = null });
+        if (_factsPending) SendFacts();
         _watch = Core.Watch(new Watched.Header { header = header }, update =>
         {
             if (_closed || update is not Update.Header h) return;
@@ -208,48 +209,64 @@ internal sealed class NodeHeader : IDisposable
         }
     }
 
-    private static string Ids(Plan? p) => p is null ? "" : string.Join(" | ", new[] { p.buttons, p.menu, p.last }.Select(g => string.Join(",", g.Select(a => HeaderPlan.Id(a.id)))));
+    private static string Ids(Plan? p) => p is null ? "" : string.Join(" | ", new[] { p.buttons, p.menu, p.last }.Select(g => string.Join(",", g.Select(a => HeaderPlan.Wire(a.id)))));
 
     /// <summary>What the kind's page knows now (a Pot read: whether it takes writes) and, for a file's page, its id
     /// <paramref name="file"/>, for a Memory's or a chapter's its gallery's <paramref name="gallery"/>: the page's own
-    /// actions (Replace, Add photos) join the plan.</summary>
+    /// entries (Replace, Add photos, the banner) join the plan.</summary>
     public void Facts(Facts? facts, long? file = null, long? gallery = null)
     {
-        if (_id is { } header) Act.Send(new Call.HeaderFacts { header = header, facts = facts, file = file, gallery = gallery, bookmark = null });
-        else (_later, _laterFile, _laterGallery, _laterSet) = (facts, file, gallery, true);
+        (_facts, _file, _gallery) = (facts, file, gallery);
+        SendFacts();
+    }
+
+    /// <summary>A kept link's page, opened as <paramref name="bookmark"/> (Bookmark.Open): its own entries (Open on its own
+    /// page, Report shared content) join the plan once its meta reads.</summary>
+    public void Bookmark(long bookmark)
+    {
+        _bookmark = bookmark;
+        SendFacts();
+    }
+
+    private void SendFacts()
+    {
+        if (_id is { } header) Act.Send(new Call.HeaderFacts { header = header, facts = _facts, file = _file, gallery = _gallery, bookmark = _bookmark });
+        else _factsPending = true;
     }
 
     /// <summary>The header's commands for the bar: its primary ones (the plan's buttons) and its secondary ones (the
-    /// menu, a separator, the last group), from the plan's groups (HeaderPlan). <paramref name="pageDownload"/> is the
-    /// page's own download where it has one (HeaderPlan.ByPage: a Pot's, a file's Save a copy), <paramref name="pageReplace"/>
-    /// a file page's own Replace, <paramref name="pageUpload"/> a Memory's page's own Add photos, <paramref name="pageMusic"/>
-    /// its music's play or stop (Gallery.Music, ADR 0142 decision 6), <paramref name="pageOwnPage"/> a kept link's page's
-    /// Open on its own page (ADR 0150 decision 6).</summary>
-    public (List<ICommandBarElement> Primary, List<ICommandBarElement> Secondary) Commands(Action pageDownload, Action? pageReplace = null, Action? pageUpload = null, Action? pageMusic = null, Action? pageOwnPage = null)
+    /// menu, a separator, the last group) — every entry of the plan, in its order (HeaderPlan); a page's own entries done
+    /// by <paramref name="page"/>.</summary>
+    public (List<ICommandBarElement> Primary, List<ICommandBarElement> Secondary) Commands(PageHooks page)
     {
         var primary = new List<ICommandBarElement>();
         var secondary = new List<ICommandBarElement>();
         if (Shown is not { gone: false, plan: { } plan } s) return (primary, secondary);
-        var kind = s.node.kind;
-        foreach (var a in HeaderPlan.Primary(plan, kind)) primary.Add(Command(a, s, pageDownload, pageReplace, pageUpload, pageMusic, pageOwnPage));
-        foreach (var a in HeaderPlan.Secondary(plan, kind))
+        foreach (var a in HeaderPlan.Primary(plan)) primary.AddRange(Draw(a, s, page));
+        foreach (var a in HeaderPlan.Secondary(plan))
         {
-            if (a is { id: HeaderAction.Offline })
-            {
-                secondary.AddRange(Offline(a, s));
-                continue;
-            }
-            secondary.Add(a is null ? new AppBarSeparator() : Command(a, s, pageDownload, pageReplace, pageUpload, pageMusic, pageOwnPage));
+            if (a is null) secondary.Add(new AppBarSeparator());
+            else secondary.AddRange(Draw(a, s, page));
         }
         return (primary, secondary);
     }
+
+    /// <summary>An entry's controls: "Available offline" a toggle with its status line, every other a command.</summary>
+    private IEnumerable<ICommandBarElement> Draw(PlanAction a, HeaderShown s, PageHooks page) => a.id switch
+    {
+        HeaderAction.Offline => Offline(a, s),
+        HeaderAction.Favorite or HeaderAction.Share or HeaderAction.Rename or HeaderAction.Move or HeaderAction.Copy
+            or HeaderAction.Cover or HeaderAction.Download or HeaderAction.Report or HeaderAction.Delete or HeaderAction.Upload
+            or HeaderAction.Music or HeaderAction.Banner or HeaderAction.Replace or HeaderAction.Send or HeaderAction.OpenOwnPage
+            or HeaderAction.ReportShared => [Command(a, s, page)],
+    };
 
     /// <summary>"Available offline": a toggle checked as the core holds it — a click asks the core, whose state redraws it
     /// — and the pin's status line under it where it has one.</summary>
     private IEnumerable<ICommandBarElement> Offline(PlanAction a, HeaderShown s)
     {
         var on = s.offline?.on == true;
-        var toggle = new AppBarToggleButton { Icon = new SymbolIcon(Symbol.Download), Label = a.word is { } w ? Veyq.Core.Said.Key(w) : HeaderPlan.Id(a.id), IsChecked = on };
+        var toggle = new AppBarToggleButton { Icon = new SymbolIcon(Symbol.Download), Label = a.word is { } w ? Veyq.Core.Said.Key(w) : HeaderPlan.Wire(a.id), IsChecked = on };
         AutomationProperties.SetAutomationId(toggle, "header:offline");
         // Checked/Unchecked, not Click: UI Automation's Toggle (a screen reader's) raises no Click. The core's state, not
         // the toggle, checks it: put back at once, the next state redraws it
@@ -304,54 +321,73 @@ internal sealed class NodeHeader : IDisposable
             confirmed ? "Header.OfflineConfirm" : "Header.OfflineCancel");
     }
 
-    private AppBarButton Command(PlanAction a, HeaderShown s, Action pageDownload, Action? pageReplace, Action? pageUpload, Action? pageMusic, Action? pageOwnPage)
+    private AppBarButton Command(PlanAction a, HeaderShown s, PageHooks page)
     {
-        var id = HeaderPlan.Id(a.id);
-        var label = a.word is { } w ? Veyq.Core.Said.Key(w) : id;
-        var icon = id switch
-        {
-            "favorite" => new SymbolIcon(s.pinned == true ? Symbol.UnFavorite : Symbol.Favorite),
-            "download" => new SymbolIcon(Symbol.Download),
-            "rename" => new SymbolIcon(Symbol.Rename),
-            "delete" => new SymbolIcon(Symbol.Delete),
-            "move" => new SymbolIcon(Symbol.MoveToFolder),
-            "copy" => new SymbolIcon(Symbol.Copy),
-            "share" => new SymbolIcon(Symbol.Share),
-            "report" => new SymbolIcon(Symbol.Flag),
-            "cover" => new SymbolIcon(Symbol.Pictures),
-            "replace" => new SymbolIcon(Symbol.Upload),
-            "upload" => new SymbolIcon(Symbol.Upload),
-            "open-own-page" => new SymbolIcon(Symbol.NewWindow),
-            // the music's play, or its stop while this node's music is the player's queue (the core's word says which)
-            "music" => new SymbolIcon(a.word == "music_stop" ? Symbol.Stop : Symbol.Audio),
-            _ => new SymbolIcon(Symbol.More),
-        };
-        var button = new AppBarButton { Icon = icon, Label = label };
+        var id = HeaderPlan.Wire(a.id);
+        var button = new AppBarButton { Icon = Icon(a, s), Label = a.word is { } w ? Veyq.Core.Said.Key(w) : id };
         AutomationProperties.SetAutomationId(button, $"header:{id}");
-        button.Click += (_, _) =>
-        {
-            switch (id)
-            {
-                case "favorite": Pin(); break;
-                case "share": ShareDialog.Open(_window, s.node); break;
-                case "rename": Rename(s.node.name); break;
-                case "delete": Delete(); break;
-                case "download" when HeaderPlan.ByPage(id, s.node.kind): pageDownload(); break;
-                case "replace": pageReplace?.Invoke(); break;
-                case "upload": pageUpload?.Invoke(); break;
-                case "music": pageMusic?.Invoke(); break;
-                case "open-own-page": pageOwnPage?.Invoke(); break;
-                case "download": Download(); break;
-                case "move": MoveDialog.Open(_window, s.node, copy: false, UndoBar); break;
-                case "copy": MoveDialog.Open(_window, s.node, copy: true, UndoBar); break;
-                case "report": ReportDialog.Open(_window, s.node); break;
-                case "cover" when _id is { } header:
-                    _heroRead = false; // a new picture may come under the crop it had
-                    CoverDialog.Open(_window, header, s.node, s.cover);
-                    break;
-            }
-        };
+        button.Click += (_, _) => Run(a.id, page);
         return button;
+    }
+
+    /// <summary>An entry's icon, Fluent's symbol for what it does.</summary>
+    public static IconElement Icon(PlanAction a, HeaderShown? s) => a.id switch
+    {
+        HeaderAction.Favorite => new SymbolIcon(s?.pinned == true ? Symbol.UnFavorite : Symbol.Favorite),
+        HeaderAction.Share => new SymbolIcon(Symbol.Share),
+        HeaderAction.Rename => new SymbolIcon(Symbol.Rename),
+        HeaderAction.Move => new SymbolIcon(Symbol.MoveToFolder),
+        HeaderAction.Copy => new SymbolIcon(Symbol.Copy),
+        HeaderAction.Cover => new SymbolIcon(Symbol.Pictures),
+        HeaderAction.Download or HeaderAction.Offline => new SymbolIcon(Symbol.Download),
+        HeaderAction.Report or HeaderAction.ReportShared => new SymbolIcon(Symbol.Flag),
+        HeaderAction.Delete => new SymbolIcon(Symbol.Delete),
+        HeaderAction.Upload or HeaderAction.Replace => new SymbolIcon(Symbol.Upload),
+        // the music's play, or its stop while this node's music is the player's queue (the core's word says which)
+        HeaderAction.Music => new SymbolIcon(a.word == "music_stop" ? Symbol.Stop : Symbol.Audio),
+        // a Memory's banner (ADR 0144 decision 5): Segoe Fluent Icons' picture
+        HeaderAction.Banner => new FontIcon { Glyph = "\uE91B" },
+        HeaderAction.Send => new SymbolIcon(Symbol.Send),
+        HeaderAction.OpenOwnPage => new SymbolIcon(Symbol.NewWindow),
+    };
+
+    /// <summary>Does entry <paramref name="id"/> for this header's node: core's through its calls and sheets, a page's own
+    /// through <paramref name="page"/> (a row's menu has none: PageHooks.None, the header's own download serving it).</summary>
+    public void Run(HeaderAction id, PageHooks page)
+    {
+        if (Shown is not { } s) return;
+        Action act = id switch
+        {
+            HeaderAction.Favorite => Pin,
+            HeaderAction.Share => () => ShareDialog.Open(_window, s.node),
+            HeaderAction.Rename => () => Rename(s.node.name),
+            HeaderAction.Move => () => MoveDialog.Open(_window, s.node, copy: false, UndoBar),
+            HeaderAction.Copy => () => MoveDialog.Open(_window, s.node, copy: true, UndoBar),
+            HeaderAction.Cover => () => OpenCover(s),
+            HeaderAction.Download => page.Download is { } byPage && HeaderPlan.DownloadsByPage(s.node.kind) ? byPage : Download,
+            HeaderAction.Offline => ToggleOffline,
+            HeaderAction.Report => () => ReportDialog.Open(_window, s.node),
+            HeaderAction.Delete => Delete,
+            HeaderAction.Upload => ByPage(page.Upload, id),
+            HeaderAction.Music => ByPage(page.Music, id),
+            HeaderAction.Banner => ByPage(page.Banner, id),
+            HeaderAction.Replace => ByPage(page.Replace, id),
+            // "Send a copy" is a phone's share sheet: the core plans none where the platform hands nothing on (FileModel.shares)
+            HeaderAction.Send => ByPage(null, id),
+            HeaderAction.OpenOwnPage => ByPage(page.OwnPage, id),
+            HeaderAction.ReportShared => ByPage(page.ReportShared, id),
+        };
+        act();
+    }
+
+    /// <summary>A page's own entry: what the page does, or — where no page does it here — a line in the log.</summary>
+    private static Action ByPage(Action? doing, HeaderAction id) => doing ?? (() => Log.Write($"header {HeaderPlan.Wire(id)}: no page does it here"));
+
+    private void OpenCover(HeaderShown s)
+    {
+        if (_id is not { } header) return;
+        _heroRead = false; // a new picture may come under the crop it had
+        CoverDialog.Open(_window, header, s.node, s.cover);
     }
 
     /// <summary>The node as the web's ZIP: the save picker suggests the core's name, the core writes the file it chose and
@@ -491,4 +527,20 @@ internal sealed class NodeHeader : IDisposable
         if (_id is { } header) Act.Send(new Call.HeaderClose { header = header });
         _id = null;
     }
+}
+
+/// <summary>What a page does for its own entries of a header's plan (ADR 0154 decision 2): a Pot's and a file's download, a
+/// file's Replace, a Memory's Add photos, its music and its banner, a kept link's Open on its own page and Report shared
+/// content. Null: no page does it here (a row's menu: None).</summary>
+internal sealed record PageHooks
+{
+    public static readonly PageHooks None = new();
+
+    public Action? Download { get; init; }
+    public Action? Replace { get; init; }
+    public Action? Upload { get; init; }
+    public Action? Music { get; init; }
+    public Action? Banner { get; init; }
+    public Action? OwnPage { get; init; }
+    public Action? ReportShared { get; init; }
 }

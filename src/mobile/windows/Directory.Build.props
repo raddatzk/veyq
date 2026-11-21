@@ -5,6 +5,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- A switch expression over a plan's enum names every entry and has no discard (ADR 0154 decision 2,
+         scripts/validate_mobile_structure.py): an entry the core adds is CS8509 here until it is drawn — named an error
+         on its own, whatever TreatWarningsAsErrors says. CS8524 (an unnamed value, `(E)17`, not handled) is off: it asks
+         for exactly the discard that would swallow a new entry, and no such value crosses — the core writes an enum by
+         its serial name and JsonStringEnumConverter refuses a name it does not know (measured 2026-11-21 with dotnet
+         10.0.301: a switch naming every entry is CS8524 with it on, a switch missing one CS8509 with it off). -->
+    <WarningsAsErrors>$(WarningsAsErrors);CS8509</WarningsAsErrors>
+    <NoWarn>$(NoWarn);CS8524</NoWarn>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <!-- What the build writes but never keeps: the bridge's C#, the samples (src/mobile/build/generated, from Gradle). -->
     <VeyqGenerated Condition="'$(VeyqGenerated)' == ''">$(MSBuildThisFileDirectory)../build/generated/</VeyqGenerated>

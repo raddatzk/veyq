@@ -202,8 +202,23 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   `icon_of`, a `&[HeaderAction::…]` const, a `.filter` on `plan.buttons` — each red alone, restored. **Open:** the Rust
   `doer` test's bite did not reach the test (the Docker VM's disk full, the link failed — no space) and the live smoke did
   not run (the dev backend answered the throwaway's owner registration 500); both for phase 8.
-- [ ] **7 Windows** — the same; `CS8509`/`CS8524` as errors. · Done when: `python3 windows/run.py build` green on the
+- [x] **7 Windows** — the same; `CS8509`/`CS8524` as errors. · Done when: `python3 windows/run.py build` green on the
   VM, the guards green. **Bite:** a `HeaderAction` arm removed from the C# switch → the build red.
+  **Built** (2026-11-21). `HeaderPlan.Drawn` and the id whitelist gone; `NodeHeader.cs` draws every entry of the plan in
+  its order (buttons primary, then menu and last group secondary, Delete last), each a `switch` expression over
+  `HeaderAction` without a discard, a page's own entries done by that page (`PageHooks`); `HeaderPlan.Wire` the serial
+  name by an exhaustive switch. A level row's menu (`RowMenu.cs`, `Row.Plan` drawn whole, run through a header of the
+  row's node); the level's New (`ShellShown.level.creates`) and tools (`Trash` in the level's `CommandBar`), the drawer's
+  New the `DrawerSection.New` arm (made at the space's top, `Call.ShellCreateFolder.top = true`); New's entries an
+  exhaustive switch over `Create`; Settings draws `SettingsShown.sections` (Sign out among them), the sign-in `SignIn.Plan`
+  (submit first); a share link's `ShownLink.actions`. **Deviation:** `CS8509` an error, `CS8524` **off**, not an error — it
+  fires on a switch naming every entry (an unnamed `(E)17`) and so demands the very discard rule (a) refuses; no unnamed
+  value crosses the wire (`JsonStringEnumConverter` refuses an unknown name) — the reason in `Directory.Build.props`.
+  **Checks:** `windows/run.py build` green on the VM after merging phases 4–6 (Bridge tests 5/5, `Veyq.Tests` 80/80 + 1;
+  locally 4/5, 1 skipped); every guard green. **Bites:** a `_ =>` over `HeaderAction` in `HeaderPlan.Wire` → the guard
+  red, restored; the same switch with the `ReportShared` arm removed, compiled under `Directory.Build.props` → `CS8509`
+  red, complete → green (a scratch project, not a second VM build). **Open:** no live smoke (the dev backend's DB disk
+  full); for phase 8.
 - [ ] **8 the passes** — § Passes.
 - [ ] **9 harvest** — ADR 0154's `Built:` (decision 2, the structure guard); `native-apps.md`; `src/mobile/CLAUDE.md`
   § Each platform's guidelines states what is the platform's (the look) and what is the plan's; the Use pages that name

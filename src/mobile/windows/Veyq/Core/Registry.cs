@@ -115,8 +115,8 @@ internal abstract class KindBody : IDisposable
 
     public virtual void Music() { }
 
-    /// <summary>The page's own commands behind the bar's More, after the header's.</summary>
-    public virtual IEnumerable<ICommandBarElement> Secondary() => [];
+    /// <summary>The header's banner entry (HeaderAction.Banner: a Memory's Add or Change banner).</summary>
+    public virtual void Banner() { }
 
     /// <summary>A received link's guest write, first in its bar (<paramref name="write"/> asks a guest's name first
     /// where the write needs one); null while the page offers none.</summary>
@@ -156,9 +156,6 @@ internal abstract class ApplicationList
 
     /// <summary>The list left the screen (what it holds open closes).</summary>
     public abstract void Close();
-
-    /// <summary>Whether a level's View (List or Tiles) is offered beside what it shows.</summary>
-    public virtual bool OffersView(ShellShown shown) => true;
 }
 
 /// <summary>What New hands an application's create: the window, how it went, the shell's state as it is when asked.</summary>

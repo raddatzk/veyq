@@ -82,15 +82,8 @@ internal static class MemoriesUi
 
         public override void Music() => _page.Music();
 
-        // a Memory's banner (ADR 0144 decision 5): "Add banner" or "Change banner", where its gallery offers the dialog
-        public override IEnumerable<ICommandBarElement> Secondary()
-        {
-            if (_page.Shown is not { editsBanner: true } offers) yield break;
-            var banner = new AppBarButton { Icon = new FontIcon { Glyph = "" }, Label = offers.banner is null ? Words.MemoryBannerAdd() : Words.MemoryBannerChange() };
-            AutomationProperties.SetAutomationId(banner, "memory-banner-edit");
-            banner.Click += (_, _) => _page.EditBanner();
-            yield return banner;
-        }
+        // a Memory's banner (ADR 0144 decision 5): its header's entry, where the gallery's plan offers it
+        public override void Banner() => _page.EditBanner();
 
         public override void Dispose() => _page.Dispose();
     }

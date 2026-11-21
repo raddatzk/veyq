@@ -315,7 +315,9 @@ A Gradle build of its own, run through its own wrapper.
   place of WinUI's generated one: with package identity one instance, a second activation handed to the running one by
   `AppInstance`), `App.xaml.cs`, `DeepLinks` (a `veyq:` link the MSIX's `windows.protocol` hands in, through
   `Call.DeepLink`: *Open a link* or the window in front, ADR 0150 § O), `MainWindow`, one class per screen (`SignInView`, `ShellView` with Search, `HomeView`, `PotPage` with its download;
-  a node's header `NodeHeader` with `HeaderPlan`, and its sheets `TrashDialog`, `MoveDialog`, `ShareDialog` with
+  a node's header `NodeHeader` with `HeaderPlan` (every entry of the core's plan, a `switch` expression over
+  `HeaderAction` without a discard — `CS8509` an error, `CS8524` off, `Directory.Build.props`), a level row's menu
+  `RowMenu` (`Row.Plan`, run through a header of the row's node), and its sheets `TrashDialog`, `MoveDialog`, `ShareDialog` with
   `ShareDays`, `ReportDialog`, `CoverDialog`, every `ContentDialog` shown through `Dialogs.Show`),
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
   each picture through `BitmapImage` by `PictureDecode`, a WebP WIC refuses by the core; sets it on every `PersonPicture` of that id), `Act` (sends a
@@ -1079,7 +1081,8 @@ subtitle, its rights narrowing, its copy and download doors and own actions, and
 actions are core's `NodeHeaderModel` and its sheets core's `TrashSheet`, `MoveSheet`, `ShareSheet` and `ReportSheet`
 (ADR 0136's Consequences): an app draws them and decides nothing. Linux (`header.rs`) draws every entry of the plan,
 each `HeaderAction` one arm (`header::doer`: the header's own call or the page's window action); Windows (`NodeHeader.cs`)
-draws only the ids in `HeaderPlan.Drawn` until its phase of cr-apps-structure-from-core-plans. A new kind registers
+draws every entry of it too (ADR 0154 decision 2, `scripts/validate_mobile_structure.py`), a page's own ones done by that
+page (`PageHooks`). A new kind registers
 there and its header order in `AppKinds.headerOrder`; it never builds header actions of its own. Its body places core's head
 first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `NodeHeroRow()` (Apple) —, never a cover of its own.
 

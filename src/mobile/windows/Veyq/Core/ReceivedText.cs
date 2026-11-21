@@ -65,7 +65,4 @@ internal static class ReceivedText
         var key = JsonSerializer.Serialize(m).Trim('"').ToLowerInvariant();
         return Words.Say(key, Array.Empty<object>()) ?? key;
     }
-
-    /// <summary>Whether a kept link's page offers Open on its own page and Report shared content: once its meta read.</summary>
-    public static bool BookmarkActions(BookmarkState state) => state is BookmarkState.InPlace or BookmarkState.OnItsOwn;
 }
