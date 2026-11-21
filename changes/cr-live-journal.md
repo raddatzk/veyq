@@ -17,7 +17,8 @@ invariants:
 
 > **Status: planned, deferred by the owner 2026-11-21** — the journal waits behind the web's move onto the core
 > ([ADR 0155](../docs/decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)
-> P2, [cr-web-expenses-on-the-core](cr-web-expenses-on-the-core.md)); no date set.
+> decision 7: the core's split, [cr-core-platform-and-application-modules](cr-core-platform-and-application-modules.md),
+> then Expenses' move, [cr-web-expenses-on-the-core](cr-web-expenses-on-the-core.md)); no date set.
 
 ## Goal
 
@@ -65,8 +66,10 @@ fallback.
   order. They count as Memories' own code, ≤ 25 KB gz, in the journal's lazy chunk. The risk is **granularity**: the
   package compiles one module for every entry (`src/packages/core-js/package.json:9-11`: `./search` →
   `./dist/veyq-mobile-core.mjs`), and a module a bundler cannot split lands where its first eager importer is — the
-  search's chunk. ADR 0155 decision 7 asks for that granularity to be measured before a second entry shares the module;
-  if Expenses' move (inbox #1046, P2) has not answered it first, phase 5 does. The façade crosses no flow: step
+  search's chunk. Measured since on Expenses' parked move: one module put Expenses into the search's entry (ADR 0155
+  § Consequences), so the core splits first into a platform module and one module per application, each its own
+  JavaScript file ([cr-core-platform-and-application-modules](cr-core-platform-and-application-modules.md), which
+  measures that per-module granularity); the journal's Kotlin then lives in `:apps:memories`. The façade crosses no flow: step
   functions over an opaque handle; the web's 1 s tick, the poll and the jitter's timer stay the web's
   (`createLivePoller`), the core decides what each tick does.
 - **ADR 0133's library facts** (Yjs 13.6.33 update v1 read by `@y/y` 14 rc.29; order-independent
@@ -375,8 +378,8 @@ the site's own check green.
    words).
 3. **History (*Verlauf*) names a journal's earlier snapshot revisions too** — ADR 0086's row reads "earlier contents
    of a file or of a journal".
-4. **The journal comes later** — deferred behind the web's move onto the core (ADR 0155 P2,
-   [cr-web-expenses-on-the-core](cr-web-expenses-on-the-core.md)); see the status note at the top.
+4. **The journal comes later** — deferred behind the web's move onto the core (ADR 0155 decision 7's
+   core split and Expenses' move); see the status note at the top.
 
 ## Definition of done
 

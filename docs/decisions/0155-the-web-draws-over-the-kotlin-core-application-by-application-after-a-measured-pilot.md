@@ -5,8 +5,10 @@
   build, dev server, check and the app image's stage build the package first); the pilot (2026-11-21): decision 2's
   gate passed (§ Consequences), decision 4 but its JSON seam, which comes with Expenses (the slice check in the
   package's `pnpm run check`), decision 5 for the search (`@veyq/core-js/search`, two opaque handles, the web's
-  direction guard reading the entry); decision 7's ratio written. Decisions 7's moves and 8 are not built: Expenses is
-  next (inbox #1046)
+  direction guard reading the entry); decision 7's ratio written. Decisions 7's moves and 8 are not built: next is
+  decision 7's first step, the core's split into a platform module and one module per application
+  ([cr-core-platform-and-application-modules](../../changes/cr-core-platform-and-application-modules.md)); Expenses'
+  move is parked behind it, half built on branch `claude/p2-impl` (§ Consequences; inbox #1046)
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -115,19 +117,27 @@ Measured before the decision (2026-11-20):
    build, its dev server, the CI `frontend` job and the app image's frontend stage each run the package's build first;
    building the web from source then needs the JDK the core builds with, as the backend already does.
 
-7. **Then application by application, and core slice by core slice** (after a go). Expenses is the first
-   application. Each next move is a CR of its own: its façade, its TypeScript twin deleted, its own size check, and the
-   module's granularity measured before a second entry shares it, so one application's chunk does not carry another's
-   code. The floor is paid, so a size check counts only a move's own code:
-   - **an application** grows the eager set and its own chunks together by at most **25 KB gz** (Expenses' own code
-     measured ~20 KB, its suite's `V1` among it); where its rules are eager today, as Expenses' are, the eager set
-     carries them;
-   - **a later core slice** grows the eager set by at most **R × the gzip of the TypeScript it deletes**, R the pilot's
-     measured ratio of its façade's own code to its deleted TypeScript, rounded up to the next half: **R = 3.0**
-     (the pilot's 8,754 B gz of own code against 3,129 B gz deleted, 2.80; the probe had estimated ~2.9).
-
-   Platform-core logic the web draws (the node tree's rules, the core's formats and plans of ADR 0154) moves this way
-   once an application needs it or it is the next slice.
+7. **Then, in this order: the core splits, the platform moves slice by slice, the applications follow** (after a go;
+   the owner's order, 2026-11-21). Each step is a CR of its own.
+   1. **The Kotlin core splits into a platform module and one module per application**, as the backend's `:core` and
+      `:apps:<application>` (ADR 0079): an application may use the platform, never the reverse and never another
+      application, and a guard holds the direction from the build files. One compiled JavaScript module cannot carry a
+      second façade without making the first one's users pay for it (§ Consequences, measured), so the split comes
+      before any second entry, and with it each module is its own JavaScript file.
+   2. **The platform core moves to the web slice by slice**: the core's formats, notices and plans of ADR 0154, the node
+      tree's rules, and what is next after them. Each slice grows the eager set by at most **R × the gzip of the
+      TypeScript it deletes**, R the pilot's measured ratio of its façade's own code to its deleted TypeScript, rounded
+      up to the next half: **R = 3.0** (the pilot's 8,754 B gz of own code against 3,129 B gz deleted, 2.80; the probe
+      had estimated ~2.9).
+   3. **Then application by application, Expenses first.** Each move: its façade, its TypeScript twin deleted, its own
+      size check and time check. The floor is paid, so a size check counts only a move's own code:
+      - **size:** an application grows the eager set and its own chunks together by at most **25 KB gz** (Expenses'
+        own code measured ~20 KB, its suite's `V1` among it), and the entries that do not use it grow by nothing;
+        where its rules are eager today, as Expenses' are, the eager set carries them;
+      - **time:** each rule a move names as its hot path runs at most **2.5×** the TypeScript's median **and at most
+        100 ms** absolute over the move's named corpus, the answers identical (the owner, 2026-11-21, replacing 1.5×
+        for an application move; the search's 1.5× of decision 2 was the pilot's and was met). For Expenses the hot
+        paths are `buildLedger` and `checkLedger` over the 10,010-revision Pot.
 
 8. **A screen model with flows is a gate of its own.** Moving a model that exposes a flow (ADR 0136 decision 2) brings
    coroutines into the web once: variant A's floor measured ~75 KB gz above B's. That crossing is decided by a
@@ -173,6 +183,37 @@ Measured before the decision (2026-11-20):
   super-interface of one, carries a default member — and fails on a Kotlin that carries the fix, so the step leaves
   with the upgrade (`src/mobile/core/build.gradle.kts`, `sortFreeInterfaceLists`). The incremental JavaScript caches
   stay off for a release build (`src/mobile/gradle.properties`): with them, fresh processes differed further.
+- **One compiled module cannot hold a second façade** (decision 7.1's reason). Expenses' move, built through its core
+  and package phases on branch `claude/p2-impl` (2026-11-21, Kotlin 2.4.21, esbuild bundling as the web does,
+  `@noble/*` external, gzip level 9 — the package's `src/slice.test.ts` there, `pnpm run build && pnpm run check` in
+  `src/packages/core-js`), measured each way the façades can share the core:
+  - **one module, one entry file per façade** (measured, `7b8af11cf`): the bundler cannot drop one façade's code from
+    the module, so the search's entry alone grows from 28,189 to 59,587 B gz against its 40 KB budget — every search
+    user pays for Expenses' rules, eagerly;
+  - **per-file granularity** (measured in the same session on a throwaway build, not committed): the search's entry
+    30,563 B gz, inside; Expenses 37,021 B gz gross, ~30.8 KB net of its deleted TypeScript's 6,194 B gz — over its
+    25 KB, from the per-file module overhead; and per-file writes an `external interface` shape into the
+    `.export.d.mts` only where it shares a file with the façade;
+  - **one binary per façade** (remembered, not built): each carries its own standard library, the pilot's 18,218 B gz,
+    once per application;
+  - **per-module granularity over real Gradle modules** — the platform's module and each application's its own
+    JavaScript file — is expected to hold both budgets and is not measured;
+    [cr-core-platform-and-application-modules](../../changes/cr-core-platform-and-application-modules.md) measures it
+    with the method above before any application moves.
+- **Expenses' move is parked, not merged** ([cr-web-expenses-on-the-core](../../changes/cr-web-expenses-on-the-core.md)),
+  on branch `claude/p2-impl`: the vectors (`c76d3212f`), the JSON seam and Expenses' pure homes (`c5793db14`), the
+  façade and its entry (`cbf54e21e`), `Big` over the engine's `BigInt` (`243e89185`), one optimisation round
+  (`7b8af11cf`). When the split is through it is rebased onto `:apps:expenses` and reused, not rebuilt. Its time at
+  the park (Node 22.23.3, median of 15 after 3 warm-ups, the 10,010-revision Pot; the bench script, `bench.mts`, is not committed — the
+  numbers are the commit message's of `7b8af11cf` and the measuring session's):
+  `buildLedger` 80.4–82.9 ms against the TypeScript's 38–41 (2.07–2.12×), `checkLedger` 4.9–5.0 against 4.1–4.6
+  (1.15–1.19×), the answers identical — inside decision 7.3's time bound. **The trap that binds every later move: a
+  Kotlin `Long` is emulated on JavaScript.** `Big`'s limbs over `Long` took `buildLedger` from 38 ms to 25.7 s; over
+  the engine's `BigInt` (an `expect` class, the limbs kept for the JVM and native) 306 ms; then a revision handle
+  read once (260), the engine's own `Map` and `Set` for string keys (165), a ledger entry handed back as the web's own
+  body object (126), whole weights without the fractions' gcd and each rate read once (103), the remainder's cents by
+  selection instead of a sort (87), lazy reader views and a UUID checked by its characters (81). A hot path's Kotlin
+  for the web is measured on JavaScript, never assumed from the JVM.
 
 - **The operator-served web is unchanged in kind** ([ADR 0026](0026-client-trust-tiers.md)): still same-origin,
   content-hashed chunks, no new CSP source, no Subresource Integrity in use before or after; the Kotlin output is one
@@ -201,6 +242,9 @@ Measured before the decision (2026-11-20):
   been paid in an application's budget while the entry, where core logic runs, still carried none; leading with core
   logic pays the floor once where it lands anyway and lets every application's check count its own code (the owner,
   2026-11-20).
+- **Expenses on the one module, before the split.** Built that way first: its façade made every search user pay
+  for it (59,587 B gz in the search's entry), and per-file granularity missed Expenses' own 25 KB (§ Consequences).
+  The split also gives the core the direction the backend and the web already hold, which no granularity setting does.
 - **Variant A for the pilot.** 97 KB gz against 35 KB, for coroutines and a serializer the pure rules do not need;
   decision 8 keeps that cost for the day a flow must cross.
 - **The status quo with more vector sets.** Each shared rule held by vectors still costs two implementations and their
