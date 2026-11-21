@@ -200,6 +200,17 @@ class GatesInTheCoreTest {
             201 to """{"nodeId":"$id"}"""
         }
         assertEquals(NameAnswer.DONE, o.shell.createFolder(space, null, "Docs"))
+        // the drawer's New, from inside a folder: made at the space's top (no parent sent)
+        var parent: String? = "unset"
+        answer = { r ->
+            val body = (r.body as io.ktor.http.content.OutgoingContent.ByteArrayContent).bytes().decodeToString()
+            parent = Regex("\"parentId\"\\s*:\\s*\"([^\"]+)\"").find(body)?.groupValues?.get(1)
+            val id = Regex("\"nodeId\"\\s*:\\s*\"([^\"]+)\"").find(body)!!.groupValues[1]
+            201 to """{"nodeId":"$id"}"""
+        }
+        o.shell.enter(FolderRef("f-inside", "Inside"))
+        assertEquals(NameAnswer.DONE, o.shell.createFolderAtTop("Top"))
+        assertNull(parent, "the drawer's New made its folder under the shell's folder")
         // a thrown error: the core says it, nothing reaches the platform as an exception
         answer = { _ -> throw IllegalStateException("the network went") }
         val thrown = o.shell.createFolder(space, null, "Other")

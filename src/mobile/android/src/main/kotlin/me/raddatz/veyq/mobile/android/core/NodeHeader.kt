@@ -15,7 +15,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.automirrored.outlined.DriveFileMove
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.OfflinePin
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Share
@@ -101,7 +108,6 @@ internal fun NodeHeaderActions(
     node: NodeAt, contribution: HeaderContribution, model: AppModel, snackbar: SnackbarHostState, scope: CoroutineScope,
     maxButtons: Int = 2,
 ) {
-    val context = LocalContext.current
     val palette = LocalPalette.current
     val covers by model.covers.collectAsStateWithLifecycle()
     val header = remember(node) { model.header(node, contribution.facts) } ?: return
@@ -109,10 +115,60 @@ internal fun NodeHeaderActions(
     val state by header.state.collectAsStateWithLifecycle()
     val pinned = state.pinned
     var menu by remember { mutableStateOf(false) }
-    var dialog by remember(node.nodeId) { mutableStateOf<Plan?>(null) }
     val plan = header.plan(maxButtons, contribution.actions.map { it.id }) ?: return
     val own = contribution.actions.associateBy { it.id }
     val hasCover = covers.containsKey(node.nodeId)
+    val run = nodeActions(node, header, contribution, model, snackbar, scope)
+
+    for (id in plan.buttons) {
+        IconButton(onClick = { run(id) }) {
+            if (id == Plan.FAVORITE && pinned == true) Icon(Icons.Filled.Favorite, labelOf(id, header, contribution, hasCover), tint = role(palette.favorite))
+            else Icon(iconOf(id, own), labelOf(id, header, contribution, hasCover))
+        }
+    }
+    if (plan.hasMenu) {
+        IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
+        DropdownMenu(menu, { menu = false }) {
+            ActionMenuItems(plan.menu, plan.last, { labelOf(it, header, contribution, hasCover) }, state.offline) { menu = false; run(it) }
+        }
+    }
+}
+
+/**
+ * A node's actions as one menu's items (a header's overflow, a row's long press): [menu], then after a divider [last] —
+ * the delete in the danger role; "Available offline" a checkable item with its state ([offline]).
+ */
+@Composable
+private fun ActionMenuItems(
+    menu: List<Plan>, last: List<Plan>, label: @Composable (Plan) -> String, offline: me.raddatz.veyq.mobile.offline.OfflineToggle?, onClick: (Plan) -> Unit,
+) {
+    for (id in menu) if (id == Plan.OFFLINE) {
+        OfflineMenuItem(label(id), offline) { onClick(id) }
+    } else DropdownMenuItem(text = { Text(label(id)) }, onClick = { onClick(id) })
+    if (menu.isNotEmpty() && last.isNotEmpty()) HorizontalDivider()
+    for (id in last) DropdownMenuItem(
+        text = {
+            val text = label(id)
+            if (id == Plan.DELETE) Text(text, color = MaterialTheme.colorScheme.error) else Text(text)
+        },
+        onClick = { onClick(id) },
+    )
+}
+
+/**
+ * Runs a node's actions — every [Plan] entry — and draws what each opens: core's dialogs (the share sheet, the move and copy
+ * browser, the cover sheet, the rename, the report, the delete and its undo), the offline pin's question, the download's
+ * "save to". The header's buttons and menu and a level row's menu ([LevelRowMenu]) run their entries through it.
+ */
+@Composable
+private fun nodeActions(
+    node: NodeAt, header: me.raddatz.veyq.mobile.navigation.NodeHeaderModel, contribution: HeaderContribution, model: AppModel,
+    snackbar: SnackbarHostState, scope: CoroutineScope,
+): (Plan) -> Unit {
+    val context = LocalContext.current
+    val state by header.state.collectAsStateWithLifecycle()
+    var dialog by remember(node.nodeId) { mutableStateOf<Plan?>(null) }
+    val own = contribution.actions.associateBy { it.id }
 
     // the download goes where the person picks (the system's "create document"), streamed there as it is written
     val saveTo = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -132,45 +188,18 @@ internal fun NodeHeaderActions(
             snackbar.showSnackbar(said, duration = if (left.isNullOrEmpty()) SnackbarDuration.Short else SnackbarDuration.Long)
         }
     }
-    fun run(id: Plan) {
+    val run: (Plan) -> Unit = { id ->
         when (id) {
             // the heart turns at once and back when the write did not land (core's)
-            Plan.FAVORITE -> scope.launch { header.toggleFavorite()?.let { snackbar.showSnackbar(context.text(it)) } }
+            Plan.FAVORITE -> { scope.launch { header.toggleFavorite()?.let { snackbar.showSnackbar(context.text(it)) } } }
             Plan.DOWNLOAD -> saveTo.launch(contribution.downloadName ?: me.raddatz.veyq.mobile.export.NodeExport.fileName(node.name))
             // on: off at once; off: core reads the size it keeps and asks first (`State.offline.asking`, the dialog below)
-            Plan.OFFLINE -> scope.launch { header.toggleOffline()?.let { snackbar.showSnackbar(context.text(it)) } }
-            in own -> own.getValue(id).onClick()
-            else -> dialog = id
-        }
-    }
-
-    for (id in plan.buttons) {
-        IconButton(onClick = { run(id) }) {
-            when (id) {
-                Plan.FAVORITE ->
-                    if (pinned == true) Icon(Icons.Filled.Favorite, labelOf(id, header, contribution, hasCover), tint = role(palette.favorite))
-                    else Icon(Icons.Outlined.FavoriteBorder, labelOf(id, header, contribution, hasCover))
-                else -> Icon(iconOf(id, own), labelOf(id, header, contribution, hasCover))
-            }
-        }
-    }
-    if (plan.hasMenu) {
-        IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
-        DropdownMenu(menu, { menu = false }) {
-            for (id in plan.menu) if (id == Plan.OFFLINE) {
-                OfflineMenuItem(labelOf(id, header, contribution, hasCover), state.offline) { menu = false; run(id) }
-            } else DropdownMenuItem(
-                text = { Text(labelOf(id, header, contribution, hasCover)) },
-                onClick = { menu = false; run(id) },
-            )
-            if (plan.menu.isNotEmpty() && plan.last.isNotEmpty()) HorizontalDivider()
-            for (id in plan.last) DropdownMenuItem(
-                text = {
-                    val label = labelOf(id, header, contribution, hasCover)
-                    if (id == Plan.DELETE) Text(label, color = MaterialTheme.colorScheme.error) else Text(label)
-                },
-                onClick = { menu = false; run(id) },
-            )
+            Plan.OFFLINE -> { scope.launch { header.toggleOffline()?.let { snackbar.showSnackbar(context.text(it)) } } }
+            // core's dialogs, drawn below
+            Plan.SHARE, Plan.RENAME, Plan.MOVE, Plan.COPY, Plan.COVER, Plan.REPORT, Plan.DELETE -> dialog = id
+            // the page's own: what it handed with the entry (`HeaderContribution.actions`)
+            Plan.UPLOAD, Plan.MUSIC, Plan.BANNER, Plan.REPLACE, Plan.SEND, Plan.OPEN_OWN_PAGE, Plan.REPORT_SHARED ->
+                own[id]?.onClick?.invoke() ?: error("the page handed no ${id.name}")
         }
     }
 
@@ -227,6 +256,29 @@ internal fun NodeHeaderActions(
         // no dialog of core's: these run at once ([run])
         null, Plan.FAVORITE, Plan.DOWNLOAD, Plan.OFFLINE, Plan.UPLOAD, Plan.MUSIC, Plan.BANNER, Plan.REPLACE, Plan.SEND, Plan.OPEN_OWN_PAGE,
         Plan.REPORT_SHARED -> {}
+    }
+    return run
+}
+
+/**
+ * A level row's menu (core's `ShellModel.rowPlan`, ADR 0154 decision 2; the web's `levelRow.ts`): rename and move first,
+ * the rest, then after a divider report and the delete — every entry, in its order, run as the node's header runs it.
+ * Android opens it with a long press on the row (Material's gesture for an item's actions), anchored at the row; read when
+ * opened, as the rights it holds may have changed since the list was read.
+ */
+@Composable
+internal fun LevelRowMenu(node: NodeAt, model: AppModel, open: Boolean, onClose: () -> Unit) {
+    if (!open) return
+    val notices = LocalShellNotices.current ?: return
+    val header = remember(node) { model.header(node, null) } ?: return
+    val state by header.state.collectAsStateWithLifecycle()
+    var plan by remember(node) { mutableStateOf<me.raddatz.veyq.mobile.navigation.LevelRow.Plan?>(null) }
+    androidx.compose.runtime.LaunchedEffect(node) { plan = model.rowPlan(node) }
+    val contribution = remember(node) { HeaderContribution(download = { out -> model.downloadNode(node, out) }) }
+    val run = nodeActions(node, header, contribution, model, notices.snackbar, notices.scope)
+    val p = plan ?: return
+    DropdownMenu(!p.isEmpty, onClose) {
+        ActionMenuItems(p.menu, p.last, { id -> header.label(id)?.let { say(it) } ?: id.name }, state.offline) { onClose(); run(it) }
     }
 }
 
@@ -298,10 +350,21 @@ private fun OfflineMenuItem(label: String, offline: me.raddatz.veyq.mobile.offli
     )
 }
 
+/** An entry's icon where it is a button: core's own Material symbols, a page's own the one it handed. */
 private fun iconOf(id: Plan, own: Map<Plan, OwnAction>): ImageVector = when (id) {
+    Plan.FAVORITE -> Icons.Outlined.FavoriteBorder
     Plan.SHARE -> Icons.Outlined.Share
     Plan.DOWNLOAD -> Icons.Outlined.Download
-    else -> own[id]?.icon ?: Icons.Outlined.MoreVert
+    // menu entries of core's (their slot never makes them a button): their word stands for them
+    Plan.RENAME -> Icons.Outlined.Edit
+    Plan.MOVE -> Icons.AutoMirrored.Outlined.DriveFileMove
+    Plan.COPY -> Icons.Outlined.ContentCopy
+    Plan.COVER -> Icons.Outlined.Image
+    Plan.OFFLINE -> Icons.Outlined.OfflinePin
+    Plan.REPORT -> Icons.Outlined.Flag
+    Plan.DELETE -> Icons.Outlined.Delete
+    Plan.UPLOAD, Plan.MUSIC, Plan.BANNER, Plan.REPLACE, Plan.SEND, Plan.OPEN_OWN_PAGE, Plan.REPORT_SHARED ->
+        own[id]?.icon ?: error("the page handed no ${id.name}")
 }
 
 @Composable

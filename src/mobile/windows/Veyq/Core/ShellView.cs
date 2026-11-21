@@ -555,7 +555,7 @@ internal sealed class ShellView
         var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
         foreach (var c in shown.drawerCreates)
         {
-            var create = Creating(c.create, TopLevel);
+            var create = Creating(c.create, TopLevel, top: true);
             var item = new MenuFlyoutItem { Text = Said.Key(c.word), IsEnabled = create is not null };
             AutomationProperties.SetAutomationId(item, $"drawer-new:{c.create}");
             item.Click += (_, _) =>
@@ -826,10 +826,11 @@ internal sealed class ShellView
 
     /// <summary>What New's entry <paramref name="c"/> does at the level <paramref name="at"/> names (read when it runs):
     /// a folder made where the shell is, a kept link made there, files or a folder uploaded there, an application's
-    /// object through its own dialog (the registry's ApplicationUi.Creates; null where this build registers none).</summary>
-    private Action? Creating(Create c, Func<UploadLevel?> at) => c switch
+    /// object through its own dialog (the registry's ApplicationUi.Creates; null where this build registers none). The drawer's
+    /// New (<paramref name="top"/>) makes its folder at the space's top, whatever level the shell still shows.</summary>
+    private Action? Creating(Create c, Func<UploadLevel?> at, bool top = false) => c switch
     {
-        Create.Folder => NewFolder,
+        Create.Folder => () => NewFolder(top),
         // New → Bookmark (ADR 0150 decision 6, inbox #1020): the made bookmark shows in the level read anew
         Create.Bookmark => () => { if (at() is { } l) BookmarkCreateDialog.Open(_window, l.ScopeId, l.ParentId, _ => RefreshLists()); },
         Create.UploadFiles => () => { if (at() is { } l) _uploads.PickFiles(l, Say); },
@@ -883,13 +884,14 @@ internal sealed class ShellView
     private CreateHost HostForCreate() => new() { Window = _window, Say = Say, State = () => _state };
 
     /// <summary>New's folder (Shell.CreateFolder), named in a dialog the core's answer keeps open with its problem
-    /// (ADR 0154 decision 1); a notice is said as it closes, a folder made offline (queued) reads as made.</summary>
-    private async void NewFolder()
+    /// (ADR 0154 decision 1), at the space's top where <paramref name="top"/>; a notice is said as it closes, a folder made
+    /// offline (queued) reads as made.</summary>
+    private async void NewFolder(bool top)
     {
         try
         {
             var named = await Dialogs.AskNamed(_window, "new-folder", Words.FolderNew(), Words.FolderName(), "", Words.FolderCreate(),
-                typed => Dialogs.Named(new Call.ShellCreateFolder { name = typed }, "Shell.CreateFolder"));
+                typed => Dialogs.Named(new Call.ShellCreateFolder { name = typed, top = top }, "Shell.CreateFolder"));
             if (named?.notice is { } n) Say(false, Said.Notice(n));
         }
         catch (Exception e)

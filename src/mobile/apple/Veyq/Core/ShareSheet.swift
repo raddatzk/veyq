@@ -78,33 +78,10 @@ struct NodeShareSheet: View {
                         // what this member may do with it is core's (`LinkRow`, the web's dialogs' rules)
                         let id = row.link.shareId
                         LinkRowView(row: row, busy: st.busy == id)
-                            // Apple's HIG: a row's actions as swipe actions and its context menu, as Mail's
-                            .swipeActions(edge: .trailing) {
-                                if row.canSwitchOff {
-                                    Button(say(.shareSwitchOff), systemImage: "nosign", role: .destructive) { Task { _ = try? await sheet.switchOff(shareId: id) } }
-                                }
-                                if row.canDelete {
-                                    Button(say(.shareDelete), systemImage: "trash", role: .destructive) { sheet.askDelete(shareId: id) }
-                                }
-                            }
-                            .swipeActions(edge: .leading) {
-                                if row.canReactivate {
-                                    Button(say(.shareReactivate), systemImage: "power") { Task { _ = try? await sheet.reactivate(shareId: id) } }.tint(Role.accent)
-                                }
-                                if row.canRenew { Button(say(.shareRenew), systemImage: "arrow.clockwise") { sheet.askRenew(shareId: id) }.tint(Role.accent) }
-                            }
+                            // the row's menu, core's (`ShareSheet.rowActions`: the web's order), whole: Apple's HIG puts a
+                            // row's actions in its context menu, as Mail's
                             .contextMenu {
-                                // an open link goes to another app through the system's share sheet, first (as Safari's links)
-                                if row.canCopy, let url = row.link.url.flatMap(URL.init(string:)) {
-                                    ShareLink(item: url) { Label(say(.shareLinkShare), systemImage: "square.and.arrow.up") }
-                                }
-                                if row.canEdit { Button(say(.shareEdit), systemImage: "pencil") { sheet.edit(shareId: id) } }
-                                if row.canReactivate { Button(say(.shareReactivate), systemImage: "power") { Task { _ = try? await sheet.reactivate(shareId: id) } } }
-                                if row.canRenew { Button(say(.shareRenew), systemImage: "arrow.clockwise") { sheet.askRenew(shareId: id) } }
-                                if row.canSwitchOff {
-                                    Button(say(.shareSwitchOff), systemImage: "nosign", role: .destructive) { Task { _ = try? await sheet.switchOff(shareId: id) } }
-                                }
-                                if row.canDelete { Button(say(.shareDelete), systemImage: "trash", role: .destructive) { sheet.askDelete(shareId: id) } }
+                                ForEach(VeyqCore.ShareSheet.companion.rowActions(row: row), id: \.self) { a in linkAction(a, row, sheet) }
                             }
                     }
                 } else {
@@ -112,6 +89,24 @@ struct NodeShareSheet: View {
                 }
             }
         }
+    }
+}
+
+/// Entry `a` of a link row's menu (core's `LinkAction`), drawn exhaustively; each runs core's.
+@MainActor @ViewBuilder
+private func linkAction(_ a: LinkAction, _ row: LinkRow, _ sheet: VeyqCore.ShareSheet) -> some View {
+    let id = row.link.shareId
+    switch a.entry {
+    case .theCopy:
+        // an open link goes to another app through the system's share sheet (as Safari's links); its copy where none
+        if let url = row.link.url.flatMap(URL.init(string:)) {
+            ShareLink(item: url) { Label(say(.shareLinkShare), systemImage: "square.and.arrow.up") }
+        }
+    case .edit: Button(say(.shareEdit), systemImage: "pencil") { sheet.edit(shareId: id) }
+    case .renew: Button(say(.shareRenew), systemImage: "arrow.clockwise") { sheet.askRenew(shareId: id) }
+    case .reactivate: Button(say(.shareReactivate), systemImage: "power") { Task { _ = try? await sheet.reactivate(shareId: id) } }
+    case .switchOff: Button(say(.shareSwitchOff), systemImage: "nosign", role: .destructive) { Task { _ = try? await sheet.switchOff(shareId: id) } }
+    case .delete_: Button(say(.shareDelete), systemImage: "trash", role: .destructive) { sheet.askDelete(shareId: id) }
     }
 }
 

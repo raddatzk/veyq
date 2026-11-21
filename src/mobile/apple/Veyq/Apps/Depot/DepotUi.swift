@@ -12,14 +12,20 @@ enum DepotUi {
         return HeaderContribution(
             facts: h.facts,
             download: { await model.downloadNode(node, to: $0) },
-            actions: h.own.map { a in
+            // the page's own entries of core's plan, whole (`FileModel.Header.own`: Replace, Send a Copy)
+            actions: h.own.compactMap { a in
                 let label = h.label(id: a).map { say($0) } ?? a.name
-                if a == .send {
+                switch a.entry {
+                case .send:
                     return OwnAction(id: a, label: label, systemImage: "paperplane") { model.sendingCopy = node }
-                }
-                return OwnAction(id: a, label: label, systemImage: "square.and.arrow.down.on.square") {
-                    // the content shown now is what the replace expects (core's choice), whatever a reload shows while picking
-                    if file.chooseReplace() { model.replacing = file }
+                case .replace:
+                    return OwnAction(id: a, label: label, systemImage: "square.and.arrow.down.on.square") {
+                        // the content shown now is what the replace expects (core's choice), whatever a reload shows while picking
+                        if file.chooseReplace() { model.replacing = file }
+                    }
+                // core's own entries and other pages', never a file's
+                case .favorite, .share, .rename, .move, .theCopy, .cover, .download, .offline, .report, .delete_, .upload, .music, .banner, .openOwnPage, .reportShared:
+                    return nil
                 }
             }
         )

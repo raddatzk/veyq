@@ -11,7 +11,14 @@
 //! share sheet ([crate::core_ui::share_sheet]); the report opens core's report sheet ([crate::core_ui::report]), the cover its dialog
 //! ([crate::core_ui::cover]), whose words follow the core's state (Set cover, or Change cover where the node has one).
 //!
-//! "Available offline" (ADR 0140 decision 10) is a check item of the "More" menu (`win.header-offline`, a stateful action
+//! Every entry of the plan is drawn, in its order (ADR 0154 decision 2): core's own and the page's — a gallery's *Add
+//! photos*, its music and its banner, a file's Replace, a kept link's *Open on its own page* and *Report shared content*
+//! (the page tells its id, [Header::facts]) — each one [HeaderAction] whose doing is one exhaustive match ([Inner::act]);
+//! how many stand as buttons is this platform's room ([MAX_BUTTONS], ADR 0110). Each drawn entry is an action of the bar's
+//! own group (`header.<n>`, the entry's place in the plan), so no list of ids stands here. A level row's menu
+//! ([row_menu]) draws its plan (`Row.Plan`) the same way, its entries done through the row's node's own header model.
+//!
+//! "Available offline" (ADR 0140 decision 10) is a check item of the "More" menu (a stateful action of the group
 //! whose state is the core's `offline.on`), the pin's status line under it as an insensitive item ("Downloading 3 MB of
 //! 12 MB", "On this device"); turning it on asks first, the size it keeps in an `AdwAlertDialog` (the core's `asking` and
 //! `question`), as GNOME asks before a step that takes space; turning it off does not.
@@ -32,36 +39,39 @@ use crate::core_ui::{said, words};
 /// The most buttons the content's header bar holds beside its title (GNOME: a few, the rest in the menu).
 pub const MAX_BUTTONS: i32 = 2;
 
-/// The header's ids drawn so far; every other id of the plan is left out until its phase.
-pub const DRAWN: &[&str] = &["favorite", "share", "rename", "delete", "download", "move", "copy", "report", "cover", "replace", "upload", "offline", "music"];
-
-/// A plan entry's wire id (its serial name), what [DRAWN], the window's actions and the icons are keyed by until this app
-/// draws the plan whole (cr-apps-structure-from-core-plans phase 6).
-pub fn wire_id(a: HeaderAction) -> String {
-    serde_json::to_value(a).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default()
+/// Who does an entry: the header itself (its model's call or sheet), or the open page's own window action
+/// (`win.<name>`, registered by the kind's application in `KindPage.actions`).
+#[derive(Debug, PartialEq, Eq)]
+pub enum Doer {
+    Header,
+    Page(&'static str),
+    /// Never offered on this platform (a phone's share sheet: the bridge builds a file's page with `shares = false`).
+    Nobody,
 }
 
-/// Whether [id] is drawn for a node of [kind].
-pub fn drawn(id: &str, _kind: &str) -> bool {
-    DRAWN.contains(&id)
-}
-
-/// The window's action an id fires (`win.header-<id>`; a Pot's download is the Pot page's `win.pot-download`, a file's its
-/// page's Save a copy, `win.file-save`, a file's own Replace its page's `win.file-replace`, and a Memory's or a chapter's
-/// own "Add photos" its page's `win.memory-upload`, its music action its page's `win.memory-music`).
-pub fn action_of(id: &str, kind: &str) -> String {
-    match (id, kind) {
-        ("download", "EXPENSES_POT") => "win.pot-download".into(),
-        ("download", "FILE") => "win.file-save".into(),
-        ("replace", _) => "win.file-replace".into(),
-        ("upload", _) => "win.memory-upload".into(),
-        ("music", _) => "win.memory-music".into(),
-        _ => format!("win.header-{id}"),
+/// Who does [a] on a node of [kind]; [row]: from a level row's menu, where no page is open — its download is the node's
+/// archive, as a folder's.
+pub fn doer(a: HeaderAction, kind: &str, row: bool) -> Doer {
+    match a {
+        HeaderAction::Favorite | HeaderAction::Share | HeaderAction::Rename | HeaderAction::Move | HeaderAction::Copy | HeaderAction::Cover
+        | HeaderAction::Offline | HeaderAction::Report | HeaderAction::Delete | HeaderAction::OpenOwnPage | HeaderAction::ReportShared => Doer::Header,
+        // a Pot's download is its page's (`Pot.Download`), a file's its page's Save a copy (the file itself); else the
+        // node's archive (`Header.Download`)
+        HeaderAction::Download => match (kind, row) {
+            ("EXPENSES_POT", false) => Doer::Page("pot-download"),
+            ("FILE", false) => Doer::Page("file-save"),
+            (_, _) => Doer::Header,
+        },
+        HeaderAction::Upload => Doer::Page("memory-upload"),
+        HeaderAction::Music => Doer::Page("memory-music"),
+        HeaderAction::Banner => Doer::Page("memory-banner"),
+        HeaderAction::Replace => Doer::Page("file-replace"),
+        HeaderAction::Send => Doer::Nobody,
     }
 }
 
-/// What a page told before the core answered the open: its facts, a file page's id, a gallery's id.
-type Later = (Option<Facts>, Option<i64>, Option<i64>);
+/// What a page told before the core answered the open: its facts, a file page's id, a gallery's id, a kept link's page's id.
+type Later = (Option<Facts>, Option<i64>, Option<i64>, Option<i64>);
 
 /// The header of one node, opened in the core when made and closed when dropped.
 pub struct Header {
@@ -70,6 +80,13 @@ pub struct Header {
 }
 
 struct Inner {
+    node: NodeAt,
+    /// Opened for a level row's menu ([row_menu]): it draws nothing, and does one entry once the core answered the open.
+    row: Option<RefCell<Option<HeaderAction>>>,
+    /// The drawn entries' actions (`header.<n>`), the bar's group.
+    actions: gio::SimpleActionGroup,
+    /// A kept link's page's id (`HeaderFacts.bookmark`): its own entries are done through it.
+    bookmark: Cell<Option<i64>>,
     id: Cell<Option<i64>>,
     shown: RefCell<Option<HeaderShown>>,
     watch: RefCell<Option<Watch>>,
@@ -96,14 +113,22 @@ struct Inner {
 impl Header {
     /// Opens the header of [node] (its page knowing [facts]), drawing into [bar] and saying what it did in [toasts].
     pub fn open(node: &NodeAt, facts: Option<Facts>, bar: &gtk::Box, toasts: &adw::ToastOverlay) -> Self {
+        Self::opened(node, facts, bar, toasts, None)
+    }
+
+    fn opened(node: &NodeAt, facts: Option<Facts>, bar: &gtk::Box, toasts: &adw::ToastOverlay, row: Option<HeaderAction>) -> Self {
         let inner = Rc::new(Inner {
+            node: node.clone(),
+            row: row.map(|a| RefCell::new(Some(a))),
+            actions: gio::SimpleActionGroup::new(),
+            bookmark: Cell::new(None),
             id: Cell::new(None),
             shown: RefCell::new(None),
             watch: RefCell::new(None),
             bar: bar.clone(),
             toasts: toasts.clone(),
             undo_toast: RefCell::new(None),
-            on_bar: Cell::new(true),
+            on_bar: Cell::new(row.is_none()),
             later: RefCell::new(None),
             seen_undo: Cell::new(false),
             hero: gtk::DrawingArea::builder().hexpand(true).content_height(180).visible(false).build(),
@@ -138,19 +163,22 @@ impl Header {
         });
         let w = Rc::downgrade(&inner);
         let click = gtk::GestureClick::new();
-        click.connect_released(move |gesture, _, _, _| {
+        click.connect_released(move |_, _, _, _| {
             let Some(i) = w.upgrade() else { return };
             let offered = i.shown.borrow().as_ref().and_then(|s| s.plan.as_ref()).is_some_and(|p| {
                 [&p.buttons, &p.menu, &p.last].iter().any(|g| g.iter().any(|a| a.id == HeaderAction::Cover))
             });
             if offered {
-                let _ = gesture.widget().and_then(|w| w.activate_action("win.header-cover", None).ok());
+                i.act(HeaderAction::Cover);
             }
         });
         inner.hero.add_controller(click);
         inner.hero.set_tooltip_text(Some(&words::cover_change()));
         inner.hero.update_property(&[gtk::accessible::Property::Label(&words::cover_change())]);
-        clear(bar);
+        if inner.row.is_none() {
+            clear(bar);
+            bar.insert_action_group("header", Some(&inner.actions));
+        }
         let weak = Rc::downgrade(&inner);
         let call = Call::HeaderOpen { node: node.clone(), facts, max_buttons: MAX_BUTTONS };
         glib::spawn_future_local(async move {
@@ -163,8 +191,8 @@ impl Header {
                 return;
             };
             inner.id.set(Some(header));
-            if let Some((facts, file, gallery)) = inner.later.borrow_mut().take() {
-                bridge::send(Call::HeaderFacts { header, facts, file, gallery, bookmark: None });
+            if let Some((facts, file, gallery, bookmark)) = inner.later.borrow_mut().take() {
+                bridge::send(Call::HeaderFacts { header, facts, file, gallery, bookmark });
             }
             let Some((watch, updates)) = bridge::watch(&Watched::Header { header }) else { return };
             *inner.watch.borrow_mut() = Some(watch);
@@ -174,12 +202,13 @@ impl Header {
         Self { node: node.clone(), inner }
     }
 
-    /// What the kind's page knows now (a Pot read: whether it takes writes) and, for a file's page or a Memory's, its id:
-    /// the page's own actions (a file's Replace, a gallery's "Add photos") join the plan.
-    pub fn facts(&self, facts: Option<Facts>, file: Option<i64>, gallery: Option<i64>) {
+    /// What the kind's page knows now (a Pot read: whether it takes writes) and, for a file's page, a Memory's or a kept
+    /// link's, its id: the page's own actions (a file's Replace, a gallery's "Add photos", a kept link's own page) join the plan.
+    pub fn facts(&self, facts: Option<Facts>, file: Option<i64>, gallery: Option<i64>, bookmark: Option<i64>) {
+        self.inner.bookmark.set(bookmark);
         match self.inner.id.get() {
-            Some(header) => bridge::send(Call::HeaderFacts { header, facts, file, gallery, bookmark: None }),
-            None => *self.inner.later.borrow_mut() = Some((facts, file, gallery)),
+            Some(header) => bridge::send(Call::HeaderFacts { header, facts, file, gallery, bookmark }),
+            None => *self.inner.later.borrow_mut() = Some((facts, file, gallery, bookmark)),
         }
     }
 
@@ -193,27 +222,39 @@ impl Header {
         self.inner.on_bar.set(false);
     }
 
+    /// Rename with [name] in the field (a held rename's *Open*, ADR 0153 decision 4: the name the person gave offline).
+    pub fn rename_as(&self, parent: &impl IsA<gtk::Widget>, name: &str) {
+        self.inner.rename_as(parent, name);
+    }
+
+    /// The node's head for its page: the cover, cut as stored; hidden while there is none.
+    pub fn hero(&self) -> gtk::Widget {
+        self.inner.hero.clone().upcast()
+    }
+}
+
+impl Inner {
     /// Pins or unpins: the heart turns at once (the core's state), a failure is said.
-    pub fn pin(&self) {
-        let Some(header) = self.inner.id.get() else { return };
-        let toasts = self.inner.toasts.clone();
+    fn pin(self: &Rc<Self>) {
+        let Some(header) = self.id.get() else { return };
+        let toasts = self.toasts.clone();
         glib::spawn_future_local(async move {
             say(&toasts, bridge::call(&Call::HeaderPin { header }).await.map(|(a, _)| a), "Header.Pin");
         });
     }
 
     /// "Available offline" toggled: off at once, on asked first (the state's `asking`, drawn by [Inner::draw_offline]).
-    pub fn offline(&self) {
-        let Some(header) = self.inner.id.get() else { return };
-        let toasts = self.inner.toasts.clone();
+    fn offline(self: &Rc<Self>) {
+        let Some(header) = self.id.get() else { return };
+        let toasts = self.toasts.clone();
         glib::spawn_future_local(async move {
             say(&toasts, bridge::call(&Call::HeaderOffline { header }).await.map(|(a, _)| a), "Header.Offline");
         });
     }
 
     /// Rename: the name asked for in an alert dialog over [parent], asked again with the core's problem.
-    pub fn rename(&self, parent: &impl IsA<gtk::Widget>) {
-        if self.inner.id.get().is_none() {
+    fn rename(self: &Rc<Self>, parent: &impl IsA<gtk::Widget>) {
+        if self.id.get().is_none() {
             return;
         }
         self.rename_as(parent, &self.node.name);
@@ -221,10 +262,10 @@ impl Header {
 
     /// Rename with [name] in the field (a held rename's *Open*, ADR 0153 decision 4: the name the person gave offline); the
     /// header is the core's by the time the dialog is confirmed.
-    pub fn rename_as(&self, parent: &impl IsA<gtk::Widget>, name: &str) {
-        let toasts = self.inner.toasts.clone();
+    fn rename_as(self: &Rc<Self>, parent: &impl IsA<gtk::Widget>, name: &str) {
+        let toasts = self.toasts.clone();
         let parent = parent.clone().upcast::<gtk::Widget>();
-        let weak = Rc::downgrade(&self.inner);
+        let weak = Rc::downgrade(self);
         ask_name(&parent, &words::node_rename(), &words::node_name(), name, None, &words::node_rename(), move |name, again| {
             let toasts = toasts.clone();
             let Some(header) = weak.upgrade().and_then(|i| i.id.get()) else { return };
@@ -244,41 +285,36 @@ impl Header {
     }
 
     /// The move ([copy] false) or copy sheet over [parent] (core's `MoveSheet`, [crate::core_ui::move_sheet]).
-    pub fn move_sheet(&self, parent: &impl IsA<gtk::Widget>, copy: bool) {
-        crate::core_ui::move_sheet::open(parent, &self.node, copy, &self.inner.toasts);
+    fn move_sheet(self: &Rc<Self>, parent: &impl IsA<gtk::Widget>, copy: bool) {
+        crate::core_ui::move_sheet::open(parent, &self.node, copy, &self.toasts);
     }
 
     /// The share sheet over [parent] (core's `ShareSheet`, [crate::core_ui::share_sheet]).
-    pub fn share(&self, parent: &impl IsA<gtk::Widget>) {
+    fn share(self: &Rc<Self>, parent: &impl IsA<gtk::Widget>) {
         crate::core_ui::share_sheet::open(parent, &self.node);
     }
 
     /// The report sheet over [parent] (core's `ReportSheet`, [crate::core_ui::report]).
-    pub fn report(&self, parent: &impl IsA<gtk::Widget>) {
+    fn report(self: &Rc<Self>, parent: &impl IsA<gtk::Widget>) {
         crate::core_ui::report::open(parent, &self.node);
     }
 
-    /// The node's head for its page: the cover, cut as stored; hidden while there is none.
-    pub fn hero(&self) -> gtk::Widget {
-        self.inner.hero.clone().upcast()
-    }
-
     /// The cover dialog over [parent] ([crate::core_ui::cover]): the stored cover framed as the core holds it, or a picture to pick.
-    pub fn cover(&self, parent: &impl IsA<gtk::Widget>) {
-        let Some(header) = self.inner.id.get() else { return };
-        let stored = self.inner.shown.borrow().as_ref().and_then(|s| s.cover.clone());
+    fn cover(self: &Rc<Self>, parent: &impl IsA<gtk::Widget>) {
+        let Some(header) = self.id.get() else { return };
+        let stored = self.shown.borrow().as_ref().and_then(|s| s.cover.clone());
         // a new picture may come under the crop it had: the head reads its picture again at the next state
-        *self.inner.hero_crop.borrow_mut() = Some(Crop { x: -1.0, y: -1.0, width: 0.0, height: 0.0 });
-        crate::core_ui::cover::open(parent, header, &self.node, stored, &self.inner.toasts);
+        *self.hero_crop.borrow_mut() = Some(Crop { x: -1.0, y: -1.0, width: 0.0, height: 0.0 });
+        crate::core_ui::cover::open(parent, header, &self.node, stored, &self.toasts);
     }
 
     /// Downloads the node as the web's ZIP: GTK's save dialog (the file chooser portal where there is one) suggests the
     /// core's name, the core writes the file the dialog chose and removes it when it did not finish, and a toast says what
     /// the core said (with what it left out).
-    pub fn download(&self, parent: &gtk::Window) {
-        let Some(header) = self.inner.id.get() else { return };
-        let Some(suggested) = self.inner.shown.borrow().as_ref().map(|s| s.archive_name.clone()) else { return };
-        let (name, parent, toasts) = (self.node.name.clone(), parent.clone(), self.inner.toasts.clone());
+    fn download(self: &Rc<Self>, parent: &gtk::Window) {
+        let Some(header) = self.id.get() else { return };
+        let Some(suggested) = self.shown.borrow().as_ref().map(|s| s.archive_name.clone()) else { return };
+        let (name, parent, toasts) = (self.node.name.clone(), parent.clone(), self.toasts.clone());
         glib::spawn_future_local(async move {
             let failed = || adw::Toast::new(&words::download_failed(&name));
             let dialog = gtk::FileDialog::builder().title(words::node_download()).initial_name(suggested).modal(true).build();
@@ -316,9 +352,9 @@ impl Header {
     }
 
     /// The delete: asked first, with the kind's title and the core's question; then to the trash, its Undo offered.
-    pub fn delete(&self, parent: &impl IsA<gtk::Widget>) {
-        let Some(header) = self.inner.id.get() else { return };
-        let shown = self.inner.shown.borrow();
+    fn delete(self: &Rc<Self>, parent: &impl IsA<gtk::Widget>) {
+        let Some(header) = self.id.get() else { return };
+        let shown = self.shown.borrow();
         let Some(shown) = shown.as_ref() else { return };
         let title = shown.plan.as_ref().and_then(|p| p.last.iter().find(|a| a.id == HeaderAction::Delete)).and_then(|a| a.word.as_deref()).map(said::key).unwrap_or_default();
         let ask = adw::AlertDialog::builder().heading(&title).body(said::notice(&shown.delete_question)).build();
@@ -326,7 +362,7 @@ impl Header {
         ask.set_response_appearance("delete", adw::ResponseAppearance::Destructive);
         ask.set_default_response(Some("cancel"));
         ask.set_close_response("cancel");
-        let weak = Rc::downgrade(&self.inner);
+        let weak = Rc::downgrade(self);
         ask.connect_response(None, move |_, response| {
             if response != "delete" {
                 return;
@@ -349,6 +385,54 @@ impl Header {
 }
 
 impl Inner {
+    /// The window the header's dialogs open over.
+    fn window(&self) -> Option<gtk::Window> {
+        self.bar.root().and_downcast::<gtk::Window>().or_else(|| self.toasts.root().and_downcast::<gtk::Window>())
+    }
+
+    /// Does plan entry [a] on this header's node: every entry one arm ([doer] says whose it is).
+    fn act(self: &Rc<Self>, a: HeaderAction) {
+        let Some(window) = self.window() else { return eprintln!("veyq: header {a:?}: no window") };
+        match doer(a, &self.node.kind, self.row.is_some()) {
+            Doer::Page(name) => {
+                let _ = WidgetExt::activate_action(&window, &format!("win.{name}"), None);
+                return;
+            }
+            Doer::Nobody => return eprintln!("veyq: header {a:?}: not offered on this platform"),
+            Doer::Header => {}
+        }
+        match a {
+            HeaderAction::Favorite => self.pin(),
+            HeaderAction::Share => self.share(&window),
+            HeaderAction::Rename => self.rename(&window),
+            HeaderAction::Move => self.move_sheet(&window, false),
+            HeaderAction::Copy => self.move_sheet(&window, true),
+            HeaderAction::Cover => self.cover(&window),
+            HeaderAction::Download => self.download(&window),
+            HeaderAction::Offline => self.offline(),
+            HeaderAction::Report => self.report(&window),
+            HeaderAction::Delete => self.delete(&window),
+            HeaderAction::OpenOwnPage => self.kept_link(false),
+            HeaderAction::ReportShared => self.kept_link(true),
+            // the page's own, done above
+            HeaderAction::Upload | HeaderAction::Music | HeaderAction::Banner | HeaderAction::Replace | HeaderAction::Send => {}
+        }
+    }
+
+    /// A kept link's *Open on its own page* or ([report]) *Report shared content*: the link's screen above the shell,
+    /// opened by the core from the page's model (`Bookmark.OwnPage`, `Bookmark.ReportShared`).
+    fn kept_link(&self, report: bool) {
+        let Some(bookmark) = self.bookmark.get() else { return eprintln!("veyq: header kept link: the page told no id") };
+        let call = if report { Call::BookmarkReportShared { bookmark } } else { Call::BookmarkOwnPage { bookmark } };
+        glib::spawn_future_local(async move {
+            match bridge::call(&call).await.map(|(a, _)| a) {
+                Ok(Answer::ReceivedOpened { received }) => crate::core_ui::received::present(received, None),
+                Ok(_) => eprintln!("veyq: the bookmark's link did not open"),
+                Err(e) => eprintln!("veyq: the bookmark's link's answer did not read: {:?}", e.0),
+            }
+        });
+    }
+
     /// What the trash said, with Undo where the core offers it now: a toast that stays until the offer ends.
     fn offer(self: &Rc<Self>, text: &str, undo: bool, header: i64) {
         let toast = adw::Toast::new(text);
@@ -445,23 +529,23 @@ impl Inner {
     }
 
     fn draw(self: &Rc<Self>) {
+        // a row's header draws no bar (it is never on one): it does its one entry once the core answered the open with a
+        // plan, then follows what that entry asks (the pin's question, the trash's Undo) as a page's header does
+        if let Some(pending) = &self.row {
+            let ready = self.id.get().is_some() && self.shown.borrow().as_ref().is_some_and(|s| s.plan.is_some());
+            let entry = if ready { pending.borrow_mut().take() } else { None };
+            if let Some(a) = entry {
+                eprintln!("veyq: row menu {a:?}");
+                self.act(a);
+            }
+        }
         let cover = self.shown.borrow().as_ref().map(|s| s.cover.clone());
-        if let Some(cover) = cover {
+        if let (Some(cover), None) = (cover, &self.row) {
             self.draw_hero(cover);
         }
         let offline = self.shown.borrow().as_ref().and_then(|s| s.offline.clone());
-        if self.on_bar.get() {
+        if self.on_bar.get() || self.row.is_some() {
             self.draw_offline(offline.as_ref());
-            // the check item's state is the core's: the window's stateful `win.header-offline`
-            if let Some(action) = self
-                .bar
-                .root()
-                .and_downcast::<gtk::ApplicationWindow>()
-                .and_then(|w| w.lookup_action("header-offline"))
-                .and_downcast::<gio::SimpleAction>()
-            {
-                action.set_state(&offline.as_ref().is_some_and(|o| o.on).to_variant());
-            }
         }
         let shown = self.shown.borrow();
         // the offer ended (its window, or the undo): the toast goes with it — once a state showed the offer, so an
@@ -480,32 +564,52 @@ impl Inner {
             return;
         }
         clear(&self.bar);
+        for name in self.actions.list_actions() {
+            self.actions.remove_action(&name);
+        }
         let Some(plan) = s.plan.as_ref() else { return };
-        let kind = s.node.kind.as_str();
         let menu = gio::Menu::new();
         let first = gio::Menu::new();
         let last = gio::Menu::new();
-        // GNOME's header bar packs from the end: the menu outermost, the buttons before it
-        for a in plan.buttons.iter().filter(|a| drawn(&wire_id(a.id), kind)) {
-            let label = a.word.as_deref().map(said::key).unwrap_or_default();
-            let button = if a.id == HeaderAction::Favorite {
-                let icon = if s.pinned == Some(true) { "starred-symbolic" } else { "non-starred-symbolic" };
-                gtk::Button::builder().icon_name(icon).tooltip_text(&label).action_name(action_of(&wire_id(a.id), kind)).build()
-            } else {
-                gtk::Button::builder().icon_name(icon_of(&wire_id(a.id))).tooltip_text(&label).action_name(action_of(&wire_id(a.id), kind)).build()
+        // every entry, in the plan's order: its action is its place (`header.<n>`), what it does the entry's own arm
+        let mut n = 0;
+        let mut action = |a: HeaderAction| {
+            let name = format!("e{n}");
+            n += 1;
+            let made = match a {
+                // "Available offline" is a check item: its state is the core's `offline.on`, never the click's
+                HeaderAction::Offline => gio::SimpleAction::new_stateful(&name, None, &s.offline.as_ref().is_some_and(|o| o.on).to_variant()),
+                HeaderAction::Favorite | HeaderAction::Share | HeaderAction::Rename | HeaderAction::Move | HeaderAction::Copy | HeaderAction::Cover
+                | HeaderAction::Download | HeaderAction::Report | HeaderAction::Delete | HeaderAction::Upload | HeaderAction::Music
+                | HeaderAction::Banner | HeaderAction::Replace | HeaderAction::Send | HeaderAction::OpenOwnPage | HeaderAction::ReportShared => gio::SimpleAction::new(&name, None),
             };
+            let weak = Rc::downgrade(self);
+            made.connect_activate(move |_, _| {
+                if let Some(i) = weak.upgrade() {
+                    i.act(a);
+                }
+            });
+            self.actions.add_action(&made);
+            format!("header.{name}")
+        };
+        // GNOME's header bar packs from the end: the menu outermost, the buttons before it
+        for a in &plan.buttons {
+            let label = a.word.as_deref().map(said::key).unwrap_or_default();
+            // the heart filled where the node is a favourite
+            let icon = if a.id == HeaderAction::Favorite && s.pinned == Some(true) { "starred-symbolic" } else { icon_of(a.id) };
+            let button = gtk::Button::builder().icon_name(icon).tooltip_text(&label).action_name(action(a.id)).build();
             button.update_property(&[gtk::accessible::Property::Label(&label)]);
             self.bar.append(&button);
         }
-        for (group, ids) in [(&first, &plan.menu), (&last, &plan.last)] {
-            for a in ids.iter().filter(|a| drawn(&wire_id(a.id), kind)) {
-                group.append(a.word.as_deref().map(said::key).as_deref(), Some(&action_of(&wire_id(a.id), kind)));
+        for (group, entries) in [(&first, &plan.menu), (&last, &plan.last)] {
+            for a in entries {
+                group.append(a.word.as_deref().map(said::key).as_deref(), Some(&action(a.id)));
                 // the pin's status under its check item, drawn insensitive
                 if a.id == HeaderAction::Offline
                     && let Some(line) = s.offline.as_ref().and_then(|o| o.said.as_ref())
                 {
                     // an action no one registers draws the item insensitive: a status, not a command
-                    group.append(Some(&said::notice(line)), Some("win.header-offline-status"));
+                    group.append(Some(&said::notice(line)), Some("header.offline-status"));
                 }
             }
         }
@@ -537,7 +641,7 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
             Ok(Update::Header { shown, .. }) => {
                 if let Some(s) = &shown {
                     eprintln!("veyq: header {}: pinned {:?}, offline {:?}, undo {}, gone {}, plan {}", s.node.kind, s.pinned, s.offline.as_ref().map(|o| (o.status, o.asking.is_some())), s.undo.is_some(), s.gone,
-                        s.plan.as_ref().map(|p| [&p.buttons, &p.menu, &p.last].iter().map(|g| g.iter().map(|a| wire_id(a.id)).collect::<Vec<_>>().join(",")).collect::<Vec<_>>().join(" | ")).unwrap_or_default());
+                        s.plan.as_ref().map(|p| [&p.buttons, &p.menu, &p.last].iter().map(|g| g.iter().map(|a| format!("{:?}", a.id)).collect::<Vec<_>>().join(",")).collect::<Vec<_>>().join(" | ")).unwrap_or_default());
                 }
                 *inner.shown.borrow_mut() = shown;
                 inner.draw();
@@ -573,23 +677,95 @@ fn clear(bar: &gtk::Box) {
     }
 }
 
-/// A plan's button's icon, in GNOME's icon set.
-pub fn icon_of(id: &str) -> &'static str {
-    match id {
-        "download" => "folder-download-symbolic",
-        "share" => "send-to-symbolic",
-        "move" => "folder-symbolic",
-        "copy" => "edit-copy-symbolic",
-        "rename" => "document-edit-symbolic",
-        "delete" => "user-trash-symbolic",
-        "report" => "dialog-warning-symbolic",
-        "cover" => "image-x-generic-symbolic",
-        "replace" => "document-revert-symbolic",
-        "upload" => "insert-image-symbolic",
-        "offline" => "folder-download-symbolic",
-        "music" => "audio-x-generic-symbolic",
-        _ => "view-more-symbolic",
+/// A plan entry's icon where it stands as a button, in GNOME's icon set.
+pub fn icon_of(a: HeaderAction) -> &'static str {
+    match a {
+        HeaderAction::Favorite => "non-starred-symbolic",
+        HeaderAction::Download => "folder-download-symbolic",
+        HeaderAction::Share => "send-to-symbolic",
+        HeaderAction::Move => "folder-symbolic",
+        HeaderAction::Copy => "edit-copy-symbolic",
+        HeaderAction::Rename => "document-edit-symbolic",
+        HeaderAction::Delete => "user-trash-symbolic",
+        HeaderAction::Report | HeaderAction::ReportShared => "dialog-warning-symbolic",
+        HeaderAction::Cover | HeaderAction::Banner => "image-x-generic-symbolic",
+        HeaderAction::Replace => "document-revert-symbolic",
+        HeaderAction::Upload => "insert-image-symbolic",
+        HeaderAction::Offline => "folder-download-symbolic",
+        HeaderAction::Music => "audio-x-generic-symbolic",
+        HeaderAction::Send => "document-send-symbolic",
+        HeaderAction::OpenOwnPage => "folder-publicshare-symbolic",
     }
+}
+
+thread_local! {
+    /// The header a row's menu entry is being done through: kept until the next row's entry (a dialog, a sheet or the
+    /// trash's Undo it opened stays its own).
+    static ROW_HEADER: RefCell<Option<Header>> = const { RefCell::new(None) };
+}
+
+/// A level row's menu on [widget] (ADR 0154 decision 2; the web's `levelRow.ts`), opened GNOME's way — a right click, or a
+/// long press on a touch screen —: the core's plan for [node] (`Row.Plan`) drawn whole, its [menu] then after a separator
+/// its last group, each entry done through [node]'s own header model, as its page's header would (said in [toasts]).
+pub fn row_menu(widget: &impl IsA<gtk::Widget>, node: &NodeAt, toasts: &adw::ToastOverlay) {
+    let open = {
+        let (widget, node, toasts) = (widget.clone().upcast::<gtk::Widget>(), node.clone(), toasts.clone());
+        move |x: f64, y: f64| {
+            let (widget, node, toasts) = (widget.clone(), node.clone(), toasts.clone());
+            glib::spawn_future_local(async move {
+                let (menu, last) = match bridge::call(&Call::RowPlan { node: node.clone() }).await.map(|(a, _)| a) {
+                    Ok(Answer::RowPlan { menu, last }) => (menu, last),
+                    other => return eprintln!("veyq: Row.Plan answered {other:?}"),
+                };
+                eprintln!("veyq: row menu {}: {} | {}", node.kind,
+                    menu.iter().map(|a| format!("{:?}", a.id)).collect::<Vec<_>>().join(","), last.iter().map(|a| format!("{:?}", a.id)).collect::<Vec<_>>().join(","));
+                if menu.is_empty() && last.is_empty() {
+                    return;
+                }
+                let actions = gio::SimpleActionGroup::new();
+                let model = gio::Menu::new();
+                let mut n = 0;
+                for entries in [&menu, &last] {
+                    let section = gio::Menu::new();
+                    for a in entries {
+                        let name = format!("e{n}");
+                        n += 1;
+                        let action = gio::SimpleAction::new(&name, None);
+                        let (id, node, toasts) = (a.id, node.clone(), toasts.clone());
+                        action.connect_activate(move |_, _| {
+                            let header = Header::opened(&node, Some(Facts { can_write: true, has_content: true }), &gtk::Box::new(gtk::Orientation::Horizontal, 0), &toasts, Some(id));
+                            ROW_HEADER.with(|h| *h.borrow_mut() = Some(header));
+                        });
+                        actions.add_action(&action);
+                        section.append(a.word.as_deref().map(said::key).as_deref(), Some(&format!("row.{name}")));
+                    }
+                    model.append_section(None, &section);
+                }
+                widget.insert_action_group("row", Some(&actions));
+                let popover = gtk::PopoverMenu::from_model(Some(&model));
+                popover.set_parent(&widget);
+                popover.set_has_arrow(false);
+                popover.set_pointing_to(Some(&gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+                popover.connect_closed(|p| {
+                    let p = p.clone();
+                    // unparented after its item's action ran (GTK activates it as the popover closes)
+                    glib::idle_add_local_once(move || p.unparent());
+                });
+                popover.popup();
+            });
+        }
+    };
+    let right = gtk::GestureClick::builder().button(gdk::BUTTON_SECONDARY).build();
+    let on_right = open.clone();
+    right.connect_pressed(move |g, _, x, y| {
+        g.set_state(gtk::EventSequenceState::Claimed);
+        on_right(x, y);
+    });
+    widget.add_controller(right);
+    let long = gtk::GestureLongPress::new();
+    long.set_touch_only(true);
+    long.connect_pressed(move |_, x, y| open(x, y));
+    widget.add_controller(long);
 }
 
 /// Says what an action answered, where it says something: its notice as a toast, an unexpected answer on stderr.
@@ -685,26 +861,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_cores_actions_are_drawn_and_a_download_where_it_is_the_nodes_archive() {
-        for id in ["favorite", "share", "rename", "delete", "move", "copy", "download", "report", "cover", "offline"] {
-            assert!(drawn(id, "FOLDER") && drawn(id, "EXPENSES_POT") && drawn(id, "FILE"), "{id}");
+    fn each_entry_is_done_by_the_header_or_by_its_pages_own_action() {
+        use HeaderAction as A;
+        for a in [A::Favorite, A::Share, A::Rename, A::Move, A::Copy, A::Cover, A::Offline, A::Report, A::Delete, A::OpenOwnPage, A::ReportShared] {
+            assert_eq!(doer(a, "FOLDER", false), Doer::Header, "{a:?}");
         }
-        assert_eq!(action_of("download", "FILE"), "win.file-save", "a file's download is its page's Save a copy");
-        assert!(drawn("replace", "FILE"), "a file's own Replace is drawn");
-        assert_eq!(action_of("replace", "FILE"), "win.file-replace", "a file's Replace is its page's");
-        assert!(drawn("upload", "MEMORY"), "a Memory's own Add photos is drawn");
-        assert_eq!(action_of("upload", "CHAPTER"), "win.memory-upload", "a gallery's Add photos is its page's");
-        assert!(drawn("music", "MEMORY"), "a gallery's music action is drawn (ADR 0142 decision 6)");
-        assert_eq!(action_of("music", "CHAPTER"), "win.memory-music", "a gallery's music action is its page's");
-        assert!(!drawn("an-applications-own", "FOLDER"), "an application's own action is its page's");
-        assert_eq!(action_of("report", "FOLDER"), "win.header-report");
-        assert_eq!(action_of("cover", "EXPENSES_POT"), "win.header-cover");
-        assert_eq!(action_of("download", "EXPENSES_POT"), "win.pot-download");
-        assert_eq!(action_of("download", "FOLDER"), "win.header-download");
-        assert_eq!(action_of("move", "EXPENSES_POT"), "win.header-move");
-        assert_eq!(action_of("rename", "FOLDER"), "win.header-rename");
-        assert_eq!(action_of("offline", "MEMORY"), "win.header-offline", "Available offline is the window's stateful check item");
-        // a Pot pins (ADR 0153 decision 6): its header's toggle, never its page's
-        assert_eq!(action_of("offline", "EXPENSES_POT"), "win.header-offline", "a Pot's Available offline is its header's");
+        assert_eq!(doer(A::Download, "FOLDER", false), Doer::Header, "a folder's download is its archive");
+        assert_eq!(doer(A::Download, "EXPENSES_POT", false), Doer::Page("pot-download"), "a Pot's download is its page's");
+        assert_eq!(doer(A::Download, "FILE", false), Doer::Page("file-save"), "a file's download is its page's Save a copy");
+        assert_eq!(doer(A::Download, "FILE", true), Doer::Header, "a row's download has no page: the node's archive");
+        assert_eq!(doer(A::Replace, "FILE", false), Doer::Page("file-replace"));
+        assert_eq!(doer(A::Upload, "CHAPTER", false), Doer::Page("memory-upload"));
+        assert_eq!(doer(A::Music, "MEMORY", false), Doer::Page("memory-music"), "ADR 0142 decision 6");
+        assert_eq!(doer(A::Banner, "MEMORY", false), Doer::Page("memory-banner"), "ADR 0144 decision 5");
+        assert_eq!(doer(A::Send, "FILE", false), Doer::Nobody, "a phone's share sheet: never offered on a desktop");
     }
 }

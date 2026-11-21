@@ -47,7 +47,9 @@ local first (`val b = plan.buttons; b.filter …`) and a list built by a loop wi
 whose property has a name every collection library uses (`entries`, `keys`, `values`, …: `LIBRARY_NAMES`), read only
 as a call. A whitelist of a single string is not seen (it is a comparison as often). Swift's `switch` over a Kotlin
 enum has no exhaustiveness of its own (an Objective-C class) and needs a `default:` to compile, which (a) refuses: Apple
-is switched on only with an exhaustive Swift form of the enums (inbox #1050).
+switches over each plan enum's generated Swift mirror instead (`src/mobile/apple/generate_plans.py`: `x.entry`, a Swift
+enum whose cases are the framework's names, the ones read here; inbox #1050) — a `switch` over the Kotlin class itself
+with no `default:` does not compile, so none is left unseen.
 """
 from __future__ import annotations
 
@@ -67,7 +69,7 @@ CORE_SRC = MOBILE / "core" / "src"
 BRIDGE_SRC = MOBILE / "bridge" / "src"
 
 # Each platform is switched on in its phase of cr-apps-structure-from-core-plans (4 Android, 5 Apple, 6 Linux, 7 Windows).
-PLATFORMS: dict[str, bool] = {"android": False, "apple": False, "linux": False, "windows": True}
+PLATFORMS: dict[str, bool] = {"android": True, "apple": True, "linux": True, "windows": True}
 
 PLAN_ANNOTATION = re.compile(r"@(?:me\.raddatz\.veyq\.mobile\.navigation\.)?Plan\b(?!\.)")
 ENUM_AFTER = re.compile(

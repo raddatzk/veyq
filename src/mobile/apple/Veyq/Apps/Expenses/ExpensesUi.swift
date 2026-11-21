@@ -32,17 +32,13 @@ enum ExpensesUi {
     }
 }
 
-/// Expenses' own list (its Pots), with "New pot" (uc.expenses.create-pot).
+/// Expenses' own list (its Pots); its New is the drawer's (core's `LevelPlan`: an application's list offers none).
 struct ExpensesList: View {
     @Bindable var model: AppModel
-    @State private var creating = false
 
     var body: some View {
         ArrangedListView(model: model, list: model.applicationList(.expenses), onOpen: model.open, key: "app:\(ApplicationId.expenses)")
             .navigationTitle(Names.application(.expenses))
-            // offline only where the core queues one (`createsHere`): a Pot never does
-            .createAction(say(.createPot), shown: !model.spaces.isEmpty && model.createsHere(isHome: false).contains(.pot)) { creating = true }
-            .sheet(isPresented: $creating) { NewPotSheet(model: model) }
     }
 }
 

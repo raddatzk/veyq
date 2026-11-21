@@ -158,6 +158,11 @@ A Gradle build of its own, run through its own wrapper.
   relaunches the installed debug app in a booted simulator, signed in as the seeded dev principal. `VeyqShare/` is the
   iOS share extension (ADR 0138), embedded in the app: it compiles every file of `Veyq/` but `VeyqApp.swift` (the
   entry point) and `DevLogin.swift`, under its own `ShareViewController`.
+  `generate_plans.py` (a pre-build step of both targets) writes `build/generated/<target>/Plans.swift`: each core `@Plan`
+  enum's exhaustive Swift mirror (`HeaderAction.Entry`, read as `action.entry`), its entries and order from the core's
+  sources and their Swift names from the framework's `VeyqCore.h`, checked equal or the build stops. A Swift `switch`
+  over the Kotlin class needs a `default:` the structure guard refuses; over `.entry` it takes none, and an entry the
+  core adds fails every drawing that forgot it (ADR 0154 decision 2, inbox #1050).
 - `bridge/` — the core as one shared library, `libveyq.so` on Linux and `veyq.dll` on Windows (ADR 0136 decision 5;
   what was built and measured is ADR 0123's Consequences, the bridge). `bridge.h` is its whole C surface, six functions written
   by hand and held to Kotlin/Native's own header by `BridgeHeaderTest`. `commonMain` holds the wire (`Wire.kt`: the
@@ -1074,10 +1079,10 @@ plans it (`NodeHeaderTest`), each app's `NodeHeaderActions` draws it and owns ev
 registers its page — `KindPages` (Android) / `KindPage` (Apple): it brings a share sheet, takes a cover, contributes a
 subtitle, its rights narrowing, its copy and download doors and own actions, and draws its body. The header's state and
 actions are core's `NodeHeaderModel` and its sheets core's `TrashSheet`, `MoveSheet`, `ShareSheet` and `ReportSheet`
-(ADR 0136's Consequences): an app draws them and decides nothing. Linux (`header.rs`) draws the same plan, but only the
-ids in `header::DRAWN`: an action whose screen a desktop lacks is left out, never drawn as a control that answers "not
-yet"; a slice that draws it adds its id. Windows (`NodeHeader.cs`) draws every entry of it (ADR 0154 decision 2,
-`scripts/validate_mobile_structure.py`), a page's own ones done by that page (`PageHooks`). A new kind registers
+(ADR 0136's Consequences): an app draws them and decides nothing. Linux (`header.rs`) draws every entry of the plan,
+each `HeaderAction` one arm (`header::doer`: the header's own call or the page's window action); Windows (`NodeHeader.cs`)
+draws every entry of it too (ADR 0154 decision 2, `scripts/validate_mobile_structure.py`), a page's own ones done by that
+page (`PageHooks`). A new kind registers
 there and its header order in `AppKinds.headerOrder`; it never builds header actions of its own. Its body places core's head
 first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `NodeHeroRow()` (Apple) —, never a cover of its own.
 

@@ -5,9 +5,10 @@
 //! and *Report* (a name's report on a kept link, `AppKinds.reportsNameOnly`). Its body is core's `BookmarkPage`
 //! (`Bookmark.Open`, `Watched.Bookmark`): while the tenant has `core.share-embedding` on, the share shows in place — a
 //! [ReceivedView] in place, its region named "Shared content from …" —; otherwise an `AdwStatusPage` naming the link's
-//! host. Either way the page offers *Open on its own page* (the link's screen above the shell, its password handed in
-//! memory by the core) and *Report shared content* (that screen with its report asked, to the share's own operator). A
-//! meta that does not read says so.
+//! host. Either way the header's plan offers *Open on its own page* (the link's screen above the shell, its password handed
+//! in memory by the core) and *Report shared content* (that screen with its report asked, to the share's own operator),
+//! done through this page's model, whose id the page tells the shell ([BookmarkPage::open]'s `told`). A meta that does not
+//! read says so.
 //!
 //! The page never holds the link, its password or its key: the core opens the meta and hands the host ids alone.
 use std::cell::{Cell, RefCell};
@@ -17,7 +18,7 @@ use adw::prelude::*;
 use gtk::glib;
 
 use crate::bridge::{self, Watch, wire::Answer, wire::BookmarkShown, wire::BookmarkState, wire::Call, wire::NodeAt, wire::Update, wire::Watched};
-use crate::core_ui::received::{self, Mode, ReceivedView};
+use crate::core_ui::received::{Mode, ReceivedView};
 use crate::core_ui::words;
 
 /// The kind of a kept link (core's `AppKinds.BOOKMARK_KIND`).
@@ -50,8 +51,9 @@ struct Inner {
 }
 
 impl BookmarkPage {
-    /// Opens kept link [node]'s page inside [window], as the shell's content.
-    pub fn open(node: &NodeAt, window: &gtk::Window) -> Self {
+    /// Opens kept link [node]'s page inside [window], as the shell's content; [told] its model's id once the core opened it
+    /// (the header's own entries are done through it, `HeaderFacts.bookmark`).
+    pub fn open(node: &NodeAt, window: &gtk::Window, told: impl Fn(i64) + 'static) -> Self {
         let root = gtk::Box::builder().orientation(gtk::Orientation::Vertical).vexpand(true).build();
         let inner = Rc::new(Inner { root, window: window.clone(), id: Cell::new(None), watch: RefCell::new(None), shown: RefCell::new(None), in_place: RefCell::new(None) });
         inner.draw();
@@ -67,12 +69,18 @@ impl BookmarkPage {
                 return;
             };
             inner.id.set(Some(bookmark));
+            told(bookmark);
             let Some((watch, updates)) = bridge::watch(&Watched::Bookmark { bookmark }) else { return };
             *inner.watch.borrow_mut() = Some(watch);
             drop(inner);
             follow(weak, updates).await;
         });
         Self { node: node.clone(), inner }
+    }
+
+    /// The page's model's id, once the core opened it.
+    pub fn id(&self) -> Option<i64> {
+        self.inner.id.get()
     }
 
     /// The page's body, the shell's content while it shows.
@@ -106,15 +114,9 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
     }
 }
 
-/// What the page's two actions are offered for [state]: both once the meta read.
-pub fn offers_actions(state: BookmarkState) -> bool {
-    matches!(state, BookmarkState::InPlace | BookmarkState::OnItsOwn)
-}
-
 impl Inner {
     fn draw(self: &Rc<Self>) {
         let shown = self.shown.borrow().clone();
-        let state = shown.as_ref().map(|s| s.state);
         // the share in place stays while the same link shows; anything else is drawn anew
         let same_in_place = shown.as_ref().and_then(|s| s.received).is_some_and(|r| self.in_place.borrow().as_ref().is_some_and(|v| v.received == r));
         if same_in_place {
@@ -129,9 +131,6 @@ impl Inner {
             self.root.append(&adw::StatusPage::builder().child(&spinner).vexpand(true).build());
             return;
         };
-        if state.is_some_and(offers_actions) {
-            self.root.append(&self.actions());
-        }
         match s.state {
             BookmarkState::Loading => {
                 let spinner = adw::Spinner::builder().width_request(32).height_request(32).build();
@@ -155,31 +154,6 @@ impl Inner {
             }
         }
     }
-
-    /// *Open on its own page* and *Report shared content*, a row of buttons above the content (the name's report is the
-    /// header's).
-    fn actions(self: &Rc<Self>) -> gtk::Box {
-        let row = gtk::Box::builder().spacing(6).margin_start(12).margin_end(12).margin_top(6).margin_bottom(6).halign(gtk::Align::End).build();
-        for (label, report) in [(words::bookmark_open_own_page(), false), (words::bookmark_report_share(), true)] {
-            let button = gtk::Button::with_label(&label);
-            button.add_css_class("flat");
-            button.set_widget_name(if report { "bookmark-report-share" } else { "bookmark-own-page" });
-            let w = Rc::downgrade(self);
-            button.connect_clicked(move |_| {
-                let Some(bookmark) = w.upgrade().and_then(|i| i.id.get()) else { return };
-                let call = if report { Call::BookmarkReportShared { bookmark } } else { Call::BookmarkOwnPage { bookmark } };
-                glib::spawn_future_local(async move {
-                    match bridge::call(&call).await.map(|(a, _)| a) {
-                        Ok(Answer::ReceivedOpened { received }) => received::present(received, None),
-                        Ok(_) => eprintln!("veyq: the bookmark's link did not open"),
-                        Err(e) => eprintln!("veyq: the bookmark's link's answer did not read: {:?}", e.0),
-                    }
-                });
-            });
-            row.append(&button);
-        }
-        row
-    }
 }
 
 #[cfg(test)]
@@ -192,13 +166,5 @@ mod tests {
         assert!(same_node(&at("s", "n", "Summer"), &at("s", "n", "Summer 2026")), "a rename keeps the page");
         assert!(!same_node(&at("s", "n", "Summer"), &at("s", "m", "Summer")));
         assert!(!same_node(&at("s", "n", "Summer"), &at("t", "n", "Summer")));
-    }
-
-    #[test]
-    fn its_actions_stand_once_the_meta_read_and_never_for_one_that_did_not() {
-        assert!(offers_actions(BookmarkState::InPlace));
-        assert!(offers_actions(BookmarkState::OnItsOwn));
-        assert!(!offers_actions(BookmarkState::Loading));
-        assert!(!offers_actions(BookmarkState::Unreadable));
     }
 }

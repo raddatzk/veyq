@@ -131,12 +131,94 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   — the phases' work. Every guard green, `validate_guard_gaps.py` run once (104 cases hold). **Open:** a Swift `switch`
   over a Kotlin enum is no exhaustive one and needs `default:` to compile (#1050) — Apple's phase needs an exhaustive Swift
   form first.
-- [ ] **4 Android** — every plan drawn in the core UI; the guard on for Android. · Done when: `:android:assembleDebug`,
+- [x] **4 Android** — every plan drawn in the core UI; the guard on for Android. · Done when: `:android:assembleDebug`,
   the words, guidelines, direction and structure guards green.
-- [ ] **5 Apple** — the same. · Done when: both Apple builds green, the guards green.
-- [ ] **6 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green, the guards green.
-- [ ] **7 Windows** — the same; `CS8509`/`CS8524` as errors. · Done when: `python3 windows/run.py build` green on the
+  **Built** (2026-11-21). The header's runner (`core/NodeHeader.kt` `nodeActions`) and its icons are exhaustive `when`s over
+  `HeaderAction` (core's dialogs, the page's own entries from its `HeaderContribution`); a Memory's page hands all of
+  `GalleryModel.headerActions` (its Upload now the header's, the FAB the chapter's — a guest's link page, which has no core
+  header, keeps its upload there), a file's `FileModel.Header.own`. The level's New is `LevelPlan.creates` (the FAB) and its
+  tools `LevelPlan.tools` in the toolbar (the trash, then the view switch); the drawer's New is the `DrawerSection.NEW` arm
+  (`drawerCreates`, below the switcher's Home), `requestNew` typed by `Create`. An application's list draws no New of its
+  own any more — the plan offers none there (Expenses' *New pot* and Memories' *New Memory* FABs went; the drawer's New
+  makes both). Settings is `State.sections(…)` drawn whole (the account section split into `ACCOUNT` and `EMAIL`, Sign out
+  its own last section); the sign-in `SignInPlan.entries`; a level row's and tile's long press opens `rowPlan`'s menu
+  (`LevelRowMenu`, the header's runner); a medium tile's long press `tileActions`; a link row `ShareSheet.rowActions`
+  (the copy its button, the system's share sheet its menu's first item). **Core addition:** `GuestLevel.creates` (a guest's
+  level New, a folder then files), held in `GuestDoorsTest` (bitten: the order swapped → red). Guard on for Android
+  (`PLATFORMS`); bites, each red alone and restored with `/bin/cp -f`: an `else ->` over `LevelTool` (a), a `listOf` of two
+  `Create`s (b), a `.filter` on `SignInPlan.entries` (c). Smoke on a throwaway API 36 AVD as a throwaway account (both
+  erased): sign-in Submit first then show, scan, kit open, kit scan, *Open a link*; Home's toolbar share, Trash, view;
+  the level New's six entries; a folder's header (Delete last) and its tile's long-press menu (rename, move, …, report,
+  delete); the drawer's New below Home (folder, Pot, Memory, bookmark); Settings appearance, maps, storage, sessions,
+  this device, account, email, password, add a device, security, profile, erase, sign out; a Memory's header (Favorite,
+  Add photos; menu share, download, banner, …, Delete last) and FAB *Add chapter*; a link row (copy; Share, Edit, Renew,
+  Revoke). **Unclicked:** a medium tile's menu (no medium uploaded), a file's, a Pot's and a bookmark's header.
+  **Open:** a guest's link pages still draw only the gallery's music from `headerActions` (`GuestMusicAction`), not the
+  whole plan — the guard reads `.none {}` as no filter; phase 8's guest pass is where it shows.
+- [x] **5 Apple** — the same. · Done when: both Apple builds green, the guards green.
+  **Built** (2026-11-21). #1050 decided: `apple/generate_plans.py`, a pre-build step of both targets after the framework's,
+  writes `build/generated/<target>/Plans.swift` — per `@Plan` enum a Swift `Entry` enum (`HeaderAction.Entry`, read as
+  `action.entry`; `core` back), its entries and order from the core's sources through the structure guard's own reader
+  (`plan_enums`), their Swift names from the framework's `VeyqCore.h` (`theCopy`, `delete_`, `theNew`), the two checked
+  equal or the build stops; no dependency. Every plan switch is over `.entry` with no `default:`. Drawn in the core UI:
+  the header (`NodeHeaderActions`) and a level row's context menu (`NodeRowMenu`, `ShellModel.rowPlan`) through one
+  `NodeActionWords` drawing and one `NodeActionDialogs` runner; the pages' own entries from their models' lists
+  (`GalleryModel.headerActions` — UPLOAD now the header's, a submenu Photo Library | Files opening the page's pickers;
+  a guest's gallery keeps the page's menu, it has no header —, `FileModel.Header.own`, `BookmarkPage.headerActions`);
+  New in the level's head from `LevelPlan.creates` and the drawer's from `drawerCreates`, the drawer's sections from
+  `drawerSections` (Home after New, ADR 0122 decision 2); the level's tools (`LevelTools`: the trash, then the view
+  switch) in Home's and an application list's toolbar — the trash left the bar's Home actions, the application lists'
+  own New Pot / New Memory went (`LevelPlan`: theirs is the drawer's); Settings from `State.sections` (background sync
+  with storage); the sign-in from `SignInPlan.entries` (Submit first, its word `signin_submit`); a link row's context
+  menu from `ShareSheet.rowActions`; a medium tile's from `GalleryModel.tileActions` (macOS *Open in New Window* beside
+  it). Core addition: `GuestLevel.creates` (a guest level's New, held by `GuestDoorsTest`, seen red with the order
+  swapped). `PLATFORMS["apple"]` on. Checks: `:core:assembleVeyqCoreDebugXCFramework`, `xcodegen`, `xcodebuild … -sdk
+  macosx` and `-sdk iphonesimulator` (with `VeyqShare`) green; every `scripts/validate_*.py` green. **Bites:** an arm
+  (`.music`) dropped from `NodeActionDialogs.run` → `switch must be exhaustive` (macOS build red); a `default:` planted
+  there → the guard red; a header lacking `send` → the generator refuses; each restored green. **Deviations:** the link
+  row's swipe actions went (a subset of the plan; its menu holds all); a level's tiles carry no row menu yet (rows do);
+  the Apple pass is build-only — nothing clicked (§ Passes, phase 8).
+- [x] **6 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green, the guards green.
+  **Built** (2026-11-21). `header.rs`: `DRAWN`, `wire_id`, `drawn` and `action_of` gone; every plan entry drawn in its
+  order, each an action of the bar's own group (`header.e<n>`, its place in the plan — no id list), done by one exhaustive
+  arm (`header::doer`: the header's own call, or the page's window action — a Pot's and a file's download, Upload,
+  Music, Banner, Replace; `Send` never offered on a desktop, the bridge's `shares = false`; `Inner::act`); `icon_of` a
+  match over `HeaderAction`. The banner is the header's entry (`win.memory-banner`, the body's *Add banner* button gone);
+  a kept link's *Open on its own page* and *Report shared content* are the header's (the page tells its model's id,
+  `HeaderFacts.bookmark`; the body's button row gone). A level row's and tile's menu (`header::row_menu`: a right click or
+  a touch long press, `Row.Plan` drawn whole, each entry done through the row's node's own header model, its download the
+  node's archive) on Home's and an application's rows and tiles; a gallery tile's menu (`GalleryRow.tileActions`: the
+  mark, `Marks.Toggle`); a share link row's `ShownLink.actions` (Copy a button where it leads, the rest the menu, each
+  arm exhaustive). The shell: the drawer's New is the `DrawerSection.NEW` arm (the sidebar header's "+", made at the
+  space's top), the level's New (`ShellShown.level.creates`) at the content header bar's start and its tools (`TRASH`,
+  `VIEW`) in order at its end — the switcher's Trash gone; New's entries an exhaustive match over `Create`. Settings draws
+  `SettingsShown.sections` (the dev harness's state as the wire's JSON); the sign-in draws `SignIn.Plan` (asked again when
+  adding changes and once the camera is known: Submit, Cancel, the rows in one boxed list). The guard on for Linux.
+  **Core addition:** the drawer's New makes a folder at the space's top — `ShellModel.createFolderAtTop`,
+  `Call.ShellCreateFolder.top` (default false; the generated C# makes it a required member, so Windows' one call names `top = false` — not built on the VM here); `GatesInTheCoreTest` and
+  `DispatchTest` (`aNewFolderAndASpacesTrashAreDrivenThroughCalls`) each bitten red (the shell's folder sent; `top`
+  ignored). **Checks:** `linux/run.py build` green (clippy `-D warnings`, 104 + 5 cargo tests; WireTest in its Gradle
+  half); every guard green but guard_gaps (only `PLATFORMS` changed). **Bites:** a `_ =>` over `HeaderAction` in
+  `icon_of`, a `&[HeaderAction::…]` const, a `.filter` on `plan.buttons` — each red alone, restored. **Open:** the Rust
+  `doer` test's bite did not reach the test (the Docker VM's disk full, the link failed — no space) and the live smoke did
+  not run (the dev backend answered the throwaway's owner registration 500); both for phase 8.
+- [x] **7 Windows** — the same; `CS8509`/`CS8524` as errors. · Done when: `python3 windows/run.py build` green on the
   VM, the guards green. **Bite:** a `HeaderAction` arm removed from the C# switch → the build red.
+  **Built** (2026-11-21). `HeaderPlan.Drawn` and the id whitelist gone; `NodeHeader.cs` draws every entry of the plan in
+  its order (buttons primary, then menu and last group secondary, Delete last), each a `switch` expression over
+  `HeaderAction` without a discard, a page's own entries done by that page (`PageHooks`); `HeaderPlan.Wire` the serial
+  name by an exhaustive switch. A level row's menu (`RowMenu.cs`, `Row.Plan` drawn whole, run through a header of the
+  row's node); the level's New (`ShellShown.level.creates`) and tools (`Trash` in the level's `CommandBar`), the drawer's
+  New the `DrawerSection.New` arm (made at the space's top, `Call.ShellCreateFolder.top = true`); New's entries an
+  exhaustive switch over `Create`; Settings draws `SettingsShown.sections` (Sign out among them), the sign-in `SignIn.Plan`
+  (submit first); a share link's `ShownLink.actions`. **Deviation:** `CS8509` an error, `CS8524` **off**, not an error — it
+  fires on a switch naming every entry (an unnamed `(E)17`) and so demands the very discard rule (a) refuses; no unnamed
+  value crosses the wire (`JsonStringEnumConverter` refuses an unknown name) — the reason in `Directory.Build.props`.
+  **Checks:** `windows/run.py build` green on the VM after merging phases 4–6 (Bridge tests 5/5, `Veyq.Tests` 80/80 + 1;
+  locally 4/5, 1 skipped); every guard green. **Bites:** a `_ =>` over `HeaderAction` in `HeaderPlan.Wire` → the guard
+  red, restored; the same switch with the `ReportShared` arm removed, compiled under `Directory.Build.props` → `CS8509`
+  red, complete → green (a scratch project, not a second VM build). **Open:** no live smoke (the dev backend's DB disk
+  full); for phase 8.
 - [ ] **8 the passes** — § Passes.
 - [ ] **9 harvest** — ADR 0154's `Built:` (decision 2, the structure guard); `native-apps.md`; `src/mobile/CLAUDE.md`
   § Each platform's guidelines states what is the platform's (the look) and what is the plan's; the Use pages that name
