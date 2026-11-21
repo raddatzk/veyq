@@ -877,7 +877,7 @@ final class AppModel {
                     syncInbox()
                     guard let offered else { return }
                     offerImport(offered.offer)
-                    if let n = MediaUploads.companion.notTaken(count: offered.taken.refused) { notice = Notice(text: say(notice: n)) }
+                    if let n = MediaUploads.companion.notTaken(count: offered.taken.refused) { show(n) }
                     onShareDone?(true)
                 }
                 return
@@ -889,7 +889,7 @@ final class AppModel {
         }
         syncInbox()
         guard let taken else { return }
-        if let n = MediaUploads.companion.notTaken(count: taken.refused) { notice = Notice(text: say(notice: n)) }
+        if let n = MediaUploads.companion.notTaken(count: taken.refused) { show(n) }
         onShareDone?(true)
     }
 
@@ -915,7 +915,7 @@ final class AppModel {
                 return
             }
             for s in files { if let url = AppleMemories.shared.urlOf(source: s) { Self.removePicked(url) } }
-            notice = Notice(text: say(notice: refused.notice))
+            show(refused.notice)
             return
         }
         if let offered = outcome as? DropOutcome.Offered {
@@ -928,11 +928,8 @@ final class AppModel {
         tell(outcome.notices)
     }
 
-    /// The core's notices of one outcome, said in order (one alert, each on its own line).
-    func tell(_ notices: [VeyqCore.Notice]) {
-        guard !notices.isEmpty else { return }
-        notice = Notice(text: notices.map { say(notice: $0) }.joined(separator: "\n"))
-    }
+    /// The core's notices of one outcome, said in order (each on its own line), as they live (`show`).
+    func tell(_ notices: [VeyqCore.Notice]) { show(notices) }
 
     /// The drop target a folder's row of the level shown is, where the core offers one (`ShellModel.dropTarget`: a folder
     /// this member may put files in — never a row by its kind, never a guest's identity folder); nil elsewhere.
@@ -1044,10 +1041,14 @@ final class AppModel {
         await readDetails(t)
     }
 
-    /// What a delete says at the bottom of the shell: moved to the trash, with its Undo while core offers it; or why not.
+    /// What the shell says at its bottom (ADR 0154 decision 4): a success, closing itself after the core's `lifeMs`
+    /// (`NoticeKind.SAID`), or a trash's or a move's Undo while core offers it (`NoticeKind.UNDO`). A refusal or a failure
+    /// (`NoticeKind.HELD`) is never here: it is the shell's alert (`notice`), which stays until it is closed.
     struct TrashNotice: Identifiable {
         let id = UUID()
         let message: String
+        /// How long it shows before it closes itself (the core's `NoticeKind.lifeMs`); nil while core's offer holds it.
+        var lifeMs: Int64? = VeyqCore.Notice.companion.SAID_MS
         /// The header whose trash this is, while core offers its undo (core ends the offer after its window).
         var header: NodeHeaderModel? = nil
         /// The move sheet whose undo this is, while core offers it (core ends the offer after its window, as a trash's).
@@ -1064,10 +1065,10 @@ final class AppModel {
         guard let said = try? await header.trash() else { return }
         undoWatch?()
         guard header.current.undo != nil else {
-            trashNotice = TrashNotice(message: say(notice: said))
+            show(said)
             return
         }
-        let notice = TrashNotice(message: say(notice: said), header: header)
+        let notice = TrashNotice(message: say(notice: said), lifeMs: nil, header: header)
         trashNotice = notice
         let id = notice.id
         let watch = header.watch { @Sendable state in
@@ -1082,13 +1083,13 @@ final class AppModel {
         if let move = trashNotice?.move {
             trashNotice = nil
             undoWatch?()
-            if let failed = try? await move.undo() { trashNotice = TrashNotice(message: say(notice: failed)) }
+            if let failed = try? await move.undo() { show(failed) }
             return
         }
         guard let header = trashNotice?.header else { return }
         trashNotice = nil
         undoWatch?()
-        if let failed = try? await header.undoTrash() { trashNotice = TrashNotice(message: say(notice: failed)) }
+        if let failed = try? await header.undoTrash() { show(failed) }
     }
 
     /// What a move or copy said once `sheet` is done, at the bottom of the shell: a move's Undo for as long as core offers it
@@ -1097,10 +1098,10 @@ final class AppModel {
         guard let done = sheet.current.done else { return }
         undoWatch?()
         guard sheet.current.undo != nil else {
-            trashNotice = TrashNotice(message: say(notice: done))
+            show(done)
             return
         }
-        let notice = TrashNotice(message: say(notice: done), move: sheet)
+        let notice = TrashNotice(message: say(notice: done), lifeMs: nil, move: sheet)
         trashNotice = notice
         let id = notice.id
         let watch = sheet.watch { @Sendable state in
@@ -1111,6 +1112,23 @@ final class AppModel {
     }
 
     func dismissTrashNotice(_ id: UUID) { if trashNotice?.id == id { trashNotice = nil } }
+
+    /// A notice the core raised, shown as its kind lives (ADR 0154 decision 4, the web's `useToast`): a refusal or a
+    /// failure as the shell's alert until it is closed, anything else at the bottom, closing itself after the core's
+    /// `lifeMs` — an Undo raised without an offer to watch lives as a success does.
+    func show(_ said: VeyqCore.Notice) { show([said]) }
+
+    /// Several notices of one outcome, said together (each on its own line): held where any is.
+    func show(_ said: [VeyqCore.Notice]) {
+        guard !said.isEmpty else { return }
+        let text = said.map { say(notice: $0) }.joined(separator: "\n")
+        if said.contains(where: { $0.kind == .held }) {
+            notice = Notice(text: text)
+        } else {
+            undoWatch?()
+            trashNotice = TrashNotice(message: text, lifeMs: said.compactMap { $0.kind.lifeMs?.int64Value }.max() ?? VeyqCore.Notice.companion.SAID_MS)
+        }
+    }
 
     // MARK: A report (core's ReportSheet)
 
@@ -1196,7 +1214,7 @@ final class AppModel {
     /// while the app is active, so nothing is asked in the background; its cancellation stops the poll.
     func liveGallery(_ node: NodeAt) async {
         guard let live = galleryModel(node)?.startLive() else { return }
-        while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
+        await untilCancelled()
         live.stop()
     }
 
@@ -1354,18 +1372,9 @@ final class AppModel {
 
     // MARK: The gallery's filter, the contributions and the view mode (ADR 0149 decisions 5, 6 and 8)
 
-    /// The viewer's calendar for a gallery filter's day chips (inbox #989): an instant's day and its words in this device's
-    /// own calendar and time zone, as a picked time is converted for the core — the core does no zone arithmetic.
-    static let galleryCalendar = GalleryFilter.Calendar(
-        dayOf: { ms in
-            let c = Calendar.current.dateComponents([.year, .month, .day], from: Date(timeIntervalSince1970: Double(truncating: ms) / 1000))
-            return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
-        },
-        label: { ms, withYear in
-            let at = Date(timeIntervalSince1970: Double(truncating: ms) / 1000)
-            return withYear.boolValue ? at.formatted(.dateTime.day().month(.abbreviated).year()) : at.formatted(.dateTime.day().month(.abbreviated))
-        }
-    )
+    /// The viewer's calendar for a gallery filter's day chips (inbox #989): an instant's day in this device's time zone
+    /// (core's `LocalDays`) and its chip's words as the web writes them (`Shown.dayLabel`, ADR 0154 decision 5).
+    static let galleryCalendar = GalleryFilter.CalendarCompanion.shared.local(language: shownLanguage)
 
     /// The Contributions view of the page `gallery` (core's `Contributions`): made when the view is asked for, its state
     /// watched by the view.
@@ -1557,7 +1566,7 @@ final class AppModel {
             if state.notice == .unplayable {
                 musicNothingPlays = true
                 Task { @MainActor [weak self] in
-                    try? await Task.sleep(for: .seconds(5))
+                    try? await waitCore(VeyqCore.Notice.companion.NOTHING_PLAYS_MS)
                     self?.musicNothingPlays = false
                 }
             }
@@ -1962,10 +1971,18 @@ final class AppModel {
         depotState = nil
     }
 
-    /// The uploads' state on the main actor; what they say (`said`) the shell shows as an alert of its own, one at a time.
+    /// The uploads' state on the main actor; what they say (`said`) the shell shows as an alert of its own, one at a time —
+    /// but a said that offers nothing and only says something went through lives as a success does (`show`), seen at once.
     private func syncDepot() {
         guard let d = depot else { return }
-        depotState = d.current
+        let state = d.current
+        if let said = state.said, said.action == nil, !said.notices.isEmpty, said.notices.allSatisfy({ $0.kind == .said }) {
+            show(said.notices)
+            d.seen(id: said.id)
+            depotState = d.current
+            return
+        }
+        depotState = state
     }
 
     /// A picked file as an upload lists it: its name, size, type, modified time (read inside its security scope).
@@ -2025,7 +2042,7 @@ final class AppModel {
     var importing: ImportOffer?
 
     /// What a finished import says once its sheet is gone (the imported line, the web's toast).
-    @ObservationIgnored var importedLine: String?
+    @ObservationIgnored var importedLine: [VeyqCore.Notice] = []
 
     func offerImport(_ dialog: ImportDialog?) {
         guard let dialog else { return }
@@ -2180,7 +2197,7 @@ final class AppModel {
     /// (nil: it closes), its notice said here once it closed. A save that answered nothing (its task cancelled) is never
     /// taken as made: the dialog stays open saying it was not saved.
     func asked(_ answer: NameAnswer?) -> String? {
-        nameAnswered(answer) { notice = Notice(text: $0) }
+        nameAnswered(answer) { show($0) }
     }
 
     /// A Memory `name` made in space `scopeId` under `parentId` (nil: the space's top) — New Memory, core's
@@ -2215,7 +2232,7 @@ final class AppModel {
     private func opened(_ made: MemoryCreate.Made?) -> String? {
         // made offline (ADR 0153): the dialog closes and says it waits to be sent; nothing to open until it is
         if let made, made.queued {
-            if let n = made.notice { notice = Notice(text: say(notice: n)) }
+            if let n = made.notice { show(n) }
             return nil
         }
         if let notice = made?.notice { return say(notice: notice) }
@@ -2269,7 +2286,7 @@ final class AppModel {
     /// while the app is active, so nothing is asked in the background; its cancellation stops the poll.
     func livePot() async {
         guard let live = potModel?.startLive() else { return }
-        while !Task.isCancelled { try? await Task.sleep(for: .seconds(3600)) }
+        await untilCancelled()
         live.stop()
     }
 

@@ -1151,8 +1151,8 @@ private struct MediaDetailsView: View {
     private static func value(_ row: MediaDetails.Row) -> String {
         let shown = MediaDetails.shared.shown(row: row)
         if let words = shown as? MediaDetails.ShownWords { return say(notice: words.notice) }
-        if let size = shown as? MediaDetails.ShownSize { return ByteCountFormatter.string(fromByteCount: size.bytes, countStyle: .file) }
-        if let moment = shown as? MediaDetails.ShownMoment { return Date(timeIntervalSince1970: Double(moment.epochMs) / 1000).formatted(date: .abbreviated, time: .shortened) }
+        if let size = shown as? MediaDetails.ShownSize { return shownSize(size.bytes) }
+        if let moment = shown as? MediaDetails.ShownMoment { return shownMoment(moment.epochMs) }
         return (shown as? MediaDetails.ShownPlain)?.text ?? row.value
     }
 }

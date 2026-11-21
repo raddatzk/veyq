@@ -593,33 +593,67 @@ struct CoverSheet: View {
     }
 }
 
-/// What a delete into the trash says, at the bottom of the shell: "“x” moved to the trash." with its Undo for as long as core
-/// offers it (`NodeHeaderModel`, `TRASH_UNDO_MS`, 6 s), or a refusal; it goes by itself.
+/// What the shell says at its bottom (`AppModel.TrashNotice`): a trash's or a move's "moved" with its Undo for as long as
+/// core offers it (`NodeHeaderModel`, `ShellModel.TRASH_UNDO_MS`), or a success that closes itself after the core's
+/// `lifeMs` (ADR 0154 decision 4).
 struct TrashNotice: View {
     @Bindable var model: AppModel
 
     var body: some View {
         if let notice = model.trashNotice {
-            HStack(spacing: 12) {
-                Text(notice.message).font(.subheadline).foregroundStyle(Role.text)
-                Spacer(minLength: 0)
+            NoticeCard(text: notice.message) {
                 if notice.header != nil || notice.move != nil {
                     Button(say(.trashUndo)) { Task { await model.undoTrash() } }.fontWeight(.semibold)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(Role.surface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
-            .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
-            .padding(.horizontal, 16)
-            .padding(.bottom, 96)
             .task(id: notice.id) {
-                // a trash's or a move's undo goes when core ends its offer; any other notice after the same time
-                guard notice.header == nil, notice.move == nil else { return }
-                try? await Task.sleep(for: .milliseconds(ShellModel.companion.TRASH_UNDO_MS))
+                // an Undo goes when core ends its offer; a success after its life
+                guard let life = notice.lifeMs, (try? await waitCore(life)) != nil else { return }
                 model.dismissTrashNotice(notice.id)
             }
         }
+    }
+}
+
+/// The card a notice at the bottom is drawn in, its action trailing.
+struct NoticeCard<Action: View>: View {
+    let text: String
+    @ViewBuilder let action: () -> Action
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(text).font(.subheadline).foregroundStyle(Role.text)
+            Spacer(minLength: 0)
+            action()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Role.surface, in: RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 96)
+    }
+}
+
+extension View {
+    /// A notice the core raised on a screen of its own (a guest's link), as it lives (ADR 0154 decision 4): a refusal or a
+    /// failure as an alert until it is closed, anything else at the bottom, closing itself after the core's `lifeMs`.
+    func saidNotice(_ said: Binding<VeyqCore.Notice?>) -> some View {
+        let held = said.wrappedValue.map { $0.kind == .held } ?? false
+        return self
+            .alert(held ? said.wrappedValue.map { say(notice: $0) } ?? "" : "",
+                   isPresented: Binding(get: { held }, set: { if !$0 { said.wrappedValue = nil } })) {
+                Button(say(.ok), role: .cancel) {}
+            }
+            .overlay(alignment: .bottom) {
+                if let n = said.wrappedValue, !held {
+                    NoticeCard(text: say(notice: n)) { EmptyView() }
+                        .task(id: ObjectIdentifier(n)) {
+                            guard (try? await waitCore(n.kind.lifeMs?.int64Value ?? Notice.companion.SAID_MS)) != nil else { return }
+                            if said.wrappedValue === n { said.wrappedValue = nil }
+                        }
+                }
+            }
     }
 }
 

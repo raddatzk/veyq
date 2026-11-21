@@ -184,7 +184,7 @@ private struct EntriesList: View {
     }
 
     private func subtitle(_ e: PotView.EntryRow) -> String {
-        view.line(e: e).map { say(piece: $0) }.joined(separator: " · ")
+        pieceLine(view.line(e: e))
     }
 
 }
@@ -208,7 +208,7 @@ private struct OverviewList: View {
                         PersonAvatar(name: personName(p.name), userId: p.userId)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(personName(p.name)).fontWeight(.semibold)
-                            Text(view.balanceFacts(p: p).map { say(piece: $0) }.joined(separator: " · "))
+                            Text(pieceLine(view.balanceFacts(p: p)))
                                 .font(.caption).foregroundStyle(Role.muted)
                         }
                         Spacer()

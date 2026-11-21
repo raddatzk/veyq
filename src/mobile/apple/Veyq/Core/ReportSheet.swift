@@ -127,12 +127,8 @@ struct ReportSheet: View {
         .disabled(st.sending)
     }
 
-    private static func time(_ instant: String?) -> String {
-        let parse = ISO8601DateFormatter()
-        parse.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let date = instant.flatMap { parse.date(from: $0) ?? ISO8601DateFormatter().date(from: $0) }
-        return date.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? (instant ?? "")
-    }
+    /// A server instant as the web writes a date and time (core's `Shown.moment`).
+    private static func time(_ instant: String?) -> String { instant.map(shownMoment) ?? "" }
 }
 
 /// Core's report sheet as SwiftUI observes it: its state, moved by the sheet's watch onto the main actor.

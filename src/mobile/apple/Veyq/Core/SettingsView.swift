@@ -102,7 +102,7 @@ struct SettingsView: View {
                     // the sessions and the saved keys read after the page opened move what is below them: the section is
                     // scrolled to again as they arrive, for a moment
                     Task {
-                        try? await Task.sleep(for: .seconds(3))
+                        try? await Task.sleep(for: Self.anchorHold)
                         if anchored == section { anchored = nil }
                     }
                 }
@@ -115,6 +115,8 @@ struct SettingsView: View {
 
     /// The section a search result chose, while what reads after the page opened may still move it.
     @State private var anchored: String?
+    /// How long an anchored section is scrolled to again as the rows below it arrive: a layout's settle, no notice's.
+    private static let anchorHold: Duration = .seconds(3)
 
     /// What the page reads after it opened, which changes its sections' heights.
     private var layoutKey: String {
@@ -284,7 +286,7 @@ struct SettingsView: View {
         return "\(f.amount)|\(f.unit.name)|\(f.off)"
     }
 
-    private static func size(_ bytes: Int64) -> String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
+    private static func size(_ bytes: Int64) -> String { shownSize(bytes) }
 
     /// "Storage on This Device" (ADR 0140 decision 10), as the system's own storage pages show it: the limit (a free size
     /// with its unit, or Off), what the recently viewed content and the items available offline use and the volume's
@@ -380,7 +382,7 @@ struct SettingsView: View {
         return HStack {
             VStack(alignment: .leading, spacing: 3) {
                 Label(say(notice: item.title), systemImage: Names.kindSymbol(item.kind))
-                Text([item.said.map { say(notice: $0) }, Self.size(item.bytes)].compactMap { $0 }.joined(separator: " · "))
+                Text(joinedLine([item.said.map { say(notice: $0) }, Self.size(item.bytes)].compactMap { $0 }))
                     .font(.footnote).foregroundStyle(Role.muted)
             }
             #if os(macOS)
@@ -526,7 +528,7 @@ struct SettingsView: View {
                             .foregroundStyle(Role.accent)
                     }
                 }
-                if !dates.isEmpty { Text(dates.joined(separator: " · ")).font(.footnote).foregroundStyle(Role.muted) }
+                if !dates.isEmpty { Text(joinedLine(dates)).font(.footnote).foregroundStyle(Role.muted) }
             }
             #if os(macOS)
             Spacer()
@@ -622,10 +624,8 @@ struct SettingsView: View {
         }
     }
 
-    /// A moment the server gave, as the system writes a date and time in the person's language.
-    private static func moment(_ epochMs: KotlinLong) -> String {
-        Date(timeIntervalSince1970: Double(epochMs.int64Value) / 1000).formatted(date: .abbreviated, time: .shortened)
-    }
+    /// A moment the server gave, as the web writes a date and time (core's `Shown.moment`).
+    private static func moment(_ epochMs: KotlinLong) -> String { shownMoment(epochMs.int64Value) }
 }
 
 /// The page in its window: a navigation stack with its title and Done (iOS, a sheet over the shell), or the content of

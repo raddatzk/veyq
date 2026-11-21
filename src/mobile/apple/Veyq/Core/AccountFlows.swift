@@ -1305,8 +1305,7 @@ struct SafetyNumberSection: View {
                 Text(say(.safetyVerifiedBy, names.joined(separator: ", "))).font(.footnote).foregroundStyle(Role.muted)
             }
             if let at = s.rotatedAt {
-                let date = Date(timeIntervalSince1970: Double(at.int64Value) / 1000).formatted(date: .abbreviated, time: .omitted)
-                Text(say(.trustRotated, date)).font(.footnote).foregroundStyle(Role.muted)
+                Text(say(.trustRotated, shownDayOf(at.int64Value))).font(.footnote).foregroundStyle(Role.muted)
             }
             if s.replaced { Text(say(.safetyReplaced)).font(.footnote).foregroundStyle(Role.muted) }
         }
