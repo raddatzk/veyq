@@ -112,9 +112,25 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   (`bookmark: None`, `sections: vec![]`/`[]`, `tile_actions`, `actions`). `linux/run.py bridge` and `build` green,
   `windows/run.py build` green on the VM (Veyq.Tests 80, PdfWebTest), both Apple builds green — after phase 1's Swift
   named two entries as Kotlin/Native does not: the framework mangles `COPY` to `theCopy` and `DELETE` to `delete_`.
-- [ ] **3 the guard** — S6, on for the core and the bridge, each platform switched on in its phase. · Done when: the
+- [x] **3 the guard** — S6, on for the core and the bridge, each platform switched on in its phase. · Done when: the
   guard green; `validate_guard_gaps.py` run once. **Bites:** a `default:` planted over `HeaderAction` in a Swift file,
   a whitelist array in Rust, a `.filter` on a plan in Kotlin — each red alone.
+  **Built** (2026-11-20). `scripts/validate_mobile_structure.py` (its docstring the rules and limits) reads the `@Plan`
+  enums, their entries and serial names from the core's main sources and each one's name per language (Swift's
+  lowerCamel or Kotlin/Native's mangled `theCopy`/`delete_`; Rust's and C#'s the generated names), and the plans' lists
+  from the core's and the wire's `List<…>` declarations: (a) no `else ->`/`default:`/`_ =>` in a `when`/`switch`/`match`
+  whose arms name a plan's entry — on the core, the bridge and each platform switched on; (b) no collection literal whose
+  elements are all a plan's entries, nor one of two or more strings that are all a plan's ids (a registration keyed by an
+  entry is none); (c) no filter or sort in the statement that reads a plan's list — (b) and (c) on the bridge and the
+  platforms. `PLATFORMS` all off (phases 4–7 switch each on); `--platform` previews one, `--paths` reads the files given.
+  Its first run found the bridge filtering `Create.entries` for a gallery's New (now `Create.valueOf`). Bites, each red
+  alone and green restored: a `default:` over `HeaderAction` in `apple/…/BookmarkScreen.swift` (`--paths`); an array of
+  two `HeaderAction`s in `linux/…/said.rs` (`--paths`; it first went unseen behind a `crate::…` path, now read); a
+  `.filter` on `p.buttons` in the bridge (the full run); an `else ->` in `NodeHeader.label` (the core); a `_ =>` over
+  `HeaderAction` in a C# switch expression (`--paths`). The preview per platform: Android 7, Apple 6, Linux 5, Windows 6
+  — the phases' work. Every guard green, `validate_guard_gaps.py` run once (104 cases hold). **Open:** a Swift `switch`
+  over a Kotlin enum is no exhaustive one and needs `default:` to compile (#1050) — Apple's phase needs an exhaustive Swift
+  form first.
 - [ ] **4 Android** — every plan drawn in the core UI; the guard on for Android. · Done when: `:android:assembleDebug`,
   the words, guidelines, direction and structure guards green.
 - [ ] **5 Apple** — the same. · Done when: both Apple builds green, the guards green.
