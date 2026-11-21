@@ -65,8 +65,15 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
 
 ## Phases
 
-- [ ] **1 vectors** — F3: the script, the file, the web's pinning test. · Done when: `pnpm run check` in `src/web` green.
+- [x] **1 vectors** — F3: the script, the file, the web's pinning test. · Done when: `pnpm run check` in `src/web` green.
   **Bite:** one size vector edited → the web test red.
+  **Built** (2026-11-21): `src/web/src/shared/formatVectors.ts` renders every case through the web's formatters
+  (`formatBytes`, `formatMoney` over `knownCurrencies`/`minorUnitsOf`, `memoryDateRange`, `joinList`, `formatTrackLength`,
+  and `Intl` with the date call sites' options, a moment in UTC); `scripts/format-vectors.mts` writes
+  `src/mobile/words/format-vectors.json` (ICU 77.1: 262 sizes, 19 days, 34 moments, 17 Memory days, 4 ranges, 815 amounts
+  in all 163 currencies, 25 numbers, 4 lists, 22 lengths); `formatVectors.test.ts` re-renders it. Measured: `pnpm run
+  check` in `src/web` green; one `"1.1 kB"` edited to `"1.2 kB"` → `size` red, restored (`/bin/cp -f`) → green. A list
+  (`joinList`) and a currency-less number joined the CR's kinds: both are shown text the apps write too.
 - [ ] **2 core** — F1, F2; every notice site's kind; the vectors test. · Done when: `:core:jvmTest :core:macosArm64Test`
   green. **Bites:** `size` at base 1024 → the vectors red; a refusal raised as `SAID` → its site's test red.
 - [ ] **3 bridge** — the kind and the shown strings on the wire (no `Bytes`/`Moment`/`Amount` left for a host to
