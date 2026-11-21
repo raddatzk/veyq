@@ -12,10 +12,13 @@
 // camera, scans its code (QrCamera, kind KIT). Either way the gate's kit fills the email and the server and the Secret Key
 // field says "From your Emergency Kit" — the key itself the core holds, never this side.
 //
-// Below them the two ways in from another device (ADR 0059 §1): "Scan a code from another device",
-// only where there is a camera, and "Sign in with a QR code" — each a ceremony of DeviceLinkDialog over the server the
-// form names (nothing a scan reads changes it). Last, *Open a link* (ADR 0150 decision 4): a received link opened as its
-// guest, no sign-in needed (ReceivedView).
+// The ways in from another device (ADR 0059 §1): "Sign in with a QR code" and, only where there is a camera, "Scan a
+// code from another device" — each a ceremony of DeviceLinkDialog over the server the form names (nothing a scan reads
+// changes it). *Open a link* (ADR 0150 decision 4): a received link opened as its guest, no sign-in needed (ReceivedView).
+//
+// Which of these entries the form offers and in which order is the core's (SignIn.Plan, ADR 0154 decision 2, owner
+// 2026-11-20: the web's — Sign in first, Cancel while adding an account, the device links, the kit, Open a link last),
+// asked again when adding or the camera changes; every entry is drawn, in its order, under the fields.
 
 namespace Veyq.Core;
 
@@ -55,6 +58,11 @@ internal sealed class SignInView
     private readonly TextBlock _otherServer;
     /// <summary>The kit the form last showed, so a new one fills the email and the server once.</summary>
     private KitShown? _shownKit;
+    /// <summary>The entries under the fields, the core's plan drawn whole (Entry).</summary>
+    private readonly StackPanel _entries = new() { Spacing = 16 };
+    private bool _adding;
+    private bool _camera;
+    private (bool Adding, bool Camera)? _planned;
 
     public UIElement Page { get; }
 
@@ -71,12 +79,11 @@ internal sealed class SignInView
         _kitHeld.Children.Add(new TextBlock { Text = Words.SigninSecretKey() });
         _kitHeld.Children.Add(Field(new TextBlock { Text = Words.SigninKitHeld(), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] }, "signin-kit-held-text"));
         _kitHeld.Children.Add(clear);
-        // the file first on a desktop (the kit CR's owner question 1); the scan only where there is a camera
         _openKit = Field(new Button { Content = Words.SigninKitOpen(), HorizontalAlignment = HorizontalAlignment.Stretch }, "signin-kit-open");
         _openKit.Click += (_, _) => PickKit();
-        _scanKit = Field(new Button { Content = Words.SigninKitScan(), HorizontalAlignment = HorizontalAlignment.Stretch, Visibility = Visibility.Collapsed }, "signin-kit-scan");
+        _scanKit = Field(new Button { Content = Words.SigninKitScan(), HorizontalAlignment = HorizontalAlignment.Stretch }, "signin-kit-scan");
         _scanKit.Click += (_, _) => ScanKit();
-        _linkScan = Field(new Button { Content = Words.SigninLinkScan(), HorizontalAlignment = HorizontalAlignment.Stretch, Visibility = Visibility.Collapsed }, "signin-link-scan");
+        _linkScan = Field(new Button { Content = Words.SigninLinkScan(), HorizontalAlignment = HorizontalAlignment.Stretch }, "signin-link-scan");
         _linkScan.Click += (_, _) => Link(server => new Call.LinkScanFromTrusted { server = server });
         _linkShow = Field(new Button { Content = Words.SigninLinkShow(), HorizontalAlignment = HorizontalAlignment.Stretch }, "signin-link-show");
         _linkShow.Click += (_, _) => Link(server => new Call.LinkShowForSignIn { server = server });
@@ -105,7 +112,7 @@ internal sealed class SignInView
             e.Handled = true;
             Ask();
         };
-        _cancel = new Button { Content = Words.SigninCancel(), HorizontalAlignment = HorizontalAlignment.Stretch, Visibility = Visibility.Collapsed };
+        _cancel = new Button { Content = Words.SigninCancel(), HorizontalAlignment = HorizontalAlignment.Stretch };
         AutomationProperties.SetAutomationId(_cancel, "signin-cancel");
         _cancel.Click += (_, _) => Act.Send(new Call.SessionCancelAdd());
         _working = new ProgressRing { IsActive = false, Visibility = Visibility.Collapsed, HorizontalAlignment = HorizontalAlignment.Center };
@@ -115,25 +122,65 @@ internal sealed class SignInView
         AutomationProperties.SetAutomationId(_heading, "signin-title");
         AutomationProperties.SetHeadingLevel(_heading, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1);
         var column = new StackPanel { Spacing = 16, MaxWidth = 420, Padding = new Thickness(24), VerticalAlignment = VerticalAlignment.Center };
-        foreach (var child in new UIElement[] { _heading, _server, _email, _password, _secretKey, _kitHeld, _openKit, _scanKit, _otherServer, _error, _submit, _cancel, _working, _linkScan, _linkShow, _openLink }) column.Children.Add(child);
+        foreach (var child in new UIElement[] { _heading, _server, _email, _password, _secretKey, _kitHeld, _otherServer, _error, _entries, _working }) column.Children.Add(child);
         // a width-capped column straight in a ScrollViewer sat off centre once the window was resized (measured): the
         // ScrollViewer's child stretches, the column centres in it
         var stretch = new Grid();
         stretch.Children.Add(column);
         // the Secret Key and the password (PasswordBox's peek shows them) and the kit scanner's camera: out of capture
         Page = ScreenSecrets.Guard(new ScrollViewer { Content = stretch, HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        Plan();
         OfferScan();
     }
 
-    /// <summary>The scan's entry only where there is a camera (the kit CR's D7: no camera, no entry).</summary>
+    /// <summary>The entries under the fields as the core plans them for adding or not and a camera or not (SignIn.Plan):
+    /// asked when either changed, each entry drawn in its order; the latest ask's answer is drawn.</summary>
+    private async void Plan()
+    {
+        (bool Adding, bool Camera) asked = (_adding, _camera);
+        if (_planned == asked) return;
+        _planned = asked;
+        try
+        {
+            var (answer, _) = await Core.CallAsync(new Call.SignInPlan { adding = asked.Adding, camera = asked.Camera });
+            if (_planned != asked) return;
+            if (answer is not Answer.SignInPlan plan)
+            {
+                Log.Write($"SignIn.Plan answered {Describe(answer)}");
+                return;
+            }
+            _entries.Children.Clear();
+            foreach (var e in plan.entries) _entries.Children.Add(Entry(e));
+            Log.Write($"sign-in entries: {string.Join(",", plan.entries)}");
+        }
+        catch (Exception e)
+        {
+            // an exception out of an async void would end the app in combase, with nothing in the log
+            Log.Write($"SignIn.Plan failed: {e.GetType().Name}");
+        }
+    }
+
+    /// <summary>A plan entry's control: Sign in the accent button, every other a button of its own.</summary>
+    private Button Entry(SignInEntry e) => e switch
+    {
+        SignInEntry.Submit => _submit,
+        SignInEntry.Cancel => _cancel,
+        SignInEntry.LinkShow => _linkShow,
+        SignInEntry.LinkScan => _linkScan,
+        SignInEntry.KitOpen => _openKit,
+        SignInEntry.KitScan => _scanKit,
+        SignInEntry.OpenLink => _openLink,
+    };
+
+    /// <summary>Whether this device has a camera, for the plan's scans (the kit CR's D7: no camera, no entry).</summary>
     private async void OfferScan()
     {
         try
         {
             var present = await QrCamera.PresentAsync();
             Log.Write(present ? "the sign-in's kit and link scans offered" : "the sign-in's kit and link scans not offered: no camera");
-            _scanKit.Visibility = present ? Visibility.Visible : Visibility.Collapsed;
-            _linkScan.Visibility = present ? Visibility.Visible : Visibility.Collapsed;
+            _camera = present;
+            Plan();
         }
         catch (Exception e)
         {
@@ -274,7 +321,8 @@ internal sealed class SignInView
         _linkScan.IsEnabled = !gate.working;
         _linkShow.IsEnabled = !gate.working;
         _heading.Text = gate.adding ? Words.SigninAddTitle() : Words.SigninTitle();
-        _cancel.Visibility = gate.adding ? Visibility.Visible : Visibility.Collapsed;
+        _adding = gate.adding;
+        Plan();
         _cancel.IsEnabled = !gate.working;
         _submit.IsEnabled = !gate.working;
         _working.IsActive = gate.working;

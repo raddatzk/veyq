@@ -88,9 +88,6 @@ internal sealed class MemoriesPlaces : ApplicationList
     /// <summary>The bar's Map tab (the core's BarTab key).</summary>
     private const string Map = "memories.map";
 
-    /// <summary>No level's View beside the Memories map.</summary>
-    public override bool OffersView(ShellShown shown) => shown.selectedTab?.key != Map;
-
     private async void OpenMemoriesMap()
     {
         if (_mapOpening) return;

@@ -1,7 +1,8 @@
 // Home and an application's list (ADR 0122): Home's level as the core groups it — the folders, then the contents — under
 // the filters the core offers (a SelectorBar), and an application's own list in its Favorites, Recent and the rest.
 // Drawn as Explorer's Home draws its sections: a heading over each group's list — or, where the account chose Tiles
-// (ShellShown.view, ADR 0149 decision 8), over each group's tiles (LevelTiles). Linux's home.rs, in Fluent.
+// (ShellShown.view, ADR 0149 decision 8), over each group's tiles (LevelTiles). A row's and a tile's context menu is the
+// core's plan for its node (RowMenu). Linux's home.rs, in Fluent.
 
 namespace Veyq.Core;
 
@@ -55,16 +56,19 @@ internal static class HomeView
     /// <summary>A kept link's row (ADR 0150 decision 6, #1032: Home.level lists it): no application's object, so its page
     /// opens over what is on screen (Shell.OpenBookmark), back returning there.</summary>
     private static ListViewItem BookmarkRow(NodeRef n) =>
-        Row(KindGlyph(n.kind), n.name, $"bookmark:{n.name}", true, () => OpenBookmark(n));
+        Row(KindGlyph(n.kind), n.name, $"bookmark:{n.name}", true, () => OpenBookmark(n), node: At(n));
 
     private static LevelTiles.Item BookmarkTile(NodeRef n) =>
-        new(KindGlyph(n.kind), n.nodeId, n.name, null, $"bookmark:{n.name}", () => OpenBookmark(n));
+        new(KindGlyph(n.kind), n.nodeId, n.name, null, $"bookmark:{n.name}", () => OpenBookmark(n), Node: At(n));
 
-    private static void OpenBookmark(NodeRef n) =>
-        Act.Send(new Call.ShellOpenBookmark { node = new NodeAt { scopeId = n.scopeId, nodeId = n.nodeId, kind = n.kind, name = n.name } });
+    private static void OpenBookmark(NodeRef n) => Act.Send(new Call.ShellOpenBookmark { node = At(n) });
 
-    /// <summary>A list row: the kind's glyph, the name, a chevron where it enters.</summary>
-    private static ListViewItem Row(string glyph, string name, string automationId, bool enters, Action open, Func<FontIcon, UIElement>? prefix = null, string? subtitle = null)
+    private static NodeAt At(NodeRef n) => new() { scopeId = n.scopeId, nodeId = n.nodeId, kind = n.kind, name = n.name };
+
+    private static NodeAt At(ObjectRef r) => new() { scopeId = r.scopeId, nodeId = r.nodeId, kind = r.kind, name = r.name };
+
+    /// <summary>A list row: the kind's glyph, the name, a chevron where it enters; <paramref name="node"/>'s menu (RowMenu).</summary>
+    private static ListViewItem Row(string glyph, string name, string automationId, bool enters, Action open, Func<FontIcon, UIElement>? prefix = null, string? subtitle = null, NodeAt? node = null)
     {
         var line = new Grid { ColumnSpacing = 12 };
         line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -99,6 +103,7 @@ internal static class HomeView
         var row = new ListViewItem { Content = line, Tag = open, MinHeight = 44 };
         AutomationProperties.SetAutomationId(row, automationId);
         AutomationProperties.SetName(row, subtitle is null ? name : $"{name}, {subtitle}");
+        if (node is not null) RowMenu.Attach(row, node);
         return row;
     }
 
@@ -107,22 +112,22 @@ internal static class HomeView
     public static ListViewItem ObjectRow(ObjectRef r) =>
         Row(KindGlyph(r.kind), r.name, $"object:{r.name}", false, () => Act.Send(new Call.ShellOpen { Ref = r }),
             glyph => RowCovers.Prefix(glyph, r.nodeId),
-            r.kind is "MEMORY" or "CHAPTER" ? RowDates.Line(r.nodeId) : null);
+            r.kind is "MEMORY" or "CHAPTER" ? RowDates.Line(r.nodeId) : null, At(r));
 
     /// <summary><paramref name="r"/> as a tile: what its row shows and does (LevelTiles).</summary>
     private static LevelTiles.Item ObjectTile(ObjectRef r) =>
         new(KindGlyph(r.kind), r.nodeId, r.name, r.kind is "MEMORY" or "CHAPTER" ? RowDates.Line(r.nodeId) : null, $"object:{r.name}",
-            () => Act.Send(new Call.ShellOpen { Ref = r }));
+            () => Act.Send(new Call.ShellOpen { Ref = r }), Node: At(r));
 
     private static LevelTiles.Item FolderTile(NodeRef n, Drops? drops) =>
         new(KindGlyph(n.kind), n.nodeId, n.name, null, $"folder:{n.name}",
             () => Act.Send(new Call.ShellEnter { folder = new FolderRef { nodeId = n.nodeId, name = n.name } }),
-            drops is not null && drops.Rows.Contains(n.nodeId) ? tile => drops.OntoFolder(tile, n) : null);
+            drops is not null && drops.Rows.Contains(n.nodeId) ? tile => drops.OntoFolder(tile, n) : null, At(n));
 
     private static ListViewItem FolderRow(NodeRef n) =>
         Row(KindGlyph(n.kind), n.name, $"folder:{n.name}", true,
             () => Act.Send(new Call.ShellEnter { folder = new FolderRef { nodeId = n.nodeId, name = n.name } }),
-            glyph => RowCovers.Prefix(glyph, n.nodeId));
+            glyph => RowCovers.Prefix(glyph, n.nodeId), node: At(n));
 
     /// <summary>A section: its heading (if any), then its rows as one list whose item click opens the row.</summary>
     private static void Section(StackPanel content, string? heading, IEnumerable<ListViewItem> rows, bool apart = false) =>

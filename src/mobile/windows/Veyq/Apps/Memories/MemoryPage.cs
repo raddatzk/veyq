@@ -410,11 +410,6 @@ internal sealed class MemoryPage : IDisposable
     public static void OpenNode(NodeAt node) =>
         Act.Send(new Call.ShellOpen { Ref = new ObjectRef { scopeId = node.scopeId, nodeId = node.nodeId, kind = node.kind, application = ApplicationId.Memories, name = node.name } });
 
-    /// <summary>Whether a tile's menu marks (Marks.Toggle): where the core says a mark may be flipped
-    /// (GalleryShown.marking, #1001: a member's, the own set read — a personal space's too), online or where the core
-    /// queues the page's writes offline (GalleryShown.queues, ADR 0153: a mark kept to be sent).</summary>
-    private bool Marking => _shown is { marking: true } s && (s.offline is null || s.queues);
-
     /// <summary>The grid's width: the scroll's view, less the page's margins.</summary>
     private double Width => _scroll.ViewportWidth - 2 * Margin;
 
@@ -484,7 +479,7 @@ internal sealed class MemoryPage : IDisposable
         {
             // a row is built from its frames and its media's tiles: the same row moves, another is made
             // a placeholder is built anew when it starts sending or fails, never for a step of its progress
-            var key = string.Join(" ", r.tiles.Select(t => $"{t.mediaId}:{(uploading.TryGetValue(t.mediaId, out var u) ? Stage(u) : byId.TryGetValue(t.mediaId, out var m) ? m.Row.tile ?? "-" : "-")}:{(byId.TryGetValue(t.mediaId, out var b) ? $"{b.Row.marks}/{b.Row.mine}" : "")}:{t.left:0.0}:{t.width:0.0}")) + $" h{r.height:0.0} m{Marking}";
+            var key = string.Join(" ", r.tiles.Select(t => $"{t.mediaId}:{(uploading.TryGetValue(t.mediaId, out var u) ? Stage(u) : byId.TryGetValue(t.mediaId, out var m) ? m.Row.tile ?? "-" : "-")}:{(byId.TryGetValue(t.mediaId, out var b) ? $"{b.Row.marks}/{b.Row.mine}/{b.Row.tileActions.Count}" : "")}:{t.left:0.0}:{t.width:0.0}")) + $" h{r.height:0.0}";
             if (_mounted.TryGetValue(r.index, out var placed))
             {
                 if (placed.Key == key)
@@ -588,17 +583,22 @@ internal sealed class MemoryPage : IDisposable
         AutomationProperties.SetName(tile, marked is null ? name : $"{name}, {marked}");
         ToolTipService.SetToolTip(tile, name);
         tile.Click += (_, _) => OpenLightbox(index);
-        if (Marking)
+        // the tile's menu (the right-click one, as Explorer's acts on the item under the pointer): every action the core
+        // plans for it, in its order (GalleryModel.tileActions, ADR 0154 decision 2: its mark where the rights allow)
+        var menu = new MenuFlyout();
+        var id = row.mediaId;
+        foreach (var a in row.tileActions)
         {
-            // the right-click menu marks, as Explorer's menu acts on the item under the pointer
-            var item = new MenuFlyoutItem { Text = row.mine ? Words.MediaMarksUnmark() : Words.MediaMarksMark(), Icon = new FontIcon { Glyph = row.mine ? "\uEB51" : "\uEB52" } };
-            AutomationProperties.SetAutomationId(item, "tile-mark");
-            var id = row.mediaId;
-            item.Click += (_, _) => ToggleMark(id);
-            var menu = new MenuFlyout();
+            var (word, glyph, automationId, act) = a switch
+            {
+                TileAction.Mark => (row.mine ? Words.MediaMarksUnmark() : Words.MediaMarksMark(), row.mine ? "\uEB51" : "\uEB52", "tile-mark", (Action)(() => ToggleMark(id))),
+            };
+            var item = new MenuFlyoutItem { Text = word, Icon = new FontIcon { Glyph = glyph } };
+            AutomationProperties.SetAutomationId(item, automationId);
+            item.Click += (_, _) => act();
             menu.Items.Add(item);
-            tile.ContextFlyout = menu;
         }
+        if (menu.Items.Count > 0) tile.ContextFlyout = menu;
         return tile;
     }
 

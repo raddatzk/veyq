@@ -69,13 +69,4 @@ public sealed class ReceivedTextTest
         var ready = Shown(ReceivedGate.Ready) with { page = page };
         Assert.AreNotEqual(ReceivedText.DrawnKey(ready), ReceivedText.DrawnKey(ready with { page = page with { sent = ["a.pdf"] } }), "a file sent shows");
     }
-
-    [TestMethod]
-    public void AKeptLinksPageOffersItsActionsOnceItsMetaRead()
-    {
-        Assert.IsTrue(ReceivedText.BookmarkActions(BookmarkState.InPlace));
-        Assert.IsTrue(ReceivedText.BookmarkActions(BookmarkState.OnItsOwn));
-        Assert.IsFalse(ReceivedText.BookmarkActions(BookmarkState.Loading));
-        Assert.IsFalse(ReceivedText.BookmarkActions(BookmarkState.Unreadable));
-    }
 }

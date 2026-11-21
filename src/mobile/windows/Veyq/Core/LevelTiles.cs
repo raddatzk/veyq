@@ -4,7 +4,7 @@
 // frame is the core's (View.Tiles: TileGrid — its columns at the width the grid has, every square's place), asked anew when
 // the width changes; a tile sits in a Border placed on the Canvas at its frame (src/mobile/CLAUDE.md § Each platform's
 // guidelines), the Border holding the tile's Button. A tile does what its row does: a folder enters (and takes a drop), an
-// object opens. Nothing is decided here.
+// object opens, and its context menu is the row's (RowMenu). Nothing is decided here.
 
 namespace Veyq.Core;
 
@@ -23,8 +23,9 @@ internal static class LevelTiles
     public const double LabelHeight = 46;
 
     /// <summary>One tile: its kind's <paramref name="Glyph"/>, the node whose cover it shows, its name and second line, its
-    /// AutomationId (the row's), what a click does, and a folder's drop (Drops.OntoFolder) where the core offers one.</summary>
-    public sealed record Item(string Glyph, string NodeId, string Name, string? Subtitle, string AutomationId, Action Open, Action<Control>? Droppable = null);
+    /// AutomationId (the row's), what a click does, a folder's drop (Drops.OntoFolder) where the core offers one, and the
+    /// node whose menu it opens (a level's row's, RowMenu).</summary>
+    public sealed record Item(string Glyph, string NodeId, string Name, string? Subtitle, string AutomationId, Action Open, Action<Control>? Droppable = null, NodeAt? Node = null);
 
     /// <summary>The tiles of <paramref name="items"/> at the core's frames, laid out anew when the grid's width changes.</summary>
     public static FrameworkElement Grid(IReadOnlyList<Item> items, string automationId)
@@ -127,6 +128,7 @@ internal static class LevelTiles
         ToolTipService.SetToolTip(tile, item.Name);
         tile.Click += (_, _) => item.Open();
         item.Droppable?.Invoke(tile);
+        if (item.Node is { } node) RowMenu.Attach(tile, node);
         return tile;
     }
 

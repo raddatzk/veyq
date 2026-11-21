@@ -2,31 +2,35 @@
 // as Windows' own Settings draws a page: the pane's Settings item opens it in the shell's NavigationView content (WinUI's
 // guideline for the settings item), a column of cards under the web's section titles —
 //
-// - Account: the address this account signs in with, and whether the server holds it confirmed;
-// - Your profile, Change password, Email address (ADR 0148 decision 10, the web's order): each a card whose button opens
-//   the flow as a page of its own in this frame (AccountFlows: Settings › the flow, Back returning here);
-// - This device: its name in the account's device register, renamed in a TextBox with its button; how it stays signed
-//   in and its change (Manage's: each other level, "Back to your password" asking in place) and "Stop trusting this device";
-// - Devices and sessions: every session family, this device's first and marked, named from the register or by its dates,
-//   its Rename where the register names its device (the web's renameDeviceOfFamily, ADR 0148 decision 1: this device's
-//   through the name above, any other's through Settings.RenameFamily), its sign-out (and, where the core offers it,
-//   "Sign out and remove saved key") behind the card's More, every step asked first (Dialogs.Confirm); "Sign out
-//   everywhere else";
-// - Add a device (only while the core offers it, addDevice: core.device-linking): "Show a code" and, where there is a
-//   camera, "Scan a code" — each a ceremony of DeviceLinkDialog over the window;
-// - Devices with a saved key: each removable, and "Remove every saved key except this device's";
+// every section the core offers (SettingsShown.sections, AccountSettings.State.sections), in its order — the web's
+// (ADR 0154 decision 2, owner 2026-11-20), the app-only ones beside their kin, Sign out last; which sections there are is
+// the core's, how each is drawn this page's:
+//
+// - Map services: this device's consent (MapServicesSection), where the tenant's map services were built;
 // - Storage on this device (ADR 0140 decision 10), as Windows' own Settings > Storage draws sizes: the limit of what is
 //   kept of content viewed — a free size in a TextBox, its unit or Off in a ComboBox, "Set limit" —, the sizes the
 //   automatic tier and the items available offline take and the volume's free space, "Clear cache", "Remove all offline
 //   content" (asked first, the core's askingRemoveAll), and a card per item available offline with its status, its size
 //   and its Remove; followed live while the page shows (Watched.SettingsStorageLive). Where this device keeps no store of
 //   the account, the section says why (storageUnavailable);
-// - Secure your account (replace the keys) and Erase account, each opening its flow as the profile's does;
+// - Devices and sessions: every session family, this device's first and marked, named from the register or by its dates,
+//   its Rename where the register names its device (the web's renameDeviceOfFamily, ADR 0148 decision 1: this device's
+//   through its name, any other's through Settings.RenameFamily), its sign-out (and, where the core offers it,
+//   "Sign out and remove saved key") behind the card's More, every step asked first (Dialogs.Confirm); "Sign out
+//   everywhere else";
+// - This device: its name in the account's device register, renamed in a TextBox with its button; how it stays signed
+//   in and its change (Manage's: each other level, "Back to your password" asking in place) and "Stop trusting this device";
+// - Devices with a saved key: each removable, and "Remove every saved key except this device's";
+// - Account: the address this account signs in with, and whether the server holds it confirmed;
+// - Email address, Change password: each a card whose button opens the flow as a page of its own in this frame
+//   (AccountFlows: Settings › the flow, Back returning here);
+// - Add a device (while the instance links devices, core.device-linking): "Show a code" and, where there is a camera,
+//   "Scan a code" — each a ceremony of DeviceLinkDialog over the window;
+// - Secure your account (replace the keys), Your profile and Erase account, each opening its flow as the others do;
 // - Sign out of this account here.
 //
 // Opened from a search's settings result (ADR 0146 decision 9), the page scrolls to that section: each section's
-// heading is kept by its SettingsSection.id (`account profile password email device add-device sessions saved-keys
-// storage maps security erase`).
+// heading is kept by its SettingsSection.id.
 //
 // Theme and language follow the system (D3): no card for them. Every state is the core's (Settings.Open,
 // Watched.Settings: SettingsShown), every action one call; why one did not come through is the state's refusal, said in an
@@ -505,7 +509,42 @@ internal sealed class AccountSettingsPage : IDisposable
         }
         _sections.Children.Add(_refused);
 
-        // Account
+        // every section the core offers, in its order (AccountSettings.State.sections, ADR 0154 decision 2: the web's
+        // order, the app-only ones beside their kin, Sign out last)
+        foreach (var section in s.sections)
+        {
+            Action draw = section switch
+            {
+                // a desktop's theme and language follow the system (D3): the core offers no Appearance here
+                SettingsSection.Appearance => () => Log.Write("settings: no appearance section on a desktop"),
+                SettingsSection.Maps => DrawMaps,
+                SettingsSection.Storage => () => DrawStorage(s),
+                SettingsSection.Sessions => () => DrawSessions(s),
+                SettingsSection.Device => () => DrawDevice(s),
+                SettingsSection.SavedKeys => () => DrawSavedKeys(s),
+                SettingsSection.Account => () => DrawAccount(s),
+                SettingsSection.Email => () => FlowSection(AccountFlow.Email),
+                SettingsSection.Password => () => FlowSection(AccountFlow.Password),
+                SettingsSection.AddDevice => () => DrawAddDevice(s),
+                SettingsSection.Security => () => FlowSection(AccountFlow.Security),
+                SettingsSection.Profile => () => FlowSection(AccountFlow.Profile),
+                SettingsSection.Erase => () => FlowSection(AccountFlow.Erase),
+                SettingsSection.SignOut => DrawSignOut,
+            };
+            draw();
+        }
+
+        // a search's settings result asked for a section: scrolled to once this first draw is laid out
+        if (_at is { } at)
+        {
+            _at = null;
+            ScrollTo(at);
+        }
+    }
+
+    /// <summary>Account: the address this account signs in with, and whether the server holds it confirmed.</summary>
+    private void DrawAccount(SettingsShown s)
+    {
         _sections.Children.Add(Anchor("account", Heading(Words.AccountSettingsAccount())));
         var confirmed = s.emailConfirmed switch
         {
@@ -514,11 +553,11 @@ internal sealed class AccountSettingsPage : IDisposable
             null => null,
         };
         _sections.Children.Add(Card("", Words.AccountSettingsEmail(), new[] { s.email, confirmed }.OfType<string>(), "settings-email"));
+    }
 
-        // the account's own flows, in the web's order (ADR 0148 decision 10)
-        foreach (var f in new[] { AccountFlow.Profile, AccountFlow.Password, AccountFlow.Email }) FlowSection(f);
-
-        // This device
+    /// <summary>This device: its name in the register, how it stays signed in.</summary>
+    private void DrawDevice(SettingsShown s)
+    {
         _sections.Children.Add(Anchor("device", Heading(Words.AccountSettingsThisDevice())));
         if (_label != s.device)
         {
@@ -528,24 +567,27 @@ internal sealed class AccountSettingsPage : IDisposable
         }
         _sections.Children.Add(Card("", Words.AccountSettingsRename(), new[] { Words.AccountSettingsRenameHint() }, "settings-device-name", out _nameHolder, _name, _rename));
         _sections.Children.Add(Trust(s));
+    }
 
-        // Add a device
-        if (s.addDevice)
+    /// <summary>Add a device (offered while the instance links devices): show a code, and scan one where there is a camera.</summary>
+    private void DrawAddDevice(SettingsShown s)
+    {
+        _sections.Children.Add(Anchor("add-device", Heading(Words.AccountSettingsAddDevice())));
+        _sections.Children.Add(Caption(Words.AccountSettingsAddDeviceSub()));
+        var show = TextButton(Words.LinkShow(), "settings-link-show");
+        show.Click += (_, _) => Link(connection => new Call.LinkShowForNewDevice { connection = connection });
+        _sections.Children.Add(Card("\uED14", Words.LinkShow(), new[] { Words.LinkIntro() }, "settings-link-show-card", show));
+        if (_camera)
         {
-            _sections.Children.Add(Anchor("add-device", Heading(Words.AccountSettingsAddDevice())));
-            _sections.Children.Add(Caption(Words.AccountSettingsAddDeviceSub()));
-            var show = TextButton(Words.LinkShow(), "settings-link-show");
-            show.Click += (_, _) => Link(connection => new Call.LinkShowForNewDevice { connection = connection });
-            _sections.Children.Add(Card("\uED14", Words.LinkShow(), new[] { Words.LinkIntro() }, "settings-link-show-card", show));
-            if (_camera)
-            {
-                var scan = TextButton(Words.LinkScan(), "settings-link-scan");
-                scan.Click += (_, _) => Link(connection => new Call.LinkScanSignInCode { connection = connection });
-                _sections.Children.Add(Card("\uE722", Words.LinkScan(), new[] { Words.LinkScanIntro() }, "settings-link-scan-card", scan));
-            }
+            var scan = TextButton(Words.LinkScan(), "settings-link-scan");
+            scan.Click += (_, _) => Link(connection => new Call.LinkScanSignInCode { connection = connection });
+            _sections.Children.Add(Card("\uE722", Words.LinkScan(), new[] { Words.LinkScanIntro() }, "settings-link-scan-card", scan));
         }
+    }
 
-        // Devices and sessions
+    /// <summary>Devices and sessions: every session family, and "Sign out everywhere else".</summary>
+    private void DrawSessions(SettingsShown s)
+    {
         _sections.Children.Add(Anchor("sessions", Heading(Words.AccountSettingsSessions())));
         _sections.Children.Add(Caption(Words.AccountSettingsSessionsSub()));
         if (s.registerRefusal is { } names)
@@ -573,39 +615,41 @@ internal sealed class AccountSettingsPage : IDisposable
                 _sections.Children.Add(others);
             }
         }
+    }
 
-        // Devices with a saved key
-        if (s.keptDevices.Count > 0 || s.otherSavedKeys)
+    /// <summary>Devices with a saved key: each removable, and every other one at once; what it is for said where none is listed.</summary>
+    private void DrawSavedKeys(SettingsShown s)
+    {
+        _sections.Children.Add(Anchor("saved-keys", Heading(Words.AccountSettingsSavedKeys())));
+        _sections.Children.Add(Caption(Words.AccountSettingsSavedKeysSub()));
+        foreach (var d in s.keptDevices)
         {
-            _sections.Children.Add(Anchor("saved-keys", Heading(Words.AccountSettingsSavedKeys())));
-            _sections.Children.Add(Caption(Words.AccountSettingsSavedKeysSub()));
-            foreach (var d in s.keptDevices)
-            {
-                var remove = TextButton(Words.AccountSettingsRemoveKey(), $"settings-remove-key:{d.label}");
-                var (device, label) = (d.deviceId, d.label);
-                remove.Click += (_, _) => AskThen("settings-remove-key-ask", Words.AccountSettingsRemoveKey(), Words.AccountSettingsRemoveKeyConfirm(label),
-                    Words.AccountSettingsRemoveKey(), "remove a saved key", id => new Call.SettingsRemoveSavedKey { settings = id, device = device });
-                _sections.Children.Add(Card("", d.label, new[] { Words.AccountSettingsSavedKeyRow() }, $"settings-kept:{d.label}", remove));
-            }
-            if (s.otherSavedKeys)
-            {
-                var others = TextButton(Words.AccountSettingsRemoveOtherKeys(), "settings-remove-other-keys");
-                others.Margin = new Thickness(0, 8, 0, 0);
-                others.Click += (_, _) => AskThen("settings-remove-other-keys-ask", Words.AccountSettingsRemoveOtherKeys(), Words.AccountSettingsRemoveOtherKeysConfirm(),
-                    Words.AccountSettingsRemoveOtherKeys(), "remove every other saved key", id => new Call.SettingsRemoveOtherSavedKeys { settings = id });
-                _sections.Children.Add(others);
-            }
+            var remove = TextButton(Words.AccountSettingsRemoveKey(), $"settings-remove-key:{d.label}");
+            var (device, label) = (d.deviceId, d.label);
+            remove.Click += (_, _) => AskThen("settings-remove-key-ask", Words.AccountSettingsRemoveKey(), Words.AccountSettingsRemoveKeyConfirm(label),
+                Words.AccountSettingsRemoveKey(), "remove a saved key", id => new Call.SettingsRemoveSavedKey { settings = id, device = device });
+            _sections.Children.Add(Card("", d.label, new[] { Words.AccountSettingsSavedKeyRow() }, $"settings-kept:{d.label}", remove));
         }
+        if (s.otherSavedKeys)
+        {
+            var others = TextButton(Words.AccountSettingsRemoveOtherKeys(), "settings-remove-other-keys");
+            others.Margin = new Thickness(0, 8, 0, 0);
+            others.Click += (_, _) => AskThen("settings-remove-other-keys-ask", Words.AccountSettingsRemoveOtherKeys(), Words.AccountSettingsRemoveOtherKeysConfirm(),
+                Words.AccountSettingsRemoveOtherKeys(), "remove every other saved key", id => new Call.SettingsRemoveOtherSavedKeys { settings = id });
+            _sections.Children.Add(others);
+        }
+    }
 
-        DrawStorage(s);
-
-        // Map services (ADR 0143 decision 2): this device's consent, its own watch
+    /// <summary>Map services (ADR 0143 decision 2): this device's consent, its own watch.</summary>
+    private void DrawMaps()
+    {
         if (_maps.Panel is FrameworkElement { Parent: Panel holder }) holder.Children.Remove(_maps.Panel);
         _sections.Children.Add(Anchor("maps", (FrameworkElement)_maps.Panel));
+    }
 
-        foreach (var f in new[] { AccountFlow.Security, AccountFlow.Erase }) FlowSection(f);
-
-        // Sign out
+    /// <summary>Sign out of this account here; writes made offline waiting are asked about first.</summary>
+    private void DrawSignOut()
+    {
         _sections.Children.Add(Heading(Words.DrawerSignOut()));
         var signOut = TextButton(Words.DrawerSignOut(), "settings-sign-out");
         // writes made offline waiting: asked first (the core's question), deleted with the sign-out
@@ -621,13 +665,6 @@ internal sealed class AccountSettingsPage : IDisposable
             }
         };
         _sections.Children.Add(signOut);
-
-        // a search's settings result asked for a section: scrolled to once this first draw is laid out
-        if (_at is { } at)
-        {
-            _at = null;
-            ScrollTo(at);
-        }
     }
 
     /// <summary>A section that opens one of the account's flows: its rubric, what it is for, the button that opens it.</summary>

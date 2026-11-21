@@ -1,7 +1,7 @@
 // A node's share sheet (ADR 0136 decision 2; core's ShareSheet, the web's FolderShareDialog), Fluent's way: one
 // ContentDialog (WinUI shows one at a time, so a renew's and a delete's question are asked in place) holding the list of
-// links — each a card with Copy link, Share (Windows' share sheet, DataTransferManager for the app's window) and its other
-// commands in a More flyout —, the new-link or edit form (RadioButtons for the role, a TextBox for the label, a ToggleSwitch
+// links — each a card with the actions the core plans for it (ShareShown.ShownLink.actions, in their order): Copy link and
+// beside it Share (Windows' share sheet, DataTransferManager for the app's window), the others in a More flyout —, the new-link or edit form (RadioButtons for the role, a TextBox for the label, a ToggleSwitch
 // with a PasswordBox, a ToggleSwitch with a CalendarDatePicker; Create/Save the primary button, Cancel the secondary one),
 // or the address just minted, shown once to copy or share. Every state and every rule is the core's (Share.*, watched by
 // id); the password typed goes in and never comes back.
@@ -208,7 +208,7 @@ internal sealed class ShareDialog
         else if (s.deleting is not null) _body.Children.Add(Ask(Words.ShareDelete(), Said.Key(s.deleteQuestion), new Call.ShareDelete { share = share }, share, "delete"));
     }
 
-    /// <summary>One link as a card: its title and line, Copy link and Share where it may be copied, the rest under More.</summary>
+    /// <summary>One link as a card: its title and line, its actions (Copy link and Share inline, the rest under More).</summary>
     private UIElement Row(ShownLink link, bool busy, long share)
     {
         var grid = new Grid { ColumnSpacing = 8, Padding = new Thickness(12, 8, 8, 8), CornerRadius = new CornerRadius(4) };
@@ -239,27 +239,39 @@ internal sealed class ShareDialog
             commands.Children.Add(new ProgressRing { IsActive = true, Width = 20, Height = 20 });
             return grid;
         }
-        if (link is { canCopy: true, address: { } address })
-        {
-            commands.Children.Add(Icon(Symbol.Copy, Words.ShareCopy(), $"share-copy:{title}", () => Copy(address)));
-            commands.Children.Add(Icon(Symbol.Share, Words.ShareLinkShare(), $"share-send:{title}", () => SendTo(address)));
-        }
+        // the link's actions, every one the core plans and in its order (ShareSheet.rowActions, ADR 0154 decision 2): Copy
+        // link inline — Windows' share of the address beside it, the system's own —, the rest in the card's More
         var menu = new MenuFlyout();
-        void Item(bool offered, string word, string id, Action act)
+        void Item(string word, string id, Action act)
         {
-            if (!offered) return;
             var item = new MenuFlyoutItem { Text = word };
             AutomationProperties.SetAutomationId(item, $"share-{id}:{title}");
             item.Click += (_, _) => act();
             menu.Items.Add(item);
         }
         var l = link.shareId;
-        Item(link.canEdit, Words.ShareEdit(), "edit", () => Act.Send(new Call.ShareEdit { share = share, link = l }));
-        Item(link.canReactivate, Words.ShareReactivate(), "reactivate", () => Tell(new Call.ShareReactivate { share = share, link = l }, "Share.Reactivate"));
-        Item(link.canRenew, Words.ShareRenew(), "renew", () => Act.Send(new Call.ShareAskRenew { share = share, link = l }));
-        if (menu.Items.Count > 0 && (link.canSwitchOff || link.canDelete)) menu.Items.Add(new MenuFlyoutSeparator());
-        Item(link.canSwitchOff, Words.ShareSwitchOff(), "switch-off", () => Tell(new Call.ShareSwitchOff { share = share, link = l }, "Share.SwitchOff"));
-        Item(link.canDelete, Words.ShareDelete(), "delete", () => Act.Send(new Call.ShareAskDelete { share = share, link = l }));
+        foreach (var a in link.actions)
+        {
+            Action draw = a switch
+            {
+                LinkAction.Copy => () =>
+                {
+                    if (link.address is not { } address)
+                    {
+                        Log.Write("share sheet: a link's copy offered without its address");
+                        return;
+                    }
+                    commands.Children.Add(Icon(Symbol.Copy, Words.ShareCopy(), $"share-copy:{title}", () => Copy(address)));
+                    commands.Children.Add(Icon(Symbol.Share, Words.ShareLinkShare(), $"share-send:{title}", () => SendTo(address)));
+                },
+                LinkAction.Edit => () => Item(Words.ShareEdit(), "edit", () => Act.Send(new Call.ShareEdit { share = share, link = l })),
+                LinkAction.Renew => () => Item(Words.ShareRenew(), "renew", () => Act.Send(new Call.ShareAskRenew { share = share, link = l })),
+                LinkAction.Reactivate => () => Item(Words.ShareReactivate(), "reactivate", () => Tell(new Call.ShareReactivate { share = share, link = l }, "Share.Reactivate")),
+                LinkAction.SwitchOff => () => Item(Words.ShareSwitchOff(), "switch-off", () => Tell(new Call.ShareSwitchOff { share = share, link = l }, "Share.SwitchOff")),
+                LinkAction.Delete => () => Item(Words.ShareDelete(), "delete", () => Act.Send(new Call.ShareAskDelete { share = share, link = l })),
+            };
+            draw();
+        }
         if (menu.Items.Count > 0)
         {
             var more = new Button { Content = new SymbolIcon(Symbol.More), Flyout = menu };

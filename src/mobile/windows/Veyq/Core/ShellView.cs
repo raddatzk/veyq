@@ -1,12 +1,15 @@
 // The shell (ADR 0122; ADR 0123's Consequences, the Windows app), Fluent's way, as Windows' own Settings and Explorer
 // draw theirs: a NavigationView whose pane is Left, LeftCompact or LeftMinimal by the window's width (its own
-// thresholds), holding the one switcher (spaces and tenants; the signed-in member's picture beside them) as its header,
+// thresholds), holding the one switcher (spaces and tenants; the signed-in member's picture beside them) and the drawer's
+// New below it (ADR 0122 decision 2: what it makes lands at the space's top, ShellShown.drawerCreates) as its header,
 // Search as its AutoSuggestBox (Ctrl+E, Ctrl+F; SearchBox, its chips a row at the top of the content), Home, Favorites, Recent and the applications as its items, and Settings
 // at its foot, which opens the account's Settings (AccountSettingsPage) in the content. The content shows what the core's
 // shell says is open — Home, an application's list (or the application's own, the registry's ApplicationList), an
 // object's page the registry holds for its kind (ADR 0154 decision 3: the body an application registered — a Pot, a file,
 // a drop box, a Memory or a chapter — in the core's frame: the header and its hero, the notices, the bar), or an object
-// this app does not draw yet — under its title and a CommandBar whose first command is New; a
+// this app does not draw yet — under its title and a CommandBar, the level's head: the level's New first and its tools
+// (the space's trash, the view switch) after the header's commands, as the core's LevelPlan places them (ShellShown.level,
+// ADR 0154 decision 2); a
 // kept link's page (BookmarkPage, ADR 0150 decision 6; the shell's state names it, Shell.bookmark) shows there too under
 // its header (Open on its own page among its commands), opened by its row and left by Back; an
 // open Pot's Download is among its secondary commands (the bar's own More), an InfoBar under the bar says how a download
@@ -40,6 +43,8 @@ internal sealed class ShellView
 {
     private readonly NavigationView _nav;
     private readonly DropDownButton _switcher;
+    /// <summary>The drawer's New below the switcher (DrawerSection.New, ShellShown.drawerCreates).</summary>
+    private readonly DropDownButton _drawerNew;
     private readonly TextBlock _switcherTitle;
     private readonly TextBlock _switcherSubtitle;
     private readonly ProgressRing _switching;
@@ -126,6 +131,12 @@ internal sealed class ShellView
         AutomationProperties.SetAutomationId(_switcher, "switcher");
         AutomationProperties.SetName(_switcher, Words.SwitcherOpen());
         ToolTipService.SetToolTip(_switcher, Words.SwitcherOpen());
+        // the drawer's New, as Outlook's pane starts with its New mail: its menu is what it makes (DrawDrawerNew)
+        _drawerNew = CreateAction.Drawer(Words.DrawerNew(), "drawer-new");
+        _drawerNew.Visibility = Visibility.Collapsed;
+        var paneHeader = new StackPanel();
+        paneHeader.Children.Add(_switcher);
+        paneHeader.Children.Add(_drawerNew);
 
         _search = new AutoSuggestBox { PlaceholderText = Words.SearchHint(), QueryIcon = new SymbolIcon(Symbol.Find), UpdateTextOnSelect = false };
         AutomationProperties.SetAutomationId(_search, "search");
@@ -169,6 +180,10 @@ internal sealed class ShellView
         _offer = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
         AutomationProperties.SetAutomationId(_offer, "uploads-said");
         _uploads = new Uploads(window, _offer) { Changed = DrawCommands, Opens = OpenQueued, Says = Say };
+        // a level row's menu runs as the header of its node: its dialogs over this window, its Undo under the bar
+        RowMenu.Window = window;
+        RowMenu.Say = Say;
+        RowMenu.UndoBar = _said;
         _body = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
         var content = new Grid();
         content.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -207,7 +222,7 @@ internal sealed class ShellView
             PaneDisplayMode = NavigationViewPaneDisplayMode.Auto,
             IsSettingsVisible = false,
             IsBackButtonVisible = NavigationViewBackButtonVisible.Auto,
-            PaneHeader = _switcher,
+            PaneHeader = paneHeader,
             AutoSuggestBox = _search,
             Content = content,
             IsTitleBarAutoPaddingEnabled = false,
@@ -420,7 +435,7 @@ internal sealed class ShellView
     }
 
     /// <summary>The switcher: the space shown and its tenant and server; the spaces, then the tenants (one row each: name
-    /// and where it is), then the trash and Manage servers (ManageDialog).</summary>
+    /// and where it is), then Manage servers (ManageDialog). The space's trash is the level's (LevelTool.Trash).</summary>
     private void DrawSwitcher(ShellModelState state, ShellShown shown)
     {
         _switcherTitle.Text = Said.Piece(shown.spaceName);
@@ -456,17 +471,6 @@ internal sealed class ShellView
             menu.Items.Add(item);
         }
         menu.Items.Add(new MenuFlyoutSeparator());
-        // the space's trash (TrashDialog)
-        var trash = new MenuFlyoutItem { Text = Words.TrashTitle(), Icon = new SymbolIcon(Symbol.Delete) };
-        AutomationProperties.SetAutomationId(trash, "switcher-trash");
-        var space = state.shell.space;
-        trash.Click += (_, _) =>
-        {
-            if (space is not null) TrashDialog.Open(_window, space);
-            ClosePaneIfOverlay();
-        };
-        trash.IsEnabled = space is not null;
-        menu.Items.Add(trash);
         var manage = new MenuFlyoutItem { Text = Words.SwitcherManage() };
         AutomationProperties.SetAutomationId(manage, "switcher-manage");
         manage.Click += (_, _) =>
@@ -498,30 +502,34 @@ internal sealed class ShellView
         }
 
         Add(Item(Words.DrawerHome(), "", "home", new Target.Home()), shown.isHome);
-        // only the sections that hold something (Lists.drawerSections, owner 2026-11-19): no empty Favorites, Recent or
-        // Applications
+        void Listed(string title, IReadOnlyList<ObjectRef> refs, string prefix)
+        {
+            items.Add(new NavigationViewItemHeader { Content = title });
+            foreach (var r in refs) Add(Item(r.name, HomeView.KindGlyph(r.kind), $"{prefix}:{r.name}", new Target.Object(r)), Opened(r));
+        }
+        // the drawer's sections, every one in the core's order (ShellModel.drawerSections; only those that hold something,
+        // owner 2026-11-19): New below the switcher, then Favorites, Recent and the applications
+        var offersNew = false;
         foreach (var section in shown.drawerSections)
         {
-            switch (section)
+            Action draw = section switch
             {
-                case DrawerSection.Favorites or DrawerSection.Recent:
+                DrawerSection.New => () => offersNew = true,
+                DrawerSection.Favorites => () => Listed(Words.DrawerFavorites(), state.lists.drawer.favorites, "favorite"),
+                DrawerSection.Recent => () => Listed(Words.DrawerRecent(), state.lists.drawer.recent, "recent"),
+                DrawerSection.Applications => () =>
                 {
-                    var favorites = section == DrawerSection.Favorites;
-                    var (title, refs, prefix) = favorites ? (Words.DrawerFavorites(), state.lists.drawer.favorites, "favorite") : (Words.DrawerRecent(), state.lists.drawer.recent, "recent");
-                    items.Add(new NavigationViewItemHeader { Content = title });
-                    foreach (var r in refs) Add(Item(r.name, HomeView.KindGlyph(r.kind), $"{prefix}:{r.name}", new Target.Object(r)), Opened(r));
-                    break;
-                }
-                case DrawerSection.Applications:
                     items.Add(new NavigationViewItemHeader { Content = Words.DrawerApplications() });
                     foreach (var app in state.lists.applications)
                     {
                         var chosen = shell.application == app && shell.openObject is null;
                         Add(Item(HomeView.AppName(shown, app), HomeView.AppGlyph(app), $"app:{HomeView.WireName(app)}", new Target.Application(app)), chosen);
                     }
-                    break;
-            }
+                },
+            };
+            draw();
         }
+        DrawDrawerNew(offersNew ? shown : null);
         _drawing = true;
         try
         {
@@ -532,6 +540,35 @@ internal sealed class ShellView
         {
             _drawing = false;
         }
+    }
+
+    /// <summary>The drawer's New (DrawerSection.New) where <paramref name="shown"/> offers it: each of drawerCreates, made
+    /// at the space's top whatever the shell shows — Home is chosen first (ADR 0122 decision 2), as Android's requestNew.</summary>
+    private void DrawDrawerNew(ShellShown? shown)
+    {
+        if (shown is null)
+        {
+            _drawerNew.Visibility = Visibility.Collapsed;
+            _drawerNew.Flyout = null;
+            return;
+        }
+        var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
+        foreach (var c in shown.drawerCreates)
+        {
+            var create = Creating(c.create, TopLevel);
+            var item = new MenuFlyoutItem { Text = Said.Key(c.word), IsEnabled = create is not null };
+            AutomationProperties.SetAutomationId(item, $"drawer-new:{c.create}");
+            item.Click += (_, _) =>
+            {
+                ClosePaneIfOverlay();
+                // at the space's top: Home there first, then what it makes lands where the shell now is
+                Act.Send(new Call.ShellChoose { application = null });
+                create?.Invoke();
+            };
+            menu.Items.Add(item);
+        }
+        _drawerNew.Flyout = menu;
+        _drawerNew.Visibility = Visibility.Visible;
     }
 
     private void DrawContent(ShellModelState state, ShellShown shown)
@@ -589,7 +626,8 @@ internal sealed class ShellView
             if (_bookmark is null || _bookmark.Node.nodeId != kept.nodeId || _bookmark.Node.scopeId != kept.scopeId)
             {
                 DropBookmark();
-                _bookmark = new BookmarkPage(_window, kept) { Changed = DrawCommands };
+                // its own entries join its header's plan once it opened (Header.Facts' bookmark)
+                _bookmark = new BookmarkPage(_window, kept) { Changed = DrawCommands, Opened = id => _header?.Bookmark(id) };
                 Log.Write("shell: a kept link's page");
             }
             CloseLists();
@@ -707,9 +745,11 @@ internal sealed class ShellView
         }
     }
 
-    /// <summary>The CommandBar: New first where the shell may create (canCreateHere) — on a Pot's page its Add entry
-    /// instead —, then the header's primary commands;
-    /// the header's secondary ones behind the bar's own More.</summary>
+    /// <summary>The CommandBar, the level's head as the web's LevelView heads it: the level's New first (ShellShown.level,
+    /// the core's LevelPlan: none on an object's page) — a Pot's or a Memory's page its own Add instead —, the upload
+    /// queue, the top level's share, the header's primary commands, the page's Refresh, then the level's tools in the
+    /// plan's order (the space's trash, the view switch); the header's secondary ones behind the bar's own More. Every
+    /// entry of each plan is drawn (ADR 0154 decision 2).</summary>
     private void DrawCommands()
     {
         _commands.PrimaryCommands.Clear();
@@ -725,23 +765,12 @@ internal sealed class ShellView
         // a person's profile is no level: nothing is created or acted on there
         if (_shown is not { } shown || _account is not null || _person is not null) return;
         var page = _page;
-        // a page that creates its one thing itself (a Pot's entry, a Memory's chapter): the level's New is not offered
-        // beside it — two Add commands side by side would ask which one adds what
-        if (page is not { OwnsCreating: true } && _bookmark is null && shown.canCreateHere && shown.creates.Count > 0)
+        // the level's New: what the core offers here (ShellModel.levelPlan: a folder, a Pot, a Memory, a kept link, files
+        // and a folder uploaded), a menu of its entries
+        if (shown.level is { creates.Count: > 0 } level)
         {
-            // what the core offers here (AppKinds.createsWhere): a folder, a Pot and a Memory, on Home files and a folder uploaded too
             _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "new",
-                // a chapter is a Memory's page's own, never a level's
-                shown.creates.Where(c => c.create is not Create.Chapter).Select(c => (Said.Key(c.word), $"new:{c.create}", c.create switch
-                {
-                    Create.Folder => (Action?)NewFolder,
-                    // New → Bookmark (ADR 0150 decision 6, inbox #1020): the made bookmark shows in the level read anew
-                    Create.Bookmark => () => { if (Level() is { } l) BookmarkCreateDialog.Open(_window, l.ScopeId, l.ParentId, _ => RefreshLists()); },
-                    Create.UploadFiles => () => { if (Level() is { } l) _uploads.PickFiles(l, Say); },
-                    Create.UploadFolder => () => { if (Level() is { } l) _uploads.PickFolder(l, Say); },
-                    // what an application creates: its own dialog (the registry's ApplicationUi.Creates)
-                    _ => Registry.Shared.Create(c.create) is { } open ? () => open(HostForCreate()) : null,
-                }))));
+                level.creates.Select(c => (Said.Key(c.word), $"new:{c.create}", Creating(c.create, Level)))));
         }
         // the page's own creating action (a Pot's Add entry, a Memory's Add chapter), first, where it offers one
         if (page?.Creating() is { } creating) _commands.PrimaryCommands.Add(creating);
@@ -755,26 +784,22 @@ internal sealed class ShellView
             share.Click += (_, _) => ShareDialog.OpenTopLevel(_window, space);
             _commands.PrimaryCommands.Add(share);
         }
-        // a level's View (Explorer's): List or Tiles, the account's one choice (ADR 0149 decision 8) — a level only, never an
-        // object's page nor the Memories map
-        var view = page is null && _bookmark is null && _state?.shell.openObject is null
-            && Registry.Shared.Applications.All(a => a.List is null || ListOf(a.Id)?.OffersView(shown) != false) ? LevelTiles.ViewCommand(shown) : null;
-        if (_header is null)
+        if (_header is not null)
         {
-            if (view is not null) _commands.PrimaryCommands.Add(view);
-            return;
+            var kept = _bookmark;
+            var (primary, secondary) = _header.Commands(new PageHooks
+            {
+                Download = page is null ? null : () => page.Download(WinRT.Interop.WindowNative.GetWindowHandle(_window)),
+                Replace = page is null ? null : page.Replace,
+                Upload = page is null ? null : page.Upload,
+                Music = page is null ? null : page.Music,
+                Banner = page is null ? null : page.Banner,
+                OwnPage = kept is null ? null : () => kept.OwnPage(false),
+                ReportShared = kept is null ? null : () => kept.OwnPage(true),
+            });
+            foreach (var c in primary) _commands.PrimaryCommands.Add(c);
+            foreach (var c in secondary) _commands.SecondaryCommands.Add(c);
         }
-        var kept = _bookmark;
-        var (primary, secondary) = _header.Commands(() => page?.Download(WinRT.Interop.WindowNative.GetWindowHandle(_window)),
-            () => page?.Replace(), () => page?.Upload(), () => page?.Music(), () => kept?.OwnPage(false));
-        // a kept link's page: Open on its own page first, once its meta read (the header's where its plan names it)
-        bool Offered(string id) => primary.Concat(secondary).OfType<FrameworkElement>().Any(e => AutomationProperties.GetAutomationId(e) == id);
-        if (kept is { OffersActions: true } && !Offered("header:open-own-page"))
-        {
-            _commands.PrimaryCommands.Add(Command(Words.BookmarkOpenOwnPage(), "bookmark-own-page", Symbol.NewWindow, () => kept.OwnPage(false)));
-        }
-        foreach (var c in primary) _commands.PrimaryCommands.Add(c);
-        if (view is not null) _commands.PrimaryCommands.Add(view);
         if (page?.Refresh is { } pageRefresh)
         {
             // the page's Refresh: desktops have no pull gesture (F5 and Ctrl+R, as Explorer and Edge refresh)
@@ -783,20 +808,34 @@ internal sealed class ShellView
             refresh.Click += (_, _) => pageRefresh.Run();
             _commands.PrimaryCommands.Add(refresh);
         }
-        foreach (var c in secondary) _commands.SecondaryCommands.Add(c);
-        if (kept is not null)
+        // the level's tools, in the plan's order (the web's tools row: the trash, the view switch)
+        foreach (var tool in shown.level?.tools ?? [])
         {
-            // a kept link's page: Report shared content (to the share's own operator) once its meta read; Report name
-            // where the header offers no report of its own (the name alone: AppKinds.reportsNameOnly)
-            if (kept.OffersActions) _commands.SecondaryCommands.Add(Command(Words.BookmarkReportShare(), "bookmark-report-share", Symbol.Flag, () => kept.OwnPage(true)));
-            if (!Offered("header:report")) _commands.SecondaryCommands.Add(Command(Words.BookmarkReportName(), "bookmark-report-name", Symbol.Flag, kept.ReportName));
-        }
-        // the page's own commands behind the More (a Memory's banner)
-        if (page is not null)
-        {
-            foreach (var c in page.Secondary()) _commands.SecondaryCommands.Add(c);
+            var command = tool switch
+            {
+                LevelTool.Trash => TrashCommand(),
+                LevelTool.View => LevelTiles.ViewCommand(shown),
+            };
+            if (command is not null) _commands.PrimaryCommands.Add(command);
         }
     }
+
+    /// <summary>The level's trash (LevelTool.Trash): the space's trash sheet (TrashDialog).</summary>
+    private AppBarButton? TrashCommand() =>
+        _state?.shell.space is { } space ? Command(Words.TrashTitle(), "level-trash", Symbol.Delete, () => TrashDialog.Open(_window, space)) : null;
+
+    /// <summary>What New's entry <paramref name="c"/> does at the level <paramref name="at"/> names (read when it runs):
+    /// a folder made where the shell is, a kept link made there, files or a folder uploaded there, an application's
+    /// object through its own dialog (the registry's ApplicationUi.Creates; null where this build registers none).</summary>
+    private Action? Creating(Create c, Func<UploadLevel?> at) => c switch
+    {
+        Create.Folder => NewFolder,
+        // New → Bookmark (ADR 0150 decision 6, inbox #1020): the made bookmark shows in the level read anew
+        Create.Bookmark => () => { if (at() is { } l) BookmarkCreateDialog.Open(_window, l.ScopeId, l.ParentId, _ => RefreshLists()); },
+        Create.UploadFiles => () => { if (at() is { } l) _uploads.PickFiles(l, Say); },
+        Create.UploadFolder => () => { if (at() is { } l) _uploads.PickFolder(l, Say); },
+        Create.Pot or Create.Memory or Create.Chapter => Registry.Shared.Create(c) is { } open ? () => open(HostForCreate()) : null,
+    };
 
     private static AppBarButton Command(string label, string automationId, Symbol symbol, Action act)
     {
@@ -827,6 +866,10 @@ internal sealed class ShellView
         var folder = state.shell.path.Count > 0 ? state.shell.path[^1] : null;
         return new UploadLevel(space, folder?.nodeId, folder?.name ?? Said.Piece(shown.spaceName));
     }
+
+    /// <summary>The shown space's top, where the drawer's New makes what it makes.</summary>
+    private UploadLevel? TopLevel() =>
+        _state?.shell.space is { } space && _shown is { } shown ? new UploadLevel(space, null, Said.Piece(shown.spaceName)) : null;
 
     /// <summary>Where a drop onto the level shown goes: the level where the core offers one (ShellShown.dropsHere), each
     /// folder's row it names (ShellShown.dropRows); none where it offers neither.</summary>

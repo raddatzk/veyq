@@ -3,9 +3,10 @@
 // shown in the shell's content under the bookmark's name (a kept link is no application's object, so the shell opens
 // none: its row opens this page, ShellView holds it until Back). While the tenant has core.share-embedding on, the share
 // shows in place — a ReceivedView in place, a region named "Shared content from …" —; otherwise the link's host on its
-// own. Either way the shell's CommandBar offers Open on its own page (the link's screen above everything, its password
-// handed in memory by the core), Report shared content (that screen with its report asked, to the share's own operator)
-// and Report name (core's report sheet of the node: a name's report for a bookmark). A meta that does not read says so.
+// own. Either way its header's plan (the shell's CommandBar) holds Open on its own page (the link's screen above
+// everything, its password handed in memory by the core) and Report shared content (that screen with its report asked, to
+// the share's own operator) once its meta reads — this page tells the header its id (Opened) and does both (OwnPage) —,
+// and the core's Report, a name's report for a bookmark. A meta that does not read says so.
 //
 // The page never holds the link, its password or its key: the core opens the meta and hands this side ids alone.
 
@@ -38,8 +39,8 @@ internal sealed class BookmarkPage : IDisposable
     /// <summary>Told when what the CommandBar offers changed (the meta read).</summary>
     public Action? Changed { get; set; }
 
-    /// <summary>Whether Open on its own page and Report shared content are offered: once the meta read.</summary>
-    public bool OffersActions => _shown is { } s && ReceivedText.BookmarkActions(s.state);
+    /// <summary>Told the page's id once the core opened it (Header.Facts' bookmark: its own entries join the plan).</summary>
+    public Action<long>? Opened { get; set; }
 
     public BookmarkPage(Window window, NodeAt node)
     {
@@ -66,6 +67,7 @@ internal sealed class BookmarkPage : IDisposable
                 return;
             }
             _id = bookmark;
+            Opened?.Invoke(bookmark);
             _watch = Core.Watch(new Watched.Bookmark { bookmark = bookmark }, update =>
             {
                 if (_closed || update is not Update.Bookmark b) return;
@@ -149,7 +151,4 @@ internal sealed class BookmarkPage : IDisposable
             Log.Write($"the bookmark's link did not open ({e.GetType().Name})");
         }
     }
-
-    /// <summary>Report name: core's report sheet of the node, a bookmark's name alone (AppKinds.reportsNameOnly).</summary>
-    public void ReportName() => ReportDialog.Open(_window, Node);
 }
