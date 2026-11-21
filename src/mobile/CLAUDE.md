@@ -1051,8 +1051,8 @@ remembers follow the web; a control's shape, a tile's form and a grid's columns 
 answers: Tiles first and the Contributions as the web's, two square columns on a phone as the platform's). A view's creating action is
 `CreateAction(…)` (Android, `CreateAction.kt`; with `menu` where a level creates several kinds) and `.createAction(…)` /
 `.createMenu(…)` (Apple, `CreateAction.swift`), never a
-floating button built by hand; `scripts/validate_mobile_platform_guidelines.py` holds that. Row actions: an overflow menu on Android, swipe actions and a context
-menu on iOS. On Linux the GNOME HIG's way, as libadwaita draws it: the creating action is `create_action(…)` /
+floating button built by hand; `scripts/validate_mobile_platform_guidelines.py` holds that. A row's actions (its plan, below):
+a long press's menu on Android, a context menu on Apple, a right click or a touch long press on Linux, a flyout on Windows. On Linux the GNOME HIG's way, as libadwaita draws it: the creating action is `create_action(…)` /
 `create_menu(…)` (`linux/src/core_ui/create_action.rs`) in a header bar or the sidebar, `list-add-symbolic`, never a button
 overlaid on a view (GNOME has no floating action button); the same guard holds it. On Windows Fluent's way, as
 Windows' own Settings and Explorer draw it: the creating action is New, the first command of the content's
@@ -1085,6 +1085,22 @@ draws every entry of it too (ADR 0154 decision 2, `scripts/validate_mobile_struc
 page (`PageHooks`). A new kind registers
 there and its header order in `AppKinds.headerOrder`; it never builds header actions of its own. Its body places core's head
 first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `NodeHeroRow()` (Apple) —, never a cover of its own.
+
+**What is the plan's and what is the platform's** (ADR 0154 decision 2). Presence, order and grouping are the core's: a
+screen's structure is a list of `@Plan` enum entries (`navigation/Plan.kt`) — a header's `NodeHeader.Plan` (Delete
+always last), a level's `LevelPlan` (New's `creates`, the tools Trash then the view switch), the drawer's
+`drawerSections` (`NEW` below the switcher) and `drawerCreates`, `AccountSettings.State.sections` (the web's order, Sign
+out last), `SignInPlan.entries` (Submit first), `LevelRow.plan`, `GalleryModel.tileActions`, `ShareSheet.rowActions`,
+`GuestLevel.creates`. A platform draws every entry, in order, in its own control: how many header actions fit inline
+(ADR 0110), a menu, a context menu, a long press or a flyout, a FAB, a toolbar or a `CommandBar` is its look. A plan is
+never filtered, sorted, whitelisted or extended by a platform; an affordance that is no product structure (the Mac's
+*Open in New Window*, the system share sheet's rows) is drawn beside a plan and named in its docs, never an entry. An
+application's list draws no New of its own — the drawer's New makes its kinds. A new entry the core adds fails every
+platform's build until drawn: Kotlin's `when`, Rust's `match`, Swift's `switch` over the generated `.entry` mirror and
+C#'s `switch` expression under `CS8509` are exhaustive; `scripts/validate_mobile_structure.py` refuses a fallback arm, a
+whitelist and a filter or sort over a plan (its docstring the rules and blind spots). The orders are held to the web by
+`PlansAreTheWebsTest` (each `register.ts`'s `header.order`, `coreNodeActions.ts`, `sections.ts`): a plan's order changes
+only with the web's.
 
 ## Traps
 
@@ -1862,3 +1878,23 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   Enter). Escape while a lightbox is open closes the lightbox, not the search. `run.py run`'s `ssh -R` outlives the run:
   end it by its PID (`ps`), never `pkill -f`. The unpackaged app's `%LOCALAPPDATA%\veyq` is shared with every earlier pass
   (an app ↔ app pass above): back it up, empty it for a clean start, and restore it after.
+- **A plan's entry under Kotlin/Native's Objective-C names** (ADR 0154 decision 2): the framework renames an entry
+  whose name Objective-C reserves — `COPY` is `theCopy`, `DELETE` `delete_`, `NEW` `theNew` — so a Swift drawing never
+  spells an entry by hand: `apple/generate_plans.py` reads the names from `VeyqCore.h` and stops the build where they and
+  the core's sources disagree. A Swift `switch` over the Kotlin enum itself needs a `default:` to compile (an
+  Objective-C class) — switch over the generated `.entry`, never over the class.
+- **C#'s `CS8524` is off on purpose** (`Directory.Build.props`): on, it fires on a `switch` expression that names every
+  entry of an enum (an unnamed `(E)17` is not handled) and so demands the discard the structure guard refuses; `CS8509`
+  (an entry not named) is the error that makes a new plan entry fail the build.
+- **The Windows VM resolves one tenant name, `tw-win.localhost`** (its `hosts`): a throwaway for a Windows pass must be
+  `--tenant tw-win`, and a tenant left on that name blocks every later pass. A throwaway run that fails between
+  `createTenant` and the owner's registration leaves a `PENDING` tenant with an unaccepted invite on its name (seen
+  2026-11-21 after the dev DB's full disk, #1051); `--erase` cannot reach it (no env file was written). A Host-rewriting
+  proxy from `tw-win.localhost:<port>` to another throwaway's tenant reached the backend, but the sign-in was refused
+  (measured 2026-11-21, the cause not read) — not a way around it.
+- A fresh worktree builds everything its first `linux/run.py run` needs — libsodium for each Kotlin/Native target, the
+  bridge, the whole cargo tree in a new `veyq-linux-target-<checkout>` volume — about 20 minutes (2026-11-21); remove
+  that volume when the worktree goes. A fresh worktree has no `local.properties`: `ANDROID_HOME=$HOME/Library/Android/sdk
+  ./gradlew :android:assembleDebug`.
+- A Broadway pass whose page connects anew per batch finds the app as the last batch left it, an open popover included:
+  a click aimed at the popover's button then closes it. Read the state (a shot, the log) before a batch that opens one.

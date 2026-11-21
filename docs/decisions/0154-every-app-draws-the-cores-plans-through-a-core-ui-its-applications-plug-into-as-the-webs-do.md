@@ -1,8 +1,9 @@
 # ADR 0154 — Every app draws the core's gates, plans, notices and formats through a core UI its applications plug into, as the web's do
 - Status: Accepted (owner 2026-11-20: the CRs' owner questions answered as recommended)
-- Built: decisions 1 and 3 on every app and decision 6's words and direction guard (2026-11-20, § Consequences);
-  decisions 2, 4, 5 and the rest of 6 not yet — the CRs `cr-apps-structure-from-core-plans` and
-  `cr-apps-notices-and-formats-from-the-core` build them
+- Built: decisions 1 and 3 on every app and decision 6's words and direction guard (2026-11-20), decision 2 on every
+  app and decision 6's structure guard (2026-11-21; § Consequences); decisions 4, 5 and the rest of 6 (the duration and
+  formatter rule) not yet — `cr-apps-notices-and-formats-from-the-core` builds them. Decision 6's shared plan fixture
+  each platform's tests draw was not built: the compilers' exhaustiveness and the structure guard hold it (§ Consequences)
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -210,6 +211,77 @@ held for the screens' models but not around them:
   Expenses and Memories lists and the Map tab; Home's New pot and New Memory; a received link's guest pages (Memory,
   Pot, file); a person's profile with Memories' section; the lightbox window and its menu command; the share
   extension (the iPhone's, the owner's).
+
+- **As built, decision 2** (2026-11-21). A plan's enum carries `@Plan` (`navigation/Plan.kt`): `HeaderAction` (core's
+  ten and the pages' own — `UPLOAD`, `MUSIC`, `BANNER`, `REPLACE`, `SEND`, `OPEN_OWN_PAGE`, `REPORT_SHARED` —, serial
+  names the web's ids), `LevelTool` (`TRASH`, `VIEW`), `DrawerSection` (`NEW` first), `SettingsSection`, `SignInEntry`,
+  `LinkAction`, `TileAction` and `AppKinds.Create`. The plans: `NodeHeader.Plan(buttons, menu, last)` with Delete always
+  in `last` and each kind's order `AppKinds.headerOrder` (the banner, a kept link's *Open on its own page* and *Report
+  shared content* among the entries, no longer a page's body buttons or Windows' entries after Delete);
+  `ShellModel.levelPlan` → `LevelPlan(creates, tools)` and `drawerCreates`/`drawerSections`; `AccountSettings.State.sections`;
+  `SignInPlan.entries`; `LevelRow.plan` (`ShellModel.rowPlan`), `GalleryModel.tileActions`, `ShareSheet.rowActions`;
+  a guest's level New `GuestLevel.creates`. The bridge carries each as typed entries (`ShellShown.level`,
+  `SettingsShown.sections`, `Call.RowPlan`, `Call.SignInPlan`, `GalleryRow.tileActions`, `ShownLink.actions`) and
+  generates every plan enum into `bridge.rs` and `Bridge.g.cs`. `PlansAreTheWebsTest` reads the web for the orders:
+  each kind's `header.order` from its `register.ts`, core's merge order from `coreNodeActions.ts`, the Settings order
+  from `sections.ts`. The owner's answers (2026-11-20), now on all four: **New** in the level's head (`LevelPlan.creates`)
+  *and* the drawer's below the switcher (`DrawerSection.NEW`, ADR 0122 decision 2), whose New Folder lands at the
+  space's top (`ShellModel.createFolderAtTop`, `Call.ShellCreateFolder.top`); **Trash** among the level's tools, then
+  the view switch — out of the desktops' switcher and the phones' bar; **Settings** in the web's order, the app-only
+  sections beside their kin (this device and saved keys after sessions, offline storage after maps, the account and
+  its address where the web's password is), Sign out its own last section; **the sign-in** Submit first, Cancel while
+  adding, then the link and kit entries. **Owner-visible beyond the answers:** an application's list draws no New of
+  its own any more (Expenses' *New pot*, Memories' *New Memory* on the phones, Apple's application lists): the plan
+  offers New there only through the drawer's. Each platform draws the plans in its core UI, its look its own:
+  Android's header runner and icons exhaustive `when`s over `HeaderAction`, the level's New the FAB and its tools the
+  toolbar, a row's, a tile's and a link row's menu by a long press; Apple's over generated Swift enums (below), a
+  row's, a medium tile's and a link row's menu a context menu (the link row's swipe actions gone — a subset of the plan),
+  the Mac's *Open in New Window* beside a tile's plan; Linux's `header::doer` one arm per entry (a page's own entries its
+  window actions), New at the content header bar's start and the tools at its end, the drawer's New the sidebar
+  header's "+", a row's and a tile's menu by a right click or a touch long press; Windows' `NodeHeader.cs` a `switch`
+  expression per entry without a discard, a page's own entries its `PageHooks`, the tools in the level's `CommandBar`,
+  a row's menu `RowMenu.cs`. **Apple's exhaustive form** (#1050): a Swift `switch` over a Kotlin enum is no exhaustive
+  one (an Objective-C class) and needs a `default:`, so `apple/generate_plans.py`, a pre-build step of both targets,
+  writes each plan enum's Swift mirror (`HeaderAction.Entry`, read as `x.entry`) from the core's sources through the
+  structure guard's own reader, its Swift names from the framework's `VeyqCore.h` (`theCopy`, `delete_`, `theNew`), the
+  two checked equal or the build stops. **Windows' choice:** `CS8509` (an entry not named) is an error, `CS8524` (an
+  unnamed value, `(E)17`) off — on, it fires on a switch naming every entry and so demands the very discard the guard
+  refuses; no unnamed value crosses the wire (`JsonStringEnumConverter` refuses an unknown name); the reason stands in
+  `Directory.Build.props`. **The guard**, `scripts/validate_mobile_structure.py` (its docstring the rules and limits),
+  reads the plan enums from the annotation, never a list, and each one's name per language: (a) no fallback arm in a
+  `when`/`switch`/`match` whose arms name a plan's entry — the core, the bridge, all four platforms; (b) no collection
+  literal of a plan's entries or of two or more of its serial names (a whitelist); (c) no filter or sort in the
+  statement that reads a plan's list — the bridge and the platforms. The compilers carry the rest, so an entry the core
+  adds fails every platform's build until drawn; that is why decision 6's shared plan fixture was not built. **Blind
+  spots** (the docstring's): it reads names, not types — an arm naming no entry (`in set`, `.name` compared with a
+  string), a plan's list renamed into a local first or built by a loop with `if`, a list whose property has a library
+  name (`entries`, `keys`), a whitelist of one string. **Left:** no `SELECT` tool — no app level selects (#1049); a
+  level's tabs stay `Shell.barTabs` (the bar's, ADR 0122); a guest's link pages on the phones draw only the gallery's
+  music from `headerActions` (the page's own menu, no core header there), Apple's tiles in a level carry no row menu
+  yet (its rows do).
+- **The passes (decision 2)**, 2026-11-21, each a throwaway erased after; compared against the web's orders as
+  `PlansAreTheWebsTest` reads them (each `register.ts`'s `header.order`, `coreNodeActions.ts`, `sections.ts`), not
+  beside a web screen. **Linux** (Broadway, its own home volume): the sign-in Submit, then the QR, the kit and *Open a
+  link* (`sign-in entries: Submit,LinkShow,KitOpen,OpenLink`); Home's New at the header bar's start (folder, Pot, files,
+  folder upload, Memory, bookmark) and its tools Trash then the view switch at its end, no Trash in the switcher; the
+  drawer's New (folder, Pot, Memory, bookmark) — its New Folder made from inside a folder landed at the space's top; a
+  folder's, a Memory's, a Pot's, a file's and a bookmark's header each with Delete last (the Memory's *Add banner* in
+  its menu, the bookmark's *Open on its own page* a button and *Report shared content* before Delete; each plan in the
+  log); a folder tile's right-click menu (rename, move, favorite, share, copy, cover, download | report, delete); a
+  medium tile's (the mark only); a link row's (Copy a button; Edit, Renew, Revoke); Settings (maps, storage, sessions,
+  this device, saved keys, account, email, password, add a device, security, profile, erase, Sign out last). **Android**
+  (a throwaway API 36 emulator, deleted after; its phase's unclicked items): a medium tile's long press (the mark only), a
+  file's header (Favorite, Download | share, replace, rename, send a copy, offline | move, copy, report, delete), a Pot's
+  (Favorite, Share | download, rename, cover, offline | move, copy, report, delete) and a bookmark's (*Open on its own
+  page*, Favorite | rename | move, report name, report shared content, delete). **Not run: Windows** — the VM resolves
+  only `tw-win.localhost`, which an owner-less pending tenant of an earlier failed attempt holds, so no throwaway could
+  take it; a Host-rewriting proxy to another throwaway reached the backend but the sign-in was refused, and the app
+  showed only its sign-in (Submit, the QR, the kit, *Open a link*, read by UI Automation). **Apple:** both builds green,
+  nothing clicked — the coordinator's Mac pass: the sign-in's order; Home's New and its tools (Trash, then the view
+  switch, none in the bar's Home actions); the drawer's New below the switcher (its folder at the space's top) and the
+  application lists without a New of their own; a folder's, a Memory's (Upload's submenu), a Pot's, a file's and a
+  bookmark's header with Delete last; a row's, a medium tile's (with *Open in New Window* beside the plan) and a link
+  row's context menu; Settings with Sign out last.
 
 ## Alternatives considered
 
