@@ -601,6 +601,12 @@ private class Open<A : Connection>(val models: Tenant, val account: A, val tenan
 internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val parts = scope.async { compose() }
+
+    /**
+     * The wire as this bridge writes it: a notice's sizes, moments and amounts and a line's days, sizes and amounts in the
+     * host's words' language ([Composition.language], ADR 0154 decision 5), so no host formats a value of its own.
+     */
+    private val written = scope.async { wireIn(runCatching { parts.await().language }.getOrDefault("en")) }
     private val tenant = MutableStateFlow<Open<A>?>(null)
     private val ids = AtomicLong(0)
     private val pots = Registry<PotModel>()
@@ -770,7 +776,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.Failed(e::class.simpleName ?: "Exception")
             }
             // the bytes ride only beside the two answers that say so: Bytes (always, empty for none) and a RowCover that sent its picture
-            answer(wire.encodeToString(Answer.serializer(), a), when {
+            answer(written.await().encodeToString(Answer.serializer(), a), when {
                 a is Answer.Bytes -> payload ?: ByteArray(0)
                 a is Answer.RowCover && a.sent -> payload
                 else -> null
@@ -808,6 +814,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         val shell = tenant.value?.models?.shell
         return when (call) {
             Call.SessionStart -> opened(session.start())
+            Call.NoticeLifetimes -> Answer.Lifetimes(
+                me.raddatz.veyq.mobile.words.Notice.SAID_MS, ShellModel.TRASH_UNDO_MS,
+                me.raddatz.veyq.mobile.words.Notice.COPIED_MS, me.raddatz.veyq.mobile.words.Notice.NOTHING_PLAYS_MS,
+            )
             is Call.SessionSignIn -> opened(session.signIn(call.server, call.email, call.password, call.secretKey)).also { managed(parts) }
             is Call.SessionStaySignedIn -> (session.stay(call.level)?.answer() ?: Answer.Refused(Answer.Why.NO_OFFER)).also { managed(parts) }
             Call.SessionNotNow -> if (session.notNow()) Answer.Done else Answer.Refused(Answer.Why.NO_OFFER)
@@ -2670,7 +2680,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         val watched = runCatching { wire.decodeFromString(Watched.serializer(), request) }.getOrNull() ?: return 0
         val id = ids.incrementAndFetch()
         val job = scope.launch {
-            updates(watched).collect { update(wire.encodeToString(Update.serializer(), it)) }
+            val out = written.await()
+            updates(watched).collect { update(out.encodeToString(Update.serializer(), it)) }
         }
         watches.put(id, job)
         return id

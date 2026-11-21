@@ -1,7 +1,8 @@
 // What the core says, in words (ADR 0123's Consequences, the Windows app): a Notice by its key and arguments through
 // the generated Words.Say, a Piece piece by piece, a line's pieces joined — Linux's said.rs, Android's NoticeText.kt,
-// Apple's say(notice). Nothing here decides what is said; that is the core's (ADR 0136 decision 1). Said.cs writes the
-// money, days and sizes; this half needs the wire's types (Veyq.Tests compiles both, ImportTextTest reads notices through it).
+// Apple's say(notice). Nothing here decides what is said; that is the core's (ADR 0136 decision 1). The core writes a
+// notice's and a piece's sizes, moments and amounts before the wire (ADR 0154 decision 5); Said.cs writes the raw values
+// the wire still carries until this app's phase of cr-apps-notices-and-formats-from-the-core; this half needs the wire's types (Veyq.Tests compiles both, ImportTextTest reads notices through it).
 
 namespace Veyq.Core;
 
@@ -27,16 +28,13 @@ public static partial class Said
     }
 
     /// <summary>A word by its catalog key alone (a key the core sent: a group's heading, an application's name).</summary>
-    public static string Key(string key) => Notice(new Notice { msg = key, args = [] });
+    public static string Key(string key) => Notice(new Notice { msg = key, args = [], kind = NoticeKind.Held });
 
     /// <summary>One piece of a line.</summary>
     public static string Piece(Piece p) => p switch
     {
         Piece.Said s => Notice(s.notice),
         Piece.Plain t => t.text,
-        Piece.Day d => Day(d.iso),
-        Piece.Size s => Size(s.bytes),
-        Piece.Money m => Money(m.amount, m.currency, m.minorUnits),
         _ => "",
     };
 
@@ -49,12 +47,9 @@ public static partial class Said
 
     private static string ArgText(NoticeArg a) => a switch
     {
-        NoticeArg.Amount m => Money(m.amount, m.currency, m.minorUnits),
-        NoticeArg.Bytes b => Size(b.count),
         NoticeArg.Int i => i.value.ToString(CultureInfo.CurrentCulture),
         NoticeArg.Long l => l.value.ToString(CultureInfo.CurrentCulture),
         NoticeArg.Joined j => string.Join(j.separator, j.parts.Select(ArgText)),
-        NoticeArg.Moment m => Moment(m.epochMs),
         NoticeArg.Notice n => Notice(n.notice),
         NoticeArg.Text t => t.text,
         _ => "",

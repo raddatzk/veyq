@@ -249,7 +249,7 @@ class MoveSheet(
         }
         back = Back(from)
         undoWindow?.cancel()
-        _state.update { it.copy(busy = false, done = said, undo = said) }
+        _state.update { it.copy(busy = false, done = said, undo = said.living(me.raddatz.veyq.mobile.words.NoticeKind.UNDO)) }
         undoWindow = scope.launch {
             delay(ShellModel.TRASH_UNDO_MS)
             endUndo()

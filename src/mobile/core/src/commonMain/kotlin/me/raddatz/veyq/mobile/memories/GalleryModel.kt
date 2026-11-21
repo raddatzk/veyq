@@ -959,10 +959,10 @@ class GalleryModel(
         val name = nameOf(mediaId) // before the removal: a refused restore names it
         pending += mediaId
         _state.update { s -> s.copy(rows = s.rows?.filter { it.mediaId != mediaId }, music = s.music.filter { it.mediaId != mediaId }, tracks = s.tracks.filter { it.mediaId != mediaId }) }
-        val said = Notice(Msg.MEMORY_MOVED_TO_TRASH)
         val u = Undoing(mediaId, name)
         // offline the trash is queued: no Undo (a restore never queues); the tray discards it
         val queuedOffline = current.offline != null
+        val said = Notice(Msg.MEMORY_MOVED_TO_TRASH).let { if (queuedOffline) it.living(me.raddatz.veyq.mobile.words.NoticeKind.SAID) else it }
         if (!queuedOffline) offerUndo(u, said)
         val done = runCatching { door.trash(mediaId) }.getOrDefault(Removal.FAILED)
         u.trashed.complete(done)

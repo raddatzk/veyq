@@ -406,7 +406,7 @@ mod tests {
         MusicTrackShown {
             media_id: "m1".into(),
             title: None,
-            untitled: Some(Notice { msg: "music_untitled".into(), args: vec![NoticeArg::Int { value: 2 }] }),
+            untitled: Some(Notice { msg: "music_untitled".into(), args: vec![NoticeArg::Int { value: 2 }], kind: crate::bridge::wire::NoticeKind::Held }),
             own_name: None,
             file_name: Some("a.ogg".into()),
             length: Some("3:05".into()),

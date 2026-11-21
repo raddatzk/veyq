@@ -607,12 +607,14 @@ class ShellModel(
             if (!me.raddatz.veyq.mobile.offline.QueuedNodes.trash(tenant.account, tenantId, ref.scopeId, ref.nodeId, wallClock())) return Trashed(NodeTrash.Deleted.FAILED, noRoom, null)
             update { afterTrash(it, ref.nodeId) }
             relocate(ref)
-            return Trashed(NodeTrash.Deleted.TRASHED, Notice(Msg.OFFLINE_WAITING), null)
+            return Trashed(NodeTrash.Deleted.TRASHED, Notice(Msg.OFFLINE_WAITING).living(me.raddatz.veyq.mobile.words.NoticeKind.SAID), null)
         }
         if (!online) return Trashed(NodeTrash.Deleted.FAILED, readOnly, null)
         val before = runCatching { tenant.node(ref.scopeId, ref.nodeId) }.getOrNull()
         val outcome = runCatching { NodeTrash.delete(tenant, ref.scopeId, ref.nodeId) }.getOrDefault(NodeTrash.Deleted.FAILED)
-        val r = Trashed(outcome, Notices.trashed(outcome, ref.name), before)
+        // moved without the node as it was, nothing can bring it back: said, not offered as an undo
+        val said = Notices.trashed(outcome, ref.name).let { if (before == null && it.kind == me.raddatz.veyq.mobile.words.NoticeKind.UNDO) it.living(me.raddatz.veyq.mobile.words.NoticeKind.SAID) else it }
+        val r = Trashed(outcome, said, before)
         if (r.gone) update { afterTrash(it, ref.nodeId) }
         refresh()
         if (r.gone) relocate(ref)

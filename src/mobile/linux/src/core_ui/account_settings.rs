@@ -988,9 +988,9 @@ mod tests {
     fn an_offline_items_line_says_its_status_and_its_size() {
         let item = |said: Option<Notice>| OfflineItem {
             tenant: "t".into(), scope: "s".into(), node: "n".into(), kind: "MEMORY".into(),
-            title: Notice { msg: "offline_item_named".into(), args: vec![] }, status: OfflineStatus::Kept, said, bytes: 7_000_000,
+            title: Notice { msg: "offline_item_named".into(), args: vec![], kind: crate::bridge::wire::NoticeKind::Held }, status: OfflineStatus::Kept, said, bytes: 7_000_000,
         };
-        let kept = item_line(&item(Some(Notice { msg: "offline_status_kept".into(), args: vec![] })));
+        let kept = item_line(&item(Some(Notice { msg: "offline_status_kept".into(), args: vec![], kind: crate::bridge::wire::NoticeKind::Held })));
         assert!(kept.starts_with(&words::offline_status_kept()), "{kept}");
         assert!(kept.ends_with(&said::size(7_000_000)), "{kept}");
         assert_eq!(item_line(&item(None)), said::size(7_000_000));
