@@ -39,9 +39,9 @@ internal static class DevSettings
             levels = [StaySignedIn.Presence, StaySignedIn.Login],
             families =
             [
-                new SettingsFamily { id = "f-here", createdAt = now - 9 * day, lastUsedAt = now, current = true, label = "WIN-VM", removesKey = false, createdShown = "Nov 12, 2026, 9:41 AM", lastUsedShown = "Nov 21, 2026, 9:41 AM" },
-                new SettingsFamily { id = "f-laptop", createdAt = now - 40 * day, lastUsedAt = now - 2 * day, current = false, label = "Work laptop", removesKey = true, createdShown = "Oct 12, 2026, 9:41 AM", lastUsedShown = "Nov 19, 2026, 9:41 AM" },
-                new SettingsFamily { id = "f-old", createdAt = now - 120 * day, lastUsedAt = now - 30 * day, current = false, label = null, removesKey = false, createdShown = "Jul 24, 2026, 9:41 AM", lastUsedShown = "Oct 22, 2026, 9:41 AM" },
+                new SettingsFamily { id = "f-here", createdAt = now - 9 * day, lastUsedAt = now, current = true, label = "WIN-VM", removesKey = false, createdText = "Nov 12, 2026, 9:41 AM", lastUsedText = "Nov 21, 2026, 9:41 AM" },
+                new SettingsFamily { id = "f-laptop", createdAt = now - 40 * day, lastUsedAt = now - 2 * day, current = false, label = "Work laptop", removesKey = true, createdText = "Oct 12, 2026, 9:41 AM", lastUsedText = "Nov 19, 2026, 9:41 AM" },
+                new SettingsFamily { id = "f-old", createdAt = now - 120 * day, lastUsedAt = now - 30 * day, current = false, label = null, removesKey = false, createdText = "Jul 24, 2026, 9:41 AM", lastUsedText = "Oct 22, 2026, 9:41 AM" },
             ],
             keptDevices = [new SettingsKeptDevice { deviceId = "d-phone", label = "Old phone" }],
             otherSavedKeys = true,

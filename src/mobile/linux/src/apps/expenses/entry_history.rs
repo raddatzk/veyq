@@ -80,7 +80,7 @@ fn load(inner: &Rc<Inner>, pot: i64, entry: &str, said: &adw::ToastOverlay) {
         let answered = bridge::call(&Call::PotHistory { pot, entry: entry.clone() }).await.map(|(a, _)| a);
         let Some(i) = w.upgrade() else { return };
         match answered {
-            Ok(Answer::EntryHistory { rows, deleted, restorable, until }) => {
+            Ok(Answer::EntryHistory { rows, deleted, restorable, until_text: until, .. }) => {
                 eprintln!("veyq: entry history: {} revision(s), deleted {deleted}, restorable {restorable}", rows.len());
                 i.show(&rows, deleted, restorable, until, pot, &entry, &said);
             }
@@ -96,14 +96,14 @@ fn load(inner: &Rc<Inner>, pot: i64, entry: &str, said: &adw::ToastOverlay) {
 
 impl Inner {
     #[allow(clippy::too_many_arguments)]
-    fn show(self: &Rc<Self>, rows: &[HistoryShown], deleted: bool, restorable: bool, until: Option<i64>, pot: i64, entry: &str, said: &adw::ToastOverlay) {
+    fn show(self: &Rc<Self>, rows: &[HistoryShown], deleted: bool, restorable: bool, until: Option<String>, pot: i64, entry: &str, said: &adw::ToastOverlay) {
         while let Some(child) = self.content.first_child() {
             self.content.remove(&child);
         }
         if deleted {
             let mut lines = vec![words::entry_deleted_hint()];
             match until {
-                Some(t) if restorable => lines.push(words::entry_restorable_until(&said::moment(t))),
+                Some(t) if restorable => lines.push(words::entry_restorable_until(&t)),
                 Some(_) => lines.push(words::entry_not_restorable()),
                 None => {}
             }
@@ -120,7 +120,7 @@ impl Inner {
             let by = r.writer.clone().unwrap_or_else(words::history_unknown_writer);
             let row = adw::ActionRow::builder()
                 .title(glib_escape(&said::line(&r.line)))
-                .subtitle(glib_escape(&words::history_by(&by, &said::moment(r.at))))
+                .subtitle(glib_escape(&words::history_by(&by, &r.at_text)))
                 .build();
             history.add(&row);
         }

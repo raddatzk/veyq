@@ -160,7 +160,7 @@ internal sealed class MusicBar : IDisposable
         AutomationProperties.SetName(_toggle, label);
         ToolTipService.SetToolTip(_toggle, label);
         AutomationProperties.SetName(_progress, Words.MusicProgress(now.title));
-        _total.Text = now.durationMs > 0 ? now.duration : "";
+        _total.Text = now.durationMs > 0 ? now.durationText : "";
         if (!_dragging)
         {
             _setting = true;
@@ -170,7 +170,7 @@ internal sealed class MusicBar : IDisposable
             _setting = false;
         }
         // the core's clock (Shown.length): while the slider is held it shows where the track stands, as the web's range
-        _elapsed.Text = now.position;
+        _elapsed.Text = now.positionText;
     }
 
     public void Dispose() => _watch?.Dispose();

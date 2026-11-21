@@ -306,10 +306,10 @@ impl Inner {
         match answered {
             Ok(Answer::MoveSent { done: Some(done), undoable, .. }) => {
                 eprintln!("veyq: {what}: {}, undo offered: {undoable}", done.msg);
-                let toast = adw::Toast::new(&said::notice(&done));
+                let toast = said::notice_toast(&done);
                 if undoable && let Some(m) = self.id.get() {
+                    // the core raised it as an undo (`UNDO`): it stays until the window ends or Undo is pressed
                     toast.set_button_label(Some(&words::trash_undo()));
-                    toast.set_timeout(0);
                     let toasts = self.toasts.clone();
                     let held = self.clone();
                     toast.connect_button_clicked(move |_| {

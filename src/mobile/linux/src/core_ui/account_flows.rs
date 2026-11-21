@@ -504,7 +504,7 @@ fn kit_page(flow: &Flow, kit: i64, sub: Option<&str>, extra: Option<&gtk::Widget
             };
             // the core opens the path itself; one that is no UTF-8 does not cross the wire
             let Some(path) = chosen.path().and_then(|p| p.to_str().map(str::to_owned)) else {
-                return f.toasts.add_toast(adw::Toast::new(&words::kit_save_failed()));
+                return f.toasts.add_toast(said::word_toast("kit_save_failed", &words::kit_save_failed()));
             };
             eprintln!("veyq: kit: saving into {path}");
             let answered = bridge::call(&Call::KitSave { kit, path, language: words::language().to_owned(), created_epoch_day: local_epoch_day() }).await;
@@ -918,7 +918,7 @@ fn rotation_done(flow: &Flow, flow_id: &Id, s: &KeyRotationState) -> adw::Naviga
             };
             let row = adw::ActionRow::builder().title(title).subtitle(said::key(&scope.status)).use_markup(false).build();
             if let Some(why) = &scope.blocked {
-                row.set_subtitle(&format!("{} · {}", said::key(&scope.status), said::key(why)));
+                row.set_subtitle(&said::joined(&[said::key(&scope.status), said::key(why)]));
             }
             list.append(&row);
         }
@@ -944,8 +944,8 @@ fn rotation_done(flow: &Flow, flow_id: &Id, s: &KeyRotationState) -> adw::Naviga
                     (None, None) => words::rotation_scope_name_unavailable(),
                 };
                 let subtitle = match (&link.node, &link.tenant) {
-                    (Some(_), _) if link.upload => format!("{space} · {}", words::rotation_link_upload()),
-                    (None, Some(tenant)) => format!("{space} · {}", words::rotation_link_elsewhere(tenant)),
+                    (Some(_), _) if link.upload => said::joined(&[space, words::rotation_link_upload()]),
+                    (None, Some(tenant)) => said::joined(&[space, words::rotation_link_elsewhere(tenant)]),
                     _ => space,
                 };
                 let row = adw::ActionRow::builder().title(title).subtitle(subtitle).use_markup(false).build();

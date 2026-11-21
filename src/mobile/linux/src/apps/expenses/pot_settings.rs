@@ -387,7 +387,7 @@ impl Inner {
                         f.set_text("");
                     }
                     if let Some(n) = notice {
-                        toasts.add_toast(adw::Toast::new(&said::notice(&n)));
+                        toasts.add_toast(said::notice_toast(&n));
                     }
                 }
                 other => eprintln!("veyq: {kind} answered {other:?}"),
@@ -411,7 +411,7 @@ impl Inner {
                     Ok(Answer::Stored { stored, .. }) => eprintln!("veyq: rename stored {stored}"),
                     other => {
                         eprintln!("veyq: a rename answered {other:?}");
-                        toasts.add_toast(adw::Toast::new(&words::people_failed()));
+                        toasts.add_toast(said::word_toast("people_failed", &words::people_failed()));
                     }
                 }
             });

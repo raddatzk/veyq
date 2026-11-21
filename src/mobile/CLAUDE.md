@@ -1383,10 +1383,6 @@ only with the web's.
   (measured 2026-11-10). `run.py test` links the container's `/etc/localtime` to Europe/Berlin and sets `TZ` for glibc.
 - The process's locale is one for every test thread: a Rust test that sets `LC_ALL` or `LC_MONETARY` holds
   `crate::LOCALE` while it does.
-- Money in the Linux app is glibc's locale data, which knows only the locale's own currency symbol; another currency's
-  symbol is ICU's (`said::icu_symbol`, `libicuuc` linked by `build.rs`), whose C functions carry ICU's major version in
-  their names (`ucurr_getName_78`) — read from pkg-config at build, never spelled, since the Fedora image (77) and the
-  GNOME runtime (78) differ. Windows' `icu.dll` names them without a version.
 - AdwComboRow's `use-subtitle` set after its model showed no subtitle until the selection changed (the payer rows, #901):
   the editor's draw sets the subtitle itself.
 - A GTK dialog's state that only weak handlers reach is dropped at once: Linux's first cover dialog did nothing on

@@ -11,7 +11,7 @@ use gtk::{gdk, glib};
 
 use crate::bridge::{self, wire::Answer, wire::Call, wire::PersonTrustOutcome as Outcome, wire::PersonTrustStatus, wire::ScanKind, wire::ScanState, wire::Shown};
 use crate::core_ui::qr_camera::ScanView;
-use crate::core_ui::{said, words};
+use crate::core_ui::words;
 
 /// The safety number's group for [user_id]'s page ([mine]: one's own), named [name]; hidden where they are no member here.
 pub fn section(user_id: &str, mine: bool, name: &str) -> adw::PreferencesGroup {
@@ -99,8 +99,8 @@ pub fn state_line(shown: &Shown) -> String {
     if !by.is_empty() {
         lines.push(words::safety_verified_by(&by.join(", ")));
     }
-    if let Some(at) = shown.rotated_at {
-        lines.push(words::trust_rotated(&said::moment(at)));
+    if let Some(at) = &shown.rotated_text {
+        lines.push(words::trust_rotated(at));
     }
     if shown.replaced {
         lines.push(words::safety_replaced());
@@ -334,7 +334,7 @@ mod tests {
     fn shown() -> Shown {
         Shown {
             user_id: "u".into(), anomaly: false, number: Some("12345".into()), chain_code: Some("67890".into()), is_new: false,
-            verified_by: vec![], verified_by_me: false, rotated_at: None, replaced: false,
+            verified_by: vec![], verified_by_me: false, rotated_at: None, replaced: false, rotated_text: None,
         }
     }
 

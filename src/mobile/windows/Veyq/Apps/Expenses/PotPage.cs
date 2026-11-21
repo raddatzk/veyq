@@ -499,9 +499,6 @@ internal sealed class PotPage : IDisposable
         return block;
     }
 
-    /// <summary>An amount as the core writes it (PotView's amounts, Shown.money); empty where it sent none.</summary>
-    private static string Money(Piece? amount) => amount is null ? "" : Said.Piece(amount);
-
     /// <summary>The ledger check's notice (ADR 0108 decision 5): what the read found missing, so the balances may be wrong.</summary>
     private static void Missing(StackPanel content, PotView view)
     {
@@ -534,7 +531,7 @@ internal sealed class PotPage : IDisposable
             else if (e.badge is { } b) trailing.Add(Trailing(Said.Notice(b.notice), b.danger ? "SystemFillColorCriticalBrush" : "TextFillColorSecondaryBrush"));
             // an entry made offline and not sent yet, marked in place (ShownEntry.unsentMark, ADR 0153 decision 5)
             if (!deleted && e.unsentMark is { } unsent) trailing.Add(Trailing(Said.Notice(unsent), "SystemFillColorCautionBrush"));
-            string? amount = e.amountShown is { } a ? Said.Piece(a) : null;
+            string? amount = e.amountText;
             if (amount is not null) trailing.Add(Trailing(amount));
             var title = e.row.title ?? Words.PotTransfer();
             var line = Row(title, Said.Line(e.line), $"{(deleted ? "deleted" : "entry")}-line:{e.row.id}", [.. trailing]);
@@ -601,7 +598,7 @@ internal sealed class PotPage : IDisposable
             foreach (var t in view.settleUp)
             {
                 var pays = Said.Notice(t.pays);
-                var amount = Money(t.amountShown);
+                var amount = t.amountText ?? "";
                 var trailing = new List<UIElement> { Trailing(amount) };
                 // Record where the core offers it (PotView.canRecord: never offline)
                 if (view.canRecord && pot is { } one)
@@ -618,8 +615,8 @@ internal sealed class PotPage : IDisposable
         if (view.byCategory.Count > 0)
         {
             Heading(content, Words.PotByCategory());
-            foreach (var c in view.byCategory) content.Children.Add(Row(Said.Piece(c.label), null, $"category:{c.row.id}", Trailing(Money(c.amountShown))));
-            content.Children.Add(Row(Words.PotTotal(), null, "total", Trailing(Money(view.totalShown), strong: true)));
+            foreach (var c in view.byCategory) content.Children.Add(Row(Said.Piece(c.label), null, $"category:{c.row.id}", Trailing(c.amountText ?? "")));
+            content.Children.Add(Row(Words.PotTotal(), null, "total", Trailing(view.totalText, strong: true)));
         }
     }
 

@@ -77,8 +77,8 @@ class EntryEditor internal constructor(
 
     @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("EditorRate")
     data class Rate(val state: RateState, val day: String? = null) {
-        /** [day] as a host across the bridge shows it (`Shown.day`); derived, so a copy keeps it true. */
-        val dayShown: me.raddatz.veyq.mobile.words.Written? = day?.let(me.raddatz.veyq.mobile.words.Written::day)
+        /** [day] as a bridge host shows it (ADR 0154 decision 5). */
+        val dayText: me.raddatz.veyq.mobile.words.ShownText? = day?.let { me.raddatz.veyq.mobile.words.ShownText.day(it) }
     }
 
     data class State(

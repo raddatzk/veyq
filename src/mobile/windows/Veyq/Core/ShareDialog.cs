@@ -218,7 +218,7 @@ internal sealed class ShareDialog
         var title = Said.Piece(link.title);
         var text = new StackPanel { Spacing = 2 };
         text.Children.Add(new TextBlock { Text = title, TextTrimming = TextTrimming.CharacterEllipsis });
-        var dates = Lives.Joined([Words.ShareCreated(link.createdDay), link.expiresDay is { } end ? Words.ShareExpires(end) : null]);
+        var dates = Lives.Joined([Words.ShareCreated(link.createdText), link.expiresText is { } end ? Words.ShareExpires(end) : null]);
         text.Children.Add(new TextBlock { Text = dates, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"] });
         if (link.badges.Count > 0)
         {

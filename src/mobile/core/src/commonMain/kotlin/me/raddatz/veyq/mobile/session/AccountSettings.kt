@@ -161,10 +161,10 @@ class AccountSettings<A : Connection, T : Any>(
         val field: me.raddatz.veyq.mobile.offline.LimitField = me.raddatz.veyq.mobile.offline.OfflineShown.field(limit),
         val items: List<me.raddatz.veyq.mobile.offline.OfflineItem> = emptyList(),
     ) {
-        /** [automatic], [pinned] and [free] as a host across the bridge shows them (`Shown.size`); derived, so a copy keeps them true. */
-        val automaticSize: me.raddatz.veyq.mobile.words.Written = me.raddatz.veyq.mobile.words.Written.size(automatic)
-        val pinnedSize: me.raddatz.veyq.mobile.words.Written = me.raddatz.veyq.mobile.words.Written.size(pinned)
-        val freeSize: me.raddatz.veyq.mobile.words.Written? = free?.let(me.raddatz.veyq.mobile.words.Written::size)
+        /** The three sizes as a bridge host shows them (ADR 0154 decision 5). */
+        val automaticText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.size(automatic)
+        val pinnedText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.size(pinned)
+        val freeText: me.raddatz.veyq.mobile.words.ShownText? = free?.let { me.raddatz.veyq.mobile.words.ShownText.size(it) }
     }
 
     /** A device the register knows that holds a served saved key and no session: removable ([removeSavedKey]). */

@@ -16,7 +16,7 @@ use gtk::{cairo, gdk, gio, glib};
 use crate::bridge::{self, Watch, wire::Answer, wire::BannerEditorShown, wire::BannerMedium, wire::BannerSaid, wire::BannerSave,
     wire::BannerShown, wire::Call, wire::Update, wire::Watched};
 use crate::core_ui::player::Playing;
-use crate::core_ui::words;
+use crate::core_ui::{said, words};
 
 /// A picture held for drawing: the whole picture and its surround (scaled down to the core's size), both cairo surfaces.
 #[derive(Clone)]
@@ -293,7 +293,7 @@ impl Inner {
             let playing = Playing::new(reader, size, &words::memory_banner_video(), true, move || {
                 if let Some(i) = failed.upgrade() {
                     i.stop();
-                    i.toasts.add_toast(adw::Toast::new(&words::memory_banner_play_failed()));
+                    i.toasts.add_toast(said::word_toast("memory_banner_play_failed", &words::memory_banner_play_failed()));
                 }
             });
             playing.on_playing(|on| eprintln!("veyq: banner video {}", if on { "playing" } else { "stopped" }));
@@ -516,7 +516,7 @@ impl BannerDialog {
                     if let (Ok(Answer::BannerSaved { outcome: BannerSave::Done }), Some(e)) = (&answered, weak.upgrade()) {
                         e.dialog.close();
                     } else if !matches!(answered, Ok(Answer::BannerSaved { .. })) {
-                        toasts.add_toast(adw::Toast::new(&words::memory_banner_failed()));
+                        toasts.add_toast(said::word_toast("memory_banner_failed", &words::memory_banner_failed()));
                     }
                 });
             });

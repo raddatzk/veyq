@@ -36,7 +36,7 @@ internal static class EntryHistoryDialog
             if (h.deleted)
             {
                 column.Children.Add(Text(Words.EntryDeletedHint(), "history-deleted", "BodyTextBlockStyle"));
-                if (h.untilShown is { } until)
+                if (h.untilText is { } until)
                 {
                     column.Children.Add(Text(h.restorable ? Words.EntryRestorableUntil(until) : Words.EntryNotRestorable(), "history-until", "BodyTextBlockStyle"));
                 }
@@ -50,7 +50,7 @@ internal static class EntryHistoryDialog
             {
                 var row = new StackPanel { Padding = new Thickness(0, 4, 0, 4) };
                 var line = Said.Line(r.line);
-                var by = Words.HistoryBy(r.writer ?? Words.HistoryUnknownWriter(), r.atShown);
+                var by = Words.HistoryBy(r.writer ?? Words.HistoryUnknownWriter(), r.atText);
                 row.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
                 row.Children.Add(new TextBlock
                 {

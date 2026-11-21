@@ -718,9 +718,9 @@ internal sealed class AccountSettingsPage : IDisposable
         _sections.Children.Add(Card("\uE713", Words.AccountSettingsStorageLimit(), [Words.AccountSettingsStorageLimitHint()], "settings-storage-limit-card", out _limitHolder, _limit, _unit, _setLimit));
         foreach (var (glyph, title, bytes, id) in new[]
         {
-            ("\uE81C", Words.AccountSettingsStorageAutomatic(), (string?)st.automaticSize, "settings-storage-automatic"),
-            ("\uE896", Words.AccountSettingsStoragePinned(), st.pinnedSize, "settings-storage-pinned"),
-            ("\uEDA2", Words.AccountSettingsStorageFree(), st.freeSize, "settings-storage-free"),
+            ("\uE81C", Words.AccountSettingsStorageAutomatic(), (string?)st.automaticText, "settings-storage-automatic"),
+            ("\uE896", Words.AccountSettingsStoragePinned(), st.pinnedText, "settings-storage-pinned"),
+            ("\uEDA2", Words.AccountSettingsStorageFree(), st.freeText, "settings-storage-free"),
         })
         {
             if (bytes is not { } b) continue;
@@ -752,7 +752,7 @@ internal sealed class AccountSettingsPage : IDisposable
 
     /// <summary>An item's line under its name: its status as the core says it, and the size it keeps on this device.</summary>
     public static string ItemLine(OfflineItem item) =>
-        Lives.Joined([item.said is { } n ? Said.Notice(n) : null, item.size]);
+        Lives.Joined([item.said is { } n ? Said.Notice(n) : null, item.bytesText]);
 
     /// <summary>The limit's field and its unit from the core's, set only where the core's changed and not while typed.</summary>
     private void DrawLimit(SettingsShown s, Storage st)
@@ -996,7 +996,7 @@ internal sealed class AccountSettingsPage : IDisposable
     /// <summary>A family's dates as its card says them: when it signed in and when it was last used, the ones the server sent.</summary>
     public static IEnumerable<string> Dates(SettingsFamily f)
     {
-        if (f.createdShown is { } created) yield return Words.AccountSettingsSignedIn(created);
-        if (f.lastUsedShown is { } used) yield return Words.AccountSettingsLastUsed(used);
+        if (f.createdText is { } created) yield return Words.AccountSettingsSignedIn(created);
+        if (f.lastUsedText is { } used) yield return Words.AccountSettingsLastUsed(used);
     }
 }

@@ -107,7 +107,7 @@ class WireTest {
     private val samples: Map<KSerializer<*>, List<Any>> = mapOf(
         Config.serializer() to listOf(Config("Fedora 44", 0, ""), Config("WIN-VM", 0x2051C, "veyq wants to open your account", "C:\\Users\\p\\AppData\\Local\\veyq\\offline"), Config("Fedora 44", 0, "", "/home/p/.local/share/veyq/offline"), Config("Fedora 44", 0, "", null, "de"), Config("Fedora 44", 0, "", null, "en", netLog = true)),
         Call.serializer() to listOf(
-            Call.SessionStart, Call.NoticeLifetimes, Call.ShownSeparator, Call.SessionSignIn("veyq.localhost:8080", "p@example.org", "typed", "A3-TYPED"),
+            Call.SessionStart, Call.NoticeLifetimes, Call.SessionSignIn("veyq.localhost:8080", "p@example.org", "typed", "A3-TYPED"),
             Call.SessionStaySignedIn(StaySignedIn.PRESENCE), Call.SessionStaySignedIn(StaySignedIn.LOGIN), Call.SessionNotNow,
             Call.ManageStaySignedIn("veyq.localhost#user-1", StaySignedIn.LOGIN), Call.ManagePasswordTrust("veyq.localhost#user-1", "typed"),
             Call.SessionUnlock("typed"), Call.SessionUnlock(""), Call.SessionOtherAccount, Call.SessionForgetDevice("veyq.localhost#user-1"),
@@ -576,7 +576,7 @@ class WireTest {
                 "self", listOf(photo), true, false, listOf("b2"), false, false, me.raddatz.veyq.mobile.memories.Buckets.Outcome.FAILED,
             )), Update.Buckets(121, null),
             Update.Gallery(62, GalleryShown(memory, emptyList(), false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,
-                filter = FilterShown(true, MarkMode.EVERYONE, true, listOf(ChipShown("day:2025-05-03", "3. Mai")), "be", listOf(ChipShown("place:lisboa", "Lisboa", "")), 1, 4),
+                filter = FilterShown(true, MarkMode.EVERYONE, true, listOf(ChipShown("day:2025-05-03", me.raddatz.veyq.mobile.words.ShownText.day("2025-05-03"))), "be", listOf(ChipShown("place:lisboa", me.raddatz.veyq.mobile.words.ShownText.written("Lisboa"), "")), 1, 4),
                 contributions = true, markSaid = Notice(Msg.MEDIA_MARKS_SAVE_FAILED), marking = true)),
             Update.Gallery(60, GalleryShown(memory, null, false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,
                 date = MemoryDateShown(DateMode.RANGE, "2026-07-01", "2026-07-14"), place = "Berlin", editsFacts = true, tracks = 2)),

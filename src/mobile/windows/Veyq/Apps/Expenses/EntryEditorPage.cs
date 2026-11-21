@@ -728,7 +728,7 @@ internal sealed class EntryEditorPage : IDisposable
                 {
                     var row = new StackPanel { Padding = new Thickness(0, 4, 0, 4) };
                     var line = Said.Line(r.line);
-                    var by = Words.HistoryBy(r.writer ?? Words.HistoryUnknownWriter(), r.atShown);
+                    var by = Words.HistoryBy(r.writer ?? Words.HistoryUnknownWriter(), r.atText);
                     row.Children.Add(new TextBlock { Text = line, TextWrapping = TextWrapping.Wrap });
                     row.Children.Add(new TextBlock { Text = by, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], Foreground = Brush("TextFillColorSecondaryBrush") });
                     AutomationProperties.SetAutomationId(row, $"ed-history:{i++}");
@@ -851,7 +851,7 @@ internal sealed class EntryEditorPage : IDisposable
             var note = s.rateFill?.state switch
             {
                 RateState.Filling => Words.EdRateLoading(),
-                RateState.Filled => Words.EdRateFilled(s.rateFill.dayShown ?? ""),
+                RateState.Filled => Words.EdRateFilled(s.rateFill.dayText ?? ""),
                 RateState.Missing => Words.EdRateMissing(s.currency),
                 _ => Words.EdRateHint(),
             };

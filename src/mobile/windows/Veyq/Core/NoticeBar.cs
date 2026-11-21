@@ -30,7 +30,7 @@ public sealed record Spoken(string Text, NoticeKind Kind)
     public static Spoken Own(string key, string text) => new(text, Lives.KindOf(key));
 }
 
-/// <summary>The core's lifetimes, its word kinds and its line separator (Call.NoticeLifetimes, Call.ShownSeparator):
+/// <summary>The core's lifetimes, its word kinds and its line separator (Call.NoticeLifetimes):
 /// read once as the core starts. Until read, a said notice stays as a held one does.</summary>
 public static class Lives
 {
@@ -63,9 +63,10 @@ public static class Lives
             if ((await Bridge.Core.CallAsync(new Call.NoticeLifetimes())).Answer is Answer.Lifetimes l)
             {
                 _lifetimes = l;
-                _kinds = new Dictionary<string, NoticeKind>(l.kinds);
+                _kinds = l.saidWords.Select(k => (k, NoticeKind.Said)).Concat(l.undoWords.Select(k => (k, NoticeKind.Undo)))
+                    .ToDictionary(p => p.k, p => p.Item2);
+                if (l.separator.Length > 0) Separator = l.separator;
             }
-            if ((await Bridge.Core.CallAsync(new Call.ShownSeparator())).Answer is Answer.Name { name: { } separator }) Separator = separator;
             Log.Write($"lives read: said {_lifetimes?.saidMs} ms, {_kinds.Count} words not held");
         }
         catch (Exception e)

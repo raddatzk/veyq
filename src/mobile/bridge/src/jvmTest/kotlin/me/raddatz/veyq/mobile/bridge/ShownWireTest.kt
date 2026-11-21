@@ -11,7 +11,6 @@ import me.raddatz.veyq.mobile.words.Piece
 import kotlinx.serialization.builtins.ListSerializer
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
  * What a host reads of a notice and a line (ADR 0154 decisions 4 and 5): its kind, its words and strings — every size,
@@ -44,38 +43,51 @@ class ShownWireTest {
         )
     }
 
+    private fun field(json: String, name: String): String? = Regex("\"$name\":(null|\"[^\"]*\")").find(json)?.groupValues?.get(1)?.removeSurrounding("\"")?.takeIf { it != "null" }
+
+    /**
+     * The values a view carries raw for the host's own use arrive beside the text the core writes for them (phase 7 of
+     * cr-apps-notices-and-formats-from-the-core): a size, a moment, a day, a server instant's day, a Memory's days, an
+     * amount and a player's clock, in the host's language — none for a host to format.
+     */
     @Test
-    fun aWireFieldsRawValueTravelsWithItsTextBesideIt() {
-        // a moment (epoch ms) and a size as the host reads them, and the raw value beside them for whoever still reads it
-        val family = SettingsFamily("f", 1_763_640_000_000, null, true, null, false)
-        val en = wireIn("en").encodeToString(SettingsFamily.serializer(), family)
-        assertTrue(en.contains("\"createdAt\":1763640000000"), en)
-        assertTrue(Regex("\"createdShown\":\"Nov 20, 2025, \\d{1,2}:\\d{2} [AP]M\"").containsMatchIn(en), en)
-        assertTrue(en.contains("\"lastUsedShown\":null"), en)
-        val row = TrashShown.Row("n", "memory", "Rome", "2026-11-10T12:00:00Z", "2026-12-10T12:00:00Z", true, false)
-        val de = wireIn("de").encodeToString(TrashShown.Row.serializer(), row)
-        assertTrue(de.contains("\"deletedDay\":\"10.11.2026\"") && de.contains("\"purgeDay\":\"10.12.2026\""), de)
-        // a Memory's date: its first day and its range in the numeric form the web's memoryDateRange writes
-        val date = MemoryDateShown(DateMode.RANGE, "2026-03-12", "2026-03-14")
-        assertEquals(
-            """{"mode":"RANGE","from":"2026-03-12","to":"2026-03-14","fromShown":"12.03.2026","range":"12.03.2026 – 14.03.2026"}""",
-            wireIn("de").encodeToString(MemoryDateShown.serializer(), date),
-        )
-        assertEquals(
-            """{"mode":"SINGLE","from":"2026-03-12","to":null,"fromShown":"03/12/2026","range":"03/12/2026"}""",
-            wireIn("en").encodeToString(MemoryDateShown.serializer(), MemoryDateShown(DateMode.SINGLE, "2026-03-12", null)),
-        )
-        // a track's distance in words with its number written; the clocks of what plays
-        val now = NowPlayingShown("t", "Song", null, null, true, 61_500, 3_725_000)
-        val played = wireIn("en").encodeToString(NowPlayingShown.serializer(), now)
-        assertTrue(played.contains("\"position\":\"1:02\"") && played.contains("\"duration\":\"1:02:05\""), played)
+    fun aViewsRawValuesArriveWithTheirTextInTheHostsLanguage() {
+        val en = wireIn("en")
+        val de = wireIn("de")
+        val detail = DetailRow(Msg.COPY_DONE, null, 1_500_000, null, null)
+        assertEquals("1.5 MB", field(en.encodeToString(DetailRow.serializer(), detail), "sizeText"))
+        assertEquals("1,5 MB", field(de.encodeToString(DetailRow.serializer(), detail), "sizeText"))
+        assertEquals(null, field(en.encodeToString(DetailRow.serializer(), detail), "momentText"))
+        val link = ShareShown.ShownLink("s", Piece.Plain("t"), emptyList(), "2026-11-20T12:00:00Z", null, null, false, false, false, false, false, false)
+        assertEquals("Nov 20, 2026", field(en.encodeToString(ShareShown.ShownLink.serializer(), link), "createdText"))
+        assertEquals("20.11.2026", field(de.encodeToString(ShareShown.ShownLink.serializer(), link), "createdText"))
+        val range = MemoryDateShown(DateMode.RANGE, "2026-03-12", "2026-03-14")
+        assertEquals("03/12/2026 – 03/14/2026", field(en.encodeToString(MemoryDateShown.serializer(), range), "text"))
+        assertEquals("12.03.2026", field(de.encodeToString(MemoryDateShown.serializer(), MemoryDateShown(DateMode.ONGOING, "2026-03-12", null)), "text"))
+        assertEquals("", field(en.encodeToString(MemoryDateShown.serializer(), MemoryDateShown(DateMode.AUTO, null, null)), "text"))
+        val now = NowPlayingShown("t", "Song", null, null, true, 59_600, 3_725_000)
+        val clocks = en.encodeToString(NowPlayingShown.serializer(), now)
+        assertEquals("1:00" to "1:02:05", field(clocks, "positionText") to field(clocks, "durationText"))
+        val chip = ChipShown("day:2026-11-20", me.raddatz.veyq.mobile.words.ShownText.day("2026-11-20"))
+        assertEquals("""{"chip":"day:2026-11-20","label":"20.11.2026","rest":null}""", de.encodeToString(ChipShown.serializer(), chip))
+        val total = me.raddatz.veyq.mobile.words.ShownText.money(-123_456, "EUR", 2)
+        assertEquals("-€1,234.56", en.encodeToString(me.raddatz.veyq.mobile.words.ShownText.serializer(), total).removeSurrounding("\""))
     }
 
+    /** What a host draws its own notices and lines by: the lifetimes, the words that live as `SAID` or `UNDO`, the separator. */
     @Test
-    fun theHostReadsTheCoresTableOfKindsAndItsSeparator() {
-        val lifetimes = Answer.Lifetimes(1, 2, 3, 4)
-        assertEquals(NoticeKind.SAID, lifetimes.kinds["link_kept"])
-        assertEquals(NoticeKind.UNDO, lifetimes.kinds["trash_moved"])
-        assertEquals(null, lifetimes.kinds["share_failed"], "a word not in the table is held")
+    fun theLifetimesNameTheKindsOfWordsAndTheSeparator() {
+        val l = noticeLifetimes()
+        assertEquals(listOf(4_000L, 6_000L, 2_000L, 5_000L), listOf(l.saidMs, l.undoMs, l.copiedMs, l.nothingPlaysMs))
+        assertEquals(" · ", l.separator)
+        assert("profile_saved" in l.saidWords && "download_done" in l.saidWords && "trash_moved" in l.undoWords) { l.toString() }
+        assert("download_failed" !in l.saidWords && "download_failed" !in l.undoWords)
+    }
+
+    /** The banner's too-large bound named as the web's BannerDialog names it ("40 MB"), in the host's language. */
+    @Test
+    fun theBannersBoundIsTheWebs() {
+        val shown = BannerEditorShown(false, false, null, false, null, BannerSaid.TOO_LARGE, false, false, false)
+        kotlin.test.assertTrue(wireIn("de").encodeToString(BannerEditorShown.serializer(), shown).endsWith(""""tooLargeBound":"40 MB"}"""))
     }
 }

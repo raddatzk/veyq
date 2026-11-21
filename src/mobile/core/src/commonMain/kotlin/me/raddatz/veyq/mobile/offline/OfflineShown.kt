@@ -56,8 +56,8 @@ data class OfflineItem(
     val said: Notice?,
     val bytes: Long,
 ) {
-    /** [bytes] as a host across the bridge shows it (`Shown.size`); derived, so a copy keeps it true. */
-    val size: me.raddatz.veyq.mobile.words.Written = me.raddatz.veyq.mobile.words.Written.size(bytes)
+    /** [bytes] as a bridge host shows them (ADR 0154 decision 5). */
+    val bytesText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.size(bytes)
 }
 
 /** The unit of the Settings section's free size field: decimal, as the platforms' file sizes read. */

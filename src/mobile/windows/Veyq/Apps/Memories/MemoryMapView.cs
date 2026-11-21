@@ -180,7 +180,7 @@ internal sealed class MemoryMapView : IDisposable
         token is null ? null : Words.Say($"track_activity_{token.Replace('-', '_')}", []);
 
     /// <summary>A track's facts on one line, each the core's: a distance written by it, or its words.</summary>
-    public static string Facts(IEnumerable<TrackFactShown> facts) => Lives.Joined(facts.Select(f => f.distanceShown ?? (f.words is { } w ? Said.Notice(w) : null)));
+    public static string Facts(IEnumerable<TrackFactShown> facts) => Lives.Joined(facts.Select(f => f.distanceText ?? (f.words is { } w ? Said.Notice(w) : null)));
 
     private FrameworkElement Row(TrackShown t, TracksShown s)
     {

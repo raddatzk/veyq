@@ -200,7 +200,7 @@ impl Inner {
         if let (Some(refused), Some(buckets)) = (s.refused, self.id.get()) {
             // a move's own answer says it; this is what any curation left behind
             if let Some(text) = not_done(refused, false) {
-                self.toasts.add_toast(adw::Toast::new(&glib_escape(&text)));
+                self.toasts.add_toast(said::toast(&text, crate::bridge::wire::NoticeKind::Held));
             }
             bridge::send(Call::BucketsSeen { buckets });
         }
@@ -368,7 +368,7 @@ impl Inner {
                 Ok(Answer::BucketsDone { outcome }) => {
                     eprintln!("veyq: contributions curation: {outcome:?}");
                     if let Some(text) = not_done(outcome, moving) {
-                        toasts.add_toast(adw::Toast::new(&glib_escape(&text)));
+                        toasts.add_toast(said::toast(&text, crate::bridge::wire::NoticeKind::Held));
                     }
                 }
                 other => header::say(&toasts, other, "Buckets"),

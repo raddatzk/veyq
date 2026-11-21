@@ -78,15 +78,10 @@ internal sealed class Call {
 
     /**
      * How long the core's notices live (ADR 0154 decision 4), answered [Answer.Lifetimes]: a host asks once and maps a
-     * notice's `kind` onto its control with it, holding no duration of its own.
+     * notice's `kind` onto its control with it, holding no duration of its own. Answered at once, without waiting for the
+     * core's start, so a host may ask it on its own thread before its first window.
      */
     @Serializable @SerialName("Notice.Lifetimes") data object NoticeLifetimes : Call()
-
-    /**
-     * What a line's parts are joined with (`Shown.SEPARATOR`), answered [Answer.Name]: a host asks once and joins the
-     * parts of a line it puts together itself with it, holding no separator of its own (ADR 0154 decision 5).
-     */
-    @Serializable @SerialName("Shown.Separator") data object ShownSeparator : Call()
 
     /**
      * The full sign-in, which holds the password trust; where the device offers a level, the shell's gate then carries
@@ -1823,13 +1818,15 @@ internal sealed class Answer {
     /**
      * The core's lifetimes ([Call.NoticeLifetimes]): a `SAID` notice closes itself after [saidMs], a `HELD` one stays until
      * closed, an `UNDO` one while its state offers the undo ([undoMs], the window the core runs); "copied" shows for
-     * [copiedMs], the player's "nothing plays" for [nothingPlaysMs]; [kinds] every word whose kind is not `HELD`
-     * (`NoticeKind.notHeld`), by its key, so a word the host says of its own lives as the core's table says.
+     * [copiedMs], the player's "nothing plays" for [nothingPlaysMs]. Beside them what a host draws a notice and a line by
+     * (ADR 0154 decisions 4 and 5): the words a notice it raises itself lives as `SAID` or `UNDO` by ([saidWords],
+     * [undoWords]; every other word is `HELD`, core's `NoticeKind.of`), and what a line's parts are joined with
+     * ([separator], `Shown.SEPARATOR`).
      */
     @Serializable @SerialName("Lifetimes")
     data class Lifetimes(
         val saidMs: Long, val undoMs: Long, val copiedMs: Long, val nothingPlaysMs: Long,
-        val kinds: Map<String, me.raddatz.veyq.mobile.words.NoticeKind> = me.raddatz.veyq.mobile.words.NoticeKind.notHeld,
+        val saidWords: List<String> = emptyList(), val undoWords: List<String> = emptyList(), val separator: String = "",
     ) : Answer()
 
     /** The call threw: the exception's class, never its message (which may hold what it was about). */
@@ -1941,9 +1938,10 @@ internal sealed class Answer {
      */
     @Serializable @SerialName("EntryHistory") data class EntryHistory(
         val rows: List<HistoryShown>, val deleted: Boolean, val restorable: Boolean, val until: Long?,
-        /** [until] as a date and time (`Shown.moment`). */
-        val untilShown: me.raddatz.veyq.mobile.words.Written? = until?.let { me.raddatz.veyq.mobile.words.Written.moment(it) },
-    ) : Answer()
+    ) : Answer() {
+        /** [until] as the host shows it (ADR 0154 decision 5). */
+        val untilText: me.raddatz.veyq.mobile.words.ShownText? = until?.let { me.raddatz.veyq.mobile.words.ShownText.moment(it) }
+    }
 
     /** An entry editor opened ([Call.EditorOpen]): its id, for [Watched.Editor] and the editor's calls. */
     @Serializable @SerialName("EditorOpened") data class EditorOpened(val editor: Long) : Answer()
@@ -2742,7 +2740,7 @@ internal class BannerEditorShown(
     val canSave: Boolean,
     val canRemove: Boolean,
     /** The bound a too large image is refused above, as its words name it (`BannerWrite.MAX_IMAGE_NAMED`, `Shown.size`). */
-    val tooLargeBound: me.raddatz.veyq.mobile.words.Written = me.raddatz.veyq.mobile.words.Written.size(me.raddatz.veyq.mobile.memories.banner.BannerWrite.MAX_IMAGE_NAMED),
+    val tooLargeBound: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.size(me.raddatz.veyq.mobile.memories.banner.BannerWrite.MAX_IMAGE_NAMED),
 )
 
 /** A picked file as the dialog shows it: its medium, a video's type, and which pick it is ([pick]: a new number per pick, so the host asks its preview anew). */
@@ -2883,7 +2881,7 @@ internal class FilterShown(
 /** A filter chip: its identity [chip] (`GalleryFilter.key`, what [Call.FilterChip] and [Call.FilterRemove] name), its [label], the text that stays ([rest], a suggestion's). */
 @Serializable
 @SerialName("ChipShown")
-internal class ChipShown(val chip: String, val label: String, val rest: String? = null)
+internal class ChipShown(val chip: String, val label: me.raddatz.veyq.mobile.words.ShownText, val rest: String? = null)
 
 /**
  * A Contributions view as the host draws it (`Contributions.State`): each bucket row at its depth with its label, its count,
@@ -2938,10 +2936,11 @@ internal class NowPlayingShown(
     val playing: Boolean,
     val positionMs: Long,
     val durationMs: Long,
-    /** [positionMs] and [durationMs] as the bar's clocks show them (`Shown.length`): the host writes no clock. */
-    val position: me.raddatz.veyq.mobile.words.Written = me.raddatz.veyq.mobile.words.Written.length(positionMs),
-    val duration: me.raddatz.veyq.mobile.words.Written = me.raddatz.veyq.mobile.words.Written.length(durationMs),
 ) {
+    /** [positionMs] and [durationMs] as the player's clocks show them (`Shown.length`, ADR 0154 decision 5). */
+    val positionText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.length(positionMs)
+    val durationText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.length(durationMs)
+
     companion object {
         fun of(now: me.raddatz.veyq.mobile.audio.NowPlaying) =
             NowPlayingShown(now.trackId, now.title, now.album, now.route, now.playing, now.positionMs, now.durationMs)
@@ -3109,13 +3108,13 @@ internal enum class DateMode { AUTO, SINGLE, RANGE, ONGOING }
 /** A Memory's date (core's `MemoryDate`): its mode and its days (`yyyy-MM-dd`, the host says them; null: none). */
 @Serializable
 @SerialName("MemoryDateShown")
-internal class MemoryDateShown(
-    val mode: DateMode, val from: String?, val to: String?,
-    /** [from] as a Memory's day ("since" it, an ongoing one's; `Shown.memoryDay`). */
-    val fromShown: me.raddatz.veyq.mobile.words.Written? = from?.let(me.raddatz.veyq.mobile.words.Written::memoryDay),
-    /** The closed range from [from] to [to] (`Shown.dayRange`); null without [from]. */
-    val range: me.raddatz.veyq.mobile.words.Written? = from?.let { me.raddatz.veyq.mobile.words.Written.dayRange(it, to) },
-)
+internal class MemoryDateShown(val mode: DateMode, val from: String?, val to: String?) {
+    /**
+     * Its days as the web's `memoryDateRange` writes them (ADR 0154 decision 5): the one day or the closed range; for an
+     * ongoing one its first day alone, which the host words as "Since …"; empty without a day.
+     */
+    val text: me.raddatz.veyq.mobile.words.ShownText = if (mode == DateMode.ONGOING) me.raddatz.veyq.mobile.words.ShownText.memoryDay(from.orEmpty()) else me.raddatz.veyq.mobile.words.ShownText.dayRange(from.orEmpty(), to)
+}
 
 /** A node's date, by its id ([Answer.MemoryDates]). */
 @Serializable
@@ -3129,7 +3128,11 @@ internal class NodeDate(val nodeId: String, val date: MemoryDateShown)
  */
 @Serializable
 @SerialName("DateShown")
-internal class DateShown(val mode: DateMode, val from: String, val to: String, val rangeInvalid: Boolean, val canSave: Boolean, val auto: MemoryDateShown)
+internal class DateShown(val mode: DateMode, val from: String, val to: String, val rangeInvalid: Boolean, val canSave: Boolean, val auto: MemoryDateShown) {
+    /** The pickers' days as the host shows them (ADR 0154 decision 5); empty where none. */
+    val fromText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.day(from)
+    val toText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.day(to)
+}
 
 /** How a place is positioned (core's `MemoryLocation.DerivedMode`) and named (`NameSource`). */
 @Serializable
@@ -3230,15 +3233,14 @@ internal class TrackShown(
 
 /**
  * One of a track's facts (core's `TrackFacts.Fact`): a distance — [distance] metres (whole) or kilometres (one decimal,
- * [kilometres]), written by the core in [distanceShown] (`Shown.distance`) — or a phrase in [words]; the host draws the
- * one of them that is there.
+ * [kilometres]), its number written in the host's locale — or a phrase in [words].
  */
 @Serializable
 @SerialName("TrackFactShown")
-internal class TrackFactShown(
-    val distance: Double?, val kilometres: Boolean, val words: Notice?,
-    val distanceShown: me.raddatz.veyq.mobile.words.Written? = distance?.let { me.raddatz.veyq.mobile.words.Written.distance(it, kilometres) },
-)
+internal class TrackFactShown(val distance: Double?, val kilometres: Boolean, val words: Notice?) {
+    /** [distance] with its unit as the host shows it (`Shown.distance`, ADR 0154 decision 5). */
+    val distanceText: me.raddatz.veyq.mobile.words.ShownText? = distance?.let { me.raddatz.veyq.mobile.words.ShownText.distance(it, kilometres) }
+}
 
 /** A picked file waiting for its label (`TrackList.Asked`): its name, and the name it falls back to (the field's hint). */
 @Serializable
@@ -3275,11 +3277,11 @@ internal class DetailRow(
     val size: Long?,
     val moment: Long?,
     val text: String?,
-    /** [size] written (`Shown.size`). */
-    val sizeShown: me.raddatz.veyq.mobile.words.Written? = size?.let(me.raddatz.veyq.mobile.words.Written::size),
-    /** [moment] written (`Shown.moment`). */
-    val momentShown: me.raddatz.veyq.mobile.words.Written? = moment?.let { me.raddatz.veyq.mobile.words.Written.moment(it) },
-)
+) {
+    /** [size] and [moment] as the host shows them (ADR 0154 decision 5). */
+    val sizeText: me.raddatz.veyq.mobile.words.ShownText? = size?.let { me.raddatz.veyq.mobile.words.ShownText.size(it) }
+    val momentText: me.raddatz.veyq.mobile.words.ShownText? = moment?.let { me.raddatz.veyq.mobile.words.ShownText.moment(it) }
+}
 
 /**
  * An account's Settings page as the host draws it (core's `AccountSettings.State`, `uc.account.sessions`), each
@@ -3337,12 +3339,11 @@ internal class SettingsLimitUnit(val unit: me.raddatz.veyq.mobile.offline.LimitU
  */
 @Serializable
 @SerialName("SettingsFamily")
-internal class SettingsFamily(
-    val id: String, val createdAt: Long?, val lastUsedAt: Long?, val current: Boolean, val label: String?, val removesKey: Boolean,
-    /** [createdAt] and [lastUsedAt] as dates and times (`Shown.moment`). */
-    val createdShown: me.raddatz.veyq.mobile.words.Written? = createdAt?.let { me.raddatz.veyq.mobile.words.Written.moment(it) },
-    val lastUsedShown: me.raddatz.veyq.mobile.words.Written? = lastUsedAt?.let { me.raddatz.veyq.mobile.words.Written.moment(it) },
-)
+internal class SettingsFamily(val id: String, val createdAt: Long?, val lastUsedAt: Long?, val current: Boolean, val label: String?, val removesKey: Boolean) {
+    /** [createdAt] and [lastUsedAt] as the host shows them (ADR 0154 decision 5). */
+    val createdText: me.raddatz.veyq.mobile.words.ShownText? = createdAt?.let { me.raddatz.veyq.mobile.words.ShownText.moment(it) }
+    val lastUsedText: me.raddatz.veyq.mobile.words.ShownText? = lastUsedAt?.let { me.raddatz.veyq.mobile.words.ShownText.moment(it) }
+}
 
 /** A device the register knows that holds a saved key and no session: [Call.SettingsRemoveSavedKey] by its [deviceId]. */
 @Serializable
@@ -3592,7 +3593,10 @@ internal class EditorShown(
     val newer: Notice? = null,
     /** *Discard mine* is offered ([Call.EditorDiscardMine]). */
     val discardsMine: Boolean = false,
-)
+) {
+    /** [date] as the host shows it (ADR 0154 decision 5). */
+    val dateText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.day(date)
+}
 
 /**
  * One receipt of the entry edited: [id], the [name] it is listed and saved under (`Receipts.downloadName`); [held] — picked
@@ -3665,9 +3669,10 @@ internal class ReportShown(
     val privacyUrl: String,
     /** Whether the sheet offers "only its name" beside the whole ([whole]'s switch): a node's does; a track's, an ITEM, does not (`ReportSheet.offersName`, ADR 0142 decision 11). */
     val offersName: Boolean = true,
-    /** [receivedAt] as a date and time (`Shown.moment`). */
-    val receivedShown: me.raddatz.veyq.mobile.words.Written? = receivedAt?.let { me.raddatz.veyq.mobile.words.Written.moment(it) },
 ) {
+    /** [receivedAt] as the host shows it (ADR 0154 decision 5). */
+    val receivedText: me.raddatz.veyq.mobile.words.ShownText? = receivedAt?.let { me.raddatz.veyq.mobile.words.ShownText.moment(it) }
+
     /** A category: the contract's name of it (its `category` on [Call.ReportCategory]) and its words. */
     @Serializable class ShownCategory(val id: String, @Serializable(with = MsgKey::class) val word: Msg)
 }
@@ -3677,11 +3682,10 @@ internal class ReportShown(
  * known — the host's "Someone") and when the server stored it (epoch ms).
  */
 @Serializable
-internal class HistoryShown(
-    val line: List<Piece>, val writer: String?, val at: Long,
-    /** [at] as a date and time (`Shown.moment`). */
-    val atShown: me.raddatz.veyq.mobile.words.Written = me.raddatz.veyq.mobile.words.Written.moment(at),
-)
+internal class HistoryShown(val line: List<Piece>, val writer: String?, val at: Long) {
+    /** [at] as the host shows it (ADR 0154 decision 5). */
+    val atText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.moment(at)
+}
 
 /**
  * A file's page as the host draws it (core's `FileModel`, ADR 0136's Consequences), each field the model's own answer:
@@ -3889,10 +3893,11 @@ internal class ShareShown(
         val canDelete: Boolean,
         /** Its menu, in the web's order (`ShareSheet.rowActions`, ADR 0154 decision 2): drawn whole, each entry its word. */
         val actions: List<me.raddatz.veyq.mobile.navigation.LinkAction> = emptyList(),
-        /** [createdAt] and [expiresAt] as their local days (`Shown.dayOf`). */
-        val createdDay: me.raddatz.veyq.mobile.words.Written = me.raddatz.veyq.mobile.words.Written.dayOf(createdAt),
-        val expiresDay: me.raddatz.veyq.mobile.words.Written? = expiresAt?.let(me.raddatz.veyq.mobile.words.Written::dayOf),
-    )
+    ) {
+        /** The local days it was made and ends, as the host shows them (ADR 0154 decision 5). */
+        val createdText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.dayOf(createdAt)
+        val expiresText: me.raddatz.veyq.mobile.words.ShownText? = expiresAt?.let { me.raddatz.veyq.mobile.words.ShownText.dayOf(it) }
+    }
 
     /**
      * The form (`LinkForm`): the roles to pick from with their words (empty: the role is fixed), the role and its hint, the
@@ -3919,7 +3924,10 @@ internal class ShareShown(
         @Serializable class ShownLock(val on: Boolean, val optional: Boolean, val kept: Boolean, val tooShort: Boolean, val hint: Notice)
 
         /** The end's switch: on, whether it may be turned off, the day picked, today and the last day a pick may take (local days since 1970-01-01), and what it says under it. */
-        @Serializable class ShownEnd(val on: Boolean, val optional: Boolean, val day: Long, val today: Long, val lastDay: Long?, val hint: Notice)
+        @Serializable class ShownEnd(val on: Boolean, val optional: Boolean, val day: Long, val today: Long, val lastDay: Long?, val hint: Notice) {
+            /** [day] as the host shows it (ADR 0154 decision 5). */
+            val dayText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.day(day)
+        }
     }
 }
 
@@ -3944,12 +3952,11 @@ internal class TrashShown(
      * under the typed name is (`State.retryable`).
      */
     @Serializable
-    class Row(
-        val id: String, val kind: String, val name: String, val deletedAt: String, val purgeAfter: String, val restorable: Boolean, val retryable: Boolean,
-        /** [deletedAt] and [purgeAfter] as their local days (`Shown.dayOf`). */
-        val deletedDay: me.raddatz.veyq.mobile.words.Written = me.raddatz.veyq.mobile.words.Written.dayOf(deletedAt),
-        val purgeDay: me.raddatz.veyq.mobile.words.Written = me.raddatz.veyq.mobile.words.Written.dayOf(purgeAfter),
-    )
+    class Row(val id: String, val kind: String, val name: String, val deletedAt: String, val purgeAfter: String, val restorable: Boolean, val retryable: Boolean) {
+        /** The local days it was deleted and is purged, as the host shows them (ADR 0154 decision 5). */
+        val deletedText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.dayOf(deletedAt)
+        val purgeText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.dayOf(purgeAfter)
+    }
 }
 
 /**

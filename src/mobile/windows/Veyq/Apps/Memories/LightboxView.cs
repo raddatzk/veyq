@@ -541,7 +541,7 @@ internal sealed class LightboxView : IDisposable
             }
             var lines = d.rows.Select(r => (Label: Said.Key(r.label), Value:
                 r.words is { } w ? Said.Notice(w)
-                : r.sizeShown ?? r.momentShown ?? r.text ?? "")).ToList();
+                : r.sizeText ?? r.momentText ?? r.text ?? "")).ToList();
             if (d.uploader is { } u) lines.Insert(Math.Clamp(d.uploaderAt, 0, lines.Count), (Words.MemoryFieldUploadedBy(), Said.Piece(u)));
             Log.Write($"lightbox details: {lines.Count} rows{(d.uploader is null ? "" : ", the uploader among them")}");
             var list = new StackPanel { Spacing = 10 };

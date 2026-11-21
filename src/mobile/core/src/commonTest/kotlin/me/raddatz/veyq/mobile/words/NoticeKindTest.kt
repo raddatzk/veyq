@@ -40,13 +40,10 @@ class NoticeKindTest {
         for (m in listOf(Msg.COPY_DONE, Msg.MOVE_MOVED, Msg.IMPORT_IMPORTED, Msg.OFFLINE_SENT, Msg.DOWNLOAD_CANCELLED, Msg.LINK_KEPT, Msg.PROFILE_SAVED, Msg.RECEIPTS_SAVED_GALLERY)) assertEquals(NoticeKind.SAID, NoticeKind.of(m), "$m")
     }
 
-    /** A platform's own success (Windows' link kept, its receipts saved) lives as the core's table says, read by key. */
-    @Test fun aPlatformsOwnSuccessIsInTheTableAHostReads() {
-        for (m in listOf(Msg.LINK_KEPT, Msg.RECEIPTS_SAVED)) assertEquals(NoticeKind.SAID, NoticeKind.of(m), "$m")
-        assertEquals(NoticeKind.SAID, NoticeKind.notHeld["link_kept"])
-        assertEquals(NoticeKind.UNDO, NoticeKind.notHeld["trash_moved"])
-        assertEquals(null, NoticeKind.notHeld["receipts_not_saved"])
-        assertEquals(Msg.entries.filter { NoticeKind.of(it) != NoticeKind.HELD }.associate { it.key to NoticeKind.of(it) }, NoticeKind.notHeld)
+    /** The desktops' own success toasts (phase 7: Linux raises them by key, their kind the core's table). */
+    @Test fun aDesktopsOwnSuccessIsSaid() {
+        for (m in listOf(Msg.PROFILE_SAVED, Msg.RECEIPTS_SAVED, Msg.LINK_KEPT)) assertEquals(NoticeKind.SAID, NoticeKind.of(m), "$m")
+        for (m in listOf(Msg.SHARE_FAILED, Msg.RECEIPTS_NOT_SAVED, Msg.BOOKMARK_CREATE_FAILED)) assertEquals(NoticeKind.HELD, NoticeKind.of(m), "$m")
     }
 
     @Test fun aSiteSaysOtherwiseAndTheKindIsPartOfTheNotice() {
