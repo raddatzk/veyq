@@ -810,7 +810,7 @@ class DispatchTest {
                     })
                 },
                 trash = { _ -> me.raddatz.veyq.mobile.navigation.TrashSheet(played) {} },
-                createFolder = { name -> played.folders += name; if (name.isBlank()) me.raddatz.veyq.mobile.navigation.NameAnswer.problem(me.raddatz.veyq.mobile.words.Notice(Msg.FOLDER_NAME_EMPTY)) else me.raddatz.veyq.mobile.navigation.NameAnswer.DONE },
+                createFolder = { name, top -> played.folders += if (top) "top:$name" else name; if (name.isBlank()) me.raddatz.veyq.mobile.navigation.NameAnswer.problem(me.raddatz.veyq.mobile.words.Notice(Msg.FOLDER_NAME_EMPTY)) else me.raddatz.veyq.mobile.navigation.NameAnswer.DONE },
             )
         }
     }
@@ -909,7 +909,9 @@ class DispatchTest {
         val empty = b.ask(Call.ShellCreateFolder(" ")) as Answer.Named
         assertEquals(Msg.FOLDER_NAME_EMPTY, empty.problem!!.msg)
         assertTrue(empty.keepsOpen, "a name problem closed the dialog")
-        assertEquals(listOf("Plans", " "), played.folders)
+        // the drawer's New makes it at the space's top
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ShellCreateFolder("Trips", top = true)))
+        assertEquals(listOf("Plans", " ", "top:Trips"), played.folders)
 
         val id = (b.ask(Call.TrashOpen("s")) as Answer.TrashOpened).trash
         val w = b.watching(Watched.Trash(id))

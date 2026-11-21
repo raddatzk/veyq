@@ -134,7 +134,30 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
 - [ ] **4 Android** — every plan drawn in the core UI; the guard on for Android. · Done when: `:android:assembleDebug`,
   the words, guidelines, direction and structure guards green.
 - [ ] **5 Apple** — the same. · Done when: both Apple builds green, the guards green.
-- [ ] **6 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green, the guards green.
+- [x] **6 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green, the guards green.
+  **Built** (2026-11-21). `header.rs`: `DRAWN`, `wire_id`, `drawn` and `action_of` gone; every plan entry drawn in its
+  order, each an action of the bar's own group (`header.e<n>`, its place in the plan — no id list), done by one exhaustive
+  arm (`header::doer`: the header's own call, or the page's window action — a Pot's and a file's download, Upload,
+  Music, Banner, Replace; `Send` never offered on a desktop, the bridge's `shares = false`; `Inner::act`); `icon_of` a
+  match over `HeaderAction`. The banner is the header's entry (`win.memory-banner`, the body's *Add banner* button gone);
+  a kept link's *Open on its own page* and *Report shared content* are the header's (the page tells its model's id,
+  `HeaderFacts.bookmark`; the body's button row gone). A level row's and tile's menu (`header::row_menu`: a right click or
+  a touch long press, `Row.Plan` drawn whole, each entry done through the row's node's own header model, its download the
+  node's archive) on Home's and an application's rows and tiles; a gallery tile's menu (`GalleryRow.tileActions`: the
+  mark, `Marks.Toggle`); a share link row's `ShownLink.actions` (Copy a button where it leads, the rest the menu, each
+  arm exhaustive). The shell: the drawer's New is the `DrawerSection.NEW` arm (the sidebar header's "+", made at the
+  space's top), the level's New (`ShellShown.level.creates`) at the content header bar's start and its tools (`TRASH`,
+  `VIEW`) in order at its end — the switcher's Trash gone; New's entries an exhaustive match over `Create`. Settings draws
+  `SettingsShown.sections` (the dev harness's state as the wire's JSON); the sign-in draws `SignIn.Plan` (asked again when
+  adding changes and once the camera is known: Submit, Cancel, the rows in one boxed list). The guard on for Linux.
+  **Core addition:** the drawer's New makes a folder at the space's top — `ShellModel.createFolderAtTop`,
+  `Call.ShellCreateFolder.top` (default false; the generated C# makes it a required member, so Windows' one call names `top = false` — not built on the VM here); `GatesInTheCoreTest` and
+  `DispatchTest` (`aNewFolderAndASpacesTrashAreDrivenThroughCalls`) each bitten red (the shell's folder sent; `top`
+  ignored). **Checks:** `linux/run.py build` green (clippy `-D warnings`, 104 + 5 cargo tests; WireTest in its Gradle
+  half); every guard green but guard_gaps (only `PLATFORMS` changed). **Bites:** a `_ =>` over `HeaderAction` in
+  `icon_of`, a `&[HeaderAction::…]` const, a `.filter` on `plan.buttons` — each red alone, restored. **Open:** the Rust
+  `doer` test's bite did not reach the test (the Docker VM's disk full, the link failed — no space) and the live smoke did
+  not run (the dev backend answered the throwaway's owner registration 500); both for phase 8.
 - [ ] **7 Windows** — the same; `CS8509`/`CS8524` as errors. · Done when: `python3 windows/run.py build` green on the
   VM, the guards green. **Bite:** a `HeaderAction` arm removed from the C# switch → the build red.
 - [ ] **8 the passes** — § Passes.

@@ -743,8 +743,11 @@ internal sealed class Call {
     /** The move's undo while offered (`undo`): [Answer.Said] with why it failed, or none. */
     @Serializable @SerialName("Move.Undo") data class MoveUndo(val move: Long) : Call()
 
-    /** A new folder where the shell is (`ShellModel.createFolderHere`): [Answer.Named], the dialog's outcome (ADR 0154 decision 1). */
-    @Serializable @SerialName("Shell.CreateFolder") data class ShellCreateFolder(val name: String) : Call()
+    /**
+     * A new folder where the shell is (`ShellModel.createFolderHere`), or at the shown space's top where [top] (the drawer's
+     * New, `ShellModel.createFolderAtTop`): [Answer.Named], the dialog's outcome (ADR 0154 decision 1).
+     */
+    @Serializable @SerialName("Shell.CreateFolder") data class ShellCreateFolder(val name: String, val top: Boolean = false) : Call()
 
     /**
      * Files and folders dropped onto [on] (`ShellModel.drop`, ADR 0154 decision 1): the host names what it dropped on and

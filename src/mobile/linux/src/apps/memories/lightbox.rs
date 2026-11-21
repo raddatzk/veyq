@@ -104,7 +104,7 @@ impl Lightbox {
         let mark = icon(crate::core_ui::theme::HEART, &words::media_marks_mark());
         mark.set_widget_name("lightbox-mark");
         mark.set_visible(false);
-        let report = icon(crate::core_ui::header::icon_of("report"), &words::report_action());
+        let report = icon(crate::core_ui::header::icon_of(crate::bridge::wire::HeaderAction::Report), &words::report_action());
         report.set_widget_name("lightbox-report");
         report.set_visible(false);
         let music_previous = icon("media-skip-backward-symbolic", &words::music_previous());

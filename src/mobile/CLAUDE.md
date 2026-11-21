@@ -1072,9 +1072,9 @@ plans it (`NodeHeaderTest`), each app's `NodeHeaderActions` draws it and owns ev
 registers its page — `KindPages` (Android) / `KindPage` (Apple): it brings a share sheet, takes a cover, contributes a
 subtitle, its rights narrowing, its copy and download doors and own actions, and draws its body. The header's state and
 actions are core's `NodeHeaderModel` and its sheets core's `TrashSheet`, `MoveSheet`, `ShareSheet` and `ReportSheet`
-(ADR 0136's Consequences): an app draws them and decides nothing. Linux (`header.rs`) and Windows (`NodeHeader.cs`)
-draw the same plan, but only the ids in `header::DRAWN` / `HeaderPlan.Drawn`: an action whose screen a desktop lacks
-is left out, never drawn as a control that answers "not yet"; a slice that draws it adds its id. A new kind registers
+(ADR 0136's Consequences): an app draws them and decides nothing. Linux (`header.rs`) draws every entry of the plan,
+each `HeaderAction` one arm (`header::doer`: the header's own call or the page's window action); Windows (`NodeHeader.cs`)
+draws only the ids in `HeaderPlan.Drawn` until its phase of cr-apps-structure-from-core-plans. A new kind registers
 there and its header order in `AppKinds.headerOrder`; it never builds header actions of its own. Its body places core's head
 first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `NodeHeroRow()` (Apple) —, never a cover of its own.
 

@@ -1,6 +1,7 @@
 //! The account's Settings (`uc.account.sessions`; the web's Settings hub, its `SessionsPanel` the reference), GNOME's
 //! way: an `AdwPreferencesDialog` opened from the sidebar's Settings, as "Manage servers" is ([crate::core_ui::manage]). One page
-//! of groups, each titled as the web's sections are:
+//! of groups — the core's sections (`SettingsShown.sections`), each drawn, in its order: the web's (ADR 0154 decision 2) —,
+//! each titled as the web's sections are:
 //!
 //! - **Account**: the address this account signs in with, and whether the server holds it confirmed;
 //! - **This device**: its name in the account's device register, renamed in an `AdwEntryRow` with apply; how it stays
@@ -31,7 +32,7 @@ use std::rc::{Rc, Weak};
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::LimitField, wire::LimitUnit, wire::OfflineItem, wire::QueuedAsk, wire::QueuedLoss,
+use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::LimitField, wire::LimitUnit, wire::OfflineItem, wire::QueuedAsk, wire::QueuedLoss, wire::SettingsSection,
     wire::SettingsFamily, wire::SettingsShown, wire::Storage, wire::Update, wire::Watched};
 use crate::core_ui::manage::{self, Change};
 use crate::core_ui::map_services::MapServices;
@@ -406,24 +407,37 @@ impl Page {
         for g in self.groups.borrow_mut().drain(..) {
             self.page.remove(&g);
         }
-        let add_device = s.add_device.then(|| self.add_device.clone());
-        let maps = Some(self.maps.group().clone());
-        let groups = vec![
-            self.account(s), self.profile(), self.password(), self.email(), self.device(s), add_device, self.sessions(s), self.saved_keys(s), self.storage(s),
-            self.offline_items(s), maps, self.security(), self.erase(), self.sign_out(),
-        ];
-        // each section named by its `SettingsSection.id`, where a search's result scrolls to it (the account's flows by the
-        // web's section names, ADR 0148 decision 10)
-        let sections = ["account", "profile", "password", "email", "device", "add-device", "sessions", "saved-keys", "storage", "", "maps", "security", "erase", ""];
-        for (g, section) in groups.iter().zip(sections) {
-            if let (Some(g), false) = (g, section.is_empty()) {
-                g.set_widget_name(&format!("settings-{section}"));
+        // the core's sections (`SettingsShown.sections`, ADR 0154 decision 2: the web's order), each drawn as its groups;
+        // a section's first group named by its `SettingsSection.id`, where a search's result scrolls to it
+        let mut groups = Vec::new();
+        for section in &s.sections {
+            let (id, drawn) = match section {
+                // a desktop's theme and language follow the system (D3): the core offers no appearance here
+                SettingsSection::Appearance => ("appearance", vec![]),
+                SettingsSection::Maps => ("maps", vec![Some(self.maps.group().clone())]),
+                SettingsSection::Storage => ("storage", vec![self.storage(s), self.offline_items(s)]),
+                SettingsSection::Sessions => ("sessions", vec![self.sessions(s)]),
+                SettingsSection::Device => ("device", vec![self.device(s)]),
+                SettingsSection::SavedKeys => ("saved-keys", vec![self.saved_keys(s)]),
+                SettingsSection::Account => ("account", vec![self.account(s)]),
+                SettingsSection::Email => ("email", vec![self.email()]),
+                SettingsSection::Password => ("password", vec![self.password()]),
+                SettingsSection::AddDevice => ("add-device", vec![Some(self.add_device.clone())]),
+                SettingsSection::Security => ("security", vec![self.security()]),
+                SettingsSection::Profile => ("profile", vec![self.profile()]),
+                SettingsSection::Erase => ("erase", vec![self.erase()]),
+                SettingsSection::SignOut => ("sign-out", vec![self.sign_out()]),
+            };
+            for (i, g) in drawn.into_iter().flatten().enumerate() {
+                if i == 0 {
+                    g.set_widget_name(&format!("settings-{id}"));
+                }
+                self.page.add(&g);
+                groups.push(g);
             }
         }
-        for g in groups.iter().flatten() {
-            self.page.add(g);
-        }
-        *self.groups.borrow_mut() = groups.into_iter().flatten().collect();
+        eprintln!("veyq: settings sections: {}", s.sections.iter().map(|x| format!("{x:?}")).collect::<Vec<_>>().join(","));
+        *self.groups.borrow_mut() = groups;
         // the name is set from the state when it changed, never over what is being typed
         if self.label.borrow().as_deref() != Some(s.device.as_str()) {
             if !self.rename.state_flags().contains(gtk::StateFlags::FOCUS_WITHIN) || self.label.borrow().is_none() {

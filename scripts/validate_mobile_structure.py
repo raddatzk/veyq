@@ -67,7 +67,7 @@ CORE_SRC = MOBILE / "core" / "src"
 BRIDGE_SRC = MOBILE / "bridge" / "src"
 
 # Each platform is switched on in its phase of cr-apps-structure-from-core-plans (4 Android, 5 Apple, 6 Linux, 7 Windows).
-PLATFORMS: dict[str, bool] = {"android": False, "apple": False, "linux": False, "windows": False}
+PLATFORMS: dict[str, bool] = {"android": False, "apple": False, "linux": True, "windows": False}
 
 PLAN_ANNOTATION = re.compile(r"@(?:me\.raddatz\.veyq\.mobile\.navigation\.)?Plan\b(?!\.)")
 ENUM_AFTER = re.compile(

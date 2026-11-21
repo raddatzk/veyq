@@ -35,7 +35,7 @@ pub fn register(registry: &mut Registry) {
     registry.kind(ApplicationId::Memories, &["MEMORY", "CHAPTER"], KindPage {
         body,
         guest: Some(GuestPage { kind: ReceivedPageKind::Gallery, body: guest, add_names_first: true }),
-        actions: &["memory-upload", "memory-music"],
+        actions: &["memory-upload", "memory-music", "memory-banner"],
         refreshes: true,
         facts_later: false,
     });
@@ -65,11 +65,13 @@ impl Page for Gallery {
         true
     }
 
-    /// The header's own "Add photos" (`win.memory-upload`, a guest's own write) and music action (`win.memory-music`).
+    /// The header's own "Add photos" (`win.memory-upload`, a guest's own write), music action (`win.memory-music`) and
+    /// banner (`win.memory-banner`).
     fn act(&self, action: &str, _window: &gtk::Window, _toasts: &adw::ToastOverlay) {
         match action {
             "memory-upload" | "add" => self.0.add(),
             "memory-music" => self.0.music(),
+            "memory-banner" => self.0.edit_banner(),
             _ => {}
         }
     }
