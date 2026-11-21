@@ -23,30 +23,32 @@ struct OwnAction {
     let id: HeaderAction
     let label: String
     let systemImage: String
+    /// Where the action offers a choice (Photo Library or Files), its entries: drawn as a submenu, `run` unused.
+    var choices: [OwnChoice] = []
+    let run: () -> Void
+}
+
+/// One choice of an own action that offers several.
+struct OwnChoice {
+    let label: String
+    let systemImage: String
     let run: () -> Void
 }
 
 /// Core's header actions on a node of any kind (the web's `NodeHeader` with `coreNodeActions.ts` and `standardNodeActions`,
 /// ADR 0110): core's `NodeHeaderModel` composes the rights and plans what is offered and where, from the node, the kind's
 /// order and the contribution; up to `maxButtons` are toolbar buttons, the rest one "More" menu whose last section holds
-/// the move, the copy, the report and the delete — the delete last and destructive, asked first. Every dialog behind an
-/// action is core's one: the share sheet, the move and copy browser, the cover sheet, the rename, the report, the delete.
+/// the move, the copy, the report and the delete — the delete last and destructive, asked first. Every entry of the plan
+/// is drawn, in its order (ADR 0154 decision 2): the core's through `NodeActionWords`, the page's own through its
+/// `OwnAction`. What runs behind each is `NodeActionDialogs`, the same a level row's menu uses.
 struct NodeHeaderActions: View {
     @Bindable var model: AppModel
     let node: NodeAt
     let contribution: HeaderContribution
     /// How many actions are toolbar buttons: a level's bar keeps its room for its title (0: one "More" menu).
     var maxButtons: Int32 = 2
-    @State private var dialog: HeaderAction?
-    @State private var asking = false
-    @State private var renaming = false
-    @State private var newName = ""
-    @State private var renameProblem: String?
-    @State private var failed: String?
+    @State private var asked: HeaderAction?
     @State private var downloading = false
-    @State private var downloaded: URL?
-    /// What the last download left out, said once its file is saved.
-    @State private var leftOut: [NodeExport.Skipped] = []
 
     /// Core's header of the node (one per node and name, held by the app model).
     private var header: NodeHeaderModel? { model.header(node, facts: contribution.facts) }
@@ -57,33 +59,25 @@ struct NodeHeaderActions: View {
         return header?.plan(maxButtons: maxButtons, own: contribution.actions.map(\.id))
     }
 
-    private var pinned: Bool? {
+    private var words: NodeActionWords {
         _ = model.headerRevision
-        return header?.current.pinned?.boolValue
-    }
-
-    /// "Available offline" of the node (core's toggle: on, its state's line, the size a pin waits to be confirmed with).
-    private var offline: OfflineToggle? {
-        _ = model.headerRevision
-        return header?.current.offline
+        return NodeActionWords(
+            kind: node.kind, pinned: header?.current.pinned?.boolValue, hasCover: model.covers[node.nodeId] != nil,
+            offline: header?.current.offline, own: contribution.actions
+        )
     }
 
     var body: some View {
         HStack {
             if let plan {
                 ForEach(plan.buttons, id: \.self) { id in
-                    Button { run(id) } label: { label(id) }
-                        .labelStyle(.iconOnly)
+                    words.entry(id) { asked = $0 }.labelStyle(.iconOnly)
                 }
                 if plan.hasMenu {
                     Menu {
-                        ForEach(plan.menu, id: \.self) { id in
-                            if id == HeaderAction.offline { offlineToggle } else { Button { run(id) } label: { label(id) } }
-                        }
+                        ForEach(plan.menu, id: \.self) { id in words.entry(id) { asked = $0 } }
                         if !plan.menu.isEmpty, !plan.last.isEmpty { Divider() }
-                        ForEach(plan.last, id: \.self) { id in
-                            Button(role: id == HeaderAction.delete_ ? .destructive : nil) { run(id) } label: { label(id) }
-                        }
+                        ForEach(plan.last, id: \.self) { id in words.entry(id) { asked = $0 } }
                     } label: {
                         if downloading { ProgressView() } else { Label(say(.nodeMore), systemImage: "ellipsis.circle") }
                     }
@@ -91,70 +85,216 @@ struct NodeHeaderActions: View {
             }
         }
         .onChange(of: contribution.facts) { header?.update(facts: contribution.facts) }
-        .sheet(isPresented: shown(.share)) { NodeShareSheet(model: model, ref: node) }
-        .sheet(isPresented: shown(.report)) { ReportSheet(model: model, ref: node) }
-        .sheet(isPresented: shown(.cover)) { CoverSheet(model: model, node: node) }
-        .sheet(isPresented: shown(.move)) { NodeMoveSheet(model: model, ref: node) }
-        .sheet(isPresented: shown(.theCopy)) { NodeMoveSheet(model: model, ref: node, copying: true) }
-        // The system's save sheet takes the written file where the person picks; the temporary copy goes either way.
-        .fileMover(isPresented: Binding(get: { downloaded != nil }, set: { if !$0 { cleanUpDownload() } }), file: downloaded) { _ in
-            cleanUpDownload()
-        }
-        .alert(header.map { say($0.deleteTitle) } ?? "", isPresented: $asking) {
-            Button(say(.peopleDeleteAccept), role: .destructive) {
-                if let header { Task { await model.trash(header) } }
+        .modifier(NodeActionDialogs(model: model, node: node, contribution: contribution, asked: $asked, downloading: $downloading, eager: true))
+    }
+}
+
+/// A level row's menu (ADR 0154 decision 2; the web's `levelRow.ts`): core's `LevelRow.Plan` for the row's node
+/// (`ShellModel.rowPlan`) drawn whole as the row's context menu — a long press on iOS, a secondary click on a Mac (the
+/// HIG's place for a row's actions) —, its two groups apart; each entry runs as the header's does (`NodeActionDialogs`).
+struct NodeRowMenu: ViewModifier {
+    @Bindable var model: AppModel
+    let node: NodeAt
+    @State private var plan: LevelRow.Plan?
+    @State private var asked: HeaderAction?
+    @State private var downloading = false
+
+    /// What a row's actions reach without its page: the download door (core's, every kind), the facts' defaults.
+    private var contribution: HeaderContribution {
+        HeaderContribution(download: { [model, node] in await model.downloadNode(node, to: $0) })
+    }
+
+    private var words: NodeActionWords {
+        NodeActionWords(kind: node.kind, pinned: model.favorites.contains { $0.nodeId == node.nodeId }, hasCover: model.covers[node.nodeId] != nil,
+                        offline: nil, own: [])
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .contextMenu {
+                if let plan {
+                    ForEach(plan.menu, id: \.self) { id in words.entry(id) { asked = $0 } }
+                    if !plan.menu.isEmpty, !plan.last.isEmpty { Divider() }
+                    ForEach(plan.last, id: \.self) { id in words.entry(id) { asked = $0 } }
+                }
             }
-            Button(say(.signinCancel), role: .cancel) {}
-        } message: {
-            if let header { Text(say(notice: header.deleteQuestion())) }
-        }
-        // the tray's *Open* of a rename held offline: this node's name dialog again, with the name the person gave
-        .onChange(of: model.renameAsked?.node, initial: true) { _, asked in
-            guard let r = model.renameAsked, asked == node.nodeId else { return }
-            model.renameAsked = nil
-            newName = r.name
-            renameProblem = nil
-            renaming = true
-        }
-        // Core's name dialog (`FolderNameDialog`): the name as it is, trimmed on save; a refusal says why and asks again.
-        .alert(say(.nodeRename), isPresented: $renaming) {
-            TextField(say(.peopleName), text: $newName)
-            Button(say(.entrySave)) {
-                let name = newName
-                guard let header else { return }
-                Task {
-                    guard let r = try? await header.rename(name: name) else {
-                        renameProblem = say(.nodeSaveFailed)
-                        renaming = true
-                        return
+            // the plan anew with what moves it: the reach, the favorites, the header's revision
+            .task(id: "\(node.nodeId)|\(model.online)|\(model.headerRevision)|\(model.favorites.count)") { plan = await model.rowPlan(node) }
+            .modifier(NodeActionDialogs(model: model, node: node, contribution: contribution, asked: $asked, downloading: $downloading, eager: false))
+    }
+}
+
+/// How each entry of a node's plan is drawn: its words (core's `NodeHeader.label`, the delete's the kind's title, an own
+/// entry's the page's) and its symbol. One exhaustive `switch` over the plan's entries: an entry the core adds fails to
+/// compile here until it is drawn.
+@MainActor
+struct NodeActionWords {
+    let kind: String
+    let pinned: Bool?
+    let hasCover: Bool
+    /// "Available offline"'s state, drawn as a toggle where the header knows it; nil: a plain entry.
+    let offline: OfflineToggle?
+    let own: [OwnAction]
+
+    private func word(_ id: HeaderAction) -> String {
+        if let msg = NodeHeader.shared.label(id: id, kind: kind, pinned: pinned.map { KotlinBoolean(bool: $0) }, hasCover: hasCover) { return say(msg) }
+        return say(AppKinds.shared.header(kind: kind)?.deleteTitle ?? .folderDelete)
+    }
+
+    /// The entry `id` as a menu item or a button; `run` asks for it.
+    @ViewBuilder func entry(_ id: HeaderAction, run: @escaping @MainActor (HeaderAction) -> Void) -> some View {
+        switch id.entry {
+        case .favorite:
+            Button { run(id) } label: {
+                Label(word(id), systemImage: pinned == true ? "heart.fill" : "heart")
+                    .foregroundStyle(pinned == true ? Role.favorite : Role.text)
+            }
+        case .share: Button { run(id) } label: { Label(word(id), systemImage: "square.and.arrow.up") }
+        case .rename: Button { run(id) } label: { Label(word(id), systemImage: "pencil") }
+        case .move: Button { run(id) } label: { Label(word(id), systemImage: "folder") }
+        case .theCopy: Button { run(id) } label: { Label(word(id), systemImage: "doc.on.doc") }
+        case .cover: Button { run(id) } label: { Label(word(id), systemImage: "photo") }
+        case .download: Button { run(id) } label: { Label(word(id), systemImage: "arrow.down.circle") }
+        case .offline:
+            if let offline {
+                // a toggle, as the system's menus show a state, with its state's line under it (core's: "Downloading 3 MB
+                // of 12 MB", "On this device", "Paused: …")
+                Toggle(isOn: Binding(get: { offline.on }, set: { _ in run(id) })) {
+                    Label {
+                        Text(word(id))
+                        if let said = offline.said { Text(say(notice: said)) }
+                    } icon: {
+                        Image(systemName: "arrow.down.circle.dotted")
                     }
-                    if let problem = r.problem {
-                        renameProblem = say(notice: problem)
-                        renaming = true
-                    } else if let notice = r.notice {
-                        // renamed; a link that kept the old name is said (the rename stands)
-                        failed = say(notice: notice)
+                }
+            } else {
+                Button { run(id) } label: { Label(word(id), systemImage: "arrow.down.circle.dotted") }
+            }
+        case .report: Button { run(id) } label: { Label(word(id), systemImage: "flag") }
+        case .delete_: Button(role: .destructive) { run(id) } label: { Label(word(id), systemImage: "trash") }
+        // the page's own entries (ADR 0154 decision 2: the core's plan holds them; the page words and runs them)
+        case .upload, .music, .banner, .replace, .send, .openOwnPage, .reportShared:
+            if let action = own.first(where: { $0.id == id }) {
+                if action.choices.isEmpty {
+                    Button { run(id) } label: { Label(action.label, systemImage: action.systemImage) }
+                } else {
+                    Menu {
+                        ForEach(Array(action.choices.enumerated()), id: \.offset) { _, c in
+                            Button(action: c.run) { Label(c.label, systemImage: c.systemImage) }
+                        }
+                    } label: {
+                        Label(action.label, systemImage: action.systemImage)
                     }
                 }
             }
-            .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
-            Button(say(.signinCancel), role: .cancel) {}
-        } message: {
-            if let renameProblem { Text(renameProblem) }
         }
-        // a pin asks the size it keeps before its first byte (core's question); nothing is kept until it is confirmed
-        .alert(say(.offlinePinAskTitle), isPresented: Binding(get: { offline?.question != nil }, set: { _ in })) {
-            Button(say(.offlinePinConfirm)) {
-                guard let header else { return }
-                Task { if let notice = try? await header.confirmOffline() { failed = say(notice: notice) } }
+    }
+}
+
+/// What runs a node's actions — the dialogs behind each entry of its plan, every one core's: the share sheet, the move and
+/// copy browser, the cover sheet, the rename, the report, the delete (asked first), the download, "Available offline".
+/// A drawing sets `asked`; it runs here and is cleared. `eager`: the node's header model is read from the start (the open
+/// node's header); a row's is read once one of its entries ran, so a level's rows make none before.
+struct NodeActionDialogs: ViewModifier {
+    @Bindable var model: AppModel
+    let node: NodeAt
+    let contribution: HeaderContribution
+    @Binding var asked: HeaderAction?
+    @Binding var downloading: Bool
+    let eager: Bool
+    @State private var dialog: HeaderAction?
+    @State private var touched = false
+    @State private var asking = false
+    @State private var renaming = false
+    @State private var newName = ""
+    @State private var renameProblem: String?
+    @State private var failed: String?
+    @State private var downloaded: URL?
+    /// What the last download left out, said once its file is saved.
+    @State private var leftOut: [NodeExport.Skipped] = []
+
+    /// Core's header of the node, once it is read (`eager`, or an entry ran).
+    private var header: NodeHeaderModel? { eager || touched ? model.header(node, facts: contribution.facts) : nil }
+
+    /// "Available offline" of the node (core's toggle: on, its state's line, the size a pin waits to be confirmed with).
+    private var offline: OfflineToggle? {
+        _ = model.headerRevision
+        return header?.current.offline
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: asked) { _, id in
+                guard let id else { return }
+                asked = nil
+                touched = true
+                run(id)
             }
-            Button(say(.signinCancel), role: .cancel) { header?.cancelOffline() }
-        } message: {
-            if let question = offline?.question { Text(say(notice: question)) }
-        }
-        .alert(failed ?? "", isPresented: Binding(get: { failed != nil }, set: { if !$0 { failed = nil } })) {
-            Button(say(.ok), role: .cancel) {}
-        }
+            .sheet(isPresented: shown(.share)) { NodeShareSheet(model: model, ref: node) }
+            .sheet(isPresented: shown(.report)) { ReportSheet(model: model, ref: node) }
+            .sheet(isPresented: shown(.cover)) { CoverSheet(model: model, node: node) }
+            .sheet(isPresented: shown(.move)) { NodeMoveSheet(model: model, ref: node) }
+            .sheet(isPresented: shown(.theCopy)) { NodeMoveSheet(model: model, ref: node, copying: true) }
+            // The system's save sheet takes the written file where the person picks; the temporary copy goes either way.
+            .fileMover(isPresented: Binding(get: { downloaded != nil }, set: { if !$0 { cleanUpDownload() } }), file: downloaded) { _ in
+                cleanUpDownload()
+            }
+            .alert(asking ? header.map { say($0.deleteTitle) } ?? "" : "", isPresented: $asking) {
+                Button(say(.peopleDeleteAccept), role: .destructive) {
+                    if let header { Task { await model.trash(header) } }
+                }
+                Button(say(.signinCancel), role: .cancel) {}
+            } message: {
+                if asking, let header { Text(say(notice: header.deleteQuestion())) }
+            }
+            // the tray's *Open* of a rename held offline: this node's name dialog again, with the name the person gave
+            .onChange(of: model.renameAsked?.node, initial: true) { _, asked in
+                guard eager, let r = model.renameAsked, asked == node.nodeId else { return }
+                model.renameAsked = nil
+                newName = r.name
+                renameProblem = nil
+                renaming = true
+            }
+            // Core's name dialog (`FolderNameDialog`): the name as it is, trimmed on save; a refusal says why and asks again.
+            .alert(say(.nodeRename), isPresented: $renaming) {
+                TextField(say(.peopleName), text: $newName)
+                Button(say(.entrySave)) {
+                    let name = newName
+                    touched = true
+                    guard let header else { return }
+                    Task {
+                        guard let r = try? await header.rename(name: name) else {
+                            renameProblem = say(.nodeSaveFailed)
+                            renaming = true
+                            return
+                        }
+                        if let problem = r.problem {
+                            renameProblem = say(notice: problem)
+                            renaming = true
+                        } else if let notice = r.notice {
+                            // renamed; a link that kept the old name is said (the rename stands)
+                            failed = say(notice: notice)
+                        }
+                    }
+                }
+                .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button(say(.signinCancel), role: .cancel) {}
+            } message: {
+                if let renameProblem { Text(renameProblem) }
+            }
+            // a pin asks the size it keeps before its first byte (core's question); nothing is kept until it is confirmed
+            .alert(say(.offlinePinAskTitle), isPresented: Binding(get: { offline?.question != nil }, set: { _ in })) {
+                Button(say(.offlinePinConfirm)) {
+                    guard let header else { return }
+                    Task { if let notice = try? await header.confirmOffline() { failed = say(notice: notice) } }
+                }
+                Button(say(.signinCancel), role: .cancel) { header?.cancelOffline() }
+            } message: {
+                if let question = offline?.question { Text(say(notice: question)) }
+            }
+            .alert(failed ?? "", isPresented: Binding(get: { failed != nil }, set: { if !$0 { failed = nil } })) {
+                Button(say(.ok), role: .cancel) {}
+            }
     }
 
     /// A sheet's presentation: on while `dialog` is `id`.
@@ -163,7 +303,7 @@ struct NodeHeaderActions: View {
     }
 
     private func run(_ id: HeaderAction) {
-        switch id {
+        switch id.entry {
         case .favorite:
             // the heart turns at once and back when the write did not land (core's)
             guard let header else { return }
@@ -180,44 +320,11 @@ struct NodeHeaderActions: View {
             // on: off at once; off: core reads the size it keeps and asks first (the alert above)
             guard let header else { return }
             Task { if let notice = try? await header.toggleOffline() { failed = say(notice: notice) } }
-        default:
-            if let own = contribution.actions.first(where: { $0.id == id }) { own.run() } else { dialog = id }
-        }
-    }
-
-    /// "Available offline" in the "More" menu (ADR 0140 decision 10): a toggle, as the system's menus show a state, with its
-    /// state's line under it (core's: "Downloading 3 MB of 12 MB", "On this device", "Paused: …").
-    private var offlineToggle: some View {
-        Toggle(isOn: Binding(get: { offline?.on ?? false }, set: { _ in run(.offline) })) {
-            Label {
-                Text(word(.offline))
-                if let said = offline?.said { Text(say(notice: said)) }
-            } icon: {
-                Image(systemName: "arrow.down.circle.dotted")
-            }
-        }
-    }
-
-    /// A core action's words (core's `NodeHeaderModel.label`).
-    private func word(_ id: HeaderAction) -> String {
-        header?.label(id: id, hasCover: model.covers[node.nodeId] != nil).map { say($0) } ?? id.name
-    }
-
-    @ViewBuilder private func label(_ id: HeaderAction) -> some View {
-        switch id {
-        case .favorite:
-            Label(word(id), systemImage: pinned == true ? "heart.fill" : "heart")
-                .foregroundStyle(pinned == true ? Role.favorite : Role.text)
-        case .share: Label(word(id), systemImage: "square.and.arrow.up")
-        case .rename: Label(word(id), systemImage: "pencil")
-        case .move: Label(word(id), systemImage: "folder")
-        case .theCopy: Label(word(id), systemImage: "doc.on.doc")
-        case .cover: Label(word(id), systemImage: "photo")
-        case .download: Label(word(id), systemImage: "arrow.down.circle")
-        case .report: Label(word(id), systemImage: "flag")
-        case .delete_: Label(word(id), systemImage: "trash")
-        default:
-            if let own = contribution.actions.first(where: { $0.id == id }) { Label(own.label, systemImage: own.systemImage) }
+        case .share, .report, .cover, .move, .theCopy:
+            dialog = id
+        // the page's own entries run as the page handed them
+        case .upload, .music, .banner, .replace, .send, .openOwnPage, .reportShared:
+            contribution.actions.first(where: { $0.id == id })?.run()
         }
     }
 

@@ -133,7 +133,29 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   form first.
 - [ ] **4 Android** — every plan drawn in the core UI; the guard on for Android. · Done when: `:android:assembleDebug`,
   the words, guidelines, direction and structure guards green.
-- [ ] **5 Apple** — the same. · Done when: both Apple builds green, the guards green.
+- [x] **5 Apple** — the same. · Done when: both Apple builds green, the guards green.
+  **Built** (2026-11-21). #1050 decided: `apple/generate_plans.py`, a pre-build step of both targets after the framework's,
+  writes `build/generated/<target>/Plans.swift` — per `@Plan` enum a Swift `Entry` enum (`HeaderAction.Entry`, read as
+  `action.entry`; `core` back), its entries and order from the core's sources through the structure guard's own reader
+  (`plan_enums`), their Swift names from the framework's `VeyqCore.h` (`theCopy`, `delete_`, `theNew`), the two checked
+  equal or the build stops; no dependency. Every plan switch is over `.entry` with no `default:`. Drawn in the core UI:
+  the header (`NodeHeaderActions`) and a level row's context menu (`NodeRowMenu`, `ShellModel.rowPlan`) through one
+  `NodeActionWords` drawing and one `NodeActionDialogs` runner; the pages' own entries from their models' lists
+  (`GalleryModel.headerActions` — UPLOAD now the header's, a submenu Photo Library | Files opening the page's pickers;
+  a guest's gallery keeps the page's menu, it has no header —, `FileModel.Header.own`, `BookmarkPage.headerActions`);
+  New in the level's head from `LevelPlan.creates` and the drawer's from `drawerCreates`, the drawer's sections from
+  `drawerSections` (Home after New, ADR 0122 decision 2); the level's tools (`LevelTools`: the trash, then the view
+  switch) in Home's and an application list's toolbar — the trash left the bar's Home actions, the application lists'
+  own New Pot / New Memory went (`LevelPlan`: theirs is the drawer's); Settings from `State.sections` (background sync
+  with storage); the sign-in from `SignInPlan.entries` (Submit first, its word `signin_submit`); a link row's context
+  menu from `ShareSheet.rowActions`; a medium tile's from `GalleryModel.tileActions` (macOS *Open in New Window* beside
+  it). Core addition: `GuestLevel.creates` (a guest level's New, held by `GuestDoorsTest`, seen red with the order
+  swapped). `PLATFORMS["apple"]` on. Checks: `:core:assembleVeyqCoreDebugXCFramework`, `xcodegen`, `xcodebuild … -sdk
+  macosx` and `-sdk iphonesimulator` (with `VeyqShare`) green; every `scripts/validate_*.py` green. **Bites:** an arm
+  (`.music`) dropped from `NodeActionDialogs.run` → `switch must be exhaustive` (macOS build red); a `default:` planted
+  there → the guard red; a header lacking `send` → the generator refuses; each restored green. **Deviations:** the link
+  row's swipe actions went (a subset of the plan; its menu holds all); a level's tiles carry no row menu yet (rows do);
+  the Apple pass is build-only — nothing clicked (§ Passes, phase 8).
 - [x] **6 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green, the guards green.
   **Built** (2026-11-21). `header.rs`: `DRAWN`, `wire_id`, `drawn` and `action_of` gone; every plan entry drawn in its
   order, each an action of the bar's own group (`header.e<n>`, its place in the plan — no id list), done by one exhaustive

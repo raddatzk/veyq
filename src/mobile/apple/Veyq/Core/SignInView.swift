@@ -117,60 +117,15 @@ struct SignInView: View {
                     Text(say(.signinKitOtherServer, kit.server ?? "", before))
                 }
             }
-            Section {
-                // the scan first on a phone or tablet, the file first on a Mac (the CR's owner question 1)
-                #if os(iOS)
-                scanButton
-                openButton
-                #else
-                openButton
-                scanButton
-                #endif
-            }
-            if onScanFromTrusted != nil || onShowForSignIn != nil {
-                // ADR 0059 §1: another device lets this one in, over the server above (nothing in a scan changes it) —
-                // scanning its code where a camera can be, showing this one's code on every device
-                Section {
-                    if let onScanFromTrusted, !noCamera {
-                        Button { onScanFromTrusted(server) } label: { Label(say(.signinLinkScan), systemImage: "qrcode.viewfinder") }
-                            .disabled(working)
-                    }
-                    if let onShowForSignIn {
-                        Button { onShowForSignIn(server) } label: { Label(say(.signinLinkShow), systemImage: "qrcode") }
-                            .disabled(working)
-                    }
-                }
-            }
             if let error {
                 Section { Text(say(error)).foregroundStyle(.red) }
             }
+            // the ways in, core's (`SignInPlan.entries`, ADR 0154 decision 2: the web's — Submit first, then Cancel while
+            // adding, the device links, the kit, *Open a link*), whole and in their order under the fields
             Section {
-                // Confirming is the web's green role (`--app-primary`), not the accent.
-                Button {
-                    onSignIn(server, email, password, kit != nil ? "" : secretKey)
-                } label: {
-                    Group { if working { ProgressView() } else { Text(say(.signinTitle)) } }.frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.roundedRectangle(radius: Radius.control))
-                .controlSize(.large)
-                .tint(Role.primary)
-                .foregroundStyle(Role.onFill)
-                .disabled(working)
-                if adding {
-                    Button(say(.signinCancel), action: onCancel).frame(maxWidth: .infinity).disabled(working)
-                }
+                ForEach(SignInPlan.shared.entries(adding: adding, camera: !noCamera), id: \.self) { e in entry(e) }
             }
             .listRowBackground(Color.clear)
-            // *Open a link* under the sign-in (owner 2026-11-19): a received link needs no session
-            if let onOpenLink {
-                Section {
-                    Button(action: onOpenLink) { Label(say(.linkOpen), systemImage: "link").frame(maxWidth: .infinity) }
-                        .disabled(working)
-                        .accessibilityIdentifier("signin-open-link")
-                }
-                .listRowBackground(Color.clear)
-            }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
@@ -206,23 +161,51 @@ struct SignInView: View {
 }
 
 private extension SignInView {
-    var openButton: some View {
-        Button {
-            pickingKit = true
-        } label: {
-            Label(say(.signinKitOpen), systemImage: "folder")
-        }
-        .disabled(working)
-    }
-
-    @ViewBuilder var scanButton: some View {
-        if let onScanKit, !noCamera {
+    /// Entry `e` of the sign-in's plan. An entry whose door this target has not (the share extension links no device and
+    /// opens no link) is drawn as nothing there.
+    @ViewBuilder func entry(_ e: SignInEntry) -> some View {
+        switch e.entry {
+        case .submit:
+            // Confirming is the web's green role (`--app-primary`), not the accent.
             Button {
-                scan = onScanKit(server)
+                onSignIn(server, email, password, kit != nil ? "" : secretKey)
             } label: {
-                Label(say(.signinKitScan), systemImage: "qrcode.viewfinder")
+                Group { if working { ProgressView() } else { Text(say(.signinSubmit)) } }.frame(maxWidth: .infinity)
             }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.roundedRectangle(radius: Radius.control))
+            .controlSize(.large)
+            .tint(Role.primary)
+            .foregroundStyle(Role.onFill)
             .disabled(working)
+        case .cancel:
+            Button(say(.signinCancel), action: onCancel).frame(maxWidth: .infinity).disabled(working)
+        case .linkShow:
+            // ADR 0059 §1: another device lets this one in over the server above (nothing in a scan changes it)
+            if let onShowForSignIn {
+                Button { onShowForSignIn(server) } label: { Label(say(.signinLinkShow), systemImage: "qrcode").frame(maxWidth: .infinity) }
+                    .disabled(working)
+            }
+        case .linkScan:
+            if let onScanFromTrusted {
+                Button { onScanFromTrusted(server) } label: { Label(say(.signinLinkScan), systemImage: "qrcode.viewfinder").frame(maxWidth: .infinity) }
+                    .disabled(working)
+            }
+        case .kitOpen:
+            Button { pickingKit = true } label: { Label(say(.signinKitOpen), systemImage: "folder").frame(maxWidth: .infinity) }
+                .disabled(working)
+        case .kitScan:
+            if let onScanKit {
+                Button { scan = onScanKit(server) } label: { Label(say(.signinKitScan), systemImage: "qrcode.viewfinder").frame(maxWidth: .infinity) }
+                    .disabled(working)
+            }
+        case .openLink:
+            // *Open a link* (owner 2026-11-19): a received link needs no session
+            if let onOpenLink {
+                Button(action: onOpenLink) { Label(say(.linkOpen), systemImage: "link").frame(maxWidth: .infinity) }
+                    .disabled(working)
+                    .accessibilityIdentifier("signin-open-link")
+            }
         }
     }
 }

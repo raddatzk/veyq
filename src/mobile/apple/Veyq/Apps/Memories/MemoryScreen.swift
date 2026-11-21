@@ -52,6 +52,8 @@ struct MemoryScreen: View {
     private var uploading: [UploadTile] { state?.uploading ?? [] }
     /// What the page adds (core's: the rights' upload, a chapter where it makes one).
     private var uploads: Bool { (state?.rights.upload ?? false) && (guest?.canAdd ?? true) }
+    /// A link's guest adds through the page's own menu (it has no node header).
+    private var guestUploads: Bool { uploads && guest != nil }
     private var chapterHere: Bool { model.galleryModel(node)?.creates.contains(MemoryCreate.shared.CHAPTER) ?? false }
     /// The room between the grid and the page's edges: the grid's own gap, so every side of a tile breathes alike.
     private static let margin = CGFloat(MediaGridLayout.shared.GAP)
@@ -267,8 +269,10 @@ struct MemoryScreen: View {
     private func photoChrome(_ content: some View) -> some View {
         content
         // photos and videos come from the photo library or from files; a Memory makes its chapters here too
-        .createMenu(say(uploads ? .memoryAdd : .memoryAddChapter), shown: !showsMusic && !showsMap && (uploads || chapterHere)) {
-            if uploads {
+        // a member adds photos through the header's `upload` entry (core's plan); a link's guest, whose page has no node
+        // header, here
+        .createMenu(say(guestUploads ? .memoryAdd : .memoryAddChapter), shown: !showsMusic && !showsMap && (guestUploads || chapterHere)) {
+            if guestUploads {
                 Button { pickingPhotos = true } label: { Label(say(.photoLibrary), systemImage: "photo.on.rectangle") }
                 Button { pickingFiles = true } label: { Label(say(.tabDepotFiles), systemImage: "folder") }
             }
@@ -324,6 +328,12 @@ struct MemoryScreen: View {
             guard guest == nil, let gallery = model.galleryModel(node) else { return false }
             Task { await model.drop(providers, onto: DropTarget.Gallery(gallery: gallery)) }
             return true
+        }
+        // the header's `upload` entry asked for a picker (`MemoriesUi`'s own action)
+        .onChange(of: model.galleryAdd, initial: true) { _, asked in
+            guard let asked, asked.nodeId == node.nodeId else { return }
+            model.galleryAdd = nil
+            if asked.files { pickingFiles = true } else { pickingPhotos = true }
         }
         .photosPicker(isPresented: $pickingPhotos, selection: $photos, matching: .any(of: [.images, .videos]), preferredItemEncoding: .current)
         .onChange(of: photos) {
@@ -389,11 +399,15 @@ struct MemoryScreen: View {
         }
         .buttonStyle(.plain)
         .offset(x: CGFloat(frame.left))
-        // the tile's menu (ADR 0149 decision 4): its mark where whoever looks may mark, online, the own marks read; on a Mac
-        // "Open in New Window" too
+        // the tile's menu, core's (`GalleryModel.tileActions`, ADR 0154 decision 2): its mark where whoever looks may mark,
+        // online, the own marks read; on a Mac "Open in New Window" beside it, the platform's (the plan's docs name it)
         .contextMenu {
-            if let state, state.marking, state.marksLoaded, let gallery = model.galleryModel(node) {
-                MarkButton(gallery: gallery, mediaId: row.mediaId, mine: state.marks[row.mediaId]?.mine ?? false)
+            if let gallery = model.galleryModel(node) {
+                ForEach(gallery.tileActions(row: row), id: \.self) { a in
+                    switch a.entry {
+                    case .mark: MarkButton(gallery: gallery, mediaId: row.mediaId, mine: state?.marks[row.mediaId]?.mine ?? false)
+                    }
+                }
             }
             #if os(macOS)
             if guest == nil {

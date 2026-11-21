@@ -747,11 +747,28 @@ final class AppModel {
     /// Whether "New" is offered where the shell is (core's `ShellModel.canCreateHere`).
     var canCreateHere: Bool { _ = shell; return shellModel?.canCreateHere ?? false }
 
-    /// What "New" offers where the shell is (core's `ShellModel.createsHere`: online all of it, offline only what queues).
-    func createsHere(isHome: Bool) -> [AppKinds.Create] {
+    /// The shown level's plan (core's `ShellModel.levelPlan`, ADR 0154 decision 2): its New and its tools, drawn whole;
+    /// nil where the shell shows no level (an object, a person, a kept link, Search).
+    var levelPlan: LevelPlan? {
         _ = shell
         _ = offlineBanner // observed: what is offered moves with the reach
-        return shellModel?.createsHere(isHome: isHome, bookmarks: true) ?? []
+        return shellModel?.levelPlan(shell: shell)
+    }
+
+    /// What the drawer's New offers (core's `ShellModel.drawerCreates`): made at the shown space's top, from anywhere.
+    var drawerCreates: [AppKinds.Create] {
+        _ = shell
+        _ = offlineBanner
+        return shellModel?.drawerCreates() ?? []
+    }
+
+    /// Whether the tenant's map services were built: the Settings page offers their consent (core's `ShellModel.mapsOffered`).
+    var mapsOffered: Bool { _ = shell; return shellModel?.mapsOffered ?? false }
+
+    /// A level row's menu (core's `ShellModel.rowPlan`); nil before a session.
+    func rowPlan(_ row: NodeAt) async -> LevelRow.Plan? {
+        guard let m = shellModel else { return nil }
+        return try? await m.rowPlan(row: row)
     }
 
     /// The shell moved by `change` (its transitions are `Shell`'s), at once.
@@ -2208,13 +2225,17 @@ final class AppModel {
     }
 
     /// What the drawer's "New" asked Home to create, until Home opens its dialog.
-    enum NewKind { case folder, pot, memory, bookmark }
-    var newRequest: NewKind?
+    var newRequest: AppKinds.Create?
+    /// The space whose trash is open (a level's tool, `LevelTools`), while non-nil.
+    var trashShown: TrashOf?
+    /// What a Memory's header asked its page to add (its `upload` entry: the photo library, or files), until the page opens
+    /// the picker.
+    var galleryAdd: GalleryAdd?
 
-    /// The drawer's "New": Home, where its dialog for `kind` opens.
-    func requestNew(_ kind: NewKind) {
+    /// The drawer's "New": Home, where its dialog for `create` opens.
+    func requestNew(_ create: AppKinds.Create) {
         choose(nil)
-        newRequest = kind
+        newRequest = create
     }
 
     /// Removes the cover of `ref`; false when it did not land.
@@ -2693,4 +2714,11 @@ extension AppModel: SettingsActions {
         trustLog("settings back to the password: \(change)")
         return change
     }
+}
+
+/// What a node's header asked its page to add (its `upload` entry): from the photo library, or from files
+/// (`AppModel.galleryAdd`).
+struct GalleryAdd: Equatable {
+    let nodeId: String
+    let files: Bool
 }

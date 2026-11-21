@@ -127,58 +127,9 @@ struct SettingsView: View {
             if let refusal = state.refusal {
                 Section { Text(say(refusal)).foregroundStyle(Role.danger) }
             }
-            account.id("account")
-            if let model = maps {
-                flowSection(.profile, model).id("profile")
-                flowSection(.password, model).id("password")
-                flowSection(.email, model).id("email")
-            }
-            device.id("device")
-            sessions.id("sessions")
-            savedKeys.id("saved-keys")
-            if state.addDevice {
-                // ADR 0059 §1, offered while the instance links devices: both halves, so whichever device has a camera
-                // scans — "Show a Code" (the new device scans) and, where this one has a camera, "Scan a Code"
-                Section {
-                    Button { actions.linkShow() } label: { Label(say(.linkShow), systemImage: "qrcode") }
-                        .disabled(state.working)
-                    if QrCamera.available {
-                        Button { actions.linkScan() } label: { Label(say(.linkScan), systemImage: "qrcode.viewfinder") }
-                            .disabled(state.working)
-                    }
-                } header: {
-                    Text(say(.accountSettingsAddDevice))
-                } footer: {
-                    Text(say(.accountSettingsAddDeviceSub) + " " + say(.linkIntro))
-                }
-                .id("add-device")
-            }
-            storage.id("storage")
-            backgroundSync.id("background-sync")
-            if let maps { MapServicesSection(model: maps).id("maps") }
-            #if os(iOS)
-            // D3: the app follows the system's appearance; its language is the system's per-app setting
-            Section {
-                Button { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } } label: {
-                    Label(say(.accountSettingsAppearance), systemImage: "globe")
-                }
-            } footer: {
-                Text(say(.accountSettingsAppearanceSub))
-            }
-            .id("appearance")
-            #endif
-            if let model = maps {
-                flowSection(.security, model).id("security")
-                flowSection(.erase, model).id("erase")
-            }
-            Section {
-                Button(role: .destructive) { actions.signOutHere() } label: {
-                    Label(say(.drawerSignOut), systemImage: "rectangle.portrait.and.arrow.right")
-                }
-                .disabled(state.working)
-            } footer: {
-                Text(say(.accountSettingsSignOutHint))
-            }
+            // core's sections, whole and in their order (`AccountSettings.State.sections`, ADR 0154 decision 2: the web's
+            // order, the apps' own sections beside their kin, Sign out last), each anchored by its `SettingsSection.id`
+            ForEach(sections, id: \.self) { s in section(s).id(s.id) }
         }
         .formStyle(.grouped)
         // the presentations of the page go on the Form (src/mobile/CLAUDE.md: a section's are presented by none)
@@ -239,6 +190,72 @@ struct SettingsView: View {
         .overlay(alignment: .top) { if state.working { ProgressView().padding(8) } }
         .sheet(item: $flow) { f in
             if let model = maps { AccountFlowSheet(flow: f, model: model) }
+        }
+    }
+
+    /// The page's sections (core's): the maps' consent where this tenant's map services were built, appearance on iOS.
+    private var sections: [SettingsSection] {
+        #if os(iOS)
+        let appearance = true
+        #else
+        let appearance = false
+        #endif
+        return state.sections(maps: maps?.mapsOffered ?? false, appearance: appearance)
+    }
+
+    /// Section `s` of the page. The account's flows (its address, password, security, profile, erase) open over the app's
+    /// model; the page played without one (`DevSettings`) has none to open.
+    @ViewBuilder private func section(_ s: SettingsSection) -> some View {
+        switch s.entry {
+        case .appearance:
+            #if os(iOS)
+            // D3: the app follows the system's appearance; its language is the system's per-app setting
+            Section {
+                Button { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } } label: {
+                    Label(say(.accountSettingsAppearance), systemImage: "globe")
+                }
+            } footer: {
+                Text(say(.accountSettingsAppearanceSub))
+            }
+            #endif
+        case .maps:
+            if let maps { MapServicesSection(model: maps) }
+        case .storage:
+            storage
+            backgroundSync
+        case .sessions: sessions
+        case .device: device
+        case .savedKeys: savedKeys
+        case .account: account
+        case .email: if let model = maps { flowSection(.email, model) }
+        case .password: if let model = maps { flowSection(.password, model) }
+        case .addDevice:
+            // ADR 0059 §1, offered while the instance links devices: both halves, so whichever device has a camera
+            // scans — "Show a Code" (the new device scans) and, where this one has a camera, "Scan a Code"
+            Section {
+                Button { actions.linkShow() } label: { Label(say(.linkShow), systemImage: "qrcode") }
+                    .disabled(state.working)
+                if QrCamera.available {
+                    Button { actions.linkScan() } label: { Label(say(.linkScan), systemImage: "qrcode.viewfinder") }
+                        .disabled(state.working)
+                }
+            } header: {
+                Text(say(.accountSettingsAddDevice))
+            } footer: {
+                Text(say(.accountSettingsAddDeviceSub) + " " + say(.linkIntro))
+            }
+        case .security: if let model = maps { flowSection(.security, model) }
+        case .profile: if let model = maps { flowSection(.profile, model) }
+        case .erase: if let model = maps { flowSection(.erase, model) }
+        case .signOut:
+            Section {
+                Button(role: .destructive) { actions.signOutHere() } label: {
+                    Label(say(.drawerSignOut), systemImage: "rectangle.portrait.and.arrow.right")
+                }
+                .disabled(state.working)
+            } footer: {
+                Text(say(.accountSettingsSignOutHint))
+            }
         }
     }
 
