@@ -170,7 +170,7 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   smoked: a Pot's amounts (the smoke's Pot was made without people, so it offered no entry; amounts are the vectors' `money`).
   Seen, not this CR's: the shell's row details (`AppModel.rowDetails`) keep the language they were read in until the
   app restarts after an in-app language switch — as before.
-- [ ] **6 Apple** · **7 Linux** · **8 Windows** — each platform's formatters and durations removed, the
+- [x] **6 Apple** · **7 Linux** · **8 Windows** — each platform's formatters and durations removed, the
   notice host mapping F1, the guard on. · Done when: each platform's build (as the CR before) and the guards green.
   **6 Apple — Built** (2026-11-21): every value the app shows goes through the core's `Shown` in the catalog's language
   (`shownLanguage`, `Bundle.main.preferredLocalizations`): `Formats.swift`'s `money`, `localDay`, `shownSize`,
