@@ -290,10 +290,11 @@ internal sealed class MemoryPage : IDisposable
     }
 
     /// <summary>A drop of files onto the page goes to the core's one drop onto this gallery, where its rights upload
-    /// (GalleryShown.canUpload; the core judges it again).</summary>
+    /// (GalleryShown.canUpload; the core judges it again) and the gallery's media show: the Music and Map views take no
+    /// drop, as the web's tabs take none (#1054).</summary>
     private void Droppable()
     {
-        Drops.Attach(_scroll, () => _id is { } gallery && _shown is { canUpload: true } ? new DropOn.DropOnGallery { gallery = gallery } : null,
+        Drops.Attach(_scroll, () => _id is { } gallery && _shown is { canUpload: true } && _musicSlot.Visibility != Visibility.Visible && _mapSlot.Visibility != Visibility.Visible ? new DropOn.DropOnGallery { gallery = gallery } : null,
             Words.MemoryAdd(), null, _window, _say);
     }
 
