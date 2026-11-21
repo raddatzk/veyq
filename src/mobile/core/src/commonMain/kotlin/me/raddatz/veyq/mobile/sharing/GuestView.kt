@@ -39,6 +39,12 @@ class GuestLevel internal constructor(
      */
     val writes: Boolean get() = access != null && access.role == GuestAccess.READ_WRITE && !access.inIdentityFolder(node.nodeId)
 
+    /**
+     * What the level's New offers the guest (ADR 0154 decision 2, a plan every platform draws whole): where it [writes], a
+     * folder and files uploaded (the web's share page's two writes); a guest makes no Memory, Pot or drop box. Nothing else.
+     */
+    val creates: List<AppKinds.Create> get() = if (writes) listOf(AppKinds.Create.FOLDER, AppKinds.Create.UPLOAD_FILES) else emptyList()
+
     /** The guest's session: a write asks the guest's name first ([GuestAccess.nameGuest]) while it is null. */
     val guest: StateFlow<GuestSession?>? get() = access?.session
 
