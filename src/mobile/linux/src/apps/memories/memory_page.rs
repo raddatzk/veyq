@@ -16,7 +16,8 @@
 //! ([crate::apps::memories::memory_facts]).
 //!
 //! Memories' rest (ADR 0149 decisions 4–6): a tile carries its mark's badge — the heart, filled where the caller marked it,
-//! with how many did where the scope counts them; no button (the heart is the lightbox's) —; over the grid the filter
+//! with how many did where the scope counts them; no button (the heart is the lightbox's) — and its menu, a right click or a
+//! long press away, the core's tile actions (`GalleryRow.tileActions`: the mark toggled, ADR 0154 decision 2); over the grid the filter
 //! ([crate::apps::memories::gallery_filter]), which the grid and the lightbox both follow; and for a member a fourth toggle,
 //! Contributions ([crate::apps::memories::contributions]).
 //!
@@ -29,7 +30,7 @@ use std::rc::{Rc, Weak};
 use adw::prelude::*;
 use gtk::{gdk, gio, glib};
 
-use crate::bridge::{self, Watch, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::GalleryRow, wire::GalleryShown, wire::UploadTileShown,
+use crate::bridge::{self, Watch, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::GalleryRow, wire::GalleryShown, wire::TileAction, wire::UploadTileShown,
     wire::DropOn, wire::GridRow, wire::NodeAt, wire::ObjectRef, wire::Update, wire::Watched};
 use crate::core_ui::home::{glib_escape, kind_icon};
 use crate::apps::memories::banner::BannerView;
@@ -68,12 +69,11 @@ struct Inner {
     hero: RefCell<Option<gtk::Widget>>,
     /// The facts line under the head: its date and its place.
     facts: FactsLine,
-    /// The banner above the head (ADR 0144 decision 4), and under the facts line the people line with *Add banner*.
+    /// The banner above the head (ADR 0144 decision 4; its *Add banner* is the header's plan entry, [MemoryPage::edit_banner]),
+    /// and under the facts line the people line.
     banner: BannerView,
     curation: gtk::Box,
     people: PeopleLine,
-    add_banner: gtk::Button,
-    add_banner_content: adw::ButtonContent,
     /// A delete of the banner's own picture asked (until the core drops its question).
     banner_asked: Cell<bool>,
     /// Photos | Music | Map (Music where the gallery offers its Music view, and whether it is listed now); the photos'
@@ -185,11 +185,6 @@ impl MemoryPage {
         let curation = gtk::Box::builder().spacing(6).visible(false).build();
         let people = PeopleLine::new(window);
         curation.append(people.widget());
-        let add_content = adw::ButtonContent::builder().icon_name("image-x-generic-symbolic").label(words::memory_banner_add()).build();
-        let add_banner = gtk::Button::builder().child(&add_content).visible(false).build();
-        add_banner.add_css_class("flat");
-        add_banner.set_widget_name("memory-banner-add");
-        curation.append(&add_banner);
         column.append(&curation);
         // the view switch (GNOME: a toggle group for a few views of one content, AdwToggleGroup); its toggles once the
         // gallery says whether it offers music
@@ -226,8 +221,6 @@ impl MemoryPage {
             banner,
             curation,
             people,
-            add_banner,
-            add_banner_content: add_content,
             banner_asked: Cell::new(false),
             switch,
             listed: Cell::new(None),
@@ -361,6 +354,11 @@ impl MemoryPage {
             // what is picked is dropped onto the gallery: the core's one drop takes it
             crate::core_ui::drop::send(parent.upcast_ref(), DropOn::DropOnGallery { gallery }, crate::core_ui::drop::items(&files), &toasts);
         });
+    }
+
+    /// The header's *Add banner* or *Change banner* (`HeaderAction.BANNER`, ADR 0144 decision 5): the banner's dialog.
+    pub fn edit_banner(&self) {
+        self.inner.banner.edit(&self.inner.window);
     }
 
     /// The header's music action: the node's music started shuffled, or stopped where it plays (`Gallery.Music`).
@@ -501,13 +499,6 @@ impl Inner {
             true
         });
         this.root.add_controller(target);
-        // *Add banner*: the banner's dialog
-        let weak = Rc::downgrade(this);
-        this.add_banner.connect_clicked(move |_| {
-            if let Some(inner) = weak.upgrade() {
-                inner.banner.edit(&inner.window);
-            }
-        });
         // the view switch: the Music view opened while it shows, closed when the photos show again
         let weak = Rc::downgrade(this);
         this.switch.connect_active_name_notify(move |_| {
@@ -668,7 +659,7 @@ impl Inner {
                 let stage = uploading.get(t.media_id.as_str()).map(|u| if u.failed { "failed" } else if u.preparing { "preparing" } else { "sending" });
                 let tile = stage.or_else(|| by_id.get(t.media_id.as_str()).and_then(|(_, row)| row.tile.as_deref())).unwrap_or("-");
                 // a mark's badge changed builds the tile anew
-                let mark = by_id.get(t.media_id.as_str()).map_or((None, false), |(_, row)| (row.marks, row.mine));
+                let mark = by_id.get(t.media_id.as_str()).map_or((None, false, String::new()), |(_, row)| (row.marks, row.mine, format!("{:?}", row.tile_actions)));
                 format!("{}:{tile}:{:.1}:{:.1}:{mark:?}", t.media_id, t.left, t.width)
             }).collect::<Vec<_>>().join(" ") + &format!(" h{:.1}", r.height);
             if let Some((widget, built, top)) = mounted.get_mut(&r.index) {
@@ -753,7 +744,66 @@ impl Inner {
             glib::Propagation::Proceed
         });
         tile.add_controller(keys);
+        self.tile_menu(&tile, row);
         tile
+    }
+
+    /// What a tile offers beside opening it (`GalleryRow.tileActions`, ADR 0154 decision 2: the web's mark toggle), each
+    /// entry in its order in a menu opened GNOME's way — a right click, or a long press on a touch screen.
+    fn tile_menu(self: &Rc<Self>, tile: &gtk::Overlay, row: &GalleryRow) {
+        if row.tile_actions.is_empty() {
+            return;
+        }
+        let actions = gio::SimpleActionGroup::new();
+        let menu = gio::Menu::new();
+        for (n, a) in row.tile_actions.iter().enumerate() {
+            let name = format!("e{n}");
+            let action = gio::SimpleAction::new(&name, None);
+            let (weak, media_id, a) = (Rc::downgrade(self), row.media_id.clone(), *a);
+            action.connect_activate(move |_, _| {
+                let Some(inner) = weak.upgrade() else { return };
+                let Some(gallery) = inner.id.get() else { return };
+                match a {
+                    TileAction::Mark => {
+                        let (toasts, media_id) = (inner.toasts.clone(), media_id.clone());
+                        glib::spawn_future_local(async move {
+                            header::say(&toasts, bridge::call(&Call::MarksToggle { gallery, media_id }).await.map(|(a, _)| a), "Marks.Toggle");
+                        });
+                    }
+                }
+            });
+            actions.add_action(&action);
+            let word = match a {
+                TileAction::Mark => if row.mine { words::media_marks_unmark() } else { words::media_marks_mark() },
+            };
+            menu.append(Some(&word), Some(&format!("tile.{name}")));
+        }
+        tile.insert_action_group("tile", Some(&actions));
+        let popover = gtk::PopoverMenu::from_model(Some(&menu));
+        popover.set_parent(tile);
+        popover.set_has_arrow(false);
+        let open = {
+            let popover = popover.downgrade();
+            move |x: f64, y: f64| {
+                if let Some(p) = popover.upgrade() {
+                    p.set_pointing_to(Some(&gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
+                    p.popup();
+                }
+            }
+        };
+        let right = gtk::GestureClick::builder().button(gdk::BUTTON_SECONDARY).build();
+        let on_right = open.clone();
+        right.connect_pressed(move |g, _, x, y| {
+            g.set_state(gtk::EventSequenceState::Claimed);
+            on_right(x, y);
+        });
+        tile.add_controller(right);
+        let long = gtk::GestureLongPress::new();
+        long.set_touch_only(true);
+        long.connect_pressed(move |_, x, y| open(x, y));
+        tile.add_controller(long);
+        // the popover is the tile's child: it goes with the tile
+        tile.connect_destroy(move |_| popover.unparent());
     }
 
     /// A photo or video on its way into this page (ADR 0145 decision 3): its kind's icon on a card, a spinner while its tiers
@@ -947,11 +997,8 @@ impl Inner {
             self.banner.draw(s.banner.as_ref(), gallery);
             self.people.draw(s.people.as_ref(), gallery);
         }
-        // *Add banner* where there is none, *Change banner* where there is one
-        self.add_banner.set_visible(s.edits_banner);
-        self.add_banner_content.set_label(&if s.banner.is_some() { words::memory_banner_change() } else { words::memory_banner_add() });
         // set from what it shows, never read back (a hidden box's children read as hidden too)
-        self.curation.set_visible(s.people.is_some() || s.edits_banner);
+        self.curation.set_visible(s.people.is_some());
         // A2: a delete of the banner's own picture asks first; the banner stays unless *Remove the banner too*
         if s.banner_question.is_none() {
             self.banner_asked.set(false);

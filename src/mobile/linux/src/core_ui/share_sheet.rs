@@ -12,7 +12,7 @@ use std::rc::{Rc, Weak};
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::NodeAt, wire::ShareShown, wire::ShownLink, wire::Update, wire::Watched};
+use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::LinkAction, wire::NodeAt, wire::ShareShown, wire::ShownLink, wire::Update, wire::Watched};
 use crate::core_ui::home::glib_escape;
 use crate::core_ui::{said, words};
 
@@ -436,61 +436,58 @@ impl Inner {
         }
     }
 
-    /// One link: its title and line, its copy button, a spinner while a write runs on it, the rest in its menu.
+    /// One link: its title and line, then its actions (`ShownLink.actions`, ADR 0154 decision 2) each drawn, in their
+    /// order — the copy as a button where it leads (GNOME's way: the one frequent action at hand), the rest in the row's menu
+    /// —; a spinner in their place while a write runs on it.
     fn row(self: &Rc<Self>, link: &ShownLink, busy: bool) -> adw::ActionRow {
         let row = adw::ActionRow::builder().title(glib_escape(&said::piece(&link.title))).subtitle(glib_escape(&subtitle(link))).build();
-        if let (Some(address), true) = (link.address.clone(), link.can_copy) {
-            let copy = gtk::Button::builder().icon_name("edit-copy-symbolic").tooltip_text(words::share_copy()).valign(gtk::Align::Center).build();
-            copy.add_css_class("flat");
-            copy.update_property(&[gtk::accessible::Property::Label(&words::share_copy())]);
-            let w = Rc::downgrade(self);
-            copy.connect_clicked(move |b| {
-                if let Some(i) = w.upgrade() {
-                    i.copy(b, &address);
-                }
-            });
-            row.add_suffix(&copy);
-        }
         if busy {
             row.add_suffix(&adw::Spinner::new());
             return row;
         }
         let actions = gio::SimpleActionGroup::new();
         let menu = gio::Menu::new();
-        let main = gio::Menu::new();
-        let closing = gio::Menu::new();
         let id = link.share_id.clone();
-        let entries: [(&str, bool, String, &gio::Menu); 5] = [
-            ("edit", link.can_edit, words::share_edit(), &main),
-            ("reactivate", link.can_reactivate, words::share_reactivate(), &main),
-            ("renew", link.can_renew, words::share_renew(), &main),
-            ("switch-off", link.can_switch_off, words::share_switch_off(), &closing),
-            ("delete", link.can_delete, words::share_delete(), &closing),
-        ];
-        for (name, offered, word, group) in entries {
-            if !offered {
-                continue;
-            }
-            let action = gio::SimpleAction::new(name, None);
-            let (w, id) = (Rc::downgrade(self), id.clone());
+        for (n, a) in link.actions.iter().enumerate() {
+            let name = format!("e{n}");
+            let action = gio::SimpleAction::new(&name, None);
+            let (w, id, address, a) = (Rc::downgrade(self), id.clone(), link.address.clone(), *a);
             action.connect_activate(move |_, _| {
                 let Some(i) = w.upgrade() else { return };
                 let link = id.clone();
-                match name {
-                    "edit" => i.send(|share| Call::ShareEdit { share, link }),
-                    "reactivate" => i.ask(|share| Call::ShareReactivate { share, link }, "Share.Reactivate"),
-                    "renew" => i.send(|share| Call::ShareAskRenew { share, link }),
-                    "switch-off" => i.ask(|share| Call::ShareSwitchOff { share, link }, "Share.SwitchOff"),
-                    _ => i.send(|share| Call::ShareAskDelete { share, link }),
+                match a {
+                    LinkAction::Copy => match address.as_deref() {
+                        Some(address) => i.copy(&i.dialog, address),
+                        None => eprintln!("veyq: share copy: the link has no address"),
+                    },
+                    LinkAction::Edit => i.send(|share| Call::ShareEdit { share, link }),
+                    LinkAction::Reactivate => i.ask(|share| Call::ShareReactivate { share, link }, "Share.Reactivate"),
+                    LinkAction::Renew => i.send(|share| Call::ShareAskRenew { share, link }),
+                    LinkAction::SwitchOff => i.ask(|share| Call::ShareSwitchOff { share, link }, "Share.SwitchOff"),
+                    LinkAction::Delete => i.send(|share| Call::ShareAskDelete { share, link }),
                 }
             });
             actions.add_action(&action);
-            group.append(Some(&word), Some(&format!("link.{name}")));
+            let word = match a {
+                LinkAction::Copy => words::share_copy(),
+                LinkAction::Edit => words::share_edit(),
+                LinkAction::Renew => words::share_renew(),
+                LinkAction::Reactivate => words::share_reactivate(),
+                LinkAction::SwitchOff => words::share_switch_off(),
+                LinkAction::Delete => words::share_delete(),
+            };
+            // the first entry, the copy, at hand as a button; every other one in the menu, in its order
+            if n == 0 && a == LinkAction::Copy {
+                let copy = gtk::Button::builder().icon_name("edit-copy-symbolic").tooltip_text(&word).valign(gtk::Align::Center).action_name(format!("link.{name}")).build();
+                copy.add_css_class("flat");
+                copy.update_property(&[gtk::accessible::Property::Label(&word)]);
+                row.add_suffix(&copy);
+            } else {
+                menu.append(Some(&word), Some(&format!("link.{name}")));
+            }
         }
-        menu.append_section(None, &main);
-        menu.append_section(None, &closing);
-        if main.n_items() + closing.n_items() > 0 {
-            row.insert_action_group("link", Some(&actions));
+        row.insert_action_group("link", Some(&actions));
+        if menu.n_items() > 0 {
             let more = gtk::MenuButton::builder().icon_name("view-more-symbolic").tooltip_text(words::node_more()).menu_model(&menu).valign(gtk::Align::Center).build();
             more.add_css_class("flat");
             row.add_suffix(&more);

@@ -15,6 +15,9 @@ pub fn requested() -> bool {
     false
 }
 
+/// What `SettingsShown.sections` carries on the wire for [fake]'s state.
+const FAKE_SECTIONS: &str = r#"["SESSIONS","DEVICE","SAVED_KEYS","ACCOUNT","EMAIL","PASSWORD","ADD_DEVICE","SECURITY","PROFILE","ERASE","SIGN_OUT"]"#;
+
 /// The state the harness draws: a staying-signed-in device and three sessions, an unconfirmed address.
 pub fn fake() -> SettingsShown {
     let day = 86_400_000;
@@ -42,6 +45,8 @@ pub fn fake() -> SettingsShown {
         storage_unavailable: None,
         asking_remove_all: false,
         limit_units: vec![],
-        sections: vec![],
+        // the sections as the core sends them for this state (`SettingsSection.offered`: a desktop, devices linked, no
+        // store, no map services), in the wire's own form, as the harness fakes no core
+        sections: serde_json::from_str(FAKE_SECTIONS).expect("the wire's sections"),
     }
 }

@@ -92,7 +92,7 @@ pub struct GuestPage {
 pub struct KindPage {
     pub body: Body,
     pub guest: Option<GuestPage>,
-    /// The window actions (`win.<name>`) the header's own actions fire on this kind's page (`header::action_of`).
+    /// The window actions (`win.<name>`) the header's own actions fire on this kind's page (`header::doer`).
     pub actions: &'static [&'static str],
     /// Whether the shell's Refresh stands on the page.
     pub refreshes: bool,

@@ -2,6 +2,8 @@
 //! under the filters the core offers, and an application's own list in its Favorites, Recent and the rest. Each drawn
 //! as GNOME draws a list of places: boxed lists in a clamped, scrolled column, a filter as a toggle group — or, where the
 //! account chose tiles (`ShellShown.view`, ADR 0149 decision 8), each group as a grid of tiles ([crate::core_ui::tiles]).
+//! Every node's row and tile opens its menu on a right click or a long press: the core's plan for it
+//! ([crate::core_ui::header::row_menu], `Row.Plan`, ADR 0154 decision 2).
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -12,6 +14,7 @@ use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::ArrangedList,
     wire::ShellModelState, wire::ShellShown, wire::FolderRef, wire::ViewModeShown};
 use crate::core_ui::tiles::{self, Tile};
 use crate::core_ui::drop::Drops;
+use crate::core_ui::header::row_menu;
 use crate::core_ui::{said, words};
 
 /// The icon of a node's kind — Android's `kindIcon`, Apple's `Names.kindSymbol`, in GNOME's icon set.
@@ -292,7 +295,7 @@ fn filter_name(f: Option<ApplicationId>) -> String {
 /// as the Pot's and the Memory's pages place it), then the level's groups (`Home.groups`): a folder enters, an object
 /// opens in its application. With [drops], files and folders dropped onto the level go to the core's one drop where it
 /// offers the level, and onto a folder's row where it offers that row (ADR 0154 decision 1).
-pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, hero: Option<gtk::Widget>) -> gtk::Widget {
+pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, hero: Option<gtk::Widget>, toasts: &adw::ToastOverlay) -> gtk::Widget {
     let as_tiles = shown.view == ViewModeShown::Tiles;
     let (scroll, content) = column(as_tiles);
     if let Some(t) = drops.and_then(Drops::onto_level) {
@@ -317,7 +320,7 @@ pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, 
             list.set_title(&said::key(heading));
         }
         if as_tiles {
-            list.add(&level_tiles(state, &g.nodes, g.folders, drops));
+            list.add(&level_tiles(state, &g.nodes, g.folders, drops, toasts));
             content.append(&list);
             continue;
         }
@@ -327,11 +330,16 @@ pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, 
                 if let Some(t) = drops.and_then(|d| d.onto_row(n)) {
                     row.add_controller(t);
                 }
+                row_menu(&row, &node_at(n), toasts);
                 list.add(&row);
             } else if let Some(o) = state.lists.objects.iter().find(|o| o.scope_id == n.scope_id && o.node_id == n.node_id) {
-                list.add(&object_row(o));
+                let row = object_row(o);
+                row_menu(&row, &object_at(o), toasts);
+                list.add(&row);
             } else if n.kind == crate::core_ui::bookmark_page::KIND {
-                list.add(&bookmark_row(n));
+                let row = bookmark_row(n);
+                row_menu(&row, &node_at(n), toasts);
+                list.add(&row);
             }
         }
         content.append(&list);
@@ -356,10 +364,12 @@ fn queued_row(q: &QueuedItem) -> adw::ActionRow {
 }
 
 /// A group of Home's level as tiles: a folder's enters it (and takes a drop as its row does), an object's opens it.
-fn level_tiles(state: &ShellModelState, nodes: &[NodeRef], folders: bool, drops: Option<&Drops>) -> gtk::FlowBox {
+fn level_tiles(state: &ShellModelState, nodes: &[NodeRef], folders: bool, drops: Option<&Drops>, toasts: &adw::ToastOverlay) -> gtk::FlowBox {
     let mut tiles = Vec::new();
     let mut dropping = Vec::new();
+    let mut menus = Vec::new();
     for n in nodes {
+        let before = tiles.len();
         if folders {
             let folder = FolderRef { node_id: n.node_id.clone(), name: n.name.clone() };
             tiles.push(Tile { name: n.name.clone(), subtitle: None, dated: false, icon: kind_icon(&n.kind), node_id: n.node_id.clone(),
@@ -374,6 +384,9 @@ fn level_tiles(state: &ShellModelState, nodes: &[NodeRef], folders: bool, drops:
                 open: Box::new(move || crate::core_ui::bookmark_page::open_kept(&node)) });
             dropping.push(None);
         }
+        if tiles.len() > before {
+            menus.push(node_at(n));
+        }
     }
     let grid = tiles::grid(tiles);
     for (i, target) in dropping.into_iter().enumerate() {
@@ -381,7 +394,22 @@ fn level_tiles(state: &ShellModelState, nodes: &[NodeRef], folders: bool, drops:
             child.add_controller(t);
         }
     }
+    menus_on(&grid, &menus, toasts);
     grid
+}
+
+/// Each tile of [grid] opens the menu of its node in [nodes] (the same order).
+fn menus_on(grid: &gtk::FlowBox, nodes: &[crate::bridge::wire::NodeAt], toasts: &adw::ToastOverlay) {
+    for (i, node) in nodes.iter().enumerate() {
+        if let Some(child) = grid.child_at_index(i as i32) {
+            row_menu(&child, node, toasts);
+        }
+    }
+}
+
+/// An object's node, for its menu.
+fn object_at(r: &ObjectRef) -> crate::bridge::wire::NodeAt {
+    crate::bridge::wire::NodeAt { scope_id: r.scope_id.clone(), node_id: r.node_id.clone(), kind: r.kind.clone(), name: r.name.clone() }
 }
 
 /// An object as a tile: opens in its application; a Memory's second line its date, as its row's.
@@ -436,7 +464,7 @@ fn filter_group(state: &ShellModelState, shown: &ShellShown) -> adw::ToggleGroup
 }
 
 /// An application's own list: Favorites, Recent, then the rest, each where it holds something.
-pub fn list(list: Option<&ArrangedList>, view: ViewModeShown) -> gtk::Widget {
+pub fn list(list: Option<&ArrangedList>, view: ViewModeShown, toasts: &adw::ToastOverlay) -> gtk::Widget {
     let as_tiles = view == ViewModeShown::Tiles;
     let (scroll, content) = column(as_tiles);
     let Some(l) = list.filter(|l| !(l.favorites.is_empty() && l.recent.is_empty() && l.all.is_empty())) else {
@@ -452,12 +480,16 @@ pub fn list(list: Option<&ArrangedList>, view: ViewModeShown) -> gtk::Widget {
             group.set_title(&t);
         }
         if as_tiles {
-            group.add(&tiles::grid(refs.iter().map(object_tile).collect()));
+            let grid = tiles::grid(refs.iter().map(object_tile).collect());
+            menus_on(&grid, &refs.iter().map(object_at).collect::<Vec<_>>(), toasts);
+            group.add(&grid);
             content.append(&group);
             continue;
         }
         for r in refs {
-            group.add(&object_row(r));
+            let row = object_row(r);
+            row_menu(&row, &object_at(r), toasts);
+            group.add(&row);
         }
         content.append(&group);
     }

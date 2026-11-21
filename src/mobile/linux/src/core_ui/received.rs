@@ -286,8 +286,8 @@ impl ReceivedView {
         let new = crate::core_ui::create_action::create_menu(&words::drawer_new(), new_menu.upcast_ref());
         new.set_visible(false);
         new.set_widget_name("guest-new");
-        let save = icon_button(crate::core_ui::header::icon_of("download"), &words::node_download(), "received.save");
-        let replace = icon_button(crate::core_ui::header::icon_of("replace"), &words::depot_replace(), "received.replace");
+        let save = icon_button(crate::core_ui::header::icon_of(crate::bridge::wire::HeaderAction::Download), &words::node_download(), "received.save");
+        let replace = icon_button(crate::core_ui::header::icon_of(crate::bridge::wire::HeaderAction::Replace), &words::depot_replace(), "received.replace");
         replace.set_widget_name("guest-replace");
         let header = adw::HeaderBar::new();
         header.set_title_widget(Some(&title));

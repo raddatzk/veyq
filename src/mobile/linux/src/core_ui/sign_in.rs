@@ -3,8 +3,12 @@
 //! to stay signed in ([Offer]) — drawn as GNOME draws a form: a clamped boxed list of rows and one suggested button. The
 //! person's input goes to the core as one call; the core decides what it means and answers with the next gate.
 //!
-//! The sign-in also takes the Emergency Kit (en.account.key-model § The Emergency Kit): "Open Emergency Kit" under the
-//! Secret Key row picks the file (GTK's open dialog, PDFs and pictures) and hands the core its path
+//! Under the fields stand the core's entries (`SignIn.Plan`, ADR 0154 decision 2), each drawn, in their order: Sign in
+//! first, Cancel while another account is being added, the device links, the kit, *Open a link* — the buttons as GNOME
+//! draws a form's (a suggested pill, a flat one), the rest as button rows in a boxed list. The plan is asked again when
+//! adding changes and once the Camera portal said whether a camera is (the scans are entries only where one may be).
+//!
+//! The sign-in also takes the Emergency Kit (en.account.key-model § The Emergency Kit): "Open Emergency Kit" picks the file (GTK's open dialog, PDFs and pictures) and hands the core its path
 //! (`Session.SignInKit`), which reads it and asks this side to draw its pages ([crate::core_ui::kit_drawing]); "Scan Emergency
 //! Kit" beside it, only where the Camera portal names a camera, scans its code ([crate::core_ui::qr_camera], kind `KIT`). Either
 //! way the gate's `kit` fills the email and the server and the Secret Key row says "From your Emergency Kit" — the key
@@ -19,7 +23,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::glib;
 
-use crate::bridge::{self, wire::Answer, wire::Call, wire::Gate, wire::KitShown, wire::Method, wire::ScanKind, wire::ScanShown, wire::ScanState, wire::StaySignedIn, wire::Why};
+use crate::bridge::{self, wire::Answer, wire::Call, wire::Gate, wire::KitShown, wire::Method, wire::ScanKind, wire::ScanShown, wire::ScanState, wire::SignInEntry, wire::StaySignedIn, wire::Why};
 use crate::core_ui::qr_camera::ScanView;
 use crate::core_ui::dev_login::DevSignIn;
 use crate::core_ui::{said, theme, words};
@@ -89,9 +93,15 @@ pub struct SignIn {
     kit_row: adw::ActionRow,
     open_kit: adw::ButtonRow,
     scan_kit: adw::ButtonRow,
-    /// The two device-linking entries; the scan only where a camera is.
+    /// The two device-linking entries.
     link_scan: adw::ButtonRow,
     link_show: adw::ButtonRow,
+    open_link: adw::ButtonRow,
+    /// Where the plan's entries are drawn, under the fields.
+    entries: gtk::Box,
+    /// What the plan was last asked with: adding another account (none before the first gate), a camera possible.
+    asked: Cell<Option<bool>>,
+    camera: Cell<bool>,
     /// The kit's server replaced a different one the form held: said, never refused.
     other_server: gtk::Label,
     /// The kit the form last showed, so a new one fills the email and the server once.
@@ -120,21 +130,19 @@ impl SignIn {
         kit_row.add_suffix(&clear);
         // the file first on a desktop (the kit CR's owner question 1); the scan only where there is a camera
         let open_kit = adw::ButtonRow::builder().title(words::signin_kit_open()).start_icon_name("document-open-symbolic").build();
-        let scan_kit = adw::ButtonRow::builder().title(words::signin_kit_scan()).start_icon_name("camera-photo-symbolic").visible(false).build();
+        let scan_kit = adw::ButtonRow::builder().title(words::signin_kit_scan()).start_icon_name("camera-photo-symbolic").build();
 
         let fields = adw::PreferencesGroup::new();
-        for row in [server.upcast_ref::<gtk::Widget>(), email.upcast_ref(), password.upcast_ref(), secret_key.upcast_ref(), kit_row.upcast_ref(), open_kit.upcast_ref(), scan_kit.upcast_ref()] {
+        for row in [server.upcast_ref::<gtk::Widget>(), email.upcast_ref(), password.upcast_ref(), secret_key.upcast_ref(), kit_row.upcast_ref()] {
             fields.add(row);
         }
-        let link_scan = adw::ButtonRow::builder().title(words::signin_link_scan()).start_icon_name("camera-photo-symbolic").visible(false).build();
+        let link_scan = adw::ButtonRow::builder().title(words::signin_link_scan()).start_icon_name("camera-photo-symbolic").build();
         let link_show = adw::ButtonRow::builder().title(words::signin_link_show()).build();
         // *Open a link* under the sign-in (ADR 0150 decision 4): a received link needs no session (`win.open-link`)
         let open_link = adw::ButtonRow::builder().title(words::link_open()).start_icon_name("insert-link-symbolic").action_name("win.open-link").build();
         open_link.set_widget_name("open-link");
-        let links = adw::PreferencesGroup::new();
-        links.add(&link_scan);
-        links.add(&link_show);
-        links.add(&open_link);
+        let entries = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        entries.set_widget_name("signin-entries");
         let other_server = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
         other_server.add_css_class("dim-label");
         // Staying signed in is no longer chosen here: the core offers it after the sign-in (ADR 0123 decision 8), drawn by `Offer`
@@ -142,11 +150,11 @@ impl SignIn {
         let submit = gtk::Button::builder().label(words::signin_submit()).halign(gtk::Align::Center).build();
         submit.add_css_class("suggested-action");
         submit.add_css_class("pill");
-        let cancel = gtk::Button::builder().label(words::signin_cancel()).halign(gtk::Align::Center).visible(false).build();
+        let cancel = gtk::Button::builder().label(words::signin_cancel()).halign(gtk::Align::Center).build();
         cancel.add_css_class("flat");
         let spinner = adw::Spinner::builder().visible(false).build();
         let heading = gtk::Label::new(Some(&words::signin_title()));
-        let page = page(&heading, &[fields.upcast_ref(), other_server.upcast_ref(), error.upcast_ref(), submit.upcast_ref(), cancel.upcast_ref(), spinner.upcast_ref(), links.upcast_ref()]);
+        let page = page(&heading, &[fields.upcast_ref(), other_server.upcast_ref(), error.upcast_ref(), spinner.upcast_ref(), entries.upcast_ref()]);
 
         let s = Rc::new(Self {
             page,
@@ -160,6 +168,10 @@ impl SignIn {
             scan_kit,
             link_scan,
             link_show,
+            open_link,
+            entries,
+            asked: Cell::new(None),
+            camera: Cell::new(false),
             other_server,
             shown_kit: RefCell::new(None),
             submit,
@@ -190,17 +202,75 @@ impl SignIn {
         s.link_show.connect_activated(move |_| if let Some(s) = w.upgrade() {
             s.link(|server| Call::LinkShowForSignIn { server });
         });
-        // the scans' entries only where the Camera portal names a camera (D7: no camera, no entry)
+        // the plan asked again once the Camera portal said whether it names a camera (D7: no camera, no scan entry)
         let w = Rc::downgrade(&s);
         glib::spawn_future_local(async move {
             let present = crate::core_ui::qr_camera::camera_present().await;
-            eprintln!("veyq: the sign-in's kit and link scans {}", if present { "offered" } else { "not offered: no camera" });
+            eprintln!("veyq: the sign-in's camera: {}", if present { "present" } else { "none" });
             if let Some(s) = w.upgrade() {
-                s.scan_kit.set_visible(present);
-                s.link_scan.set_visible(present);
+                s.camera.set(present);
+                s.ask_plan();
             }
         });
         s
+    }
+
+    /// The core's entries for the gate shown and the camera known (`SignIn.Plan`), drawn once answered.
+    fn ask_plan(self: &Rc<Self>) {
+        let Some(adding) = self.asked.get() else { return };
+        let call = Call::SignInPlan { adding, camera: self.camera.get() };
+        let w = Rc::downgrade(self);
+        glib::spawn_future_local(async move {
+            match bridge::call(&call).await.map(|(a, _)| a) {
+                Ok(Answer::SignInPlan { entries }) => {
+                    if let Some(s) = w.upgrade() {
+                        s.draw_entries(&entries);
+                    }
+                }
+                other => eprintln!("veyq: SignIn.Plan answered {other:?}"),
+            }
+        });
+    }
+
+    /// Every entry of the plan, in its order: a button as itself, consecutive rows in one boxed list.
+    fn draw_entries(&self, entries: &[SignInEntry]) {
+        eprintln!("veyq: sign-in entries: {}", entries.iter().map(|e| format!("{e:?}")).collect::<Vec<_>>().join(","));
+        for row in [&self.open_kit, &self.scan_kit, &self.link_scan, &self.link_show, &self.open_link] {
+            if let Some(list) = row.parent().and_downcast::<gtk::ListBox>() {
+                list.remove(row);
+            }
+        }
+        while let Some(child) = self.entries.first_child() {
+            self.entries.remove(&child);
+        }
+        let mut rows: Option<gtk::ListBox> = None;
+        for entry in entries {
+            let row = match entry {
+                SignInEntry::Submit => None,
+                SignInEntry::Cancel => None,
+                SignInEntry::LinkShow => Some(&self.link_show),
+                SignInEntry::LinkScan => Some(&self.link_scan),
+                SignInEntry::KitOpen => Some(&self.open_kit),
+                SignInEntry::KitScan => Some(&self.scan_kit),
+                SignInEntry::OpenLink => Some(&self.open_link),
+            };
+            match row {
+                Some(row) => {
+                    let list = rows.get_or_insert_with(|| {
+                        let list = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
+                        list.add_css_class("boxed-list");
+                        self.entries.append(&list);
+                        list
+                    });
+                    list.append(row);
+                }
+                None => {
+                    rows = None;
+                    let button = if *entry == SignInEntry::Submit { &self.submit } else { &self.cancel };
+                    self.entries.append(button);
+                }
+            }
+        }
     }
 
     /// The sign-in the form holds, sent; while a kit's key is held the Secret Key is sent empty, so the core signs in with it.
@@ -286,8 +356,11 @@ impl SignIn {
 
     /// Draws [gate] (a `Gate.SignIn`): the server and the email it knows, a kit's own replacing them once, the Secret Key
     /// row as typed or as the kit's, working or not, the core's error.
-    pub fn show(&self, gate: &Gate) {
+    pub fn show(self: &Rc<Self>, gate: &Gate) {
         let Gate::SignIn { working, error, server, email, adding, kit } = gate else { return };
+        if self.asked.replace(Some(*adding)) != Some(*adding) {
+            self.ask_plan();
+        }
         let new_kit = kit.is_some() && *self.shown_kit.borrow() != *kit;
         *self.shown_kit.borrow_mut() = kit.clone();
         if let Some(server) = server.as_deref().filter(|_| new_kit || self.server.text().is_empty()) {
@@ -309,7 +382,6 @@ impl SignIn {
             None => self.other_server.set_visible(false),
         }
         self.heading.set_label(&if *adding { words::signin_add_title() } else { words::signin_title() });
-        self.cancel.set_visible(*adding);
         self.cancel.set_sensitive(!working);
         self.submit.set_sensitive(!working);
         self.open_kit.set_sensitive(!working);

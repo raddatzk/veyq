@@ -846,7 +846,7 @@ internal sealed class ShellView
         try
         {
             var named = await Dialogs.AskNamed(_window, "new-folder", Words.FolderNew(), Words.FolderName(), "", Words.FolderCreate(),
-                typed => Dialogs.Named(new Call.ShellCreateFolder { name = typed }, "Shell.CreateFolder"));
+                typed => Dialogs.Named(new Call.ShellCreateFolder { name = typed, top = false }, "Shell.CreateFolder"));
             if (named?.notice is { } n) Say(false, Said.Notice(n));
         }
         catch (Exception e)

@@ -238,8 +238,9 @@ internal class Tenant(
     },
     /** A space's trash sheet (`ShellModel.trashSheet`). */
     val trash: ((scopeId: String) -> TrashSheet)? = shell?.let { s -> { scopeId -> s.trashSheet(scopeId) {} } },
-    /** A new folder where the shell is (`ShellModel.createFolderHere`): the dialog's outcome. */
-    val createFolder: (suspend (name: String) -> me.raddatz.veyq.mobile.navigation.NameAnswer)? = shell?.let { s -> { name -> s.createFolderHere(name) } },
+    /** A new folder where the shell is (`ShellModel.createFolderHere`), or at the space's top ([top]: the drawer's New): the dialog's outcome. */
+    val createFolder: (suspend (name: String, top: Boolean) -> me.raddatz.veyq.mobile.navigation.NameAnswer)? =
+        shell?.let { s -> { name, top -> if (top) s.createFolderAtTop(name) else s.createFolderHere(name) } },
     /**
      * Whether files may be put under a parent (null: the space's top) of a space (`ShellModel.takesUpload`, ADR 0154 decision
      * 1): every upload call judges its target again here, whatever the host's own gate said. Fail-closed: a tenant without a
@@ -1189,7 +1190,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.MoveConfirm -> moves[call.move]?.let { sent(it.confirm()) } ?: noMove
             is Call.MoveCancelConfirm -> moves[call.move]?.cancelConfirm().done(Answer.Why.NO_SUCH_MOVE)
             is Call.MoveUndo -> moves[call.move]?.let { Answer.Said(it.undo()) } ?: noMove
-            is Call.ShellCreateFolder -> tenant.value?.models?.createFolder?.let { named(it(call.name)) } ?: noTenant
+            is Call.ShellCreateFolder -> tenant.value?.models?.createFolder?.let { named(it(call.name, call.top)) } ?: noTenant
             is Call.TrashOpen -> tenant.value?.models?.trash?.let { make ->
                 val id = ids.incrementAndFetch()
                 val sheet = make(call.scopeId)

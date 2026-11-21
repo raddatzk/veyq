@@ -777,6 +777,12 @@ class ShellModel(
         return createFolder(space, s.folder?.nodeId, name)
     }
 
+    /** [createFolder] at the shown space's top, wherever the shell is: the drawer's New ([drawerCreates], ADR 0122 decision 2). */
+    suspend fun createFolderAtTop(name: String): NameAnswer {
+        val space = shell?.space ?: return NameAnswer.said(Notices.folderRefused(null))
+        return createFolder(space, null, name)
+    }
+
     /**
      * Copies [ref] with everything under it (named `duplicate`: a name starting `copy` reaches Swift as `doCopy`) to [to] (null: the space's root) in its space; [deletedName] is how a copied
      * Pot names an erased person; the lists are read anew. Why not, or null once copied.

@@ -1,6 +1,7 @@
 //! The shell (ADR 0122; ADR 0123's Consequences, the Linux app), GNOME's way: an `AdwNavigationSplitView` whose sidebar is an
 //! `AdwSidebar` — Home, Favorites, Recent, the applications, each only when it lists something — under a header bar whose title is the one switcher (the
-//! space shown, its tenant and server; spaces and tenants in its menu), with New beside it and Search under it (Ctrl+F,
+//! space shown, its tenant and server; spaces and tenants in its menu), with the drawer's New beside it (`DrawerSection.NEW`,
+//! made at the space's top) and Search under it (Ctrl+F,
 //! [crate::core_ui::search]: while something is asked, its list is the sidebar's place), and Settings pinned at its foot; the switcher shows the signed-in member's picture beside the tenant. The content
 //! side shows what the core's shell says is open: Home, an application's list (with what the application registered
 //! around it, [ApplicationList]), an object's page — the body its kind's application registered ([registry]: a Pot's,
@@ -8,7 +9,9 @@
 //! frame, its header above it and the page's own creating action at the header bar's start ([Frame]) —, or an object
 //! this app does not draw yet. Refresh (F5, Ctrl+R) reads an open page anew where it reads itself (a Pot, a Memory),
 //! else the shell's lists (a guest's new folder, another device's upload); a space's top
-//! level offers its share, "Add files only" ([crate::core_ui::share_sheet::open_top_level]), beside it. Below 600sp the split view collapses
+//! level offers its share, "Add files only" ([crate::core_ui::share_sheet::open_top_level]), beside it. A level draws its
+//! plan (`ShellShown.level`, ADR 0154 decision 2): its New at the content header bar's start, its tools — the space's
+//! trash, the view switch — in their order at its end. Below 600sp the split view collapses
 //! to a navigation stack. A list keeps where it was scrolled to when the shell draws it anew — after an object opened from
 //! it closed, after an update — by its place ([ListScrolls]).
 //!
@@ -28,7 +31,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::DrawerSection, wire::Facts, wire::ObjectRef, wire::QueuedOpen, wire::ShellModelState, wire::ShellShown, wire::ViewModeShown};
+use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::DrawerSection, wire::Facts, wire::LevelTool, wire::ObjectRef, wire::QueuedOpen, wire::ShellModelState, wire::ShellShown, wire::ShownCreate, wire::ViewModeShown};
 use crate::core_ui::bookmark_page::BookmarkPage;
 use crate::core_ui::person_page::PersonPage;
 use crate::core_ui::music_bar::MusicBar;
@@ -64,7 +67,14 @@ pub struct Shell {
     switcher_title: adw::WindowTitle,
     me: adw::Avatar,
     switching: adw::Spinner,
+    /// The drawer's New (`DrawerSection.NEW`, `ShellShown.drawerCreates`): beside the switcher, made at the space's top.
     new: gtk::MenuButton,
+    /// The level's New (`ShellShown.level.creates`): at the content header bar's start, made where the level is.
+    level_new: gtk::MenuButton,
+    /// The level's tools (`ShellShown.level.tools`), in their order at the content header bar's end.
+    level_tools: gtk::Box,
+    /// The space's trash among them (`LevelTool.TRASH`).
+    trash_button: gtk::Button,
     space_action: gio::SimpleAction,
     tenant_action: gio::SimpleAction,
     /// The search over every space ([Search]): its bar under the sidebar's title, its list in [sidebar_place].
@@ -83,7 +93,7 @@ pub struct Shell {
     /// The space's top level's share, "Add files only", shown where the core offers it (`ShellShown.topLevelShare`).
     top_share: gtk::Button,
     /// A level's view (ADR 0149 decision 8), Files' way: one header bar button showing the view it turns to — tiles from the
-    /// list, the list from tiles (`View.Set`, the account's choice on this device). Shown on a level that offers both.
+    /// list, the list from tiles (`View.Set`, the account's choice on this device). A level tool (`LevelTool.VIEW`).
     view_toggle: gtk::Button,
     /// The open page's own creating action's place, after the back (a Pot's "Add entry", a Memory's "Add chapter"):
     /// the page fills it ([Frame::start]), the shell empties it when the page goes.
@@ -190,9 +200,18 @@ impl Shell {
         let top_share = gtk::Button::builder().icon_name("send-to-symbolic").tooltip_text(words::share_role_uploader()).visible(false).build();
         top_share.update_property(&[gtk::accessible::Property::Label(&words::share_role_uploader())]);
         content_header.pack_end(&top_share);
-        let view_toggle = gtk::Button::builder().icon_name("view-grid-symbolic").visible(false).build();
+        // the level's tools, in the plan's order (`level_tools`); its New at the start, after the page's own place
+        let level_tools = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        content_header.pack_end(&level_tools);
+        let view_toggle = gtk::Button::builder().icon_name("view-grid-symbolic").build();
         view_toggle.set_widget_name("view-toggle");
-        content_header.pack_end(&view_toggle);
+        let trash_button = gtk::Button::builder().icon_name("user-trash-symbolic").tooltip_text(words::trash_title()).action_name("win.trash").build();
+        trash_button.update_property(&[gtk::accessible::Property::Label(&words::trash_title())]);
+        trash_button.set_widget_name("level-trash");
+        let level_new = create_action::create_menu(&words::drawer_new(), gio::Menu::new().upcast_ref());
+        level_new.set_widget_name("level-new");
+        level_new.set_visible(false);
+        content_header.pack_start(&level_new);
         let refresh_action = gio::SimpleAction::new("pot-refresh", None);
         window.add_action(&refresh_action);
         let content_view = adw::ToolbarView::new();
@@ -246,6 +265,9 @@ impl Shell {
             me,
             switching,
             new,
+            level_new,
+            level_tools,
+            trash_button,
             space_action,
             tenant_action,
             search,
@@ -315,7 +337,7 @@ impl Shell {
             eprintln!("veyq: view set {mode:?}");
             bridge::send(Call::ViewSet { mode });
         });
-        // the open page's own actions, the header's own (`header::action_of`: a Pot's download, a file's Save a copy and
+        // the open page's own actions, the header's own (`header::doer`: a Pot's download, a file's Save a copy and
         // Replace, a gallery's Add photos and music), each as its kind registered it
         for name in registry().actions() {
             let action = gio::SimpleAction::new(name, None);
@@ -330,11 +352,11 @@ impl Shell {
         }
         // New's "Upload files" and "Upload folder…" into the level shown (`uploads`)
         for (name, folder) in [("upload-files", false), ("upload-folder", true)] {
-            let action = gio::SimpleAction::new(name, None);
+            let action = gio::SimpleAction::new(name, Some(glib::VariantTy::BOOLEAN));
             let weak = Rc::downgrade(self);
-            action.connect_activate(move |_, _| {
+            action.connect_activate(move |_, top| {
                 let Some(s) = weak.upgrade() else { return };
-                let Some(level) = s.level() else { return };
+                let Some(level) = s.creates_in(top) else { return };
                 if folder {
                     uploads::pick_folder(s.window.upcast_ref(), level, &s.toasts);
                 } else {
@@ -365,49 +387,18 @@ impl Shell {
             }
         });
 
-        // "Available offline", a check item whose state the header sets from the core's (`header`): activated, the core
-        // toggles it (on asks first), the state follows the core's answer, never the click
-        let offline = gio::SimpleAction::new_stateful("header-offline", None, &false.to_variant());
+        // the header's entries are its own group's (`header`); New's folder (`Shell.CreateFolder`, at the space's top from
+        // the drawer's New), named in an alert dialog that asks again with the core's problem
+        let create_folder = gio::SimpleAction::new("create-folder", Some(glib::VariantTy::BOOLEAN));
         let weak = Rc::downgrade(self);
-        offline.connect_activate(move |_, _| {
+        create_folder.connect_activate(move |_, top| {
             let Some(s) = weak.upgrade() else { return };
-            if let Some(h) = s.header.borrow().as_ref() {
-                h.offline();
-            }
-        });
-        window.add_action(&offline);
-        // the header's actions, on the node on screen (`header`)
-        for id in ["favorite", "share", "rename", "delete", "move", "copy", "download", "report", "cover"] {
-            let action = gio::SimpleAction::new(&format!("header-{id}"), None);
-            let weak = Rc::downgrade(self);
-            action.connect_activate(move |_, _| {
-                let Some(s) = weak.upgrade() else { return };
-                let held = s.header.borrow();
-                let Some(h) = held.as_ref() else { return };
-                match id {
-                    "favorite" => h.pin(),
-                    "share" => h.share(&s.window),
-                    "rename" => h.rename(&s.window),
-                    "move" => h.move_sheet(&s.window, false),
-                    "copy" => h.move_sheet(&s.window, true),
-                    "download" => h.download(s.window.upcast_ref()),
-                    "report" => h.report(&s.window),
-                    "cover" => h.cover(&s.window),
-                    _ => h.delete(&s.window),
-                }
-            });
-            window.add_action(&action);
-        }
-        // New's folder (`Shell.CreateFolder`), named in an alert dialog that asks again with the core's problem
-        let create_folder = gio::SimpleAction::new("create-folder", None);
-        let weak = Rc::downgrade(self);
-        create_folder.connect_activate(move |_, _| {
-            let Some(s) = weak.upgrade() else { return };
+            let top = top.and_then(|v| v.get::<bool>()).unwrap_or(false);
             let toasts = s.toasts.clone();
             header::ask_name(s.window.upcast_ref(), &words::folder_new(), &words::folder_name(), "", None, &words::folder_create(), move |name, again| {
                 let toasts = toasts.clone();
                 glib::spawn_future_local(async move {
-                    match bridge::call(&Call::ShellCreateFolder { name: name.clone() }).await.map(|(a, _)| a) {
+                    match bridge::call(&Call::ShellCreateFolder { name: name.clone(), top }).await.map(|(a, _)| a) {
                         Ok(Answer::Named { problem: Some(p), .. }) => {
                             eprintln!("veyq: new folder: {}", p.msg);
                             again(name, said::notice(&p));
@@ -423,26 +414,26 @@ impl Shell {
         // New's creates an application draws its own dialog for (`win.create-pot`, `win.create-memory`), over the window and
         // the level shown
         for c in registry().applications().iter().flat_map(|a| a.creates.iter()) {
-            let action = gio::SimpleAction::new(c.action, None);
+            let action = gio::SimpleAction::new(c.action, Some(glib::VariantTy::BOOLEAN));
             let (weak, open) = (Rc::downgrade(self), c.open);
-            action.connect_activate(move |_, _| {
+            action.connect_activate(move |_, top| {
                 if let Some(s) = weak.upgrade() {
-                    open(s.window.upcast_ref(), &s.toasts, s.level());
+                    open(s.window.upcast_ref(), &s.toasts, s.creates_in(top));
                 }
             });
             window.add_action(&action);
         }
         // New → Bookmark (ADR 0150 decision 6): its dialog keeps the link where New is
-        let create_bookmark = gio::SimpleAction::new("create-bookmark", None);
+        let create_bookmark = gio::SimpleAction::new("create-bookmark", Some(glib::VariantTy::BOOLEAN));
         let weak = Rc::downgrade(self);
-        create_bookmark.connect_activate(move |_, _| {
+        create_bookmark.connect_activate(move |_, top| {
             let Some(s) = weak.upgrade() else { return };
-            let Some(level) = s.level() else { return };
+            let Some(level) = s.creates_in(top) else { return };
             // the bookmark made shows in the level read anew (the core forgot its tree)
             crate::core_ui::bookmark_create::open(&s.window, level.scope_id, level.parent_id, |_| bridge::send(Call::ShellRefresh));
         });
         window.add_action(&create_bookmark);
-        // the space's trash, from the switcher's menu (`trash`)
+        // the space's trash, a level's tool (`LevelTool.TRASH`, `trash`)
         let open_trash = gio::SimpleAction::new("trash", None);
         let weak = Rc::downgrade(self);
         open_trash.connect_activate(move |_, _| {
@@ -509,6 +500,16 @@ impl Shell {
     }
 
     /// The level shown, where New's uploads go: its space, the folder there (none: its top), the name the queue labels it by.
+    /// Where a New's entry makes what it makes: the level shown, or — the drawer's New ([top] true) — the space's top.
+    fn creates_in(&self, top: Option<&glib::Variant>) -> Option<uploads::Level> {
+        let level = self.level()?;
+        if !top.and_then(|v| v.get::<bool>()).unwrap_or(false) {
+            return Some(level);
+        }
+        let space = self.now.borrow().as_ref().map(|(_, shown)| said::piece(&shown.space_name)).unwrap_or_default();
+        Some(uploads::Level { scope_id: level.scope_id, parent_id: None, label: space })
+    }
+
     fn level(&self) -> Option<uploads::Level> {
         let now = self.now.borrow();
         let (state, shown) = now.as_ref()?;
@@ -621,10 +622,6 @@ impl Shell {
             tenants.append_item(&item);
         }
         menu.append_section(None, &tenants);
-        // the space's trash (`trash.rs`)
-        let space_menu = gio::Menu::new();
-        space_menu.append(Some(&words::trash_title()), Some("win.trash"));
-        menu.append_section(None, &space_menu);
         // "Manage servers" (the window's `win.manage`, `manage.rs`); *Open a link* is the sign-in's alone (owner 2026-11-19)
         let manage = gio::Menu::new();
         manage.append(Some(&words::switcher_manage()), Some("win.manage"));
@@ -634,30 +631,9 @@ impl Shell {
         self.tenant_action.set_state(&format!("{}\n{}", shown.connection, shown.tenant.tenant_id).to_variant());
     }
 
-    /// New: what the core offers where the shell is (`AppKinds.createsWhere`: on Home a folder, a Pot, files and a folder
-    /// uploaded; elsewhere a folder and a Pot) where it may create (`canCreateHere`).
+    /// The drawer's New (`DrawerSection.NEW`): hidden until the sidebar's plan names it ([Shell::draw_sidebar]).
     fn draw_new(&self) {
-        let now = self.now.borrow();
-        let Some((state, shown)) = now.as_ref() else { return };
-        let menu = gio::Menu::new();
-        for c in &shown.creates {
-            let action = match c.create {
-                Create::Folder => "win.create-folder".to_owned(),
-                Create::UploadFiles => "win.upload-files".to_owned(),
-                Create::UploadFolder => "win.upload-folder".to_owned(),
-                Create::Bookmark => "win.create-bookmark".to_owned(),
-                // an application's own dialog where it registered one (a Pot, a Memory); a chapter is a Memory's page's
-                // own (its "Add chapter"), never a level's
-                other => match registry().create(other) {
-                    Some(dialog) => format!("win.{}", dialog.action),
-                    None => continue,
-                },
-            };
-            menu.append(Some(&said::key(&c.word)), Some(&action));
-        }
-        self.new.set_menu_model(Some(&menu));
-        // a person's profile creates nothing, nor does a kept link's page
-        self.new.set_visible(shown.can_create_here && state.shell.person.is_none() && state.shell.bookmark.is_none());
+        self.new.set_visible(false);
     }
 
     fn draw_sidebar(&self) {
@@ -686,16 +662,22 @@ impl Shell {
         for kind in &shown.drawer_sections {
             let section = adw::SidebarSection::new();
             match kind {
-                // the drawer's New stands in the sidebar's header until this app draws the plan whole
-                // (cr-apps-structure-from-core-plans phase 6)
-                DrawerSection::New => continue,
-                DrawerSection::Favorites | DrawerSection::Recent => {
-                    let (title, refs) = match kind {
-                        DrawerSection::Favorites => (words::drawer_favorites(), &state.lists.drawer.favorites),
-                        _ => (words::drawer_recent(), &state.lists.drawer.recent),
-                    };
-                    section.set_title(Some(&title));
-                    for r in refs {
+                // the drawer's New, below the switcher: the "+" at the sidebar header's start (GNOME's creating action),
+                // what it makes landing at the space's top
+                DrawerSection::New => {
+                    self.new.set_menu_model(Some(&creates_menu(&shown.drawer_creates, true)));
+                    self.new.set_visible(true);
+                    continue;
+                }
+                DrawerSection::Favorites => {
+                    section.set_title(Some(&words::drawer_favorites()));
+                    for r in &state.lists.drawer.favorites {
+                        add(&section, &r.name, kind_icon(&r.kind), Some(Target::Object(r.clone())), opened(r));
+                    }
+                }
+                DrawerSection::Recent => {
+                    section.set_title(Some(&words::drawer_recent()));
+                    for r in &state.lists.drawer.recent {
                         add(&section, &r.name, kind_icon(&r.kind), Some(Target::Object(r.clone())), opened(r));
                     }
                 }
@@ -734,6 +716,11 @@ impl Shell {
             let later = registry().page(&node.kind).is_some_and(|p| p.facts_later);
             let facts = (!later).then_some(Facts { can_write: true, has_content: true });
             let header = Header::open(node, facts, &self.header_bar, &self.toasts);
+            // a kept link's page already open (its header opened anew: renamed): its model's id joins the new header
+            let kept = self.bookmark.borrow().as_ref().filter(|p| crate::core_ui::bookmark_page::same_node(&p.node, node)).and_then(BookmarkPage::id);
+            if let Some(bookmark) = kept {
+                header.facts(Some(Facts { can_write: true, has_content: true }), None, None, Some(bookmark));
+            }
             // a held rename opened: its node's rename asks again with the name the person gave offline
             let pending = self.pending_rename.borrow().as_ref().filter(|(id, _)| *id == node.node_id).map(|(_, name)| name.clone());
             if let Some(name) = pending {
@@ -832,7 +819,6 @@ impl Shell {
         if shell.bookmark.is_none() {
             self.bookmark.borrow_mut().take();
         }
-        let mut instead = false;
         let body: gtk::Widget = if let Some(node) = &shell.bookmark {
             // a kept link's page (ADR 0150 decision 6, #1032): its body here, core's header above it, the shell's back out
             self.drop_page();
@@ -840,7 +826,15 @@ impl Shell {
             let mut page = self.bookmark.borrow_mut();
             if page.as_ref().is_none_or(|p| !crate::core_ui::bookmark_page::same_node(&p.node, node)) {
                 *page = None;
-                *page = Some(BookmarkPage::open(node, self.window.upcast_ref()));
+                // the page's model's id joins its header: the kept link's own entries are done through it
+                let held = Rc::downgrade(&self.header);
+                *page = Some(BookmarkPage::open(node, self.window.upcast_ref(), move |bookmark| {
+                    if let Some(held) = held.upgrade()
+                        && let Some(h) = held.borrow().as_ref()
+                    {
+                        h.facts(Some(Facts { can_write: true, has_content: true }), None, None, Some(bookmark));
+                    }
+                }));
             }
             page.as_ref().expect("set above").widget().clone().upcast()
         } else if let Some(user) = &shell.person {
@@ -873,16 +867,13 @@ impl Shell {
                 self.drop_page();
                 let held = self.app_list.borrow();
                 match held.as_ref().and_then(|(_, l)| l.instead(shown, self.window.upcast_ref())) {
-                    Some(own) => {
-                        instead = true;
-                        own
-                    }
+                    Some(own) => own,
                     None => {
                         let list = if shell.application.is_some() {
-                            home::list(shown.list.as_ref(), shown.view)
+                            home::list(shown.list.as_ref(), shown.view, &self.toasts)
                         } else {
                             // a folder's level starts with its head, as an object's page (none on a space's root)
-                            home::home(state, shown, Some(&self.drops()), self.header.borrow().as_ref().map(Header::hero))
+                            home::home(state, shown, Some(&self.drops()), self.header.borrow().as_ref().map(Header::hero), &self.toasts)
                         };
                         if let Some(scroll) = list.downcast_ref::<gtk::ScrolledWindow>() {
                             self.scrolls.keep(scroll, ListScrolls::place(state));
@@ -898,19 +889,7 @@ impl Shell {
         let refreshes = self.page.borrow().as_ref().and_then(|(r, _)| registry().page(&r.kind)).is_some_and(|p| p.refreshes);
         self.refresh.set_visible(refreshes);
         self.top_share.set_visible(shown.top_level_share);
-        // a level's view: where a level shows (no object, no person, no application's own page instead, the bar's Map tab)
-        // and it offers another
-        let level = shell.person.is_none() && shell.bookmark.is_none() && shell.open_object.is_none() && !instead;
-        match other_view(shown).filter(|_| level) {
-            Some(to) => {
-                let (icon, label) = if to == ViewModeShown::Tiles { ("view-grid-symbolic", words::node_view_grid_label()) } else { ("view-list-symbolic", words::node_view_list_label()) };
-                self.view_toggle.set_icon_name(icon);
-                self.view_toggle.set_tooltip_text(Some(&label));
-                self.view_toggle.update_property(&[gtk::accessible::Property::Label(&label)]);
-                self.view_toggle.set_visible(true);
-            }
-            None => self.view_toggle.set_visible(false),
-        }
+        self.draw_level(shown);
         if self.content_view.content().as_ref() != Some(&body) {
             self.content_view.set_content(Some(&body));
         }
@@ -918,6 +897,39 @@ impl Shell {
 }
 
 impl Shell {
+    /// The level's plan (`ShellShown.level`; none where no level shows — an object, a person, a kept link): its New at the
+    /// content header bar's start, its tools at its end, each entry in its order.
+    fn draw_level(&self, shown: &ShellShown) {
+        while let Some(child) = self.level_tools.first_child() {
+            self.level_tools.remove(&child);
+        }
+        let Some(level) = shown.level.as_ref() else {
+            self.level_new.set_visible(false);
+            return;
+        };
+        self.level_new.set_menu_model(Some(&creates_menu(&level.creates, false)));
+        self.level_new.set_visible(!level.creates.is_empty());
+        for tool in &level.tools {
+            match tool {
+                LevelTool::Trash => self.level_tools.append(&self.trash_button),
+                LevelTool::View => {
+                    // the button shows the view it turns to (Files' way); a level offering one view has nothing to turn to
+                    let to = other_view(shown);
+                    let (icon, label) = if to == Some(ViewModeShown::Tiles) || (to.is_none() && shown.view == ViewModeShown::Tiles) {
+                        ("view-grid-symbolic", words::node_view_grid_label())
+                    } else {
+                        ("view-list-symbolic", words::node_view_list_label())
+                    };
+                    self.view_toggle.set_icon_name(icon);
+                    self.view_toggle.set_tooltip_text(Some(&label));
+                    self.view_toggle.update_property(&[gtk::accessible::Property::Label(&label)]);
+                    self.view_toggle.set_sensitive(to.is_some());
+                    self.level_tools.append(&self.view_toggle);
+                }
+            }
+        }
+    }
+
     /// The frame an object's page opens in: the window, the toasts, the content's navigation, the header bar's start, the
     /// header told what the page read, the line under the title.
     fn frame(&self) -> Frame {
@@ -932,7 +944,7 @@ impl Shell {
                 if let Some(held) = held.upgrade()
                     && let Some(h) = held.borrow().as_ref()
                 {
-                    h.facts(facts, file, gallery);
+                    h.facts(facts, file, gallery, None);
                     return true;
                 }
                 false
@@ -958,6 +970,33 @@ impl Shell {
         }
         self.content_title.set_subtitle("");
     }
+}
+
+/// New's menu of [creates], each entry its window action — made where the level is, or ([top]: the drawer's New) at the
+/// space's top.
+fn creates_menu(creates: &[ShownCreate], top: bool) -> gio::Menu {
+    let menu = gio::Menu::new();
+    for c in creates {
+        let action = match c.create {
+            Create::Folder => "win.create-folder".to_owned(),
+            Create::UploadFiles => "win.upload-files".to_owned(),
+            Create::UploadFolder => "win.upload-folder".to_owned(),
+            Create::Bookmark => "win.create-bookmark".to_owned(),
+            // an application's own dialog (a Pot, a Memory; a chapter is a Memory's page's own and never a level's): the
+            // action its application registered for it
+            Create::Pot | Create::Memory | Create::Chapter => match registry().create(c.create) {
+                Some(dialog) => format!("win.{}", dialog.action),
+                None => {
+                    eprintln!("veyq: New's {:?}: no application registered its dialog", c.create);
+                    continue;
+                }
+            },
+        };
+        let item = gio::MenuItem::new(Some(&said::key(&c.word)), None);
+        item.set_action_and_target_value(Some(&action), Some(&top.to_variant()));
+        menu.append_item(&item);
+    }
+    menu
 }
 
 /// The view a level's toggle turns to: the other of the two it offers (`ShellShown.views`), none where it offers one.
