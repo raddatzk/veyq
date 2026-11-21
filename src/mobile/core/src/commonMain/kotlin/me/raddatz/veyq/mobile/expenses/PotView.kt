@@ -521,7 +521,11 @@ class PotView(session: Source) {
 
     /** An entry row with its line and badge. */
     @Serializable
-    class ShownEntry(val row: EntryRow, val line: List<Piece>, val badge: Badge?, val unsentMark: Notice? = null)
+    class ShownEntry(
+        val row: EntryRow, val line: List<Piece>, val badge: Badge?, val unsentMark: Notice? = null,
+        /** [row]'s amount in the Pot's currency as a bridge host shows it (ADR 0154 decision 5). */
+        val amountText: me.raddatz.veyq.mobile.words.ShownText? = null,
+    )
 
     /** A balance row with its person's name as a row shows it ([person]), its words and what makes it. */
     @Serializable
@@ -529,11 +533,11 @@ class PotView(session: Source) {
 
     /** A settle-up row with its sentence. */
     @Serializable
-    class ShownSettle(val row: SettleRow, val pays: Notice)
+    class ShownSettle(val row: SettleRow, val pays: Notice, val amountText: me.raddatz.veyq.mobile.words.ShownText? = null)
 
     /** A category's total with its name. */
     @Serializable
-    class ShownCategory(val row: CategoryRow, val label: Piece)
+    class ShownCategory(val row: CategoryRow, val label: Piece, val amountText: me.raddatz.veyq.mobile.words.ShownText? = null)
 
     /** One of the Settings tab's people with their facts. */
     @Serializable
@@ -569,18 +573,23 @@ class PotView(session: Source) {
         val offersEntries: Boolean = false,
         /** A settle-up row's *Record* is offered ([canRecord]): never offline. */
         val canRecord: Boolean = false,
-    )
+    ) {
+        /** [total] in [currency] as a bridge host shows it (ADR 0154 decision 5). */
+        val totalText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.money(total, currency, minorUnits)
+    }
+
+    private fun amountText(amount: Long?) = amount?.let { me.raddatz.veyq.mobile.words.ShownText.money(it, currency, minorUnits) }
 
     /** What this view shows ([Shown]). */
     fun shown(): Shown = Shown(
         name, subtitle, currency, minorUnits, ready, canWrite,
-        entries.map { ShownEntry(it, line(it), badge(it), unsentMark(it)) },
-        deletedEntries.map { ShownEntry(it, line(it), null) },
+        entries.map { ShownEntry(it, line(it), badge(it), unsentMark(it), amountText(it.amount)) },
+        deletedEntries.map { ShownEntry(it, line(it), null, amountText = amountText(it.amount)) },
         balances.map { ShownBalance(it, person(it.name), balance(it), balanceFacts(it)) },
-        settleUp.map { ShownSettle(it, pays(it)) },
+        settleUp.map { ShownSettle(it, pays(it), amountText(it.amount)) },
         canRecordAll,
         total,
-        byCategory.map { ShownCategory(it, categoryLabel(it.id)) },
+        byCategory.map { ShownCategory(it, categoryLabel(it.id), amountText(it.amount)) },
         personEntries.map { ShownPerson(it, personFacts(it)) },
         deletedPeople,
         missing.map(::missingName),

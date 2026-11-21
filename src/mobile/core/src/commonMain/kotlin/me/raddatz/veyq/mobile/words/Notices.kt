@@ -79,6 +79,8 @@ enum class NoticeKind {
         private val SAID_WORDS = setOf(
             Msg.COPY_DONE, Msg.MOVE_MOVED, Msg.DOWNLOAD_DONE, Msg.DOWNLOAD_CANCELLED, Msg.IMPORT_IMPORTED,
             Msg.IMPORT_IMPORTED_LEFT_OUT, Msg.OFFLINE_SENT,
+            // the desktops' own toasts (cr-apps-notices-and-formats-from-the-core phase 7)
+            Msg.PROFILE_SAVED, Msg.RECEIPTS_SAVED, Msg.LINK_KEPT,
         )
 
         /** The words that offer an undo (the web's `showUndo`). */
@@ -520,4 +522,41 @@ object WireWords {
             override fun deserialize(decoder: Decoder): Marker = throw SerializationException("never read")
         }
     }
+}
+
+/**
+ * A value a view shows — a size, a day, a moment, a Memory's days, an amount, a length —, carried over a bridge as the
+ * text [Shown] writes for it in the language of the encoder's [WireWords.module] (ADR 0154 decision 5): a bridge host
+ * reads a string and formats none. Beside a raw value a host still needs for itself (a calendar's day, a scale's range),
+ * or in place of one it only showed. Read back (a test's round trip) it is the text it was written as.
+ */
+@Serializable(with = ShownTextSerializer::class)
+class ShownText private constructor(private val write: (language: String) -> String) {
+    /** The text in [language] (`en`, `de`). */
+    fun text(language: String): String = write(language)
+
+    override fun equals(other: Any?) = other is ShownText && other.text("en") == text("en") && other.text("de") == text("de")
+    override fun hashCode() = text("en").hashCode()
+    override fun toString() = "ShownText(${text("en")})"
+
+    companion object {
+        fun size(bytes: Long) = ShownText { Shown.size(bytes, it) }
+        fun day(iso: String) = ShownText { Shown.day(iso, it) }
+        fun day(epochDay: Long) = ShownText { Shown.day(epochDay, it) }
+        fun dayOf(instant: String) = ShownText { Shown.dayOf(instant, it) }
+        fun moment(epochMs: Long) = ShownText { Shown.moment(epochMs, it) }
+        fun moment(instant: String) = ShownText { Shown.moment(instant, it) }
+        fun memoryDay(iso: String) = ShownText { Shown.memoryDay(iso, it) }
+        fun dayRange(from: String, to: String?) = ShownText { Shown.dayRange(from, to, it) }
+        fun money(amount: Long, currency: String?, minorUnits: Int) = ShownText { Shown.money(amount, currency, minorUnits, it) }
+        fun length(ms: Long) = ShownText { Shown.length(ms) }
+        fun written(text: String) = ShownText { text }
+    }
+}
+
+/** [ShownText] on the wire: its text in the encoder's language, a plain string. */
+object ShownTextSerializer : KSerializer<ShownText> {
+    override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("me.raddatz.veyq.mobile.words.ShownText", PrimitiveKind.STRING)
+    override fun serialize(encoder: Encoder, value: ShownText) = encoder.encodeString(value.text(WireWords.languageOf(encoder)))
+    override fun deserialize(decoder: Decoder): ShownText = ShownText.written(decoder.decodeString())
 }

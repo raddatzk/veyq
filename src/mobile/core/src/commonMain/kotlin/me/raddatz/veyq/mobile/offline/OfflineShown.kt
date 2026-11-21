@@ -55,7 +55,10 @@ data class OfflineItem(
     val status: OfflineStatus,
     val said: Notice?,
     val bytes: Long,
-)
+) {
+    /** [bytes] as a bridge host shows them (ADR 0154 decision 5). */
+    val bytesText: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.size(bytes)
+}
 
 /** The unit of the Settings section's free size field: decimal, as the platforms' file sizes read. */
 @Serializable

@@ -40,6 +40,12 @@ class NoticeKindTest {
         for (m in listOf(Msg.COPY_DONE, Msg.MOVE_MOVED, Msg.IMPORT_IMPORTED, Msg.OFFLINE_SENT, Msg.DOWNLOAD_CANCELLED)) assertEquals(NoticeKind.SAID, NoticeKind.of(m), "$m")
     }
 
+    /** The desktops' own success toasts (phase 7: Linux raises them by key, their kind the core's table). */
+    @Test fun aDesktopsOwnSuccessIsSaid() {
+        for (m in listOf(Msg.PROFILE_SAVED, Msg.RECEIPTS_SAVED, Msg.LINK_KEPT)) assertEquals(NoticeKind.SAID, NoticeKind.of(m), "$m")
+        for (m in listOf(Msg.SHARE_FAILED, Msg.RECEIPTS_NOT_SAVED, Msg.BOOKMARK_CREATE_FAILED)) assertEquals(NoticeKind.HELD, NoticeKind.of(m), "$m")
+    }
+
     @Test fun aSiteSaysOtherwiseAndTheKindIsPartOfTheNotice() {
         val undo = Notice(Msg.MOVE_MOVED, "a", "b").living(NoticeKind.UNDO)
         assertEquals(NoticeKind.UNDO, undo.kind)

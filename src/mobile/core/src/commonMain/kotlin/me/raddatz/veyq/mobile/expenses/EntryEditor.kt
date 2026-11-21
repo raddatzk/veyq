@@ -76,7 +76,10 @@ class EntryEditor internal constructor(
     enum class RateState { FILLING, FILLED, MISSING }
 
     @kotlinx.serialization.Serializable @kotlinx.serialization.SerialName("EditorRate")
-    data class Rate(val state: RateState, val day: String? = null)
+    data class Rate(val state: RateState, val day: String? = null) {
+        /** [day] as a bridge host shows it (ADR 0154 decision 5). */
+        val dayText: me.raddatz.veyq.mobile.words.ShownText? = day?.let { me.raddatz.veyq.mobile.words.ShownText.day(it) }
+    }
 
     data class State(
         /** A new entry (no history, no delete). */

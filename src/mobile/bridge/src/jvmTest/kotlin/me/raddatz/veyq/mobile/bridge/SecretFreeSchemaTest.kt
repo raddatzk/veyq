@@ -147,10 +147,10 @@ class SecretFreeSchemaTest {
         val fields = schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }.groupBy({ it.owner }, { it.name })
         fun of(suffix: String) = fields.entries.single { (owner, _) -> owner == suffix || owner.endsWith(".$suffix") }.value
         assertEquals(listOf("asOf"), of("OfflineAsOf"), "a screen offline says more than as of when")
-        assertEquals(listOf("limit", "automatic", "pinned", "free", "field", "items"), of("AccountSettings.Storage"), "the Settings section's storage says more than sizes, its field and its items")
+        assertEquals(listOf("limit", "automatic", "pinned", "free", "field", "items", "automaticText", "pinnedText", "freeText"), of("AccountSettings.Storage"), "the Settings section's storage says more than sizes (and their text), its field and its items")
         assertEquals(listOf("amount", "unit", "off"), of("LimitField"))
         assertEquals(
-            listOf("tenant", "scope", "node", "kind", "title", "status", "said", "bytes"), of("OfflineItem"),
+            listOf("tenant", "scope", "node", "kind", "title", "status", "said", "bytes", "bytesText"), of("OfflineItem"),
             "a pinned item says more than its ids, its name from the held tree, its state and its size",
         )
         assertEquals(listOf("on", "status", "said", "done", "total", "asking", "question"), of("OfflineToggle"), "a node's toggle says more than its state and sizes")

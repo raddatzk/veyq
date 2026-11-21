@@ -55,6 +55,8 @@ class PersonTrust internal constructor(private val tenant: TenantSession) {
         /** A join record replaced a pin that was not theirs. */
         val replaced: Boolean,
     ) {
+        /** [rotatedAt] as a bridge host shows it (ADR 0154 decision 5). */
+        val rotatedText: me.raddatz.veyq.mobile.words.ShownText? = rotatedAt?.let { me.raddatz.veyq.mobile.words.ShownText.moment(it) }
         val verified: Boolean get() = verifiedByMe || verifiedBy.isNotEmpty()
         val status: Status get() = when {
             anomaly -> Status.CANT_CONFIRM

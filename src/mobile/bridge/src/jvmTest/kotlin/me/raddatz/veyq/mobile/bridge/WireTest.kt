@@ -576,7 +576,7 @@ class WireTest {
                 "self", listOf(photo), true, false, listOf("b2"), false, false, me.raddatz.veyq.mobile.memories.Buckets.Outcome.FAILED,
             )), Update.Buckets(121, null),
             Update.Gallery(62, GalleryShown(memory, emptyList(), false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,
-                filter = FilterShown(true, MarkMode.EVERYONE, true, listOf(ChipShown("day:2025-05-03", "3. Mai")), "be", listOf(ChipShown("place:lisboa", "Lisboa", "")), 1, 4),
+                filter = FilterShown(true, MarkMode.EVERYONE, true, listOf(ChipShown("day:2025-05-03", me.raddatz.veyq.mobile.words.ShownText.day("2025-05-03"))), "be", listOf(ChipShown("place:lisboa", me.raddatz.veyq.mobile.words.ShownText.written("Lisboa"), "")), 1, 4),
                 contributions = true, markSaid = Notice(Msg.MEDIA_MARKS_SAVE_FAILED), marking = true)),
             Update.Gallery(60, GalleryShown(memory, null, false, null, Notice(Msg.MEMORY_ITEMS, listOf(0)), emptyList(), false, false, emptyList(), null, null, null, null,
                 date = MemoryDateShown(DateMode.RANGE, "2026-07-01", "2026-07-14"), place = "Berlin", editsFacts = true, tracks = 2)),

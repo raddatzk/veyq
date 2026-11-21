@@ -586,6 +586,18 @@ internal interface DeviceFiles {
     }
 }
 
+/** The core's lifetimes, its words' kinds and its separator ([Call.NoticeLifetimes]): constants, the same for every host. */
+internal fun noticeLifetimes(): Answer.Lifetimes {
+    val words = me.raddatz.veyq.mobile.words.Msg.entries
+    fun keysOf(kind: me.raddatz.veyq.mobile.words.NoticeKind) = words.filter { me.raddatz.veyq.mobile.words.NoticeKind.of(it) == kind }.map { it.key }
+    return Answer.Lifetimes(
+        me.raddatz.veyq.mobile.words.Notice.SAID_MS, ShellModel.TRASH_UNDO_MS,
+        me.raddatz.veyq.mobile.words.Notice.COPIED_MS, me.raddatz.veyq.mobile.words.Notice.NOTHING_PLAYS_MS,
+        keysOf(me.raddatz.veyq.mobile.words.NoticeKind.SAID), keysOf(me.raddatz.veyq.mobile.words.NoticeKind.UNDO),
+        me.raddatz.veyq.mobile.words.Shown.SEPARATOR,
+    )
+}
+
 /** The tenant open now: its models, and the account and tenant the session opened them for. */
 private class Open<A : Connection>(val models: Tenant, val account: A, val tenant: TenantRef)
 
@@ -760,6 +772,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ParticipantsSearch, is Call.ParticipantsToggle,
             // the search's text as typed: the latest keystroke is the one the field ends on
             is Call.SearchText -> ordered(call)
+            // constants, answered without waiting for the core's start (a host asks before its first window)
+            Call.NoticeLifetimes -> lifetimes()
             else -> null
         }
         scope.launch {
@@ -800,6 +814,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /** [Call.EditorChange] on its editor: done, or no such editor. */
     private fun edit(c: Call.EditorChange): Answer = editors[c.editor]?.model?.change(c.change).done(Answer.Why.NO_SUCH_EDITOR)
 
+    /** [Call.NoticeLifetimes]: the core's lifetimes, its words' kinds and its separator. */
+    private fun lifetimes(): Answer = noticeLifetimes()
+
     /** [Call.PotCreateName] held: done, or no such sheet. */
     private fun named(c: Call.PotCreateName): Answer = creates[c.create]?.name?.let { it.value = c.name }.done(Answer.Why.NO_SUCH_CREATE)
 
@@ -814,10 +831,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         val shell = tenant.value?.models?.shell
         return when (call) {
             Call.SessionStart -> opened(session.start())
-            Call.NoticeLifetimes -> Answer.Lifetimes(
-                me.raddatz.veyq.mobile.words.Notice.SAID_MS, ShellModel.TRASH_UNDO_MS,
-                me.raddatz.veyq.mobile.words.Notice.COPIED_MS, me.raddatz.veyq.mobile.words.Notice.NOTHING_PLAYS_MS,
-            )
+            Call.NoticeLifetimes -> lifetimes()
             is Call.SessionSignIn -> opened(session.signIn(call.server, call.email, call.password, call.secretKey)).also { managed(parts) }
             is Call.SessionStaySignedIn -> (session.stay(call.level)?.answer() ?: Answer.Refused(Answer.Why.NO_OFFER)).also { managed(parts) }
             Call.SessionNotNow -> if (session.notNow()) Answer.Done else Answer.Refused(Answer.Why.NO_OFFER)
@@ -3220,14 +3234,15 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     /** A filter chip as it reads: a year by its number, a day, a place or a kind by its label. */
-    private fun chipLabel(c: me.raddatz.veyq.mobile.memories.GalleryFilter.Chip): String = when (c) {
-        is me.raddatz.veyq.mobile.memories.GalleryFilter.Chip.Day -> c.label
-        is me.raddatz.veyq.mobile.memories.GalleryFilter.Chip.Search -> when (val k = c.chip) {
+    private fun chipLabel(c: me.raddatz.veyq.mobile.memories.GalleryFilter.Chip): me.raddatz.veyq.mobile.words.ShownText = when (c) {
+        // a day the device's zone gave, written as every app writes a day (ADR 0154 decision 5)
+        is me.raddatz.veyq.mobile.memories.GalleryFilter.Chip.Day -> me.raddatz.veyq.mobile.words.ShownText.day(c.day)
+        is me.raddatz.veyq.mobile.memories.GalleryFilter.Chip.Search -> me.raddatz.veyq.mobile.words.ShownText.written(when (val k = c.chip) {
             is me.raddatz.veyq.mobile.search.SearchChip.Year -> k.year.toString()
             is me.raddatz.veyq.mobile.search.SearchChip.Place -> k.label
             is me.raddatz.veyq.mobile.search.SearchChip.Kind -> k.label
             else -> me.raddatz.veyq.mobile.search.Query.chipKey(k)
-        }
+        })
     }
 
     /** A lightbox as the host draws it ([LightboxShown]), each field the model's own answer; none once it closed. */
