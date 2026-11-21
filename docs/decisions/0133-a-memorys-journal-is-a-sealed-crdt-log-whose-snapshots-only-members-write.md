@@ -321,3 +321,68 @@ found by the text of its last snapshot. Guests have no search.
 - **The applications' append-only gap** the security model asks every such application to state
   ([security-model](../crosscutting/security-model.md#applications-are-compiled-in--never-loaded)) is decision 5's:
   dropped updates are found, the newest withheld ones are not.
+
+## Proposed amendment — the journal's rules are the Kotlin core's, the CRDT engine a port
+
+**Status of this section: Proposed** (2026-11-21, re-grounded against ADR 0153, ADR 0154 and ADR 0155; the decisions
+above stay Accepted, and this section replaces their wording only where it names one, once the owner accepts it).
+Written before anything of the journal was built, so nothing is twinned or moved.
+
+[ADR 0155](0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md) decision 1
+makes the Kotlin core the one home of every client's logic, and its pilot passed (its § Consequences). Decisions 2, 5,
+6 and 9 above were written for a web model in TypeScript, ported later by a Yrs binding per app (inbox #855). Building
+them in TypeScript now would create exactly the twin ADR 0155 deletes. Measured for this section (2026-11-21):
+
+- **No maintained Kotlin engine reads Yjs update v1 on every core target** (JVM, Apple, Linux, Windows, JavaScript —
+  `grep -n -E "jvm\(\)|iosArm64|linuxX64|mingwX64" src/mobile/core/build.gradle.kts` and ADR 0155 decision 3's `js()`).
+  `y-crdt/ykt`'s README says the repository "is currently not active", last push 2023-01-17 (`gh api repos/y-crdt/ykt`);
+  `hwisu/yks` is JVM-only (JDK 21), one contributor, created 2026-07-05, published only to GitHub Packages behind a
+  personal token (`gh api repos/hwisu/yks`, its README); `y-crdt/y-octo` is Rust, its README promising "official
+  bindings coming soon". `y-crdt/y-crdt` is maintained and MIT — `yrs` with its C binding `yffi` in the same repository,
+  v0.28.2 released 2026-11-19 (`gh api repos/y-crdt/y-crdt/releases`) — but compiled to the web it is `ywasm`, which needs
+  `'wasm-unsafe-eval'` (ADR 0155's Alternatives reject Wasm on that ground) and loses `y-codemirror.next`, which binds a
+  Yjs `Y.Text`.
+- **The web's engine and editor stay what decision 2 chose:** `yjs` 13.6.33 is still `latest` (14 is `beta`/`next`),
+  `y-codemirror.next` 0.3.6, `@codemirror/view` 6.43.15, `@codemirror/lang-markdown` 6.5.2, all MIT, none deprecated
+  (the npm registry's `dist-tags`, `license`, `deprecated`, 2026-11-21).
+
+**A1. The rules are the core's; the engine is a port.** Everything decisions 3–5, 8, 9 and 11 make a client do — the
+update envelope (Yjs client id, sequence, update, padded to its size class) and its codec, applying in the server's
+order, the client-id pin, the sequence check and its *incomplete* state, skipping what does not decode, the flush tick,
+the compaction policy (when, the jitter, dropping on `409`), the snapshot check, the restore's edit, who may edit,
+compact, read the history and restore (a gate, [ADR 0154](0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md)
+decision 1), the journal's notices and their lifetimes (its decision 4), and the contributors' rows with the guest's
+pseudonyms — lives once, in the Kotlin core (`memories/journal/`), free of coroutines, serialization and Ktor so the web
+can draw it (ADR 0155 decision 4). The web draws it through Memories' façade `@veyq/core-js/memories`, the apps through
+the core and the bridge. The **CRDT engine** is a port the core calls with bytes only — merge updates, the state of a
+base plus updates, the text of a state, the update that turns a state's text into another — implemented by **Yjs on the
+web** (a platform library, as CodeMirror is: ADR 0155 decision 1's "what only a browser does") and, for #855, by **Yrs
+through `yffi` in the core's own platform source sets**, so no app binds a CRDT library of its own. The sealing stays
+each suite's ([ADR 0155](0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)
+decision 9): the web seals the core's envelope with `@veyq/crypto`, the apps with the Kotlin suite, both held by
+`contracts/crypto/vectors/v1.json`. The rules are held by `contracts/memories/journal/v1-vectors.json`, written by the
+core's test; the cases that need an engine's bytes run over each engine. Replaces decision 2's "through a UniFFI
+binding we keep".
+
+**A2. The snapshot check normalises through the checker's own engine.** Decision 4's byte-for-byte equality was
+measured for Yjs against itself. A snapshot written by one implementation and checked by another may encode the same
+state in other bytes, which would name an honest writer a forger. So a checker re-encodes the snapshot's state through
+its own engine (apply to an empty document, encode) and compares that with its own encoding of the predecessor plus the
+updates up to the folded position; each engine's case of the journal vectors holds that its encoding of a state is a
+fixed point (encode → apply → encode, the same bytes). Unmeasured until the core phase of `cr-live-journal`: a Yjs
+re-encoding as a fixed point, and Yrs' for #855.
+
+**A3. In the apps, an unsent update is an offline write.** The envelope is the person's intent in
+[ADR 0153](0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md)
+decision 1's sense: it is sealed under the then-current `K_jrev` only when it is sent, as decision 4 above already
+re-seals after `409 stale_revision`. #855 adds the journal's update to ADR 0153 decision 3's list (a member's and the
+person's own; a guest view queues nothing), and its decision 4's outcomes read: a `409 stale_revision` or a rotation is
+*re-sealed and sent*, never a conflict (a CRDT update overwrites nothing unseen); a refusal (`451`, the switch, the tail
+cap) holds it. **A queued update is discarded only with every later update of its client id**, since a discarded one
+would leave every reader's sequence check reporting the journal incomplete for good; and a writer whose update the
+server refused for good stops writing under that client id (the editor turns to the read view until reopened). The
+web keeps unsent updates in the open tab only, as the Consequences above say.
+
+**A4. The pseudonym lists are the catalog's.** Decision 9's two lists of 64 words in EN and DE (with each German
+animal's gender) live once, in `src/mobile/words/words.json` as `core_text` keys, and the core composes the name with
+its number and "You"; the web shows the façade's string, so the web and every app name a guest's co-writers alike.
