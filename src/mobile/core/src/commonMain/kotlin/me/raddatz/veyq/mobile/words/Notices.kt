@@ -9,6 +9,7 @@ import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.modules.SerializersModule
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.depot.DepotFiles
 import me.raddatz.veyq.mobile.depot.DropBoxes
@@ -100,40 +101,36 @@ class Joined(val parts: List<Any>, val separator: String) {
 }
 
 /**
- * One piece of a row's line, which a platform writes its own way and joins with the others: words of the catalog, a
- * name as written, a day (ISO, `2026-11-10`), a size in bytes or an amount in a currency's minor units.
+ * One piece of a row's line: words of the catalog, a name as written, a day (ISO, `2026-11-10`), a size in bytes or an
+ * amount in a currency's minor units — the last three written by [Shown.piece] in the app's language, the pieces joined
+ * by [Shown.joined]. On the wire ([PieceSerializer]) a piece is words or a string: the bridge writes its value first.
  */
-@Serializable
+@Serializable(with = PieceSerializer::class)
 sealed class Piece {
-    @Serializable @SerialName("said")
     class Said(val notice: Notice) : Piece() {
         override fun equals(other: Any?) = other is Said && other.notice == notice
         override fun hashCode() = notice.hashCode()
         override fun toString() = "Said($notice)"
     }
 
-    @Serializable @SerialName("plain")
     class Plain(val text: String) : Piece() {
         override fun equals(other: Any?) = other is Plain && other.text == text
         override fun hashCode() = text.hashCode()
         override fun toString() = "Plain($text)"
     }
 
-    @Serializable @SerialName("day")
     class Day(val iso: String) : Piece() {
         override fun equals(other: Any?) = other is Day && other.iso == iso
         override fun hashCode() = iso.hashCode()
         override fun toString() = "Day($iso)"
     }
 
-    @Serializable @SerialName("size")
     class Size(val bytes: Long) : Piece() {
         override fun equals(other: Any?) = other is Size && other.bytes == bytes
         override fun hashCode() = bytes.hashCode()
         override fun toString() = "Size($bytes)"
     }
 
-    @Serializable @SerialName("money")
     class Money(val amount: Long, val currency: String?, val minorUnits: Int) : Piece() {
         override fun equals(other: Any?) = other is Money && other.amount == amount && other.currency == currency && other.minorUnits == minorUnits
         override fun hashCode() = amount.hashCode()
@@ -176,13 +173,40 @@ object MsgKey : KSerializer<Msg> {
 }
 
 /**
- * A [Notice] on the wire: its key and each argument tagged by what it is, so the platform across the bridge says it
- * as a platform here does ([NoticeArg]); an argument of another type is refused, never sent as its `toString`.
+ * A [Notice] on the wire: its key, its kind and each argument tagged by what it is, so the platform across the bridge
+ * says it as a platform here does ([NoticeArg]). Its sizes, moments and amounts are written first ([Shown.args]) in the
+ * language of the encoder's [WireWords.module] (English without one), so the host formats none; an argument of another
+ * type is refused, never sent as its `toString`.
  */
 object NoticeSerializer : KSerializer<Notice> {
     override val descriptor: SerialDescriptor = NoticeWire.serializer().descriptor
-    override fun serialize(encoder: Encoder, value: Notice) = encoder.encodeSerializableValue(NoticeWire.serializer(), NoticeWire.of(value))
+    override fun serialize(encoder: Encoder, value: Notice) =
+        encoder.encodeSerializableValue(NoticeWire.serializer(), NoticeWire.of(Shown.args(value, WireWords.languageOf(encoder))))
     override fun deserialize(decoder: Decoder): Notice = decoder.decodeSerializableValue(NoticeWire.serializer()).notice()
+}
+
+/** A [Piece] on the wire: words ([PieceWire.Said]) or a string ([PieceWire.Plain]), its value written by [Shown.piece]. */
+object PieceSerializer : KSerializer<Piece> {
+    override val descriptor: SerialDescriptor = PieceWire.serializer().descriptor
+    override fun serialize(encoder: Encoder, value: Piece) =
+        encoder.encodeSerializableValue(PieceWire.serializer(), PieceWire.of(Shown.piece(value, WireWords.languageOf(encoder))))
+    override fun deserialize(decoder: Decoder): Piece = decoder.decodeSerializableValue(PieceWire.serializer()).piece()
+}
+
+@Serializable @SerialName("Piece")
+internal sealed class PieceWire {
+    abstract fun piece(): Piece
+
+    @Serializable @SerialName("said") class Said(val notice: Notice) : PieceWire() { override fun piece() = Piece.Said(notice) }
+    @Serializable @SerialName("plain") class Plain(val text: String) : PieceWire() { override fun piece() = Piece.Plain(text) }
+
+    companion object {
+        fun of(p: Piece): PieceWire = when (p) {
+            is Piece.Said -> Said(p.notice)
+            is Piece.Plain -> Plain(p.text)
+            else -> throw SerializationException("a piece's value is written before the wire: $p")
+        }
+    }
 }
 
 @Serializable @SerialName("Notice")
@@ -194,7 +218,7 @@ internal class NoticeWire(@Serializable(with = MsgKey::class) val msg: Msg, val 
     }
 }
 
-/** One argument of a [Notice] as the wire carries it: each kind the class documents, by its own tag. */
+/** One argument of a [Notice] as the wire carries it, by its own tag: a value is written as its text first ([Shown.args]). */
 @Serializable @SerialName("NoticeArg")
 internal sealed class NoticeArg {
     abstract fun arg(): Any
@@ -202,11 +226,6 @@ internal sealed class NoticeArg {
     @Serializable @SerialName("text") class Text(val text: String) : NoticeArg() { override fun arg() = text }
     @Serializable @SerialName("int") class IntArg(val value: Int) : NoticeArg() { override fun arg() = value }
     @Serializable @SerialName("long") class LongArg(val value: Long) : NoticeArg() { override fun arg() = value }
-    @Serializable @SerialName("bytes") class BytesArg(val count: Long) : NoticeArg() { override fun arg() = Bytes(count) }
-    @Serializable @SerialName("moment") class MomentArg(val epochMs: Long) : NoticeArg() { override fun arg() = Moment(epochMs) }
-    @Serializable @SerialName("amount") class AmountArg(val amount: Long, val currency: String?, val minorUnits: Int) : NoticeArg() {
-        override fun arg() = Amount(amount, currency, minorUnits)
-    }
     @Serializable @SerialName("notice") class Said(val notice: Notice) : NoticeArg() { override fun arg() = notice }
     @Serializable @SerialName("joined") class JoinedArg(val parts: List<NoticeArg>, val separator: String) : NoticeArg() {
         override fun arg() = Joined(parts.map { it.arg() }, separator)
@@ -217,9 +236,6 @@ internal sealed class NoticeArg {
             is String -> Text(a)
             is Int -> IntArg(a)
             is Long -> LongArg(a)
-            is Bytes -> BytesArg(a.count)
-            is Moment -> MomentArg(a.epochMs)
-            is Amount -> AmountArg(a.amount, a.currency, a.minorUnits)
             is Notice -> Said(a)
             is Joined -> JoinedArg(a.parts.map(::of), a.separator)
             else -> throw SerializationException("a notice's argument of ${a::class.simpleName} has no form on the wire")
@@ -482,4 +498,26 @@ object Notices {
 
     /** Whether [item] is a medium (Memories) rather than a file (Depot): their refusals for room are worded apart. */
     fun isMedium(item: UploadQueue.Item): Boolean = item.job is MediaUpload.Job
+}
+
+/**
+ * The language a bridge's wire writes a notice's and a line's values in ([Shown.args], [Shown.piece]): [module] names it to
+ * [NoticeSerializer] and [PieceSerializer] through the encoder's serializers module (the bridge's `Config.language`).
+ * Beside the serializers, never in [Shown], which the web's façades may reach without kotlinx.serialization.
+ */
+object WireWords {
+    /** A serializers module naming [language]; the bridge's `Json` carries it. */
+    fun module(language: String): SerializersModule = SerializersModule { contextual(Marker::class, Marker.In(language)) }
+
+    /** The language [encoder]'s [module] names; English without one. */
+    internal fun languageOf(encoder: Encoder): String = (encoder.serializersModule.getContextual(Marker::class) as? Marker.In)?.language ?: "en"
+
+    /** What [module] registers: its serializer carries the language, nothing of it is ever written. */
+    internal class Marker private constructor() {
+        class In(val language: String) : KSerializer<Marker> {
+            override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("me.raddatz.veyq.mobile.words.WireWords", PrimitiveKind.STRING)
+            override fun serialize(encoder: Encoder, value: Marker) = encoder.encodeString(language)
+            override fun deserialize(decoder: Decoder): Marker = throw SerializationException("never read")
+        }
+    }
 }

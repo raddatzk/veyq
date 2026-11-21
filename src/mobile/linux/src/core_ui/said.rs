@@ -1,7 +1,9 @@
 //! What the core says, written the way this desktop writes it (ADR 0123's Consequences, the Linux app): a `Notice` by its key
-//! and arguments through [words::say], a `Piece` piece by piece — a day, a size, a moment and an amount of money in the
-//! person's locale, as glibc and GLib hold it. Nothing here decides what is said; that is the core's (ADR 0136
-//! decision 1). The same as Android's `NoticeText.kt` and Apple's `say(notice)`.
+//! and arguments through [words::say], a `Piece` piece by piece — the core writes a notice's and a piece's sizes, moments
+//! and amounts before the wire (ADR 0154 decision 5); the values the wire still carries raw are written here in the
+//! person's locale, as glibc and GLib hold it, until this app's phase of cr-apps-notices-and-formats-from-the-core. Nothing
+//! here decides what is said; that is the core's (ADR 0136 decision 1). The same as Android's `NoticeText.kt` and Apple's
+//! `say(notice)`.
 use std::ffi::{CStr, c_char};
 
 use gtk::glib;
@@ -24,7 +26,7 @@ pub fn notice(n: &Notice) -> String {
 
 /// A word by its catalog key alone (a `Msg` the core sent: a group's heading, an application's name).
 pub fn key(key: &str) -> String {
-    notice(&Notice { msg: key.to_string(), args: Vec::new() })
+    notice(&Notice { msg: key.to_string(), args: Vec::new(), kind: crate::bridge::wire::NoticeKind::Held })
 }
 
 /// One piece of a line.
@@ -32,9 +34,6 @@ pub fn piece(p: &Piece) -> String {
     match p {
         Piece::Said { notice: n } => notice(n),
         Piece::Plain { text } => text.clone(),
-        Piece::Day { iso } => day(iso),
-        Piece::Size { bytes } => size(*bytes),
-        Piece::Money { amount, currency, minor_units } => money(*amount, currency.as_deref(), *minor_units),
     }
 }
 
@@ -71,12 +70,9 @@ fn part(a: &NoticeArg) -> Part {
 
 fn arg_text(a: &NoticeArg) -> String {
     match a {
-        NoticeArg::Amount { amount, currency, minor_units } => money(*amount, currency.as_deref(), *minor_units),
-        NoticeArg::Bytes { count } => size(*count),
         NoticeArg::Int { value } => value.to_string(),
         NoticeArg::Long { value } => value.to_string(),
         NoticeArg::Joined { parts, separator } => parts.iter().map(arg_text).collect::<Vec<_>>().join(separator),
-        NoticeArg::Moment { epoch_ms } => moment(*epoch_ms),
         NoticeArg::Notice { notice: n } => notice(n),
         NoticeArg::Text { text } => text.clone(),
     }

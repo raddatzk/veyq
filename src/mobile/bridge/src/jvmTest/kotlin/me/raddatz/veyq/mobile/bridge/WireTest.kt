@@ -107,7 +107,7 @@ class WireTest {
     private val samples: Map<KSerializer<*>, List<Any>> = mapOf(
         Config.serializer() to listOf(Config("Fedora 44", 0, ""), Config("WIN-VM", 0x2051C, "veyq wants to open your account", "C:\\Users\\p\\AppData\\Local\\veyq\\offline"), Config("Fedora 44", 0, "", "/home/p/.local/share/veyq/offline"), Config("Fedora 44", 0, "", null, "de"), Config("Fedora 44", 0, "", null, "en", netLog = true)),
         Call.serializer() to listOf(
-            Call.SessionStart, Call.SessionSignIn("veyq.localhost:8080", "p@example.org", "typed", "A3-TYPED"),
+            Call.SessionStart, Call.NoticeLifetimes, Call.SessionSignIn("veyq.localhost:8080", "p@example.org", "typed", "A3-TYPED"),
             Call.SessionStaySignedIn(StaySignedIn.PRESENCE), Call.SessionStaySignedIn(StaySignedIn.LOGIN), Call.SessionNotNow,
             Call.ManageStaySignedIn("veyq.localhost#user-1", StaySignedIn.LOGIN), Call.ManagePasswordTrust("veyq.localhost#user-1", "typed"),
             Call.SessionUnlock("typed"), Call.SessionUnlock(""), Call.SessionOtherAccount, Call.SessionForgetDevice("veyq.localhost#user-1"),
@@ -262,7 +262,7 @@ class WireTest {
         HostReply.serializer() to listOf(HostReply.Value("s\tn\t1"), HostReply.Value(null), HostReply.Done, HostReply.Failed("disk full"), HostReply.Pixels(2400, 3394),
             HostReply.Tiers(2048, 1536, 412_000), HostReply.Tiers(null, null, 0), HostReply.Wav),
         Answer.serializer() to listOf(
-            Answer.Done, Answer.Refused(Answer.Why.NO_TENANT_OPEN), Answer.Refused(Answer.Why.TRUST_CANCELLED), Answer.Failed("IllegalStateException"),
+            Answer.Done, Answer.Lifetimes(4_000, 6_000, 2_000, 5_000), Answer.Refused(Answer.Why.NO_TENANT_OPEN), Answer.Refused(Answer.Why.TRUST_CANCELLED), Answer.Failed("IllegalStateException"),
             Answer.Groups(listOf(Home.Group(true, lists.nodes.take(1), Msg.HOME_GROUP_FOLDERS), Home.Group(false, lists.nodes.drop(1), null))),
             Answer.PotOpened(3), Answer.Name("Trip to Lyon.zip"), Answer.Bytes("image/png"), Answer.Bytes(null),
             Answer.Reader(5, 9_000_000_000, "video/mp4"), Answer.Reader(6, 0, null),

@@ -9,7 +9,7 @@ namespace Veyq.Tests;
 [TestClass]
 public sealed class SearchPlanTest
 {
-    private static Notice N(string msg) => new() { msg = msg, args = [] };
+    private static Notice N(string msg) => new() { msg = msg, args = [], kind = NoticeKind.Held };
 
     private static Piece P(string text) => new Piece.Plain { text = text };
 

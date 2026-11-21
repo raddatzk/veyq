@@ -104,8 +104,30 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   first try (all 1,202 cases × 2 languages). Bites, one run: `size` dividing by 1024 → `sizes` red (442 of 524 cases);
   `DELETE_REFUSED_GONE` added to the success words → `aTrashIsAnUndoAndItsRefusalsAreHeld` red; both restored
   (`/bin/cp -f`) → green.
-- [ ] **3 bridge** — the kind and the shown strings on the wire (no `Bytes`/`Moment`/`Amount` left for a host to
+- [x] **3 bridge** — the kind and the shown strings on the wire (no `Bytes`/`Moment`/`Amount` left for a host to
   format). · Done when: `:bridge:jvmTest` green.
+  **Built** (2026-11-21): the bridge writes with `wireIn(Config.language)` (`Bridge.written`), whose serializers module
+  (`WireWords.module`, beside the serializers in `Notices.kt` so `Shown` stays free of kotlinx.serialization) hands
+  `NoticeSerializer` and the new `PieceSerializer` the host's language: a notice carries `kind` and its sizes, moments and
+  amounts as `text` (`NoticeArg`'s `bytes`/`moment`/`amount` variants are gone), a line's `Piece` is `said` or `plain`
+  (its `day`/`size`/`money` written first). `Call.NoticeLifetimes` → `Answer.Lifetimes(saidMs, undoMs, copiedMs,
+  nothingPlaysMs)`: the one place a host reads a duration. The hosts, kept compiling with the least: Linux's `said.rs`
+  and Windows' `SaidNotice.cs` lost the arms of the removed variants, every hand-built `Notice` names `kind: Held`
+  (`said.rs`, four Rust tests, `ImportTextTest.cs` — whose `Bytes(2048)` became the text `"2 kB"` —, `SearchPlanTest.cs`).
+  **Open for phases 7–8** (both read the one wire, so phase 7 adds the shown string and phase 8 follows): the raw values
+  a host still formats itself — the account settings' storage sizes, an offline item's `bytes`, a session family's
+  `createdAt`/`lastUsedAt`, the safety page's `rotatedAt`, a trash row's `deletedAt`/`purgeAfter`, a link's
+  `createdAt`/`expiresAt`, an entry's history `at` and `restorableUntil`, a Pot's total (`said::money` over the view's
+  currency), a Memory's `MemoryDateShown`, the entry editor's date and a rate's day, the gallery filter's day, the
+  lightbox's size and moment, the music clocks (`linux/run.py`'s `said::*` callers, measured by `grep -rnE
+  "said::(size|day|moment|money|instant_day|instant_moment)\(" src/mobile/linux/src`: 18 sites, Windows' `Said.*` alike);
+  and a day the host itself picked (a link's end in a calendar), which needs the core's text through a call. Measured:
+  `:bridge:jvmTest` green, 139 tests (two `DispatchTest` cases first red where they cast a value the wire now writes —
+  now asserting the text: `CHF 50.50`, a size); `:core:jvmTest`/`:core:macosArm64Test` of `words.*` and
+  `:core:compileKotlinJs` green; `linux/run.py bridge` green; `:bridge:generateBindings` writes `NoticeKind`, a
+  `Notice.kind`, a `Piece` of `Plain`/`Said` and the lifetimes call in both `bridge.rs` and `Bridge.g.cs`. Not compiled:
+  the Rust and C# hosts (their builds need the Flatpak SDK and the Windows host; phases 7–8 build them). **Bite:**
+  `WireWords.languageOf` ignoring its module → `ShownWireTest` 2/2 red, restored → green.
 - [ ] **4 the guard** — F4, switched on per platform in its phase. · Done when: the guard green; `validate_guard_gaps.py`
   run once. **Bites:** a `FromSeconds(6)` at a notice, a `ByteCountFormatter`, a `" · "` literal — each red alone.
 - [ ] **5 Android** · **6 Apple** · **7 Linux** · **8 Windows** — each platform's formatters and durations removed, the

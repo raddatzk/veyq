@@ -529,7 +529,7 @@ mod tests {
             status: TrackStatus::Ready,
             facts: vec![
                 TrackFactShown { distance: Some(3.24), kilometres: true, words: None },
-                TrackFactShown { distance: None, kilometres: false, words: Some(Notice { msg: "track_duration_minutes".into(), args: vec![NoticeArg::Int { value: 38 }] }) },
+                TrackFactShown { distance: None, kilometres: false, words: Some(Notice { msg: "track_duration_minutes".into(), args: vec![NoticeArg::Int { value: 38 }], kind: crate::bridge::wire::NoticeKind::Held }) },
             ],
             shown: true,
             selected: false,

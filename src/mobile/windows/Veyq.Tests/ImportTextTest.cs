@@ -11,9 +11,9 @@ namespace Veyq.Tests;
 [TestClass]
 public sealed class ImportTextTest
 {
-    private static Notice N(string msg, params NoticeArg[] args) => new() { msg = msg, args = args };
+    private static Notice N(string msg, params NoticeArg[] args) => new() { msg = msg, args = args, kind = NoticeKind.Held };
 
-    private static readonly Notice Summary = N("import_summary", new NoticeArg.Int { value = 7 }, new NoticeArg.Bytes { count = 2048 }, new NoticeArg.Text { text = "Trip" });
+    private static readonly Notice Summary = N("import_summary", new NoticeArg.Int { value = 7 }, new NoticeArg.Text { text = "2 kB" }, new NoticeArg.Text { text = "Trip" });
 
     private static ImportShown Shown(ImportStep step, Notice? summary = null, bool canImport = false, bool canAsFile = true,
         IReadOnlyList<Notice>? said = null, IReadOnlyList<Notice>? leftOut = null, int done = 0, int total = 0, string importWord = "import_submit") => new()
@@ -61,7 +61,7 @@ public sealed class ImportTextTest
     [TestMethod]
     public void NoRoomIsAWarningAndKeepsImportShut()
     {
-        var noRoom = N("import_no_room", new NoticeArg.Bytes { count = 2048 });
+        var noRoom = N("import_no_room", new NoticeArg.Text { text = "2 kB" });
         var face = ImportText.Of(Shown(ImportStep.Ready, Summary, canImport: false, said: [noRoom]));
         Assert.AreEqual(Said.Notice(noRoom), face.NoRoom);
         Assert.IsNull(face.Problem, "no room is the web's warning, not its error");

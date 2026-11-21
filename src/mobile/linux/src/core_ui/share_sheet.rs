@@ -598,7 +598,7 @@ mod tests {
     fn a_links_line_says_its_days_then_its_badges() {
         let link = ShownLink {
             share_id: "s".into(), title: Piece::Plain { text: "Family".into() },
-            badges: vec![Notice { msg: "share_switched_off".into(), args: vec![] }],
+            badges: vec![Notice { msg: "share_switched_off".into(), args: vec![], kind: crate::bridge::wire::NoticeKind::Held }],
             created_at: "2026-11-01T10:00:00Z".into(), expires_at: None, address: None, can_copy: false, can_edit: false,
             can_renew: true, can_switch_off: false, can_reactivate: true, can_delete: true, actions: vec![],
         };

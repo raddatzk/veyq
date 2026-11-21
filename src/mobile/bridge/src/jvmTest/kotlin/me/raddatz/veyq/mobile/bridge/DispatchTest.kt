@@ -1788,7 +1788,10 @@ class DispatchTest {
         assertEquals(Notice(Msg.DEPOT_FOLDER_UNREADABLE, "gone.txt"), offered.notice)
         val shown = b.watching(Watched.Import(offered.import)).until { u -> (u as Update.Import).shown?.takeIf { it.step == ImportStep.READY } }
         assertEquals("Trip", shown.root)
-        assertEquals(Notice(Msg.IMPORT_SUMMARY, 7, me.raddatz.veyq.mobile.words.Bytes(shown.summary!!.args[1].let { (it as me.raddatz.veyq.mobile.words.Bytes).count }), "Home"), shown.summary)
+        // the size arrives written in the host's language (ADR 0154 decision 5), as the core writes it
+        val size = shown.summary!!.args[1] as String
+        assertTrue(Regex("""\d+(\.\d)? (B|kB)""").matches(size), size)
+        assertEquals(Notice(Msg.IMPORT_SUMMARY, 7, size, "Home"), shown.summary)
         assertTrue(shown.canImport && shown.canAsFile)
         assertEquals(Msg.IMPORT_SUBMIT, shown.importWord)
         assertEquals(Answer.Done, b.ask(Call.ImportCancel(offered.import)))
@@ -2391,7 +2394,7 @@ class DispatchTest {
         assertEquals(listOf("70", ""), item.split.people.map { it.value })
         assertEquals(Msg.ED_PERCENT_TOTAL, item.split.hint?.msg)
         assertEquals(listOf("2", "1"), filled.rest!!.people.map { it.value })
-        assertEquals(5050L to "CHF", (filled.total as me.raddatz.veyq.mobile.words.Piece.Money).let { it.amount to it.currency })
+        assertEquals(me.raddatz.veyq.mobile.words.Piece.Plain("CHF\u00A050.50"), filled.total, "the total written as the web writes it")
         // the percent typed for Ben: the form saves, its preview in the base currency
         assertEquals(Answer.Done, b.ask(change(id, me.raddatz.veyq.mobile.expenses.EditorChange.Share(0, BEN, "30"))))
         assertEquals(2, shownNow(id).preview.size)

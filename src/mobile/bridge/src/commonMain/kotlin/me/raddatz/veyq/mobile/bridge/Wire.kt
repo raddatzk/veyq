@@ -44,6 +44,12 @@ internal val wire = Json {
 }
 
 /**
+ * [wire] writing a [me.raddatz.veyq.mobile.words.Notice]'s and a [Piece]'s values in [language] (`Config.language`):
+ * what a host reads is words and strings, never a size, a moment or an amount to format (ADR 0154 decision 5).
+ */
+internal fun wireIn(language: String): Json = Json(wire) { serializersModule = me.raddatz.veyq.mobile.words.WireWords.module(language) }
+
+/**
  * What the host starts the core with ([veyq_init]): [device] the name this device gives itself in the account's device
  * register; [window] Windows' HWND of the host's top-level window, which owns Windows Hello's prompt (`0` elsewhere, and
  * for a prompt without an owner); [prompt] the words that prompt shows (the host's `device_unlock_prompt`, empty where
@@ -69,6 +75,12 @@ internal class Config(
 internal sealed class Call {
     /** The way in, once per process: the trusted accounts resume, or the sign-in shows (SessionModel.start). */
     @Serializable @SerialName("Session.Start") data object SessionStart : Call()
+
+    /**
+     * How long the core's notices live (ADR 0154 decision 4), answered [Answer.Lifetimes]: a host asks once and maps a
+     * notice's `kind` onto its control with it, holding no duration of its own.
+     */
+    @Serializable @SerialName("Notice.Lifetimes") data object NoticeLifetimes : Call()
 
     /**
      * The full sign-in, which holds the password trust; where the device offers a level, the shell's gate then carries
@@ -1801,6 +1813,14 @@ internal enum class ScanKind {
 internal sealed class Answer {
     @Serializable @SerialName("Done") data object Done : Answer()
     @Serializable @SerialName("Refused") data class Refused(val why: Why) : Answer()
+
+    /**
+     * The core's lifetimes ([Call.NoticeLifetimes]): a `SAID` notice closes itself after [saidMs], a `HELD` one stays until
+     * closed, an `UNDO` one while its state offers the undo ([undoMs], the window the core runs); "copied" shows for
+     * [copiedMs], the player's "nothing plays" for [nothingPlaysMs].
+     */
+    @Serializable @SerialName("Lifetimes")
+    data class Lifetimes(val saidMs: Long, val undoMs: Long, val copiedMs: Long, val nothingPlaysMs: Long) : Answer()
 
     /** The call threw: the exception's class, never its message (which may hold what it was about). */
     @Serializable @SerialName("Failed") data class Failed(val error: String) : Answer()
