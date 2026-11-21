@@ -78,11 +78,11 @@ struct NodeHeaderActions: View {
                 if plan.hasMenu {
                     Menu {
                         ForEach(plan.menu, id: \.self) { id in
-                            if id == .offline { offlineToggle } else { Button { run(id) } label: { label(id) } }
+                            if id == HeaderAction.offline { offlineToggle } else { Button { run(id) } label: { label(id) } }
                         }
                         if !plan.menu.isEmpty, !plan.last.isEmpty { Divider() }
                         ForEach(plan.last, id: \.self) { id in
-                            Button(role: id == .delete ? .destructive : nil) { run(id) } label: { label(id) }
+                            Button(role: id == HeaderAction.delete_ ? .destructive : nil) { run(id) } label: { label(id) }
                         }
                     } label: {
                         if downloading { ProgressView() } else { Label(say(.nodeMore), systemImage: "ellipsis.circle") }
@@ -95,7 +95,7 @@ struct NodeHeaderActions: View {
         .sheet(isPresented: shown(.report)) { ReportSheet(model: model, ref: node) }
         .sheet(isPresented: shown(.cover)) { CoverSheet(model: model, node: node) }
         .sheet(isPresented: shown(.move)) { NodeMoveSheet(model: model, ref: node) }
-        .sheet(isPresented: shown(.copy)) { NodeMoveSheet(model: model, ref: node, copying: true) }
+        .sheet(isPresented: shown(.theCopy)) { NodeMoveSheet(model: model, ref: node, copying: true) }
         // The system's save sheet takes the written file where the person picks; the temporary copy goes either way.
         .fileMover(isPresented: Binding(get: { downloaded != nil }, set: { if !$0 { cleanUpDownload() } }), file: downloaded) { _ in
             cleanUpDownload()
@@ -172,7 +172,7 @@ struct NodeHeaderActions: View {
             newName = node.name
             renameProblem = nil
             renaming = true
-        case .delete:
+        case .delete_:
             asking = true
         case .download:
             Task { await download() }
@@ -211,11 +211,11 @@ struct NodeHeaderActions: View {
         case .share: Label(word(id), systemImage: "square.and.arrow.up")
         case .rename: Label(word(id), systemImage: "pencil")
         case .move: Label(word(id), systemImage: "folder")
-        case .copy: Label(word(id), systemImage: "doc.on.doc")
+        case .theCopy: Label(word(id), systemImage: "doc.on.doc")
         case .cover: Label(word(id), systemImage: "photo")
         case .download: Label(word(id), systemImage: "arrow.down.circle")
         case .report: Label(word(id), systemImage: "flag")
-        case .delete: Label(word(id), systemImage: "trash")
+        case .delete_: Label(word(id), systemImage: "trash")
         default:
             if let own = contribution.actions.first(where: { $0.id == id }) { Label(own.label, systemImage: own.systemImage) }
         }

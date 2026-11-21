@@ -28,12 +28,12 @@ public sealed class HeaderPlanTest
         Assert.IsFalse(HeaderPlan.IsDrawn("an-applications-own", "FOLDER"), "an application's own action is its page's");
     }
 
-    private static PlanAction A(string id) => new() { id = id, word = null };
+    private static PlanAction A(string id) => new() { id = System.Text.Json.JsonSerializer.Deserialize<HeaderAction>($"\"{id}\""), word = null };
 
     private static Plan P(string[] buttons, string[] menu, string[] last) =>
         new() { buttons = buttons.Select(A).ToList(), menu = menu.Select(A).ToList(), last = last.Select(A).ToList() };
 
-    private static string Ids(System.Collections.Generic.IEnumerable<PlanAction?> actions) => string.Join(",", actions.Select(a => a?.id ?? "|"));
+    private static string Ids(System.Collections.Generic.IEnumerable<PlanAction?> actions) => string.Join(",", actions.Select(a => (a is null ? "|" : HeaderPlan.Id(a.id))));
 
     [TestMethod]
     public void AFoldersMoreAndAPotsAreLaidOutAlikeFromThePlansGroups()
@@ -45,9 +45,9 @@ public sealed class HeaderPlanTest
         Assert.AreEqual(Ids(HeaderPlan.Secondary(pot, "EXPENSES_POT")), Ids(HeaderPlan.Secondary(folder, "FOLDER")));
         Assert.AreEqual("favorite,share", Ids(HeaderPlan.Primary(folder, "FOLDER")));
         // one drawn action in the menu still stands apart from the last group
-        Assert.AreEqual("rename,|,delete", Ids(HeaderPlan.Secondary(P(["favorite"], ["own", "rename"], ["own2", "delete"]), "FOLDER")));
+        Assert.AreEqual("rename,|,delete", Ids(HeaderPlan.Secondary(P(["favorite"], ["banner", "rename"], ["report-shared", "delete"]), "FOLDER")));
         // no separator where a group draws nothing (an application's own actions are its page's)
-        Assert.AreEqual("delete", Ids(HeaderPlan.Secondary(P(["favorite"], ["own"], ["delete"]), "FOLDER")));
-        Assert.AreEqual("rename", Ids(HeaderPlan.Secondary(P(["favorite"], ["rename"], ["own"]), "FOLDER")));
+        Assert.AreEqual("delete", Ids(HeaderPlan.Secondary(P(["favorite"], ["banner"], ["delete"]), "FOLDER")));
+        Assert.AreEqual("rename", Ids(HeaderPlan.Secondary(P(["favorite"], ["rename"], ["report-shared"]), "FOLDER")));
     }
 }

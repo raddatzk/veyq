@@ -47,6 +47,34 @@ class ShellModelTest {
     }
 
     @Test
+    fun a_levels_plan_the_drawers_new_and_a_rows_menu_are_the_shells_answers() = runTest {
+        val t = PlayedTenant().also { played += it }
+        val s = t.scope("s1")
+        t.node(s, "f", kind = NodeRef.FOLDER, name = "Trips")
+        t.remember()
+        val a = t.resume()
+        val shell = ShellModel(a.open(a.tenants.first()), Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }
+        shell.load(openLastUsed = false)
+        shell.switchSpace(s.id)
+        val home = kotlin.test.assertNotNull(shell.shell)
+        // a space's level (ADR 0154 decision 2, owner 2026-11-20): New in its head, the trash before the view switch
+        val level = kotlin.test.assertNotNull(shell.levelPlan(home))
+        assertEquals(shell.createsHere(isHome = true, bookmarks = true), level.creates)
+        assertEquals(listOf(LevelTool.TRASH, LevelTool.VIEW), level.tools)
+        // the drawer's New comes first, where it offers anything: what the space's top takes
+        assertEquals(DrawerSection.NEW, shell.drawerSections().first())
+        assertEquals(AppKinds.createsWhere(isHome = false, bookmarks = true), shell.drawerCreates())
+        // an object, a person or Search shows no level
+        assertNull(shell.levelPlan(home.open(pot)))
+        // a folder row's menu: rename and move first, the delete last
+        val row = shell.rowPlan(NodeAt(s.id, t.id("f"), NodeRef.FOLDER, "Trips"))
+        assertEquals(listOf(HeaderAction.RENAME, HeaderAction.MOVE), row.menu.take(2))
+        assertEquals(HeaderAction.DELETE, row.last.last())
+        // a kind this build has no page for offers nothing
+        assertTrue(shell.rowPlan(NodeAt(s.id, "x", "UNKNOWN", "x")).isEmpty)
+    }
+
+    @Test
     fun an_applications_list_holds_its_favorites_then_its_recent_then_the_rest() {
         val rome = ObjectRef("t", "rome", "EXPENSES_POT", ApplicationId.EXPENSES, "Rome")
         val oslo = ObjectRef("t", "oslo", "EXPENSES_POT", ApplicationId.EXPENSES, "Oslo")

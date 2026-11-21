@@ -380,9 +380,9 @@ class MemoriesDispatchTest {
         val header = (b.ask(Call.HeaderOpen(memory, AppKinds.Facts(), 3)) as Answer.HeaderOpened).header
         assertEquals(Answer.Done, b.ask(Call.HeaderFacts(header, AppKinds.Facts(), gallery = g)))
         val plan = b.watching(Watched.Header(header)).until { u ->
-            (u as Update.Header).shown?.plan?.takeIf { p -> (p.buttons + p.menu + p.last).any { it.id == "upload" } }
+            (u as Update.Header).shown?.plan?.takeIf { p -> (p.buttons + p.menu + p.last).any { it.id == me.raddatz.veyq.mobile.navigation.HeaderAction.UPLOAD } }
         }
-        assertEquals(Msg.MEMORY_ADD, (plan.buttons + plan.menu + plan.last).single { it.id == "upload" }.word)
+        assertEquals(Msg.MEMORY_ADD, (plan.buttons + plan.menu + plan.last).single { it.id == me.raddatz.veyq.mobile.navigation.HeaderAction.UPLOAD }.word)
 
         // added by path: each read at offsets a frame at a time, its tiers the host's (on the queue's thread, the core's spec)
         val dir = java.nio.file.Files.createTempDirectory("veyq-memory").toFile()

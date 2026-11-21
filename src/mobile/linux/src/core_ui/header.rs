@@ -26,7 +26,7 @@ use std::rc::{Rc, Weak};
 use adw::prelude::*;
 use gtk::{cairo, gdk, gio, glib};
 
-use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::Crop, wire::Facts, wire::HeaderShown, wire::NodeAt, wire::OfflineToggle, wire::Update, wire::Watched};
+use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::Crop, wire::Facts, wire::HeaderAction, wire::HeaderShown, wire::NodeAt, wire::OfflineToggle, wire::Update, wire::Watched};
 use crate::core_ui::{said, words};
 
 /// The most buttons the content's header bar holds beside its title (GNOME: a few, the rest in the menu).
@@ -34,6 +34,12 @@ pub const MAX_BUTTONS: i32 = 2;
 
 /// The header's ids drawn so far; every other id of the plan is left out until its phase.
 pub const DRAWN: &[&str] = &["favorite", "share", "rename", "delete", "download", "move", "copy", "report", "cover", "replace", "upload", "offline", "music"];
+
+/// A plan entry's wire id (its serial name), what [DRAWN], the window's actions and the icons are keyed by until this app
+/// draws the plan whole (cr-apps-structure-from-core-plans phase 6).
+pub fn wire_id(a: HeaderAction) -> String {
+    serde_json::to_value(a).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default()
+}
 
 /// Whether [id] is drawn for a node of [kind].
 pub fn drawn(id: &str, _kind: &str) -> bool {
@@ -135,7 +141,7 @@ impl Header {
         click.connect_released(move |gesture, _, _, _| {
             let Some(i) = w.upgrade() else { return };
             let offered = i.shown.borrow().as_ref().and_then(|s| s.plan.as_ref()).is_some_and(|p| {
-                [&p.buttons, &p.menu, &p.last].iter().any(|g| g.iter().any(|a| a.id == "cover"))
+                [&p.buttons, &p.menu, &p.last].iter().any(|g| g.iter().any(|a| a.id == HeaderAction::Cover))
             });
             if offered {
                 let _ = gesture.widget().and_then(|w| w.activate_action("win.header-cover", None).ok());
@@ -158,7 +164,7 @@ impl Header {
             };
             inner.id.set(Some(header));
             if let Some((facts, file, gallery)) = inner.later.borrow_mut().take() {
-                bridge::send(Call::HeaderFacts { header, facts, file, gallery });
+                bridge::send(Call::HeaderFacts { header, facts, file, gallery, bookmark: None });
             }
             let Some((watch, updates)) = bridge::watch(&Watched::Header { header }) else { return };
             *inner.watch.borrow_mut() = Some(watch);
@@ -172,7 +178,7 @@ impl Header {
     /// the page's own actions (a file's Replace, a gallery's "Add photos") join the plan.
     pub fn facts(&self, facts: Option<Facts>, file: Option<i64>, gallery: Option<i64>) {
         match self.inner.id.get() {
-            Some(header) => bridge::send(Call::HeaderFacts { header, facts, file, gallery }),
+            Some(header) => bridge::send(Call::HeaderFacts { header, facts, file, gallery, bookmark: None }),
             None => *self.inner.later.borrow_mut() = Some((facts, file, gallery)),
         }
     }
@@ -314,7 +320,7 @@ impl Header {
         let Some(header) = self.inner.id.get() else { return };
         let shown = self.inner.shown.borrow();
         let Some(shown) = shown.as_ref() else { return };
-        let title = shown.plan.as_ref().and_then(|p| p.last.iter().find(|a| a.id == "delete")).and_then(|a| a.word.as_deref()).map(said::key).unwrap_or_default();
+        let title = shown.plan.as_ref().and_then(|p| p.last.iter().find(|a| a.id == HeaderAction::Delete)).and_then(|a| a.word.as_deref()).map(said::key).unwrap_or_default();
         let ask = adw::AlertDialog::builder().heading(&title).body(said::notice(&shown.delete_question)).build();
         ask.add_responses(&[("cancel", &words::entry_cancel()), ("delete", &words::entry_delete())]);
         ask.set_response_appearance("delete", adw::ResponseAppearance::Destructive);
@@ -480,22 +486,22 @@ impl Inner {
         let first = gio::Menu::new();
         let last = gio::Menu::new();
         // GNOME's header bar packs from the end: the menu outermost, the buttons before it
-        for a in plan.buttons.iter().filter(|a| drawn(&a.id, kind)) {
+        for a in plan.buttons.iter().filter(|a| drawn(&wire_id(a.id), kind)) {
             let label = a.word.as_deref().map(said::key).unwrap_or_default();
-            let button = if a.id == "favorite" {
+            let button = if a.id == HeaderAction::Favorite {
                 let icon = if s.pinned == Some(true) { "starred-symbolic" } else { "non-starred-symbolic" };
-                gtk::Button::builder().icon_name(icon).tooltip_text(&label).action_name(action_of(&a.id, kind)).build()
+                gtk::Button::builder().icon_name(icon).tooltip_text(&label).action_name(action_of(&wire_id(a.id), kind)).build()
             } else {
-                gtk::Button::builder().icon_name(icon_of(&a.id)).tooltip_text(&label).action_name(action_of(&a.id, kind)).build()
+                gtk::Button::builder().icon_name(icon_of(&wire_id(a.id))).tooltip_text(&label).action_name(action_of(&wire_id(a.id), kind)).build()
             };
             button.update_property(&[gtk::accessible::Property::Label(&label)]);
             self.bar.append(&button);
         }
         for (group, ids) in [(&first, &plan.menu), (&last, &plan.last)] {
-            for a in ids.iter().filter(|a| drawn(&a.id, kind)) {
-                group.append(a.word.as_deref().map(said::key).as_deref(), Some(&action_of(&a.id, kind)));
+            for a in ids.iter().filter(|a| drawn(&wire_id(a.id), kind)) {
+                group.append(a.word.as_deref().map(said::key).as_deref(), Some(&action_of(&wire_id(a.id), kind)));
                 // the pin's status under its check item, drawn insensitive
-                if a.id == "offline"
+                if a.id == HeaderAction::Offline
                     && let Some(line) = s.offline.as_ref().and_then(|o| o.said.as_ref())
                 {
                     // an action no one registers draws the item insensitive: a status, not a command
@@ -531,7 +537,7 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
             Ok(Update::Header { shown, .. }) => {
                 if let Some(s) = &shown {
                     eprintln!("veyq: header {}: pinned {:?}, offline {:?}, undo {}, gone {}, plan {}", s.node.kind, s.pinned, s.offline.as_ref().map(|o| (o.status, o.asking.is_some())), s.undo.is_some(), s.gone,
-                        s.plan.as_ref().map(|p| [&p.buttons, &p.menu, &p.last].iter().map(|g| g.iter().map(|a| a.id.as_str()).collect::<Vec<_>>().join(",")).collect::<Vec<_>>().join(" | ")).unwrap_or_default());
+                        s.plan.as_ref().map(|p| [&p.buttons, &p.menu, &p.last].iter().map(|g| g.iter().map(|a| wire_id(a.id)).collect::<Vec<_>>().join(",")).collect::<Vec<_>>().join(" | ")).unwrap_or_default());
                 }
                 *inner.shown.borrow_mut() = shown;
                 inner.draw();

@@ -97,7 +97,21 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   nothing until phase 4). **Deviations:** no `SELECT` tool — no app level selects (#1049); a level's tabs stay
   `Shell.barTabs` (the bar's, ADR 0122), no `LevelPlan` field; the account's address sits beside it as `ACCOUNT`, `EMAIL`,
   `PASSWORD`.
-- [ ] **2 bridge** — the enums and plans on the wire, generated into C# and Rust. · Done when: `:bridge:jvmTest` green.
+- [x] **2 bridge** — the enums and plans on the wire, generated into C# and Rust. · Done when: `:bridge:jvmTest` green.
+  **Built** (2026-11-20). `HeaderShown.PlanAction.id` is a `HeaderAction`; `Call.HeaderFacts` takes the kept link's page
+  (`bookmark`), whose own entries and words join the plan as a file's and a gallery's do; `ShellShown.level`
+  (`ShownLevel(creates, tools)`) and `drawerCreates`, `drawerSections` the shell's (`NEW` first); `SettingsShown.sections`
+  (no appearance on a desktop, the maps' consent where `ShellModel.mapsOffered`); `Call.RowPlan` → `Answer.RowPlan` (each
+  entry worded) and `Call.SignInPlan(adding, camera)` → `Answer.SignInPlan`; `GalleryRow.tileActions`,
+  `ShareShown.ShownLink.actions`; a gallery's creates read as `Create.valueOf` (no filter over the enum). Every enum is
+  generated into `bridge.rs` and `Bridge.g.cs` with the wire's ids. Tests: `DispatchTest` (the sign-in's and a row's
+  plan; the header's entries as enums), `WireTest`'s samples carry each new type, `SecretFreeSchemaTest`'s gallery row,
+  and the core's `ShellModelTest` for `levelPlan`, `drawerSections`, `drawerCreates`, `rowPlan` (bitten: the trash
+  dropped → red). Linux and Windows compile with their drawing kept: a plan entry's wire id (`header::wire_id`,
+  `HeaderPlan.Id`) feeds their whitelists until phases 6 and 7 replace them; their initializers carry the new fields
+  (`bookmark: None`, `sections: vec![]`/`[]`, `tile_actions`, `actions`). `linux/run.py bridge` and `build` green,
+  `windows/run.py build` green on the VM (Veyq.Tests 80, PdfWebTest), both Apple builds green — after phase 1's Swift
+  named two entries as Kotlin/Native does not: the framework mangles `COPY` to `theCopy` and `DELETE` to `delete_`.
 - [ ] **3 the guard** — S6, on for the core and the bridge, each platform switched on in its phase. · Done when: the
   guard green; `validate_guard_gaps.py` run once. **Bites:** a `default:` planted over `HeaderAction` in a Swift file,
   a whitelist array in Rust, a `.filter` on a plan in Kotlin — each red alone.

@@ -1093,7 +1093,7 @@ mod tests {
 
     fn row(marks: Option<i32>, mine: bool) -> GalleryRow {
         GalleryRow { media_id: "m".into(), name: None, media_type: None, video: false, blocked: false, tile: None, picture: None, captured_at: None,
-            width: None, height: None, said: None, can_delete: false, marks, mine }
+            width: None, height: None, said: None, can_delete: false, marks, mine, tile_actions: vec![] }
     }
 
     /// A tile's badge (ADR 0149 decision 4): the count where the scope counts and someone marked it, the heart filled where
