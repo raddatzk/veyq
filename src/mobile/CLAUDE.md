@@ -414,6 +414,11 @@ A Gradle build of its own, run through its own wrapper.
   `crypto/` or `jsMain` also runs `@veyq/core-js`'s check (`cd src/packages/core-js && pnpm run build && pnpm run
   check`): the suite's conformance over the web's `@noble/*` under Node, with its bite. No Kotlin/JS test task exists, and
   none of Kotlin's Node, Yarn or npm tasks may run (`src/mobile/build.gradle.kts` fails a build that reaches one).
+  `:core:jsPackage` writes byte-identical output (ADR 0155 decision 2): it sorts the interface lists Kotlin 2.4's
+  dead-code elimination leaves in hash order (KT-68281, `sortFreeInterfaceLists`) and fails on a Kotlin that carries
+  the fix — the upgrade to 2.5 deletes the step. A change to the JavaScript build proves it with three clean builds in
+  fresh processes (`rm -rf ../packages/core-js/dist; ./gradlew --no-daemon --rerun-tasks :core:jsPackage`, then
+  `find dist -type f | sort | xargs shasum -a 256 | shasum -a 256` in `src/packages/core-js`), one digest.
 - `./gradlew :core:jvmTest :core:macosArm64Test` — the suite against `contracts/crypto/vectors/v1.json` (with its
   bite) over BouncyCastle and over libsodium, the navigation model, and the grant check (`GrantTrustTest`: the web's
   `openOwnGrant`/`verifyOwnGrant` rules against a server the test plays). Any change under

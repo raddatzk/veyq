@@ -439,6 +439,27 @@ val jsKotlinVersion = tasks.register("jsKotlinVersion") {
     outputs.file(out)
     doLast { out.get().asFile.writeText("$version\n") }
 }
+// KT-68281: Kotlin 2.4's production link lists a class's interfaces in an order that differs between compiler processes.
+// Its dead-code elimination (`UselessDeclarationsRemover.collectUsedSuperTypes`) replaces an interface it removed by that
+// interface's surviving supertypes, gathered in a `HashSet` of IR symbols, whose iteration follows their identity hashes:
+// `MutableList` dropped, `AbstractMutableList`'s `initMetadataForClass` names `[KtList, Collection]` in one build and
+// `[Collection, KtList]` in the next. Fixed upstream in 2.5.0 (a `LinkedHashSet`); no compiler flag, execution strategy
+// or `-Xir-keep` holds it in 2.4 (measured 2026-11-21). Until then `jsPackage` sorts such a list by name — only where it
+// cannot change what runs: `initMetadataFor` copies each listed interface's prototype onto the class's in list order
+// (`Object.assign`), so the order is free exactly when no listed interface, nor a super-interface of one, carries a
+// default member (`protoOf(I).m = …`) — checked per list, every interface declared in that module; a list naming an
+// imported interface is left as the compiler wrote it. Byte-identical builds are ADR 0155's criterion.
+fun sortFreeInterfaceLists(module: String): String {
+    val ident = """[A-Za-z_$][\w$]*"""
+    val supers = Regex("""^initMetadataForInterface\(($ident), '[^']*'[^\[\n]*(?:\[([^\]]*)\])?""", RegexOption.MULTILINE)
+        .findAll(module).associate { m -> m.groupValues[1] to m.groupValues[2].split(", ").filter { it.isNotEmpty() } }
+    val withDefaults = Regex("""protoOf\(($ident)\)\.""").findAll(module).map { it.groupValues[1] }.toSet()
+    fun free(name: String): Boolean = name in supers && name !in withDefaults && supers.getValue(name).all(::free)
+    return Regex("""^(initMetadataFor\w*\([^\[\n]*)\[($ident(?:, $ident)+)\]""", RegexOption.MULTILINE).replace(module) { m ->
+        val names = m.groupValues[2].split(", ")
+        if (names.all(::free)) "${m.groupValues[1]}[${names.sorted().joinToString(", ")}]" else m.value
+    }
+}
 val jsPackage = tasks.register<Sync>("jsPackage") {
     group = "veyq"
     description = "Compiles the core for JavaScript and writes the module and its conformance runner into src/packages/core-js/dist."
@@ -448,6 +469,17 @@ val jsPackage = tasks.register<Sync>("jsPackage") {
     }
     from(jsKotlinVersion)
     into(coreJsDist)
+    val kotlinVersion = getKotlinPluginVersion()
+    doLast {
+        check(KotlinVersion(2, 5) > kotlinVersion.split('.', '-').take(2).map(String::toInt).let { KotlinVersion(it[0], it[1]) }) {
+            "Kotlin $kotlinVersion carries the fix for KT-68281: remove sortFreeInterfaceLists from core/build.gradle.kts"
+        }
+        coreJsDist.walk().filter { it.isFile && it.name.endsWith(".mjs") }.forEach { file ->
+            val module = file.readText()
+            val sorted = sortFreeInterfaceLists(module)
+            if (sorted != module) file.writeText(sorted)
+        }
+    }
 }
 // The dev server's build (`build.py --watch`, src/web/vite.config.ts): the development link of the shipped module alone —
 // no dead-code elimination, no conformance binary — into the same `dist/`, so a saved rule reaches the open page inside
