@@ -9,6 +9,7 @@ import { formatBytes } from '../shared/formatBytes'
 import { decimalOf, formatMoney, knownCurrencies, minorUnitsOf } from '../features/expenses/amounts'
 import { formatClosedRange, formatDay } from '../features/memories/memoryDateRange'
 import { formatTrackLength } from '../features/memories/music/audio'
+import { formatDistance } from '../features/memories/track/trackFacts'
 import { joinList } from '../core/node/selection'
 
 export const LANGUAGES = ['en', 'de'] as const
@@ -73,6 +74,9 @@ function lengths(): number[] {
     3_599_500, 3_600_000, 3_661_000, 36_000_000, 359_999_999, -1000]
 }
 
+/** A track's length in metres (`trackFacts.ts`' `formatDistance`): around the kilometre and the decimal's rounding. */
+const DISTANCES = [0, 0.4, 0.5, 1, 849.6, 999.4, 999.5, 1000, 1049, 1050, 1234.5, 12_000, 12_340, 12_350, 99_999, 1_234_567.8]
+
 const AMOUNTS = [123_456_789, -5, 0, 1, 100]
 
 export interface FormatVectors {
@@ -85,6 +89,8 @@ export interface FormatVectors {
   readonly number: readonly ({ amount: number; minorUnits: number } & Said)[]
   readonly list: readonly ({ items: string[] } & Said)[]
   readonly length: readonly { ms: number; text: string }[]
+  readonly dayLabel: readonly ({ iso: string; withYear: boolean } & Said)[]
+  readonly distance: readonly ({ meters: number } & Said)[]
 }
 
 /** Every vector, rendered now by the web's formatters. */
@@ -129,5 +135,12 @@ export function formatVectors(): FormatVectors {
     number,
     list: lists.map((items) => ({ items, ...said((l) => joinList(l, items)) })),
     length: lengths().map((ms) => ({ ms, text: formatTrackLength(ms) })),
+    // a gallery filter's day chip (`galleryFilter.ts`' label: the year only where the Memory spans more than one)
+    dayLabel: days().filter((iso) => !iso.startsWith('0')).flatMap((iso) => [false, true].map((withYear) => ({
+      iso, withYear,
+      ...said((l) => new Intl.DateTimeFormat(l, { timeZone: 'UTC', day: 'numeric', month: 'long', ...(withYear ? { year: 'numeric' } : {}) })
+        .format(new Date(`${iso}T12:00:00Z`))),
+    }))),
+    distance: DISTANCES.map((meters) => ({ meters, ...said((l) => formatDistance(meters, l)) })),
   }
 }

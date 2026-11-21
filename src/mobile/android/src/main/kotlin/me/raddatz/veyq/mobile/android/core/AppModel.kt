@@ -507,7 +507,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         android.util.Log.i("veyq-trust", line)
     }
 
-    private fun trustFailed() = notify(Notice(getApplication<Application>().getString(R.string.trust_failed)))
+    private fun trustFailed() = said(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.TRUST_FAILED))
 
     /** The debug build's `--unlock` password, for "Manage servers"' password field once (never typed by a pass). */
     private var devPasswordTrust: String? = null
@@ -1244,10 +1244,13 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     // ---- what the shell says (a snackbar), and an upload under way ----
 
     /**
-     * A notice the shell shows once: its text and, where offered, an action (Depot's "Replace anyway"); [done] once it is
-     * gone, its action taken or not.
+     * A notice the shell shows once: its text, how long it lives (core's [kind]) and, where offered, an action (Depot's
+     * "Replace anyway"); [done] once it is gone, its action taken or not.
      */
-    class Notice(val text: String, val action: String? = null, val run: (suspend () -> Unit)? = null, val done: (() -> Unit)? = null)
+    class Notice(
+        val text: String, val kind: me.raddatz.veyq.mobile.words.NoticeKind, val action: String? = null,
+        val run: (suspend () -> Unit)? = null, val done: (() -> Unit)? = null,
+    )
 
     private val _notices = kotlinx.coroutines.channels.Channel<Notice>(kotlinx.coroutines.channels.Channel.BUFFERED)
     val notices: kotlinx.coroutines.flow.Flow<Notice> = _notices.receiveAsFlow()
@@ -1257,7 +1260,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Core's [notice] said by the shell, in the words of the app's language. */
-    fun said(notice: me.raddatz.veyq.mobile.words.Notice) = notify(Notice(getApplication<Application>().text(notice)))
+    fun said(notice: me.raddatz.veyq.mobile.words.Notice) = notify(Notice(getApplication<Application>().text(notice), notice.kind))
 
     // ---- the writes made offline (ADR 0153): core's outbox, its tray, its marks and its notices; the app only draws ----
 
@@ -1426,7 +1429,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 val (d, said) = pair ?: return@collect
                 said ?: return@collect
                 val app = getApplication<Application>()
-                notify(Notice(said.notices.joinToString("\n") { app.text(it) }, said.action?.let { app.words(it) }, run = { d.take(said) }) { d.seen(said.id) })
+                // an offer waits for its answer; a line said with a refusal stays as the refusal does
+                val kind = if (said.action != null || said.notices.any { it.kind != me.raddatz.veyq.mobile.words.NoticeKind.SAID }) me.raddatz.veyq.mobile.words.NoticeKind.HELD else me.raddatz.veyq.mobile.words.NoticeKind.SAID
+                notify(Notice(said.notices.joinToString("\n") { app.text(it) }, kind, said.action?.let { app.words(it) }, run = { d.take(said) }) { d.seen(said.id) })
             }
     }
 
@@ -1578,20 +1583,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * The viewer's calendar for a gallery filter's day chips (ADR 0149 decision 5, inbox #989): a capture time's local day on
-     * this device's zone, its chip labelled in the app's language by the platform's own skeleton (with the year where the
-     * gallery spans more than one) — the core does no zone arithmetic.
+     * The viewer's calendar for a gallery filter's day chips (ADR 0149 decision 5, inbox #989): the core's
+     * (`GalleryFilter.Calendar.local`: a capture time's local day, its chip labelled as the web labels it) in the app's language.
      */
-    private fun galleryCalendar(): me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar {
-        val locale = getApplication<Application>().resources.configuration.locales.get(0) ?: java.util.Locale.getDefault()
-        val zone = java.time.ZoneId.systemDefault()
-        fun format(skeleton: String) = java.time.format.DateTimeFormatter.ofPattern(android.text.format.DateFormat.getBestDateTimePattern(locale, skeleton), locale)
-        val short = format("dMMM")
-        val long = format("dMMMy")
-        return me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar({ ms -> java.time.Instant.ofEpochMilli(ms).atZone(zone).toLocalDate().toString() }) { ms, withYear ->
-            (if (withYear) long else short).format(java.time.Instant.ofEpochMilli(ms).atZone(zone))
-        }
-    }
+    private fun galleryCalendar(): me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar =
+        me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar.local(getApplication<Application>().language)
 
     // ---- a Memory's Contributions view (ADR 0149 decision 6) ----
 

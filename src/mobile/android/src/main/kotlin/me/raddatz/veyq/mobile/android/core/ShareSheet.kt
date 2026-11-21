@@ -54,10 +54,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
-import java.time.format.FormatStyle
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.android.R
 import me.raddatz.veyq.mobile.android.words
@@ -163,7 +160,7 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
 private fun LinkRow(row: me.raddatz.veyq.mobile.session.LinkRow, busy: Boolean, onAction: (me.raddatz.veyq.mobile.navigation.LinkAction) -> Unit) {
     val palette = LocalPalette.current
     val context = LocalContext.current
-    val copied = stringResource(R.string.share_copied)
+    val copied = rememberCopied()
     val link = row.link
     val actions = me.raddatz.veyq.mobile.navigation.ShareSheet.rowActions(row)
     val url = link.url
@@ -173,12 +170,13 @@ private fun LinkRow(row: me.raddatz.veyq.mobile.session.LinkRow, busy: Boolean, 
             val dates = listOfNotNull(
                 stringResource(R.string.share_created, day(link.createdAt)),
                 link.expiresAt?.let { stringResource(R.string.share_expires, day(it)) },
-            ).joinToString(" · ")
+            ).joined()
             Text(dates, style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
             val badges = row.badges.map { say(it) }
-            if (badges.isNotEmpty()) Text(badges.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.accent))
+            if (badges.isNotEmpty()) Text(badges.joined(), style = MaterialTheme.typography.bodySmall, color = role(palette.accent))
         }
-        if (url != null && me.raddatz.veyq.mobile.navigation.LinkAction.COPY in actions) IconButton(onClick = { copy(context, url); android.widget.Toast.makeText(context, copied, android.widget.Toast.LENGTH_SHORT).show() }) {
+        if (copied.shown) Text(stringResource(R.string.share_copied), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+        if (url != null && me.raddatz.veyq.mobile.navigation.LinkAction.COPY in actions) IconButton(onClick = { copy(context, url); copied.said() }) {
             Icon(Icons.Outlined.ContentCopy, stringResource(R.string.share_copy))
         }
         if (busy) CircularProgressIndicator(Modifier.padding(12.dp).width(20.dp))
@@ -240,14 +238,15 @@ internal fun TopLevelUploadSheet(scopeId: String, model: AppModel, onClose: () -
 @Composable
 private fun FreshLink(url: String, onDone: () -> Unit) {
     val context = LocalContext.current
-    val copied = stringResource(R.string.share_copied)
+    val copied = rememberCopied()
     Text(stringResource(R.string.share_ready))
     Spacer(Modifier.padding(4.dp))
     OutlinedTextField(url, {}, readOnly = true, singleLine = true, modifier = Modifier.fillMaxWidth())
-    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+    Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+        if (copied.shown) Text(stringResource(R.string.share_copied), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
         TextButton(onClick = onDone) { Text(stringResource(R.string.share_done)) }
         TextButton(onClick = { sendText(context, url) }) { Text(stringResource(R.string.share_send)) }
-        Button(onClick = { copy(context, url); android.widget.Toast.makeText(context, copied, android.widget.Toast.LENGTH_SHORT).show() }) {
+        Button(onClick = { copy(context, url); copied.said() }) {
             Text(stringResource(R.string.share_copy))
         }
     }
@@ -308,7 +307,7 @@ private fun NewLinkForm(
         Switch(form.withEnd, { on -> onChange { it.withEndOn(on) } }, enabled = form.endOptional)
     }
     if (form.withEnd) TextButton(onClick = { picking = true }) {
-        Text(stringResource(R.string.share_expires, LocalDate.ofEpochDay(form.endDay).format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))))
+        Text(stringResource(R.string.share_expires, me.raddatz.veyq.mobile.words.Shown.day(form.endDay, language())))
     }
     if (picking) {
         val state = rememberDatePickerState(
@@ -339,15 +338,44 @@ private fun NewLinkForm(
 }
 
 
+/** "Copied" beside what was copied, shown for the core's [me.raddatz.veyq.mobile.words.Notice.COPIED_MS] (the web's copy note). */
+private class Copied {
+    var shown by mutableStateOf(false)
+        private set
+    var times by mutableStateOf(0)
+        private set
+
+    fun said() {
+        shown = true
+        times += 1
+    }
+
+    fun gone() {
+        shown = false
+    }
+}
+
+/** A [Copied] that ends itself: each copy shows it anew for its whole time. */
+@Composable
+private fun rememberCopied(): Copied {
+    val copied = remember { Copied() }
+    androidx.compose.runtime.LaunchedEffect(copied.times) {
+        if (copied.shown) {
+            kotlinx.coroutines.delay(me.raddatz.veyq.mobile.words.Notice.COPIED_MS)
+            copied.gone()
+        }
+    }
+    return copied
+}
+
 private fun copy(context: android.content.Context, text: String) {
     val clipboard = context.getSystemService(android.content.ClipboardManager::class.java)
     clipboard.setPrimaryClip(android.content.ClipData.newPlainText("veyq", text))
 }
 
-/** The day of a server instant (ISO 8601), in the device's words. */
-private fun day(instant: String): String = runCatching {
-    DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).format(Instant.parse(instant).atZone(ZoneId.systemDefault()).toLocalDate())
-}.getOrDefault(instant.take(10))
+/** The local day of a server instant (ISO 8601), as the web writes it (`Shown.dayOf`). */
+@Composable
+private fun day(instant: String): String = me.raddatz.veyq.mobile.words.Shown.dayOf(instant, language())
 
 /** [text] handed to another app through the system's share sheet (a link to send in a chat or a mail). */
 private fun sendText(context: android.content.Context, text: String) {

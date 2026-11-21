@@ -37,6 +37,7 @@ import me.raddatz.veyq.mobile.android.core.OwnAction
 import me.raddatz.veyq.mobile.android.core.PrimaryButton
 import me.raddatz.veyq.mobile.android.core.RecordNotice
 import me.raddatz.veyq.mobile.android.core.Registry
+import me.raddatz.veyq.mobile.android.core.joined
 import me.raddatz.veyq.mobile.android.core.role
 import me.raddatz.veyq.mobile.android.core.say
 import me.raddatz.veyq.mobile.navigation.ApplicationId
@@ -117,13 +118,16 @@ private fun GuestDropBoxPage(drop: me.raddatz.veyq.mobile.depot.GuestDropBox, ac
             if (sent.isNotEmpty() || mine.isNotEmpty()) {
                 Text(stringResource(R.string.share_dropbox_session), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
                 for (item in mine) Text(
-                    item.name + " · " + stringResource(
-                        when {
-                            item.active -> R.string.share_dropbox_sending
-                            item.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.FAILED -> R.string.share_dropbox_failed
-                            else -> R.string.share_dropbox_sent
-                        },
-                    ),
+                    listOf(
+                        item.name,
+                        stringResource(
+                            when {
+                                item.active -> R.string.share_dropbox_sending
+                                item.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.FAILED -> R.string.share_dropbox_failed
+                                else -> R.string.share_dropbox_sent
+                            },
+                        ),
+                    ).joined(),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 for (name in sent.filter { n -> mine.none { it.name == n } }) Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("guest-drop-sent"))

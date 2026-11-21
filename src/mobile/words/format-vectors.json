@@ -7679,5 +7679,293 @@
    "ms": -1000,
    "text": "0:00"
   }
+ ],
+ "dayLabel": [
+  {
+   "iso": "1970-01-01",
+   "withYear": false,
+   "en": "January 1",
+   "de": "1. Januar"
+  },
+  {
+   "iso": "1970-01-01",
+   "withYear": true,
+   "en": "January 1, 1970",
+   "de": "1. Januar 1970"
+  },
+  {
+   "iso": "2000-02-29",
+   "withYear": false,
+   "en": "February 29",
+   "de": "29. Februar"
+  },
+  {
+   "iso": "2000-02-29",
+   "withYear": true,
+   "en": "February 29, 2000",
+   "de": "29. Februar 2000"
+  },
+  {
+   "iso": "1999-12-31",
+   "withYear": false,
+   "en": "December 31",
+   "de": "31. Dezember"
+  },
+  {
+   "iso": "1999-12-31",
+   "withYear": true,
+   "en": "December 31, 1999",
+   "de": "31. Dezember 1999"
+  },
+  {
+   "iso": "2026-11-20",
+   "withYear": false,
+   "en": "November 20",
+   "de": "20. November"
+  },
+  {
+   "iso": "2026-11-20",
+   "withYear": true,
+   "en": "November 20, 2026",
+   "de": "20. November 2026"
+  },
+  {
+   "iso": "9999-12-31",
+   "withYear": false,
+   "en": "December 31",
+   "de": "31. Dezember"
+  },
+  {
+   "iso": "9999-12-31",
+   "withYear": true,
+   "en": "December 31, 9999",
+   "de": "31. Dezember 9999"
+  },
+  {
+   "iso": "2026-01-04",
+   "withYear": false,
+   "en": "January 4",
+   "de": "4. Januar"
+  },
+  {
+   "iso": "2026-01-04",
+   "withYear": true,
+   "en": "January 4, 2026",
+   "de": "4. Januar 2026"
+  },
+  {
+   "iso": "2026-02-28",
+   "withYear": false,
+   "en": "February 28",
+   "de": "28. Februar"
+  },
+  {
+   "iso": "2026-02-28",
+   "withYear": true,
+   "en": "February 28, 2026",
+   "de": "28. Februar 2026"
+  },
+  {
+   "iso": "2026-03-06",
+   "withYear": false,
+   "en": "March 6",
+   "de": "6. März"
+  },
+  {
+   "iso": "2026-03-06",
+   "withYear": true,
+   "en": "March 6, 2026",
+   "de": "6. März 2026"
+  },
+  {
+   "iso": "2026-04-07",
+   "withYear": false,
+   "en": "April 7",
+   "de": "7. April"
+  },
+  {
+   "iso": "2026-04-07",
+   "withYear": true,
+   "en": "April 7, 2026",
+   "de": "7. April 2026"
+  },
+  {
+   "iso": "2026-05-08",
+   "withYear": false,
+   "en": "May 8",
+   "de": "8. Mai"
+  },
+  {
+   "iso": "2026-05-08",
+   "withYear": true,
+   "en": "May 8, 2026",
+   "de": "8. Mai 2026"
+  },
+  {
+   "iso": "2026-06-09",
+   "withYear": false,
+   "en": "June 9",
+   "de": "9. Juni"
+  },
+  {
+   "iso": "2026-06-09",
+   "withYear": true,
+   "en": "June 9, 2026",
+   "de": "9. Juni 2026"
+  },
+  {
+   "iso": "2026-07-10",
+   "withYear": false,
+   "en": "July 10",
+   "de": "10. Juli"
+  },
+  {
+   "iso": "2026-07-10",
+   "withYear": true,
+   "en": "July 10, 2026",
+   "de": "10. Juli 2026"
+  },
+  {
+   "iso": "2026-08-11",
+   "withYear": false,
+   "en": "August 11",
+   "de": "11. August"
+  },
+  {
+   "iso": "2026-08-11",
+   "withYear": true,
+   "en": "August 11, 2026",
+   "de": "11. August 2026"
+  },
+  {
+   "iso": "2026-09-12",
+   "withYear": false,
+   "en": "September 12",
+   "de": "12. September"
+  },
+  {
+   "iso": "2026-09-12",
+   "withYear": true,
+   "en": "September 12, 2026",
+   "de": "12. September 2026"
+  },
+  {
+   "iso": "2026-10-13",
+   "withYear": false,
+   "en": "October 13",
+   "de": "13. Oktober"
+  },
+  {
+   "iso": "2026-10-13",
+   "withYear": true,
+   "en": "October 13, 2026",
+   "de": "13. Oktober 2026"
+  },
+  {
+   "iso": "2026-11-14",
+   "withYear": false,
+   "en": "November 14",
+   "de": "14. November"
+  },
+  {
+   "iso": "2026-11-14",
+   "withYear": true,
+   "en": "November 14, 2026",
+   "de": "14. November 2026"
+  },
+  {
+   "iso": "2026-12-15",
+   "withYear": false,
+   "en": "December 15",
+   "de": "15. Dezember"
+  },
+  {
+   "iso": "2026-12-15",
+   "withYear": true,
+   "en": "December 15, 2026",
+   "de": "15. Dezember 2026"
+  }
+ ],
+ "distance": [
+  {
+   "meters": 0,
+   "en": "0 m",
+   "de": "0 m"
+  },
+  {
+   "meters": 0.4,
+   "en": "0 m",
+   "de": "0 m"
+  },
+  {
+   "meters": 0.5,
+   "en": "1 m",
+   "de": "1 m"
+  },
+  {
+   "meters": 1,
+   "en": "1 m",
+   "de": "1 m"
+  },
+  {
+   "meters": 849.6,
+   "en": "850 m",
+   "de": "850 m"
+  },
+  {
+   "meters": 999.4,
+   "en": "999 m",
+   "de": "999 m"
+  },
+  {
+   "meters": 999.5,
+   "en": "1,000 m",
+   "de": "1.000 m"
+  },
+  {
+   "meters": 1000,
+   "en": "1 km",
+   "de": "1 km"
+  },
+  {
+   "meters": 1049,
+   "en": "1 km",
+   "de": "1 km"
+  },
+  {
+   "meters": 1050,
+   "en": "1.1 km",
+   "de": "1,1 km"
+  },
+  {
+   "meters": 1234.5,
+   "en": "1.2 km",
+   "de": "1,2 km"
+  },
+  {
+   "meters": 12000,
+   "en": "12 km",
+   "de": "12 km"
+  },
+  {
+   "meters": 12340,
+   "en": "12.3 km",
+   "de": "12,3 km"
+  },
+  {
+   "meters": 12350,
+   "en": "12.4 km",
+   "de": "12,4 km"
+  },
+  {
+   "meters": 99999,
+   "en": "100 km",
+   "de": "100 km"
+  },
+  {
+   "meters": 1234567.8,
+   "en": "1,234.6 km",
+   "de": "1.234,6 km"
+  }
  ]
 }

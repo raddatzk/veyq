@@ -275,10 +275,18 @@ def check_manifests(root: Path) -> list[str]:
 
 # platform-format (ADR 0154 decisions 4 and 5): switched on per platform by its phase of
 # cr-apps-notices-and-formats-from-the-core; each platform's own durations and formatters are gone then.
-PLATFORM_FORMAT_ON: set[str] = {"apple"}
-# (platform, file relative to src/mobile, the matched text) a platform may keep, each with why. Empty until a platform's
-# phase names one.
+PLATFORM_FORMAT_ON: set[str] = {"android", "apple"}
+# (platform, file relative to src/mobile, the matched text) a platform may keep, each with why.
 PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {
+    ("android", "android/src/main/kotlin/me/raddatz/veyq/mobile/android/core/NoticeHost.kt", "SnackbarDuration.Indefinite"):
+        "the one place a notice meets Material's snackbar: shown without a lifetime of Material's own, closed after the "
+        "core's `lifeMs` or when the core ends an undo",
+    ("android", "android/src/main/kotlin/me/raddatz/veyq/mobile/android/core/SettingsScreen.kt", "delay(50)"):
+        "a layout poll while the search's section is scrolled into view, no notice's",
+    ("android", "android/src/main/kotlin/me/raddatz/veyq/mobile/android/core/SettingsScreen.kt", "delay(100)"):
+        "a layout poll while the search's section is scrolled into view, no notice's",
+    ("android", "android/src/debug/kotlin/me/raddatz/veyq/mobile/android/DevAudio.kt", "delay(1500)"):
+        "a debug build's playback probe lets a deck play before it reads the position, no notice's",
     ("apple", "apple/Veyq/Core/AppModel.swift", ".currency(code:"):
         "the Pot create sheet's own `currency(code:)` — a currency picked, nothing formatted",
     ("apple", "apple/Veyq/Core/MusicPlayback.swift", ".milliseconds(2"):

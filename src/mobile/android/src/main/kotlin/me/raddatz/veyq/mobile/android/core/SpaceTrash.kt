@@ -72,7 +72,7 @@ internal fun SpaceTrashSheet(scopeId: String, model: AppModel, onClose: () -> Un
                                 Text(row.name, fontWeight = FontWeight.SemiBold)
                             }
                             Text(
-                                stringResource(R.string.trash_deleted_on, day(row.deletedAt)) + " · " + stringResource(R.string.trash_purge_on, day(row.purgeAfter)),
+                                listOf(stringResource(R.string.trash_deleted_on, day(row.deletedAt)), stringResource(R.string.trash_purge_on, day(row.purgeAfter))).joined(),
                                 style = MaterialTheme.typography.bodySmall, color = role(palette.muted),
                             )
                             if (st.errorRow == row.id) st.error?.let { Text(say(it), style = MaterialTheme.typography.bodySmall, color = role(palette.danger)) }
@@ -112,8 +112,6 @@ internal fun SpaceTrashSheet(scopeId: String, model: AppModel, onClose: () -> Un
     }
 }
 
-/** The day of a server instant (ISO 8601), in the device's words. */
-private fun day(instant: String): String = runCatching {
-    java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM)
-        .format(java.time.Instant.parse(instant).atZone(java.time.ZoneId.systemDefault()).toLocalDate())
-}.getOrDefault(instant.take(10))
+/** The local day of a server instant (ISO 8601), as the web writes it (`Shown.dayOf`). */
+@androidx.compose.runtime.Composable
+private fun day(instant: String): String = me.raddatz.veyq.mobile.words.Shown.dayOf(instant, language())

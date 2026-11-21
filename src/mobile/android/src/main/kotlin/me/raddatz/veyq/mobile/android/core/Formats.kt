@@ -1,49 +1,60 @@
 package me.raddatz.veyq.mobile.android.core
 
 import android.content.Context
-import java.math.BigDecimal
-import java.text.NumberFormat
-import java.time.LocalDate
-import java.time.ZoneOffset
-import java.util.Currency
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import me.raddatz.veyq.mobile.android.words
 import me.raddatz.veyq.mobile.memories.place.MemoryDate
 import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.Shown
+
+// Every size, day, moment, amount and joined line the app shows is the core's text (`words/Shown`, ADR 0154 decision 5):
+// written in the app's language, the same as the web's and the other apps'. The app formats none of its own.
 
 /** The reader's decimal separator, as amounts are typed over. */
 internal fun separator(): Char = java.text.DecimalFormatSymbols.getInstance().decimalSeparator
 
-/** Minor units of [currency] as the person's locale writes money. */
-fun money(minor: Long, currency: String?, minorUnits: Int): String {
-    // D8: the core hands every amount with its currency; none is never the locale's, but a number alone (the desktops' rule)
-    val f = if (currency == null) NumberFormat.getNumberInstance() else NumberFormat.getCurrencyInstance()
-    currency?.let { runCatching { f.currency = Currency.getInstance(it) } }
-    f.minimumFractionDigits = minorUnits
-    f.maximumFractionDigits = minorUnits
-    return f.format(BigDecimal.valueOf(minor, minorUnits))
+/** The app's language (the per-app one Android applies), the one the core's [Shown] writes a value in. */
+internal val Context.language: String
+    get() = resources.configuration.locales.get(0)?.language?.takeIf { it.isNotEmpty() } ?: java.util.Locale.getDefault().language
+
+/** The app's language in a composable (read again when the configuration, its language among it, changes). */
+@Composable
+internal fun language(): String {
+    LocalConfiguration.current
+    return LocalContext.current.language
 }
 
-/** An entry's `YYYY-MM-DD` as the person's locale writes a day; the text itself when it is no date. */
-internal fun localDate(iso: String): String = runCatching {
-    java.time.LocalDate.parse(iso).format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM))
-}.getOrDefault(iso)
+/** Minor units of [currency] as the web writes money (`Shown.money`); a null currency the number alone. */
+internal fun Context.money(minor: Long, currency: String?, minorUnits: Int): String = Shown.money(minor, currency, minorUnits, language)
+
+/** [money] in a composable. */
+@Composable
+internal fun money(minor: Long, currency: String?, minorUnits: Int): String = Shown.money(minor, currency, minorUnits, language())
+
+/** An ISO day (`YYYY-MM-DD`) as the web writes a day (`Shown.day`); the text itself when it is no day. */
+internal fun Context.localDate(iso: String): String = Shown.day(iso, language)
+
+/** A size in bytes as the web writes it (`Shown.size`). */
+internal fun Context.size(bytes: Long): String = Shown.size(bytes, language)
+
+/** A moment (epoch milliseconds) in this device's zone as the web writes it (`Shown.moment`). */
+internal fun Context.moment(epochMs: Long): String = Shown.moment(epochMs, language)
+
+/** [moment] in a composable. */
+@Composable
+internal fun moment(epochMs: Long): String = Shown.moment(epochMs, language())
+
+/** A line's parts as every app joins them (`Shown.joined`). */
+internal fun List<String>.joined(): String = Shown.joined(this)
 
 /**
- * A Memory's date as a list row and its header say it (ADR 0143 D5): a single day, a range the device's way
- * (`DateUtils.formatDateRange`: "3–5 Jan 2020"), an ongoing one "Since …"; null where it has no day yet.
+ * A Memory's date as a list row and its header say it (ADR 0143 D5; the web's `memoryDateRange`): a single day, a
+ * closed range ("03/12/2026 – 04/02/2026"), an ongoing one "Since …"; null where it has no day yet.
  */
 internal fun Context.memoryDateText(d: MemoryDate): String? {
     val from = d.from ?: return null
-    if (d.mode == MemoryDate.Mode.ONGOING) return words(Msg.MEMORY_DATE_SINCE, localDate(from))
-    val to = d.to
-    if (to == null || to == from) return localDate(from)
-    return runCatching {
-        // noon of each day in UTC: the range is days, never shifted by a zone
-        fun ms(iso: String) = LocalDate.parse(iso).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli() + 12 * 3_600_000L
-        android.text.format.DateUtils.formatDateRange(
-            this, ms(from), ms(to),
-            android.text.format.DateUtils.FORMAT_SHOW_DATE or android.text.format.DateUtils.FORMAT_SHOW_YEAR or
-                android.text.format.DateUtils.FORMAT_ABBREV_MONTH or android.text.format.DateUtils.FORMAT_UTC,
-        )
-    }.getOrElse { "${localDate(from)} – ${localDate(to)}" }
+    if (d.mode == MemoryDate.Mode.ONGOING) return words(Msg.MEMORY_DATE_SINCE, Shown.memoryDay(from, language))
+    return Shown.dayRange(from, d.to, language)
 }

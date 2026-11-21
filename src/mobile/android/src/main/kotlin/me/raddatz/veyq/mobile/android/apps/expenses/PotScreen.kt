@@ -53,9 +53,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
-import java.math.BigDecimal
-import java.text.NumberFormat
-import java.util.Currency
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.android.R
 import me.raddatz.veyq.mobile.android.core.AppModel
@@ -66,10 +63,12 @@ import me.raddatz.veyq.mobile.android.core.LocalShellNotices
 import me.raddatz.veyq.mobile.android.core.PersonAvatar
 import me.raddatz.veyq.mobile.android.core.Screen
 import me.raddatz.veyq.mobile.android.core.Section
+import me.raddatz.veyq.mobile.android.core.joined
 import me.raddatz.veyq.mobile.android.core.money
 import me.raddatz.veyq.mobile.android.core.piece
 import me.raddatz.veyq.mobile.android.core.role
 import me.raddatz.veyq.mobile.android.core.say
+import me.raddatz.veyq.mobile.android.core.show
 import me.raddatz.veyq.mobile.android.core.text
 import me.raddatz.veyq.mobile.expenses.Ledger
 import me.raddatz.veyq.mobile.expenses.PotView
@@ -165,7 +164,7 @@ private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMod
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(e.title ?: stringResource(R.string.pot_transfer), fontWeight = FontWeight.SemiBold)
-                        Text(view.line(e).map { piece(it) }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+                        Text(view.line(e).map { piece(it) }.joined(), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
                         view.badge(e)?.let { b -> Text(say(b.notice), style = MaterialTheme.typography.labelSmall, color = role(if (b.danger) palette.danger else palette.muted)) }
                         // made offline and not sent yet (core's `PotView.unsentMark`, ADR 0153 decision 5)
                         view.unsentMark(e)?.let { Text(say(it), style = MaterialTheme.typography.labelSmall, color = role(palette.muted), modifier = Modifier.testTag("pot-unsent")) }
@@ -209,7 +208,7 @@ private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMod
             val taken = model.takeShare() ?: return@launch
             shared = taken.pending
             // what the new expense left out, in Expenses' own words: no image or PDF, too large, too many
-            if (taken.refused > 0) notices?.let { n -> n.scope.launch { n.snackbar.showSnackbar(context.resources.getQuantityString(R.plurals.share_refused, taken.refused, taken.refused)) } }
+            if (taken.refused > 0) notices?.let { n -> n.scope.launch { n.snackbar.show(context, me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.SHARE_REFUSED, taken.refused)) } }
         }
     }
     // Its editor closed unsaved: the files wait again in the pick mode, for this Pot or another.
@@ -243,7 +242,7 @@ private fun Overview(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMo
                 Column(Modifier.weight(1f)) {
                     Text(personName(p.name), fontWeight = FontWeight.SemiBold)
                     // What makes the balance: paid and consumed always, the transfers only where there were any.
-                    Text(view.balanceFacts(p).map { piece(it) }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+                    Text(view.balanceFacts(p).map { piece(it) }.joined(), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
                 }
                 val b = view.balance(p)
                 Text(

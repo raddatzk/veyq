@@ -55,6 +55,7 @@ import me.raddatz.veyq.mobile.android.core.Registry
 import me.raddatz.veyq.mobile.android.core.Screen
 import me.raddatz.veyq.mobile.android.core.role
 import me.raddatz.veyq.mobile.android.core.say
+import me.raddatz.veyq.mobile.android.core.show
 import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.ObjectRef
@@ -195,7 +196,7 @@ private fun GuestUploaderPage(up: me.raddatz.veyq.mobile.memories.GuestUploader,
                 TextButton(onClick = {
                     scope.launch {
                         val ok = withContext(Dispatchers.IO) { up.remove(s.mediaId) }
-                        if (!ok) snackbar.showSnackbar(context.getString(R.string.share_delete_failed))
+                        if (!ok) snackbar.show(context, me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.SHARE_DELETE_FAILED))
                     }
                 }) { Text(stringResource(R.string.entry_delete)) }
             }
