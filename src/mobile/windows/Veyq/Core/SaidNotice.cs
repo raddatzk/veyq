@@ -1,8 +1,9 @@
 // What the core says, in words (ADR 0123's Consequences, the Windows app): a Notice by its key and arguments through
 // the generated Words.Say, a Piece piece by piece, a line's pieces joined — Linux's said.rs, Android's NoticeText.kt,
-// Apple's say(notice). Nothing here decides what is said; that is the core's (ADR 0136 decision 1). The core writes a
-// notice's and a piece's sizes, moments and amounts before the wire (ADR 0154 decision 5); Said.cs writes the raw values
-// the wire still carries until this app's phase of cr-apps-notices-and-formats-from-the-core; this half needs the wire's types (Veyq.Tests compiles both, ImportTextTest reads notices through it).
+// Apple's say(notice). Nothing here decides what is said; that is the core's (ADR 0136 decision 1). The core writes
+// every size, moment, day and amount before the wire (ADR 0154 decision 5) — a notice's and a piece's, and each wire
+// field's text beside its raw value —, so nothing here formats a value; a line's pieces are joined with the core's
+// separator (Lives.Joined).
 
 namespace Veyq.Core;
 
@@ -39,11 +40,7 @@ public static partial class Said
     };
 
     /// <summary>A line's pieces joined as the other apps join them.</summary>
-    public static string Line(IEnumerable<Piece> pieces) => string.Join(" · ", pieces.Select(Piece));
-
-    /// <summary>A moment in the local zone, as the culture writes a short date and a short time.</summary>
-    public static string Moment(long epochMs) =>
-        DateTimeOffset.FromUnixTimeMilliseconds(epochMs).ToLocalTime().ToString("g", CultureInfo.CurrentCulture);
+    public static string Line(IEnumerable<Piece> pieces) => Lives.Joined(pieces.Select(Piece));
 
     private static string ArgText(NoticeArg a) => a switch
     {

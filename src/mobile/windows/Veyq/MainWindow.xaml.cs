@@ -148,6 +148,8 @@ public sealed partial class MainWindow : Window
             Face(AccountSettingsPage.Showing(this, DevSettings.Fake()).Page);
             return;
         }
+        // how long the core's notices live, its words' kinds and its separator: read before anything is said
+        await Lives.Load();
         _session =Bridge.Core.Watch(new Watched.Session(), ShowGate, e => Log.Write(e.Message));
         _shellWatch = Bridge.Core.Watch(new Watched.Shell(), ShellUpdate, e => Log.Write(e.Message));
         _manageWatch = Bridge.Core.Watch(new Watched.Manage(), ManageUpdate, e => Log.Write(e.Message));
@@ -226,7 +228,7 @@ public sealed partial class MainWindow : Window
                 break;
             // the offer to stay signed in stands over the shell until it is answered (ADR 0123 decision 8)
             case Gate.Signed { offer: { } offer }:
-                _offer ??= new OfferView(message => (_shell ??= NewShell()).Say(false, message));
+                _offer ??= new OfferView(said => (_shell ??= NewShell()).Say(said));
                 _offer.Show(offer);
                 Face(_offer.Page);
                 break;

@@ -353,7 +353,7 @@ internal sealed class SearchBox
             second = Line(line, dim: true);
             if (r.reason is { Count: > 0 } reason)
             {
-                if (line.Length > 0) second.Inlines.Add(new Run { Text = " · " });
+                if (line.Length > 0) second.Inlines.Add(new Run { Text = Lives.Separator });
                 Parts(second, reason);
             }
         }

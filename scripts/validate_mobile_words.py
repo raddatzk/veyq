@@ -276,7 +276,7 @@ def check_manifests(root: Path) -> list[str]:
 
 # platform-format (ADR 0154 decisions 4 and 5): switched on per platform by its phase of
 # cr-apps-notices-and-formats-from-the-core; each platform's own durations and formatters are gone then.
-PLATFORM_FORMAT_ON: set[str] = {"android", "apple", "linux"}
+PLATFORM_FORMAT_ON: set[str] = {"android", "apple", "linux", "windows"}
 # (platform, file relative to src/mobile, the matched text) a platform may keep, each with why.
 PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {
     ("android", "android/src/main/kotlin/me/raddatz/veyq/mobile/android/core/NoticeHost.kt", "SnackbarDuration.Indefinite"):
@@ -300,6 +300,20 @@ PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {
         "a debug build's audio probe (`#if DEBUG`) waiting for its deck — no notice's",
     ("apple", "apple/Veyq/DevLogin.swift", "Task.sleep(for: ."):
         "a debug build's dev sign-in (`#if DEBUG`) waiting for the screens it drives — no notice's",
+    ("windows", "windows/Veyq/Apps/Expenses/EntryEditorPage.cs", '.ToString("yyyy-MM-dd"'): "the picked day as the ISO day the core reads (EditorChange.EditDay), never shown",
+    ("windows", "windows/Veyq/Apps/Memories/MemoryFacts.cs", '.ToString("yyyy-MM-dd"'): "the picked day as the ISO day the core reads (a Memory's date), never shown",
+    ("windows", "windows/Veyq/Core/PdfWeb.cs", '.ToString("N"'): "a Guid's hex digits naming a folder, no shown value",
+    ("windows", "windows/Veyq/Core/PdfWeb.cs", 'Task.Delay(1'): "a held folder's delete retried, no notice's",
+    ("windows", "windows/Veyq/Core/AccountSettingsPage.cs", 'TimeSpan.FromMilliseconds(1'): "a section's scroll retried while it lays out, no notice's",
+    ("windows", "windows/Veyq/Core/DeviceLinkDialog.cs", 'TimeSpan.FromMilliseconds(1'): "the confirm slider's spring-back frames, no notice's",
+    ("windows", "windows/Veyq/Core/RasterMap.cs", 'TimeSpan.FromMilliseconds(1'): "the map's viewport told to the core at most every 100 ms, no notice's",
+    ("windows", "windows/Veyq/Core/ShellView.cs", 'TimeSpan.FromMilliseconds(4'): "a list's scroll put back once it settled, no notice's",
+    ("windows", "windows/Veyq.Bridge.Tests/CoreTest.cs", 'TimeSpan.FromSeconds(3'): "a test's wait for the core, no notice's",
+    ("windows", "windows/Veyq.Bridge.Tests/CoreTest.cs", 'Task.Delay(3'): "a test's wait for the core, no notice's",
+    ("windows", "windows/Veyq.Tests/CurationTextTest.cs", 'TimeSpan.FromHours(2'): "a test's zone offset, no notice's",
+    ("windows", "windows/Veyq.Tests/MediaTiersTest.cs", 'TimeSpan.FromSeconds(1'): "a test video's frame moment, no notice's",
+    ("windows", "windows/Veyq.Tests/PdfWebTest.cs", 'Task.Delay(3'): "a test's wait for WebView2, no notice's",
+    ("windows", "windows/Veyq.Tests/PdfWebTest.cs", 'Task.Delay(1'): "a test's wait for WebView2, no notice's",
     ("linux", "linux/src/core_ui/said.rs", "adw::Toast::new"):
         "the one toast every notice is made by, its timeout the core's kind and lifetimes (`said::toast`)",
     ("linux", "linux/src/core_ui/said.rs", "localeconv"):

@@ -1199,7 +1199,7 @@ internal sealed class KeyRotationPage : FlowPage
     private static string ScopeLine(ScopeStatus scope)
     {
         var name = scope.name ?? (scope.nameWord is { } word ? Said.Key(word) : Words.RotationScopeNameUnavailable());
-        return scope.blocked is { } why ? $"{name}: {Said.Key(scope.status)} · {Said.Key(why)}" : $"{name}: {Said.Key(scope.status)}";
+        return scope.blocked is { } why ? $"{name}: {Lives.Joined([Said.Key(scope.status), Said.Key(why)])}" : $"{name}: {Said.Key(scope.status)}";
     }
 
     private async void Prove()

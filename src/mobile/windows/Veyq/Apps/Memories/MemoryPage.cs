@@ -64,8 +64,8 @@ internal sealed class MemoryPage : IDisposable
         [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".avif", ".tif", ".tiff", ".bmp", ".mp4", ".m4v", ".mov", ".webm", ".mkv", ".avi", ".3gp", ".wmv"];
 
     private readonly Window _window;
-    private readonly Action<bool, string> _say;
-    private readonly InfoBar _undoBar;
+    private readonly Action<Spoken> _say;
+    private readonly NoticeBar _undoBar;
     private readonly Action<long> _saving;
     private readonly Grid _root = new();
     private readonly ScrollViewer _scroll;
@@ -151,7 +151,7 @@ internal sealed class MemoryPage : IDisposable
     /// the trash's Undo in <paramref name="undoBar"/>, a save of an original followed by <paramref name="saving"/>.</summary>
     /// <remarks>With <paramref name="opened"/>, over the gallery the core already opened (a received link's guest page,
     /// ReceivedPage.gallery): the member's page, the core's rights a guest's.</remarks>
-    public MemoryPage(Window window, NodeAt node, Action<bool, string> say, InfoBar undoBar, Action<long> saving, long? opened = null)
+    public MemoryPage(Window window, NodeAt node, Action<Spoken> say, NoticeBar undoBar, Action<long> saving, long? opened = null)
     {
         _window = window;
         Node = node;
@@ -385,7 +385,7 @@ internal sealed class MemoryPage : IDisposable
                 case Answer.Created { queued: true } created:
                     // made offline: waiting to be sent, said; nothing opens yet (it shows where it was made)
                     Log.Write("new chapter: queued");
-                    if (created.notice is { } waiting) _say(false, Said.Notice(waiting));
+                    if (created.notice is { } waiting) _say(Spoken.Of(waiting));
                     break;
                 case Answer.Created { node: { } made }:
                     Log.Write("new chapter: made");
@@ -610,7 +610,7 @@ internal sealed class MemoryPage : IDisposable
         {
             var (answer, _) = await Core.CallAsync(new Call.MarksToggle { gallery = gallery, mediaId = mediaId });
             Log.Write($"tile mark: {(answer is Answer.Refused r ? $"Refused {r.why}" : answer.GetType().Name)}");
-            if (answer is Answer.Said { notice: { } n }) _say(false, Said.Notice(n));
+            if (answer is Answer.Said { notice: { } n }) _say(Spoken.Of(n));
         }
         catch (Exception e)
         {
@@ -911,26 +911,21 @@ internal sealed class MemoryPage : IDisposable
                     Log.Write("gallery undo pressed");
                     Act.Send(new Call.GalleryUndo { gallery = gallery });
                 };
-                _undoBar.Severity = InfoBarSeverity.Informational;
-                _undoBar.Content = null;
-                _undoBar.Message = Said.Notice(undo);
-                _undoBar.ActionButton = button;
-                _undoBar.IsOpen = true;
+                _undoBar.Offer(Spoken.Of(undo), button);
             }
         }
         else if (_seenUndo)
         {
             _seenUndo = false;
             Log.Write("gallery undo offer ended");
-            _undoBar.ActionButton = null;
-            _undoBar.IsOpen = false;
+            _undoBar.EndOffer();
         }
         if (s.said is null) _saidShown = false;
         if (s.said is { } said && !_saidShown && _id is { } g)
         {
             _saidShown = true;
             Log.Write($"gallery said: {said.msg}");
-            _say(false, Said.Notice(said));
+            _say(Spoken.Of(said));
             Act.Send(new Call.GallerySeen { gallery = g });
         }
         if (s.purging is null) _purgeAsked = false;
@@ -993,7 +988,7 @@ internal sealed class MemoryPage : IDisposable
             if (await Dialogs.Confirm(_window, "gallery-purge", Words.MemoryDeleteOwnTitle(), question, Words.MemoryDeleteOwnAccept()))
             {
                 var (answer, _) = await Core.CallAsync(new Call.GalleryPurge { gallery = gallery });
-                if (answer is Answer.Said { notice: { } n }) _say(false, Said.Notice(n));
+                if (answer is Answer.Said { notice: { } n }) _say(Spoken.Of(n));
             }
             else Act.Send(new Call.GalleryCancelAsk { gallery = gallery });
         }
@@ -1037,11 +1032,7 @@ internal sealed class MemoryPage : IDisposable
         _buckets = null;
         _watch?.Dispose();
         _live?.Dispose();
-        if (_seenUndo)
-        {
-            _undoBar.ActionButton = null;
-            _undoBar.IsOpen = false;
-        }
+        if (_seenUndo) _undoBar.EndOffer();
         Hero.Place(null);
         if (_id is { } gallery) Act.Send(new Call.GalleryClose { gallery = gallery });
     }

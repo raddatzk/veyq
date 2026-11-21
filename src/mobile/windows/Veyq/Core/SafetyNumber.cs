@@ -124,7 +124,7 @@ internal sealed class SafetyNumberSection
             names.AddRange(s.verifiedBy);
             _state.Children.Add(Line(Words.SafetyVerifiedBy(string.Join(", ", names)), "safety-verified-by", secondary: true));
         }
-        if (s.rotatedAt is { } at) _state.Children.Add(Line(Words.TrustRotated(Said.Moment(at)), "safety-rotated", secondary: true));
+        if (s.rotatedText is { } at) _state.Children.Add(Line(Words.TrustRotated(at), "safety-rotated", secondary: true));
         if (s.replaced) _state.Children.Add(Line(Words.SafetyReplaced(), "safety-replaced", secondary: true));
     }
 

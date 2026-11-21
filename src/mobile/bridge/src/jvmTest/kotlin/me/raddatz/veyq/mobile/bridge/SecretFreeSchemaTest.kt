@@ -211,7 +211,7 @@ class SecretFreeSchemaTest {
         )
         assertEquals(listOf("userId", "name", "ticked", "togglable"), of("MemberShown"))
         assertEquals(listOf("atMs", "corrected", "originalMs", "saving", "said", "saved"), of("CaptureTimeShown"))
-        assertEquals(listOf("hasBanner", "picking", "picked", "saving", "progress", "said", "done", "canSave", "canRemove"), of("BannerEditorShown"))
+        assertEquals(listOf("hasBanner", "picking", "picked", "saving", "progress", "said", "done", "canSave", "canRemove", "tooLargeBound"), of("BannerEditorShown"))
         assertEquals(listOf("medium", "mediaType", "pick"), of("BannerPickedShown"), "a picked file says more than its medium and type: its path echoed?")
         assertEquals(listOf("width", "height", "wide", "surroundWidth", "surroundHeight"), of("BannerFramed"))
         assertEquals(listOf("userId", "name", "former", "picture", "username", "sections", "memories"), of("PersonShown"))

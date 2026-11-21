@@ -2739,6 +2739,8 @@ internal class BannerEditorShown(
     val done: Boolean,
     val canSave: Boolean,
     val canRemove: Boolean,
+    /** The bound a too large image is refused above, as its words name it (`BannerWrite.MAX_IMAGE_NAMED`, `Shown.size`). */
+    val tooLargeBound: me.raddatz.veyq.mobile.words.ShownText = me.raddatz.veyq.mobile.words.ShownText.size(me.raddatz.veyq.mobile.memories.banner.BannerWrite.MAX_IMAGE_NAMED),
 )
 
 /** A picked file as the dialog shows it: its medium, a video's type, and which pick it is ([pick]: a new number per pick, so the host asks its preview anew). */

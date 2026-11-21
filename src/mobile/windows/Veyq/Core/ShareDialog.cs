@@ -218,14 +218,13 @@ internal sealed class ShareDialog
         var title = Said.Piece(link.title);
         var text = new StackPanel { Spacing = 2 };
         text.Children.Add(new TextBlock { Text = title, TextTrimming = TextTrimming.CharacterEllipsis });
-        var dates = Words.ShareCreated(Said.InstantDay(link.createdAt));
-        if (link.expiresAt is { } end) dates += " · " + Words.ShareExpires(Said.InstantDay(end));
+        var dates = Lives.Joined([Words.ShareCreated(link.createdText), link.expiresText is { } end ? Words.ShareExpires(end) : null]);
         text.Children.Add(new TextBlock { Text = dates, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"] });
         if (link.badges.Count > 0)
         {
             text.Children.Add(new TextBlock
             {
-                Text = string.Join(" · ", link.badges.Select(Said.Notice)),
+                Text = Lives.Joined(link.badges.Select(Said.Notice)),
                 Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
                 Foreground = (Brush)Application.Current.Resources["AccentTextFillColorPrimaryBrush"],
             });

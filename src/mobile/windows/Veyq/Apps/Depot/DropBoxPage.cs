@@ -24,7 +24,7 @@ using Veyq.Core;
 internal sealed class DropBoxPage : IDisposable
 {
     private readonly Window _window;
-    private readonly InfoBar _bar;
+    private readonly NoticeBar _bar;
     private readonly StackPanel _content = new() { Spacing = 4, Padding = new Thickness(12, 0, 12, 24) };
     /// <summary>Where the frame places the head, above the folders (drawn anew on each state).</summary>
     public HeroSlot Hero { get; } = new(new Thickness(12, 0, 12, 0));
@@ -41,7 +41,7 @@ internal sealed class DropBoxPage : IDisposable
 
     public UIElement Page => _root;
 
-    public DropBoxPage(Window window, NodeAt node, InfoBar bar)
+    public DropBoxPage(Window window, NodeAt node, NoticeBar bar)
     {
         _window = window;
         _bar = bar;
@@ -216,23 +216,19 @@ internal sealed class DropBoxPage : IDisposable
         }
         Log.Write($"drop box folder trashed: {(answer as Answer.Trashed)?.notice.msg ?? answer.GetType().Name}, undo offered: {(answer as Answer.Trashed)?.undoable}");
         if (answer is not Answer.Trashed { notice: var notice, undoable: var undoable }) return;
-        _bar.Content = null;
-        _bar.Severity = InfoBarSeverity.Informational;
-        _bar.Message = Said.Notice(notice);
-        if (undoable)
+        if (!undoable)
         {
-            var undo = new Button { Content = Words.TrashUndo() };
-            AutomationProperties.SetAutomationId(undo, "undo");
-            undo.Click += async (_, _) =>
-            {
-                _bar.ActionButton = null;
-                _bar.IsOpen = false;
-                var (undone, _) = await Core.CallAsync(new Call.DropBoxUndo { box = box });
-                Log.Write($"drop box undo: {undone.GetType().Name}");
-            };
-            _bar.ActionButton = undo;
+            _bar.Say(Spoken.Of(notice));
+            return;
         }
-        else _bar.ActionButton = null;
-        _bar.IsOpen = true;
+        var undo = new Button { Content = Words.TrashUndo() };
+        AutomationProperties.SetAutomationId(undo, "undo");
+        undo.Click += async (_, _) =>
+        {
+            _bar.EndOffer();
+            var (undone, _) = await Core.CallAsync(new Call.DropBoxUndo { box = box });
+            Log.Write($"drop box undo: {undone.GetType().Name}");
+        };
+        _bar.Offer(Spoken.Of(notice), undo);
     }
 }

@@ -50,13 +50,12 @@ public sealed class GalleryTextTest
     }
 
     [TestMethod]
-    public void ADayChipIsSaidAsTheCulturesDateAnyOtherByItsLabel()
+    public void AChipIsSaidAsTheCoreWritesIt()
     {
-        Assert.AreEqual(Said.Day("2024-05-03"), GalleryText.ChipLabel(new ChipShown { chip = "day:2024-05-03", label = "2024-05-03", rest = null }));
-        Assert.AreNotEqual("2024-05-03", Said.Day("2024-05-03", System.Globalization.CultureInfo.GetCultureInfo("de-DE")), "a day said its culture's way");
+        var day = new ChipShown { chip = "day:2024-05-03", label = "May 3, 2024", rest = null };
+        Assert.AreEqual("May 3, 2024", GalleryText.ChipLabel(day));
         Assert.AreEqual("Rome", GalleryText.ChipLabel(new ChipShown { chip = "place:rome", label = "Rome", rest = null }));
-        Assert.AreEqual(Words.MediaFilterEmpty(Said.Day("2024-05-03")),
-            GalleryText.Empty(Filter() with { chips = [new ChipShown { chip = "day:2024-05-03", label = "2024-05-03", rest = null }] }));
+        Assert.AreEqual(Words.MediaFilterEmpty("May 3, 2024"), GalleryText.Empty(Filter() with { chips = [day] }));
     }
 
     [TestMethod]

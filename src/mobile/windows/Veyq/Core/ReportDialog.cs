@@ -151,7 +151,7 @@ internal sealed class ReportDialog
             _form = null;
             _body.Children.Clear();
             _body.Children.Add(new TextBlock { Text = Words.ReportSent(), Style = (Style)Application.Current.Resources["SubtitleTextBlockStyle"], TextWrapping = TextWrapping.Wrap });
-            var receipt = Text(Words.ReportReceipt(s.reference ?? "", s.receivedAt is { } at ? Said.InstantMoment(at) : ""), "report-receipt", "TextFillColorSecondaryBrush");
+            var receipt = Text(Words.ReportReceipt(s.reference ?? "", s.receivedText ?? ""), "report-receipt", "TextFillColorSecondaryBrush");
             receipt.IsTextSelectionEnabled = true;
             _body.Children.Add(receipt);
             dialog.PrimaryButtonText = "";

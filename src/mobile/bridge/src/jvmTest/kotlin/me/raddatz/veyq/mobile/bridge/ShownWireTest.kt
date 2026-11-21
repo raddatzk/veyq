@@ -83,4 +83,11 @@ class ShownWireTest {
         assert("profile_saved" in l.saidWords && "download_done" in l.saidWords && "trash_moved" in l.undoWords) { l.toString() }
         assert("download_failed" !in l.saidWords && "download_failed" !in l.undoWords)
     }
+
+    /** The banner's too-large bound named as the web's BannerDialog names it ("40 MB"), in the host's language. */
+    @Test
+    fun theBannersBoundIsTheWebs() {
+        val shown = BannerEditorShown(false, false, null, false, null, BannerSaid.TOO_LARGE, false, false, false)
+        kotlin.test.assertTrue(wireIn("de").encodeToString(BannerEditorShown.serializer(), shown).endsWith(""""tooLargeBound":"40 MB"}"""))
+    }
 }

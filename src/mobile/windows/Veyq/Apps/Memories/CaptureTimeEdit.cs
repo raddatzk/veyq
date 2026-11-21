@@ -141,7 +141,7 @@ internal sealed class CaptureTimeEdit : IDisposable
             _root.Visibility = Visibility.Collapsed;
             return;
         }
-        Log.Write($"capture time shown: at {(s.atMs is { } a ? DateTimeOffset.FromUnixTimeMilliseconds(a).ToString("yyyy-MM-dd HH:mm") + "Z" : "-")}, corrected {s.corrected}, saving {s.saving}, said {s.said?.ToString() ?? "-"}, saved {s.saved}");
+        Log.Write($"capture time shown: at {s.atMs?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-"} ms, corrected {s.corrected}, saving {s.saving}, said {s.said?.ToString() ?? "-"}, saved {s.saved}");
         _reset.Visibility = s.corrected ? Visibility.Visible : Visibility.Collapsed;
         var said = CurationText.CaptureSaid(s.said);
         _problem.Text = said ?? "";

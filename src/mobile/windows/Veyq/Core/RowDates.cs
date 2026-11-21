@@ -17,10 +17,8 @@ internal static class RowDates
     /// range of two, "Since" a day; null where it has none.</summary>
     public static string? DateText(MemoryDateShown? d)
     {
-        if (d?.from is not { Length: > 0 } from) return null;
-        if (d.mode == DateMode.Ongoing) return Words.MemoryDateSince(Said.Day(from));
-        if (d.to is not { Length: > 0 } to || string.CompareOrdinal(to, from) <= 0) return Said.Day(from);
-        return $"{Said.Day(from)} – {Said.Day(to)}";
+        if (d is not { text.Length: > 0 }) return null;
+        return d.mode == DateMode.Ongoing ? Words.MemoryDateSince(d.text) : d.text;
     }
 
     private static Dictionary<string, MemoryDateShown> _dates = [];

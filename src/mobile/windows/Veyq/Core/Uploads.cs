@@ -80,7 +80,7 @@ internal sealed class Uploads : IDisposable
     public Action<QueuedOpen>? Opens { get; set; }
 
     /// <summary>Says what the tray's actions came to; the shell's.</summary>
-    public Action<bool, string>? Says { get; set; }
+    public Action<Spoken>? Says { get; set; }
 
     private void Draw()
     {
@@ -255,7 +255,7 @@ internal sealed class Uploads : IDisposable
     /// <summary>New's "Upload files": the open picker picks several, handed to the core's one drop onto the level shown
     /// (Shell.Drop, ADR 0154 decision 1) as a drop is: judged, screened — the first veyq download among them offered as an
     /// import —, the rest queued; a picked item with no local path said by the core.</summary>
-    public async void PickFiles(UploadLevel level, Action<bool, string> say)
+    public async void PickFiles(UploadLevel level, Action<Spoken> say)
     {
         try
         {
@@ -275,7 +275,7 @@ internal sealed class Uploads : IDisposable
 
     /// <summary>New's "Upload folder…": the folder picker picks one directory, handed to the core's one drop onto the level
     /// shown, which walks it: a download unpacked is offered as an import, any other uploaded.</summary>
-    public async void PickFolder(UploadLevel level, Action<bool, string> say)
+    public async void PickFolder(UploadLevel level, Action<Spoken> say)
     {
         try
         {
@@ -296,7 +296,7 @@ internal sealed class Uploads : IDisposable
     /// <summary>A file's Replace (the header's, on its page <paramref name="file"/>): chosen in the core first — the replace
     /// expects the content shown now —, then the open picker picks the one file whose path goes to the core
     /// (Upload.Replace).</summary>
-    public async void Replace(long file, Action<bool, string> say)
+    public async void Replace(long file, Action<Spoken> say)
     {
         try
         {
@@ -320,7 +320,7 @@ internal sealed class Uploads : IDisposable
         }
     }
 
-    internal static void Queued(Answer answer, string what, Action<bool, string> say)
+    internal static void Queued(Answer answer, string what, Action<Spoken> say)
     {
         switch (answer)
         {
@@ -328,11 +328,11 @@ internal sealed class Uploads : IDisposable
                 // what did not read is the core's to say (Notices.notRead): never dropped unsaid, as a drop the packaged
                 // app queued nothing for was (2026-11-13)
                 Log.Write($"{what}: {count} queued{(n is null ? "" : $", said {n.msg}")}");
-                if (n is not null) say(false, Said.Notice(n));
+                if (n is not null) say(Spoken.Of(n));
                 break;
             case Answer.Said { notice: { } n }:
                 Log.Write($"{what}: said {n.msg}");
-                say(false, Said.Notice(n));
+                say(Spoken.Of(n));
                 break;
             default:
                 Log.Write($"{what} answered {answer.GetType().Name}");
@@ -449,7 +449,7 @@ internal sealed class Uploads : IDisposable
             var (answer, _) = await Core.CallAsync(new Call.QueuedSaveCopy { write = write, index = index, path = chosen.Path });
             Log.Write($"Queued.SaveCopy: {(answer is Answer.Refused r ? $"Refused {r.why}" : answer.GetType().Name)}");
             // said as a download's end is (core's QueuedShown.copySaved; Queued.SaveCopy answers Done or NOT_WRITTEN alone)
-            Says?.Invoke(answer is Answer.Done, answer is Answer.Done ? Words.DownloadDone(suggested) : Words.DownloadFailed(suggested));
+            Says?.Invoke(answer is Answer.Done ? Spoken.Own("download_done", Words.DownloadDone(suggested)) : Spoken.Own("download_failed", Words.DownloadFailed(suggested)));
         }
         catch (Exception e)
         {

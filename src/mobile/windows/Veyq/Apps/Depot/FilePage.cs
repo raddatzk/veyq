@@ -408,8 +408,10 @@ internal sealed class FilePage : IDisposable
             copied.Text = cut is null ? Words.FileTextCopied() : Words.FileTextCopiedShown();
             Log.Write($"file text copied: {text.Length} characters");
             clear?.Stop();
+            // "copied" shows for the core's while (Notice.COPIED_MS, the web's)
+            if (Lives.Copied is not { } life) return;
             clear = copied.DispatcherQueue.CreateTimer();
-            clear.Interval = TimeSpan.FromSeconds(6);
+            clear.Interval = life;
             clear.IsRepeating = false;
             clear.Tick += (_, _) => copied.Text = "";
             clear.Start();
@@ -466,7 +468,7 @@ internal sealed class FilePage : IDisposable
 
     /// <summary>"Save a copy": the save picker (owned by <paramref name="window"/>) suggests the core's name in Downloads,
     /// the core writes the file it chose (File.Save), and <paramref name="saving"/> follows the save by its id.</summary>
-    public async void Save(nint window, Action<bool, string> say, Action<long> saving)
+    public async void Save(nint window, Action<Spoken> say, Action<long> saving)
     {
         if (_id is not { } file) return;
         var name = _shown?.downloadName ?? Node.name;
@@ -486,12 +488,12 @@ internal sealed class FilePage : IDisposable
                 return;
             }
             Log.Write($"File.Save answered {answer.GetType().Name}");
-            say(false, Words.DownloadFailed(name));
+            say(Spoken.Own("download_failed", Words.DownloadFailed(name)));
         }
         catch (Exception e)
         {
             Log.Write($"the copy failed: {e.GetType().Name}: {e.Message}");
-            say(false, Words.DownloadFailed(name));
+            say(Spoken.Own("download_failed", Words.DownloadFailed(name)));
         }
     }
 

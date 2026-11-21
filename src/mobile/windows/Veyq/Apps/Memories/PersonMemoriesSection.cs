@@ -160,7 +160,7 @@ internal sealed class PersonMemoriesSection : PersonSection
             line.Children.Add(RowCovers.Prefix(HomeView.Glyph(HomeView.KindGlyph(r.Ref.kind)), r.Ref.nodeId));
             var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             texts.Children.Add(new TextBlock { Text = r.Ref.name, TextTrimming = TextTrimming.CharacterEllipsis });
-            var under = string.Join(" · ", new[] { RowDates.DateText(r.date), r.place, r.groupName is { } g ? Said.Piece(g) : null }.Where(t => !string.IsNullOrEmpty(t)));
+            var under = Lives.Joined([RowDates.DateText(r.date), r.place, r.groupName is { } g ? Said.Piece(g) : null]);
             if (under.Length > 0)
             {
                 texts.Children.Add(new TextBlock

@@ -42,7 +42,7 @@ internal sealed class LightboxView : IDisposable
 
     private readonly Window _window;
     private readonly long _gallery;
-    private readonly Action<bool, string> _say;
+    private readonly Action<Spoken> _say;
     private readonly Action<long> _saving;
     private readonly Action _close;
     private readonly Grid _view = new() { Background = new SolidColorBrush(Microsoft.UI.Colors.Black), RequestedTheme = ElementTheme.Dark };
@@ -84,12 +84,12 @@ internal sealed class LightboxView : IDisposable
 
     /// <summary>The lightbox over gallery <paramref name="gallery"/> at row <paramref name="index"/>; <paramref name="close"/>
     /// takes it away (Close, Escape, the core closing it).</summary>
-    public LightboxView(Window window, long gallery, int index, Action<bool, string> say, Action<long> saving, Action close)
+    public LightboxView(Window window, long gallery, int index, Action<Spoken> say, Action<long> saving, Action close)
         : this(window, gallery, new Call.LightboxOpen { gallery = gallery, index = index }, say, saving, close) { }
 
     /// <summary>The lightbox the core opens by <paramref name="open"/> (Lightbox.Open, or Buckets.Lightbox over a bucket's media,
     /// inbox #996) over gallery <paramref name="gallery"/>.</summary>
-    public LightboxView(Window window, long gallery, Call open, Action<bool, string> say, Action<long> saving, Action close)
+    public LightboxView(Window window, long gallery, Call open, Action<Spoken> say, Action<long> saving, Action close)
     {
         _window = window;
         _gallery = gallery;
@@ -275,7 +275,7 @@ internal sealed class LightboxView : IDisposable
         {
             var (answer, _) = await Core.CallAsync(new Call.LightboxMark { lightbox = lightbox });
             Log.Write($"lightbox mark: {answer.GetType().Name}");
-            if (answer is Answer.Said { notice: { } n }) _say(false, Said.Notice(n));
+            if (answer is Answer.Said { notice: { } n }) _say(Spoken.Of(n));
         }
         catch (Exception e)
         {
@@ -309,7 +309,7 @@ internal sealed class LightboxView : IDisposable
             var (answer, _) = await Core.CallAsync(new Call.LightboxTrash { lightbox = lightbox });
             // the Undo is the gallery's, held while its state offers it
             if (answer is Answer.Trashed { undoable: var undoable }) Log.Write($"lightbox trash: Trashed, undo {undoable}");
-            else if (answer is Answer.Said { notice: { } n }) _say(false, Said.Notice(n));
+            else if (answer is Answer.Said { notice: { } n }) _say(Spoken.Of(n));
             else Log.Write($"Lightbox.Trash answered {answer.GetType().Name}");
         }
         catch (Exception e)
@@ -541,9 +541,7 @@ internal sealed class LightboxView : IDisposable
             }
             var lines = d.rows.Select(r => (Label: Said.Key(r.label), Value:
                 r.words is { } w ? Said.Notice(w)
-                : r.size is { } size ? Said.Size(size)
-                : r.moment is { } moment ? Said.Moment(moment)
-                : r.text ?? "")).ToList();
+                : r.sizeText ?? r.momentText ?? r.text ?? "")).ToList();
             if (d.uploader is { } u) lines.Insert(Math.Clamp(d.uploaderAt, 0, lines.Count), (Words.MemoryFieldUploadedBy(), Said.Piece(u)));
             Log.Write($"lightbox details: {lines.Count} rows{(d.uploader is null ? "" : ", the uploader among them")}");
             var list = new StackPanel { Spacing = 10 };
@@ -686,12 +684,12 @@ internal sealed class LightboxView : IDisposable
                 return;
             }
             Log.Write($"Medium.Save answered {answer.GetType().Name}");
-            _say(false, Words.DownloadFailed(name));
+            _say(Spoken.Own("download_failed", Words.DownloadFailed(name)));
         }
         catch (Exception e)
         {
             Log.Write($"the original was not saved: {e.GetType().Name}");
-            _say(false, Words.DownloadFailed(name));
+            _say(Spoken.Own("download_failed", Words.DownloadFailed(name)));
         }
     }
 

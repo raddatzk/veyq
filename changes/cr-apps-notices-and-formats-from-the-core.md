@@ -227,6 +227,36 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
     report of this phase. After the merge of phases 5–6: a track's distance is `TrackFactShown.distanceText`
     (`Shown.distance`), and the bridge's gallery calendar is `GalleryFilter.Calendar.local(language)` (its day chip the
     web's label; `LocalCalendar.kt` gone, Windows' too). ADR 0123's Linux lines (`localeconv`, `%x`, `instant_day`) are history for phase 10.
+  **8 Windows — Built** (2026-11-21): a notice lives by the core's kind in one place, `Core/NoticeBar.cs` (the InfoBar
+  under the bar: `SAID` a Success closed after `saidMs`, `HELD` an Error until its close, `UNDO` with its Undo until the
+  owner's `EndOffer` when the core's offer ends — NodeHeader's trash, MoveDialog's move, a drop box's and a gallery's
+  trash); what is said is a `Spoken` (`Core/Lives.cs`: a core notice with its kind, several of them held where any is, or a
+  word of the app's own by its key, living as the core's `saidWords`/`undoWords` say), and `Lives` takes the core's
+  `Notice.Lifetimes` once at start (its lifetimes, word kinds and separator: "copied" for `copiedMs`, the player's
+  "nothing plays" for `nothingPlaysMs`, every line joined by `Lives.Joined`). Every `Action<bool, string>` say became
+  `Action<Spoken>`. `Said.cs` (`CurrencyFormatter`, `StrFormatByteSizeEx` — base 1024 —, the `"d"`/`"g"` dates) and
+  `MusicTime` (a truncating clock) are gone; the app draws phase 7's `…Text` fields (storage, an offline item, a
+  session's dates, the safety page's rotation, the trash's and a link's days, a report's receipt, an entry's history and
+  rate day, a Pot's amounts and total, a Memory's date, the lightbox's size and moment, the music clocks, a track's
+  distance) and `ChipShown.label`. Core addition: the banner dialog's too-large bound, `BannerEditorShown.tooLargeBound`
+  (`BannerWrite.MAX_IMAGE_NAMED`: "40 MB", the web's BannerDialog — Windows wrote 40 MiB as "40.0 MB"),
+  `ShownWireTest.theBannersBoundIsTheWebs`; `RECEIPTS_SAVED` among the success words. Exceptions
+  (`PLATFORM_FORMAT_EXCEPTIONS`, 14): the two picked days encoded as ISO for the core, PdfWeb's folder Guid and its delete
+  retry, four layout/animation timers (Settings' scroll, the device link's slide, the map's viewport, a list's scroll put
+  back) and six waits in tests. Measured: `run.py build` green before the change (phase 3's `SaidNotice.cs` compiled, 80 +
+  5 tests) and after the merges of phases 5–7 (`VEYQ_WINDOWS_DIR=F:\veyq-nfw`, own tasks `*-nfw`): the app, Veyq.Drive,
+  Veyq.Bridge.Tests 5/5 here and there, Veyq.Tests 76/76 (`LivesTest` new; `SaidTest` and the clock's test gone with what
+  they held), PdfWebTest 1/1; `:bridge:jvmTest :core:jvmTest`(words) `:core:compileKotlinJs` green; every
+  `scripts/validate_*.py` but guard_gaps green with `windows` on. **Bites:** a planted `.ToString("N0")`,
+  `TimeSpan.FromSeconds(6)` and `"a · b"` in `NoticeBar.cs` → the guard red each, restored green; `MAX_IMAGE_NAMED` =
+  `MAX_IMAGE_BYTES` → `theBannersBoundIsTheWebs` red, restored green; `Lives.KindOf` ignoring the core's table (on the
+  host) → `LivesTest` red, restored green. **Smoke** (a `tw-win` throwaway on the VM, English, erased after): the app
+  logged `lives read: said 4000 ms, 13 words not held`; a folder's trash showed "“Smoke” moved to the trash." with its Undo,
+  offered 16:18:45.578 and ended 16:18:51.579 (6.0 s) with the bar gone; a copy's "“Smoke” is copied to …" there at 1.5 s
+  and gone at 5.5 s; Settings read "10 kB", "0 B", "31.3 GB" and "Signed in Nov 21, 2026, 4:16 PM"; the trash row
+  "Deleted Nov 21, 2026 · removed for good on Dec 21, 2026". Not smoked: a refusal staying (none reachable in a fresh
+  tenant without a second device; the mapping is `NoticeBar`'s one switch), German, a Pot's amounts, a file's size, a
+  Memory's range and the music clocks (each the core's text, held by the vectors and `ShownWireTest`).
 - [ ] **9 the passes** — § Passes.
 - [ ] **10 harvest** — ADR 0154's `Built:` (decisions 4, 5); `native-apps.md`; the words guard's docstring; the Use
   pages that quote a notice's behaviour, if any (`grep -rln -i "undo\|rückgängig" site/src/content/docs`). · Done when:

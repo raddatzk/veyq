@@ -21,7 +21,7 @@ internal sealed class OfferView
 {
     private readonly StackPanel _choices = new() { Spacing = 8 };
     private readonly ProgressRing _working;
-    private readonly Action<string> _said;
+    private readonly Action<Spoken> _said;
     /// <summary>The levels drawn last and whether the offer followed a device link; null before the first draw (an offer
     /// with no level at all still draws its "Not now").</summary>
     private (List<StaySignedIn> Levels, bool Linked)? _shown;
@@ -31,7 +31,7 @@ internal sealed class OfferView
 
     /// <param name="said">Says a level this device could not keep, where the person then is (the shell: the offer has
     /// ended, the password trust stays).</param>
-    public OfferView(Action<string> said)
+    public OfferView(Action<Spoken> said)
     {
         _said = said;
         var heading = new TextBlock { Text = Words.OfferTitle(), Style = (Style)Application.Current.Resources["TitleTextBlockStyle"], TextWrapping = TextWrapping.Wrap };
@@ -116,7 +116,7 @@ internal sealed class OfferView
                     break;
                 case Answer.Refused { why: Why.TrustFailed }:
                     Log.Write($"offer {choice}: not kept");
-                    _said(Words.TrustFailed());
+                    _said(Spoken.Own("trust_failed", Words.TrustFailed()));
                     break;
                 default:
                     Log.Write($"offer {choice} answered {answer.GetType().Name}");

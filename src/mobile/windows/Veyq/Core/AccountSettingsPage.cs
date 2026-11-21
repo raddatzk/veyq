@@ -684,7 +684,7 @@ internal sealed class AccountSettingsPage : IDisposable
         try
         {
             var hint = new TextBlock { Text = Words.AccountSettingsRenameHint(), TextWrapping = TextWrapping.Wrap, Foreground = Brush("TextFillColorSecondaryBrush") };
-            var name = await Dialogs.AskName(_window, "settings-rename-family-ask", $"{Words.NodeRename()} · {label}", Words.AccountSettingsRenamePlaceholder(), label, null, Words.NodeRename(), hint);
+            var name = await Dialogs.AskName(_window, "settings-rename-family-ask", Lives.Joined([Words.NodeRename(), label]), Words.AccountSettingsRenamePlaceholder(), label, null, Words.NodeRename(), hint);
             if (name is null || name.Trim().Length == 0 || _disposed) return;
             await Send("rename a device", id => new Call.SettingsRenameFamily { settings = id, family = family, label = name });
         }
@@ -718,13 +718,13 @@ internal sealed class AccountSettingsPage : IDisposable
         _sections.Children.Add(Card("\uE713", Words.AccountSettingsStorageLimit(), [Words.AccountSettingsStorageLimitHint()], "settings-storage-limit-card", out _limitHolder, _limit, _unit, _setLimit));
         foreach (var (glyph, title, bytes, id) in new[]
         {
-            ("\uE81C", Words.AccountSettingsStorageAutomatic(), (long?)st.automatic, "settings-storage-automatic"),
-            ("\uE896", Words.AccountSettingsStoragePinned(), st.pinned, "settings-storage-pinned"),
-            ("\uEDA2", Words.AccountSettingsStorageFree(), st.free, "settings-storage-free"),
+            ("\uE81C", Words.AccountSettingsStorageAutomatic(), (string?)st.automaticText, "settings-storage-automatic"),
+            ("\uE896", Words.AccountSettingsStoragePinned(), st.pinnedText, "settings-storage-pinned"),
+            ("\uEDA2", Words.AccountSettingsStorageFree(), st.freeText, "settings-storage-free"),
         })
         {
             if (bytes is not { } b) continue;
-            var size = new TextBlock { Text = Said.Size(b), VerticalAlignment = VerticalAlignment.Center, Foreground = Brush("TextFillColorSecondaryBrush") };
+            var size = new TextBlock { Text = b, VerticalAlignment = VerticalAlignment.Center, Foreground = Brush("TextFillColorSecondaryBrush") };
             AutomationProperties.SetAutomationId(size, $"{id}-size");
             _sections.Children.Add(Card(glyph, title, [], id, size));
         }
@@ -752,7 +752,7 @@ internal sealed class AccountSettingsPage : IDisposable
 
     /// <summary>An item's line under its name: its status as the core says it, and the size it keeps on this device.</summary>
     public static string ItemLine(OfflineItem item) =>
-        item.said is { } n ? $"{Said.Notice(n)} · {Said.Size(item.bytes)}" : Said.Size(item.bytes);
+        Lives.Joined([item.said is { } n ? Said.Notice(n) : null, item.bytesText]);
 
     /// <summary>The limit's field and its unit from the core's, set only where the core's changed and not while typed.</summary>
     private void DrawLimit(SettingsShown s, Storage st)
@@ -996,7 +996,7 @@ internal sealed class AccountSettingsPage : IDisposable
     /// <summary>A family's dates as its card says them: when it signed in and when it was last used, the ones the server sent.</summary>
     public static IEnumerable<string> Dates(SettingsFamily f)
     {
-        if (f.createdAt is { } created) yield return Words.AccountSettingsSignedIn(Said.Moment(created));
-        if (f.lastUsedAt is { } used) yield return Words.AccountSettingsLastUsed(Said.Moment(used));
+        if (f.createdText is { } created) yield return Words.AccountSettingsSignedIn(created);
+        if (f.lastUsedText is { } used) yield return Words.AccountSettingsLastUsed(used);
     }
 }

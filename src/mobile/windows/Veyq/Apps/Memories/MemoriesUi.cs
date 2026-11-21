@@ -170,7 +170,7 @@ internal static class MemoriesUi
                 case Answer.Created { queued: true } created:
                     // made offline: waiting to be sent, said; nothing opens yet (it shows where it was made)
                     Log.Write("new memory: queued");
-                    if (created.notice is { } waiting) host.Say(false, Said.Notice(waiting));
+                    if (created.notice is { } waiting) host.Say(Spoken.Of(waiting));
                     break;
                 case Answer.Created { node: { } made }:
                     Log.Write("new memory: made");

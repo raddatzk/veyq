@@ -48,13 +48,11 @@ internal static class CurationText
         _ => null,
     };
 
-    /// <summary>The banner's largest image (the web's MAX_BANNER_IMAGE_BYTES), as its too-large words name it.</summary>
-    public const long BannerImageMaxBytes = 40L * 1024 * 1024;
-
-    /// <summary>What the banner dialog says (core's BannerEditor.Said).</summary>
-    public static string? BannerSaidText(BannerSaid? said) => said switch
+    /// <summary>What the banner dialog says (core's BannerEditor.Said);
+    /// <paramref name="bound"/> is the core's too-large bound as its words name it (BannerEditorShown.tooLargeBound).</summary>
+    public static string? BannerSaidText(BannerSaid? said, string bound) => said switch
     {
-        BannerSaid.TooLarge => Words.MemoryBannerTooLarge(Said.Size(BannerImageMaxBytes)),
+        BannerSaid.TooLarge => Words.MemoryBannerTooLarge(bound),
         BannerSaid.Unreadable or BannerSaid.NotMedia => Words.MemoryBannerUnreadable(),
         BannerSaid.VideoUnreadable => Words.MemoryBannerVideoUnreadable(),
         BannerSaid.Stale => Words.MemoryBannerStale(),

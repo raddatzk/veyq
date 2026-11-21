@@ -32,7 +32,7 @@ using Windows.Storage.Pickers;
 internal sealed class MemoryMapView : IDisposable
 {
     private readonly Window _window;
-    private readonly Action<bool, string> _say;
+    private readonly Action<Spoken> _say;
     private readonly Action<long> _saving;
     private readonly StackPanel _root = new() { Spacing = 8 };
     private readonly Border _mapSlot = new();
@@ -51,7 +51,7 @@ internal sealed class MemoryMapView : IDisposable
 
     public UIElement View => _root;
 
-    public MemoryMapView(Window window, long gallery, Action<bool, string> say, Action<long> saving)
+    public MemoryMapView(Window window, long gallery, Action<Spoken> say, Action<long> saving)
     {
         _window = window;
         _say = say;
@@ -164,7 +164,7 @@ internal sealed class MemoryMapView : IDisposable
             if (said != _saidShown)
             {
                 _saidShown = said;
-                _say(false, said);
+                _say(Spoken.Of(s.said));
             }
             Act.Send(new Call.TracksSeen { tracks = tracks });
         }
@@ -179,11 +179,8 @@ internal sealed class MemoryMapView : IDisposable
     public static string? Activity(string? token) =>
         token is null ? null : Words.Say($"track_activity_{token.Replace('-', '_')}", []);
 
-    /// <summary>A track's facts on one line: its distance in the culture's numbers, then the core's phrases.</summary>
-    public static string Facts(IEnumerable<TrackFactShown> facts) =>
-        string.Join(" · ", facts.Select(f => f.distance is { } d
-            ? f.kilometres ? Words.TrackDistanceKm(d.ToString("N1", CultureInfo.CurrentCulture)) : Words.TrackDistanceM(d.ToString("N0", CultureInfo.CurrentCulture))
-            : f.words is { } w ? Said.Notice(w) : "").Where(x => x.Length > 0));
+    /// <summary>A track's facts on one line, each the core's: a distance written by it, or its words.</summary>
+    public static string Facts(IEnumerable<TrackFactShown> facts) => Lives.Joined(facts.Select(f => f.distanceText ?? (f.words is { } w ? Said.Notice(w) : null)));
 
     private FrameworkElement Row(TrackShown t, TracksShown s)
     {
@@ -321,7 +318,7 @@ internal sealed class MemoryMapView : IDisposable
             var label = new TrackLabelShown { name = typed.Length == 0 ? null : typed, activity = Picked(activity) };
             Log.Write($"track view: edit {t.mediaId} ({label.activity ?? "-"})");
             var (answer, _) = await Core.CallAsync(new Call.TracksEdit { tracks = tracks, mediaId = t.mediaId, label = label });
-            if (answer is Answer.Said { notice: { } n }) _say(false, Said.Notice(n));
+            if (answer is Answer.Said { notice: { } n }) _say(Spoken.Of(n));
             Log.Write($"Tracks.Edit: {(answer is Answer.Said { notice: { } m } ? m.msg : answer.GetType().Name)}");
         }
         catch (Exception e)
@@ -408,12 +405,12 @@ internal sealed class MemoryMapView : IDisposable
                 return;
             }
             Log.Write($"Tracks.Download answered {answer.GetType().Name}");
-            _say(false, Words.TrackDownloadFailed());
+            _say(Spoken.Own("track_download_failed", Words.TrackDownloadFailed()));
         }
         catch (Exception e)
         {
             Log.Write($"the track was not saved: {e.GetType().Name}");
-            _say(false, Words.TrackDownloadFailed());
+            _say(Spoken.Own("track_download_failed", Words.TrackDownloadFailed()));
         }
     }
 
@@ -425,7 +422,7 @@ internal sealed class MemoryMapView : IDisposable
         {
             var (answer, _) = await Core.CallAsync(new Call.TracksRemove { tracks = tracks, mediaId = t.mediaId });
             if (answer is Answer.Trashed { undoable: var undoable }) Log.Write($"track remove: Trashed, undo {undoable}");
-            else if (answer is Answer.Said { notice: { } n }) _say(false, Said.Notice(n));
+            else if (answer is Answer.Said { notice: { } n }) _say(Spoken.Of(n));
             else Log.Write($"Tracks.Remove answered {answer.GetType().Name}");
         }
         catch (Exception e)
@@ -457,7 +454,7 @@ internal sealed class MemoryMapView : IDisposable
             {
                 Log.Write($"tracks added: {said.Count} refused ({string.Join(", ", said.Select(n => n.msg))})");
                 // the last refusal is the view's own said as well (TracksShown.said), which says it once: the rest here
-                foreach (var n in said.Take(said.Count - 1)) _say(false, Said.Notice(n));
+                foreach (var n in said.Take(said.Count - 1)) _say(Spoken.Of(n));
             }
             else Log.Write($"Tracks.Add answered {answer.GetType().Name}");
         }
