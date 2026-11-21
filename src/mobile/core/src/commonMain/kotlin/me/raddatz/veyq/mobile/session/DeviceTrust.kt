@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import me.raddatz.veyq.mobile.api.models.DeviceRegister
@@ -136,7 +138,9 @@ data class TrustedDevice(
     val key: String get() = "${io.ktor.http.Url(server).host}#$userId"
 
     /** The alias under which a remembered account's refresh token is kept. */
-    internal val refreshAlias: String get() = "$alias.refresh"
+    @PlatformApi
+    @HiddenFromObjC
+    val refreshAlias: String get() = "$alias.refresh"
 }
 
 /**
@@ -160,10 +164,14 @@ class ThisDevice(
     val offline: OfflineStores? by lazy { offlineRoot?.let { OfflineStores(it, store, primitives, offlineFiles, offlineClock) } }
 
     /** The offline stores' files and clock: a test's seam (a counted write, a clock it sets), set before [offline] is first read. */
-    internal var offlineFiles: me.raddatz.veyq.mobile.blob.DeviceFiles = me.raddatz.veyq.mobile.blob.deviceFiles
+    @PlatformApi
+    @HiddenFromObjC
+    var offlineFiles: me.raddatz.veyq.mobile.blob.DeviceFiles = me.raddatz.veyq.mobile.blob.deviceFiles
 
     @OptIn(kotlin.time.ExperimentalTime::class)
-    internal var offlineClock: () -> Long = { kotlin.time.Clock.System.now().toEpochMilliseconds() }
+    @PlatformApi
+    @HiddenFromObjC
+    var offlineClock: () -> Long = { kotlin.time.Clock.System.now().toEpochMilliseconds() }
 
     /**
      * A copy of this device's own wrap of account [key]'s Master Key (ADR 0140 decision 4): ciphertext the server holds
@@ -171,11 +179,15 @@ class ThisDevice(
      * and enrolment, removed with the record and when the server no longer serves the wrap.
      */
     @Serializable
-    internal data class KeptWrap(val wrapId: String, val wrappedKey: String, val kdfParams: String?)
+    @PlatformApi
+    @HiddenFromObjC
+    data class KeptWrap(val wrapId: String, val wrappedKey: String, val kdfParams: String?)
 
     internal fun keepWrap(key: String, wrap: KeptWrap) = store.write(WRAP + key, JSON.encodeToString(wrap))
 
-    internal fun keptWrap(key: String): KeptWrap? = runCatching { store.read(WRAP + key)?.let { JSON.decodeFromString<KeptWrap>(it) } }.getOrNull()
+    @PlatformApi
+    @HiddenFromObjC
+    fun keptWrap(key: String): KeptWrap? = runCatching { store.read(WRAP + key)?.let { JSON.decodeFromString<KeptWrap>(it) } }.getOrNull()
 
     internal fun dropWrap(key: String) = store.remove(WRAP + key)
 
@@ -212,7 +224,9 @@ class ThisDevice(
 
     fun trusted(key: String): TrustedDevice? = trusted().firstOrNull { it.key == key }
 
-    internal fun remember(record: TrustedDevice) {
+    @PlatformApi
+    @HiddenFromObjC
+    fun remember(record: TrustedDevice) {
         store.write(TRUSTED, JSON.encodeToString(listOf(record) + trusted().filter { it.key != record.key }))
         backgroundChanged()
     }
@@ -315,7 +329,9 @@ class ThisDevice(
 }
 
 /** The register's server calls, behind one seam so a test can play the server. */
-internal interface RegisterApi {
+@PlatformApi
+@HiddenFromObjC
+interface RegisterApi {
     suspend fun get(): DeviceRegister
     /** The revision-guarded write; false on `409 stale_revision`. */
     suspend fun put(update: DeviceRegisterUpdate): Boolean
@@ -329,7 +345,9 @@ internal interface RegisterApi {
  * read through this device's marks like the pin store; a `409` re-reads and re-applies, bounded. Never on an unlock
  * path: a failure here is swallowed by the caller.
  */
-internal class DeviceRegisterStore(
+@PlatformApi
+@HiddenFromObjC
+class DeviceRegisterStore(
     private val suite: V1,
     private val api: RegisterApi,
     private val marks: TrustMarks,
@@ -488,7 +506,9 @@ internal class DeviceRegisterStore(
         val savedKeyDevices: Map<String, Pair<String, List<String>>>,
     )
 
-    internal companion object {
+    @PlatformApi
+    @HiddenFromObjC
+    companion object {
         /**
          * The web's `readRegisterView` over [plain]: the [live] families' names, and — only where the wrap list was read
          * ([served] not null) — each family's device's served wraps and the devices with a saved key and no live family.

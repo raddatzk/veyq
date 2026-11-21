@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.blob
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.Json
@@ -48,7 +50,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
     /** One listed blob as the server serves it (`ApplicationBlob`); times in epoch ms. */
     class Listed(
         val id: String, val ownerId: String, val role: String, val blobId: String, val chunkCount: Int, val byteSize: Long,
-        internal val wrappedBlobKey: String, internal val wrappedBlobMeta: String?, val writer: String?, val createdAt: Long,
+        @PlatformApi
+        @HiddenFromObjC
+        val wrappedBlobKey: String, @PlatformApi @HiddenFromObjC val wrappedBlobMeta: String?, val writer: String?, val createdAt: Long,
         val keptAt: Long?, val releasedAt: Long?, val purgeAfter: Long?, val blocked: Boolean,
     ) {
         /** Released by a revision that dropped it, and kept by none since: never held again. */
@@ -156,7 +160,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
     ): Listed = upload(scopeId, node, reread, belowFloor, id, ownerId, role, bytes, type, name, modifiedAt, pull, null)
 
     /** [upload] of a blob [sealed] ahead (a receipt queued offline, ADR 0153 decision 1): its frames sent as they are, [bytes] unread. */
-    internal suspend fun upload(
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun upload(
         scopeId: String, node: () -> OpenNode, reread: suspend () -> Boolean, belowFloor: () -> Boolean,
         id: String, ownerId: String, role: String, bytes: ByteArray, type: String, name: String?, modifiedAt: Long?,
         pull: (suspend () -> Boolean)?, sealed: Sealed?,
@@ -224,7 +230,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
      * [reserveAndPump] over a source of [size] bytes read a frame at a time ([read]: the plaintext from an offset, at most a
      * frame long), so a file of any size is sealed and sent without holding it whole.
      */
-    internal suspend fun reserveAndPumpFrames(
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun reserveAndPumpFrames(
         scopeId: String, node: OpenNode, role: String, size: Long, type: String, name: String?, modifiedAt: Long?,
         read: suspend (from: Long, length: Int) -> ByteArray, sealed: Sealed? = null, sent: (Long) -> Unit = {},
     ): Pair<String, Plan> = reserveAndPumpAll(
@@ -235,7 +243,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
      * One blob an upload sends: its role, its plaintext's size and bytes (a frame at a time), and what its meta seals —
      * or, for a blob sealed ahead ([sealed], a write queued offline), its frames as they were sealed.
      */
-    internal class Outgoing(
+    @PlatformApi
+    @HiddenFromObjC
+    class Outgoing(
         val role: String, val size: Long, val type: String, val name: String?, val modifiedAt: Long?, val sha256: String?,
         val read: suspend (from: Long, length: Int) -> ByteArray,
     ) {
@@ -255,7 +265,7 @@ class ApplicationBlobs(private val tenant: TenantSession) {
      * [frame] as it was sealed then. Sent as it is: only `K_blob`'s wrap under the node's key and its meta are made at the
      * send, under the keys current then — so a re-key while it waited costs nothing.
      */
-    class Sealed internal constructor(internal val key: ByteArray, internal val chunkCount: Int, internal val size: Long, internal val frame: suspend (index: Int) -> ByteArray)
+    class Sealed internal constructor(internal val key: ByteArray, internal val chunkCount: Int, @PlatformApi @HiddenFromObjC val size: Long, internal val frame: suspend (index: Int) -> ByteArray)
 
     /**
      * [blobs] of the record [ownerId] (a node; a medium, whose original and tiers are one record), each sealed under a
@@ -264,7 +274,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
      * the first item's refusal (`quota_exceeded` refuses them all). [sent] is told the plaintext bytes sent so far, over
      * all of them, after each frame.
      */
-    internal suspend fun reserveAndPumpAll(
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun reserveAndPumpAll(
         scopeId: String, ownerId: String, wrapKey: ByteArray, blobs: List<Outgoing>, sent: (Long) -> Unit = {},
     ): List<Pair<String, Plan>> {
         val keys = blobs.map { it.sealed?.key ?: account.primitives.randomBytes(32) }
@@ -343,7 +355,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
     }
 
     /** The key of blob [blobId] in [role] of [node], from its wrap, or null when it does not open there (not this blob's). */
-    internal fun openKey(scopeId: String, node: OpenNode, blobId: String, role: String, wrappedBlobKey: String): ByteArray? = runCatching {
+    @PlatformApi
+    @HiddenFromObjC
+    fun openKey(scopeId: String, node: OpenNode, blobId: String, role: String, wrappedBlobKey: String): ByteArray? = runCatching {
         suite.open(keyContext(scopeId, node.id, blobId, role), node.key, unb64(wrappedBlobKey))
     }.getOrNull()
 
@@ -351,7 +365,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
      * A blob's plaintext under [key], its [chunkCount] frames read through presigned GETs and opened in place — from the
      * offline store where it keeps them; [keep]: the frames fetched are kept there (ADR 0140 decision 8 names what is).
      */
-    internal suspend fun frames(scopeId: String, blobId: String, chunkCount: Int, key: ByteArray, keep: Boolean = false): ByteArray {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun frames(scopeId: String, blobId: String, chunkCount: Int, key: ByteArray, keep: Boolean = false): ByteArray {
         val out = ArrayList<ByteArray>(chunkCount)
         framesTo(scopeId, blobId, chunkCount, key, keep = keep) { out += it }
         val all = ByteArray(out.sumOf { it.size })
@@ -367,7 +383,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
      * A blob's plaintext under [key] handed to [sink] a frame at a time, in order, from frame [first] to [until] (exclusive):
      * a file of any size is read without holding it whole, and a page that decides by the first frame reads only that one.
      */
-    internal suspend fun framesTo(
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun framesTo(
         scopeId: String, blobId: String, chunkCount: Int, key: ByteArray, first: Int = 0, until: Int = chunkCount,
         keep: Boolean = false, sink: suspend (ByteArray) -> Unit,
     ) = FrameSource(scopeId, blobId, chunkCount, key, keep).read(first, until, sink)
@@ -383,7 +401,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
      * frames kept and stops where they end. Where [keep], the frames fetched are kept as the store served them, appended in
      * batches of [KEEP_BATCH] (one frame index and one manifest shard written per batch, never per frame).
      */
-    internal inner class FrameSource(
+    @PlatformApi
+    @HiddenFromObjC
+    inner class FrameSource(
         private val scopeId: String, private val blobId: String, val chunkCount: Int, private val key: ByteArray, private val keep: Boolean = false,
     ) {
         private var urls: List<String>? = null
@@ -515,7 +535,9 @@ class ApplicationBlobs(private val tenant: TenantSession) {
         internal const val KEEP_BATCH = 16
 
         /** Every frame a pin's fetch took from the object store in this process ([FrameSource.fill]): what a test counts. */
-        internal var fetchedFrames = 0L
+        @PlatformApi
+        @HiddenFromObjC
+        var fetchedFrames = 0L
 
         /** What a store answers a presigned URL past its lifetime with: S3's 403, others' 400 or 401. Signed anew. */
         private val LAPSED = setOf(400, 401, 403)

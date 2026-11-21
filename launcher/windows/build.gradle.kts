@@ -13,5 +13,5 @@ fun verb(name: String, what: String, vararg args: String) = tasks.register<Exec>
 
 verb("build", "Generates the C#'s bridge, words and theme, gates the NuGet packages, builds the Windows app and runs its tests here and on the Windows host (run.py build).", "build")
 verb("run", "Builds the Windows app and starts it in the Windows host's logged-on session, holding the tunnel to the dev backend (run.py run).", "run")
-verb("coreTest", "Runs the core's Windows test binary on the Windows host: the suite over libsodium, normalization, the wall clock (run.py test).", "test")
+verb("coreTest", "Runs every core module's Windows test binary on the Windows host: the suite over libsodium, normalization, the wall clock (run.py test).", "test")
 verb("bridge", "Links veyq.dll, checks what it exports and runs the C smoke against it on the Windows host (run.py bridge).", "bridge")

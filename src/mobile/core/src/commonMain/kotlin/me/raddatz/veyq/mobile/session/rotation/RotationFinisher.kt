@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session.rotation
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -21,7 +23,9 @@ import kotlin.time.Duration.Companion.seconds
  * [scope] — so a pass dies with the account's close. One pass at a time: a second asker waits for the running pass and
  * gets its answer ([finish]), never racing it into a `stale_epoch`. A failed pass is silent; the next one retries.
  */
-internal class RotationFinisher(
+@PlatformApi
+@HiddenFromObjC
+class RotationFinisher(
     private val scope: CoroutineScope,
     private val online: () -> Boolean,
     private val period: Duration = EVERY,

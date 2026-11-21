@@ -53,7 +53,7 @@ object AppKinds {
      */
     @PlatformApi
     @HiddenFromObjC
-    internal fun queuedSender(q: me.raddatz.veyq.mobile.offline.Queued): me.raddatz.veyq.mobile.offline.QueuedSender = when (q) {
+    fun queuedSender(q: me.raddatz.veyq.mobile.offline.Queued): me.raddatz.veyq.mobile.offline.QueuedSender = when (q) {
         me.raddatz.veyq.mobile.offline.Queued.FOLDER_CREATE,
         me.raddatz.veyq.mobile.offline.Queued.NODE_RENAME,
         me.raddatz.veyq.mobile.offline.Queued.NODE_TRASH,

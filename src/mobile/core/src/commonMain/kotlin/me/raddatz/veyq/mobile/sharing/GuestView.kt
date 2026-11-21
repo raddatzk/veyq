@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
@@ -249,7 +251,9 @@ class GuestView internal constructor(
         }
 
         /** Over an existing guest client (a test's played instance). */
-        internal fun over(
+        @PlatformApi
+        @HiddenFromObjC
+        fun over(
             link: ReceivedLink.ShareLink, guest: GuestClient, store: DeviceStore, sessions: GuestSessions, locale: () -> String = { "en" },
             handedPassword: String? = null, queue: UploadQueue? = null, deriver: Derivation.Deriver? = null, now: () -> Long = { 0L },
             doors: (kind: String, role: String) -> GuestDoor? = AppKinds::guestDoor,

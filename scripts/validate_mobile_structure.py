@@ -65,7 +65,6 @@ from rust_lexer import mask as mask_rust  # noqa: E402
 from validate_mobile_ui_direction import cs_mask, swift_mask  # noqa: E402
 
 MOBILE = repo_layout.MOBILE
-CORE_SRC = MOBILE / "core" / "src"
 BRIDGE_SRC = MOBILE / "bridge" / "src"
 
 # Every platform is on (switched on one by one as each drew the plans whole, 2026-11-21); a new platform starts off
@@ -183,14 +182,17 @@ class PlanEnum:
         return out
 
 
-def core_main_sources(src: pathlib.Path) -> list[pathlib.Path]:
-    return sorted(p for d in src.iterdir() if d.is_dir() and d.name.endswith("Main") for p in d.rglob("*.kt"))
+def core_main_sources() -> list[pathlib.Path]:
+    """The core's main Kotlin files: every core module's main source sets — the platform's, each application's (a plan
+    such as Memories' `TileAction` lives there), the composition's —, the shared test support (`:testing`) aside."""
+    return sorted(p for root in repo_layout.mobile_core_sources("Main") if not root.is_relative_to(repo_layout.MOBILE_TESTING)
+                  for p in root.rglob("*.kt"))
 
 
-def plan_enums(core_src: pathlib.Path = CORE_SRC) -> list[PlanEnum]:
+def plan_enums() -> list[PlanEnum]:
     """Every `@Plan` enum of the core's main sources, with its entries and serial names."""
     found: list[PlanEnum] = []
-    for path in core_main_sources(core_src):
+    for path in core_main_sources():
         src = path.read_text(encoding="utf-8")
         if "Plan" not in src:
             continue
@@ -545,14 +547,14 @@ def check(platforms: dict[str, bool] | None = None, paths: list[pathlib.Path] | 
     errors = [f"{p.where}: `@Plan` on no enum class — the annotation marks a plan's enum" for p in plans if not p.name]
     plans = [p for p in plans if p.name]
     if not plans:
-        return [f"{_rel(CORE_SRC)}: no `@Plan` enum read — the guard would check nothing"], 0
+        return [f"{_rel(repo_layout.MOBILE_CORE)}: no `@Plan` enum read in the core's modules — the guard would check nothing"], 0
     for p in plans:
         if not p.entries:
             errors.append(f"{p.where}: the plan `{p.name}` has no entry read")
-    props, funs = plan_lists(plans, core_main_sources(CORE_SRC) + bridge_sources())
+    props, funs = plan_lists(plans, core_main_sources() + bridge_sources())
     if paths is not None:
         return errors + check_files(paths, "abc", plans, props, funs), len(paths)
-    core = core_main_sources(CORE_SRC)
+    core = core_main_sources()
     bridge = bridge_sources()
     errors += check_files(core, "a", plans, props, funs)
     errors += check_files(bridge, "abc", plans, props, funs)

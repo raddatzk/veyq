@@ -2,6 +2,8 @@
 
 package me.raddatz.veyq.mobile.blob
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.posix.FILE
@@ -11,7 +13,9 @@ import platform.posix.FILE
 // mingw's `fopen` reads a path in the ANSI code page and a name outside it does not open as named (`mingwMain`).
 
 /** [path] (UTF-8) opened in C's [mode]; null when it does not open. */
-internal expect fun openFile(path: String, mode: String): CPointer<FILE>?
+@PlatformApi
+@HiddenFromObjC
+expect fun openFile(path: String, mode: String): CPointer<FILE>?
 
 /** Removes the file at [path]; true when it went. */
 internal expect fun removeFile(path: String): Boolean
@@ -20,23 +24,33 @@ internal expect fun removeFile(path: String): Boolean
 internal expect fun seekFile(file: CPointer<FILE>, offset: Long): Boolean
 
 /** What a path is, as the system lists it without following a link ([pathFacts]). */
-internal enum class PathKind { FILE, DIRECTORY, LINK, OTHER }
+@PlatformApi
+@HiddenFromObjC
+enum class PathKind { FILE, DIRECTORY, LINK, OTHER }
 
 /** A path's kind, its size in bytes (a file's) and when it was last modified (epoch milliseconds, where the system says). */
-internal class PathFacts(val kind: PathKind, val size: Long, val modifiedAt: Long?)
+@PlatformApi
+@HiddenFromObjC
+class PathFacts(val kind: PathKind, val size: Long, val modifiedAt: Long?)
 
 /**
  * What [path] is (UTF-8), never following a link: a link — a symbolic link, a Windows reparse point (a junction too) — is
  * reported as one ([PathKind.LINK]), so a walk over it reaches nothing outside the directory picked. Null where the system
  * cannot tell (it does not exist, or may not be read).
  */
-internal expect fun pathFacts(path: String): PathFacts?
+@PlatformApi
+@HiddenFromObjC
+expect fun pathFacts(path: String): PathFacts?
 
 /** The names directory [path] holds (`.` and `..` left out), as the system lists them; null where it does not list. */
-internal expect fun listDirectory(path: String): List<String>?
+@PlatformApi
+@HiddenFromObjC
+expect fun listDirectory(path: String): List<String>?
 
 /** What joins a directory's path and a name in it: `/`, Windows' `\`. */
-internal expect val pathSeparator: Char
+@PlatformApi
+@HiddenFromObjC
+expect val pathSeparator: Char
 
 // The offline store's directory (ADR 0140 decision 3): a directory the app owns, named by the host at start, whose
 // files the core writes beside and renames over (`DeviceFiles`). Per platform as the calls above.

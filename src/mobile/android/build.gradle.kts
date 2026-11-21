@@ -96,7 +96,7 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":core"))
+    implementation(project(":composition"))
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
     implementation(libs.coroutines.core)

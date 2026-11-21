@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.builtins.ListSerializer
 import me.raddatz.veyq.mobile.api.models.AccountKeyMaterial
@@ -21,7 +23,7 @@ import me.raddatz.veyq.mobile.api.models.ScopeSummary
  * `listMyTenants` is kept too, though decision 5's list does not name it: an account opened offline needs the tenants it
  * belongs to (their names and domains) before it can open one, and the answer carries no token or address.
  */
-class KeptRead(val kind: String, internal val model: KSerializer<*>) {
+class KeptRead(val kind: String, @PlatformApi @HiddenFromObjC val model: KSerializer<*>) {
     companion object {
         /** `getAccountKeyMaterial`: this account's wraps and sealed identity (decision 4) — the identity an offline unlock opens. */
         val KEY_MATERIAL = KeptRead("getAccountKeyMaterial", AccountKeyMaterial.serializer())
@@ -71,10 +73,14 @@ class KeptRead(val kind: String, internal val model: KSerializer<*>) {
         internal val QUEUED = setOf(OUTBOX, OUTBOX_FRAMES)
 
         /** The reads an account opens with: never evicted (an offline unlock needs them), dropped only by a wipe. */
-        internal val OPENING = setOf(KEY_MATERIAL.kind, MY_TENANTS.kind, MY_SCOPES.kind)
+        @PlatformApi
+        @HiddenFromObjC
+        val OPENING = setOf(KEY_MATERIAL.kind, MY_TENANTS.kind, MY_SCOPES.kind)
 
         /** What neither the limit, "Clear cache" nor the sweep drops: the opening answers, the pins' record and the outbox. */
-        internal val PROTECTED = OPENING + PINS + QUEUED
+        @PlatformApi
+        @HiddenFromObjC
+        val PROTECTED = OPENING + PINS + QUEUED
 
         /** The listings below a scope: what a pin reaches through — core's and each application's ([ApplicationKept.listings]). */
         internal val LISTINGS: Set<String>

@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,7 +48,9 @@ import me.raddatz.veyq.mobile.session.DeviceStore
  *   refused below the free-space floor whatever the limit; only a send, a discard or a wipe removes them.
  */
 class AccountOffline internal constructor(
-    internal val store: OfflineStore,
+    @PlatformApi
+    @HiddenFromObjC
+    val store: OfflineStore,
     private val files: DeviceFiles,
     /** Ends a holder's use of the store, which [OfflineStores.openShared] shares; null: this holder owns it alone. */
     private val release: (suspend (holder: AccountOffline, all: Boolean) -> Boolean)?,
@@ -68,9 +72,13 @@ class AccountOffline internal constructor(
      */
     data class Usage(val limit: Long, val automatic: Long, val pinned: Long, val free: Long?, val queued: Long = 0)
 
-    internal fun key(read: KeptRead, tenant: String = "", scope: String = "", id: String = "") = EntryKey(server, tenant, scope, read.kind, id)
+    @PlatformApi
+    @HiddenFromObjC
+    fun key(read: KeptRead, tenant: String = "", scope: String = "", id: String = "") = EntryKey(server, tenant, scope, read.kind, id)
 
-    internal fun blobKey(tenant: String, scope: String, blobId: String) = EntryKey(server, tenant, scope, KeptRead.FRAMES, blobId)
+    @PlatformApi
+    @HiddenFromObjC
+    fun blobKey(tenant: String, scope: String, blobId: String) = EntryKey(server, tenant, scope, KeptRead.FRAMES, blobId)
 
     /** The limit in bytes for this account on this device. */
     val limit: Long get() = settings.read(LIMIT + account)?.toLongOrNull()?.takeIf { it >= 0 } ?: defaultLimit
@@ -109,7 +117,9 @@ class AccountOffline internal constructor(
     }
 
     /** The answer kept under [key], its last view moved; null where none is (or it no longer opens). */
-    internal suspend fun answer(key: EntryKey): Answer? {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun answer(key: EntryKey): Answer? {
         val entry = store.entry(key) ?: return null
         val bytes = store.get(key) ?: return null
         val pages = runCatching { Pages.decode(bytes) }.getOrNull() ?: return null.also { store.remove(key) }
@@ -118,7 +128,9 @@ class AccountOffline internal constructor(
     }
 
     /** [pages] (an answer as the server sent it) kept under [key] with the server's [revision], replacing what was kept. */
-    internal suspend fun keep(key: EntryKey, pages: List<ByteArray>, revision: String?) {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun keep(key: EntryKey, pages: List<ByteArray>, revision: String?) {
         val content = Pages.encode(pages)
         val pins = pinsOf(key)
         if (key.kind !in KeptRead.OPENING && !mayWrite(content.size.toLong(), pinned = !pins.isNullOrEmpty())) {
@@ -153,18 +165,24 @@ class AccountOffline internal constructor(
     // ---- a blob's frames
 
     /** The frame indexes kept of [key]'s blob. */
-    internal suspend fun frames(key: EntryKey): Set<Int> = store.frames(key)
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun frames(key: EntryKey): Set<Int> = store.frames(key)
 
     /** Frame [index] of [key]'s blob as the store served it; null where it is not kept. */
     internal suspend fun frame(key: EntryKey, index: Int): ByteArray? = store.frame(key, index)
 
-    internal suspend fun touch(key: EntryKey) = store.touch(key)
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun touch(key: EntryKey) = store.touch(key)
 
     /**
      * [frames] (as the object store served them) appended to [key]'s blob in one write — one frame index and one shard
      * written per batch, never per frame — where the automatic tier takes a blob of [size] bytes; then the eviction.
      */
-    internal suspend fun keepFrames(key: EntryKey, frames: Map<Int, ByteArray>, size: Long): Boolean {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun keepFrames(key: EntryKey, frames: Map<Int, ByteArray>, size: Long): Boolean {
         if (frames.isEmpty()) return true
         val pins = pinsOf(key)
         val pinned = pins?.isNotEmpty() ?: (store.entry(key)?.pins?.isNotEmpty() == true)
@@ -190,14 +208,18 @@ class AccountOffline internal constructor(
     private var outboxHeld: Outbox? = null
 
     /** The account's writes made offline, kept in this store ([Outbox]); one per store, shared by its holders. */
-    internal fun outbox(suite: me.raddatz.veyq.mobile.crypto.V1): Outbox = outboxHeld ?: Outbox(this, suite, server).also { outboxHeld = it }
+    @PlatformApi
+    @HiddenFromObjC
+    fun outbox(suite: me.raddatz.veyq.mobile.crypto.V1): Outbox = outboxHeld ?: Outbox(this, suite, server).also { outboxHeld = it }
 
     /**
      * [content] kept as the queued entry [key] (an intent, the outbox's order) whatever the limit — the person's own writes
      * are never the automatic tier's —, but refused below the free-space floor where [floor] (a new write; the order and a
      * write's state are rewritten whatever is free, so a send or a discard always lands): false then, nothing written.
      */
-    internal suspend fun putQueued(key: EntryKey, content: ByteArray, floor: Boolean): Boolean {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun putQueued(key: EntryKey, content: ByteArray, floor: Boolean): Boolean {
         require(key.kind in KeptRead.QUEUED)
         if (floor && !mayWrite(content.size.toLong(), pinned = true)) return false
         store.put(key, content, null, clock(), emptySet())
@@ -286,7 +308,9 @@ class AccountOffline internal constructor(
      * Drops every entry no current kept answer reaches (ADR 0140 decision 6) — first the pins whose node no current answer
      * lists ([settlePins]), so their entries go with them —, then gives each entry left the pins that reach it.
      */
-    internal suspend fun sweep() {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun sweep() {
         settlePins()
         val reached = mark()
         store.removeAll(store.entries().filter { it.key !in reached }.map { it.key })

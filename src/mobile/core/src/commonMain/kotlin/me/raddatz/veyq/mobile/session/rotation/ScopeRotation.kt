@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session.rotation
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.coroutines.CancellationException
 import me.raddatz.veyq.mobile.api.apis.ContentApi
 import me.raddatz.veyq.mobile.api.apis.RekeyApi
@@ -40,7 +42,9 @@ class EpochMovedOn(val scopeId: String) : Exception("epoch_moved_on: $scopeId")
 
 /** An opened scope a rotation is built on: its tenant, kind, the epoch of the one key it holds, and that key (the caller
  *  of the opener owns it and zeroes it). */
-internal class OpenedScope(val scopeId: String, val tenantId: String, val kind: String, val epoch: Long, val key: ByteArray)
+@PlatformApi
+@HiddenFromObjC
+class OpenedScope(val scopeId: String, val tenantId: String, val kind: String, val epoch: Long, val key: ByteArray)
 
 /** Opens the scope a rotation is built on — the caller's own grant, at whatever epoch it lags (`E_n`); null where it does
  *  not open. The web's `RotationOpener` and `TenantOpener`. */
@@ -57,7 +61,9 @@ fun interface ScopeRekeyParticipant {
 
 /** What a [ScopeRekeyParticipant] is handed: the scope, its origin, the re-key id, the epoch moved from, and the re-wrap. */
 class ScopeRekeyContext internal constructor(
-    internal val account: VeyqAccount,
+    @PlatformApi
+    @HiddenFromObjC
+    val account: VeyqAccount,
     val base: String,
     val scopeId: String,
     val rekeyId: String,
@@ -68,7 +74,9 @@ class ScopeRekeyContext internal constructor(
     fun rewrap(value: Context, wrapped: String): String = rewrapOne(value, wrapped)
 
     /** One call of the participant: the response, or [RotationRefused] for any other answer than a 2xx. */
-    internal suspend fun <T : Any> send(f: suspend () -> HttpResponse<T>): HttpResponse<T> = sent(account, f)
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun <T : Any> send(f: suspend () -> HttpResponse<T>): HttpResponse<T> = sent(account, f)
 }
 
 internal suspend fun <T : Any> sent(account: VeyqAccount, f: suspend () -> HttpResponse<T>): HttpResponse<T> {
@@ -90,7 +98,9 @@ internal suspend fun <T : Any> sent(account: VeyqAccount, f: suspend () -> HttpR
  * Every member whose key is anchored is re-granted, the rotator itself unconditionally to the identity it holds; every
  * other one (an anomaly, judged in the scope's tenant) is declared pending (ADR 0111 decisions 9, 10, 15).
  */
-internal class ScopeRotation(
+@PlatformApi
+@HiddenFromObjC
+class ScopeRotation(
     private val account: VeyqAccount,
     private val participants: List<ScopeRekeyParticipant>,
     /** A kind's slug-token input (`AppKinds.tokenInput`): a root entry's token is recomputed under the new key. */

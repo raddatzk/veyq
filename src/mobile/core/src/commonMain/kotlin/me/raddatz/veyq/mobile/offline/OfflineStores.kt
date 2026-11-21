@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -135,12 +137,16 @@ class OfflineStores internal constructor(
     }
 
     /** The steps of a [wipe], for a test to stop it where a crash would. */
-    internal enum class WipeStep { MARKED, FILES, DIRECTORY }
+    @PlatformApi
+    @HiddenFromObjC
+    enum class WipeStep { MARKED, FILES, DIRECTORY }
 
     /** Removes [account]'s store: every file, then its directory, then its id. Nothing where it has none. */
     fun wipe(account: String) = wipe(account) {}
 
-    internal fun wipe(account: String, interrupt: (WipeStep) -> Unit) {
+    @PlatformApi
+    @HiddenFromObjC
+    fun wipe(account: String, interrupt: (WipeStep) -> Unit) {
         val record = records()[account] ?: return
         if (!record.wiping) write(records() + (account to record.copy(wiping = true)))
         interrupt(WipeStep.MARKED)
@@ -176,7 +182,13 @@ class OfflineStores internal constructor(
         if (records.isEmpty()) store.remove(KEY) else store.write(KEY, JSON.encodeToString(records))
     }
 
-    internal companion object {
+    @PlatformApi
+    @HiddenFromObjC
+    companion object {
+        /** The stores over [files] and [clock] of the caller's own (a test's volume, its clock): the constructor, opened. */
+        fun of(root: String, store: DeviceStore, primitives: Primitives, files: DeviceFiles, clock: () -> Long) =
+            OfflineStores(root, store, primitives, files, clock)
+
         const val KEY = "veyq.offline-stores"
         /** The header's file name, the one a store's directory names in the clear (a test's). */
         const val HEADER_NAME = OfflineStore.HEADER

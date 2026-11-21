@@ -36,7 +36,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[2] / "scripts"))
 from validate_mobile_structure import PlanEnum, plan_enums  # noqa: E402
 
-PREFIX = "VeyqCore"  # the framework's Objective-C prefix (core/build.gradle.kts' baseName)
+PREFIX = "VeyqCore"  # the framework's Objective-C prefix (composition/build.gradle.kts' baseName)
 
 
 def _norm(name: str) -> str:

@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 /**
  * A node a member's run created and keeps writing into — a copy's Memory (inbox #988) —, a port of the web's
  * `memberNodeWriter` (`src/web/src/core/node/rereadNode.ts`). A rotation another member makes while the run is under way
@@ -24,7 +26,7 @@ class MemberNodeWriter internal constructor(
     private val sleep: (suspend (Long) -> Unit)? = null,
 ) {
     /** A node's key and the epoch a write into it states. */
-    class At(internal val key: ByteArray, val epoch: Int)
+    class At(@PlatformApi @HiddenFromObjC val key: ByteArray, val epoch: Int)
 
     /** The node re-read: its key and epoch, and the scope epoch its key was minted under. */
     class Read(val at: At, val scopeEpoch: Int)

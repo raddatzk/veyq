@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.api.models.NodeSummary
 import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.OpenRefused
@@ -15,11 +17,15 @@ class OpenNode(
     val parentId: String?,
     val kind: String,
     val name: String,
-    internal val key: ByteArray,
+    @PlatformApi
+    @HiddenFromObjC
+    val key: ByteArray,
     /** The node's own key epoch: what a write into it states (`nodeEpoch`). */
     val epoch: Int = 0,
     /** The node's sealed meta (`node-meta` under its key), base64, and the revision it is stored at. */
-    internal val wrappedMeta: String? = null,
+    @PlatformApi
+    @HiddenFromObjC
+    val wrappedMeta: String? = null,
     val metaRevision: Long = 0,
     /** The scope epoch the node's key was minted under: a write seals under it only at the scope's current epoch. */
     val scopeEpoch: Int = 0,
@@ -28,7 +34,9 @@ class OpenNode(
     /** The name as stored (`node-name` under the parent's key), base64: what a report of the name hands over a key to. */
     internal val encryptedName: String? = null,
     /** A drop box's private drop key, sealed under its key (`drop-private-key`), base64; null for any other node. */
-    internal val sealedDropPrivateKey: String? = null,
+    @PlatformApi
+    @HiddenFromObjC
+    val sealedDropPrivateKey: String? = null,
     /** A guest's identity folder (ADR 0080 decision 11): the identity it belongs to, and that identity's key `K_up` sealed
      *  to its drop box's public drop key (`upload-identity-key`), under which the folder's own entry lives. */
     val shareIdentityId: String? = null,

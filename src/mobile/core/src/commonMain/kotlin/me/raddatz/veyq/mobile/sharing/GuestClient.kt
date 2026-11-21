@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -16,7 +18,7 @@ import me.raddatz.veyq.mobile.session.VeyqAccount
  * through one of these, never through the account's client: the share's instance may be another, and this instance's
  * own share page asks no session either. Closed with the open link.
  */
-class GuestClient(val origin: String, val suite: V1, internal val http: HttpClient) {
+class GuestClient(val origin: String, val suite: V1, @PlatformApi @HiddenFromObjC val http: HttpClient) {
     /** A fresh client id for a write (an identity, a node): a UUID v4 from the suite's randomness. */
     internal fun uuid(): String {
         val b = suite.p.randomBytes(16)

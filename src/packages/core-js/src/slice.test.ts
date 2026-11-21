@@ -11,7 +11,7 @@ import { build } from 'esbuild'
 // The size is printed beside the budget, the Kotlin standard library's share apart from the façade's own.
 const here = dirname(fileURLToPath(import.meta.url))
 const dist = resolve(here, '../dist')
-if (!existsSync(resolve(dist, 'veyq-mobile-core.mjs'))) {
+if (!existsSync(resolve(dist, 'kotlin_veyq_mobile_core.mjs'))) {
   throw new Error('dist/ is missing: run `pnpm run build` (the core compiled by Gradle) before the check')
 }
 
@@ -20,7 +20,8 @@ if (!existsSync(resolve(dist, 'veyq-mobile-core.mjs'))) {
 const BUDGET_GZ = 40 * 1024
 const FORBIDDEN = /kotlinx-serialization|kotlinx-coroutines|kotlinx\.coroutines|kotlinx\/serialization|ktor|NotOnTheWeb\.kt/i
 
-const ENTRIES = { search: 'veyq-mobile-core.mjs' }
+// each entry's module file (Kotlin's per-module output: the platform's search in the platform's file, ADR 0155 decision 7.1)
+const ENTRIES = { search: 'kotlin_veyq_mobile_core.mjs' }
 
 describe('what an entry ships', () => {
   for (const [entry, file] of Object.entries(ENTRIES)) {
@@ -42,7 +43,7 @@ describe('what an entry ships', () => {
       const gz = gzipSync(js.contents, { level: 9 }).length
       const share = (re: RegExp) => Object.entries(inputs).filter(([m]) => re.test(m)).reduce((n, [, i]) => n + i.bytesInOutput, 0)
       const stdlib = share(/kotlin-kotlin-stdlib/)
-      const own = share(/veyq-mobile-core\.mjs$/)
+      const own = share(new RegExp(file.replace('.', '\\.') + '$'))
       console.log(
         `@veyq/core-js/${entry}: ${js.contents.length} B minified, ${gz} B gz (budget ${BUDGET_GZ}); of the minified: ` +
           `standard library ${stdlib} B, the core's own ${own} B, other ${js.contents.length - stdlib - own} B`,

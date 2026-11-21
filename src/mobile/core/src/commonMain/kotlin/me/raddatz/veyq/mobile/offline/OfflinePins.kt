@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -185,7 +187,9 @@ class OfflinePins internal constructor(
     }
 
     /** The build's [kinds] without the loop: a test drives [sync] itself. */
-    internal fun use(kinds: PinKinds) {
+    @PlatformApi
+    @HiddenFromObjC
+    fun use(kinds: PinKinds) {
         this.kinds = kinds
     }
 
@@ -360,7 +364,9 @@ class OfflinePins internal constructor(
     }
 
     /** The sync stops (the account closes); a fetch under way ends where it is, to continue at the next open. */
-    internal fun stop() {
+    @PlatformApi
+    @HiddenFromObjC
+    fun stop() {
         loop?.cancel()
         for (node in _progress.value.keys) OfflineFetching.set("${account.key}\u0000$node", null)
         _progress.value = emptyMap()

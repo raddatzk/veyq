@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +19,9 @@ import me.raddatz.veyq.mobile.navigation.NodeAt
  */
 class GuestAccess internal constructor(
     internal val gates: ShareGates,
-    internal val head: ShareHead,
+    @PlatformApi
+    @HiddenFromObjC
+    val head: ShareHead,
     /** The subtree a READ or READ_WRITE link serves; null for a WRITE_ONLY link, which is served none. */
     val tree: GuestTree?,
     /** The guest view's upload queue (a guest's uploads); null where the host gave none. */
@@ -39,9 +43,15 @@ class GuestAccess internal constructor(
     /** A READ_WRITE or WRITE_ONLY link: the guest writes (once it named itself). */
     val writes: Boolean get() = role != READ
 
-    internal val client: GuestClient get() = gates.guestClient
-    internal val suite: V1 get() = client.suite
-    internal val pwToken: String? get() = gates.passwordToken
+    @PlatformApi
+    @HiddenFromObjC
+    val client: GuestClient get() = gates.guestClient
+    @PlatformApi
+    @HiddenFromObjC
+    val suite: V1 get() = client.suite
+    @PlatformApi
+    @HiddenFromObjC
+    val pwToken: String? get() = gates.passwordToken
     val blobs: GuestBlobs = GuestBlobs(gates)
 
     /** The guest's session of this link on this device (null: it has not named itself). */
@@ -114,10 +124,14 @@ class GuestAccess internal constructor(
     }
 
     /** The uploader's own `K_up` of [session] (a fresh copy, the caller's to zero); null where the session holds none. */
-    internal fun uploaderKey(session: GuestSession): ByteArray? = session.uploaderKey?.let { runCatching { unb64(it) }.getOrNull() }
+    @PlatformApi
+    @HiddenFromObjC
+    fun uploaderKey(session: GuestSession): ByteArray? = session.uploaderKey?.let { runCatching { unb64(it) }.getOrNull() }
 
     /** A fresh client id (a UUID v4). */
-    internal fun uuid(): String = client.uuid()
+    @PlatformApi
+    @HiddenFromObjC
+    fun uuid(): String = client.uuid()
 
     /** Whether [nodeId] is a guest's identity folder or lies in one: nothing is placed there but by its identity (ADR 0080 decision 11). */
     fun inIdentityFolder(nodeId: String): Boolean {
@@ -147,7 +161,9 @@ class GuestAccess internal constructor(
      * minted under stated. Never under a key the guest does not hold; the server checks the place and the kind
      * (`GuestCreatableKinds`).
      */
-    internal suspend fun createNode(session: GuestSession, parent: me.raddatz.veyq.mobile.session.OpenNode, kind: String, name: String): Created {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun createNode(session: GuestSession, parent: me.raddatz.veyq.mobile.session.OpenNode, kind: String, name: String): Created {
         val input = me.raddatz.veyq.mobile.AppKinds.tokenInput(kind, name) ?: return Created.Refused("unknown_kind")
         val nodeId = uuid()
         val scopeEpoch = parent.scopeEpoch
@@ -171,7 +187,9 @@ class GuestAccess internal constructor(
     }
 
     /** Take back node [nodeId] this guest created for an upload that never filled it (`abandonShareNode`); best effort. */
-    internal suspend fun abandonNode(session: GuestSession, nodeId: String) {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun abandonNode(session: GuestSession, nodeId: String) {
         runCatching { me.raddatz.veyq.mobile.api.apis.SharingApi(client.origin, client.http).abandonShareNode(shareId, nodeId, session.contributorToken, pwToken) }
     }
 

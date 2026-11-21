@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +26,9 @@ object AppleBackground {
     fun start(device: ThisDevice, deadline: Long, done: (summary: String?) -> Unit): Run =
         start(BackgroundRun(LibsodiumPrimitives, device, { block -> appleHttpClient(block) }), deadline, done)
 
-    internal fun start(run: BackgroundRun, deadline: Long, done: (summary: String?) -> Unit): Run {
+    @PlatformApi
+    @HiddenFromObjC
+    fun start(run: BackgroundRun, deadline: Long, done: (summary: String?) -> Unit): Run {
         var report: BackgroundRun.Report? = null
         val job = CoroutineScope(Dispatchers.Default).launch {
             report = try {

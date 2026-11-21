@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -48,7 +50,9 @@ data class HeldEpochKey(val epoch: Long, val commitment: String)
  * Marks only rise. Storage is best effort, since a mark that did not land is a lower mark (safer for the server,
  * never a lockout); the refusals that read them are fail-closed.
  */
-internal class TrustMarks(private val store: DeviceStore, primitives: Primitives, masterKey: ByteArray) {
+@PlatformApi
+@HiddenFromObjC
+class TrustMarks(private val store: DeviceStore, primitives: Primitives, masterKey: ByteArray) {
     @Serializable
     private data class Stored(
         val pins: Long = 0,

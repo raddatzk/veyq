@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -182,7 +184,9 @@ object NodeReport {
      * The keys a report of [node] hands over (`nodeReportKeys`, `nameReportKeys`): for the whole node its own key, its
      * name's and its meta's field keys; for its name only that name's field key. Null when nothing opens here.
      */
-    internal suspend fun keysOf(tenant: TenantSession, scopeId: String, node: OpenNode, scope: Scope): List<Report.Key>? {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun keysOf(tenant: TenantSession, scopeId: String, node: OpenNode, scope: Scope): List<Report.Key>? {
         val suite = tenant.account.suite
         val entryKey = node.parentId?.let { p -> tenant.trees()[scopeId]?.firstOrNull { it.id == p }?.key } ?: tenant.scopeKey(scopeId)?.first
         val nameKey = runCatching {

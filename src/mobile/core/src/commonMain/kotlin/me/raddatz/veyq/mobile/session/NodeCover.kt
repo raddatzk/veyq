@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -106,7 +108,9 @@ object NodeCover {
     }
 
     /** A crop as the meta writes it (the web's key order and number form). */
-    internal fun cropJson(c: Crop) = buildJsonObject {
+    @PlatformApi
+    @HiddenFromObjC
+    fun cropJson(c: Crop) = buildJsonObject {
         fun n(v: Double): JsonPrimitive = if (v == kotlin.math.floor(v) && kotlin.math.abs(v) < 1e15) JsonPrimitive(v.toLong()) else JsonPrimitive(v)
         put("x", n(c.x)); put("y", n(c.y)); put("width", n(c.width)); put("height", n(c.height))
     }

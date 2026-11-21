@@ -2,6 +2,8 @@
 
 package me.raddatz.veyq.mobile.blob
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.convert
@@ -22,7 +24,9 @@ import platform.posix.rmdir
 
 // Apple and Linux: a path is the bytes it is, UTF-8 as the wire and the system's dialogs hand it.
 
-internal actual fun openFile(path: String, mode: String): CPointer<FILE>? = fopen(path, mode)
+@PlatformApi
+@HiddenFromObjC
+actual fun openFile(path: String, mode: String): CPointer<FILE>? = fopen(path, mode)
 
 internal actual fun removeFile(path: String): Boolean = remove(path) == 0
 

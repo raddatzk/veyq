@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.crypto
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import org.kotlincrypto.hash.sha3.SHA3_256
 import org.kotlincrypto.hash.sha3.SHAKE256
 
@@ -7,7 +9,7 @@ import org.kotlincrypto.hash.sha3.SHAKE256
 data class ArgonParams(val t: Int, val m: Int, val p: Int, val dkLen: Int)
 
 /** An X-Wing key pair: the 32-byte seed is the private key (draft-connolly-cfrg-xwing-kem-11). */
-class XWingKey(val seed: ByteArray, val publicKey: ByteArray, internal val mlKemDk: ByteArray, internal val x25519Sk: ByteArray)
+class XWingKey(val seed: ByteArray, val publicKey: ByteArray, @PlatformApi @HiddenFromObjC val mlKemDk: ByteArray, @PlatformApi @HiddenFromObjC val x25519Sk: ByteArray)
 
 /** A member's identity private half: the X-Wing seed and the Ed25519 signing seed. */
 class IdentityPrivate(val kemSeed: ByteArray, val signSeed: ByteArray)

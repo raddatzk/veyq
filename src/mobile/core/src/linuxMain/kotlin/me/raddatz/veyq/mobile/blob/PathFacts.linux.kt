@@ -2,6 +2,8 @@
 
 package me.raddatz.veyq.mobile.blob
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
@@ -15,7 +17,9 @@ import platform.posix.stat
 
 // Linux: a path's facts by `lstat`, which reports a link as the link it is and never follows it.
 
-internal actual fun pathFacts(path: String): PathFacts? = memScoped {
+@PlatformApi
+@HiddenFromObjC
+actual fun pathFacts(path: String): PathFacts? = memScoped {
     val st = alloc<stat>()
     if (lstat(path, st.ptr) != 0) return@memScoped null
     val kind = when (st.st_mode.toInt() and S_IFMT) {

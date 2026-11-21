@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.blob
 
+import me.raddatz.veyq.mobile.PlatformApi
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -12,7 +13,8 @@ import java.nio.file.StandardOpenOption
 
 // Android (and the JVM's tests): java.nio, a write forced to the device before it returns.
 
-internal actual val deviceFiles: DeviceFiles = object : DeviceFiles {
+@PlatformApi
+actual val deviceFiles: DeviceFiles = object : DeviceFiles {
     override val separator: Char get() = File.separatorChar
 
     override fun createDirectory(path: String): Boolean {

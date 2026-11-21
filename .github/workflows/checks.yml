@@ -228,7 +228,7 @@ jobs:
         run: pnpm run check
 
       # The core's suite over the web's own @noble/* (its conformance over contracts/crypto/vectors/v1.json under Node),
-      # before the web: the build writes `dist/` (Gradle's `:core:jsPackage`), the check runs it.
+      # before the web: the build writes `dist/` (Gradle's `:composition:jsPackage`), the check runs it.
       - name: Build and check the core compiled for JavaScript
         working-directory: src/packages/core-js
         run: pnpm run build && pnpm run check

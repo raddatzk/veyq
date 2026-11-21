@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -142,7 +144,9 @@ object NodeRekey {
     }
 
     /** The ids of [nodeIds], each one's ancestors, and — with [subtree] — each one's descendants. */
-    internal fun pathOf(nodeIds: List<String>, rows: List<RekeyNode>, byId: Map<String, RekeyNode>, subtree: Boolean): Set<String> {
+    @PlatformApi
+    @HiddenFromObjC
+    fun pathOf(nodeIds: List<String>, rows: List<RekeyNode>, byId: Map<String, RekeyNode>, subtree: Boolean): Set<String> {
         val wanted = HashSet<String>()
         for (id in nodeIds) {
             var cur = byId[id]
@@ -161,10 +165,14 @@ object NodeRekey {
     }
 
     /** The frontier's rule: a node's parent is re-keyed, or it has none. A parent the listing does not hold counts as due. */
-    internal fun parentNotDue(n: RekeyNode, byId: Map<String, RekeyNode>): Boolean = n.parentId == null || byId[n.parentId]?.due == false
+    @PlatformApi
+    @HiddenFromObjC
+    fun parentNotDue(n: RekeyNode, byId: Map<String, RekeyNode>): Boolean = n.parentId == null || byId[n.parentId]?.due == false
 
     /** Whether this client re-keys [n] at all (see the class); its subtree waits for whoever does. */
-    internal fun isMine(n: RekeyNode, owner: Boolean, kinds: Kinds): Boolean =
+    @PlatformApi
+    @HiddenFromObjC
+    fun isMine(n: RekeyNode, owner: Boolean, kinds: Kinds): Boolean =
         (owner || !n.ownerOnly) && kinds.contentOf(n.kind) != null
 
     private enum class Step { COMMITTED, CONFLICT, LEFT, FAILED }
@@ -387,7 +395,9 @@ object NodeRekey {
     ).any { "\"$it\"" in body }
 
     /** `K_blob` of [blobId] (owner, role) moved from [oldKey] to [newKey], bound as before; a wrap that does not open throws. */
-    internal fun rewrapBlob(suite: V1, scopeId: String, ownerId: String, blobId: String, role: String, oldKey: ByteArray, newKey: ByteArray, wrapped: String): String {
+    @PlatformApi
+    @HiddenFromObjC
+    fun rewrapBlob(suite: V1, scopeId: String, ownerId: String, blobId: String, role: String, oldKey: ByteArray, newKey: ByteArray, wrapped: String): String {
         val context = Context("blob-key", "scopeId" to scopeId, "ownerId" to ownerId, "blobId" to blobId, "role" to role)
         val kBlob = suite.open(context, oldKey, unb64(wrapped))
         try {

@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.blob
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -77,4 +79,12 @@ class FileSave internal constructor(
     }
 
     private fun progress(written: Long) = Notice(Msg.DOWNLOAD_SAVING, name, Bytes(written), Bytes(total))
+
+    @PlatformApi
+    @HiddenFromObjC
+    companion object {
+        /** A save an application's page starts (Depot's file page, Memories' lightbox): the constructor, opened to them. */
+        fun of(name: String, total: Long, scope: CoroutineScope, write: suspend (progress: (Long) -> Unit) -> Boolean) =
+            FileSave(name, total, scope, write)
+    }
 }

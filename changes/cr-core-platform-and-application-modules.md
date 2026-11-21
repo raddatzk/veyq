@@ -377,6 +377,89 @@ command, or `remembered`), what it costs or leaves open.
     the package `…mobile.composition` is the one root: it may name applications, and no other file names it (rule c3).
     Phase 3 retires these rules into the module graph guard.
 
+13. **2026-11-22 — Where the modules' shared targets live (decision 5).** Options: a `buildSrc` convention plugin; a
+    convention in `src/mobile/build.gradle.kts`. Chosen the root file: `subprojects { plugins.withId(multiplatform) { … } }`
+    for `:core`, `:apps:*`, `:composition`, `:testing` (by path; `:bridge` keeps its own three targets). `buildSrc` would
+    put a second Kotlin Gradle plugin on the build's classpath beside the catalog's, and the CR's tie-breaker (what the
+    configuration cache accepts) is moot: the build does not enable it (`gradle.properties`, measured by reading). The
+    convention declares the eight targets, the hierarchy (`native`/`bridged`/`posix`, `threaded`), the two opt-ins, the
+    shared `api` dependencies (coroutines, serialization, Ktor's core, negotiation and JSON — what the platform's API
+    hands its applications), the test dependencies, the tests' system properties and `generateApi`. Cost: a reader of a
+    module's build file finds its targets in another file (each module's header says where).
+14. **2026-11-22 — `generateApi` per module, and the generator's class path.** An application's specs are derived — every
+    `contracts/api/<application>/*.openapi.yaml`, into `…mobile.api.<application>` — never listed (the backend's rule);
+    the platform keeps its explicit list. The generator writes its `infrastructure`/`auth` packages for every spec; an
+    application module deletes its copy and uses the platform's (one class per name on the JVM). **Deviation from the
+    obvious:** moving the generator onto the root build script's classpath broke dependency verification — resolved
+    beside the Android plugin, `checker-qual` became a 2.5.8 jar no build had verified (measured: `./gradlew
+    :core:compileKotlinJvm` → "Dependency verification failed … checker-qual-2.5.8.jar"). The generator now runs from a
+    configuration of its own in a class loader of its own (`URLClassLoader` over it, the platform class loader its parent,
+    `CodegenConfigurator`/`DefaultGenerator` called reflectively), so neither classpath perturbs the other and every
+    artifact was already verified. Cost: twenty lines of reflection in the build script; the CLI artifact
+    (`openapi-generator-cli`) would have been a new, unverified dependency.
+15. **2026-11-22 — The `internal` crossings (decision 4), from the compiler.** Opened by the compiler's own list
+    ("Cannot access …: it is internal in …", "exposes its internal type"), round by round until every module compiled:
+    173 declarations of the platform, 39 of the applications (which the composition's code and tests reach), each
+    `@PlatformApi` + `@HiddenFromObjC` (`@HiddenFromObjC` dropped where Kotlin/Native's annotation does not exist: JVM and
+    JavaScript source sets). An `internal` constructor becomes `@PlatformApi constructor`. Evidence: measured,
+    `scratchpad/cs/tools/open_internals.py` over the compile logs; the header diff of entry 21 shows none of them.
+16. **2026-11-22 — Where the tests went (decision 6), and a deviation.** The rule applied, by what a test file names: a
+    platform test that names an application or the composition, or needs the composed registry, moved to
+    `:composition`'s tests (its package kept); an application test that names another application or the composition
+    moved there too; an application test that composes only its own application stays and installs its part beside
+    inert parts for the others (`:testing`'s `TestApplications.install`) — unless what it asserts depends on another
+    application's hook (Depot's `ImportScreenTest` counted 7 nodes of a web download only with every import hook: moved).
+    **Deviation:** no platform test was rewritten over a played kind; 82 test files run in `:composition` unchanged,
+    rather than being rewritten — behaviour held identical over the move outweighed a cleaner platform test set (left as
+    a follow-up). `PlayedTenant` (the played server, which seals Pots and banners) was not split; it and its users are
+    composition tests. One assertion moved: the guest doors' check of a Pot's wire view (`PotFixture`, an Expenses test
+    helper) is Expenses' `PotViewGuestTest`. Test packages may span modules (tests only; rule (c) of the guard reads main
+    sets). Evidence: measured, the JVM test cases of a scratch tree at phase 1's commit against this tree's
+    (`testcase` names of every `build/test-results/jvmTest`): 1475 then, 1476 now, the one added `PotViewGuestTest`, none
+    lost (a first run had lost the 12 contract cases of `SoftwareDeviceKeysContractTest`, defined in the helper's file;
+    they are back in `:core`).
+17. **2026-11-22 — `:testing`.** Its `commonMain` holds the old `testDevice` and the helpers every module's tests share
+    (moved from `:core`'s test sets: `DeviceKeysContract` and `testPrimitives`, `PlayedImport`, `ImportFixtures`,
+    `SizedVolume`, `StoreDirs`, `TestDirs`, `PlayedMapServices`, `QrFixtures`/`RepoFile`, `TestEnv`, `PlayedAudio`, and
+    Memories' `AudioFiles`, now `audio.AudioFiles` since it needs nothing of Memories), its `jvmMain` the old `liveTest`;
+    their `internal` dropped (support for other modules). Its packages are the platform's, so rule (c) of the guard
+    exempts it, and it opts into `PlatformApi` (rule (d) allows it). The bridge's path-based `srcDir` became a
+    dependency on it.
+18. **2026-11-22 — The JavaScript package from the composition.** `:composition` links the library (per-module
+    granularity, Kotlin's default); `:core` keeps only the `conformance` compilation's binary, which `jsPackage` copies
+    (`evaluationDependsOn(":core")`). `jsPackage`, `jsPackageDev`, `jsKotlinVersion` and the KT-68281 sort moved whole.
+19. **2026-11-22 — Pulled forward from phase 3.** `repo_layout.py`'s constants and helpers (`MOBILE_CORE`, `MOBILE_APPS`,
+    `MOBILE_COMPOSITION`, `MOBILE_TESTING`, `MOBILE_SETTINGS`, `mobile_projects`, `mobile_core_modules`,
+    `mobile_core_sources`) — `run.py` reads the modules from the settings now — and `validate_mobile_structure.py`'s
+    `plan_enums` over every module, because Apple's pre-build `generate_plans.py` reads it and Memories' `TileAction`
+    left `core/src`. Linux's and Windows' `run.py test` link and run every core module's test binary but `:testing`'s
+    (it has none), the platform's first, the first red one's code the run's.
+20. **2026-11-22 — `@HiddenFromObjC` on a subtype.** Kotlin/Native refuses a visible class implementing a hidden
+    interface ("Only '@HiddenFromObjC' declaration can be a subtype of …"): `:testing`'s `SizedVolume` (a `DeviceFiles`)
+    is hidden too.
+
+21. **2026-11-22 — Phase 2's header and bindings diffs.** Against phase 1's (`hdiff.py`, the same copy of entry 1):
+    first two opened constructors (`FileSave`, `OfflineStores`, whose `internal constructor` the compiler listed) showed
+    as Objective-C initialisers and four `QueuedNodes` constants as properties — an `@PlatformApi constructor` cannot be
+    hidden (`HiddenFromObjC` takes no constructor). Chosen: the constructors stay `internal`, each opened through a
+    hidden companion's `of(…)` (Depot's file page and Memories' lightbox, the composition's tests call it); the constants
+    carry `@HiddenFromObjC`. After: the semantic diff against the pre-split copy equals phase 1's line for line
+    (`diff header-p1.sem header-p2.sem` empty); the bindings: 0 types removed, 0 added. Evidence: measured.
+22. **2026-11-22 — The JavaScript package's file names (decision 5), a deviation.** Kotlin's per-module output names a
+    dependency's file after its library, not its project: the platform's is `kotlin_veyq_mobile_core.mjs`, each
+    application's `kotlin_veyq_mobile_apps_<application>.mjs`, the composition's (an empty shell importing Ktor's client
+    for its registration) `veyq-mobile-composition.mjs`, and one `.d.mts` for every module's exports,
+    `veyq-mobile-composition.d.mts`. `js { outputModuleName }` on `:core` renames only a binary `:core` links itself, not
+    the file the composition's link writes for it (measured: set, rebuilt, unchanged). Chosen: the entry follows
+    Kotlin's names — `./search` → `dist/kotlin_veyq_mobile_core.mjs`, its types the one `.d.mts` — rather than a rename
+    step after the link (a second rewrite of Kotlin's output beside KT-68281's). The CR's "`./search` stays
+    `veyq-mobile-core.mjs`" does not hold; the package's tests name the new files. Cost: an entry's types are the
+    whole package's (types only, no bytes).
+23. **2026-11-22 — The search alone after the split.** `@veyq/core-js/search` bundled as the web bundles it
+    (`src/slice.test.ts`, Node 22.23.3): 27,909 B gz at phase 1's end, 27,943 B gz after the split (+34, per-module
+    output), within 40,960; the refine's 28,189 was measured before phase 1. Evidence: measured, `npx vitest run
+    src/slice.test.ts` in `src/packages/core-js` after `pnpm run build`.
+
 ## Retrospective
 
 (Filled by the implementer.)

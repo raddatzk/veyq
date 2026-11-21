@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.search
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -682,7 +684,9 @@ class SearchModel(
     }
 
     /** Waits until the index and the answer in flight are done (a test's, a measurement's). */
-    internal suspend fun settled() {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun settled() {
         while (true) {
             indexing?.join()
             val a = withContext(lane) { answering }

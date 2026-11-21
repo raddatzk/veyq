@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.blob
 
+import me.raddatz.veyq.mobile.PlatformApi
 /**
  * What the core's common code expects of a platform and the web has no form of (ADR 0155 decision 3): each answers with
  * a refusal that names it, and nothing a façade reaches may reach one. The web reads and writes no files of its own
@@ -9,7 +10,8 @@ package me.raddatz.veyq.mobile.blob
  */
 class NotOnTheWeb(what: String) : UnsupportedOperationException("not on the web: $what")
 
-internal actual val deviceFiles: DeviceFiles
+@PlatformApi
+actual val deviceFiles: DeviceFiles
     get() = throw NotOnTheWeb("deviceFiles")
 
 actual fun inflate(bytes: ByteArray, cap: Int): ByteArray? = throw NotOnTheWeb("inflate")

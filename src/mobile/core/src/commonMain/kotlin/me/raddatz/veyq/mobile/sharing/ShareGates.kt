@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -75,7 +77,9 @@ class ShareGates(
         private set
     private var pwToken: String? = null
     /** The opened head behind the gates (internal: it holds `K_share`); null until [load] passed the password. */
-    internal var head: ShareHead? = null
+    @PlatformApi
+    @HiddenFromObjC
+    var head: ShareHead? = null
         private set
     private var terms: ShareTerms? = null
     private val acceptedNotes = HashSet<String>()

@@ -18,7 +18,7 @@ import me.raddatz.veyq.mobile.session.TenantSession
  */
 @kotlinx.serialization.Serializable
 @kotlinx.serialization.SerialName("QueuedOp")
-enum class Queued(internal val operations: Set<String>) {
+enum class Queued(@PlatformApi @HiddenFromObjC val operations: Set<String>) {
     /** Core: a folder created (`FolderCreate`, its id the write's). */
     FOLDER_CREATE(setOf("createNode")),
 
@@ -59,7 +59,9 @@ enum class Queued(internal val operations: Set<String>) {
     POT_ENTRY(setOf("startBlobUploads", "presignBlobUploadWindows", "completeApplicationBlob", "appendPotRevisions")),
     ;
 
-    internal companion object {
+    @PlatformApi
+    @HiddenFromObjC
+    companion object {
         /** The value a queued write names; null where this build no longer knows it (the write is then held as refused). */
         fun of(op: String): Queued? = entries.firstOrNull { it.name == op }
     }

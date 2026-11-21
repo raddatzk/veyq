@@ -2,6 +2,8 @@
 
 package me.raddatz.veyq.mobile.blob
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
@@ -24,7 +26,9 @@ import platform.windows._GET_FILEEX_INFO_LEVELS
 /** 100-ns intervals from 1601-01-01 to 1970-01-01. */
 private const val EPOCH_FILETIME = 116_444_736_000_000_000L
 
-internal actual fun pathFacts(path: String): PathFacts? = memScoped {
+@PlatformApi
+@HiddenFromObjC
+actual fun pathFacts(path: String): PathFacts? = memScoped {
     val data = alloc<WIN32_FILE_ATTRIBUTE_DATA>()
     if (GetFileAttributesExW(path, _GET_FILEEX_INFO_LEVELS.GetFileExInfoStandard, data.ptr) == 0) return@memScoped null
     val attributes = data.dwFileAttributes.toInt()
@@ -38,7 +42,9 @@ internal actual fun pathFacts(path: String): PathFacts? = memScoped {
     PathFacts(kind, size, (written - EPOCH_FILETIME) / 10_000)
 }
 
-internal actual fun listDirectory(path: String): List<String>? = memScoped {
+@PlatformApi
+@HiddenFromObjC
+actual fun listDirectory(path: String): List<String>? = memScoped {
     val data = alloc<WIN32_FIND_DATAW>()
     val h = FindFirstFileW("${path.trimEnd('\\')}\\*", data.ptr)
     if (h == INVALID_HANDLE_VALUE) return@memScoped null
@@ -54,4 +60,6 @@ internal actual fun listDirectory(path: String): List<String>? = memScoped {
     out
 }
 
-internal actual val pathSeparator: Char = '\\'
+@PlatformApi
+@HiddenFromObjC
+actual val pathSeparator: Char = '\\'
