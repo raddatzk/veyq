@@ -112,14 +112,17 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
                             items(sheet.rows(state), key = { it.link.shareId }) { row ->
                                 // what this member may do with it is core's (`LinkRow`, the web's dialogs' rules)
                                 val id = row.link.shareId
-                                LinkRow(
-                                    row, busy = state.busy == id,
-                                    onEdit = if (row.canEdit) ({ sheet.edit(id) }) else null,
-                                    onRenew = if (row.canRenew) ({ sheet.askRenew(id) }) else null,
-                                    onDelete = if (row.canDelete) ({ sheet.askDelete(id) }) else null,
-                                    onReactivate = if (row.canReactivate) ({ scope.launch { sheet.reactivate(id) } }) else null,
-                                    onSwitchOff = if (row.canSwitchOff) ({ scope.launch { sheet.switchOff(id) } }) else null,
-                                )
+                                LinkRow(row, busy = state.busy == id) { action ->
+                                    when (action) {
+                                        // the copy is the row's own (its button and the system's share sheet)
+                                        me.raddatz.veyq.mobile.navigation.LinkAction.COPY -> {}
+                                        me.raddatz.veyq.mobile.navigation.LinkAction.EDIT -> sheet.edit(id)
+                                        me.raddatz.veyq.mobile.navigation.LinkAction.RENEW -> sheet.askRenew(id)
+                                        me.raddatz.veyq.mobile.navigation.LinkAction.REACTIVATE -> { scope.launch { sheet.reactivate(id) } }
+                                        me.raddatz.veyq.mobile.navigation.LinkAction.SWITCH_OFF -> { scope.launch { sheet.switchOff(id) } }
+                                        me.raddatz.veyq.mobile.navigation.LinkAction.DELETE -> sheet.askDelete(id)
+                                    }
+                                }
                                 HorizontalDivider()
                             }
                         }
@@ -150,16 +153,20 @@ internal fun ShareSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: Ap
     }
 }
 
+/**
+ * A link's row: its title, dates and badges, then what it offers (core's `ShareSheet.rowActions`, ADR 0154 decision 2) —
+ * every entry, in its order: the copy as the row's button, with the system's share sheet (Android's Sharesheet) first in
+ * its menu; the rest in that one overflow menu (Material 3). Switching off is at once, as the web does; renew and delete
+ * ask first ([onAction] runs each but the copy).
+ */
 @Composable
-private fun LinkRow(
-    row: me.raddatz.veyq.mobile.session.LinkRow, busy: Boolean, onSwitchOff: (() -> Unit)?,
-    onEdit: (() -> Unit)? = null, onRenew: (() -> Unit)? = null, onDelete: (() -> Unit)? = null,
-    onReactivate: (() -> Unit)? = null,
-) {
+private fun LinkRow(row: me.raddatz.veyq.mobile.session.LinkRow, busy: Boolean, onAction: (me.raddatz.veyq.mobile.navigation.LinkAction) -> Unit) {
     val palette = LocalPalette.current
     val context = LocalContext.current
     val copied = stringResource(R.string.share_copied)
     val link = row.link
+    val actions = me.raddatz.veyq.mobile.navigation.ShareSheet.rowActions(row)
+    val url = link.url
     Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(piece(row.title), fontWeight = FontWeight.SemiBold)
@@ -171,29 +178,29 @@ private fun LinkRow(
             val badges = row.badges.map { say(it) }
             if (badges.isNotEmpty()) Text(badges.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.accent))
         }
-        val url = link.url
-        if (url != null && row.canCopy) IconButton(onClick = { copy(context, url); android.widget.Toast.makeText(context, copied, android.widget.Toast.LENGTH_SHORT).show() }) {
+        if (url != null && me.raddatz.veyq.mobile.navigation.LinkAction.COPY in actions) IconButton(onClick = { copy(context, url); android.widget.Toast.makeText(context, copied, android.widget.Toast.LENGTH_SHORT).show() }) {
             Icon(Icons.Outlined.ContentCopy, stringResource(R.string.share_copy))
         }
-        // The row's other actions in one overflow menu (Material 3); switching off is at once, as the web does: the Pot gets a
-        // new key, so the link opens nothing any more. Renew and delete ask first.
-        // an open link goes to another app through the system's share sheet (Android's Sharesheet), first in the menu
-        val share = if (url != null && row.canCopy) ({ sendText(context, url) }) else null
         if (busy) CircularProgressIndicator(Modifier.padding(12.dp).width(20.dp))
-        else if (share != null || onEdit != null || onRenew != null || onReactivate != null || onSwitchOff != null || onDelete != null) {
+        else if (actions.isNotEmpty()) {
             var menu by remember { mutableStateOf(false) }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.node_more)) }
                 androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
-                    share?.let { a -> androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_send)) }, onClick = { menu = false; a() }) }
-                    onEdit?.let { a -> androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_edit)) }, onClick = { menu = false; a() }) }
-                    onReactivate?.let { a -> androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_reactivate)) }, onClick = { menu = false; a() }) }
-                    onRenew?.let { a -> androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_renew)) }, onClick = { menu = false; a() }) }
-                    onSwitchOff?.let { a ->
-                        androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_switch_off), color = role(palette.danger)) }, onClick = { menu = false; a() })
-                    }
-                    onDelete?.let { a ->
-                        androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_delete), color = role(palette.danger)) }, onClick = { menu = false; a() })
+                    for (a in actions) when (a) {
+                        me.raddatz.veyq.mobile.navigation.LinkAction.COPY -> if (url != null) {
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_send)) }, onClick = { menu = false; sendText(context, url) })
+                        }
+                        me.raddatz.veyq.mobile.navigation.LinkAction.EDIT ->
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_edit)) }, onClick = { menu = false; onAction(a) })
+                        me.raddatz.veyq.mobile.navigation.LinkAction.RENEW ->
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_renew)) }, onClick = { menu = false; onAction(a) })
+                        me.raddatz.veyq.mobile.navigation.LinkAction.REACTIVATE ->
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_reactivate)) }, onClick = { menu = false; onAction(a) })
+                        me.raddatz.veyq.mobile.navigation.LinkAction.SWITCH_OFF ->
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_switch_off), color = role(palette.danger)) }, onClick = { menu = false; onAction(a) })
+                        me.raddatz.veyq.mobile.navigation.LinkAction.DELETE ->
+                            androidx.compose.material3.DropdownMenuItem(text = { Text(stringResource(R.string.share_delete), color = role(palette.danger)) }, onClick = { menu = false; onAction(a) })
                     }
                 }
             }

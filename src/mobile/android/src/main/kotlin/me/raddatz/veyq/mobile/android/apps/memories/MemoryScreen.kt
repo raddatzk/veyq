@@ -205,7 +205,7 @@ internal fun MemoryGallery(
         model.shareTarget(gallery, true)
         onDispose { model.shareTarget(gallery, false) }
     }
-    // what the page adds: photos and videos where the rights let whoever looks upload, a chapter where it makes one (core's)
+    // what the page adds: a chapter where it makes one (core's `GalleryModel.creates`), and a guest's photos and videos
     val chapterHere = me.raddatz.veyq.mobile.memories.MemoryCreate.CHAPTER in gallery.creates
     var namingChapter by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
@@ -221,7 +221,9 @@ internal fun MemoryGallery(
     val contributions = if (contributionsOffered && view == MemoryView.CONTRIBUTIONS) remember(gallery) { model.contributions(gallery) } else null
     // photos and videos dropped from another app onto the gallery: core's one drop judges and sorts (ADR 0154 decision 1)
     val dropped = Modifier.sharedFilesDrop { drop -> model.drop(me.raddatz.veyq.mobile.navigation.DropTarget.Gallery(gallery), drop) }
-    val adds = state.rights.upload && canAdd
+    // a member adds photos through the header's Upload (core's `GalleryModel.headerActions`); a guest's link page has no
+    // core header, so its page offers them here
+    val adds = guest && state.rights.upload && canAdd
     Box(Modifier.fillMaxSize().then(if (!guest) dropped else Modifier)) {
     if (tracks != null) MemoryMapView(gallery, tracks, model, snackbar, viewSwitch) else
     if (music != null) MusicView(gallery, music, model, snackbar, viewSwitch) else
@@ -306,7 +308,7 @@ internal fun MemoryGallery(
                                 uploadById[id]?.let { UploadPlaceholder(it, Modifier.offset(x = t.left.dp).size(t.width.dp, t.height.dp)) }
                             }
                             val at = byId[t.id] ?: continue
-                            MediaTile(at.value, state.marks[at.value.mediaId], gallery, model, Modifier.offset(x = t.left.dp).size(t.width.dp, t.height.dp)) {
+                            MediaTile(at.value, state.marks[at.value.mediaId], gallery, model, Modifier.offset(x = t.left.dp).size(t.width.dp, t.height.dp), actions = gallery.tileActions(at.value)) {
                                 open = gallery.lightbox(at.index)
                             }
                         }
@@ -429,15 +431,32 @@ internal fun MediaTile(
     row: GalleryModel.Row, mark: GalleryModel.Mark?, gallery: GalleryModel, model: AppModel, modifier: Modifier,
     /** A long press's action and what a screen reader calls it (the Contributions view's move); null: none. */
     longPress: Pair<String, () -> Unit>? = null,
+    /**
+     * What the tile offers beside opening it (core's `GalleryModel.tileActions`, ADR 0154 decision 2): every entry in a menu
+     * a long press opens, Material's gesture for a tile's actions; none: no menu.
+     */
+    actions: List<me.raddatz.veyq.mobile.memories.TileAction> = emptyList(),
     onOpen: () -> Unit,
 ) {
     val palette = LocalPalette.current
     val picture by produceState<ImageBitmap?>(null, row.mediaId) {
         value = row.tile?.let { blob -> model.mediaPicture(blob) { gallery.tile(row.mediaId) } }
     }
-    val tap = if (longPress == null) Modifier.clickable(onClick = onOpen)
-    else Modifier.combinedClickable(onClick = onOpen, onLongClickLabel = longPress.first, onLongClick = longPress.second)
+    var menu by remember { mutableStateOf(false) }
+    val tileMenu = stringResource(R.string.node_more)
+    val hold = if (actions.isNotEmpty()) tileMenu to { menu = true } else longPress
+    val tap = if (hold == null) Modifier.clickable(onClick = onOpen)
+    else Modifier.combinedClickable(onClick = onOpen, onLongClickLabel = hold.first, onLongClick = hold.second)
     Box(modifier.background(role(palette.line)).then(tap), contentAlignment = Alignment.Center) {
+        if (actions.isNotEmpty()) androidx.compose.material3.DropdownMenu(menu, { menu = false }) {
+            for (a in actions) when (a) {
+                // the caller's mark set or taken away (the lightbox's heart, from the grid)
+                me.raddatz.veyq.mobile.memories.TileAction.MARK -> androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(stringResource(if (mark?.mine == true) R.string.media_marks_unmark else R.string.media_marks_mark)) },
+                    onClick = { menu = false; model.galleryAct { gallery.toggleMark(row.mediaId) } },
+                )
+            }
+        }
         val p = picture
         if (p != null) Image(p, row.name, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         else Icon(Icons.Outlined.Image, row.name, tint = role(palette.muted))

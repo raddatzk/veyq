@@ -166,70 +166,73 @@ fun SignInScreen(
             OutlinedTextField(secretKey, { secretKey = it }, label = { Text(stringResource(R.string.signin_secret_key)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                 visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
         }
-        if (onScanKit != null && !noCamera) {
-            androidx.compose.material3.OutlinedButton(
-                onClick = { onScanKit(server) },
-                enabled = !state.working,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.QrCodeScanner, null, Modifier.padding(end = 8.dp))
-                Text(stringResource(R.string.signin_kit_scan))
-            }
-        }
-        androidx.compose.material3.OutlinedButton(
-            onClick = { pickKit.launch(arrayOf("application/pdf", "image/*")) },
-            enabled = !state.working,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.FileOpen, null, Modifier.padding(end = 8.dp))
-            Text(stringResource(R.string.signin_kit_open))
-        }
         kit?.typedServer?.let { before ->
             Text(
                 stringResource(R.string.signin_kit_other_server, kit.server.orEmpty(), before),
                 style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted),
             )
         }
-        // ADR 0059 §1: another device lets this one in, over the server above (nothing in a scan changes it) — scanning
-        // its code where a camera can be, showing this one's code on every device
-        if (onScanFromTrusted != null && !noCamera) {
-            androidx.compose.material3.OutlinedButton(
-                onClick = { onScanFromTrusted(server) },
-                enabled = !state.working,
-                modifier = Modifier.fillMaxWidth().testTag("signin-link-scan"),
-            ) {
-                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.QrCodeScanner, null, Modifier.padding(end = 8.dp))
-                Text(stringResource(R.string.signin_link_scan))
-            }
-        }
-        if (onShowForSignIn != null) {
-            androidx.compose.material3.OutlinedButton(
-                onClick = { onShowForSignIn(server) },
-                enabled = !state.working,
-                modifier = Modifier.fillMaxWidth().testTag("signin-link-show"),
-            ) {
-                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.QrCode2, null, Modifier.padding(end = 8.dp))
-                Text(stringResource(R.string.signin_link_show))
-            }
-        }
         state.error?.let { Text(say(it), color = MaterialTheme.colorScheme.error) }
-        // Confirming is the web's green role (`--app-primary`), not the accent.
+        // the ways in, every one core's plan offers and in its order (`SignInPlan`, ADR 0154 decision 2: the web's —
+        // Submit first); a scan is offered while the device may have a camera. Each entry's look is Android's.
         val palette = LocalPalette.current
-        Button(
-            onClick = { onSignIn(server, email, password, if (state.kit != null) "" else secretKey) },
-            enabled = !state.working,
-            shape = MaterialTheme.shapes.small,
-            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
-            modifier = Modifier.fillMaxWidth().height(44.dp),
-        ) {
-            if (state.working) CircularProgressIndicator(Modifier.height(20.dp)) else Text(stringResource(R.string.signin_submit))
-        }
-        if (state.adding) {
-            androidx.compose.material3.TextButton(onClick = onCancel, enabled = !state.working, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.signin_cancel))
+        for (entry in me.raddatz.veyq.mobile.session.SignInPlan.entries(adding = state.adding, camera = !noCamera)) when (entry) {
+            // confirming is the web's green role (`--app-primary`), not the accent
+            me.raddatz.veyq.mobile.session.SignInEntry.SUBMIT -> Button(
+                onClick = { onSignIn(server, email, password, if (state.kit != null) "" else secretKey) },
+                enabled = !state.working,
+                shape = MaterialTheme.shapes.small,
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
+                modifier = Modifier.fillMaxWidth().height(44.dp).testTag("signin-submit"),
+            ) {
+                if (state.working) CircularProgressIndicator(Modifier.height(20.dp)) else Text(stringResource(R.string.signin_submit))
             }
+            me.raddatz.veyq.mobile.session.SignInEntry.CANCEL ->
+                androidx.compose.material3.TextButton(onClick = onCancel, enabled = !state.working, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.signin_cancel))
+                }
+            // ADR 0059 §1: another device lets this one in, over the server above (nothing in a scan changes it)
+            me.raddatz.veyq.mobile.session.SignInEntry.LINK_SHOW -> onShowForSignIn?.let { show ->
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { show(server) },
+                    enabled = !state.working,
+                    modifier = Modifier.fillMaxWidth().testTag("signin-link-show"),
+                ) {
+                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.QrCode2, null, Modifier.padding(end = 8.dp))
+                    Text(stringResource(R.string.signin_link_show))
+                }
+            }
+            me.raddatz.veyq.mobile.session.SignInEntry.LINK_SCAN -> onScanFromTrusted?.let { scan ->
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { scan(server) },
+                    enabled = !state.working,
+                    modifier = Modifier.fillMaxWidth().testTag("signin-link-scan"),
+                ) {
+                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.QrCodeScanner, null, Modifier.padding(end = 8.dp))
+                    Text(stringResource(R.string.signin_link_scan))
+                }
+            }
+            // the system's document picker: a PDF or a picture of the kit's QR
+            me.raddatz.veyq.mobile.session.SignInEntry.KIT_OPEN -> androidx.compose.material3.OutlinedButton(
+                onClick = { pickKit.launch(arrayOf("application/pdf", "image/*")) },
+                enabled = !state.working,
+                modifier = Modifier.fillMaxWidth().testTag("signin-kit-open"),
+            ) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.FileOpen, null, Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.signin_kit_open))
+            }
+            me.raddatz.veyq.mobile.session.SignInEntry.KIT_SCAN -> onScanKit?.let { scan ->
+                androidx.compose.material3.OutlinedButton(
+                    onClick = { scan(server) },
+                    enabled = !state.working,
+                    modifier = Modifier.fillMaxWidth().testTag("signin-kit-scan"),
+                ) {
+                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.QrCodeScanner, null, Modifier.padding(end = 8.dp))
+                    Text(stringResource(R.string.signin_kit_scan))
+                }
+            }
+            me.raddatz.veyq.mobile.session.SignInEntry.OPEN_LINK -> onOpenLink?.let { OpenLinkButton(it) }
         }
-        onOpenLink?.let { OpenLinkButton(it) }
     }
 }
 

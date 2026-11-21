@@ -344,14 +344,21 @@ private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, vie
         if (uris.isNotEmpty()) model.guestLevelUpload(level, uris)
     }
     val rows = level.rows
-    // what a guest adds here: a folder and files (Depot's level action); a guest makes no Memory, Pot or drop box
-    val creates = listOf(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES)
-    // offered where core's level writes; a guest not named yet is asked its name at the write (core's naming flow)
-    CreateAction(stringResource(R.string.create_new), shown = level.writes, onClick = {}, menu = { close ->
+    // what a guest adds here (core's `GuestLevel.creates`, a plan drawn whole): offered where core's level writes; a guest
+    // not named yet is asked its name at the write (core's naming flow)
+    val creates = level.creates
+    CreateAction(stringResource(R.string.create_new), shown = creates.isNotEmpty(), onClick = {}, menu = { close ->
         creates.forEach { c ->
             androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, modifier = Modifier.testTag("guest-create-${c.name.lowercase()}"), onClick = {
                 close()
-                if (c == me.raddatz.veyq.mobile.AppKinds.Create.FOLDER) naming = true else pickFiles.launch(arrayOf("*/*"))
+                when (c) {
+                    me.raddatz.veyq.mobile.AppKinds.Create.FOLDER -> naming = true
+                    me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES -> pickFiles.launch(arrayOf("*/*"))
+                    // never a guest's (core's `GuestLevel.creates` holds none of these): each would need its member's dialog
+                    me.raddatz.veyq.mobile.AppKinds.Create.POT, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FOLDER,
+                    me.raddatz.veyq.mobile.AppKinds.Create.MEMORY, me.raddatz.veyq.mobile.AppKinds.Create.CHAPTER,
+                    me.raddatz.veyq.mobile.AppKinds.Create.BOOKMARK -> error("a guest's level offers no ${c.name}")
+                }
             })
         }
     }) { list, bottom ->

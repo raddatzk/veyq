@@ -235,7 +235,7 @@ private fun ResultRow(r: ResultShown, onOpen: () -> Unit) {
             if (person != null) PersonAvatar(r.name.joinToString("") { it.text }, person) else Icon(searchIcon(r.icon), null)
         },
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        modifier = Modifier.clickableRow(onOpen),
+        modifier = Modifier.clickableRow(onClick = onOpen),
     )
 }
 

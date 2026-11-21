@@ -198,7 +198,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
             onSpace = { closeDrawerThen { model.switchSpace(it) } },
             onAddServer = { closeDrawerThen { model.openManage() } },
             onNew = { kind -> closeDrawerThen { model.requestNew(kind) } },
-            creates = model.createsHere(isHome = false, bookmarks = true),
+            creates = model.drawerCreates(),
             onSettings = { closeDrawerThen { model.openSettings() } },
             permanent = wide,
         )
@@ -241,17 +241,6 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                         },
                         colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                         actions = {
-                            // a level's view toggle (Files' grid / list, ADR 0149 decision 8): Home and a folder, an
-                            // application's list — one choice for every level and a person's Memories
-                            val atLevel = !shell.searching && shell.person == null && shell.bookmark == null && shell.openObject == null &&
-                                (shell.application != null || space != null) && shell.selectedTab?.key != "memories.map" && !(wide && shell.showsListBeside)
-                            if (atLevel) {
-                                val tiles = levelView == me.raddatz.veyq.mobile.navigation.ViewMode.TILES
-                                IconButton(onClick = { model.chooseLevelView(if (tiles) me.raddatz.veyq.mobile.navigation.ViewMode.LIST else me.raddatz.veyq.mobile.navigation.ViewMode.TILES) }) {
-                                    if (tiles) Icon(Icons.AutoMirrored.Outlined.ViewList, stringResource(R.string.node_view_list_label))
-                                    else Icon(Icons.Outlined.GridView, stringResource(R.string.node_view_grid_label))
-                                }
-                            }
                             // one's own profile: *Edit profile* opens the same model as Settings' *Your profile* (ADR 0084 decision 6)
                             if (shell.person != null && shell.person == model.ownUserId()) {
                                 IconButton(onClick = model::openProfile, modifier = Modifier.testTag("person-edit-profile")) {
@@ -261,14 +250,34 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                             if (headed != null && contribution != null) {
                                 NodeHeaderActions(headed, contribution, model, snackbar, scope)
                             }
-                            // The space's trash, from its Home (the web's level toolbar): every application's nodes.
-                            val open = shell.openObject
-                            if (open == null && shell.person == null && shell.bookmark == null && shell.application == null && !shell.searching && space != null) {
-                                // the top level is no link's root: its share offers "Add files only" alone (the web's level share), where core says
-                                if (model.offersTopLevelShare(shell)) {
-                                    IconButton(onClick = { uploadShareAt = space }) { Icon(Icons.Outlined.Share, stringResource(R.string.share_role_uploader)) }
+                            // the top level is no link's root: its share offers "Add files only" alone (the web's level
+                            // share), where core says — the top level's header, as a folder's share is its header's
+                            if (space != null && shell.openObject == null && shell.person == null && shell.bookmark == null && shell.application == null &&
+                                !shell.searching && model.offersTopLevelShare(shell)
+                            ) {
+                                IconButton(onClick = { uploadShareAt = space }) { Icon(Icons.Outlined.Share, stringResource(R.string.share_role_uploader)) }
+                            }
+                            // the level's tools (core's `LevelPlan.tools`, ADR 0154 decision 2; the web's tools row): every
+                            // one, in its order, as toolbar icons. A wide window's list beside its object has its own pane.
+                            val level = if (shell.searching || (wide && shell.showsListBeside)) null else model.levelPlan(shell)
+                            for (tool in level?.tools.orEmpty()) when (tool) {
+                                // the space's trash: every application's nodes
+                                me.raddatz.veyq.mobile.navigation.LevelTool.TRASH -> if (space != null) {
+                                    IconButton(onClick = { trashOf = space }, modifier = Modifier.testTag("level-trash")) {
+                                        Icon(Icons.Outlined.Delete, stringResource(R.string.trash_title))
+                                    }
                                 }
-                                IconButton(onClick = { trashOf = space }) { Icon(Icons.Outlined.Delete, stringResource(R.string.trash_title)) }
+                                // the view switch, rows or tiles (ADR 0149 decision 8): one choice for every level
+                                me.raddatz.veyq.mobile.navigation.LevelTool.VIEW -> {
+                                    val tiles = levelView == me.raddatz.veyq.mobile.navigation.ViewMode.TILES
+                                    IconButton(
+                                        onClick = { model.chooseLevelView(if (tiles) me.raddatz.veyq.mobile.navigation.ViewMode.LIST else me.raddatz.veyq.mobile.navigation.ViewMode.TILES) },
+                                        modifier = Modifier.testTag("level-view"),
+                                    ) {
+                                        if (tiles) Icon(Icons.AutoMirrored.Outlined.ViewList, stringResource(R.string.node_view_list_label))
+                                        else Icon(Icons.Outlined.GridView, stringResource(R.string.node_view_grid_label))
+                                    }
+                                }
                             }
                         },
                         navigationIcon = {
@@ -408,17 +417,6 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
     // what an application creates here, through the dialog it registered (the registry's `creates`: a Pot, a Memory)
     var creating by remember { mutableStateOf<me.raddatz.veyq.mobile.AppKinds.Create?>(null) }
     var keepingLink by remember { mutableStateOf(false) }
-    // what the drawer's "New" asked for
-    val asked by model.newRequest.collectAsStateWithLifecycle()
-    androidx.compose.runtime.LaunchedEffect(asked) {
-        when (asked) {
-            "folder" -> naming = true
-            "pot" -> creating = me.raddatz.veyq.mobile.AppKinds.Create.POT
-            "memory" -> creating = me.raddatz.veyq.mobile.AppKinds.Create.MEMORY
-            "bookmark" -> keepingLink = true
-        }
-        if (asked != null) model.newRequestTaken()
-    }
     // Depot's "Upload files": the system's picker hands over the documents chosen, queued for this level
     val levelLabel = s.shell.folder?.name ?: spaceName(s.space)
     val pickFiles = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -430,26 +428,32 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
         val space = s.shell.space
         if (tree != null && space != null) model.uploadFolderPicked(space, s.shell.folder?.nodeId, tree)
     }
-    // The level's "New" (the web's menu): a folder here, a Pot here, files uploaded here, or a Memory here (core's
-    // `AppKinds.createsWhere`: a Memory's placement allows every level New makes into).
-    // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
-    CreateAction(stringResource(R.string.create_new), shown = model.canCreateHere, onClick = {}, state = LocalListStates.current.of("home:${s.shell.space}/${s.shell.folder?.nodeId}"), menu = { close ->
-        // core's list: online all a level makes, offline only what is queued (`ShellModel.createsHere`, ADR 0153 decision 3)
-        model.createsHere(isHome = true, bookmarks = true).forEach { c ->
-            androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = {
-                close()
-                when (c) {
-                    me.raddatz.veyq.mobile.AppKinds.Create.FOLDER -> naming = true
-                    me.raddatz.veyq.mobile.AppKinds.Create.POT -> creating = c
-                    me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES -> pickFiles.launch(arrayOf("*/*"))
-                    me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FOLDER -> pickFolder.launch(null)
-                    me.raddatz.veyq.mobile.AppKinds.Create.MEMORY -> creating = c
-                    // a Memory's page's own New, never a level's (`createsWhere` holds none)
-                    me.raddatz.veyq.mobile.AppKinds.Create.CHAPTER -> {}
-                    // a link kept here (ADR 0150 decision 6): the web's bookmark dialog
-                    me.raddatz.veyq.mobile.AppKinds.Create.BOOKMARK -> keepingLink = true
-                }
-            })
+    // what each entry of a New starts: its dialog or the system's picker
+    fun start(c: me.raddatz.veyq.mobile.AppKinds.Create) { when (c) {
+        me.raddatz.veyq.mobile.AppKinds.Create.FOLDER -> naming = true
+        me.raddatz.veyq.mobile.AppKinds.Create.POT -> creating = c
+        me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES -> pickFiles.launch(arrayOf("*/*"))
+        me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FOLDER -> pickFolder.launch(null)
+        me.raddatz.veyq.mobile.AppKinds.Create.MEMORY -> creating = c
+        // a Memory's page's own New, never a level's (`createsWhere` holds none)
+        me.raddatz.veyq.mobile.AppKinds.Create.CHAPTER -> error("a level offers no chapter")
+        // a link kept here (ADR 0150 decision 6): the web's bookmark dialog
+        me.raddatz.veyq.mobile.AppKinds.Create.BOOKMARK -> keepingLink = true
+    } }
+    // what the drawer's "New" asked for (core's `ShellModel.drawerCreates`)
+    val asked by model.newRequest.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(asked) {
+        val c = asked ?: return@LaunchedEffect
+        model.newRequestTaken()
+        start(c)
+    }
+    // The level's "New" in its head (core's `LevelPlan.creates`, ADR 0154 decision 2; the web's `LevelView` menu): every
+    // entry, in its order — online all a level makes, offline only what is queued, none in a guest's folder. Material 3
+    // draws a screen's one primary action as its floating action button.
+    val creates = model.levelPlan(s.shell)?.creates.orEmpty()
+    CreateAction(stringResource(R.string.create_new), shown = creates.isNotEmpty(), onClick = {}, state = LocalListStates.current.of("home:${s.shell.space}/${s.shell.folder?.nodeId}"), menu = { close ->
+        creates.forEach { c ->
+            androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = { close(); start(c) })
         }
     }) { list, bottom ->
     // a file dropped onto the level goes through core's one drop (ADR 0154 decision 1): uploaded here where it takes it, else a share
@@ -490,15 +494,18 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                     val heading = group.heading
                     if (heading != null) item(key = "group-${group.folders}") { Box(Modifier.padding(horizontal = 8.dp)) { Section(say(heading)) } }
                     // as tiles: every kind a square tile, a folder its cover or the folder symbol (ADR 0149 decision 8)
+                    // each row's and tile's menu a long press opens (core's `ShellModel.rowPlan`, [LevelRowMenu])
                     if (tiles) tileRows(group.nodes, columns, key = { it.scopeId + it.nodeId }, inset = 8.dp) { node, modifier ->
                         val folder = node.asFolder()
                         val obj = node.asObject()
                         val bookmark = node.asBookmark()
-                        if (folder != null) {
-                            LevelTile(node.name, null, LocalCovers.current[node.nodeId]?.second, Icons.Outlined.Folder, folder = true, modifier = modifier.rowDrop(node, model)) { onEnter(folder) }
-                        } else if (obj != null) ObjectTile(obj, modifier, onOpen)
-                        else if (bookmark != null) LevelTile(bookmark.name, null, null, kindIcon(bookmark.kind), folder = false, modifier = modifier) { model.openBookmark(bookmark) }
-                    } else items(group.nodes, key = { it.scopeId + it.nodeId }) { node ->
+                        WithRowMenu(node, model, modifier) { menu ->
+                            if (folder != null) {
+                                LevelTile(node.name, null, LocalCovers.current[node.nodeId]?.second, Icons.Outlined.Folder, folder = true, modifier = Modifier.rowDrop(node, model), onMenu = menu) { onEnter(folder) }
+                            } else if (obj != null) ObjectTile(obj, Modifier, onOpen, menu)
+                            else if (bookmark != null) LevelTile(bookmark.name, null, null, kindIcon(bookmark.kind), folder = false, modifier = Modifier, onMenu = menu) { model.openBookmark(bookmark) }
+                        }
+                    } else items(group.nodes, key = { it.scopeId + it.nodeId }) { node -> WithRowMenu(node, model, Modifier) { menu ->
                         val folder = node.asFolder()
                         if (folder != null) {
                             ListItem(
@@ -510,14 +517,15 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                                     ) else FolderTile()
                                 },
                                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
-                                modifier = Modifier.rowDrop(node, model).clip(MaterialTheme.shapes.medium).clickableRow { onEnter(folder) },
+                                modifier = Modifier.rowDrop(node, model).clip(MaterialTheme.shapes.medium)
+                                    .clickableRow(stringResource(R.string.node_more), menu) { onEnter(folder) },
                             )
                         } else {
-                            node.asObject()?.let { ObjectRow(it, onOpen) }
+                            node.asObject()?.let { ObjectRow(it, onOpen, menu) }
                             // a kept link (core's, #1032): its row opens the bookmark's page
-                            node.asBookmark()?.let { b -> BookmarkRow(b) { model.openBookmark(b) } }
+                            node.asBookmark()?.let { b -> BookmarkRow(b, menu) { model.openBookmark(b) } }
                         }
-                    }
+                    } }
                 }
             }
         }
@@ -530,6 +538,20 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
         val create = remember(space, s.shell.folder?.nodeId) { model.bookmarkCreate(space, s.shell.folder?.nodeId) }
         if (create == null) keepingLink = false
         else BookmarkCreateDialog(create, onClose = { keepingLink = false }, onMade = model::bookmarkMade)
+    }
+}
+
+/**
+ * A level row or tile with its menu (core's `ShellModel.rowPlan`, [LevelRowMenu]): [content] gets the long press that opens
+ * it, none while a share picks its place (a pick only chooses); the menu anchors at the row.
+ */
+@Composable
+private fun WithRowMenu(node: me.raddatz.veyq.mobile.navigation.NodeRef, model: AppModel, modifier: Modifier, content: @Composable (onMenu: (() -> Unit)?) -> Unit) {
+    var open by remember(node.nodeId) { mutableStateOf(false) }
+    val picking = LocalPicking.current
+    Box(modifier) {
+        content(if (picking) null else ({ open = true }))
+        LevelRowMenu(me.raddatz.veyq.mobile.navigation.NodeAt(node.scopeId, node.nodeId, node.kind, node.name), model, open) { open = false }
     }
 }
 
@@ -692,9 +714,9 @@ private fun Drawer(
     /** A space chosen in the switcher: its Home. */
     onSpace: (String) -> Unit,
     onAddServer: () -> Unit,
-    /** The sidebar's "New": what a level creates ("folder", "pot"), opened on Home. */
-    onNew: (String) -> Unit,
-    /** What its "New" offers (core's `ShellModel.createsHere`: offline only what is queued). */
+    /** The sidebar's "New": what a level creates, opened on Home. */
+    onNew: (me.raddatz.veyq.mobile.AppKinds.Create) -> Unit,
+    /** What its "New" offers (core's `ShellModel.drawerCreates`: offline only what is queued). */
     creates: List<me.raddatz.veyq.mobile.AppKinds.Create>,
     /** The drawer's Settings: the account's page (`uc.account.sessions`). */
     onSettings: () -> Unit,
@@ -712,44 +734,13 @@ private fun Drawer(
                 Brand(Modifier.padding(start = 8.dp, top = 20.dp, bottom = 14.dp))
                 Switcher(s, onSpace, onSwitch, onAddServer)
                 Spacer(Modifier.height(12.dp))
-                // the web's sidebar "New": what a level creates, opened on Home
-                var newMenu by remember { mutableStateOf(false) }
-                Box {
-                    Button(
-                        onClick = { newMenu = true },
-                        // offline only what is queued is offered (core's `ShellModel.createsHere`, ADR 0153 decision 3)
-                        enabled = creates.isNotEmpty(),
-                        colors = ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
-                        shape = MaterialTheme.shapes.small,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(6.dp))
-                        Text(stringResource(R.string.drawer_new))
-                    }
-                    androidx.compose.material3.DropdownMenu(newMenu, { newMenu = false }) {
-                        creates.forEach { c ->
-                            androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = {
-                                newMenu = false
-                                onNew(
-                                    when (c) {
-                                        me.raddatz.veyq.mobile.AppKinds.Create.POT -> "pot"
-                                        me.raddatz.veyq.mobile.AppKinds.Create.MEMORY -> "memory"
-                                        me.raddatz.veyq.mobile.AppKinds.Create.BOOKMARK -> "bookmark"
-                                        else -> "folder"
-                                    },
-                                )
-                            })
-                        }
-                    }
-                }
                 Spacer(Modifier.height(6.dp))
                 Row(app = Icons.Outlined.Home, label = stringResource(R.string.drawer_home), selected = s.shell.isHome) { onChoose(null) }
                 // only the sections with something in them (core's `Lists.drawerSections`; owner 2026-11-19)
                 for (section in s.drawerSections) when (section) {
-                    // the drawer's New stands above the switcher's Home until this app draws the plan whole
-                    // (cr-apps-structure-from-core-plans phase 4)
-                    me.raddatz.veyq.mobile.navigation.DrawerSection.NEW -> {}
+                    // the web's sidebar "New" below the switcher (ADR 0122 decision 2): what it makes lands at the space's
+                    // top, opened on Home
+                    me.raddatz.veyq.mobile.navigation.DrawerSection.NEW -> DrawerNew(creates, onNew)
                     me.raddatz.veyq.mobile.navigation.DrawerSection.FAVORITES -> {
                         Section(stringResource(R.string.drawer_favorites))
                         ObjectItems(s.drawer.favorites, s.shell.openObject, onOpen)
@@ -873,7 +864,7 @@ internal val LocalListStates = androidx.compose.runtime.staticCompositionLocalOf
 internal val LocalCovers = androidx.compose.runtime.staticCompositionLocalOf<Map<String, Pair<String, androidx.compose.ui.graphics.ImageBitmap>>> { emptyMap() }
 
 @Composable
-private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit) {
+private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit, onMenu: (() -> Unit)? = null) {
     val details = LocalRowDetails.current[ref.nodeId].orEmpty()
     // Picking a place for what was shared: only a kind that takes it can be chosen (ADR 0138 decision 1).
     val takes = !LocalPicking.current || LocalTakesShare.current(ref)
@@ -892,7 +883,8 @@ private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit) {
         colors = ListItemDefaults.colors(
             containerColor = if (LocalOpenObject.current == ref.nodeId) role(LocalPalette.current.accentSoft) else MaterialTheme.colorScheme.background,
         ),
-        modifier = Modifier.clip(MaterialTheme.shapes.medium).alpha(if (takes) 1f else 0.38f).let { if (takes) it.clickableRow { onOpen(ref) } else it },
+        modifier = Modifier.clip(MaterialTheme.shapes.medium).alpha(if (takes) 1f else 0.38f)
+            .let { if (takes) it.clickableRow(stringResource(R.string.node_more), onMenu) { onOpen(ref) } else it },
     )
 }
 
@@ -907,24 +899,24 @@ private fun LazyListScope.group(title: Int?, refs: List<ObjectRef>, onOpen: (Obj
 /** An object as a level's tile ([LevelTile]): its cover, its name, the application's facts; a pick dims what does not take it. */
 /** A kept link's row on a level (ADR 0150 decision 6): its name and the bookmark's tile; a tap opens its page. */
 @Composable
-private fun BookmarkRow(node: me.raddatz.veyq.mobile.navigation.NodeAt, onOpen: () -> Unit) {
+private fun BookmarkRow(node: me.raddatz.veyq.mobile.navigation.NodeAt, onMenu: (() -> Unit)? = null, onOpen: () -> Unit) {
     // picking a place for what was shared: a kept link takes nothing (ADR 0138 decision 1)
     val takes = !LocalPicking.current
     ListItem(
         headlineContent = { Text(node.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
         leadingContent = { Tile(kindIcon(node.kind)) },
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
-        modifier = Modifier.clip(MaterialTheme.shapes.medium).alpha(if (takes) 1f else 0.38f).testTag("bookmark-row").let { if (takes) it.clickableRow { onOpen() } else it },
+        modifier = Modifier.clip(MaterialTheme.shapes.medium).alpha(if (takes) 1f else 0.38f).testTag("bookmark-row").let { if (takes) it.clickableRow(stringResource(R.string.node_more), onMenu, onOpen) else it },
     )
 }
 
 @Composable
-private fun ObjectTile(ref: ObjectRef, modifier: Modifier, onOpen: (ObjectRef) -> Unit) {
+private fun ObjectTile(ref: ObjectRef, modifier: Modifier, onOpen: (ObjectRef) -> Unit, onMenu: (() -> Unit)? = null) {
     val details = LocalRowDetails.current[ref.nodeId].orEmpty()
     val takes = !LocalPicking.current || LocalTakesShare.current(ref)
     LevelTile(
         ref.name, details.takeIf { it.isNotEmpty() }?.joinToString(" · "), LocalCovers.current[ref.nodeId]?.second, kindIcon(ref.kind),
-        folder = false, modifier = modifier, enabled = takes, selected = LocalOpenObject.current == ref.nodeId,
+        folder = false, modifier = modifier, enabled = takes, selected = LocalOpenObject.current == ref.nodeId, onMenu = onMenu,
     ) { onOpen(ref) }
 }
 
@@ -1106,3 +1098,28 @@ private fun ListBeside(s: Screen.Signed, model: AppModel) {
 
 /** The list pane's width beside an object (Material 3's list-detail: a fixed list, the detail takes the rest). */
 private val LIST_PANE_WIDTH = 360.dp
+
+
+/** The drawer's "New" (core's `DrawerSection.NEW`): a button whose menu holds every entry of [creates], in its order. */
+@Composable
+private fun DrawerNew(creates: List<me.raddatz.veyq.mobile.AppKinds.Create>, onNew: (me.raddatz.veyq.mobile.AppKinds.Create) -> Unit) {
+    val palette = LocalPalette.current
+    var newMenu by remember { mutableStateOf(false) }
+    Box(Modifier.padding(vertical = 6.dp)) {
+        Button(
+            onClick = { newMenu = true },
+            colors = ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.fillMaxWidth().testTag("drawer-new"),
+        ) {
+            Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.drawer_new))
+        }
+        androidx.compose.material3.DropdownMenu(newMenu, { newMenu = false }) {
+            creates.forEach { c ->
+                androidx.compose.material3.DropdownMenuItem(text = { Text(say(c.word)) }, onClick = { newMenu = false; onNew(c) })
+            }
+        }
+    }
+}
