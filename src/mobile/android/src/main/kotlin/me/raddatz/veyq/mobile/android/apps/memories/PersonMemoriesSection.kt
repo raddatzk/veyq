@@ -37,6 +37,7 @@ import me.raddatz.veyq.mobile.android.core.LevelTile
 import me.raddatz.veyq.mobile.android.core.LocalCovers
 import me.raddatz.veyq.mobile.android.core.LocalPalette
 import me.raddatz.veyq.mobile.android.core.clickableRow
+import me.raddatz.veyq.mobile.android.core.joined
 import me.raddatz.veyq.mobile.android.core.kindIcon
 import me.raddatz.veyq.mobile.android.core.memoryDateText
 import me.raddatz.veyq.mobile.android.core.role
@@ -107,7 +108,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.personRows(memories: 
 private fun personDetails(row: PersonMemories.Row): String? {
     val context = LocalContext.current
     return listOfNotNull(row.date?.let { context.memoryDateText(it) }, row.placeName?.takeIf { it.isNotEmpty() }, row.group?.let { spaceName(it) })
-        .takeIf { it.isNotEmpty() }?.joinToString(" · ")
+        .takeIf { it.isNotEmpty() }?.joined()
 }
 
 /** One of the person's Memories as the level draws a row: its cover, its name, its date, place and group. */
@@ -116,7 +117,7 @@ private fun PersonMemoryRow(row: PersonMemories.Row, onOpen: () -> Unit) {
     val details = personDetails(row)?.let { listOf(it) }.orEmpty()
     ListItem(
         headlineContent = { Text(row.ref.name) },
-        supportingContent = if (details.isEmpty()) null else { { Text(details.joinToString(" · ")) } },
+        supportingContent = if (details.isEmpty()) null else { { Text(details.joined()) } },
         leadingContent = {
             val cover = LocalCovers.current[row.ref.nodeId]?.second
             if (cover != null) Image(cover, null, Modifier.size(40.dp).clip(MaterialTheme.shapes.small), contentScale = ContentScale.Crop)

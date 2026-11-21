@@ -54,6 +54,7 @@ import me.raddatz.veyq.mobile.android.core.AppModel
 import me.raddatz.veyq.mobile.android.core.LocalPalette
 import me.raddatz.veyq.mobile.android.core.OpenPdf
 import me.raddatz.veyq.mobile.android.core.ReaderPlayer
+import me.raddatz.veyq.mobile.android.core.joined
 import me.raddatz.veyq.mobile.android.core.piece
 import me.raddatz.veyq.mobile.android.core.role
 import me.raddatz.veyq.mobile.android.core.say
@@ -90,7 +91,7 @@ internal fun FilePage(file: FileModel, name: String) {
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // the facts (Depot's `detail`): size, the sealed type (a claim, shown as such), modified; who uploaded it
         if (state.facts.isNotEmpty()) {
-            Text(state.facts.map { piece(it) }.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+            Text(state.facts.map { piece(it) }.joined(), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
         }
         state.uploader?.let { Text(say(it), style = MaterialTheme.typography.bodySmall, color = role(palette.muted)) }
         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.TopCenter) {
@@ -131,7 +132,7 @@ private fun ShownText(s: FileModel.Shown.Text) {
     var copied by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(copied) {
         if (copied != null) {
-            kotlinx.coroutines.delay(6_000)
+            kotlinx.coroutines.delay(me.raddatz.veyq.mobile.words.Notice.COPIED_MS)
             copied = null
         }
     }

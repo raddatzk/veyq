@@ -131,8 +131,13 @@ private fun ReceiptViewer(view: PotView, model: AppModel, receiptId: String, onC
     }
     val name = Receipts.downloadName(receipt?.name, receipt?.type)
     val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val savedToGallery = stringResource(R.string.receipts_saved_gallery)
-    val notSaved = stringResource(R.string.receipts_not_saved_gallery)
+    // what the gallery's save said, inside the dialog (a snackbar would sit behind it), living as the core's kind says
+    var said by remember { mutableStateOf<me.raddatz.veyq.mobile.words.Notice?>(null) }
+    LaunchedEffect(said) {
+        val life = said?.kind?.lifeMs ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(life)
+        said = null
+    }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         val b = bytes
         if (uri != null && b != null) runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(b) } }
@@ -142,6 +147,9 @@ private fun ReceiptViewer(view: PotView, model: AppModel, receiptId: String, onC
         title = { Text(name) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                said?.let { n ->
+                    Text(say(n), style = MaterialTheme.typography.bodySmall, color = if (n.kind == me.raddatz.veyq.mobile.words.NoticeKind.SAID) role(LocalPalette.current.muted) else MaterialTheme.colorScheme.error)
+                }
                 val b = bytes
                 when {
                     // offline, a receipt this device did not keep says so (muted: no failure), else it is unreadable (core's words)
@@ -168,7 +176,7 @@ private fun ReceiptViewer(view: PotView, model: AppModel, receiptId: String, onC
                 if (picture != null) TextButton(onClick = {
                     scope.launch {
                         val ok = saveToGallery(context, b, name, picture.mime)
-                        android.widget.Toast.makeText(context, if (ok) savedToGallery else notSaved, android.widget.Toast.LENGTH_SHORT).show()
+                        said = me.raddatz.veyq.mobile.words.Notice(if (ok) me.raddatz.veyq.mobile.words.Msg.RECEIPTS_SAVED_GALLERY else me.raddatz.veyq.mobile.words.Msg.RECEIPTS_NOT_SAVED_GALLERY)
                     }
                 }) { Text(stringResource(R.string.receipts_save_gallery)) }
                 TextButton(onClick = { save.launch(name) }) { Text(stringResource(R.string.receipts_save)) }

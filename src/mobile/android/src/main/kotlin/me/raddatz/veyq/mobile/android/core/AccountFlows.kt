@@ -208,12 +208,12 @@ internal fun DangerConfirm(title: String, body: String, action: String, onConfir
 private fun ProfileFlow(m: me.raddatz.veyq.mobile.session.ProfileModel, model: AppModel) {
     val state by m.state.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
-    val saved = stringResource(R.string.profile_saved)
+    val context = androidx.compose.ui.platform.LocalContext.current
     var seenSaves by remember { mutableStateOf(0) }
     LaunchedEffect(state.saves) {
         if (state.saves > seenSaves) {
             seenSaves = state.saves
-            if (state.pictureRefusal == null && state.refusal == null) snackbar.showSnackbar(saved)
+            if (state.pictureRefusal == null && state.refusal == null) snackbar.show(context, me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.PROFILE_SAVED))
         }
     }
     var cropping by remember { mutableStateOf<Uri?>(null) }

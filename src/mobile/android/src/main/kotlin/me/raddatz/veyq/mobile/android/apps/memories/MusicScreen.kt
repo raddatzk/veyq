@@ -71,6 +71,7 @@ import me.raddatz.veyq.mobile.android.core.LocalPalette
 import me.raddatz.veyq.mobile.android.core.ReportSheet
 import me.raddatz.veyq.mobile.android.core.role
 import me.raddatz.veyq.mobile.android.core.say
+import me.raddatz.veyq.mobile.android.core.show
 import me.raddatz.veyq.mobile.android.core.text
 import me.raddatz.veyq.mobile.android.words
 import me.raddatz.veyq.mobile.audio.NowPlaying
@@ -135,7 +136,7 @@ internal fun MusicView(gallery: GalleryModel, music: MusicModel, model: AppModel
     val said = state.said
     LaunchedEffect(said) {
         if (said == null) return@LaunchedEffect
-        snackbar.showSnackbar(context.text(said))
+        snackbar.show(context, said)
         music.seen()
     }
     var renaming by remember { mutableStateOf<MusicModel.Shown?>(null) }
@@ -147,7 +148,7 @@ internal fun MusicView(gallery: GalleryModel, music: MusicModel, model: AppModel
         saving = null
         if (uri == null || id == null) return@rememberLauncherForActivityResult
         val save = model.saveTrack(music, id, uri) ?: return@rememberLauncherForActivityResult
-        scope.launch { snackbar.showSnackbar(context.text(save.state.first { it.end != null }.notice)) }
+        scope.launch { snackbar.show(context, save.state.first { it.end != null }.notice) }
     }
     CreateAction(say(Msg.MUSIC_ADD), shown = state.rights.add, onClick = { pick.launch(arrayOf("audio/*")) }) { list, bottom ->
         LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(bottom = bottom)) {
@@ -174,7 +175,7 @@ internal fun MusicView(gallery: GalleryModel, music: MusicModel, model: AppModel
                             saving = t.mediaId
                             saveTo.launch(t.track.fileName ?: t.title ?: context.words(Msg.MUSIC_UNTITLED, t.number))
                         },
-                        onRemove = { model.galleryAct { music.remove(t.mediaId)?.let { snackbar.showSnackbar(context.text(it)) } } },
+                        onRemove = { model.galleryAct { music.remove(t.mediaId)?.let { snackbar.show(context, it) } } },
                         onReport = { reporting = music.reportSheet(t.mediaId) },
                     )
                 }

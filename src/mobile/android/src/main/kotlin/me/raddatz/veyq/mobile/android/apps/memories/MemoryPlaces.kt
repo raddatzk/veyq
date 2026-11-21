@@ -75,7 +75,7 @@ import me.raddatz.veyq.mobile.android.core.MapCamera
 import me.raddatz.veyq.mobile.android.core.MapPlace
 import me.raddatz.veyq.mobile.android.core.RasterMap
 import me.raddatz.veyq.mobile.android.core.clickableRow
-import me.raddatz.veyq.mobile.android.core.localDate
+import me.raddatz.veyq.mobile.android.core.language
 import me.raddatz.veyq.mobile.android.core.memoryDateText
 import me.raddatz.veyq.mobile.android.core.photoDot
 import me.raddatz.veyq.mobile.android.core.projected
@@ -91,8 +91,9 @@ import me.raddatz.veyq.mobile.memories.place.MemoryLocation
 import me.raddatz.veyq.mobile.memories.place.PlaceEditor
 import me.raddatz.veyq.mobile.words.Msg
 
-/** A day of a Memory's date (`yyyy-MM-dd`) as the device writes it. */
-private fun day(iso: String): String = localDate(iso)
+/** A day of a Memory's date (`yyyy-MM-dd`) as the web writes a day (`Shown.day`). */
+@Composable
+private fun day(iso: String): String = me.raddatz.veyq.mobile.words.Shown.day(iso, language())
 
 /**
  * The facts line under a Memory's header (ADR 0143 D5; the web's `MemoryDetail` facts): its date and its place name,
