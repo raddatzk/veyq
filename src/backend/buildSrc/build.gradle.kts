@@ -49,7 +49,7 @@ dependencies {
         implementation("com.github.jknack:handlebars:4.5.8") {
             because("GHSA-r4gv-qr8j-p3pg: 4.3.1 (generator), fixed in 4.5.2")
         }
-        implementation("org.codehaus.plexus:plexus-utils:4.1.0") {
+        implementation("org.codehaus.plexus:plexus-utils:4.2.0") {
             because("GHSA-6fmv-xxpf-w3cw: 4.0.2 (Quarkus plugin), fixed in 4.0.3")
         }
     }
