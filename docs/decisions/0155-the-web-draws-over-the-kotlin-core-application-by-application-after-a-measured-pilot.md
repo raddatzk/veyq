@@ -124,11 +124,33 @@ Measured before the decision (2026-11-20):
       application, and a guard holds the direction from the build files. One compiled JavaScript module cannot carry a
       second façade without making the first one's users pay for it (§ Consequences, measured), so the split comes
       before any second entry, and with it each module is its own JavaScript file.
-   2. **The platform core moves to the web slice by slice**: the core's formats, notices and plans of ADR 0154, the node
-      tree's rules, and what is next after them. Each slice grows the eager set by at most **R × the gzip of the
-      TypeScript it deletes**, R the pilot's measured ratio of its façade's own code to its deleted TypeScript, rounded
-      up to the next half: **R = 3.0** (the pilot's 8,754 B gz of own code against 3,129 B gz deleted, 2.80; the probe
-      had estimated ~2.9).
+   2. **The platform core moves to the web slice by slice.** Each slice grows the eager set by at most **R × the gzip
+      of the TypeScript it deletes**, R the pilot's measured ratio of its façade's own code to its deleted TypeScript,
+      rounded up to the next half: **R = 3.0** (the pilot's 8,754 B gz of own code against 3,129 B gz deleted, 2.80; the
+      probe had estimated ~2.9), and each of its hot rules meets 7.3's time bound. The order (2026-11-21; the deleted
+      TypeScript's min+gz measured on sources, each slice's exports bundled alone with every other import external):
+      1. **the node tree's rules** — a level's order, equal names numbered, a name's sibling collision, the move's plan
+         (1,326 B gz): eager, every application builds on them, the app and the web answer them differently today, no
+         key material and no JSON — [cr-web-node-tree-on-the-core](../../changes/cr-web-node-tree-on-the-core.md);
+      2. **the share-link rules** — a received link's parsing and report link, a link's last end day, an instance's
+         embeddability (1,251 B gz): pinned by `contracts/platform/share-links/cases.v1.json` on both sides already; the
+         bookmark's sealed meta joins once Expenses has built decision 4's JSON seam;
+      3. **the rights and ADR 0154's plans** — a header's and a row's actions, the favourite, cover and bookmark rights
+         (1,388 B gz): the structure every client draws, after the tree's kind facts exist to build them on;
+      4. **the file facts** — a content sniff, a download name, an archive name (2,566 B gz): lazy today (Depot's
+         viewer), and the SVG rule is a security rule;
+      5. **the media headers** — EXIF, video and image headers (4,780 B gz): lazy, and no vectors yet;
+      6. **the export archive** — the ZIP, its CRC and manifest (5,726 B gz): lazy, streamed, and a wrong byte loses data;
+      7. **the music order and fades** (859 B gz).
+
+      Not slices: the **formats** move with the slice or application that owns each (money with Expenses) — alone they
+      miss R by a measured factor (ADR 0154 § Consequences: 7.1×); **notices** wait until the web and the apps read one
+      word catalog; the **slug folding** (`shared/naming.ts`) stays beside the Kotlin as decision 9's crypto does, held by
+      `v1.json#name_folding`; the **URL fragment rules** are the router's (decision 1). Every platform façade lands in
+      `:core`'s one JavaScript file, which a bundler cannot split, so a rule that is lazy in TypeScript turns eager when
+      it moves — the reason slices 4 to 6 come last, each asking first whether a module of its own is cheaper — and the
+      package's size check becomes one running bound on that file: the split's measured search alone plus R × each moved
+      slice's deleted TypeScript.
    3. **Then application by application, Expenses first.** Each move: its façade, its TypeScript twin deleted, its own
       size check and time check. The floor is paid, so a size check counts only a move's own code:
       - **size:** an application grows the eager set and its own chunks together by at most **25 KB gz** (Expenses'
