@@ -59,6 +59,17 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   (sizes across the unit boundaries, dates and ranges, amounts in every currency a Pot offers — so its symbols and
   patterns serve as the core's money table —, lengths), written by a script under `src/web/` over the web's own
   formatters and pinned by a web unit test that re-renders them; `ShownVectorsTest` holds the core to the file.
+  **The web stays the source of these formats (decided 2026-11-21, against ADR 0155's turn-around).** ADR 0155's
+  Consequences make the core's output the one source for what *moved*; these formats did not move, and moving them now
+  misses decision 7's budget by a measured factor: a throwaway `@JsExport` façade of `Shown` (size, day, moment, Memory
+  day and range, money, list, length) bundled beside the search's entry grew it from 78,824 B min / 27,691 B gz to
+  91,955 / 32,658 — **4,967 B gz of own code** against the **703 B gz** (1,221 min) of TypeScript it would delete
+  (`formatBytes`, `formatMoney`+`decimalOf`, `memoryDateRange`'s two; esbuild `--minify`, `gzip -9`): **7.1×, R = 3.0**
+  allows ~2.1 KB. It would also give up `Intl` for the browser's own locale data and put the money table in the eager
+  set, and the search's entry carried the façade's code whether imported or not (one module), the granularity decision 7
+  asks to measure first. So the web keeps `Intl`, the vectors run web → core as F3 says, and the turn comes with the
+  move that owns a format (Expenses brings `formatMoney`; then `Shown` is the source and `format-vectors.json` is
+  written by a core test, as `SearchVectorsTest` writes the search's).
 - **F4 — the guard.** The words guard gains `platform-format`: no duration literal at a notice or an inline note, no
   size/date/money formatter (R4's and R5's names), no `" · "` literal in a platform's UI; exceptions only a player's
   own media time it passes to the core.
@@ -74,8 +85,25 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
   in all 163 currencies, 25 numbers, 4 lists, 22 lengths); `formatVectors.test.ts` re-renders it. Measured: `pnpm run
   check` in `src/web` green; one `"1.1 kB"` edited to `"1.2 kB"` → `size` red, restored (`/bin/cp -f`) → green. A list
   (`joinList`) and a currency-less number joined the CR's kinds: both are shown text the apps write too.
-- [ ] **2 core** — F1, F2; every notice site's kind; the vectors test. · Done when: `:core:jvmTest :core:macosArm64Test`
+- [x] **2 core** — F1, F2; every notice site's kind; the vectors test. · Done when: `:core:jvmTest :core:macosArm64Test`
   green. **Bites:** `size` at base 1024 → the vectors red; a refusal raised as `SAID` → its site's test red.
+  **Built** (2026-11-21): `Notice.kind` (`NoticeKind.SAID`/`HELD`/`UNDO`, `lifeMs`; `Notice.SAID_MS` 4 s, `COPIED_MS` 2 s,
+  `NOTHING_PLAYS_MS` 5 s; the undo's window stays `ShellModel.TRASH_UNDO_MS` 6 s), part of its equality; the default
+  `NoticeKind.of(msg)` — `SAID` for the success words (`COPY_DONE`, `MOVE_MOVED`, `DOWNLOAD_DONE`, `DOWNLOAD_CANCELLED`,
+  `IMPORT_IMPORTED`(`_LEFT_OUT`), `OFFLINE_SENT`), `UNDO` for `TRASH_MOVED` and `MEMORY_MOVED_TO_TRASH`, every other word
+  `HELD` —, changed at the sites where the same word lives otherwise (`living(kind)`): a move's offered undo is `UNDO`,
+  a trash without the node as it was or queued offline is `SAID`, an offline trash's "waiting to send" `SAID`.
+  `words/Shown.kt`: `size`, `day` (ISO or local epoch day), `dayOf` (an instant's local day), `moment` (an instant in the
+  device's zone, `LocalDays.wallOf`), `memoryDay`, `dayRange`, `money`, `number`, `list`, `length` (`MusicQueue.formatLength`
+  now calls it), `joined`/`SEPARATOR`, and `args(notice)` / `piece(p)` that write a notice's or a line's values in a
+  language; free of kotlinx.serialization, so a later web façade may reach it. A platform's word list beyond the
+  success words, and the platform-picked toasts (`R.string.link_kept` and the like), become core notices in phases 5–8,
+  each adding its word to `NoticeKind`'s table. A count with its noun stays the catalog's plural (`{1:int}`), not a
+  `Shown` function. Measured: `:core:jvmTest :core:macosArm64Test :core:compileKotlinJs` green (one red first,
+  `MoveSheetTest` pinning the undo without its kind — updated to `UNDO`, re-run green on both); `ShownVectorsTest` 10/10
+  first try (all 1,202 cases × 2 languages). Bites, one run: `size` dividing by 1024 → `sizes` red (442 of 524 cases);
+  `DELETE_REFUSED_GONE` added to the success words → `aTrashIsAnUndoAndItsRefusalsAreHeld` red; both restored
+  (`/bin/cp -f`) → green.
 - [ ] **3 bridge** — the kind and the shown strings on the wire (no `Bytes`/`Moment`/`Amount` left for a host to
   format). · Done when: `:bridge:jvmTest` green.
 - [ ] **4 the guard** — F4, switched on per platform in its phase. · Done when: the guard green; `validate_guard_gaps.py`

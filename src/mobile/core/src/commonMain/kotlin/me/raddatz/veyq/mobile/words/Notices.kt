@@ -26,16 +26,70 @@ import me.raddatz.veyq.mobile.session.ShareLinks
 
 /**
  * What a screen says, as the catalog's key and its arguments (ADR 0136 decisions 1 and 3): each platform renders it in
- * the person's language. An argument is a `String`, an `Int`, a [Bytes] (a size the platform formats its own way),
- * a [Moment], an [Amount], another [Notice] (a word inside the sentence) or a [Joined] list of those.
+ * the person's language. An argument is a `String`, an `Int`, a [Bytes], a [Moment] or an [Amount] (each written by
+ * [Shown] in the app's language, [Shown.args]), another [Notice] (a word inside the sentence) or a [Joined] list of those.
+ *
+ * Shown as a notice of its own (a snackbar, a toast, an InfoBar), it lives as its [kind] says (ADR 0154 decision 4):
+ * [NoticeKind.of] its word's default, which a raising site changes where the same word lives otherwise (a move with its
+ * undo offered is [NoticeKind.UNDO], one without is [NoticeKind.SAID]). As a line of a screen its kind is not read.
  */
 @Serializable(with = NoticeSerializer::class)
-class Notice(val msg: Msg, val args: List<Any> = emptyList()) {
+class Notice(val msg: Msg, val args: List<Any> = emptyList(), val kind: NoticeKind = NoticeKind.of(msg)) {
     constructor(msg: Msg, vararg args: Any) : this(msg, args.toList())
 
-    override fun equals(other: Any?) = other is Notice && other.msg == msg && other.args == args
-    override fun hashCode() = msg.hashCode() * 31 + args.hashCode()
-    override fun toString() = "Notice(${msg.key}, $args)"
+    /** The same words, living as [kind] says. */
+    fun living(kind: NoticeKind): Notice = Notice(msg, args, kind)
+
+    override fun equals(other: Any?) = other is Notice && other.msg == msg && other.args == args && other.kind == kind
+    override fun hashCode() = (msg.hashCode() * 31 + args.hashCode()) * 31 + kind.hashCode()
+    override fun toString() = "Notice(${msg.key}, $args${if (kind == NoticeKind.of(msg)) "" else ", $kind"})"
+
+    companion object {
+        /** How long a [NoticeKind.SAID] notice shows before it closes itself (the web's `SUCCESS_LIFE_MS`). */
+        const val SAID_MS = 4_000L
+
+        /** How long "copied" shows beside what was copied (the web's copy notes). */
+        const val COPIED_MS = 2_000L
+
+        /** How long the player says that nothing plays (the web's `AudioBar` `NOTICE_MS`). */
+        const val NOTHING_PLAYS_MS = 5_000L
+    }
+}
+
+/**
+ * How long a notice shown on its own lives (ADR 0154 decision 4, the web's `useToast`): a platform maps it onto its
+ * control and holds no duration of its own.
+ */
+enum class NoticeKind {
+    /** Said briefly — a success: it closes itself after [Notice.SAID_MS]. */
+    SAID,
+
+    /** A refusal or a failure: it stays until the person closes it, so it carries a close action. */
+    HELD,
+
+    /** An offer to undo: it stays while the state offers the undo (the core's window, `ShellModel.TRASH_UNDO_MS`). */
+    UNDO;
+
+    /** Milliseconds it shows before it closes itself; null while it stays (until closed, or until the state drops it). */
+    val lifeMs: Long? get() = if (this == SAID) Notice.SAID_MS else null
+
+    companion object {
+        /** The words that say something went through (the web's `toast.success`), each reviewed. */
+        private val SAID_WORDS = setOf(
+            Msg.COPY_DONE, Msg.MOVE_MOVED, Msg.DOWNLOAD_DONE, Msg.DOWNLOAD_CANCELLED, Msg.IMPORT_IMPORTED,
+            Msg.IMPORT_IMPORTED_LEFT_OUT, Msg.OFFLINE_SENT,
+        )
+
+        /** The words that offer an undo (the web's `showUndo`). */
+        private val UNDO_WORDS = setOf(Msg.TRASH_MOVED, Msg.MEMORY_MOVED_TO_TRASH)
+
+        /** The kind [msg] lives as unless its site says otherwise: a refusal or a failure, which every other word is. */
+        fun of(msg: Msg): NoticeKind = when (msg) {
+            in SAID_WORDS -> SAID
+            in UNDO_WORDS -> UNDO
+            else -> HELD
+        }
+    }
 }
 
 /** Several values in a sentence, one after another with [separator] between them; each a `String` or a [Notice]. */
@@ -132,11 +186,11 @@ object NoticeSerializer : KSerializer<Notice> {
 }
 
 @Serializable @SerialName("Notice")
-internal class NoticeWire(@Serializable(with = MsgKey::class) val msg: Msg, val args: List<NoticeArg>) {
-    fun notice() = Notice(msg, args.map { it.arg() })
+internal class NoticeWire(@Serializable(with = MsgKey::class) val msg: Msg, val args: List<NoticeArg>, val kind: NoticeKind) {
+    fun notice() = Notice(msg, args.map { it.arg() }, kind)
 
     companion object {
-        fun of(n: Notice) = NoticeWire(n.msg, n.args.map(NoticeArg::of))
+        fun of(n: Notice) = NoticeWire(n.msg, n.args.map(NoticeArg::of), n.kind)
     }
 }
 

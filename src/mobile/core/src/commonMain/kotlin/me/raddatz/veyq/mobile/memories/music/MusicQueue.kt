@@ -60,13 +60,7 @@ object MusicQueue {
     fun trackTitle(trackName: String?, fileName: String?): String? = trackName?.trim()?.takeIf { it.isNotEmpty() } ?: musicTitle(fileName)
 
     /** A length as the list shows it: `m:ss`, `h:mm:ss` from an hour on (the web's `formatTrackLength`). */
-    fun formatLength(ms: Long): String {
-        val total = (maxOf(0L, ms) + 500) / 1000
-        val h = total / 3600
-        val m = (total % 3600) / 60
-        val s = (total % 60).toString().padStart(2, '0')
-        return if (h > 0) "$h:${m.toString().padStart(2, '0')}:$s" else "$m:$s"
-    }
+    fun formatLength(ms: Long): String = me.raddatz.veyq.mobile.words.Shown.length(ms)
 
     /**
      * The order titles are listed in (the web's `Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })`, as near

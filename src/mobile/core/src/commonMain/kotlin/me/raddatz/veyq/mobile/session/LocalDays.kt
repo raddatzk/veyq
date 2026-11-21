@@ -15,13 +15,19 @@ object LocalDays {
     private const val DAY_MS = 86_400_000L
 
     /** The local day [epochMs] falls on. */
-    fun dayOf(epochMs: Long): Long {
+    fun dayOf(epochMs: Long): Long = wallOf(epochMs).floorDiv(DAY_MS)
+
+    /**
+     * [epochMs] as the device's local wall clock reads it, counted as if that reading were UTC: the milliseconds since
+     * 1970-01-01T00:00 of the local calendar, which [civil] and a day's hours read (`Shown.moment`).
+     */
+    fun wallOf(epochMs: Long): Long {
         val seconds = (epochMs).floorDiv(1000L) * 1000L
         val (y, m, d) = civil((seconds).floorDiv(DAY_MS))
         val inDay = (seconds).mod(DAY_MS) / 1000
         // the instant whose local wall clock reads [seconds]' UTC one: the zone's offset is the distance between them
         val wall = localWallClock(y, m, d, (inDay / 3600).toInt(), (inDay / 60 % 60).toInt(), (inDay % 60).toInt()) ?: seconds
-        return (epochMs + (seconds - wall)).floorDiv(DAY_MS)
+        return epochMs + (seconds - wall)
     }
 
     /** The local day a server instant (ISO 8601) falls on; null where it does not parse. */
