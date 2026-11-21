@@ -3,12 +3,14 @@ package me.raddatz.veyq.mobile.navigation
 /**
  * The actions of a node's header, for every kind (the web's `core/node/nodeHeader.ts`, `standardNodeActions` and
  * `coreNodeActions.ts`, ADR 0110): core builds them, the application narrows its kind's rights, supplies its doors and
- * may add actions of its own, and each app draws the [Plan] in its platform's way — the [Plan.buttons] as icon buttons in
- * the bar, the rest in one "more" menu. The rules are the web's:
+ * hands its own actions (every one a [HeaderAction]), and each app draws the [Plan] whole in its platform's way — the
+ * [Plan.buttons] as icon buttons in the bar, the rest in one "more" menu, the [Plan.last] group behind a separator; its
+ * drawing is exhaustive over [HeaderAction] (ADR 0154 decision 2: no fallback arm, no whitelist, no entry of its own).
+ * The rules are the web's:
  *
  * - core's actions sit around the application's: the heart before them, the copy right after the move, the download and
  *   the report after them all ([placed]);
- * - the kind's priority (`header.order`) puts the ids it lists first, in its order; every other follows in that merge
+ * - the kind's priority (`header.order`, [me.raddatz.veyq.mobile.AppKinds.headerOrder]) puts the actions it lists first, in its order; every other follows in that merge
  *   order, so an action no order names still appears ([ordered]);
  * - the move, the copy, the report and the delete are never buttons: they are the menu's last group, behind a separator,
  *   the delete last ([Slot.LAST]);
@@ -18,30 +20,15 @@ package me.raddatz.veyq.mobile.navigation
  * How many buttons fit is the platform's answer (`maxButtons`), not a measurement: a bar's room is the platform's.
  */
 object NodeHeader {
-    const val FAVORITE = "favorite"
-    const val SHARE = "share"
-    const val RENAME = "rename"
-    const val MOVE = "move"
-    const val COPY = "copy"
-    const val COVER = "cover"
-    const val DOWNLOAD = "download"
-    const val REPORT = "report"
-    const val DELETE = "delete"
-    /** "Available offline" (ADR 0140 decision 10): a toggle in the menu, its state the header's (`NodeHeaderModel.State.offline`). */
-    const val OFFLINE = "offline"
-
     /** Where an action may go: a button where it fits, else the menu ([ANY]); the menu ([MENU]); the menu's last group. */
     enum class Slot { ANY, MENU, LAST }
 
-    /** One action: its id (core's above, or the application's own), and where it may go. */
-    data class Action(val id: String, val slot: Slot = Slot.ANY)
-
     /** Where a core action sits among the application's: before them, after them, or right after the action [afterId]. */
-    class Placement private constructor(val before: Boolean, val afterId: String?) {
+    class Placement private constructor(val before: Boolean, val afterId: HeaderAction?) {
         companion object {
             val BEFORE = Placement(true, null)
             val AFTER = Placement(false, null)
-            fun after(id: String) = Placement(false, id)
+            fun after(id: HeaderAction) = Placement(false, id)
         }
     }
 
@@ -107,23 +94,31 @@ object NodeHeader {
 
     /**
      * A core action's words in the header: the heart's by whether it is pinned, the share sheet's title of the kind, the
-     * cover's by whether one is set. Null for the delete (its kind's own title) and an application's own action.
+     * cover's by whether one is set, a kept link's report its name's (the web's `report-name`). Null for the delete (its
+     * kind's own title) and for an application's own action (its page model's words: `GalleryModel.label`,
+     * `FileModel.Header.label`, `BookmarkPage.label`).
      */
-    fun label(id: String, kind: String, pinned: Boolean?, hasCover: Boolean): me.raddatz.veyq.mobile.words.Msg? = when (id) {
-        FAVORITE -> if (pinned == true) me.raddatz.veyq.mobile.words.Msg.NODE_UNFAVORITE else me.raddatz.veyq.mobile.words.Msg.NODE_FAVORITE
-        SHARE -> me.raddatz.veyq.mobile.session.ShareWords.of(kind).title
-        RENAME -> me.raddatz.veyq.mobile.words.Msg.NODE_RENAME
-        MOVE -> me.raddatz.veyq.mobile.words.Msg.NODE_MOVE
-        COPY -> me.raddatz.veyq.mobile.words.Msg.COPY_ACTION
-        COVER -> if (hasCover) me.raddatz.veyq.mobile.words.Msg.COVER_CHANGE else me.raddatz.veyq.mobile.words.Msg.COVER_SET
-        DOWNLOAD -> me.raddatz.veyq.mobile.words.Msg.NODE_DOWNLOAD
-        REPORT -> me.raddatz.veyq.mobile.words.Msg.REPORT_ACTION
-        OFFLINE -> me.raddatz.veyq.mobile.words.Msg.OFFLINE_AVAILABLE
-        else -> null
+    fun label(id: HeaderAction, kind: String, pinned: Boolean?, hasCover: Boolean): me.raddatz.veyq.mobile.words.Msg? = when (id) {
+        HeaderAction.FAVORITE -> if (pinned == true) me.raddatz.veyq.mobile.words.Msg.NODE_UNFAVORITE else me.raddatz.veyq.mobile.words.Msg.NODE_FAVORITE
+        HeaderAction.SHARE -> me.raddatz.veyq.mobile.session.ShareWords.of(kind).title
+        HeaderAction.RENAME -> me.raddatz.veyq.mobile.words.Msg.NODE_RENAME
+        HeaderAction.MOVE -> me.raddatz.veyq.mobile.words.Msg.NODE_MOVE
+        HeaderAction.COPY -> me.raddatz.veyq.mobile.words.Msg.COPY_ACTION
+        HeaderAction.COVER -> if (hasCover) me.raddatz.veyq.mobile.words.Msg.COVER_CHANGE else me.raddatz.veyq.mobile.words.Msg.COVER_SET
+        HeaderAction.DOWNLOAD -> me.raddatz.veyq.mobile.words.Msg.NODE_DOWNLOAD
+        HeaderAction.REPORT ->
+            if (me.raddatz.veyq.mobile.AppKinds.reportsNameOnly(kind)) me.raddatz.veyq.mobile.words.Msg.BOOKMARK_REPORT_NAME
+            else me.raddatz.veyq.mobile.words.Msg.REPORT_ACTION
+        HeaderAction.OFFLINE -> me.raddatz.veyq.mobile.words.Msg.OFFLINE_AVAILABLE
+        HeaderAction.DELETE, HeaderAction.UPLOAD, HeaderAction.MUSIC, HeaderAction.BANNER, HeaderAction.REPLACE, HeaderAction.SEND,
+        HeaderAction.OPEN_OWN_PAGE, HeaderAction.REPORT_SHARED -> null
     }
 
-    /** The header's split: the [buttons] in order, then the menu's [menu] group and, after a separator, its [last] group. */
-    data class Plan(val buttons: List<String>, val menu: List<String>, val last: List<String>) {
+    /**
+     * The header's split: the [buttons] in order, then the menu's [menu] group and, after a separator, its [last] group, the
+     * delete last of all. A platform draws every entry, in this order (ADR 0154 decision 2).
+     */
+    data class Plan(val buttons: List<HeaderAction>, val menu: List<HeaderAction>, val last: List<HeaderAction>) {
         /** Whether there is a "more" menu at all. */
         val hasMenu: Boolean get() = menu.isNotEmpty() || last.isNotEmpty()
     }
@@ -132,44 +127,54 @@ object NodeHeader {
      * The plan of a node's header: core's actions where [rights] grants them, around the application's [own] (in its
      * order), in the kind's priority [order], at most [maxButtons] of them buttons.
      */
-    fun plan(rights: Rights, order: List<String>, maxButtons: Int, own: List<Action> = emptyList()): Plan {
-        // the standard ones (`standardNodeActions`), as the application's list starts: rename, share, move, delete
-        val standard = listOfNotNull(
-            Action(RENAME, Slot.MENU).takeIf { rights.rename },
-            Action(SHARE).takeIf { rights.share },
-            Action(MOVE, Slot.LAST).takeIf { rights.move },
-            Action(DELETE, Slot.LAST).takeIf { rights.delete },
-        )
-        // core's own (`coreNodeActions`): the heart before, the copy beside the move, cover, download and report after
-        val core = listOfNotNull(
-            (Action(FAVORITE) to Placement.BEFORE).takeIf { rights.favorite },
-            (Action(COVER, Slot.MENU) to Placement.AFTER).takeIf { rights.cover },
-            (Action(COPY, Slot.LAST) to Placement.after(MOVE)).takeIf { rights.copy },
-            (Action(DOWNLOAD) to Placement.AFTER).takeIf { rights.download },
-            (Action(OFFLINE, Slot.MENU) to Placement.AFTER).takeIf { rights.offline },
-            (Action(REPORT, Slot.LAST) to Placement.AFTER).takeIf { rights.report },
-        )
-        val actions = ordered(placed(core, standard + own), order)
-        val buttons = actions.filter { it.slot == Slot.ANY }.take(maxButtons.coerceAtLeast(0)).map { it.id }
-        val menu = actions.filter { it.slot != Slot.LAST && it.id !in buttons }.map { it.id }
+    fun plan(rights: Rights, order: List<HeaderAction>, maxButtons: Int, own: List<HeaderAction> = emptyList()): Plan {
+        val actions = ordered(placed(core(rights), standard(rights) + own), order)
+        val buttons = actions.filter { it.slot == Slot.ANY }.take(maxButtons.coerceAtLeast(0))
+        val menu = actions.filter { it.slot != Slot.LAST && it !in buttons }
         val lastGroup = actions.filter { it.slot == Slot.LAST }
-        // the delete last of all (`partitionHeaderActions`: a danger action ends the menu)
-        val last = lastGroup.filter { it.id != DELETE }.map { it.id } + lastGroup.filter { it.id == DELETE }.map { it.id }
+        // a kept link's share report right after its name's (`coreNodeActions.ts`' `bookmarkReport`), the delete last of
+        // all (`partitionHeaderActions`: a danger action ends the menu)
+        val tail = listOf(HeaderAction.REPORT_SHARED, HeaderAction.DELETE)
+        val last = lastGroup.filter { it !in tail } + tail.filter { it in lastGroup }
         return Plan(buttons, menu, last)
     }
 
+    /** The standard ones (`standardNodeActions`), as the application's list starts: rename, share, move, delete. */
+    internal fun standard(rights: Rights): List<HeaderAction> = listOfNotNull(
+        HeaderAction.RENAME.takeIf { rights.rename },
+        HeaderAction.SHARE.takeIf { rights.share },
+        HeaderAction.MOVE.takeIf { rights.move },
+        HeaderAction.DELETE.takeIf { rights.delete },
+    )
+
+    /**
+     * Core's own (`coreNodeActions`) in their merge order ([CORE_ORDER]): the heart before, the copy beside the move, cover,
+     * download, "Available offline" and report after.
+     */
+    internal fun core(rights: Rights): List<Pair<HeaderAction, Placement>> = listOfNotNull(
+        (HeaderAction.FAVORITE to Placement.BEFORE).takeIf { rights.favorite },
+        (HeaderAction.COVER to Placement.AFTER).takeIf { rights.cover },
+        (HeaderAction.COPY to Placement.after(HeaderAction.MOVE)).takeIf { rights.copy },
+        (HeaderAction.DOWNLOAD to Placement.AFTER).takeIf { rights.download },
+        (HeaderAction.OFFLINE to Placement.AFTER).takeIf { rights.offline },
+        (HeaderAction.REPORT to Placement.AFTER).takeIf { rights.report },
+    )
+
+    /** Core's actions in the order [core] merges them, every one granted — what a test holds to `coreNodeActions.ts`. */
+    val CORE_ORDER: List<HeaderAction> get() = core(Rights(true, true, true, true, true, true, true, true, true, offline = true)).map { it.first }
+
     /** The web's `placeCoreActions`: core's before, the application's each followed by core's beside it, core's after. */
-    internal fun placed(core: List<Pair<Action, Placement>>, app: List<Action>): List<Action> {
-        val ids = app.map { it.id }.toSet()
+    internal fun placed(core: List<Pair<HeaderAction, Placement>>, app: List<HeaderAction>): List<HeaderAction> {
+        val ids = app.toSet()
         val before = core.filter { it.second.before }.map { it.first }
-        fun beside(id: String) = core.filter { it.second.afterId == id }.map { it.first }
+        fun beside(id: HeaderAction) = core.filter { it.second.afterId == id }.map { it.first }
         val after = core.filter { !it.second.before && (it.second.afterId == null || it.second.afterId !in ids) }.map { it.first }
-        return before + app.flatMap { listOf(it) + beside(it.id) } + after
+        return before + app.flatMap { listOf(it) + beside(it) } + after
     }
 
     /** The web's `orderHeaderActions`: the ids [order] lists first, in its order, then every other in the given order. */
-    internal fun ordered(actions: List<Action>, order: List<String>): List<Action> {
+    internal fun ordered(actions: List<HeaderAction>, order: List<HeaderAction>): List<HeaderAction> {
         val rank = order.withIndex().associate { (i, id) -> id to i }
-        return actions.filter { it.id in rank }.sortedBy { rank.getValue(it.id) } + actions.filter { it.id !in rank }
+        return actions.filter { it in rank }.sortedBy { rank.getValue(it) } + actions.filter { it !in rank }
     }
 }

@@ -51,7 +51,7 @@ Measured 2026-11-19 on `claude/offline-refine` at `4f3b57ecd` (commands from `sr
   key with no user-authentication parameters (`sed -n 78,96p android/src/main/kotlin/me/raddatz/veyq/mobile/android/KeystoreDeviceKeys.kt`),
   its wrap copy and refresh token in credential-encrypted preferences — readable after the first unlock since boot,
   locked screen or not (remembered: Android's file-based encryption); Apple, a Keychain item
-  `kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly` (`sed -n 44,58p apple/Veyq/KeychainStore.swift`) — readable only
+  `kSecAttrAccessibleWhenPasscodeSetThisDeviceOnly` (`sed -n 44,58p apple/Veyq/Core/KeychainStore.swift`) — readable only
   while the device is unlocked (remembered: Apple's data-protection classes); Windows DPAPI and Linux's Secret Service,
   while the person's desktop session is signed in. The presence level asks the person on every platform, and the password
   trust needs the password. No process opens an account in the background today: `PinWorker` and `ContinuedWork` hold the

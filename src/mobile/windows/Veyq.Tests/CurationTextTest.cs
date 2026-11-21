@@ -2,6 +2,8 @@ using System;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Veyq.Bridge.Wire;
+using Veyq.Apps.Memories;
+using Veyq.Core;
 
 namespace Veyq.Tests;
 
@@ -38,8 +40,8 @@ public sealed class CurationTextTest
         Assert.AreEqual("Ada", CurationText.Name("Ada", false));
         Assert.AreEqual(Words.MemoryParticipantsFormer(), CurationText.Name(null, true));
         var unknown = new PersonShown { userId = "x", name = null, former = false, picture = false, username = null, sections = [], memories = null };
-        Assert.AreEqual(Words.PeopleUnknownMember(), CurationText.PersonTitle(unknown));
-        Assert.AreEqual(Words.MemoryParticipantsFormer(), CurationText.PersonTitle(unknown with { former = true }));
+        Assert.AreEqual(Words.PeopleUnknownMember(), PersonText.Title(unknown));
+        Assert.AreEqual(Words.MemoryParticipantsFormer(), PersonText.Title(unknown with { former = true }));
         Assert.AreEqual(Words.MemoryPeopleWithName("Ada"), CurationText.MemoriesWith(unknown with { name = "Ada" }));
     }
 

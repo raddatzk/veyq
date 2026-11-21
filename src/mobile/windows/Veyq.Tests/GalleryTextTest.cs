@@ -1,5 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Veyq.Bridge.Wire;
+using Veyq.Apps.Memories;
+using Veyq.Core;
 
 namespace Veyq.Tests;
 
@@ -23,7 +25,7 @@ public sealed class GalleryTextTest
     private static GalleryRow Row(int? marks, bool mine) => new()
     {
         mediaId = "m", name = "a.jpg", mediaType = "image/jpeg", video = false, blocked = false, tile = null, picture = null,
-        capturedAt = null, width = null, height = null, said = null, canDelete = false, marks = marks, mine = mine,
+        capturedAt = null, width = null, height = null, said = null, canDelete = false, marks = marks, mine = mine, tileActions = [],
     };
 
     [TestMethod]

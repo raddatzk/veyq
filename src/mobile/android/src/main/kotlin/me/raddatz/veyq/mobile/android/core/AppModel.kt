@@ -1290,9 +1290,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** What "New" offers where the shell is (core's `ShellModel.createsHere`: offline only what is queued). */
-    fun createsHere(isHome: Boolean, bookmarks: Boolean = false): List<me.raddatz.veyq.mobile.AppKinds.Create> =
-        shellModel?.createsHere(isHome, bookmarks).orEmpty()
+    /** What the drawer's "New" offers (core's `ShellModel.drawerCreates`: offline only what is queued; none outside a space). */
+    fun drawerCreates(): List<me.raddatz.veyq.mobile.AppKinds.Create> = shellModel?.drawerCreates().orEmpty()
+
+    /** A level row's menu (core's `ShellModel.rowPlan`): rename and move first, report and the delete last. */
+    suspend fun rowPlan(node: me.raddatz.veyq.mobile.navigation.NodeAt): me.raddatz.veyq.mobile.navigation.LevelRow.Plan =
+        shellModel?.rowPlan(node) ?: me.raddatz.veyq.mobile.navigation.LevelRow.Plan(emptyList(), emptyList())
+
+    /** The plan of the level [shell] shows (core's `ShellModel.levelPlan`: its New and its tools); null where it shows none. */
+    fun levelPlan(shell: me.raddatz.veyq.mobile.navigation.Shell): me.raddatz.veyq.mobile.navigation.LevelPlan? = shellModel?.levelPlan(shell)
 
     /** The tray's *Discard* of write [id] (core's `QueuedTray.discard`, with what waits for it). */
     fun discardQueued(id: String) {
@@ -2219,12 +2225,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         return null
     }
 
-    /** What the drawer's "New" asked Home to create ("folder" or "pot"), until Home opens its dialog. */
-    private val _newRequest = MutableStateFlow<String?>(null)
-    val newRequest: StateFlow<String?> = _newRequest.asStateFlow()
+    /** What the drawer's "New" asked Home to create (an entry of `ShellModel.drawerCreates`), until Home opens its dialog. */
+    private val _newRequest = MutableStateFlow<me.raddatz.veyq.mobile.AppKinds.Create?>(null)
+    val newRequest: StateFlow<me.raddatz.veyq.mobile.AppKinds.Create?> = _newRequest.asStateFlow()
 
     /** The drawer's "New": Home, where its dialog for [kind] opens. */
-    fun requestNew(kind: String) {
+    fun requestNew(kind: me.raddatz.veyq.mobile.AppKinds.Create) {
         choose(null)
         _newRequest.value = kind
     }
@@ -2380,7 +2386,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             servers = me.raddatz.veyq.mobile.navigation.ShellWords.switcher(session.accounts, hidden, account, tenant).mapNotNull { e ->
                 session.accounts.firstOrNull { it.key == e.connection }?.let { ServerEntry(it, e) }
             },
-            drawerSections = l.drawerSections,
+            drawerSections = shellModel?.drawerSections(l).orEmpty(),
             applications = l.applications,
             filters = l.filters,
             drawer = l.drawer,

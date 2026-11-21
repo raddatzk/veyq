@@ -89,12 +89,18 @@ class WireTest {
         queuedSaid = listOf(Notice(Msg.OFFLINE_SENT, listOf(1)), Notice(Msg.OFFLINE_NEED_YOU, listOf(1))),
         dropsHere = true,
         dropRows = listOf("f-1", "f-2"),
+        level = ShellShown.ShownLevel(
+            listOf(ShellShown.ShownCreate(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, Msg.FOLDER_NEW)),
+            listOf(me.raddatz.veyq.mobile.navigation.LevelTool.TRASH, me.raddatz.veyq.mobile.navigation.LevelTool.VIEW),
+        ),
+        drawerCreates = listOf(ShellShown.ShownCreate(me.raddatz.veyq.mobile.AppKinds.Create.POT, Msg.CREATE_POT)),
     )
     private val memory = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "m-1", "MEMORY", "Ostsee 2026")
     private val pin = PinShown(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "m-1", "MEMORY", "Ostsee 2026"), ObjectRef("scope-1", "m-1", "MEMORY", ApplicationId.MEMORIES, "Ostsee 2026"), "m-1")
     private val nowPlaying = NowPlayingShown("t1", "Fado", "Ostsee 2026", ObjectRef("scope-1", "m-1", "MEMORY", ApplicationId.MEMORIES, "Ostsee 2026"), true, 61_500, 187_000)
     private val photo = GalleryRow("m1", "IMG_0001.jpg", "image/jpeg", video = false, blocked = false, tile = "blob-t1", picture = "blob-p1",
-        capturedAt = 1_790_000_000_000, width = 4000, height = 3000, said = null, canDelete = true)
+        capturedAt = 1_790_000_000_000, width = 4000, height = 3000, said = null, canDelete = true,
+        tileActions = listOf(me.raddatz.veyq.mobile.memories.TileAction.MARK))
     private val record = TrustedDevice("http://veyq.localhost:8080", "p@example.org", "user-1", TrustedDevice.Method.DEVICE, "wrap-1", "veyq.device.ab")
 
     /** Each root's values: every variant of a sealed root once. */
@@ -113,7 +119,8 @@ class WireTest {
             Call.PotDownload(3, "/home/p/Downloads/Trip to Lyon.zip", "deleted person"), Call.PotArchiveName(3), Call.AvatarPicture("user-1"), Call.PictureDecode,
             Call.PotRecord(3, listOf(PotView.SettleRow("Ben", "Anna", 2100, "p2", "p1"))), Call.PotRestore(3, "e2"), Call.PotHistory(3, "e2"),
             Call.ReaderRead(5, 262_144, 65_536), Call.ReaderClose(5),
-            Call.HeaderOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "EXPENSES_POT", "Trip to Lyon"), me.raddatz.veyq.mobile.AppKinds.Facts(canWrite = false), 2), Call.HeaderOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "EXPENSES_POT", "Trip to Lyon"), null, 0),
+            Call.HeaderOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "EXPENSES_POT", "Trip to Lyon"), me.raddatz.veyq.mobile.AppKinds.Facts(canWrite = false), 2),
+            Call.RowPlan(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "FOLDER", "Trips")), Call.SignInPlan(adding = true, camera = false), Call.HeaderOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "EXPENSES_POT", "Trip to Lyon"), null, 0),
             Call.HeaderFacts(7, me.raddatz.veyq.mobile.AppKinds.Facts()), Call.HeaderClose(7), Call.HeaderPin(7), Call.HeaderOffline(7), Call.HeaderOfflineConfirm(7), Call.HeaderOfflineCancel(7), Call.HeaderTrash(7), Call.HeaderUndo(7),
             Call.HeaderRename(7, "Trip to Lyon 2"), Call.ShellCreateFolder("Plans"),
             Call.Drop(DropOn.Level("Familie"), listOf(DropItem.File("/home/p/Büro 中文.pdf"), DropItem.Folder("C:\\Users\\p\\Trip"), DropItem.NotLocal("Phone photo")), "Gelöschte Personen"),
@@ -259,7 +266,9 @@ class WireTest {
             Answer.Groups(listOf(Home.Group(true, lists.nodes.take(1), Msg.HOME_GROUP_FOLDERS), Home.Group(false, lists.nodes.drop(1), null))),
             Answer.PotOpened(3), Answer.Name("Trip to Lyon.zip"), Answer.Bytes("image/png"), Answer.Bytes(null),
             Answer.Reader(5, 9_000_000_000, "video/mp4"), Answer.Reader(6, 0, null),
-            Answer.HeaderOpened(7), Answer.FileOpened(20), Answer.Saving(21), Answer.ImportOffered(60, 2, Notice(Msg.DEPOT_FOLDER_UNREADABLE, listOf("gone.txt"))), Answer.ImportOffered(61, 0), Answer.Queued(3),
+            Answer.HeaderOpened(7),
+            Answer.RowPlan(listOf(HeaderShown.PlanAction(me.raddatz.veyq.mobile.navigation.HeaderAction.RENAME, Msg.NODE_RENAME)), listOf(HeaderShown.PlanAction(me.raddatz.veyq.mobile.navigation.HeaderAction.DELETE, Msg.FOLDER_DELETE))),
+            Answer.SignInPlan(me.raddatz.veyq.mobile.session.SignInEntry.entries), Answer.FileOpened(20), Answer.Saving(21), Answer.ImportOffered(60, 2, Notice(Msg.DEPOT_FOLDER_UNREADABLE, listOf("gone.txt"))), Answer.ImportOffered(61, 0), Answer.Queued(3),
             Answer.QueuedOpens(me.raddatz.veyq.mobile.offline.QueuedOpen.Entry("t", "scope-1", "pot-1", "e1", "entry:e1")),
             Answer.QueuedOpens(me.raddatz.veyq.mobile.offline.QueuedOpen.Rename("t", "scope-1", "node-1", "Trip (mine)")),
             Answer.QueuedOpens(me.raddatz.veyq.mobile.offline.QueuedOpen.Place("t", "scope-1", null)),
@@ -324,7 +333,7 @@ class WireTest {
             Update.Shell(ShellModel.State(shell, lists), shown), Update.Shell(null),
             Update.Pot(3, PotModel.State(ref, failed = false, saving = true, message = "REFUSED"), listOf("user-1")), Update.Pot(4, null),
             Update.Header(7, HeaderShown(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "EXPENSES_POT", "Trip to Lyon"), pinned = true,
-                plan = HeaderShown.Plan(listOf(HeaderShown.PlanAction("favorite", Msg.NODE_UNFAVORITE)), listOf(HeaderShown.PlanAction("own", null)), listOf(HeaderShown.PlanAction("delete", Msg.POT_DELETE))),
+                plan = HeaderShown.Plan(listOf(HeaderShown.PlanAction(me.raddatz.veyq.mobile.navigation.HeaderAction.FAVORITE, Msg.NODE_UNFAVORITE)), listOf(HeaderShown.PlanAction(me.raddatz.veyq.mobile.navigation.HeaderAction.BANNER, null)), listOf(HeaderShown.PlanAction(me.raddatz.veyq.mobile.navigation.HeaderAction.DELETE, Msg.POT_DELETE))),
                 deleteQuestion = Notice(Msg.POT_DELETE_CONFIRM, listOf("Trip to Lyon")), undo = Notice(Msg.TRASH_MOVED, listOf("Trip to Lyon")), gone = true, archiveName = "Trip to Lyon.zip", cover = me.raddatz.veyq.mobile.session.NodeCover.Crop(0.0, 0.25, 0.5, 0.5))),
             Update.Header(7, HeaderShown(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "EXPENSES_POT", "Trip to Lyon"), pinned = null, plan = null, deleteQuestion = Notice(Msg.POT_DELETE_CONFIRM, listOf("x")), undo = null, gone = false, archiveName = "x.zip", cover = null)),
             Update.Header(9, null),
@@ -452,7 +461,8 @@ class WireTest {
                 links = listOf(
                     ShareShown.ShownLink("share-1", Piece.Plain("Family"), listOf(Notice(Msg.SHARE_ROLE_VIEWER), Notice(Msg.SHARE_PASSWORD_BADGE)),
                         "2026-11-01T10:00:00Z", "2026-12-01T22:59:59.999Z", "http://veyq.localhost:8080/s/share-1#k=AAAA", canCopy = true, canEdit = true,
-                        canRenew = true, canSwitchOff = true, canReactivate = false, canDelete = false),
+                        canRenew = true, canSwitchOff = true, canReactivate = false, canDelete = false,
+                        actions = listOf(me.raddatz.veyq.mobile.navigation.LinkAction.COPY, me.raddatz.veyq.mobile.navigation.LinkAction.SWITCH_OFF)),
                     ShareShown.ShownLink("share-2", Piece.Said(Notice(Msg.SHARE_ROLE_VIEWER)), listOf(Notice(Msg.SHARE_SWITCHED_OFF)), "2026-10-01T10:00:00Z", null,
                         null, canCopy = false, canEdit = false, canRenew = true, canSwitchOff = false, canReactivate = true, canDelete = true),
                 ),
@@ -520,6 +530,7 @@ class WireTest {
                     SettingsFamily("fam-2", null, null, current = false, label = null, removesKey = true)),
                 keptDevices = listOf(SettingsKeptDevice("dev-3", "Old phone")), otherSavedKeys = true, hasOthers = true, addDevice = true,
                 working = false, refusal = Msg.ACCOUNT_SETTINGS_REVOKE_FAILED, registerRefusal = Msg.ACCOUNT_SETTINGS_REGISTER_UNREADABLE,
+                sections = listOf(me.raddatz.veyq.mobile.search.SettingsSection.SESSIONS, me.raddatz.veyq.mobile.search.SettingsSection.SIGN_OUT),
             )),
             Update.Settings(50, SettingsShown("p@veyq.localhost", null, "Fedora 44", null, null, emptyList(), null, emptyList(), false, false, false, true, null, null)),
             Update.Settings(51, null),

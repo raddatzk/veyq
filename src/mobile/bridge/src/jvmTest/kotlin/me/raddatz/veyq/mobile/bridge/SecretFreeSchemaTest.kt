@@ -235,7 +235,7 @@ class SecretFreeSchemaTest {
         val byOwner = fields.groupBy({ it.owner }, { it.name })
         fun of(name: String) = byOwner[name] ?: byOwner.entries.single { (owner, _) -> owner.endsWith(".$name") }.value
         assertEquals(
-            listOf("mediaId", "name", "mediaType", "video", "blocked", "tile", "picture", "capturedAt", "width", "height", "said", "canDelete", "marks", "mine"),
+            listOf("mediaId", "name", "mediaType", "video", "blocked", "tile", "picture", "capturedAt", "width", "height", "said", "canDelete", "marks", "mine", "tileActions"),
             of("GalleryRow"), "a gallery row says more than its medium's facts and its badge",
         )
         assertEquals(listOf("offered", "mode", "modeOffered", "chips", "text", "suggestions", "shown", "total"), of("FilterShown"))

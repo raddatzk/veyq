@@ -259,45 +259,55 @@ fun SettingsScreen(
                     )
                 }
             }
-            account(state, actions)
-            profile(state, actions)
-            password(state, actions)
-            thisDevice(state, onRename = { renaming = true }, onStay = { actions.stay(it, trustDone) }, onPassword = { askPassword = true }) {
-                confirm = Confirm(
-                    context.getString(R.string.account_settings_untrust_confirm_title), context.getString(R.string.account_settings_untrust_confirm),
-                    context.getString(R.string.manage_forget_device), actions::stopTrusting,
-                )
-            }
-            sessions(state, context, ask = { confirm = it }, actions, onRename = { renamingFamily = it })
-            savedKeys(state, context, ask = { confirm = it }, actions)
-            if (state.addDevice) {
-                val camera = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)
-                addDevice(camera, !state.working, actions)
-            }
-            security(state, actions)
-            storage(state, context, onLimit = { limiting = true }, actions)
-            maps?.let { mapServices(it) }
-            appearance(context)
-            erase(state, actions)
-            item(key = "sign-out") {
-                Column(Modifier.padding(16.dp)) {
-                    OutlinedButton(
-                        onClick = actions::signOutHere,
-                        enabled = !state.working,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                        modifier = Modifier.testTag("settings-sign-out"),
-                    ) {
-                        Icon(Icons.AutoMirrored.Outlined.Logout, null, Modifier.size(18.dp))
-                        Spacer(Modifier.size(8.dp))
-                        Text(stringResource(R.string.drawer_sign_out))
-                    }
-                    Text(
-                        stringResource(R.string.account_settings_sign_out_hint), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp),
+            // the page's sections, every one core offers and in its order (`AccountSettings.State.sections`, ADR 0154
+            // decision 2: the web's order, the app-only ones beside their kin, Sign out last); only their look is Android's
+            for (section in state.sections(maps = maps != null, appearance = true)) when (section) {
+                me.raddatz.veyq.mobile.search.SettingsSection.APPEARANCE -> appearance(context)
+                me.raddatz.veyq.mobile.search.SettingsSection.MAPS -> maps?.let { mapServices(it) }
+                me.raddatz.veyq.mobile.search.SettingsSection.STORAGE -> storage(state, context, onLimit = { limiting = true }, actions)
+                me.raddatz.veyq.mobile.search.SettingsSection.SESSIONS -> sessions(state, context, ask = { confirm = it }, actions, onRename = { renamingFamily = it })
+                me.raddatz.veyq.mobile.search.SettingsSection.DEVICE -> thisDevice(state, onRename = { renaming = true }, onStay = { actions.stay(it, trustDone) }, onPassword = { askPassword = true }) {
+                    confirm = Confirm(
+                        context.getString(R.string.account_settings_untrust_confirm_title), context.getString(R.string.account_settings_untrust_confirm),
+                        context.getString(R.string.manage_forget_device), actions::stopTrusting,
                     )
-                    Spacer(Modifier.height(24.dp))
                 }
+                me.raddatz.veyq.mobile.search.SettingsSection.SAVED_KEYS -> savedKeys(state, context, ask = { confirm = it }, actions)
+                me.raddatz.veyq.mobile.search.SettingsSection.ACCOUNT -> account(state)
+                me.raddatz.veyq.mobile.search.SettingsSection.EMAIL -> email(state, actions)
+                me.raddatz.veyq.mobile.search.SettingsSection.PASSWORD -> password(state, actions)
+                me.raddatz.veyq.mobile.search.SettingsSection.ADD_DEVICE -> {
+                    val camera = context.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY)
+                    addDevice(camera, !state.working, actions)
+                }
+                me.raddatz.veyq.mobile.search.SettingsSection.SECURITY -> security(state, actions)
+                me.raddatz.veyq.mobile.search.SettingsSection.PROFILE -> profile(state, actions)
+                me.raddatz.veyq.mobile.search.SettingsSection.ERASE -> erase(state, actions)
+                me.raddatz.veyq.mobile.search.SettingsSection.SIGN_OUT -> signOut(state, actions)
             }
+        }
+    }
+}
+
+/** Signing out on this device: the page's last section (core's `SettingsSection.SIGN_OUT`). */
+private fun LazyListScope.signOut(state: AccountSettings.State, actions: SettingsActions) {
+    item(key = "sign-out") {
+        Column(Modifier.padding(16.dp)) {
+            OutlinedButton(
+                onClick = actions::signOutHere,
+                enabled = !state.working,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.testTag("settings-sign-out"),
+            ) {
+                Icon(Icons.AutoMirrored.Outlined.Logout, null, Modifier.size(18.dp))
+                Spacer(Modifier.size(8.dp))
+                Text(stringResource(R.string.drawer_sign_out))
+            }
+            Text(
+                stringResource(R.string.account_settings_sign_out_hint), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp),
+            )
+            Spacer(Modifier.height(24.dp))
         }
     }
 }
@@ -326,7 +336,7 @@ private fun LazyListScope.header(key: String, title: @Composable () -> String, s
 @Composable
 private fun listColors() = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background)
 
-private fun LazyListScope.account(state: AccountSettings.State, actions: SettingsActions) {
+private fun LazyListScope.account(state: AccountSettings.State) {
     header("account", { stringResource(R.string.account_settings_account) })
     item(key = "email") {
         ListItem(
@@ -340,7 +350,10 @@ private fun LazyListScope.account(state: AccountSettings.State, actions: Setting
             colors = listColors(),
         )
     }
-    // the address changed beside the address shown (ADR 0148 decision 10); the mailed link confirms it on the web
+}
+
+/** The address changed beside the address shown (ADR 0148 decision 10); the mailed link confirms it on the web. */
+private fun LazyListScope.email(state: AccountSettings.State, actions: SettingsActions) {
     item(key = "email-change") {
         ListItem(
             headlineContent = { Text(stringResource(R.string.email_change_action)) },
@@ -892,7 +905,6 @@ private fun MapsSwitch(checked: Boolean, enabled: Boolean, onChange: (Boolean) -
 /** "Appearance and language" (D3): the app follows the system's theme; its language is the system's per-app setting. */
 private fun LazyListScope.appearance(context: Context) {
     item(key = "appearance") {
-        HorizontalDivider(Modifier.padding(top = 8.dp))
         ListItem(
             headlineContent = { Text(stringResource(R.string.account_settings_appearance)) },
             supportingContent = { Text(stringResource(R.string.account_settings_appearance_sub)) },

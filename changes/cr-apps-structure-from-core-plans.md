@@ -37,13 +37,13 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
 | # | What | Where / command |
 |---|---|---|
 | R1 | The core's lists a UI iterates today (`NodeHeader.plan`, `headerOrder`, `createsWhere`, `DrawerSection.shown`, `barTabs`, `SearchShown`, `SettingsSection.offered`, `ShareSheet.rows`, `TrashSheet.rows`, `ViewMode.LEVEL`, `GalleryModel.headerActions`/`creates`, …). | `grep -rnE "fun (plan\|shown\|offered\|createsWhere\|headerOrder)\b\|val (barTabs\|LEVEL\|creates\|headerActions\|homeCreates\|drawerCreates)\b" $C` |
-| R2 | Header action ids are `const val` strings, so every platform has a fallback arm: Android `else -> dialog = id`, Apple `default:`, Linux `_ => format!("win.header-{id}")`, Windows `_ => new SymbolIcon(Symbol.More)`. | `grep -n "const val" $C/navigation/NodeHeader.kt`; `grep -rnE "else ->\|default:\|_ =>" $M/android/src/main/kotlin/me/raddatz/veyq/mobile/android/NodeHeader.kt $M/apple/Veyq/NodeHeader.swift $M/linux/src/header.rs $M/windows/Veyq/NodeHeader*.cs` |
+| R2 | Header action ids are `const val` strings, so every platform has a fallback arm: Android `else -> dialog = id`, Apple `default:`, Linux `_ => format!("win.header-{id}")`, Windows `_ => new SymbolIcon(Symbol.More)`. | `grep -n "const val" $C/navigation/NodeHeader.kt`; `grep -rnE "else ->\|default:\|_ =>" $M/android/src/main/kotlin/me/raddatz/veyq/mobile/android/NodeHeader.kt $M/apple/Veyq/NodeHeader.swift $M/linux/src/core_ui/header.rs $M/windows/Veyq/NodeHeader*.cs` |
 | R3 | The whitelists: Linux `DRAWN`, Windows `Drawn`, the same 13 ids, missing `banner` and `open-own-page`. | `grep -rnE "\bDRAWN\b\|\bDrawn\b\|IsDrawn" $M/linux/src $M/windows/Veyq` |
-| R4 | Windows appends the banner and a kept link's report entries after the plan's last group (after Delete); Linux draws the banner and the bookmark's actions in the page body. | `grep -n "memory-banner-edit\|report" $M/windows/Veyq/ShellView.cs`; `grep -n "banner\|report\|open" $M/linux/src/memory_page.rs $M/linux/src/bookmark_page.rs \| head -20` |
+| R4 | Windows appends the banner and a kept link's report entries after the plan's last group (after Delete); Linux draws the banner and the bookmark's actions in the page body. | `grep -n "memory-banner-edit\|report" $M/windows/Veyq/Core/ShellView.cs`; `grep -n "banner\|report\|open" $M/linux/src/apps/memories/memory_page.rs $M/linux/src/core_ui/bookmark_page.rs \| head -20` |
 | R5 | New: Android and Apple the level's (`createsWhere(isHome=true)`) and the drawer's; Linux one in the sidebar header; Windows one in the content's command bar, hidden on a Pot, Memory or bookmark. The web: the level's head only (`LevelView.vue`); ADR 0122 decision 2: the drawer's New below the switcher. | `grep -rn "createsWhere\|CreateAction\|createMenu\|create_action" $M/android/src/main $M/apple/Veyq $M/linux/src $M/windows/Veyq \| grep -v "^.*//"`; `grep -n "create" $W/core/node/LevelView.vue \| head` |
-| R6 | Trash: Android and Apple a level toolbar icon; Linux and Windows an item of the switcher. The web: the level's tools row (tabs left; Select, Trash, the view switch right), gate `trashOffered`. | `grep -rn -i "trash" $M/android/src/main/kotlin/me/raddatz/veyq/mobile/android/ShellScreen.kt $M/apple/Veyq/ShellView.swift $M/linux/src/shell.rs $M/windows/Veyq/ShellView.cs \| grep -i "icon\|item\|button\|menu" \| head`; `sed -n 747,770p $W/core/node/LevelView.vue` |
+| R6 | Trash: Android and Apple a level toolbar icon; Linux and Windows an item of the switcher. The web: the level's tools row (tabs left; Select, Trash, the view switch right), gate `trashOffered`. | `grep -rn -i "trash" $M/android/src/main/kotlin/me/raddatz/veyq/mobile/android/ShellScreen.kt $M/apple/Veyq/ShellView.swift $M/linux/src/core_ui/shell.rs $M/windows/Veyq/Core/ShellView.cs \| grep -i "icon\|item\|button\|menu" \| head`; `sed -n 747,770p $W/core/node/LevelView.vue` |
 | R7 | Settings: nobody draws `SettingsSection.offered()` for the page; four orders (Apple = the core enum; Android security before storage; Linux and Windows add-device before sessions). The web's personal order: appearance, maps, sessions, password, pairing, security, (trust reset), profile, (moderation), erase; then the tenant's sections. | `grep -rn "SettingsSection" $M/android/src/main $M/apple/Veyq $M/linux/src $M/windows/Veyq`; `sed -n 147,192p $W/features/settings/sections.ts` |
-| R8 | Sign-in: Android and Apple the link entries first, then Submit; Linux and Windows Submit first. The web: Submit first. | `grep -n "Button\|button" $M/android/src/main/kotlin/me/raddatz/veyq/mobile/android/AppRoot.kt $M/apple/Veyq/SignInView.swift $M/linux/src/sign_in.rs $M/windows/Veyq/SignInView.cs \| head -40`; `sed -n 513,578p $W/views/LoginView.vue` |
+| R8 | Sign-in: Android and Apple the link entries first, then Submit; Linux and Windows Submit first. The web: Submit first. | `grep -n "Button\|button" $M/android/src/main/kotlin/me/raddatz/veyq/mobile/android/AppRoot.kt $M/apple/Veyq/SignInView.swift $M/linux/src/core_ui/sign_in.rs $M/windows/Veyq/Core/SignInView.cs \| head -40`; `sed -n 513,578p $W/views/LoginView.vue` |
 | R9 | Tile and row menus: a medium tile on the web has none (open, a mark toggle); a level row's menu is rename, move, the rest, a separator, report, delete (`levelRow.ts`). The apps: Apple a Mark context menu (+ macOS *Open in New Window*), Windows Mark while marking, Android and Linux none. | `sed -n 24,29p $W/core/node/levelRow.ts`; `sed -n 196,215p $W/core/node/levelRow.ts`; `grep -rn "contextMenu\|ContextFlyout\|MenuFlyout\|combinedClickable" $M/android/src/main $M/apple/Veyq $M/windows/Veyq \| head -20` |
 | R10 | Fallback arms in the platforms overall (the guard's first run separates those over plan enums). | `grep -rnE '^\s*else\s*->' $M/android/src/main --include='*.kt' \| wc -l`; `grep -rnE '^\s*default\s*:' $M/apple/Veyq $M/windows/Veyq \| wc -l`; `grep -rnE '\b_\s*=>' $M/linux/src $M/windows/Veyq \| wc -l` |
 
@@ -75,19 +75,150 @@ Branch `claude/core-owns-refine` at `a75188eb8`. `C=src/mobile/core/src/commonMa
 
 ## Phases
 
-- [ ] **1 core** — S1–S5; the orders' tests reading the web; Q1–Q4's answers. · Done when: `:core:jvmTest
+- [x] **1 core** — S1–S5; the orders' tests reading the web; Q1–Q4's answers. · Done when: `:core:jvmTest
   :core:macosArm64Test` green. **Bites:** (a) Memory's `headerOrder` swapped against `register.ts` → the web-order test
   red; (b) Delete out of `last` → red; (c) `SettingsSection` order changed → its test red.
-- [ ] **2 bridge** — the enums and plans on the wire, generated into C# and Rust. · Done when: `:bridge:jvmTest` green.
-- [ ] **3 the guard** — S6, on for the core and the bridge, each platform switched on in its phase. · Done when: the
+  **Built** (2026-11-20). `@Plan` (`navigation/Plan.kt`) marks a plan's enum: `HeaderAction` (core's ten, the pages' own
+  `UPLOAD`, `MUSIC`, `BANNER`, `REPLACE`, `SEND`, `OPEN_OWN_PAGE`, `REPORT_SHARED`; serial names the web's ids, each its
+  `slot`), `LevelTool` (`TRASH`, `VIEW`), `DrawerSection` (`NEW` first), `SettingsSection`, `SignInEntry`, `LinkAction`,
+  `TileAction`, `AppKinds.Create`. S1: `NodeHeader.Plan` of `HeaderAction`, `headerOrder` of them; the pages hand their own
+  (`GalleryModel.headerActions` with the banner, `FileModel.Header.own`, `BookmarkPage.headerActions`, each with its
+  `label`); a kept link's report is its name's (`BOOKMARK_REPORT_NAME`), its share's right after it, the delete last. S2:
+  `ShellModel.levelPlan(shell)` → `LevelPlan(creates, tools)` (New where `canCreateHere`, the trash where
+  `trashOffered`, the view switch but on the Memories map), `drawerCreates()` and `drawerSections(lists)` (`Lists`' own
+  getter is internal now). S3: `SettingsSection` in the web's order with the app-only ones beside their kin and `SIGN_OUT`
+  last (`search_words_sign_out`), drawn from `AccountSettings.State.sections(maps, appearance)`. S4: `SignInPlan.entries`
+  (Submit, Cancel while adding, show a link, scan one with a camera, the kit's open and scan, *Open a link*). S5:
+  `LevelRow.plan(rights)` (`ShellModel.rowPlan(row)`), `GalleryModel.tileActions(row)`, `ShareSheet.rowActions(row)`.
+  Tests: `PlansAreTheWebsTest` (jvmTest: each kind's `header.order` from its registration, core's merge order from
+  `coreNodeActions.ts`, the Settings order from `sections.ts`), `NodeHeaderTest`, `PlansTest`, `QueuedOverlayTest`'s tile.
+  Each bite seen red (`eachKindsHeaderOrderIsItsRegistrations`; five `NodeHeaderTest` cases; `theSettingsSections…`).
+  Android and Apple compile on it with their behaviour kept (their own entries now `HeaderAction`s, a `NEW` arm drawing
+  nothing until phase 4). **Deviations:** no `SELECT` tool — no app level selects (#1049); a level's tabs stay
+  `Shell.barTabs` (the bar's, ADR 0122), no `LevelPlan` field; the account's address sits beside it as `ACCOUNT`, `EMAIL`,
+  `PASSWORD`.
+- [x] **2 bridge** — the enums and plans on the wire, generated into C# and Rust. · Done when: `:bridge:jvmTest` green.
+  **Built** (2026-11-20). `HeaderShown.PlanAction.id` is a `HeaderAction`; `Call.HeaderFacts` takes the kept link's page
+  (`bookmark`), whose own entries and words join the plan as a file's and a gallery's do; `ShellShown.level`
+  (`ShownLevel(creates, tools)`) and `drawerCreates`, `drawerSections` the shell's (`NEW` first); `SettingsShown.sections`
+  (no appearance on a desktop, the maps' consent where `ShellModel.mapsOffered`); `Call.RowPlan` → `Answer.RowPlan` (each
+  entry worded) and `Call.SignInPlan(adding, camera)` → `Answer.SignInPlan`; `GalleryRow.tileActions`,
+  `ShareShown.ShownLink.actions`; a gallery's creates read as `Create.valueOf` (no filter over the enum). Every enum is
+  generated into `bridge.rs` and `Bridge.g.cs` with the wire's ids. Tests: `DispatchTest` (the sign-in's and a row's
+  plan; the header's entries as enums), `WireTest`'s samples carry each new type, `SecretFreeSchemaTest`'s gallery row,
+  and the core's `ShellModelTest` for `levelPlan`, `drawerSections`, `drawerCreates`, `rowPlan` (bitten: the trash
+  dropped → red). Linux and Windows compile with their drawing kept: a plan entry's wire id (`header::wire_id`,
+  `HeaderPlan.Id`) feeds their whitelists until phases 6 and 7 replace them; their initializers carry the new fields
+  (`bookmark: None`, `sections: vec![]`/`[]`, `tile_actions`, `actions`). `linux/run.py bridge` and `build` green,
+  `windows/run.py build` green on the VM (Veyq.Tests 80, PdfWebTest), both Apple builds green — after phase 1's Swift
+  named two entries as Kotlin/Native does not: the framework mangles `COPY` to `theCopy` and `DELETE` to `delete_`.
+- [x] **3 the guard** — S6, on for the core and the bridge, each platform switched on in its phase. · Done when: the
   guard green; `validate_guard_gaps.py` run once. **Bites:** a `default:` planted over `HeaderAction` in a Swift file,
   a whitelist array in Rust, a `.filter` on a plan in Kotlin — each red alone.
-- [ ] **4 Android** — every plan drawn in the core UI; the guard on for Android. · Done when: `:android:assembleDebug`,
+  **Built** (2026-11-20). `scripts/validate_mobile_structure.py` (its docstring the rules and limits) reads the `@Plan`
+  enums, their entries and serial names from the core's main sources and each one's name per language (Swift's
+  lowerCamel or Kotlin/Native's mangled `theCopy`/`delete_`; Rust's and C#'s the generated names), and the plans' lists
+  from the core's and the wire's `List<…>` declarations: (a) no `else ->`/`default:`/`_ =>` in a `when`/`switch`/`match`
+  whose arms name a plan's entry — on the core, the bridge and each platform switched on; (b) no collection literal whose
+  elements are all a plan's entries, nor one of two or more strings that are all a plan's ids (a registration keyed by an
+  entry is none); (c) no filter or sort in the statement that reads a plan's list — (b) and (c) on the bridge and the
+  platforms. `PLATFORMS` all off (phases 4–7 switch each on); `--platform` previews one, `--paths` reads the files given.
+  Its first run found the bridge filtering `Create.entries` for a gallery's New (now `Create.valueOf`). Bites, each red
+  alone and green restored: a `default:` over `HeaderAction` in `apple/…/BookmarkScreen.swift` (`--paths`); an array of
+  two `HeaderAction`s in `linux/…/said.rs` (`--paths`; it first went unseen behind a `crate::…` path, now read); a
+  `.filter` on `p.buttons` in the bridge (the full run); an `else ->` in `NodeHeader.label` (the core); a `_ =>` over
+  `HeaderAction` in a C# switch expression (`--paths`). The preview per platform: Android 7, Apple 6, Linux 5, Windows 6
+  — the phases' work. Every guard green, `validate_guard_gaps.py` run once (104 cases hold). **Open:** a Swift `switch`
+  over a Kotlin enum is no exhaustive one and needs `default:` to compile (#1050) — Apple's phase needs an exhaustive Swift
+  form first.
+- [x] **4 Android** — every plan drawn in the core UI; the guard on for Android. · Done when: `:android:assembleDebug`,
   the words, guidelines, direction and structure guards green.
-- [ ] **5 Apple** — the same. · Done when: both Apple builds green, the guards green.
-- [ ] **6 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green, the guards green.
-- [ ] **7 Windows** — the same; `CS8509`/`CS8524` as errors. · Done when: `python3 windows/run.py build` green on the
+  **Built** (2026-11-21). The header's runner (`core/NodeHeader.kt` `nodeActions`) and its icons are exhaustive `when`s over
+  `HeaderAction` (core's dialogs, the page's own entries from its `HeaderContribution`); a Memory's page hands all of
+  `GalleryModel.headerActions` (its Upload now the header's, the FAB the chapter's — a guest's link page, which has no core
+  header, keeps its upload there), a file's `FileModel.Header.own`. The level's New is `LevelPlan.creates` (the FAB) and its
+  tools `LevelPlan.tools` in the toolbar (the trash, then the view switch); the drawer's New is the `DrawerSection.NEW` arm
+  (`drawerCreates`, below the switcher's Home), `requestNew` typed by `Create`. An application's list draws no New of its
+  own any more — the plan offers none there (Expenses' *New pot* and Memories' *New Memory* FABs went; the drawer's New
+  makes both). Settings is `State.sections(…)` drawn whole (the account section split into `ACCOUNT` and `EMAIL`, Sign out
+  its own last section); the sign-in `SignInPlan.entries`; a level row's and tile's long press opens `rowPlan`'s menu
+  (`LevelRowMenu`, the header's runner); a medium tile's long press `tileActions`; a link row `ShareSheet.rowActions`
+  (the copy its button, the system's share sheet its menu's first item). **Core addition:** `GuestLevel.creates` (a guest's
+  level New, a folder then files), held in `GuestDoorsTest` (bitten: the order swapped → red). Guard on for Android
+  (`PLATFORMS`); bites, each red alone and restored with `/bin/cp -f`: an `else ->` over `LevelTool` (a), a `listOf` of two
+  `Create`s (b), a `.filter` on `SignInPlan.entries` (c). Smoke on a throwaway API 36 AVD as a throwaway account (both
+  erased): sign-in Submit first then show, scan, kit open, kit scan, *Open a link*; Home's toolbar share, Trash, view;
+  the level New's six entries; a folder's header (Delete last) and its tile's long-press menu (rename, move, …, report,
+  delete); the drawer's New below Home (folder, Pot, Memory, bookmark); Settings appearance, maps, storage, sessions,
+  this device, account, email, password, add a device, security, profile, erase, sign out; a Memory's header (Favorite,
+  Add photos; menu share, download, banner, …, Delete last) and FAB *Add chapter*; a link row (copy; Share, Edit, Renew,
+  Revoke). **Unclicked:** a medium tile's menu (no medium uploaded), a file's, a Pot's and a bookmark's header.
+  **Open:** a guest's link pages still draw only the gallery's music from `headerActions` (`GuestMusicAction`), not the
+  whole plan — the guard reads `.none {}` as no filter; phase 8's guest pass is where it shows.
+- [x] **5 Apple** — the same. · Done when: both Apple builds green, the guards green.
+  **Built** (2026-11-21). #1050 decided: `apple/generate_plans.py`, a pre-build step of both targets after the framework's,
+  writes `build/generated/<target>/Plans.swift` — per `@Plan` enum a Swift `Entry` enum (`HeaderAction.Entry`, read as
+  `action.entry`; `core` back), its entries and order from the core's sources through the structure guard's own reader
+  (`plan_enums`), their Swift names from the framework's `VeyqCore.h` (`theCopy`, `delete_`, `theNew`), the two checked
+  equal or the build stops; no dependency. Every plan switch is over `.entry` with no `default:`. Drawn in the core UI:
+  the header (`NodeHeaderActions`) and a level row's context menu (`NodeRowMenu`, `ShellModel.rowPlan`) through one
+  `NodeActionWords` drawing and one `NodeActionDialogs` runner; the pages' own entries from their models' lists
+  (`GalleryModel.headerActions` — UPLOAD now the header's, a submenu Photo Library | Files opening the page's pickers;
+  a guest's gallery keeps the page's menu, it has no header —, `FileModel.Header.own`, `BookmarkPage.headerActions`);
+  New in the level's head from `LevelPlan.creates` and the drawer's from `drawerCreates`, the drawer's sections from
+  `drawerSections` (Home after New, ADR 0122 decision 2); the level's tools (`LevelTools`: the trash, then the view
+  switch) in Home's and an application list's toolbar — the trash left the bar's Home actions, the application lists'
+  own New Pot / New Memory went (`LevelPlan`: theirs is the drawer's); Settings from `State.sections` (background sync
+  with storage); the sign-in from `SignInPlan.entries` (Submit first, its word `signin_submit`); a link row's context
+  menu from `ShareSheet.rowActions`; a medium tile's from `GalleryModel.tileActions` (macOS *Open in New Window* beside
+  it). Core addition: `GuestLevel.creates` (a guest level's New, held by `GuestDoorsTest`, seen red with the order
+  swapped). `PLATFORMS["apple"]` on. Checks: `:core:assembleVeyqCoreDebugXCFramework`, `xcodegen`, `xcodebuild … -sdk
+  macosx` and `-sdk iphonesimulator` (with `VeyqShare`) green; every `scripts/validate_*.py` green. **Bites:** an arm
+  (`.music`) dropped from `NodeActionDialogs.run` → `switch must be exhaustive` (macOS build red); a `default:` planted
+  there → the guard red; a header lacking `send` → the generator refuses; each restored green. **Deviations:** the link
+  row's swipe actions went (a subset of the plan; its menu holds all); a level's tiles carry no row menu yet (rows do);
+  the Apple pass is build-only — nothing clicked (§ Passes, phase 8).
+- [x] **6 Linux** — the same. · Done when: `python3 linux/run.py test` and `build` green, the guards green.
+  **Built** (2026-11-21). `header.rs`: `DRAWN`, `wire_id`, `drawn` and `action_of` gone; every plan entry drawn in its
+  order, each an action of the bar's own group (`header.e<n>`, its place in the plan — no id list), done by one exhaustive
+  arm (`header::doer`: the header's own call, or the page's window action — a Pot's and a file's download, Upload,
+  Music, Banner, Replace; `Send` never offered on a desktop, the bridge's `shares = false`; `Inner::act`); `icon_of` a
+  match over `HeaderAction`. The banner is the header's entry (`win.memory-banner`, the body's *Add banner* button gone);
+  a kept link's *Open on its own page* and *Report shared content* are the header's (the page tells its model's id,
+  `HeaderFacts.bookmark`; the body's button row gone). A level row's and tile's menu (`header::row_menu`: a right click or
+  a touch long press, `Row.Plan` drawn whole, each entry done through the row's node's own header model, its download the
+  node's archive) on Home's and an application's rows and tiles; a gallery tile's menu (`GalleryRow.tileActions`: the
+  mark, `Marks.Toggle`); a share link row's `ShownLink.actions` (Copy a button where it leads, the rest the menu, each
+  arm exhaustive). The shell: the drawer's New is the `DrawerSection.NEW` arm (the sidebar header's "+", made at the
+  space's top), the level's New (`ShellShown.level.creates`) at the content header bar's start and its tools (`TRASH`,
+  `VIEW`) in order at its end — the switcher's Trash gone; New's entries an exhaustive match over `Create`. Settings draws
+  `SettingsShown.sections` (the dev harness's state as the wire's JSON); the sign-in draws `SignIn.Plan` (asked again when
+  adding changes and once the camera is known: Submit, Cancel, the rows in one boxed list). The guard on for Linux.
+  **Core addition:** the drawer's New makes a folder at the space's top — `ShellModel.createFolderAtTop`,
+  `Call.ShellCreateFolder.top` (default false; the generated C# makes it a required member, so Windows' one call names `top = false` — not built on the VM here); `GatesInTheCoreTest` and
+  `DispatchTest` (`aNewFolderAndASpacesTrashAreDrivenThroughCalls`) each bitten red (the shell's folder sent; `top`
+  ignored). **Checks:** `linux/run.py build` green (clippy `-D warnings`, 104 + 5 cargo tests; WireTest in its Gradle
+  half); every guard green but guard_gaps (only `PLATFORMS` changed). **Bites:** a `_ =>` over `HeaderAction` in
+  `icon_of`, a `&[HeaderAction::…]` const, a `.filter` on `plan.buttons` — each red alone, restored. **Open:** the Rust
+  `doer` test's bite did not reach the test (the Docker VM's disk full, the link failed — no space) and the live smoke did
+  not run (the dev backend answered the throwaway's owner registration 500); both for phase 8.
+- [x] **7 Windows** — the same; `CS8509`/`CS8524` as errors. · Done when: `python3 windows/run.py build` green on the
   VM, the guards green. **Bite:** a `HeaderAction` arm removed from the C# switch → the build red.
+  **Built** (2026-11-21). `HeaderPlan.Drawn` and the id whitelist gone; `NodeHeader.cs` draws every entry of the plan in
+  its order (buttons primary, then menu and last group secondary, Delete last), each a `switch` expression over
+  `HeaderAction` without a discard, a page's own entries done by that page (`PageHooks`); `HeaderPlan.Wire` the serial
+  name by an exhaustive switch. A level row's menu (`RowMenu.cs`, `Row.Plan` drawn whole, run through a header of the
+  row's node); the level's New (`ShellShown.level.creates`) and tools (`Trash` in the level's `CommandBar`), the drawer's
+  New the `DrawerSection.New` arm (made at the space's top, `Call.ShellCreateFolder.top = true`); New's entries an
+  exhaustive switch over `Create`; Settings draws `SettingsShown.sections` (Sign out among them), the sign-in `SignIn.Plan`
+  (submit first); a share link's `ShownLink.actions`. **Deviation:** `CS8509` an error, `CS8524` **off**, not an error — it
+  fires on a switch naming every entry (an unnamed `(E)17`) and so demands the very discard rule (a) refuses; no unnamed
+  value crosses the wire (`JsonStringEnumConverter` refuses an unknown name) — the reason in `Directory.Build.props`.
+  **Checks:** `windows/run.py build` green on the VM after merging phases 4–6 (Bridge tests 5/5, `Veyq.Tests` 80/80 + 1;
+  locally 4/5, 1 skipped); every guard green. **Bites:** a `_ =>` over `HeaderAction` in `HeaderPlan.Wire` → the guard
+  red, restored; the same switch with the `ReportShared` arm removed, compiled under `Directory.Build.props` → `CS8509`
+  red, complete → green (a scratch project, not a second VM build). **Open:** no live smoke (the dev backend's DB disk
+  full); for phase 8.
 - [ ] **8 the passes** — § Passes.
 - [ ] **9 harvest** — ADR 0154's `Built:` (decision 2, the structure guard); `native-apps.md`; `src/mobile/CLAUDE.md`
   § Each platform's guidelines states what is the platform's (the look) and what is the plan's; the Use pages that name

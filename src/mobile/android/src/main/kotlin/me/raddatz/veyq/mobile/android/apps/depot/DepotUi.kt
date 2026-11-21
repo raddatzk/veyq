@@ -59,15 +59,27 @@ private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution? {
         download = { out -> model.downloadNode(node, out) },
         downloadName = h.downloadName,
         downloadMime = "application/octet-stream",
+        // a file's own entries (core's `FileModel.Header.own`), each drawn
         actions = h.own.map { a ->
-            when (a.id) {
-                me.raddatz.veyq.mobile.depot.FileModel.REPLACE ->
-                    OwnAction(a.id, say(h.label(a.id)!!), androidx.compose.material.icons.Icons.Outlined.Upload, a.slot) {
+            when (a) {
+                me.raddatz.veyq.mobile.navigation.HeaderAction.REPLACE ->
+                    OwnAction(a, say(h.label(a)!!), androidx.compose.material.icons.Icons.Outlined.Upload) {
                         // the content shown now is what the replace expects (core's choice), whatever a reload shows while picking
                         if (file.chooseReplace()) pick.launch(arrayOf("*/*"))
                     }
                 // a decrypted copy to another app the person picks (the system's share sheet), after the shell's notice
-                else -> OwnAction(a.id, say(h.label(a.id)!!), androidx.compose.material.icons.Icons.AutoMirrored.Outlined.Send, a.slot) { model.askToSend(node) }
+                me.raddatz.veyq.mobile.navigation.HeaderAction.SEND ->
+                    OwnAction(a, say(h.label(a)!!), androidx.compose.material.icons.Icons.AutoMirrored.Outlined.Send) { model.askToSend(node) }
+                // core's own, or another page's: never a file's (`FileModel.Header.own` holds none of these)
+                me.raddatz.veyq.mobile.navigation.HeaderAction.FAVORITE, me.raddatz.veyq.mobile.navigation.HeaderAction.SHARE,
+                me.raddatz.veyq.mobile.navigation.HeaderAction.RENAME, me.raddatz.veyq.mobile.navigation.HeaderAction.MOVE,
+                me.raddatz.veyq.mobile.navigation.HeaderAction.COPY, me.raddatz.veyq.mobile.navigation.HeaderAction.COVER,
+                me.raddatz.veyq.mobile.navigation.HeaderAction.DOWNLOAD, me.raddatz.veyq.mobile.navigation.HeaderAction.OFFLINE,
+                me.raddatz.veyq.mobile.navigation.HeaderAction.REPORT, me.raddatz.veyq.mobile.navigation.HeaderAction.DELETE,
+                me.raddatz.veyq.mobile.navigation.HeaderAction.UPLOAD, me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC,
+                me.raddatz.veyq.mobile.navigation.HeaderAction.BANNER, me.raddatz.veyq.mobile.navigation.HeaderAction.OPEN_OWN_PAGE,
+                me.raddatz.veyq.mobile.navigation.HeaderAction.REPORT_SHARED,
+                -> error("a file offers no own ${a.name}")
             }
         },
     )

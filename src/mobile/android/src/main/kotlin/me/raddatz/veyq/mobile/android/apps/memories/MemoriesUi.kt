@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.MusicNote
 import androidx.compose.material.icons.outlined.MusicOff
 import androidx.compose.material.icons.outlined.Panorama
@@ -61,35 +62,49 @@ import me.raddatz.veyq.mobile.sharing.GuestAccess
 import me.raddatz.veyq.mobile.sharing.GuestPage
 import me.raddatz.veyq.mobile.sharing.GuestScreen
 
-/** The header's banner action: its id in the kind's order (`AppKinds.headerOrder`). */
-private const val BANNER_ACTION = "banner"
-
 /**
- * A Memory's or a chapter's own header action: its music played or stopped (core's `GalleryModel.headerActions`' MUSIC,
- * ADR 0142 decision 6). Adding photos is the page's creating action (`CreateAction`), not the header's.
+ * A Memory's or a chapter's own header actions (core's `GalleryModel.headerActions`, drawn whole and in its order): adding
+ * photos and videos where whoever looks uploads, its music played or stopped (ADR 0142 decision 6), the banner added or
+ * changed (ADR 0144 decision 5). Core's header places each.
  */
 @Composable
 private fun memoryHeader(node: NodeAt, model: AppModel): HeaderContribution {
     val gallery = androidx.compose.runtime.remember(node) { model.galleryModel(node) } ?: return HeaderContribution()
-    // read here, whatever is offered: the action appears once the gallery's first read finds music
+    // read here, whatever is offered: an action appears once the gallery's first read finds it
     val state = gallery.state.collectAsStateWithLifecycle().value
-    val musicHere = state.musicHere
-    // the banner's dialog where whoever looks may set it, online (ADR 0144 decision 5; the web's header `banner`)
-    val banner = if (!state.editsBanner) null else OwnAction(
-        BANNER_ACTION,
-        androidx.compose.ui.res.stringResource(if (state.banner != null) R.string.memory_banner_change else R.string.memory_banner_add),
-        androidx.compose.material.icons.Icons.Outlined.Panorama,
-    ) { model.openBanner(gallery) }
+    // the system's photo picker: photos and videos, several at once; full media access asked once before the first pick
+    // (the picker hands a photo over with its location zeroed otherwise), whatever the answer the picker opens
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
+        if (uris.isNotEmpty()) model.uploadMedia(gallery, uris)
+    }
+    val pickMedia = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }
+    val askAccess = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { pickMedia() }
+    val actions = gallery.headerActions.map { a ->
+        val label = say(gallery.label(a)!!)
+        when (a) {
+            me.raddatz.veyq.mobile.navigation.HeaderAction.UPLOAD -> OwnAction(a, label, androidx.compose.material.icons.Icons.Outlined.AddPhotoAlternate) {
+                if (model.mediaAccessAsked()) pickMedia() else askAccess.launch(mediaAccessPermissions())
+            }
+            me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC -> OwnAction(
+                a, label, if (state.musicHere) androidx.compose.material.icons.Icons.Outlined.MusicOff else androidx.compose.material.icons.Icons.Outlined.MusicNote,
+            ) { gallery.toggleMusic() }
+            // the banner's dialog where whoever looks may set it, online (the web's header `banner`)
+            me.raddatz.veyq.mobile.navigation.HeaderAction.BANNER -> OwnAction(a, label, androidx.compose.material.icons.Icons.Outlined.Panorama) { model.openBanner(gallery) }
+            // core's own, or another page's: never a gallery's (`GalleryModel.headerActions` holds none of these)
+            me.raddatz.veyq.mobile.navigation.HeaderAction.FAVORITE, me.raddatz.veyq.mobile.navigation.HeaderAction.SHARE,
+            me.raddatz.veyq.mobile.navigation.HeaderAction.RENAME, me.raddatz.veyq.mobile.navigation.HeaderAction.MOVE,
+            me.raddatz.veyq.mobile.navigation.HeaderAction.COPY, me.raddatz.veyq.mobile.navigation.HeaderAction.COVER,
+            me.raddatz.veyq.mobile.navigation.HeaderAction.DOWNLOAD, me.raddatz.veyq.mobile.navigation.HeaderAction.OFFLINE,
+            me.raddatz.veyq.mobile.navigation.HeaderAction.REPORT, me.raddatz.veyq.mobile.navigation.HeaderAction.DELETE,
+            me.raddatz.veyq.mobile.navigation.HeaderAction.REPLACE, me.raddatz.veyq.mobile.navigation.HeaderAction.SEND,
+            me.raddatz.veyq.mobile.navigation.HeaderAction.OPEN_OWN_PAGE, me.raddatz.veyq.mobile.navigation.HeaderAction.REPORT_SHARED,
+            -> error("a gallery offers no own ${a.name}")
+        }
+    }
     return HeaderContribution(
         // a Memory's and a chapter's ZIP, the web's archive (ADR 0149 decision 3: core's `MemoryExport` behind `NodeExport`)
         download = { out -> model.downloadNode(node, out) },
-        actions = gallery.headerActions.filter { it.id == me.raddatz.veyq.mobile.memories.GalleryModel.MUSIC }.map { a ->
-            OwnAction(
-                a.id, say(gallery.label(a.id)!!),
-                if (musicHere) androidx.compose.material.icons.Icons.Outlined.MusicOff else androidx.compose.material.icons.Icons.Outlined.MusicNote,
-                a.slot,
-            ) { gallery.toggleMusic() }
-        } + listOfNotNull(banner),
+        actions = actions,
     )
 }
 
@@ -131,22 +146,18 @@ private fun CheckRow(checked: Boolean, onChange: (Boolean) -> Unit, label: Strin
     }
 }
 
-/** Memories' own list (its Memories), with "New Memory" (made at the top of the space shown, then opened; core's `MemoryCreate`). */
+/**
+ * Memories' own list (its Memories). An application's list offers no New of its own (core's `ShellModel.levelPlan`, ADR
+ * 0154 decision 2): a Memory is made from the drawer's New or a level's.
+ */
 @Composable
 private fun MemoriesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) -> Unit = model::open) {
-    var creating by remember { mutableStateOf(false) }
-    val space = s.shell.space ?: s.spaces.firstOrNull()?.scopeId
     // the bar's Map tab: every located Memory of the same list on a map (ADR 0143 D6)
     if (s.shell.selectedTab?.key == "memories.map") {
         MemoriesMapTab(s, model)
         return
     }
-    CreateAction(stringResource(R.string.memory_new), shown = space != null && me.raddatz.veyq.mobile.AppKinds.Create.MEMORY in model.createsHere(isHome = false), onClick = { creating = true }, state = LocalListStates.current.of("app:MEMORIES")) { list, bottom ->
-        ArrangedListScreen(s.applicationList(ApplicationId.MEMORIES), onOpen = onOpen, state = list, bottom = bottom)
-    }
-    if (creating && space != null) MemoryNameDialog(space, model, onClose = { creating = false }) { name, wasThere, autoPlace ->
-        model.createMemory(space, null, name, wasThere, autoPlace)
-    }
+    ArrangedListScreen(s.applicationList(ApplicationId.MEMORIES), onOpen = onOpen, state = LocalListStates.current.of("app:MEMORIES"))
 }
 
 /**

@@ -123,7 +123,7 @@ private fun PersonMemoryRow(row: PersonMemories.Row, onOpen: () -> Unit) {
             else Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) { Icon(kindIcon(row.ref.kind), null, tint = role(LocalPalette.current.accent)) }
         },
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
-        modifier = Modifier.clickableRow(onOpen),
+        modifier = Modifier.clickableRow(onClick = onOpen),
     )
 }
 

@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ApplicationId = Veyq.Bridge.Wire.ApplicationId;
+using Veyq.Core;
 
 namespace Veyq.Tests;
 

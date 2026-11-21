@@ -117,7 +117,7 @@ class GuestDoorsTest {
             v.open(f.file)
             val model = assertIs<GuestPage.File>(v.page.value).model
             val header = withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(10_000) { model.state.first { it.header != null }.header!! } }
-            assertEquals(replaces, header.own.any { it.id == FileModel.REPLACE }, "$role's file offers replace = ${!replaces}")
+            assertEquals(replaces, header.own.any { it == me.raddatz.veyq.mobile.navigation.HeaderAction.REPLACE }, "$role's file offers replace = ${!replaces}")
             assertTrue(header.facts.hasContent)
             model.close()
         }
@@ -306,6 +306,7 @@ class GuestDoorsTest {
         r.load()
         val readLevel = assertIs<GuestPage.Level>(r.page.value).model
         assertFalse(readLevel.writes, "a READ guest's level offers a write")
+        assertEquals(emptyList(), readLevel.creates, "a READ guest's New offers something")
         assertEquals(0, readLevel.upload(listOf(source("x.txt", "x"))))
 
         val f = fixture("READ_WRITE")
@@ -314,6 +315,7 @@ class GuestDoorsTest {
         v.load()
         val level = assertIs<GuestPage.Level>(v.page.value).model
         assertTrue(level.writes, "a READ_WRITE guest's level offers no write")
+        assertEquals(listOf(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES), level.creates, "a READ_WRITE guest's New: a folder, then files")
         // nothing is written before the guest named itself (the web's `requestGuest`): the write asks the name through the
         // core's one naming flow (ADR 0154 decision 1); declined, nothing is made or queued
         val access = assertNotNull(v.access)

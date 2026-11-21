@@ -72,13 +72,17 @@ internal fun <T> LazyListScope.tileRows(
 @Composable
 internal fun LevelTile(
     name: String, details: String?, cover: ImageBitmap?, icon: ImageVector, folder: Boolean, modifier: Modifier,
-    enabled: Boolean = true, selected: Boolean = false, onClick: () -> Unit,
+    enabled: Boolean = true, selected: Boolean = false,
+    /** A long press's menu (a level row's, [LevelRowMenu]); null: none. */
+    onMenu: (() -> Unit)? = null,
+    onClick: () -> Unit,
 ) {
     val palette = LocalPalette.current
+    val menuLabel = androidx.compose.ui.res.stringResource(me.raddatz.veyq.mobile.android.R.string.node_more)
     Column(
         modifier.clip(MaterialTheme.shapes.medium).alpha(if (enabled) 1f else 0.38f)
             .let { if (selected) it.background(role(palette.accentSoft)) else it }
-            .let { if (enabled) it.clickableRow(onClick) else it },
+            .let { if (enabled) it.clickableRow(menuLabel, onMenu, onClick) else it },
     ) {
         Box(
             Modifier.fillMaxWidth().aspectRatio(1f).clip(MaterialTheme.shapes.medium)

@@ -14,7 +14,6 @@ import me.raddatz.veyq.mobile.memories.GalleryModel
 import me.raddatz.veyq.mobile.memories.MediaDetails
 import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.NodeAt
-import me.raddatz.veyq.mobile.navigation.NodeHeader
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.session.NodeReport
 import me.raddatz.veyq.mobile.words.Msg
@@ -113,24 +112,24 @@ class MusicModelTest {
         assertEquals(listOf("v1", "p1"), p.gallery.current.rows!!.map { it.mediaId }, "a track is no row of the grid")
         assertEquals(listOf("Alfama", "Bossa", null), p.music.current.tracks!!.map { it.title })
         assertEquals(listOf("1:02", null, null), p.music.current.tracks!!.map { it.length })
-        assertTrue(GalleryModel.MUSIC in p.gallery.headerActions.map { it.id })
-        assertEquals(Msg.MUSIC_PLAY, p.gallery.label(GalleryModel.MUSIC))
+        assertTrue(me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC in p.gallery.headerActions)
+        assertEquals(Msg.MUSIC_PLAY, p.gallery.label(me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC))
         p.gallery.toggleMusic()
         runCurrent()
         assertNotNull(p.audio.playing(), "the header's play started the node's music")
         assertEquals("memories:s1:n1", p.player.current.nowPlaying?.key)
-        assertEquals(Msg.MUSIC_STOP, p.gallery.label(GalleryModel.MUSIC))
+        assertEquals(Msg.MUSIC_STOP, p.gallery.label(me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC))
         assertTrue(p.music.current.tracks!!.single { it.playing }.mediaId == p.player.current.nowPlaying?.trackId, "the one playing is marked")
         p.gallery.toggleMusic()
         runCurrent()
         assertNull(p.player.current.nowPlaying)
-        assertEquals(Msg.MUSIC_PLAY, p.gallery.label(GalleryModel.MUSIC))
+        assertEquals(Msg.MUSIC_PLAY, p.gallery.label(me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC))
     }
 
     @Test
     fun aNodeWithoutMusicOffersNoMusicActionAndATrackPressedPlaysFirst() = runTest {
         val none = page(listOf(photo("p1", 10)))
-        assertFalse(GalleryModel.MUSIC in none.gallery.headerActions.map { it.id })
+        assertFalse(me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC in none.gallery.headerActions)
         val p = page(lisbonMusic)
         p.music.play("u")
         runCurrent()
@@ -208,7 +207,7 @@ class MusicModelTest {
         assertEquals(MusicModel.Rights(add = false, rename = false, download = true, report = false), p.music.current.rights)
         assertEquals(listOf(Notice(Msg.OFFLINE_READ_ONLY)), p.music.add(listOf(AudioFiles.picked(ByteArray(4), "x.mp3"))))
         assertEquals(Notice(Msg.OFFLINE_READ_ONLY), p.music.rename("a", "x"))
-        assertTrue(GalleryModel.MUSIC in p.gallery.headerActions.map { it.id }, "a pinned node's music plays offline")
+        assertTrue(me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC in p.gallery.headerActions, "a pinned node's music plays offline")
         p.music.play("a")
         runCurrent()
         assertNotNull(p.audio.playing())
@@ -283,7 +282,6 @@ class MusicModelTest {
     @Test
     fun theHeaderJoinsTheKindsOrderAfterShare() {
         val order = me.raddatz.veyq.mobile.AppKinds.headerOrder("MEMORY")
-        assertEquals(order.indexOf("share") + 1, order.indexOf(GalleryModel.MUSIC))
-        assertEquals(NodeHeader.Action(GalleryModel.MUSIC), NodeHeader.Action("music"))
+        assertEquals(order.indexOf(me.raddatz.veyq.mobile.navigation.HeaderAction.SHARE) + 1, order.indexOf(me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC))
     }
 }

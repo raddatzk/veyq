@@ -39,7 +39,7 @@ class UserDefaultsStore(private val defaults: NSUserDefaults) : DeviceStore {
 class KeychainRead(val data: NSData?, val cancelled: Boolean, val locked: Boolean)
 
 /**
- * The Keychain as the Swift app reaches it (`apple/Veyq/KeychainStore.swift`): generic-password items on this device
+ * The Keychain as the Swift app reaches it (`apple/Veyq/Core/KeychainStore.swift`): generic-password items on this device
  * only. A [protected] item is readable only after the person authenticated (`.userPresence`: Face ID, Touch ID or the
  * device's passcode); reading one asks them and blocks the calling thread, never the main one. A [passcode] item asks
  * nothing but exists only while the device has a passcode (`WhenPasscodeSetThisDeviceOnly`): removing the passcode

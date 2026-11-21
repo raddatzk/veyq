@@ -52,14 +52,13 @@ private fun potHeader(node: NodeAt, model: AppModel): HeaderContribution? {
     )
 }
 
-/** Expenses' own list (its Pots), with "New pot" (uc.expenses.create-pot). */
+/**
+ * Expenses' own list (its Pots). An application's list offers no New of its own (core's `ShellModel.levelPlan`, ADR 0154
+ * decision 2): a Pot is made from the drawer's New or a level's.
+ */
 @Composable
 private fun ExpensesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) -> Unit = model::open) {
-    var creating by remember { mutableStateOf(false) }
-    CreateAction(stringResource(R.string.create_pot), shown = s.spaces.isNotEmpty() && me.raddatz.veyq.mobile.AppKinds.Create.POT in model.createsHere(isHome = false), onClick = { creating = true }, state = LocalListStates.current.of("app:EXPENSES")) { list, bottom ->
-        ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), onOpen = onOpen, state = list, bottom = bottom)
-    }
-    if (creating) PotCreateSheet(s, model) { creating = false }
+    ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), onOpen = onOpen, state = LocalListStates.current.of("app:EXPENSES"))
 }
 
 /**

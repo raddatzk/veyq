@@ -810,9 +810,27 @@ class DispatchTest {
                     })
                 },
                 trash = { _ -> me.raddatz.veyq.mobile.navigation.TrashSheet(played) {} },
-                createFolder = { name -> played.folders += name; if (name.isBlank()) me.raddatz.veyq.mobile.navigation.NameAnswer.problem(me.raddatz.veyq.mobile.words.Notice(Msg.FOLDER_NAME_EMPTY)) else me.raddatz.veyq.mobile.navigation.NameAnswer.DONE },
+                createFolder = { name, top -> played.folders += if (top) "top:$name" else name; if (name.isBlank()) me.raddatz.veyq.mobile.navigation.NameAnswer.problem(me.raddatz.veyq.mobile.words.Notice(Msg.FOLDER_NAME_EMPTY)) else me.raddatz.veyq.mobile.navigation.NameAnswer.DONE },
             )
         }
+    }
+
+    @Test
+    fun theSignInsEntriesAndARowsMenuAreTheCoresPlans() = runBlocking {
+        val b = bridgeWithHeader(Played())
+        // the sign-in's plan needs no tenant (ADR 0154 decision 2): Submit first, Cancel while adding, no scan without a camera
+        assertEquals(
+            Answer.SignInPlan(
+                listOf(
+                    me.raddatz.veyq.mobile.session.SignInEntry.SUBMIT, me.raddatz.veyq.mobile.session.SignInEntry.CANCEL,
+                    me.raddatz.veyq.mobile.session.SignInEntry.LINK_SHOW, me.raddatz.veyq.mobile.session.SignInEntry.KIT_OPEN,
+                    me.raddatz.veyq.mobile.session.SignInEntry.OPEN_LINK,
+                ),
+            ),
+            b.ask(Call.SignInPlan(adding = true, camera = false)),
+        )
+        // a row's menu is the shell's: none without a tenant open
+        assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.RowPlan(NodeAt("s", "f1", "FOLDER", "Trip"))))
     }
 
     @Test
@@ -825,11 +843,11 @@ class DispatchTest {
         val id = (b.ask(Call.HeaderOpen(folder, AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
         val w = b.watching(Watched.Header(id))
         // the plan with each action's words, once the report's offer was read
-        val shown = w.until { u -> (u as Update.Header).shown?.takeIf { it.plan != null && it.plan.last.any { a -> a.id == "report" } } }
+        val shown = w.until { u -> (u as Update.Header).shown?.takeIf { it.plan != null && it.plan.last.any { a -> a.id == me.raddatz.veyq.mobile.navigation.HeaderAction.REPORT } } }
         assertEquals(folder, shown.node)
         assertEquals(false, shown.pinned)
-        assertEquals(listOf("favorite" to Msg.NODE_FAVORITE, "share" to me.raddatz.veyq.mobile.session.ShareWords.of("FOLDER").title), shown.plan!!.buttons.map { it.id to it.word })
-        assertEquals("delete" to Msg.FOLDER_DELETE, shown.plan.last.last().let { it.id to it.word })
+        assertEquals(listOf(me.raddatz.veyq.mobile.navigation.HeaderAction.FAVORITE to Msg.NODE_FAVORITE, me.raddatz.veyq.mobile.navigation.HeaderAction.SHARE to me.raddatz.veyq.mobile.session.ShareWords.of("FOLDER").title), shown.plan!!.buttons.map { it.id to it.word })
+        assertEquals(me.raddatz.veyq.mobile.navigation.HeaderAction.DELETE to Msg.FOLDER_DELETE, shown.plan.last.last().let { it.id to it.word })
         assertEquals(Msg.FOLDER_DELETE_CONFIRM, shown.deleteQuestion.msg)
 
         // pin: turned, its word follows; a pin not stored turns back with its notice
@@ -868,7 +886,7 @@ class DispatchTest {
         assertNull((b.watching(Watched.Header(potId)).next() as Update.Header).shown!!.plan)
         assertEquals(Answer.Done, b.ask(Call.HeaderFacts(potId, AppKinds.Facts(canWrite = false))))
         val pot = b.watching(Watched.Header(potId)).until { u -> (u as Update.Header).shown?.plan }
-        assertTrue(pot.last.none { it.id == "copy" }, "a read-only Pot offered its copy")
+        assertTrue(pot.last.none { it.id == me.raddatz.veyq.mobile.navigation.HeaderAction.COPY }, "a read-only Pot offered its copy")
 
         // closed: refused, watched as none; and every header closes with its tenant
         assertEquals(Answer.Done, b.ask(Call.HeaderClose(potId)))
@@ -891,7 +909,9 @@ class DispatchTest {
         val empty = b.ask(Call.ShellCreateFolder(" ")) as Answer.Named
         assertEquals(Msg.FOLDER_NAME_EMPTY, empty.problem!!.msg)
         assertTrue(empty.keepsOpen, "a name problem closed the dialog")
-        assertEquals(listOf("Plans", " "), played.folders)
+        // the drawer's New makes it at the space's top
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ShellCreateFolder("Trips", top = true)))
+        assertEquals(listOf("Plans", " ", "top:Trips"), played.folders)
 
         val id = (b.ask(Call.TrashOpen("s")) as Answer.TrashOpened).trash
         val w = b.watching(Watched.Trash(id))
@@ -1423,7 +1443,7 @@ class DispatchTest {
         val id = (b.ask(Call.HeaderOpen(folder, AppKinds.Facts(), 2)) as Answer.HeaderOpened).header
         val w = b.watching(Watched.Header(id))
         val none = w.until { u -> (u as Update.Header).shown?.plan }
-        assertEquals(Msg.COVER_SET, (none.buttons + none.menu + none.last).first { it.id == "cover" }.word)
+        assertEquals(Msg.COVER_SET, (none.buttons + none.menu + none.last).first { it.id == me.raddatz.veyq.mobile.navigation.HeaderAction.COVER }.word)
         assertEquals(Answer.Refused(Answer.Why.NO_COVER), b.ask(Call.HeaderCoverPicture(id)))
 
         // set from the host's file, its bytes read by the core
@@ -1432,7 +1452,7 @@ class DispatchTest {
         assertEquals("set [1, 2, 3]", writes.single())
         val set = w.until { u -> (u as Update.Header).shown?.takeIf { it.cover != null } }
         assertEquals(left, set.cover)
-        assertEquals(Msg.COVER_CHANGE, set.plan!!.let { it.buttons + it.menu + it.last }.first { it.id == "cover" }.word)
+        assertEquals(Msg.COVER_CHANGE, set.plan!!.let { it.buttons + it.menu + it.last }.first { it.id == me.raddatz.veyq.mobile.navigation.HeaderAction.COVER }.word)
         val (pictureAnswer, bytes) = b.askWithPayload(Call.HeaderCoverPicture(id))
         assertIs<Answer.Bytes>(pictureAnswer)
         assertEquals(listOf<Byte>(1, 2, 3), bytes!!.toList())
@@ -2045,8 +2065,8 @@ class DispatchTest {
         val shownPage = b.watching(Watched.File(page)).until { u -> (u as Update.File).shown?.takeIf { it.headerFacts != null } }
         val header = (b.ask(Call.HeaderOpen(NodeAt("s", "n-b.bin", "FILE", "b.bin"), shownPage.headerFacts, 2)) as Answer.HeaderOpened).header
         assertEquals(Answer.Done, b.ask(Call.HeaderFacts(header, shownPage.headerFacts, page)))
-        val plan = b.watching(Watched.Header(header)).until { u -> (u as Update.Header).shown?.plan?.takeIf { p -> (p.buttons + p.menu + p.last).any { it.id == "replace" } } }
-        assertEquals(Msg.DEPOT_REPLACE, (plan.buttons + plan.menu + plan.last).first { it.id == "replace" }.word, "the page's own Replace, worded by it")
+        val plan = b.watching(Watched.Header(header)).until { u -> (u as Update.Header).shown?.plan?.takeIf { p -> (p.buttons + p.menu + p.last).any { it.id == me.raddatz.veyq.mobile.navigation.HeaderAction.REPLACE } } }
+        assertEquals(Msg.DEPOT_REPLACE, (plan.buttons + plan.menu + plan.last).first { it.id == me.raddatz.veyq.mobile.navigation.HeaderAction.REPLACE }.word, "the page's own Replace, worded by it")
         assertEquals(Answer.Refused(Answer.Why.NOT_CHOSEN), b.ask(Call.UploadReplace(page, a.path)), "a replace not chosen first")
         assertEquals(Answer.Done, b.ask(Call.FileChooseReplace(page)))
         level.blobs["n-b.bin"] = "peer" // someone else replaced it while the dialog was open

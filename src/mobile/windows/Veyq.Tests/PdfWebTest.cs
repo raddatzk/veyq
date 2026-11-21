@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.Web.WebView2.Core;
+using Veyq.Core;
 
 namespace Veyq.Tests;
 

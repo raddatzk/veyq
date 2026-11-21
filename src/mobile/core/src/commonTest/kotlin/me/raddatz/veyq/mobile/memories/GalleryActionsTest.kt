@@ -14,7 +14,6 @@ import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.crypto.V1
 import me.raddatz.veyq.mobile.memories.MemoryRights.Access
 import me.raddatz.veyq.mobile.navigation.NodeAt
-import me.raddatz.veyq.mobile.navigation.NodeHeader
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.LivePoll
@@ -127,7 +126,11 @@ class GalleryActionsTest {
     @Test
     fun theRightsDecideWhatThePageOffersOneViewForAMemberAndAGuest() = runTest {
         val member = open(Door(three()))
-        assertEquals(listOf(NodeHeader.Action(GalleryModel.UPLOAD)), member.headerActions, "a member adds photos from the header")
+        assertEquals(
+            listOf(me.raddatz.veyq.mobile.navigation.HeaderAction.UPLOAD, me.raddatz.veyq.mobile.navigation.HeaderAction.BANNER), member.headerActions,
+            "a member adds photos and sets the banner from the header",
+        )
+        assertEquals(Msg.MEMORY_BANNER_ADD, member.label(me.raddatz.veyq.mobile.navigation.HeaderAction.BANNER))
         assertEquals(listOf(MemoryCreate.CHAPTER), member.creates)
         assertEquals(1, member.upload(listOf(source())))
         val reader = open(Door(three()), access = Access.Guest(ShareLinks.READ))
@@ -142,7 +145,7 @@ class GalleryActionsTest {
         val box = drop.lightbox(1)
         assertNull(box.play(), "an uploader opens no original")
         assertNull(box.save { true }, "nor saves one")
-        assertEquals(listOf(NodeHeader.Action(GalleryModel.UPLOAD)), drop.headerActions)
+        assertEquals(listOf(me.raddatz.veyq.mobile.navigation.HeaderAction.UPLOAD), drop.headerActions, "an uploader sets no banner")
         assertEquals(emptyList(), open(Door(three()), at = chapter).creates, "no chapter in a chapter")
     }
 
@@ -374,8 +377,8 @@ class GalleryActionsTest {
         assertContentEquals("cover-c1".encodeToByteArray(), g.chapterCover("c1"))
         assertNull(g.chapterCover("elsewhere"), "a node that is no chapter of this Memory")
         assertEquals(listOf("c1"), covers.covers)
-        assertEquals(Msg.MEMORY_ADD, g.label(GalleryModel.UPLOAD))
-        assertNull(g.label("share"))
+        assertEquals(Msg.MEMORY_ADD, g.label(me.raddatz.veyq.mobile.navigation.HeaderAction.UPLOAD))
+        assertNull(g.label(me.raddatz.veyq.mobile.navigation.HeaderAction.SHARE))
         assertEquals(null, MediaUploads.notTaken(0))
         assertEquals(Notice(Msg.MEMORY_NOT_MEDIA, 2), MediaUploads.notTaken(2))
     }

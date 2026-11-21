@@ -41,6 +41,15 @@ folder; a gallery is the web's justified grid on every app, its uploaders read o
 web's and a medium's Undo the node trash's 6 s; nothing decrypted is written to show or play a file ([ADR 0047](../decisions/0047-inline-video-playback-range-streaming.md)'s
 Consequences).
 
+Inside each platform the drawing splits once more, as the web's does (owner 2026-11-20, [ADR 0154](../decisions/0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md)
+decision 3, built 2026-11-20 on all four): a **core UI** — the shell and drawer, the page frame and node header, the
+level, the shared sheets, the notices, New, the uploads and drops, the tray — and one directory per **application**
+(Memories, Depot, Expenses), each registering its kinds' page bodies, its link pages, its New dialogs, its list and its
+part of a person's profile into the platform's one registry through one composition root. The core UI reaches an
+application only through that registry, an application never reaches another, and the Kotlin core keeps the same
+direction but for `AppKinds` and a shrinking list of roots (inbox #1048); `scripts/validate_mobile_ui_direction.py`
+holds all four platforms and the core. The paths per platform are [src/mobile/CLAUDE.md](../../src/mobile/CLAUDE.md)'s.
+
 ## Platforms
 
 | Platform | Builds | UI | Large-screen layout | Seen running |
@@ -655,7 +664,7 @@ its macOS click pass and a drop from Files or Explorer ([ADR 0152](../decisions/
 Consequences, inbox #985); multi-select and dragging a node onto a folder to move
 it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built). A password-protected PDF's text
 selected and copied on Windows (drawn by `Windows.Data.Pdf`, which has no text API). Built 2026-11-18 (inbox #955): on
-Linux an overlay of its own over poppler's rendered pages (`src/mobile/linux/src/pdf_text.rs`; GTK has no view that
+Linux an overlay of its own over poppler's rendered pages (`src/mobile/linux/src/apps/depot/pdf_text.rs`; GTK has no view that
 selects a PDF's text) — poppler's `selected_region` for the highlight and `selected_text` for the copy, a drag across
 pages, a double click a word and a triple a line, Ctrl+A every page shown, Ctrl+C and the context menu's *Copy*; nothing
 of the text logged (a count of characters) or written. Passed in Broadway against the dev instance the same day: a

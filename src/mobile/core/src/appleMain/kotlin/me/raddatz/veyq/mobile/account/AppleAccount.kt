@@ -15,7 +15,7 @@ import platform.Foundation.create
 import platform.posix.memcpy
 
 /**
- * The account's flows as the Apple app reaches them (ADR 0148 decision 10, `apple/Veyq/AccountFlows.swift`): what Swift
+ * The account's flows as the Apple app reaches them (ADR 0148 decision 10, `apple/Veyq/Core/AccountFlows.swift`): what Swift
  * cannot write itself — Kotlin's default arguments, a picture's or a
  * kit's bytes in one copy across the language boundary instead of byte by byte.
  */

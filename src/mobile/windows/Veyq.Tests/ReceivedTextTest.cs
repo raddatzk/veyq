@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Veyq.Bridge.Wire;
+using Veyq.Core;
 
 namespace Veyq.Tests;
 
@@ -67,14 +68,5 @@ public sealed class ReceivedTextTest
         var page = new ReceivedPage { kind = ReceivedPageKind.DropBox, name = "Inbox", nodeKind = "DEPOT_DROPBOX", rows = [], file = null, gallery = null, pot = null, sent = [], writes = false };
         var ready = Shown(ReceivedGate.Ready) with { page = page };
         Assert.AreNotEqual(ReceivedText.DrawnKey(ready), ReceivedText.DrawnKey(ready with { page = page with { sent = ["a.pdf"] } }), "a file sent shows");
-    }
-
-    [TestMethod]
-    public void AKeptLinksPageOffersItsActionsOnceItsMetaRead()
-    {
-        Assert.IsTrue(ReceivedText.BookmarkActions(BookmarkState.InPlace));
-        Assert.IsTrue(ReceivedText.BookmarkActions(BookmarkState.OnItsOwn));
-        Assert.IsFalse(ReceivedText.BookmarkActions(BookmarkState.Loading));
-        Assert.IsFalse(ReceivedText.BookmarkActions(BookmarkState.Unreadable));
     }
 }

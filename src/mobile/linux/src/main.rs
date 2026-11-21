@@ -8,16 +8,18 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 use veyq::bridge::wire::{Answer, Call, Config, DeepScreen, Gate, Method, Update, Watched};
 use veyq::bridge::{self, DeviceStore, Start};
-use veyq::shell::Shell;
-use veyq::manage::Manage;
-use veyq::received::{Mode, ReceivedView};
-use veyq::sign_in::{Offer, SignIn, Unlock};
-use veyq::theme::APP_ID;
-use veyq::{dev_login, dev_scan, dev_settings, words};
+use veyq::core_ui::shell::Shell;
+use veyq::core_ui::manage::Manage;
+use veyq::core_ui::received::{Mode, ReceivedView};
+use veyq::core_ui::sign_in::{Offer, SignIn, Unlock};
+use veyq::core_ui::theme::APP_ID;
+use veyq::core_ui::{dev_login, dev_scan, dev_settings, words};
 
 fn main() -> glib::ExitCode {
     words::init();
-    veyq::theme::register();
+    // every application registered into the core UI's registry before any screen reads it
+    veyq::applications::register();
+    veyq::core_ui::theme::register();
     // HANDLES_OPEN: a `veyq:` link (the desktop entry's `x-scheme-handler/veyq`, `Exec=veyq %u`) arrives at [open] — in
     // the running instance, where GApplication hands a second launch's URI over D-Bus and that launch exits
     let app = adw::Application::builder().application_id(APP_ID).flags(gio::ApplicationFlags::HANDLES_OPEN).build();
@@ -123,7 +125,7 @@ impl Screens {
 }
 
 fn activate(app: &adw::Application) {
-    veyq::theme::use_app_icon();
+    veyq::core_ui::theme::use_app_icon();
     let status_page = adw::StatusPage::builder().icon_name(APP_ID).title(words::app_name()).description(words::starting()).build();
     let status = adw::ToolbarView::new();
     status.add_top_bar(&adw::HeaderBar::new());
@@ -138,7 +140,7 @@ fn activate(app: &adw::Application) {
         .content(&status)
         .build();
     // closing the window while files upload asks first (ADR 0145 decision 2)
-    veyq::uploads::ask_before_close(&window);
+    veyq::core_ui::uploads::ask_before_close(&window);
     let shell = Shell::new(&window);
     let manage = Manage::new(&window);
     // the switcher's "Manage servers"
@@ -151,7 +153,7 @@ fn activate(app: &adw::Application) {
     let w = window.clone();
     open_settings.connect_activate(move |_, connection| {
         if let Some(connection) = connection.and_then(|c| c.get::<String>()) {
-            veyq::account_settings::open(&w, connection, None);
+            veyq::core_ui::account_settings::open(&w, connection, None);
         }
     });
     window.add_action(&open_settings);
@@ -173,10 +175,10 @@ fn activate(app: &adw::Application) {
     // whatever shows until it is let go
     let open_link = gtk::gio::SimpleAction::new("open-link", None);
     let w = window.clone();
-    open_link.connect_activate(move |_, _| veyq::received::open_link(&w));
+    open_link.connect_activate(move |_, _| veyq::core_ui::received::open_link(&w));
     window.add_action(&open_link);
     let s = Rc::downgrade(&screens);
-    veyq::received::set_presenter(move |received, browser| {
+    veyq::core_ui::received::set_presenter(move |received, browser| {
         if let Some(s) = s.upgrade() {
             s.present_received(received, browser);
         }
@@ -230,7 +232,7 @@ fn activate(app: &adw::Application) {
     // a debug build's Settings harness: the page over a state of its own, no session (`uc.account.sessions`)
     if dev_settings::requested() {
         eprintln!("veyq: the settings harness (debug build)");
-        veyq::account_settings::show(&screens.window, &dev_settings::fake());
+        veyq::core_ui::account_settings::show(&screens.window, &dev_settings::fake());
         return;
     }
     let (Some((session_watch, gates)), Some((shell_watch, shells)), Some((manage_watch, managed))) =
@@ -312,11 +314,11 @@ fn open(app: &adw::Application, files: &[gio::File], _hint: &str) {
         let shown = window
             .downcast_ref::<adw::ApplicationWindow>()
             .and_then(|w| w.visible_dialog())
-            .is_some_and(|d| d.widget_name() == veyq::received::OPEN_LINK_DIALOG);
+            .is_some_and(|d| d.widget_name() == veyq::core_ui::received::OPEN_LINK_DIALOG);
         // the screen alone, for a pass's log: nothing of the link
         eprintln!("veyq: a veyq: link opened {}", if link { "Open a link" } else { "the app where it is" });
         if link && !shown {
-            veyq::received::open_link(&window);
+            veyq::core_ui::received::open_link(&window);
         }
     });
 }

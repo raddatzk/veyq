@@ -1,7 +1,7 @@
 # ADR 0154 — Every app draws the core's gates, plans, notices and formats through a core UI its applications plug into, as the web's do
 - Status: Accepted (owner 2026-11-20: the CRs' owner questions answered as recommended)
-- Built: decision 1 on every app and decision 6's words (2026-11-20, § Consequences); decisions 2–5 and the rest of 6
-  not yet — the CRs `cr-apps-core-ui-layer`, `cr-apps-structure-from-core-plans` and
+- Built: decisions 1 and 3 on every app and decision 6's words and direction guard (2026-11-20, § Consequences);
+  decisions 2, 4, 5 and the rest of 6 not yet — the CRs `cr-apps-structure-from-core-plans` and
   `cr-apps-notices-and-formats-from-the-core` build them
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
@@ -144,6 +144,72 @@ held for the screens' models but not around them:
   (`plutil -p`). **Open:** a German device's camera and photo prompts — the Mac's and the iPhone's (Apple's usage
   descriptions as shown), Android's and the desktops' (their prompts are the system's, no manifest word) — never opened;
   the Mac's needs full-screen control, which a background agent has not.
+
+- **As built, decision 3** (2026-11-20). Each platform is a core UI, one directory per application and one
+  composition root, the web's `src/web/src/core`, `features/<owner>` and `applications.ts`; files were moved with `git
+  mv`, and what two applications or the core use left an application's file for the core UI (the music bar, the
+  formats, the PDF view, a save's banner, a picture's edge, the bar's places, the rows' date). The layout:
+
+  | Platform | Core UI | An application | Composition root | Left at the root (the system names it by class) |
+  |---|---|---|---|---|
+  | Android | package `…android.core` (`core/`) | `…android.apps.<id>` (`apps/<id>/`) | `Applications.kt` | `MainActivity`, `MusicService`, the WorkManager workers (a queued job names its class), the debug/release `Dev*` doors |
+  | Apple | group `Veyq/Core/` | `Veyq/Apps/<Id>/` | `Applications.swift` (the app's `init` and the share extension's `viewDidLoad`) | what `project.yml` names by path per target (`VeyqApp`, `ContinuedWork`, `BackgroundSync`, `DevLogin`, `DevAudio`) |
+  | Linux | module `core_ui` (`src/core_ui/`; `bridge/` is core too) | `apps::<id>` (`src/apps/<id>/`, its `mod.rs` holds `register`) | `src/applications.rs` (first in `main`) | `lib.rs`, `main.rs` |
+  | Windows | `Veyq.Core` (`Core/`) | `Veyq.Apps.<Id>` (`Apps/<Id>/`) | `Applications.cs` (first in `App.OnLaunched`) | `App`, `MainWindow`, `Program`, `Words` |
+
+  The registry (`Registry.kt`/`.swift`/`registry.rs`/`Registry.cs` in the core UI) is the web's `registry.ts`: per kind
+  a `KindPage` — the body drawn inside the core UI's frame, and `guest`, the page a received link shows of that kind —
+  and per application an `ApplicationUi(id, list, creates, personSection)` — its drawer list around the core's (Memories'
+  places and Map tab), New's dialogs keyed by `AppKinds.Create`, its section of a person's profile under the core's
+  frame. Each application has one `register(registry)`; the root registers the core's own kinds (folder, bookmark),
+  then every application, then `seal()`s; a second registration and a lookup before the seal fail. The shell's object
+  page, its lists, New, a received link's pages (Level and NotShown stay the core's; Windows' second dispatch in
+  `ReceivedView` is gone) and the person screen ask the registry; no `when`/`switch` over a kind of an application is
+  left in a dispatch. The desktops' registries carry what their frames ask of a page beside the body (Linux's window
+  actions and `facts_later`, Windows' `KindBody`: the hero slot, tabs, the header's commands, `FactsWhenRead`).
+  **Left in the core UI on purpose, named:** the header's hero is still placed by each desktop page inside its own
+  scroll (a slot the frame fills: lifting it out of the scroll changes what is drawn, the structure CR's); the link
+  bar's file and music actions on the phones (header actions over core-Kotlin models); kind literals for glyphs, the
+  rows' dates and `TREE_PAGES`; Android's and Apple's `AppModel` methods per application and Apple's holders it stores
+  for Memories (`Core/AppModelHeld.swift`: a stored property cannot live in an application's extension); Windows'
+  WRITE_ONLY upload page and the bookmark page (core kinds); Linux's `home::ask_dates` (a bridge call).
+  **The guard**, `scripts/validate_mobile_ui_direction.py` (its docstring the rules and limits): (a) no core UI file
+  names an application but the composition root; (b) no application names another's; (c) in the Kotlin core no
+  application package names another's package or generated client (`blob/FileSave` moved out of `depot/` for it), and no
+  file outside the application packages names one but `AppKinds.kt` and the `CORE_ROOTS` it lists with their reasons;
+  each file's package or namespace is its directory's; an application without a file, a directory that is no
+  application, and a root that misses an application are red. The applications are derived from `ApplicationId`. Read
+  per language: Kotlin and C# by import, qualified name and namespace (C#'s `global using` and a csproj `<Using>` too);
+  Rust by paths resolved against the file's module; Swift — one module, no imports — by an index of each `Apps/<Id>/`'s
+  non-private top-level names and its extensions' members. **Blind spots** (the docstring's): a type alias or an `Any`
+  handed over and cast, a kind spelled as a literal (no kind rule yet, as the web's guard has), a star import of a parent
+  package, reflection, a Rust `#[path]`, `pub use` or macro, Swift's protocol requirements; the bridge module and the
+  tests are not read (a host and consumers of both sides). **What remains:** the 17 `CORE_ROOTS` beside `AppKinds.kt` —
+  the shell's model holding each application's screen models, the drop and *Add here*, the top level's *Add files
+  only*, the rows' details, the notices, the link form, the guest pages' per-kind models, the tray, the kept reads, the
+  folder walk and the four Swift adapters in `appleMain` — each a hook behind `AppKinds` that needs a design of its own
+  (inbox #1048); the list only shrinks (a root that names no application any more is red).
+- **The passes (decision 3).** Behaviour-preserving, so each platform's pass checked that every kind still reaches its
+  page through the registry with its header and body. Throwaways, erased after. Android (an API 36 emulator): New pot
+  and New Memory (registered creates), a Memory's, a Pot's and a folder's page, the drawer's Expenses and Memories lists
+  and the Map tab; a photo uploaded into a Memory; a Depot file's page from Home (header Favorite, Download, More with
+  share, replace, rename, send a copy, offline, move, copy, report, delete; the picture and its facts); a person's
+  profile (the core's frame with the safety number, Memories' section with List | Tiles | Map); a link to the Memory,
+  the Pot and the file each opened signed out as its guest (the gallery with the photo; Entries and Overview; the
+  picture with Download and Report). Linux (Broadway; the signed-in pass its phase could not run): a Memory with a
+  photo and its lightbox, a Pot with an entry, a folder and a file's page, each header's plan in the log; a link to
+  each opened signed out (`received: Ready`, `page Gallery`/`Pot`/`Level`, the file from the folder's level). Windows
+  (the VM): New → Folder, Memory, Pot through the registered creates, a Memory with a photo and a cover (the hero in its
+  slot), a Pot, a Depot file's page (the text, its facts and uploader); a link to each opened signed out (`page
+  Gallery`/`Pot`/`File`). Nowhere a kind fell to *not shown* or a dispatch panicked. A link opened while signed in was
+  not tried: *Open a link* stands only on the sign-in and unlock screens (ADR 0150 decision 4), and the desktops' signed-in
+  way, `veyq://link`, needs an installed package. **Not run:** the before/after screenshots the CR planned (the pages
+  before the move were never shot; the comparison stands on each pass reading the same structure the phases' smokes
+  read before the move); a drop box's page on every app. **Apple:** both builds green (unchanged since), nothing
+  clicked — the coordinator's Mac pass: a Memory's, a Pot's, a Depot file's and a drop box's page; the drawer's
+  Expenses and Memories lists and the Map tab; Home's New pot and New Memory; a received link's guest pages (Memory,
+  Pot, file); a person's profile with Memories' section; the lightbox window and its menu command; the share
+  extension (the iPhone's, the owner's).
 
 ## Alternatives considered
 

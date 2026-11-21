@@ -44,9 +44,9 @@ A Gradle build of its own, run through its own wrapper.
   ([ADR 0143](../../docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)): the map services in core's `map/` (the consent per device, the tile
   fetch, its memory cache and its sealed shelf in the offline store's automatic tier (`TileShelf`, inbox #939), the geocoder, the viewport, clustering), a Memory's date and place in `memories/place/`
   and its GPX tracks in `memories/tracks/`. Apple draws them with MapKit (decision 1): `MapViews.swift` (the gate that
-  mounts a `Map` only while `MapServices.state` is `Shown`, the consent's offer naming Apple Maps, the facts line and the
-  two editors, the bar's Map tab, a photo's map, Settings' Map services) and `MemoryMapView.swift` (the Map view's
-  tracks), over `AppModel`'s map services; `AppleMemories.saveTrack` and `watchPlace` adapt what Swift cannot call. Android draws
+  mounts a `Map` only while `MapServices.state` is `Shown`, the consent's offer naming Apple Maps, Settings' Map
+  services), `MemoryPlaces.swift` (the facts line and the two editors, the bar's Map tab, a photo's map) and
+  `MemoryMapView.swift` (the Map view's tracks), over `AppModel`'s map services; `AppleMemories.saveTrack` and `watchPlace` adapt what Swift cannot call. Android draws
   the core's raster map in Compose (decision 1, no map library): `MapView.kt` (`RasterMap` — the tiles the core's tile view
   hands, drawn from the floor level scaled, a pan, a pinch and a double tap reported back as a `Viewport`; `MapPlace`, the
   consent's offer or the reason no map stands; the attribution and *Turn map services off* along every map's edge),
@@ -158,6 +158,11 @@ A Gradle build of its own, run through its own wrapper.
   relaunches the installed debug app in a booted simulator, signed in as the seeded dev principal. `VeyqShare/` is the
   iOS share extension (ADR 0138), embedded in the app: it compiles every file of `Veyq/` but `VeyqApp.swift` (the
   entry point) and `DevLogin.swift`, under its own `ShareViewController`.
+  `generate_plans.py` (a pre-build step of both targets) writes `build/generated/<target>/Plans.swift`: each core `@Plan`
+  enum's exhaustive Swift mirror (`HeaderAction.Entry`, read as `action.entry`), its entries and order from the core's
+  sources and their Swift names from the framework's `VeyqCore.h`, checked equal or the build stops. A Swift `switch`
+  over the Kotlin class needs a `default:` the structure guard refuses; over `.entry` it takes none, and an entry the
+  core adds fails every drawing that forgot it (ADR 0154 decision 2, inbox #1050).
 - `bridge/` — the core as one shared library, `libveyq.so` on Linux and `veyq.dll` on Windows (ADR 0136 decision 5;
   what was built and measured is ADR 0123's Consequences, the bridge). `bridge.h` is its whole C surface, six functions written
   by hand and held to Kotlin/Native's own header by `BridgeHeaderTest`. `commonMain` holds the wire (`Wire.kt`: the
@@ -310,7 +315,9 @@ A Gradle build of its own, run through its own wrapper.
   place of WinUI's generated one: with package identity one instance, a second activation handed to the running one by
   `AppInstance`), `App.xaml.cs`, `DeepLinks` (a `veyq:` link the MSIX's `windows.protocol` hands in, through
   `Call.DeepLink`: *Open a link* or the window in front, ADR 0150 § O), `MainWindow`, one class per screen (`SignInView`, `ShellView` with Search, `HomeView`, `PotPage` with its download;
-  a node's header `NodeHeader` with `HeaderPlan`, and its sheets `TrashDialog`, `MoveDialog`, `ShareDialog` with
+  a node's header `NodeHeader` with `HeaderPlan` (every entry of the core's plan, a `switch` expression over
+  `HeaderAction` without a discard — `CS8509` an error, `CS8524` off, `Directory.Build.props`), a level row's menu
+  `RowMenu` (`Row.Plan`, run through a header of the row's node), and its sheets `TrashDialog`, `MoveDialog`, `ShareDialog` with
   `ShareDays`, `ReportDialog`, `CoverDialog`, every `ContentDialog` shown through `Dialogs.Show`),
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
   each picture through `BitmapImage` by `PictureDecode`, a WebP WIC refuses by the core; sets it on every `PersonPicture` of that id), `Act` (sends a
@@ -358,6 +365,21 @@ A Gradle build of its own, run through its own wrapper.
   nuget.org the only source (`nuget.config`), the SDK in `global.json`. A project must set no property that implies an
   SDK-versioned package (trimming, AOT, `IsAotCompatible`). `run.py` is its one entry point (§ Prove your work).
 
+- **Each app's layout: a core UI and one directory per application** ([ADR 0154](../../docs/decisions/0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md)
+  decision 3, the web's `core/` and `features/<owner>`; its Consequences hold the table). Every platform splits the same
+  way: the core UI — the shell and drawer, the frame and node header, the level with its rows and tiles, the sheets
+  every kind shares, the notice host, New, the upload, drop and import flow, the tray — in Android's `…android.core`
+  (`core/`), Apple's `Veyq/Core/`, Linux's `src/core_ui/` and Windows' `Core/` (`Veyq.Core`); each application in
+  `apps/<id>/` (`…android.apps.<id>`, `Veyq/Apps/<Id>/`, `src/apps/<id>/`, `Apps/<Id>/` with `Veyq.Apps.<Id>`), the ids
+  `ApplicationId`'s; at the root only the composition root (`Applications.kt`, `.swift`, `applications.rs`, `.cs`) and
+  what the system names by class or path (an activity, a service, a worker, the Apple targets' entry files, `App`,
+  `MainWindow`, `Program`, `lib.rs`, `main.rs`). An application exposes one `register(registry)` — per kind a
+  `KindPage` (the body the frame draws, the `guest` page of a received link) and one `ApplicationUi(id, list, creates,
+  personSection)` —; the root registers the core's kinds (folder, bookmark), each application, then `seal()`s, before
+  anything is drawn. A new kind's page goes into its application's `register`, never a `when`/`switch` in the shell; a
+  file two applications or the core use is core UI and names no application. `scripts/validate_mobile_ui_direction.py`
+  holds it: no core UI file names an application but the root, no application another's, and in the Kotlin core no
+  application package another's and no core file one but `AppKinds.kt` and the shrinking `CORE_ROOTS` (inbox #1048).
 - `words/` — every word the apps show (ADR 0136 decision 3): `words.json` (English and German, `{n}` / `{n:int}`
   placeholders, plurals by CLDR category) is the one source; `generate_words.py` writes the core's `Msg` keys
   (`:core:generateWords`), Android's resources and `Context.words` (`:android:generateWords`; the app has no
@@ -1035,10 +1057,10 @@ answers: Tiles first and the Contributions as the web's, two square columns on a
 `.createMenu(…)` (Apple, `CreateAction.swift`), never a
 floating button built by hand; `scripts/validate_mobile_platform_guidelines.py` holds that. Row actions: an overflow menu on Android, swipe actions and a context
 menu on iOS. On Linux the GNOME HIG's way, as libadwaita draws it: the creating action is `create_action(…)` /
-`create_menu(…)` (`linux/src/create_action.rs`) in a header bar or the sidebar, `list-add-symbolic`, never a button
+`create_menu(…)` (`linux/src/core_ui/create_action.rs`) in a header bar or the sidebar, `list-add-symbolic`, never a button
 overlaid on a view (GNOME has no floating action button); the same guard holds it. On Windows Fluent's way, as
 Windows' own Settings and Explorer draw it: the creating action is New, the first command of the content's
-`CommandBar`, built only in `windows/Veyq/CreateAction.cs`, never a button laid over a view; the same guard holds it.
+`CommandBar`, built only in `windows/Veyq/Core/CreateAction.cs`, never a button laid over a view; the same guard holds it.
 A tile WinUI places on a `Canvas` at the core's frame sits in a `Border` placed there, never a `Button` placed by
 `Canvas.SetLeft`/`SetTop`: the guard reads the latter as a floating button (Memories' grid, 2026-11-15). The guard knows
 no grid cell placed by its frame; an exception for one would be the cleaner answer (inbox #927).
@@ -1061,14 +1083,26 @@ plans it (`NodeHeaderTest`), each app's `NodeHeaderActions` draws it and owns ev
 registers its page — `KindPages` (Android) / `KindPage` (Apple): it brings a share sheet, takes a cover, contributes a
 subtitle, its rights narrowing, its copy and download doors and own actions, and draws its body. The header's state and
 actions are core's `NodeHeaderModel` and its sheets core's `TrashSheet`, `MoveSheet`, `ShareSheet` and `ReportSheet`
-(ADR 0136's Consequences): an app draws them and decides nothing. Linux (`header.rs`) and Windows (`NodeHeader.cs`)
-draw the same plan, but only the ids in `header::DRAWN` / `HeaderPlan.Drawn`: an action whose screen a desktop lacks
-is left out, never drawn as a control that answers "not yet"; a slice that draws it adds its id. A new kind registers
+(ADR 0136's Consequences): an app draws them and decides nothing. Linux (`header.rs`) draws every entry of the plan,
+each `HeaderAction` one arm (`header::doer`: the header's own call or the page's window action); Windows (`NodeHeader.cs`)
+draws every entry of it too (ADR 0154 decision 2, `scripts/validate_mobile_structure.py`), a page's own ones done by that
+page (`PageHooks`). A new kind registers
 there and its header order in `AppKinds.headerOrder`; it never builds header actions of its own. Its body places core's head
 first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `NodeHeroRow()` (Apple) —, never a cover of its own.
 
 ## Traps
 
+- The core UI's own name clashes with the language on two platforms. In Rust a crate module named `core` makes every
+  `core::…` path ambiguous with the language's `core` crate, so Linux's is `core_ui`. In C# the namespace `Veyq.Core`
+  makes `Core` inside any `Veyq.*` name resolve to that namespace before the bridge's `Core` class: a file under
+  `Veyq.*` that means the bridge writes its `using`s below its `namespace` line (a namespace-level `using Veyq.Bridge;`
+  is read first), and the root files, outside `Veyq.Core`, say `Bridge.Core.`.
+- Two passes from one working tree never run Gradle at once: `linux/run.py run` and `windows/run.py run` both build the
+  core in `src/mobile/build/`, and side by side one deleted what the other was compiling (`:core:buildLibsodium`
+  "Unable to delete directory", `:core:buildLibwebp` hashing a missing `CMakeLists.txt`; 2026-11-20). Run them one after
+  the other, or each from a worktree of its own. In a fresh worktree `:android:assembleDebug` needs `ANDROID_HOME`
+  (there is no `local.properties`), and a Linux pass as a throwaway gives `VEYQ_LIVE` the throwaway's own tenant
+  (`http://tw-<stamp>.localhost:8080`): the backend picks the tenant from the Host.
 - The Apple primitives are libsodium 1.0.22 through cinterop (`core/sodium/`): `build_libsodium.py` builds the three
   arm64 slices from the release tarball, refused unless it matches the pinned SHA-256. GitHub's release CDN answers a
   504 now and then; the script retries, and a tarball already in `build/libsodium/` is used as it is.
@@ -1540,7 +1574,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
   `PotCreate.Name`, `Share.Label`, `Share.Password` — a link's label once lost its last character to a Save sent 0.8 s after it,
   Linux 2026-11-12). No test sees the order of two trivial calls: `Dispatchers.Default` kept them in order in practice,
   so a `PotCreate.Name` launched instead of applied stayed green (2026-11-12); the order rests on `Bridge.call`'s path.
-- A text field is set from the state by D5's rule (`linux/src/typed.rs`, `windows/Veyq/TypedText.cs`, the same cases):
+- A text field is set from the state by D5's rule (`linux/src/core_ui/typed.rs`, `windows/Veyq/Core/TypedText.cs`, the same cases):
   states lag the typing by a keystroke or two, so a focused field passes over a state that echoes a text it sent and
   takes any other (a stale save's version, a rate filled). "Differs from what it sent last" alone rewrote the field to an
   older text.
