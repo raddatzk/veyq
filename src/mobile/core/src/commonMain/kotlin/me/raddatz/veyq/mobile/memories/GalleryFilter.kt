@@ -26,6 +26,11 @@ object GalleryFilter {
         companion object {
             /** ISO days in UTC, labelled by the day itself: a test's, and a platform's until it hands its own. */
             val UTC = Calendar({ me.raddatz.veyq.mobile.export.NodeExport.isoMs(it).substring(0, 10) }) { at, _ -> me.raddatz.veyq.mobile.export.NodeExport.isoMs(at).substring(0, 10) }
+
+            /** The device's calendar ([LocalDays]), each chip as the web labels it in [language] (`Shown.dayLabel`). */
+            fun local(language: String) = Calendar({ me.raddatz.veyq.mobile.session.LocalDays.isoOf(it) }) { at, withYear ->
+                me.raddatz.veyq.mobile.words.Shown.dayLabelOf(at, withYear, language)
+            }
         }
     }
 

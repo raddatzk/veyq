@@ -38,7 +38,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
@@ -64,7 +63,6 @@ import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.android.R
@@ -184,17 +182,19 @@ private fun nodeActions(
             // what it says is core's: downloaded or failed, then what it left out
             val said = listOfNotNull(
                 me.raddatz.veyq.mobile.words.Notices.downloaded(node.name, left), me.raddatz.veyq.mobile.words.Notices.downloadLeftOut(left),
-            ).joinToString(" ") { context.text(it) }
-            snackbar.showSnackbar(said, duration = if (left.isNullOrEmpty()) SnackbarDuration.Short else SnackbarDuration.Long)
+            )
+            // a download said briefly; one that failed or left something out stays until closed
+            val kind = if (said.all { it.kind == me.raddatz.veyq.mobile.words.NoticeKind.SAID }) me.raddatz.veyq.mobile.words.NoticeKind.SAID else me.raddatz.veyq.mobile.words.NoticeKind.HELD
+            snackbar.show(said.joinToString(" ") { context.text(it) }, kind)
         }
     }
     val run: (Plan) -> Unit = { id ->
         when (id) {
             // the heart turns at once and back when the write did not land (core's)
-            Plan.FAVORITE -> { scope.launch { header.toggleFavorite()?.let { snackbar.showSnackbar(context.text(it)) } } }
+            Plan.FAVORITE -> { scope.launch { header.toggleFavorite()?.let { snackbar.show(context, it) } } }
             Plan.DOWNLOAD -> saveTo.launch(contribution.downloadName ?: me.raddatz.veyq.mobile.export.NodeExport.fileName(node.name))
             // on: off at once; off: core reads the size it keeps and asks first (`State.offline.asking`, the dialog below)
-            Plan.OFFLINE -> { scope.launch { header.toggleOffline()?.let { snackbar.showSnackbar(context.text(it)) } } }
+            Plan.OFFLINE -> { scope.launch { header.toggleOffline()?.let { snackbar.show(context, it) } } }
             // core's dialogs, drawn below
             Plan.SHARE, Plan.RENAME, Plan.MOVE, Plan.COPY, Plan.COVER, Plan.REPORT, Plan.DELETE -> dialog = id
             // the page's own: what it handed with the entry (`HeaderContribution.actions`)
@@ -220,7 +220,7 @@ private fun nodeActions(
                         androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.POST_NOTIFICATIONS) !=
                         android.content.pm.PackageManager.PERMISSION_GRANTED
                     ) notifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-                    scope.launch { header.confirmOffline()?.let { snackbar.showSnackbar(context.text(it)) } }
+                    scope.launch { header.confirmOffline()?.let { snackbar.show(context, it) } }
                 }) { Text(stringResource(R.string.offline_pin_confirm)) }
             },
             dismissButton = { TextButton(onClick = header::cancelOffline) { Text(stringResource(R.string.entry_cancel)) } },
@@ -235,7 +235,7 @@ private fun nodeActions(
         Plan.RENAME -> NodeRenameDialog(node.name, onRename = { name ->
             val r = header.rename(name)
             // renamed; a link that kept the old name is said (the rename stands)
-            r.notice?.let { scope.launch { snackbar.showSnackbar(context.text(it)) } }
+            r.notice?.let { scope.launch { snackbar.show(context, it) } }
             r.problem?.let { context.text(it) }
         }, onClose = close)
         Plan.MOVE, Plan.COPY -> remember(node, dialog) { model.moveSheet(node, dialog == Plan.COPY) }?.let { sheet ->
@@ -288,8 +288,7 @@ internal fun LevelRowMenu(node: NodeAt, model: AppModel, open: Boolean, onClose:
  */
 internal fun trash(header: me.raddatz.veyq.mobile.navigation.NodeHeaderModel, snackbar: SnackbarHostState, scope: CoroutineScope, context: android.content.Context) {
     scope.launch {
-        val said = context.text(header.trash())
-        offerUndo(said, header.current.undo != null, { header.state.first { it.undo == null } }, { header.undoTrash() }, snackbar, context)
+        offerUndo(header.trash(), header.current.undo != null, { header.state.first { it.undo == null } }, { header.undoTrash() }, snackbar, context)
     }
 }
 
@@ -297,29 +296,24 @@ internal fun trash(header: me.raddatz.veyq.mobile.navigation.NodeHeaderModel, sn
 internal fun moved(sheet: me.raddatz.veyq.mobile.navigation.MoveSheet, snackbar: SnackbarHostState, scope: CoroutineScope, context: android.content.Context) {
     val done = sheet.current.done ?: return
     scope.launch {
-        offerUndo(context.text(done), sheet.current.undo != null, { sheet.state.first { it.undo == null } }, { sheet.undo() }, snackbar, context)
+        offerUndo(done, sheet.current.undo != null, { sheet.state.first { it.undo == null } }, { sheet.undo() }, snackbar, context)
     }
 }
 
 /**
- * [said] in the snackbar; while core offers an undo ([offered]), with its Undo until core ends the offer ([ended]), the
- * undo's failure said after.
+ * [said] in the snackbar; while core offers an undo ([offered]), with its Undo until core ends the offer ([ended]: the
+ * snackbar goes with it), the undo's failure said after.
  */
 private suspend fun offerUndo(
-    said: String, offered: Boolean, ended: suspend () -> Unit, undo: suspend () -> me.raddatz.veyq.mobile.words.Notice?,
+    said: me.raddatz.veyq.mobile.words.Notice, offered: Boolean, ended: suspend () -> Unit, undo: suspend () -> me.raddatz.veyq.mobile.words.Notice?,
     snackbar: SnackbarHostState, context: android.content.Context,
 ) {
     if (!offered) {
-        snackbar.showSnackbar(said)
+        snackbar.show(context, said)
         return
     }
-    val answer = kotlinx.coroutines.coroutineScope {
-        val shown = async { snackbar.showSnackbar(said, actionLabel = context.getString(R.string.trash_undo), duration = SnackbarDuration.Indefinite) }
-        // core ends the offer after its window: the snackbar goes with it
-        val window = launch { ended(); shown.cancel() }
-        runCatching { shown.await() }.getOrNull().also { window.cancel() }
-    }
-    if (answer == SnackbarResult.ActionPerformed) undo()?.let { snackbar.showSnackbar(context.text(it)) }
+    val answer = snackbar.show(context.text(said), me.raddatz.veyq.mobile.words.NoticeKind.UNDO, context.getString(R.string.trash_undo), ended)
+    if (answer == SnackbarResult.ActionPerformed) undo()?.let { snackbar.show(context, it) }
 }
 
 /**

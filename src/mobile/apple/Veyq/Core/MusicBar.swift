@@ -46,7 +46,7 @@ struct MusicBar: View {
                     .help(say(.musicClose))
             }
             HStack(spacing: 8) {
-                Text(musicTime(Int64(at))).font(.caption2).monospacedDigit().foregroundStyle(Role.muted)
+                Text(shownLength(Int64(at))).font(.caption2).monospacedDigit().foregroundStyle(Role.muted)
                 Slider(value: Binding(get: { min(at, max(total, 1)) }, set: { dragging = $0 }), in: 0...max(total, 1)) { editing in
                     if !editing, let to = dragging {
                         commands.seek(positionMs: Int64(to))
@@ -56,7 +56,7 @@ struct MusicBar: View {
                 .controlSize(.mini)
                 .disabled(total <= 0)
                 .accessibilityLabel(say(.musicProgress, now.title))
-                Text(musicTime(now.durationMs)).font(.caption2).monospacedDigit().foregroundStyle(Role.muted)
+                Text(shownLength(now.durationMs)).font(.caption2).monospacedDigit().foregroundStyle(Role.muted)
             }
         }
         .padding(.horizontal, 16).padding(.vertical, 8)

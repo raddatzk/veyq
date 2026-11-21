@@ -37,7 +37,7 @@ class NoticeKindTest {
 
     @Test fun aSuccessIsSaid() {
         assertEquals(NoticeKind.SAID, Notices.downloaded("a", emptyList()).kind)
-        for (m in listOf(Msg.COPY_DONE, Msg.MOVE_MOVED, Msg.IMPORT_IMPORTED, Msg.OFFLINE_SENT, Msg.DOWNLOAD_CANCELLED)) assertEquals(NoticeKind.SAID, NoticeKind.of(m), "$m")
+        for (m in listOf(Msg.COPY_DONE, Msg.MOVE_MOVED, Msg.IMPORT_IMPORTED, Msg.OFFLINE_SENT, Msg.DOWNLOAD_CANCELLED, Msg.LINK_KEPT, Msg.PROFILE_SAVED, Msg.RECEIPTS_SAVED_GALLERY)) assertEquals(NoticeKind.SAID, NoticeKind.of(m), "$m")
     }
 
     /** A platform's own success (Windows' link kept, its receipts saved) lives as the core's table says, read by key. */

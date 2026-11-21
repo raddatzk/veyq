@@ -46,6 +46,7 @@ import me.raddatz.veyq.mobile.android.core.LocalPalette
 import me.raddatz.veyq.mobile.android.core.LocalShellNotices
 import me.raddatz.veyq.mobile.android.core.NodeMoveSheet
 import me.raddatz.veyq.mobile.android.core.clickableRow
+import me.raddatz.veyq.mobile.android.core.joined
 import me.raddatz.veyq.mobile.android.core.kindIcon
 import me.raddatz.veyq.mobile.android.core.role
 import me.raddatz.veyq.mobile.android.core.text
@@ -120,7 +121,7 @@ internal fun DropBoxScreen(ref: ObjectRef, model: AppModel) {
                     items(f.files, key = { "file:" + it.id }) { file ->
                         ListItem(
                             headlineContent = { Text(file.name) },
-                            supportingContent = details[file.id]?.takeIf { it.isNotEmpty() }?.let { { Text(it.joinToString(" · "), color = role(palette.muted)) } },
+                            supportingContent = details[file.id]?.takeIf { it.isNotEmpty() }?.let { { Text(it.joined(), color = role(palette.muted)) } },
                             leadingContent = { Icon(kindIcon(file.kind), null, tint = role(palette.muted)) },
                             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
                             modifier = Modifier.clickableRow { file.asObject()?.let(model::open) },

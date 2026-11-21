@@ -180,7 +180,7 @@ private fun TheirSafetyNumber(trust: PersonTrust, userId: String, name: String, 
             Text(stringResource(R.string.safety_verified_by, names.joinToString(", ")), style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("safety-verified-by"))
         }
         s.rotatedAt?.let { at ->
-            val date = java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(java.util.Date(at))
+            val date = me.raddatz.veyq.mobile.words.Shown.dayOf(at, language())
             Text(stringResource(R.string.trust_rotated, date), style = MaterialTheme.typography.bodySmall)
         }
         if (s.replaced) Text(stringResource(R.string.safety_replaced), style = MaterialTheme.typography.bodySmall)

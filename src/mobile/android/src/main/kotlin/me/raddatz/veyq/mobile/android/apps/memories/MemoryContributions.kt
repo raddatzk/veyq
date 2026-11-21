@@ -58,6 +58,7 @@ import me.raddatz.veyq.mobile.android.core.NameDialog
 import me.raddatz.veyq.mobile.android.core.moved
 import me.raddatz.veyq.mobile.android.core.piece
 import me.raddatz.veyq.mobile.android.core.role
+import me.raddatz.veyq.mobile.android.core.show
 import me.raddatz.veyq.mobile.android.core.text
 import me.raddatz.veyq.mobile.memories.Buckets
 import me.raddatz.veyq.mobile.memories.Contributions
@@ -93,7 +94,7 @@ internal fun ContributionsView(
     LaunchedEffect(refused) {
         if (refused == null) return@LaunchedEffect
         contributions.seen()
-        snackbar.showSnackbar(context.getString(if (moved) R.string.memory_buckets_move_failed else R.string.memory_buckets_save_failed))
+        snackbar.show(context, me.raddatz.veyq.mobile.words.Notice(if (moved) me.raddatz.veyq.mobile.words.Msg.MEMORY_BUCKETS_MOVE_FAILED else me.raddatz.veyq.mobile.words.Msg.MEMORY_BUCKETS_SAVE_FAILED))
     }
     var naming by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf(false) }

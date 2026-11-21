@@ -73,7 +73,7 @@ internal fun ReportSheet(sheet: me.raddatz.veyq.mobile.navigation.ReportSheet, o
             val receipt = st.sent
             if (receipt != null) {
                 Text(stringResource(R.string.report_sent))
-                Text(stringResource(R.string.report_receipt, receipt.reference.orEmpty(), day(receipt.receivedAt)), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+                Text(stringResource(R.string.report_receipt, receipt.reference.orEmpty(), me.raddatz.veyq.mobile.words.Shown.moment(receipt.receivedAt.orEmpty(), context.language)), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { Button(onClick = onClose) { Text(stringResource(R.string.report_close)) } }
                 return@Column
             }
@@ -126,9 +126,3 @@ internal fun ReportSheet(sheet: me.raddatz.veyq.mobile.navigation.ReportSheet, o
         }
     }
 }
-
-/** A server instant (ISO 8601) in the device's words, date and time. */
-private fun day(instant: String?): String = runCatching {
-    java.time.format.DateTimeFormatter.ofLocalizedDateTime(java.time.format.FormatStyle.MEDIUM, java.time.format.FormatStyle.SHORT)
-        .format(java.time.Instant.parse(instant).atZone(java.time.ZoneId.systemDefault()))
-}.getOrDefault(instant.orEmpty())

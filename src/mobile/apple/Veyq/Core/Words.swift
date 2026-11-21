@@ -26,17 +26,26 @@ private func say(_ msg: Msg, _ args: [CVarArg]) -> String {
     return args.isEmpty ? format.replacingOccurrences(of: "%%", with: "%") : String(format: format, locale: .current, arguments: args)
 }
 
-/// A notice the core raised, in the person's language: its words inside it rendered too, a size as the system writes it.
+/// The app's language as its catalog speaks it (`en`, `de`): what the core's `Shown` writes a value in, so a size, a
+/// day or an amount reads as the web writes it beside the words around it (ADR 0154 decision 5).
+let shownLanguage: String = Bundle.main.preferredLocalizations.first ?? "en"
+
+/// A notice the core raised, in the person's language: its words inside it rendered too, every value written by the
+/// core's `Shown` first.
 func say(notice: Notice) -> String {
-    let args: [CVarArg] = notice.args.map { a -> CVarArg in
+    let written = Shown.shared.args(notice: notice, language: shownLanguage)
+    let args: [CVarArg] = written.args.map { a -> CVarArg in
         switch a {
         case let inner as Notice: return say(notice: inner)
-        case let size as Bytes: return ByteCountFormatter.string(fromByteCount: size.count, countStyle: .file)
-        case let a as Amount: return money(a.amount, a.currency, a.minorUnits)
-        case let moment as Moment: return Date(timeIntervalSince1970: Double(moment.epochMs) / 1000).formatted(date: .abbreviated, time: .shortened)
         case let joined as Joined: return joined.parts.map { ($0 as? Notice).map { say(notice: $0) } ?? "\($0)" }.joined(separator: joined.separator)
         default: return argument(a)
         }
     }
-    return say(notice.msg, args)
+    return say(written.msg, args)
 }
+
+/// A line's parts joined as every app and the web join them (core's `Shown.joined`).
+func joinedLine(_ parts: [String]) -> String { Shown.shared.joined(parts: parts) }
+
+/// A row's line of the core's pieces, each written in the person's language and joined (`Shown.piece`, `Shown.joined`).
+func pieceLine(_ pieces: [Piece]) -> String { joinedLine(pieces.map { say(piece: $0) }) }

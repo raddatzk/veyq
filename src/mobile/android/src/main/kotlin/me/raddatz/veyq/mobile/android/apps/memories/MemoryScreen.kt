@@ -59,7 +59,6 @@ import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -114,10 +113,13 @@ import me.raddatz.veyq.mobile.android.core.ReaderPlayer
 import me.raddatz.veyq.mobile.android.core.ReportSheet
 import me.raddatz.veyq.mobile.android.core.clickableRow
 import me.raddatz.veyq.mobile.android.core.kindIcon
+import me.raddatz.veyq.mobile.android.core.moment
 import me.raddatz.veyq.mobile.android.core.piece
 import me.raddatz.veyq.mobile.android.core.role
 import me.raddatz.veyq.mobile.android.core.say
 import me.raddatz.veyq.mobile.android.core.sharedFilesDrop
+import me.raddatz.veyq.mobile.android.core.show
+import me.raddatz.veyq.mobile.android.core.size
 import me.raddatz.veyq.mobile.android.core.text
 import me.raddatz.veyq.mobile.android.core.trash
 import me.raddatz.veyq.mobile.blob.RangeReader
@@ -384,13 +386,13 @@ private fun GalleryNotices(gallery: GalleryModel, model: AppModel, snackbar: Sna
     // core ends the offer: the effect restarts and the snackbar it showed goes with it
     LaunchedEffect(undo) {
         if (undo == null) return@LaunchedEffect
-        val answer = snackbar.showSnackbar(context.text(undo), actionLabel = context.getString(R.string.trash_undo), duration = SnackbarDuration.Indefinite)
+        val answer = snackbar.show(context.text(undo), me.raddatz.veyq.mobile.words.NoticeKind.UNDO, context.getString(R.string.trash_undo))
         if (answer == SnackbarResult.ActionPerformed) model.galleryAct { gallery.undo() }
     }
     val said = state.said
     LaunchedEffect(said) {
         if (said == null) return@LaunchedEffect
-        snackbar.showSnackbar(context.text(said))
+        snackbar.show(context, said)
         gallery.seen()
     }
     // a mark that did not land sprang back (core's), and this says why (too many, not saved)
@@ -398,7 +400,7 @@ private fun GalleryNotices(gallery: GalleryModel, model: AppModel, snackbar: Sna
     LaunchedEffect(markSaid) {
         if (markSaid == null) return@LaunchedEffect
         gallery.markSeen()
-        snackbar.showSnackbar(context.text(markSaid))
+        snackbar.show(context, markSaid)
     }
 }
 
@@ -550,7 +552,7 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
         // how a save ended, said once
         LaunchedEffect(save) {
             val ended = save?.state?.first { it.end != null } ?: return@LaunchedEffect
-            snackbar.showSnackbar(context.text(ended.notice))
+            snackbar.show(context, ended.notice)
         }
         // the original goes where the person picks (the system's "create document"), streamed there as it is read
         val saveTo = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
@@ -635,7 +637,7 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
                 Column(Modifier.fillMaxWidth().padding(16.dp)) {
                     Text(row.name ?: "", color = Color.White, style = MaterialTheme.typography.titleSmall)
                     row.capturedAt?.let {
-                        Text(capturedText(it), color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
+                        Text(moment(it), color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -652,9 +654,6 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
         }
     }
 }
-
-private fun capturedText(ms: Long): String =
-    java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(ms))
 
 /** A picture being read: not yet, or read (null where it is no picture this device decodes). */
 private class Read(val picture: ImageBitmap?)
@@ -818,8 +817,8 @@ private fun detailValue(row: MediaDetails.Row): String {
     val context = LocalContext.current
     return when (val v = MediaDetails.shown(row)) {
         is MediaDetails.Shown.Words -> context.text(v.notice)
-        is MediaDetails.Shown.Size -> android.text.format.Formatter.formatShortFileSize(context, v.bytes)
-        is MediaDetails.Shown.Moment -> capturedText(v.epochMs)
+        is MediaDetails.Shown.Size -> context.size(v.bytes)
+        is MediaDetails.Shown.Moment -> context.moment(v.epochMs)
         is MediaDetails.Shown.Plain -> v.text
     }
 }

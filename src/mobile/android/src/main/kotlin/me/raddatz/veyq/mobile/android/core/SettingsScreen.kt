@@ -200,8 +200,9 @@ fun SettingsScreen(
     var renamingFamily by remember { mutableStateOf<AccountSettings.Family?>(null) }
     var askPassword by remember { mutableStateOf(false) }
     BackHandler { actions.close() }
-    val trustFailed = stringResource(R.string.trust_failed)
-    val trustDone: (TrustChange) -> Unit = { if (it == TrustChange.FAILED) scope.launch { snackbar.showSnackbar(trustFailed) } }
+    val trustDone: (TrustChange) -> Unit = {
+        if (it == TrustChange.FAILED) scope.launch { snackbar.show(context, me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.TRUST_FAILED)) }
+    }
 
     confirm?.let { c ->
         AlertDialog(
@@ -524,10 +525,10 @@ private fun FamilyRow(f: AccountSettings.Family, working: Boolean, context: Cont
         supportingContent = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 val dates = listOfNotNull(
-                    f.lastUsedAt?.let { stringResource(R.string.account_settings_last_used, moment(it)) },
-                    f.createdAt?.let { stringResource(R.string.account_settings_signed_in, moment(it)) },
+                    f.lastUsedAt?.let { stringResource(R.string.account_settings_last_used, context.moment(it)) },
+                    f.createdAt?.let { stringResource(R.string.account_settings_signed_in, context.moment(it)) },
                 )
-                if (dates.isNotEmpty()) Text(dates.joinToString(" · "))
+                if (dates.isNotEmpty()) Text(dates.joined())
                 // a badge, not a control: the web's "You are here", in the accent's soft container
                 if (f.current) Text(
                     stringResource(R.string.account_settings_current), style = MaterialTheme.typography.labelMedium,
@@ -688,7 +689,7 @@ private fun LazyListScope.storage(state: AccountSettings.State, context: Context
         }
         return
     }
-    fun size(bytes: Long) = android.text.format.Formatter.formatShortFileSize(context, bytes)
+    fun size(bytes: Long) = me.raddatz.veyq.mobile.words.Shown.size(bytes, context.language)
     item(key = "storage-limit") {
         val field = storage.field
         ListItem(
@@ -728,7 +729,7 @@ private fun LazyListScope.storage(state: AccountSettings.State, context: Context
     items(storage.items, key = { "pinned-${it.tenant}-${it.node}" }) { item ->
         ListItem(
             headlineContent = { Text(say(item.title)) },
-            supportingContent = { Text(listOfNotNull(item.said?.let { say(it) }, size(item.bytes)).joinToString(" · ")) },
+            supportingContent = { Text(listOfNotNull(item.said?.let { say(it) }, size(item.bytes)).joined()) },
             leadingContent = { Icon(kindIcon(item.kind), null) },
             trailingContent = {
                 IconButton(onClick = { actions.unpinOffline(item.node) }, enabled = !state.working, modifier = Modifier.testTag("settings-storage-remove-${item.node}")) {
@@ -922,10 +923,6 @@ internal fun openAppearanceAndLanguage(context: Context) {
     else Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri)
     context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }
-
-/** A moment the server gave, as the system writes a date and time in the person's language. */
-private fun moment(epochMs: Long): String =
-    java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(epochMs))
 
 /** "Rename this device": its own entry in the register only (the single-writer rule); a blank name changes nothing. */
 @Composable

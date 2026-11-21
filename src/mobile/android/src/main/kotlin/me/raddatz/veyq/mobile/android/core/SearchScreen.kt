@@ -181,7 +181,7 @@ internal fun SearchScreen(model: AppModel, onClose: () -> Unit) {
                             val where = s.where.map { piece(it) }
                             ListItem(
                                 headlineContent = { Text(piece(s.label)) },
-                                supportingContent = where.takeIf { it.isNotEmpty() }?.let { { Text(it.joinToString(" · ")) } },
+                                supportingContent = where.takeIf { it.isNotEmpty() }?.let { { Text(it.joined()) } },
                                 leadingContent = { Icon(searchIcon(s.icon), null) },
                                 trailingContent = { Text(say(s.word), style = MaterialTheme.typography.labelMedium) },
                                 colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
@@ -219,12 +219,12 @@ private fun Head(title: String) {
 /** One result: its icon (a member's avatar), its name with the matched part bold, its second line and why it is listed. */
 @Composable
 private fun ResultRow(r: ResultShown, onOpen: () -> Unit) {
-    val line = r.line.map { piece(it) }.joinToString(" · ")
+    val line = r.line.map { piece(it) }.joined()
     val person = r.id.removePrefix(":${SearchDocument.PERSON}:").takeIf { r.id.startsWith(":${SearchDocument.PERSON}:") }
     val meta = buildAnnotatedString {
         append(line)
         r.reason?.let { reason ->
-            if (line.isNotEmpty()) append(" · ")
+            if (line.isNotEmpty()) append(me.raddatz.veyq.mobile.words.Shown.SEPARATOR)
             append(bold(reason))
         }
     }
