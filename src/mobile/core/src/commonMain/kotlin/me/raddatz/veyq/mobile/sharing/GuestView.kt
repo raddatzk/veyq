@@ -39,6 +39,14 @@ class GuestLevel internal constructor(
      */
     val writes: Boolean get() = access != null && access.role == GuestAccess.READ_WRITE && !access.inIdentityFolder(node.nodeId)
 
+    /**
+     * The level's New (ADR 0154 decision 2, a plan every platform draws whole and in this order): where the guest [writes],
+     * a folder, then files uploaded here (the web's share page: New folder and Depot's level action); a guest makes no
+     * Memory, Pot, drop box or kept link. None where it does not write.
+     */
+    val creates: List<me.raddatz.veyq.mobile.AppKinds.Create>
+        get() = if (writes) listOf(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES) else emptyList()
+
     /** The guest's session: a write asks the guest's name first ([GuestAccess.nameGuest]) while it is null. */
     val guest: StateFlow<GuestSession?>? get() = access?.session
 

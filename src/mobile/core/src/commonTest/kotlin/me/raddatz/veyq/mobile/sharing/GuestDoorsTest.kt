@@ -306,6 +306,7 @@ class GuestDoorsTest {
         r.load()
         val readLevel = assertIs<GuestPage.Level>(r.page.value).model
         assertFalse(readLevel.writes, "a READ guest's level offers a write")
+        assertTrue(readLevel.creates.isEmpty(), "a READ guest's level offers a New")
         assertEquals(0, readLevel.upload(listOf(source("x.txt", "x"))))
 
         val f = fixture("READ_WRITE")
@@ -314,6 +315,11 @@ class GuestDoorsTest {
         v.load()
         val level = assertIs<GuestPage.Level>(v.page.value).model
         assertTrue(level.writes, "a READ_WRITE guest's level offers no write")
+        // its New, in the plan's order (ADR 0154 decision 2): a folder, then files
+        assertEquals(
+            listOf(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES), level.creates,
+            "a READ_WRITE guest's New is not a folder, then files",
+        )
         // nothing is written before the guest named itself (the web's `requestGuest`): the write asks the name through the
         // core's one naming flow (ADR 0154 decision 1); declined, nothing is made or queued
         val access = assertNotNull(v.access)
