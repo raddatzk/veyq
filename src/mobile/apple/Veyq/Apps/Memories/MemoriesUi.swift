@@ -10,20 +10,31 @@ import VeyqCore
 enum MemoriesUi {
     /// Memories' Memory and chapter: their gallery (`MemoryScreen`); their cover, copy and download are core's. Their
     /// header plays or stops their music (core's `GalleryModel.headerActions`' MUSIC, ADR 0142 decision 6) and opens the banner's dialog where whoever
-    /// looks may set it, online (ADR 0144 decision 5; the web's header `banner`); adding photos is the page's creating menu.
+    /// looks may set it, online (ADR 0144 decision 5; the web's header `banner`); its `upload` entry opens the page's pickers.
     private static let memory = KindPage(header: { node, model in
         let download: (String) async -> [NodeExport.Skipped]? = { await model.downloadNode(node, to: $0) }
         guard let gallery = model.galleryModel(node), let state = model.galleryState(node) else { return HeaderContribution(download: download) }
-        let music = gallery.headerActions.filter { $0 == .music }.map { a in
-            OwnAction(id: a, label: gallery.label(id: a).map { say($0) } ?? a.name, systemImage: state.musicHere ? "stop.fill" : "music.note") {
-                gallery.toggleMusic()
+        // the page's own entries of core's plan, whole (`GalleryModel.headerActions`: adding photos and videos, the music,
+        // the banner), each worded by the gallery
+        let actions: [OwnAction] = gallery.headerActions.compactMap { a in
+            let label = gallery.label(id: a).map { say($0) } ?? a.name
+            switch a.entry {
+            case .upload:
+                // from the photo library or from files, as the page's pickers take them
+                return OwnAction(id: a, label: label, systemImage: "plus", choices: [
+                    OwnChoice(label: say(.photoLibrary), systemImage: "photo.on.rectangle") { model.galleryAdd = GalleryAdd(nodeId: node.nodeId, files: false) },
+                    OwnChoice(label: say(.tabDepotFiles), systemImage: "folder") { model.galleryAdd = GalleryAdd(nodeId: node.nodeId, files: true) },
+                ]) {}
+            case .music:
+                return OwnAction(id: a, label: label, systemImage: state.musicHere ? "stop.fill" : "music.note") { gallery.toggleMusic() }
+            case .banner:
+                return OwnAction(id: a, label: label, systemImage: "photo.artframe") { model.openBanner(gallery) }
+            // core's own entries, never a gallery's
+            case .favorite, .share, .rename, .move, .theCopy, .cover, .download, .offline, .report, .delete_, .replace, .send, .openOwnPage, .reportShared:
+                return nil
             }
         }
-        let banner = state.editsBanner ? [OwnAction(id: .banner, label: say(state.banner != nil ? .memoryBannerChange : .memoryBannerAdd), systemImage: "photo.artframe") {
-            model.openBanner(gallery)
-        }] : []
-        // its download, the web's archive of the Memory (core's `MemoryExport`); its copy is core's door (ADR 0149 decision 3)
-        return HeaderContribution(download: download, actions: music + banner)
+        return HeaderContribution(download: download, actions: actions)
     }, body: { ref, _, model in AnyView(MemoryScreen(model: model, ref: ref)) }, guest: { page, held, model in guest(page, held, model) })
 
     static func register(_ registry: Registry.Type) {
@@ -73,21 +84,13 @@ enum MemoriesUi {
     #endif
 }
 
-/// Memories' own list (its Memories), with "New Memory" (made at the top of the space shown, then opened).
+/// Memories' own list (its Memories); its New is the drawer's (core's `LevelPlan`: an application's list offers none).
 struct MemoriesList: View {
     @Bindable var model: AppModel
-    @State private var naming = false
-
-    private var space: String? { model.shell.space ?? model.spaces.first?.scopeId }
 
     var body: some View {
         ArrangedListView(model: model, list: model.applicationList(.memories), onOpen: model.open, key: "app:\(ApplicationId.memories)")
             .navigationTitle(Names.application(.memories))
-            // offline only where the core queues one (`createsHere`, ADR 0153 decision 3)
-            .createAction(say(.memoryNew), shown: space != nil && model.createsHere(isHome: false).contains(.memory)) { naming = true }
-            .sheet(isPresented: $naming) {
-                if let space { NewMemorySheet(model: model, scopeId: space, parentId: nil) }
-            }
     }
 }
 

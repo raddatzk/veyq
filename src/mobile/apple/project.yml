@@ -31,6 +31,10 @@ targets:
       - path: Veyq
         excludes: [Info.plist, "*.entitlements"]
       # Every word the app shows, generated before the build from src/mobile/words/words.json (ADR 0136 decision 3).
+      # The core's plan enums as exhaustive Swift enums (ADR 0154 decision 2, inbox #1050), generated before the build.
+      - path: build/generated/app/Plans.swift
+        optional: true
+        buildPhase: sources
       - path: build/generated/app/Words.xcstrings
         optional: true
         buildPhase: resources
@@ -56,6 +60,14 @@ targets:
         script: |
           cd "$SRCROOT/.."
           ./gradlew :core:embedAndSignAppleFrameworkForXcode --console=plain
+      - name: Generate the plans
+        basedOnDependencyAnalysis: false
+        outputFiles: ["$(SRCROOT)/build/generated/app/Plans.swift"]
+        script: |
+          # Each core plan enum's exhaustive Swift form (ADR 0154 decision 2, inbox #1050), from the core's @Plan enums
+          # and the header the step above wrote: a switch over `.entry` takes no `default:`, so an entry the core adds
+          # fails every drawing that forgot it.
+          python3 "$SRCROOT/generate_plans.py" --header "$SRCROOT/../core/build/xcode-frameworks/$CONFIGURATION/$SDK_NAME/VeyqCore.framework/Headers/VeyqCore.h" --out "$SRCROOT/build/generated/app/Plans.swift"
       - name: Generate the theme
         basedOnDependencyAnalysis: false
         script: |
@@ -106,6 +118,9 @@ targets:
         excludes: [Info.plist, "*.entitlements", VeyqApp.swift, DevLogin.swift, DevAudio.swift, ContinuedWork.swift, BackgroundSync.swift]
       - path: VeyqShare
         excludes: [Info.plist, "*.entitlements"]
+      - path: build/generated/share/Plans.swift
+        optional: true
+        buildPhase: sources
       - path: build/generated/share/Words.xcstrings
         optional: true
         buildPhase: resources
@@ -115,6 +130,11 @@ targets:
         script: |
           cd "$SRCROOT/.."
           ./gradlew :core:embedAndSignAppleFrameworkForXcode --console=plain
+      - name: Generate the plans
+        basedOnDependencyAnalysis: false
+        outputFiles: ["$(SRCROOT)/build/generated/share/Plans.swift"]
+        script: |
+          python3 "$SRCROOT/generate_plans.py" --header "$SRCROOT/../core/build/xcode-frameworks/$CONFIGURATION/$SDK_NAME/VeyqCore.framework/Headers/VeyqCore.h" --out "$SRCROOT/build/generated/share/Plans.swift"
       - name: Generate the theme
         basedOnDependencyAnalysis: false
         script: |

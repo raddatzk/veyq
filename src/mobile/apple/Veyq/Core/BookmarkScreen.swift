@@ -43,11 +43,17 @@ extension KindPage {
     static let bookmark = KindPage(header: { node, model in
         guard let held = model.bookmarkPage(node) else { return HeaderContribution() }
         let page = held.page
-        if held.state.value is BookmarkPage.StateLoading || held.state.value is BookmarkPage.StateUnreadable { return HeaderContribution() }
-        return HeaderContribution(actions: [
-            OwnAction(id: .openOwnPage, label: say(.bookmarkOpenOwnPage), systemImage: "arrow.up.forward.square") { model.bookmarkOwnPage(page) },
-            OwnAction(id: .reportShared, label: say(.bookmarkReportShare), systemImage: "flag") { model.bookmarkReportShared(page) },
-        ])
+        // the page's own entries of core's plan, whole (`BookmarkPage.headerActions`: none until its meta reads)
+        return HeaderContribution(actions: page.headerActions(state: held.state.value).compactMap { a in
+            let label = page.label(id: a).map { say($0) } ?? a.name
+            switch a.entry {
+            case .openOwnPage: return OwnAction(id: a, label: label, systemImage: "arrow.up.forward.square") { model.bookmarkOwnPage(page) }
+            case .reportShared: return OwnAction(id: a, label: label, systemImage: "flag") { model.bookmarkReportShared(page) }
+            // core's own entries and other pages', never a kept link's
+            case .favorite, .share, .rename, .move, .theCopy, .cover, .download, .offline, .report, .delete_, .upload, .music, .banner, .replace, .send:
+                return nil
+            }
+        })
     }, body: { ref, _, model in AnyView(BookmarkScreen(model: model, node: ref.at)) })
 }
 

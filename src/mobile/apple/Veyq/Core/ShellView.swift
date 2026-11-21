@@ -128,55 +128,66 @@ struct DrawerList: View {
             Section {
                 Brand().padding(.vertical, 6)
                 TenantSwitcher(model: model)
-                // the web's sidebar "New": what a level creates, opened on Home
-                Menu {
-                    // a kept link last (ADR 0150 decision 6): this platform draws the bookmark's dialog (#1020)
-                    // core's `createsHere`: online all of it, offline only what is queued (ADR 0153 decision 3)
-                    ForEach(model.createsHere(isHome: false), id: \.self) { c in
-                        Button(say(c.word), systemImage: Names.createSymbol(c)) {
-                            model.requestNew(c == .pot ? .pot : c == .memory ? .memory : c == .bookmark ? .bookmark : .folder)
-                        }
-                    }
-                } label: {
-                    // drawn here: a Mac draws a bordered menu as its own grey pop-up, whatever its button style
-                    // drawn by its own style: a Mac's menu draws a label's icon in its own control colour, never the
-                    // label's (measured 2026-11-10: black on the green)
-                    Label(say(.drawerNew), systemImage: "plus")
-                        .labelStyle(FilledLabel())
-                        .fontWeight(.semibold)
-                        .foregroundStyle(Role.onFill)
-                        .frame(maxWidth: .infinity, minHeight: 34)
-                        .background(Role.primary, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
-                        .contentShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
-                }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                // offline only what queues is offered (ADR 0153 decision 3); nothing at all where none does
-                .disabled(model.createsHere(isHome: false).isEmpty)
-                .opacity(model.createsHere(isHome: false).isEmpty ? 0.38 : 1)
-                row(say(.drawerHome), symbol: "house", selected: model.shell.isHome) { model.choose(nil) }
+                // Home follows the drawer's New where the plan begins with it (ADR 0122 decision 2: New, Home, Favorites, …)
+                if model.drawerSections.first != DrawerSection.theNew { homeRow }
             }
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
 
-            // only the sections with something in them (core's `Lists.drawerSections`; owner 2026-11-19)
-            if model.drawerSections.contains(.favorites) {
-                Section { refs(model.drawer.favorites) } header: { SectionLabel(title: say(.drawerFavorites)) }
-            }
-            if model.drawerSections.contains(.recent) {
-                Section { refs(model.drawer.recent) } header: { SectionLabel(title: say(.drawerRecent)) }
-            }
-            if model.drawerSections.contains(.applications) {
-                Section {
-                    ForEach(model.applications, id: \.self) { app in
-                        row(Names.application(app), symbol: Names.appSymbol(app), selected: model.shell.application == app && model.shell.openObject == nil) { model.choose(app) }
+            // core's sections, whole and in their order (`ShellModel.drawerSections`, ADR 0154 decision 2): only those with
+            // something in them (owner 2026-11-19)
+            ForEach(model.drawerSections, id: \.self) { section in
+                switch section.entry {
+                case .theNew:
+                    Section {
+                        newMenu
+                        homeRow
                     }
-                } header: { SectionLabel(title: say(.drawerApplications)) }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                case .favorites:
+                    Section { refs(model.drawer.favorites) } header: { SectionLabel(title: say(.drawerFavorites)) }
+                case .recent:
+                    Section { refs(model.drawer.recent) } header: { SectionLabel(title: say(.drawerRecent)) }
+                case .applications:
+                    Section {
+                        ForEach(model.applications, id: \.self) { app in
+                            row(Names.application(app), symbol: Names.appSymbol(app), selected: model.shell.application == app && model.shell.openObject == nil) { model.choose(app) }
+                        }
+                    } header: { SectionLabel(title: say(.drawerApplications)) }
+                }
             }
         }
         .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
+    }
+
+    private var homeRow: some View {
+        row(say(.drawerHome), symbol: "house", selected: model.shell.isHome) { model.choose(nil) }
+    }
+
+    /// The drawer's New (ADR 0122 decision 2): core's `drawerCreates`, made at the shown space's top from wherever the shell
+    /// is — online all of it, offline only what is queued (ADR 0153 decision 3); Home opens and its dialog asks.
+    private var newMenu: some View {
+        Menu {
+            ForEach(model.drawerCreates, id: \.self) { c in
+                Button(say(c.word), systemImage: Names.createSymbol(c)) { model.requestNew(c) }
+            }
+        } label: {
+            // drawn here: a Mac draws a bordered menu as its own grey pop-up, whatever its button style
+            // drawn by its own style: a Mac's menu draws a label's icon in its own control colour, never the
+            // label's (measured 2026-11-10: black on the green)
+            Label(say(.drawerNew), systemImage: "plus")
+                .labelStyle(FilledLabel())
+                .fontWeight(.semibold)
+                .foregroundStyle(Role.onFill)
+                .frame(maxWidth: .infinity, minHeight: 34)
+                .background(Role.primary, in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
     }
 
     @ViewBuilder private func refs(_ list: [ObjectRef]) -> some View {
@@ -337,8 +348,6 @@ struct Bar: View {
         )
     }
 
-    /// The space whose trash is open.
-    @State private var trashOf: TrashOf?
     /// The space whose top level's "Add files only" share is open.
     @State private var uploadShareOf: TrashOf?
 
@@ -401,7 +410,7 @@ struct Bar: View {
 
     var body: some View {
         main
-        .sheet(item: $trashOf) { SpaceTrashSheet(model: model, scopeId: $0.scopeId) }
+        .sheet(item: $model.trashShown) { SpaceTrashSheet(model: model, scopeId: $0.scopeId) }
         .sheet(item: $uploadShareOf) { TopLevelUploadSheet(model: model, scopeId: $0.scopeId) }
         #if os(macOS)
         // a download's import an upload offered (ADR 0152 decision 1); its imported line said once the sheet is gone
@@ -505,15 +514,10 @@ struct Bar: View {
             } else if let ref = model.shell.openObject, let contribution = Registry.page(ref.kind)?.header(ref.at, model) {
                 NodeHeaderActions(model: model, node: ref.at, contribution: contribution).id(ref.nodeId)
             } else if model.shell.openObject == nil, model.shell.application == nil, !model.shell.searching, let space = model.shell.space {
-                HStack {
-                    // the top level is no link's root: its share offers "Add files only" alone (the web's level share)
-                    if model.offersTopLevelShare() {
-                        Button { uploadShareOf = TrashOf(scopeId: space) } label: { Image(systemName: "square.and.arrow.up") }
-                            .accessibilityLabel(say(.shareRoleUploader))
-                    }
-                    // The space's trash, from its Home (the web's level toolbar): every application's nodes.
-                    Button { trashOf = TrashOf(scopeId: space) } label: { Image(systemName: "trash") }
-                        .accessibilityLabel(say(.trashTitle))
+                // the top level is no link's root: its share offers "Add files only" alone (the web's level share)
+                if model.offersTopLevelShare() {
+                    Button { uploadShareOf = TrashOf(scopeId: space) } label: { Image(systemName: "square.and.arrow.up") }
+                        .accessibilityLabel(say(.shareRoleUploader))
                 }
             }
         }
@@ -577,35 +581,39 @@ struct HomeView: View {
     @State private var pickingFolder = false
     @State private var keepingLink = false
 
-    /// A group's rows: a folder enters, an object opens.
+    /// A group's rows: a folder enters, an object opens; each row's menu is core's (`NodeRowMenu`).
     @ViewBuilder private func rows(_ nodes: [NodeRef]) -> some View {
         ForEach(nodes, id: \.nodeId) { node in
-            if let folder = node.asFolder() {
-                Button { model.enter(folder) } label: {
-                    HStack(spacing: 12) {
-                        if let cover = model.covers[node.nodeId]?.image {
-                            Image(decorative: cover, scale: 1).resizable().scaledToFill()
-                                .frame(width: 34, height: 34)
-                                .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
-                        } else {
-                            FolderTile()
-                        }
-                        Text(node.name).fontWeight(.bold).foregroundStyle(Role.text)
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Role.muted)
+            row(node).modifier(NodeRowMenu(model: model, node: NodeAt(scopeId: node.scopeId, nodeId: node.nodeId, kind: node.kind, name: node.name)))
+        }
+    }
+
+    @ViewBuilder private func row(_ node: NodeRef) -> some View {
+        if let folder = node.asFolder() {
+            Button { model.enter(folder) } label: {
+                HStack(spacing: 12) {
+                    if let cover = model.covers[node.nodeId]?.image {
+                        Image(decorative: cover, scale: 1).resizable().scaledToFill()
+                            .frame(width: 34, height: 34)
+                            .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+                    } else {
+                        FolderTile()
                     }
-                    .contentShape(Rectangle())
+                    Text(node.name).fontWeight(.bold).foregroundStyle(Role.text)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Role.muted)
                 }
-                .buttonStyle(.plain)
-                .listRowBackground(Role.surface)
-                // a drop onto a folder's row only where the core offers it (`ShellModel.dropTarget`), never by its kind
-                .modifier(DropsOnto(model: model, target: model.dropTarget(node)))
-            } else if let ref = node.asObject() {
-                ObjectRow(ref: ref, onOpen: model.open).listRowBackground(Role.surface)
-            } else if let bookmark = node.asBookmark() {
-                // a kept link (core's, #1032): its row opens the bookmark's page
-                BookmarkRow(node: bookmark) { model.openBookmark(bookmark) }.listRowBackground(Role.surface)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .listRowBackground(Role.surface)
+            // a drop onto a folder's row only where the core offers it (`ShellModel.dropTarget`), never by its kind
+            .modifier(DropsOnto(model: model, target: model.dropTarget(node)))
+        } else if let ref = node.asObject() {
+            ObjectRow(ref: ref, onOpen: model.open).listRowBackground(Role.surface)
+        } else if let bookmark = node.asBookmark() {
+            // a kept link (core's, #1032): its row opens the bookmark's page
+            BookmarkRow(node: bookmark) { model.openBookmark(bookmark) }.listRowBackground(Role.surface)
         }
     }
 
@@ -700,6 +708,18 @@ struct HomeView: View {
         return NodeTileItem(ref: ref, details: details, covers: covers, picking: picking, takesShare: takesShare, onOpen: model.open)
     }
 
+    /// New's entry `c` begun: its dialog, its picker, or the application's registered dialog (`Registry.create`).
+    private func start(_ c: AppKinds.Create) {
+        switch c.entry {
+        case .folder: newName = ""; nameProblem = nil; naming = true
+        case .pot, .memory, .chapter: newName = ""; nameProblem = nil; creating = Creating(create: c)
+        case .uploadFiles: pickingFiles = true
+        case .uploadFolder: pickingFolder = true
+        // a link kept here (ADR 0150 decision 6): the web's bookmark dialog
+        case .bookmark: keepingLink = true
+        }
+    }
+
     private var level: some View {
         levelBody
         // what is dropped onto the level goes through core's one drop (ADR 0154 decision 1; ADR 0138 decision 9): uploaded
@@ -711,8 +731,8 @@ struct HomeView: View {
         // the level's "New" (the web's menu): a folder here, or a Pot here
         // a folder Home shows: core's actions on it, as the web's level header has them
         .toolbar {
-            // List or Tiles (Files' View menu)
-            ToolbarItem(placement: ViewModeMenu.placement) { ViewModeMenu(model: model) }
+            // the level's tools, core's (the trash, then List or Tiles as Files' View menu)
+            LevelTools(model: model)
             // one "More" menu (as Files' folder menu): a level's bar keeps its room for its title
             if let space = model.shell.space, let folder = model.shell.folderAt(scopeId: space), let contribution = Registry.page(folder.kind)?.header(folder, model) {
                 ToolbarItem(placement: .primaryAction) {
@@ -720,22 +740,11 @@ struct HomeView: View {
                 }
             }
         }
-        // nothing is created in a guest's folder (the web's `folderRights`: no "New" there)
-        .createMenu(say(.drawerNew), shown: model.canCreateHere) {
-            // core's `createsHere`: a folder, a Pot, files and a folder uploaded here, and a Memory here — offline only what
-            // is queued (ADR 0153 decision 3)
-            ForEach(model.createsHere(isHome: true), id: \.self) { c in
-                Button(say(c.word), systemImage: Names.createSymbol(c)) {
-                    switch c {
-                    case .pot: creating = Creating(create: c)
-                    case .uploadFiles: pickingFiles = true
-                    case .uploadFolder: pickingFolder = true
-                    case .memory: newName = ""; nameProblem = nil; creating = Creating(create: c)
-                    // a link kept here (ADR 0150 decision 6): the web's bookmark dialog
-                    case .bookmark: keepingLink = true
-                    default: newName = ""; nameProblem = nil; naming = true
-                    }
-                }
+        // the level's New, core's (`LevelPlan.creates`): a folder, a Pot, files and a folder uploaded here, a Memory and a
+        // kept link — none in a guest's folder (the web's `folderRights`), offline only what is queued (ADR 0153 decision 3)
+        .createMenu(say(.drawerNew), shown: !(model.levelPlan?.creates.isEmpty ?? true)) {
+            ForEach(model.levelPlan?.creates ?? [], id: \.self) { c in
+                Button(say(c.word), systemImage: Names.createSymbol(c)) { start(c) }
             }
         }
         // Depot's "Upload files": the system's picker hands over the files chosen, uploaded here one after another
@@ -759,19 +768,34 @@ struct HomeView: View {
         }
         // what the drawer's "New" asked for
         .onChange(of: model.newRequest, initial: true) { _, asked in
-            switch asked {
-            case .folder: newName = ""; nameProblem = nil; naming = true
-            case .memory: creating = Creating(create: .memory)
-            case .pot: creating = Creating(create: .pot)
-            case .bookmark: keepingLink = true
-            case nil: return
-            }
+            guard let asked else { return }
             model.newRequest = nil
+            start(asked)
         }
         .scrollContentBackground(.hidden)
         .navigationTitle(title)
     }
 }
+/// A level's tools (core's `LevelPlan.tools`, ADR 0154 decision 2; the web's `LevelView` tools row), whole and in their
+/// order at the toolbar's trailing end: the space's trash (every application's deleted nodes), then the view switch.
+struct LevelTools: ToolbarContent {
+    @Bindable var model: AppModel
+
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: ViewModeMenu.placement) {
+            ForEach(model.levelPlan?.tools ?? [], id: \.self) { tool in
+                switch tool.entry {
+                case .trash:
+                    Button { if let space = model.shell.space { model.trashShown = TrashOf(scopeId: space) } } label: { Image(systemName: "trash") }
+                        .accessibilityLabel(say(.trashTitle))
+                case .view:
+                    ViewModeMenu(model: model)
+                }
+            }
+        }
+    }
+}
+
 /// The web's folder tile: the info role's soft fill and text.
 struct FolderTile: View {
     var body: some View {
@@ -974,8 +998,8 @@ struct ArrangedListView: View {
                 .modifier(KeepsScroll(key: key))
             }
         }
-        // List or Tiles (Files' View menu)
-        .toolbar { ToolbarItem(placement: ViewModeMenu.placement) { ViewModeMenu(model: model) } }
+        // the level's tools, core's (an application's list: List or Tiles as Files' View menu)
+        .toolbar { LevelTools(model: model) }
     }
 
     @ViewBuilder private func tiles(_ refs: [ObjectRef], heading: String?) -> some View {
@@ -1246,12 +1270,12 @@ enum Names {
 
     /// A "New" entry's symbol (the web's motifs in SF Symbols).
     static func createSymbol(_ c: AppKinds.Create) -> String {
-        switch c {
+        switch c.entry {
         case .pot: "wallet.bifold"
         case .uploadFiles: "square.and.arrow.up.on.square"
         case .memory, .chapter: "photo.badge.plus"
         case .bookmark: "link.badge.plus"
-        default: "folder.badge.plus"
+        case .folder, .uploadFolder: "folder.badge.plus"
         }
     }
 

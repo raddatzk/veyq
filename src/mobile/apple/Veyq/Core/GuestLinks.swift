@@ -470,10 +470,16 @@ private struct GuestLevelView: View {
         }
         // what a guest adds here: a folder and files (Depot's level action); a guest makes no Memory, Pot or drop box
         // offered by the core alone (`GuestLevel.writes`): a guest not named yet is asked its name at the write (`naming`)
-        .createMenu(say(.drawerNew), shown: level.writes) {
-            ForEach([AppKinds.Create.folder, AppKinds.Create.uploadFiles], id: \.self) { c in
+        .createMenu(say(.drawerNew), shown: !level.creates.isEmpty) {
+            // core's `GuestLevel.creates`, whole: a guest's New holds what the link lets it write here, nothing else
+            ForEach(level.creates, id: \.self) { c in
                 Button(say(c.word), systemImage: Names.createSymbol(c)) {
-                    if c == .folder { newName = ""; nameProblem = nil; naming = true } else { pickingFiles = true }
+                    switch c.entry {
+                    case .folder: newName = ""; nameProblem = nil; naming = true
+                    case .uploadFiles: pickingFiles = true
+                    // what a guest never makes (the core offers none of them): nothing to begin
+                    case .pot, .uploadFolder, .memory, .chapter, .bookmark: break
+                    }
                 }
             }
         }
