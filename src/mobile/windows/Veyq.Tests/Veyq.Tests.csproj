@@ -28,7 +28,7 @@
   <ItemGroup>
     <Compile Include="../Veyq/Words.cs" Link="App/Words.cs" />
     <Compile Include="../Veyq/Core/MrtWords.cs" Link="App/MrtWords.cs" />
-    <Compile Include="../Veyq/Core/Said.cs" Link="App/Said.cs" />
+    <Compile Include="../Veyq/Core/Lives.cs" Link="App/Lives.cs" />
     <Compile Include="../Veyq/Core/SaidNotice.cs" Link="App/SaidNotice.cs" />
     <Compile Include="../Veyq/Core/AvatarsHeld.cs" Link="App/AvatarsHeld.cs" />
     <Compile Include="../Veyq/Core/PictureDecode.cs" Link="App/PictureDecode.cs" />
