@@ -80,6 +80,16 @@ class ShownVectorsTest {
         assertEquals(Currencies.known.toSet(), cases("money").map { it.s("currency") }.toSet())
     }
 
+    /**
+     * The digits a new Pot or entry is sealed with are the web's `minorUnitsOf` for every currency it offers: each
+     * currency's first case (the later ones are amounts sealed with other digits).
+     */
+    @Test fun theDigitsAreTheWebs() {
+        val wrong = cases("money").groupBy { it.s("currency") }.mapValues { (_, c) -> c.first().getValue("minorUnits").jsonPrimitive.int }
+            .filter { (code, digits) -> Currencies.minorUnits(code) != digits }.toList()
+        assertEquals(emptyList(), wrong, "currencies whose digits differ from the web's")
+    }
+
     private companion object {
         const val FILE = "src/mobile/words/format-vectors.json"
         val LANGUAGES = listOf("en", "de")

@@ -7,8 +7,10 @@ package me.raddatz.veyq.mobile.expenses
  * gives the Iraqi dinar 3 digits, `Intl` 0), so the apps carry this one. The digits a Pot or an entry was written with are
  * sealed in it: a later table never moves a stored amount.
  *
- * Measured 2026-11-10 from `Intl` (Node 23.11, ICU 77.1, CLDR 47): `Intl.supportedValuesOf('currency')`, and for each
- * `new Intl.NumberFormat('en', {style: 'currency', currency}).resolvedOptions().maximumFractionDigits`.
+ * Measured from `Intl`: `Intl.supportedValuesOf('currency')`, and for each
+ * `new Intl.NumberFormat('en', {style: 'currency', currency}).resolvedOptions().maximumFractionDigits` — 2026-11-10 under
+ * ICU 77.1, then 2026-11-21 under ICU 78.3 (Node 22.23, the line CI runs; COP, HUF, IDR and PKR lost their digits, RSD
+ * gained two). `ShownVectorsTest.theDigitsAreTheWebs` holds the table to `format-vectors.json`, which the web writes.
  */
 object Currencies {
     private const val KNOWN = "AED AFN ALL AMD ANG AOA ARS AUD AWG AZN BAM BBD BDT BGN BHD BIF BMD BND BOB BRL BSD BTN BWP " +
@@ -19,8 +21,8 @@ object Currencies {
         "TWD TZS UAH UGX USD UYU UZS VES VND VUV WST XAF XCD XCG XDR XOF XPF XSU YER ZAR ZMW ZWG ZWL"
 
     /** Every code whose digits are not 2. */
-    private const val NOT_TWO = "AFN0 ALL0 BHD3 BIF0 CLP0 DJF0 GNF0 IQD0 IRR0 ISK0 JOD3 JPY0 KMF0 KPW0 KRW0 KWD3 LAK0 LBP0 " +
-        "LYD3 MGA0 MMK0 OMR3 PYG0 RSD0 RWF0 SLL0 SOS0 SYP0 TND3 UGX0 VND0 VUV0 XAF0 XOF0 XPF0 YER0"
+    private const val NOT_TWO = "AFN0 ALL0 BHD3 BIF0 CLP0 COP0 DJF0 GNF0 HUF0 IDR0 IQD0 IRR0 ISK0 JOD3 JPY0 KMF0 KPW0 KRW0 " +
+        "KWD3 LAK0 LBP0 LYD3 MGA0 MMK0 OMR3 PKR0 PYG0 RWF0 SLL0 SOS0 SYP0 TND3 UGX0 VND0 VUV0 XAF0 XOF0 XPF0 YER0"
 
     private val digits: Map<String, Int> = NOT_TWO.split(' ').associate { it.take(3) to it.drop(3).toInt() }
 

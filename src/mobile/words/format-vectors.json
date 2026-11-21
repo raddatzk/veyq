@@ -1,6 +1,6 @@
 {
  "//": "Written by src/web/scripts/format-vectors.mts from the web's formatters (ADR 0154 decision 5); never by hand. src/web's formatVectors.test.ts re-renders it; the core's ShownVectorsTest holds words/Shown.kt to it.",
- "icu": "77.1",
+ "icu": "78.3",
  "size": [
   {
    "bytes": 0,
@@ -2749,37 +2749,37 @@
   {
    "amount": 123456789,
    "currency": "COP",
-   "minorUnits": 2,
-   "en": "COP 1,234,567.89",
-   "de": "1.234.567,89 COP"
+   "minorUnits": 0,
+   "en": "COP 123,456,789",
+   "de": "123.456.789 COP"
   },
   {
    "amount": -5,
    "currency": "COP",
-   "minorUnits": 2,
-   "en": "-COP 0.05",
-   "de": "-0,05 COP"
+   "minorUnits": 0,
+   "en": "-COP 5",
+   "de": "-5 COP"
   },
   {
    "amount": 0,
    "currency": "COP",
-   "minorUnits": 2,
-   "en": "COP 0.00",
-   "de": "0,00 COP"
+   "minorUnits": 0,
+   "en": "COP 0",
+   "de": "0 COP"
   },
   {
    "amount": 1,
    "currency": "COP",
-   "minorUnits": 2,
-   "en": "COP 0.01",
-   "de": "0,01 COP"
+   "minorUnits": 0,
+   "en": "COP 1",
+   "de": "1 COP"
   },
   {
    "amount": 100,
    "currency": "COP",
-   "minorUnits": 2,
-   "en": "COP 1.00",
-   "de": "1,00 COP"
+   "minorUnits": 0,
+   "en": "COP 100",
+   "de": "100 COP"
   },
   {
    "amount": 123456789,
@@ -3729,72 +3729,72 @@
   {
    "amount": 123456789,
    "currency": "HUF",
-   "minorUnits": 2,
-   "en": "HUF 1,234,567.89",
-   "de": "1.234.567,89 HUF"
+   "minorUnits": 0,
+   "en": "HUF 123,456,789",
+   "de": "123.456.789 HUF"
   },
   {
    "amount": -5,
    "currency": "HUF",
-   "minorUnits": 2,
-   "en": "-HUF 0.05",
-   "de": "-0,05 HUF"
+   "minorUnits": 0,
+   "en": "-HUF 5",
+   "de": "-5 HUF"
   },
   {
    "amount": 0,
    "currency": "HUF",
-   "minorUnits": 2,
-   "en": "HUF 0.00",
-   "de": "0,00 HUF"
+   "minorUnits": 0,
+   "en": "HUF 0",
+   "de": "0 HUF"
   },
   {
    "amount": 1,
    "currency": "HUF",
-   "minorUnits": 2,
-   "en": "HUF 0.01",
-   "de": "0,01 HUF"
+   "minorUnits": 0,
+   "en": "HUF 1",
+   "de": "1 HUF"
   },
   {
    "amount": 100,
    "currency": "HUF",
-   "minorUnits": 2,
-   "en": "HUF 1.00",
-   "de": "1,00 HUF"
+   "minorUnits": 0,
+   "en": "HUF 100",
+   "de": "100 HUF"
   },
   {
    "amount": 123456789,
    "currency": "IDR",
-   "minorUnits": 2,
-   "en": "IDR 1,234,567.89",
-   "de": "1.234.567,89 IDR"
+   "minorUnits": 0,
+   "en": "IDR 123,456,789",
+   "de": "123.456.789 IDR"
   },
   {
    "amount": -5,
    "currency": "IDR",
-   "minorUnits": 2,
-   "en": "-IDR 0.05",
-   "de": "-0,05 IDR"
+   "minorUnits": 0,
+   "en": "-IDR 5",
+   "de": "-5 IDR"
   },
   {
    "amount": 0,
    "currency": "IDR",
-   "minorUnits": 2,
-   "en": "IDR 0.00",
-   "de": "0,00 IDR"
+   "minorUnits": 0,
+   "en": "IDR 0",
+   "de": "0 IDR"
   },
   {
    "amount": 1,
    "currency": "IDR",
-   "minorUnits": 2,
-   "en": "IDR 0.01",
-   "de": "0,01 IDR"
+   "minorUnits": 0,
+   "en": "IDR 1",
+   "de": "1 IDR"
   },
   {
    "amount": 100,
    "currency": "IDR",
-   "minorUnits": 2,
-   "en": "IDR 1.00",
-   "de": "1,00 IDR"
+   "minorUnits": 0,
+   "en": "IDR 100",
+   "de": "100 IDR"
   },
   {
    "amount": 123456789,
@@ -5479,37 +5479,37 @@
   {
    "amount": 123456789,
    "currency": "PKR",
-   "minorUnits": 2,
-   "en": "PKR 1,234,567.89",
-   "de": "1.234.567,89 PKR"
+   "minorUnits": 0,
+   "en": "PKR 123,456,789",
+   "de": "123.456.789 PKR"
   },
   {
    "amount": -5,
    "currency": "PKR",
-   "minorUnits": 2,
-   "en": "-PKR 0.05",
-   "de": "-0,05 PKR"
+   "minorUnits": 0,
+   "en": "-PKR 5",
+   "de": "-5 PKR"
   },
   {
    "amount": 0,
    "currency": "PKR",
-   "minorUnits": 2,
-   "en": "PKR 0.00",
-   "de": "0,00 PKR"
+   "minorUnits": 0,
+   "en": "PKR 0",
+   "de": "0 PKR"
   },
   {
    "amount": 1,
    "currency": "PKR",
-   "minorUnits": 2,
-   "en": "PKR 0.01",
-   "de": "0,01 PKR"
+   "minorUnits": 0,
+   "en": "PKR 1",
+   "de": "1 PKR"
   },
   {
    "amount": 100,
    "currency": "PKR",
-   "minorUnits": 2,
-   "en": "PKR 1.00",
-   "de": "1,00 PKR"
+   "minorUnits": 0,
+   "en": "PKR 100",
+   "de": "100 PKR"
   },
   {
    "amount": 123456789,
@@ -5654,37 +5654,37 @@
   {
    "amount": 123456789,
    "currency": "RSD",
-   "minorUnits": 0,
-   "en": "RSD 123,456,789",
-   "de": "123.456.789 RSD"
+   "minorUnits": 2,
+   "en": "RSD 1,234,567.89",
+   "de": "1.234.567,89 RSD"
   },
   {
    "amount": -5,
    "currency": "RSD",
-   "minorUnits": 0,
-   "en": "-RSD 5",
-   "de": "-5 RSD"
+   "minorUnits": 2,
+   "en": "-RSD 0.05",
+   "de": "-0,05 RSD"
   },
   {
    "amount": 0,
    "currency": "RSD",
-   "minorUnits": 0,
-   "en": "RSD 0",
-   "de": "0 RSD"
+   "minorUnits": 2,
+   "en": "RSD 0.00",
+   "de": "0,00 RSD"
   },
   {
    "amount": 1,
    "currency": "RSD",
-   "minorUnits": 0,
-   "en": "RSD 1",
-   "de": "1 RSD"
+   "minorUnits": 2,
+   "en": "RSD 0.01",
+   "de": "0,01 RSD"
   },
   {
    "amount": 100,
    "currency": "RSD",
-   "minorUnits": 0,
-   "en": "RSD 100",
-   "de": "100 RSD"
+   "minorUnits": 2,
+   "en": "RSD 1.00",
+   "de": "1,00 RSD"
   },
   {
    "amount": 123456789,
