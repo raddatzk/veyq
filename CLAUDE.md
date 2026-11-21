@@ -29,7 +29,8 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   ([ADR 0106](docs/decisions/0106-deployment-under-infra-tests-under-tests.md) stages 2 and 3), all below. Not to be
   confused with a surface's own `src/` (`src/web/src`, a Gradle module's `src/main`).
 - `src/backend/` + `src/web/` — the two user-facing surfaces. A CR's phase order is
-  **contracts → backend → web**. **Built** ([ADR 0079](docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
+  **contracts → backend → web**, and **contracts → backend → core → clients** for what the web draws from the Kotlin
+  core (the search so far, [ADR 0155](docs/decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)). **Built** ([ADR 0079](docs/decisions/0079-veyq-is-a-platform-memories-is-its-first-application.md)):
   each splits into **core** (the platform) and **applications** (Memories first; compiled in, no runtime
   loading; an application may use core, never the reverse, never another application). **The backend is split** —
   Gradle modules `:core` (`src/backend/core`, `me.raddatz.veyq.core`) and `:apps:memories` (`src/backend/apps/memories`,

@@ -1,9 +1,12 @@
 # ADR 0155 — The web draws over the Kotlin core, application by application, after a measured pilot
 - Status: Accepted
 - Built: partly — decision 3 (2026-11-20: `:core`'s `js()` target over `@noble/*`, the refusals in `jsMain`'s two
-  `NotOnTheWeb.kt`) and decision 6 but the web's half (`@veyq/core-js` with its conformance check in CI's `frontend`
-  job; nothing under `src/web/` builds or imports it yet). `cr-web-search-on-the-core` builds decisions 4 (but its JSON
-  seam, which comes with Expenses) to 6 and the gate (decision 2); decisions 7 and 8 wait for a go
+  `NotOnTheWeb.kt`); decision 6 (`@veyq/core-js` with its conformance in CI's `frontend` job, and the web's half: its
+  build, dev server, check and the app image's stage build the package first); the pilot (2026-11-21): decision 2's
+  gate passed (§ Consequences), decision 4 but its JSON seam, which comes with Expenses (the slice check in the
+  package's `pnpm run check`), decision 5 for the search (`@veyq/core-js/search`, two opaque handles, the web's
+  direction guard reading the entry); decision 7's ratio written. Decisions 7's moves and 8 are not built: Expenses is
+  next (inbox #1046)
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -38,8 +41,11 @@ Measured before the decision (2026-11-20):
   (`search/{Fold,Query,Results,Model}`, `session/LocalDays`, a façade of plain values): 78 KB minified / 27.7 KB gz
   bundled, the standard library 53 KB of it (Expenses' probe: 52 KB), the slice ~25 KB minified (~9 KB gz) against its
   TypeScript's 7.5 KB (3.1 KB gz) — 3.4× minified, Expenses' 3.7×. It passed the vectors' 72 pure cases, and a
-  dropped `ß → ss` turned 5 red; a 10,000-document corpus is made in 27 ms and searched in 1 ms (median, Node). The
-  method and every candidate weighed are in `cr-web-search-on-the-core` § Measured at refine.
+  dropped `ß → ss` turned 5 red; a 10,000-document corpus is made in 27 ms and searched in 1 ms (median, Node). Each
+  chunk was attributed by its source map (`source-map-js`, gzip level 9). The candidates weighed beside the search,
+  each eager in the build: share-link parsing (1.4 KB, too small to fix a ratio by), the subtree export (streams and a
+  serializer behind it, and a wrong byte loses data), the account rotation (no vectors, key material), and Expenses'
+  rules (an application's).
 
 ## Decision
 
@@ -53,7 +59,7 @@ Measured before the decision (2026-11-20):
    owner, 2026-11-20): the floor lands in the eager set with the first core logic anyway, so it is paid once there and
    measured alone, and every application after adds only its own code. The slice is the search — eager, pure, held by
    `contracts/platform/search/v1-vectors.json` on both sides, and a wrong answer changes no data —, as variant B. Its
-   gate is a phase of its own (`cr-web-search-on-the-core`), and **every criterion must hold** for a go:
+   gate is a phase of its own in the pilot's CR, and **every criterion must hold** for a go:
    - **size:** the eager set — `main` and the chunks `index.html` modulepreloads, since the bundler decides which of
      them a module lands in — grows by at most **40 KB gz**, the TypeScript it deletes counted; no lazy chunk grows by
      more than 1 KB gz. The probe measured 27.7 KB gz before ~3 KB of TypeScript leaves; the ceiling leaves room for
@@ -117,8 +123,8 @@ Measured before the decision (2026-11-20):
      measured ~20 KB, its suite's `V1` among it); where its rules are eager today, as Expenses' are, the eager set
      carries them;
    - **a later core slice** grows the eager set by at most **R × the gzip of the TypeScript it deletes**, R the pilot's
-     measured ratio of its façade's own code to its deleted TypeScript, rounded up to the next half and written here at
-     the pilot's harvest (the probe: ~2.9 gzipped).
+     measured ratio of its façade's own code to its deleted TypeScript, rounded up to the next half: **R = 3.0**
+     (the pilot's 8,754 B gz of own code against 3,129 B gz deleted, 2.80; the probe had estimated ~2.9).
 
    Platform-core logic the web draws (the node tree's rules, the core's formats and plans of ADR 0154) moves this way
    once an application needs it or it is the next slice.
@@ -136,6 +142,38 @@ Measured before the decision (2026-11-20):
 
 ## Consequences
 
+- **The pilot's gate** (2026-11-20/21, branch `claude/kjs-p1`, macOS arm64, Kotlin 2.4.21; each number against the
+  same tree before the first edit) — a full pass, so the go:
+
+  | Criterion | Measured | Bound |
+  |---|---|---|
+  | size: the eager set | +24,860 B gz (606,761 → 631,621): the Kotlin lands in `activeSpace` (+26,838), `main` −1,974 | ≤ 40,960 |
+  | size: any lazy chunk | +14 B gz at most (`MemoryDetailHost`) | ≤ 1,024 |
+  | size: the façade's own code | 8,754 B gz (25,541 min) beside the standard library's 18,218 gz; 2.80× the 3,129 B gz of TypeScript deleted | R (decision 7) |
+  | build: the `frontend` job | 5.7 min with the package and the web's `pnpm run core` in it (local, `run_pipeline.py --job frontend`); CI's last three before it 9.5–10.3 | +3 min, inside 15 |
+  | development: a `Query.kt` edit to the reloaded dev page | 11.1, 11.3, 11.3 s warm (the development link, `:core:jsPackageDev`; the production link took 16–18) | ≤ 15 s |
+  | development: a stack frame, the `.d.ts` | `SearchWeb.kt:159` through the dev server's map; no `any` in a façade signature | — |
+  | tests | the 69 deleted TypeScript cases each held by a vector case, a `SearchRulesTest` case or a staying web test; the vectors run through the shipped module in the package's and the web's check, `ß → ss` dropped → 4 red in each; Stryker names no search file | — |
+  | delivery: byte-identical builds | 5 clean builds in fresh processes and 2 on a warm daemon, one digest (`26813b07…`), after the fix below | identical |
+  | delivery: no `eval`, `new Function`, DOM sink; `verify:csp`, `verify:license-sources` | 0 hits; green, the standard library's notice in the licence file | — |
+  | behaviour: the staying web tests | pass; two changed beyond their imports where they counted the deleted TypeScript's internals (`SearchField.test.ts` its `foldedName` reads, `searchIndex.test.ts` its `matchAll`) — a pass by the owner's ruling (2026-11-21): no search behaviour they assert changed | imports only |
+  | behaviour: the pass | 17 queries, their 64 listed lines with bold parts, identical before and after (one throwaway, Chrome) | identical |
+  | behaviour: 10,000 documents | median 0.523–0.530 ms against the TypeScript's 0.432–0.446: 1.19–1.23×, the answers identical | ≤ 1.5× |
+
+  Not run: an app listing the same results for the pass's queries (no Linux app or emulator in that session); the apps
+  run the same `search/` against the same vectors. Explained for users (the browser and the app decide by the same
+  code): [Search all your spaces](../../site/src/content/docs/spaces/search.mdx).
+- **Byte-identical needs a step of the build until Kotlin 2.5** (KT-68281). The production link's dead-code
+  elimination replaces an interface it removed by that interface's surviving supertypes, gathered in a `HashSet` of IR
+  symbols, so a class's `initMetadataForClass` lists them in identity-hash order: `AbstractMutableList`'s
+  `[KtList, Collection]` in one compiler process, `[Collection, KtList]` in the next. No compiler flag, execution strategy
+  (Kotlin 2.4 removed `out-of-process`) or `-Xir-keep` holds it (keeping `MutableList` pulled in 25 KB of the
+  collections' JavaScript views and still differed); the fix is upstream from 2.5.0 (a `LinkedHashSet`). Until then
+  `:core:jsPackage` sorts such a list by name, only where order cannot change what runs — no listed interface, nor a
+  super-interface of one, carries a default member — and fails on a Kotlin that carries the fix, so the step leaves
+  with the upgrade (`src/mobile/core/build.gradle.kts`, `sortFreeInterfaceLists`). The incremental JavaScript caches
+  stay off for a release build (`src/mobile/gradle.properties`): with them, fresh processes differed further.
+
 - **The operator-served web is unchanged in kind** ([ADR 0026](0026-client-trust-tiers.md)): still same-origin,
   content-hashed chunks, no new CSP source, no Subresource Integrity in use before or after; the Kotlin output is one
   more reviewed, compiled-in module ([ADR 0079](0079-veyq-is-a-platform-memories-is-its-first-application.md) decision 5).
@@ -144,9 +182,10 @@ Measured before the decision (2026-11-20):
 - **The apps pay only the JSON seam**, and only once Expenses moves: its format reads JSON through it; the apps'
   behaviour is held by the tests that hold it today. The search adds one parameter to the core's `Results`, defaulting
   to today's order, so the web keeps its browser collator. Core code a façade reaches stays free of coroutines, serialization and Ktor; the build says so.
-- **After a go**, a CR touching a moved application orders its phases contracts → backend → core → clients, and
-  ADR 0154's vectors "from the web's own formatters" turn around for what moved: the core's output is the one source.
-  The root `CLAUDE.md`, `docs/ai/README.md` and `src/web/CLAUDE.md` are edited by the pilot's harvest, not before.
+- **After the go**, a CR touching a moved slice or application orders its phases contracts → backend → core → clients,
+  and ADR 0154's vectors "from the web's own formatters" turn around for what moved: the core's output is the one
+  source (the search's vectors are written by `SearchVectorsTest`). The root `CLAUDE.md`, `docs/ai/README.md` and
+  `src/web/CLAUDE.md` say so.
 - **CI's `frontend` job checks the package** with crypto, web and admin-web: published in the stage map of
   [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 - **The pnpm workspace holds a second package.** ADR 0065's "one package" was a rule against general code sharing;

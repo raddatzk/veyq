@@ -76,7 +76,7 @@ rates, a receipt's PDF uploaded, drawn and saved at document-portal paths, a Dep
 and VP9 played and heard, the account's Settings from the sidebar (rename, another session signed out, sign-out) in
 English/light and German/dark — 2026-11-13; Memories (as Windows', a drop from Files and the sound in the VM's session),
 2026-11-13/14 |
-| Web (JavaScript) | the core's common code, as `@veyq/core-js` (`js()`: IR, ES modules, es2015, `.d.mts`; primitives the web's own `@noble/*`), [ADR 0155](../decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md) decision 3 | none: the web draws in Vue, and ships nothing of the core yet (`cr-web-expenses-on-the-core` is the pilot) | — | its conformance over `contracts/crypto/vectors/v1.json` under Node, in `frontend` |
+| Web (JavaScript) | the core's common code, as `@veyq/core-js` (`js()`: IR, ES modules, es2015, `.d.mts`; primitives the web's own `@noble/*`), [ADR 0155](../decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md) decision 3 | none: the web draws in Vue; it ships the core's search (`@veyq/core-js/search`, the pilot's go, 2026-11-21), each next slice or application a CR of its own (decision 7) | — | its conformance over `contracts/crypto/vectors/v1.json` and the search's vectors through the shipped module under Node, in `frontend` |
 
 Windows and Linux are wanted (owner 2026-11-09), each with its own native UI over the same core
 ([ADR 0136](../decisions/0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): Linux GTK 4 and
@@ -202,7 +202,8 @@ two signed-in accounts list the same tenant) — the owner's rules of 2026-11-19
 `ShellWords.switcher` on every app ([src/mobile/CLAUDE.md](../../src/mobile/CLAUDE.md), the drawer and the switcher).
 
 **Search** ([ADR 0146](../decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md)): the web's search ported into the core (`search/`) and held to the web by
-`contracts/platform/search/v1-vectors.json` — every visible space of the current tenant, chips, one ordered list, every
+`contracts/platform/search/v1-vectors.json` — since ADR 0155's pilot the web's too: it draws the rules from the core
+through `@veyq/core-js/search`, and the core writes the vectors — every visible space of the current tenant, chips, one ordered list, every
 space's photos through `listScopeMedia`, people and the app's own settings sections; each platform in its own field
 (Android's `SearchBar`, Apple's `.searchable` with tokens, Linux's sidebar `SearchBar`, Windows' `AutoSuggestBox`), the
 Linux and Windows apps over the bridge's `Search.*`. Measured 2026-11-18 on the Android emulator (`uiautomator`,
