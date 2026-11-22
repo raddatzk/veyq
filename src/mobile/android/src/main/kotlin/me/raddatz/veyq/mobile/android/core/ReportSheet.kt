@@ -12,6 +12,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -78,6 +79,12 @@ internal fun ReportSheet(sheet: me.raddatz.veyq.mobile.navigation.ReportSheet, o
                 return@Column
             }
             Text(stringResource(R.string.report_intro), style = MaterialTheme.typography.bodyMedium, color = role(palette.muted))
+            // a level's selection: how many it reports, and above one report's room the folder holding them instead
+            if (sheet.nodes.size > 1) Text(say(st.items), style = MaterialTheme.typography.bodyMedium)
+            st.tooManyNotice?.let { tooMany ->
+                Text(say(tooMany), color = role(palette.danger), style = MaterialTheme.typography.bodySmall)
+                if (sheet.offersEnclosing(st)) OutlinedButton(onClick = sheet::useEnclosing) { Text(say(sheet.enclosingWord)) }
+            }
             Spacer(Modifier.padding(6.dp))
             if (sheet.offersName) {
                 Text(stringResource(R.string.report_scope), fontWeight = FontWeight.SemiBold)

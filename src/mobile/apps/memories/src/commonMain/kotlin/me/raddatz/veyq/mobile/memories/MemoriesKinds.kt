@@ -96,6 +96,9 @@ object MemoriesKinds : ApplicationKinds {
         }
     }
 
+    /** A Memory's and a chapter's noun with its article (the web's `nounWithArticle`, `memory.aMemory`, `memory.aChapter`). */
+    override fun noun(kind: String): Msg? = if (kind in kinds) MemoryCreate.noun(kind) else null
+
     override fun headerOrder(kind: String): List<H>? =
         if (kind in kinds) listOf(H.FAVORITE, H.UPLOAD, H.SHARE, H.MUSIC, H.DOWNLOAD, H.BANNER, H.MOVE, H.COPY) else null
 

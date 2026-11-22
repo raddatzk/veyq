@@ -119,7 +119,7 @@ import { displayNamesOf, orderLevel } from './treeRules'
 import { FOLDER_VIEWS, effectiveViewMode, unionViews } from './levelViews'
 import { ALL_TAB, effectiveTab, kindVisible, offeredTabs, showTabBar } from './levelTabs'
 import type { CoreRowAction, LevelRow, LevelRowSelection, LevelRowsContext, LevelRowsHost } from './levelRow'
-import { useSelection } from './selection'
+import { selectionBar, useSelection, type SelectionRights } from './selection'
 import { activeNodeDrag, dropOnNodeTarget, dropTakes, endNodeDrag, isNodeDrag, leftTarget, overNodeTarget, startNodeDrag } from './nodeDrag'
 import { standardRowActions, withStandardRowActions } from './standardRowActions'
 import { hostHandlers, hostRights, injectNodeHost, shareOfferOf, type NodeShareOffer } from './nodeHost'
@@ -420,16 +420,11 @@ const levelItems = computed(() => new Map([...listedLevel.value.folders, ...[...
 const selection = useSelection()
 const selecting = ref(false)
 const allowsOf = (id: string): LevelRowSelection | undefined => levelItems.value.get(id)?.row.selection
-// Offered where something here allows an action and the page has its door, and only while core draws the rows (no
-// application presentation).
-const anyMove = computed(() => !!host.moveMany && [...levelItems.value.values()].some((i) => i.row.selection?.move === true))
-const anyDelete = computed(() => !!host.deleteMany && [...levelItems.value.values()].some((i) => i.row.selection?.delete === true))
 // "Copy to…" is core's (uc.platform.copy-node): a member's, for every node whose kind this build copies (`canCopy`).
 const copiesNode = (id: string): boolean => {
   const item = levelItems.value.get(id)
   return !!item && !item.unsupported && canCopy(props.access, item.node)
 }
-const anyCopy = computed(() => !!host.copy && [...levelItems.value.keys()].some(copiesNode))
 // "Report" is core's (uc.moderation.report): anyone who sees a node reports it, a READ guest included — so it alone
 // makes a level selectable — while the instance publishes a moderation key.
 const reportOn = useReportOffered(reportBaseOf(props.access))
@@ -437,10 +432,28 @@ const reportsNode = (id: string): boolean => {
   const item = levelItems.value.get(id)
   return !!item && !item.unsupported
 }
-const anyReport = computed(() => reportOn.value && canReport(props.access) && [...levelItems.value.keys()].some(reportsNode))
-const canSelect = computed(
-  () => (mode.value === 'grid' || mode.value === 'list') && (anyMove.value || anyDelete.value || anyCopy.value || anyReport.value),
-)
+// What each node lets the selection do: its rights answer, where the page has the action's door (`selectionBar`, the rule
+// the plans' vectors hold here and in the apps' core).
+const selectionRights = computed(() => {
+  const report = reportOn.value && canReport(props.access)
+  return new Map<string, SelectionRights>([...levelItems.value.entries()].map(([id, item]) => [id, {
+    move: !!host.moveMany && item.row.selection?.move === true,
+    copy: !!host.copy && copiesNode(id),
+    report: report && reportsNode(id),
+    delete: !!host.deleteMany && item.row.selection?.delete === true,
+  }]))
+})
+const shownIds = computed(() => items.value.map((i) => i.key))
+const bar = computed(() => selectionBar(selectionRights.value, selection.ids.value, shownIds.value))
+const barOffers = (action: string) => bar.value.entries.some((e) => e.action === action)
+const cannotOf = (action: string) => bar.value.entries.find((e) => e.action === action)?.cannot ?? 0
+// Offered where something here allows an action and the page has its door, and only while core draws the rows (no
+// application presentation).
+const anyMove = computed(() => barOffers('move'))
+const anyDelete = computed(() => barOffers('delete'))
+const anyCopy = computed(() => barOffers('copy'))
+const anyReport = computed(() => barOffers('report'))
+const canSelect = computed(() => (mode.value === 'grid' || mode.value === 'list') && bar.value.offered)
 /** Whether the level offers any tool beside its tabs: Select, the trash or the view switch ("New" sits in the head). */
 const hasTools = computed(() => trashOffered.value || showViews.value || canSelect.value)
 const selectedIds = computed(() => [...selection.ids.value].filter((id) => levelItems.value.has(id)))
@@ -448,30 +461,26 @@ const movable = computed(() => selectedIds.value.filter((id) => allowsOf(id)?.mo
 const deletable = computed(() => selectedIds.value.filter((id) => allowsOf(id)?.delete === true))
 const copyable = computed(() => selectedIds.value.filter(copiesNode))
 const reportable = computed(() => selectedIds.value.filter(reportsNode))
-const shownIds = computed(() => items.value.map((i) => i.key))
-const hiddenCount = computed(() => {
-  const shown = new Set(shownIds.value)
-  return selectedIds.value.filter((id) => !shown.has(id)).length
-})
+const hiddenCount = computed(() => bar.value.hidden)
 const countText = computed(() =>
   hiddenCount.value > 0
     ? t('node.select.countHidden', { count: selectedIds.value.length, hidden: hiddenCount.value })
     : t('node.select.count', { count: selectedIds.value.length }),
 )
 const cannotMoveText = computed(() => {
-  const m = selectedIds.value.length
-  const n = m - movable.value.length
+  const m = bar.value.count
+  const n = cannotOf('move')
   return n > 0 ? t('node.select.cannotMove', { n, m }, n) : ''
 })
 const cannotCopyText = computed(() => {
-  const m = selectedIds.value.length
-  const n = m - copyable.value.length
-  return anyCopy.value && n > 0 ? t('node.select.cannotCopy', { n, m }, n) : ''
+  const m = bar.value.count
+  const n = cannotOf('copy')
+  return n > 0 ? t('node.select.cannotCopy', { n, m }, n) : ''
 })
 const cannotDeleteText = computed(() => {
-  const m = selectedIds.value.length
-  const n = m - deletable.value.length
-  return anyDelete.value && n > 0 ? t('node.select.cannotDelete', { n, m }, n) : ''
+  const m = bar.value.count
+  const n = cannotOf('delete')
+  return n > 0 ? t('node.select.cannotDelete', { n, m }, n) : ''
 })
 function toggleSelecting(): void {
   selecting.value = !selecting.value

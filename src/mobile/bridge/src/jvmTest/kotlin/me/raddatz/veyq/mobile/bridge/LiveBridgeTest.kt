@@ -510,7 +510,7 @@ class LiveBridgeTest {
 
             // the copy moved into the folder, undone (back beside Amsterdam), moved again with the undo left to its window
             val (move, browsing) = sheet(at(potCopy), copy = false)
-            assertEquals(me.raddatz.veyq.mobile.words.Msg.MOVE_HERE_CURRENT, browsing.here)
+            assertEquals(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MOVE_HERE_CURRENT), browsing.here)
             go(move, folder.nodeId)
             val sent = b.ask(Call.MoveHere(move), timeout = 1.minutes) as Answer.MoveSent
             assertEquals(me.raddatz.veyq.mobile.words.Msg.MOVE_MOVED, sent.done?.msg, "${sent.problem}")

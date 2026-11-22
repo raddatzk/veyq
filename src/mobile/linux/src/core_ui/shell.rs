@@ -912,6 +912,9 @@ impl Shell {
         self.level_new.set_visible(!level.creates.is_empty());
         for tool in &level.tools {
             match tool {
+                // Select (core's `LevelSelection`, inbox #1049): the level's pick mode on and off, pressed while on (Files'
+                // selection mode)
+                LevelTool::Select => self.level_tools.append(&crate::core_ui::selection::tool(shown.selection.is_some())),
                 LevelTool::Trash => self.level_tools.append(&self.trash_button),
                 LevelTool::View => {
                     // the button shows the view it turns to (Files' way); a level offering one view has nothing to turn to

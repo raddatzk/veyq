@@ -106,6 +106,11 @@ class ShellModel(
         val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null,
         val gone: List<Notice> = emptyList(),
         @kotlinx.serialization.Transient val pages: Map<String, Long> = emptyMap(),
+        /**
+         * The shown level's selection while its Select mode is on ([LevelSelection], inbox #1049); null otherwise. Another
+         * place clears it, and a node that left the level drops out of it.
+         */
+        val selection: LevelSelection.Picking? = null,
     ) {
         /**
          * The banner offline: "Offline — content as of {time}", the time the open page's own (a Pot's kept ledger, a
@@ -113,7 +118,7 @@ class ShellModel(
          */
         val banner: Notice? get() = me.raddatz.veyq.mobile.offline.OfflineShown.banner(offline, shell.openObject?.let { pages[it.nodeId] })
 
-        internal fun moved(shell: Shell, lists: Lists = this.lists) = State(shell, lists, offline, gone, pages)
+        internal fun moved(shell: Shell, lists: Lists = this.lists) = State(shell, lists, offline, gone, pages, selection)
     }
 
     /** The tenant as read, before what this device hides is taken out. */
@@ -123,6 +128,9 @@ class ShellModel(
     private val reading = Mutex()
 
     private val _state = MutableStateFlow<State?>(null)
+
+    /** Every change of the state, its level's selection kept on what the level still holds ([reselected]). */
+    private fun put(change: (State?) -> State?) = _state.update { prior -> change(prior)?.let { reselected(prior, it) } }
     val state: StateFlow<State?> = _state.asStateFlow()
 
     /** A watch of [state] for a platform without flows: stopped with [stop]. */
@@ -160,7 +168,7 @@ class ShellModel(
         }
         watchGone()
         if (pagesWatch == null) pagesWatch = CoroutineScope(Dispatchers.Default).launch {
-            tenant.pagesOffline.shown.collect { p -> _state.update { s -> s?.let { State(it.shell, it.lists, it.offline, it.gone, p) } } }
+            tenant.pagesOffline.shown.collect { p -> put { s -> s?.let { State(it.shell, it.lists, it.offline, it.gone, p) } } }
         }
     }
 
@@ -183,7 +191,7 @@ class ShellModel(
         goneWatch = CoroutineScope(Dispatchers.Default).launch {
             pins.gone.collect { gone ->
                 val said = gone.filter { it.tenant == tenant.tenant.tenantId }.map { me.raddatz.veyq.mobile.offline.OfflineShown.gone(heldNames[it.node]) }
-                _state.update { s -> s?.let { State(it.shell, it.lists, it.offline, said, it.pages) } }
+                put { s -> s?.let { State(it.shell, it.lists, it.offline, said, it.pages) } }
             }
         }
     }
@@ -191,7 +199,7 @@ class ShellModel(
     /** The [State.gone] notices said: they are not said again (on any screen of the account). */
     suspend fun goneSeen() {
         tenant.account.offlinePins?.offline?.seenGone()
-        _state.update { s -> s?.let { State(it.shell, it.lists, it.offline, pages = it.pages) } }
+        put { s -> s?.let { State(it.shell, it.lists, it.offline, pages = it.pages) } }
     }
 
     /** Whether the account reaches its server: offline every write here is refused ([readOnly], ADR 0140 decision 7). */
@@ -342,7 +350,7 @@ class ShellModel(
             drawer = drawer(objects, favorites),
             uses = recent.resolve(objects),
         )
-        _state.update { prior ->
+        put { prior ->
             State(next(prior?.shell.takeUnless { start }, spaces, if (openLastUsed) recent.lastUsed(objects) else null), lists, offlineNow(), prior?.gone.orEmpty(), tenant.pagesOffline.shown.value)
         }
     }
@@ -354,7 +362,7 @@ class ShellModel(
 
     /** Any move of the shell (its own transitions are `Shell`'s). */
     fun update(change: (Shell) -> Shell) {
-        _state.update { s -> s?.moved(change(s.shell)) }
+        put { s -> s?.moved(change(s.shell)) }
     }
 
     fun choose(app: ApplicationId?) = update { it.choose(app) }
@@ -404,7 +412,7 @@ class ShellModel(
 
     private fun opened(ref: ObjectRef, move: (Shell) -> Shell) {
         recent.record(ref, now())
-        _state.update { s -> s?.let { it.moved(move(it.shell), Lists(it.lists.spaces, it.lists.nodes, it.lists.objects, it.lists.favorites, it.lists.applications, it.lists.filters, drawer(it.lists.objects, it.lists.favorites), recent.resolve(it.lists.objects))) } }
+        put { s -> s?.let { it.moved(move(it.shell), Lists(it.lists.spaces, it.lists.nodes, it.lists.objects, it.lists.favorites, it.lists.applications, it.lists.filters, drawer(it.lists.objects, it.lists.favorites), recent.resolve(it.lists.objects))) } }
     }
 
     /** Every node of [scopeId] this device opens: what the move browser walks. */
@@ -567,14 +575,128 @@ class ShellModel(
      * A kind this build registers no page for offers nothing.
      */
     suspend fun rowPlan(row: NodeAt): LevelRow.Plan {
-        val kind = AppKinds.header(row.kind) ?: return LevelRow.Plan(emptyList(), emptyList())
+        val rights = rowRights(row, reportOffered()) ?: return LevelRow.Plan(emptyList(), emptyList())
+        return LevelRow.plan(rights, own = if (row.kind == AppKinds.BOOKMARK_KIND && bookmarkReads(row)) listOf(HeaderAction.REPORT_SHARED) else emptyList())
+    }
+
+    /** What [row]'s header would grant it, [report] whether the server takes reports; null for a kind this build draws no page of. */
+    private fun rowRights(row: NodeAt, report: Boolean): NodeHeader.Rights? {
+        val kind = AppKinds.header(row.kind) ?: return null
         val doors = AppKinds.doors(row.kind, AppKinds.Facts())
-        val rights = NodeHeader.rights(
+        return NodeHeader.rights(
             row.kind, favoriteKnown = isFavorite(row) != null, shareable = kind.shareable, linksOn = tenant.linkRules.on,
             rename = kind.renames, takesCover = kind.takesCover, coverOffered = doors.coverOffered, copy = doors.copies,
-            download = doors.downloads, report = reportOffered(), inGuestFolder = inIdentityFolder(row), online = online,
+            download = doors.downloads, report = report, inGuestFolder = inIdentityFolder(row), online = online,
         )
-        return LevelRow.plan(rights, own = if (row.kind == AppKinds.BOOKMARK_KIND && bookmarkReads(row)) listOf(HeaderAction.REPORT_SHARED) else emptyList())
+    }
+
+    // ---- a level's selection (inbox #1049, the web's `LevelView.vue` Select mode) ----
+
+    /**
+     * The place a level's selection belongs to: a level of Home (a space, a folder) — never an application's list, an
+     * object, a person, a kept link or Search, which draw no level of their own (the web offers Select only where core
+     * draws the rows) —, or null.
+     */
+    private fun selectionPlace(s: Shell): String? {
+        if (s.application != null || s.searching || s.openObject != null || s.person != null || s.bookmark != null) return null
+        val space = s.space ?: return null
+        return "$space/${s.folder?.nodeId.orEmpty()}"
+    }
+
+    /** Every row of the level [s] shows, whatever its filter shows (the selection is the level's, not the filter's). */
+    private fun levelRows(s: Shell, lists: Lists): List<NodeRef> =
+        s.space?.let { Home.level(lists.nodes, it, s.folder?.nodeId, null) }.orEmpty()
+
+    /** What each row of the level lets a selection do: its own row menu's entries ([LevelSelection.Rights.of]). */
+    private fun selectionRights(rows: List<NodeRef>): Map<String, LevelSelection.Rights> {
+        val report = reportKnown ?: false
+        return rows.associate { r -> r.nodeId to (rowRights(r.nodeAt(), report)?.let { LevelSelection.Rights.of(LevelRow.plan(it)) } ?: LevelSelection.Rights.NONE) }
+    }
+
+    /** Whether the level [s] shows offers Select ([LevelSelection.offered]). */
+    private fun selectOffered(s: Shell, lists: Lists?): Boolean {
+        if (lists == null || selectionPlace(s) == null) return false
+        return LevelSelection.offered(selectionRights(levelRows(s, lists)).values)
+    }
+
+    /** [next] with its level's selection kept on what the level holds, or cleared where the place changed or offers no Select. */
+    private fun reselected(prior: State?, next: State): State {
+        val sel = next.selection ?: prior?.selection ?: return next
+        val place = selectionPlace(next.shell)
+        if (place == null || place != sel.place) return next.cleared()
+        val rights = selectionRights(levelRows(next.shell, next.lists))
+        if (!LevelSelection.offered(rights.values)) return next.cleared()
+        return next.withSelection(LevelSelection.Picking.of(place, rights, sel.selected, next.lists.level(next.shell).map { it.nodeId }))
+    }
+
+    private fun State.cleared() = if (selection == null) this else State(shell, lists, offline, gone, pages, null)
+    private fun State.withSelection(sel: LevelSelection.Picking?) = State(shell, lists, offline, gone, pages, sel)
+
+    /** The selection changed by [change] (the ids), shown anew; nothing where the level is in no Select mode. */
+    private fun changeSelection(change: (LevelSelection.Picking, List<String>) -> Set<String>) = _state.update { s ->
+        val sel = s?.selection ?: return@update s
+        val shown = s.lists.level(s.shell).map { it.nodeId }
+        reselected(null, s.withSelection(sel.copy(selected = change(sel, shown))))
+    }
+
+    /**
+     * Select turned on ([LevelTool.SELECT]): the level's Select mode, nothing selected yet; the server's answer whether it
+     * takes reports is read first, so the bar offers Report where it does.
+     */
+    suspend fun selectStart() {
+        reportOffered()
+        _state.update { s ->
+            val place = s?.let { selectionPlace(it.shell) } ?: return@update s
+            reselected(null, s.withSelection(LevelSelection.Picking(place, emptySet(), Notice(Msg.SELECT_COUNT, 0), emptyList())))
+        }
+    }
+
+    /** Select turned off (*Cancel*, the tool again): the selection cleared. */
+    fun selectCancel() = _state.update { it?.cleared() }
+
+    /** Row [id] selected, or no longer. */
+    fun selectToggle(id: String) = changeSelection { sel, _ -> LevelSelection.toggle(sel.selected, id) }
+
+    /** *All*: every row the level shows selected too. */
+    fun selectAll() = changeSelection { sel, shown -> LevelSelection.all(sel.selected, shown) }
+
+    /** *None*: every row the level shows no longer selected; what its filter hides stays. */
+    fun selectNone() = changeSelection { sel, shown -> LevelSelection.none(sel.selected, shown) }
+
+    /** The selected rows [action] reaches, in the level's order (each row by its own rights); empty without a selection. */
+    fun selected(action: SelectionAction): List<NodeAt> {
+        val s = current ?: return emptyList()
+        val sel = s.selection ?: return emptyList()
+        val rows = levelRows(s.shell, s.lists)
+        val rights = selectionRights(rows)
+        return LevelSelection.reached<NodeRef>(action, rows, { it.nodeId }, sel.selected) { rights[it.nodeId] ?: LevelSelection.Rights.NONE }.map { it.nodeAt() }
+    }
+
+    /**
+     * The selection's *Move to…* or *Copy to…* ([copying]): one sheet over every selected row the action reaches
+     * ([MoveSheet] over a list); null where it reaches none. A Pot's copy is its open model's (none here): it fails as its
+     * row's copy without a page does.
+     */
+    fun selectionMoveSheet(copying: Boolean, deletedName: String, changed: () -> Unit): MoveSheet? {
+        val nodes = selected(if (copying) SelectionAction.COPY else SelectionAction.MOVE).takeIf { it.isNotEmpty() } ?: return null
+        return MoveSheet(nodes, copying, moveDoor(null, deletedName, changed))
+    }
+
+    /** The selection's *Report*: one report of every selected row ([ReportSheet] over a list), the folder on screen offered above the cap. */
+    fun selectionReportSheet(): ReportSheet? {
+        val nodes = selected(SelectionAction.REPORT).takeIf { it.isNotEmpty() } ?: return null
+        val enclosing = shell?.folder?.let { f -> current?.lists?.nodes?.firstOrNull { it.nodeId == f.nodeId }?.nodeAt() }
+        return ReportSheet(nodes, enclosing, reportDoor(nodes.first()))
+    }
+
+    /** The selection's *Delete*: one question for every selected row it reaches ([SelectionTrash]); null where it reaches none. */
+    fun selectionTrash(changed: () -> Unit): SelectionTrash? {
+        val nodes = selected(SelectionAction.DELETE).takeIf { it.isNotEmpty() } ?: return null
+        return SelectionTrash(nodes, object : SelectionTrash.Door {
+            override suspend fun trash(ref: NodeAt) = this@ShellModel.trash(ref)
+            override suspend fun undoTrash(node: OpenNode) = this@ShellModel.undoTrash(node)
+            override fun changed() = changed()
+        })
     }
 
     /**
@@ -606,7 +728,10 @@ class ShellModel(
         val creates = if (s == this.shell && canCreateHere) createsHere(isHome = true, bookmarks = true) else emptyList()
         val identity = s.folderAt(space)?.let { inIdentityFolder(it) } ?: false
         val rows = if (identity) current?.lists?.level(s)?.size ?: 0 else 0
-        return LevelPlan.of(creates, trash = trashOffered(s), views = LevelPlan.views(mapTab = false, identityFolder = identity, rows = rows))
+        return LevelPlan.of(
+            creates, trash = trashOffered(s), views = LevelPlan.views(mapTab = false, identityFolder = identity, rows = rows),
+            select = selectOffered(s, current?.lists),
+        )
     }
 
     /** Pins or unpins [ref], then the lists are read anew; false when it was not stored (the heart goes back). */
@@ -815,7 +940,9 @@ class ShellModel(
      */
     fun moveSheet(
         node: NodeAt, copying: Boolean, pot: me.raddatz.veyq.mobile.expenses.PotModel?, deletedName: String, changed: () -> Unit,
-    ): MoveSheet = MoveSheet(node, copying, object : MoveSheet.Door {
+    ): MoveSheet = MoveSheet(node, copying, moveDoor(pot, deletedName, changed))
+
+    private fun moveDoor(pot: me.raddatz.veyq.mobile.expenses.PotModel?, deletedName: String, changed: () -> Unit) = object : MoveSheet.Door {
         val uuid = { NodeCreate.uuid(tenant.account) }
         override suspend fun tree(scopeId: String) = scopeNodes(scopeId)
         override val placement get() = AppKinds.placement
@@ -829,7 +956,7 @@ class ShellModel(
         override suspend fun preview(ref: NodeAt) = SubtreeCopy.preview(tenant, ref.scopeId, ref.nodeId, AppKinds.copies(deletedName, uuid))
         override suspend fun noRoom(ref: NodeAt) = StorageFit.noRoomForCopy(tenant, ref.scopeId, ref.nodeId, AppKinds.exports(deletedName))
         override fun changed() = changed()
-    })
+    }
 
     /**
      * The share sheet of [node] over this tenant ([ShareSheet]): its links (a drop box's WRITE_ONLY ones), the writes on
@@ -880,12 +1007,16 @@ class ShellModel(
     }
 
     /** The report of [node] to the tenant's moderators over this tenant ([ReportSheet], core's [NodeReport]). */
-    fun reportSheet(node: NodeAt): ReportSheet = ReportSheet(node, object : ReportSheet.Door {
+    fun reportSheet(node: NodeAt): ReportSheet = ReportSheet(node, reportDoor(node), nameOnly = AppKinds.reportsNameOnly(node.kind))
+
+    private fun reportDoor(node: NodeAt) = object : ReportSheet.Door {
         override val origin get() = tenant.origin
         override suspend fun send(scope: NodeReport.Scope, category: String, reason: String, contact: String) =
             // a kept link reports its name only, whatever is asked (ADR 0150 decision 6): its key opens another operator's share
             NodeReport.report(tenant, node.scopeId, node.nodeId, if (AppKinds.reportsNameOnly(node.kind)) NodeReport.Scope.NAME else scope, category, reason, contact)
-    }, nameOnly = AppKinds.reportsNameOnly(node.kind))
+        override suspend fun sendAll(nodes: List<NodeAt>, category: String, reason: String, contact: String) =
+            NodeReport.reportMany(tenant, node.scopeId, nodes.map { it.nodeId }, category, reason, contact)
+    }
 
     /**
      * Node [ref]'s download into [sink]: a file the file itself ([AppKinds.ownDownload]), any other node with everything
@@ -1470,3 +1601,6 @@ class ShellModel(
         const val DRAWER_RECENT = 8
     }
 }
+
+/** [this] as core's node actions take it. */
+private fun NodeRef.nodeAt() = NodeAt(scopeId, nodeId, kind, name)

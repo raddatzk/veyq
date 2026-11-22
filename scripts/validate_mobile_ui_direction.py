@@ -265,8 +265,9 @@ WIRE_APPLICATIONS: dict[str, tuple[str, ...]] = {
 WIRE_PLATFORM = (
     "AddressChange", "Audio", "Avatar", "Bookmark", "Controls", "Cover", "Erasure", "Header", "Home", "Import", "KeyRotation",
     "Kit", "Link", "Manage", "Map", "MapState", "Media", "Move", "Net", "Notice", "PasswordChange", "Pdf", "Person",
-    "Picture", "Player", "Profile", "Queued", "Reader", "Received", "Report", "Row", "Save", "Scan", "Search", "SecretKey", "Session",
-    "Settings", "Share", "Shell", "SignIn", "Store", "Trash", "Trust", "Unlock", "Upload", "View", "Words",
+    "Picture", "Player", "Profile", "Queued", "Reader", "Received", "Report", "Row", "Save", "Scan", "Search", "SecretKey",
+    "Select", "Selection", "Session", "Settings", "Share", "Shell", "SignIn", "Store", "Trash", "Trust", "Unlock", "Upload",
+    "View", "Words",
 )
 # A name of the wire that starts with an application's prefix yet is shared: Depot's `File.Pages` answers with the
 # receipt viewer's `ReceiptPages` (a PDF's page budget), so it is no one application's.

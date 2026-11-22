@@ -25,7 +25,9 @@ internal static class LevelTiles
     /// <summary>One tile: its kind's <paramref name="Glyph"/>, the node whose cover it shows, its name and second line, its
     /// AutomationId (the row's), what a click does, a folder's drop (Drops.OntoFolder) where the core offers one, and the
     /// node whose menu it opens (a level's row's, RowMenu).</summary>
-    public sealed record Item(string Glyph, string NodeId, string Name, string? Subtitle, string AutomationId, Action Open, Action<Control>? Droppable = null, NodeAt? Node = null);
+    /// <para><paramref name="Selected"/>: whether its node is selected while the level picks (null: the level does not pick),
+    /// a check drawn on the tile and a click turning its node.</para>
+    public sealed record Item(string Glyph, string NodeId, string Name, string? Subtitle, string AutomationId, Action Open, Action<Control>? Droppable = null, NodeAt? Node = null, bool? Selected = null);
 
     /// <summary>The tiles of <paramref name="items"/> at the core's frames, laid out anew when the grid's width changes.</summary>
     public static FrameworkElement Grid(IReadOnlyList<Item> items, string automationId)
@@ -99,7 +101,16 @@ internal static class LevelTiles
             Child = RowCovers.Prefix(glyph, item.NodeId, size, size),
         };
         var column = new StackPanel { Spacing = 2 };
-        column.Children.Add(square);
+        if (item.Selected is { } picked)
+        {
+            // the level picks: the tile's check over its cover's corner, read as the tile's toggle state
+            var check = new CheckBox { IsChecked = picked, IsHitTestVisible = false, IsTabStop = false, MinWidth = 0, Margin = new Thickness(6), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top };
+            var corner = new Grid();
+            corner.Children.Add(square);
+            corner.Children.Add(check);
+            column.Children.Add(corner);
+        }
+        else column.Children.Add(square);
         column.Children.Add(new TextBlock { Text = item.Name, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(2, 4, 2, 0) });
         if (item.Subtitle is { Length: > 0 } under)
         {
@@ -125,6 +136,7 @@ internal static class LevelTiles
         };
         AutomationProperties.SetAutomationId(tile, item.AutomationId);
         AutomationProperties.SetName(tile, item.Subtitle is { Length: > 0 } s ? $"{item.Name}, {s}" : item.Name);
+        if (item.Selected is { } selected) AutomationProperties.SetItemStatus(tile, selected ? Selection.CheckedStatus : "");
         ToolTipService.SetToolTip(tile, item.Name);
         tile.Click += (_, _) => item.Open();
         item.Droppable?.Invoke(tile);

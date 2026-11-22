@@ -115,7 +115,7 @@ internal fun NodeMoveSheet(sheet: MoveSheet, onDone: (MoveSheet) -> Unit, onClos
                 }
             }
             val danger = state.problem ?: state.noRoom
-            val shown = danger?.let { say(it) } ?: sheet.hereWord(state)?.let { say(it) }
+            val shown = danger?.let { say(it) } ?: sheet.here(state)?.let { say(it) }
             shown?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = role(if (danger != null) palette.danger else palette.muted), modifier = Modifier.padding(top = 10.dp)) }
             Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End) {
                 TextButton(onClick = onClose, enabled = !busy) { Text(stringResource(R.string.trash_cancel)) }

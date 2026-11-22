@@ -291,6 +291,9 @@ fn filter_name(f: Option<ApplicationId>) -> String {
 /// offers the level, and onto a folder's row where it offers that row (ADR 0154 decision 1).
 pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, hero: Option<gtk::Widget>, toasts: &adw::ToastOverlay) -> gtk::Widget {
     let as_tiles = shown.view == ViewModeShown::Tiles;
+    // the level picks (core's selection, inbox #1049): a row or tile turns its node, no drop and no menu meanwhile
+    let selecting = shown.selection.as_ref();
+    let drops = if selecting.is_some() { None } else { drops };
     let (scroll, content) = column(as_tiles);
     if let Some(t) = drops.and_then(Drops::onto_level) {
         scroll.add_controller(t);
@@ -314,11 +317,15 @@ pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, 
             list.set_title(&said::key(heading));
         }
         if as_tiles {
-            list.add(&level_tiles(state, &g.nodes, g.folders, drops, toasts));
+            list.add(&level_tiles(state, &g.nodes, g.folders, drops, toasts, selecting));
             content.append(&list);
             continue;
         }
         for n in &g.nodes {
+            if let Some(sel) = selecting {
+                list.add(&crate::core_ui::selection::row(n, kind_icon(&n.kind), sel));
+                continue;
+            }
             if g.folders {
                 let row = folder_row(n);
                 if let Some(t) = drops.and_then(|d| d.onto_row(n)) {
@@ -346,6 +353,13 @@ pub fn home(state: &ShellModelState, shown: &ShellShown, drops: Option<&Drops>, 
         }
         content.append(&list);
     }
+    // the selection's bar under the level while it picks
+    if let Some(sel) = selecting {
+        let outer = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        outer.append(&scroll);
+        outer.append(&crate::core_ui::selection::bar(sel, toasts));
+        return outer.upcast();
+    }
     scroll.upcast()
 }
 
@@ -358,7 +372,10 @@ fn queued_row(q: &QueuedItem) -> adw::ActionRow {
 }
 
 /// A group of Home's level as tiles: a folder's enters it (and takes a drop as its row does), an object's opens it.
-fn level_tiles(state: &ShellModelState, nodes: &[NodeRef], folders: bool, drops: Option<&Drops>, toasts: &adw::ToastOverlay) -> gtk::FlowBox {
+fn level_tiles(
+    state: &ShellModelState, nodes: &[NodeRef], folders: bool, drops: Option<&Drops>, toasts: &adw::ToastOverlay,
+    selecting: Option<&crate::bridge::wire::ShownSelection>,
+) -> gtk::FlowBox {
     let mut tiles = Vec::new();
     let mut dropping = Vec::new();
     let mut menus = Vec::new();
@@ -367,7 +384,7 @@ fn level_tiles(state: &ShellModelState, nodes: &[NodeRef], folders: bool, drops:
         if folders {
             let folder = FolderRef { node_id: n.node_id.clone(), name: n.name.clone() };
             tiles.push(Tile { name: n.name.clone(), subtitle: None, dated: false, icon: kind_icon(&n.kind), node_id: n.node_id.clone(),
-                open: Box::new(move || bridge::send(Call::ShellEnter { folder: folder.clone() })) });
+                open: Box::new(move || bridge::send(Call::ShellEnter { folder: folder.clone() })), selected: None });
             dropping.push(drops.and_then(|d| d.onto_row(n)));
         } else if let Some(o) = state.lists.objects.iter().find(|o| o.scope_id == n.scope_id && o.node_id == n.node_id) {
             tiles.push(object_tile(o));
@@ -375,12 +392,21 @@ fn level_tiles(state: &ShellModelState, nodes: &[NodeRef], folders: bool, drops:
         } else if n.kind == crate::core_ui::bookmark_page::KIND {
             let node = node_at(n);
             tiles.push(Tile { name: n.name.clone(), subtitle: None, dated: false, icon: kind_icon(&n.kind), node_id: n.node_id.clone(),
-                open: Box::new(move || crate::core_ui::bookmark_page::open_kept(&node)) });
+                open: Box::new(move || crate::core_ui::bookmark_page::open_kept(&node)), selected: None });
             dropping.push(None);
         }
         if tiles.len() > before {
             menus.push(node_at(n));
+            // while the level picks, the tile turns its node instead of opening it
+            if let (Some(sel), Some(t)) = (selecting, tiles.last_mut()) {
+                t.selected = Some(sel.selected.contains(&n.node_id));
+                let id = n.node_id.clone();
+                t.open = Box::new(move || bridge::send(Call::SelectToggle { node_id: id.clone() }));
+            }
         }
+    }
+    if selecting.is_some() {
+        menus.clear();
     }
     let grid = tiles::grid(tiles);
     for (i, target) in dropping.into_iter().enumerate() {
@@ -410,7 +436,7 @@ fn object_at(r: &ObjectRef) -> crate::bridge::wire::NodeAt {
 fn object_tile(r: &ObjectRef) -> Tile {
     let open = r.clone();
     Tile { name: r.name.clone(), subtitle: None, dated: r.kind == "MEMORY", icon: kind_icon(&r.kind), node_id: r.node_id.clone(),
-        open: Box::new(move || bridge::send(Call::ShellOpen { r#ref: open.clone() })) }
+        open: Box::new(move || bridge::send(Call::ShellOpen { r#ref: open.clone() })), selected: None }
 }
 
 /// A kept link's row (ADR 0150 decision 6): no application's object — the core's shell opens its page

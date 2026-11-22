@@ -1029,7 +1029,7 @@ class DispatchTest {
         val w = b.watching(Watched.Move(id))
         val opened = w.until { u -> (u as Update.Move).shown?.takeIf { it.loaded } }
         assertEquals(listOf(null, "trips"), opened.trail.map { it.nodeId })
-        assertEquals(Msg.MOVE_HERE_CURRENT, opened.here)
+        assertEquals(Notice(Msg.MOVE_HERE_CURRENT), opened.here)
         assertTrue(!opened.canChoose)
         assertEquals(Msg.MOVE_SUBMIT, opened.submit)
         assertEquals(Answer.Done, b.ask(Call.MoveUp(id)))

@@ -91,9 +91,16 @@ class WireTest {
         dropRows = listOf("f-1", "f-2"),
         level = ShellShown.ShownLevel(
             listOf(ShellShown.ShownCreate(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, Msg.FOLDER_NEW)),
-            listOf(me.raddatz.veyq.mobile.navigation.LevelTool.TRASH, me.raddatz.veyq.mobile.navigation.LevelTool.VIEW),
+            listOf(me.raddatz.veyq.mobile.navigation.LevelTool.SELECT, me.raddatz.veyq.mobile.navigation.LevelTool.TRASH, me.raddatz.veyq.mobile.navigation.LevelTool.VIEW),
         ),
         drawerCreates = listOf(ShellShown.ShownCreate(me.raddatz.veyq.mobile.AppKinds.Create.POT, Msg.CREATE_POT)),
+        selection = ShellShown.ShownSelection(
+            listOf("f-1"), Notice(Msg.SELECT_COUNT, listOf(1)),
+            listOf(
+                ShellShown.ShownSelectionAction(me.raddatz.veyq.mobile.navigation.SelectionAction.MOVE, Msg.NODE_MOVE, true, null),
+                ShellShown.ShownSelectionAction(me.raddatz.veyq.mobile.navigation.SelectionAction.DELETE, Msg.ENTRY_DELETE, false, Notice(Msg.SELECT_CANNOT_DELETE, listOf(1, 1))),
+            ),
+        ),
     )
     private val memory = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "m-1", "MEMORY", "Ostsee 2026")
     private val pin = PinShown(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "m-1", "MEMORY", "Ostsee 2026"), ObjectRef("scope-1", "m-1", "MEMORY", ApplicationId.MEMORIES, "Ostsee 2026"), "m-1")
@@ -130,6 +137,8 @@ class WireTest {
             Call.MoveOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "EXPENSES_POT", "Trip to Lyon"), copy = true, deletedName = "deleted person"),
             Call.MoveClose(9), Call.MoveGo(9, "folder-1"), Call.MoveGo(9, null), Call.MoveUp(9), Call.MoveHere(9), Call.MoveConfirm(9),
             Call.MoveCancelConfirm(9), Call.MoveUndo(9),
+            Call.SelectStart, Call.SelectCancel, Call.SelectToggle("f-1"), Call.SelectAll, Call.SelectNone, Call.SelectMove(copy = true, deletedName = "deleted"),
+            Call.SelectReport, Call.SelectDelete, Call.SelectDeleteRun(13), Call.SelectDeleteUndo(13), Call.SelectDeleteClose(13),
             Call.ShareOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "folder-1", "FOLDER", "Holidays")), Call.ShareClose(10), Call.ShareAdd(10),
             Call.ShareEdit(10, "share-1"), Call.ShareRole(10, "READ_WRITE"), Call.ShareLabel(10, "Family"), Call.ShareLockOn(10, true),
             Call.SharePassword(10, "typed by the person"), Call.ShareEndOn(10, false), Call.ShareEndDay(10, 20_800), Call.ShareCancelForm(10),
@@ -144,7 +153,7 @@ class WireTest {
             Call.CoverPose(4000.0, 3000.0, 640.0, 360.0, null, me.raddatz.veyq.mobile.session.NodeCover.Crop.FULL, 0.0, 0.0, 1.0), Call.CoverFit(4000, 3000),
             Call.CoverCut(me.raddatz.veyq.mobile.session.NodeCover.Crop(0.25, 0.0, 0.5, 1.0), 4000, 3000),
             Call.ReportOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "folder-1", "FOLDER", "Holidays")), Call.ReportClose(11), Call.ReportWhole(11, false),
-            Call.ReportCategory(11, "ILLEGAL_CONTENT"), Call.ReportReason(11, "why"), Call.ReportGoodFaith(11, true), Call.ReportContact(11, "me@example.org"), Call.ReportSend(11),
+            Call.ReportCategory(11, "ILLEGAL_CONTENT"), Call.ReportReason(11, "why"), Call.ReportGoodFaith(11, true), Call.ReportContact(11, "me@example.org"), Call.ReportSend(11), Call.ReportEnclosing(11),
             Call.EditorOpen(3, null, ","), Call.EditorOpen(3, "e1", "."), Call.EditorSave(12), Call.EditorAskDelete(12), Call.EditorDelete(12), Call.EditorCancelAsk(12), Call.EditorClose(12), Call.EditorOpenHeld(3, "entry:e1", ","), Call.EditorDiscardMine(12),
             Call.EditorAddReceipts(12, listOf("/home/p/Bilder/Quittung März.jpg", "C:\\Users\\p\\scan.pdf")), Call.EditorDropReceipt(12, "r1"),
             Call.ReceiptOpen(3, "r1"), Call.ReceiptPages(25), Call.ReceiptSave(3, "r1", "/home/p/Downloads/r1.jpg"),
@@ -254,7 +263,7 @@ class WireTest {
             Call.ErasureOpen("veyq.localhost#u1"), Call.ErasureChoose(124, "t1", null), Call.ErasureChoose(124, "t2", "user-3"),
             Call.ErasureRun(124, "pw"), Call.ErasureClose(124),
         ),
-        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.QueuedTray, Watched.Import(60), Watched.DropBox(30), Watched.DropBoxLive(30), Watched.Scan(40), Watched.Link(70), Watched.Received(80), Watched.Bookmark(90), Watched.Settings(50),
+        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.SelectionDelete(13), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.QueuedTray, Watched.Import(60), Watched.DropBox(30), Watched.DropBoxLive(30), Watched.Scan(40), Watched.Link(70), Watched.Received(80), Watched.Bookmark(90), Watched.Settings(50),
             Watched.Gallery(60), Watched.GalleryLive(60), Watched.SettingsStorageLive(50), Watched.Lightbox(61), Watched.Player, Watched.Music(80), Watched.Buckets(120),
             Watched.Map(100), Watched.MapServices, Watched.Date(101), Watched.Place(102), Watched.Tracks(103),
             Watched.Participants(110), Watched.CaptureTime(111), Watched.Banner(112), Watched.Person(113), Watched.Search(114),
@@ -274,6 +283,7 @@ class WireTest {
             Answer.QueuedOpens(me.raddatz.veyq.mobile.composition.QueuedOpen.Place("t", "scope-1", null)),
             Answer.QueuedCopyName("dune.png", "image/png"), Answer.QueuedCopyName(null, null),
             Answer.QueuedAsked(me.raddatz.veyq.mobile.composition.QueuedAsk(Notice(Msg.OFFLINE_WRITES_LOST, listOf(2)), Msg.OFFLINE_SIGN_OUT_ANYWAY)), Answer.QueuedAsked(null), Answer.TrashOpened(8), Answer.Said(Notice(Msg.TRASH_MOVED, listOf("Trip"))), Answer.Said(null), Answer.Trashed(Notice(Msg.TRASH_MOVED, listOf("Trip")), undoable = true),
+            Answer.SelectionDelete(13, Notice(Msg.DELETE_MANY_TITLE, listOf(2)), Notice(Msg.DELETE_MANY_COPY, listOf(2, me.raddatz.veyq.mobile.words.Joined(listOf(Notice(Msg.NODE_A_FOLDER)), ", ")))),
             Answer.Named(Notice(Msg.NODE_SLUG_TAKEN), null, false, true), Answer.Named(null, Notice(Msg.SHARE_NAME_RESEAL_FAILED), false, false), Answer.Named(null, null, true, false),
             Answer.Dropped(2, listOf(Notice(Msg.MEMORY_DROP_FOLDER, listOf("Trip"))), 62), Answer.Dropped(0, listOf(Notice(Msg.DROP_NOT_HERE)), refused = true), Answer.Refused(Answer.Why.DROP_NOT_HERE), Answer.Refused(Answer.Why.NO_SUCH_ROW),
             Answer.MoveOpened(9), Answer.ShareOpened(10), Answer.DropBoxOpened(30), Answer.Refused(Answer.Why.NOT_ASKED), Answer.ReportOpened(11), Answer.Refused(Answer.Why.NO_COVER),
@@ -345,12 +355,13 @@ class WireTest {
                 title = Notice(Msg.COPY_TITLE, listOf("Holidays")), hint = Msg.COPY_HINT, submit = Msg.COPY_SUBMIT, loaded = true,
                 trail = listOf(MoveShown.MoveCrumb(null, Piece.Said(Notice(Msg.SPACE_PERSONAL))), MoveShown.MoveCrumb("folder-2", Piece.Plain("Trips"))),
                 places = listOf(MoveShown.MovePlace("folder-1", "FOLDER", "Holidays", Msg.MOVE_BLOCKED_SELF), MoveShown.MovePlace("folder-3", "FOLDER", "2026", null)),
-                empty = null, here = Msg.MOVE_HERE_CURRENT, problem = Notice(Msg.COPY_NAME_TAKEN), noRoom = Notice(Msg.COPY_NO_ROOM, listOf(Bytes(4096))),
+                empty = null, here = Notice(Msg.MOVE_HERE_CURRENT), problem = Notice(Msg.COPY_NAME_TAKEN), noRoom = Notice(Msg.COPY_NO_ROOM, listOf(Bytes(4096))),
                 losses = listOf(Notice(Msg.COPY_LOSS_ALWAYS), Notice(Msg.COPY_LOSS_FOLDER_COVER)), leftOut = listOf(Notice(Msg.LEFT_OUT_LINE, listOf("x", Notice(Msg.LEFT_OUT_NOT_COPYABLE)))),
                 busy = false, canChoose = false, confirming = true, confirmQuestion = Notice(Msg.MOVE_IDENTITY_CONFIRM, listOf("Holidays")),
                 done = Notice(Msg.MOVE_MOVED, listOf("Holidays", "Trips")), undo = Notice(Msg.MOVE_MOVED, listOf("Holidays", "Trips")),
             )),
             Update.Move(9, null),
+            Update.SelectionDelete(13, Notice(Msg.DELETE_MANY_MOVED, listOf(2))), Update.SelectionDelete(13, null),
             Update.Report(11, ReportShown(
                 node = me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "folder-1", "FOLDER", "Holidays"),
                 categories = listOf(ReportShown.ShownCategory("CHILD_SEXUAL_ABUSE", Msg.REPORT_CAT_CSAM), ReportShown.ShownCategory("TERMS_BREACH", Msg.REPORT_CAT_TERMS)),

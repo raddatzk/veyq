@@ -111,6 +111,27 @@ object NodeReport {
         return submit(tenant, scopeId, cat, kind, nodeId, keys, reason, contact)
     }
 
+    /** The most items one report holds (ADR 0093 § 1, the web's `MAX_REPORT_ITEMS`); above it the folder holding them is offered. */
+    const val MAX_ITEMS = 100
+
+    /**
+     * Reports several nodes [nodeIds] of [scopeId] as one report (a level's selection, the web's `reportNodes`): each node
+     * whole — a kept link by its name ([scopeOf]) — in [category] for [reason], with [contact]. At most [MAX_ITEMS]; a node
+     * not there or whose keys do not open here fails the whole report, as the web's does (nothing is reported in part).
+     */
+    @Throws(Exception::class)
+    suspend fun reportMany(tenant: TenantSession, scopeId: String, nodeIds: List<String>, category: String, reason: String, contact: String): Sent {
+        val cat = ReportSubmission.Category.entries.firstOrNull { it.value == category } ?: return Sent(Outcome.FAILED)
+        if (reason.isBlank() || nodeIds.isEmpty() || nodeIds.size > MAX_ITEMS) return Sent(Outcome.FAILED)
+        val tree = tenant.trees()[scopeId].orEmpty().associateBy { it.id }
+        val items = nodeIds.map { id ->
+            val node = tree[id] ?: return Sent(Outcome.NOT_FOUND)
+            val asked = scopeOf(node.kind, Scope.WHOLE)
+            Triple(itemKind(asked), id, keysOf(tenant, scopeId, node, asked) ?: return Sent(Outcome.UNAVAILABLE))
+        }
+        return submitAll(tenant, scopeId, cat, items, reason, contact)
+    }
+
     /**
      * What a report of a node of [kind] reports when [asked] (ADR 0150 decision 6): a kept link its name only, whatever is
      * asked — its key would hand this instance's moderators another operator's share —, every other kind as asked.
@@ -140,6 +161,12 @@ object NodeReport {
     private suspend fun submit(
         tenant: TenantSession, scopeId: String, cat: ReportSubmission.Category, kind: ReportSubmissionItemsInner.Kind, id: String,
         keys: List<Report.Key>, reason: String, contact: String,
+    ): Sent = submitAll(tenant, scopeId, cat, listOf(Triple(kind, id, keys)), reason, contact)
+
+    /** [items] (each its kind, id and keys) sealed under one `K_report` and sent as one report. */
+    private suspend fun submitAll(
+        tenant: TenantSession, scopeId: String, cat: ReportSubmission.Category,
+        items: List<Triple<ReportSubmissionItemsInner.Kind, String, List<Report.Key>>>, reason: String, contact: String,
     ): Sent {
         val account = tenant.account
         val suite = account.suite
@@ -152,7 +179,9 @@ object NodeReport {
                     category = cat,
                     epoch = key.epoch,
                     sealedReport = b64(Report.seal(suite, key.epoch, key.kem, reportKey, reason)),
-                    items = listOf(ReportSubmissionItemsInner(kind, b64(Report.sealShare(suite, reportKey, Report.Item.Of(kind.value, id), keys)), id)),
+                    items = items.map { (kind, id, keys) ->
+                        ReportSubmissionItemsInner(kind, b64(Report.sealShare(suite, reportKey, Report.Item.Of(kind.value, id), keys)), id)
+                    },
                     sealedContact = trimmed.takeIf { it.isNotEmpty() }?.let { b64(Report.sealContact(suite, key.epoch, key.kem, it)) },
                     receiptAddress = trimmed.takeIf { it.isNotEmpty() },
                 )

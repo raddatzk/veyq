@@ -119,7 +119,7 @@ internal sealed class MoveDialog
             _shown = u.shown;
             if (u.shown is { } s)
             {
-                Log.Write($"move sheet{(s.copying ? " (copy)" : "")}: at {s.trail.LastOrDefault()?.nodeId}, {s.places.Count} places, here {s.here}, problem {s.problem?.msg}, " +
+                Log.Write($"move sheet{(s.copying ? " (copy)" : "")}: at {s.trail.LastOrDefault()?.nodeId}, {s.places.Count} places, here {s.here?.msg}, problem {s.problem?.msg}, " +
                     $"no room {s.noRoom is not null}, busy {s.busy}, confirming {s.confirming}, done {s.done is not null}, undo {s.undo is not null}");
             }
             // a move's undo: the InfoBar's Undo goes when the core's offer ends (once a state showed it), the sheet with it
@@ -200,7 +200,7 @@ internal sealed class MoveDialog
         }
         else if (s.here is { } here)
         {
-            _body.Children.Add(Text(Said.Key(here), "move-here-said", "TextFillColorSecondaryBrush"));
+            _body.Children.Add(Text(Said.Notice(here), "move-here-said", "TextFillColorSecondaryBrush"));
         }
         if (s.confirming) _body.Children.Add(AskConfirm(s, m));
     }

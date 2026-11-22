@@ -56,7 +56,9 @@ struct NodeTileItem: Identifiable {
     /// The node whose menu a secondary click or a long press opens: its row's, core's `rowPlan` (`NodeRowMenu`, ADR 0154
     /// decision 2); nil: none (a tile that is no level's row, a person's Memories).
     var menu: NodeAt?
-    let open: () -> Void
+    /// Whether its node is selected while the level picks (nil: the level does not pick): a check drawn on the tile.
+    var selected: Bool? = nil
+    var open: () -> Void
 }
 
 /// Tiles in core's grid (`TileGrid`): at least two columns on a phone, more as the window widens, each a square cover with
@@ -99,6 +101,13 @@ private struct NodeTile: View {
                         }
                     }
                     .clipShape(RoundedRectangle(cornerRadius: Radius.card, style: .continuous))
+                    .overlay(alignment: .topTrailing) {
+                        if let selected = item.selected {
+                            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                                .font(.title3).foregroundStyle(selected ? Role.accent : Color.white)
+                                .shadow(radius: 1).padding(6)
+                        }
+                    }
                 Text(item.name).fontWeight(.bold).foregroundStyle(Role.text).lineLimit(2)
                 if let details = item.details, !details.isEmpty {
                     Text(details).font(.caption).foregroundStyle(Role.muted).lineLimit(1)
@@ -110,6 +119,7 @@ private struct NodeTile: View {
         .disabled(!item.enabled)
         .opacity(item.enabled ? 1 : 0.38)
         .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(item.selected == true ? .isSelected : [])
         .modifier(TileDrop(drop: item.drop))
         .modifier(TileMenu(model: model, node: item.menu))
     }

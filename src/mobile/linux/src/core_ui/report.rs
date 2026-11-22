@@ -40,6 +40,10 @@ struct Inner {
     whole: gtk::CheckButton,
     name_only: gtk::CheckButton,
     scope_hint: gtk::Label,
+    /// A level selection's: how many it reports, and above one report's room why, with the folder holding them offered.
+    items: gtk::Label,
+    too_many: gtk::Label,
+    enclosing: gtk::Button,
     categories: gtk::ListBox,
     category_checks: RefCell<Vec<(String, gtk::CheckButton)>>,
     note: gtk::Label,
@@ -125,6 +129,12 @@ fn sheet(parent: &impl IsA<gtk::Widget>, node: &NodeAt) -> Rc<Inner> {
     scope_hint.add_css_class("dim-label");
     scope_hint.add_css_class("caption");
 
+    let items = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
+    let too_many = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
+    too_many.add_css_class("error");
+    let enclosing = gtk::Button::builder().halign(gtk::Align::Start).visible(false).build();
+    enclosing.add_css_class("pill");
+
     let categories = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
     categories.add_css_class("boxed-list");
     let category_group = adw::PreferencesGroup::builder().title(words::report_category()).build();
@@ -158,7 +168,7 @@ fn sheet(parent: &impl IsA<gtk::Widget>, node: &NodeAt) -> Rc<Inner> {
 
     let body = gtk::Box::new(gtk::Orientation::Vertical, 18);
     for w in [
-        intro.upcast_ref::<gtk::Widget>(), scope.upcast_ref(), scope_hint.upcast_ref(), category_group.upcast_ref(), note.upcast_ref(),
+        intro.upcast_ref::<gtk::Widget>(), items.upcast_ref(), too_many.upcast_ref(), enclosing.upcast_ref(), scope.upcast_ref(), scope_hint.upcast_ref(), category_group.upcast_ref(), note.upcast_ref(),
         reason_group.upcast_ref(), faith_list.upcast_ref(), contact_group.upcast_ref(), problem.upcast_ref(),
     ] {
         body.append(w);
@@ -197,6 +207,9 @@ fn sheet(parent: &impl IsA<gtk::Widget>, node: &NodeAt) -> Rc<Inner> {
         whole,
         name_only,
         scope_hint,
+        items,
+        too_many,
+        enclosing,
         categories,
         category_checks: RefCell::new(Vec::new()),
         note,
@@ -258,6 +271,8 @@ impl Inner {
     fn wire(self: &Rc<Self>, privacy: &adw::ButtonRow, close: &gtk::Button) {
         let w = Rc::downgrade(self);
         self.cancel.connect_clicked(move |_| { if let Some(i) = w.upgrade() { i.dialog.close(); } });
+        let w = Rc::downgrade(self);
+        self.enclosing.connect_clicked(move |_| { if let Some(i) = w.upgrade() { i.send_call(|report| Call::ReportEnclosing { report }); } });
         let w = Rc::downgrade(self);
         close.connect_clicked(move |_| { if let Some(i) = w.upgrade() { i.dialog.close(); } });
         let w = Rc::downgrade(self);
@@ -382,6 +397,16 @@ impl Inner {
             self.whole.set_active(s.whole);
             self.name_only.set_active(!s.whole);
             self.scope_hint.set_label(&said::key(&s.scope_hint));
+            self.items.set_visible(s.items.is_some());
+            if let Some(n) = &s.items {
+                self.items.set_label(&said::notice(n));
+            }
+            self.too_many.set_visible(s.too_many.is_some());
+            if let Some(n) = &s.too_many {
+                self.too_many.set_label(&said::notice(n));
+            }
+            self.enclosing.set_visible(s.offers_enclosing);
+            self.enclosing.set_label(&said::key(&s.enclosing_word));
             for (id, check) in self.category_checks.borrow().iter() {
                 check.set_active(s.category.as_deref() == Some(id.as_str()));
             }

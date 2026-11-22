@@ -193,6 +193,9 @@ internal static class HomeView
     public static UIElement Home(ShellModelState state, ShellShown shown, Drops? drops = null, UIElement? hero = null)
     {
         var tiles = shown.view == ViewModeShown.Tiles;
+        // the level picks (the core's selection, inbox #1049): a row or a tile turns its node, no drop and no menu meanwhile
+        var selecting = shown.selection;
+        if (selecting is not null) drops = null;
         var (scroll, content) = Column();
         // the scroller holds only the column's height: the level takes a drop under its last row too
         scroll.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
@@ -216,9 +219,14 @@ internal static class HomeView
                 var items = new List<LevelTiles.Item>();
                 foreach (var n in g.nodes)
                 {
-                    if (g.folders) items.Add(FolderTile(n, drops));
-                    else if (state.lists.objects.FirstOrDefault(o => o.scopeId == n.scopeId && o.nodeId == n.nodeId) is { } o) items.Add(ObjectTile(o));
-                    else if (n.kind == BookmarkPage.Kind) items.Add(BookmarkTile(n));
+                    LevelTiles.Item? item = null;
+                    if (g.folders) item = FolderTile(n, drops);
+                    else if (state.lists.objects.FirstOrDefault(o => o.scopeId == n.scopeId && o.nodeId == n.nodeId) is { } o) item = ObjectTile(o);
+                    else if (n.kind == BookmarkPage.Kind) item = BookmarkTile(n);
+                    if (item is null) continue;
+                    // while the level picks, the tile turns its node instead of opening it
+                    if (selecting is not null) item = item with { Open = Selection.Toggle(n.nodeId), Droppable = null, Node = null, Selected = selecting.selected.Contains(n.nodeId) };
+                    items.Add(item);
                 }
                 TileSection(content, heading, items, index++);
                 continue;
@@ -226,6 +234,11 @@ internal static class HomeView
             var rows = new List<ListViewItem>();
             foreach (var n in g.nodes)
             {
+                if (selecting is not null)
+                {
+                    rows.Add(Row(KindGlyph(n.kind), n.name, $"select:{n.name}", false, Selection.Toggle(n.nodeId), glyph => Selection.Check(glyph, selecting.selected.Contains(n.nodeId))));
+                    continue;
+                }
                 if (g.folders)
                 {
                     var row = FolderRow(n);
@@ -240,6 +253,18 @@ internal static class HomeView
         }
         // what was made here offline and waits to be sent (ShellShown.queuedHere, ADR 0153 decision 5): in place, marked
         if (shown.queuedHere.Count > 0) Section(content, null, shown.queuedHere.Select(QueuedRow), apart: true);
+        if (selecting is not null)
+        {
+            // the selection's bar under the level while it picks
+            var page = new Grid();
+            page.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            page.Children.Add(scroll);
+            var bar = Selection.Bar(selecting);
+            Grid.SetRow(bar, 1);
+            page.Children.Add(bar);
+            return page;
+        }
         return scroll;
     }
 

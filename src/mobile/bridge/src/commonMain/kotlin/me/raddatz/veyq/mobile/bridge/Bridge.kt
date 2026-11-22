@@ -638,6 +638,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val shares = Registry<ShareSheet>()
     private val dropBoxes = Registry<HeldDropBox>()
     private val reports = Registry<ReportSheet>()
+    private val deletes = Registry<me.raddatz.veyq.mobile.navigation.SelectionTrash>()
     private val editors = Registry<HeldEditor>()
     private val settings = Registry<HeldSettings>()
     private val creates = Registry<HeldCreate>()
@@ -1206,6 +1207,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ReportGoodFaith -> reports[call.report]?.goodFaith(call.on).done(Answer.Why.NO_SUCH_REPORT)
             is Call.ReportContact -> reports[call.report]?.contact(call.contact).done(Answer.Why.NO_SUCH_REPORT)
             is Call.ReportSend -> reports[call.report]?.let { Answer.Said(it.send().problem) } ?: noReport
+            is Call.ReportEnclosing -> reports[call.report]?.useEnclosing().done(Answer.Why.NO_SUCH_REPORT)
             is Call.HeaderDownload -> headers[call.header]?.let { h ->
                 val download = tenant.value?.models?.download ?: return noTenant
                 var leftOut: List<NodeExport.Skipped>? = null
@@ -1226,6 +1228,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.MoveConfirm -> moves[call.move]?.let { sent(it.confirm()) } ?: noMove
             is Call.MoveCancelConfirm -> moves[call.move]?.cancelConfirm().done(Answer.Why.NO_SUCH_MOVE)
             is Call.MoveUndo -> moves[call.move]?.let { Answer.Said(it.undo()) } ?: noMove
+            is Call.SelectStart, is Call.SelectCancel, is Call.SelectToggle, is Call.SelectAll, is Call.SelectNone, is Call.SelectMove,
+            is Call.SelectReport, is Call.SelectDelete, is Call.SelectDeleteRun, is Call.SelectDeleteUndo, is Call.SelectDeleteClose -> selecting(call)
             is Call.ShellCreateFolder -> tenant.value?.models?.createFolder?.let { named(it(call.name, call.top)) } ?: noTenant
             is Call.TrashOpen -> tenant.value?.models?.trash?.let { make ->
                 val id = ids.incrementAndFetch()
@@ -2207,6 +2211,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noPot = Answer.Refused(Answer.Why.NO_SUCH_POT)
     private val noTrash = Answer.Refused(Answer.Why.NO_SUCH_TRASH)
     private val noMove = Answer.Refused(Answer.Why.NO_SUCH_MOVE)
+    private val noDelete = Answer.Refused(Answer.Why.NO_SUCH_DELETE)
     private val noShare = Answer.Refused(Answer.Why.NO_SUCH_SHARE)
     private val noReport = Answer.Refused(Answer.Why.NO_SUCH_REPORT)
     private val noEditor = Answer.Refused(Answer.Why.NO_SUCH_EDITOR)
@@ -2567,6 +2572,38 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         return Answer.Stored(stored, model.current.notice.takeIf { !stored })
     }
 
+    /** A level's selection's calls (inbox #1049), apart from [dispatch], whose one method the JVM holds at its size limit. */
+    private suspend fun selecting(call: Call): Answer = when (call) {
+        is Call.SelectStart -> tenant.value?.models?.shell?.let { it.selectStart(); Answer.Done } ?: noTenant
+        is Call.SelectCancel -> tenant.value?.models?.shell?.let { it.selectCancel(); Answer.Done } ?: noTenant
+        is Call.SelectToggle -> tenant.value?.models?.shell?.let { it.selectToggle(call.nodeId); Answer.Done } ?: noTenant
+        is Call.SelectAll -> tenant.value?.models?.shell?.let { it.selectAll(); Answer.Done } ?: noTenant
+        is Call.SelectNone -> tenant.value?.models?.shell?.let { it.selectNone(); Answer.Done } ?: noTenant
+        is Call.SelectMove -> tenant.value?.models?.shell?.let { s ->
+            val sheet = s.selectionMoveSheet(call.copy, call.deletedName) {} ?: return@let Answer.Refused(Answer.Why.NOTHING_SELECTED)
+            val id = ids.incrementAndFetch()
+            moves.put(id, sheet)
+            scope.launch { sheet.load() }
+            Answer.MoveOpened(id)
+        } ?: noTenant
+        is Call.SelectReport -> tenant.value?.models?.shell?.let { s ->
+            val sheet = s.selectionReportSheet() ?: return@let Answer.Refused(Answer.Why.NOTHING_SELECTED)
+            val id = ids.incrementAndFetch()
+            reports.put(id, sheet)
+            Answer.ReportOpened(id)
+        } ?: noTenant
+        is Call.SelectDelete -> tenant.value?.models?.shell?.let { s ->
+            val delete = s.selectionTrash {} ?: return@let Answer.Refused(Answer.Why.NOTHING_SELECTED)
+            val id = ids.incrementAndFetch()
+            deletes.put(id, delete)
+            Answer.SelectionDelete(id, delete.title, delete.question)
+        } ?: noTenant
+        is Call.SelectDeleteRun -> deletes[call.delete]?.let { d -> d.trash().let { Answer.Trashed(it, d.current.undo != null) } } ?: noDelete
+        is Call.SelectDeleteUndo -> deletes[call.delete]?.let { Answer.Said(it.undo()) } ?: noDelete
+        is Call.SelectDeleteClose -> deletes.remove(call.delete)?.let { Answer.Done } ?: noDelete
+        else -> Answer.Refused(Answer.Why.NOT_A_CALL)
+    }
+
     /** A move sheet's state as a write's answer ([Answer.MoveSent]). */
     private fun sent(s: MoveSheet.State) = Answer.MoveSent(s.done, s.undo != null, s.confirming, s.problem)
 
@@ -2701,6 +2738,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         shares.removeAll()
         dropBoxes.removeAll().forEach { it.page.close() }
         reports.removeAll()
+        deletes.removeAll()
         accountPages.removeAll().forEach { it.close() }
         // the account's flows (ADR 0148 decision 11): every model dropped, its secrets zeroed, each watch delivering null
         profiles.removeAll().forEach { it.close() }
@@ -2840,6 +2878,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.Share(w.share, null))
         is Watched.Report -> reports[w.report]?.let { r -> r.state.map { Update.Report(w.report, shownReport(r, it)) } }
             ?: flowOf(Update.Report(w.report, null))
+        is Watched.SelectionDelete -> deletes[w.delete]?.let { d -> d.state.map { Update.SelectionDelete(w.delete, it.undo) } }
+            ?: flowOf(Update.SelectionDelete(w.delete, null))
         // the poll runs inside this watch's own job: a host's dropped watch cancels it, and it ends with its Pot
         is Watched.PotLive -> flow { pots[w.pot]?.live() }
         is Watched.Editor -> editors[w.editor]?.let { e -> e.model.state.map { Update.Editor(w.editor, shownEditor(e, it)) } }
@@ -2954,6 +2994,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 ShellShown.ShownLevel(p.creates.map { ShellShown.ShownCreate(it, it.word) }, p.tools)
             },
             drawerCreates = open.models.shell?.drawerCreates().orEmpty().map { ShellShown.ShownCreate(it, it.word) },
+            selection = s.selection?.let { sel ->
+                ShellShown.ShownSelection(
+                    sel.selected.toList(), sel.count,
+                    sel.entries.map { ShellShown.ShownSelectionAction(it.action, it.word, it.enabled, it.cannot) },
+                )
+            },
             dropRows = shell.space?.let { scopeId ->
                 lists.groups(shell).filter { it.folders }.flatMap { it.nodes }
                     .filter { open.models.dropTarget(NodeAt(scopeId, it.nodeId, it.kind, it.name)) }.map { it.nodeId }
@@ -3463,7 +3509,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         scopeHint = s.scopeHint, category = s.category, note = s.note, reasonMax = NodeReport.REASON_MAX,
         contactMax = NodeReport.CONTACT_MAX, goodFaith = s.goodFaith, canSend = s.canSend, sending = s.sending, problem = s.problem,
         sent = s.sent != null, reference = s.sent?.reference, receivedAt = s.sent?.receivedAt, privacyUrl = r.privacyUrl,
-        offersName = r.offersName,
+        offersName = r.offersName, items = s.items.takeIf { r.nodes.size > 1 }, tooMany = s.tooManyNotice,
+        offersEnclosing = r.offersEnclosing(s),
     )
 
     /** A move or copy sheet as the host draws it ([MoveShown]), each field the sheet's own answer. */
@@ -3472,7 +3519,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         trail = s.trail.map { MoveShown.MoveCrumb(it.nodeId, it.name) },
         places = s.places.map { MoveShown.MovePlace(it.node.nodeId, it.node.kind, it.node.name, it.blocked?.let(NodeMove::placeWord)) },
         empty = m.empty.takeIf { s.loaded && s.places.isEmpty() },
-        here = m.hereWord(s), problem = s.problem, noRoom = s.noRoom, losses = s.losses.map { Notice(it) }, leftOut = s.leftOut,
+        here = m.here(s), problem = s.problem, noRoom = s.noRoom, losses = s.losses.map { Notice(it) }, leftOut = s.leftOut,
         busy = s.busy, canChoose = s.canChoose, confirming = s.confirming, confirmQuestion = m.confirmQuestion, done = s.done, undo = s.undo,
     )
 

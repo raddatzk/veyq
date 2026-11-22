@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// A node header's and a level row's plans and core's favourite, cover and bookmark rights against
+// A node header's and a level row's plans, a level's selection bar and core's favourite, cover and bookmark rights against
 // contracts/platform/plans/v1-vectors.json (ADR 0154 decision 2, ADR 0155 decision 7.2's third slice): every case through
 // the web's adapters (`plans.ts`, `favorites/rights.ts`, `cover/rights.ts`, `bookmark/rights.ts`) over the platform's Kotlin
 // (`@veyq/core-js/navigation`), and the real registry (`src/test/setup.ts` registers the applications, as `main.ts` does),
@@ -12,6 +12,7 @@ import { resolve } from 'node:path'
 import { headerPlan as coreHeaderPlan } from '@veyq/core-js/navigation'
 import { registry } from '../applications/registry'
 import { headerPlan, rowPlan } from './plans'
+import { selectionBar } from './selection'
 import type { NodeHeaderAction } from './nodeHeader'
 import { favoriteRights } from '../favorites/rights'
 import { coverRights } from './cover/rights'
@@ -108,6 +109,15 @@ describe('the plans\' vectors (contracts/platform/plans/v1-vectors.json)', () =>
     const web = ['FOLDER', ...registry.levelMenu().map((e) => name[e.id] ?? e.id)]
     const all = vectors.level.creates.find((c: any) => c.at === 'level' && c.bookmarks)
     expect(web).toEqual(all.expected)
+  })
+
+  // A level's selection's bar (`LevelView.vue` over `selectionBar`, inbox #1049): the same numbers and entries the core's
+  // `LevelSelection.bar` answers.
+  it('every selection bar', () => {
+    for (const [i, c] of vectors.selection.entries()) {
+      const rows = new Map(c.rows.map((r: any) => [r.id, { move: r.move, copy: r.copy, report: r.report, delete: r.delete }]))
+      expect(selectionBar(rows as any, c.selected, c.shown), `selection ${i}: ${c.rule}`).toEqual(c.expected)
+    }
   })
 
   it('core\'s favourite, cover and bookmark rights', () => {

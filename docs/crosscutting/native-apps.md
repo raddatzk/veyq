@@ -798,5 +798,5 @@ drawn on an iPhone, and its missing reason at *Sign in with Face ID*.
 Broadway carries no file drop, the Windows VM's WinUI takes none with UAC off; the Mac's drops and dialogs are the
 coordinator's pass (#1039), a guest's link on the iPhone the owner's; a Memory's *Add photos* and a WRITE_ONLY page still
 name a guest first (#1042), the phones' guest gallery offers *Add* only once named (#1044).
-**The structure** (ADR 0154 decision 2): passed on Linux, Android and Windows; the Mac's is the coordinator's click list (ADR 0154's Consequences), the iPhone's the owner's; no level selects yet (#1049).
+**The structure** (ADR 0154 decision 2): passed on Linux, Android and Windows; the Mac's is the coordinator's click list (ADR 0154's Consequences), the iPhone's the owner's. A level selects as the web's (inbox #1049, ADR 0154 § Consequences, As built: a level's Select).
 **Notices and formats** (ADR 0154 decisions 4 and 5): passed on Android and Windows in English and German (each lifetime, a held refusal staying, sizes, moments, a Pot's amounts in two currencies, a Memory's range; the music clocks on Android only); Linux's lifetimes and amounts were not seen in Broadway; the Mac's is the coordinator's click list (ADR 0154's Consequences), the iPhone's the owner's.

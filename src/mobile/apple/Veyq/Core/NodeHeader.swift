@@ -607,7 +607,7 @@ struct TrashNotice: View {
     var body: some View {
         if let notice = model.trashNotice {
             NoticeCard(text: notice.message) {
-                if notice.header != nil || notice.move != nil {
+                if notice.undoable {
                     Button(say(.trashUndo)) { Task { await model.undoTrash() } }.fontWeight(.semibold)
                 }
             }
