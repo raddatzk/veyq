@@ -3,14 +3,19 @@
 // with one (a password-trusted account), one accent button, and the way to another account as a link under it. For a
 // remembered account the button asks the core again, which raises Windows Hello's prompt itself ("" crosses, nothing
 // typed); without Hello (LOGIN) it says the resume failed and tries again (TrustWords.Unlock). Linux's sign_in::Unlock.
-// Under it *Open a link* (ADR 0150 decision 4), as under the sign-in: a received link needs no session (ReceivedView).
+// The controls under the account are the core's entries (Unlock.Plan, ADR 0154 decision 2), each drawn in its order:
+// the button, the way to another account, *Open a link* (ADR 0150 decision 4: a received link needs no session,
+// ReceivedView) and *Stop trusting this device* (inbox #1052), asked first by the core where writes made offline wait.
 
 namespace Veyq.Core;
 
+using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
+using Veyq.Bridge;
 using Veyq.Bridge.Wire;
 using Windows.System;
 
@@ -23,6 +28,10 @@ internal sealed class UnlockView
     private readonly PasswordBox _password;
     private readonly Button _submit;
     private readonly HyperlinkButton _other;
+    private readonly HyperlinkButton _openLink;
+    private readonly HyperlinkButton _forget;
+    private readonly StackPanel _entries = new() { Spacing = 16 };
+    private readonly Window _window;
     private readonly ProgressRing _working;
     private readonly TextBlock _error;
 
@@ -30,6 +39,7 @@ internal sealed class UnlockView
 
     public UnlockView(Window window)
     {
+        _window = window;
         var heading = new TextBlock { Text = Words.UnlockTitle(), Style = (Style)Application.Current.Resources["TitleTextBlockStyle"], HorizontalAlignment = HorizontalAlignment.Center };
         AutomationProperties.SetAutomationId(heading, "unlock-title");
         AutomationProperties.SetHeadingLevel(heading, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1);
@@ -66,21 +76,90 @@ internal sealed class UnlockView
         _other.Click += (_, _) => Act.Send(new Call.SessionOtherAccount());
         _working = new ProgressRing { IsActive = false, Visibility = Visibility.Collapsed, HorizontalAlignment = HorizontalAlignment.Center };
         AutomationProperties.SetAutomationId(_working, "unlock-working");
-        var openLink = new HyperlinkButton { Content = Words.LinkOpen(), HorizontalAlignment = HorizontalAlignment.Center };
-        AutomationProperties.SetAutomationId(openLink, "open-link");
-        openLink.Click += (_, _) => ReceivedView.OpenLink(window);
+        _openLink = new HyperlinkButton { Content = Words.LinkOpen(), HorizontalAlignment = HorizontalAlignment.Center };
+        AutomationProperties.SetAutomationId(_openLink, "open-link");
+        _openLink.Click += (_, _) => ReceivedView.OpenLink(window);
+        _forget = new HyperlinkButton
+        {
+            Content = Words.ManageForgetDevice(),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"],
+        };
+        AutomationProperties.SetAutomationId(_forget, "unlock-forget");
+        _forget.Click += (_, _) => Forget();
 
         var column = new StackPanel { Spacing = 16, MaxWidth = 420, Padding = new Thickness(24), VerticalAlignment = VerticalAlignment.Center };
         var account = new StackPanel { Spacing = 4 };
         account.Children.Add(_picture);
         account.Children.Add(_email);
         account.Children.Add(_server);
-        foreach (var child in new UIElement[] { heading, account, _hint, _password, _error, _submit, _other, openLink, _working }) column.Children.Add(child);
+        foreach (var child in new UIElement[] { heading, account, _hint, _password, _error, _entries, _working }) column.Children.Add(child);
         // the sign-in's layout: the capped column centres in a stretching Grid (a trap of src/mobile/CLAUDE.md)
         var stretch = new Grid();
         stretch.Children.Add(column);
         // the password (PasswordBox's peek shows it): out of capture
         Page = ScreenSecrets.Guard(new ScrollViewer { Content = stretch, HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        Plan();
+    }
+
+    /// <summary>The entries under the account as the core plans them (Unlock.Plan; no share extension here, so one plan
+    /// for every unlock): asked once, each entry drawn in its order.</summary>
+    private async void Plan()
+    {
+        try
+        {
+            var (answer, _) = await Core.CallAsync(new Call.UnlockPlan());
+            if (answer is not Answer.UnlockPlan plan)
+            {
+                Log.Write($"Unlock.Plan answered {answer.GetType().Name}");
+                return;
+            }
+            _entries.Children.Clear();
+            foreach (var e in plan.entries) _entries.Children.Add(Entry(e));
+            Log.Write($"unlock entries: {string.Join(",", plan.entries)}");
+        }
+        catch (Exception e)
+        {
+            // an exception out of an async void would end the app in combase, with nothing in the log
+            Log.Write($"Unlock.Plan failed: {e.GetType().Name}");
+        }
+    }
+
+    /// <summary>A plan entry's control: Unlock the accent button, every other a link under it.</summary>
+    private ButtonBase Entry(UnlockEntry e) => e switch
+    {
+        UnlockEntry.Submit => _submit,
+        UnlockEntry.OtherAccount => _other,
+        UnlockEntry.OpenLink => _openLink,
+        UnlockEntry.Forget => _forget,
+    };
+
+    /// <summary>*Stop trusting this device* from the unlock: the core's ask first (Unlock.ForgetAsk) while writes made
+    /// offline wait for the account shown, then Session.ForgetUnlocked; the gate that follows shows the next account or
+    /// the sign-in.</summary>
+    private async void Forget()
+    {
+        try
+        {
+            var (answer, _) = await Core.CallAsync(new Call.UnlockForgetAsk());
+            if (answer is not Answer.QueuedAsked asked)
+            {
+                // unanswered, nothing is lost unasked: the forget waits for the next try
+                Log.Write($"Unlock.ForgetAsk answered {answer.GetType().Name}");
+                return;
+            }
+            if (asked.ask is { } ask)
+            {
+                Log.Write("queued ask before the unlock's stop trusting");
+                if (!await Dialogs.Confirm(_window, "unlock-forget-ask", Words.AccountSettingsUntrustConfirmTitle(), Said.Notice(ask.question), Said.Key(ask.confirm))) return;
+            }
+            Log.Write("unlock stop trusting");
+            Act.Send(new Call.SessionForgetUnlocked());
+        }
+        catch (Exception e)
+        {
+            Log.Write($"the unlock's stop trusting failed: {e.GetType().Name}");
+        }
     }
 
     private void Unlock()
@@ -105,6 +184,8 @@ internal sealed class UnlockView
         _password.Visibility = record.method == Method.Device ? Visibility.Visible : Visibility.Collapsed;
         _submit.IsEnabled = !gate.working;
         _other.IsEnabled = !gate.working;
+        _openLink.IsEnabled = !gate.working;
+        _forget.IsEnabled = !gate.working;
         _password.IsEnabled = !gate.working;
         _working.IsActive = gate.working;
         _working.Visibility = gate.working ? Visibility.Visible : Visibility.Collapsed;
