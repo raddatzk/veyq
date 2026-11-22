@@ -383,6 +383,9 @@ punctuation, case); only 427 web keys derive an app key's name.
    (`cover_choose_image` gained one). Owner questions left `open`: `kit_save_title` (the apps' own step title against
    the web's) and `link_sign_in_scan_hint` (the web quotes a screen's title in lower case); and, worded alike on both
    but split within each, "Cover" / "Titelbild", "Titel" / "Track", and "Tenant" left English in German.
+   **All answered by the owner 2026-11-22** (recorded in ADR 0086): `kit_save_title` is the web's "Notfall-Kit
+   sichern"; the web quotes "Add a device" as the screen is named; "Cover" everywhere, "Titel" for a piece of music
+   (a GPX track stays "Track"), "Tenant" stays English. Both pairs moved to `twins`; `open` is empty.
    The changes, each `words.json` field as it was and as the web words it:
 
    | key | field | before | after |
