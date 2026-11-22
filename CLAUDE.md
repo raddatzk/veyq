@@ -67,16 +67,20 @@ The server is **operator-blind**: it stores and serves only ciphertext.
   shared by `src/web/` and `src/admin-web/` (and read by `tests/e2e/`, with the wire assertion's canary collision rule, ADR 0090)
   ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)) — duplicating key-material logic would be a
   security defect, not a maintenance nuisance. Beside it **`src/packages/core-js/`** (`@veyq/core-js`): the Kotlin
-  `core` compiled for JavaScript over the web's own `@noble/*`, its `dist/` written by Gradle's `:core:jsPackage`
-  (`pnpm run build`, never committed), its check the suite's conformance under Node; the web imports nothing from it
-  yet ([ADR 0155](docs/decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)).
+  `core` compiled for JavaScript over the web's own `@noble/*`, its `dist/` written by Gradle's `:composition:jsPackage`
+  (`pnpm run build`, never committed), its check the suite's conformance under Node; the web's search draws from it
+  ([ADR 0155](docs/decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)).
   The workspace exists **for those two** — no UI, no router, no state is shared. The workspace is **pnpm** ([ADR 0116](docs/decisions/0116-the-javascript-packages-are-installed-by-pnpm.md);
   `pnpm-workspace.yaml`, the version pinned in `package.json` `packageManager`): `pnpm install` runs from the repo root, and its strict `node_modules` links each package
   only what it declares; each package still proves itself with its own `pnpm run check`.
 - `src/mobile/` — the **veyq app** (V2): one app for every application ([ADR 0122](docs/decisions/0122-one-app-holds-every-application-the-drawer-chooses-the-bar-belongs-to-it.md)),
-  a Gradle build of its own — `core` (Kotlin Multiplatform: the v1 suite ported once and held to
-  `contracts/crypto/vectors`, the API client generated from `contracts/api`, the session, the navigation model),
-  `android` (Compose) and `apple` (SwiftUI, iOS and macOS) ([ADR 0123](docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)).
+  a Gradle build of its own — the Kotlin Multiplatform core, split as the backend is
+  ([ADR 0156](docs/decisions/0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md)):
+  `core` the platform (the v1 suite ported once and held to `contracts/crypto/vectors`, the API client generated from
+  `contracts/api`, the session, the navigation model, the registry of kinds), `apps/<application>` one module per
+  application, `composition` the one that names them all and that every client links, `testing` the shared test
+  support, the direction the build's and `validate_mobile_module_graph.py`'s; `android` (Compose) and `apple` (SwiftUI,
+  iOS and macOS) ([ADR 0123](docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)).
   The suite's second implementation answers to the same vectors as `@veyq/crypto`; the vectors are the one gate.
 - `src/tools/` — the two operator tools a release ships as assets: `veyqctl` (installs, upgrades and backs up a
   Compose instance from its releases, [ADR 0096](docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md))

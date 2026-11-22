@@ -12,12 +12,12 @@ invariants:
   - "no behaviour a member sees changes, except the currency list and digits named in decision 6"
 ---
 
-> **Status: parked by the owner 2026-11-21, behind
-> [cr-core-platform-and-application-modules](cr-core-platform-and-application-modules.md)** (ADR 0155 decision 7's
-> new order: the core splits, the platform moves slice by slice, then the applications, Expenses first). Phases 1–3 and
-> one timing round are built and committed on branch **`claude/p2-impl`**, not merged; its worktree
-> (`…/scratchpad/p2-impl`) is left as it is. When the split is through, the branch is rebased onto `:apps:expenses`
-> and reused, not rebuilt.
+> **Status: parked by the owner 2026-11-21, behind the core's split** (ADR 0155 decision 7's new order: the core
+> splits, the platform moves slice by slice, then the applications, Expenses first). **The split is built** (2026-11-22,
+> [ADR 0156](../docs/decisions/0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md): `:core`, `:apps:expenses` among the applications, `:composition`). Phases 1–3 and one timing round are
+> built and committed on branch **`claude/p2-impl`**, not merged; its worktree (`…/scratchpad/p2-impl`) is left as it
+> is. The branch is rebased onto `:apps:expenses` and reused, not rebuilt — replayed there once for the split's
+> measurement, whose answer to decision 4 is below.
 >
 > | Step | Commit | What |
 > |---|---|---|
@@ -31,10 +31,16 @@ invariants:
 > - **Decision 4 does not hold.** One module with one entry file per façade puts Expenses into the search's entry
 >   (28,189 → 59,587 B gz alone, over the 40 KB; `src/slice.test.ts` on the branch is red on it), and per-file
 >   granularity puts Expenses at ~30.8 KB net, over its 25 KB. Decision 4 is replaced by the split's per-module
->   granularity, measured in that CR's last phase before this one resumes (ADR 0155 § Consequences).
+>   granularity, **measured 2026-11-22** ([ADR 0156](../docs/decisions/0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md) § Consequences, ADR 0155 § Consequences): Expenses' net 14,315 B
+>   gz (inside 25,600), but the search's entry alone 43,091 B gz (over 40,960) — what the façade uses of the platform
+>   (this CR's JSON seam in `json/`, money's formats in `words/Shown`) sits in the platform's file, which every entry
+>   imports whole. The owner has the number. Before resuming: that platform code leaves the file the search imports (a
+>   module of its own, or Expenses' own), each entry gets a declaration file of its own (one `.d.mts` covers every
+>   module today, so `entries.typetest.ts` is red), and `:apps:expenses` gets a conformance compilation for its decode
+>   runner (`DecodeRun.kt`; 21 decode cases red without one).
 > - **`SearchField.test.ts` is red** on the parked work only (`main` is green): the extra module hop between the web
->   and the search's façade changes when the field's watchers fire. The cause is not fully found; with per-module output
->   the hop changes again, so it is re-diagnosed on the rebased branch, not before.
+>   and the search's façade changes when the field's watchers fire. On the split's per-module output with Expenses'
+>   entry beside the search it is green (61 passed, measured 2026-11-22); the rebased branch confirms it.
 > - **The time gate is amended** (decision 9, ADR 0155 decision 7.3): ≤ 2.5× the TypeScript's median and ≤ 100 ms.
 >   At the park `buildLedger` 80.4–82.9 ms against 38–41 (2.07–2.12×), `checkLedger` 4.9–5.0 against 4.1–4.6
 >   (1.15–1.19×), Node 22.23.3, median of 15 after 3 warm-ups, the 10,010-revision Pot — inside. Re-measured after the

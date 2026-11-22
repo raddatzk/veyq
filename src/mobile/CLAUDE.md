@@ -4,6 +4,18 @@ One app for every application ([ADR 0122](../../docs/decisions/0122-one-app-hold
 a Kotlin Multiplatform base under each platform's own UI ([ADR 0123](../../docs/decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)).
 A Gradle build of its own, run through its own wrapper.
 
+- **The core's modules** ([ADR 0156](../../docs/decisions/0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md)):
+  `core/` the platform, `apps/<application>/` (`:apps:memories`, `:apps:depot`, `:apps:expenses`) each application's
+  packages below, `composition/` the one module that names every application — it installs each one's part
+  (`<Application>Kinds`, its kept reads, its `Notices`, `AppleSessions`, `AppleAudio` and `GuestAccess` extensions) into
+  the platform's registry `AppKinds` (`AppComposition.install()`, called by every client's start path: Android's
+  `VeyqApplication`, Apple's `AppModel`, the bridge's `Bridge`), holds the shell's model (`ShellModel`), the drop, the
+  queued tray and Swift's adapters over several applications, and is what the Apple framework (`VeyqCore`), the bridge,
+  Android and `@veyq/core-js` are built from — and `testing/` the shared test support. The targets, hierarchy, opt-ins,
+  shared dependencies and the generated client are one convention in `build.gradle.kts`. An application reaches what the
+  platform keeps `internal` from the clients only behind `@PlatformApi`, opted into by the core's modules alone and hidden
+  from Objective-C; `scripts/validate_mobile_module_graph.py` holds the direction. A test of one application runs in its
+  module over `TestApplications.install(<its part>)`, one across applications or of the composition in `composition/`.
 - `core/` — the shared base: the v1 suite (`crypto/`), the generated API client (`build/generated/openapi`, from
   `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), the search (`search/`: ported rule by rule from the web's `core/search`, which draws it from the core since ADR 0155, and held to `contracts/platform/search/v1-vectors.json`, [ADR 0146](../../docs/decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md); it names no application — `scripts/validate_mobile_search_names_no_application.py` —, each application's part reaches it through `AppKinds.search`), the music player (`audio/`, ADR 0142 decisions 1–3 and 13: the order, the fades, `MusicPlayer` with its interruption, and the two ports each platform implements — `Deck` and `SystemControls`: Android's `MusicPlayback.kt` — `MediaDeck`, `AndroidMusicControls` with its `MusicService` —, Apple's through `appleMain`'s `AppleAudio` — `MusicPlayback.swift`; carried over the bridge as host requests for Linux's `music_host` and Windows' decks with SMTC), a photo's and a video's metadata read from their bytes (`media/`),
   the uploads under way that a phone holds its process for, `blob/UploadsUnderway` (Android's `UploadWork.kt`, Apple's
@@ -141,16 +153,16 @@ A Gradle build of its own, run through its own wrapper.
   or `LOGIN`, and `DeviceKeys.staySignedIn` the set a store offers). The stores: Android `KeystoreDeviceKeys`, Apple
   `AppleDeviceKeys` (`appleMain`) over `KeychainStore.swift`, Windows `WindowsDeviceKeys` (`mingwMain`, the cinterop
   `core/wincred/`: DPAPI and the Passport key storage provider), Linux `LinuxDeviceKeys` (`linuxMain`, the cinterop
-  `core/secret/`: libsecret `dlopen`ed, never linked). `DeviceKeysContract` (`commonTest`) is what every store meets,
+  `core/secret/`: libsecret `dlopen`ed, never linked). `DeviceKeysContract` (`:testing`) is what every store meets,
   read only through the interface: a new store gets a subclass of it, run on its platform. `SoftwareDeviceKeys`
-  (`core/src/testDevice/`, compiled into core's `commonTest` and `:bridge`'s `jvmTest`) is the test store; its
+  (`:testing`, `testing/src/commonMain`, a dependency of every core module's tests and `:bridge`'s `jvmTest`) is the test store; its
   `prompts`/`authenticates` counters are the flows' tests' extras, not the contract.
 - **Device linking** (ADR 0059): `session/DeviceLink` is one ceremony in one of its four roles (trusted or new, showing
   or scanning), over `crypto/Pairing`; its code reaches a UI only as a picture (`matrix`, `png`) and its scan is its
   own `QrScan`. The new device's tail is the sign-in's (`SessionModel.scanFromTrusted`/`showForSignIn`,
   `VeyqAccount.linked`): the handed token spent once at `/api/token/refresh` in the body, never adoption, and no trust
   enrolled but the offer's DEVICE_KEY levels (`Offer.linked`). `DeviceLinkTest` plays the relay (`PlayedServer`, in
-  `testDevice`, so `:bridge`'s `LinkDispatchTest` plays the same one).
+  `:testing`, so `:bridge`'s `LinkDispatchTest` plays the same one).
 - `android/` — the Android app (Compose). `devlogin.py` signs a debug build on a running emulator in as the seeded dev
   principal (`.run/.env`).
 - `apple/` — the Apple app (SwiftUI, iOS and macOS). `xcodegen` in that directory writes `Veyq.xcodeproj` from
@@ -414,18 +426,20 @@ A Gradle build of its own, run through its own wrapper.
 
 ## Prove your work
 
-- `./gradlew :core:compileKotlinJs :core:compileTestKotlinJs` with the JVM tests, on every change to the core: its
+- `./gradlew compileKotlinJs compileTestKotlinJs` (every core module) with the JVM tests, on every change to the core: its
   common code compiles for JavaScript as for every other target (ADR 0155 decision 3), so a JVM- or native-only API in
   `commonMain` is red here (a test that blocks a thread lives in `threadedTest`, the JVM's and native's). A change under
   `crypto/` or `jsMain` also runs `@veyq/core-js`'s check (`cd src/packages/core-js && pnpm run build && pnpm run
   check`): the suite's conformance over the web's `@noble/*` under Node, with its bite. No Kotlin/JS test task exists, and
   none of Kotlin's Node, Yarn or npm tasks may run (`src/mobile/build.gradle.kts` fails a build that reaches one).
-  `:core:jsPackage` writes byte-identical output (ADR 0155 decision 2): it sorts the interface lists Kotlin 2.4's
+  `:composition:jsPackage` writes byte-identical output (each module its file, Kotlin's per-module names: the platform's
+  `kotlin_veyq_mobile_core.mjs`, one `.d.mts` for every module's exports) (ADR 0155 decision 2): it sorts the interface lists Kotlin 2.4's
   dead-code elimination leaves in hash order (KT-68281, `sortFreeInterfaceLists`) and fails on a Kotlin that carries
   the fix — the upgrade to 2.5 deletes the step. A change to the JavaScript build proves it with three clean builds in
-  fresh processes (`rm -rf ../packages/core-js/dist; ./gradlew --no-daemon --rerun-tasks :core:jsPackage`, then
+  fresh processes (`rm -rf ../packages/core-js/dist; ./gradlew --no-daemon --rerun-tasks :composition:jsPackage`, then
   `find dist -type f | sort | xargs shasum -a 256 | shasum -a 256` in `src/packages/core-js`), one digest.
-- `./gradlew :core:jvmTest :core:macosArm64Test` — the suite against `contracts/crypto/vectors/v1.json` (with its
+- `./gradlew jvmTest macosArm64Test` — every core module's tests (`:core`, `:apps:*`, `:composition`; a module's own:
+  `:apps:memories:jvmTest`), among them the suite against `contracts/crypto/vectors/v1.json` (with its
   bite) over BouncyCastle and over libsodium, the navigation model, and the grant check (`GrantTrustTest`: the web's
   `openOwnGrant`/`verifyOwnGrant` rules against a server the test plays). Any change under
   `core/src/commonMain/kotlin/me/raddatz/veyq/mobile/crypto` runs both. The first Apple build compiles libsodium
@@ -524,7 +538,7 @@ A Gradle build of its own, run through its own wrapper.
   The search (`search/`, ADR 0146) changes only with the vectors that pin it, and is the web's too (ADR 0155: the web
   draws it through `@veyq/core-js/search`, `jsMain/…/search/web/`): a rule of the fold, the query or the order by
   `SearchVectorsTest` (`contracts/platform/search/v1-vectors.json`; a changed rule rewrites the file from the core's own
-  answers, `VEYQ_WRITE_VECTORS=1 ./gradlew :core:jvmTest --tests '*SearchVectorsTest*'`, byte for byte where nothing
+  answers, `VEYQ_WRITE_VECTORS=1 ./gradlew :composition:jvmTest --tests '*SearchVectorsTest*'`, byte for byte where nothing
   changed) and `SearchRulesTest` (the web's former unit cases: chip edges, ranks, the matcher's memory by identity,
   `firstRanked`), then `@veyq/core-js`'s check (the façade over the same vectors, the web's collator crossing, the slice
   check) and the web's `vectors.test.ts`; the field's model by
@@ -534,8 +548,8 @@ A Gradle build of its own, run through its own wrapper.
   `scripts/validate_mobile_search_names_no_application.py` keeps the package free of an application. Live,
   `SearchLiveTest` (`VEYQ_LIVE`: a Memory with a date, a place, a participant and a photo searched from another space,
   the photo opened through its gallery's request, a rename seen after a focus, an idle focus one `304` per tree and
-  listing; the Memory purged). Its bounds are `SearchVolumeMeasure`'s, opt-in: `VEYQ_MEASURE=1 ./gradlew :core:jvmTest
-  --tests '*SearchVolumeMeasure*' --rerun` (and `:core:macosArm64Test`), printed as `veyq-measure:`.
+  listing; the Memory purged). Its bounds are `SearchVolumeMeasure`'s, opt-in: `VEYQ_MEASURE=1 ./gradlew :composition:jvmTest
+  --tests '*SearchVolumeMeasure*' --rerun` (and `:composition:macosArm64Test`), printed as `veyq-measure:`.
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
   - `DispatchTest` covers the way in, over a door the test plays: the host reached by a reply that arrives before the
     start returned (`Started`, `veyq_init`'s order) and a silent host's ask failed (`Host.Silent`, a call answered
@@ -714,7 +728,7 @@ A Gradle build of its own, run through its own wrapper.
 - `VEYQ_LIVE=http://veyq.localhost:8080 ./gradlew :core:jvmTest :core:macosArm64Test --tests '*LiveSignInTest*'` —
   signs in to a running dev instance as the seeded principal on both paths and reads its spaces, objects and
   favorites (`./gradlew backend:seed` at the repository root first). Every live case leaves the account as it found
-  it: a JVM case (core's and `:bridge`'s) takes its devices from `LiveRun` (`core/src/liveTest`) and calls its
+  it: a JVM case (core's and `:bridge`'s) takes its devices from `LiveRun` (`testing/src/jvmMain`) and calls its
   `removeAll` in `@AfterTest`, which signs in once more as each device and runs `VeyqAccount.removeThisDevice` (its
   wraps, its families, its register entry); a native case calls `removeThisDevice` in a `finally`. A new live case does
   the same — a run that skipped it filled the principal's wraps to the server's limit and its register with test names.
@@ -738,7 +752,7 @@ A Gradle build of its own, run through its own wrapper.
   throwaway:account -- --out <file> [--with-member]` in `src/web/` makes a fresh tenant `tw-<stamp>.localhost` with its
   owner (and a member through a link invite, so no mailbox is read), writes the credentials to `<file>` (mode 0600,
   outside the repository: the scratchpad), and `--erase <file>` erases them after (the sole-member tenant along; its
-  pending erasure listed). The core's such cases read `VEYQ_LIVE_THROWAWAY_ENV=<file>` (`Throwaway`, `core/src/liveTest`)
+  pending erasure listed). The core's such cases read `VEYQ_LIVE_THROWAWAY_ENV=<file>` (`Throwaway`, `testing/src/jvmMain`)
   and **fail**, not skip, on a file naming `.run/.env`'s principal or member; an app pass points `VEYQ_ENV_FILE` at the
   file for `devlogin.py` / `run.py --devlogin`. A machine that resolves no `*.localhost` (the Windows VM) maps one
   fixed name instead, which `--tenant tw-<name>` gives the tenant (the VM's `hosts` maps `tw-win.localhost`, 2026-11-19).
@@ -879,7 +893,7 @@ A Gradle build of its own, run through its own wrapper.
   `VEYQ_DEV_KIT_SCAN=1` (Apple: the kit scanner opened once the sign-in shows); the Settings page over a played state,
   no server — `veyq.devSettings=1|refused` (Android), `VEYQ_DEV_SETTINGS=1|refused` (Apple, Linux, Windows).
 - `xcodebuild -project apple/Veyq.xcodeproj -target Veyq -sdk macosx build CODE_SIGNING_ALLOWED=NO` (or
-  `-sdk iphonesimulator`) — the Apple app compiles. On a fresh checkout run `./gradlew :core:assembleVeyqCoreDebugXCFramework`
+  `-sdk iphonesimulator`) — the Apple app compiles. On a fresh checkout run `./gradlew :composition:assembleVeyqCoreDebugXCFramework`
   once first: Xcode looks for the framework before the project's own pre-build step can make it.
 
 ## Secrets on screen

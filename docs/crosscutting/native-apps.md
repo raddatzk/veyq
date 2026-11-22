@@ -46,9 +46,11 @@ decision 3, built 2026-11-20 on all four): a **core UI** — the shell and drawe
 level, the shared sheets, the notices, New, the uploads and drops, the tray — and one directory per **application**
 (Memories, Depot, Expenses), each registering its kinds' page bodies, its link pages, its New dialogs, its list and its
 part of a person's profile into the platform's one registry through one composition root. The core UI reaches an
-application only through that registry, an application never reaches another, and the Kotlin core keeps the same
-direction but for `AppKinds` and a shrinking list of roots (inbox #1048); `scripts/validate_mobile_ui_direction.py`
-holds all four platforms and the core. The paths per platform are [src/mobile/CLAUDE.md](../../src/mobile/CLAUDE.md)'s.
+application only through that registry, an application never reaches another (`scripts/validate_mobile_ui_direction.py`
+holds all four platforms; Android's core UI still names core application packages, inbox #1056). The Kotlin core keeps
+the same direction by its build: `:core` the platform, one module per application, `:composition` the one that names
+them and fills the platform's registry `AppKinds` ([ADR 0156](../decisions/0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md),
+`scripts/validate_mobile_module_graph.py`). The paths per platform are [src/mobile/CLAUDE.md](../../src/mobile/CLAUDE.md)'s.
 
 ## Platforms
 

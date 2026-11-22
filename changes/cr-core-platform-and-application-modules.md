@@ -494,6 +494,37 @@ command, or `remembered`), what it costs or leaves open.
     Android); routed: the row is `refined`, its next step a CR that moves those holdings behind Android's `apps/`
     registry and widens the UI guard's rule (a) to core application packages, and asks the same of the other platforms.
 
+28. **2026-11-22 — Phase 4: the measurement ADR 0155 waits for.** Substrate: a throwaway branch
+    `claude/core-split-p4-measure` from phase 3's `7f4d2f3e3` in a worktree of its own; the parked branch's whole diff
+    (`git diff eb1ec9be1 7b8af11cf`, its five commits; none of their files changed on the way to this branch's base) applied
+    with its Expenses paths rewritten onto `:apps:expenses` and two moved tests onto `:composition`; conflicts resolved —
+    the parked per-file entry writer of `:core:jsPackage` dropped (with modules, an entry is its module's file:
+    `./expenses` → `dist/kotlin_veyq_mobile_apps_expenses.mjs`), the slice test kept the parked method (esbuild over
+    `export *` of the entries' files, minified ESM, `@noble/*` external, gzip 9, Node 22.23.3); committed there as
+    `ecdc90588`, then the branch and its worktree deleted. Measured (`npx vitest run src/slice.test.ts`; the bench
+    `scratchpad/p2-gen/bench.mts`, median of 15 after 3 warm-ups, three runs each way):
+    - **search alone: 43,091 B gz** (122,812 minified) — **over the 40,960 budget**; it was 27,943 on the split
+      without Expenses. The platform's own code in the search's bundle grew from 26,271 to 45,253 B minified: what
+      Expenses' façade uses of the platform (the parked move put its JSON seam `json/` and money's formats in `words/Shown`
+      into the platform) lives in the platform's file, and a bundler drops nothing of a Kotlin module file (its
+      `initMetadataFor…` calls run at load). Per-module output moves the cost from Expenses' file into the platform's.
+    - Expenses gross alone 61,619 B gz; search and Expenses together 63,600; **Expenses' net = 63,600 − 43,091 − 6,194 =
+      14,315 B gz**, within 25,600.
+    - the `.d.mts`: one for every module (`veyq-mobile-composition.d.mts`), all 28 of the façade's `external interface`
+      shapes in it — the per-file defect is gone; but with one declaration file the entries share their types, so the
+      parked `entries.typetest.ts` (a name of one façade must not resolve through the other's entry) is red.
+    - 21 decode cases red: Expenses' decode runner (`jsConformance/…/DecodeRun.kt`) has no conformance compilation in
+      `:apps:expenses` (the platform's is the only one); the 384 other package tests, Expenses' vectors through the
+      module among them, pass.
+    - time: `buildLedger` 79.2–81.6 ms against the TypeScript's 37.5–40.2 (2.07× at the medians), `checkLedger` 4.94–5.06
+      against 4.18–4.37 (1.20×), the answers identical (one digest) — within decision 7.3's 2.5× and 100 ms; the read
+      into the handle once 40–43 ms.
+    - the web's `SearchField.test.ts`: 61 passed — the parked branch's red does not come back.
+    The gate misses on the search alone; per the mandate the number goes to the owner and the split stays. What it says
+    for Expenses' resumed move: the platform code a façade needs must not sit in the module every other entry imports
+    (a module of its own for the JSON seam and the shared formats, or those parts in `:apps:expenses`), the entries need
+    a declaration file each, and an application needs a conformance compilation of its own for its runners.
+
 ## Retrospective
 
 (Filled by the implementer.)

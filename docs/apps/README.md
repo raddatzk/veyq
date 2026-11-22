@@ -124,6 +124,16 @@ library that owns nothing is allowed, never required; an application's rights an
   name no application concept: an application's configuration keys, should it have any, are its own `@ConfigMapping`
   (none has one today), whose `@WithDefault`s are their only defaults, since SmallRye refuses a `veyq.*` key no mapping
   claims and a line in core's base config would fail core's boot without that application.
+- **The apps' Kotlin core** ([ADR 0156](../decisions/0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md)):
+  Gradle modules below `src/mobile/` as the backend's — `:core` the platform (`src/mobile/core`), `:apps:<application>`
+  (`src/mobile/apps/<application>`) an application's code in its own packages `me.raddatz.veyq.mobile.<application>` and
+  its generated client `…mobile.api.<application>` (every spec of `contracts/api/<application>/`), `:composition`
+  (`src/mobile/composition`) the one module that names every application — it installs each one's part
+  (`<Application>Kinds`) into the platform's registry `AppKinds` before any session opens, holds the shell's model and
+  what reads several applications, and is what the Apple framework, the bridge, Android and `@veyq/core-js` are built
+  from — and `:testing` the test support. What an application needs of the platform's `internal` is `@PlatformApi`, an
+  opt-in only the core's modules take, hidden from Objective-C. A test of one application runs in its module over
+  `TestApplications.install(<its part>)`; one across applications or of the composition in `:composition`.
 
 ### The seams core asks
 
@@ -364,6 +374,10 @@ point 8).
   guest-mode mounts through the real shell (`ShareView.memory.test.ts`, `MemoryDetail.guest.test.ts`,
   `DropBoxDetail.guest.test.ts`, `FolderShareGuest.test.ts`) assert that a guest's page reads nothing of the member's
   world.
+- **Apps' Kotlin core:** core → application is the compiler's (no edge). `validate_mobile_module_graph.py` holds what
+  Gradle allows: the modules are the settings' and the applications `ApplicationId`'s, no application depends on another
+  or on the composition, a package lives in one module, and `PlatformApi` is opted into by the core's modules alone and
+  hidden from Objective-C. Each platform's UI keeps its own direction (`validate_mobile_ui_direction.py`).
 - **Both kind rules read literals**, from lists a new application extends by hand: a kind missing there is guarded by
   nothing. (The kinds files of `contracts/platform/kinds/` hold the kinds' facts, not these guards' lists.)
 
