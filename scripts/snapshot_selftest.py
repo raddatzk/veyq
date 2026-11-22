@@ -256,6 +256,10 @@ check(got.get("published") == "snapshot-0.12" and got.get("commit") == C and got
 check(walk([H, C], {H: [run_of(head_sha=H)]}, {}, tags={H: "snapshot-0.13"}).get("published") == "snapshot-0.13",
       "a HEAD that carries its snapshot publishes again")
 check(walk_refused([M, C], {C: [run_of(head_sha=C)]}, {M: ["docs/a.md"]}), "a walk that does not start at HEAD is taken")
+for tags, want in ((["snapshot-1.247"], "snapshot-1.247"), (["v1.247"], "v1.247"), (["v1.247", "x"], "v1.247"),
+                   (["v1.247-rc"], ""), (["v1"], ""), (["release-1.2"], ""), ([], "")):
+    check(snapshot.published_by(tags) == want, f"the tags {tags} make a commit published as {snapshot.published_by(tags)!r}, "
+                                               f"not {want!r}")
 
 
 # The wiring, on a throwaway history: `checks_run` walks git, reads checks.yml's filter, counts C's version, names C.
@@ -315,6 +319,12 @@ with tempfile.TemporaryDirectory(prefix="snapshot_walk_") as tmp:
         found = quiet(head)
         check(found.get("kind") == "none" and found.get("commit") == tested,
               f"a docs-only HEAD over a tested ancestor that has its snapshot publishes again: {found}")
+        git(repo, "tag", "-d", "snapshot-0.1")
+        git(repo, "tag", "v0.1", tested)
+        found = quiet(head)
+        check(found.get("kind") == "none" and found.get("commit") == tested,
+              f"a released commit whose snapshot tag the release deleted is published as a snapshot again: {found}")
+        git(repo, "tag", "-d", "v0.1")
         git(repo, "mv", "docs/a.md", "a.kt")
         git(repo, "commit", "-q", "-m", "a doc becomes code")
         moved = git(repo, "rev-parse", "HEAD")

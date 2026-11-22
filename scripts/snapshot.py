@@ -21,7 +21,8 @@ branch; otherwise the newest first-parent ancestor that has one, accepted only i
 changes nothing but paths checks.yml's own `on.push.paths-ignore` ignores (read from the checkout, matched as GitHub
 matches them) — a docs-only HEAD gets no Checks run of its own, and its tested ancestor's bytes are the ones it ships. A
 commit without a run that changes another path is refused, named; so is a walk that finds no run within `WALK_BOUND`
-commits. A C that already carries a `snapshot-` tag publishes nothing (`kind=none`, a notice). Otherwise C's run is its
+commits. A C that already carries a `snapshot-` tag, or the `v<major>.<minor>` tag of its release, publishes nothing
+(`kind=none`, a notice). Otherwise C's run is its
 newest such run, refused, red and named, unless it is completed and `success`, and in its latest attempt the gate job
 (`Pipeline green`) and one lane L1 leg per architecture and domain of the commit's own `stack` matrix concluded
 `success`. A run cancelled by hand, still running, or red is refused with that reason; Publish never starts Checks
@@ -296,6 +297,17 @@ def push_paths_ignore(root: pathlib.Path) -> list[str]:
     return [str(p) for p in push.get("paths-ignore") or []]
 
 
+RELEASE_TAG = re.compile(r"^v[0-9]+\.[0-9]+$")
+
+
+def published_by(tags: list[str]) -> str:
+    """The tags among a commit's `tags` that make it published: its `snapshot-` tag, and its release tag
+    `v<major>.<minor>` — release.yml deletes the snapshot tag once it has released the commit, so without the release
+    tag the next Publish of an unchanged `main` made the released commit a snapshot again (`snapshot-1.247` on
+    2026-11-16, two days after `v1.247`; cr-release-draft-from-publish)."""
+    return " ".join(t for t in tags if t.startswith("snapshot-") or RELEASE_TAG.match(t))
+
+
 def publishable(head: str, branch: str, chain: list[str], tags_of, runs_of, files_of, ignored,
                 bound: int = WALK_BOUND) -> dict:
     """The commit a snapshot of `head` is made from, walking `chain` (`head` and its first parents, newest first):
@@ -422,7 +434,7 @@ def checks_run(repository: str, head: str, branch: str, root: pathlib.Path, boun
     chain = _git_out(root, "rev-list", "--first-parent", f"--max-count={bound}", head).split()
 
     def tags_of(commit: str) -> str:
-        return " ".join(_git_out(root, "tag", "--list", "snapshot-*", "--points-at", commit).split())
+        return published_by(_git_out(root, "tag", "--points-at", commit).split())
 
     def runs_of(commit: str) -> list[dict]:
         return _gh_json(f"repos/{repository}/actions/workflows/checks.yml/runs?head_sha={commit}&event=push"
