@@ -535,3 +535,29 @@ names were the implementation session's and are not kept.
 54. **2026-11-22 — No guard and no CI job here.** The core's JVM tests run in no CI job (`grep -n jvmTest
     .github/workflows/*.yml`: none) — wiring the suite in is a decision of its own, filed as #1085; no guard either, the
     test is the check (docs/ai/README.md rule 3).
+55. **2026-11-22 — The core's JVM tests are a Checks stage (inbox #1085, the coordinator's yes).** A job of its own,
+    `kotlin-core`, in `checks.yml` beside `frontend` and in `green`'s `needs:` (validate_release_identity.py assertion 9
+    found it missing when it was dropped: bitten). Options: a step in `frontend` (which already runs src/mobile's Gradle
+    for `@veyq/core-js`); a job of its own. Chosen the job: a red core test then reads as the core's, not the web's, and
+    the two run in parallel. The tasks are selected by name (`jvmTest`), not listed, so a module added to the build is
+    in without a workflow edit; `--continue` so one module's red hides no other's.
+56. **2026-11-22 — A JDK alone, on Linux.** `:android` configures with no Android SDK (no `local.properties`, no
+    `ANDROID_HOME`): measured, `env -u ANDROID_HOME -u ANDROID_SDK_ROOT ./gradlew jvmTest --dry-run` in a worktree with no
+    `local.properties`, BUILD SUCCESSFUL, no `:android` task in the graph — so no SDK setup step, no property to skip
+    the module. Without `:bridge` the graph holds no Kotlin/Native task (`… jvmTest -x :bridge:jvmTest --dry-run`: none).
+57. **2026-11-22 — The bridge's JVM tests run in `app-inputs`, on macOS.** `:bridge:jvmTest` depends on
+    `linkDebugSharedLinuxArm64` and `linkDebugSharedMingwX64` (`BridgeHeaderTest` reads the headers Kotlin/Native writes
+    beside them), which need libsodium, utf8proc and libwebp built; `core/sodium/build_libsodium.py` builds Apple's slices
+    unconditionally through `xcrun` (read, not run on Linux), so on ubuntu the job would need Xcode. Options: the whole
+    job on macOS (ten times a Linux minute, for six modules that need none of it); teaching the libsodium script to skip
+    Apple's slices off a Mac as `build_libwebp.py` does (unproved on a Linux host here, and widens this change into the native
+    build); the bridge's tests in `app-inputs`, which has just built the same toolchain and libraries. Chosen the last.
+    Cost: the bridge's tests wait for `app-inputs`' inputs.
+58. **2026-11-22 — What the first run found.** Measured, the job's command through `scripts/run_pipeline.py --job
+    kotlin-core` and directly: `UnlockForgetTest` red on this Mac's volume (2.7 % free, under ADR 0140's 5 % floor: every
+    queued write refused) — it opened its stores on the host's volume, not on `SizedVolume` as the other offline tests do;
+    fixed. Under a load of 12–20 two more were red once and green alone: `QueuedOverlayTest`'s offline mark (#1100) and
+    the bridge's `AccountFlowsDispatchTest` 10 s wait (#1101); filed, not waved through. The core's native test tasks
+    run in no CI job either (#1102). The job green, measured: `scripts/run_pipeline.py --job kotlin-core` at the
+    workflow's commit, 3.9 min, five `jvmTest` tasks executed, every step but the wrapper JAR's check (GitHub's alone);
+    `:bridge:jvmTest` alone 1.7 min, green.

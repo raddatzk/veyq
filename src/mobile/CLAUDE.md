@@ -452,7 +452,9 @@ A Gradle build of its own, run through its own wrapper.
   fresh processes (`rm -rf ../packages/core-js/dist; ./gradlew --no-daemon --rerun-tasks :composition:jsPackage`, then
   `find dist -type f | sort | xargs shasum -a 256 | shasum -a 256` in `src/packages/core-js`), one digest.
 - `./gradlew jvmTest macosArm64Test` — every core module's tests (`:core`, `:apps:*`, `:composition`; a module's own:
-  `:apps:memories:jvmTest`), among them the suite against `contracts/crypto/vectors/v1.json` (with its
+  `:apps:memories:jvmTest`; the JVM half is Checks' `kotlin-core` job on every commit, a JDK only,
+  `./gradlew --no-daemon --continue jvmTest -x :bridge:jvmTest`, and `:bridge:jvmTest`, which links the bridge's native
+  libraries, runs in `app-inputs` on macOS — inbox #1085), among them the suite against `contracts/crypto/vectors/v1.json` (with its
   bite) over BouncyCastle and over libsodium, the navigation model, and the grant check (`GrantTrustTest`: the web's
   `openOwnGrant`/`verifyOwnGrant` rules against a server the test plays). Any change under
   `core/src/commonMain/kotlin/me/raddatz/veyq/mobile/crypto` runs both. The first Apple build compiles libsodium
