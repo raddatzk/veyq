@@ -64,7 +64,7 @@ dependencies {
     api("io.quarkus:quarkus-jdbc-mariadb") // the store of every profile but `%test` (prod, dev, e2e)
     api("io.quarkus:quarkus-flyway")
     api("org.flywaydb:flyway-mysql") // Flyway 12 keeps MariaDB/MySQL support out of flyway-core
-    api("software.amazon.awssdk:s3:2.57.11") // S3 blob store: vendor-neutral S3 client + presigner (ADR 0013)
+    api("software.amazon.awssdk:s3:2.59.3") // S3 blob store: vendor-neutral S3 client + presigner (ADR 0013)
     api("io.quarkus:quarkus-mailer") // generic SMTP transport (transitive Vert.x MailClient), no vendor SDK (ADR 0048)
     // ADR 0064's Kubernetes (Gateway API) sink. Chosen over a bare fabric8 client for `@WithKubernetesTestServer`
     // (the root's tests) as much as for the client itself: this repository has no cluster and no CI that could get
@@ -94,7 +94,7 @@ dependencies {
     // does not re-measure the gate. 3.20.0 is the version the rest of the build already resolves. **Drop it with the
     // PIT bump that brings commons-lang3 3.18.0 or later.**
     constraints {
-        pitest("org.apache.commons:commons-lang3:3.21.0") {
+        pitest("org.apache.commons:commons-lang3:3.22.0") {
             because("GHSA-j288-q9x7-2f5v: 3.14.0 via PIT's commons-text 1.12.0, fixed in 3.18.0")
         }
     }
