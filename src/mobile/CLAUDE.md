@@ -1130,7 +1130,7 @@ first in each of its scrolls — `LocalNodeHero.current(inset)` (Android) / `Nod
 screen's structure is a list of `@Plan` enum entries (`navigation/Plan.kt`) — a header's `NodeHeader.Plan` (Delete
 always last), a level's `LevelPlan` (New's `creates`, the tools Trash then the view switch), the drawer's
 `drawerSections` (`NEW` below the switcher) and `drawerCreates`, `AccountSettings.State.sections` (the web's order, Sign
-out last), `SignInPlan.entries` (Submit first), `LevelRow.plan`, `GalleryModel.tileActions`, `ShareSheet.rowActions`,
+out last), `SignInPlan.entries` (Submit first), `UnlockPlan.entries` (*Stop trusting this device* last), `LevelRow.plan`, `GalleryModel.tileActions`, `ShareSheet.rowActions`,
 `GuestLevel.creates`. A platform draws every entry, in order, in its own control: how many header actions fit inline
 (ADR 0110), a menu, a context menu, a long press or a flyout, a FAB, a toolbar or a `CommandBar` is its look. A plan is
 never filtered, sorted, whitelisted or extended by a platform; an affordance that is no product structure (the Mac's

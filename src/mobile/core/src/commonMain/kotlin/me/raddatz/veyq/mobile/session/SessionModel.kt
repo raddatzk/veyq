@@ -108,6 +108,15 @@ class SessionModel<A : Connection, T : Any>(
         fun ends(account: A): kotlinx.coroutines.flow.Flow<SignInFailure.Reason>? = null
         suspend fun forgetDevice(account: A)
 
+        /**
+         * [record] forgotten on this device with no account opened (the unlock's *Stop trusting this device*, inbox #1052):
+         * its keys, the record and its kept wrap, its offline store and its "Not now" — nothing sent.
+         */
+        suspend fun forgetRecord(record: TrustedDevice): Unit = throw UnsupportedOperationException("this door forgets no record")
+
+        /** How many writes made offline [record]'s account keeps on this device ([OfflineStores.waiting]); 0 without a store. */
+        fun waiting(record: TrustedDevice): Int = 0
+
         /** The levels staying signed in can take on this device now ([DeviceKeys.staySignedIn]). */
         fun staySignedIn(): Set<StaySignedIn>
 
@@ -468,6 +477,34 @@ class SessionModel<A : Connection, T : Any>(
         if (current is Gate.Unlock) return unlock(password)
         pendingUnlock = password
         return null
+    }
+
+    /**
+     * How many writes made offline the account the unlock shows keeps on this device: what is asked before
+     * [forgetUnlocked] deletes them (ADR 0153 decision 2, `QueuedShown.forgetAsk`). 0 outside the unlock.
+     */
+    fun waitingOnUnlock(): Int = (current as? Gate.Unlock)?.let { door.waiting(it.record) } ?: 0
+
+    /**
+     * The unlock's *Stop trusting this device* (inbox #1052, owner 2026-11-22): the account the unlock shows forgotten on
+     * this device as "Manage servers"' stop forgets it ([Door.forgetRecord]) — the only way off an account erased
+     * elsewhere, which this device cannot tell from a wrong password (anti-enumeration) —, then where the start would go
+     * without it: the next account this device trusts, or the sign-in. Nothing is sent. False outside the unlock, while it
+     * works, in the share extension (the app keeps this device's trust), and where the account is held as a connection
+     * (its own stop is Manage servers'). The caller asked first where writes wait ([waitingOnUnlock]).
+     */
+    suspend fun forgetUnlocked(): Boolean {
+        val state = current as? Gate.Unlock ?: return false
+        if (state.working || signInElsewhere || connections.all.any { it.key == state.record.key }) return false
+        try {
+            door.forgetRecord(state.record)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            println("veyq: the unlock's record was not forgotten: $e")
+        }
+        locked()
+        return true
     }
 
     /** From the unlock to the full sign-in, for another account. */
@@ -831,6 +868,8 @@ class AccountDoor(
     override suspend fun retire(account: VeyqAccount) = account.retire()
     override fun ends(account: VeyqAccount) = account.reach.mapNotNull { (it as? Reach.Ended)?.reason }
     override suspend fun forgetDevice(account: VeyqAccount) = account.forgetThisDevice()
+    override suspend fun forgetRecord(record: TrustedDevice) = device.forgetLocked(record)
+    override fun waiting(record: TrustedDevice): Int = device.offline?.waiting(record.key) ?: 0
     override fun staySignedIn(): Set<StaySignedIn> = device.keys.staySignedIn
     override fun declined(account: VeyqAccount): Boolean = device.declined(account.key)
     override fun setDeclined(account: VeyqAccount, declined: Boolean) = device.setDeclined(account.key, declined)

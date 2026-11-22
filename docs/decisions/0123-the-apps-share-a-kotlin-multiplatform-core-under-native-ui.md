@@ -133,7 +133,12 @@ implementation exists but what holds it to the first.
    (the person signs in with the Secret Key instead). A refresh the server refuses ends the remembered session on the
    device; one it cannot answer keeps it. Signing out ends staying signed in (its wrap deleted, its token and, if no
    other record uses it, its key gone) and keeps the password trust, as on the web; "Stop trusting this device" ends
-   either. Every unlock and every enrolment names the device in the account's device register (write moments 1 and 2
+   either. **The unlock offers it too** (owner 2026-11-22, inbox #1052: the core's `UnlockPlan`, last): an account
+   erased elsewhere is, to this device, a wrong password (anti-enumeration), so without it the unlock came back at
+   every start. With no session it sends nothing — the server's wrap opens only with the bind key now gone, and stays
+   in the register for another device to remove — and forgets here what Manage servers' stop does: the record, its
+   keys, its kept wrap, its offline store and its "Not now"; the start falls through to the next trusted account or
+   the sign-in. Every unlock and every enrolment names the device in the account's device register (write moments 1 and 2
    of en.account.device-register, its label the device's model), so a person's other device can find this one's saved
    key and remove it ([ADR 0058](0058-revoke-never-takes-key-material.md)). iOS keeps Keychain items when an app is
    deleted: a first start after an installation removes them. What each store guarantees at each level is

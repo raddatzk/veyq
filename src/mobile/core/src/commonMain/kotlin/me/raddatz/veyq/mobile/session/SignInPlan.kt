@@ -54,3 +54,43 @@ object SignInPlan {
         SignInEntry.OPEN_LINK,
     )
 }
+
+/**
+ * An entry of the unlock below its account (ADR 0154 decision 2): the ways a [SessionModel.Gate.Unlock] offers. Their
+ * words: [SUBMIT] `unlock_submit` (`unlock_retry` for a remembered account at the login level, whose unlock shows only
+ * after a resume that failed), [OTHER_ACCOUNT] `unlock_other`, [OPEN_LINK] `link_open`, [FORGET] `manage_forget_device`.
+ */
+@Plan
+@Serializable
+enum class UnlockEntry {
+    /** Unlocks the account shown (`SessionModel.unlock`): its password, or the person's authentication again. */
+    @SerialName("submit") SUBMIT,
+    /** The full sign-in, for another account (`SessionModel.otherAccount`). */
+    @SerialName("other-account") OTHER_ACCOUNT,
+    /** *Open a link* (ADR 0150 decision 4): a received link opened as its guest, no session needed. */
+    @SerialName("open-link") OPEN_LINK,
+    /**
+     * *Stop trusting this device* for the account shown (`SessionModel.forgetUnlocked`, inbox #1052): forgotten here, asked
+     * first where writes made offline wait (`QueuedShown.forgetAsk`); the start then falls through to the next account.
+     */
+    @SerialName("forget") FORGET,
+}
+
+/**
+ * The unlock's entries, in their order: Unlock, *Use another account*, *Open a link* — the ways in, as the sign-in lists
+ * its own — and *Stop trusting this device* last, the one that forgets (owner 2026-11-22 on inbox #1052: on every app).
+ * Every platform draws them whole and in this order under the account; how each looks is the platform's, the forget in
+ * its destructive style.
+ */
+object UnlockPlan {
+    /**
+     * The entries of the unlock; [inExtension]: the share extension's (ADR 0138), which unlocks but leaves this device's
+     * trust to the app — no forget there.
+     */
+    fun entries(inExtension: Boolean): List<UnlockEntry> = listOfNotNull(
+        UnlockEntry.SUBMIT,
+        UnlockEntry.OTHER_ACCOUNT,
+        UnlockEntry.OPEN_LINK,
+        UnlockEntry.FORGET.takeUnless { inExtension },
+    )
+}

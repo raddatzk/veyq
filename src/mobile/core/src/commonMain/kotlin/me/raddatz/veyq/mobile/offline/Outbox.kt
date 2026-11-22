@@ -172,12 +172,14 @@ class Outbox internal constructor(
         val carried = writes.flatMap { w -> w.blobs.map { it.id } }.toSet()
         val loose = entries.filter { it.key.kind == KeptRead.OUTBOX_FRAMES && it.key.id !in carried }.map { it.key }
         if (loose.isNotEmpty()) offline.store.removeAll(loose)
-        if (whole != kept) setOrder(whole)
+        if (whole != kept) setOrder(whole) else offline.noteWaiting(whole.size)
         return whole
     }
 
+    /** The order written, and how many it names noted for the unlock's ask ([OfflineStores.waiting]). */
     private suspend fun setOrder(ids: List<String>) {
         offline.putQueued(orderKey, JSON.encodeToString(IDS, ids).encodeToByteArray(), floor = false)
+        offline.noteWaiting(ids.size)
     }
 
     private fun encode(write: QueuedWrite) = JSON.encodeToString(QueuedWrite.serializer(), write).encodeToByteArray()

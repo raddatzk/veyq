@@ -43,9 +43,12 @@ struct RootView: View {
             .deviceLinkSheet(model)
         case .unlock(let record, let working, let error):
             UnlockView(
-                record: record, working: working, error: error, onUnlock: model.unlock(password:), onOther: model.otherAccount,
+                record: record, working: working, error: error, inExtension: model.inExtension, onUnlock: model.unlock(password:),
+                onOther: model.otherAccount, onForget: model.forgetUnlocked,
                 onOpenLink: model.inExtension ? nil : { model.guests.ask(model) }
             )
+            // the ask before its *Stop trusting this device* while writes made offline wait (inbox #1052)
+            .modifier(LossAsking(model: model, here: true))
         case .needsApp:
             // The share extension with no account this device trusts: the app signs in (ADR 0138 decision 5).
             VStack(spacing: 16) {

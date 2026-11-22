@@ -519,6 +519,16 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** From the unlock to the full sign-in, for another account. */
     fun otherAccount() = session.otherAccount()
 
+    /**
+     * The unlock's *Stop trusting this device* (inbox #1052): core's ask first while writes made offline wait
+     * (`QueuedShown.forgetAsk`), then the account forgotten here; the gate shows the next account or the sign-in.
+     */
+    fun forgetUnlocked() {
+        val go = { viewModelScope.launch { if (session.forgetUnlocked()) trustLog("unlock stop trusting") }; Unit }
+        val ask = me.raddatz.veyq.mobile.composition.QueuedShown.forgetAsk(session.waitingOnUnlock())
+        if (ask == null) go() else _lossAsk.value = LossAsk(ask, go, {})
+    }
+
     /** The switcher: another tenant of the same server is the same session at another domain; another server is its own. */
     fun switchTo(account: VeyqAccount, tenant: TenantRef) {
         _screen.update { s -> if (s is Screen.Signed) s.copy(managing = null) else s }
@@ -581,7 +591,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Ends this device's trust in [account]: the next sign-in on this device asks for the Secret Key again. */
-    fun forgetDevice(account: VeyqAccount) {
+    fun forgetDevice(account: VeyqAccount) = beforeLoss(account, me.raddatz.veyq.mobile.composition.QueuedLoss.STOP_TRUSTING) {
         viewModelScope.launch {
             session.forgetDevice(account)
             trustLog("manage stop trusting")

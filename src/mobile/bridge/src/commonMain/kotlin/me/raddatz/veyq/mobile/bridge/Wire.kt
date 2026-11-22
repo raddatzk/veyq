@@ -109,6 +109,13 @@ internal sealed class Call {
     /** From the unlock to the full sign-in, for another account. */
     @Serializable @SerialName("Session.OtherAccount") data object SessionOtherAccount : Call()
 
+    /**
+     * The unlock's *Stop trusting this device* (`SessionModel.forgetUnlocked`, inbox #1052): the account `Gate.Unlock` shows
+     * forgotten on this device, nothing sent; the gate then shows the next trusted account's unlock or the sign-in. Asked
+     * first with [UnlockForgetAsk]. Refused `NOT_OFFERED` outside the unlock and while it works.
+     */
+    @Serializable @SerialName("Session.ForgetUnlocked") data object SessionForgetUnlocked : Call()
+
     /** "Stop trusting this device" for the connection whose key is [connection]: the next sign-in asks for the Secret Key. */
     @Serializable @SerialName("Session.ForgetDevice") data class SessionForgetDevice(val connection: String) : Call()
 
@@ -490,6 +497,15 @@ internal sealed class Call {
      * whenever the gate's [adding] or the host's [camera] (whether this device may have one) changes.
      */
     @Serializable @SerialName("SignIn.Plan") data class SignInPlan(val adding: Boolean, val camera: Boolean) : Call()
+
+    /** The unlock's entries under its account (`UnlockPlan.entries`, ADR 0154 decision 2): [Answer.UnlockPlan]. */
+    @Serializable @SerialName("Unlock.Plan") data object UnlockPlan : Call()
+
+    /**
+     * What is asked before [SessionForgetUnlocked] while writes made offline wait for the account the unlock shows
+     * (`QueuedShown.forgetAsk`, ADR 0153 decision 2): [Answer.QueuedAsked], none where nothing waits.
+     */
+    @Serializable @SerialName("Unlock.ForgetAsk") data object UnlockForgetAsk : Call()
 
     /**
      * What the kind's page knows now (`NodeHeaderModel.update`) and, for a file's page, its id ([file]): the page's own
@@ -1856,6 +1872,9 @@ internal sealed class Answer {
 
     /** The sign-in's entries in their order ([Call.SignInPlan]). */
     @Serializable @SerialName("SignInPlan") data class SignInPlan(val entries: List<me.raddatz.veyq.mobile.session.SignInEntry>) : Answer()
+
+    /** The unlock's entries in their order ([Call.UnlockPlan]). */
+    @Serializable @SerialName("UnlockPlan") data class UnlockPlan(val entries: List<me.raddatz.veyq.mobile.session.UnlockEntry>) : Answer()
     @Serializable @SerialName("FileOpened") data class FileOpened(val file: Long) : Answer()
 
     /** A copy being saved ([Call.FileSave]): its id, for [Watched.Save] and [Call.SaveCancel]. */

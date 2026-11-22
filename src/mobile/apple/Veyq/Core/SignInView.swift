@@ -282,13 +282,18 @@ struct KitScannerView: View {
 }
 
 /// An account this device trusts (ADR 0123 decision 8): the password alone for a password-trusted one, a button that
-/// asks for the person's authentication again for a remembered one; and the way to another account.
+/// asks for the person's authentication again for a remembered one; then the core's entries (`UnlockPlan.entries`,
+/// ADR 0154 decision 2), whole and in their order — the way to another account, *Open a link*, and *Stop trusting this
+/// device* (inbox #1052), destructive, asked first by the core where writes made offline wait.
 struct UnlockView: View {
     let record: TrustedDevice
     let working: Bool
     let error: Msg?
+    /// The share extension's unlock: the app keeps this device's trust, so the plan lists no forget there.
+    let inExtension: Bool
     let onUnlock: (String) -> Void
     let onOther: () -> Void
+    let onForget: () -> Void
     /// *Open a link* under the unlock (ADR 0150 decision 4); nil where the app offers none.
     var onOpenLink: (() -> Void)?
 
@@ -323,28 +328,9 @@ struct UnlockView: View {
                 Section { Text(say(error)).foregroundStyle(.red) }
             }
             Section {
-                Button {
-                    onUnlock(password)
-                } label: {
-                    Group { if working { ProgressView() } else { Text(login ? say(.unlockRetry) : say(.unlockSubmit)) } }.frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .buttonBorderShape(.roundedRectangle(radius: Radius.control))
-                .controlSize(.large)
-                .tint(Role.primary)
-                .foregroundStyle(Role.onFill)
-                .disabled(working)
-                Button(say(.unlockOther), action: onOther).frame(maxWidth: .infinity).disabled(working)
+                ForEach(UnlockPlan.shared.entries(inExtension: inExtension), id: \.self) { e in entry(e) }
             }
             .listRowBackground(Color.clear)
-            if let onOpenLink {
-                Section {
-                    Button(action: onOpenLink) { Label(say(.linkOpen), systemImage: "link").frame(maxWidth: .infinity) }
-                        .disabled(working)
-                        .accessibilityIdentifier("unlock-open-link")
-                }
-                .listRowBackground(Color.clear)
-            }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
@@ -353,6 +339,39 @@ struct UnlockView: View {
         // the form a column of its own, the window around it the app's ground (an iPad, a Mac)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Role.bg)
+    }
+}
+
+private extension UnlockView {
+    /// Entry `e` of the unlock's plan. *Open a link* is drawn as nothing where the target has no door for it (the share
+    /// extension opens no link).
+    @ViewBuilder func entry(_ e: UnlockEntry) -> some View {
+        switch e.entry {
+        case .submit:
+            Button {
+                onUnlock(password)
+            } label: {
+                Group { if working { ProgressView() } else { Text(login ? say(.unlockRetry) : say(.unlockSubmit)) } }.frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.roundedRectangle(radius: Radius.control))
+            .controlSize(.large)
+            .tint(Role.primary)
+            .foregroundStyle(Role.onFill)
+            .disabled(working)
+        case .otherAccount:
+            Button(say(.unlockOther), action: onOther).frame(maxWidth: .infinity).disabled(working)
+        case .openLink:
+            if let onOpenLink {
+                Button(action: onOpenLink) { Label(say(.linkOpen), systemImage: "link").frame(maxWidth: .infinity) }
+                    .disabled(working)
+                    .accessibilityIdentifier("unlock-open-link")
+            }
+        case .forget:
+            Button(role: .destructive, action: onForget) { Label(say(.manageForgetDevice), systemImage: "lock.slash").frame(maxWidth: .infinity) }
+                .disabled(working)
+                .accessibilityIdentifier("unlock-forget")
+        }
     }
 }
 
