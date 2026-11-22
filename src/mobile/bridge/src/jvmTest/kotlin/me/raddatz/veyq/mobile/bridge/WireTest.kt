@@ -157,7 +157,7 @@ class WireTest {
             Call.EditorOpen(3, null, ","), Call.EditorOpen(3, "e1", "."), Call.EditorSave(12), Call.EditorAskDelete(12), Call.EditorDelete(12), Call.EditorCancelAsk(12), Call.EditorClose(12), Call.EditorOpenHeld(3, "entry:e1", ","), Call.EditorDiscardMine(12),
             Call.EditorAddReceipts(12, listOf("/home/p/Bilder/Quittung März.jpg", "C:\\Users\\p\\scan.pdf")), Call.EditorDropReceipt(12, "r1"),
             Call.ReceiptOpen(3, "r1"), Call.ReceiptPages(25), Call.ReceiptSave(3, "r1", "/home/p/Downloads/r1.jpg"),
-            Call.FileOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "file-1", "FILE", "Plan März.pdf")), Call.FileBytes(20), Call.FilePages(1200), Call.FileClose(20), Call.FileReader(20),
+            Call.FileOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "file-1", "FILE", "Plan März.pdf")), Call.FileBytes(20), Call.FilePages(1200), Call.FileSvgPage, Call.FileSvgRaster(200.0, 100.0, 2.5), Call.FileClose(20), Call.FileReader(20),
             Call.FileSave(20, "C:\\Users\\p\\Downloads\\Plan März.pdf"), Call.SaveCancel(21),
             Call.FileChooseReplace(20), Call.UploadFiles("s1", null, "Familie", listOf("/home/p/Büro 中文.pdf", "C:\\Users\\p\\a.jpg")),
             Call.UploadFiles("s1", "f1", "Trip", emptyList()), Call.UploadFolder("s1", "f1", "/home/p/Trip"), Call.UploadReplace(20, "/tmp/b.bin"),
@@ -297,6 +297,8 @@ class WireTest {
             Answer.EditorOpened(12), Answer.EditorSaved(true, Notice(Msg.RECEIPTS_NO_ROOM, listOf(Joined(listOf("a.jpg"), ", ")))), Answer.EditorSaved(false, null),
             Answer.Refused(Answer.Why.NO_SUCH_EDITOR),
             Answer.ReceiptPages(20, Notice(Msg.RECEIPTS_PAGES_CUT, listOf(20, 25))), Answer.ReceiptPages(3, null),
+            Answer.SvgPage("<!doctype html>", "https://svg.veyq.invalid/view.html", "https://svg.veyq.invalid/picture.svg", "default-src 'none'", listOf(1.0, 1.5), listOf("a", "b")),
+            Answer.SvgRaster(400, 200, 2.0),
             Answer.Refused(Answer.Why.NO_RECEIPT), Answer.Refused(Answer.Why.NOT_WRITTEN),
             Answer.PotSettingsOpened(15), Answer.PotCreateOpened(16), Answer.Stored(true, null), Answer.Stored(false, Notice(Msg.SETTINGS_CURRENCY_FIXED)),
             Answer.Stored(true, Notice(Msg.CREATE_POT_PEOPLE_FAILED)), Answer.Refused(Answer.Why.NO_SUCH_SETTINGS), Answer.Refused(Answer.Why.NO_SUCH_CREATE),
@@ -757,6 +759,8 @@ class WireTest {
     fun everyRootRoundTripsAndItsJsonIsWhatItsDescriptorSays() {
         assertEquals(Roots.all.map { it.descriptor.serialName }.toSet(), samples.keys.map { it.descriptor.serialName }.toSet(), "a root without samples")
         val out = System.getProperty("veyq.samples")?.let { File(it).apply { deleteRecursively(); mkdirs() } }
+        // the SVG page the core makes, beside the samples: Windows' SvgWebTest shows its hostile files in it (inbox #1059)
+        out?.parentFile?.resolve("svg-page.json")?.writeText(wire.encodeToString(Answer.SvgPage.serializer(), svgPage()))
         for ((serializer, values) in samples) {
             @Suppress("UNCHECKED_CAST") val s = serializer as KSerializer<Any>
             values.forEachIndexed { i, v ->

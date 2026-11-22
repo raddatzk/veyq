@@ -1124,6 +1124,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 payload(bytes)
                 Answer.Bytes(f.mediaType(shown))
             } ?: noFile
+            Call.FileSvgPage -> svgPage()
+            is Call.FileSvgRaster -> me.raddatz.veyq.mobile.depot.SvgView.plan(call.width, call.height, call.ratio).let { Answer.SvgRaster(it.width, it.height, it.ratio) }
             is Call.FilePages -> Answer.ReceiptPages(me.raddatz.veyq.mobile.depot.FileView.pagesShown(call.total), me.raddatz.veyq.mobile.depot.FileView.pagesCut(call.total))
             is Call.FileClose -> filePages.remove(call.file)?.also { closeReadersOf(call.file) }?.close().done(Answer.Why.NO_SUCH_FILE)
             is Call.FileReader -> filePages[call.file]?.let { f ->
@@ -3706,4 +3708,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 /** Why a receipt of this Pot did not open: offline, that this device does not keep it (`PotModel.receiptFailure`); else none. */
 private fun PotModel.receiptRefusal(): Answer.Why =
     if (receiptFailure() == Msg.OFFLINE_NOT_KEPT) Answer.Why.NOT_KEPT_OFFLINE else Answer.Why.NO_RECEIPT
+
+/** An SVG's page as core's `SvgView` makes it ([Call.FileSvgPage]); WireTest writes it beside the samples for SvgWebTest. */
+internal fun svgPage(): Answer.SvgPage = me.raddatz.veyq.mobile.depot.SvgView.let { v ->
+    Answer.SvgPage(v.document(), v.DOCUMENT, v.PICTURE, v.CONTENT_SECURITY_POLICY, v.ZOOM_STEPS, v.ZOOM_STEPS.map(v::zoomScript))
+}
 

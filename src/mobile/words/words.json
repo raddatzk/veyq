@@ -2246,6 +2246,21 @@
     "en": "This file cannot be shown here. You can download it.",
     "de": "Diese Datei kann hier nicht angezeigt werden. Du kannst sie herunterladen."
   },
+  "file_zoom_in": {
+    "note": "An SVG's zoom on a file's page (inbox #1059): the button's label, its tooltip and its name for a screen reader.",
+    "en": "Zoom in",
+    "de": "Vergrößern"
+  },
+  "file_zoom_out": {
+    "note": "An SVG's zoom on a file's page (inbox #1059): the button's label, its tooltip and its name for a screen reader.",
+    "en": "Zoom out",
+    "de": "Verkleinern"
+  },
+  "file_zoom_fit": {
+    "note": "An SVG's zoom on a file's page (inbox #1059): back to the whole picture fitted into the view.",
+    "en": "Fit to the view",
+    "de": "In die Ansicht einpassen"
+  },
   "file_text_truncated": {
     "en": "Showing only the first megabyte. Download the file to read all of it.",
     "de": "Angezeigt wird nur das erste Megabyte. Lade die Datei herunter, um alles zu lesen."

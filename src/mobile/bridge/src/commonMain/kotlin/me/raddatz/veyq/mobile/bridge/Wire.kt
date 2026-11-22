@@ -598,6 +598,13 @@ internal sealed class Call {
 
     /** A PDF viewer's pages of a file's PDF of [total] pages ([Answer.ReceiptPages]: `FileView.pagesShown`, `pagesCut`). */
     @Serializable @SerialName("File.Pages") data class FilePages(val total: Int) : Call()
+
+    /** The page a host's web view shows an SVG in, and how it zooms ([Answer.SvgPage]: core's `SvgView`, inbox #1059). */
+    @Serializable @SerialName("File.SvgPage") data object FileSvgPage : Call()
+
+    /** The raster of an SVG laid out at [width] × [height] at [ratio] pixels each, within the cap ([Answer.SvgRaster]:
+     *  core's `SvgView.plan`): Linux draws an SVG's zoom into one such raster. */
+    @Serializable @SerialName("File.SvgRaster") data class FileSvgRaster(val width: Double, val height: Double, val ratio: Double) : Call()
     @Serializable @SerialName("File.Close") data class FileClose(val file: Long) : Call()
 
     /**
@@ -2037,6 +2044,18 @@ internal sealed class Answer {
     /** A PDF viewer's pages ([Call.ReceiptPages]): how many it renders ([shown], `Receipts.pagesShown`) and what it says
      *  under them when that is not all ([cut], `Receipts.pagesCut`). */
     @Serializable @SerialName("ReceiptPages") data class ReceiptPages(val shown: Int, val cut: Notice?) : Answer()
+
+    /**
+     * An SVG's page ([Call.FileSvgPage], core's `SvgView`): the [document] served at [documentUrl] and the SVG's bytes at
+     * [pictureUrl], both from memory, under the page's [policy], every other request and navigation refused; [steps] are the
+     * zoom's steps and [scripts] the host's own script that sets each (paired by index).
+     */
+    @Serializable @SerialName("SvgPage") data class SvgPage(
+        val document: String, val documentUrl: String, val pictureUrl: String, val policy: String, val steps: List<Double>, val scripts: List<String>,
+    ) : Answer()
+
+    /** An SVG's raster ([Call.FileSvgRaster]): its pixel size and the pixels per laid-out unit it holds (the cap wins). */
+    @Serializable @SerialName("SvgRaster") data class SvgRaster(val width: Int, val height: Int, val ratio: Double) : Answer()
 
     /** A Pot's settings opened ([Call.PotSettingsOpen]): their id, for [Watched.PotSettings] and their calls. */
     @Serializable @SerialName("PotSettingsOpened") data class PotSettingsOpened(val settings: Long) : Answer()
