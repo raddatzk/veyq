@@ -291,8 +291,8 @@ class GuestDropBox internal constructor(private val access: GuestAccess, val nod
     /** The names of the files sent from this device in this visit, in order. */
     val sent: StateFlow<List<String>> = _sent.asStateFlow()
 
-    /** Name the guest (the drop page's first step). */
-    suspend fun name(displayName: String): Boolean = runCatching { access.nameUploader(displayName.trim()) }.isSuccess
+    /** Name the guest from the drop page's own form (the phones', the web's): through the core's one naming flow. */
+    suspend fun name(displayName: String): Boolean = access.naming.name(displayName).let { it.problem == null && it.notice == null }
 
     /** *Not you?* */
     fun forget() = access.forgetGuest()
@@ -303,6 +303,17 @@ class GuestDropBox internal constructor(private val access: GuestAccess, val nod
         if (session.value == null || sources.isEmpty()) return 0
         queue.enqueue(sources.map { Job(it) }, node.name, null, null, null)
         return sources.size
+    }
+
+    /**
+     * [sources] queued as [upload] does, a guest not named yet asked its name first through the core's one naming flow
+     * ([GuestAccess.naming], ADR 0154 decision 1: an uploader's own `K_up`); declined, none is queued (and each is the
+     * caller's to close).
+     */
+    suspend fun uploadAsking(sources: List<UploadSource>): Int {
+        if (access.queue == null || sources.isEmpty()) return 0
+        access.naming.request() ?: return 0
+        return upload(sources)
     }
 
     /** One file sent now (a test's, and the queue's job): its own node in the guest's folder, its content, completed. */

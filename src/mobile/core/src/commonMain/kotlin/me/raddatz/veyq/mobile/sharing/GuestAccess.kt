@@ -57,7 +57,10 @@ class GuestAccess internal constructor(
     /** The guest's session of this link on this device (null: it has not named itself). */
     val session: StateFlow<GuestSession?> get() = gates.guest
 
-    /** Name the guest of a READ_WRITE link (under the root's key); a WRITE_ONLY kind names its uploader itself. */
+    /**
+     * Name the guest of a READ_WRITE link (under the root's key); a WRITE_ONLY link's uploader is [nameUploader]'s. A write
+     * names through [naming], which picks between the two by the role.
+     */
     suspend fun nameGuest(displayName: String): GuestSession = gates.nameGuest(displayName)
 
     /** *Not you?* */

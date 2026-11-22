@@ -119,6 +119,13 @@ class GalleryModel(
         /** The picked [sources] queued into this node ([MediaUploads.upload]); how many were. */
         fun upload(sources: List<UploadSource>): Int
 
+        /**
+         * Whether a write here may go on as whoever writes: a member at once; a link's guest not named yet is asked its name
+         * first, at the write, through the core's one naming flow (`GuestAccess.naming`, ADR 0154 decision 1) — false where it
+         * declined.
+         */
+        suspend fun named(): Boolean = true
+
         /** Each revision of the shell's lists (its first value: the lists as they are when the page opens). */
         val revisions: Flow<Any?>
 
@@ -875,6 +882,20 @@ class GalleryModel(
         // offline each is sealed at once and waits to be sent (ADR 0153 decision 1): a placeholder tile marked waiting
         scope.launch { runCatching { door.queueMedia(sources) } }
         return sources.count { MediaUpload.isMedia(it.type, it.name) }
+    }
+
+    /**
+     * The picked [sources] added as [upload] does, whoever writes asked first where the door says (a link's guest not named
+     * yet, [Door.named]); how many were queued — declined, none, and each source is closed here. Every app's *Add photos*
+     * and drop go through it, so no app reads a guest's session to offer one (#1044).
+     */
+    suspend fun uploadAsking(sources: List<UploadSource>): Int {
+        if (!takesUploads || sources.isEmpty()) return 0
+        if (!door.named()) {
+            sources.forEach { runCatching { it.close() } }
+            return 0
+        }
+        return upload(sources)
     }
 
     /** Whether this page takes an upload now: the rights let whoever looks upload, online or queued offline. */
