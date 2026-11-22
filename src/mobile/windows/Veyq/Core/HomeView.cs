@@ -269,14 +269,16 @@ internal static class HomeView
     }
 
     /// <summary>A write made offline in the level shown, waiting to be sent: its title and its line (Waiting to send, or
-    /// why it is held) as the core says them; the uploads tray holds its actions.</summary>
+    /// why it is held) as the core says them; the uploads tray holds its actions. A Memory made offline opens its page
+    /// before it is sent (QueuedItem.page, #1040).</summary>
     private static ListViewItem QueuedRow(QueuedItem q) =>
         Row(q.op switch
         {
             QueuedOp.FolderCreate => KindGlyph("FOLDER"),
             QueuedOp.MemoryCreate => KindGlyph("MEMORY"),
             _ => "\uE8A5",
-        }, Said.Notice(q.title), $"queued:{q.id}", false, () => { }, subtitle: Said.Notice(q.said));
+        }, Said.Notice(q.title), $"queued:{q.id}", false,
+            () => { if (q.page is { } page) Act.Send(new Call.ShellOpen { Ref = page }); }, subtitle: Said.Notice(q.said));
 
     private static SelectorBar Filters(ShellModelState state, ShellShown shown)
     {

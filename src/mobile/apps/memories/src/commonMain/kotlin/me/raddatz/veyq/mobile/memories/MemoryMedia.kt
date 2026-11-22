@@ -235,6 +235,21 @@ object MemoryMedia {
             .thenBy { it.mediaId },
     )
 
+    /**
+     * [item] with its capture-time correction [overrideMs] (null: back to the derived time) — one set offline and not sent
+     * yet, shown in place (ADR 0153 decision 5, #1040): what the grid orders by ([order]) and the details show. Nothing
+     * else of the item changes; what a write states of it stays the listed revision.
+     */
+    internal fun withCaptureTime(item: Item, overrideMs: Long?): Item {
+        val m = item.meta
+        val meta = if (m == null) Meta(null, null, null, overrideMs, null, null, null, null, null)
+        else Meta(m.width, m.height, m.capturedAt, overrideMs, m.capturedAtSource, m.gpsLat, m.gpsLng, m.placeName, m.placeLevel, m.trackName, m.facts, m.trackActivity)
+        return Item(
+            item.scopeId, item.nodeId, item.mediaId, item.original, item.thumbnail, item.preview, meta, item.type, item.name, item.ownerKey,
+            item.blocked, item.key, item.metaRevision, item.wrappedMeta, item.sha256, item.modifiedAt, item.bucketId,
+        )
+    }
+
     /** A medium's listed tier under [key] (`openMediaMeta`), or null where none was sealed or it does not open or parse. */
     internal fun openMeta(suite: V1, scopeId: String, mediaId: String, key: ByteArray, wrapped: String?): Meta? {
         if (wrapped == null) return null

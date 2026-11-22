@@ -2711,7 +2711,17 @@ internal class GalleryShown(
      * lightbox on it ([Call.LightboxOpen] at its row) and says so ([Call.GallerySearchOpenedSeen]). Null: nothing asked.
      */
     val searchOpened: String? = null,
+    /**
+     * The [chapters] made offline and not sent yet (`GalleryModel.State.chapterSaid`, ADR 0153 decision 5, #1040): each
+     * chapter's id with the line under its name (*Waiting to send*, or why it is held). Such a chapter opens as any other.
+     */
+    val chaptersUnsent: List<ChapterUnsent> = emptyList(),
 )
+
+/** A chapter of a [GalleryShown] made offline and not sent yet: its [node] id and the line under its name ([said]). */
+@Serializable
+@SerialName("ChapterUnsent")
+internal class ChapterUnsent(val node: String, val said: Notice)
 
 /**
  * A placeholder tile of a [GalleryShown] (core's `UploadTile`): its layout id ([id], never a medium's: a [GridTile.mediaId]

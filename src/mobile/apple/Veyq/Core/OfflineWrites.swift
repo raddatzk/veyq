@@ -140,11 +140,21 @@ struct QueuedBanner: View {
 }
 
 /// A write made offline in its level's place (core's `queuedHere`): its kind and name, *Waiting to send* (or why it is held
-/// or refused) under it; nothing to open until it is sent.
+/// or refused) under it. A Memory made offline opens its page (core's `QueuedItem.page`, #1040); anything else opens
+/// nothing until it is sent.
 struct QueuedRow: View {
     let item: QueuedItem
+    var open: (ObjectRef) -> Void = { _ in }
 
     var body: some View {
+        if let page = item.page {
+            Button { open(page) } label: { row.contentShape(Rectangle()) }.buttonStyle(.plain)
+        } else {
+            row
+        }
+    }
+
+    private var row: some View {
         HStack(spacing: 12) {
             Image(systemName: "arrow.up.circle").foregroundStyle(Role.muted).frame(width: 34)
             VStack(alignment: .leading, spacing: 2) {

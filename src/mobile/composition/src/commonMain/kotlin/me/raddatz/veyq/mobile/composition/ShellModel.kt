@@ -166,6 +166,22 @@ class ShellModel(
         if (sentWatch == null) sentWatch = CoroutineScope(Dispatchers.Default).launch {
             tenant.account.queuedReports.collect { if (it.sent > 0) refresh() }
         }
+        // a rename made offline shows in place until it is sent, discarded or held (#1040)
+        val box = tenant.account.outbox
+        if (renameWatch == null && box != null) renameWatch = CoroutineScope(Dispatchers.Default).launch {
+            box.changes.collect {
+                val now = renamesQueued()
+                if (now != renamedOffline) {
+                    renamedOffline = now
+                    rebuild()
+                    // a page open on a node whose queued name went (discarded, held) heads it as the lists do again
+                    shell?.openObject?.let { open ->
+                        current?.lists?.objects?.firstOrNull { it.scopeId == open.scopeId && it.nodeId == open.nodeId && it.name != open.name }
+                            ?.let { o -> update { afterRename(it, o) } }
+                    }
+                }
+            }
+        }
         watchGone()
         if (pagesWatch == null) pagesWatch = CoroutineScope(Dispatchers.Default).launch {
             tenant.pagesOffline.shown.collect { p -> put { s -> s?.let { State(it.shell, it.lists, it.offline, it.gone, p) } } }
@@ -176,6 +192,26 @@ class ShellModel(
 
     private var reaches: kotlinx.coroutines.Job? = null
     private var sentWatch: kotlinx.coroutines.Job? = null
+    private var renameWatch: kotlinx.coroutines.Job? = null
+
+    /**
+     * The names given offline and waiting to be sent, by node id (ADR 0153 decision 5, #1040): the lists show each node
+     * under it ([overlaid]). A rename held for the person shows the name the server holds, as its *Open* asks about it.
+     */
+    @kotlin.concurrent.Volatile
+    private var renamedOffline: Map<String, String> = emptyMap()
+
+    private suspend fun renamesQueued(): Map<String, String> =
+        tenant.account.outbox?.writes().orEmpty()
+            .filter { it.tenant == tenantId && it.op == me.raddatz.veyq.mobile.offline.Queued.NODE_RENAME.name && it.state == me.raddatz.veyq.mobile.offline.QueuedWrite.State.WAITING }
+            .mapNotNull { w -> w.node?.let { it to me.raddatz.veyq.mobile.offline.QueuedNodes.decode(me.raddatz.veyq.mobile.offline.QueuedNodes.RenameIntent.serializer(), w).name } }
+            .toMap()
+
+    /** [nodes] under the names given offline and not sent yet ([renamedOffline]). */
+    private fun overlaid(nodes: List<NodeRef>): List<NodeRef> {
+        val names = renamedOffline
+        return if (names.isEmpty()) nodes else nodes.map { n -> names[n.nodeId]?.let { n.copy(name = it) } ?: n }
+    }
     private var goneWatch: kotlinx.coroutines.Job? = null
 
     /**
@@ -235,15 +271,41 @@ class ShellModel(
         }
     }
 
-    /** What the outbox holds for gallery [nodeId]: the media whose trash waits, the marks set offline. */
+    /**
+     * What the outbox holds for gallery [nodeId]: the media whose trash waits, the marks and the capture times set offline,
+     * and the chapters made in it offline, each with what it says (ADR 0153 decision 5, #1040).
+     */
     private suspend fun queuedHere(nodeId: String): me.raddatz.veyq.mobile.memories.GalleryModel.QueuedHere {
-        val writes = tenant.account.outbox?.writes().orEmpty().filter { it.node == nodeId && it.state == me.raddatz.veyq.mobile.offline.QueuedWrite.State.WAITING }
+        val all = tenant.account.outbox?.writes().orEmpty().filter { it.tenant == tenantId }
+        val writes = all.filter { it.node == nodeId && it.state == me.raddatz.veyq.mobile.offline.QueuedWrite.State.WAITING }
         fun field(w: me.raddatz.veyq.mobile.offline.QueuedWrite, k: String) = (w.intent[k] as? kotlinx.serialization.json.JsonPrimitive)?.content
         return me.raddatz.veyq.mobile.memories.GalleryModel.QueuedHere(
             trashed = writes.filter { it.op == me.raddatz.veyq.mobile.offline.Queued.MEDIA_TRASH.name }.mapNotNull { field(it, "mediaId") }.toSet(),
             marks = writes.filter { it.op == me.raddatz.veyq.mobile.offline.Queued.MEDIA_MARK.name }.mapNotNull { w -> field(w, "mediaId")?.let { it to (field(w, "marked") == "true") } }.toMap(),
+            times = writes.filter { it.op == me.raddatz.veyq.mobile.offline.Queued.MEDIA_CAPTURE_TIME.name }.associate { w ->
+                me.raddatz.veyq.mobile.offline.QueuedNodes.decode(me.raddatz.veyq.mobile.memories.QueuedMemories.TimeIntent.serializer(), w).let { it.mediaId to it.overrideMs }
+            },
+            chapters = queuedMade(all).filter { it.first.parentId == nodeId }.associate { (n, w) -> n.nodeId to QueuedShown.said(w) },
         )
     }
+
+    /**
+     * The Memories and chapters made offline among [writes] and not sent yet, each as the node it will be (its id the
+     * write's, ADR 0153 decision 3) with its write: what a level's row opens and a Memory's chapters list (#1040).
+     */
+    private fun queuedMade(writes: List<me.raddatz.veyq.mobile.offline.QueuedWrite>): List<Pair<NodeRef, me.raddatz.veyq.mobile.offline.QueuedWrite>> =
+        writes.filter { it.op == me.raddatz.veyq.mobile.offline.Queued.MEMORY_CREATE.name }.map { w -> QueuedShown.madeNode(w) to w }
+
+    /** [scopeId]'s nodes as [scopeNodes] reads them, with the Memories and chapters made there offline and not sent yet. */
+    private suspend fun scopeNodesWithQueued(scopeId: String): List<NodeRef> {
+        val read = scopeNodes(scopeId)
+        val made = queuedMade(tenant.account.outbox?.writes().orEmpty().filter { it.tenant == tenantId && it.scope == scopeId }).map { it.first }
+        return read + made.filter { m -> read.none { it.nodeId == m.nodeId } }
+    }
+
+    /** Whether [nodeId] is a Memory or a chapter made offline and not sent yet: its page opens empty, as of now (#1040). */
+    private suspend fun madeOffline(nodeId: String): Boolean =
+        tenant.account.outbox?.write(nodeId)?.op == me.raddatz.veyq.mobile.offline.Queued.MEMORY_CREATE.name
 
     /** The name of [nodeId] (null: the space) as the lists hold it: where a queued write goes, as the tray groups it. */
     private fun placeName(scopeId: String, nodeId: String?): String? {
@@ -340,9 +402,10 @@ class ShellModel(
     private fun rebuild(start: Boolean, openLastUsed: Boolean) {
         val r = raw ?: return
         val spaces = hidden.visibleSpaces(r.spaces)
-        val nodes = hidden.visibleNodes(r.nodes, r.spaces)
+        val nodes = hidden.visibleNodes(overlaid(r.nodes), r.spaces)
         val objects = nodes.mapNotNull { it.asObject() }
-        val favorites = hidden.visibleObjects(r.favorites, r.spaces)
+        val names = renamedOffline
+        val favorites = hidden.visibleObjects(r.favorites, r.spaces).map { f -> names[f.nodeId]?.let { f.copy(name = it) } ?: f }
         val lists = Lists(
             spaces, nodes, objects, favorites,
             applications = drawerApplications(r.off).map { it.id },
@@ -422,7 +485,7 @@ class ShellModel(
     private suspend fun relocate(ref: NodeAt) {
         val s = shell ?: return
         if (s.path.none { it.nodeId == ref.nodeId }) return
-        val tree = scopeNodes(ref.scopeId)
+        val tree = overlaid(scopeNodes(ref.scopeId))
         update { relocated(it, tree, ref.nodeId) }
     }
 
@@ -848,6 +911,13 @@ class ShellModel(
             // offline the rename states the placement the person saw (ADR 0153 decision 4) and waits to be sent
             val seen = runCatching { tenant.node(ref.scopeId, ref.nodeId)?.placementRevision }.getOrNull() ?: 0
             if (!me.raddatz.veyq.mobile.offline.QueuedNodes.rename(tenant.account, tenantId, ref.scopeId, ref.nodeId, seen, name, wallClock())) return Renamed(NodeRename.Result(NodeRename.Outcome.FAILED), noRoom)
+            // shown in place at once (#1040): the level's row, an open page's head (the outbox's watch keeps it so)
+            renamedOffline = renamesQueued()
+            rebuild()
+            followRename(ref)
+            // a Memory made offline is in no list: its open page heads it under the name its create now carries
+            shell?.openObject?.takeIf { it.scopeId == ref.scopeId && it.nodeId == ref.nodeId && it.name != name.trim() }
+                ?.let { o -> update { afterRename(it, o.copy(name = name.trim())) } }
             return Renamed(NodeRename.Result(NodeRename.Outcome.RENAMED), Notice(Msg.OFFLINE_WAITING))
         }
         if (!online) return Renamed(NodeRename.Result(NodeRename.Outcome.FAILED), readOnly)
@@ -857,15 +927,20 @@ class ShellModel(
             // a rename made offline and held for the person is decided by this one (its *Open*, `QueuedOpen.Rename`)
             runCatching { me.raddatz.veyq.mobile.offline.QueuedNodes.renameDecided(tenant.account, ref.nodeId) }
             refresh()
-            val lists = _state.value?.lists
-            val renamed = lists?.objects?.firstOrNull { it.scopeId == ref.scopeId && it.nodeId == ref.nodeId }
-            if (renamed != null) update { afterRename(it, renamed) }
-            // a kept link's page heads its node under the new name too (#1035)
-            val kept = lists?.nodes?.firstOrNull { it.scopeId == ref.scopeId && it.nodeId == ref.nodeId }?.asBookmark()
-            if (kept != null) update { afterRename(it, kept) }
-            relocate(ref)
+            followRename(ref)
         }
         return Renamed(r, Notices.renameRefused(r))
+    }
+
+    /** An open page of renamed [ref] (an object's, a kept link's) and the path follow its name as the lists hold it now. */
+    private suspend fun followRename(ref: NodeAt) {
+        val lists = _state.value?.lists
+        val renamed = lists?.objects?.firstOrNull { it.scopeId == ref.scopeId && it.nodeId == ref.nodeId }
+        if (renamed != null) update { afterRename(it, renamed) }
+        // a kept link's page heads its node under the new name too (#1035)
+        val kept = lists?.nodes?.firstOrNull { it.scopeId == ref.scopeId && it.nodeId == ref.nodeId }?.asBookmark()
+        if (kept != null) update { afterRename(it, kept) }
+        relocate(ref)
     }
 
     /** Where a node of a kind may be placed: the build's kinds' placement. */
@@ -1218,8 +1293,11 @@ class ShellModel(
         calendar: me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar = me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar.UTC,
     ): me.raddatz.veyq.mobile.memories.GalleryModel =
         me.raddatz.veyq.mobile.memories.GalleryModel(ref, object : me.raddatz.veyq.mobile.memories.GalleryModel.Door {
-            override suspend fun gallery() = me.raddatz.veyq.mobile.memories.MemoryMedia.list(tenant, ref.scopeId, ref.nodeId)
-            override suspend fun scopeNodes() = this@ShellModel.scopeNodes(ref.scopeId)
+            override suspend fun gallery() =
+                // made offline and not sent yet: nothing listed, nothing asked of the server — what waits to go into it shows
+                if (madeOffline(ref.nodeId)) me.raddatz.veyq.mobile.memories.MemoryMedia.Gallery(emptyList(), 0, 0, offlineNow() ?: me.raddatz.veyq.mobile.session.OfflineAsOf(null))
+                else me.raddatz.veyq.mobile.memories.MemoryMedia.list(tenant, ref.scopeId, ref.nodeId)
+            override suspend fun scopeNodes() = scopeNodesWithQueued(ref.scopeId)
             override fun shownOffline(at: me.raddatz.veyq.mobile.session.OfflineAsOf?) = tenant.pagesOffline.shown(ref.nodeId, at)
             override suspend fun read(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, blob: me.raddatz.veyq.mobile.memories.MemoryMedia.Blob) =
                 me.raddatz.veyq.mobile.memories.MemoryMedia.read(tenant, item, blob)

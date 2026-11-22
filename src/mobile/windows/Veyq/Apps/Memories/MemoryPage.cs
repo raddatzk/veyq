@@ -259,7 +259,8 @@ internal sealed class MemoryPage : IDisposable
         {
             Log.Write($"gallery shown: {s.rows?.Count ?? -1} rows, {s.chapters.Count} chapters, failed {s.failed}, filter {(s.filter is { } fs ? $"{fs.shown}/{fs.total} {fs.mode} chips {fs.chips.Count} suggestions {fs.suggestions.Count}" : "-")}, contributions {s.contributions}, marks {s.rows?.Count(r => r.mine || r.marks > 0) ?? 0}, undo {s.undo is not null}, upload {s.canUpload}, save {s.canSave}, creates {string.Join(",", s.creates.Select(c => c.create))}");
         }
-        var chaptersChanged = !(_shown?.chapters ?? []).SequenceEqual(g.shown?.chapters ?? []);
+        // a chapter made offline and its line under it (#1040) redraw the rows as a chapter added does
+        var chaptersChanged = !(_shown?.chapters ?? []).SequenceEqual(g.shown?.chapters ?? []) || !Unsent(_shown).SequenceEqual(Unsent(g.shown));
         _shown = g.shown;
         if (chaptersChanged) DrawChapters();
         Draw();
@@ -822,6 +823,9 @@ internal sealed class MemoryPage : IDisposable
         _scroll.Visibility = Visibility.Visible;
     }
 
+    /// <summary>The chapters made offline and not sent yet, each with its line, compared as text (a Notice's arguments are a list).</summary>
+    private static IEnumerable<string> Unsent(GalleryShown? s) => (s?.chaptersUnsent ?? []).Select(u => u.node + "\n" + Said.Notice(u.said));
+
     /// <summary>A Memory's chapters: a row each, its cover read where it has one (Gallery.ChapterCover), opening the chapter.</summary>
     private void DrawChapters()
     {
@@ -842,8 +846,14 @@ internal sealed class MemoryPage : IDisposable
             cell.Children.Add(new Border { CornerRadius = new CornerRadius(4), Child = cover });
             line.Children.Add(cell);
             var title = new TextBlock { Text = chapter.name, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
-            Grid.SetColumn(title, 1);
-            line.Children.Add(title);
+            // made offline and not sent yet: core's line under its name (#1040)
+            var unsent = _shown?.chaptersUnsent.FirstOrDefault(u => u.node == chapter.nodeId);
+            var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            text.Children.Add(title);
+            if (unsent is not null)
+                text.Children.Add(new TextBlock { Text = Said.Notice(unsent.said), Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
+            Grid.SetColumn(text, 1);
+            line.Children.Add(text);
             var chevron = HomeView.Glyph("\uE76C");
             chevron.FontSize = 12;
             Grid.SetColumn(chevron, 2);
