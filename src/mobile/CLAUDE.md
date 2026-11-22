@@ -508,7 +508,7 @@ A Gradle build of its own, run through its own wrapper.
   waiting after a transport failure, `id_taken` — and the closed list derived from the senders' operations, none of the
   never-queue column), `QueuedMemoriesTest` and `QueuedDepotExpensesTest` (media waiting for a chapter made offline, a
   `K_blob` wrapped at the send, a Pot entry's heads as the person saw them, the held editor), `QueuedOverlayTest` (each
-  model's queued rows, the tray, the banner, the reconnect's notice, the loss's ask, New offline) and `AppleQueuedTest`
+  model's queued rows, the tray, the banner, the reconnect's notice, the loss's ask, the unlock's forget always asked, New offline) and `AppleQueuedTest`
   (the Swift app's states by value, *Save a copy* into a path); live, `LiveQueuedTest` (a chapter, two photos and an
   entry with a receipt queued offline and sent). The sync in the background (ADR 0153 decision 8): `BackgroundRunTest`
   (a login-level account resumed with one refresh, its queue sent, then its pins, closed with its keys zeroed; a

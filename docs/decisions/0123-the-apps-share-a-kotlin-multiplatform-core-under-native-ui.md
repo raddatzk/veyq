@@ -138,7 +138,9 @@ implementation exists but what holds it to the first.
    every start. With no session it sends nothing — the server's wrap opens only with the bind key now gone, and stays
    in the register for another device to remove — and forgets here what Manage servers' stop does: the record, its
    keys, its kept wrap, its offline store and its "Not now"; the start falls through to the next trusted account or
-   the sign-in. Every unlock and every enrolment names the device in the account's device register (write moments 1 and 2
+   the sign-in. It is **always asked first** (owner 2026-11-22, `QueuedShown.forgetAsk`): the account goes from this
+   device, and signing in here again takes the Secret Key. Where writes made offline wait, that one question names them
+   too — never a second ask. Every unlock and every enrolment names the device in the account's device register (write moments 1 and 2
    of en.account.device-register, its label the device's model), so a person's other device can find this one's saved
    key and remove it ([ADR 0058](0058-revoke-never-takes-key-material.md)). iOS keeps Keychain items when an app is
    deleted: a first start after an installation removes them. What each store guarantees at each level is

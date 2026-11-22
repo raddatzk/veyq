@@ -238,7 +238,8 @@ held for the screens' models but not around them:
   in `last` and each kind's order `AppKinds.headerOrder` (the banner, a kept link's *Open on its own page* and *Report
   shared content* among the entries, no longer a page's body buttons or Windows' entries after Delete);
   `ShellModel.levelPlan` → `LevelPlan(creates, tools)` and `drawerCreates`/`drawerSections`; `AccountSettings.State.sections`;
-  `SignInPlan.entries`, `UnlockPlan.entries` (inbox #1052); `LevelRow.plan` (`ShellModel.rowPlan`), `GalleryModel.tileActions`, `ShareSheet.rowActions`;
+  `SignInPlan.entries`, `UnlockPlan.entries` (inbox #1052; its *Stop trusting this device* always asked first, in
+  core's one question `QueuedShown.forgetAsk`, owner 2026-11-22); `LevelRow.plan` (`ShellModel.rowPlan`), `GalleryModel.tileActions`, `ShareSheet.rowActions`;
   a guest's level New `GuestLevel.creates`. The bridge carries each as typed entries (`ShellShown.level`,
   `SettingsShown.sections`, `Call.RowPlan`, `Call.SignInPlan`, `Call.UnlockPlan`, `GalleryRow.tileActions`, `ShownLink.actions`) and
   generates every plan enum into `bridge.rs` and `Bridge.g.cs`. `PlansAreTheWebsTest` reads the web for the orders:
