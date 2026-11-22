@@ -65,7 +65,7 @@ public sealed class ReceivedTextTest
         Assert.AreEqual(ReceivedText.DrawnKey(a), ReceivedText.DrawnKey(a with { guestName = "Ben" }));
         Assert.AreNotEqual(ReceivedText.DrawnKey(a), ReceivedText.DrawnKey(a with { askedAgain = true }));
         Assert.AreNotEqual(ReceivedText.DrawnKey(a), ReceivedText.DrawnKey(Shown(ReceivedGate.Terms)));
-        var page = new ReceivedPage { kind = ReceivedPageKind.DropBox, name = "Inbox", nodeKind = "DEPOT_DROPBOX", rows = [], file = null, gallery = null, pot = null, sent = [], writes = false };
+        var page = new ReceivedPage { kind = ReceivedPageKind.DropBox, name = "Inbox", nodeKind = "DEPOT_DROPBOX", rows = [], file = null, gallery = null, pot = null, sent = [], writes = false, creates = [] };
         var ready = Shown(ReceivedGate.Ready) with { page = page };
         Assert.AreNotEqual(ReceivedText.DrawnKey(ready), ReceivedText.DrawnKey(ready with { page = page with { sent = ["a.pdf"] } }), "a file sent shows");
     }
