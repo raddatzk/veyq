@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.CheckBox
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
@@ -94,6 +95,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.material3.AlertDialog
 import me.raddatz.veyq.mobile.android.R
 import me.raddatz.veyq.mobile.android.words
 import me.raddatz.veyq.mobile.navigation.ApplicationId
@@ -261,6 +268,14 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                             // one, in its order, as toolbar icons. A wide window's list beside its object has its own pane.
                             val level = if (shell.searching || (wide && shell.showsListBeside)) null else model.levelPlan(shell)
                             for (tool in level?.tools.orEmpty()) when (tool) {
+                                // Select (core's `LevelSelection`, inbox #1049): the level's pick mode on and off, pressed while on
+                                me.raddatz.veyq.mobile.navigation.LevelTool.SELECT -> {
+                                    val on = s.selection != null
+                                    androidx.compose.material3.IconToggleButton(
+                                        checked = on, onCheckedChange = { if (it) model.selectStart() else model.selectCancel() },
+                                        modifier = Modifier.testTag("level-select"),
+                                    ) { Icon(Icons.Outlined.CheckBox, say(me.raddatz.veyq.mobile.navigation.LevelSelection.word)) }
+                                }
                                 // the space's trash: every application's nodes
                                 me.raddatz.veyq.mobile.navigation.LevelTool.TRASH -> if (space != null) {
                                     IconButton(onClick = { trashOf = space }, modifier = Modifier.testTag("level-trash")) {
@@ -478,6 +493,10 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                 }
             }
         }
+        // the selection's bar while the level picks (core's `LevelSelection.Picking`, the web's selection bar): the count, All,
+        // None, every action of its plan in order (enabled where some selected row allows it, its hint what it cannot
+        // reach), Cancel
+        s.selection?.let { SelectionBar(it, model) }
         val groups = s.levelGroups
         val queuedHere by model.queuedHere.collectAsStateWithLifecycle()
         val hero = LocalNodeHero.current
@@ -499,13 +518,13 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                         val folder = node.asFolder()
                         val obj = node.asObject()
                         val bookmark = node.asBookmark()
-                        WithRowMenu(node.at(), model, modifier) { menu ->
+                        WithRowMenu(node.at(), model, modifier, s.selection) { menu ->
                             if (folder != null) {
                                 LevelTile(node.name, null, LocalCovers.current[node.nodeId]?.second, Icons.Outlined.Folder, folder = true, modifier = Modifier.rowDrop(node, model), onMenu = menu) { onEnter(folder) }
                             } else if (obj != null) ObjectTile(obj, Modifier, onOpen, menu)
                             else if (bookmark != null) LevelTile(bookmark.name, null, null, kindIcon(bookmark.kind), folder = false, modifier = Modifier, onMenu = menu) { model.openBookmark(bookmark) }
                         }
-                    } else items(group.nodes, key = { it.scopeId + it.nodeId }) { node -> WithRowMenu(node.at(), model, Modifier) { menu ->
+                    } else items(group.nodes, key = { it.scopeId + it.nodeId }) { node -> WithRowMenu(node.at(), model, Modifier, s.selection) { menu ->
                         val folder = node.asFolder()
                         if (folder != null) {
                             ListItem(
@@ -546,12 +565,100 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
  * gets the long press that opens it, none while a share picks its place (a pick only chooses); the menu anchors at the row.
  */
 @Composable
-private fun WithRowMenu(node: me.raddatz.veyq.mobile.navigation.NodeAt, model: AppModel, modifier: Modifier, content: @Composable (onMenu: (() -> Unit)?) -> Unit) {
+private fun WithRowMenu(
+    node: me.raddatz.veyq.mobile.navigation.NodeAt, model: AppModel, modifier: Modifier,
+    /** The level's selection while it picks: a tap turns the row instead of opening it, and a check shows whether it is selected. */
+    selection: me.raddatz.veyq.mobile.navigation.LevelSelection.Picking? = null,
+    content: @Composable (onMenu: (() -> Unit)?) -> Unit,
+) {
     var open by remember(node.scopeId, node.nodeId) { mutableStateOf(false) }
     val picking = LocalPicking.current
+    if (selection != null) {
+        // Material's selection mode: the row drawn as it is, a checkbox over its start, the whole row one toggle
+        val checked = selection.has(node.nodeId)
+        Box(modifier.clip(MaterialTheme.shapes.medium).let { if (checked) it.background(role(LocalPalette.current.accentSoft)) else it }) {
+            content(null)
+            Box(
+                Modifier.matchParentSize().testTag("select-row")
+                    .toggleable(value = checked, role = androidx.compose.ui.semantics.Role.Checkbox) { model.selectToggle(node.nodeId) },
+            ) {
+                androidx.compose.material3.Checkbox(checked, onCheckedChange = null, modifier = Modifier.align(Alignment.TopEnd))
+            }
+        }
+        return
+    }
     Box(modifier) {
         content(if (picking) null else ({ open = true }))
         LevelRowMenu(node, model, open) { open = false }
+    }
+}
+
+/**
+ * The selection's bar (core's `LevelSelection.Picking`, the web's `LevelView` selection bar): the count, *All* and *None*,
+ * every action of its plan in its order — each enabled where some selected row allows it, with what it cannot reach under
+ * it — and *Cancel*. Each action opens core's own sheet over the selected rows it reaches.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun SelectionBar(sel: me.raddatz.veyq.mobile.navigation.LevelSelection.Picking, model: AppModel) {
+    val palette = LocalPalette.current
+    val notices = LocalShellNotices.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var open by remember { mutableStateOf<me.raddatz.veyq.mobile.navigation.SelectionAction?>(null) }
+    val label = say(sel.label)
+    androidx.compose.material3.Surface(
+        color = role(palette.accentSoft), shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).testTag("selection-bar")
+            .semantics { paneTitle = label },
+    ) {
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+            androidx.compose.foundation.layout.FlowRow(verticalArrangement = Arrangement.Center, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    say(sel.count), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.CenterVertically).padding(end = 4.dp)
+                        .semantics { liveRegion = LiveRegionMode.Polite },
+                )
+                TextButton(onClick = model::selectAll) { Text(say(sel.all)) }
+                TextButton(onClick = model::selectNone) { Text(say(sel.none)) }
+                for (a in sel.entries) {
+                    val danger = a.action == me.raddatz.veyq.mobile.navigation.SelectionAction.DELETE
+                    TextButton(onClick = { open = a.action }, enabled = a.enabled, modifier = Modifier.testTag("select-${a.action.name.lowercase()}")) {
+                        Text(say(a.word), color = if (danger && a.enabled) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified)
+                    }
+                }
+                TextButton(onClick = model::selectCancel) { Text(say(sel.cancel)) }
+            }
+            for (a in sel.entries) a.cannot?.let { Text(say(it), style = MaterialTheme.typography.bodySmall, color = role(palette.muted)) }
+        }
+    }
+    val close = { open = null }
+    when (open) {
+        me.raddatz.veyq.mobile.navigation.SelectionAction.MOVE, me.raddatz.veyq.mobile.navigation.SelectionAction.COPY ->
+            remember(open) { model.selectionMoveSheet(open == me.raddatz.veyq.mobile.navigation.SelectionAction.COPY) }?.let { sheet ->
+                NodeMoveSheet(sheet, onDone = { done -> notices?.let { moved(done, it.snackbar, it.scope, context) } }, onClose = close)
+            } ?: close()
+        me.raddatz.veyq.mobile.navigation.SelectionAction.REPORT ->
+            remember(open) { model.selectionReportSheet() }?.let { ReportSheet(it, close) } ?: close()
+        me.raddatz.veyq.mobile.navigation.SelectionAction.DELETE -> remember(open) { model.selectionTrash() }?.let { delete ->
+            AlertDialog(
+                onDismissRequest = close,
+                title = { Text(say(delete.title)) },
+                text = { Text(say(delete.question)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        close()
+                        notices?.let { n ->
+                            n.scope.launch {
+                                val said = delete.trash()
+                                offerUndo(said, delete.current.undo != null, { delete.state.first { it.undo == null } }, { delete.undo() }, n.snackbar, context)
+                            }
+                        }
+                    }) { Text(stringResource(R.string.entry_delete), color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = { TextButton(onClick = close) { Text(stringResource(R.string.entry_cancel)) } },
+            )
+        } ?: close()
+        null -> {}
     }
 }
 

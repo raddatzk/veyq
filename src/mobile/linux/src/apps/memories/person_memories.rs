@@ -234,7 +234,7 @@ impl Inner {
             let tiles = m.rows.iter().map(|r| {
                 let open = r.r#ref.clone();
                 let subtitle = row_subtitle(r);
-                Tile { name: r.r#ref.name.clone(), subtitle: (!subtitle.is_empty()).then_some(subtitle), dated: false, icon: kind_icon(&r.r#ref.kind),
+                Tile { selected: None, name: r.r#ref.name.clone(), subtitle: (!subtitle.is_empty()).then_some(subtitle), dated: false, icon: kind_icon(&r.r#ref.kind),
                     node_id: r.r#ref.node_id.clone(), open: Box::new(move || {
                         eprintln!("veyq: a person's Memory opened");
                         bridge::send(Call::ShellOpen { r#ref: open.clone() });

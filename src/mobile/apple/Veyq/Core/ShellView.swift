@@ -541,9 +541,15 @@ struct HomeView: View {
     @State private var keepingLink = false
 
     /// A group's rows: a folder enters, an object opens; each row's menu is core's (`NodeRowMenu`), as each tile's (`tile`).
+    /// While the level picks (its selection, core's), a row is one toggle with its check, as Files' Select.
     @ViewBuilder private func rows(_ nodes: [NodeRef]) -> some View {
         ForEach(nodes, id: \.nodeId) { node in
-            row(node).modifier(NodeRowMenu(model: model, node: Self.at(node)))
+            if let sel = model.selection {
+                SelectableRow(selected: sel.has(id: node.nodeId)) { model.selectToggle(node.nodeId) } label: { row(node).allowsHitTesting(false) }
+                    .listRowBackground(Role.surface)
+            } else {
+                row(node).modifier(NodeRowMenu(model: model, node: Self.at(node)))
+            }
         }
     }
 
@@ -658,8 +664,21 @@ struct HomeView: View {
         }
     }
 
-    /// A node of the level as a tile: a folder enters, an object opens; its menu the row's (#1053).
+    /// A node of the level as a tile: a folder enters, an object opens; its menu the row's (#1053). While the level picks, a
+    /// tile turns its node instead, its check drawn on it, and offers no menu.
     private func tile(_ node: NodeRef) -> NodeTileItem? {
+        guard var item = plainTile(node) else { return nil }
+        if let sel = model.selection {
+            item.selected = sel.has(id: node.nodeId)
+            item.menu = nil
+            item.drop = nil
+            item.enabled = true
+            item.open = { [model] in model.selectToggle(node.nodeId) }
+        }
+        return item
+    }
+
+    private func plainTile(_ node: NodeRef) -> NodeTileItem? {
         if let folder = node.asFolder() {
             let target = model.dropTarget(node)
             return NodeTileItem(id: node.nodeId, name: node.name, cover: model.covers[node.nodeId]?.image, symbol: "folder", folder: true,
@@ -686,6 +705,10 @@ struct HomeView: View {
 
     private var level: some View {
         levelBody
+        // the selection's bar while the level picks (core's `LevelSelection.Picking`): at the bottom, as Files' Select
+        .safeAreaInset(edge: .bottom) {
+            if let sel = model.selection { SelectionBar(model: model, selection: sel) }
+        }
         // what is dropped onto the level goes through core's one drop (ADR 0154 decision 1; ADR 0138 decision 9): uploaded
         // here where the core offers it, a folder on macOS as a folder; where it does not, it waits in the pick mode
         .onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
@@ -749,6 +772,13 @@ struct LevelTools: ToolbarContent {
         ToolbarItemGroup(placement: ViewModeMenu.placement) {
             ForEach(model.levelPlan?.tools ?? [], id: \.self) { tool in
                 switch tool.entry {
+                case .select:
+                    // Select (core's `LevelSelection`, inbox #1049): the level's pick mode on and off, as Files' Select
+                    Toggle(isOn: Binding(get: { model.selection != nil }, set: { $0 ? model.selectStart() : model.selectCancel() })) {
+                        Label(say(LevelSelection.shared.word), systemImage: "checkmark.circle")
+                    }
+                    .toggleStyle(.button)
+                    .accessibilityIdentifier("level-select")
                 case .trash:
                     Button { if let space = model.shell.space { model.trashShown = TrashOf(scopeId: space) } } label: { Image(systemName: "trash") }
                         .accessibilityLabel(say(.trashTitle))

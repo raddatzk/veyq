@@ -38,6 +38,10 @@ internal sealed class ReportDialog
         public required TextBlock ScopeHint { get; init; }
         public required RadioButtons Category { get; init; }
         public required TextBlock Note { get; init; }
+        /// <summary>A level selection's: how many it reports; above one report's room why, and the folder holding them offered.</summary>
+        public required TextBlock Items { get; init; }
+        public required TextBlock TooMany { get; init; }
+        public required Button Enclosing { get; init; }
         public required TextBox Reason { get; init; }
         public required CheckBox GoodFaith { get; init; }
         public required TextBox Contact { get; init; }
@@ -162,6 +166,12 @@ internal sealed class ReportDialog
         _drawing = true;
         f.Scope.SelectedIndex = s.whole ? 0 : 1;
         f.ScopeHint.Text = Said.Key(s.scopeHint);
+        f.Items.Text = s.items is { } items ? Said.Notice(items) : "";
+        f.Items.Visibility = s.items is null ? Visibility.Collapsed : Visibility.Visible;
+        f.TooMany.Text = s.tooMany is { } tooMany ? Said.Notice(tooMany) : "";
+        f.TooMany.Visibility = s.tooMany is null ? Visibility.Collapsed : Visibility.Visible;
+        f.Enclosing.Content = Said.Key(s.enclosingWord);
+        f.Enclosing.Visibility = s.offersEnclosing ? Visibility.Visible : Visibility.Collapsed;
         f.Category.SelectedIndex = s.category is { } c ? s.categories.Select(x => x.id).ToList().IndexOf(c) : -1;
         f.Note.Text = s.note is { } n ? Said.Key(n) : "";
         f.Note.Visibility = s.note is null ? Visibility.Collapsed : Visibility.Visible;
@@ -180,6 +190,14 @@ internal sealed class ReportDialog
         _body.Children.Clear();
         var panel = new StackPanel { Spacing = 12 };
         panel.Children.Add(Text(Words.ReportIntro(), "report-intro", "TextFillColorSecondaryBrush"));
+        var items = Text("", "report-items", "TextFillColorPrimaryBrush");
+        panel.Children.Add(items);
+        var tooMany = Text("", "report-too-many", "SystemFillColorCriticalBrush");
+        panel.Children.Add(tooMany);
+        var enclosing = new Button();
+        AutomationProperties.SetAutomationId(enclosing, "report-enclosing");
+        enclosing.Click += (_, _) => Act.Send(new Call.ReportEnclosing { report = report });
+        panel.Children.Add(enclosing);
 
         var scope = new RadioButtons { Header = Words.ReportScope() };
         foreach (var (id, word) in new[] { ("whole", Words.ReportScopeWhole()), ("name", Words.ReportScopeName()) })
@@ -269,7 +287,7 @@ internal sealed class ReportDialog
         var problem = Text("", "report-problem", "SystemFillColorCriticalBrush");
         panel.Children.Add(problem);
         _body.Children.Add(panel);
-        return new Form { Scope = scope, ScopeHint = scopeHint, Category = category, Note = note, Reason = reason, GoodFaith = faith, Contact = contact, Problem = problem, Panel = panel };
+        return new Form { Items = items, TooMany = tooMany, Enclosing = enclosing, Scope = scope, ScopeHint = scopeHint, Category = category, Note = note, Reason = reason, GoodFaith = faith, Contact = contact, Problem = problem, Panel = panel };
     }
 
     private static TextBlock Caption(string text) => new()

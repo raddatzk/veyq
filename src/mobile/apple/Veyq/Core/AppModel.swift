@@ -84,6 +84,8 @@ final class AppModel {
     private(set) var offlineBanner: VeyqCore.Notice?
     /// Items made available offline that left this device (core's `State.gone`), said until `goneSeen()`.
     private(set) var goneNotices: [VeyqCore.Notice] = []
+    /// The shown level's selection while its Select mode is on (core's `ShellModel.State.selection`, inbox #1049); nil off.
+    private(set) var selection: LevelSelection.Picking?
     /// Whether the account reaches its server: offline every write is taken away (ADR 0140 decision 7).
     var online: Bool { offlineBanner == nil }
     /// "Manage servers", shown as a sheet while non-nil.
@@ -779,6 +781,7 @@ final class AppModel {
         let wasOffline = offlineBanner != nil
         offlineBanner = state.banner
         goneNotices = state.gone
+        selection = state.selection
         if wasOffline, offlineBanner == nil, maps?.state.value is MapStateOffline, let m = shellModel { openMaps(m) }
         if start { drawerOpen = shell.drawerOpensAtStart }
     }
@@ -1047,6 +1050,59 @@ final class AppModel {
         var header: NodeHeaderModel? = nil
         /// The move sheet whose undo this is, while core offers it (core ends the offer after its window, as a trash's).
         var move: MoveSheet? = nil
+        /// A level selection's delete whose undo this is, while core offers it.
+        var selection: SelectionTrash? = nil
+        /// Whether it offers an Undo.
+        var undoable: Bool { header != nil || move != nil || selection != nil }
+    }
+
+    // MARK: A level's selection (core's LevelSelection over the shell, inbox #1049)
+
+    /// Select on (the level's tool): its Select mode, nothing selected yet.
+    func selectStart() { Task { try? await shellModel?.selectStart() } }
+    /// Select off (*Cancel*, or the tool again): the selection cleared.
+    func selectCancel() { shellModel?.selectCancel() }
+    func selectToggle(_ nodeId: String) { shellModel?.selectToggle(id: nodeId) }
+    func selectAll() { shellModel?.selectAll() }
+    func selectNone() { shellModel?.selectNone() }
+
+    /// The selection's *Move to…* or *Copy to…*: one sheet over every selected row it reaches; nil where it reaches none.
+    func selectionMoveSheet(copying: Bool) -> MoveSheet? {
+        guard let m = shellModel else { return nil }
+        return m.selectionMoveSheet(copying: copying, deletedName: say(.potDeletedPerson)) { [weak self] in
+            Task { @MainActor in
+                guard let self, let t = self.tenantSession else { return }
+                await self.readDetails(t)
+            }
+        }
+    }
+
+    /// The first selected row `action` reaches (what a sheet over the selection is anchored at); nil where it reaches none.
+    func selectedFirst(_ action: SelectionAction) -> NodeAt? { shellModel?.selected(action: action).first }
+
+    /// The selection's *Report*: one report of every selected row; nil where it reaches none.
+    func selectionReportSheet() -> VeyqCore.ReportSheet? { shellModel?.selectionReportSheet() }
+
+    /// The selection's *Delete*: its one question over every selected row it reaches; nil where it reaches none.
+    func selectionTrash() -> SelectionTrash? { shellModel?.selectionTrash {} }
+
+    /// Runs a selection's delete; the bottom of the shell says what came of it, with its one Undo while core offers it.
+    func trash(_ delete: SelectionTrash) async {
+        guard let said = try? await delete.trash() else { return }
+        if let t = tenantSession { await readDetails(t) }
+        undoWatch?()
+        guard delete.current.undo != nil else {
+            show(said)
+            return
+        }
+        let notice = TrashNotice(message: say(notice: said), lifeMs: nil, selection: delete)
+        trashNotice = notice
+        let id = notice.id
+        let watch = delete.watch { @Sendable state in
+            guard state.undo == nil else { return }
+            Task { @MainActor [weak self] in self?.dismissTrashNotice(id) }
+        }
+        undoWatch = { watch.stop() }
     }
 
     private(set) var trashNotice: TrashNotice?
@@ -1074,6 +1130,12 @@ final class AppModel {
 
     /// The Undo of the notice at the bottom: a move moved back, or the last delete's node back from the trash under its name.
     func undoTrash() async {
+        if let delete = trashNotice?.selection {
+            trashNotice = nil
+            undoWatch?()
+            if let failed = try? await delete.undo() { show(failed) }
+            return
+        }
         if let move = trashNotice?.move {
             trashNotice = nil
             undoWatch?()

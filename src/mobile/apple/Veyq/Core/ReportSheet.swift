@@ -61,6 +61,12 @@ struct ReportSheet: View {
             Section {
                 Text(say(.reportIntro))
                     .font(.subheadline).foregroundStyle(Role.muted)
+                // a level's selection: how many it reports, and above one report's room the folder holding them instead
+                if sheet.nodes.count > 1 { Text(say(notice: st.items)) }
+                if let tooMany = st.tooManyNotice {
+                    Text(say(notice: tooMany)).foregroundStyle(Role.danger)
+                    if sheet.offersEnclosing(state: st) { Button(say(sheet.enclosingWord)) { sheet.useEnclosing() } }
+                }
             }
             if sheet.offersName { Section(say(.reportScope)) {
                 Picker(say(.reportScope), selection: Binding(get: { st.whole }, set: { sheet.whole(on: $0) })) {

@@ -52,6 +52,7 @@ pub mod safety;
 pub mod said;
 pub mod saving;
 pub mod search;
+pub mod selection;
 pub mod share_sheet;
 pub mod shell;
 pub mod sign_in;

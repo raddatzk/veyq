@@ -311,7 +311,7 @@ internal fun moved(sheet: me.raddatz.veyq.mobile.navigation.MoveSheet, snackbar:
  * [said] in the snackbar; while core offers an undo ([offered]), with its Undo until core ends the offer ([ended]: the
  * snackbar goes with it), the undo's failure said after.
  */
-private suspend fun offerUndo(
+internal suspend fun offerUndo(
     said: me.raddatz.veyq.mobile.words.Notice, offered: Boolean, ended: suspend () -> Unit, undo: suspend () -> me.raddatz.veyq.mobile.words.Notice?,
     snackbar: SnackbarHostState, context: android.content.Context,
 ) {

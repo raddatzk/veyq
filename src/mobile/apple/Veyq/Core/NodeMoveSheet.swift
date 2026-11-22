@@ -10,6 +10,8 @@ struct NodeMoveSheet: View {
     let model: AppModel
     let ref: NodeAt
     var copying = false
+    /// Another sheet than the node's own (a level selection's, over several nodes); nil: the node's.
+    var make: (@MainActor () -> MoveSheet?)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var box = MoveBox()
 
@@ -30,7 +32,7 @@ struct NodeMoveSheet: View {
         .frame(minWidth: 460, idealWidth: 520, minHeight: 480)
         #endif
         .task {
-            guard box.sheet == nil, let made = model.moveSheet(ref, copying: copying) else { return }
+            guard box.sheet == nil, let made = make.map({ $0() }) ?? model.moveSheet(ref, copying: copying) else { return }
             box.start(made)
             try? await made.load()
         }
@@ -101,8 +103,8 @@ struct NodeMoveSheet: View {
                 Section {
                     if let problem = st.problem ?? st.noRoom {
                         Text(say(notice: problem)).font(.caption).foregroundStyle(Role.danger)
-                    } else if let here = sheet.hereWord(state: st) {
-                        Text(say(here)).font(.caption).foregroundStyle(Role.muted)
+                    } else if let here = sheet.here(state: st) {
+                        Text(say(notice: here)).font(.caption).foregroundStyle(Role.muted)
                     }
                     Button {
                         Task { _ = try? await sheet.choose() }

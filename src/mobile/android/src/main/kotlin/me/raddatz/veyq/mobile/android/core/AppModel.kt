@@ -101,6 +101,8 @@ sealed interface Screen {
         val banner: me.raddatz.veyq.mobile.words.Notice? = null,
         /** Items made available offline that left this device (core's `State.gone`), said until [AppModel.goneSeen]. */
         val gone: List<me.raddatz.veyq.mobile.words.Notice> = emptyList(),
+        /** The shown level's selection while its Select mode is on (core's `ShellModel.State.selection`, inbox #1049). */
+        val selection: me.raddatz.veyq.mobile.navigation.LevelSelection.Picking? = null,
     ) : Screen {
         /** Whether the account reaches its server: offline every write is taken away (ADR 0140 decision 7). */
         val online: Boolean get() = banner == null
@@ -1272,6 +1274,37 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** The plan of the level [shell] shows (core's `ShellModel.levelPlan`: its New and its tools); null where it shows none. */
     fun levelPlan(shell: me.raddatz.veyq.mobile.navigation.Shell): me.raddatz.veyq.mobile.navigation.LevelPlan? = shellModel?.levelPlan(shell)
 
+    // ---- a level's selection (core's `LevelSelection` over the shell, inbox #1049) ----
+
+    /** Select on (the level's tool): its Select mode, nothing selected yet. */
+    fun selectStart() {
+        val m = shellModel ?: return
+        viewModelScope.launch { m.selectStart() }
+    }
+
+    /** Select off (*Cancel*, or the tool again): the selection cleared. */
+    fun selectCancel() { shellModel?.selectCancel() }
+
+    fun selectToggle(nodeId: String) { shellModel?.selectToggle(nodeId) }
+    fun selectAll() { shellModel?.selectAll() }
+    fun selectNone() { shellModel?.selectNone() }
+
+    /** The selection's *Move to…* or *Copy to…*: one sheet over every selected row it reaches; null where it reaches none. */
+    fun selectionMoveSheet(copying: Boolean): me.raddatz.veyq.mobile.navigation.MoveSheet? {
+        val m = shellModel ?: return null
+        val changed = { viewModelScope.launch { readRowDetails(m.tenant) }; Unit }
+        return m.selectionMoveSheet(copying, getApplication<Application>().getString(R.string.pot_deleted_person), changed)
+    }
+
+    /** The selection's *Report*: one report of every selected row; null where it reaches none. */
+    fun selectionReportSheet(): me.raddatz.veyq.mobile.navigation.ReportSheet? = shellModel?.selectionReportSheet()
+
+    /** The selection's *Delete*: one question over every selected row it reaches; null where it reaches none. */
+    fun selectionTrash(): me.raddatz.veyq.mobile.navigation.SelectionTrash? {
+        val m = shellModel ?: return null
+        return m.selectionTrash { viewModelScope.launch { readRowDetails(m.tenant) } }
+    }
+
     /** The tray's *Discard* of write [id] (core's `QueuedTray.discard`, with what waits for it). */
     fun discardQueued(id: String) {
         val m = shellModel ?: return
@@ -1711,6 +1744,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             managing = if (start) null else prior?.managing,
             banner = state.banner,
             gone = state.gone,
+            selection = state.selection,
         )
     }
 

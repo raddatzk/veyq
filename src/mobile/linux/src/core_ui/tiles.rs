@@ -21,6 +21,8 @@ pub struct Tile {
     pub icon: &'static str,
     pub node_id: String,
     pub open: Box<dyn Fn()>,
+    /// Whether its node is selected while the level picks (none: the level does not pick): a check drawn on the tile.
+    pub selected: Option<bool>,
 }
 
 /// The core's grid at a width: its columns, each cover's size, the gap between tiles.
@@ -131,7 +133,16 @@ fn tile(t: &Tile) -> (gtk::FlowBoxChild, gtk::Widget) {
     let name = gtk::Label::builder().label(&t.name).ellipsize(gtk::pango::EllipsizeMode::End).xalign(0.0).width_chars(1).build();
     let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(6).build();
     column.append(&cover);
-    column.append(&name);
+    if let Some(selected) = t.selected {
+        // the level picks: the tile's check before its name, the tile one toggle (activating it turns its node)
+        let check = gtk::CheckButton::builder().active(selected).can_target(false).can_focus(false).build();
+        let line = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        line.append(&check);
+        line.append(&name);
+        column.append(&line);
+    } else {
+        column.append(&name);
+    }
     let line = gtk::Label::builder().ellipsize(gtk::pango::EllipsizeMode::End).xalign(0.0).width_chars(1).build();
     line.add_css_class("dim-label");
     line.add_css_class("caption");
@@ -140,6 +151,9 @@ fn tile(t: &Tile) -> (gtk::FlowBoxChild, gtk::Widget) {
     column.append(&line);
     let child = gtk::FlowBoxChild::builder().child(&column).tooltip_text(&t.name).build();
     child.update_property(&[gtk::accessible::Property::Label(&t.name)]);
+    if let Some(selected) = t.selected {
+        child.update_state(&[gtk::accessible::State::Checked(if selected { gtk::AccessibleTristate::True } else { gtk::AccessibleTristate::False })]);
+    }
     if !subtitle.is_empty() {
         child.update_property(&[gtk::accessible::Property::Description(&subtitle)]);
     }

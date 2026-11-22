@@ -809,11 +809,13 @@ internal sealed class ShellView
             refresh.Click += (_, _) => pageRefresh.Run();
             _commands.PrimaryCommands.Add(refresh);
         }
-        // the level's tools, in the plan's order (the web's tools row: the trash, the view switch)
+        // the level's tools, in the plan's order (the web's tools row: Select, the trash, the view switch)
         foreach (var tool in shown.level?.tools ?? [])
         {
-            var command = tool switch
+            ICommandBarElement? command = tool switch
             {
+                // Select (the core's LevelSelection, inbox #1049): the level's pick mode on and off, checked while on
+                LevelTool.Select => Selection.Tool(shown.selection is not null),
                 LevelTool.Trash => TrashCommand(),
                 LevelTool.View => LevelTiles.ViewCommand(shown),
             };

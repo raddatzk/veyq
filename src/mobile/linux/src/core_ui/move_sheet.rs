@@ -142,7 +142,7 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
                     eprintln!(
                         "veyq: move sheet{}: at {:?}, {} places, here {:?}, problem {:?}, no room {}, busy {}, confirming {}, done {}, undo {}",
                         if s.copying { " (copy)" } else { "" },
-                        s.trail.last().and_then(|c| c.node_id.clone()), s.places.len(), s.here, s.problem.as_ref().map(|p| &p.msg),
+                        s.trail.last().and_then(|c| c.node_id.clone()), s.places.len(), s.here.as_ref().map(|h| &h.msg), s.problem.as_ref().map(|p| &p.msg),
                         s.no_room.is_some(), s.busy, s.confirming, s.done.is_some(), s.undo.is_some()
                     );
                 }
@@ -270,8 +270,8 @@ impl Inner {
         if let Some(n) = s.problem.as_ref().or(s.no_room.as_ref()) {
             status.set_label(&said::notice(n));
             status.add_css_class("error");
-        } else if let Some(word) = &s.here {
-            status.set_label(&said::key(word));
+        } else if let Some(here) = &s.here {
+            status.set_label(&said::notice(here));
             status.add_css_class("dim-label");
         }
         let submit = gtk::Button::builder().label(said::key(&s.submit)).sensitive(s.can_choose).valign(gtk::Align::Center).build();
