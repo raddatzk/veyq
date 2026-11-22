@@ -20,8 +20,8 @@ info:
     level: another instance's client reads it to decide whether this instance's links can be browsed in place (its
     major and its capabilities). The grant stays the instance's while the list is the domain's tenant's, so a tenant that
     switched `.embeddable` off is still readable and tells the reader so by the entry's absence. A CORS preflight is answered `204` and every answer carries
-    `Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy: cross-origin`, exactly as the guest share
-    operations do (`sharing.openapi.yaml` § Cross-origin); never `Access-Control-Allow-Credentials`. `/api/setup/owner`
+    `Access-Control-Allow-Origin: *`, `Cross-Origin-Resource-Policy: cross-origin` and `Cache-Control: no-store`,
+    exactly as the guest share operations do (`sharing.openapi.yaml` § Cross-origin); never `Access-Control-Allow-Credentials`. `/api/setup/owner`
     stays same-origin. A preflight is HTTP, not an operation, so no `options` is declared here.
 tags:
   - name: setup

@@ -34,8 +34,10 @@ info:
     `Access-Control-Request-Method`) is answered `204` with `Access-Control-Allow-Origin: *`, the path's guest methods
     in `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers: X-Share-Password, X-Contributor-Token,
     X-Share-Write, If-None-Match, Content-Type` and `Access-Control-Max-Age: 600`; every answer of such an operation,
-    a refusal included, carries `Access-Control-Allow-Origin: *`, `Access-Control-Expose-Headers: ETag` and
-    `Cross-Origin-Resource-Policy: cross-origin`. `Access-Control-Allow-Credentials` is never sent and `Authorization`
+    a refusal included, carries `Access-Control-Allow-Origin: *`, `Access-Control-Expose-Headers: ETag`,
+    `Cross-Origin-Resource-Policy: cross-origin` and `Cache-Control: no-store` — no browser keeps a granted answer, so
+    none revalidates one past the switch (inbox #1068); a client's own `If-None-Match` still gets its `304`.
+    `Access-Control-Allow-Credentials` is never sent and `Authorization`
     is never an allowed header: these operations take no cookie and no bearer, the link is their whole capability. The
     switch is read for the tenant of a link the guest gate serves; for any other id — unknown, revoked, expired,
     switched off — at the instance level, so the headers say nothing the `404` does not. Switched off, a preflight is

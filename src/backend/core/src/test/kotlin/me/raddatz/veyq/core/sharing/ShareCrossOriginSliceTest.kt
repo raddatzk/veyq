@@ -27,9 +27,9 @@ import java.util.UUID
  * The guest share API answers any origin while `core.public-shares.embeddable` is effective (ADR 0121 decision 3,
  * [ShareCrossOrigin]): one case per path class — the resolve, the blob gate, a tree write, a report, `/api/setup`,
  * `/api/moderation/key` — with the switch on, off by the Server Owner and off by the link's tenant; a curator's operation
- * on a link and a member's path as the same-origin controls; `Access-Control-Allow-Credentials` asserted absent on every
- * answer read here; and the id the gate does not serve answered exactly as an id no link has, so the CORS headers are no
- * existence oracle.
+ * on a link and a member's path as the same-origin controls; every granted answer `Cache-Control: no-store` (inbox
+ * #1068); `Access-Control-Allow-Credentials` asserted absent on every answer read here; and the id the gate does not
+ * serve answered exactly as an id no link has, so the CORS headers are no existence oracle.
  *
  * The requests are malformed or unauthorised on purpose where that is cheapest (an empty body, no password): a refusal
  * must carry the headers too, or a browser could not read why it was refused.
@@ -136,6 +136,34 @@ class ShareCrossOriginSliceTest {
     }
 
     @Test
+    fun noGrantedAnswerIsStoredSoNoRevalidationOutlivesTheSwitch() {
+        // Inbox #1068 (measured in Chrome, 2026-11-22): a browser that stored the resolve's 200 revalidates it on the next
+        // plain request; the 304 sent once the tenant switched embedding off has no Access-Control-Allow-Origin, but the
+        // browser checks CORS on the stored response the 304 refreshes, whose `*` survives — the page went on embedding.
+        // So a granted answer is never stored: no stored copy, no revalidation, the next answer decides.
+        val link = link()
+        val path = "/api/shares/${link.shareId}"
+        val first = given().header("Origin", ORIGIN).`when`().get(path)
+        assertEquals(200, first.statusCode, "the resolve")
+        val etag = first.header("ETag")
+        assertTrue(etag != null && etag.isNotBlank(), "the resolve carries a validator a browser would revalidate with")
+        assertEquals(CrossOrigin.NO_STORE, first.header(CACHE_CONTROL), "the granted 200: never stored")
+        // The guest client's own conditional poll (ADR 0081) keeps its 304, granted and unstored alike.
+        val conditional = given().header("Origin", ORIGIN).header("If-None-Match", etag).`when`().get(path)
+        assertEquals(304, conditional.statusCode, "the client's own If-None-Match")
+        assertCrossOrigin(conditional, "the granted 304")
+        TenantCapabilitySwitchFixtures.with(link.tenantId, PUBLIC_SHARES_EMBEDDABLE) {
+            // The server's half of the trap, pinned: switched off, a revalidation is answered 304 without any CORS header,
+            // so only a stored copy could have carried the old grant — which the no-store above rules out.
+            val revalidated = given().header("Origin", ORIGIN).header("If-None-Match", etag).`when`().get(path)
+            assertEquals(304, revalidated.statusCode, "switched off: the same tag still revalidates")
+            assertSameOrigin(revalidated, "switched off: the 304")
+        }
+        // Every path class's granted answer, a refusal included, is unstored too (`assertCrossOrigin` asserts it).
+        for (c in shareClasses + instanceClasses) assertCrossOrigin(send(c, link.shareId), c.name)
+    }
+
+    @Test
     fun aCuratorsOperationOnALinkAndAMembersPathStaySameOrigin() {
         val link = link()
         // A curator's operations under the same `/api/shares/{shareId}` take a bearer: never offered to another origin.
@@ -205,6 +233,7 @@ class ShareCrossOriginSliceTest {
         assertEquals("*", r.header(CrossOrigin.ALLOW_ORIGIN), "$what: Access-Control-Allow-Origin")
         assertEquals("ETag", r.header(CrossOrigin.EXPOSE_HEADERS), "$what: Access-Control-Expose-Headers")
         assertEquals("cross-origin", r.header(CORP), "$what: CORP")
+        assertEquals(CrossOrigin.NO_STORE, r.header(CACHE_CONTROL), "$what: Cache-Control (inbox #1068)")
         assertNoCredentials(r, what)
     }
 
@@ -221,5 +250,6 @@ class ShareCrossOriginSliceTest {
         const val ORIGIN = "https://other-instance.example"
         const val CORP = "Cross-Origin-Resource-Policy"
         const val ACAC = "Access-Control-Allow-Credentials"
+        const val CACHE_CONTROL = "Cache-Control"
     }
 }
