@@ -43,14 +43,16 @@
 
 ## Quality notes
 
-- **A capability is not a permission.** It is instance-wide before sign-in and per tenant after it; it says what this
+- **A capability is not a permission.** It is per domain before sign-in (the domain's tenant's, else the instance's) and per tenant after it; it says what this
   *server* and this *tenant* offer, not
   what *you* may do. A feature is offered only when **(capability present) AND (policy permits here)** — e.g.
   `core.public-shares` present **and** the node is one the caller may share. Conflating the two
   is the modelling error this use-case exists to prevent ([ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md) §6).
-- **Operator-blind-safe.** The response is identical for every caller and carries no per-user state, so a
+- **Operator-blind-safe.** The response is identical for every caller of one domain (a tenant's domain answers that
+  tenant's set, any other host the instance level) and carries no per-user state, so a
   pre-auth manifest leaks nothing — that is what lets it sit outside the auth boundary. The tenant's set is the same
-  for every member of the tenant, and only members read it.
+  for every member of the tenant, and only members read it with its erasure dates; its ids are on the tenant's domain's
+  manifest for anyone, which tells nothing that domain's own pages and links do not already show.
 - **The catalog is a coarser projection over use-cases, not a 1:1 rename.** Each entry in
   `contracts/platform/capabilities.json` declares a `serves: [uc.…]` back-ref (catalog-only, never on the wire);
   `scripts/validate_capabilities.py` enforces that every `serves` resolves to a real use-case, so the catalog
