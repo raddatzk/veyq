@@ -162,7 +162,7 @@ describe('Memories rows', () => {
     const h = mountSection({ nodes: [node('m1', MEMORY_KIND, 'Solo')] })
     const row = h.source().row(node('m1', MEMORY_KIND, 'Solo'))!
     expect(row.actions, 'Memories builds no action of its own').toEqual([])
-    expect(row.standard).toEqual({ rename: true, move: true, delete: true })
+    expect(row.standard).toEqual({ rename: true, move: true, delete: true, share: { view: true, contribute: true, upload: true } })
     expect(await actionIdsOf(h.w, 'Solo')).toEqual(['rename', 'move', 'delete'])
     await clickAction(h.w, 'Solo', 'rename')
     await clickAction(h.w, 'Solo', 'move')

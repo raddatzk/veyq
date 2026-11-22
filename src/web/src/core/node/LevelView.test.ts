@@ -446,8 +446,11 @@ describe('LevelView: the folders', () => {
     expect(w.calls.open).toEqual([[rome]])
     expect(rowOf(w, 'Rome').find('button.veyq-level-item-main').attributes('aria-label')).toBe('Rome')
     expect(w.find('.veyq-create-card').exists(), 'the create tile is retired (inbox #406)').toBe(false)
-    // a folder's row: core's heart, and core's default rename, move and delete by `folderRights` (owner 2026-11-01)
-    expect(await actionIdsOf(w, 'Rome')).toEqual(['favorite', 'rename', 'move', 'delete'])
+    // a folder's row: core's heart, and core's default rename, move and delete by `folderRights` (owner 2026-11-01), and its
+    // share where the page has the share door (owner 2026-11-22: a row's Share on every client)
+    expect(await actionIdsOf(w, 'Rome')).toEqual(['favorite', 'rename', 'move', 'share', 'delete'])
+    await clickAction(w, 'Rome', 'share')
+    expect(w.calls.share, 'the row\'s share opens the node\'s share door with what its answer grants').toEqual([[rome, { view: false, contribute: true, upload: false }]])
     await chooseNew(w, t('node.folderCreate'))
     expect(w.calls.createChild).toEqual([[FOLDER_KIND, TRIPS]])
   })

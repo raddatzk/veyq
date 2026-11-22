@@ -18,6 +18,10 @@ import { coverRights } from './cover/rights'
 import { bookmarkRights } from '../bookmark/rights'
 import type { Access } from '../access'
 import type { ScopeKey } from '../../features/spaces/epochs'
+import { UPLOAD_ACTION, UPLOAD_FOLDER_ACTION } from '../../features/depot/levelRows'
+import { MEMORY_KIND } from '../../features/memories/kinds'
+import { POT_KIND } from '../../features/expenses/kinds'
+import { SHARE_BOOKMARK_KIND as BOOKMARK_KIND } from './kind'
 
 const held = vi.hoisted(() => ({ node: null as null | { rename: boolean; move: boolean; delete: boolean }, writable: true }))
 vi.mock('../access', async (original) => {
@@ -92,6 +96,18 @@ describe('the plans\' vectors (contracts/platform/plans/v1-vectors.json)', () =>
       const p = rowPlan(offered(c))
       expect({ menu: ids(p.menu), last: ids(p.last) }, `row ${i}: ${c.rule}`).toEqual(c.expected)
     }
+  })
+
+  // A level's New in the web's order (`LevelView.vue`: the folder first, then `registry.levelMenu()` by `order`), each entry by
+  // the core's `AppKinds.Create` name: the file's member's level with every entry, which the core's `createsWhere` answers.
+  it('the level\'s New is the core\'s order', () => {
+    const name: Record<string, string> = {
+      [`create:${MEMORY_KIND}`]: 'MEMORY', [UPLOAD_ACTION]: 'UPLOAD_FILES', [UPLOAD_FOLDER_ACTION]: 'UPLOAD_FOLDER',
+      [`create:${POT_KIND}`]: 'POT', [`create:${BOOKMARK_KIND}`]: 'BOOKMARK',
+    }
+    const web = ['FOLDER', ...registry.levelMenu().map((e) => name[e.id] ?? e.id)]
+    const all = vectors.level.creates.find((c: any) => c.at === 'level' && c.bookmarks)
+    expect(web).toEqual(all.expected)
   })
 
   it('core\'s favourite, cover and bookmark rights', () => {
