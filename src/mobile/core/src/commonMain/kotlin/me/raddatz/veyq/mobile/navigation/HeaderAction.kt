@@ -37,7 +37,7 @@ enum class HeaderAction(val slot: NodeHeader.Slot) {
     @SerialName("music") MUSIC(NodeHeader.Slot.ANY),
     /**
      * A Memory's banner added or changed (ADR 0144 decision 5): never a button, an entry of the menu's last group, as the web's
-     * `menuOnly` (ADR 0154 § Consequences: where the apps and the web differed, the web's; cr-web-rights-and-plans-on-the-core).
+     * `menuOnly` (ADR 0154 § Consequences: where the apps and the web differed, the web's; ADR 0155 § The rights and plans' slice).
      */
     @SerialName("banner") BANNER(NodeHeader.Slot.LAST),
     /** A file's content replaced, or the first upload into an empty one (`FileModel`). */
