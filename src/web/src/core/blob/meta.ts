@@ -6,9 +6,11 @@
 //
 // Core's, kind-neutral: an application hands in the ref it built and the `K_blob` it unwrapped (the chunk provider's
 // `meta()`, or `readBlobMeta` in `transport.ts` for a ref it only lists) and decides what to show. Also core's: the one
-// download-name rule every application saves under ([downloadName]) and the type → extension table it uses.
+// download-name rule every application saves under ([downloadName]) and the type → extension table it uses, both the
+// platform's Kotlin (`@veyq/core-js/files`, ADR 0155 decision 7.2).
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
+import * as core from '@veyq/core-js/files'
 
 /** What a writer declares (`planBlob`'s `meta`): `{ type, name?, modifiedAt? }` — the crypto suite's `BlobMeta`. */
 export type BlobMeta = v1.BlobMeta
@@ -30,46 +32,23 @@ export function openBlobMetaOf(ref: { wrappedBlobMeta?: string | null }, kBlob: 
   }
 }
 
-/**
- * Download extension per media type — the suffix a saved name gains when it has none. Moved from Memories'
- * `features/memories/download.ts` (inbox #397) unchanged, so Depot and Memories name a type alike; Memories' magic-byte
- * sniff (`sniffMediaType`) produces only types this table names — a type added there needs its row here.
- */
-export const MIME_TO_EXT: Readonly<Record<string, string>> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/gif': 'gif',
-  'image/webp': 'webp',
-  'image/heic': 'heic',
-  'application/pdf': 'pdf',
-  'video/mp4': 'mp4',
-  'video/quicktime': 'mov',
-  'video/webm': 'webm',
-  'video/x-matroska': 'mkv',
-  // the audio containers `sniff.ts` `sniffStream` names, which a music track (ADR 0135) is typed by
-  'audio/mpeg': 'mp3',
-  'audio/mp4': 'm4a',
-  'audio/aac': 'aac',
-  'audio/ogg': 'ogg',
-  'audio/wav': 'wav',
-  'audio/flac': 'flac',
+/** The download extension a sealed media type names — exactly as sealed, own rows only (a type is a peer's statement) —, or
+ *  undefined for one the table does not name. The table is the platform's (`blob/DownloadName.kt`, through
+ *  `@veyq/core-js/files`), so Depot, Memories and the apps name a type alike; every type a sniff produces for a medium or a
+ *  track has its row. */
+export function typeExtension(type: string | null | undefined): string | undefined {
+  return core.typeExtension(type ?? null) ?? undefined
 }
-
-/** Whether `name` ends in an extension: a dot after at least one other character, then 1–16 characters that are no
- *  dot and no whitespace (`Bericht.PDF` does, `Rom 2026`, `.profile` and `v1.2 notes` do not). */
-const HAS_EXTENSION = /[^.]\.[^.\s]{1,16}$/
 
 /**
  * The one name a blob is saved under: the owning object's own name when it has one (a file's node name — a rename
  * wins over the name it was uploaded under), else the name sealed in the blob's meta, else `fallback()` (the
- * application's derived name). The chosen name gains the extension `meta.type` names ([MIME_TO_EXT]) when it has none
- * of its own; an extension it has is never replaced. Names are trimmed; the save target sanitises for its route.
+ * application's derived name, made only where it is needed). The chosen name gains the extension `meta.type` names
+ * ({@link typeExtension}) when it has none; one it has is never replaced. Names are trimmed; the save target sanitises
+ * for its route. The rule is the platform's (`blob/DownloadName.kt`, ADR 0155 decision 7.2).
  */
 export function downloadName(objectName: string | null | undefined, meta: BlobMeta | null | undefined, fallback: () => string): string {
-  const own = objectName?.trim()
-  const sealed = meta?.name?.trim()
-  const name = own || sealed || fallback()
-  // An own row only: a sealed type is a peer's statement, and `toString` must not index the object's prototype.
-  const ext = meta?.type && Object.hasOwn(MIME_TO_EXT, meta.type) ? MIME_TO_EXT[meta.type] : undefined
-  return ext && !HAS_EXTENSION.test(name) ? `${name}.${ext}` : name
+  const type = meta?.type ?? null
+  const sealed = meta?.name ?? null
+  return core.downloadName(objectName ?? null, sealed, type, null) ?? (core.downloadName(objectName ?? null, sealed, type, fallback()) as string)
 }
