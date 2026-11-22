@@ -78,6 +78,14 @@ carry a second façade without the first one's users paying for it (ADR 0155 § 
 - **The UI guard's core rules retired into this one**; each platform's UI keeps its own rules. Android's core UI named
   core application packages (inbox #1056, against ADR 0154 decision 3): since 2026-11-22 each application holds what it
   did in a `Holding` it registers, and the UI guard's rule (c) reads those packages (entries 29–37; Apple's is #1066).
+- **The registry answers the kinds files** (inbox #1061, 2026-11-22): `:composition`'s `KindsContractTest` reads
+  `contracts/platform/kinds/*.json` and asks every kind through what the apps read — `AppKinds.facts` (placement),
+  `AppKinds.header` (cover, whether it shares), `AppKinds.guestDoor` per role, the share sheet's roles (`ShareSheet`,
+  `LinkRow.mint`), a member's New and the folder sheet's drop box under `ShareLinks.Rules.of` (creation, `createNeeds`),
+  `GuestLevel.createsFor` and core's level door with `MovePlan.hereBlock` in a guest's mode (the guest's creates and
+  container) — so the core is the third client held to the files, beside the backend's `KindsContractTest` and the web's
+  `kindsContract.test.ts`. `guest.writeOnlyCreates` is the backend's alone, as on the web. It found no drift. The core's
+  JVM tests run in no CI job (#1085).
 - **Left, named:** 82 platform-package tests run in `:composition` rather than over a played kind; the played server
   `PlayedTenant` is not split into the platform's half and the applications'; `validate_mobile_search_names_no_application.py`
   is a second check of what the build now holds; a few kind literals remain in the composition (it may name applications).
@@ -506,3 +514,24 @@ names were the implementation session's and are not kept.
     (`validate_mobile_words.py`'s one exception for the Pot create sheet's `currency(code:)` moved with it to
     `ExpensesHolding.swift`); `validate_guard_gaps.py` (122 cases hold). **Not run:** any pass — the Mac and the VM's UI
     are the owner's; what is owed is inbox #1066's row.
+
+51. **2026-11-22 — The kinds held to their files: a test, not generation (inbox #1061).** Options: generate a Kotlin table
+    from `contracts/platform/kinds/`; a test over the code as it is. Chosen the test: the facts are not one table in the
+    core but answers spread over the registry, the share sheet, the guest level and the move plan — a generated table
+    would be read by none of them unless each were rewritten onto it, and the backend and the web chose the same shape.
+    Placed in `:composition`'s `jvmTest` (the one module where every application is installed, read by `veyq.repoRoot`
+    as `PlansAreTheWebsTest` reads the web's source), not `commonTest`: `readRepoFile` throws on JavaScript and the facts
+    are platform-free. `guest.writeOnlyCreates` is not answered — the schema names it the backend's alone, the web does
+    not answer it either, and the drop page creates `"FILE"` by a literal in `DepotGuest`. Cost: a fact the core asks
+    nowhere has nothing to hold.
+52. **2026-11-22 — The kinds files are an input of every `Test` task.** The first bite (the files mutated) ran green:
+    Gradle took the test as up to date, since no `Test` task declared the files. `src/mobile/build.gradle.kts` adds
+    `contracts/platform/kinds` beside the import cases. Evidence: measured, the same mutation then red.
+53. **2026-11-22 — Bitten from both sides.** Measured, `./gradlew :composition:jvmTest --tests '*KindsContractTest*'`:
+    green on the files as they are (7 tests); with the files mutated (a chapter without a cover, a guest creating a
+    Memory, a folder rooting a WRITE_ONLY link, a kept link nowhere in a folder, a drop box needing nothing) 5 of 7 red,
+    each on its fact; with the code mutated (a Pot not at the root, a drop box without a cover, a Memory's sheet without
+    its upload link, `MovePlan`'s guest let into any kind) 4 of 7 red, each on its fact. Both restored.
+54. **2026-11-22 — No guard and no CI job here.** The core's JVM tests run in no CI job (`grep -n jvmTest
+    .github/workflows/*.yml`: none) — wiring the suite in is a decision of its own, filed as #1085; no guard either, the
+    test is the check (docs/ai/README.md rule 3).
