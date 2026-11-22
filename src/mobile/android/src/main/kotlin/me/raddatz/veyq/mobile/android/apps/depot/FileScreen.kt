@@ -75,7 +75,7 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 @Composable
 internal fun FileScreen(ref: ObjectRef, model: AppModel) {
     val node = ref.at
-    val file = remember(node) { model.fileModel(node) }
+    val file = remember(node) { model.depot.fileModel(node) }
     if (file == null) {
         CircularProgressIndicator(Modifier.padding(16.dp))
         return

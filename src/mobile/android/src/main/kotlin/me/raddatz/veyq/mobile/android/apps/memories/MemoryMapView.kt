@@ -122,7 +122,7 @@ internal fun MemoryMapView(gallery: GalleryModel, tracks: TrackList, model: AppM
         onDispose { tracks.active(false) }
     }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) model.addTracks(tracks, uris)
+        if (uris.isNotEmpty()) model.memories.addTracks(tracks, uris)
     }
     val said = state.said
     LaunchedEffect(said) {
@@ -137,7 +137,7 @@ internal fun MemoryMapView(gallery: GalleryModel, tracks: TrackList, model: AppM
         val id = saving
         saving = null
         if (uri == null || id == null) return@rememberLauncherForActivityResult
-        val save = model.saveGpx(tracks, id, uri) ?: return@rememberLauncherForActivityResult
+        val save = model.memories.saveGpx(tracks, id, uri) ?: return@rememberLauncherForActivityResult
         scope.launch { snackbar.show(context, save.state.first { it.end != null }.notice) }
     }
     val points = g.gpsPoints
@@ -206,7 +206,7 @@ internal fun MemoryMapView(gallery: GalleryModel, tracks: TrackList, model: AppM
                             saving = e.mediaId
                             saveTo.launch(e.fileName ?: ((e.name ?: context.words(Msg.TRACK_UNNAMED, e.number)) + ".gpx"))
                         },
-                        onRemove = { model.galleryAct { tracks.remove(e.mediaId)?.let { snackbar.show(context, it) } } },
+                        onRemove = { model.memories.galleryAct { tracks.remove(e.mediaId)?.let { snackbar.show(context, it) } } },
                         onReport = { reporting = tracks.reportSheet(e.mediaId) },
                     )
                 }

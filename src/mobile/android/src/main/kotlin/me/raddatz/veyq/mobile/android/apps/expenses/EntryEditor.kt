@@ -99,13 +99,13 @@ fun EntryEditorSheet(
     if (heldWrite != null) {
         var held by remember(heldWrite) { mutableStateOf<me.raddatz.veyq.mobile.expenses.EntryEditor?>(null) }
         androidx.compose.runtime.LaunchedEffect(heldWrite) {
-            held = model.heldEntryEditor(heldWrite, sep)
+            held = model.expenses.heldEntryEditor(heldWrite, sep)
             if (held == null) onClose()
         }
         held?.let { EntryEditorBody(view, model, it, entryId, sep, onSaved, onClose) }
         return
     }
-    val editor = remember(entryId) { model.entryEditor(entryId, sep, initialPending) }
+    val editor = remember(entryId) { model.expenses.entryEditor(entryId, sep, initialPending) }
     if (editor == null) {
         androidx.compose.runtime.LaunchedEffect(Unit) { onClose() }
         return

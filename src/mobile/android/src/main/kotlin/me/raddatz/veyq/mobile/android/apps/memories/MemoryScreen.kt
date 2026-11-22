@@ -147,7 +147,7 @@ internal fun mediaAccessPermissions(): Array<String> =
  */
 @Composable
 internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
-    val gallery = remember(ref.at) { model.galleryModel(ref.at) }
+    val gallery = remember(ref.at) { model.memories.galleryModel(ref.at) }
     if (gallery == null) {
         CircularProgressIndicator(Modifier.padding(16.dp))
         return
@@ -182,13 +182,13 @@ internal fun MemoryGallery(
     val rows = state.shown
     // the system's photo picker: photos and videos, several at once
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
-        if (uris.isNotEmpty()) model.uploadMedia(gallery, uris)
+        if (uris.isNotEmpty()) model.memories.uploadMedia(gallery, uris)
     }
     fun pickMedia() = pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
     // the picker hands a photo over with its location zeroed and under a number: full media access keeps both, so it is
     // asked for once, before the first pick; whatever the answer, the picker opens
     val askAccess = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { pickMedia() }
-    fun add() = if (model.mediaAccessAsked()) pickMedia() else askAccess.launch(mediaAccessPermissions())
+    fun add() = if (model.memories.mediaAccessAsked()) pickMedia() else askAccess.launch(mediaAccessPermissions())
     // live while the page is on screen and the app started: what another device or a guest adds shows up (core's poll)
     val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     // (in the gallery's own scope, off the main thread: a moved gallery is read and opened there)
@@ -204,8 +204,8 @@ internal fun MemoryGallery(
     }
     // in the pick mode the banner offers Add here on this page (ADR 0138 decision 3)
     if (!guest) androidx.compose.runtime.DisposableEffect(gallery) {
-        model.shareTarget(gallery, true)
-        onDispose { model.shareTarget(gallery, false) }
+        model.memories.shareTarget(gallery, true)
+        onDispose { model.memories.shareTarget(gallery, false) }
     }
     // what the page adds: a chapter where it makes one (core's `GalleryModel.creates`), and a guest's photos and videos
     val chapterHere = me.raddatz.veyq.mobile.memories.MemoryCreate.CHAPTER in gallery.creates
@@ -218,9 +218,9 @@ internal fun MemoryGallery(
     // Photos | Music | Map | Contributions: the contributions where core offers them to whoever looks (ADR 0149 decision 6)
     val contributionsOffered = state.rights.buckets && me.raddatz.veyq.mobile.memories.Contributions.OFFERED
     val viewSwitch: @Composable () -> Unit = { MemoryViewSwitch(view, musicOffered, contributionsOffered, map = !guest) { view = it } }
-    val music = if (musicOffered && view == MemoryView.MUSIC) remember(gallery) { model.musicModel(gallery) } else null
-    val tracks = if (view == MemoryView.MAP) remember(gallery) { model.trackList(gallery) } else null
-    val contributions = if (contributionsOffered && view == MemoryView.CONTRIBUTIONS) remember(gallery) { model.contributions(gallery) } else null
+    val music = if (musicOffered && view == MemoryView.MUSIC) remember(gallery) { model.memories.musicModel(gallery) } else null
+    val tracks = if (view == MemoryView.MAP) remember(gallery) { model.memories.trackList(gallery) } else null
+    val contributions = if (contributionsOffered && view == MemoryView.CONTRIBUTIONS) remember(gallery) { model.memories.contributions(gallery) } else null
     // photos and videos dropped from another app onto the gallery: core's one drop judges and sorts (ADR 0154 decision 1).
     // Only where the gallery's media show: the Music and Map views take no drop, as the web's tabs take none (#1054)
     val dropped = Modifier.sharedFilesDrop { drop -> model.drop(me.raddatz.veyq.mobile.composition.DropTarget.Gallery(gallery), drop) }
@@ -334,13 +334,13 @@ internal fun MemoryGallery(
         GalleryNotices(gallery, model, snackbar)
     }
     if (namingChapter) NameDialog(stringResource(R.string.memory_create_chapter_title), onClose = { namingChapter = false }) { name ->
-        model.createChapter(gallery, name)
+        model.memories.createChapter(gallery, name)
     }
     state.purging?.let { PurgeQuestion(gallery, model) }
     // a Memory's curation (ADR 0144): the picker and the banner's dialog are the app model's (a rotation keeps them)
-    val picker by model.participants.collectAsStateWithLifecycle()
+    val picker by model.memories.participants.collectAsStateWithLifecycle()
     picker?.let { ParticipantsPickerSheet(it, model) }
-    val bannerEditor by model.banner.collectAsStateWithLifecycle()
+    val bannerEditor by model.memories.banner.collectAsStateWithLifecycle()
     bannerEditor?.let { BannerDialog(it, gallery, model) }
     // trashing the banner's picture asks first (A2), over the lightbox where it was asked from
     state.bannerPicture?.let { BannerPictureQuestion(gallery, model) }
@@ -388,7 +388,7 @@ private fun GalleryNotices(gallery: GalleryModel, model: AppModel, snackbar: Sna
     LaunchedEffect(undo) {
         if (undo == null) return@LaunchedEffect
         val answer = snackbar.show(context.text(undo), me.raddatz.veyq.mobile.words.NoticeKind.UNDO, context.getString(R.string.trash_undo))
-        if (answer == SnackbarResult.ActionPerformed) model.galleryAct { gallery.undo() }
+        if (answer == SnackbarResult.ActionPerformed) model.memories.galleryAct { gallery.undo() }
     }
     val said = state.said
     LaunchedEffect(said) {
@@ -413,7 +413,7 @@ private fun PurgeQuestion(gallery: GalleryModel, model: AppModel) {
         title = { Text(stringResource(R.string.memory_delete_own_title)) },
         text = { Text(say(gallery.purgeQuestion)) },
         confirmButton = {
-            TextButton(onClick = { model.galleryAct { gallery.purge() } }) {
+            TextButton(onClick = { model.memories.galleryAct { gallery.purge() } }) {
                 Text(stringResource(R.string.memory_delete_own_accept), color = role(LocalPalette.current.danger))
             }
         },
@@ -443,7 +443,7 @@ internal fun MediaTile(
 ) {
     val palette = LocalPalette.current
     val picture by produceState<ImageBitmap?>(null, row.mediaId) {
-        value = row.tile?.let { blob -> model.mediaPicture(blob) { gallery.tile(row.mediaId) } }
+        value = row.tile?.let { blob -> model.memories.mediaPicture(blob) { gallery.tile(row.mediaId) } }
     }
     var menu by remember { mutableStateOf(false) }
     val tileMenu = stringResource(R.string.node_more)
@@ -456,7 +456,7 @@ internal fun MediaTile(
                 // the caller's mark set or taken away (the lightbox's heart, from the grid)
                 me.raddatz.veyq.mobile.memories.TileAction.MARK -> androidx.compose.material3.DropdownMenuItem(
                     text = { Text(stringResource(if (mark?.mine == true) R.string.media_marks_unmark else R.string.media_marks_mark)) },
-                    onClick = { menu = false; model.galleryAct { gallery.toggleMark(row.mediaId) } },
+                    onClick = { menu = false; model.memories.galleryAct { gallery.toggleMark(row.mediaId) } },
                 )
             }
         }
@@ -557,7 +557,7 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
         }
         // the original goes where the person picks (the system's "create document"), streamed there as it is read
         val saveTo = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-            if (uri != null) model.saveMedium(box, uri)
+            if (uri != null) model.memories.saveMedium(box, uri)
         }
         Scaffold(
             containerColor = Color.Black,
@@ -583,7 +583,7 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
                             }
                         }
                         // the heart (ADR 0149 decision 4): the caller's mark, with how many marked it where a count is kept
-                        if (canMark || mark != null) MarkButton(mark, enabled = canMark) { model.galleryAct { box.toggleMark() } }
+                        if (canMark || mark != null) MarkButton(mark, enabled = canMark) { model.memories.galleryAct { box.toggleMark() } }
                         IconButton(onClick = { details = true }) { Icon(Icons.Outlined.Info, stringResource(R.string.memory_details)) }
                         if (saving) Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
@@ -604,7 +604,7 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
                                     if (trashes) androidx.compose.material3.DropdownMenuItem(
                                         text = { Text(stringResource(R.string.memory_trash)) },
                                         leadingIcon = { Icon(Icons.Outlined.Delete, null) },
-                                        onClick = { more = false; model.galleryAct { box.trash() } },
+                                        onClick = { more = false; model.memories.galleryAct { box.trash() } },
                                     )
                                     if (reports) androidx.compose.material3.DropdownMenuItem(
                                         text = { Text(stringResource(R.string.report_action)) },
@@ -670,7 +670,7 @@ private fun LightboxPage(row: GalleryModel.Row, box: MemoryLightbox, model: AppM
             else -> {
                 val read by produceState<Read?>(null, row.mediaId) {
                     // a video without a poster has none to show: its original is no picture
-                    value = Read(row.picture?.let { blob -> model.mediaPicture(blob) { box.picture(row.mediaId) } })
+                    value = Read(row.picture?.let { blob -> model.memories.mediaPicture(blob) { box.picture(row.mediaId) } })
                 }
                 val r = read
                 when {

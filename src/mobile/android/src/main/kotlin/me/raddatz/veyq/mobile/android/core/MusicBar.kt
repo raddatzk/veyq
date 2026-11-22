@@ -37,7 +37,6 @@ import kotlinx.coroutines.delay
 import me.raddatz.veyq.mobile.audio.NowPlaying
 import me.raddatz.veyq.mobile.audio.PlayerCommands
 import me.raddatz.veyq.mobile.audio.PlayerNotice
-import me.raddatz.veyq.mobile.memories.music.MusicQueue
 import me.raddatz.veyq.mobile.words.Msg
 
 /** How long the bar says that none of a queue's tracks played (the web's 5 s). */
@@ -109,7 +108,7 @@ private fun MusicPosition(now: NowPlaying, commands: PlayerCommands) {
     val at = dragged ?: now.positionMs.toFloat().coerceIn(0f, total)
     val label = say(Msg.MUSIC_PROGRESS, now.title)
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp)) {
-        Text(MusicQueue.formatLength(at.toLong()), style = MaterialTheme.typography.labelSmall)
+        Text(me.raddatz.veyq.mobile.words.Shown.length(at.toLong()), style = MaterialTheme.typography.labelSmall)
         Slider(
             value = at,
             onValueChange = { dragged = it },
@@ -120,7 +119,7 @@ private fun MusicPosition(now: NowPlaying, commands: PlayerCommands) {
             valueRange = 0f..total,
             modifier = Modifier.weight(1f).padding(horizontal = 8.dp).semantics { contentDescription = label },
         )
-        Text(if (now.durationMs > 0) MusicQueue.formatLength(now.durationMs) else "", style = MaterialTheme.typography.labelSmall)
+        Text(if (now.durationMs > 0) me.raddatz.veyq.mobile.words.Shown.length(now.durationMs) else "", style = MaterialTheme.typography.labelSmall)
     }
 }
 

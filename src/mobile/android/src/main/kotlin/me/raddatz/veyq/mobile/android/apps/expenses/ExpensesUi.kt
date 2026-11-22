@@ -43,14 +43,14 @@ import me.raddatz.veyq.mobile.sharing.GuestPage
 
 @Composable
 private fun potHeader(node: NodeAt, model: AppModel): HeaderContribution? {
-    val state = model.pot.collectAsStateWithLifecycle().value
+    val state = model.expenses.pot.collectAsStateWithLifecycle().value
     val view = state?.takeIf { it.ref.nodeId == node.nodeId }?.view ?: return null
     val ref = state.ref
     return HeaderContribution(
         subtitle = view.subtitle?.let { say(it) },
         // a cover and a copy write: core offers them where Expenses is on (the web's `canCopy`, `expensesRights`)
         facts = me.raddatz.veyq.mobile.AppKinds.Facts(canWrite = view.canWrite),
-        download = { out -> if (model.downloadPot(ref, out)) emptyList() else null },
+        download = { out -> if (model.expenses.downloadPot(ref, out)) emptyList() else null },
     )
 }
 
@@ -71,8 +71,8 @@ private fun ExpensesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) 
 @Composable
 private fun GuestPot(page: PotGuest.Pot, model: AppModel) {
     DisposableEffect(page.model) {
-        model.showGuestPot(page.model)
-        onDispose { model.showGuestPot(null) }
+        model.expenses.showGuestPot(page.model)
+        onDispose { model.expenses.showGuestPot(null) }
     }
     val ref = remember(page.node) {
         ObjectRef(page.node.scopeId, page.node.nodeId, page.node.kind, me.raddatz.veyq.mobile.navigation.ApplicationId.EXPENSES, page.node.name)
@@ -107,6 +107,8 @@ internal object ExpensesUi {
         header = { node, model -> potHeader(node, model) },
         body = { ref, tab, model -> PotScreen(ref, tab, model) },
         guest = { page, _, model, _ -> if (page is PotGuest.Pot) GuestPot(page, model) },
+        // a named guest adds entries: the Pot reads its write right anew (the web's `requestGuest`, then the write)
+        guestNamed = { page, model -> if (page is PotGuest.Pot) model.expenses.refreshPot {} },
     )
 
     fun register(registry: Registry) {
@@ -116,6 +118,7 @@ internal object ExpensesUi {
                 ApplicationId.EXPENSES,
                 list = { s, model, onOpen -> ExpensesList(s, model, onOpen) },
                 creates = mapOf(me.raddatz.veyq.mobile.AppKinds.Create.POT to newPot),
+                holding = ExpensesHeld,
             ),
         )
     }

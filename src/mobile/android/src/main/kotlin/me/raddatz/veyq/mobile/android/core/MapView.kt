@@ -406,7 +406,3 @@ internal fun DrawScope.trackLine(t: ScreenTransform, lines: List<List<MapPoint>>
 
 /** [points] projected once (they are drawn every frame). */
 internal fun projected(points: List<LatLng>): List<MapPoint> = points.map(Mercator::project)
-
-/** The zoom a [Viewport] framing nothing opens at, and its centre: the world. */
-internal fun worldView(width: Double, height: Double): Viewport =
-    Viewport(me.raddatz.veyq.mobile.memories.place.MemoryLocation.WORLD_CENTER, me.raddatz.veyq.mobile.memories.place.MemoryLocation.WORLD_ZOOM, width, height)

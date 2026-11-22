@@ -143,7 +143,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     // "Send a copy…": what happens is said first — the copy leaves veyq decrypted —, then the system's share sheet
     val sending by model.sending.collectAsStateWithLifecycle()
     val context = androidx.compose.ui.platform.LocalContext.current
-    sending?.let { node ->
+    sending?.let { send ->
+        val node = send.node
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { model.askToSend(null) },
             title = { Text(stringResource(R.string.file_send_title)) },
@@ -152,7 +153,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 androidx.compose.material3.TextButton(onClick = {
                     model.askToSend(null)
                     scope.launch {
-                        val copy = model.copyForSending(node)
+                        val copy = model.copyForSending(send)
                         if (copy == null) {
                             snackbar.show(context, me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DOWNLOAD_FAILED, node.name))
                             return@launch
@@ -969,7 +970,7 @@ private fun tabIcon(tab: BarTab, kind: String?): ImageVector = when (tab.key) {
     "memories.map" -> Icons.Outlined.Map
     "expenses.overview" -> Icons.Outlined.BarChart
     "expenses.settings" -> Icons.Outlined.Settings
-    "depot.file" -> if (kind == me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX) Icons.Outlined.Inbox else Icons.Outlined.InsertDriveFile
+    "depot.file" -> if (kind == "DEPOT_DROPBOX") Icons.Outlined.Inbox else Icons.Outlined.InsertDriveFile
     else -> Icons.AutoMirrored.Outlined.List
 }
 
@@ -1020,10 +1021,10 @@ private fun ShareBanner(
     snackbar: androidx.compose.material3.SnackbarHostState, onCancel: () -> Unit,
 ) {
     val palette = LocalPalette.current
-    val gallery by model.shareTarget.collectAsStateWithLifecycle()
+    val page by model.addHerePage.collectAsStateWithLifecycle()
     // the page's rights and reach move with its state, the level's with the screen: asked again on each
-    gallery?.state?.collectAsStateWithLifecycle()?.value
-    val addHere = model.addHereTarget(s.shell, gallery)
+    page?.changes?.collectAsStateWithLifecycle()?.value
+    val addHere = model.addHereTarget(s.shell, page)
     val label = s.shell.folder?.name ?: spaceName(s.space)
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()

@@ -162,16 +162,16 @@ internal fun ContributionsView(
     }
     if (renaming && row != null) RenameBucketDialog(piece(row.label), onClose = { renaming = false }) { name ->
         moved = false
-        model.curate { contributions.rename(name) }
+        model.memories.curate { contributions.rename(name) }
     }
     if (deleting && row != null) DeleteBucketDialog(piece(row.label), onClose = { deleting = false }) {
         moved = false
-        model.curate { contributions.delete() }
+        model.memories.curate { contributions.delete() }
     }
     moving?.let { id ->
         MoveDialog(state.moveTargets, onClose = { moving = null }) { target ->
             moved = true
-            model.curate { contributions.move(listOf(id), target) }
+            model.memories.curate { contributions.move(listOf(id), target) }
         }
     }
 }

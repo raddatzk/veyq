@@ -65,7 +65,7 @@ internal fun potRefusal(outcome: String): String = say(me.raddatz.veyq.mobile.wo
 @Composable
 internal fun PotSettings(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel) {
     // core's `PotSettings` decides what may be changed and says a refusal; this draws it
-    val settings = androidx.compose.runtime.remember(state.ref) { model.potSettings() } ?: return
+    val settings = androidx.compose.runtime.remember(state.ref) { model.expenses.potSettings() } ?: return
     androidx.compose.runtime.DisposableEffect(settings) { onDispose { settings.clear() } }
     val said by settings.state.collectAsStateWithLifecycle()
     val ui = SettingsUi(settings, said, state.saving, model)
@@ -93,7 +93,7 @@ private class SettingsUi(
     private val model: AppModel,
 ) {
     /** One of [settings]' actions, [done] once it was stored (a field emptied, a dialog closed). */
-    fun write(op: suspend me.raddatz.veyq.mobile.expenses.PotSettings.() -> Boolean, done: () -> Unit = {}) = model.settingsWrite({ settings.op() }, done)
+    fun write(op: suspend me.raddatz.veyq.mobile.expenses.PotSettings.() -> Boolean, done: () -> Unit = {}) = model.expenses.settingsWrite({ settings.op() }, done)
 }
 
 /** The currencies offered, by code: core's one table (the web's `Intl`). */
