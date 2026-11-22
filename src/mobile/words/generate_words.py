@@ -47,6 +47,13 @@ Outputs (each optional; each a directory or file this script owns and rewrites w
                         key's `<summary>` and its line `@DESCRIPTION@` by each `description` key's `<p>`, every one
                         in English and then each other language's (`xml:lang`); the rest of TEMPLATE as it is (its own
                         `@APP_ID@`, `@VERSION@` and `@DATE@` are `run.py`'s).
+  --web FILE            the web's share of the catalog (inbox #1060): the keys `web.json`'s `read` names (the words the
+                        core's notices raise, ADR 0155 decision 7.2), as JSON `{"en": {key: message}, "de": {…}}` in
+                        vue-i18n's message syntax — a placeholder `{n}` / `{n:int}` the list interpolation `{n-1}`, a
+                        plural its forms joined by ` | ` (`zero`, `one`, `other` as present), `{`, `}`, `@`, `|` and `$`
+                        as literal interpolations, `%%` one `%`; a key without German its English. The web registers
+                        it as its `words` namespace; the file is committed, and `scripts/validate_web_words.py` keeps
+                        it equal to this output.
 
 Python 3.9 (Xcode's and Gradle's `python3` on the developer's Mac), standard library only.
 """
@@ -59,6 +66,7 @@ import sys
 from pathlib import Path
 
 CATALOG = Path(__file__).resolve().parent / "words.json"
+WEB_LINKS = Path(__file__).resolve().parent / "web.json"
 LANGS = ("en", "de")
 PLURAL_CATEGORIES = ("zero", "one", "two", "few", "many", "other")
 PLACEHOLDER = re.compile(r"\{(\d+)(:int)?\}")
@@ -613,6 +621,42 @@ def csharp_words(words: dict, out: Path) -> None:
     write(out / "Words.g.cs", "\n".join(lines))
 
 
+# ---- the web (inbox #1060) ----
+
+WEB_LITERAL = re.compile(r"[{}@|$]")
+
+
+def web_text(t: str) -> str:
+    """A text in vue-i18n's message syntax: a placeholder by its list index, every other syntax character a literal."""
+    out, at = [], 0
+    for m in PLACEHOLDER.finditer(t):
+        out.append(WEB_LITERAL.sub(lambda c: "{'" + c.group(0) + "'}", desktop_text(t[at:m.start()])))
+        out.append("{" + str(int(m.group(1)) - 1) + "}")
+        at = m.end()
+    out.append(WEB_LITERAL.sub(lambda c: "{'" + c.group(0) + "'}", desktop_text(t[at:])))
+    return "".join(out)
+
+
+def web_message(v) -> str:
+    if isinstance(v, dict):
+        return " | ".join(web_text(v[c]) for c in ("zero", "one", "other") if c in v)
+    return web_text(v)
+
+
+def web_read(words: dict) -> list:
+    read = json.loads(WEB_LINKS.read_text(encoding="utf-8"))["read"]
+    unknown = [k for k in read if k not in words]
+    if unknown:
+        raise CatalogError(f"web.json's `read` names keys the catalog has not: {unknown}")
+    return sorted(set(read))
+
+
+def web_messages(words: dict, keys: list) -> str:
+    """The `--web` file's text: deterministic, so a committed copy can be compared byte for byte."""
+    data = {lang: {k: web_message(words[k].get(lang, words[k]["en"])) for k in keys} for lang in LANGS}
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
 def write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists() or path.read_text(encoding="utf-8") != text:
@@ -629,6 +673,7 @@ def main() -> int:
     ap.add_argument("--resw", type=Path)
     ap.add_argument("--apple-infoplist", type=Path)
     ap.add_argument("--metainfo", type=Path, nargs=2, metavar=("TEMPLATE", "OUT"))
+    ap.add_argument("--web", type=Path)
     a = ap.parse_args()
     try:
         words = load()
@@ -662,6 +707,8 @@ def main() -> int:
             apple_infoplist(words, a.apple_infoplist)
         if a.metainfo:
             metainfo(words, *a.metainfo)
+        if a.web:
+            write(a.web, web_messages(words, web_read(words)))
     except CatalogError as e:
         print(f"words.json: {e}", file=sys.stderr)
         return 1

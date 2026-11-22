@@ -151,7 +151,7 @@ Measured before the decision (2026-11-20):
 
       Not slices: the **formats** move with the slice or application that owns each (money with Expenses) — alone they
       miss R by a measured factor (ADR 0154 § Consequences: 7.1×); **notices** wait until the web and the apps read one
-      word catalog; the **slug folding** (`shared/naming.ts`) stays beside the Kotlin as decision 9's crypto does, held by
+      word catalog (their words are generated for the web since 2026-11-22, ADR 0136 § The web's words); the **slug folding** (`shared/naming.ts`) stays beside the Kotlin as decision 9's crypto does, held by
       `v1.json#name_folding`; the **URL fragment rules** are the router's (decision 1). Every platform façade lands in
       `:core`'s one JavaScript file, which a bundler cannot split, so a rule that is lazy in TypeScript turns eager when
       it moves — the reason slices 4 to 6 come last, each asking first whether a module of its own is cheaper — and the

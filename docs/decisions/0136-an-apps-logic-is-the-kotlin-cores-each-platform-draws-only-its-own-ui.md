@@ -53,6 +53,7 @@ four times.
    and every label), and the build generates each platform's resources from it — Android's `strings.xml`, Apple's
    String Catalog, Windows' `.resw`, Linux's gettext catalog —, as the theme is generated from the web's colours
    (ADR 0123 decision 7). Today's two catalogs (Android's and Apple's) are merged into it as the screens move.
+   The web keeps its own catalog, held to this one (§ The web's words, below).
 
 4. **Linux: GTK 4 and libadwaita in Rust, the core as a Kotlin/Native library** (owner 2026-11-10: no JVM in the
    app, and the way GNOME's own apps are built). The Linux app is Rust with gtk4-rs and libadwaita-rs (both checked
@@ -355,6 +356,107 @@ four times.
   The repository's C# (`src/mobile/windows/`) has one: `run.py build` is red on any NuGet package `dotnet package list`
   calls deprecated or vulnerable, transitive ones included.
 - What is still open per platform is [native-apps](../crosscutting/native-apps.md)' to keep.
+
+## The web's words (inbox #1060, built 2026-11-22)
+
+The web's messages (`src/web/src/i18n/index.ts`, each application's `features/<owner>/i18n.ts`, vue-i18n) and
+`words.json` were two catalogs nothing compared. Measured 2026-11-22 (a node `eval` of each web catalog's blocks, then a
+Python comparison): the web 2,529 keys in 4 files, the apps 1,503; 1,134 app keys and 1,242 web keys say a meaning the
+other says (English equal once placeholders are read alike); 42 such pairs worded it apart (15 "pot" against the web's
+and ADR 0086's "Pot", 13 German wordings — "Spaces" against "Bereiche", "Titelbild" against "Cover" —, quote style,
+punctuation, case); only 427 web keys derive an app key's name.
+
+1. **The two catalogs are paired, and the pairs are held equal.** `src/mobile/words/web.json` names, per app key, the
+   web keys that say the same (`twins`), the pairs worded apart on purpose with why (`apart`: a different meaning, or a
+   platform's convention — the ellipsis on a command that opens a picker), and the pairs waiting on the owner (`open`).
+   `scripts/validate_web_words.py` holds every twin equal in English and German (placeholders matched by first use in
+   the English, plurals form by form, Apple's `apple_en` / `apple_de` not compared), and demands that any sentence of
+   three words or more both catalogs say be paired — so a new shared sentence is decided the day it lands. A separate
+   file and not a field on each entry: ~820 entries would gain a line while other work adds words, and lines beside an
+   edited `de` conflict; one line per pair merges. Seeded from the identical pairs of three words or more, the pairs
+   whose names agree and the resolved conflicts: 819 app keys, 860 pairs, 10 apart, 2 open.
+2. **Where they differed, the web's wording won** (ADR 0154; owner mandate 2026-11-21), in `words.json`: 49 field changes
+   over 44 keys — "Pot" capitalised in all 18 of the apps' English uses, "Bereich(e)" for "Space(s)" in all 6 German ones,
+   "Cover" for "Titelbild" on the three cover actions, the web's typographic apostrophe, its punctuation and case, and
+   seven German wordings (`offer_not_now`, `pot_unreadable`, `search_words_password`, `search_words_profile`,
+   `signin_working`, `share_link_share`, `bookmark_delete_confirm`). Apple's title case stays in `apple_en`
+   (`cover_choose_image` gained one). Owner questions left `open`: `kit_save_title` (the apps' own step title against
+   the web's) and `link_sign_in_scan_hint` (the web quotes a screen's title in lower case); and, worded alike on both
+   but split within each, "Cover" / "Titelbild", "Titel" / "Track", and "Tenant" left English in German.
+   The changes, each `words.json` field as it was and as the web words it:
+
+   | key | field | before | after |
+   |---|---|---|---|
+   | `pot_loading` | en | 'Loading the pot…' | 'Loading the Pot…' |
+   | `pot_ledger_unknown_entry` | en | 'An entry this pot no longer shows' | 'An entry this Pot no longer shows' |
+   | `entry_stale` | en | 'Someone else changed the pot meanwhile. It was read again; save once more.' | 'Someone else changed the Pot meanwhile. It was read again; save once more.' |
+   | `people_remove_confirm` | en | 'No entry names them, so they disappear from the pot. This can’t be undone.' | 'No entry names them, so they disappear from the Pot. This can’t be undone.' |
+   | `pot_busy` | en | 'The pot’s key is being renewed. Try again in a moment.' | 'The Pot’s key is being renewed. Try again in a moment.' |
+   | `pot_blocked` | en | 'The operator blocked this pot.' | 'The operator blocked this Pot.' |
+   | `settings_missing` | en | 'This pot has no base currency yet. Pick one to record entries.' | 'This Pot has no base currency yet. Pick one to record entries.' |
+   | `settings_missing_read_only` | en | 'This pot has no base currency yet, so it shows no entries.' | 'This Pot has no base currency yet, so it shows no entries.' |
+   | `settings_currency_fixed` | en | 'Fixed: the pot holds entries.' | 'Fixed: the Pot holds entries.' |
+   | `settings_categories_hint` | en | 'Added here, they can be picked for every entry of this pot. They can be renamed, not removed.' | 'Added here, they can be picked for every entry of this Pot. They can be renamed, not removed.' |
+   | `create_pot` | en | 'New pot' | 'New Pot' |
+   | `create_pot_name_taken` | en | 'There is already a pot with this name here.' | 'There is already a Pot with this name here.' |
+   | `create_pot_people_failed` | en | 'The pot was created, its people were not. Add them in its settings.' | 'The Pot was created, its people were not. Add them in its settings.' |
+   | `create_pot_failed` | en | 'The pot was not created. Please try again.' | 'The Pot was not created. Please try again.' |
+   | `ed_blocked` | en | 'Blocked by the operator: this pot or entry takes no changes. Nothing was saved.' | 'Blocked by the operator: this Pot or entry takes no changes. Nothing was saved.' |
+   | `problem_unknown_participant` | en | 'The entry names someone who is not in this pot.' | 'The entry names someone who is not in this Pot.' |
+   | `history_unreadable` | en | 'A version this pot cannot read' | 'A version this Pot cannot read' |
+   | `pot_open_failed` | en | 'This pot did not open' | 'This Pot did not open' |
+   | `memory_date_invalid_range` | en | "The end can't be before the start." | 'The end can’t be before the start.' |
+   | `memory_place_name_from_map` | en | "Use the map's name" | 'Use the map’s name' |
+   | `settings_maps_receive` | en | "The map service receives the part of the map you view, the place-name service the point of a place, and both this device's IP address." | 'The map service receives the part of the map you view, the place-name service the point of a place, and both this device’s IP address.' |
+   | `cover_choose_image` | en | 'Choose an Image' | 'Choose an image' |
+   | `cover_choose_image` | apple_en | None | 'Choose an Image' |
+   | `pot_expense_by` | en | 'Expense by {1}' | 'expense by {1}' |
+   | `pot_refund_to` | en | 'Refund to {1}' | 'refund to {1}' |
+   | `ed_paid_column` | en | 'paid' | 'Paid' |
+   | `ed_paid_column` | de | 'bezahlt' | 'Bezahlt' |
+   | `ed_received_column` | en | 'received' | 'Received' |
+   | `ed_received_column` | de | 'erhalten' | 'Erhalten' |
+   | `list_empty` | en | 'Nothing here yet' | 'Nothing here yet.' |
+   | `list_empty` | de | 'Hier ist noch nichts' | 'Hier ist noch nichts.' |
+   | `memory_upload_switched_off` | en | 'Memories is switched off here, so nothing can be added.' | 'Memories is switched off here, so nothing can be added' |
+   | `memory_upload_switched_off` | de | 'Erinnerungen ist hier abgeschaltet, deshalb kann nichts dazukommen.' | 'Erinnerungen ist hier abgeschaltet, deshalb kann nichts dazukommen' |
+   | `share_link_share` | de | 'Teilen …' | 'Teilen…' |
+   | `cover_change` | de | 'Titelbild ändern' | 'Cover ändern' |
+   | `cover_remove` | de | 'Titelbild entfernen' | 'Cover entfernen' |
+   | `cover_set` | de | 'Titelbild festlegen' | 'Cover festlegen' |
+   | `drawer_spaces` | de | 'Spaces' | 'Bereiche' |
+   | `space_switch` | de | 'Space wechseln' | 'Bereich wechseln' |
+   | `switcher_open` | de | 'Space, Tenant oder Server wechseln' | 'Bereich, Tenant oder Server wechseln' |
+   | `manage_hint` | de | 'Ausgeblendete Tenants und Spaces bleiben auf dem Server und werden nur auf diesem Gerät weggelassen.' | 'Ausgeblendete Tenants und Bereiche bleiben auf dem Server und werden nur auf diesem Gerät weggelassen.' |
+   | `unlock_remembered_hint` | de | 'Bestätige, dass du es bist, um deine Spaces zu öffnen.' | 'Bestätige, dass du es bist, um deine Bereiche zu öffnen.' |
+   | `device_unlock_prompt` | de | 'Deine Spaces öffnen' | 'Deine Bereiche öffnen' |
+   | `offer_not_now` | de | 'Nicht jetzt' | 'Jetzt nicht' |
+   | `pot_unreadable` | de | 'nicht lesbar' | 'unlesbar' |
+   | `search_words_password` | de | 'Passwort, Passphrase, Anmeldung' | 'Kennwort, Passwort, Anmeldung' |
+   | `search_words_profile` | de | 'Benutzername, echter Name, Profilbild, Avatar' | 'Benutzername, Name, Profilbild, Avatar' |
+   | `signin_working` | de | 'Anmeldung läuft…' | 'Wird angemeldet…' |
+   | `bookmark_delete_confirm` | de | '„{1}“ wird in den Papierkorb verschoben. Von dort kannst du es wiederherstellen, bis es endgültig gelöscht wird.' | '„{1}“ kommt in den Papierkorb. Dort lässt es sich wiederherstellen, bis es endgültig entfernt wird.' |
+
+3. **The notices' words are generated for the web** — the mechanism ADR 0155 decision 7.2 waited on ("notices after one
+   word catalog"). `generate_words.py --web` writes `src/web/src/i18n/words.generated.json` (committed): the keys
+   `web.json`'s `read` names, in vue-i18n's syntax with list placeholders (`{n}` → `{n-1}`, a `Notice`'s arguments
+   arrive positional), plurals as ` | ` forms, syntax characters as literal interpolations. The guard holds `read` equal
+   to the `Msg`s the `*Notices.kt` tables name (110) and the file to the generator's output; `words.test.ts` renders
+   every word through vue-i18n in both languages against the catalog's own text. The web does not register the
+   `words` namespace yet: the notices' move does, switching its toasts' call sites to it, so ~110 unread words do not
+   ride the eager set meanwhile.
+4. **One source for all of it is staged, not built.** Generating every web message from `words.json` would add the
+   1,287 web-only keys to it (the apps generating resources for words they never show) and rename or map the web's
+   5,092 `t('…')` calls in 202 files (`grep -rhoE "\bt\(['\"\`]" src/web/src --include='*.vue' --include='*.ts'`);
+   that churn would not merge beside the work that adds words to both. The order: (1) the notices' move registers
+   `words` and deletes the web's twin keys of those words; (2) each application, as ADR 0155 decision 7.3 moves it onto
+   the core, joins its shared words to `read` and deletes its web twins; (3) the web-only words stay the web's until an
+   app needs one.
+
+The guard's limits (its docstring): a pair is only as true as `web.json` says; a meaning worded apart in English
+entirely, or in one or two words, is not offered for pairing (the homographs live there — "Open" the state and the
+verb); a notice raised outside a `*Notices.kt` is not in `read`. `validate_guard_gaps.py` cases 126–131 pin its rules
+and the short-text limit.
 
 ## Alternatives considered
 

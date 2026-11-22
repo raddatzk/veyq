@@ -322,6 +322,13 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   123 Windows' Depot UI naming `Call.GalleryOpen` — rejected: Windows' (b), another application's part of the wire
   124 a wire prefix `Ledger.` classified nowhere — rejected: the desktops' (c) reads the prefix table whole
   125 Apple's core UI naming `GalleryModel` in a comment only — passes: the Swift mask blanks it
+  126 a twinned web message reworded alone (Expenses' `expenses.entry.blocked` saying "pot") — rejected:
+     `validate_web_words` twin-equal (inbox #1060)
+  127 a twin's German naming its two placeholders the other way round (`expenses.balances.pays`) — rejected:
+     twin-equal matches placeholders by their first use in the English, not by name
+  128 a new app sentence the web already says, paired nowhere — rejected: `validate_web_words` unpaired
+  129 a notices table raising a word `web.json`'s `read` lacks — rejected: read-is-notices
+  130 a notice's word changed in words.json without `generate_words.py --web` — rejected: generated-fresh
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -385,6 +392,10 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      stands. **Left open on purpose** — the same data-flow gap as 25: a constant holding the whole name IS caught,
      and the realistic regression (a hand parse in the moderation CR's guest-write path) spells the name. Pinned so
      the limit in that guard's docstring is executable rather than a sentence.
+  131 a new app word of two words ("Change cover") the web says in other German, paired nowhere, passes
+     `validate_web_words`, which demands a pair only from three words on. **Left open on purpose** — short texts
+     are where the homographs are ("Open" the state and the verb, "Delete" the key's name): forcing them paired would
+     twin different meanings. Pinned so the limit in that guard's docstring is executable.
   93 a ciphertext column named outside `wrapped_*` / `sealed_*` / `encrypted_*` (`node_ciphertext`) that no re-key
      rewrites passes `validate_node_rekey_arity`, which derives its subject from column NAMES. **Left open on purpose**:
      every column sealed under a node key today carries one of those prefixes or is named in the guard, and a guard
@@ -1336,6 +1347,49 @@ def forge_apple_core_ui_names_application_in_comment(root: pathlib.Path) -> str:
     return "Apple's core UI naming GalleryModel in a comment only (must PASS — the mask blanks it)"
 
 
+WEB_WORDS = "validate_web_words.py"
+
+
+def _edit(root: pathlib.Path, rel: str, old: str, new: str) -> None:
+    f = root / rel
+    if not f.is_file():
+        raise ForgeError(f"{rel} is gone — re-anchor this forgery")
+    f.write_text(_sub(f.read_text(encoding="utf-8"), old, new), encoding="utf-8")
+
+
+def forge_web_twin_reworded(root: pathlib.Path) -> str:
+    _edit(root, "src/web/src/features/expenses/i18n.ts", "this Pot or entry takes no changes", "this pot or entry takes no changes")
+    return "the web's expenses.entry.blocked reworded alone (must be REJECTED — twin-equal)"
+
+
+def forge_web_twin_placeholders_swapped(root: pathlib.Path) -> str:
+    _edit(root, "src/web/src/features/expenses/i18n.ts", "'{from} zahlt an {to}'", "'{to} zahlt an {from}'")
+    return "a twin's German placeholders swapped (must be REJECTED — matched by first use)"
+
+
+def forge_app_sentence_unpaired(root: pathlib.Path) -> str:
+    _edit(root, "src/mobile/words/words.json", '{\n  "', '{\n  "guard_gap_probe": {"en": "The import stopped after '
+          '{1:int} of {2:int} items. What was created has been moved to the trash.", "de": "Abgebrochen."},\n  "')
+    return "a new app sentence the web says, paired nowhere (must be REJECTED — unpaired)"
+
+
+def forge_notice_word_unread(root: pathlib.Path) -> str:
+    _edit(root, "src/mobile/apps/expenses/src/commonMain/kotlin/me/raddatz/veyq/mobile/expenses/ExpensesNotices.kt",
+          '"title" -> Msg.PROBLEM_TITLE', '"title" -> Msg.APP_NAME')
+    return "a notices table raising a word web.json's read lacks (must be REJECTED — read-is-notices)"
+
+
+def forge_notice_word_not_regenerated(root: pathlib.Path) -> str:
+    _edit(root, "src/mobile/words/words.json", '"Nothing here can be copied by this version of veyq."',
+          '"Nothing here can be copied by this veyq."')
+    return "a notice's word changed without generate_words.py --web (must be REJECTED — generated-fresh)"
+
+
+def forge_short_app_word_unpaired(root: pathlib.Path) -> str:
+    _edit(root, "src/mobile/words/words.json", '{\n  "', '{\n  "guard_gap_probe": {"en": "Change cover", "de": "Umschlag ändern"},\n  "')
+    return "a two-word app word the web says otherwise, paired nowhere (must PASS — pairs are demanded from three words)"
+
+
 def forge_web_core_imports_second_application(root: pathlib.Path) -> str:
     _plant_depot(root, "core/node/guardGapProbe.ts", "export { FILE_KIND } from '../../features/depot/kinds'\n")
     return "a core/node file re-exporting features/depot/kinds (must be REJECTED — core depends on no application)"
@@ -2031,6 +2085,12 @@ CASES = [
     ("123", "validate_mobile_ui_direction.py", forge_windows_application_names_other_application_wire, False),
     ("124", "validate_mobile_ui_direction.py", forge_wire_prefix_unclassified, False),
     ("125", "validate_mobile_ui_direction.py", forge_apple_core_ui_names_application_in_comment, True),
+    ("126", WEB_WORDS, forge_web_twin_reworded, False),
+    ("127", WEB_WORDS, forge_web_twin_placeholders_swapped, False),
+    ("128", WEB_WORDS, forge_app_sentence_unpaired, False),
+    ("129", WEB_WORDS, forge_notice_word_unread, False),
+    ("130", WEB_WORDS, forge_notice_word_not_regenerated, False),
+    ("131", WEB_WORDS, forge_short_app_word_unpaired, True),
     ("100", LINK_CLOSE_ARITY, forge_link_closed_outside_the_body, False),
     ("101", LINK_CLOSE_ARITY, forge_link_closed_by_a_bulk_update, False),
     ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),
