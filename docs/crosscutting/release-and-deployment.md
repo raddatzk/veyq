@@ -333,5 +333,10 @@ check is logged and retried with a back-off, and blocks nothing.
   Copier from a verified release, which `init` offers in an empty repository. Built: the template and its checks in
   `github.com/raddatzk/veyq-server` (cr-veyq-server-template), and `init`'s server path, self-tested against
   stand-ins (cr-veyqctl-server-path phase 3). Not yet: veyq-server's first release, and a run on a real server.
+- **Every pin has an updater** ([ADR 0158](../decisions/0158-every-pin-has-an-updater-a-self-hosted-renovate-proposes-each-bump-with-what-moves-with-it.md)): a self-hosted Renovate, acting as
+  a GitHub App of this repository, proposes every pin's bump with what moves with it (a SHA-256, a lockfile, the
+  verification metadata, a rebuild) in one pull request that starts `Checks`; a check is red on a pin it does not
+  extract; bumping a pin is no longer part of cutting a release. Until it is built, Dependabot and its follow workflows
+  propose what they reach and the rest is bumped by hand (cr-renovate).
 - **L3's archive holding the major entry** (ADR 0085 decision 10, inbox #461): the major entry's backup in the
   archive lane L3 restores.

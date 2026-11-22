@@ -4,6 +4,7 @@
 - Built: yes
 - Date: 2026-11-12
 - Model: [cc.security.csp](../crosscutting/cc.security.csp.md)
+- Replaced in part: decision 4's scheduled workflow by ADR 0158 decision 8 (not built)
 
 ## Context
 

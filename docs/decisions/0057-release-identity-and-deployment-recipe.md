@@ -6,7 +6,7 @@
 - Date: 2026-08-10
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 - Replaced in part: § 1 by ADR 0091 (built: the snapshot and its promotion), § 7 by ADR 0091 (not built); § 3 by ADR
-  0096 (built)
+  0096 (built); § 6's last sentence (bumping a pin at a release) by ADR 0158 (not built)
 
 ## Context
 
