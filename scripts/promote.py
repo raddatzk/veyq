@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Promote a snapshot to a release: every check that decides it, and the refusal note (ADR 0091 decision 5).
 
-`.github/workflows/release.yml` runs it. The owner saves a **draft** release in GitHub's release page on a
-`snapshot-<major>.<minor>` tag, with the notes, and presses *Run workflow* on `release.yml` on the branch the snapshot
+`.github/workflows/release.yml` runs it. A **draft** release waits on a `snapshot-<major>.<minor>` tag — on `main`
+written by `publish.yml`'s `release-draft` (`scripts/release_notes.py`), on a release branch by the owner — the owner
+reads it, and presses *Run workflow* on `release.yml` on the branch the snapshot
 came from (`main`, or `release/<major>.x` for a fix of a previous major). The workflow's writes — the release tags, the
 signatures, the chart, the git tag, the GitHub Release — stay in the workflow's own lines, where
 `scripts/validate_release_identity.py` sees them; this file decides whether they may happen.

@@ -1,0 +1,29 @@
+name: Release note
+
+# Every pull request carries the release's words for what it changes, in a `## Release note` section of its body (or
+# `none`), because the weekly draft is gathered from them (publish.yml's `release-draft`, scripts/release_notes.py;
+# cr-release-draft-from-publish). Dependabot's pull requests need none.
+#
+# Its own workflow, not a job in checks.yml: editing a body re-runs this one small job, never the pipeline. Advisory —
+# the ruleset requires no check. The body is read from the event file by the script, never through a `${{ }}`
+# expression in a run line, where it would be shell. `pull_request`, never `pull_request_target`: a fork's pull request
+# runs its own copy of the script with no token and no secret.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions: {}
+
+jobs:
+  release-note:
+    name: The pull request carries a release note
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check the release note
+        run: python3 scripts/release_notes.py check --event "$GITHUB_EVENT_PATH"

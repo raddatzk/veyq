@@ -271,10 +271,16 @@ settings (ADR 0096 decision 3). Never delete a published release to redo it: Git
 release, but its tag name can never be used again (GitHub's immutable-releases page, 2026-11-06; not tried here). Then,
 per release:
 
-1. **GitHub → Releases → Draft a new release.** *Choose a tag*: the snapshot's, `snapshot-<major>.<minor>` — the list
-   offers exactly the snapshots that are still promotable. The title is overwritten (`veyq <major>.<minor>`); write the
-   **notes** in your words — whatever an operator must act on goes here. **Save draft** (never *Publish*). Leave no
-   other draft lying around: the promotion releases exactly one draft and refuses when there are several.
+1. **GitHub → Releases → read the draft.** Every Publish on `main` that made a snapshot (the Monday schedule, or a
+   dispatch) also writes the draft (`publish.yml` › `release-draft`, cr-release-draft-from-publish): `veyq
+   <major>.<minor>` on `snapshot-<major>.<minor>`, its **notes** gathered from the `## Release note` section of every
+   pull request merged since the last release — **What is new**, **Fixed**, Dependabot's bumps in one line under
+   **Under the hood**, a pull request without a usable note under **Needs a note**, and **What an operator must act
+   on** (*Nothing.* unless a note says otherwise). Read it, edit what needs it (a lede line, a note to fix), **Save
+   draft** (never *Publish*). An edited draft is never overwritten: a later Publish leaves it, with a notice, until it
+   is released or deleted — so a draft from an older week waits for you rather than moving on. A fix release on
+   `release/<major>.x`, and the first release of a major, get no draft: write one on their snapshot's tag by hand.
+   Leave no other draft lying around: the promotion releases exactly one draft and refuses when there are several.
 2. **GitHub → Actions → Release → Run workflow**, on the branch the snapshot came from: `main`, or `release/<major>.x`
    for a fix of a previous major. Tick `unscheduled_major` only for an unscheduled major (ADR 0085 decision 4).
 3. **Watch the run.** `check` decides — every refusal names what it saw, and the `refused` job writes it into the
@@ -284,7 +290,7 @@ per release:
    removes `snapshot-<major>.<minor>`. `channels` moves `<major>` and, from `main`, `latest`.
 
 ```sh
-gh workflow run release.yml --ref main                  # step 2 from a terminal, after the draft is saved
+gh workflow run release.yml --ref main                  # step 2 from a terminal, once the draft reads right
 gh run watch                                            # step 3
 ```
 

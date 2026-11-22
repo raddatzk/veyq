@@ -96,6 +96,11 @@ jobs:
       - name: Snapshot self-test
         run: .venv/bin/python scripts/snapshot_selftest.py
 
+      # The release draft's decisions (scripts/release_notes.py, run by publish.yml's `release-draft` and by
+      # release-note.yml): the note's form, the body, the edit marker and the one-draft rule, before a Monday shows them.
+      - name: Release notes self-test
+        run: .venv/bin/python scripts/release_notes_selftest.py
+
       # The promotion's decisions (scripts/promote.py, run by release.yml): proven on every commit that could change
       # them, not first on the day of a release.
       - name: Promotion self-test
