@@ -17,9 +17,9 @@ acceptanceCriteria:
     coverage:
       web: { unit: [src/core/blob/files.vectors.test.ts, src/features/depot/view.test.ts] }
   - id: an-image-is-an-img-on-a-typed-blob-url
-    text: An image is shown as an <img> (alt text from the file name) on an object URL typed with the sniffed type, an SVG only as the PNG it draws (inbox #1059: never by its own URL, never inline, never in an object or iframe); a decode failure is a message and the download, and the URL is revoked on a failure, a replace and unmount.
+    text: An image is shown as an <img> (alt text from the file name) on an object URL typed with the sniffed type, an SVG only as pixels painted on canvases from its decoded image, its URL revoked at once (inbox #1059: never by its own URL, never an img, never inline, never in an object or iframe; one that taints a canvas is refused), painted again at each zoom so it stays sharp, no canvas over 4096 x 4096 pixels; a decode failure is a message and the download, and the URL is revoked on a failure, a replace and unmount.
     coverage:
-      web: { unit: [src/features/depot/components/FileViewer.test.ts, src/features/depot/view.test.ts] }
+      web: { unit: [src/features/depot/components/FileViewer.test.ts, src/features/depot/components/FileViewer.svg.test.ts, src/features/depot/svgRaster.test.ts, src/features/depot/view.test.ts] }
   - id: a-text-is-shown-as-characters
     text: A text is shown in a monospace block through textContent - markup in it stays visible characters and nothing is parsed; a byte-order mark is dropped, the first 1 MiB is shown with a note when the file is longer, and a binary or non-UTF-8 text claiming to be text is not shown.
     coverage:
