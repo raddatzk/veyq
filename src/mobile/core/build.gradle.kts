@@ -1,88 +1,16 @@
 import java.net.URI
 import java.security.MessageDigest
-import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
-import org.jetbrains.kotlin.gradle.plugin.KotlinHierarchyTemplate
-import org.jetbrains.kotlin.gradle.plugin.getKotlinPluginVersion
-import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
-import org.openapitools.codegen.DefaultGenerator
-import org.openapitools.codegen.config.CodegenConfigurator
 
-buildscript {
-    dependencies {
-        // The generator the backend and both web clients run, at the one version the repository pins
-        // (scripts/validate_build_input_pins.py), with the same advisory floors as src/backend/buildSrc/build.gradle.kts.
-        classpath(libs.openapi.generator)
-        constraints {
-            classpath("com.fasterxml.jackson.core:jackson-core:2.22.4")
-            classpath("com.fasterxml.jackson.core:jackson-databind:2.22.4")
-            classpath("com.google.guava:guava:33.7.2-jre")
-            classpath("com.github.jknack:handlebars:4.5.8")
-        }
-    }
-}
-
-// The base every veyq app shares (ADR 0123): the v1 crypto suite, the API client, the session and the navigation
-// model. Its targets are the JVM (which the Android app consumes, and where the conformance suite runs fastest), the
-// Apple platforms the Apple app runs on, each packed into one XCFramework, `VeyqCore`, and Linux on arm64 and x86-64
-// (ADR 0136 decision 4) and Windows on x86-64 (decision 5), cross-compiled from this build's host by Kotlin/Native's own
-// toolchain.
+// The platform module (ADR 0155 decision 7.1): what every veyq app shares and every application builds on (ADR 0123,
+// ADR 0079) — the v1 crypto suite, the platform's API client, the session, the navigation model, the registry of kinds
+// (`AppKinds`) the composition fills. It names no application: `scripts/validate_mobile_module_graph.py` holds it to no
+// project dependency. Its targets and hierarchy are every core module's (src/mobile/build.gradle.kts): the JVM (which
+// the Android app consumes, and where the conformance suite runs fastest), JavaScript, the Apple platforms (packed by
+// `:composition` into one XCFramework, `VeyqCore`), Linux on arm64 and x86-64 (ADR 0136 decision 4) and Windows on
+// x86-64 (decision 5), cross-compiled from this build's host by Kotlin/Native's own toolchain.
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.serialization)
-}
-
-// The API client is generated from contracts/api, never written by hand (CLAUDE.md: API-first). Core's specs only, the
-// ones a member's app calls; an application's specs join with that application's screens.
-val contracts = rootDir.resolve("../../contracts/api").canonicalFile
-val coreSpecs = listOf("setup", "auth", "account", "scopes", "content", "favorites", "tenants", "blob", "sharing", "moderation")
-
-/** An application's spec, generated into packages of its own (`api.<application>`), so its models never meet core's. */
-val applicationSpecs = listOf("expenses/expenses", "depot/files", "memories/media", "memories/memory-banner", "memories/item-favorites", "memories/share-media")
-val generatedApi = layout.buildDirectory.dir("generated/openapi")
-
-val generateApi = tasks.register("generateApi") {
-    group = "veyq"
-    description = "Generates the Kotlin Multiplatform API client from contracts/api (openapi-generator, kotlin/multiplatform)."
-    val specs = coreSpecs.map { contracts.resolve("$it.openapi.yaml") to "" } +
-        applicationSpecs.map { contracts.resolve("$it.openapi.yaml") to "." + it.substringBefore('/') }
-    inputs.files(specs.map { it.first } + contracts.resolve("_common.openapi.yaml")).withPropertyName("specs")
-    outputs.dir(generatedApi)
-    doLast {
-        val out = generatedApi.get().asFile
-        out.deleteRecursively()
-        specs.forEach { (spec, application) ->
-            val config = CodegenConfigurator()
-                .setGeneratorName("kotlin")
-                .setLibrary("multiplatform")
-                .setInputSpec(spec.absolutePath)
-                .setOutputDir(out.absolutePath)
-                .setPackageName("me.raddatz.veyq.mobile.api")
-                .setApiPackage("me.raddatz.veyq.mobile.api$application.apis")
-                .setModelPackage("me.raddatz.veyq.mobile.api$application.models")
-                .addAdditionalProperty("dateLibrary", "string")
-                .addAdditionalProperty("enumUnknownDefaultCase", "true")
-                .addAdditionalProperty("hideGenerationTimestamp", "true")
-                .addAdditionalProperty("omitGradleWrapper", "true")
-                .addAdditionalProperty("omitGradlePluginVersions", "true")
-                .addGlobalProperty("apiTests", "false")
-                .addGlobalProperty("modelTests", "false")
-                .addGlobalProperty("apiDocs", "false")
-                .addGlobalProperty("modelDocs", "false")
-            DefaultGenerator().opts(config.toClientOptInput()).generate()
-        }
-        // The specs carry the backend's server-side annotations as `x-*-extra-annotation` (Jakarta validation, Jackson
-        // deserializers): the server's checks, which a client neither has nor needs. A line that is nothing but such
-        // an annotation is dropped; anything else naming the backend's packages fails the build rather than ship.
-        out.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
-            // (sharing's `JsonInclude` is the server's serializer's choice, as a getter annotation)
-            val serverOnly = listOf("@field:", "@jakarta.", "@me.raddatz.veyq.", "@get:com.fasterxml.jackson.annotation.JsonInclude(")
-            val kept = f.readLines().filterNot { line -> serverOnly.any { line.trimStart().startsWith(it) } }
-            kept.firstOrNull { "jakarta." in it || "fasterxml" in it || Regex("""me\.raddatz\.veyq\.(?!mobile\b)""").containsMatchIn(it) }?.let {
-                throw GradleException("${f.name}: a server-side annotation survived the strip: ${it.trim().take(120)}")
-            }
-            f.writeText(kept.joinToString("\n", postfix = "\n"))
-        }
-    }
 }
 
 // The platform major the app speaks (ADR 0085), from the repository's one VERSION file, as the backend and the web take it.
@@ -171,55 +99,18 @@ fun libraryInput(taskName: String, library: File) =
     tasks.matching { it.name == taskName }.configureEach { inputs.file(library).withPropertyName("staticLibrary") }
 
 kotlin {
-    jvmToolchain(21)
-    jvm()
-    // JavaScript (ADR 0155 decision 3): the web's target, IR, ES modules, es2015, with TypeScript definitions and no
-    // experimental flag. Its primitives are the web's own @noble/* (`jsMain`'s `JsPrimitives`), resolved by pnpm from the
-    // lockfile, never by Gradle. No environment is chosen (src/mobile/build.gradle.kts says why), so no Kotlin/JS test task
-    // exists: the common tests compile for JavaScript (`compileTestKotlinJs`) and the suite's conformance runs under Node
-    // through `@veyq/core-js`, from the `conformance` compilation's binary of its own — never the shipped module's export.
+    // JavaScript (ADR 0155 decision 3): the suite's conformance runs under Node through `@veyq/core-js`, from the
+    // `conformance` compilation's binary of its own — never the shipped package's export, which `:composition` links.
+    // No environment is chosen (src/mobile/build.gradle.kts says why), so no Kotlin/JS test task exists: the common
+    // tests compile for JavaScript (`compileTestKotlinJs`).
     js {
-        binaries.library()
-        useEsModules()
-        generateTypeScriptDefinitions()
-        compilerOptions { target.set("es2015") }
         val main = compilations.getByName("main")
         val conformance = compilations.create("conformance") { associateWith(main) }
         binaries.library(conformance)
     }
 
-    // The targets reached through the bridge (ADR 0136 decision 5), Linux and Windows, share `bridgedMain`/`bridgedTest`
-    // between `nativeMain` and their own sets: `nfc`/`nfkd` over utf8proc and the wall clock over kotlinx-datetime. The
-    // default template is extended, not replaced; only the HTTP engine differs (`linuxMain` Curl, `mingwMain` WinHttp).
-    // Apple and Linux share `posixMain` beside it: a file opened by its path as the bytes it is (`blob/Files.posix.kt`),
-    // where Windows takes the path as UTF-16 (`mingwMain`).
-    @OptIn(ExperimentalKotlinGradlePluginApi::class)
-    applyHierarchyTemplate(KotlinHierarchyTemplate.default) {
-        group("native") {
-            group("bridged") {
-                group("linux")
-                group("mingw")
-            }
-            group("posix") {
-                group("apple")
-                group("linux")
-            }
-        }
-        // The tests that block a thread or run on a pool of them (`runBlocking`, `newFixedThreadPoolContext`: the JVM's and
-        // native's coroutines API, none on JavaScript) live in `threadedTest`, between `commonTest` and the JVM and native
-        // targets: in `commonTest` they would fail `compileTestKotlinJs` (44 errors in three files, measured 2026-11-20).
-        // A new test that blocks a thread goes here, never into `commonTest` behind a platform `expect`.
-        common {
-            group("threaded") {
-                withJvm()
-                group("native")
-            }
-        }
-    }
-
     // The Apple primitives are libsodium (ADR 0123 decision 3): one slice of build_libsodium.py's output per target.
     val sodiumSlices = mapOf("iosArm64" to "ios_arm64", "iosSimulatorArm64" to "ios_simulator_arm64", "macosArm64" to "macos_arm64")
-    val xcf = XCFramework("VeyqCore")
     listOf(iosArm64(), iosSimulatorArm64(), macosArm64()).forEach { target ->
         val slice = libsodium.resolve(sodiumSlices.getValue(target.name))
         target.compilations.getByName("main").cinterops.create("sodium") {
@@ -234,11 +125,6 @@ kotlin {
             includeDirs(libwebp.resolve("${sodiumSlices.getValue(target.name)}/include"))
             extraOpts("-libraryPath", libwebp.resolve("${sodiumSlices.getValue(target.name)}/lib").absolutePath)
             libraryInput(interopProcessingTaskName, libwebp.resolve("${sodiumSlices.getValue(target.name)}/lib/libwebp.a"))
-        }
-        target.binaries.framework {
-            baseName = "VeyqCore"
-            isStatic = true
-            xcf.add(this)
         }
     }
 
@@ -293,33 +179,17 @@ kotlin {
 
     sourceSets {
         commonMain {
-            kotlin.srcDir(generatedApi.map { it.dir("src/commonMain/kotlin") })
             kotlin.srcDir(generatedMajor)
             kotlin.srcDir(generatedTheme)
             kotlin.srcDir(generatedWords)
         }
-        // The in-memory device keys and device of the flows' tests (`SoftwareDeviceKeys`, `testDevice`): a directory of
-        // their own, so :bridge's JVM tests compile the same fake (bridge/build.gradle.kts) and no copy drifts.
-        commonTest {
-            kotlin.srcDir("src/testDevice/kotlin")
-        }
-        // What a live run (`VEYQ_LIVE`) signs in with and takes off the account again (`LiveRun`): JVM only, compiled into
-        // :bridge's JVM tests too (bridge/build.gradle.kts), so every live case cleans up through the one helper.
-        jvmTest {
-            kotlin.srcDir("src/liveTest/kotlin")
-        }
         commonMain.dependencies {
-            implementation(libs.coroutines.core)
-            implementation(libs.serialization.json)
-            implementation(libs.ktor.client.core)
-            implementation(libs.ktor.client.content.negotiation)
-            implementation(libs.ktor.serialization.json)
             implementation(libs.kotlincrypto.sha3)
         }
+        // The in-memory device keys and device of the flows' tests (`SoftwareDeviceKeys`, `testDevice`) and the live runs'
+        // sign-in and clean-up (`LiveRun`): the shared test support, which every module's tests and :bridge's compile.
         commonTest.dependencies {
-            implementation(kotlin("test"))
-            implementation(libs.coroutines.test)
-            implementation(libs.ktor.client.mock)
+            implementation(project(":testing"))
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.okhttp)
@@ -382,116 +252,13 @@ tasks.named<Test>("jvmTest") {
     System.getenv("VEYQ_WRITE_QR_FIXTURE")?.let { environment("VEYQ_WRITE_QR_FIXTURE", it); outputs.upToDateWhen { false } }
 }
 
-// The conformance suite reads the vectors from where every client reads them: contracts/crypto/vectors/v1.json.
-val vectors = rootDir.resolve("../../contracts/crypto/vectors/v1.json").canonicalFile
-// The web's Emergency Kit fixtures, which the kit's read order is held to (KitFixtureCases), on the JVM and Apple.
-val kitFixtures = rootDir.resolve("../web/src/features/account/emergencyKit/__fixtures__").canonicalFile
-// The import cases and the web's download both clients answer to (ADR 0152 decision 4), on the JVM and Apple.
-val importCases = rootDir.resolve("../../contracts/export/import-cases").canonicalFile
-tasks.withType<Test>().configureEach {
-    systemProperty("veyq.vectors", vectors.absolutePath)
-    systemProperty("veyq.repoRoot", rootDir.resolve("../..").canonicalPath)
-    System.getenv("VEYQ_LIVE")?.let { environment("VEYQ_LIVE", it) }
-    System.getenv("VEYQ_SEED_TENANT")?.let { environment("VEYQ_SEED_TENANT", it) }
-    System.getenv("VEYQ_ADMIN_BASE")?.let { environment("VEYQ_ADMIN_BASE", it) }
-    // `.run/.env` of another checkout (a worktree has none): read by DeviceTrustLiveTest.
-    System.getenv("VEYQ_ENV_FILE")?.let { environment("VEYQ_ENV_FILE", it) }
-    // the throwaway a destructive live case runs as (ADR 0148 decision 12; `src/web`'s `throwaway:account`)
-    System.getenv("VEYQ_LIVE_THROWAWAY_ENV")?.let { environment("VEYQ_LIVE_THROWAWAY_ENV", it) }
-    // the search's volume measurement (ADR 0146 § Consequences), opt-in: a timing is no check of every run
-    System.getenv("VEYQ_MEASURE")?.let { environment("VEYQ_MEASURE", it) }
-    testLogging { showStandardStreams = System.getenv("VEYQ_LIVE") != null || System.getenv("VEYQ_MEASURE") != null }
-    inputs.file(vectors).withPropertyName("vectors")
-    inputs.dir(kitFixtures).withPropertyName("kitFixtures")
-    inputs.dir(importCases).withPropertyName("importCases")
-}
-
-tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
-    environment("VEYQ_VECTORS", vectors.absolutePath)
-    environment("VEYQ_ENV_FILE", rootDir.resolve("../../.run/.env").canonicalPath)
-    environment("VEYQ_REPO_ROOT", rootDir.resolve("../..").canonicalPath)
-    environment("VEYQ_NORMALIZATION_TEST", utf8proc.resolve("NormalizationTest.txt").absolutePath)
-    System.getenv("VEYQ_LIVE")?.let { environment("VEYQ_LIVE", it) }
-    System.getenv("VEYQ_MEASURE")?.let { environment("VEYQ_MEASURE", it) }
-    testLogging { showStandardStreams = System.getenv("VEYQ_LIVE") != null || System.getenv("VEYQ_MEASURE") != null }
-    inputs.file(vectors).withPropertyName("vectors")
-    inputs.dir(kitFixtures).withPropertyName("kitFixtures")
-    inputs.dir(importCases).withPropertyName("importCases")
-}
-
-tasks.matching { it.name.startsWith("compile") || it.name.endsWith("SourcesJar") }.configureEach { dependsOn(generateApi, generateMajor, generateTheme, generateWords) }
+tasks.matching { it.name.startsWith("compile") || it.name.endsWith("SourcesJar") }.configureEach { dependsOn(generateMajor, generateTheme, generateWords) }
 tasks.matching { it.name.startsWith("cinteropSodium") }.configureEach { dependsOn(buildLibsodium) }
 // The Linux slices are compiled by Kotlin/Native's own toolchain, which this task downloads (core/konan_toolchain.py).
 listOf(buildLibsodium, buildUtf8proc, buildLibwebp).forEach { it.configure { dependsOn("downloadKotlinNativeDistribution") } }
 tasks.matching { it.name.startsWith("cinteropUtf8proc") }.configureEach { dependsOn(buildUtf8proc) }
 tasks.matching { it.name.startsWith("cinteropWebp") }.configureEach { dependsOn(buildLibwebp) }
 
-// The compiled module, its TypeScript definitions and source maps, into `@veyq/core-js`'s `dist/` (ADR 0155 decision 6):
-// the one directory where Gradle and pnpm meet. The conformance binary lands in `dist/conformance/`, beside and never
-// inside the shipped module. The package's `build` runs this task by name (src/packages/core-js/scripts/build.py).
-val coreJsDist = rootDir.resolve("../packages/core-js/dist")
-// The Kotlin version the module was compiled with, for the web's licence file: the standard library is bundled into what
-// the web ships, and its notice names the version (src/web/vite.config.ts, `verify:license-sources`).
-val jsKotlinVersion = tasks.register("jsKotlinVersion") {
-    val version = getKotlinPluginVersion()
-    val out = layout.buildDirectory.file("core-js/kotlin-stdlib.version")
-    inputs.property("version", version)
-    outputs.file(out)
-    doLast { out.get().asFile.writeText("$version\n") }
-}
-// KT-68281: Kotlin 2.4's production link lists a class's interfaces in an order that differs between compiler processes.
-// Its dead-code elimination (`UselessDeclarationsRemover.collectUsedSuperTypes`) replaces an interface it removed by that
-// interface's surviving supertypes, gathered in a `HashSet` of IR symbols, whose iteration follows their identity hashes:
-// `MutableList` dropped, `AbstractMutableList`'s `initMetadataForClass` names `[KtList, Collection]` in one build and
-// `[Collection, KtList]` in the next. Fixed upstream in 2.5.0 (a `LinkedHashSet`); no compiler flag, execution strategy
-// or `-Xir-keep` holds it in 2.4 (measured 2026-11-21). Until then `jsPackage` sorts such a list by name — only where it
-// cannot change what runs: `initMetadataFor` copies each listed interface's prototype onto the class's in list order
-// (`Object.assign`), so the order is free exactly when no listed interface, nor a super-interface of one, carries a
-// default member (`protoOf(I).m = …`) — checked per list, every interface declared in that module; a list naming an
-// imported interface is left as the compiler wrote it. Byte-identical builds are ADR 0155's criterion.
-fun sortFreeInterfaceLists(module: String): String {
-    val ident = """[A-Za-z_$][\w$]*"""
-    val supers = Regex("""^initMetadataForInterface\(($ident), '[^']*'[^\[\n]*(?:\[([^\]]*)\])?""", RegexOption.MULTILINE)
-        .findAll(module).associate { m -> m.groupValues[1] to m.groupValues[2].split(", ").filter { it.isNotEmpty() } }
-    val withDefaults = Regex("""protoOf\(($ident)\)\.""").findAll(module).map { it.groupValues[1] }.toSet()
-    fun free(name: String): Boolean = name in supers && name !in withDefaults && supers.getValue(name).all(::free)
-    return Regex("""^(initMetadataFor\w*\([^\[\n]*)\[($ident(?:, $ident)+)\]""", RegexOption.MULTILINE).replace(module) { m ->
-        val names = m.groupValues[2].split(", ")
-        if (names.all(::free)) "${m.groupValues[1]}[${names.sorted().joinToString(", ")}]" else m.value
-    }
-}
-val jsPackage = tasks.register<Sync>("jsPackage") {
-    group = "veyq"
-    description = "Compiles the core for JavaScript and writes the module and its conformance runner into src/packages/core-js/dist."
-    from(tasks.named<org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrLink>("compileProductionLibraryKotlinJs").flatMap { it.destinationDirectory })
-    from(tasks.named<org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrLink>("compileConformanceProductionLibraryKotlinJs").flatMap { it.destinationDirectory }) {
-        into("conformance")
-    }
-    from(jsKotlinVersion)
-    into(coreJsDist)
-    val kotlinVersion = getKotlinPluginVersion()
-    doLast {
-        check(KotlinVersion(2, 5) > kotlinVersion.split('.', '-').take(2).map(String::toInt).let { KotlinVersion(it[0], it[1]) }) {
-            "Kotlin $kotlinVersion carries the fix for KT-68281: remove sortFreeInterfaceLists from core/build.gradle.kts"
-        }
-        coreJsDist.walk().filter { it.isFile && it.name.endsWith(".mjs") }.forEach { file ->
-            val module = file.readText()
-            val sorted = sortFreeInterfaceLists(module)
-            if (sorted != module) file.writeText(sorted)
-        }
-    }
-}
-// The dev server's build (`build.py --watch`, src/web/vite.config.ts): the development link of the shipped module alone —
-// no dead-code elimination, no conformance binary — into the same `dist/`, so a saved rule reaches the open page inside
-// ADR 0155's 15 s (the production link is ~7 s more, measured 2026-11-20). Never what a check or an image ships: those
-// run `jsPackage`, which writes `dist/` anew.
-tasks.register<Sync>("jsPackageDev") {
-    group = "veyq"
-    description = "The development build of the core for JavaScript into src/packages/core-js/dist, for the web's dev server."
-    from(tasks.named<org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrLink>("compileDevelopmentLibraryKotlinJs").flatMap { it.destinationDirectory })
-    from(jsKotlinVersion)
-    into(coreJsDist)
-}
 // The plugin's check of the generated `.d.ts` runs `tsc` under Kotlin's own Node (ignored by default today); the package's
 // own typecheck reads them instead, so the task never runs.
 tasks.withType<org.jetbrains.kotlin.gradle.targets.js.typescript.TypeScriptValidationTask>().configureEach { enabled = false }

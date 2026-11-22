@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.blob
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.crypto.BlobMeta
 import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.V1
@@ -21,7 +23,9 @@ import me.raddatz.veyq.mobile.crypto.unb64
  */
 object SharedBlob {
     /** The blob-key seal's context: a wrap bound to the record it belongs to (a node, a medium) and to its role. */
-    internal fun keyContext(scopeId: String, ownerId: String, blobId: String, role: String) =
+    @PlatformApi
+    @HiddenFromObjC
+    fun keyContext(scopeId: String, ownerId: String, blobId: String, role: String) =
         Context("blob-key", "scopeId" to scopeId, "ownerId" to ownerId, "blobId" to blobId, "role" to role)
 
     /** The sealed size of [plaintextBytes] as a blob — the `byteSize` a stored blob of the same plaintext carries (an empty one is one frame). */

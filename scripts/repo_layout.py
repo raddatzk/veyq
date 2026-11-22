@@ -29,7 +29,7 @@ BACKEND = SRC / "backend"
 WEB = SRC / "web"
 ADMIN_WEB = SRC / "admin-web"
 CRYPTO = SRC / "packages/crypto"
-# The Kotlin core compiled for JavaScript (ADR 0155 decision 6): its `dist/` is Gradle's `:core:jsPackage` output. Not in
+# The Kotlin core compiled for JavaScript (ADR 0155 decision 6): its `dist/` is Gradle's `:composition:jsPackage` output. Not in
 # `SURFACES`: no release ships it yet.
 CORE_JS = SRC / "packages/core-js"
 # The veyq app (ADR 0123): a Gradle build of its own, with the Android app's sources and the Apple app's. Not in
@@ -37,6 +37,14 @@ CORE_JS = SRC / "packages/core-js"
 MOBILE = SRC / "mobile"
 MOBILE_ANDROID = MOBILE / "android"
 MOBILE_APPLE = MOBILE / "apple"
+# The Kotlin core's modules (ADR 0155 decision 7.1): the platform, one module per application below `apps/`, the
+# composition every client links, the test support the modules' tests share; the build's includes name them
+# (`MOBILE_SETTINGS`, read by `mobile_core_modules`), scripts/validate_mobile_module_graph.py holds them to it.
+MOBILE_CORE = MOBILE / "core"
+MOBILE_APPS = MOBILE / "apps"
+MOBILE_COMPOSITION = MOBILE / "composition"
+MOBILE_TESTING = MOBILE / "testing"
+MOBILE_SETTINGS = MOBILE / "settings.gradle.kts"
 # The Linux app (ADR 0123's Consequences, the Linux app): a Cargo package, built and run in a container by its `run.py`.
 MOBILE_LINUX = MOBILE / "linux"
 # The Windows app (ADR 0136 decision 5): driven on a Windows host from this one by its `run.py`.
@@ -121,3 +129,29 @@ def surface_in(tree: pathlib.Path, surface: pathlib.Path) -> pathlib.Path:
     then fails loudly where it is read (no jar, no `package.json`)."""
     current, legacy = surface_paths(surface)
     return tree / current if (tree / current).is_dir() else tree / legacy
+
+
+def mobile_projects() -> list[str]:
+    """Every project src/mobile/settings.gradle.kts includes (`:core`, `:apps:memories`, …), in its order; read, never spelled."""
+    import re
+    text = re.sub(r"//[^\n]*", "", MOBILE_SETTINGS.read_text(encoding="utf-8"))
+    return [p for call in re.findall(r"\binclude\s*\(([^)]*)\)", text) for p in re.findall(r'"(:[\w:-]+)"', call)]
+
+
+def mobile_project_dir(project: str) -> pathlib.Path:
+    """The directory of mobile project [project] (`:apps:depot` → src/mobile/apps/depot), as Gradle maps it by default."""
+    return MOBILE.joinpath(*project.strip(":").split(":"))
+
+
+def mobile_core_modules() -> list[tuple[str, pathlib.Path]]:
+    """The core's Kotlin modules — the platform, the applications, the composition and the test support — as
+    (project, directory), in the settings' order: every included project but the clients (`:bridge`, `:android`)."""
+    return [(p, mobile_project_dir(p)) for p in mobile_projects()
+            if p in (":core", ":composition", ":testing") or p.startswith(":apps:")]
+
+
+def mobile_core_sources(kind: str = "Main") -> list[pathlib.Path]:
+    """The Kotlin source roots (`src/<set><kind>/kotlin`) of every core module, `kind` "Main" or "Test" (a suffix of the
+    set's name): what a guard over the core's code reads, wherever a file's module put it."""
+    return sorted(s / "kotlin" for _, d in mobile_core_modules() for s in (d / "src").glob(f"*{kind}") if (s / "kotlin").is_dir())
+

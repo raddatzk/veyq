@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import me.raddatz.veyq.mobile.crypto.V1
@@ -44,7 +46,9 @@ object BookmarkMeta {
     }
 
     /** What [NodeMetaWrite.seal] encodes of [meta]: its JSON with `v` set, as UTF-8. */
-    internal fun plaintextOf(meta: JsonObject): ByteArray = JsonObject(meta + ("v" to JsonPrimitive(1))).toString().encodeToByteArray()
+    @PlatformApi
+    @HiddenFromObjC
+    fun plaintextOf(meta: JsonObject): ByteArray = JsonObject(meta + ("v" to JsonPrimitive(1))).toString().encodeToByteArray()
 
     /** [envelope] sealed under the new bookmark's key [key], bound to its scope and node (`node-meta`). */
     fun seal(suite: V1, scopeId: String, nodeId: String, key: ByteArray, link: ReceivedLink.ShareLink, password: String?): String =

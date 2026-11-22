@@ -11,12 +11,7 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.modules.SerializersModule
 import me.raddatz.veyq.mobile.blob.UploadQueue
-import me.raddatz.veyq.mobile.depot.DepotFiles
-import me.raddatz.veyq.mobile.depot.DropBoxes
-import me.raddatz.veyq.mobile.depot.FolderUpload
-import me.raddatz.veyq.mobile.expenses.PotCopy
 import me.raddatz.veyq.mobile.export.SubtreeCopy
-import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.session.NodeCreate
 import me.raddatz.veyq.mobile.session.NodeMove
 import me.raddatz.veyq.mobile.session.NodeRename
@@ -280,21 +275,11 @@ object Notices {
     fun renameRefused(r: NodeRename.Result): Notice? = when (r.outcome) {
         NodeRename.Outcome.RENAMED -> null
         NodeRename.Outcome.NAME_TAKEN -> r.taken?.let { sibling ->
-            Notice(Msg.NODE_NAME_TAKEN_BY, Notice(if (sibling.kind == "EXPENSES_POT") Msg.POT_A else Msg.NODE_AN_ITEM), sibling.name)
+            Notice(Msg.NODE_NAME_TAKEN_BY, Notice(me.raddatz.veyq.mobile.AppKinds.noun(sibling.kind) ?: Msg.NODE_AN_ITEM), sibling.name)
         } ?: Notice(Msg.NODE_SLUG_TAKEN)
         NodeRename.Outcome.NOT_ALLOWED -> Notice(Msg.NODE_ILLEGAL_STRUCTURE)
         NodeRename.Outcome.BUSY -> Notice(Msg.POT_BUSY)
         NodeRename.Outcome.FAILED -> Notice(Msg.NODE_SAVE_FAILED)
-    }
-
-    /** Why a Pot's copy did not go through. */
-    fun potCopyRefused(outcome: PotCopy.Outcome): Notice? = when (outcome) {
-        PotCopy.Outcome.COPIED -> null
-        PotCopy.Outcome.NAME_TAKEN -> Notice(Msg.COPY_NAME_TAKEN)
-        PotCopy.Outcome.NOTHING_TO_COPY -> Notice(Msg.COPY_NOTHING)
-        PotCopy.Outcome.BUSY -> Notice(Msg.MOVE_REFUSED_REKEY_PENDING)
-        PotCopy.Outcome.BLOCKED, PotCopy.Outcome.REFUSED -> Notice(Msg.MOVE_REFUSED_ILLEGAL_STRUCTURE)
-        PotCopy.Outcome.FAILED -> Notice(Msg.COPY_FAILED)
     }
 
     /** Why a folder's (or a file's) copy did not go through; null [outcome] is a copy that threw. */
@@ -331,67 +316,6 @@ object Notices {
     }
 
     /** Why a new link was not made. */
-    /** A problem of an entry's form or its write path (the web's `expenses.entry.problem.*`); any other: an unknown participant. */
-    fun entryProblem(problem: String): Msg = when (problem) {
-        "title" -> Msg.PROBLEM_TITLE
-        "date" -> Msg.PROBLEM_DATE
-        "amount" -> Msg.PROBLEM_AMOUNT
-        "rate" -> Msg.PROBLEM_RATE
-        "payers" -> Msg.PROBLEM_PAYERS
-        "split" -> Msg.PROBLEM_SPLIT
-        "split-shares" -> Msg.PROBLEM_SPLIT_SHARES
-        "split-percents" -> Msg.PROBLEM_SPLIT_PERCENTS
-        "split-amounts" -> Msg.PROBLEM_SPLIT_AMOUNTS
-        "items" -> Msg.PROBLEM_ITEMS
-        "transfer" -> Msg.PROBLEM_TRANSFER
-        "payers-unbalanced" -> Msg.PROBLEM_PAYERS_UNBALANCED
-        "receivers-unbalanced" -> Msg.PROBLEM_RECEIVERS_UNBALANCED
-        "items-above-total" -> Msg.PROBLEM_ITEMS_ABOVE_TOTAL
-        "rest-unallocated" -> Msg.PROBLEM_REST_UNALLOCATED
-        "percent-unbalanced" -> Msg.PROBLEM_PERCENT_UNBALANCED
-        "amounts-unbalanced" -> Msg.PROBLEM_AMOUNTS_UNBALANCED
-        "named-twice" -> Msg.PROBLEM_NAMED_TWICE
-        else -> Msg.PROBLEM_UNKNOWN_PARTICIPANT
-    }
-
-    /**
-     * What a saved entry says when receipts were left out for want of room (the web's `expenses.receipts.noRoom`): the entry
-     * is saved and its editor closes; a receipt is attached again once there is room. Null when none was left out.
-     */
-    fun receiptsSkipped(names: List<String>): Notice? =
-        if (names.isEmpty()) null else Notice(Msg.RECEIPTS_NO_ROOM, Joined(names, ", "))
-
-    /** Why an entry was not saved (`PotWrites` outcome names). */
-    fun entryRefused(outcome: String): Msg = when (outcome) {
-        "STALE" -> Msg.ED_STALE
-        "BLOCKED" -> Msg.ED_BLOCKED
-        "OFFLINE" -> Msg.OFFLINE_READ_ONLY
-        "BUSY" -> Msg.POT_BUSY
-        else -> Msg.ED_SAVE_FAILED
-    }
-
-    /** Why a write to a Pot's settings or people was not done. */
-    fun potRefused(outcome: String): Msg = when (outcome) {
-        "STALE" -> Msg.ENTRY_STALE
-        "NOT_SETTLED" -> Msg.PEOPLE_SETTLE_FIRST
-        "BUSY" -> Msg.POT_BUSY
-        "BLOCKED" -> Msg.POT_BLOCKED
-        "INVALID" -> Msg.PEOPLE_INVALID
-        "OFFLINE" -> Msg.OFFLINE_READ_ONLY
-        "NOT_RESTORABLE" -> Msg.ENTRY_NOT_RESTORABLE
-        else -> Msg.PEOPLE_FAILED
-    }
-
-    /** Why a new Pot was not created (`PotCreate.Outcome` names). */
-    fun potCreateRefused(outcome: String): Msg = when (outcome) {
-        "NAME_TAKEN" -> Msg.CREATE_POT_NAME_TAKEN
-        "PEOPLE_NOT_ADDED" -> Msg.CREATE_POT_PEOPLE_FAILED
-        "BUSY" -> Msg.POT_BUSY
-        "BLOCKED" -> Msg.POT_BLOCKED
-        "INVALID" -> Msg.CREATE_POT_INVALID
-        else -> Msg.CREATE_POT_FAILED
-    }
-
     /** A node a download or a copy left out, with why (the web's `export.reason.*`, `node.copy.reason.*`). */
     fun leftOut(s: me.raddatz.veyq.mobile.export.NodeExport.Skipped): Notice = Notice(
         Msg.LEFT_OUT_LINE, s.name,
@@ -428,26 +352,6 @@ object Notices {
         else -> Notice(Msg.SHARE_FAILED)
     }
 
-    /** Why a new drop box (and its first link) was not made whole. */
-    fun dropBoxRefused(outcome: DropBoxes.Outcome): Notice? = when (outcome) {
-        DropBoxes.Outcome.CREATED -> null
-        DropBoxes.Outcome.NAME_TAKEN -> Notice(Msg.NODE_SLUG_TAKEN)
-        DropBoxes.Outcome.LINK_FAILED -> Notice(Msg.DROPBOX_LINK_FAILED)
-        else -> Notice(Msg.SHARE_FAILED)
-    }
-
-    /** What a folder upload says once its folders are made: its refusal, else the folders not made (one line each). */
-    fun folderUpload(r: FolderUpload.Report): List<Notice> = when (r.outcome) {
-        FolderUpload.Outcome.NO_ROOM -> listOf(Notice(Msg.DEPOT_FOLDER_NO_ROOM, r.name, Bytes(r.bytes)))
-        FolderUpload.Outcome.ROOT_FAILED -> listOf(Notice(Msg.DEPOT_FOLDER_FAILED, r.name))
-        FolderUpload.Outcome.READY -> r.failedFolders.map { Notice(Msg.DEPOT_FOLDER_PART_FAILED, it) }
-        FolderUpload.Outcome.NOTHING -> emptyList()
-    }
-
-    /** What a folder upload's walk left out ([FolderUpload.walked]): each link and each entry that did not read, one line each. */
-    fun folderLeftOut(w: FolderUpload.Walked): List<Notice> =
-        w.links.map { Notice(Msg.DEPOT_FOLDER_LINK_SKIPPED, it) } + w.unreadable.map { Notice(Msg.DEPOT_FOLDER_UNREADABLE, it) }
-
     /**
      * What a picked or dropped upload says of the [names] whose paths did not read (no regular file there, or none that
      * opens): the one by its name, several by their count; null where every path read. Never silent: a drop the core
@@ -459,20 +363,14 @@ object Notices {
         else -> Notice(Msg.DEPOT_FILES_UNREADABLE, names.size)
     }
 
-    /** A Depot upload that found a file of its name: its replace is offered (the notice's action, [Msg.DEPOT_REPLACE_TITLE]). */
-    fun replaceOffered(name: String) = Notice(Msg.DEPOT_REPLACE_CONFIRM, name)
-
-    /** A replace whose file someone replaced meanwhile: "Replace anyway" is offered ([Msg.DEPOT_REPLACE_ANYWAY]). */
-    fun replaceStale(name: String) = Notice(Msg.DEPOT_ERROR_STALE_FILE, name)
-
     /** Why an upload item did not go up (the line under it in the uploads list); null while it may still. */
     fun uploadProblem(item: UploadQueue.Item): Notice? {
         if (item.status != UploadQueue.Status.FAILED) return null
         return when (item.error) {
             UploadQueue.QUOTA_EXCEEDED -> Notice(Msg.UPLOAD_NO_SPACE)
             UploadQueue.APPLICATION_OFF -> Notice(Msg.UPLOAD_SWITCHED_OFF)
-            DepotFiles.Codes.NAME_TAKEN -> Notice(Msg.UPLOAD_NAME_TAKEN)
-            DepotFiles.Codes.BUSY -> Notice(Msg.MOVE_REFUSED_REKEY_PENDING)
+            UploadQueue.NAME_TAKEN -> Notice(Msg.UPLOAD_NAME_TAKEN)
+            UploadQueue.BUSY -> Notice(Msg.MOVE_REFUSED_REKEY_PENDING)
             else -> Notice(Msg.UPLOAD_STATUS_FAILED)
         }
     }
@@ -497,9 +395,6 @@ object Notices {
         q.failed > 0 -> Notice(Msg.UPLOAD_FAILED_COUNT, q.failed)
         else -> Notice(Msg.UPLOAD_STATUS_DONE)
     }
-
-    /** Whether [item] is a medium (Memories) rather than a file (Depot): their refusals for room are worded apart. */
-    fun isMedium(item: UploadQueue.Item): Boolean = item.job is MediaUpload.Job
 }
 
 /**

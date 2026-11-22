@@ -235,12 +235,6 @@ object AppleSessions {
         signInElsewhere: Boolean,
     ): SessionModel<VeyqAccount, TenantSession> = SessionModel.accounts(LibsodiumPrimitives, device, client, hidden, recent, signInElsewhere)
 
-    /** An Expenses Pot of [tenant], opened and read; null when the tenant holds no such open Pot. */
-    @Throws(Exception::class)
-    suspend fun openPot(tenant: TenantSession, scopeId: String, nodeId: String): me.raddatz.veyq.mobile.expenses.PotSession? =
-        me.raddatz.veyq.mobile.expenses.PotSession.open(tenant, scopeId, nodeId)
-
-    /** A receipt of [pot] opened to its bytes, as Foundation data; null when blocked or unreadable. */
     /** The cover of node [nodeId] as the tenant's trees hold it, as the platform's data (core's `NodeCover`), or null. */
     @Throws(Exception::class)
     suspend fun openCover(tenant: TenantSession, nodeId: String): NSData? = NodeCover.openNode(tenant, nodeId)?.toNSData()
@@ -258,20 +252,6 @@ object AppleSessions {
     suspend fun openFramedCover(tenant: TenantSession, nodeId: String): FramedCover? =
         NodeCover.openFramed(tenant, nodeId)?.let { FramedCover(it.bytes.toNSData(), it.crop) }
 
-    @Throws(Exception::class)
-    suspend fun openReceipt(pot: me.raddatz.veyq.mobile.expenses.PotSession, receiptId: String): NSData? =
-        pot.openReceipt(receiptId)?.toNSData()
-
     /** The members' pictures [tenant] shows now (core's `AvatarsModel`, which decides when they are read), by user id. */
     fun pictures(tenant: TenantSession): Map<String, NSData> = tenant.pictures.state.value.mapValues { it.value.toNSData() }
-
-    /** A file picked as a receipt for core's entry editor to judge ([data] nil: it did not read). */
-    fun picked(data: NSData?, type: String, name: String?, modifiedAt: Long?): me.raddatz.veyq.mobile.expenses.EntryEditor.Picked =
-        me.raddatz.veyq.mobile.expenses.EntryEditor.Picked(data?.toByteArray(), type, name, modifiedAt)
-
-    /** What the bytes of an opened receipt are (an image, a PDF, a download only). */
-    fun receiptKind(data: NSData): me.raddatz.veyq.mobile.expenses.Receipts.Kind = me.raddatz.veyq.mobile.expenses.Receipts.kindOf(data.toByteArray())
-
-    /** What an opened receipt's bytes are as a media type (`Receipts.mediaTypeOf`), for the share sheet; nil for other bytes. */
-    fun receiptMediaType(data: NSData): String? = me.raddatz.veyq.mobile.expenses.Receipts.mediaTypeOf(data.toByteArray())
 }

@@ -223,7 +223,7 @@ internal fun MemoryGallery(
     val contributions = if (contributionsOffered && view == MemoryView.CONTRIBUTIONS) remember(gallery) { model.contributions(gallery) } else null
     // photos and videos dropped from another app onto the gallery: core's one drop judges and sorts (ADR 0154 decision 1).
     // Only where the gallery's media show: the Music and Map views take no drop, as the web's tabs take none (#1054)
-    val dropped = Modifier.sharedFilesDrop { drop -> model.drop(me.raddatz.veyq.mobile.navigation.DropTarget.Gallery(gallery), drop) }
+    val dropped = Modifier.sharedFilesDrop { drop -> model.drop(me.raddatz.veyq.mobile.composition.DropTarget.Gallery(gallery), drop) }
     // a member adds photos through the header's Upload (core's `GalleryModel.headerActions`); a guest's link page has no
     // core header, so its page offers them here
     val adds = guest && state.rights.upload && canAdd

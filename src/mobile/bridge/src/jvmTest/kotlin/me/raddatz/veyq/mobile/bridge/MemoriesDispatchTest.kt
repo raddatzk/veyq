@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.bridge
 
+import me.raddatz.veyq.mobile.media.Derivation
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,7 +27,7 @@ import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeHeaderModel
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.navigation.ShellModel
+import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.OpenNode
@@ -93,9 +94,9 @@ class MemoriesDispatchTest {
         override fun linksOn() = true
         override suspend fun reportOffered() = false
         override suspend fun toggleFavorite(ref: NodeAt) = false
-        override suspend fun trash(ref: NodeAt): ShellModel.Trashed = error("not here")
+        override suspend fun trash(ref: NodeAt): NodeHeaderModel.Trashed = error("not here")
         override suspend fun undoTrash(node: OpenNode): Notice? = null
-        override suspend fun rename(ref: NodeAt, name: String): ShellModel.Renamed = error("not here")
+        override suspend fun rename(ref: NodeAt, name: String): NodeHeaderModel.Renamed = error("not here")
         override fun closeOpen(ref: NodeAt) {}
         override fun changed() {}
     }
@@ -120,7 +121,7 @@ class MemoriesDispatchTest {
         val sent = CopyOnWriteArrayList<String>()
         val listings = AtomicInteger()
         val moved = AtomicInteger()
-        val derived = ConcurrentHashMap<String, MediaUpload.Derived>()
+        val derived = ConcurrentHashMap<String, Derivation.Derived>()
         val revisions = MutableStateFlow<Any?>(Any())
         /** What the page is told is on its way into it (its placeholder tiles, ADR 0145 decision 3). */
         val tiles = MutableStateFlow<List<me.raddatz.veyq.mobile.memories.UploadTile>>(emptyList())
@@ -188,7 +189,7 @@ class MemoriesDispatchTest {
         }
 
         /** Memories' uploads over the app's queue, each job the core's shape: its tiers prepared ahead, its file read in frames. */
-        fun uploads(queue: UploadQueue, deriver: MediaUpload.Deriver) = MediaUploads(queue, object : MediaUploads.Door {
+        fun uploads(queue: UploadQueue, deriver: Derivation.Deriver) = MediaUploads(queue, object : MediaUploads.Door {
             override fun job(scopeId: String, nodeId: String, source: UploadSource) = Job(source, deriver, nodeId)
             override fun musicJob(scopeId: String, nodeId: String, track: me.raddatz.veyq.mobile.memories.music.MusicUpload.Check.Taken) =
                 Job(track.source, deriver, nodeId)
@@ -198,11 +199,11 @@ class MemoriesDispatchTest {
             override fun left(source: UploadSource) {}
         })
 
-        inner class Job(private val source: UploadSource, private val deriver: MediaUpload.Deriver, private val nodeId: String) : UploadQueue.Job {
+        inner class Job(private val source: UploadSource, private val deriver: Derivation.Deriver, private val nodeId: String) : UploadQueue.Job {
             override val name get() = source.name
             override val sizeBytes get() = source.size
             override val prepares get() = true
-            private var tiers: MediaUpload.Derived? = null
+            private var tiers: Derivation.Derived? = null
             private val lock = kotlinx.coroutines.sync.Mutex()
 
             // once, as the core's job: the queue prepares ahead while its run awaits the same work
@@ -531,7 +532,7 @@ class MemoriesDispatchTest {
         }
         val tiers = HostTiers(host)
         val source = PathSource("/home/p/clip.mp4", UploadSource.of("clip.mp4", 5, "video/mp4", null) { _, n -> ByteArray(n) })
-        val done = CompletableDeferred<MediaUpload.Derived>()
+        val done = CompletableDeferred<Derivation.Derived>()
         tiers.derive(source, "video/mp4") { done.complete(it) }
         returned.complete(Unit)
         val d = withTimeout(10.seconds) { done.await() }
@@ -541,7 +542,7 @@ class MemoriesDispatchTest {
         assertEquals(MediaUpload.POSTER_AT_MS, asked.filterIsInstance<HostRequest.MediaTiers>().single().posterAtMs, "a 10 s video's poster at the core's time")
 
         // a source that names no path asks nothing; a reply that is no set of tiers goes up alone
-        val none = CompletableDeferred<MediaUpload.Derived>()
+        val none = CompletableDeferred<Derivation.Derived>()
         tiers.derive(UploadSource.of("x.jpg", 1, "image/jpeg", null) { _, n -> ByteArray(n) }, "image/jpeg") { none.complete(it) }
         assertNull(withTimeout(5.seconds) { none.await() }.preview)
         assertEquals(2, asked.size)

@@ -3,7 +3,9 @@
 never the reverse).
 
 **What it asserts.** No Kotlin file of the core's search package — `src/mobile/core/src/<set>/kotlin/me/raddatz/veyq/mobile/
-search/`, every main source set (`commonMain`, `jvmMain`, `appleMain`, …; a `…Test` set is a consumer of both sides and
+search/` (the platform module's: `validate_mobile_module_graph.py` keeps the package there, and the platform's build has
+no edge to an application, so such an import no longer compiles — this guard says why before a build does), every main
+source set (`commonMain`, `jvmMain`, `appleMain`, …; a `…Test` set is a consumer of both sides and
 is not read) — references an application's package `me.raddatz.veyq.mobile.<application>`, by an import or a qualified
 name. The applications are not listed here: they are derived from the entries of `ApplicationId`
 (`core/…/navigation/Applications.kt`, `MEMORIES("memories")` names the package `…mobile.memories`), so an application
@@ -34,7 +36,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import repo_layout  # noqa: E402
 from kotlin_lexer import mask  # noqa: E402
 
-CORE_SRC = repo_layout.MOBILE / "core" / "src"
+CORE_SRC = repo_layout.MOBILE_CORE / "src"
 PACKAGE = pathlib.Path("kotlin/me/raddatz/veyq/mobile/search")
 APPLICATIONS = CORE_SRC / "commonMain/kotlin/me/raddatz/veyq/mobile/navigation/Applications.kt"
 ENTRY = re.compile(r"^\s*([A-Z][A-Z0-9_]*)\s*\(\s*\"([a-z][a-z0-9]*)\"\s*\)\s*,", re.MULTILINE)

@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import io.ktor.client.request.get
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -113,7 +115,9 @@ class GuestBlobs internal constructor(private val gates: ShareGates) {
      * as the guest [contributorToken] (into [nodeId], a WRITE_ONLY guest's folder, where given) and pumped one after another;
      * their upload ids and plans. Throws [ApplicationBlobs.UploadRefused] with the first refusal.
      */
-    internal suspend fun reserveAndPumpAll(
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun reserveAndPumpAll(
         scopeId: String, ownerId: String, wrapKey: ByteArray, contributorToken: String, blobs: List<ApplicationBlobs.Outgoing>,
         nodeId: String? = null, sent: (Long) -> Unit = {},
     ): List<Pair<String, ApplicationBlobs.Plan>> {
@@ -185,7 +189,9 @@ class GuestBlobs internal constructor(private val gates: ShareGates) {
         }
     }
 
-    internal companion object {
+    @PlatformApi
+    @HiddenFromObjC
+    companion object {
         private val LAPSED = setOf(400, 401, 403)
 
         fun codeOf(body: String): String? =

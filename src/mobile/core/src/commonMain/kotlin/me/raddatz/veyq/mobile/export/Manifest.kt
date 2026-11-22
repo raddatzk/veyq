@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.export
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -103,7 +105,9 @@ class Manifest private constructor(
         private fun bad(message: String, detail: String? = null): Nothing = fail(ImportRefused.Refusal.INVALID_MANIFEST, message, detail)
 
         /** A JSON number as JavaScript reads it (`typeof v === 'number'`); null for anything else. */
-        internal fun number(v: JsonElement?): Double? {
+        @PlatformApi
+        @HiddenFromObjC
+        fun number(v: JsonElement?): Double? {
             val p = v as? JsonPrimitive ?: return null
             if (p.isString || p is JsonNull) return null
             if (p.content == "true" || p.content == "false") return null

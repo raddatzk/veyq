@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import kotlinx.coroutines.CancellationException
@@ -84,7 +86,9 @@ class BackgroundRun(
     data class Report(val accounts: Map<String, Outcome>, val sent: Int)
 
     /** A test's look at each account the run opened itself, before it is closed. */
-    internal var onOpened: (VeyqAccount) -> Unit = {}
+    @PlatformApi
+    @HiddenFromObjC
+    var onOpened: (VeyqAccount) -> Unit = {}
 
     /** The run, until [deadline] (epoch ms): each account in turn; one not begun before the deadline is left for the next run. */
     suspend fun run(deadline: Long): Report = withContext(Dispatchers.Default) {

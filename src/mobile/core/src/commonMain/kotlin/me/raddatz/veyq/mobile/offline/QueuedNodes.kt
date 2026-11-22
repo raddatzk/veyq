@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.offline
 
+import kotlin.native.HiddenFromObjC
+import me.raddatz.veyq.mobile.PlatformApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -28,10 +30,14 @@ import me.raddatz.veyq.mobile.session.VeyqAccount
  */
 object QueuedNodes {
     @Serializable
-    internal data class FolderIntent(val parent: String? = null, val name: String)
+    @PlatformApi
+    @HiddenFromObjC
+    data class FolderIntent(val parent: String? = null, val name: String)
 
     @Serializable
-    internal data class RenameIntent(val name: String, val placementRevision: Long)
+    @PlatformApi
+    @HiddenFromObjC
+    data class RenameIntent(val name: String, val placementRevision: Long)
 
     @Serializable
     internal class TrashIntent
@@ -84,13 +90,17 @@ object QueuedNodes {
     }
 
     /** A rename of [node] held for the person (`stale_placement`, a name taken) dropped: a rename online decided it. */
-    internal suspend fun renameDecided(account: VeyqAccount, node: String) {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun renameDecided(account: VeyqAccount, node: String) {
         val box = account.outbox ?: return
         box.write(RENAME + node)?.takeIf { it.state == QueuedWrite.State.HELD }?.let { box.remove(it.id) }
     }
 
     /** Write [id] discarded with every write that waits for it, theirs after them. */
-    internal suspend fun dropWithDependents(box: Outbox, id: String) {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun dropWithDependents(box: Outbox, id: String) {
         val all = box.writes()
         val drop = LinkedHashSet<String>().apply { add(id) }
         var grew = true
@@ -156,16 +166,30 @@ object QueuedNodes {
     }
 
     /** The queued writes that create a node the person may rename or trash before it is sent: its intent's `name` is its name. */
-    internal val CREATES = setOf(Queued.FOLDER_CREATE.name, Queued.MEMORY_CREATE.name, Queued.DEPOT_FILE_ADD.name)
+    @PlatformApi
+    @HiddenFromObjC
+    val CREATES = setOf(Queued.FOLDER_CREATE.name, Queued.MEMORY_CREATE.name, Queued.DEPOT_FILE_ADD.name)
 
     private const val RENAME = "rename:"
     private const val TRASH = "trash:"
-    internal const val ID_TAKEN = "id_taken"
-    internal const val NAME_TAKEN = "name_taken"
-    internal const val STALE_PLACEMENT = "stale_placement"
-    internal const val NOT_FOUND = "not_found"
+    @PlatformApi
+    @HiddenFromObjC
+    const val ID_TAKEN = "id_taken"
+    @PlatformApi
+    @HiddenFromObjC
+    const val NAME_TAKEN = "name_taken"
+    @PlatformApi
+    @HiddenFromObjC
+    const val STALE_PLACEMENT = "stale_placement"
+    @PlatformApi
+    @HiddenFromObjC
+    const val NOT_FOUND = "not_found"
 
-    internal fun <T> encode(serializer: KSerializer<T>, value: T): JsonObject = Outbox.JSON.encodeToJsonElement(serializer, value).jsonObject
+    @PlatformApi
+    @HiddenFromObjC
+    fun <T> encode(serializer: KSerializer<T>, value: T): JsonObject = Outbox.JSON.encodeToJsonElement(serializer, value).jsonObject
 
-    internal fun <T> decode(serializer: KSerializer<T>, write: QueuedWrite): T = Outbox.JSON.decodeFromJsonElement(serializer, write.intent)
+    @PlatformApi
+    @HiddenFromObjC
+    fun <T> decode(serializer: KSerializer<T>, write: QueuedWrite): T = Outbox.JSON.decodeFromJsonElement(serializer, write.intent)
 }

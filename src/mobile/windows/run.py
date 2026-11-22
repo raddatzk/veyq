@@ -4,12 +4,13 @@ everything Kotlin is cross-compiled here by Gradle (Kotlin/Native's `mingwX64`);
 host reached over ssh. No Windows host builds Kotlin.
 
 Verbs:
-  test [--tests <pattern>]   links the core's Windows test binary (`:core:linkDebugTestMingwX64`), copies it with the
-                             crypto vectors and Unicode's NormalizationTest.txt to the Windows host and runs it there:
+  test [--tests <pattern>]   links every core module's Windows test binary (`:<module>:linkDebugTestMingwX64`, the
+                             modules read from settings.gradle.kts), copies each with the crypto vectors and Unicode's
+                             NormalizationTest.txt to the Windows host and runs them there, the platform's first:
                              the whole common suite, the conformance over libsodium, `NormalizationTest` and
                              `WallClockTest` (in the host's own zone, which must be Europe/Berlin's, W. Europe Standard
                              Time). `--tests` is Kotlin/Native's `--ktest_filter` pattern (`*LiveSignInTest*`). Its exit
-                             code is the test binary's.
+                             code is the first red test binary's.
   bridge                     links the bridge's release DLL (`:bridge:linkReleaseSharedMingwX64`), checks its export
                              table on this host (`objdump -p`) — exactly bridge.h's six functions and Kotlin/Native's
                              `veyq_symbols` —, cross-compiles `bridge/smoke/smoke.c` for mingw against bridge.h alone
@@ -137,12 +138,12 @@ KIT_FIXTURES = "src/web/src/features/account/emergencyKit/__fixtures__"
 sys.path.insert(0, str(ROOT / "scripts"))
 import repo_layout  # noqa: E402
 
-sys.path.insert(0, str(repo_layout.MOBILE / "core"))
+sys.path.insert(0, str(repo_layout.MOBILE_CORE))
 import konan_toolchain  # noqa: E402
 
 VECTORS = ROOT / "contracts" / "crypto" / "vectors" / "v1.json"
 NORMALIZATION_TEST = repo_layout.MOBILE / "build" / "utf8proc" / "NormalizationTest.txt"
-TEST_BINARY = repo_layout.MOBILE / "core" / "build" / "bin" / "mingwX64" / "debugTest" / "test.exe"
+TEST_BINARY = repo_layout.MOBILE_CORE / "build" / "bin" / "mingwX64" / "debugTest" / "test.exe"
 BRIDGE_H = repo_layout.MOBILE / "bridge" / "bridge.h"
 SMOKE_C = repo_layout.MOBILE / "bridge" / "smoke" / "smoke.c"
 DLL_DIR = {kind: repo_layout.MOBILE / "bridge" / "build" / "bin" / "mingwX64" / f"{kind}Shared" for kind in ("debug", "release")}
@@ -290,11 +291,17 @@ def env_file() -> Path:
 
 
 def test(pattern: str | None) -> int:
-    run("./gradlew", ":core:linkDebugTestMingwX64", cwd=repo_layout.MOBILE)
-    if not TEST_BINARY.exists():
-        sys.exit(f"no test binary at {TEST_BINARY}")
+    # every core module with tests of its own (the shared test support `:testing` has none), the platform first
+    modules = [(p, d) for p, d in repo_layout.mobile_core_modules() if any((d / "src").glob("*Test/kotlin"))]
+    run("./gradlew", *(f"{p}:linkDebugTestMingwX64" for p, _ in modules), cwd=repo_layout.MOBILE)
+    binaries = {p.strip(":").replace(":", "-"): d / "build" / "bin" / "mingwX64" / "debugTest" / "test.exe" for p, d in modules}
+    for binary in binaries.values():
+        if not binary.exists():
+            sys.exit(f"no test binary at {binary}")
     remote = REMOTE_DIR / "test"
-    copy_to([TEST_BINARY, VECTORS, NORMALIZATION_TEST], remote)
+    copy_to([VECTORS, NORMALIZATION_TEST], remote)
+    for name, binary in binaries.items():
+        copy_to([binary], remote / name)
     # the QR reader's fixtures (QrFixtures, read through VEYQ_REPO_ROOT at their repository path)
     qr_fixtures = "src/mobile/core/src/commonTest/resources/qr"
     copy_to(sorted((ROOT / qr_fixtures).glob("*.pgm")), remote / "repo" / PureWindowsPath(qr_fixtures))
@@ -306,6 +313,9 @@ def test(pattern: str | None) -> int:
     for name in ("import-cases/cases.v1.json", "import-cases/web-download.zip", "veyq-subtree.schema.json"):
         fixture = Path("contracts/export") / name
         copy_to([ROOT / fixture], remote / "repo" / PureWindowsPath(fixture.parent))
+    # and the web's format vectors (ShownVectorsTest, ADR 0154 decision 5), read the same way
+    format_vectors = Path("src/mobile/words/format-vectors.json")
+    copy_to([ROOT / format_vectors], remote / "repo" / PureWindowsPath(format_vectors.parent))
     env = {"VEYQ_VECTORS": str(remote / VECTORS.name), "VEYQ_NORMALIZATION_TEST": str(remote / NORMALIZATION_TEST.name),
            "VEYQ_REPO_ROOT": str(remote / "repo")}
     forward: list[str] | None = None
@@ -319,8 +329,11 @@ def test(pattern: str | None) -> int:
         *(f"$env:{k} = {ps_quote(v)}" for k, v in env.items()),
         # the zone WallClockTest reads, said before its verdict
         "Write-Output (\"windows zone: \" + (Get-TimeZone).Id)",
-        f"& {ps_quote(str(remote / TEST_BINARY.name))}{args}",
-        "$code = $LASTEXITCODE",
+        # each module's binary in turn; the first red one's exit code is the run's
+        "$code = 0",
+        *(line for name in binaries for line in (
+            f"if ($code -eq 0) {{ Write-Output '+ {name}'; & {ps_quote(str(remote / name / 'test.exe'))}{args}; $code = $LASTEXITCODE }}",
+        )),
         f"Remove-Item -Force -ErrorAction SilentlyContinue -Path {ps_quote(str(secret))}",
         "exit $code",
     ])

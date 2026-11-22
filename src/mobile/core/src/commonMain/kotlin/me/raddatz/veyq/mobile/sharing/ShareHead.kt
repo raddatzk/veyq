@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -21,7 +23,9 @@ class ShareHead internal constructor(
     val origin: String,
     val shareId: String,
     val share: PublicShare,
-    internal val kShare: ByteArray,
+    @PlatformApi
+    @HiddenFromObjC
+    val kShare: ByteArray,
     val scopeId: String,
     val name: String,
     /** The curator's note per locale ([pickLocaleText] picks the viewer's). */

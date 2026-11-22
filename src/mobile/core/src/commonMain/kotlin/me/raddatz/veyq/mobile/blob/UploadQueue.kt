@@ -138,6 +138,12 @@ class UploadQueue(dispatcher: CoroutineDispatcher) {
         /** The application is switched off here (`422 capability_disabled`): no retry helps until it is switched on. */
         const val APPLICATION_OFF = "capability_disabled"
 
+        /** A sibling of another kind holds the name (`409 name_taken`). */
+        const val NAME_TAKEN = "name_taken"
+
+        /** The node is being re-keyed (`409 node_rekey_pending`): a retry later goes through. */
+        const val BUSY = "node_rekey_pending"
+
         /** What a run that threw anything but [Failed] failed with. */
         const val UPLOAD_FAILED = "upload_failed"
 

@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.media.localWallClock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -50,7 +52,9 @@ object LocalDays {
     }
 
     /** Year, month and day of epoch day [day] (proleptic Gregorian; Howard Hinnant's `civil_from_days`). */
-    internal fun civil(day: Long): Triple<Int, Int, Int> {
+    @PlatformApi
+    @HiddenFromObjC
+    fun civil(day: Long): Triple<Int, Int, Int> {
         val z = day + 719_468
         val era = (z).floorDiv(146_097L)
         val doe = z - era * 146_097

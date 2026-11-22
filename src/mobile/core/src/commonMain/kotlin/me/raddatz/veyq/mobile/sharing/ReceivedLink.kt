@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.sharing
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.crypto.unb64
 
 /**
@@ -29,7 +31,9 @@ object ReceivedLink {
         val host: String get() = origin.substringAfter("://")
 
         /** `K_share`, decoded from the fragment: a fresh copy each call, the caller's to zero. */
-        internal fun key(): ByteArray = unb64url(link.substringAfter("#k="))!!
+        @PlatformApi
+        @HiddenFromObjC
+        fun key(): ByteArray = unb64url(link.substringAfter("#k="))!!
 
         /** The same link with the share page asked to open its report dialog (ADR 0120 decision 6). */
         val reportLink: String get() = "$link&report"

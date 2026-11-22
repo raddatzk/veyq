@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.android.core
 
+import me.raddatz.veyq.mobile.media.Derivation
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.ImageDecoder
@@ -24,7 +25,7 @@ internal object MediaDerive {
     /** A quality of the core's spec (0 to 1) as `Bitmap.compress` takes it (0 to 100). */
     private fun percent(quality: Double) = (quality * 100).roundToInt()
 
-    fun of(context: Context, uri: Uri, type: String): MediaUpload.Derived? = runCatching {
+    fun of(context: Context, uri: Uri, type: String): Derivation.Derived? = runCatching {
         if (type.startsWith("video/")) video(context, uri) else image(context, uri)
     }.getOrNull()
 
@@ -36,7 +37,7 @@ internal object MediaDerive {
         return max(1, (w * scale).roundToInt()) to max(1, (h * scale).roundToInt())
     }
 
-    private fun image(context: Context, uri: Uri): MediaUpload.Derived {
+    private fun image(context: Context, uri: Uri): Derivation.Derived {
         var full = 0 to 0
         val preview = ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, info, _ ->
             decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
@@ -56,10 +57,10 @@ internal object MediaDerive {
         }
         val thumbJpeg = jpeg(thumb, percent(MediaUpload.THUMBNAIL_QUALITY))
         thumb.recycle()
-        return MediaUpload.Derived(previewJpeg, thumbJpeg, shown.first, shown.second)
+        return Derivation.Derived(previewJpeg, thumbJpeg, shown.first, shown.second)
     }
 
-    private fun video(context: Context, uri: Uri): MediaUpload.Derived? {
+    private fun video(context: Context, uri: Uri): Derivation.Derived? {
         val r = MediaMetadataRetriever()
         try {
             r.setDataSource(context, uri)
@@ -79,7 +80,7 @@ internal object MediaDerive {
             }
             val poster = jpeg(frame, percent(MediaUpload.PREVIEW_QUALITY))
             frame.recycle()
-            return MediaUpload.Derived(poster, poster, dw, dh)
+            return Derivation.Derived(poster, poster, dw, dh)
         } finally {
             r.release()
         }

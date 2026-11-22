@@ -17,7 +17,7 @@ invariants:
 
 > **Status: planned, deferred by the owner 2026-11-21** — the journal waits behind the web's move onto the core
 > ([ADR 0155](../docs/decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)
-> decision 7: the core's split, [cr-core-platform-and-application-modules](cr-core-platform-and-application-modules.md),
+> decision 7: the core's split, built 2026-11-22 ([ADR 0156](../docs/decisions/0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md)),
 > then Expenses' move, [cr-web-expenses-on-the-core](cr-web-expenses-on-the-core.md)); no date set.
 
 ## Goal
@@ -68,8 +68,8 @@ fallback.
   `./dist/veyq-mobile-core.mjs`), and a module a bundler cannot split lands where its first eager importer is — the
   search's chunk. Measured since on Expenses' parked move: one module put Expenses into the search's entry (ADR 0155
   § Consequences), so the core splits first into a platform module and one module per application, each its own
-  JavaScript file ([cr-core-platform-and-application-modules](cr-core-platform-and-application-modules.md), which
-  measures that per-module granularity); the journal's Kotlin then lives in `:apps:memories`. The façade crosses no flow: step
+  JavaScript file ([ADR 0156](../docs/decisions/0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md), built; its measurement: the platform code a façade needs must leave the file every
+  entry imports); the journal's Kotlin lives in `:apps:memories`. The façade crosses no flow: step
   functions over an opaque handle; the web's 1 s tick, the poll and the jitter's timer stay the web's
   (`createLivePoller`), the core decides what each tick does.
 - **ADR 0133's library facts** (Yjs 13.6.33 update v1 read by `@y/y` 14 rc.29; order-independent

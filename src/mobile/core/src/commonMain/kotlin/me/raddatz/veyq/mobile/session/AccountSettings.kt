@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -108,7 +110,9 @@ class AccountSettings<A : Connection, T : Any>(
 
         /** Each change of the pins or their fetches: what the section reads anew while it is shown ([followStorage]). */
         open val storageChanges: kotlinx.coroutines.flow.Flow<Unit> get() = kotlinx.coroutines.flow.emptyFlow()
-        internal open fun register(): DeviceRegisterStore = throw UnsupportedOperationException("this door keeps no device register")
+        @PlatformApi
+        @HiddenFromObjC
+        open fun register(): DeviceRegisterStore = throw UnsupportedOperationException("this door keeps no device register")
     }
 
     /** This device's trust in the account and its sign-out, as [SessionModel] holds them ("Manage servers"' source). */
@@ -524,7 +528,9 @@ class AccountSettings<A : Connection, T : Any>(
     }
 
     /** [Door] over a signed-in [VeyqAccount]: the generated client's calls, each refreshed once on a `401`. */
-    internal class Over(private val account: VeyqAccount) : Door() {
+    @PlatformApi
+    @HiddenFromObjC
+    class Over(private val account: VeyqAccount) : Door() {
         override val deviceId: String get() = account.thisDevice.id
         override val fallbackLabel: String get() = account.thisDevice.label
         override fun myWrapId(): String? = account.trusted?.wrapId

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.navigation
 
+
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 

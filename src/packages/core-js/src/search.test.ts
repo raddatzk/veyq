@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const dist = resolve(here, '../dist')
-if (!existsSync(resolve(dist, 'veyq-mobile-core.mjs'))) {
+if (!existsSync(resolve(dist, 'kotlin_veyq_mobile_core.mjs'))) {
   throw new Error('dist/ is missing: run `pnpm run build` (the core compiled by Gradle) before the check')
 }
 // The package's own entry, as the web imports it.
@@ -105,7 +105,7 @@ describe('what the web passes crosses', () => {
 
 // The two handles are opaque (ADR 0155 decision 5): nothing in their definitions a caller could read or build.
 describe('the handles', () => {
-  const dts = readFileSync(resolve(dist, 'veyq-mobile-core.d.mts'), 'utf8')
+  const dts = readFileSync(resolve(dist, 'veyq-mobile-composition.d.mts'), 'utf8')
   for (const handle of ['SearchCorpus', 'SearchMatcher']) {
     it(`${handle} declares no member`, () => {
       const body = dts.match(new RegExp(`export declare class ${handle} \\{([^}]*)\\}`))?.[1]

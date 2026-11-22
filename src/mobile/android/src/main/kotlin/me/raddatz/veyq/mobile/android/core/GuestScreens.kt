@@ -1,5 +1,11 @@
 package me.raddatz.veyq.mobile.android.core
 
+import me.raddatz.veyq.mobile.memories.MemoriesGuest
+
+import me.raddatz.veyq.mobile.expenses.PotGuest
+
+import me.raddatz.veyq.mobile.depot.DepotGuest
+
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -182,12 +188,12 @@ internal fun GuestLinkScreen(screen: GuestScreen, model: AppModel) {
                         }
                     },
                     actions = {
-                        (page as? GuestPage.File)?.let { GuestFileActions(it, view.access, model, snackbar) }
+                        (page as? DepotGuest.File)?.let { GuestFileActions(it, view.access, model, snackbar) }
                         if (screen.keepOffered) {
                             IconButton(onClick = { keeping = true }, modifier = Modifier.testTag("guest-keep")) { Icon(Icons.Outlined.BookmarkAdd, stringResource(R.string.link_keep)) }
                         }
                         // a Memory's music, played or stopped as on the member's header (#1034)
-                        (page as? GuestPage.Gallery)?.let { GuestMusicAction(it) }
+                        (page as? MemoriesGuest.Gallery)?.let { GuestMusicAction(it) }
                         // an upload link's guest sees no node, so it reports the link itself; a viewing guest reports the
                         // page on screen from the views (#1033: the web's `reportNodes`; the backend refuses a LINK item
                         // of a READ or READ_WRITE link) — while the link's instance takes reports
@@ -303,10 +309,10 @@ internal fun GuestContent(screen: GuestScreen, model: AppModel, snackbar: Snackb
             val said: (me.raddatz.veyq.mobile.words.Notice) -> Unit = { n -> scope.launch { snackbar.show(context, n) } }
             if (access != null && access.naming.offered) GuestLine(access, said) {
                 // a Pot's page reads its write right anew: a named guest adds entries (the web's `requestGuest`, then the write)
-                if (view.page.value is GuestPage.Pot) model.refreshPot {}
+                if (view.page.value is PotGuest.Pot) model.refreshPot {}
             }
             // a write offered to a guest not named yet asks its name at the write (core's one naming flow, the web's)
-            if (access != null) NamingAsked(access, said) { if (view.page.value is GuestPage.Pot) model.refreshPot {} }
+            if (access != null) NamingAsked(access, said) { if (view.page.value is PotGuest.Pot) model.refreshPot {} }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 page?.let { GuestPageBody(it, screen, model, snackbar) } ?: Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
@@ -382,7 +388,7 @@ private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, vie
 
 /** A guest's Memory's music played or stopped (core's `GalleryModel.headerActions`' MUSIC), as the member's header offers it. */
 @Composable
-private fun GuestMusicAction(page: GuestPage.Gallery) {
+private fun GuestMusicAction(page: MemoriesGuest.Gallery) {
     val gallery = page.model
     val state by gallery.state.collectAsStateWithLifecycle()
     if (gallery.headerActions.none { it == me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC }) return
@@ -399,7 +405,7 @@ private fun GuestMusicAction(page: GuestPage.Gallery) {
  * (`FileRights.replace`), a READ_WRITE guest's replace — a guest not named yet asked its name at the write.
  */
 @Composable
-private fun GuestFileActions(page: GuestPage.File, access: GuestAccess?, model: AppModel, snackbar: SnackbarHostState) {
+private fun GuestFileActions(page: DepotGuest.File, access: GuestAccess?, model: AppModel, snackbar: SnackbarHostState) {
     val file = page.model
     val state by file.state.collectAsStateWithLifecycle()
     val h = state.header ?: return

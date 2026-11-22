@@ -5,10 +5,10 @@
   build, dev server, check and the app image's stage build the package first); the pilot (2026-11-21): decision 2's
   gate passed (§ Consequences), decision 4 but its JSON seam, which comes with Expenses (the slice check in the
   package's `pnpm run check`), decision 5 for the search (`@veyq/core-js/search`, two opaque handles, the web's
-  direction guard reading the entry); decision 7's ratio written. Decisions 7's moves and 8 are not built: next is
-  decision 7's first step, the core's split into a platform module and one module per application
-  ([cr-core-platform-and-application-modules](../../changes/cr-core-platform-and-application-modules.md)); Expenses'
-  move is parked behind it, half built on branch `claude/p2-impl` (§ Consequences; inbox #1046)
+  direction guard reading the entry); decision 7's ratio written; decision 7.1 (2026-11-22: the core's split into a
+  platform module and one module per application, [ADR 0156](0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md)). Decision 7.2, 7.3 and 8 are not built: Expenses' move is
+  parked, half built on branch `claude/p2-impl`, and the split's measurement (§ Consequences) missed the search's
+  budget — the owner's question (inbox #1046)
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -219,13 +219,23 @@ Measured before the decision (2026-11-20):
   - **one binary per façade** (remembered, not built): each carries its own standard library, the pilot's 18,218 B gz,
     once per application;
   - **per-module granularity over real Gradle modules** — the platform's module and each application's its own
-    JavaScript file — is expected to hold both budgets and is not measured;
-    [cr-core-platform-and-application-modules](../../changes/cr-core-platform-and-application-modules.md) measures it
-    with the method above before any application moves.
+    JavaScript file ([ADR 0156](0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md), built 2026-11-22) — measured with the method above, the parked commits replayed onto
+    `:apps:expenses` on a throwaway branch from the split (`ecdc90588`, deleted after): the search's entry alone
+    **43,091 B gz, over its 40,960** (27,943 on the split before Expenses), Expenses gross 61,619, both together 63,600,
+    so **Expenses' net 14,315 B gz** (63,600 − 43,091 − 6,194), within its 25,600; its `.d.mts` shapes all present; time
+    `buildLedger` 2.07× the TypeScript at the medians (79.2–81.6 ms against 37.5–40.2), `checkLedger` 1.20× (4.94–5.06
+    against 4.18–4.37), the answers identical — within decision 7.3. The search pays for the platform code Expenses'
+    façade uses (the JSON seam and the shared formats the parked move placed in the platform: the platform's own code in
+    the search's bundle 26,271 → 45,253 B minified), since a bundler drops nothing of a Kotlin module file. **A miss on
+    the search alone, handed to the owner** (decision 2's rule); the split stays for its direction, and the miss decides
+    how Expenses resumes: what a façade needs of the platform out of the module every entry imports, a declaration file
+    per entry (one for every module today, so the entries share their types), a conformance compilation per application
+    (Expenses' decode runner has none). [ADR 0156](0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md) § Consequences holds the whole run.
 - **Expenses' move is parked, not merged** ([cr-web-expenses-on-the-core](../../changes/cr-web-expenses-on-the-core.md)),
   on branch `claude/p2-impl`: the vectors (`c76d3212f`), the JSON seam and Expenses' pure homes (`c5793db14`), the
   façade and its entry (`cbf54e21e`), `Big` over the engine's `BigInt` (`243e89185`), one optimisation round
-  (`7b8af11cf`). When the split is through it is rebased onto `:apps:expenses` and reused, not rebuilt. Its time at
+  (`7b8af11cf`). It is rebased onto `:apps:expenses` and reused, not rebuilt — replayed there once for the measurement
+above, which says what changes first. Its time at
   the park (Node 22.23.3, median of 15 after 3 warm-ups, the 10,010-revision Pot; the bench script, `bench.mts`, is not committed — the
   numbers are the commit message's of `7b8af11cf` and the measuring session's):
   `buildLedger` 80.4–82.9 ms against the TypeScript's 38–41 (2.07–2.12×), `checkLedger` 4.9–5.0 against 4.1–4.6

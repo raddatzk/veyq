@@ -1,5 +1,8 @@
 package me.raddatz.veyq.mobile.offline
 
+import kotlin.native.HiddenFromObjC
+import me.raddatz.veyq.mobile.PlatformApi
+
 import me.raddatz.veyq.mobile.session.TenantSession
 
 /**
@@ -15,7 +18,7 @@ import me.raddatz.veyq.mobile.session.TenantSession
  */
 @kotlinx.serialization.Serializable
 @kotlinx.serialization.SerialName("QueuedOp")
-enum class Queued(internal val operations: Set<String>) {
+enum class Queued(@PlatformApi @HiddenFromObjC val operations: Set<String>) {
     /** Core: a folder created (`FolderCreate`, its id the write's). */
     FOLDER_CREATE(setOf("createNode")),
 
@@ -56,7 +59,9 @@ enum class Queued(internal val operations: Set<String>) {
     POT_ENTRY(setOf("startBlobUploads", "presignBlobUploadWindows", "completeApplicationBlob", "appendPotRevisions")),
     ;
 
-    internal companion object {
+    @PlatformApi
+    @HiddenFromObjC
+    companion object {
         /** The value a queued write names; null where this build no longer knows it (the write is then held as refused). */
         fun of(op: String): Queued? = entries.firstOrNull { it.name == op }
     }
@@ -76,6 +81,8 @@ sealed interface QueuedOutcome {
 }
 
 /** A [Queued] write's sender: its online path called with the write's intent, never a copy of it. */
-internal fun interface QueuedSender {
+@PlatformApi
+@HiddenFromObjC
+fun interface QueuedSender {
     suspend fun send(tenant: TenantSession, write: QueuedWrite): QueuedOutcome
 }

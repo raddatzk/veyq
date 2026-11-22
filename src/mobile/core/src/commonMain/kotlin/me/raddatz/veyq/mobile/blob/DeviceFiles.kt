@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.blob
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 /**
  * Files in a directory the app owns — the offline store's (ADR 0140 decision 3) —, named by the host at start, never by
  * a dialog. The core does all reading and writing (ADR 0137
@@ -10,7 +12,9 @@ package me.raddatz.veyq.mobile.blob
  *
  * A seam, so a test can stop a write where a crash would ([write] then [rename] is how a file is replaced whole).
  */
-internal interface DeviceFiles {
+@PlatformApi
+@HiddenFromObjC
+interface DeviceFiles {
     /** What joins a directory's path and a name in it. */
     val separator: Char
 
@@ -53,4 +57,6 @@ internal interface DeviceFiles {
 }
 
 /** This platform's [DeviceFiles]. */
-internal expect val deviceFiles: DeviceFiles
+@PlatformApi
+@HiddenFromObjC
+expect val deviceFiles: DeviceFiles

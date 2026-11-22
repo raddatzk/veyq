@@ -2,6 +2,8 @@
 
 package me.raddatz.veyq.mobile.blob
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.alloc
@@ -31,7 +33,9 @@ import platform.windows.ULARGE_INTEGER
 // ANSI code page: over plain `fopen` the file `Büro € 中文.bin` was written as `BÃ¼ro â‚¬ ä¸­æ–‡.bin` —
 // its UTF-8 bytes read as CP-1252 (measured 2026-11-11 on the German test VM, `FilesTest`, the bite of this file).
 
-internal actual fun openFile(path: String, mode: String): CPointer<FILE>? = _wfopen(path.wcstr, mode.wcstr)
+@PlatformApi
+@HiddenFromObjC
+actual fun openFile(path: String, mode: String): CPointer<FILE>? = _wfopen(path.wcstr, mode.wcstr)
 
 internal actual fun removeFile(path: String): Boolean = _wremove(path.wcstr) == 0
 

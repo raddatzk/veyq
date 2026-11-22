@@ -4,8 +4,9 @@ image of `Containerfile` beside it and runs what a verb names in it. Everything 
 by Gradle; only running it needs Linux.
 
 Verbs:
-  test [--tests <pattern>]   links the core's Linux test binary for this host's architecture
-                             (`:core:linkDebugTest<Target>`) and runs it in the container: the conformance suite over
+  test [--tests <pattern>]   links every core module's Linux test binary for this host's architecture
+                             (`:<module>:linkDebugTest<Target>`, the modules read from settings.gradle.kts) and runs
+                             each in the container, the platform's first: the conformance suite over
                              libsodium, utf8proc's NormalizationTest, the wall clock in Europe/Berlin, and — with
                              VEYQ_LIVE set — the live sign-in. `--tests` is Kotlin/Native's `--ktest_filter` pattern
                              (`*LiveSignInTest*`). It runs inside a session bus of its own with gnome-keyring-daemon,
@@ -142,13 +143,24 @@ def build_image(docker_platform: str) -> None:
     run("docker", "build", "--platform", docker_platform, "-t", IMAGE, "-f", str(HERE / "Containerfile"), str(HERE))
 
 
+def test_modules() -> list[tuple[str, Path]]:
+    """The core modules with tests of their own (the shared test support `:testing` has none), the platform first."""
+    return [(p, d) for p, d in repo_layout.mobile_core_modules() if any((d / "src").glob("*Test/kotlin"))]
+
+
 def test(pattern: str | None) -> int:
     docker_platform, target = arch()
-    run("./gradlew", f":core:linkDebugTest{target}", cwd=repo_layout.MOBILE)
-    kexe_dir = repo_layout.MOBILE / "core" / "build" / "bin" / (target[0].lower() + target[1:]) / "debugTest"
-    if not (kexe_dir / "test.kexe").exists():
-        sys.exit(f"no test binary at {kexe_dir / 'test.kexe'}")
+    modules = test_modules()
+    run("./gradlew", *(f"{p}:linkDebugTest{target}" for p, _ in modules), cwd=repo_layout.MOBILE)
+    kexe_dirs = {p.strip(":").replace(":", "-"): d / "build" / "bin" / (target[0].lower() + target[1:]) / "debugTest" for p, d in modules}
+    for kexe_dir in kexe_dirs.values():
+        if not (kexe_dir / "test.kexe").exists():
+            sys.exit(f"no test binary at {kexe_dir / 'test.kexe'}")
     build_image(docker_platform)
+    # each module's binary in turn, the first red one's exit code the run's
+    runner = repo_layout.MOBILE / "build" / "linux" / "test-modules.sh"
+    runner.parent.mkdir(parents=True, exist_ok=True)
+    runner.write_text("#!/bin/bash\n" + "".join(f'echo "+ {m}"; /veyq/bin/{m}/test.kexe "$@" || exit $?\n' for m in kexe_dirs))
 
     # the QR reader's fixtures (QrFixtures, read through VEYQ_REPO_ROOT at their repository path)
     qr_fixtures = "src/mobile/core/src/commonTest/resources/qr"
@@ -156,18 +168,21 @@ def test(pattern: str | None) -> int:
     search_vectors = "contracts/platform/search/v1-vectors.json"
     # and the import's cases, the web's download and the manifest's schema (ImportFixtures, ZipReaderTest; ADR 0152 decision 4)
     export_contracts = "contracts/export"
-    mounts = {kexe_dir: "/veyq/bin", VECTORS: "/veyq/vectors.json", NORMALIZATION_TEST: "/veyq/NormalizationTest.txt",
+    # and the web's format vectors (ShownVectorsTest, ADR 0154 decision 5), read the same way
+    format_vectors = "src/mobile/words/format-vectors.json"
+    mounts = {**{d: f"/veyq/bin/{m}" for m, d in kexe_dirs.items()}, runner: "/veyq/run/test-modules.sh",
+              VECTORS: "/veyq/vectors.json", NORMALIZATION_TEST: "/veyq/NormalizationTest.txt",
               ROOT / qr_fixtures: f"/veyq/repo/{qr_fixtures}", ROOT / search_vectors: f"/veyq/repo/{search_vectors}",
-              ROOT / export_contracts: f"/veyq/repo/{export_contracts}"}
+              ROOT / export_contracts: f"/veyq/repo/{export_contracts}", ROOT / format_vectors: f"/veyq/repo/{format_vectors}"}
     env = {"VEYQ_VECTORS": "/veyq/vectors.json", "VEYQ_NORMALIZATION_TEST": "/veyq/NormalizationTest.txt",
            "VEYQ_REPO_ROOT": "/veyq/repo", "TZ": ZONE}
     # WallClockTest's values are Berlin's. kotlinx-datetime reads the zone from /etc/localtime, glibc from TZ: both set.
     prelude = f"ln -sf /usr/share/zoneinfo/{ZONE} /etc/localtime; "
     filter_arg = " " + shlex.quote(f"--ktest_filter={pattern}") if pattern else ""
-    script = prelude + SECRET_SERVICE.format(tests=f"/veyq/bin/test.kexe{filter_arg}")
+    script = prelude + SECRET_SERVICE.format(tests=f"bash /veyq/run/test-modules.sh{filter_arg}")
     if not pattern:
-        # The store where none answers: libsecret there but no session bus, then libsecret moved away.
-        probe = "/veyq/bin/test.kexe --ktest_filter='*SecretServiceProbeTest*'"
+        # The store where none answers: libsecret there but no session bus, then libsecret moved away (the platform's).
+        probe = "/veyq/bin/core/test.kexe --ktest_filter='*SecretServiceProbeTest*'"
         script += (f"; rc=$?; [ $rc -ne 0 ] && exit $rc; "
                    f"echo '+ the Secret Service probe without a session bus'; "
                    f"env -u DBUS_SESSION_BUS_ADDRESS VEYQ_SECRET_SERVICE=no-bus {probe} || exit $?; "

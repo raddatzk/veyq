@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.raddatz.veyq.mobile.blob.DeviceFiles
@@ -168,7 +170,9 @@ class OfflineStore internal constructor(
     }
 
     /** [key]'s pins set to [pins] (a test's): an entry with a pin is never evicted. */
-    internal suspend fun setPins(key: EntryKey, pins: Set<String>) = lock.withLock {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun setPins(key: EntryKey, pins: Set<String>) = lock.withLock {
         if (closed) return@withLock
         val kept = find(key) ?: return@withLock
         kept.pins = pins
@@ -332,7 +336,9 @@ class OfflineStore internal constructor(
 
     private fun path(name: String) = "$directory${files.separator}$name"
 
-    internal companion object {
+    @PlatformApi
+    @HiddenFromObjC
+    companion object {
         const val SHARDS = 256
         const val CARRY_BATCH = 16
         const val BATCH_MS = 30_000L

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.navigation
 
+
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,7 +19,7 @@ import me.raddatz.veyq.mobile.words.Msg
  * meanwhile leaves through a re-read. [changed] runs after each write that went through, for the lists around.
  */
 class TrashSheet(private val door: Door, private val changed: () -> Unit) {
-    /** The trash's reads and writes ([ShellModel.trashSheet] over a tenant, a test over its own). */
+    /** The trash's reads and writes (`ShellModel.trashSheet` over a tenant, a test over its own). */
     interface Door {
         suspend fun list(): List<NodeTrash.Trashed>?
         fun canRestore(row: NodeTrash.Trashed): Boolean

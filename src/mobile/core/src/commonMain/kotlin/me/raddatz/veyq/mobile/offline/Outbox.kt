@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -64,7 +66,9 @@ class Outbox internal constructor(
     }
 
     /** [write] stored again as it now is (its state after a send's outcome): never refused by the floor; nothing if it is gone. */
-    internal suspend fun update(write: QueuedWrite) = lock.withLock {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun update(write: QueuedWrite) = lock.withLock {
         if (write.id in order()) offline.putQueued(writeKey(write.id), encode(write), floor = false)
         changed()
     }
@@ -123,7 +127,9 @@ class Outbox internal constructor(
     }
 
     /** Frame [index] of queued blob [blob] as it is sent: sealed under its `K_blob`, never plaintext. Null where it is not kept. */
-    internal suspend fun frame(blob: QueuedBlob, index: Int): ByteArray? = offline.store.frame(blobKey(blob.id), index)
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun frame(blob: QueuedBlob, index: Int): ByteArray? = offline.store.frame(blobKey(blob.id), index)
 
     /** [bytes] sealed as a queued blob ([sealBlob]): a derived tier, a receipt read whole. */
     suspend fun sealBlob(bytes: ByteArray): QueuedBlob? =
@@ -133,13 +139,17 @@ class Outbox internal constructor(
      * Queued blob [blob] as its send takes it ([me.raddatz.veyq.mobile.blob.ApplicationBlobs.Sealed]): its frames as they
      * were sealed, under its `K_blob`. A frame no longer kept fails the send (the write is refused, never sent short).
      */
-    internal fun sealed(blob: QueuedBlob): me.raddatz.veyq.mobile.blob.ApplicationBlobs.Sealed =
+    @PlatformApi
+    @HiddenFromObjC
+    fun sealed(blob: QueuedBlob): me.raddatz.veyq.mobile.blob.ApplicationBlobs.Sealed =
         me.raddatz.veyq.mobile.blob.ApplicationBlobs.Sealed(me.raddatz.veyq.mobile.crypto.unb64(blob.key), blob.chunkCount, blob.size) { i ->
             frame(blob, i) ?: throw me.raddatz.veyq.mobile.blob.ApplicationBlobs.UploadRefused(FRAME_GONE)
         }
 
     /** A blob sealed for a write that was never queued (a crash between the two), or a discarded one's: dropped. */
-    internal suspend fun dropBlob(blob: QueuedBlob) = offline.store.remove(blobKey(blob.id))
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun dropBlob(blob: QueuedBlob) = offline.store.remove(blobKey(blob.id))
 
     // ---- inside
 
@@ -172,7 +182,9 @@ class Outbox internal constructor(
 
     private fun encode(write: QueuedWrite) = JSON.encodeToString(QueuedWrite.serializer(), write).encodeToByteArray()
 
-    internal companion object {
+    @PlatformApi
+    @HiddenFromObjC
+    companion object {
         /** A queued blob's frame no longer kept: its write cannot be sent whole. */
         const val FRAME_GONE = "queued_frame_gone"
 

@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.words
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.session.LocalDays
 
 /**
@@ -93,7 +95,9 @@ object Shown {
             ?.let { moment(it, language) } ?: instant
 
     /** [wallMs] — a local wall clock counted as if it were UTC — as [moment] writes it: the vectors' form, in UTC. */
-    internal fun wallMoment(wallMs: Long, language: String): String {
+    @PlatformApi
+    @HiddenFromObjC
+    fun wallMoment(wallMs: Long, language: String): String {
         val (y, m, d) = LocalDays.civil(wallMs.floorDiv(DAY_MS))
         val inDay = wallMs.mod(DAY_MS) / 60_000
         return "${mediumDay(y, m, d, language)}, ${clock((inDay / 60).toInt(), (inDay % 60).toInt(), language)}"

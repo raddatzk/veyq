@@ -2,6 +2,8 @@
 
 package me.raddatz.veyq.mobile.blob
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.convert
@@ -12,7 +14,9 @@ import platform.posix.fwrite
 
 // Apple, Linux and Windows: `Files.kt`'s calls, each platform's own below them (a path as UTF-16 on Windows).
 
-internal actual val deviceFiles: DeviceFiles = object : DeviceFiles {
+@PlatformApi
+@HiddenFromObjC
+actual val deviceFiles: DeviceFiles = object : DeviceFiles {
     override val separator: Char get() = pathSeparator
 
     override fun createDirectory(path: String): Boolean = me.raddatz.veyq.mobile.blob.createDirectory(path)

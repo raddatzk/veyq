@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.session
 
-import me.raddatz.veyq.mobile.depot.DepotFiles
-import me.raddatz.veyq.mobile.expenses.PotSession
 import me.raddatz.veyq.mobile.words.Msg
 
 /**
@@ -28,35 +26,11 @@ class ShareWords(
     }
 
     companion object {
-        fun of(kind: String): ShareWords = when (kind) {
-            // a Memory's and a chapter's (Memories' `share.*`: the same dialog, its sentences naming the node shared)
-            "MEMORY" -> ShareWords(
-                Msg.SHARE_MEMORY_TITLE, Msg.SHARE_MEMORY_INTRO, Msg.SHARE_MEMORY_ROLE_CONTRIBUTOR,
-                Msg.SHARE_MEMORY_ROLE_VIEWER_HINT, Msg.SHARE_MEMORY_ROLE_CONTRIBUTOR_HINT, Msg.SHARE_MEMORY_DELETE_CONFIRM,
-                Msg.SHARE_MEMORY_ROLE_UPLOADER, Msg.SHARE_MEMORY_ROLE_UPLOADER_HINT,
-            )
-            "CHAPTER" -> ShareWords(
-                Msg.SHARE_CHAPTER_TITLE, Msg.SHARE_CHAPTER_INTRO, Msg.SHARE_MEMORY_ROLE_CONTRIBUTOR,
-                Msg.SHARE_CHAPTER_ROLE_VIEWER_HINT, Msg.SHARE_MEMORY_ROLE_CONTRIBUTOR_HINT, Msg.SHARE_CHAPTER_DELETE_CONFIRM,
-                Msg.SHARE_MEMORY_ROLE_UPLOADER, Msg.SHARE_CHAPTER_ROLE_UPLOADER_HINT,
-            )
-            DepotFiles.DROPBOX -> ShareWords(
-                Msg.DROPBOX_SHARE_TITLE, Msg.DROPBOX_SHARE_HINT, Msg.SHARE_ROLE_UPLOADER,
-                Msg.DROPBOX_UPLOAD_HINT, Msg.DROPBOX_UPLOAD_HINT, Msg.DROPBOX_SHARE_DELETE_CONFIRM,
-            )
-            DepotFiles.FILE -> ShareWords(
-                Msg.SHARE_FILE_TITLE, Msg.SHARE_FILE_INTRO, Msg.SHARE_FILE_ROLE_CONTRIBUTOR,
-                Msg.SHARE_FILE_ROLE_VIEWER_HINT, Msg.SHARE_FILE_ROLE_CONTRIBUTOR_HINT, Msg.SHARE_FILE_DELETE_CONFIRM,
-            )
-            PotSession.KIND -> ShareWords(
-                Msg.SHARE_TITLE, Msg.SHARE_INTRO, Msg.SHARE_ROLE_CONTRIBUTOR,
-                Msg.SHARE_ROLE_VIEWER_HINT, Msg.SHARE_ROLE_CONTRIBUTOR_HINT, Msg.SHARE_DELETE_CONFIRM,
-            )
-            else -> ShareWords(
-                Msg.SHARE_FOLDER_TITLE, Msg.SHARE_FOLDER_INTRO, Msg.SHARE_FOLDER_ROLE_CONTRIBUTOR,
-                Msg.SHARE_FOLDER_ROLE_VIEWER_HINT, Msg.SHARE_FOLDER_ROLE_CONTRIBUTOR_HINT, Msg.SHARE_FOLDER_DELETE_CONFIRM,
-            )
-        }
+        /** The words of a node of [kind]'s share sheet: its application's (`ApplicationKinds.shareWords`), else core's folder words. */
+        fun of(kind: String): ShareWords = me.raddatz.veyq.mobile.AppKinds.shareWords(kind) ?: ShareWords(
+            Msg.SHARE_FOLDER_TITLE, Msg.SHARE_FOLDER_INTRO, Msg.SHARE_FOLDER_ROLE_CONTRIBUTOR,
+            Msg.SHARE_FOLDER_ROLE_VIEWER_HINT, Msg.SHARE_FOLDER_ROLE_CONTRIBUTOR_HINT, Msg.SHARE_FOLDER_DELETE_CONFIRM,
+        )
     }
 }
 

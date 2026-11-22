@@ -56,10 +56,10 @@ enum MemoriesUi {
     /// A link's Memory or chapter: its gallery with a guest's rights, or — on a WRITE_ONLY link — the uploader.
     private static func guest(_ page: GuestPage, _ held: GuestHeld, _ model: AppModel) -> AnyView {
         switch page {
-        case let gallery as GuestPage.Gallery:
+        case let gallery as MemoriesGuest.Gallery:
             AnyView(MemoryScreen(model: model, ref: .guest(gallery.node, .memories))
                 .environment(\.guestGallery, GuestGallery(canAdd: held.guest.value != nil) { c in held.open(c.nodeId) }))
-        case let up as GuestPage.Uploader:
+        case let up as MemoriesGuest.Uploader:
             AnyView(GuestUploaderView(model: model, held: held, up: up.model))
         default:
             AnyView(EmptyView())

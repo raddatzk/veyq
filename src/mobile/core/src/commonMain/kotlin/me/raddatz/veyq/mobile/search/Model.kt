@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.search
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.session.LocalDays
 
 // The search's documents (ADR 0125 decisions 2 and 6; the web's `core/search/model.ts` keeps the shape
@@ -113,7 +115,9 @@ data class ScopeDocument(
 )
 
 /** Year, month (1–12) and day of an epoch millisecond in the device's time zone (the web reads local time; [LocalDays]). */
-internal fun localDate(epochMs: Long): Triple<Int, Int, Int> = LocalDays.civil(LocalDays.dayOf(epochMs))
+@PlatformApi
+@HiddenFromObjC
+fun localDate(epochMs: Long): Triple<Int, Int, Int> = LocalDays.civil(LocalDays.dayOf(epochMs))
 
 /** The years a document spans: its own span, else its capture year (local time) — the web's `yearsOf`. */
 fun yearsOf(doc: SearchDocument): YearSpan? {

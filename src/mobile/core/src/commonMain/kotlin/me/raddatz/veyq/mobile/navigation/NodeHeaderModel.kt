@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.navigation
 
+
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -12,6 +13,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.session.NodeCover
+import me.raddatz.veyq.mobile.session.NodeRename
+import me.raddatz.veyq.mobile.session.NodeTrash
 import me.raddatz.veyq.mobile.session.OpenNode
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
@@ -25,7 +28,7 @@ import me.raddatz.veyq.mobile.words.Notices
  * owns on it:
  *
  * - **pin**: the heart turns at once and turns back when the write did not land, with its notice;
- * - **trash**: the undo is offered for [ShellModel.TRASH_UNDO_MS], which this model runs, and an open object of the node
+ * - **trash**: the undo is offered for [TRASH_UNDO_MS], which this model runs, and an open object of the node
  *   closes once it is gone;
  * - **rename**: why it did not land, or the notice that a link kept the old name (the rename stands);
  * - **the cover** of a kind that takes one: where its frame sits ([State.cover], read when the header opens and after each
@@ -40,7 +43,7 @@ import me.raddatz.veyq.mobile.words.Notices
  *   it is not offered, [toggleOffline] refuses it (`offline_read_only`) and a size asked online is dropped;
  *
  * Each app draws [state] (or [watch]) and the dialogs; what it says is a [Notice] the actions return. The move, the copy,
- * the share and the report are sheets of their own ([MoveSheet], [ShareSheet], [ReportSheet]).
+ * the share and the report are sheets of their own ([MoveSheet], `ShareSheet`, [ReportSheet]).
  */
 class NodeHeaderModel(
     val node: NodeAt,
@@ -48,7 +51,7 @@ class NodeHeaderModel(
     private val door: Door,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
 ) {
-    /** What the header reads and writes ([ShellModel.header] over a tenant, a test over its own). */
+    /** What the header reads and writes (`ShellModel.header` over a tenant, a test over its own). */
     interface Door {
         /** Whether [ref] is pinned; null while its space's pin set is not loaded. */
         fun isFavorite(ref: NodeAt): Boolean?
@@ -59,10 +62,10 @@ class NodeHeaderModel(
         suspend fun reportOffered(): Boolean
         /** Pins or unpins [ref]; false when it was not stored. */
         suspend fun toggleFavorite(ref: NodeAt): Boolean
-        suspend fun trash(ref: NodeAt): ShellModel.Trashed
+        suspend fun trash(ref: NodeAt): Trashed
         /** [node] back from the trash under its name; why not, or null. */
         suspend fun undoTrash(node: OpenNode): Notice?
-        suspend fun rename(ref: NodeAt, name: String): ShellModel.Renamed
+        suspend fun rename(ref: NodeAt, name: String): Renamed
         /** An open object of [ref] closes (an open Pot stops reading a node that is gone). */
         fun closeOpen(ref: NodeAt)
         /** After each write that went through, for what the app keeps around the lists (its rows' details). */
@@ -209,7 +212,7 @@ class NodeHeaderModel(
 
     /**
      * Moves the node with everything under it to its space's trash; what it says. Where it went, its undo is offered in
-     * [State.undo] for [ShellModel.TRASH_UNDO_MS]; once it is gone, an open object of it closes.
+     * [State.undo] for [TRASH_UNDO_MS]; once it is gone, an open object of it closes.
      */
     suspend fun trash(): Notice {
         val r = door.trash(node)
@@ -228,7 +231,7 @@ class NodeHeaderModel(
         undoing = node
         _state.update { it.copy(undo = notice) }
         undoWindow = scope.launch {
-            delay(ShellModel.TRASH_UNDO_MS)
+            delay(TRASH_UNDO_MS)
             endUndo()
         }
     }
@@ -329,5 +332,24 @@ class NodeHeaderModel(
         if (outcome != NodeCover.Outcome.DONE) return Notice(Msg.COVER_FAILED)
         door.changed()
         return null
+    }
+
+    /** What a trash came to: the outcome, its notice (moved, with its undo; or why not) and the node as it was. */
+    class Trashed(val outcome: NodeTrash.Deleted, val notice: Notice, val before: OpenNode?) {
+        /** Whether the node is gone from where it was (an open page of it left, an open Pot of it closed). */
+        val gone: Boolean get() = outcome == NodeTrash.Deleted.TRASHED || outcome == NodeTrash.Deleted.GONE
+        /** Whether its undo is offered. */
+        val undoable: Boolean get() = outcome == NodeTrash.Deleted.TRASHED && before != null
+    }
+
+    /** What a rename came to, and its notice where it did not land. */
+    class Renamed(val result: NodeRename.Result, val notice: Notice?) {
+        /** Renamed, but a link to it still shows its old name to its guests. */
+        val linksFailed: Boolean get() = result.outcome == NodeRename.Outcome.RENAMED && !(result.links?.failed.isNullOrEmpty())
+    }
+
+    companion object {
+        /** How long a trash's undo is offered (the web's `TRASH_UNDO_MS`): the header's, a gallery's and a move's. */
+        const val TRASH_UNDO_MS = 6_000L
     }
 }

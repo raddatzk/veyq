@@ -1,6 +1,7 @@
 // The native bridge (ADR 0136 decision 5; ADR 0123's Consequences, the bridge): the core as one shared library,
 // `libveyq.so` on Linux and `veyq.dll` on Windows, whose only public surface is the six C functions of `bridge.h`. It
-// depends on `:core` as an implementation dependency, so the library exports none of the core's classes — only the
+// depends on `:composition` (the platform and every application) as an implementation dependency, so the library exports
+// none of the core's classes — only the
 // `@CName` functions of `src/bridgedMain` (Linux and Windows, as in `:core`; each brings only its HTTP engine). The JVM
 // target exists for the tests and for the generator of the Rust and the C# types (`generateBindings`).
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
@@ -45,7 +46,7 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            implementation(project(":core"))
+            implementation(project(":composition"))
             implementation(libs.coroutines.core)
             implementation(libs.serialization.json)
             implementation(libs.ktor.client.core)
@@ -60,13 +61,10 @@ kotlin {
         getByName("bridgedMain").dependencies {
             implementation(libs.kotlinx.datetime)
         }
-        // core's in-memory device keys (SoftwareDeviceKeys), the fake every flow test runs over, and the live runs' cleanup
-        // (LiveRun), compiled here too.
-        jvmTest {
-            kotlin.srcDir(project(":core").file("src/testDevice/kotlin"))
-            kotlin.srcDir(project(":core").file("src/liveTest/kotlin"))
-        }
         jvmTest.dependencies {
+            // the core's in-memory device keys (SoftwareDeviceKeys), the fake every flow test runs over, and the live
+            // runs' clean-up (LiveRun): the core modules' shared test support
+            implementation(project(":testing"))
             implementation(kotlin("test"))
             implementation(libs.coroutines.test)
             implementation(libs.ktor.client.okhttp)

@@ -108,6 +108,14 @@ on their own.
 How each of these is built — the modules, the seams core asks, the web registry, the guards — is
 [Applications](../apps/README.md); this section keeps what was decided and why.
 
+- **The split holds on every side, each by its build.** The backend's Gradle modules `:core` and `:apps:<application>`
+  (`validate_backend_module_graph.py`), the web's `features/<owner>` by import direction
+  (`validate_web_core_imports_no_applications.py`), and the apps' Kotlin core: `:core` the platform, `:apps:<application>`
+  one module per application, `:composition` the one module that names them all and that every client links
+  ([ADR 0156](0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md),
+  `validate_mobile_module_graph.py`). Rejected for the core: its direction held by a list of platform files allowed to
+  name an application — it only grew, and the platform's own tables named every kind.
+
 - **The node tree is the platform's, not Memories'.** Rejected: the tree owned by Memories. Every other
   application would then need a tree of its own and, with it, its own sharing, trash and move rules — the
   duplication this decision exists to avoid. The price is that the tree's `kind` holds values core does not

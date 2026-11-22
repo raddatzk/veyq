@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -20,7 +22,7 @@ import me.raddatz.veyq.mobile.crypto.utf8
  * [me.raddatz.veyq.mobile.crypto.Naming]), and optionally the node's first sealed meta.
  */
 object NodeCreate {
-    class Created(val nodeId: String, internal val key: ByteArray, val epoch: Int, val scopeEpoch: Int)
+    class Created(val nodeId: String, @PlatformApi @HiddenFromObjC val key: ByteArray, val epoch: Int, val scopeEpoch: Int)
 
     sealed interface Result {
         data class Done(val created: Created) : Result
@@ -131,7 +133,9 @@ object NodeCreate {
     private fun codeOf(body: String): String? = runCatching { (Json.parseToJsonElement(body) as JsonObject)["code"]?.jsonPrimitive?.content }.getOrNull()
 
     /** A fresh UUID v4 from the suite's randomness. */
-    internal fun uuid(account: VeyqAccount): String {
+    @PlatformApi
+    @HiddenFromObjC
+    fun uuid(account: VeyqAccount): String {
         val b = account.primitives.randomBytes(16)
         b[6] = ((b[6].toInt() and 0x0f) or 0x40).toByte()
         b[8] = ((b[8].toInt() and 0x3f) or 0x80).toByte()

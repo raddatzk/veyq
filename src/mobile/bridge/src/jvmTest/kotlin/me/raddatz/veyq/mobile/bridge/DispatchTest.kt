@@ -1,5 +1,8 @@
 package me.raddatz.veyq.mobile.bridge
 
+import me.raddatz.veyq.mobile.expenses.receiptsSkipped
+import me.raddatz.veyq.mobile.depot.replaceOffered
+import me.raddatz.veyq.mobile.depot.replaceStale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.async
@@ -766,16 +769,16 @@ class DispatchTest {
             if (pinStores) pinned = pinned?.not()
             return pinStores
         }
-        override suspend fun trash(ref: NodeAt) = me.raddatz.veyq.mobile.navigation.ShellModel.Trashed(
+        override suspend fun trash(ref: NodeAt) = me.raddatz.veyq.mobile.navigation.NodeHeaderModel.Trashed(
             me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED,
             me.raddatz.veyq.mobile.words.Notices.trashed(me.raddatz.veyq.mobile.session.NodeTrash.Deleted.TRASHED, ref.name),
             me.raddatz.veyq.mobile.session.OpenNode(ref.scopeId, ref.nodeId, null, ref.kind, ref.name, ByteArray(32)),
         )
         override suspend fun undoTrash(node: me.raddatz.veyq.mobile.session.OpenNode): me.raddatz.veyq.mobile.words.Notice? { restored += node.id; return null }
-        override suspend fun rename(ref: NodeAt, name: String): me.raddatz.veyq.mobile.navigation.ShellModel.Renamed {
+        override suspend fun rename(ref: NodeAt, name: String): me.raddatz.veyq.mobile.navigation.NodeHeaderModel.Renamed {
             renamedTo += name
             val r = me.raddatz.veyq.mobile.session.NodeRename.Result(renameOutcome)
-            return me.raddatz.veyq.mobile.navigation.ShellModel.Renamed(r, me.raddatz.veyq.mobile.words.Notices.renameRefused(r))
+            return me.raddatz.veyq.mobile.navigation.NodeHeaderModel.Renamed(r, me.raddatz.veyq.mobile.words.Notices.renameRefused(r))
         }
         override fun closeOpen(ref: NodeAt) { closed += ref }
         override fun changed() {}
@@ -1055,7 +1058,7 @@ class DispatchTest {
     }
 
     /** A share sheet's door the test plays: a server's links, every write recorded. */
-    private class PlayedShare : me.raddatz.veyq.mobile.navigation.ShareSheet.Door {
+    private class PlayedShare : me.raddatz.veyq.mobile.composition.ShareSheet.Door {
         val links = java.util.concurrent.CopyOnWriteArrayList<me.raddatz.veyq.mobile.session.ShareLinks.Link>()
         val sent = java.util.concurrent.CopyOnWriteArrayList<String>()
         @Volatile var passwordSent: String? = null
@@ -1149,7 +1152,7 @@ class DispatchTest {
                     move = { node, copying, _, _ -> me.raddatz.veyq.mobile.navigation.MoveSheet(node, copying, move) },
                     // a clock that has always moved on: the live poll's first tick asks at once
                     dropBox = { node -> var t = 0L; me.raddatz.veyq.mobile.depot.DropBoxPage(node, box, now = { t += 60_000; t }) },
-                    topLevelShare = { scopeId -> me.raddatz.veyq.mobile.navigation.ShareSheet.topLevel(scopeId, share) { 1_700_000_000_000L } },
+                    topLevelShare = { scopeId -> me.raddatz.veyq.mobile.composition.ShareSheet.topLevel(scopeId, share) { 1_700_000_000_000L } },
                 )
             }
         }
@@ -1248,7 +1251,7 @@ class DispatchTest {
             Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
                 Tenant(
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
-                    share = { node -> me.raddatz.veyq.mobile.navigation.ShareSheet(node, played, { 1_700_000_000_000L }) },
+                    share = { node -> me.raddatz.veyq.mobile.composition.ShareSheet(node, played, { 1_700_000_000_000L }) },
                 )
             }
         }
@@ -1568,7 +1571,7 @@ class DispatchTest {
                     header = { node, facts, _ -> me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, Played()) },
                     // a node's download as the shell makes it: the kind decides (a file itself, any other node its ZIP)
                     download = { node, _, sink ->
-                        me.raddatz.veyq.mobile.navigation.ShellModel.downloadAs(
+                        me.raddatz.veyq.mobile.composition.ShellModel.downloadAs(
                             node.kind, own = { out -> out(zip); true }, zip = { out -> out("PK-archive".encodeToByteArray()); emptyList() }, sink = sink,
                         )
                     },
@@ -1875,8 +1878,8 @@ class DispatchTest {
         val trip = java.io.File(dir, "Trip").apply { mkdirs(); java.io.File(this, "x.txt").writeText("x") }
         val seen = java.util.Collections.synchronizedList(ArrayList<String>())
         val closed = java.util.Collections.synchronizedList(ArrayList<String>())
-        var outcome: (me.raddatz.veyq.mobile.navigation.DropTarget) -> me.raddatz.veyq.mobile.navigation.DropOutcome = { _ ->
-            me.raddatz.veyq.mobile.navigation.DropOutcome.Uploaded(1, listOf(Notice(Msg.DEPOT_DROP_NOT_LOCAL, "Phone")))
+        var outcome: (me.raddatz.veyq.mobile.composition.DropTarget) -> me.raddatz.veyq.mobile.composition.DropOutcome = { _ ->
+            me.raddatz.veyq.mobile.composition.DropOutcome.Uploaded(1, listOf(Notice(Msg.DEPOT_DROP_NOT_LOCAL, "Phone")))
         }
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
@@ -1885,20 +1888,20 @@ class DispatchTest {
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     drop = { target, items, _, left, deletedName ->
                         seen += when (target) {
-                            is me.raddatz.veyq.mobile.navigation.DropTarget.Level -> "level:${target.label}"
-                            is me.raddatz.veyq.mobile.navigation.DropTarget.Row -> "row:${target.folder.nodeId}"
-                            is me.raddatz.veyq.mobile.navigation.DropTarget.Gallery -> "gallery"
+                            is me.raddatz.veyq.mobile.composition.DropTarget.Level -> "level:${target.label}"
+                            is me.raddatz.veyq.mobile.composition.DropTarget.Row -> "row:${target.folder.nodeId}"
+                            is me.raddatz.veyq.mobile.composition.DropTarget.Gallery -> "gallery"
                         }
                         seen += items.map {
                             when (it) {
-                                is me.raddatz.veyq.mobile.navigation.Dropped.File -> "file:${it.source.name}"
-                                is me.raddatz.veyq.mobile.navigation.Dropped.Folder -> "folder:${it.name}:${it.found?.size}"
-                                is me.raddatz.veyq.mobile.navigation.Dropped.NotLocal -> "notLocal:${it.name}"
-                                is me.raddatz.veyq.mobile.navigation.Dropped.Unread -> "unread:${it.name}"
+                                is me.raddatz.veyq.mobile.composition.Dropped.File -> "file:${it.source.name}"
+                                is me.raddatz.veyq.mobile.composition.Dropped.Folder -> "folder:${it.name}:${it.found?.size}"
+                                is me.raddatz.veyq.mobile.composition.Dropped.NotLocal -> "notLocal:${it.name}"
+                                is me.raddatz.veyq.mobile.composition.Dropped.Unread -> "unread:${it.name}"
                             }
                         }
                         seen += "deleted:$deletedName"
-                        items.filterIsInstance<me.raddatz.veyq.mobile.navigation.Dropped.File>().forEach { f ->
+                        items.filterIsInstance<me.raddatz.veyq.mobile.composition.Dropped.File>().forEach { f ->
                             val src = f.source
                             left(object : me.raddatz.veyq.mobile.blob.UploadSource(src.name, src.size, src.type, src.modifiedAt) {
                                 override suspend fun read(from: Long, length: Int) = src.read(from, length)
@@ -1917,7 +1920,7 @@ class DispatchTest {
         assertEquals(listOf("level:Home", "file:a.txt", "folder:Trip:1", "notLocal:Phone", "unread:gone.txt", "deleted:Deleted"), seen.toList())
         assertEquals(listOf("a.txt"), closed.toList(), "a file the drop did not keep was not closed")
         seen.clear()
-        outcome = { _ -> me.raddatz.veyq.mobile.navigation.DropOutcome.Refused(Notice(Msg.DROP_NOT_HERE)) }
+        outcome = { _ -> me.raddatz.veyq.mobile.composition.DropOutcome.Refused(Notice(Msg.DROP_NOT_HERE)) }
         val row = me.raddatz.veyq.mobile.navigation.NodeAt("s", "identity", "FOLDER", "Ben")
         assertEquals(
             Answer.Dropped(0, listOf(Notice(Msg.DROP_NOT_HERE)), refused = true),
@@ -1944,13 +1947,13 @@ class DispatchTest {
             val hidden = Hidden({}, emptySet())
             Composition(
                 SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles,
-                queuedAsk = { account, loss -> me.raddatz.veyq.mobile.offline.QueuedShown.ask(loss, if (account.key == "a.example#u1") 2 else 0) },
+                queuedAsk = { account, loss -> me.raddatz.veyq.mobile.composition.QueuedShown.ask(loss, if (account.key == "a.example#u1") 2 else 0) },
             ) { _ -> Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}) }
         }
         b.signedIn()
-        val asked = b.ask(Call.QueuedAskFor("a.example#u1", me.raddatz.veyq.mobile.offline.QueuedLoss.STOP_TRUSTING)) as Answer.QueuedAsked
+        val asked = b.ask(Call.QueuedAskFor("a.example#u1", me.raddatz.veyq.mobile.composition.QueuedLoss.STOP_TRUSTING)) as Answer.QueuedAsked
         assertEquals(Notice(Msg.OFFLINE_WRITES_LOST, 2) to Msg.OFFLINE_STOP_TRUSTING_ANYWAY, asked.ask!!.question to asked.ask.confirm)
-        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_CONNECTION), b.ask(Call.QueuedAskFor("b.example#u2", me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_CONNECTION), b.ask(Call.QueuedAskFor("b.example#u2", me.raddatz.veyq.mobile.composition.QueuedLoss.SIGN_OUT)))
         b.shutdown()
     }
 
@@ -2189,7 +2192,7 @@ class DispatchTest {
     @Test
     fun theWritesMadeOfflineAreListedDiscardedOpenedAndARefusedFileSavedToAPath() = runBlocking {
         fun item(id: String, op: me.raddatz.veyq.mobile.offline.Queued, state: me.raddatz.veyq.mobile.offline.QueuedWrite.State, said: Msg, opens: Boolean, copies: Int, at: Long) =
-            me.raddatz.veyq.mobile.offline.QueuedItem(id, op, "ta", "s", "n", "Trip", Notice(Msg.QUEUED_FOLDER, id), state, Notice(said), opens, copies, at)
+            me.raddatz.veyq.mobile.composition.QueuedItem(id, op, "ta", "s", "n", "Trip", Notice(Msg.QUEUED_FOLDER, id), state, Notice(said), opens, copies, at)
         val waiting = item("w1", me.raddatz.veyq.mobile.offline.Queued.FOLDER_CREATE, me.raddatz.veyq.mobile.offline.QueuedWrite.State.WAITING, Msg.OFFLINE_WAITING, false, 0, 1)
         val held = item("entry:e1", me.raddatz.veyq.mobile.offline.Queued.POT_ENTRY, me.raddatz.veyq.mobile.offline.QueuedWrite.State.HELD, Msg.OFFLINE_HELD_CHANGED, true, 0, 2)
         val refused = item("m1", me.raddatz.veyq.mobile.offline.Queued.MEDIA_ADD, me.raddatz.veyq.mobile.offline.QueuedWrite.State.REFUSED, Msg.OFFLINE_REFUSED_NO_ROOM, false, 1, 3)
@@ -2198,11 +2201,11 @@ class DispatchTest {
         val door = QueuedDoor(
             items = items,
             discard = { id -> items.value.any { it.id == id }.also { found -> if (found) items.value = items.value.filter { it.id != id } } },
-            opens = { id -> if (id == held.id) me.raddatz.veyq.mobile.offline.QueuedOpen.Entry("ta", "s", "p", "e1", id) else null },
+            opens = { id -> if (id == held.id) me.raddatz.veyq.mobile.composition.QueuedOpen.Entry("ta", "s", "p", "e1", id) else null },
             copyName = { id, index -> if (id == refused.id && index == 0) "dune.png" to "image/png" else null },
             // the played tray answers any write it holds, refused or not: the refused check is the dispatch's to hold
             saveCopy = { id, _, sink -> if (items.value.any { it.id == id }) { sink(plain.copyOfRange(0, 4)); sink(plain.copyOfRange(4, plain.size)); true } else false },
-            ask = { loss -> me.raddatz.veyq.mobile.offline.QueuedShown.ask(loss, items.value.size) },
+            ask = { loss -> me.raddatz.veyq.mobile.composition.QueuedShown.ask(loss, items.value.size) },
             banner = kotlinx.coroutines.flow.flowOf(null), sent = kotlinx.coroutines.flow.emptyFlow(), here = kotlinx.coroutines.flow.flowOf(emptyList()),
         )
         val b = Bridge {
@@ -2219,7 +2222,7 @@ class DispatchTest {
         assertEquals(listOf(Notice(Msg.OFFLINE_WAITING), Notice(Msg.OFFLINE_HELD_CHANGED), Notice(Msg.OFFLINE_REFUSED_NO_ROOM)), first.map { it.said })
 
         // Open: the core's typed target for a held one, none for one that waits
-        assertEquals(Answer.QueuedOpens(me.raddatz.veyq.mobile.offline.QueuedOpen.Entry("ta", "s", "p", "e1", "entry:e1")), b.ask(Call.QueuedOpen("entry:e1")))
+        assertEquals(Answer.QueuedOpens(me.raddatz.veyq.mobile.composition.QueuedOpen.Entry("ta", "s", "p", "e1", "entry:e1")), b.ask(Call.QueuedOpen("entry:e1")))
         assertEquals(Answer.Refused(Answer.Why.NO_SUCH_QUEUED), b.ask(Call.QueuedOpen("w1")))
         // a held entry's editor needs its Pot open first
         assertEquals(Answer.Refused(Answer.Why.NO_SUCH_POT), b.ask(Call.EditorOpenHeld(99, "entry:e1", ",")))
@@ -2242,16 +2245,16 @@ class DispatchTest {
         }
 
         // the ask before a loss: how many go, and the loss's own confirm
-        val asked = b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT)) as Answer.QueuedAsked
+        val asked = b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.composition.QueuedLoss.SIGN_OUT)) as Answer.QueuedAsked
         assertEquals(Notice(Msg.OFFLINE_WRITES_LOST, 3) to Msg.OFFLINE_SIGN_OUT_ANYWAY, asked.ask!!.question to asked.ask.confirm)
-        assertEquals(Msg.OFFLINE_REMOVE_ANYWAY, (b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.offline.QueuedLoss.REMOVE_ALL)) as Answer.QueuedAsked).ask!!.confirm)
+        assertEquals(Msg.OFFLINE_REMOVE_ANYWAY, (b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.composition.QueuedLoss.REMOVE_ALL)) as Answer.QueuedAsked).ask!!.confirm)
 
         // Discard: gone from the list at once; a second is refused
         assertEquals(Answer.Done, b.ask(Call.QueuedDiscard("w1")))
         assertEquals(listOf("entry:e1", "m1"), tray.until { u -> (u as Update.QueuedTray).items?.takeIf { it.size == 2 } }.map { it.id })
         assertEquals(Answer.Refused(Answer.Why.NO_SUCH_QUEUED), b.ask(Call.QueuedDiscard("w1")))
         items.value = emptyList()
-        assertEquals(Answer.QueuedAsked(null), b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.offline.QueuedLoss.STOP_TRUSTING)), "asked with nothing waiting")
+        assertEquals(Answer.QueuedAsked(null), b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.composition.QueuedLoss.STOP_TRUSTING)), "asked with nothing waiting")
 
         // the tenant closed: the tray is gone
         assertEquals(Answer.Done, b.ask(Call.SessionSignOut("a.example#u1")))

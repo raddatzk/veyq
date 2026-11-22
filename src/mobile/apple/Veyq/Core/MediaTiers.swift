@@ -75,12 +75,12 @@ enum MediaTiers {
     }
 }
 
-/// Core's `MediaUpload.Deriver` on an Apple device: the tiers of a picked file (`MediaTiers`), read inside its security
+/// Core's `Derivation.Deriver` on an Apple device: the tiers of a picked file (`MediaTiers`), read inside its security
 /// scope, handed back on any thread.
-final class MediaDeriver: NSObject, MediaUploadDeriver, @unchecked Sendable {
+final class MediaDeriver: NSObject, DerivationDeriver, @unchecked Sendable {
     static let shared = MediaDeriver()
 
-    func derive(source: UploadSource, type: String, done: @escaping (MediaUpload.Derived) -> Void) {
+    func derive(source: UploadSource, type: String, done: @escaping (Derivation.Derived) -> Void) {
         nonisolated(unsafe) let done = done
         let url = AppleMemories.shared.urlOf(source: source)
         Task.detached {

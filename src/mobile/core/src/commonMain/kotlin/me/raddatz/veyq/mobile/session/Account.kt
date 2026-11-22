@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.PlatformApi
+import kotlin.native.HiddenFromObjC
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -109,9 +111,15 @@ class SignInFailure(val reason: Reason, detail: String? = null) : Exception(deta
  * the identity.
  */
 class VeyqAccount private constructor(
-    internal val suite: V1,
-    internal val primitives: Primitives,
-    internal val http: HttpClient,
+    @PlatformApi
+    @HiddenFromObjC
+    val suite: V1,
+    @PlatformApi
+    @HiddenFromObjC
+    val primitives: Primitives,
+    @PlatformApi
+    @HiddenFromObjC
+    val http: HttpClient,
     /**
      * A client for a request to anyone but this server — an external service the tenant names (the day's exchange
      * rates): no bearer, no cookie, no header of the app's own. [http] puts this account's bearer on every request it
@@ -148,7 +156,9 @@ class VeyqAccount private constructor(
     }
 
     // The account's keys: replaced in place once a rotation this device made committed ([swapKeys], ADR 0148 decision 7).
-    internal var masterKey: ByteArray = masterKey
+    @PlatformApi
+    @HiddenFromObjC
+    var masterKey: ByteArray = masterKey
         private set
     private var identity: IdentityPrivate = identity
     internal var kem: XWingKey = kem
@@ -177,7 +187,9 @@ class VeyqAccount private constructor(
 
     /** This account's offline store on this device, open while the account is (none where the device keeps no trust in it,
      *  or the host named no directory). */
-    internal var offline: AccountOffline? = null
+    @PlatformApi
+    @HiddenFromObjC
+    var offline: AccountOffline? = null
         private set
 
     private var pinsHeld: me.raddatz.veyq.mobile.offline.OfflinePins? = null
@@ -202,7 +214,9 @@ class VeyqAccount private constructor(
      * The outbox sent (ADR 0153 decision 4, [me.raddatz.veyq.mobile.offline.OutboxSender]): one run at a time, each tenant
      * opened once for it. Null where there is no outbox or the account is not online.
      */
-    internal suspend fun sendQueued(go: () -> Boolean = { true }): me.raddatz.veyq.mobile.offline.OutboxSender.Report? = sendingLock.withLock {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun sendQueued(go: () -> Boolean = { true }): me.raddatz.veyq.mobile.offline.OutboxSender.Report? = sendingLock.withLock {
         val box = outbox ?: return@withLock null
         if (_reach.value != Reach.Online || sendsNothing || closed) return@withLock null
         if (box.count() == 0) return@withLock me.raddatz.veyq.mobile.offline.OutboxSender.Report(0, 0, 0, 0)
@@ -239,7 +253,9 @@ class VeyqAccount private constructor(
     }
 
     /** The background run [startSending] began, awaited (a test's). */
-    internal suspend fun awaitSending() { sendJob?.join() }
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun awaitSending() { sendJob?.join() }
 
     /** This account's pins on this device and their sync (ADR 0140 decision 9); null where it keeps no offline store. */
     val offlinePins: me.raddatz.veyq.mobile.offline.OfflinePins?
@@ -317,7 +333,9 @@ class VeyqAccount private constructor(
      * the account here ([Reach.Ended]): the store is wiped (a refused refresh forgets the record too, as the resume does),
      * the person signs in again. True once online; false while the server does not answer.
      */
-    internal suspend fun reconnect(): Boolean = reconnecting.withLock {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun reconnect(): Boolean = reconnecting.withLock {
         when (_reach.value) {
             Reach.Online -> return@withLock true
             is Reach.Ended -> return@withLock false
@@ -393,10 +411,14 @@ class VeyqAccount private constructor(
     }
 
     /** This device's own store: what an application keeps per device and not per account (the day's exchange rates). */
-    internal val deviceStore: DeviceStore get() = device.store
+    @PlatformApi
+    @HiddenFromObjC
+    val deviceStore: DeviceStore get() = device.store
 
     /** This installation as the account's device register names it: its id there and the label it starts with. */
-    internal val thisDevice: ThisDevice get() = device
+    @PlatformApi
+    @HiddenFromObjC
+    val thisDevice: ThisDevice get() = device
 
     /** A presigned `PUT` of [bytes] to the object store through the [outside] client: exactly `Content-Type:
      *  application/octet-stream` (it is part of the signature) and no bearer; the status, or 0 when the store was not
@@ -419,7 +441,9 @@ class VeyqAccount private constructor(
 
     /** The body of a plain `GET` of [url] through the [outside] client (no bearer, no cookie), or null for anything but
      *  a 2xx answer or a failure to reach it. */
-    internal suspend fun fetchOutside(url: String): String? = runCatching {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun fetchOutside(url: String): String? = runCatching {
         val r = outside.get(url)
         if (r.status.value in 200..299) r.bodyAsText() else null
     }.getOrNull()
@@ -463,7 +487,9 @@ class VeyqAccount private constructor(
      * it (what an offline unlock opens with). Open tenants hold scope keys opened with the old identity: the host opens
      * its tenant again.
      */
-    internal suspend fun swapKeys(newMasterKey: ByteArray, newIdentity: IdentityPrivate, newMaterial: AccountKeyMaterial) {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun swapKeys(newMasterKey: ByteArray, newIdentity: IdentityPrivate, newMaterial: AccountKeyMaterial) {
         rekeyOffline(newMasterKey)
         val oldMk = masterKey
         val oldIdentity = identity
@@ -515,7 +541,9 @@ class VeyqAccount private constructor(
      * write the server answered `409 stale_epoch` (a rotation replaced the key in between): its key and epoch, or null
      * where it does not open. The caller zeroes the key.
      */
-    internal suspend fun reopenScope(tenant: TenantRef, scopeId: String): Pair<ByteArray, Long>? {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun reopenScope(tenant: TenantRef, scopeId: String): Pair<ByteArray, Long>? {
         val base = originOf(tenant)
         val r = respond { ScopesApi(base, http).listMyScopes() }
         if (!r.success) return null
@@ -573,7 +601,9 @@ class VeyqAccount private constructor(
      * online ([finish]) and every reconnect after an offline unlock — and every [RotationFinisher.EVERY] while the account is
      * open and online, in its own background scope, cancelled at close. A failed pass is silent: the next one retries.
      */
-    internal val rotations = me.raddatz.veyq.mobile.session.rotation.RotationFinisher(background, { reach.value == Reach.Online && !sendsNothing && !closed }) {
+    @PlatformApi
+    @HiddenFromObjC
+    val rotations = me.raddatz.veyq.mobile.session.rotation.RotationFinisher(background, { reach.value == Reach.Online && !sendsNothing && !closed }) {
         me.raddatz.veyq.mobile.session.rotation.finishOnce(this)
     }
 
@@ -702,7 +732,9 @@ class VeyqAccount private constructor(
      * Scope [scopeId]'s member list (`listScopeMembers`) of tenant [tenantId], a kept read (ADR 0144 decision 7): the server's answer
      * while it is reached, the store's while not; null where it did not read (refused, or offline and not kept).
      */
-    internal suspend fun members(base: String, tenantId: String, scopeId: String): List<ScopeMember>? {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun members(base: String, tenantId: String, scopeId: String): List<ScopeMember>? {
         val r = runCatching {
             kept(KeptRead.MEMBERS, tenantId, scopeId, scopeId) { fetched(respond { ScopesApi(base, http).listScopeMembers(scopeId) }, null) }
         }.getOrElse { e -> if (e is CancellationException) throw e else return null }
@@ -981,12 +1013,16 @@ class VeyqAccount private constructor(
     private val scopeKeys = MutableStateFlow<List<ByteArray>>(emptyList())
 
     /** The scope keys [scopeKeys] holds (a test's look that they are zeroed at the close). */
-    internal val openedScopeKeys: List<ByteArray> get() = scopeKeys.value
+    @PlatformApi
+    @HiddenFromObjC
+    val openedScopeKeys: List<ByteArray> get() = scopeKeys.value
 
     private fun opened(key: ByteArray): ByteArray = key.also { k -> scopeKeys.update { if (it.any { held -> held === k }) it else it + k } }
 
     /** A copy of the Master Key the caller zeroes, null once the account closed. */
-    internal fun masterKeyCopy(): ByteArray? = if (closed) null else masterKey.copyOf()
+    @PlatformApi
+    @HiddenFromObjC
+    fun masterKeyCopy(): ByteArray? = if (closed) null else masterKey.copyOf()
 
     /** `getAccountKeyMaterial`, read now (the cold proof reads the floor as the server holds it). */
     internal suspend fun keyMaterialNow(): AccountKeyMaterial = call { AccountApi(server, http).getAccountKeyMaterial() }
@@ -1067,7 +1103,9 @@ class VeyqAccount private constructor(
     private fun now(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
 
     /** One API call with the current access token; a 401 refreshes once (single-flight, ADR 0004) and retries. */
-    internal suspend fun <T : Any> call(f: suspend () -> HttpResponse<T>): T {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun <T : Any> call(f: suspend () -> HttpResponse<T>): T {
         val r = respond(f)
         if (!r.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "HTTP ${r.status}")
         return r.body()
@@ -1078,7 +1116,9 @@ class VeyqAccount private constructor(
      * that does not reach the server throws [Unreachable] and turns the account offline ([reach]); an account opened
      * offline sends nothing until it reconnected.
      */
-    internal suspend fun <T : Any> respond(f: suspend () -> HttpResponse<T>): HttpResponse<T> {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun <T : Any> respond(f: suspend () -> HttpResponse<T>): HttpResponse<T> {
         val first = sent(f)
         if (first.status != 401 || tokens.refresh == null) return first
         refresh(tokens.access)
@@ -1103,7 +1143,9 @@ class VeyqAccount private constructor(
     }
 
     /** What a kept read's fetch came to: its pages as the server sent them and its revision, a `304`, or a refusal. */
-    internal sealed class Fetched {
+    @PlatformApi
+    @HiddenFromObjC
+    sealed class Fetched {
         class Pages(val pages: List<ByteArray>, val revision: String?) : Fetched()
         object NotModified : Fetched()
         class Refused(val status: Int, val code: String?) : Fetched()
@@ -1113,7 +1155,9 @@ class VeyqAccount private constructor(
      * A kept read's answer: its pages, and — where they came from the store with the server unreachable — as of when;
      * [revision] the answer's (the kept one's on a `304` or offline), null where it has none.
      */
-    internal class Read(val pages: List<ByteArray>, val offline: OfflineAsOf?, val revision: String? = null)
+    @PlatformApi
+    @HiddenFromObjC
+    class Read(val pages: List<ByteArray>, val offline: OfflineAsOf?, val revision: String? = null)
 
     /** A read the server refused ([status], its error [code]); what was kept of it is gone. */
     class Refused(val status: Int, val code: String?) : Exception("HTTP $status${code?.let { " $it" } ?: ""}")
@@ -1125,7 +1169,9 @@ class VeyqAccount private constructor(
      * drop the store is swept of what no current answer reaches ([settle]: a caller that reads many settles once). Without
      * a store it is the server's answer alone.
      */
-    internal suspend fun kept(
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun kept(
         read: KeptRead, tenant: String, scope: String, id: String, conditional: Boolean = false, settle: Boolean = true,
         fetch: suspend (ifNoneMatch: String?) -> Fetched,
     ): Read {
@@ -1172,7 +1218,9 @@ class VeyqAccount private constructor(
     private var sweepDue = false
 
     /** The store swept, where a read replaced or dropped an answer since the last sweep. */
-    internal suspend fun settle() {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun settle() {
         val o = offline ?: return
         if (!sweepDue) return
         sweepDue = false
@@ -1180,7 +1228,9 @@ class VeyqAccount private constructor(
     }
 
     /** [r]'s body as the server sent it, its pages' one page; or its refusal with the error's code. */
-    internal suspend fun <T : Any> fetched(r: HttpResponse<T>, revision: String? = r.response.headers[HttpHeaders.ETag]): Fetched = when {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun <T : Any> fetched(r: HttpResponse<T>, revision: String? = r.response.headers[HttpHeaders.ETag]): Fetched = when {
         r.status == 304 -> Fetched.NotModified
         r.success -> Fetched.Pages(listOf(r.response.readRawBytes()), revision)
         else -> Fetched.Refused(r.status, errorCode(r))
@@ -1208,7 +1258,9 @@ class VeyqAccount private constructor(
     }
 
     /** The `code` of an error response's body (`ErrorResponse`), or null. */
-    internal suspend fun errorCode(r: HttpResponse<*>): String? = runCatching {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun errorCode(r: HttpResponse<*>): String? = runCatching {
         (Json.parseToJsonElement(r.response.bodyAsText()) as? JsonObject)?.get("code")?.jsonPrimitive?.content
     }.getOrNull()
 
@@ -1240,7 +1292,9 @@ class VeyqAccount private constructor(
         internal val PROBE = LivePoll.Cadence(intervalMs = 5_000, maxBackoffMs = 60_000, jitter = 0.2, minGapMs = 0)
 
         /** How a kept answer is read back: as the generated client reads the server's. */
-        internal val KEPT_JSON = Json { ignoreUnknownKeys = true; isLenient = true }
+        @PlatformApi
+        @HiddenFromObjC
+        val KEPT_JSON = Json { ignoreUnknownKeys = true; isLenient = true }
 
         /** An HTTP client with the bearer of [tokens], and the server checked for its major and suite. */
         private class Connected(val suite: V1, val base: String, val tokens: Tokens, val http: HttpClient, val outside: HttpClient)
@@ -1781,7 +1835,9 @@ private fun ThisDevice.keepRefresh(alias: String, token: String) {
 class TenantSession internal constructor(
     val account: VeyqAccount,
     val tenant: TenantRef,
-    internal val base: String,
+    @PlatformApi
+    @HiddenFromObjC
+    val base: String,
     scopes: List<OpenScope>,
     private val applicationsOff: Set<String>,
     closed: Map<String, GrantOutcome.Reason> = emptyMap(),
@@ -1821,7 +1877,9 @@ class TenantSession internal constructor(
 
     /** The kind of each scope of [closed] (`TENANT`, `GROUP`, `PERSONAL`), by id: what a walk over the tenant's and the groups'
      *  scopes counts as not read (a person's index, ADR 0144 decision 12). */
-    internal var closedKinds: Map<String, String> = closedKinds
+    @PlatformApi
+    @HiddenFromObjC
+    var closedKinds: Map<String, String> = closedKinds
         private set
 
     private val reopening = kotlinx.coroutines.sync.Mutex()
@@ -1922,7 +1980,9 @@ class TenantSession internal constructor(
     override suspend fun spaces(): List<SpaceRef> = scopes.map { SpaceRef(it.summary.id, it.summary.kind.value, it.name) }
 
     /** The kind of open scope [scopeId] (`TENANT`, `GROUP`, `PERSONAL`), or null where it is not open here. */
-    internal fun scopeKind(scopeId: String): String? = scopes.firstOrNull { it.summary.id == scopeId }?.summary?.kind?.value
+    @PlatformApi
+    @HiddenFromObjC
+    fun scopeKind(scopeId: String): String? = scopes.firstOrNull { it.summary.id == scopeId }?.summary?.kind?.value
 
     private var tree: Map<String, List<OpenNode>>? = null
 
@@ -1979,7 +2039,9 @@ class TenantSession internal constructor(
      * ([forgetTree]) or the tenant closes ([close]), which drop it. Keyed by [key], the deriving code's own name; core's
      * session names no application.
      */
-    internal suspend fun <V : Any> fromTree(key: String, derive: suspend (Map<String, List<OpenNode>>) -> V): V {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun <V : Any> fromTree(key: String, derive: suspend (Map<String, List<OpenNode>>) -> V): V {
         val read = trees()
         derived[key]?.let { (from, value) ->
             @Suppress("UNCHECKED_CAST")
@@ -1992,19 +2054,25 @@ class TenantSession internal constructor(
     }
 
     /** Whether a value derived under [key] is held now ([fromTree]): what a test of its lifetime reads. */
-    internal fun holdsDerived(key: String): Boolean = key in derived
+    @PlatformApi
+    @HiddenFromObjC
+    fun holdsDerived(key: String): Boolean = key in derived
 
     private val derived = HashMap<String, Pair<Map<String, List<OpenNode>>, Any>>()
 
     /** The open scopes whose tree did not read in [trees]' last read (offline with nothing of it kept): listed there as empty. */
-    internal var unreadTrees: Set<String> = emptySet()
+    @PlatformApi
+    @HiddenFromObjC
+    var unreadTrees: Set<String> = emptySet()
         private set
 
     /**
      * The scope epoch this device holds [scopeId] at — its floor for writes (ADR 0109 point 6, layer 2): a node whose key
      * was minted below it is not re-keyed since the rotation, and nothing is sealed under its key. Null for a scope not open.
      */
-    internal fun scopeEpoch(scopeId: String): Int? = scopes.firstOrNull { it.summary.id == scopeId }?.summary?.grantedEpoch
+    @PlatformApi
+    @HiddenFromObjC
+    fun scopeEpoch(scopeId: String): Int? = scopes.firstOrNull { it.summary.id == scopeId }?.summary?.grantedEpoch
 
     /** How this app re-keys and folds each kind (its composition root's), for a write that pulls its path forward and for
      *  the background run that finishes a scope's re-key ([NodeRekey.pull], [NodeRekey.resume]); null: neither runs. */
@@ -2050,7 +2118,9 @@ class TenantSession internal constructor(
     val rekeyingScopes: List<String> get() = scopes.filter { it.summary.rekeying == true }.map { it.summary.id }
 
     /** The scope key this device holds [scopeId] at, with its epoch; null for a scope not open. */
-    internal fun scopeKey(scopeId: String): Pair<ByteArray, Int>? =
+    @PlatformApi
+    @HiddenFromObjC
+    fun scopeKey(scopeId: String): Pair<ByteArray, Int>? =
         scopes.firstOrNull { it.summary.id == scopeId }?.let { it.key to it.summary.grantedEpoch }
 
     /**
@@ -2064,7 +2134,9 @@ class TenantSession internal constructor(
      * re-sealed root entries no longer open (inbox #1021). Where a key changed, the models over this session read again
      * ([rekeyed]) once this read is held — a Pot under its key, the shell its spaces.
      */
-    internal suspend fun trees(): Map<String, List<OpenNode>> = tree ?: run {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun trees(): Map<String, List<OpenNode>> = tree ?: run {
         reopenMoved()
         var asOf: OfflineAsOf? = null
         var unkept: Unreachable? = null

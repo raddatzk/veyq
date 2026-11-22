@@ -270,9 +270,9 @@ struct GuestLinkView: View {
                             .accessibilityIdentifier("guest-back")
                     }
                     ToolbarItemGroup(placement: .automatic) {
-                        if let file = held.page as? GuestPage.File { GuestFileActions(model: model, held: held, file: file.model) }
+                        if let file = held.page as? DepotGuest.File { GuestFileActions(model: model, held: held, file: file.model) }
                         // a Memory's music played or stopped, as the member's header offers it (#1034)
-                        if let g = held.page as? GuestPage.Gallery, let gallery = model.galleryModel(g.node), let state = model.galleryState(g.node),
+                        if let g = held.page as? MemoriesGuest.Gallery, let gallery = model.galleryModel(g.node), let state = model.galleryState(g.node),
                            gallery.headerActions.contains(HeaderAction.music) {
                             Button { gallery.toggleMusic() } label: {
                                 Label(gallery.label(id: .music).map { say($0) } ?? "", systemImage: state.musicHere ? "stop.fill" : "music.note")

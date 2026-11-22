@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.navigation
 
+
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +28,7 @@ import me.raddatz.veyq.mobile.words.Piece
  * a trail up to the space's root, lists the places one may go into or place into and says why the place shown takes
  * nothing —, the guest folder's confirm before a move ends it, and the write:
  *
- * - **move**: where it went, and its **undo** offered for [ShellModel.TRASH_UNDO_MS], which this model runs (the move's
+ * - **move**: where it went, and its **undo** offered for [NodeHeaderModel.TRASH_UNDO_MS], which this model runs (the move's
  *   window is a trash's, the header CR's D4) — the node moved back the same way, to where it was; none for a guest's
  *   folder moved out, which that move ended (nothing brings it back into its drop box);
  * - **copy**: by the kind's way ([AppKinds.copiesByOpenModel]: a Pot by its open model, everything else with what is under
@@ -50,7 +51,7 @@ class MoveSheet(
      */
     private val work: CoroutineDispatcher = Dispatchers.Default,
 ) {
-    /** What the sheet reads and writes ([ShellModel.moveSheet] over a tenant, a test over its own). */
+    /** What the sheet reads and writes (`ShellModel.moveSheet` over a tenant, a test over its own). */
     interface Door {
         /** Every node of [scopeId] this device opens: what the browser walks. */
         suspend fun tree(scopeId: String): List<NodeRef>
@@ -251,7 +252,7 @@ class MoveSheet(
         undoWindow?.cancel()
         _state.update { it.copy(busy = false, done = said, undo = said.living(me.raddatz.veyq.mobile.words.NoticeKind.UNDO)) }
         undoWindow = scope.launch {
-            delay(ShellModel.TRASH_UNDO_MS)
+            delay(NodeHeaderModel.TRASH_UNDO_MS)
             endUndo()
         }
         return current
