@@ -1106,6 +1106,25 @@ internal sealed class Call {
     @Serializable @SerialName("Received.NamingDecline") data class ReceivedNamingDecline(val received: Long) : Call()
 
     /**
+     * A guest level's row [node]'s *Move to…* ([ReceivedRow.menu], inbox #1063): the member's move sheet over the guest's
+     * door (`GuestLevelMoves.sheet`), answered [Answer.MoveOpened] for [Watched.Move] and the `Move.*` calls; refused
+     * `NOT_OFFERED` where the guest does not move it.
+     */
+    @Serializable @SerialName("Received.Move") data class ReceivedMove(val received: Long, val node: String) : Call()
+
+    /**
+     * A guest level's Select mode ([ReceivedPage.tools], inbox #1063): on, off (*Cancel*), a row turned, *All* and *None* —
+     * each [Answer.Done], the selection then shown in [ReceivedPage.selection]; [ReceivedSelectMove] its *Move to…* over
+     * the selected rows the guest moves ([Answer.MoveOpened], then the `Move.*` calls).
+     */
+    @Serializable @SerialName("Received.SelectStart") data class ReceivedSelectStart(val received: Long) : Call()
+    @Serializable @SerialName("Received.SelectCancel") data class ReceivedSelectCancel(val received: Long) : Call()
+    @Serializable @SerialName("Received.SelectToggle") data class ReceivedSelectToggle(val received: Long, val node: String) : Call()
+    @Serializable @SerialName("Received.SelectAll") data class ReceivedSelectAll(val received: Long) : Call()
+    @Serializable @SerialName("Received.SelectNone") data class ReceivedSelectNone(val received: Long) : Call()
+    @Serializable @SerialName("Received.SelectMove") data class ReceivedSelectMove(val received: Long) : Call()
+
+    /**
      * Kept link [node]'s page (core's `BookmarkPage`, ADR 0150 decision 6): its meta opened, the share shown in place while
      * the tenant has `core.share-embedding` on, else opened on its own page. Answered with its id
      * ([Answer.BookmarkOpened]) for [Watched.Bookmark] and the `Bookmark.*` calls. Loaded at once.
@@ -4384,7 +4403,11 @@ internal enum class ReceivedPageKind { LEVEL, FILE, GALLERY, POT, DROP_BOX, UPLO
 /** One child of a guest's level. */
 @Serializable
 @SerialName("ReceivedRow")
-internal class ReceivedRow(val id: String, val kind: String, val name: String, val identity: Boolean)
+internal class ReceivedRow(
+    val id: String, val kind: String, val name: String, val identity: Boolean,
+    /** The row's menu as the core plans it (`GuestLevelMoves.rowPlan`, inbox #1063): Move where the guest moves its node ([Call.ReceivedMove]). */
+    val menu: List<HeaderShown.PlanAction> = emptyList(),
+)
 
 /**
  * The page a received link shows: a level's rows, or the id of the member's own model it opened under the existing calls
@@ -4400,6 +4423,10 @@ internal class ReceivedPage(
     val writes: Boolean = false,
     /** A guest level's New (`GuestLevel.creates`, a plan drawn whole): a folder, files, a folder uploaded where it writes. */
     val creates: List<ShellShown.ShownCreate> = emptyList(),
+    /** A guest level's tools (`GuestLevelMoves.tools`, inbox #1063): Select where some row moves ([Call.ReceivedSelectStart]). */
+    val tools: List<me.raddatz.veyq.mobile.navigation.LevelTool> = emptyList(),
+    /** A guest level's selection while its Select mode is on (`GuestLevelMoves.selection`): the member's bar over it. */
+    val selection: ShellShown.ShownSelection? = null,
 )
 
 /**

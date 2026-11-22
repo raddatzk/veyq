@@ -247,6 +247,58 @@ class ReceivedBridgeTest {
     }
 
     /**
+     * #1063 over the bridge: a READ_WRITE guest's level carries each row's menu (Move where the guest moves its node) and
+     * Select; the selection is shown in the page, and its *Move to…* and a row's are the member's sheets (`Move.*`), the
+     * guest's name asked at the write — every update scanned for the key.
+     */
+    @Test
+    fun aReadWriteGuestMovesThroughTheBridgeWithTheMembersSheet() = runBlocking {
+        val share = PlayedShare(p, role = "READ_WRITE")
+        val content = PlayedGuestContent(share)
+        val folder = share.uuid().also { share.add(it, share.rootId, share.rootKey, "FOLDER", "Archive") }
+        val (file, _) = content.file(share.rootId, share.rootKey, "notes.txt", "hello".encodeToByteArray())
+        val pot = content.pot(share.rootId, share.rootKey, "Dinner")
+        val b = bridge(share)
+        val opened = assertIs<Answer.ReceivedOpened>(b.ask(Call.ReceivedOpen(share.link)))
+        val w = b.watching(Watched.Received(opened.received))
+        val all = mutableListOf<String>()
+        suspend fun until(pick: (ReceivedShown) -> Boolean): ReceivedShown = w.untilJson { j ->
+            all += j.toString()
+            (wire.decodeFromJsonElement(Update.serializer(), j) as Update.Received).shown?.takeIf(pick)
+        }
+        val level = until { it.page?.kind == ReceivedPageKind.LEVEL }.page!!
+        val menus = level.rows.associate { it.id to it.menu.map { a -> a.id } }
+        assertEquals(listOf(me.raddatz.veyq.mobile.navigation.HeaderAction.MOVE), menus[file])
+        assertEquals(listOf(me.raddatz.veyq.mobile.navigation.HeaderAction.MOVE), menus[folder])
+        assertEquals(emptyList(), menus[pot], "a guest's Pot offers a move")
+        assertEquals(listOf(me.raddatz.veyq.mobile.navigation.LevelTool.SELECT), level.tools)
+        assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.ReceivedMove(opened.received, pot)))
+        // Select: the selection shown in the page, its Move over the rows the guest moves
+        assertEquals(Answer.Done, b.ask(Call.ReceivedSelectStart(opened.received)))
+        assertEquals(Answer.Done, b.ask(Call.ReceivedSelectToggle(opened.received, file)))
+        assertEquals(listOf(file), until { it.page?.selection?.selected == listOf(file) }.page!!.selection!!.selected)
+        val sheet = assertIs<Answer.MoveOpened>(b.ask(Call.ReceivedSelectMove(opened.received))).move
+        val m = b.watching(Watched.Move(sheet))
+        m.untilJson { j -> (wire.decodeFromJsonElement(Update.serializer(), j) as Update.Move).shown?.takeIf { it.loaded } }
+        assertEquals(Answer.Done, b.ask(Call.MoveGo(sheet, folder)))
+        val sent = async { b.ask(Call.MoveHere(sheet)) }
+        until { it.naming }
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ReceivedNamingSave(opened.received, "Ben")))
+        assertNotNull(assertIs<Answer.MoveSent>(sent.await()).done, "the guest's move was not said")
+        assertEquals(listOf(file to folder), content.placed.map { (id, body) -> id to body["parentId"].toString().trim('"') })
+        // the link read anew: the file no longer lists at the root
+        until { s -> s.page?.kind == ReceivedPageKind.LEVEL && s.page!!.rows.none { it.id == file } }
+        assertIs<Answer.MoveOpened>(b.ask(Call.ReceivedMove(opened.received, folder)))
+        b.ask(Call.ReceivedClose(opened.received))
+        val key = share.kShare
+        for (json in all) for (c in listOf(b64url(key), b64(key), b64(key).trimEnd('='), hex(key), share.link, share.shareId)) {
+            if (json.contains(c)) fail("an update carried the link or its key: $json")
+        }
+        share.assertNoKeyInAnyRequest()
+        b.shutdown()
+    }
+
+    /**
      * #1035: a signed-out READ_WRITE guest replaces the file on screen by path (`Received.Replace`, the link's own queue —
      * no tenant is open); ADR 0154 decision 1: a guest not named yet is asked its name at the write by the core's naming
      * flow ([ReceivedShown.naming]) — declined, nothing queued; an empty name keeps the dialog open; named, the replace
