@@ -15,3 +15,6 @@ internal actual fun platformDeviceKeys(config: Config, store: DeviceStore): Devi
 
 /** The Secret Service, where the device keys are: an item per guest session under its hashed name. */
 internal actual fun platformGuestSessions(): me.raddatz.veyq.mobile.sharing.GuestSessions = me.raddatz.veyq.mobile.sharing.LinuxGuestSessions()
+
+/** Whether an SVG is drawn as an image: GTK decodes it through glycin's sandboxed librsvg (inbox #1059, `file_page.rs`' test). */
+internal actual fun platformDrawsSvgAsImage(): Boolean = true

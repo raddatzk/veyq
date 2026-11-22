@@ -55,6 +55,13 @@ internal expect fun platformDeviceKeys(config: Config, store: DeviceStore): Devi
  */
 internal expect fun platformGuestSessions(): me.raddatz.veyq.mobile.sharing.GuestSessions
 
+/**
+ * Whether this platform's app draws an SVG as an image (inbox #1059, `FileView.svgAsImage`): Linux's GTK decodes it through
+ * glycin's sandboxed librsvg, which runs no script and fetches nothing (`file_page.rs`' hostile-file test); Windows shows
+ * it as its text.
+ */
+internal expect fun platformDrawsSvgAsImage(): Boolean
+
 /** The files the host names by path, written by core's [FileSink]: one not finished is removed (ADR 0137). */
 private object Files : DeviceFiles {
     override suspend fun write(path: String, produce: suspend (sink: (ByteArray) -> Unit) -> Boolean): Boolean =
@@ -119,6 +126,7 @@ fun veyqInit(config: CPointer<ByteVar>?, host: VeyqHost?, hostCtx: COpaquePointe
     val h = Host { token, json ->
         memScoped { host.invoke(hostCtx, token.toULong(), json.cstr.ptr, null, 0u) }
     }
+    if (platformDrawsSvgAsImage()) me.raddatz.veyq.mobile.depot.FileView.drawSvgAsImage()
     val composed = started.start(h) {
         // a debug build's request log (inbox #947): installed only where the host's config asks for it
         val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit ->

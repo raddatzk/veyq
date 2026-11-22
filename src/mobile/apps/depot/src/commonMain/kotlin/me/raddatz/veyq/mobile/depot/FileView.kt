@@ -7,7 +7,9 @@ import me.raddatz.veyq.mobile.crypto.V1
  * How a file's page shows it (the web's `features/depot/view.ts`, `docs/apps/depot.md` § The viewer): decided by its first
  * frame's decrypted BYTES (`Sniff`); the sealed type and the name are claims that only narrow (text must be claimed). A
  * raster image, a PDF and a text are shown in the app, an audio or video container played there, and everything else is
- * only downloaded — a peer's bytes are never handed to another app or rendered as markup: an SVG is shown as its text.
+ * only downloaded — a peer's bytes are never handed to another app or rendered as markup. An SVG whose markup and claim agree
+ * is an image only on a platform that draws it with nothing in it run or fetched ([svgAsImage], inbox #1059: Linux, through
+ * glycin's sandboxed librsvg); everywhere else it is shown as its text (`docs/apps/depot.md` § The viewer).
  * Nothing decrypted is written to show it (ADR 0047): an image, a text and a PDF are held in memory (each capped), a medium
  * is read in ranges through core's `RangeReader` ([FileModel]).
  */
@@ -32,6 +34,21 @@ object FileView {
 
     enum class Kind { IMAGE, MEDIA, PDF, TEXT, TOO_LARGE, EMPTY, UNSUPPORTED }
 
+    /**
+     * Whether this platform draws an SVG as an image (inbox #1059): only where its renderer runs nothing an SVG holds (no
+     * script, no `foreignObject` document), fetches nothing it names (`<image href>`, `<use>`, CSS `url()`/`@import`, an
+     * external entity) and expands no external entity — proven on that platform by a hostile file's test. Linux's start
+     * turns it on (the bridge: GTK decodes through glycin's sandboxed librsvg, `file_page.rs`' test); every other app shows an
+     * SVG as its text. Off by default, and nothing turns it off again.
+     */
+    var svgAsImage: Boolean = false
+        private set
+
+    /** This platform draws an SVG as an image ([svgAsImage]); called once at the start of a platform that proved it. */
+    fun drawSvgAsImage() {
+        svgAsImage = true
+    }
+
     /** What the page says where it shows no content of [kind]: too large, empty, else not shown here. */
     fun message(kind: Kind): me.raddatz.veyq.mobile.words.Msg = when (kind) {
         Kind.TOO_LARGE -> me.raddatz.veyq.mobile.words.Msg.FILE_TOO_LARGE
@@ -44,12 +61,20 @@ object FileView {
      */
     data class Decision(val kind: Kind, val mime: String? = null, val fileExtension: String? = null, val frames: Int = 0, val truncated: Boolean = false)
 
-    /** The decision for a file of [chunkCount] frames, [total] plaintext bytes, whose first frame is [head]. */
-    fun decide(head: ByteArray, chunkCount: Int, total: Long, claimedType: String?, claimedName: String?): Decision {
+    /** The decision for a file of [chunkCount] frames, [total] plaintext bytes, whose first frame is [head]; [svg]: an SVG
+     *  may be an image here ([svgAsImage]). */
+    fun decide(
+        head: ByteArray, chunkCount: Int, total: Long, claimedType: String?, claimedName: String?, svg: Boolean = svgAsImage,
+    ): Decision {
         if (chunkCount < 1 || head.isEmpty()) return Decision(Kind.EMPTY)
         Sniff.image(head)?.let { image ->
             if (total > IMAGE_CAP) return Decision(Kind.TOO_LARGE)
             return Decision(Kind.IMAGE, image.mime, image.mime.substringAfter('/').replace("jpeg", "jpg"), chunkCount)
+        }
+        // the web's order (`view.ts`): an SVG only where the claim agrees with the markup, and only where this platform draws one
+        if (svg && Sniff.claimsSvg(claimedType, claimedName) && Sniff.svg(head)) {
+            if (total > IMAGE_CAP) return Decision(Kind.TOO_LARGE)
+            return Decision(Kind.IMAGE, "image/svg+xml", "svg", chunkCount)
         }
         Sniff.stream(head)?.let { media ->
             return Decision(Kind.MEDIA, media.mime, EXTENSIONS[media.mime], chunkCount)

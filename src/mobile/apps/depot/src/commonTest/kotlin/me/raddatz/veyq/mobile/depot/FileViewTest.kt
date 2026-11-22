@@ -43,6 +43,23 @@ class FileViewTest {
     }
 
     @Test
+    fun anSvgIsAnImageOnlyWhereThePlatformDrawsOneAndTheClaimAgrees() {
+        val svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>fetch('https://evil.example')</script></svg>".encodeToByteArray()
+        assertEquals(false, FileView.svgAsImage, "no platform draws an SVG until its start says so (Linux's bridge)")
+        // a platform that does not draw one shows the markup as its text, the web's text rule (svg is a text extension)
+        assertEquals(FileView.Decision(Kind.TEXT, "text/plain", "txt", 1), FileView.decide(svg, 1, svg.size.toLong(), "image/svg+xml", "logo.svg"))
+        // where it does: an image of the SVG's type, never of the claim's
+        assertEquals(
+            FileView.Decision(Kind.IMAGE, "image/svg+xml", "svg", 1),
+            FileView.decide(svg, 1, svg.size.toLong(), null, "logo.svg", svg = true),
+        )
+        assertEquals(Kind.TEXT, FileView.decide(svg, 1, svg.size.toLong(), "text/plain", "logo.txt", svg = true).kind, "the claim must agree")
+        val html = "<html><svg></svg></html>".encodeToByteArray()
+        assertEquals(Kind.TEXT, FileView.decide(html, 1, html.size.toLong(), "image/svg+xml", "x.svg", svg = true).kind, "markup that is no SVG")
+        assertEquals(Kind.TOO_LARGE, FileView.decide(svg, 300, FileView.IMAGE_CAP + 1, null, "logo.svg", svg = true).kind)
+    }
+
+    @Test
     fun mediaContainers() {
         assertEquals(Sniff.Stream(false, "audio/mpeg"), Sniff.stream("ID3\u0004".encodeToByteArray()))
         assertEquals(Sniff.Stream(false, "audio/wav"), Sniff.stream("RIFF\u0000\u0000\u0000\u0000WAVE".encodeToByteArray()))
