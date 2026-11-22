@@ -153,7 +153,7 @@ class LinkForm private constructor(
         ): LinkForm {
             val today = LocalDays.dayOf(now)
             val madeAt = editing?.let { runCatching { Instant.parse(it.createdAt).toEpochMilliseconds() }.getOrNull() } ?: now
-            val last = LinkDays.lastEndDay(rules.maxDays, madeAt)
+            val last = LinkDays.lastEndDay(rules.maxDays, madeAt.toDouble())?.toLong()
             return LinkForm(
                 rules, editing, writeOnly, uploadOffered, uploadOnly, uploadLink, today, last,
                 role = if (writeOnly || uploadOnly) ShareLinks.WRITE_ONLY else editing?.role ?: ShareLinks.READ,

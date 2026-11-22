@@ -11,8 +11,12 @@ import me.raddatz.veyq.mobile.session.LocalDays
  * one before the local day the limit falls on. Held by `contracts/platform/share-links/cases.v1.json` (`lastDay`).
  */
 object LinkDays {
-    private const val DAY_MS = 86_400_000L
-
-    /** The last local day (epoch days, the device's zone) a link made at [madeAt] (epoch ms) may end on; null without a limit. */
-    fun lastEndDay(maxDays: Int?, madeAt: Long): Long? = maxDays?.let { LocalDays.dayOf(madeAt + it * DAY_MS) - 1 }
+    /**
+     * The last local day (epoch days) a link made at [madeAt] (epoch ms) may end on; null without a limit. [dayOf] reads an
+     * instant's local day in the device's zone: [LocalDays] on every target, the web's own `Date` behind its façade — the
+     * same reading without the `Long` JavaScript emulates (a guest-stop row asks once per stopped link, 20× the
+     * TypeScript's time through `LocalDays`; ADR 0155 § The share links' slice). An instant is a `Double`, exact to 2^53 ms.
+     */
+    fun lastEndDay(maxDays: Int?, madeAt: Double, dayOf: (Double) -> Int = { LocalDays.dayOf(it.toLong()).toInt() }): Int? =
+        if (maxDays == null) null else dayOf(madeAt + maxDays * 86_400_000.0) - 1
 }

@@ -98,3 +98,37 @@ apps' link form counts an edited link's last day from its creation through the s
   switch over it); `ShareInstance.refusal(major, capabilities, speaks)` is the reading both use, `embedding(on, …)` adds
   the page's two checks (this instance's switch first, `.embeddable` last) and answers in the web's words. The vectors
   carry both answers per case.
+- **D7 — The vectors' answer where the two parsers differed** (phase 1, measured by running each side over candidate
+  inputs: the web's answers from its functions bundled under Node 22, the core's from `ShareLinkVectorsTest`). Ten new
+  parse cases agreed (an upper-case scheme with its default port, `https:` without slashes, backslashes, a tab inside the
+  host, an empty port, a percent-encoded id, `?#`, `#report&k=`, two `k=`, a port past 65535). Three did not, and take the
+  core's answer — fail closed, one rule: a key whose last character leaves bits past the 256th set (`noKey`; the browser's
+  `atob` read it), an empty user info `https://:@host` (`credentials`; the URL parser drops it), and a host in Unicode
+  (`notAUrl`; the URL parser turns it into punycode — the punycode form itself still reads). *Cost:* a member who pastes
+  such a text on the web is refused where it was accepted; a link veyq builds is none of them. They entered the file with
+  the web's wiring (phase 4), so every commit's tests stay green.
+- **D8 — #1057's vector fails before the fix.** The core's `ShareLinkVectorsTest` opens `LinkForm` for every `lastDay` case
+  (an edit where `madeAt` ≠ `now`); with the pre-fix line (`today + maxDays - 1`) its edit case is red ("expected
+  2026-10-17 but was 2026-10-22"), as is `LinkFormTest`'s new edit case (measured, `:core:jvmTest`, `:composition:jvmTest`).
+- **D9 — No `Regex` and none of the library's general string search on the façade's path.** The first build of the façade
+  measured 37,357 B gz for the module (own code 5,256 = 4.19×). Attributed by source map and by an unminified diff of the
+  bundle: a Kotlin `Regex` (its wrapper, ~9 KB minified), `split` (the delimited-ranges sequence), the ignore-case paths of
+  `indexOf`/`lastIndexOf`/`startsWith`/`endsWith` and `trim`'s Unicode whitespace table. `ReceivedLink` now reads its
+  shapes with five small helpers of its own: 36,335 → 35,369 B gz. The same build found a defect only JavaScript has: the
+  IPv6 host's pattern `^\[[0-9a-f:.]+]$` is no valid expression in the `u` mode Kotlin/JS compiles a `Regex` to, so the
+  web's first parse threw — the JVM and native read it. `trim` is now JavaScript's own set of white space, the web's
+  reading (the apps once also trimmed `U+001C`–`U+001F` and `U+0085`, after which no URL reads anyway).
+- **D10 — The last day's instant is a `Double` and its day reading the platform's.** Through `LocalDays` (a `Long` of
+  epoch ms, emulated on JavaScript) a guest-stop row's `lastExpiryDay` measured 19.8× the TypeScript; `LinkDays.lastEndDay`
+  now takes the instant as a `Double` and the local-day reading as a parameter — `LocalDays` for the apps, the engine's
+  own `Date` behind the façade (0.30× the TypeScript). One formula, no second implementation of it.
+- **D11 — The gate** (phase 3; Node 22.23.3, macOS arm64, Kotlin 2.4.21; `src/packages/core-js/src/slice.test.ts`, the
+  bench `links-scratch/bench.mjs`: median of 15 runs after 3 warm-ups, the answers compared first — 20,038 identical):
+  - size: the platform module with every entry **32,101 → 35,392 B gz** (measured both, the façade's directory moved
+    aside for the first); own code **3,291 B gz = 2.63×** the 1,253 deleted (8,753 B minified, 3.27×), within the
+    running budget 35,865 at R = 3.0;
+  - time: `parseShareLink` (a keystroke; the 38 vector inputs of phase 1 × 100) 1.41×, `keptLink` + `hostOf` (a list; 10,000
+    links) 1.17×, `lastExpiryDay` (a list of stopped links; 10,000) 0.30×, `embeddability` (once a page; 11 × 1,000)
+    2.05× — each at most 25 ms for its whole batch, within 2.5× and 100 ms;
+  - bites: the package's `sharing.test.ts` red on a `withoutReport` that keeps empty parameters (2) and a `lastEndDay`
+    without its `− 1` (8); the running budget red at a deleted 1,000 B gz; each restored with `/bin/cp -f`.

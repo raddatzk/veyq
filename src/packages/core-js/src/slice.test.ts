@@ -24,6 +24,7 @@ const FORBIDDEN = /kotlinx-serialization|kotlinx-coroutines|kotlinx\.coroutines|
 const ENTRIES: Record<string, { control: string }> = {
   search: { control: 'search/Query.kt' },
   tree: { control: 'tree/LevelOrder.kt' },
+  sharing: { control: 'sharing/ReceivedLink.kt' },
 }
 
 /**
@@ -41,6 +42,9 @@ const SLICES: { slice: string; deletedGz: number; allowed?: { ratio: number; own
   // siblingCollision.ts' collidingSibling, move.ts' plan - 3,086 B min / 1,326 B gz, measured on sources. Its own code
   // measured 4,158 B gz (3.14x): accepted at that ratio by the owner, 2026-11-22.
   { slice: 'the node tree\'s rules', deletedGz: 1_326, allowed: { ratio: 3.14, owner: '2026-11-22' } },
+  // the share links' rules (ADR 0155 decision 7.2.2, § The share links' slice): bookmarkLink.ts' exports, linkRules.ts'
+  // lastExpiryDay, shareInstance.ts' embeddability and olderMajorsInWindow - 2,678 B min / 1,253 B gz, measured on sources.
+  { slice: 'the share links\' rules', deletedGz: 1_253 },
 ]
 const BUDGET_GZ = Math.floor(SEARCH_ALONE_GZ + SLICES.reduce((n, s) => n + (s.allowed?.ratio ?? R) * s.deletedGz, 0))
 

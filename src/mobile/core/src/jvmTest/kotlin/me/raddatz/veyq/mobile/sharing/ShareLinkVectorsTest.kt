@@ -117,7 +117,7 @@ class ShareLinkVectorsTest {
                 val madeAt = Instant.parse(c.str("madeAt")!!).toEpochMilliseconds()
                 val now = Instant.parse(c.str("now")!!).toEpochMilliseconds()
                 val expected = c.str("lastDay")
-                assertEquals(expected, LinkDays.lastEndDay(maxDays, madeAt)?.let(LocalDays::iso), rule)
+                assertEquals(expected, LinkDays.lastEndDay(maxDays, madeAt.toDouble())?.let { LocalDays.iso(it.toLong()) }, rule)
                 // the apps' form, editing a link made at madeAt and opened at now (a new one where both are the same instant)
                 val rules = ShareLinks.Rules(on = true, contribute = true, passwordRequired = false, maxDays = maxDays, dropBox = true)
                 val editing = ShareLinks.Link(
