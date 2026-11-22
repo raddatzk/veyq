@@ -486,7 +486,8 @@ held for the screens' models but not around them:
     `AppModel`, the bridge for the desktops) — the same answer while Settings can show, no change. Appearance: the web offers
     it everywhere, the apps on the phones only (Mac, Linux and Windows follow the system's appearance and language). The rule
     says the web's; the owner's 2026-11-09 rule says the platform's guidelines as far as possible, and adding it means a
-    theme and language choice on three desktops — **an owner question**, unchanged until answered.
+    theme and language choice on three desktops. **The owner, 2026-11-22: the desktops follow the system** — a platform's
+    trait, not a gap; the phones keep their Appearance section.
   - **P9 — The sign-in's entries** (D14). The web's sign-in has a locked entry (§E3: sign in without unlocking, to sign out
     everywhere), *Forgot password* (the recovery flow) and, with a live session, *Sign out*; the apps' have Cancel while
     adding and *Open a link* (owner 2026-11-20, ADR 0154 § Consequences). The rule settles that the apps gain the first two,
