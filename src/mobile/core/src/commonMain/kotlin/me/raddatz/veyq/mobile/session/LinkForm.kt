@@ -1,6 +1,9 @@
 package me.raddatz.veyq.mobile.session
 
+import me.raddatz.veyq.mobile.sharing.LinkDays
 import me.raddatz.veyq.mobile.words.Msg
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 /**
  * The words of a node's share sheet by its kind (the web's `ShareDialogCopy`): a drop box's, a file's, a Pot's, else
@@ -37,8 +40,9 @@ class ShareWords(
 /**
  * The form of a new link or of one being edited (the web's `FolderShareDialog`): its role, an optional label, a password
  * and an end. A rule of the tenant turns its switch on and keeps it on; the end is a day from today to the rule's last
- * ([ShareLinks.Rules.maxDays] days, today counted), sent as the end of that local day. Days are the device's local
- * calendar days as epoch days; turning one into an instant is the platform's (its zone), as reading an edited link's end.
+ * ([lastDay]: [LinkDays.lastEndDay], counted from when the link was made — an edited one's creation, not today, as the
+ * server counts; inbox #1057), sent as the end of that local day. Days are the device's local calendar days as epoch days
+ * ([LocalDays], every platform's zone read one way).
  * Each change is a new form ([withRole] …), so a UI holds it as its state.
  */
 class LinkForm private constructor(
@@ -57,6 +61,9 @@ class LinkForm private constructor(
      */
     val uploadLink: Boolean,
     val today: Long,
+    /** The last day an end may be ([LinkDays.lastEndDay] from the link's creation), or null where any day may. It lies
+     *  before [today] for an edited link past its lifetime: then no day is offered that the server takes (only a renew). */
+    val lastDay: Long?,
     val role: String,
     val label: String,
     val withPassword: Boolean,
@@ -67,7 +74,7 @@ class LinkForm private constructor(
     private fun with(
         role: String = this.role, label: String = this.label, withPassword: Boolean = this.withPassword,
         password: String = this.password, withEnd: Boolean = this.withEnd, endDay: Long = this.endDay,
-    ) = LinkForm(rules, editing, writeOnly, uploadOffered, uploadOnly, uploadLink, today, role, label, withPassword, password, withEnd, endDay)
+    ) = LinkForm(rules, editing, writeOnly, uploadOffered, uploadOnly, uploadLink, today, lastDay, role, label, withPassword, password, withEnd, endDay)
 
     fun withRole(role: String) = if (role in roles) with(role = role) else this
     fun withLabel(label: String) = with(label = label)
@@ -76,8 +83,8 @@ class LinkForm private constructor(
     fun withPassword(password: String) = with(password = password)
     /** The end's switch: kept on where the tenant limits a link's days. */
     fun withEndOn(on: Boolean) = with(withEnd = on || rules.maxDays != null)
-    /** The end, held to the days a pick may take. */
-    fun withEndDay(day: Long) = with(endDay = day.coerceIn(today, lastDay ?: Long.MAX_VALUE))
+    /** The end, held to the days a pick may take (the last day wins over today where a link outlived its limit). */
+    fun withEndDay(day: Long) = with(endDay = capped(maxOf(day, today), lastDay))
 
     /** The roles to pick from, in order; empty where the role is fixed. */
     val roles: List<String>
@@ -93,9 +100,6 @@ class LinkForm private constructor(
 
     /** The name field's label: a drop box's name its guests see, else a label only the member sees. */
     val nameLabel: Msg get() = if (role == ShareLinks.WRITE_ONLY && !uploadLink) Msg.SHARE_UPLOAD_NAME else Msg.SHARE_LABEL
-
-    /** The last day an end may be (the rule's, today counted), or null where any day may. */
-    val lastDay: Long? get() = rules.maxDays?.let { today + it - 1 }
 
     /** Whether the switches may be turned off (a rule holds them on). */
     val passwordOptional: Boolean get() = !rules.passwordRequired
@@ -135,23 +139,29 @@ class LinkForm private constructor(
         /** Days a new link's end lies ahead when nothing else sets it. */
         const val DEFAULT_DAYS = 30
 
+        private fun capped(day: Long, last: Long?): Long = if (last != null && day > last) last else day
+
         /**
-         * The form as it opens: an edited link's settings ([editingEndDay] its end as a local day, read by the platform),
-         * else a new link's — the role a fixed one or view only, each switch on where a rule holds it.
+         * The form as it opens at [now] (epoch ms): an edited link's settings ([editingEndDay] its end as a local day), else
+         * a new link's — the role a fixed one or view only, each switch on where a rule holds it. The last day counts from
+         * the edited link's `createdAt` (a new one is made now), so no caller hands an edit a day counted from today.
          */
+        @OptIn(ExperimentalTime::class)
         fun start(
             rules: ShareLinks.Rules, editing: ShareLinks.Link?, writeOnly: Boolean, uploadOffered: Boolean, uploadOnly: Boolean,
-            today: Long, editingEndDay: Long?, uploadLink: Boolean = false,
+            now: Long, editingEndDay: Long?, uploadLink: Boolean = false,
         ): LinkForm {
-            val last = rules.maxDays?.let { today + it - 1 }
+            val today = LocalDays.dayOf(now)
+            val madeAt = editing?.let { runCatching { Instant.parse(it.createdAt).toEpochMilliseconds() }.getOrNull() } ?: now
+            val last = LinkDays.lastEndDay(rules.maxDays, madeAt)
             return LinkForm(
-                rules, editing, writeOnly, uploadOffered, uploadOnly, uploadLink, today,
+                rules, editing, writeOnly, uploadOffered, uploadOnly, uploadLink, today, last,
                 role = if (writeOnly || uploadOnly) ShareLinks.WRITE_ONLY else editing?.role ?: ShareLinks.READ,
                 label = editing?.label.orEmpty(),
                 withPassword = rules.passwordRequired || editing?.passwordRequired == true,
                 password = "",
                 withEnd = rules.maxDays != null || editingEndDay != null,
-                endDay = editingEndDay ?: last ?: (today + DEFAULT_DAYS),
+                endDay = capped(editingEndDay ?: last ?: (today + DEFAULT_DAYS), last),
             )
         }
     }

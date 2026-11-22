@@ -28,7 +28,7 @@ object ReceivedLink {
      */
     class ShareLink internal constructor(val link: String, val origin: String, val shareId: String) {
         /** The host a kept link names, as a reader is shown it (`photos.example.org`, a port kept). */
-        val host: String get() = origin.substringAfter("://")
+        val host: String get() = hostOf(origin)
 
         /** `K_share`, decoded from the fragment: a fresh copy each call, the caller's to zero. */
         @PlatformApi
@@ -70,7 +70,21 @@ object ReceivedLink {
         if (key == null || !isKey(key)) return Parsed.Refused(Problem.NO_KEY)
         val link = "${url.origin}/s/$shareId#k=$key"
         if (link.length > MAX_LINK_LENGTH) return Parsed.Refused(Problem.TOO_LONG)
-        return Parsed.Ok(ShareLink(link, url.origin, shareId), url.fragment.split('&').contains("report"))
+        return Parsed.Ok(ShareLink(link, url.origin, shareId), asksForReport(url.fragment))
+    }
+
+    /** The host a link's [origin] names, as a reader is shown it (`photos.example.org`, a port kept). */
+    fun hostOf(origin: String): String = origin.substringAfter("://")
+
+    /** Whether a share page's fragment (with or without its `#`) asks it to open its report dialog: the `report` parameter
+     *  of [ShareLink.reportLink] among the `&`-separated ones. */
+    fun asksForReport(fragment: String): Boolean = fragment.removePrefix("#").split('&').contains("report")
+
+    /** The fragment without the `report` parameter (and without empty ones): what the share page keeps in its address once
+     *  it has read it, so a reload or a copied address does not open the dialog again. */
+    fun withoutReport(fragment: String): String {
+        val kept = fragment.removePrefix("#").split('&').filter { it != "report" && it.isNotEmpty() }
+        return if (kept.isEmpty()) "" else kept.joinToString("&", prefix = "#")
     }
 
     /** What the app's *Open a link* takes: [parse], a moderator's review (`#moderation`) refused as its own problem. */
@@ -94,7 +108,14 @@ object ReceivedLink {
     private fun fragmentKey(fragment: String): String? =
         fragment.split('&').firstOrNull { it.startsWith("k=") }?.substring(2)
 
-    private fun isKey(key: String): Boolean = TOKEN.matches(key) && unb64url(key)?.size == 32
+    /**
+     * Whether [key] is a 32-byte key in base64url: 43 characters of its alphabet whose last one leaves the two bits past
+     * the 256th zero — a canonical encoding, as the share page writes it (a strict decode refuses the others; the browser's
+     * `atob` would read them). Decided by its characters, so no decoder runs on the parse.
+     */
+    private fun isKey(key: String): Boolean = TOKEN.matches(key) && key[42] in CANONICAL_LAST
+
+    private const val CANONICAL_LAST = "AEIMQUYcgkosw048"
 
     /** A base64url string without padding decoded, or null. */
     internal fun unb64url(s: String): ByteArray? = runCatching {
