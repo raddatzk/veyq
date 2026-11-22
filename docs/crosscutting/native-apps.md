@@ -783,8 +783,9 @@ any app: the Flatpak's and the MSIX's, sign-out offline on Linux, a never-kept P
 **Writes made offline** (ADR 0153 decisions 1–5): the Mac's pass waits for the owner's signed build (an ad-hoc build
 keeps no trust, so nothing queues) and the iPhone's is the owner's — offline New, a folder, a Memory, a photo and a Pot
 entry with a receipt queued and sent with the notice, a held entry's and a held rename's *Open*, *Save a copy*, each
-loss's ask; not run on any app: a capture time, a re-key while offline, *Save a copy*; not shown in place before they
-are sent: a capture time, a rename, a new Memory (#1040); Windows' and Linux's Manage ask nothing before signing out an
+loss's ask; not run on any app: a capture time, a re-key while offline, *Save a copy*; shown in place before they are
+sent since 2026-11-22 but clicked on no app: a capture time re-ordering the grid, a rename in its level, a Memory made
+offline opened from its row with a photo and a chapter added (#1040); a folder made offline is not entered (#1095); Windows' and Linux's Manage ask nothing before signing out an
 account that is not open (#1043). **Sync in the background** (decision 8): the iPhone's run is the owner's, on a device
 with a passcode and a signed build, the account at *Stay signed in* with the switch on in *Storage on this device* —
 a Memory pinned and a write queued offline, a photo added to the pinned Memory on the web, the app left (not swiped away:

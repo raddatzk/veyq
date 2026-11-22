@@ -267,10 +267,31 @@ Measured 2026-11-19 on `claude/offline-refine` at `4f3b57ecd` (commands from `sr
   Alternatives rejected keeping an old `K_off`); a refused receipt refuses its whole entry, so the person decides with
   *Save a copy* or *Discard*; a sibling's name met at the send holds a create or rename (`name_taken`), and a re-key still
   pending leaves a write waiting; the outbox's keys name no tenant or scope, so a suspended tenant's sweep leaves its
-  writes to be refused on send rather than lost unsaid. Not shown in place before they are sent (#1040): a capture time
-  (the grid keeps its order), a rename, and a Memory or chapter made offline, which opens nothing until sent; a trash
-  offline offers no Undo (the tray's *Discard* is it). Tests: [`src/mobile/CLAUDE.md`](../../src/mobile/CLAUDE.md) § Prove
+  writes to be refused on send rather than lost unsaid. A capture time, a rename and a Memory or chapter made offline
+  were first not shown in place (#1040; built since, the next bullet); a trash offline offers no Undo (the tray's
+  *Discard* is it). Tests: [`src/mobile/CLAUDE.md`](../../src/mobile/CLAUDE.md) § Prove
   your work names them.
+- **As built, decision 5 in place for the last three** (2026-11-22, #1040). A write waiting shows its value where it was
+  made; a **held** one shows what the server holds, since its *Open* asks the person about exactly that difference.
+  **A capture time**: `GalleryModel.QueuedHere.times` (the waiting `MEDIA_CAPTURE_TIME` writes of the node) is laid over
+  the listing at each read (`MemoryMedia.withCaptureTime`) and the grid ordered anew (`MemoryMedia.order`), so the medium
+  moves to where its time puts it and its details show that time. **A rename**: `ShellModel` keeps the waiting
+  `NODE_RENAME` writes' names from a watch of the outbox and builds its lists, its favorites and a relocated path under
+  them; an open page follows at the rename, and a *Discard*, a hold or a send gives the name back. **A Memory or chapter
+  made offline opens as its page** (the question #1040 left): the level's row carries it (`QueuedItem.page`, an
+  `ObjectRef` for a `MEMORY_CREATE` not refused) and opens through `ShellModel.open`; the gallery door answers such a node
+  with an empty listing, offline, asking the server nothing, so the page shows only what waits to go into it and takes
+  more — media and chapters queue behind its create (`QueuedWrite.after`), a rename and a trash change or drop the create
+  (`QueuedNodes`). A Memory's chapters include those made in it offline (the door's scope nodes carry them), each with
+  core's line under its name (`GalleryModel.State.chapterSaid`; the bridge's `GalleryShown.chaptersUnsent`) and opening
+  in turn. Drawn on Android, Apple, Linux and Windows: the level's row opens the page, a chapter made offline says
+  *Waiting to send*. **Left:** a folder made offline is not entered (#1095) and a Depot file made offline opens nothing
+  (its content is on this device, sealed; a refused one has *Save a copy*); between a reconnect and its create's send a
+  page of a node made offline still shows offline, and a write made on it in those seconds takes the online path and is
+  refused (the node is not there yet); a gallery open while the tray changes its writes shows the change at its next
+  read, as for a trash and a mark before. Tests: `QueuedOverlayTest` (`a_capture_time_set_offline_reorders_the_gallery_in_place`,
+  `a_rename_made_offline_shows_in_its_level_and_on_its_open_page`, `a_memory_made_offline_opens_and_takes_media_and_a_chapter`,
+  each bitten). No app clicked: the passes are #1040's row.
 - **The passes (decisions 1–5).** Each a throwaway with a member, erased after. **Android** (2026-11-20, a throwaway API 36
   AVD in airplane mode, deleted after; the member on the web): offline a folder and a Memory made, an entry with a receipt
   added and another edited, two photos added to a kept Memory — rows, tiles and entries *Waiting to send* / *Not sent*,
